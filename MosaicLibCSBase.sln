@@ -1,0 +1,26 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 10.00
+# Visual Studio 2008
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MosaicLibCSBase", "Base\MosaicLibCSBase.csproj", "{DFD5D17D-1977-4B56-A4EB-5955B40B6ABB}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MosaicLibCS_Win32", "Base\Xtras\Win32\MosaicLibCS_Win32\MosaicLibCS_Win32.csproj", "{12F530A0-4A74-4CD1-96CD-871FF215168E}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{DFD5D17D-1977-4B56-A4EB-5955B40B6ABB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DFD5D17D-1977-4B56-A4EB-5955B40B6ABB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DFD5D17D-1977-4B56-A4EB-5955B40B6ABB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DFD5D17D-1977-4B56-A4EB-5955B40B6ABB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{12F530A0-4A74-4CD1-96CD-871FF215168E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{12F530A0-4A74-4CD1-96CD-871FF215168E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{12F530A0-4A74-4CD1-96CD-871FF215168E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{12F530A0-4A74-4CD1-96CD-871FF215168E}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
