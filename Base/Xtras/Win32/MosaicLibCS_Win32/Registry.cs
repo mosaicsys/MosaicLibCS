@@ -39,8 +39,8 @@ namespace MosaicLib.Win32.Registry
 
         #region Split Registry Key Path methods
 
-        public const char DefaultRegPathDelimiter = '/';
-        public static readonly char [] DefaultRegPathDelimiters = new char [] { DefaultRegPathDelimiter };
+        public const char DefaultRegPathDelimiter = '\\';
+        public static readonly char [] DefaultRegPathDelimiters = new char [] { DefaultRegPathDelimiter, '/' };
 
         public static string[] SplitRegistryKeyPath(string regKeyPath)
         {
