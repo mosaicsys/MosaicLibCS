@@ -280,6 +280,16 @@ namespace MosaicLib.Time
 		}
 
         /// <summary>
+        /// Method is used to set the TriggerInterval to the given value and then Reset the timer so that it will expire after the given interval.
+        /// </summary>
+        /// <param name="newTriggerInterval">Caller provided TimeSpan after which the timer should expire</param>
+        public void Start(TimeSpan newTriggerInterval)
+        {
+            TriggerInterval = newTriggerInterval;
+            Reset();
+        }
+
+        /// <summary>
         /// Get property returns true if the timer's TriggerInterval has elapsed since the last occurance.  Uses GetIsTriggered method internally.  If timer is configured to AutoReset, the timer will automatically reset to expire after after the TriggerInterval has elapsed from the most recent occurance.
         /// </summary>
         public bool IsTriggered { get { return GetIsTriggered(QpcTimeStamp.Now); } }

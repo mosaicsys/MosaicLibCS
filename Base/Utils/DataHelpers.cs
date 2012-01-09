@@ -25,39 +25,68 @@ namespace MosaicLib.Utils
 {
 	//-------------------------------------------------
 	using System;
+    using System.Runtime.InteropServices;
+    using System.Runtime.Serialization;
 
 	//-------------------------------------------------
-	#region Data Packing and Unpacking
+	#region Data Packing, Unpacking, Byte Order manipulations
 
 	/// <summary>
 	/// This static partial class provides static helper methods that can be used to pack and unpack values.
 	/// Byte array versions always use network order (msb first).
 	/// </summary>
 	public static partial class Data
-	{
-		public static UInt16 Pack(Byte msb, Byte lsb) { unchecked { return (UInt16) ((((UInt32) msb) << 8) | ((UInt32) lsb)); } }
+    {
+        #region Packing
+
+        public static UInt16 Pack(Byte msb, Byte lsb) { unchecked { return (UInt16) ((((UInt32) msb) << 8) | ((UInt32) lsb)); } }
         public static UInt32 Pack(Byte umsb, Byte ulsb, Byte lmsb, Byte llsb) { unchecked { return ((((UInt32)umsb) << 24) | (((UInt32)ulsb) << 16) | (((UInt32)lmsb) << 8) | ((UInt32)llsb)); } }
+        public static UInt32 Pack(Byte ulsb, Byte lmsb, Byte llsb) { unchecked { return ((((UInt32)ulsb) << 16) | (((UInt32)lmsb) << 8) | ((UInt32)llsb)); } }
         public static UInt32 Pack(UInt16 msw, UInt16 lsw) { unchecked { return ((((UInt32)msw) << 16) | ((UInt32)lsw)); } }
 
 		public static bool Pack(Byte [] byteArray, int baseIdx, out UInt16 value) 
 		{ 
 			value = 0;
-			if (byteArray == null || (baseIdx < 0) || ((baseIdx + 1) >= byteArray.Length))
+
+            if (byteArray == null || (baseIdx < 0) || ((baseIdx + 1) >= byteArray.Length))
 				return false;
-			value = Pack(byteArray [baseIdx], byteArray [baseIdx + 1]);
+
+            value = Pack(byteArray [baseIdx], byteArray [baseIdx + 1]);
 			return true;
 		}
 
 		public static bool Pack(Byte [] byteArray, int baseIdx, out UInt32 value) 
 		{ 
 			value = 0;
-			if (byteArray == null || (baseIdx < 0) || ((baseIdx + 3) >= byteArray.Length))
-				return false;
-			value = Pack(byteArray [baseIdx], byteArray [baseIdx + 1], byteArray [baseIdx + 2], byteArray [baseIdx + 3]);
-			return true;
-		}
 
-		public static void Unpack(UInt16 w, out Byte msb, out Byte lsb)
+            if (byteArray == null || (baseIdx < 0) || ((baseIdx + 3) >= byteArray.Length))
+				return false;
+
+            value = Pack(byteArray [baseIdx], byteArray [baseIdx + 1], byteArray [baseIdx + 2], byteArray [baseIdx + 3]);
+			return true;
+        }
+
+        public static bool Pack(Byte[] byteArray, int baseIdx, int numBytes, out UInt32 value)
+        {
+            value = 0;
+
+            if (byteArray == null || (baseIdx < 0) || ((baseIdx + numBytes) > byteArray.Length))
+                return false;
+
+            switch (numBytes)
+            {
+                case 2: value = Pack(byteArray[baseIdx], byteArray[baseIdx + 1]); return true;
+                case 3: value = Pack(byteArray[baseIdx], byteArray[baseIdx + 1], byteArray[baseIdx + 2]); return true;
+                case 4: value = Pack(byteArray[baseIdx], byteArray[baseIdx + 1], byteArray[baseIdx + 2], byteArray[baseIdx + 3]); return true;
+                default: return false;
+            }
+        }
+
+        #endregion
+
+        #region Unpacking
+
+        public static void Unpack(UInt16 w, out Byte msb, out Byte lsb)
 		{
 			unchecked
 			{
@@ -75,7 +104,18 @@ namespace MosaicLib.Utils
 			}
 		}
 
-		public static void Unpack(UInt32 l, out Byte umsb, out Byte ulsb, out Byte lmsb, out Byte llsb)
+        public static void Unpack(UInt32 l, out Byte ulsb, out Byte lmsb, out Byte llsb)
+        {
+            unchecked
+            {
+                l = (l & 0xffffff);
+                ulsb = (Byte)(l >> 16);
+                lmsb = (Byte)(l >> 8);
+                llsb = (Byte)(l >> 0);
+            }
+        }
+
+        public static void Unpack(UInt32 l, out Byte umsb, out Byte ulsb, out Byte lmsb, out Byte llsb)
 		{
 			unchecked
 			{
@@ -88,7 +128,7 @@ namespace MosaicLib.Utils
 
 		public static bool Unpack(UInt16 w, byte [] byteArray, int baseIdx)
 		{
-			if (byteArray == null || baseIdx < 0 || ((baseIdx + 1) >= byteArray.Length))
+			if (byteArray == null || baseIdx < 0 || ((baseIdx + 2) > byteArray.Length))
 				return false;
 			Unpack(w, out byteArray [baseIdx], out byteArray [baseIdx + 1]);
 			return true;
@@ -96,12 +136,158 @@ namespace MosaicLib.Utils
 
 		public static bool Unpack(UInt32 l, byte [] byteArray, int baseIdx)
 		{
-			if (byteArray == null || baseIdx < 0 || ((baseIdx + 3) >= byteArray.Length))
+			if (byteArray == null || baseIdx < 0 || ((baseIdx + 4) > byteArray.Length))
 				return false;
 			Unpack(l, out byteArray [baseIdx], out byteArray [baseIdx + 1], out byteArray [baseIdx + 2], out byteArray [baseIdx + 3]);
 			return true;
-		}
-	}
+        }
+
+        public static bool Unpack(UInt32 l, byte[] byteArray, int baseIdx, int numBytes)
+        {
+            if (byteArray == null || baseIdx < 0 || ((baseIdx + numBytes) > byteArray.Length))
+                return false;
+
+            switch (numBytes)
+            {
+                case 2: Unpack((UInt16) (l & 0xffff), out byteArray[baseIdx], out byteArray[baseIdx + 1]); return true;
+                case 3: Unpack(l, out byteArray[baseIdx], out byteArray[baseIdx + 1], out byteArray[baseIdx + 2]); return true;
+                case 4: Unpack(l, out byteArray[baseIdx], out byteArray[baseIdx + 1], out byteArray[baseIdx + 2], out byteArray[baseIdx + 3]); return true;
+                default: return false;
+            }
+        }
+
+        #endregion
+
+        #region Byte order manipulation
+
+        public enum ByteOrder
+        {
+            LittleEndian, BigEndian
+        }
+
+        public static ByteOrder MachineOrder { get { return ((BitConverter.IsLittleEndian) ? ByteOrder.LittleEndian : ByteOrder.BigEndian); } }
+        public static bool IsMachineLittleEndian { get { return (MachineOrder == ByteOrder.LittleEndian); } }
+        public static bool IsMachineBigEndian { get { return (MachineOrder == ByteOrder.BigEndian); } }
+
+        public static bool ChangeByteOrder(byte[] byteArray, int baseIdx, int itemSize, ByteOrder fromByteOrder) 
+        { 
+            return ChangeByteOrder(byteArray, baseIdx, itemSize, fromByteOrder, MachineOrder); 
+        }
+
+        public static bool ChangeByteOrder(byte[] byteArray, int baseIdx, int itemSize, ByteOrder fromByteOrder, ByteOrder toByteOrder)
+        {
+            if (byteArray == null || baseIdx < 0 || byteArray.Length < baseIdx + itemSize)
+                return false;
+
+            switch (itemSize)
+            {
+                case 1:
+                    return true;
+                case 2:
+                    if (fromByteOrder == toByteOrder)
+                        return true;
+
+                    Swap<byte>(ref byteArray[baseIdx + 0], ref byteArray[baseIdx + 1]);
+                    return true;
+                case 3:
+                    if (fromByteOrder == toByteOrder)
+                        return true;
+
+                    Swap<byte>(ref byteArray[baseIdx + 0], ref byteArray[baseIdx + 2]);
+                    return true;
+                case 4:
+                    if (fromByteOrder == toByteOrder)
+                        return true;
+
+                    Swap<byte>(ref byteArray[baseIdx + 0], ref byteArray[baseIdx + 3]);
+                    Swap<byte>(ref byteArray[baseIdx + 1], ref byteArray[baseIdx + 2]);
+                    return true;
+                case 8:
+                    if (fromByteOrder == toByteOrder)
+                        return true;
+
+                    Swap<byte>(ref byteArray[baseIdx + 0], ref byteArray[baseIdx + 7]);
+                    Swap<byte>(ref byteArray[baseIdx + 1], ref byteArray[baseIdx + 6]);
+                    Swap<byte>(ref byteArray[baseIdx + 2], ref byteArray[baseIdx + 5]);
+                    Swap<byte>(ref byteArray[baseIdx + 3], ref byteArray[baseIdx + 4]);
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        public static bool ChangeByteOrder(byte[] byteArray, int baseIdx, int numItems, int itemSize, ByteOrder fromByteOrder) 
+        { 
+            return ChangeByteOrder(byteArray, baseIdx, itemSize, numItems, fromByteOrder, MachineOrder); 
+        }
+
+        public static bool ChangeByteOrder(byte[] byteArray, int baseIdx, int numItems, int itemSize, ByteOrder fromByteOrder, ByteOrder toByteOrder)
+        {
+            if (byteArray == null || baseIdx < 0 || byteArray.Length < baseIdx + (itemSize * numItems) || numItems < 0)
+                return false;
+
+            switch (itemSize)
+            {
+                case 1:
+                    return true;
+                case 2:
+                    if (fromByteOrder == toByteOrder || numItems == 0)
+                        return true;
+
+                    for (; numItems > 0; --numItems)
+                    {
+                        Swap<byte>(ref byteArray[baseIdx + 0], ref byteArray[baseIdx + 1]);
+                        baseIdx += 2;
+                    }
+                    return true;
+                case 3:
+                    if (fromByteOrder == toByteOrder || numItems == 0)
+                        return true;
+
+                    for (; numItems > 0; --numItems)
+                    {
+                        Swap<byte>(ref byteArray[baseIdx + 0], ref byteArray[baseIdx + 2]);
+                        baseIdx += 3;
+                    }
+                    return true;
+                case 4:
+                    if (fromByteOrder == toByteOrder || numItems == 0)
+                        return true;
+
+                    for (; numItems > 0; --numItems)
+                    {
+                        Swap<byte>(ref byteArray[baseIdx + 0], ref byteArray[baseIdx + 3]);
+                        Swap<byte>(ref byteArray[baseIdx + 1], ref byteArray[baseIdx + 2]);
+                        baseIdx += 4;
+                    }
+                    return true;
+                case 8:
+                    if (fromByteOrder == toByteOrder || numItems == 0)
+                        return true;
+
+                    for (; numItems > 0; --numItems)
+                    {
+                        Swap<byte>(ref byteArray[baseIdx + 0], ref byteArray[baseIdx + 7]);
+                        Swap<byte>(ref byteArray[baseIdx + 1], ref byteArray[baseIdx + 6]);
+                        Swap<byte>(ref byteArray[baseIdx + 2], ref byteArray[baseIdx + 5]);
+                        Swap<byte>(ref byteArray[baseIdx + 3], ref byteArray[baseIdx + 4]);
+                        baseIdx += 8;
+                    }
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        public static void Swap<TypeT>(ref TypeT left, ref TypeT right)
+        {
+            TypeT temp = left;
+            left = right;
+            right = temp;
+        }
+
+        #endregion
+    }
 
 	#endregion
 
@@ -238,7 +424,7 @@ namespace MosaicLib.Utils
 
 	#endregion
 
-	//-------------------------------------------------
+    //-------------------------------------------------
 	/// <remarks>
 	/// The following GuardedObject and SequenceNumber related defintions form an essential component that is required to support the efficient 
 	/// poll version of event reaction and handling.  
@@ -271,6 +457,7 @@ namespace MosaicLib.Utils
 	/// <typeparam name="ObjectType">The type of the Object property.</typeparam>
 	public interface IObjectSource<ObjectType>
 	{
+        /// <summary>Property caller access to contained object.  May invoke locking so as to keep sequence number synchronized with each object.</summary>
 		ObjectType Object { get; }
 	}
 
@@ -280,6 +467,7 @@ namespace MosaicLib.Utils
 	/// <typeparam name="ObjectType">The type of the VolatileObject property.</typeparam>
 	public interface IVolatileObjectSource<ObjectType> where ObjectType : class
 	{
+        /// <summary>Provides caller with volatile access to the contained object.  Will allow caller to snapshot a specific object with minimal locking required to produce a valid object.</summary>
 		ObjectType VolatileObject { get; }
 	}
 
@@ -291,15 +479,22 @@ namespace MosaicLib.Utils
 	/// <typeparam name="SeqNumberType">Defines the numeric type used by this sequence number's counter.</typeparam>
 	public interface ISequenceNumberValue<SeqNumberType>
 	{
-		bool HasBeenSet { get; }		// true if sequence number has been incremented or has been explicitly constructed with a non-zero value
-		SeqNumberType SequenceNumber { get; }
-		SeqNumberType VolatileSequenceNumber { get; }
+        /// <summary>Returns true if the number has been incremented or has been explicitly constructed with a non-zero value</summary>
+		bool HasBeenSet { get; }
+
+        /// <summary>Returns the current sequence number.  May return zero if sequence number is set to skip zero and Increment is in progress on another thread.</summary>
+        SeqNumberType SequenceNumber { get; }
+
+        /// <summary>Returns the current sequence number read as a volatile (no locking) - May return zero if sequence number is set to skip zero and Increment is in progress on another thread</summary>
+        SeqNumberType VolatileSequenceNumber { get; }
 	}
 
 	/// <summary> This interface defines the methods that are available for all sequence number objects and is used to generate the next value in the seaquence </summary>
 	/// <typeparam name="SeqNumberType">Defines the numeric type used by this sequence number's counter.</typeparam>
 	public interface ISequenceNumberGenerator<SeqNumberType>
 	{
+        /// <summary>Advances the sequence number to the next value and returns it</summary>
+        /// <remarks>SkipZero type SequenceNumberGenerators implement this by performing the increment and then doing it again if the result of the first was zero.</remarks>
 		SeqNumberType Increment();
 	}
 
@@ -322,8 +517,10 @@ namespace MosaicLib.Utils
 	/// </summary>
 	public interface ISequencedSourceObserver
 	{
-		bool IsUpdateNeeded { get; set; }	// returns true when source's seq number does not match seq number during last update.  May be set to true to indicate that an update is needed
-		bool Update();						// updates the local copy of the source's value(s), returns true if the update was needed.
+        /// <summary>returns true when source's seq number does not match seq number during last update.  May be set to true to indicate that an update is needed.</summary>
+		bool IsUpdateNeeded { get; set; }
+        /// <summary>updates the local copy of the source's value(s), returns true if the update was needed.</summary>
+		bool Update();
 	}
 
 	/// <summary>This interface gives the client access to the Object from the source that was obtained during the last Update call.</summary>
@@ -370,8 +567,10 @@ namespace MosaicLib.Utils
 		public VolatileRefObject() { }
 		public VolatileRefObject(ObjectType initialValue) { Object = initialValue; }
 
-		public virtual ObjectType Object { get { return volatileObjHandle; } set { volatileObjHandle = value; } }
-		public virtual ObjectType VolatileObject { get { return volatileObjHandle; } }
+        /// <summary>Property caller access to contained object.  synonym for VolatileObject.</summary>
+        public virtual ObjectType Object { get { return volatileObjHandle; } set { volatileObjHandle = value; } }
+        /// <summary>Provides caller with volatile access to the contained object.  Will allow caller to snapshot a specific object with minimal locking required to produce a valid object.</summary>
+        public virtual ObjectType VolatileObject { get { return volatileObjHandle; } }
 
 		protected volatile ObjectType volatileObjHandle = null;		// reference objects can be atomically updated
 	}
@@ -383,8 +582,10 @@ namespace MosaicLib.Utils
 		public GuardedRefObject() { }
 		public GuardedRefObject(ObjectType initialValue) { Object = initialValue; }
 
-		public virtual ObjectType Object { get { lock (mutex) { return volatileObjHandle; } } set { lock (mutex) { volatileObjHandle = value; } } }
-		public virtual ObjectType VolatileObject { get { return volatileObjHandle; } }
+        /// <summary>Property caller access to contained object.  Uses locking to control access to internal object.</summary>
+        public virtual ObjectType Object { get { lock (mutex) { return volatileObjHandle; } } set { lock (mutex) { volatileObjHandle = value; } } }
+        /// <summary>Provides caller with volatile access to the contained object.  Will allow caller to snapshot a specific object with minimal locking required to produce a valid object.</summary>
+        public virtual ObjectType VolatileObject { get { return volatileObjHandle; } }
 
 		protected object mutex = new object();
 		protected volatile ObjectType volatileObjHandle = null;		// reference objects can be atomically updated
@@ -397,7 +598,8 @@ namespace MosaicLib.Utils
 		public GuardedValueObject() { }
 		public GuardedValueObject(ObjectType initialValue) { Object = initialValue; }
 
-		public virtual ObjectType Object { get { lock (mutex) { return valueObjStorage; } } set { lock (mutex) { valueObjStorage = value; } } }
+        /// <summary>Property caller access to contained object.  Uses locking to control access to internal (value) object.</summary>
+        public virtual ObjectType Object { get { lock (mutex) { return valueObjStorage; } } set { lock (mutex) { valueObjStorage = value; } } }
 
 		protected object mutex = new object();
 		protected ObjectType valueObjStorage;		// value objects are stored internally.  Accept default value
@@ -449,7 +651,8 @@ namespace MosaicLib.Utils
         public virtual ValueType VolatileSequenceNumber { get { return sequenceNumberGen.VolatileValue; } }
         public virtual ValueType Increment() { return InnerIncrementNumber(); }
 
-        protected virtual ValueType InnerIncrementNumber()			//!< This method skips zero.  zero is a unique value indicating that the sequenceNumber has never been set
+        /// <summary>Innermost method used to increment a sequence number.  Implements skip zero behavior.</summary>
+        protected virtual ValueType InnerIncrementNumber()
 		{
             ValueType temp;
 
@@ -526,7 +729,7 @@ namespace MosaicLib.Utils
         public InterlockedSequenceNumberUInt64() : base(0, false, false) { }
         public InterlockedSequenceNumberUInt64(System.UInt64 initialValue) : base(initialValue, false, true) { }
 
-        private new bool SkipZero { get { return base.SkipZero; } set { Utils.Assert.ThrowCondition(value == false, "InterlockedSequenceNumberInt.SkipZero must be false"); base.SkipZero = false; } }
+        private new bool SkipZero { get { return base.SkipZero; } set { Utils.Assert.ThrowCondition(value == false, "InterlockedSequenceNumberUInt64.SkipZero must be false"); base.SkipZero = false; } }
 
         public virtual void Notify() { InnerIncrementNumber(); }
     }
@@ -725,7 +928,85 @@ namespace MosaicLib.Utils
 
 	#endregion
 
-	//-------------------------------------------------
+    //-------------------------------------------------
+    #region DataContractObject to/from xml string or byte stream helper
+
+    public class DataContractAsciiXmlAdapter<ObjType>
+        where ObjType : class
+    {
+        public DataContractAsciiXmlAdapter()
+        {
+            xws.ConformanceLevel = System.Xml.ConformanceLevel.Document;
+            xws.OmitXmlDeclaration = false;
+            xws.Encoding = System.Text.Encoding.ASCII;
+            xws.Indent = true;
+            xws.CloseOutput = false;     // we will explicitly close the underlying stream
+
+            xrs.ConformanceLevel = System.Xml.ConformanceLevel.Auto;
+            xrs.CloseInput = false;
+        }
+
+        public bool Indent { get { return xws.Indent; } set { xws.Indent = value; } }
+        public bool GenerateFragment 
+        {
+            get { return (xws.ConformanceLevel == System.Xml.ConformanceLevel.Fragment); } 
+            set 
+            { 
+                xws.ConformanceLevel = (value ? System.Xml.ConformanceLevel.Fragment : System.Xml.ConformanceLevel.Document);
+                xws.OmitXmlDeclaration = value;
+            }
+        }
+
+        System.Xml.XmlWriterSettings xws = new System.Xml.XmlWriterSettings();
+        System.Xml.XmlReaderSettings xrs = new System.Xml.XmlReaderSettings();
+        DataContractSerializer dcs = new DataContractSerializer(typeof(ObjType));
+
+        public ObjType ReadObject(System.IO.Stream readStream)
+        {
+            return dcs.ReadObject(readStream) as ObjType;
+        }
+
+        public ObjType ReadObject(String s)
+        {
+            using (System.IO.StringReader sr = new System.IO.StringReader(s))
+            using (System.Xml.XmlReader xr = System.Xml.XmlReader.Create(sr, xrs))
+            {
+                return dcs.ReadObject(xr) as ObjType;
+            }
+        }
+
+        public void WriteObject(ObjType obj, System.IO.Stream writeStream)
+        {
+            using (System.Xml.XmlWriter xw = System.Xml.XmlWriter.Create(writeStream, xws))
+            {
+                dcs.WriteObject(xw, obj);
+                xw.Flush();
+            }
+        }
+
+        System.Text.StringBuilder sb = new System.Text.StringBuilder();
+
+        public string ConvertObjectToString(ObjType obj)
+        {
+            if (sb == null)
+                sb = new System.Text.StringBuilder();
+            else
+                sb.Length = 0;
+
+            using (System.Xml.XmlWriter xw = System.Xml.XmlWriter.Create(sb, xws))
+            {
+                dcs.WriteObject(xw, obj);
+                xw.Flush();
+            }
+
+            return sb.ToString();
+        }
+    }
+
+    #endregion
+
+    //-------------------------------------------------
+
 }
 
 //-------------------------------------------------

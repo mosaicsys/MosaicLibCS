@@ -65,7 +65,8 @@ namespace MosaicLib.SerialIO
         private string[] rxPacketEndStrArray;
         private string txPacketEndStr;
         private byte[] txPacketEndStrByteArray;
-		private string traceDataLoggerGroupID;				// for data trace logger
+        private string loggerGroupID;				        // for normal logger
+        private string traceDataLoggerGroupID;				// for data trace logger
 
 		public PortConfig(string name, string specStr, LineTerm lineTerm) : this(name, specStr, lineTerm, (lineTerm == LineTerm.Auto ? LineTerm.CRLF : lineTerm)) { }
         public PortConfig(string name, string specStr, string[] rxPacketEndStrArray, LineTerm txLineTerm) : this(name, specStr, LineTerm.Custom, txLineTerm) { RxPacketEndStrArray = rxPacketEndStrArray; }
@@ -109,6 +110,7 @@ namespace MosaicLib.SerialIO
 			DebugMesgType = Logging.MesgType.Debug;
             TraceMesgType = Logging.MesgType.Trace;
             TraceDataMesgType = Logging.MesgType.Trace;
+            LoggerGroupID = String.Empty;       // use default
 			TraceDataLoggerGroupID = "LDG.SerialIO.TraceData";
 
 			RxBufferSize = 4096;
@@ -151,9 +153,15 @@ namespace MosaicLib.SerialIO
         public Logging.MesgType DebugMesgType { get; set; }
         public Logging.MesgType TraceMesgType { get; set; }
         public Logging.MesgType TraceDataMesgType { get; set; }
-		public string TraceDataLoggerGroupID 
+
+        public string LoggerGroupID
+        {
+            get { return (loggerGroupID ?? String.Empty); }
+            set { loggerGroupID = value; }
+        }
+        public string TraceDataLoggerGroupID 
 		{ 
-			get { return (traceDataLoggerGroupID != null ? traceDataLoggerGroupID : Logging.DefaultDistributionGroupName); } 
+			get { return (traceDataLoggerGroupID ?? String.Empty); } 
 			set { traceDataLoggerGroupID = value; } 
 		}
 
@@ -224,8 +232,8 @@ namespace MosaicLib.SerialIO
 		public ReadActionParam(byte [] buffer) : this(buffer, (buffer != null ? buffer.Length : 0)) { }
 		public ReadActionParam(byte [] buffer, int bytesToRead) : this() { Buffer = buffer; BytesToRead = bytesToRead;  }
 
-		public void Reset() { startTime = QpcTimeStamp.Zero; bytesRead = 0; actionResultEnum = ActionResultEnum.None; resultCode = null; }
-		public void Start() { Reset(); startTime = QpcTimeStamp.Now; }
+		public void Reset() { startTime = QpcTimeStamp.Zero; actionResultEnum = ActionResultEnum.None; resultCode = null; }
+        public void Start() { Reset(); startTime = QpcTimeStamp.Now; }
 
 		public Byte [] Buffer { get { return buffer; } set { buffer = value; bytesToRead = (buffer != null ? buffer.Length : 0); } }
 		public int BytesToRead { get { return bytesToRead; } set { if (buffer != null) bytesToRead = Math.Min(value, buffer.Length); else bytesToRead = 0; } }
@@ -362,7 +370,7 @@ namespace MosaicLib.SerialIO
 			else
 			{
                 success &= specScan.MatchToken("<", false, false);
-                success &= specScan.ExtractToken(out elementName);
+                success &= specScan.ExtractToken(out elementName, TokenType.AlphaNumeric, false, false, false); // do not require token end
 			}
 
 			if (elementName == "NullPort")

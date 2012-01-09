@@ -32,10 +32,16 @@ namespace MosaicLib
     /// </summary>
     public static partial class Constants
     {
-        public const string MosaicLibNameSpaceRoot = "urn://mosaicsys.com/NS/MLib";
+        /// <summary>urn://mosaicsys.com/NS</summary>
+        public const string MosaicSysNameSpaceRoot = "urn://mosaicsys.com/NS";
 
+        /// <summary>urn://mosaicsys.com/NS/MLib</summary>
+        public const string MosaicLibNameSpaceRoot = MosaicSysNameSpaceRoot + "/MLib";
+
+        /// <summary>urn://mosaicsys.com/NS/MLib.Logging</summary>
         public const string LoggingNameSpace = MosaicLibNameSpaceRoot + ".Logging";
 
+        /// <summary>urn://mosaicsys.com/NS/MLib.Modular</summary>
         public const string ModularNameSpace = MosaicLibNameSpaceRoot + ".Modular";
     }
 }

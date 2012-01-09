@@ -107,7 +107,7 @@ namespace MosaicLib.Utils
 
 		#region Private methods
 
-		private static Logging.ILogger assertLogger = new Logging.Logger("MosaicLib.Utils.Assert");
+		private static Logging.ILogger assertLogger = null;
 
 		/// <summary> This is the inner-most implementation method for the Assert helper class.  It implements all of the assertType specific behavior for all assertions that get triggered.</summary>
 		private static void AssertCommon(string mesg, AssertType assertType, System.Diagnostics.StackFrame sourceFrame)
@@ -123,7 +123,10 @@ namespace MosaicLib.Utils
 
 			if (assertType == AssertType.Log)
 			{
-				assertLogger.Warning.Emit(mesg);
+                if (assertLogger == null)       // in an MT world we might create a few of these simultaniously.  This is not a problem as the distribution engine supports such a construct so locking is not required here in order to get valid behavior.
+                    assertLogger = new Logging.Logger("MosaicLib.Utils.Assert");
+
+                assertLogger.Warning.Emit(mesg);
 
 				return;
 			}

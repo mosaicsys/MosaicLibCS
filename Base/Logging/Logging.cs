@@ -717,7 +717,7 @@ namespace MosaicLib
             /// <summary>Returns the current KeywordArray (which may be empty).  Setter requires that the message has not been emitted. </summary>
             public string[] KeywordArray { get { return (keywordArray != null ? keywordArray : emptyKeywordArray); } set { AssertNotEmitted("KeywordArray property Set"); keywordArray = value; } }
             /// <summary>Returns an easily printable, comma seperated string of the given keywords or the empty string if there are none</summary>
-            public string Keywords { get { return Utils.Fcns.Unsplit(keywordArray); } }
+            public string Keywords { get { return (keywordArray != null ? String.Join(",", keywordArray) : String.Empty); } }
 
 			// optonal information about the source file and line where message was generated.
 			private System.Diagnostics.StackFrame sourceStackFrame = null;

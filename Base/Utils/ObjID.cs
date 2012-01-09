@@ -42,10 +42,16 @@ namespace MosaicLib.Utils
 		private string className = string.Empty;
 		public string ClassName { get { return ClassName; } }
 
+        public ObjIDBase(string objID) : this(string.Empty, objID, string.Empty) { }
 		public ObjIDBase(string className, string objID) : this (className, objID, string.Empty) {}
 		public ObjIDBase(string className, string objID, string objIDStrSuffix)
 		{
-			if (string.IsNullOrEmpty(objIDStrSuffix))
+            if (string.IsNullOrEmpty(className))
+                className = new System.Diagnostics.StackFrame(1).GetType().Name;    // get the name of the caller's type
+
+            this.className = className;
+
+            if (string.IsNullOrEmpty(objIDStrSuffix))
 				objIDStrSuffix = string.Empty;
 
 			if (!string.IsNullOrEmpty(objID))
@@ -55,6 +61,7 @@ namespace MosaicLib.Utils
 			{
 				object obj = this;
 				string objHashCodeStr = obj.GetHashCode().ToString("x8");
+
 				objID = Utils.Fcns.CheckedFormat("{0}{1}", objHashCodeStr, objIDStrSuffix);
 			}
 		}

@@ -73,20 +73,20 @@ namespace MosaicLib.SerialIO
 		{
 			Utils.StringScanner specScanner = new StringScanner(SpecStr);
 
-            if (IsValid && !specScanner.MatchToken("<ComPort"))
+            if (IsValid && !specScanner.MatchToken("<ComPort", false, false))
 				faultCode = Utils.Fcns.CheckedFormat("invalid element name in '{0}' at idx {1}", specScanner.Str, specScanner.Idx);
 
 			if (IsValid && !specScanner.ParseXmlAttribute("port", out portName))
 				faultCode = Utils.Fcns.CheckedFormat("missing port attribute in '{0}' at idx {1}", specScanner.Str, specScanner.Idx);
 
-			if (IsValid && specScanner.MatchToken(">"))
+            if (IsValid && specScanner.MatchToken(">", true, false))
 			{
 				Utils.StringScanner copy = specScanner;
 
 				if (IsValid && !uartConfig.ParseString(ref specScanner))
 					faultCode = Utils.Fcns.CheckedFormat("unable to parse expected UartConfig element in '{0}' at idx {1}", copy.Str, copy.Idx);
 
-                if (IsValid && !specScanner.MatchToken("</ComPort>"))
+                if (IsValid && !specScanner.MatchToken("</ComPort>", true, false))
 					faultCode = Utils.Fcns.CheckedFormat("missing element close '</ComPort>' in '{0}' at idx {1}", specScanner.Str, specScanner.Idx);
 			}
 			else
@@ -99,7 +99,7 @@ namespace MosaicLib.SerialIO
 				if (IsValid && !uartConfig.ParseString(uartConfigStr))
 					faultCode = Utils.Fcns.CheckedFormat("uartConfig attribute could not be parsed from '{0}'", uartConfigStr);
 
-                if (IsValid && !specScanner.MatchToken("/>"))
+                if (IsValid && !specScanner.MatchToken("/>", true, false))
 					faultCode = Utils.Fcns.CheckedFormat("missing element close '/>' in '{0}' at idx {1}", specScanner.Str, specScanner.Idx);
 			}
 		}

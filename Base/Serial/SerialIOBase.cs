@@ -41,7 +41,8 @@ namespace MosaicLib.SerialIO
 		//-----------------------------------------------------------------
 		#region Ctor, DTor
 
-		protected PortBase(PortConfig config, string partType) : base(config.Name, partType, config.SpinWaitTimeLimit) 
+		protected PortBase(PortConfig config, string partType) 
+            : base(config.Name, partType, config.SpinWaitTimeLimit) 
 		{ 
 			portConfig = config;
 
@@ -49,6 +50,9 @@ namespace MosaicLib.SerialIO
 			Info = Log.Emitter(config.InfoMesgType);
 			Debug = Log.Emitter(config.DebugMesgType);
             Trace = Log.Emitter(config.TraceMesgType);
+            Logging.Logger logger = Log as Logging.Logger;
+            if (logger != null)
+               logger.GroupName = config.LoggerGroupID;
 
 			traceDataLogger = new Logging.Logger(config.Name + ".Data", config.TraceDataLoggerGroupID);
 			TraceData = traceDataLogger.Emitter(config.TraceDataMesgType);
@@ -61,7 +65,8 @@ namespace MosaicLib.SerialIO
 			ActionLoggingReference.Error = Info;
 
             // most serial action progress messages are logged to the trace logger along with the data trace messages
-            ActionLoggingTraceReference = new ActionLogging(traceDataLogger, ActionLoggingConfig.Debug_Debug_Trace_Trace);
+            ActionLoggingConfig traceActionLoggingConfig = new ActionLoggingConfig(config.DebugMesgType, config.InfoMesgType, config.TraceDataMesgType, config.TraceDataMesgType);
+            ActionLoggingTraceReference = new ActionLogging(traceDataLogger, traceActionLoggingConfig);
 
 			BaseStatePublishedNotificationList.OnNotify += BaseStateChangedEventHandler;
 
@@ -273,8 +278,8 @@ namespace MosaicLib.SerialIO
 		protected readonly Logging.ILogger traceDataLogger = null;
 
 		protected readonly Logging.IMesgEmitter Error;
-		protected readonly Logging.IMesgEmitter Info;
-		protected readonly Logging.IMesgEmitter Debug;
+        protected readonly Logging.IMesgEmitter Info;
+        protected readonly Logging.IMesgEmitter Debug;
         protected readonly Logging.IMesgEmitter Trace;
         protected readonly Logging.IMesgEmitter TraceData;
 
@@ -421,7 +426,7 @@ namespace MosaicLib.SerialIO
 				if (gotCount > 0)
 					rdActionParam.BytesRead += gotCount;
 
-				bool readComplete = (rdActionParam.WaitForAllBytes ? (rdActionParam.BytesRead >= rdActionParam.BytesToRead) : (rdActionParam.BytesRead > 0));
+                bool readComplete = (rdActionParam.WaitForAllBytes ? (rdActionParam.BytesRead >= rdActionParam.BytesToRead) : (gotCount > 0));
 				if (ec == null && readComplete)
 					ec = string.Empty;
 

@@ -129,7 +129,7 @@ namespace MosaicLib.SerialIO
 
 			scan.SkipOverWhiteSpace();
 
-            if (scan.MatchToken("<UartConfig"))
+            if (scan.MatchToken("<UartConfig", false, false))
 			{
 				fromXml = true;
 

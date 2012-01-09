@@ -99,7 +99,7 @@ namespace MosaicLib.SerialIO
 			IPAddress ipAddr = null;
 
             if (!specScan.MatchToken("<", true, false)
-                || !specScan.ExtractToken(out elementName))
+                || !specScan.ExtractToken(out elementName, TokenType.AlphaNumeric, false, true, false))
 			{
 				ec = Utils.Fcns.CheckedFormat("Could not find element name in SpecStr:'{0}'", specScan.Str);
 			}
@@ -111,7 +111,7 @@ namespace MosaicLib.SerialIO
 			{
 				ec = Utils.Fcns.CheckedFormat("Could not extract port attribute from SpecStr:'{0}'", specScan.Str);
 			}
-            else if (!specScan.MatchToken("/>"))
+            else if (!specScan.MatchToken("/>", true, false))
             {
                 ec = Utils.Fcns.CheckedFormat("Did not find expected element end in SpecStr:'{0}'", specScan.Str);
             }

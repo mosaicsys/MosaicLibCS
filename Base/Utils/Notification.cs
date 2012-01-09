@@ -271,7 +271,7 @@ namespace MosaicLib.Utils
 			}
 			catch (Exception e)
 			{
-				Assert.BreakpointFault("eventH.WaitOne failed", e);
+				Assert.BreakpointFault("eventH.Reset failed", e);
 			}
 		}
 
@@ -575,7 +575,9 @@ namespace MosaicLib.Utils
 
 	/// <summary> 
 	/// Defines the interface that is provided by NotificationObjects.  
-	/// Supports access to (possibly guarded) Sequenced Object and registration of BasicNotificationDelegates with underlying NotificationList 
+	/// Supports access to (possibly guarded) Sequenced Object and registration of BasicNotificationDelegates with underlying NotificationList.
+    /// Current implementation classes include: InterlockedNotificationRefObject and GuardedNotificationValueObject.
+    /// May be used as a IBasicNotificationList and may be observed SequencedRefObjectSourceObserver or SequencedValueObjectSourceObserver as appropriate
 	/// </summary>
 	public interface INotificationObject<ObjectType> : ISequencedObjectSource<ObjectType, int>
 	{
@@ -588,6 +590,7 @@ namespace MosaicLib.Utils
 		public InterlockedNotificationRefObject() {}
 		public InterlockedNotificationRefObject(RefObjectType initialValue) : base(initialValue) { }
 
+        /// <summary>Sets the contained object and notifies all parties in the contained notificationList.  Use of lock free, volatile update and notify pattern requires that property setter cannot be used reenterantly.</summary>
 		public override RefObjectType Object { set { base.Object = value; notificationList.Notify(); } }
 
 		public IBasicNotificationList NotificationList { get { return notificationList; } }
@@ -601,7 +604,11 @@ namespace MosaicLib.Utils
 		public GuardedNotificationValueObject() {}
 		public GuardedNotificationValueObject(ValueObjectType initialValue) : base(initialValue) { }
 
-		public override ValueObjectType Object { set { base.Object = value; notificationList.Notify(); } }
+        /// <summary>
+        /// Accessor inherited from GuardedValueObject which uses mutex to control access to stored value object.  Accessor is thread safe and reenterant.
+        /// Mutator/Setter sets the contained object and notifies all parties in the contained notificationList.  Mutator/Setter method cannot be used reenterantly since no lock is used during notify portion of update pattern.
+        /// </summary>
+        public override ValueObjectType Object { set { base.Object = value; notificationList.Notify(); } }
 
 		public IBasicNotificationList NotificationList { get { return notificationList; } }
 
@@ -627,7 +634,8 @@ namespace MosaicLib.Utils
 
 	public class SharedWaitEventNotifierSet : DisposableBase
 	{
-		public SharedWaitEventNotifierSet() : this(37) { }
+        public const int defaultSetSize = 131;
+        public SharedWaitEventNotifierSet() : this(defaultSetSize) { }
 		public SharedWaitEventNotifierSet(int setSize) : this(setSize, WaitEventNotifier.Behavior.WakeAllSticky) { } 
 
 		public SharedWaitEventNotifierSet(int setSize, WaitEventNotifier.Behavior notifierBehavior) 
@@ -640,6 +648,7 @@ namespace MosaicLib.Utils
 
 		public IEventNotifier GetNextEventNotifier()
 		{
+            // use AtomicInt32 to generate next index
 			int seqNum = seqNumGen.Increment();
 			int idx = seqNum % eventSetList.Count;
 			IEventNotifier ien = eventSetList [idx];

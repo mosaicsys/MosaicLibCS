@@ -33,9 +33,14 @@ namespace MosaicLib.Utils
     /// <summary>Simple enumeration of the types of tokens that are supported in this set of parsing utilities.</summary>
     public enum TokenType
     {
-        ToNextWhiteSpace,		// span anything except whitespace
-        AlphaNumeric,			// span seq of letters and numbers
-        SimpleFileName,			// span alphanumeric, '-', '_' and '.'
+        /// <summary>span anything except whitespace</summary>
+        ToNextWhiteSpace,
+        /// <summary>span seq of letters and numbers</summary>
+        AlphaNumeric,
+        /// <summary>span alphanumeric, '-', '_' and '.'</summary>
+        SimpleFileName,
+        /// <summary>span alphanumeric, '-', '_', '.', '\\', '/', ':'</summary>
+        SimpleFilePath,
     }
 
     /// <summary>
@@ -132,6 +137,9 @@ namespace MosaicLib.Utils
         //-------------------------------------
         #region Token match and extract functions
 
+        /// <summary>
+        /// Returns true if the given char is a valid char in the set of chars defined by the tokenType
+        /// </summary>
         public static bool IsValidTokenChar(Char c, TokenType tokenType)
         {
             switch (tokenType)
@@ -139,17 +147,24 @@ namespace MosaicLib.Utils
                 case TokenType.ToNextWhiteSpace: return !Char.IsWhiteSpace(c);
                 case TokenType.AlphaNumeric: return (Char.IsLetterOrDigit(c));
                 case TokenType.SimpleFileName: return (Char.IsLetterOrDigit(c) || c == '-' || c == '_' || c == '.');
+                case TokenType.SimpleFilePath: return (Char.IsLetterOrDigit(c) || c == '-' || c == '_' || c == '.' || c == '\\' || c == '/' || c == ':');
                 default: return false;
             }
         }
 
+        /// <summary>
+        /// Returns true if the given char is a valid end of token char.  
+        /// For TokenType.ToNextWhiteSpace the char must be IsWhiteSpace.  
+        /// For TokenType.AlphaNumeric and TokenType.SimpleFileName, the char must not be a valid TokenType.SimpleFileName char.
+        /// </summary>
         public static bool IsValidTokenEndChar(Char c, TokenType tokenType)
         {
             switch (tokenType)
             {
                 case TokenType.ToNextWhiteSpace: return Char.IsWhiteSpace(c);
-                case TokenType.AlphaNumeric:
-                case TokenType.SimpleFileName: return !IsValidTokenChar(c, TokenType.SimpleFileName);
+                case TokenType.AlphaNumeric: return (Char.IsWhiteSpace(c));
+                case TokenType.SimpleFileName: return (Char.IsWhiteSpace(c));
+                case TokenType.SimpleFilePath: return (Char.IsWhiteSpace(c));
                 default: return false;
             }
         }
@@ -259,7 +274,7 @@ namespace MosaicLib.Utils
         {
             StringScanner localScanner = this;
             string tokenStr = string.Empty;
-            bool success = localScanner.ExtractToken(out tokenStr, TokenType.ToNextWhiteSpace, true, skipTrailingWhiteSpace);
+            bool success = localScanner.ExtractToken(out tokenStr, TokenType.AlphaNumeric, true, skipTrailingWhiteSpace);
             success = FindTokenValueByName(tokenStr, map, out value) && success;
 
             if (success)
@@ -319,7 +334,7 @@ namespace MosaicLib.Utils
         {
             StringScanner localScanner = this;
             string token;
-            bool success = localScanner.ParseValue(out token, skipTrailingWhiteSpace);
+            bool success = localScanner.ExtractToken(out token, TokenType.SimpleFileName, true, skipTrailingWhiteSpace, false);
             success = ParseValue(token, out value) && success;
 
             if (success)
@@ -332,7 +347,7 @@ namespace MosaicLib.Utils
         {
             StringScanner localScanner = this;
             string token;
-            bool success = localScanner.ParseValue(out token, skipTrailingWhiteSpace);
+            bool success = localScanner.ExtractToken(out token, TokenType.SimpleFileName, true, skipTrailingWhiteSpace, false);
             success = ParseValue(token, out value) && success;
 
             if (success)
@@ -346,7 +361,7 @@ namespace MosaicLib.Utils
         {
             StringScanner localScanner = this;
             string token;
-            bool success = localScanner.ParseValue(out token, skipTrailingWhiteSpace);
+            bool success = localScanner.ExtractToken(out token, TokenType.AlphaNumeric, true, skipTrailingWhiteSpace, true);
             success = ParseValue(token, out value) && success;
 
             if (success)
@@ -360,7 +375,7 @@ namespace MosaicLib.Utils
         {
             StringScanner localScanner = this;
             string token;
-            bool success = localScanner.ParseValue(out token, skipTrailingWhiteSpace);
+            bool success = localScanner.ExtractToken(out token, TokenType.SimpleFileName, true, skipTrailingWhiteSpace, false);
             success = ParseValue(token, out value) && success;
 
             if (success)
@@ -454,7 +469,7 @@ namespace MosaicLib.Utils
         #endregion
 
         //-------------------------------------
-        #region simple Xml attribute Parsers
+        #region simple Xml (style) attribute Parsers
 
         public bool ParseXmlAttribute(string attribName, out string value) { return ParseXmlAttribute(attribName, out value, true); }
         public bool ParseXmlAttribute(string attribName, out string value, bool skipTrailingWhiteSpace)
@@ -463,23 +478,45 @@ namespace MosaicLib.Utils
             StringScanner localScan = this;
             char termChar = (char)0;
 
-            success = localScan.MatchToken(attribName);
-            if (localScan.MatchToken("=\"", true, false))
+            const TokenType equalsUndelimitedValueTokenType = TokenType.SimpleFileName;
+
+            success = localScan.MatchToken(attribName, false, false);
+
+            if (localScan.MatchToken("=\"", false, false))
                 termChar = '"';
-            else if (localScan.MatchToken("=\'", true, false))
+            else if (localScan.MatchToken("=\'", false, false))
                 termChar = '\'';
+            else if (localScan.MatchToken("=", false, false))
+            { }
             else
                 success = false;
 
             StringScanner valueStart = localScan;
 
-            while (localScan.IsIdxValid && localScan.Char != termChar)
-                localScan.Idx++;
+            if (termChar != (char)0)
+            {
+                while (localScan.IsIdxValid && localScan.Char != termChar)
+                    localScan.Idx++;
+            }
+            else
+            {
+                while (localScan.IsIdxValid && IsValidTokenChar(localScan.Char, equalsUndelimitedValueTokenType))
+                    localScan.Idx++;
+            }
 
             StringScanner valueEnd = localScan;
 
-            string termStr = new string(termChar, 1);
-            success = localScan.MatchToken(termStr, skipTrailingWhiteSpace, true) && success;
+            if (termChar != (char)0)
+            {
+                string termStr = new string(termChar, 1);
+                success = localScan.MatchToken(termStr, skipTrailingWhiteSpace, false) && success;
+            }
+            else
+            {
+                success = success && IsValidTokenEndChar(localScan.Char, equalsUndelimitedValueTokenType);
+                if (success)
+                    localScan.SkipOverWhiteSpace();
+            }
 
             int valueLen = valueEnd.Idx - valueStart.Idx;
             value = valueStart.Str.Substring(valueStart.Idx, valueLen);

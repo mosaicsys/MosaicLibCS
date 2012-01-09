@@ -22,6 +22,7 @@
 namespace MosaicLib.Utils
 {
 	using System;
+    using System.Text;
 	using System.Collections.Generic;
 
 	#region Unassociated Functions
@@ -95,7 +96,7 @@ namespace MosaicLib.Utils
 			}
             catch (System.Exception ex)
             {
-                return System.String.Format("Format1('{0}') threw Exception '{1}'", fmt, ex.Message);
+                return System.String.Format("Format2('{0}') threw Exception '{1}'", fmt, ex.Message);
             }
         }
 
@@ -116,7 +117,7 @@ namespace MosaicLib.Utils
 			}
             catch (System.Exception ex)
             {
-                return System.String.Format("Format1('{0}') threw Exception '{1}'", fmt, ex.Message);
+                return System.String.Format("Format3('{0}') threw Exception '{1}'", fmt, ex.Message);
             }
         }
 
@@ -137,37 +138,30 @@ namespace MosaicLib.Utils
 			}
             catch (System.Exception ex)
             {
-                return System.String.Format("Format1('{0}') threw Exception '{1}'", fmt, ex.Message);
+                return System.String.Format("FormatN('{0}') threw Exception '{1}'", fmt, ex.Message);
             }
         }
 
-		#endregion
 
-        #region Unsplit
-
-        /// <summary>
-        /// Takes an array of strings and returns the comma delimited concatination of them.
-        /// </summary>
-        public static string Unsplit(string [] strings) { return Unsplit(strings, ","); }
-
-        /// <summary>
-        /// Takes an array of strings and a seperator string and returns the seperator delimited concatination of them.
-        /// </summary>
-        public static string Unsplit(string[] strings, string seperator)
+        /// <summary>Invokes System.String.Format with the given args within a try/catch pattern.</summary>
+        public static string CheckedFormat(IFormatProvider provider, string fmt, params object[] args)
         {
-            if (strings == null || strings.Length == 0)
-                return String.Empty;
-            if (strings.Length == 1)
-                return strings[0];
-
-            System.Text.StringBuilder sb = new System.Text.StringBuilder(strings[0]);
-            for (int idx = 1; idx < strings.Length; idx++)
+            try
             {
-                sb.Append(seperator);
-                sb.Append(strings[idx]);
+                return System.String.Format(provider, fmt, args);
             }
-
-            return sb.ToString();
+            catch (System.FormatException ex)
+            {
+                return System.String.Format(provider, "FormatPN('{0}') threw FormatException '{1}'", fmt, ex.Message);
+            }
+            catch (System.ArgumentNullException ex)
+            {
+                return System.String.Format(provider, "FormatPN('{0}') threw ArgumentNullException '{1}'", fmt, ex.Message);
+            }
+            catch (System.Exception ex)
+            {
+                return System.String.Format(provider, "FormatPN('{0}') threw Exception '{1}'", fmt, ex.Message);
+            }
         }
 
         #endregion
@@ -175,7 +169,139 @@ namespace MosaicLib.Utils
 
 	#endregion
 
-	#region Enum
+#if (false) // disable until we switch to 3.5
+    #region Extension Functions
+
+    /// <summary>
+    /// This class contains a set of extension methods.  At present this primarily adds variants of the CheckedFormat methods above to be used directly with Strings and StringBuilder
+    /// </summary>
+    public static partial class ExtensionMethods
+    {
+        #region static System.Text.StringBuilder.CheckedAppendFormat extension methods
+
+        /// <summary>Invokes System.Text.StringBuilder.AppendFormat with the given args within a try/catch pattern.</summary>
+        public static StringBuilder CheckedAppendFormat(this StringBuilder sb, string fmt, object arg0)
+        {
+            try
+            {
+                sb.AppendFormat(fmt, arg0);
+            }
+            catch (System.FormatException ex)
+            {
+                sb.AppendFormat("Format1('{0}') threw FormatException '{1}'", fmt, ex.Message);
+            }
+            catch (System.ArgumentNullException ex)
+            {
+                sb.AppendFormat("Format1('{0}') threw ArgumentNullException '{1}'", fmt, ex.Message);
+            }
+            catch (System.Exception ex)
+            {
+                sb.AppendFormat("Format1('{0}') threw Exception '{1}'", fmt, ex.Message);
+            }
+
+            return sb;
+        }
+
+        /// <summary>Invokes System.Text.StringBuilder.AppendFormat with the given args within a try/catch pattern.</summary>
+        public static StringBuilder CheckedAppendFormat(this StringBuilder sb, string fmt, object arg0, object arg1)
+        {
+            try
+            {
+                sb.AppendFormat(fmt, arg0, arg1);
+            }
+            catch (System.FormatException ex)
+            {
+                sb.AppendFormat("Format2('{0}') threw FormatException '{1}'", fmt, ex.Message);
+            }
+            catch (System.ArgumentNullException ex)
+            {
+                sb.AppendFormat("Format2('{0}') threw ArgumentNullException '{1}'", fmt, ex.Message);
+            }
+            catch (System.Exception ex)
+            {
+                sb.AppendFormat("Format2('{0}') threw Exception '{1}'", fmt, ex.Message);
+            }
+
+            return sb;
+        }
+
+        /// <summary>Invokes System.Text.StringBuilder.AppendFormat with the given args within a try/catch pattern.</summary>
+        public static StringBuilder CheckedAppendFormat(this StringBuilder sb, string fmt, object arg0, object arg1, object arg2)
+        {
+            try
+            {
+                sb.AppendFormat(fmt, arg0, arg1, arg2);
+            }
+            catch (System.FormatException ex)
+            {
+                sb.AppendFormat("Format3('{0}') threw FormatException '{1}'", fmt, ex.Message);
+            }
+            catch (System.ArgumentNullException ex)
+            {
+                sb.AppendFormat("Format3('{0}') threw ArgumentNullException '{1}'", fmt, ex.Message);
+            }
+            catch (System.Exception ex)
+            {
+                sb.AppendFormat("Format3('{0}') threw Exception '{1}'", fmt, ex.Message);
+            }
+
+            return sb;
+        }
+
+        /// <summary>Invokes System.Text.StringBuilder.AppendFormat with the given args within a try/catch pattern.</summary>
+        public static StringBuilder CheckedAppendFormat(this StringBuilder sb, string fmt, params object[] args)
+        {
+            try
+            {
+                sb.AppendFormat(fmt, args);
+            }
+            catch (System.FormatException ex)
+            {
+                sb.AppendFormat("FormatN('{0}') threw FormatException '{1}'", fmt, ex.Message);
+            }
+            catch (System.ArgumentNullException ex)
+            {
+                sb.AppendFormat("FormatN('{0}') threw ArgumentNullException '{1}'", fmt, ex.Message);
+            }
+            catch (System.Exception ex)
+            {
+                sb.AppendFormat("FormatN('{0}') threw Exception '{1}'", fmt, ex.Message);
+            }
+
+            return sb;
+        }
+
+        /// <summary>Invokes System.Text.StringBuilder.AppendFormat with the given args within a try/catch pattern.</summary>
+        public static StringBuilder CheckedAppendFormat(this StringBuilder sb, IFormatProvider provider, string fmt, params object[] args)
+        {
+            try
+            {
+                sb.AppendFormat(provider, fmt, args);
+            }
+            catch (System.FormatException ex)
+            {
+                sb.AppendFormat("FormatPN('{0}') threw FormatException '{1}'", fmt, ex.Message);
+            }
+            catch (System.ArgumentNullException ex)
+            {
+                sb.AppendFormat("FormatPN('{0}') threw ArgumentNullException '{1}'", fmt, ex.Message);
+            }
+            catch (System.Exception ex)
+            {
+                sb.AppendFormat("FormatPN('{0}') threw Exception '{1}'", fmt, ex.Message);
+            }
+
+            return sb;
+        }
+
+        #endregion
+    }
+
+    #endregion
+
+#endif
+
+    #region Enum
 
     /// <summary>
     /// Enum class is essentially a namespace for series of static Enum related helper methods
@@ -354,7 +480,7 @@ namespace MosaicLib.Utils
 		private static IByteArrayTranscoder byteArrayStringTranscoder = new ByteArrayStringTranscoder();
 		private static IByteArrayTranscoder base64UrlTranscoder = new Base64UrlTranscoder();
 
-        /// <summary>Returns a Transcoder that converts directly between byte arrays and strings of the identical characters.</summary>
+        /// <summary>Returns a Transcoder that converts directly between byte arrays and strings of the identical character (bit patterns).  Encode widens each byte, Decode truncates the upper bits in each character to give the resulting byte.</summary>
 		public static IByteArrayTranscoder ByteStringTranscoder { get { return byteArrayStringTranscoder; } }
 
         /// <summary>Returns a Transcoder that converst between binary byte arrays and Base64 coded strings</summary>

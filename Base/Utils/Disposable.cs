@@ -23,7 +23,10 @@ namespace MosaicLib.Utils
 {
 	using System;
 
-	/// <summary>Provide placeholder to put DisposeOfObject method</summary>
+    //-------------------------------------------------------------------
+    #region Helper functions and classes
+
+    /// <summary>Provide placeholder to put DisposeOfObject method</summary>
 	public static partial class Fcns
 	{
 		/// <summary>Helper function used to dispose of things that can be casted to an IDisposable type.  oRef.Dispose() method is only called if ObjType can be casted to an IDisposable object.</summary>
@@ -38,9 +41,38 @@ namespace MosaicLib.Utils
             if (d != null)
 				d.Dispose();
 		}
-	}
+    }
 
-	/// <summary>Defines the base class of the DisposableBase class.</summary>
+    /// <summary>
+    /// This class is used to invoke a simple delegate on explicit disposal of the object.  It is generally used to trigger the delegate to be invoked when flow of control leaves the execution block for a using instruction.
+    /// </summary>
+    public class InvokeDelegateOnDispose : DisposableBase
+    {
+        public delegate void DisposeDelegate();
+        public InvokeDelegateOnDispose(DisposeDelegate disposeDelegate) { this.disposeDelegate = disposeDelegate; }
+        private DisposeDelegate disposeDelegate = null;
+
+        protected override void Dispose(DisposableBase.DisposeType disposeType)
+        {
+            if (disposeType == DisposeType.CalledExplicitly && disposeDelegate != null)
+            {
+                try
+                {
+                    disposeDelegate();
+                }
+                catch { }
+
+                disposeDelegate = null;
+            }
+        }
+    }
+
+    #endregion
+
+    //-------------------------------------------------------------------
+    #region DisposableBase and DisposableBaseBase
+
+    /// <summary>Defines the base class of the DisposableBase class.</summary>
 	/// <remarks>
 	/// Provides default virual implementation of Dispose method.  It is necessary to provide this explicit base class for the 
 	/// DisposableBase class so that it can mark its override of this method as sealed.
@@ -176,7 +208,9 @@ namespace MosaicLib.Utils
 		private AtomicInt32 activeDisposeCounter = new AtomicInt32(0);
 
 		#endregion
-	}
+    }
+
+    #endregion
 }
 
 //-------------------------------------------------------------------
