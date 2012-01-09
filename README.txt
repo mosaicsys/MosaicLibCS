@@ -1,6 +1,6 @@
 This is the MosaicLibCS source library project.
 
-Copyright (c) Mosaic Systems Inc., All rights reserved.  
+Copyright (c) Mosaic Systems Inc.  All rights reserved.  
 
 This distribution is licensed under the Apache License, Version 2.0 (the "License") 
 and may not be used except in compliance with the License.  
