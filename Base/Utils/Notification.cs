@@ -38,17 +38,18 @@ namespace MosaicLib.Utils
 	#region Notification targets: notification and wait objects
 
 	/// <summary> This interface defines the Notify method which a client may invoke on a INotifyable object to Notify it that something has happened. </summary>
-
 	public interface INotifyable
 	{
-		void Notify();
+        /// <summary>Caller invokes this to Notify a target object that something noticable has happened.</summary>
+        void Notify();
 	}
 
 	/// <summary> Provides a version of the INotifyable interface in which the Notify call is passed an eventArgs parameter. </summary>
 	/// <typeparam name="EventArgsType">The type of the eventArgs parameter that will be passed to the Notify call.</typeparam>
 	public interface INotifyable<EventArgsType>
 	{
-		void Notify(EventArgsType eventArgs);
+        /// <summary>Caller invokes this to Notify a target object that something noticable has happened and passes the requested EventArgType argument to it.</summary>
+        void Notify(EventArgsType eventArgs);
 	}
 
 	/// <summary> This interface defines a simple interface that is supported by objects which can be used to cause a thread to wait until the object is signalted (Notified). </summary>
@@ -78,33 +79,45 @@ namespace MosaicLib.Utils
 	{
 		#region INotifyable Members
 
-		public abstract void Notify();
+        /// <summary>Caller invokes this to Notify a target object that something noticable has happened.</summary>
+        public abstract void Notify();
 
 		#endregion
 
 		#region IWaitable Members
 
-		public abstract bool IsSet { get; }	// returns true if the underlying object is currently set (so that first wait call is expected to return immiedately)
-		public abstract void Reset();
+        /// <summary>returns true if the underlying object is currently set (so that first wait call is expected to return immiedately)</summary>
+        public abstract bool IsSet { get; }
 
-		public abstract bool Wait();
+        /// <summary>returns true if object was signaling at end of wait, false otherwise</summary>
+        public abstract bool Wait();
 
-		public abstract bool WaitMSec(int timeLimitInMSec);
+        /// <summary>returns true if object was signaling at end of wait, false otherwise</summary>
+        public abstract bool WaitMSec(int timeLimitInMSec);
 
-		public virtual bool WaitSec(double timeLimitInSeconds)
+        /// <summary>returns true if object was signaling at end of wait, false otherwise</summary>
+        public virtual bool WaitSec(double timeLimitInSeconds)
 		{
 			double dblTimeLimitInMSec = timeLimitInSeconds * 1000.0;
 			int timeLimitInMSec = (int) Math.Max(Math.Min(dblTimeLimitInMSec, (double) 0x7fffffff), 0.0);
 			return WaitMSec(timeLimitInMSec);
 		}
 
-		public virtual bool Wait(TimeSpan timeLimit)
+        /// <summary>returns true if object was signaling at end of wait, false otherwise</summary>
+        public virtual bool Wait(TimeSpan timeLimit)
 		{
 			return WaitSec(timeLimit.TotalSeconds);
 		}
 
 		#endregion
-	}
+
+        #region Additional required methods
+
+        /// <summary>Clears the signaling state of the target object.  Implemented as appropriate based on the actual implementation object type.</summary>
+        public abstract void Reset();
+
+        #endregion
+    }
 
 	/// <summary> 
 	/// This class is both INotifyable and IWaitable.  It provides an implementation around an EventWaitHandle where the constructor can detemine the
@@ -118,10 +131,14 @@ namespace MosaicLib.Utils
 		/// <summary> Enum defines the types of behavior that this object may have </summary>
 		public enum Behavior
 		{
-			Invalid = 0,		// Initial value placeholder.  Illegal in normal use.  Will throw exception if attempt is made to construct a WaitEventNotifier using this value.
-			WakeOne,			// Notify wakes one thread if any are waiting (AutoReset) or none if no threads are currently waiting
-			WakeAll,			// Notify wakes all threads that are currently waiting (Pulse with ManualReset), or none if no threads are currently waiting
-			WakeAllSticky,		// Notify wakes all threads if any are waiting.  If no threads are waiting then it wakes the next thread or threads that attempt to invoke Wait on the previsouly signaled object.  Last caller to return from Wait in this manner will reset the object to its non-signaling state.  (based on ManualReset)
+            /// <summary>Initial value placeholder.  Illegal in normal use.  Will throw exception if attempt is made to construct a WaitEventNotifier using this value.</summary>
+			Invalid = 0,
+            /// <summary>Notify wakes one thread if any are waiting (AutoReset) or none if no threads are currently waiting</summary>
+            WakeOne,
+            /// <summary>Notify wakes all threads that are currently waiting (Pulse with ManualReset), or none if no threads are currently waiting</summary>
+            WakeAll,
+            /// <summary>Notify wakes all threads if any are waiting.  If no threads are waiting then it wakes the next thread or threads that attempt to invoke Wait on the previsouly signaled object.  Last caller to return from Wait in this manner will reset the object to its non-signaling state.  (based on ManualReset)</summary>
+            WakeAllSticky,
 		}
 
 		public WaitEventNotifier(Behavior behavior) 
@@ -147,7 +164,8 @@ namespace MosaicLib.Utils
 
 		#region EventNotifierBase Members
 
-		public override void Notify()
+        /// <summary>Caller invokes this to Notify a target object that something noticable has happened.</summary>
+        public override void Notify()
 		{
 			if (behavior == Behavior.WakeAll)
 				PulseEvent();
@@ -155,7 +173,8 @@ namespace MosaicLib.Utils
 				SetEvent();
 		}
 
-		public override bool IsSet
+        /// <summary>returns true if the underlying object is currently set (so that first wait call is expected to return immiedately)</summary>
+        public override bool IsSet
 		{
 			get
 			{
@@ -169,12 +188,14 @@ namespace MosaicLib.Utils
 			}
 		}
 
-		public override void Reset()
+        /// <summary>Resets the underlying event.</summary>
+        public override void Reset()
 		{
 			ResetEvent();
 		}
 
-		public override bool Wait()
+        /// <summary>returns true if object was signaling at end of wait, false otherwise</summary>
+        public override bool Wait()
 		{
 			System.Threading.EventWaitHandle ewh = eventH;
 
@@ -201,7 +222,8 @@ namespace MosaicLib.Utils
 			return signaled;
 		}
 
-		public override bool WaitMSec(int timeLimitInMSec)
+        /// <summary>returns true if object was signaling at end of wait, false otherwise</summary>
+        public override bool WaitMSec(int timeLimitInMSec)
 		{
 			if (eventH == null)
 				return false;
@@ -362,63 +384,146 @@ namespace MosaicLib.Utils
 		event EventHandlerDelegate<EventArgsType> OnNotify;
 	}
 
-	/// <summary>Provides a thread safe container for storing a set of delegates that can be invoked without locking.</summary>  
+    /// <summary>
+    /// Provides a thread safe container for storing a set of objects with a backing cached array for thread safe efficient atomic snapshot of the set contents.
+    /// This object is intended to be used in the following cases:
+    /// <list type="number">
+    /// <item>Where logic frequently iterates through the items in a list but where the contents are rarely changed.  Use of conversion of list contents to a cached Array decreases access/iteration cost and minimizes garbage generation.</item>
+    /// <item>Where list content changes may be made on multiple threads with list iteration performed on a single thread.  Use of conversion of list contents to an array allows iterating thread to take a snapshot of the list contents before each iteration method and then iterate without needing to lock or otherwise concern itself with changeable list contents during a single iteration phase.</item>
+    /// </list>
+    /// Examples of these cases include delegate and event lists as well as any generic list of items that are iterated through much more frequently than the set of such items changes.
+    /// </summary>  
+    /// <typeparam name="ObjectType">ObjectType may be any reference or value object.  Use is expected to be based on reference object types but does not require it.</typeparam>
+    /// <remarks>
+    /// Based on the use of a locked list of the objects and a volatile handle to an array of objects that is (re)objtained from the list when needed
+    /// </remarks>
+
+    public class LockedObjectListWithCachedArray<ObjectType>
+    {
+        /// <summary>Default contstructor</summary>
+        public LockedObjectListWithCachedArray() { }
+
+        #region Public methods and properties
+
+        /// <summary>Adds the given object instance to the list and triggers the Array be rebuilt on next use.  Re-enterant and thread safe using leaf lock on list contents.</summary>
+        public LockedObjectListWithCachedArray<ObjectType> Add(ObjectType d)
+        {
+            lock (listMutex)
+            {
+                objectList.Add(d);
+                rebuildVolatileObjectArray = true;
+            }
+
+            return this;
+        }
+        /// <summary>Removes the given object instance from the list and triggers the Array be rebuilt on next use.  Re-enterant and thread safe using leaf lock on list contents.</summary>
+        public LockedObjectListWithCachedArray<ObjectType> Remove(ObjectType d)
+        {
+            lock (listMutex)
+            {
+                objectList.Remove(d);
+                rebuildVolatileObjectArray = true;
+            }
+
+            return this;
+        }
+
+        /// <summary>Returns true if the Array property is currently empty (returns a zero length array).</summary>
+        public bool IsEmpty { get { return (Array.Length == 0); } }
+
+        /// <summary>
+        /// Returns the most recently generated copy of the Array version of the underlying list of objects.  Will return a fixed empty array when the list is empty.
+        /// Implementation guarantees that returned value will include effects of any change made to the list by the thread that is requesting this array.
+        /// Changes made by other threads produce race conditions where the side effects of the change on another thread may, or may not, be visible in the array contents
+        /// until the thread reading this property invokes it entirely after another thread in question's Add or Remove method has returned from that method invokation.
+        /// This method does not attempt to lock or update the underlying Array value unless it knows that at least one change has been completed to the list contents.
+        /// </summary>
+        /// <remarks>
+        /// If any change to the list has been recorded via the rebuild flag then this property will lock access to the list, 
+        /// generate the array version of it and then retain the Array version for later requests until the list contents have been changed again.
+        /// Use of locked access to list during rebuild prevents the risk that the list may change contents while the rebuild is taking place.
+        /// </remarks>
+        public ObjectType[] Array
+        {
+            get
+            {
+                ObjectType[] array = volatileObjectArray;
+
+                if (rebuildVolatileObjectArray)
+                {
+                    lock (listMutex)
+                    {
+                        rebuildVolatileObjectArray = false;
+
+                        array = objectList.ToArray();
+                        if (array == null)
+                            array = emptyObjectArray;
+
+                        volatileObjectArray = array;
+                    }
+                }
+
+                return array;
+            }
+        }
+
+        #endregion
+
+        #region Private fields
+
+        /// <summary>mutex used to gaurd/sequence access to the underlying list so that both changes and access to the list are performed atomically.</summary>
+        private object listMutex = new object();
+        /// <summary>underlying reference list of delegates, access to this list must only be made while owning the corresponding mutex.</summary>
+        private List<ObjectType> objectList = new List<ObjectType>();
+        /// <summary>Single common empty array that is used as the array when the list is empty.</summary>
+        private static ObjectType[] emptyObjectArray = new ObjectType[0];
+        /// <summary>volatile handle to the array of delegates produced during the last rebuild operation.</summary>
+        private volatile ObjectType[] volatileObjectArray = emptyObjectArray;
+        /// <summary>volatile boolean used to flag that a rebuild is required during the next access to the Array property.</summary>
+        private volatile bool rebuildVolatileObjectArray = true;
+
+        #endregion
+    }
+    
+    /// <summary>
+    /// Provides a thread safe container for storing a set of delegates that can be invoked without locking.
+    /// This class is a synonym for the LockedObjectListWithCachedArray templatized class.
+    /// </summary>  
 	/// <remarks>
 	/// Based on the use of a locked list of the delegates and a volatile handle to an array of delegates that is (re)objtained from the
 	/// list when needed
 	/// </remarks>
-
-	public class LockedDelegateListBase<DelegateType>
+	public class LockedDelegateListBase<DelegateType> : LockedObjectListWithCachedArray<DelegateType>
 	{
-		protected void Add(DelegateType d)
-		{
-			lock (mutex)
-			{
-				delegateList.Add(d);
-				rebuildVolatileDelegateArray = true;
-			}
-		}
-		protected void Remove(DelegateType d)
-		{
-			lock (mutex)
-			{
-				delegateList.Remove(d);
-				rebuildVolatileDelegateArray = true;
-			}
-		}
+        /// <summary>Adds the given delegate instance to the list and triggers the Array copy to be rebuilt.  Re-enterant and thread safe using leaf lock on list contents.</summary>
+        protected new void Add(DelegateType d)
+        {
+            base.Add(d);
+        }
 
-		public bool IsEmpty { get { return (Array.Length != 0); } }
+        /// <summary>Removes the given delegate instance from the list and triggers the Array copy to be rebuilt.  Re-enterant and thread safe using leaf lock on list contents.</summary>
+        protected new void Remove(DelegateType d)
+        {
+            base.Remove(d);
+        }
 
-		protected DelegateType [] Array 
-		{
-			get
-			{
-				DelegateType [] array = volatileDelegateArray;
-
-				if (rebuildVolatileDelegateArray)
-				{
-					lock (mutex)
-					{
-						rebuildVolatileDelegateArray = false;
-
-						array = delegateList.ToArray();
-						if (array == null)
-							array = emptyDelegateArray;
-
-						volatileDelegateArray = array;
-					}
-				}
-
-				return array;
-			}
-		}
-
-		private object mutex = new object();
-		private List<DelegateType> delegateList = new List<DelegateType>();
-		private static DelegateType [] emptyDelegateArray = new DelegateType [0];
-		private volatile DelegateType [] volatileDelegateArray = emptyDelegateArray;
-		private volatile bool rebuildVolatileDelegateArray = true;
-	}
+        /// <summary>
+        /// Returns the most recently generated copy of the Array version of the underlying list of delegates.  Will return a fixed empty array when the list is empty.
+        /// Implementation guarantees that returned value will include effects of any change made to the list by the thread that is requesting this array.
+        /// Changes made by other threads produce a race condition where the side effects of the change on another thread will not be visible in the array contents
+        /// until the thread reading this property invokes it entirely after another thread in question's Add or Remove method has returned from that method invokation.
+        /// This method does not attempt to lock or update the underlying Array value unless it knows that at least one change has been completed to the list contents.
+        /// </summary>
+        /// <remarks>
+        /// If any change to the list has been recorded via the rebuild flag then this property will lock access to the list, 
+        /// generate the array version of it and then retain the Array version for later requests until the list contents have been changed again.
+        /// Use of locked access to list during rebuild prevents the risk that the list may change contents while the rebuild is taking place.
+        /// </remarks>
+        protected new DelegateType[] Array
+        {
+            get { return base.Array; }
+        }
+    }
 
 	/// <summary> This class implements an MT safe event list for BasicNotificationDelegates. </summary>
 	/// <remarks> 

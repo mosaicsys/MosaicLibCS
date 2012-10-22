@@ -25,9 +25,9 @@ namespace MosaicLib.Time
 	using System;
 	using System.Runtime.InteropServices;
 
-	#region Qpc static wrapper class
+    #region Qpc static wrapper class
 
-	/// <summary>This class acts as a form of namespace in which to place various QueryPerformanceCounter (QPC) related items</summary>
+    /// <summary>This class acts as a form of namespace in which to place various QueryPerformanceCounter (QPC) related items</summary>
 	public static class Qpc
 	{
 		#region extern kernal functions
@@ -135,7 +135,7 @@ namespace MosaicLib.Time
 		public TimeSpan Age { get { return (Now - this); } }
 
 		/// <summary>Sets the stored qpc timestamp to Now.</summary>
-		public void SetToNow() { Time = Qpc.TimeNow; }
+		public QpcTimeStamp SetToNow() { Time = Qpc.TimeNow; return this; }
 
 		/// <summary>True if the stored qpc timestamp is zero.</summary>
 		public bool IsZero { get { return Time == 0.0; } }
@@ -185,7 +185,7 @@ namespace MosaicLib.Time
 		/// <summary>returns true if the lhs timestamp comes after, or equals, the rhs timestamp</summary>
 		public static bool operator >=(QpcTimeStamp lhs, QpcTimeStamp rhs) { return lhs.Time >= rhs.Time; }
 
-		/// <summary>returns the </summary>
+		/// <summary>returns the result of lhs.CompareTo(rhs)</summary>
 		public static int Compare(QpcTimeStamp lhs, QpcTimeStamp rhs) { return lhs.Time.CompareTo(rhs.Time); }
 
 		/// <summary>Invokes CompareTo on the underlying double values and returns its result.</summary>
@@ -243,79 +243,193 @@ namespace MosaicLib.Time
         { }
 
         /// <summary>Defines timer based on given interval and autoReset flag</summary>
-        /// <param name="triggerInervalInSec">double value that defines the timer interval in units of seconds.</param>
+        /// <param name="triggerIntervalInSec">double value that defines the timer interval in units of seconds.</param>
         /// <param name="autoReset">boolean value that determines if the timer resets itself on reported experation of the timer or if it requires the client to explicitly restart it using the Reset method.</param>
         public QpcTimer(double triggerIntervalInSec, bool autoReset)
             : this()
 		{
-			lastTriggerTimestamp = QpcTimeStamp.Zero;
-			TriggerIntervalInSec = triggerIntervalInSec;
-			this.autoReset = autoReset;
+            lastTriggerTimestamp = QpcTimeStamp.Zero;           // essentially calls Stop();
+			TriggerIntervalInSec = triggerIntervalInSec;        // advances next
+			AutoReset = autoReset;
         }
+
+        // default constructor always leaves all fields in default, zero state
 
         #endregion
 
         /// <summary>
-        /// Property can be used to get or set the TriggerInterval as a double value in units of seconds.  Setting this interval implicitly resets the timer to expire after the interval has elapsed since the last occurance.
+        /// Property can be used to get or set the TriggerInterval as a double value in units of seconds.  
+        /// Setting this interval implicitly resets the timer to expire after the interval has elapsed since the last occurance (if it has already been started).
         /// </summary>
         public double TriggerIntervalInSec { get { return triggerIntervalInSec; } set { triggerIntervalInSec = value; nextTriggerTimestamp = lastTriggerTimestamp + value; } }
+ 
         /// <summary>
-        /// Property can be used to get or set the TriggerInterval as a TimeSpan value.  Setting this interval implicitly resets the timer to expire after the interval has elpased since the since the last occurance. 
+        /// Property can be used to get or set the TriggerInterval as a TimeSpan value.  
+        /// Setting this interval implicitly resets the timer to expire after the interval has elpased since the since the last occurance (if it has already been started).
         /// </summary>
-        public TimeSpan TriggerInterval { get { return TimeSpan.FromSeconds(triggerIntervalInSec); } set { triggerIntervalInSec = value.TotalSeconds; } }
+        public TimeSpan TriggerInterval { get { return TimeSpan.FromSeconds(TriggerIntervalInSec); } set { TriggerIntervalInSec = value.TotalSeconds; } }
 
         /// <summary>
-        /// Method is used to reset the timer to occur after TriggerInterval has elpased from now.
+        /// Indicates that the timer has been set to use autoReset behavior.  Setter allows autoReset behavior to be enabled or disabled, typically as part of the construction time property initializer list.
         /// </summary>
-		public void Reset() { Reset(QpcTimeStamp.Now); }
+        public bool AutoReset
+        {
+            get
+            {
+                return (SelectedBehavior & Behavior.AutoReset) != Behavior.None;
+            }
+            set
+            {
+                if (value)
+                    SelectedBehavior = SelectedBehavior | Behavior.AutoReset;
+                else
+                    SelectedBehavior = SelectedBehavior & ~Behavior.AutoReset;
+            }
+        }
+
+        /// <summary>This enum defines the various behaviors that a QpcTimer can be configured to use.</summary>
+        [Flags]
+        public enum Behavior
+        {
+            /// <summary>Struct default constructor default value - all zeros - no listed behaviors are selected.</summary>
+            None = 0x0000,
+            /// <summary>Selects that the AutoReset behavior shall be used</summary>
+            AutoReset = 0x0001,
+            /// <summary>Selects that the ElapsedTime properties will report zero when the timer is stopped.  Otherwise they report large elapsed times (now - zero)</summary>
+            ElapsedTimeIsZeroWhenStopped = 0x0002,
+            /// <summary>Selects that the IsTriggered and GetIsTriggered functions/properties will allow the timer to run if when the TriggerInterval is zero.  default is that they will not.</summary>
+            ZeroTriggerIntervalRunsTimer = 0x0004,
+            /// <summary>Selects that both ElapsedTimeIsZeroWhenStopped and ZeroTriggerIntervaleRunsTimer will be enabled.</summary>
+            NewDefault = (Behavior.ElapsedTimeIsZeroWhenStopped | Behavior.ZeroTriggerIntervalRunsTimer),
+            /// <summary>Selects that AutoReset, ElapsedTimeIsZeroWhenStopped, and ZeroTriggerIntervaleRunsTimer will be enabled.</summary>
+            NewAutoReset = (Behavior.AutoReset | Behavior.ElapsedTimeIsZeroWhenStopped | Behavior.ZeroTriggerIntervalRunsTimer),
+        }
 
         /// <summary>
-        /// Method is used to reset the timer to occur after TriggerInterval has elpased from state time called now.
+        /// This property defines the timer behavior options and allows the caller to change them using the setter.
+        /// </summary>
+        public Behavior SelectedBehavior { get; set; }
+
+        /// <summary>indicates that ElapsedTime will be forced to zero when timer is stopped</summary>
+        public bool ElapsedTimeIsZeroWhenStopped { get { return ((SelectedBehavior & Behavior.ElapsedTimeIsZeroWhenStopped) != Behavior.None); } }
+
+        /// <summary>Indicates that Timer may trigger even when TriggerInterval is zero</summary>
+        public bool ZeroTriggerIntervalRunsTimer { get { return ((SelectedBehavior & Behavior.ZeroTriggerIntervalRunsTimer) != Behavior.None); } }
+
+        /// <summary>
+        /// Method is used to reset the timer to occur after TriggerInterval has elpased from now.  This is a synonym for Start().
+        /// </summary>
+        public QpcTimer Reset() 
+        {
+            return Start();
+        }
+
+        /// <summary>
+        /// Method is used to reset the timer to occur after TriggerInterval has elpased from stated time called now.
+        /// This is a synonym for Start(now).
         /// </summary>
         /// <param name="now">Caller provies the time stamp from which the interval is measured.</param>
-		public void Reset(QpcTimeStamp now)
+        public QpcTimer Reset(QpcTimeStamp now)
 		{
-			nextTriggerTimestamp = lastTriggerTimestamp = now;
-			nextTriggerTimestamp.Add(triggerIntervalInSec);
+            return Start(now);
+		}
+
+        /// <summary>
+        /// Getter returns true if the timer has been started.
+        /// Setter starts the timer if assigned to true or stops the timer if assigned to false.
+        /// NOTE: use of the setter for this property puts the QpcTimer in the new behavior where 
+        /// ElapsedTime is forced to zero when the timer is stopped and where the TriggerInterval of zero will not block the timer from triggering (negative values still do)
+        /// </summary>
+        public bool Started
+        {
+            get 
+            { 
+                return !lastTriggerTimestamp.IsZero; 
+            }
+
+            set 
+            {
+                if (value) 
+                    Start(); 
+                else 
+                    Stop(); 
+            }
 		}
 
         /// <summary>
         /// Method is used to set the TriggerInterval to the given value and then Reset the timer so that it will expire after the given interval.
         /// </summary>
         /// <param name="newTriggerInterval">Caller provided TimeSpan after which the timer should expire</param>
-        public void Start(TimeSpan newTriggerInterval)
+        public QpcTimer Start(TimeSpan newTriggerInterval)
         {
             TriggerInterval = newTriggerInterval;
-            Reset();
+            return Start();
         }
 
         /// <summary>
-        /// Get property returns true if the timer's TriggerInterval has elapsed since the last occurance.  Uses GetIsTriggered method internally.  If timer is configured to AutoReset, the timer will automatically reset to expire after after the TriggerInterval has elapsed from the most recent occurance.
+        /// Starts the timer to run from now, using the current TriggerInterval 
+        /// </summary>
+        public QpcTimer Start()
+        {
+            return Start(QpcTimeStamp.Now);
+        }
+
+        /// <summary>
+        /// Internal method: starts the timer to trigger after the TriggerInterval has elpased from the given starting timestamp.
+        /// </summary>
+        private QpcTimer Start(QpcTimeStamp now)
+        {
+            lastTriggerTimestamp = now;
+            nextTriggerTimestamp = now + triggerIntervalInSec;
+
+            return this;
+        }
+
+        /// <summary>
+        /// Stops the timer so that it will not trigger until it has been started again.
+        /// </summary>
+        public QpcTimer Stop()
+        {
+            lastTriggerTimestamp = QpcTimeStamp.Zero;
+            return this;
+        }
+
+        /// <summary>
+        /// Get property returns true if the timer's TriggerInterval has elapsed since the last occurance.  
+        /// Uses GetIsTriggered method internally.  If timer is configured to AutoReset, the timer will automatically reset to expire after 
+        /// the TriggerInterval has elapsed from the most recent occurance.
         /// </summary>
         public bool IsTriggered { get { return GetIsTriggered(QpcTimeStamp.Now); } }
 
         /// <summary>
         /// Method is used to determin is the timer's TriggerInterval has elapsed based on the given time Now and the recorded time of the last occurance.
-        /// If the timer has elapsed and the timer is configured to AutoReset, method will last occurance to the timestamp of the current occurance (even if now is after that occurance).  Then if this newly advanced timer has already expired then the method Reset's the timer to occur at TimerInterval from the given now value.
+        /// If the timer has elapsed and the timer is configured to AutoReset, method will add the TriggerInterval to the last occurance to the timestamp 
+        /// of the current occurance (even if now is after that occurance).  Then if this newly advanced timer has already expired then the method Reset's 
+        /// the timer to occur at TimerInterval from the given now value.
         /// </summary>
         /// <param name="now">Caller provided QpcTimeStamp value that defines when the timer is evaluated against and provides the base time for a Reset style advance when appropriate.</param>
         /// <remarks>
-        /// Method always returns false if the timer has not configured either during construction or by setting the TriggerInterval.
+        /// Method always returns false if the timer has not been started either during construction or by setting the TriggerInterval.
+        /// non-AutoReset timers will continue to return true once they have triggered until some other action is taken to change, reset or start the timer.
         /// </remarks>
 		public bool GetIsTriggered(QpcTimeStamp now)
 		{
-			if (lastTriggerTimestamp.IsZero || triggerIntervalInSec <= 0.0)
+            if (lastTriggerTimestamp.IsZero || (triggerIntervalInSec < 0.0) || (triggerIntervalInSec == 0.0 && !ZeroTriggerIntervalRunsTimer))
 				return false;
 
 			bool triggered = (now > nextTriggerTimestamp);
 
-			if (triggered && autoReset)
+			if (triggered && AutoReset)
 			{
+                // update the lastTriggerTimestamp to match the incoming nextTriggerTimestamp
 				lastTriggerTimestamp = nextTriggerTimestamp;
+
+                // add the interval to the nextTriggerTimestamp
 				nextTriggerTimestamp.Add(triggerIntervalInSec);
 
+                // if the new nextTriggerTimestamp is already past then reset/restart the timer to expire after the full triggerInterval has elapsed from now.
 				if (nextTriggerTimestamp < now)
-					Reset(now);
+					Start(now);
 			}
 
 			return triggered;
@@ -338,12 +452,15 @@ namespace MosaicLib.Time
         /// <returns></returns>
         public TimeSpan GetElapsedTime(QpcTimeStamp now)
         {
-            return (now - lastTriggerTimestamp);
+            if (!lastTriggerTimestamp.IsZero || !ElapsedTimeIsZeroWhenStopped)
+                return (now - lastTriggerTimestamp);
+            else
+                return TimeSpan.Zero;
         }
 
         #region private fields
 
-        /// <summary>QpcTimeStamp of the last time the timer expired</summary>
+        /// <summary>QpcTimeStamp of the last time the timer expired, or zero if the timer has not been started.</summary>
         private QpcTimeStamp lastTriggerTimestamp;
 
         /// <summary>QpcTimeStamp of the next time after which the timer will have expired</summary>
@@ -351,9 +468,6 @@ namespace MosaicLib.Time
 
         /// <summary>Configured expieration interval in seconds</summary>
         private double triggerIntervalInSec;
-
-        /// <summary></summary>
-        private bool autoReset;
 
         #endregion
 

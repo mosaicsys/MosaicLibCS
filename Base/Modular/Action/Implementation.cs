@@ -96,7 +96,7 @@ namespace MosaicLib.Modular.Action
         public ActionLogging(string mesg, string mesgDetails, ActionLogging copyFrom) : this(mesg, mesgDetails, copyFrom.Logger, copyFrom.Config, copyFrom.Done, copyFrom.Error, copyFrom.State, copyFrom.Update) { }
 
         /// <summary>Standard constructor for creating a reference ActionLogging object (from which others are created)</summary>
-        public ActionLogging(Logging.ILogger logger, ActionLoggingConfig config)
+        public ActionLogging(Logging.IBasicLogger logger, ActionLoggingConfig config)
 		{
             this.mesg = String.Empty;
             this.mesgDetail = String.Empty;
@@ -105,7 +105,7 @@ namespace MosaicLib.Modular.Action
             UpdateEmitters();
 		}
 
-        protected ActionLogging(string mesg, string mesgDetails, Logging.ILogger logger, ActionLoggingConfig config, Logging.IMesgEmitter doneEmitter, Logging.IMesgEmitter errorEmitter, Logging.IMesgEmitter stateEmitter, Logging.IMesgEmitter updateEmitter)
+        protected ActionLogging(string mesg, string mesgDetails, Logging.IBasicLogger logger, ActionLoggingConfig config, Logging.IMesgEmitter doneEmitter, Logging.IMesgEmitter errorEmitter, Logging.IMesgEmitter stateEmitter, Logging.IMesgEmitter updateEmitter)
         {
             this.mesg = mesg;
             this.mesgDetail = mesgDetails;
@@ -119,18 +119,18 @@ namespace MosaicLib.Modular.Action
 
 		string mesg;
 		string mesgDetail;
-        Logging.ILogger logger;
+        Logging.IBasicLogger logger;
         volatile ActionLoggingConfig config;
-		volatile Logging.IMesgEmitter doneEmitter, errorEmitter, stateEmitter, updateEmitter;
+        volatile Logging.IMesgEmitter doneEmitter, errorEmitter, stateEmitter, updateEmitter;
 
 		public string Mesg { get { return mesg; } set { mesg = value; } }
 		public string MesgDetail { get { return mesgDetail; } set { mesgDetail = value; } }
-        public Logging.ILogger Logger { get { return logger; } set { logger = value; UpdateEmitters(); } }
+        public Logging.IBasicLogger Logger { get { return logger; } set { logger = value; UpdateEmitters(); } }
         public ActionLoggingConfig Config { get { return config; } set { config = value; UpdateEmitters(); } }
 
 		public Logging.IMesgEmitter Done { get { return doneEmitter; } set { doneEmitter = value; } }
         public Logging.IMesgEmitter Error { get { return errorEmitter; } set { errorEmitter = value; } }
-		public Logging.IMesgEmitter State { get { return stateEmitter; } set { stateEmitter = value; } }
+        public Logging.IMesgEmitter State { get { return stateEmitter; } set { stateEmitter = value; } }
         public Logging.IMesgEmitter Update { get { return updateEmitter; } set { updateEmitter = value; } }
 
 		public override string ToString()
@@ -143,7 +143,8 @@ namespace MosaicLib.Modular.Action
 
         private void UpdateEmitters()
         {
-            ActionLoggingConfig capturedConfig = config;        // allow us to 
+            ActionLoggingConfig capturedConfig = config;
+
             if (logger != null && capturedConfig != null)
             {
                 doneEmitter = logger.Emitter(capturedConfig.DoneMesgType);
@@ -265,7 +266,7 @@ namespace MosaicLib.Modular.Action
 
 		private static void EmitStateChangeMesg(ActionLogging logging, ActionStateCode toState, ActionStateCode fromState, string resultCode)
 		{
-			Logging.IMesgEmitter emitter = logging.State;
+            Logging.IMesgEmitter emitter = logging.State;
 			bool isComplete = (toState == ActionStateCode.Complete);
 			bool includeRC = (isComplete || !string.IsNullOrEmpty(resultCode));
 			if (isComplete)
@@ -279,7 +280,7 @@ namespace MosaicLib.Modular.Action
 
         private static void EmitNamedValueListUpdateMesg(ActionLogging logging, ActionStateCode state, Common.NamedValueList nvl)
         {
-			Logging.IMesgEmitter emitter = logging.Update;
+            Logging.IMesgEmitter emitter = logging.Update;
 
             string nvls = (nvl != null ? nvl.ToString() : "");
 

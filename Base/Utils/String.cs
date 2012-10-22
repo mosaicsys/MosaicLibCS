@@ -32,7 +32,7 @@ namespace MosaicLib.Utils
     /// </summary>
 	public static partial class Fcns
 	{
-		#region String value mapping functions
+		#region static String value mapping functions
 
 		/// <summary>Maps the given string value to the empty string if it is null</summary>
 		/// <param name="s">The string to test for null and optionally map</param>
@@ -165,11 +165,55 @@ namespace MosaicLib.Utils
         }
 
         #endregion
+
+        #region static String [] methods
+
+        /// <summary>Returns true if both lists have the same contents.  Returns false if they do not.</summary>
+        public static bool Equals(String[] a, String[] b)
+        {
+            if (a == null && b == null)
+                return true;
+            if ((a == null) || (b == null))
+                return false;
+            if (a.Length != b.Length)
+                return false;
+
+            int n = a.Length;
+            for (int idx = 0; idx < n; idx++)
+            {
+                if (a[idx] != b[idx])
+                    return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>Returns true if both the array and the list have the same contents.  Returns false if they do not.</summary>
+        public static bool Equals(String[] a, IList<String> b)
+        {
+            if (a == null && b == null)
+                return true;
+            if ((a == null) || (b == null))
+                return false;
+            if (a.Length != b.Count)
+                return false;
+
+            int n = a.Length;
+            for (int idx = 0; idx < n; idx++)
+            {
+                if (a[idx] != b[idx])
+                    return false;
+            }
+
+            return true;
+        }
+
+        #endregion
     }
 
 	#endregion
 
-#if (false) // disable until we switch to 3.5
+#if (true) // disable until we switch to 3.5
     #region Extension Functions
 
     /// <summary>

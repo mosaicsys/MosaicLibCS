@@ -27,25 +27,39 @@ namespace MosaicLib.Utils
 	/// <summary>Enum defines the behavior of the Assertion when it is triggered or produced</summary>
 	public enum AssertType
 	{
-		LogFallback = 0,		/// <summary>on assert: log message to Fallback log.  Behavior common to all AssertTypes.</summary>
-		Log,					/// <summary>on assert: log message from Assert source and to Fallback log</summary>
-		DebugBreakpoint,		/// <summary>on assert: log message to Fallback log and take breakpoint if code is being run under a debugger</summary>
-		ThrowException,		    /// <summary>on assert: log message to Fallback log and throw AssertException with message</summary>
-		FatalExit,			    /// <summary>on assert: log message to Fallback log and cause program to exit abortively</summary>
+        /// <summary>on assert: log message to Fallback log.  Behavior common to all AssertTypes.</summary>
+		LogFallback = 0,
+
+        /// <summary>on assert: log message from Assert source and to Fallback log</summary>
+		Log,
+
+        /// <summary>on assert: log message to Fallback log and take breakpoint if code is being run under a debugger</summary>
+		DebugBreakpoint,		
+
+        /// <summary>on assert: log message to Fallback log and throw AssertException with message</summary>
+        ThrowException,		    
+
+        /// <summary>on assert: log message to Fallback log and cause program to exit abortively</summary>
+        FatalExit,			    
 	};
 
 	/// <summary>Provides a specific exeception type that is thrown on Asserts with the AssertType of ThrowExecption</summary>
 	public class AssertException : System.Exception
 	{
+        /// <summary>Constructors accepts a message and a StackFrame, from which the file and line are derived.</summary>
 		public AssertException(string mesg, System.Diagnostics.StackFrame sourceFrame) : base(mesg) { this.sourceFrame = sourceFrame; }
 
 		private System.Diagnostics.StackFrame sourceFrame;
 
-		public System.Diagnostics.StackFrame SourceFrame { get { return sourceFrame; } }
-		public string File { get { return sourceFrame.GetFileName(); } }
-		public int Line { get { return sourceFrame.GetFileLineNumber(); } }
+        /// <summary>Reports the full StackFrame of the Assert related method invokation that failed and/or generated this exception</summary>
+        public System.Diagnostics.StackFrame SourceFrame { get { return sourceFrame; } }
+        /// <summary>Reports the file name of the original Assert related method invokation that failed and/or generated this exception</summary>
+        public string File { get { return sourceFrame.GetFileName(); } }
+        /// <summary>Reports the file line of the original Assert related method invokation that failed and/or generated this exception</summary>
+        public int Line { get { return sourceFrame.GetFileLineNumber(); } }
 
-		public override string ToString() { return string.Format("Exception:{0} at file:{1}, line:{2}", Message, File, Line); }
+        /// <summary>Returns readable/logable version of this exception</summary>
+        public override string ToString() { return string.Format("Exception:{0} at file:{1}, line:{2}", Message, File, Line); }
 	}
 
 	/// <summary>This static helper class defines a set of static methods that may be used by client code to perform assertion and assertaion failure reaction logic in a well defined manner</summary>
@@ -54,48 +68,64 @@ namespace MosaicLib.Utils
 		#region Standard public methods
 
 		// the following are the standard variations of the normal methods that clients use from this static helper class
+        /// <summary>Logs the given condDesc condition description as an assert error message if the given cond condition is not true.</summary>
 		public static void LogCondition(bool cond, string condDesc) { if (!cond) NoteConditionFailed(condDesc, AssertType.Log, new System.Diagnostics.StackFrame(1, true)); }
-		public static void LogConditionFailed(string condDesc) { NoteConditionFailed(condDesc, AssertType.Log, new System.Diagnostics.StackFrame(1, true)); }
-		public static void LogFault(string faultDesc) { NoteFault(faultDesc, null, AssertType.Log, new System.Diagnostics.StackFrame(1, true)); }
-		public static void LogFault(string faultDesc, System.Exception ex) { NoteFault(faultDesc, ex, AssertType.Log, new System.Diagnostics.StackFrame(1, true)); }
+        /// <summary>Logs the given condDesc as an assert Condition Failed error message.</summary>
+        public static void LogConditionFailed(string condDesc) { NoteConditionFailed(condDesc, AssertType.Log, new System.Diagnostics.StackFrame(1, true)); }
+        /// <summary>Logs the given faultDesc as an Assert Fault error message</summary>
+        public static void LogFault(string faultDesc) { NoteFault(faultDesc, null, AssertType.Log, new System.Diagnostics.StackFrame(1, true)); }
+        /// <summary>Logs the given faultDesc as an Assert Fault error message with the given faultDesc fault description and the given ex exception.</summary>
+        public static void LogFault(string faultDesc, System.Exception ex) { NoteFault(faultDesc, ex, AssertType.Log, new System.Diagnostics.StackFrame(1, true)); }
 
-		public static void BreakpointCondition(bool cond, string condDesc) { if (!cond) NoteConditionFailed(condDesc, AssertType.DebugBreakpoint, new System.Diagnostics.StackFrame(1, true)); }
-		public static void BreakpointConditionFailed(string condDesc) { NoteConditionFailed(condDesc, AssertType.DebugBreakpoint, new System.Diagnostics.StackFrame(1, true)); }
-		public static void BreakpointFault(string faultDesc) { NoteFault(faultDesc, null, AssertType.DebugBreakpoint, new System.Diagnostics.StackFrame(1, true)); }
-		public static void BreakpointFault(string faultDesc, System.Exception ex) { NoteFault(faultDesc, ex, AssertType.DebugBreakpoint, new System.Diagnostics.StackFrame(1, true)); }
+        /// <summary>Takes a debugger breakpoint if the given cond condition is not true.  Also logs a Condition Failed message for the given condition description in this case.</summary>
+        public static void BreakpointCondition(bool cond, string condDesc) { if (!cond) NoteConditionFailed(condDesc, AssertType.DebugBreakpoint, new System.Diagnostics.StackFrame(1, true)); }
+        /// <summary>Takss a debugger breakpoint and logs a Condition Failed message for the given condDesc condition description</summary>
+        public static void BreakpointConditionFailed(string condDesc) { NoteConditionFailed(condDesc, AssertType.DebugBreakpoint, new System.Diagnostics.StackFrame(1, true)); }
+        /// <summary>Takes a debugger breakpoint and logs an Assert Fault message for the given faultDesc fault description.</summary>
+        public static void BreakpointFault(string faultDesc) { NoteFault(faultDesc, null, AssertType.DebugBreakpoint, new System.Diagnostics.StackFrame(1, true)); }
+        /// <summary>Takes a debugger breakpoint and logs an Assert Fault message for the given faultDesc fault description and ex exception.</summary>
+        public static void BreakpointFault(string faultDesc, System.Exception ex) { NoteFault(faultDesc, ex, AssertType.DebugBreakpoint, new System.Diagnostics.StackFrame(1, true)); }
 
+        /// <summary>Throws an AssertException if the given condition is not true. </summary>
 		public static void ThrowCondition(bool cond, string condDesc) { if (!cond) NoteConditionFailed(condDesc, AssertType.ThrowException, new System.Diagnostics.StackFrame(1, true)); }
-		public static void ThrowFault(string faultDesc) { NoteFault(faultDesc, null, AssertType.ThrowException, new System.Diagnostics.StackFrame(1, true)); }
-		public static void ThrowFault(string faultDesc, System.Exception ex) { NoteFault(faultDesc, ex, AssertType.ThrowException, new System.Diagnostics.StackFrame(1, true)); }
+        /// <summary>Throws an AssertException. </summary>
+        public static void ThrowFault(string faultDesc) { NoteFault(faultDesc, null, AssertType.ThrowException, new System.Diagnostics.StackFrame(1, true)); }
+        /// <summary>Throws an AssertException with the given ex as the inner exception. </summary>
+        public static void ThrowFault(string faultDesc, System.Exception ex) { NoteFault(faultDesc, ex, AssertType.ThrowException, new System.Diagnostics.StackFrame(1, true)); }
 
-		public static AssertType DefaultAssertType = AssertType.DebugBreakpoint;
+        /// <summary>Defines the default assert type for the following non-typed assert methods</summary>
+        public static AssertType DefaultAssertType = AssertType.DebugBreakpoint;
 
-		public static void Condition(bool cond, string condDesc) { if (!cond) NoteConditionFailed(condDesc, DefaultAssertType, new System.Diagnostics.StackFrame(1, true)); }
-		public static void ConditionFailed(string condDesc) { NoteConditionFailed(condDesc, DefaultAssertType, new System.Diagnostics.StackFrame(1, true)); }
-		public static void Fault(string faultDesc) { NoteFault(faultDesc, null, DefaultAssertType, new System.Diagnostics.StackFrame(1, true)); }
-		public static void Fault(string faultDesc, System.Exception ex) { NoteFault(faultDesc, ex, DefaultAssertType, new System.Diagnostics.StackFrame(1, true)); }
+        /// <summary>Asserts that the given cond condition is true.  If not then it uses the DefaultAssertType to define what action is taken.</summary>
+        public static void Condition(bool cond, string condDesc) { if (!cond) NoteConditionFailed(condDesc, DefaultAssertType, new System.Diagnostics.StackFrame(1, true)); }
+        /// <summary>Asserts that the described condition (condDesc) test has failed.  Uses the DefaultAssertType to define what action is taken.</summary>
+        public static void ConditionFailed(string condDesc) { NoteConditionFailed(condDesc, DefaultAssertType, new System.Diagnostics.StackFrame(1, true)); }
+        /// <summary>Asserts that a described fault (faultDesc) has occurred.  Uses the DefaultAssertType to define what action is taken.</summary>
+        public static void Fault(string faultDesc) { NoteFault(faultDesc, null, DefaultAssertType, new System.Diagnostics.StackFrame(1, true)); }
+        /// <summary>Asserts that a described fault (faultDesc) and exception has occurred.  Uses the DefaultAssertType to define what action is taken.</summary>
+        public static void Fault(string faultDesc, System.Exception ex) { NoteFault(faultDesc, ex, DefaultAssertType, new System.Diagnostics.StackFrame(1, true)); }
 
-		public static void Condition(bool cond, string condDesc, AssertType assertType) { if (!cond) NoteConditionFailed(condDesc, assertType, new System.Diagnostics.StackFrame(1, true)); }
-		public static void ConditionFailed(string condDesc, AssertType assertType) { NoteConditionFailed(condDesc, assertType, new System.Diagnostics.StackFrame(1, true)); }
-		public static void Fault(string faultDesc, AssertType assertType) { NoteFault(faultDesc, null, assertType, new System.Diagnostics.StackFrame(1, true)); }
-		public static void Fault(string faultDesc, System.Exception ex, AssertType assertType) { NoteFault(faultDesc, ex, assertType, new System.Diagnostics.StackFrame(1, true)); }
+        /// <summary>Asserts that the given cond condition is true.  Action taken when the condition is not true is determined by the given assertType value.</summary>
+        public static void Condition(bool cond, string condDesc, AssertType assertType) { if (!cond) NoteConditionFailed(condDesc, assertType, new System.Diagnostics.StackFrame(1, true)); }
+        /// <summary>Reports that the given condDesc described condition test failed.  Action taken when the condition is not true is determined by the given assertType value.</summary>
+        public static void ConditionFailed(string condDesc, AssertType assertType) { NoteConditionFailed(condDesc, assertType, new System.Diagnostics.StackFrame(1, true)); }
+        /// <summary>Reports that the faultDesc described fault has occurred.  Action taken when the condition is not true is determined by the given assertType value.</summary>
+        public static void Fault(string faultDesc, AssertType assertType) { NoteFault(faultDesc, null, assertType, new System.Diagnostics.StackFrame(1, true)); }
+        /// <summary>Reports that the faultDesc described fault and the ex Exception has occurred.  Action taken when the condition is not true is determined by the given assertType value.</summary>
+        public static void Fault(string faultDesc, System.Exception ex, AssertType assertType) { NoteFault(faultDesc, ex, assertType, new System.Diagnostics.StackFrame(1, true)); }
 
 		#endregion
 
 		#region Public adapter/formatter methods
 
-		// the following methods convert the standard invocation versions into arguments that can be given to the AssertCommon method
-		public static void TestCondition(bool cond, string condDesc, AssertType assertType, System.Diagnostics.StackFrame sourceFrame)
-		{
-			if (!cond)
-				NoteConditionFailed(condDesc, assertType, sourceFrame);
-		}
-
-		public static void NoteConditionFailed(string condDesc, AssertType assertType, System.Diagnostics.StackFrame sourceFrame)
+        /// <summary>Common implementation method for Noteing that a condition test failed.</summary>
+        public static void NoteConditionFailed(string condDesc, AssertType assertType, System.Diagnostics.StackFrame sourceFrame)
 		{
 			AssertCommon(Fcns.CheckedFormat("AssertCondition:[{0}] Failed", condDesc), assertType, sourceFrame);
 		}
-		public static void NoteFault(string faultDesc, System.Exception ex, AssertType assertType, System.Diagnostics.StackFrame sourceFrame)
+
+        /// <summary>Common implementation method for Noteing that Fault has occurred, with or without a related System.Exception ex.</summary>
+        public static void NoteFault(string faultDesc, System.Exception ex, AssertType assertType, System.Diagnostics.StackFrame sourceFrame)
 		{
 			if (ex == null)
 				AssertCommon(Fcns.CheckedFormat("AssertFault:{0}", faultDesc), assertType, sourceFrame);

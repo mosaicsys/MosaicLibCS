@@ -445,7 +445,7 @@ namespace MosaicLib
             bool SupportsReferenceCountedRelease { get; }
 		}
 
-        /// <summary>Implement standard storage object for supporting the ILoggerConfig inteface</summary>
+        /// <summary>Implement standard storage object for supporting the ILoggerConfig inteface.  These objects are used to define and control logging for specific groups of loggers and log message handlers.</summary>
 		public struct LoggerConfig : ILoggerConfig
 		{
             // all LoggerConfig objects are constructed using default constructor.  Client may set properties using post CTOR {} notation.
@@ -797,23 +797,28 @@ namespace MosaicLib
 		/// calls for these numbers of arguments where the Emit call is generally disabled in the source.
 		/// </remarks>
 
-		public interface IMesgEmitter
+        public interface IMesgEmitter
 		{
-			bool IsEnabled { get; }			// true if the IMesgEmitter is valid and its mesgType is enabled in the target logger object
-			MesgType MesgType { get; }
+            /// <summary>True if the IMesgEmitter is valid and its mesgType is enabled in the parent logger object</summary>
+            bool IsEnabled { get; }
 
-			void Emit(string str);
-			void Emit(string fmt, object arg0);
-			void Emit(string fmt, object arg0, object arg1);
-			void Emit(string fmt, object arg0, object arg1, object arg2);
-			void Emit(string fmt, params object [] args);
+            /// <summary>Gives the caller access to the message type that this emitter will generate</summary>
+            MesgType MesgType { get; }
 
-			void Emit(int skipNStackLevels, string str);
+            void Emit(string str);
+            void Emit(string fmt, object arg0);
+            void Emit(string fmt, object arg0, object arg1);
+            void Emit(string fmt, object arg0, object arg1, object arg2);
+            void Emit(string fmt, params object[] args);
+            void Emit(IFormatProvider provider, string fmt, params object[] args);
+            
+            void Emit(int skipNStackLevels, string str);
 			void Emit(int skipNStackLevels, string fmt, object arg0);
 			void Emit(int skipNStackLevels, string fmt, object arg0, object arg1);
 			void Emit(int skipNStackLevels, string fmt, object arg0, object arg1, object arg2);
 			void Emit(int skipNStackLevels, string fmt, params object [] args);
-		}
+            void Emit(int skipNStackLevels, IFormatProvider provider, string fmt, params object[] args);
+        }
 
         /// <summary>Returns an emitter that may be used to accept emit calls but which will never emit anything.</summary>
         public static IMesgEmitter NullEmitter { get { return MesgEmitterImpl.Null; } }
@@ -822,6 +827,36 @@ namespace MosaicLib
 
 		//-------------------------------------------------------------------
 		#region ILogger
+
+        /// <summary>
+        /// This interface defines the most basic set of properties and methods that are provided by objects that can be used as log message sources.
+        /// </summary>
+        /// <remarks>
+        /// This interface allows the client to obtain IMesgEmitters at any of the standard log levels with which the client can generate and emit 
+        /// log messages.  
+        /// </remarks>
+        public interface IBasicLogger
+        {
+            /// <summary>Returns a message emitter for Error messages from this logger</summary>
+            IMesgEmitter Error { get; }
+            /// <summary>Returns a message emitter for Warning messages from this logger</summary>
+            IMesgEmitter Warning { get; }
+            /// <summary>Returns a message emitter for Signif messages from this logger</summary>
+            IMesgEmitter Signif { get; }
+            /// <summary>Returns a message emitter for Info messages from this logger</summary>
+            IMesgEmitter Info { get; }
+            /// <summary>Returns a message emitter for Debug messages from this logger</summary>
+            IMesgEmitter Debug { get; }
+            /// <summary>Returns a message emitter for Trace messages from this logger</summary>
+            IMesgEmitter Trace { get; }
+
+            /// <summary>Returns a message emitter that will emit messages of the given MesgType and from this logger.</summary>
+            IMesgEmitter Emitter(MesgType mesgType);
+
+            /// <summary>Helper method: Gets the current System.Diagnostics.StackFrame of the caller (up skipNFrames levels)</summary>
+            /// <returns>Selected StackFrame if stack frame tagging support is currently enabled or null if it is not</returns>
+            System.Diagnostics.StackFrame GetStackFrame(int skipNFrames);
+        }
 
 		/// <summary>This interface defines the methods that is provided by all entities that can act like log message sources.</summary>
 		/// <remarks>
@@ -848,7 +883,7 @@ namespace MosaicLib
 		///			will produce consistant and correct results.
 		/// </remarks>
 
-		public interface ILogger
+        public interface ILogger : IBasicLogger
 		{
             /// <summary>Returns the name of this logger.</summary>
             string Name { get; }
@@ -858,9 +893,6 @@ namespace MosaicLib
 
             /// <summary>Returns the Distribution Group Name for this logger</summary>
             string GroupName { get; set; }
-
-            /// <summary>Helper method: Gets the current System.Diagnostics.StackFrame of the caller (up skipNFrames levels)</summary>
-            System.Diagnostics.StackFrame GetStackFrame(int skipNFrames);
 
             /// <summary>returns true if the given message type is currently enabled.</summary>
             bool IsTypeEnabled(MesgType mesgType);
@@ -877,22 +909,6 @@ namespace MosaicLib
             /// <summary>Emits and consumes the message (mesgP will be set to null)</summary>
 			void EmitLogMessage(ref LogMessage mesg);
 
-            /// <summary>Returns a message emitter for Error messages from this logger</summary>
-            IMesgEmitter Error { get; }
-            /// <summary>Returns a message emitter for Warning messages from this logger</summary>
-            IMesgEmitter Warning { get; }
-            /// <summary>Returns a message emitter for Signif messages from this logger</summary>
-            IMesgEmitter Signif { get; }
-            /// <summary>Returns a message emitter for Info messages from this logger</summary>
-            IMesgEmitter Info { get; }
-            /// <summary>Returns a message emitter for Debug messages from this logger</summary>
-            IMesgEmitter Debug { get; }
-            /// <summary>Returns a message emitter for Trace messages from this logger</summary>
-            IMesgEmitter Trace { get; }
-
-            /// <summary>Returns a message emitter that will emit messages of the given MesgType and from this logger.</summary>
-            IMesgEmitter Emitter(MesgType mesgType);
-
             /// <summary>Waits for last message emitted by this logger to have been distributed and processed.</summary>
             bool WaitForDistributionComplete(TimeSpan timeLimit);
 
@@ -907,28 +923,21 @@ namespace MosaicLib
 
 		public class MesgEmitterImpl : IMesgEmitter
 		{
-			private ILogger logger = null;
-			private MesgType mesgType = MesgType.None;
-			private int skipNAdditionalStackFrames = 0;
+            public ILogger Logger { get; set; }
+			public MesgType MesgType { get; set; }
+            public int SkipNAdditionalStackFrames { get; set; }
 
-			public MesgEmitterImpl(ILogger logger, MesgType mesgType, int skipNAdditionalStackFrames)
-			{
-				this.logger = logger;
-				this.mesgType = mesgType;
-				this.skipNAdditionalStackFrames = skipNAdditionalStackFrames;
-			}
+			public MesgEmitterImpl() {}
 
 			#region IMesgEmitter Members
 
-			public bool IsEnabled { get { return (logger != null && logger.IsTypeEnabled(mesgType)); } }
-
-			public MesgType MesgType { get { return mesgType; } }
+			public bool IsEnabled { get { return (Logger != null && Logger.IsTypeEnabled(MesgType)); } }
 
 			System.Diagnostics.StackFrame GetStackFrame(int skipNStackFrames)
 			{
-				if (logger == null)
+				if (Logger == null)
 					return null;
-				return logger.GetStackFrame(1 + skipNStackFrames + skipNAdditionalStackFrames);
+				return Logger.GetStackFrame(1 + skipNStackFrames + SkipNAdditionalStackFrames);
 			}
 
 			public void Emit(string str) { Emit(1, str); }
@@ -936,13 +945,14 @@ namespace MosaicLib
 			public void Emit(string fmt, object arg0, object arg1) { Emit(1, fmt, arg0, arg1); }
 			public void Emit(string fmt, object arg0, object arg1, object arg2) { Emit(1, fmt, arg0, arg1, arg2); }
 			public void Emit(string fmt, params object [] args) { Emit(1, fmt, args); }
+            public void Emit(IFormatProvider provider, string fmt, params object[] args) { Emit(1, provider, fmt, args); }
 
 			public void Emit(int skipNStackFrames, string str)
 			{
 				if (IsEnabled)
 				{
-					LogMessage lm = logger.GetLogMessage(mesgType, str, GetStackFrame(1 + skipNStackFrames), true);
-					logger.EmitLogMessage(ref lm);
+					LogMessage lm = Logger.GetLogMessage(MesgType, str, GetStackFrame(1 + skipNStackFrames), true);
+					Logger.EmitLogMessage(ref lm);
 				}
 			}
 
@@ -950,10 +960,10 @@ namespace MosaicLib
 			{
 				if (IsEnabled)
 				{
-					LogMessage lm = logger.GetLogMessage(mesgType, string.Empty, GetStackFrame(1 + skipNStackFrames), true);
+					LogMessage lm = Logger.GetLogMessage(MesgType, string.Empty, GetStackFrame(1 + skipNStackFrames), true);
 					if (lm != null)
 						lm.Mesg = Utils.Fcns.CheckedFormat(fmt, arg0);
-					logger.EmitLogMessage(ref lm);
+					Logger.EmitLogMessage(ref lm);
 				}
 			}
 
@@ -961,10 +971,10 @@ namespace MosaicLib
 			{
 				if (IsEnabled)
 				{
-					LogMessage lm = logger.GetLogMessage(mesgType, string.Empty, GetStackFrame(1 + skipNStackFrames), true);
+					LogMessage lm = Logger.GetLogMessage(MesgType, string.Empty, GetStackFrame(1 + skipNStackFrames), true);
 					if (lm != null)
 						lm.Mesg = Utils.Fcns.CheckedFormat(fmt, arg0, arg1);
-					logger.EmitLogMessage(ref lm);
+					Logger.EmitLogMessage(ref lm);
 				}
 			}
 
@@ -972,10 +982,10 @@ namespace MosaicLib
 			{
 				if (IsEnabled)
 				{
-					LogMessage lm = logger.GetLogMessage(mesgType, string.Empty, GetStackFrame(1 + skipNStackFrames), true);
+					LogMessage lm = Logger.GetLogMessage(MesgType, string.Empty, GetStackFrame(1 + skipNStackFrames), true);
 					if (lm != null)
 						lm.Mesg = Utils.Fcns.CheckedFormat(fmt, arg0, arg1, arg2);
-					logger.EmitLogMessage(ref lm);
+					Logger.EmitLogMessage(ref lm);
 				}
 			}
 
@@ -983,18 +993,29 @@ namespace MosaicLib
 			{
 				if (IsEnabled)
 				{
-					LogMessage lm = logger.GetLogMessage(mesgType, string.Empty, GetStackFrame(1 + skipNStackFrames), true);
+					LogMessage lm = Logger.GetLogMessage(MesgType, string.Empty, GetStackFrame(1 + skipNStackFrames), true);
 					if (lm != null)
 						lm.Mesg = Utils.Fcns.CheckedFormat(fmt, args);
-					logger.EmitLogMessage(ref lm);
+					Logger.EmitLogMessage(ref lm);
 				}
 			}
 
-			#endregion
+            public void Emit(int skipNStackFrames, IFormatProvider provider, string fmt, params object[] args)
+            {
+                if (IsEnabled)
+                {
+                    LogMessage lm = Logger.GetLogMessage(MesgType, string.Empty, GetStackFrame(1 + skipNStackFrames), true);
+                    if (lm != null)
+                        lm.Mesg = Utils.Fcns.CheckedFormat(provider, fmt, args);
+                    Logger.EmitLogMessage(ref lm);
+                }
+            }
+
+            #endregion
 
 			#region NullEmitter
 
-			private static readonly IMesgEmitter nullEmitter = new MesgEmitterImpl(null, MesgType.None, 0);
+            private static readonly IMesgEmitter nullEmitter = new MesgEmitterImpl() { Logger = null, MesgType = MesgType.None, SkipNAdditionalStackFrames = 0 };
 
 			public static IMesgEmitter Null { get { return nullEmitter; } }
 
@@ -1031,7 +1052,7 @@ namespace MosaicLib
 					GroupName = groupName;
 
 				if (traceLoggerCtor)
-					myTraceEmitter = new MesgEmitterImpl(this, MesgType.Trace, 1);	// this emitter records the stack frame 1 above its caller
+					myTraceEmitter = new MesgEmitterImpl() { Logger = this, MesgType = MesgType.Trace, SkipNAdditionalStackFrames = 1 } ;	// this emitter records the stack frame 1 above its caller
 
 				MyTraceEmitter.Emit("{0} object has been created", ClassName);
 			}
@@ -1116,28 +1137,7 @@ namespace MosaicLib
 					dist.DistributeMessage(ref mesg);
 			}
 
-			public IMesgEmitter Error { get { return Emitter(MesgType.Error); } }
-			public IMesgEmitter Warning { get { return Emitter(MesgType.Warning); } }
-			public IMesgEmitter Signif { get { return Emitter(MesgType.Signif); } }
-			public IMesgEmitter Info { get { return Emitter(MesgType.Info); } }
-			public IMesgEmitter Debug { get { return Emitter(MesgType.Debug); } }
-			public IMesgEmitter Trace { get { return Emitter(MesgType.Trace); } }
-			public IMesgEmitter Emitter(MesgType mesgType)
-			{
-				IMesgEmitter emitter = null;
-
-				int mesgTypeIdx = (int) mesgType;
-				if (mesgTypeIdx > (int) MesgType.None && mesgTypeIdx < emitters.Length)
-				{
-					emitter = emitters[mesgTypeIdx];
-					if (emitter == null)
-						emitter = emitters[mesgTypeIdx] = new MesgEmitterImpl(this, mesgType, 0);
-				}
-
-				return ((emitter != null) ? emitter : MesgEmitterImpl.Null);
-			}
-
-			public virtual bool WaitForDistributionComplete(TimeSpan timeLimit)		//!< Waits for last message emitted by this logger to have been distributed and processed.
+            public virtual bool WaitForDistributionComplete(TimeSpan timeLimit)		//!< Waits for last message emitted by this logger to have been distributed and processed.
 			{
 				return dist.WaitForDistributionComplete(sourceInfo.ID, timeLimit);
 			}
@@ -1152,7 +1152,32 @@ namespace MosaicLib
 
 			#endregion
 
-			protected abstract string ClassName { get; }
+            #region IBaseMessageLogger interface
+
+            public IMesgEmitter Error { get { return Emitter(MesgType.Error); } }
+            public IMesgEmitter Warning { get { return Emitter(MesgType.Warning); } }
+            public IMesgEmitter Signif { get { return Emitter(MesgType.Signif); } }
+            public IMesgEmitter Info { get { return Emitter(MesgType.Info); } }
+            public IMesgEmitter Debug { get { return Emitter(MesgType.Debug); } }
+            public IMesgEmitter Trace { get { return Emitter(MesgType.Trace); } }
+            public IMesgEmitter Emitter(MesgType mesgType)
+            {
+                IMesgEmitter emitter = null;
+
+                int mesgTypeIdx = (int)mesgType;
+                if (mesgTypeIdx > (int)MesgType.None && mesgTypeIdx < emitters.Length)
+                {
+                    emitter = emitters[mesgTypeIdx];
+                    if (emitter == null)
+                        emitter = emitters[mesgTypeIdx] = new MesgEmitterImpl() {Logger = this, MesgType = mesgType, SkipNAdditionalStackFrames = 0};
+                }
+
+                return ((emitter != null) ? emitter : MesgEmitterImpl.Null);
+            }
+
+            #endregion
+
+            protected abstract string ClassName { get; }
 
 			protected ILogMessageDistribution dist = null;				// the distribution system to which we belong
 			protected LoggerSourceInfo sourceInfo = null;				// stores the reference id and name
@@ -1187,28 +1212,33 @@ namespace MosaicLib
 		//-------------------------------------------------------------------
 		#region Trace helper objects
 
-		// NOTE: the following Trace object classes were inspired by the use of the TraceLogger class from logger.h in the log4cplus library developed by Tad E. Smith.
-		// In most cases these objects should be used in the context of a using statement such as:
-		//
-		//	using (IDisposable traceObj = MosaicLib.Logging.EntryExitTrace(logger, "TestTrace")) { <do stuff> }
-		//
+        // NOTE:
+        // The following Trace object classes were inspired by the use of the TraceLogger class from logger.h in the log4cplus library developed by Tad E. Smith.
+        // In most cases these objects should be used in the context of a using statement such as:
+        //
+        //	using (IDisposable traceObj = MosaicLib.Logging.EntryExitTrace(logger, "TestTrace")) { [do stuff] }
 
-		public class CtorDisposeTrace : Utils.DisposableBase			//!< This class is used to provide a Trace on construction/destruction.  It logs a configurable message on constriuction and destruction.
+        /// <summary>
+        /// This class is used to provide a Trace on construction/destruction.  It logs a configurable message on construction and explicit disposal.
+        /// Generally this class is used as the base class for the EnterExitTrace and TimerTrace classes.  By default messages use MesgType.Trace.
+        /// </summary>
+
+        public class CtorDisposeTrace : Utils.DisposableBase
 		{
 			private const string defaultCtorPrefixStr = "Ctor:";
 			private const string defaultDisposePrefixStr = "Dispose:";
 			protected const MesgType defaultMesgType = MesgType.Trace;
 
-			public CtorDisposeTrace(ILogger logger, string traceID)
+            public CtorDisposeTrace(IBasicLogger logger, string traceID)
 				: this(logger, traceID, defaultMesgType, defaultCtorPrefixStr, 1, defaultDisposePrefixStr, 0) {}
 
-			public CtorDisposeTrace(ILogger logger, string traceID, MesgType mesgType)
+            public CtorDisposeTrace(IBasicLogger logger, string traceID, MesgType mesgType)
 				: this(logger, traceID, mesgType, defaultCtorPrefixStr, 1, defaultDisposePrefixStr, 0) {}
 
-			public CtorDisposeTrace(ILogger logger, string traceID, MesgType mesgType, int ctorSkipNStackFrames)
+            public CtorDisposeTrace(IBasicLogger logger, string traceID, MesgType mesgType, int ctorSkipNStackFrames)
 				: this(logger, traceID, mesgType, defaultCtorPrefixStr, ctorSkipNStackFrames + 1, defaultDisposePrefixStr, 0) {}
 
-			public CtorDisposeTrace(ILogger logger, string traceID, MesgType mesgType, string ctorPrefixStr, int ctorSkipNStackFrames, string disposePrefixStr, int disposeSkipNStackFrames)
+            public CtorDisposeTrace(IBasicLogger logger, string traceID, MesgType mesgType, string ctorPrefixStr, int ctorSkipNStackFrames, string disposePrefixStr, int disposeSkipNStackFrames)
 			{
 				if (logger != null)
 				{
@@ -1244,41 +1274,56 @@ namespace MosaicLib
 
 		//-------------------------------------------------------------------
 
-		public class EnterExitTrace 			//!< This class is generally used as a method entry/exit Trace.  It is based on the CtorDtorTrace with modified default log message prefixes.
+        /// <summary>
+        /// This class is generally used as a method entry/exit Trace.  It is based on the CtorDisposeTrace with modified default log message prefixes.
+        /// By default messages use CtorDisposeTrace default message type (MesgType.Trace)
+        /// </summary>
+        /// <remarks>
+        ///	using (var eeTrace = MosaicLib.Logging.EntryExitTrace(logger)) { [do stuff] }
+        /// </remarks>
+
+        public class EnterExitTrace
 			: CtorDisposeTrace
 		{
 			private const string entryPrefixStr = "Enter:";
 			private const string exitPrefixStr = "Exit:";
 
-			public EnterExitTrace(ILogger logger)
+			public EnterExitTrace(IBasicLogger logger)
 				: base(logger, new System.Diagnostics.StackFrame(1).GetMethod().Name, defaultMesgType, entryPrefixStr, 1, exitPrefixStr, 0) {}
 
-			public EnterExitTrace(ILogger logger, string traceID)
+			public EnterExitTrace(IBasicLogger logger, string traceID)
 				: base(logger, traceID, defaultMesgType, entryPrefixStr, 1, exitPrefixStr, 0) {}
 
-			public EnterExitTrace(ILogger logger, string traceID, MesgType mesgType)
+			public EnterExitTrace(IBasicLogger logger, string traceID, MesgType mesgType)
 				: base(logger, traceID, mesgType, entryPrefixStr, 1, exitPrefixStr, 0) {}
 
-			public EnterExitTrace(ILogger logger, string traceID, MesgType mesgType, int ctorSkipNStackFrames)
+			public EnterExitTrace(IBasicLogger logger, string traceID, MesgType mesgType, int ctorSkipNStackFrames)
 				: base(logger, traceID, mesgType, entryPrefixStr, ctorSkipNStackFrames + 1, exitPrefixStr, 0) {}
 		}
 
 		//-------------------------------------------------------------------
 
-		public class TimerTrace 			//!< This class is generally used as a section start/stop Trace.  It is based on the CtorDtorTrace with modified default log message prefixes.
+        /// <summary>
+        /// This class is generally used as a section start/stop Trace.  It is based on the CtorDisposeTrace with modified default log message prefixes.
+        /// By default start and stop messages use MesgType.Debug.
+        /// </summary>
+        /// <remarks>
+        ///	using (var tTract = MosaicLib.Logging.TimerTrace(logger, "MeasurementName")) { [do stuff] }
+        /// </remarks>
+        public class TimerTrace
 			: CtorDisposeTrace
 		{
 			private const string startPrefixStr = "Start:";
 			private const string stopPrefixStr = "Stop:";
-			private const MesgType defaultStartStopMesgType = MesgType.Info;
+            private const MesgType defaultStartStopMesgType = MesgType.Debug;
 
-			public TimerTrace(ILogger logger, string traceID)
+            public TimerTrace(IBasicLogger logger, string traceID)
 				: this(logger, traceID, defaultStartStopMesgType, 1) {}
 
-			public TimerTrace(ILogger logger, string traceID, MesgType mesgType)
+            public TimerTrace(IBasicLogger logger, string traceID, MesgType mesgType)
 				: this(logger, traceID, mesgType, 1) {}
 
-			public TimerTrace(ILogger logger, string traceID, MesgType mesgType, int ctorSkipNStackFrames)
+            public TimerTrace(IBasicLogger logger, string traceID, MesgType mesgType, int ctorSkipNStackFrames)
 				: base(logger, traceID, mesgType, startPrefixStr, ctorSkipNStackFrames + 1, stopPrefixStr, 0)
 			{
 				startTime = Time.Qpc.TimeNow;
@@ -1290,7 +1335,7 @@ namespace MosaicLib
 				{
 					double runTime = Time.Qpc.TimeNow - startTime;
 
-					mesgEmitter.Emit(1 + disposeSkipNStackFrames, "{0} [runTime:{1}]", disposeStr, runTime.ToString("f6"));
+					mesgEmitter.Emit(1 + disposeSkipNStackFrames, "{0} [runTime:{1:f6}]", disposeStr, runTime);
 					disposeStr = null;		// prevent additional dispose message
 				}
 

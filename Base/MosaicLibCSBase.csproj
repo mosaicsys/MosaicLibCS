@@ -10,7 +10,7 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>MosaicLib</RootNamespace>
     <AssemblyName>MosaicLibCSBase</AssemblyName>
-    <TargetFrameworkVersion>v3.0</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v3.5</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
@@ -21,6 +21,8 @@
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+    <DocumentationFile>bin\Debug\MosaicLibCSBase.XML</DocumentationFile>
+    <NoWarn>1591, 1587</NoWarn>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
@@ -29,9 +31,14 @@
     <DefineConstants>TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+    <DocumentationFile>bin\Release\MosaicLibCSBase.XML</DocumentationFile>
+    <NoWarn>1591, 1587</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
+    <Reference Include="System.Core">
+      <RequiredTargetFramework>3.5</RequiredTargetFramework>
+    </Reference>
     <Reference Include="System.Data" />
     <Reference Include="System.Runtime.Serialization">
       <RequiredTargetFramework>3.0</RequiredTargetFramework>
@@ -59,6 +66,8 @@
     <Compile Include="Modular\Part\PartBase.cs" />
     <Compile Include="Modular\Part\SimpleActivePart.cs" />
     <Compile Include="Modular\Persist\Persist.cs" />
+    <Compile Include="Modular\Reflection\Attributes.cs" />
+    <Compile Include="Modular\Reflection\GetterSetterFactory.cs" />
     <Compile Include="MosaicLibCSBase.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Serial\AutoEchoWrapper.cs" />
@@ -71,6 +80,7 @@
     <Compile Include="Serial\UdpSerialIO.cs" />
     <Compile Include="Time\MMTimer.cs" />
     <Compile Include="Time\QpcTime.cs" />
+    <Compile Include="Time\Ticks.cs" />
     <Compile Include="Utils\Assert.cs" />
     <Compile Include="Utils\DataHelpers.cs" />
     <Compile Include="Utils\Disposable.cs" />

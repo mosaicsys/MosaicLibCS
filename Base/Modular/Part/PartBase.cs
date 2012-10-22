@@ -183,6 +183,9 @@ namespace MosaicLib.Modular.Part
 		bool IsConnected { get; }
 		/// <summary>summary property reports true if the ConnState indicates that the part's connection is connected or is making a connection</summary>
 		bool IsConnectedOrConnecting { get; }
+
+        /// <summary>returns true if either the UseState or the ConnState are not at their Undefined value.  Typically this means that the part has not be started or that it has not generated its initial value.</summary>
+        bool IsDefined { get; }
 	}
 
 	/// <summary>
@@ -199,7 +202,10 @@ namespace MosaicLib.Modular.Part
 
 		/// <summary>Returns a reference to the last published BaseState from the part</summary>
 		IBaseState BaseState { get; }
-	}
+
+        /// <summary>Property gives client access to the part's Guarded Notificdation Object for the part's BaseState property.</summary>
+        INotificationObject<IBaseState> BaseStateNotifier { get; }
+    }
 
 	#endregion
 
@@ -211,7 +217,7 @@ namespace MosaicLib.Modular.Part
     public interface IStringParamAction : IClientFacetWithParam<string>, IBasicAction { }
 
 	/// <summary>
-	/// This interface is implmeneted by all ActiveParts.  
+	/// This interface is implemeneted by all ActiveParts.  
 	/// It provides the ability for a client to be notified when the part publishes a new BaseState value.
 	/// It provides the ability for the client to create actions that can request tha the part 
 	/// Go Online, Go Online and Initialize, or to Go Offline.  It also provides a common interface for a client
@@ -220,14 +226,18 @@ namespace MosaicLib.Modular.Part
 	/// </summary>
 	public interface IActivePartBase : IPartBase
 	{
-		/// <summary>Property gives client access to the part's Guarded Notificdation Object for the part's BaseState property.</summary>
-		INotificationObject<IBaseState> BaseStateNotifier { get; }
-
 		/// <summary>Method used to Start the part.  Some parts automatically start whenever a GoOnlineAction is created.</summary>
 		void StartPart();
 
 		/// <summary>Method used to explicitly stop the part.  Parts also self stop when they are explicilty Disposed.</summary>
 		void StopPart();
+
+        /// <summary>Returns true if the part has been successfully started with StartPart.</summary>
+        bool HasBeenStarted { get; }
+        /// <summary>Returns true if the part has been stopped with StopPart or if its primary action Q has been disabled.</summary>
+        bool HasBeenStopped { get; }
+        /// <summary>Returns true if the part HasBeenStarted and not it HasBeenStopped</summary>
+        bool IsRunning { get; }
 
 		// All active parts provide the following basic actions which they can perform
 
@@ -263,9 +273,9 @@ namespace MosaicLib.Modular.Part
 	#region PartBase class
 
 	/// <summary>
-	/// This abstract class is generally used as a base class for all Part classes (active or otherwise).  See SimpleActivePart.
+	/// This abstract base class is generally used as a base class for all Part base classes (active or otherwise).  See SimplePartBase, and SimpleActivePart
 	/// </summary>
-	public abstract class PartBase : DisposableBase, IPartBase
+	public abstract class PartBaseBase : DisposableBase, IPartBase
 	{
 		private readonly string partID = string.Empty;
 		private readonly string partType = string.Empty;
@@ -275,10 +285,11 @@ namespace MosaicLib.Modular.Part
 		public string PartID { get { return partID; } }
 		public string PartType { get { return partType; } }
 		public abstract IBaseState BaseState { get; }
+        public abstract INotificationObject<IBaseState> BaseStateNotifier { get; }
 
 		#endregion
 
-		protected PartBase(string partID, string partType) 
+		protected PartBaseBase(string partID, string partType) 
 		{
 			this.partID = partID;
             this.partType = partType;
@@ -314,19 +325,33 @@ namespace MosaicLib.Modular.Part
 
 		#region IBaseState interface
 
-        public bool IsSimulated { get; private set; }   // true if this part is simulated
-		public bool IsPrimaryPart { get; private set; } // true if this part represents the master interface to a part which supports multiple interfaces
-		public UseState UseState { get { return useState; } set { useState = value; timeStamp.SetToNow(); } }
-		public ConnState ConnState { get { return connState; } set { connState = value; timeStamp.SetToNow(); } }
-		public QpcTimeStamp TimeStamp { get { return timeStamp; } }
+        /// <summary>return true if the part is simulated</summary>
+        public bool IsSimulated { get; private set; }
+        /// <summary>return true if the part is a primary part.  secondary parts are parts that provide secondary functional facade on a common underlying part but where the secondary facade should not be used to manage the part's online/offline state or to start or stop it.</summary>
+        public bool IsPrimaryPart { get; private set; } // true if this part represents the master interface to a part which supports multiple interfaces
+        /// <summary>reports the UseState of the part at the time the client obtained this state object</summary>
+        public UseState UseState { get { return useState; } set { useState = value; timeStamp.SetToNow(); } }
+        /// <summary>reports the ConnState of the part at the time the client obtained this state object</summary>
+        public ConnState ConnState { get { return connState; } set { connState = value; timeStamp.SetToNow(); } }
+        /// <summary>reports the, possibly empty, name of any action that part is currently performing</summary>
         public string ActionName { get { return Utils.Fcns.MapNullToEmpty(actionName); } set { actionName = value; timeStamp.SetToNow(); } }
+        /// <summary>reports the timestamp at which the new contents or state object was generated.</summary>
+        public QpcTimeStamp TimeStamp { get { return timeStamp; } }
 
+        /// <summary>summary property reports true if the UseState is in an Online state</summary>
         public bool IsOnline { get { return BaseStateFcns.IsOnline(UseState); } }
+        /// <summary>summary property reports true if the UseState indicates that the device is busy.  Details of functionality depends on internal part behavior.</summary>
         public bool IsBusy { get { return BaseStateFcns.IsBusy(UseState); } }
 
+        /// <summary>summary property reports true if the ConnState indicates that the part is in the process of making a connection.</summary>
         public bool IsConnecting { get { return BaseStateFcns.IsConnecting(ConnState); } }
+        /// <summary>summary property reports true if the ConnState indicates that the part's connection (if any) is connected.</summary>
         public bool IsConnected { get { return BaseStateFcns.IsConnected(ConnState); } }
+        /// <summary>summary property reports true if the ConnState indicates that the part's connection is connected or is making a connection</summary>
         public bool IsConnectedOrConnecting { get { return (BaseStateFcns.IsConnectedOrConnecting(ConnState)); } }
+
+        /// <summary>returns true if either the UseState or the ConnState are not at their Undefined value.  Typically this means that the part has not be started or that it has not generated its initial value.</summary>
+        public bool IsDefined { get { return (UseState != UseState.Undefined || ConnState != ConnState.Undefined); } }
 
 		#endregion
 
@@ -396,5 +421,240 @@ namespace MosaicLib.Modular.Part
 
 	#endregion
 
-	//-----------------------------------------------------------------
+    //-----------------------------------------------------------------
+    #region SimplePartBase
+
+    /// <summary>
+    /// This class is a utility base class for objects that implement the IPartBase interface.  
+    /// This class instantiates and gives derived classes use of a Logger via the Log property.  
+    /// This class also implements all of the public properties and base protected utility methods that are used to implement and maintain the 
+    /// Part's BaseState property including allowing clients to observe and/or subscribe to it.
+    /// </summary>
+
+    public abstract class SimplePartBase : PartBaseBase
+    {
+        #region Construction and Destruction
+
+        protected SimplePartBase(string partID, string partType) : this(partID, partType, new Logging.Logger(partID)) { }
+
+        protected SimplePartBase(string partID, string partType, Logging.IBasicLogger basicLogger)
+            : base(partID, partType)
+        {
+            Log = basicLogger;
+
+            BaseStatePublishedNotificationList = new EventHandlerNotificationList<IBaseState>(this);
+            BaseStateChangeEmitter = Log.Emitter(Logging.MesgType.Trace);
+
+            publishedBaseState.Object = PrivateBaseState;
+        }
+
+        #endregion
+
+        #region PaseBaseBase methods and properties that are implemented by this base class
+
+        /// <summary>public property that may be used to obtain a copy of the most recently generated IBaseState for this part.</summary>
+        public override IBaseState BaseState { get { return publishedBaseState.VolatileObject; } }      // base class defines this as abstract - use VolatileObject since IBaseState will always be handling boxed copies.
+
+        /// <summary>public property that may be used to gain access to the INotificationObject that is used to manage publication and notification of this part's BaseState.</summary>
+        public override INotificationObject<IBaseState> BaseStateNotifier { get { return publishedBaseState; } }    // base class defines this as abstract
+
+        #endregion
+
+        #region Logging related fields and protected properties
+
+        /// <summary>Gives derived objects access to the Logger.ILogger created by this SimpleActivePartBase during construction.</summary>
+        /// <remarks>Derived classes are allowed to replace the Log logger with some other instance.</remarks>
+        protected Logging.IBasicLogger Log { get; set; }
+
+        #endregion
+
+        #region BaseState support code - implements BaseState change logging, notification and common set methods
+
+        private Logging.IMesgEmitter stateChangeEmitter = null;
+
+        /// <summary>Defines the emitter that is used for state change event log messages.  Defaults to Log.Emitter(Logging.MesgType.Trace).  When set to null Logging.MesgEmitterImpl.Null is used to emit these messages (into the void).</summary>
+        protected Logging.IMesgEmitter BaseStateChangeEmitter { get { return (stateChangeEmitter != null ? stateChangeEmitter : Logging.MesgEmitterImpl.Null); } set { stateChangeEmitter = value; } }
+
+        private BaseState privateBaseState;
+        protected BaseState PrivateBaseState { get { return privateBaseState; } set { privateBaseState = value; } }
+
+        private InterlockedNotificationRefObject<IBaseState> publishedBaseState = new InterlockedNotificationRefObject<IBaseState>();
+        protected Utils.EventHandlerNotificationList<IBaseState> BaseStatePublishedNotificationList = null;
+
+        /// <summary>If this property is set to true, the part should indicate that it is busy whenever any action queue is non-empty.</summary>
+        protected bool TreatPartAsBusyWhenQueueIsNotEmpty { get; set; }
+        /// <summary>Internal proprty that must be overridden by derived class to allow PublishBaseState to observe if any action queue is non-empty.</summary>
+        protected virtual bool AreAllActionQueuesEmpty { get { return true; } }
+
+        /// <summary>If this property is set to true, the part should indicate that it is busy whenever its internal part busy counter is non-zero</summary>
+        protected bool TreatPartAsBusyWhenInternalPartBusyCountIsNonZero { get; set; }
+
+        /// <summary>Generates an updated copy of the base state, publishes it, logs specific transitions in use and/or connection state, and signals this parts base state published notification list.</summary>
+        protected void PublishBaseState(string reason)
+        {
+            IBaseState entryState = publishedBaseState.VolatileObject;
+            UseState entryUseState = (entryState != null ? entryState.UseState : UseState.Initial);
+            ConnState entryConnState = (entryState != null ? entryState.ConnState : ConnState.Initial);
+            string entryActionName = (entryState != null ? entryState.ActionName : String.Empty);
+
+            BaseState baseStateCopy = PrivateBaseState;
+
+            bool pushPartToBusyState = (TreatPartAsBusyWhenQueueIsNotEmpty && !AreAllActionQueuesEmpty)
+                                     || (TreatPartAsBusyWhenInternalPartBusyCountIsNonZero && internalPartBusyCounter.VolatileValue != 0)
+                                     ;
+
+            if (pushPartToBusyState && baseStateCopy.UseState == UseState.Online)      // map idle state to busy state
+                baseStateCopy.UseState = UseState.OnlineBusy;
+            else if (entryUseState == UseState.OnlineBusy && baseStateCopy.UseState == UseState.Online)
+                baseStateCopy.ActionName = String.Empty;
+
+            IBaseState publishState = baseStateCopy;
+
+            publishedBaseState.Object = publishState;
+
+            bool includeAction = (publishState.ActionName != String.Empty || entryActionName != publishState.ActionName);
+
+            if (entryUseState != publishState.UseState)
+            {
+                if (!includeAction)
+                    BaseStateChangeEmitter.Emit("<PartUseStateChange to=\"{0}\" from=\"{1}\" reason=\"{2}\"/>", publishState.UseState, entryUseState, reason);
+                else
+                    BaseStateChangeEmitter.Emit("<PartUseStateChange to=\"{0}\",\"{1}\", from=\"{2}\",\"{3}\", reason=\"{2}\"/>", publishState.UseState, publishState.ActionName, entryUseState, entryActionName, reason);
+            }
+            if (entryConnState != publishState.ConnState)
+                BaseStateChangeEmitter.Emit("<PartConnStateChange to=\"{0}\" from=\"{1}\" reason=\"{2}\"/>", publishState.ConnState, entryConnState, reason);
+
+            if (BaseStatePublishedNotificationList != null)
+                BaseStatePublishedNotificationList.Notify(publishState);
+        }
+
+        /// <summary>
+        /// Local internalPartBusyCounter atomic counter.  This counter may be used by the part to automatically push the use state from Online(Idle) to OnlineBusy whenver this counter is non-zero.
+        /// Part specific code is responsible for making certain that this counter returns to zero whenever all busy signaling sources that incremented it have been completed.  
+        /// Generally this is most safely safely done with the "using" construct using an object returned by a call to the CreateInternalBusyFlagHolderObject method.
+        /// </summary>
+        private Utils.AtomicUInt32 internalPartBusyCounter = new AtomicUInt32();
+
+        /// <summary>Increments the internal part busy counter</summary>
+        protected void IncrementInternalPartBusyCounter() { IncrementInternalPartBusyCounter(null, null); }
+
+        /// <summary>Increments the internal part busy counter and publishes the base state if the publishReason is neither null nor empty</summary>
+        protected void IncrementInternalPartBusyCounter(string publishReason, string startingActionName)
+        {
+            if (!string.IsNullOrEmpty(startingActionName))
+                privateBaseState.ActionName = startingActionName;
+
+            internalPartBusyCounter.Increment();
+
+            if (!String.IsNullOrEmpty(publishReason))
+                PublishBaseState(publishReason);
+        }
+
+        /// <summary>Decrements the internal part busy counter</summary>
+        protected void DecrementInternalPartBusyCounter() { DecrementInternalPartBusyCounter(null); }
+
+        /// <summary>Decrements the internal part busy counter and publishes the base state if the publishReason is neither null nor empty</summary>
+        protected void DecrementInternalPartBusyCounter(string publishReason)
+        {
+            internalPartBusyCounter.Decrement();
+            if (!String.IsNullOrEmpty(publishReason))
+                PublishBaseState(publishReason);
+        }
+
+        /// <summary>
+        /// Increments the internal part busy counter and Creates an internal busy flag holder object which is returned.  When the returned object is explicitly disposed it will decrement the internal part busy flag automatically.
+        /// Caller is responsible for following an object dispose pattern that will cause the returned object to be disposed of at the correct time.
+        /// </summary>
+        protected IDisposable CreateInternalBusyFlagHolderObject() { return CreateInternalBusyFlagHolderObject(null, null); }
+
+        /// <summary>
+        /// Increments the internal part busy counter and Creates an internal busy flag holder object which is returned.  When the returned object is explicitly disposed it will decrement the internal part busy flag automatically.
+        /// Caller is responsible for following an object dispose pattern that will cause the returned object to be disposed of at the correct time.
+        /// This variant uses a reason of "StartBusy:" + flagPublishName when first incrementing the busy flag and "EndBusy:" + flagPublishName when the returned object is disposed and the counter is decremented.
+        /// </summary>
+        protected IDisposable CreateInternalBusyFlagHolderObject(string flagName, string startingActionName)
+        {
+            bool haveActionName = !string.IsNullOrEmpty(startingActionName);
+            bool publish = !string.IsNullOrEmpty(flagName) || haveActionName;
+
+            string startReason = (!publish ? null : (!haveActionName ?  ("StartBusy:" + flagName) : Utils.Fcns.CheckedFormat("Starting:{0} FlagName:{1}", startingActionName, flagName)));
+            string endReason = (!publish ? null : (!haveActionName ?  ("EndBusy:" + flagName) : Utils.Fcns.CheckedFormat("Ending:{0} FlagName:{1}", startingActionName, flagName)));
+
+            IncrementInternalPartBusyCounter(startReason, startingActionName);
+
+            return new DecrementPartBusyCounterOnDispose(this, endReason);
+        }
+
+        /// <summary>
+        /// This class provides the local implementation needed with the CreateInternalBusyFlagHolderObject method(s).  
+        /// It is passed a SimplePartBase and a Reason on construction.  This class will call the part.DecrementInternalPartBusyCounter method when this object is explicitly disposed.
+        /// </summary>
+        private class DecrementPartBusyCounterOnDispose : DisposableBase
+        {
+            public DecrementPartBusyCounterOnDispose(SimplePartBase part, string reason) { Part = part; Reason = reason; }
+            public SimplePartBase Part { get; internal set; }
+            public string Reason { get; internal set; }
+
+            protected override void Dispose(DisposableBase.DisposeType disposeType)
+            {
+                if (disposeType == DisposeType.CalledExplicitly && Part != null)
+                {
+                    Part.DecrementInternalPartBusyCounter(Reason);
+                    Part = null;
+                }
+            }
+        }
+
+        /// <summary>Variant SetBaseState which allows caller to set the useState</summary>
+        protected void SetBaseState(UseState useState, string reason, bool publish)
+        {
+            privateBaseState.UseState = useState;
+            if (publish)
+                PublishBaseState(reason);
+        }
+
+        /// <summary>Variant SetBaseState which allows caller to set the action name</summary>
+        protected void SetBaseState(string actionName, string reason, bool publish)
+        {
+            privateBaseState.ActionName = actionName;
+            if (publish)
+                PublishBaseState(reason);
+        }
+
+        /// <summary>Variant SetBaseState which allows caller to set the useState and identify a specific action name</summary>
+        protected void SetBaseState(UseState useState, string actionName, string reason, bool publish)
+        {
+            privateBaseState.SetState(useState, actionName);
+            if (publish)
+                PublishBaseState(reason);
+        }
+
+        /// <summary>Variant SetBaseState which allows caller to set the commState</summary>
+        protected void SetBaseState(ConnState commState, string reason, bool publish)
+        {
+            privateBaseState.ConnState = commState;
+            if (publish)
+                PublishBaseState(reason);
+        }
+
+        /// <summary>Variant SetBaseState which allows caller to set the useState and the commState</summary>
+        protected void SetBaseState(UseState useState, ConnState connState, string reason, bool publish)
+        {
+            SetBaseState(useState, null, connState, reason, publish);
+        }
+
+        /// <summary>Variant SetBaseState which allows caller to set the useState, the action name, and the commState</summary>
+        protected void SetBaseState(UseState useState, string actionName, ConnState connState, string reason, bool publish)
+        {
+            privateBaseState.SetState(useState, actionName, connState);
+            if (publish)
+                PublishBaseState(reason);
+        }
+
+        #endregion
+    }
+
+    #endregion
+
+    //-----------------------------------------------------------------
 }

@@ -2,11 +2,14 @@ This is the MosaicLibCS source library project.
 
 Copyright (c) Mosaic Systems Inc.  All rights reserved.  
 
+Currently this project is hosted at github.com and can be cloned from 
+"https://github.com/mosaicsys/MosaicLibCS.git"
+
 This distribution is licensed under the Apache License, Version 2.0 (the "License") 
 and may not be used except in compliance with the License.  
 
 If you have any comments, observations, corrections, or suggestions please email 
-them to
+them to:
 	"mosaiclib [@@] mosaicsystems [..] com"
 	(after making the obvious anti-spam substitutions)
 

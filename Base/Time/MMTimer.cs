@@ -24,15 +24,21 @@ namespace MosaicLib.Time
 {
 	using System.Runtime.InteropServices;
 
+    public static class MMTimer
+    {
+        [DllImport("winmm.dll")]
+		internal static extern uint timeBeginPeriod(uint uMilliseconds);
+
+		[DllImport("winmm.dll")]
+		internal static extern uint timeEndPeriod(uint uMilliseconds);
+
+        [DllImport("winmm.dll")]
+        public static extern uint timeGetTime();
+    }
+
 	public class MMTimerPeriod : Utils.DisposableBase
 	{
-		[DllImport("winmm.dll")]
-		private static extern uint timeBeginPeriod(uint uMilliseconds);
-
-		[DllImport("winmm.dll")]
-		private static extern uint timeEndPeriod(uint uMilliseconds);
-
-		/// <summary>Constrution requests winmm.dll/timeBeginPeriod(0)</summary>
+        /// <summary>Constrution requests winmm.dll/timeBeginPeriod(0)</summary>
 		public MMTimerPeriod() : this(0) {}
 
 		/// <summary>Constrution requests winmm.dll/timeBeginPeriod(uMilliseconds)</summary>
@@ -40,7 +46,7 @@ namespace MosaicLib.Time
 		{
 			periodMilliseconds = uMilliseconds;
 
-			if (0 == timeBeginPeriod(periodMilliseconds))
+			if (0 == MMTimer.timeBeginPeriod(periodMilliseconds))
 				periodHasBeenSet = true;
 		}
 
@@ -51,7 +57,7 @@ namespace MosaicLib.Time
 			if (periodHasBeenSet)
 			{
 				periodHasBeenSet = false;
-				timeEndPeriod(periodMilliseconds);
+				MMTimer.timeEndPeriod(periodMilliseconds);
 			}
 		}
 

@@ -40,8 +40,9 @@ namespace MosaicLib.File
 		protected string path = string.Empty;
 		protected string name = string.Empty;
 		protected FileSystemInfo fsiItem = null;
-		protected Time.QpcTimeStamp timeStamp = Time.QpcTimeStamp.Zero;
-		#endregion
+        protected Time.QpcTimeStamp timeStamp = Time.QpcTimeStamp.Zero;
+
+        #endregion
 
 		#region public methods and properties
 
@@ -49,14 +50,21 @@ namespace MosaicLib.File
 		public DirectoryEntryInfo(FileSystemInfo fsiItem) { this.FileSystemInfo = fsiItem; }
 		public DirectoryEntryInfo(string path) { Path = path; }
 
+        /// <summary>
+        /// Refreshes contained FileSystemInfo from stored path
+        /// </summary>
 		public void Refresh() 
 		{
-			if (Exists && (IsFile || IsDirectory))
-				FileSystemInfo.Refresh();
-			else if (!string.IsNullOrEmpty(path))
-				Path = path;		// trigger a full rescan
+            if (Exists && (IsFile || IsDirectory))
+            {
+                FileSystemInfo.Refresh();
+                timeStamp.SetToNow();
+            }
+            else if (!string.IsNullOrEmpty(path))
+                Path = path;		// trigger a full rescan
 		}
 
+        /// <summary>Resets path and stored information to the empty state</summary>
 		public void Clear()
 		{
 			path = string.Empty;
@@ -64,7 +72,8 @@ namespace MosaicLib.File
 			fsiItem = null;
 		}
 
-		public FileSystemInfo FileSystemInfo 
+        /// <summary>Getter returns the stored FileSystemInfo for the entry or null if the entry IsEmpty.  Setter replaces sets this object to reference and reflect the state and path information from the given FileSystemInfo object.</summary>
+        public FileSystemInfo FileSystemInfo 
 		{ 
 			get { return fsiItem; }
 			set
@@ -81,14 +90,23 @@ namespace MosaicLib.File
 			}
 		}
 
-		public FileInfo FileInfo { get { return fsiItem as FileInfo; } }
-		public DirectoryInfo DirectoryInfo { get { return fsiItem as DirectoryInfo; } }
-		public bool IsEmpty { get { return (string.IsNullOrEmpty(Path) || FileSystemInfo == null); } }
-		public bool IsFile { get { return (FileInfo != null); } }
-		public bool IsDirectory { get { return (DirectoryInfo != null); } }
-		public bool IsExistingFile { get { return IsFile && Exists; } }
-		public bool IsExistingDirectory { get { return IsDirectory && Exists; } }
-		public string Path 
+        /// <summary>Returns the FileSystemInfo property as a FileInfo (null if the item is not a File)</summary>
+        public FileInfo FileInfo { get { return fsiItem as FileInfo; } }
+        /// <summary>Returns the FileSystemInfo property as a DirectoryInfo (nul if the item is not a Directory)</summary>
+        public DirectoryInfo DirectoryInfo { get { return fsiItem as DirectoryInfo; } }
+        /// <summary>Returns true if the path or the FileSystemInfo are null or empty</summary>
+        public bool IsEmpty { get { return (string.IsNullOrEmpty(Path) || FileSystemInfo == null); } }
+        /// <summary>Returns true if the FileSystemInfo is a File</summary>
+        public bool IsFile { get { return (fsiItem is FileInfo); } }
+        /// <summary>Returns true if the FileSystemInfo is a Directory</summary>
+        public bool IsDirectory { get { return (fsiItem is DirectoryInfo); } }
+        /// <summary>Returns ture if the FileSystemInfo exists and is a file</summary>
+        public bool IsExistingFile { get { return IsFile && Exists; } }
+        /// <summary>Returns true if the FileSystemInfo esists and is a directory</summary>
+        public bool IsExistingDirectory { get { return IsDirectory && Exists; } }
+
+        /// <summary>Getter returns the full path to the current object.  Setter resets the object and updates its informtion to contain the FileSystemInfo for the file system object at the given path or null if there is none.</summary>
+        public string Path 
 		{ 
 			get { return path; } 
 			set 
@@ -103,22 +121,28 @@ namespace MosaicLib.File
 					else
 						fsiItem = new FileInfo(value);
 
-					this.path = fsiItem.FullName;
+					path = fsiItem.FullName;
 					name = fsiItem.Name;
 					timeStamp.SetToNow();
 				}
 			} 
 		}
-		public string Name { get { return name; } }
-		public Int64 Length
+
+        /// <summary>Returns the leaf name of the FileSystemInfo full path (file name or last directory name in hierarchy)</summary>
+        public string Name { get { return name; } }
+
+        /// <summary>Returns the length of the referenced file in bytes or 0 if the file does not exist or if the the given path is empty or is not a file.</summary>
+        public Int64 Length
 		{
 			get
 			{
 				FileInfo fi = FileSystemInfo as FileInfo;
-				return ((fi != null) ? fi.Length : 0);
+				return ((fi != null && fi.Exists) ? fi.Length : 0);
 			}
 		}
-		public bool Exists
+
+        /// <summary>Returns true if the path is a file or directory that exists.</summary>
+        public bool Exists
 		{
 			get
 			{
@@ -130,7 +154,9 @@ namespace MosaicLib.File
 					return false;
 			}
 		}
-		public TimeSpan CreationAge 
+
+        /// <summary>Returns the amount of time that has elapsed from the FileSystemInfo.CreateionTime to now as a DateTime.</summary>
+        public TimeSpan CreationAge 
 		{
 			get
 			{
@@ -140,7 +166,33 @@ namespace MosaicLib.File
 					return TimeSpan.Zero;
 			}
 		}
-		public Time.QpcTimeStamp QpcTimeStamp { get { return timeStamp; } }
+
+        /// <summary>Returns the QpcTimeStamp of the last object creation or its last Refresh</summary>
+        public Time.QpcTimeStamp QpcTimeStamp { get { return timeStamp; } }
+
+        /// <summary>Returns the DateTime that is the oldest from the referenced file system object's creation time, last modified time, and last accessed time, in UTC.</summary>
+        protected DateTime OldestFileSystemInfoDateTimeUtc
+        {
+            get
+            {
+                if (!IsEmpty)
+                {
+                    DateTime oldestTime = FileSystemInfo.CreationTimeUtc;
+
+                    if (oldestTime > FileSystemInfo.LastWriteTimeUtc)
+                        oldestTime = FileSystemInfo.LastWriteTimeUtc;
+                    if (oldestTime > FileSystemInfo.LastAccessTimeUtc)
+                        oldestTime = FileSystemInfo.LastAccessTimeUtc;
+
+                    return oldestTime;
+                }
+                else
+                {
+                    return DateTime.Now;
+                }
+            }
+        }
+
 		#endregion
 	}
 
@@ -198,14 +250,9 @@ namespace MosaicLib.File
 	///			to be advanced and effect the reported total size of the files in the diretory.
 	/// </remarks>
 
-	public class DirectoryFileRotationManager : PartBase
+	public class DirectoryFileRotationManager : SimplePartBase
 	{
-		#region PartBase methods
-
-		public override IBaseState BaseState
-		{
-			get { return MosaicLib.Modular.Part.BaseState.None; }
-		}
+		#region SimplePartBase methods
 
 		protected override void Dispose(MosaicLib.Utils.DisposableBase.DisposeType disposeType) {}
 
@@ -621,8 +668,9 @@ namespace MosaicLib.File
 					int fileNamePrefixLen = config.fileNamePrefix.Length;
 					int fileNameSuffixLen = config.fileNameSuffix.Length;
 
-					string prefix = fileName.Substring(0, fileNamePrefixLen);
-					string rest = fileName.Substring(fileNamePrefixLen);
+                    int split1Idx = Math.Min(fileNamePrefixLen, fileName.Length);   // prevent attempting to call Substring with a second arg that is beyond the end of the string.
+                    string prefix = fileName.Substring(0, split1Idx);
+                    string rest = fileName.Substring(split1Idx);
 					int restLen = rest.Length;
 
 					string middle = string.Empty, suffix = string.Empty;

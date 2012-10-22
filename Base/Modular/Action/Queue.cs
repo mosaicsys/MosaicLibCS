@@ -176,12 +176,17 @@ namespace MosaicLib.Modular.Action
         /// <summary>Returns a recent copy of the count of the number of objects in the queue.</summary>
         public Int32 VolatileCount { get { return mPtrQueueCount.VolatileValue; } }
 
-        /// <summary>Returns true if the a recent copy of the count of the number of objects in the queue is zero.</summary>
+        /// <summary>Returns true if the a recent (volatile) copy of the count of the number of objects in the queue is zero.</summary>
         public bool IsEmpty { get { return (VolatileCount == 0); } }
 
 		/// <summary>Attempts to extract and return the next action in the queue.</summary>
 		/// <returns>The next extracted action or null if the queue is empty.</returns>
-		public IProviderFacet GetNextAction()
+        public IProviderFacet GetNextAction() { return GetNextAction(false); }
+
+        /// <summary>Attempts to extract and return the next action in the queue.</summary>
+        /// <returns>The next extracted action or null if the queue is empty.</returns>
+        /// <param name="peekOnly">If this parameter is true then the returned action is not removed from the queue.</param>
+        public IProviderFacet GetNextAction(bool peekOnly)
 		{
 			// before actually trying to obtain an object from the queue
 			//	Use an asynchronous check to see if the queue is known to be empty
@@ -209,7 +214,11 @@ namespace MosaicLib.Modular.Action
 						return null;
 
 					IProviderFacet action = mPtrQueueArray [mPtrQueueArrayNextGetIdx];
-					mPtrQueueArray [mPtrQueueArrayNextGetIdx] = null;
+
+                    if (peekOnly)
+                        return action;
+
+                    mPtrQueueArray [mPtrQueueArrayNextGetIdx] = null;
 
 					if (++mPtrQueueArrayNextGetIdx >= mPtrQueueArraySize)
 						mPtrQueueArrayNextGetIdx = 0;

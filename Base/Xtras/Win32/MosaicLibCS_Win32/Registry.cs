@@ -32,6 +32,7 @@ namespace MosaicLib.Win32.Registry
     {
         #region extern kernal functions
 
+        [Obsolete("All classes, methods and properties from this assembly under the MosaicLib.Win32.Registry namespace have been moved to the MosaicLibCSBase assembly (under the same namespace there).")]
         [DllImport("advapi32")]
         public static extern int RegFlushKey(IntPtr hKey);
 
@@ -39,14 +40,18 @@ namespace MosaicLib.Win32.Registry
 
         #region Split Registry Key Path methods
 
+        [Obsolete("All classes, methods and properties from this assembly under the MosaicLib.Win32.Registry namespace have been moved to the MosaicLibCSBase assembly (under the same namespace there).")]
         public const char DefaultRegPathDelimiter = '\\';
-        public static readonly char [] DefaultRegPathDelimiters = new char [] { DefaultRegPathDelimiter, '/' };
+        [Obsolete("All classes, methods and properties from this assembly under the MosaicLib.Win32.Registry namespace have been moved to the MosaicLibCSBase assembly (under the same namespace there).")]
+        public static readonly char[] DefaultRegPathDelimiters = new char[] { DefaultRegPathDelimiter, '/' };
 
+        [Obsolete("All classes, methods and properties from this assembly under the MosaicLib.Win32.Registry namespace have been moved to the MosaicLibCSBase assembly (under the same namespace there).")]
         public static string[] SplitRegistryKeyPath(string regKeyPath)
         {
             return SplitRegistryKeyPath(regKeyPath, DefaultRegPathDelimiters);
         }
 
+        [Obsolete("All classes, methods and properties from this assembly under the MosaicLib.Win32.Registry namespace have been moved to the MosaicLibCSBase assembly (under the same namespace there).")]
         public static string[] SplitRegistryKeyPath(string regKeyPath, char[] delimiters)
         {
             return regKeyPath.Split(delimiters);
@@ -56,21 +61,25 @@ namespace MosaicLib.Win32.Registry
 
         #region Open Registry Key Path methods
 
+        [Obsolete("All classes, methods and properties from this assembly under the MosaicLib.Win32.Registry namespace have been moved to the MosaicLibCSBase assembly (under the same namespace there).")]
         public static RegistryKey OpenRegistryKeyPath(string regKeyPath)
         {
             return OpenRegistryKeyPath(null, SplitRegistryKeyPath(regKeyPath, DefaultRegPathDelimiters), RegistryKeyPermissionCheck.ReadWriteSubTree);
         }
 
+        [Obsolete("All classes, methods and properties from this assembly under the MosaicLib.Win32.Registry namespace have been moved to the MosaicLibCSBase assembly (under the same namespace there).")]
         public static RegistryKey OpenRegistryKeyPath(string regKeyPath, RegistryKeyPermissionCheck permissions) 
         {
             return OpenRegistryKeyPath(null, SplitRegistryKeyPath(regKeyPath, DefaultRegPathDelimiters), permissions);
         }
 
+        [Obsolete("All classes, methods and properties from this assembly under the MosaicLib.Win32.Registry namespace have been moved to the MosaicLibCSBase assembly (under the same namespace there).")]
         public static RegistryKey OpenRegistryKeyPath(RegistryKey startAtKey, string relativeRegKeyPath, RegistryKeyPermissionCheck permissions)
         {
             return OpenRegistryKeyPath(startAtKey, SplitRegistryKeyPath(relativeRegKeyPath, DefaultRegPathDelimiters), permissions);
         }
 
+        [Obsolete("All classes, methods and properties from this assembly under the MosaicLib.Win32.Registry namespace have been moved to the MosaicLibCSBase assembly (under the same namespace there).")]
         public static RegistryKey OpenRegistryKeyPath(RegistryKey startAtKey, string[] keyPathArray, RegistryKeyPermissionCheck permissions)
         {
             RegistryKey currentKey = startAtKey;
@@ -135,6 +144,7 @@ namespace MosaicLib.Win32.Registry
 
         #region Registry Hive Helper methods
 
+        [Obsolete("All classes, methods and properties from this assembly under the MosaicLib.Win32.Registry namespace have been moved to the MosaicLibCSBase assembly (under the same namespace there).")]
         static public RegistryHive GetRegistryHiveCode(string hiveName)
         {
             switch (hiveName)
@@ -150,6 +160,7 @@ namespace MosaicLib.Win32.Registry
             }
         }
 
+        [Obsolete("All classes, methods and properties from this assembly under the MosaicLib.Win32.Registry namespace have been moved to the MosaicLibCSBase assembly (under the same namespace there).")]
         static public RegistryKey GetRegistryHiveKey(string hiveName)
         {
             RegistryHive hiveCode = GetRegistryHiveCode(hiveName);
@@ -173,6 +184,7 @@ namespace MosaicLib.Win32.Registry
 
     #region Registry Key Creation classes
 
+    [Obsolete("All classes, structs, methods and properties from this assembly under the MosaicLib.Win32.Registry namespace have been moved to the MosaicLibCSBase assembly (under the same namespace there).")]
     public struct RegValueSpec
     {
         public RegValueSpec(string valueName, object valueObject) : this(valueName, valueObject, RegistryValueKind.Unknown) { }

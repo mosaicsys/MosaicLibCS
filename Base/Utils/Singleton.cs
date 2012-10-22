@@ -26,7 +26,7 @@ namespace MosaicLib.Utils
     /// <summary>
     /// Interface implemented by Singleton helper object(s) provided here.  Gives user access to a common Instance, either constructed explicitly or on first use.
     /// </summary>
-    public interface ISingleton<SingletonObjectType> where SingletonObjectType : class, new()
+    public interface ISingleton<TSingletonInstanceProperty> where TSingletonInstanceProperty : class
     {
         /// <summary>
         /// Gives caller access to the unerlying Singleton Instance.  
@@ -37,7 +37,7 @@ namespace MosaicLib.Utils
         /// Also Thrown on any attempt by the constructor to invoke, or depend on static construction, that attempts to implicitly, recursively, re-accesses the Singleton Instance perperty on the original thread that is constructing the first singleton instance.
         /// </exception>
         /// <remarks>Underlying object construction exceptions for AutoConstruct case are not caught and will throw through to the caller's code that accesses the Instance if it cannot be successfully constructed on first use.</remarks>
-        SingletonObjectType Instance { get; }
+        TSingletonInstanceProperty Instance { get; }
 
         /// <summary>
         /// Gives the caller access to see what behavior the singleton has
@@ -63,8 +63,10 @@ namespace MosaicLib.Utils
     /// </summary>
     public enum SingletonInstanceBehavior
     {
-        /// <summary>First use of Instance property will automatically construct the instance using default constructor.</summary>
+        /// <summary>First use of Instance property will automatically construct the instance using default constructor.  Instance cannot be provided externally.</summary>
         AutoConstruct = 0,
+        /// <summary>First use of Instance property will automatically construct the instance using default constructor if the Instance has not been assigned by that point.  Instance may be provided externally or it may be automatically constructed.</summary>
+        AutoConstructIfNeeded,
         /// <summary>Instance property is manually assigned.  It must be assigned non-null value prior to first use of Instance property by Singleton user/client code.</summary>
         ManuallyAssign_MustBeNonNull,
         /// <summary>Instance property is manually assigned.  It may be null or non-null at any point that a Singleton user/client attempts to use it.</summary>
@@ -74,8 +76,18 @@ namespace MosaicLib.Utils
     /// <summary>
     /// Primary Singleton class.  Implements SingletonInstanceBehavior (defaults to AutoConstruct) for Instance property.  This class is renterant and support MT safe use.
     /// </summary>
-    /// <typeparam name="SingletonObjectType"></typeparam>
-    public class SingletonHelper<SingletonObjectType> : Utils.DisposableBase, System.IDisposable, ISingleton<SingletonObjectType> where SingletonObjectType : class, new()
+    /// <typeparam name="TSingletonObject"></typeparam>
+    public class SingletonHelper<TSingletonObject> : SingletonHelper<TSingletonObject, TSingletonObject>
+        where TSingletonObject : class, new()
+    {
+        public SingletonHelper() : base() { }
+        public SingletonHelper(SingletonInstanceBehavior behavior) : base(behavior) { }
+    }
+
+    public class SingletonHelper<TSingletonInstanceProperty, TSingletonObject>
+        : Utils.DisposableBase, System.IDisposable, ISingleton<TSingletonInstanceProperty>
+        where TSingletonObject : class, TSingletonInstanceProperty, new()
+        where TSingletonInstanceProperty : class
     {
         #region Construction and Destruction
 
@@ -102,19 +114,28 @@ namespace MosaicLib.Utils
             {
                 lock (instanceMutex)
                 {
-                    if (instance != null)
-                    {
-                        // we do not use Utils.Fcns.DisposeOfObject because instance is declared as volatile.
-                        System.IDisposable id = instance as System.IDisposable;
-
-                        // prevent Instance property from seeing object
-                        instance = null;
-
-                        // dispose of it (or not as appropriate)
-                        if (id != null)
-                            id.Dispose();
-                    }
+                    InnerDispose();
                 }
+            }
+        }
+
+        #endregion
+
+        #region InnerDispose
+
+        private void InnerDispose()
+        {
+            if (instance != null)
+            {
+                // we do not use Utils.Fcns.DisposeOfObject because instance is declared as volatile.
+                System.IDisposable id = instance as System.IDisposable;
+
+                // prevent Instance property from seeing object
+                instance = null;
+
+                // dispose of it (or not as appropriate)
+                if (id != null)
+                    id.Dispose();
             }
         }
 
@@ -129,14 +150,14 @@ namespace MosaicLib.Utils
         /// </summary>
         /// <exception cref="SingletonException">
         /// Get property throws exception if instance is null and null is not defined as a legal instance value (optional ctor parameter)
-        /// Set property throws exception if the given value is null or if the contained instance is non-null at the time of the assignment.
+        /// Set property throws exception if the given value is null or if the contained instance is non-null at the time of the assignment.  In some Behavior dependent cases this property may first be assigned to null and then to a second instance to dispose of the current instance (if present) and thne replace it with another.  Generally this is only safe to do in setup and/or test conditions.
         /// </exception>
 
-        public SingletonObjectType Instance
+        public TSingletonInstanceProperty Instance
         {
             get 
             {
-                SingletonObjectType value = instance;
+                TSingletonInstanceProperty value = instance;
 
                 if (value == null)
                 {
@@ -160,7 +181,7 @@ namespace MosaicLib.Utils
                                 //  classes code.  Failure to block this case produces unexpected results since at minimum two singleton objects are created, of which only one is retained.
                             }
 
-                            value = new SingletonObjectType();
+                            value = new TSingletonObject();
 
                             recursiveConstructionCount.Decrement();
                         }
@@ -179,8 +200,8 @@ namespace MosaicLib.Utils
             {
                 lock (instanceMutex)
                 {
-                    if (CreateInstanceOnFirstUse)
-                        throw new SingletonException("Attempt to assign value to SingletonHelper with AutoCreate Behavior");
+                    if (!InstanceMayBeAssigned)
+                        throw new SingletonException("Attempt to assign value to SingletonHelper whose Behavior does not permit this");
 
                     if (IsDisposed)
                         throw new SingletonException("Attempt to set Instance after SingletonHelper has been disposed");
@@ -190,6 +211,9 @@ namespace MosaicLib.Utils
 
                     if (instance != null && value != null)
                         throw new SingletonException("Attempt to replace existing non-null Instance");
+
+                    if (instance != null && value == null)
+                        InnerDispose();
 
                     instance = value;
                 }
@@ -211,15 +235,31 @@ namespace MosaicLib.Utils
         #region private fields and properties
 
         /// <summary>True if behavior is AutoConstruct</summary>
-        private bool CreateInstanceOnFirstUse { get { return (Behavior == SingletonInstanceBehavior.AutoConstruct); } }
+        private bool CreateInstanceOnFirstUse { get { return (Behavior == SingletonInstanceBehavior.AutoConstruct || Behavior == SingletonInstanceBehavior.AutoConstructIfNeeded); } }
+
+        /// <summary>True if behavior is AutoConstruct</summary>
+        private bool InstanceMayBeAssigned 
+        { 
+            get 
+            {
+                switch (Behavior)
+                {
+                    case SingletonInstanceBehavior.AutoConstruct: return false;
+                    case SingletonInstanceBehavior.AutoConstructIfNeeded: return true;
+                    case SingletonInstanceBehavior.ManuallyAssign_MayBeNull: return true;
+                    case SingletonInstanceBehavior.ManuallyAssign_MustBeNonNull: return true;
+                    default: return false;
+                }
+            } 
+        }
 
         /// <summary>True if behavior is ManuallyAssign_MayBeNull</summary>
-        private bool NullIsLegalInstanceValue { get { return (Behavior == SingletonInstanceBehavior.ManuallyAssign_MayBeNull); } }
+        private bool NullIsLegalInstanceValue { get { return (Behavior == SingletonInstanceBehavior.ManuallyAssign_MayBeNull || Behavior == SingletonInstanceBehavior.AutoConstructIfNeeded); } }
 
         /// <summary>mutex object for access to change instance field</summary>
         private readonly object instanceMutex = new object();
         /// <summary>volatile refernece to constructed or held singleton object</summary>
-        private volatile SingletonObjectType instance = null;
+        private volatile TSingletonInstanceProperty instance = null;
         /// <summary>Instance recursion counter used to detect recursive use of Instance during auto construction of SingletonObjectType object.</summary>
         private AtomicInt32 recursiveConstructionCount = new AtomicInt32(0);
 

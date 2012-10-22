@@ -67,6 +67,53 @@ namespace MosaicLib.Modular.Common
             foreach (NamedValue rhsItem in rhs)
                 Add(new NamedValue(rhsItem));
         }
+
+        public NamedValue this[string name]
+        {
+            get
+            {
+                BuildDictIfNeeded();
+                int idx = -1;
+                if (nameToIndexDict.TryGetValue(name, out idx))
+                    return this[idx];
+                else
+                    return new NamedValue(name);
+            }
+
+            set
+            {
+                if (name == null)
+                    throw new System.NullReferenceException("Index string must not be null");
+                if (name != value.Name)
+                    throw new System.InvalidOperationException("Index string must equal Name in given NamedValue object");
+
+                BuildDictIfNeeded();
+                int idx = -1;
+                if (nameToIndexDict.TryGetValue(name, out idx))
+                    this[idx] = value;
+                else
+                {
+                    idx = Count;
+                    Add(value);
+                    nameToIndexDict[name] = idx;
+                }
+            }
+        }
+
+        protected Dictionary<string, int> nameToIndexDict = new Dictionary<string, int>();
+        protected void BuildDictIfNeeded()
+        {
+            if (nameToIndexDict == null)
+            {
+                nameToIndexDict = new Dictionary<string, int>();
+                for (int idx = 0; idx < Count; idx++)
+                {
+                    NamedValue nvItem = this[idx];
+                    nameToIndexDict[nvItem.Name] = idx;
+                }
+            }
+        }
+
     }
 
     /// <summary>
@@ -92,6 +139,10 @@ namespace MosaicLib.Modular.Common
         /// <summary>This property is non-null if the NV has been given a binary value (possibly from a ValueSet or other E005DataSource)</summary>
         [DataMember(Order = 3, IsRequired = false, EmitDefaultValue = false)]
         public byte[] Data { get; set; }
+
+        public bool HasStrValue { get { return (Str != null); } }
+        public bool HasDataValue { get { return (Data != null); } }
+        public bool HasValue { get { return (HasStrValue || HasDataValue); } }
     }
 
     #endregion}

@@ -68,7 +68,7 @@ namespace MosaicLib
 
 					dirMgrConfig.enableAutomaticCleanup = true;
 					dirMgrConfig.maxAutoCleanupDeletes = 200;
-					dirMgrConfig.createDirectoryIfNeeded = true;
+					dirMgrConfig.createDirectoryIfNeeded = config.createDirectoryIfNeeded;
 
 					SetupDirMgr();
 				}

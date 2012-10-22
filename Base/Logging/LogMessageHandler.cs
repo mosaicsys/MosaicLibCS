@@ -131,6 +131,7 @@ namespace MosaicLib
 
 		//-------------------------------------------------------------------
 
+        /// <summary>The standard default mesg queue size: 5000</summary>
 		const int DefaultMesgQueueSize = 5000;
 
 		public static ILogMessageHandler CreateQueueLogMessageHandler(ILogMessageHandler targetLMH) { return CreateQueueLogMessageHandler(targetLMH, DefaultMesgQueueSize); }
@@ -143,41 +144,73 @@ namespace MosaicLib
 
 		#region FileRotationLogging
 
+        /// <summary>
+        /// Contains all configuration information that is used to setup a FileRotation type log message handler (queued or not).
+        /// </summary>
 		public struct FileRotationLoggingConfig
 		{
-			public string name;				// sink name - may be used as prefix to created files in directory
-			public string dirPath;			// full path to directory in which to place files.  This directory is only intended to store files that relate to this rotation set
-			public LogGate logGate;
+            /// <summary>sink name - may be used as prefix to created files in directory</summary>
+			public string name;
+            /// <summary>full path to directory in which to place files.  This directory is only intended to store files that relate to this rotation set</summary>
+            public string dirPath;
+            /// <summary>The desired logGate.  Defaults to LogGate.None unless overriden in constructor</summary>
+            public LogGate logGate;
 
-			public bool	nameUsesDateAndTime;			// true for date_time in middle of name, false for 5 digits in middle of name
-			// files are named "<name><date_time>.log" or "<name><nnnnn>.log"
+            /// <summary>true for date_time in middle of name, false for 5 digits in middle of name.  files are named "[name][date_time].log" or "[name][nnnnn].log"</summary>
+            public bool nameUsesDateAndTime;
 
-			public struct AdvanceRules
+            /// <summary>Defines the set of values that determine when the ring must advance to the next file.</summary>
+            public struct AdvanceRules
 			{
-				public int		fileSizeLimit;		//!< the maximum desired size of each file (0 for no limit)
-				public double	fileAgeLimitInSec;	//!< file age limit in seconds (0 for no limit)
-				public double	testPeriodInSec;	//!< the period after checking the active file's size before it will be checked again.  Leave as zero for calculation based on fileAgeLimitInSec
-			} 
-			public AdvanceRules advanceRules;
+                /// <summary>the maximum desired size of each file (0 for no limit)</summary>
+                public int fileSizeLimit;
+                /// <summary>file age limit in seconds (0 for no limit)</summary>
+                public double fileAgeLimitInSec;
+                /// <summary>file age limit (TimeSpan.Zero for no limit)</summary>
+                public TimeSpan FileAgeLimit { get { return TimeSpan.FromSeconds(fileAgeLimitInSec); } set { fileAgeLimitInSec = value.TotalSeconds; } }
+                /// <summary>the period after checking the active file's size before it will be checked again.  Leave as zero for calculation based on fileAgeLimitInSec</summary>
+                public double testPeriodInSec;
+                /// <summary>the period after checking the active file's size before it will be checked again.  Leave as TimeSpan.Zero for calculation based on fileAgeLimitInSec</summary>
+                public TimeSpan TestPeriod { get { return TimeSpan.FromSeconds(testPeriodInSec); } set { testPeriodInSec = value.TotalSeconds; } }
+            }
+            /// <summary>Defines the set of values that determine when the ring must advance to the next file.</summary>
+            public AdvanceRules advanceRules;
 
-			public struct PurgeRules
+            /// <summary>Defines the set of values that determine when old files in the ring must be purged/deleted.</summary>
+            public struct PurgeRules
 			{
-				public int		dirNumFilesLimit;	//!< the user stated maximum number of files (or zero for no limit).  Must be 0 or be between 2 and 5000
-				public long		dirTotalSizeLimit;	//!< the user stated maximum size of the set of managed files or zero for no limit
-				public double	fileAgeLimitInSec;	//!< the user stated maximum age in seconds of the oldest file or zero for no limit
-			} 
-			public PurgeRules purgeRules;
+                /// <summary>the user stated maximum number of files (or zero for no limit).  Must be 0 or be between 2 and 5000</summary>
+                public int dirNumFilesLimit;
+                /// <summary>the user stated maximum size of the set of managed files or zero for no limit</summary>
+                public long dirTotalSizeLimit;
+                /// <summary>the user stated maximum age in seconds of the oldest file or zero for no limit</summary>
+                public double fileAgeLimitInSec;
+                /// <summary>the user stated maximum age in seconds of the oldest file or zero for no limit (TimeSpan.Zero for no limit)</summary>
+                public TimeSpan FileAgeLimit { get { return TimeSpan.FromSeconds(fileAgeLimitInSec); } set { fileAgeLimitInSec = value.TotalSeconds; } }
+            }
+            /// <summary>Defines the set of values that determine when old files in the ring must be purged/deleted.</summary>
+            public PurgeRules purgeRules;
 
-			public int 	mesgQueueSize;			// only used by queued file rotation type log message handlers
+            /// <summary>only used by queued file rotation type log message handlers.  Defines the maximum number of messages that can be enqueued before being dropped or processed.</summary>
+            public int mesgQueueSize;
 
-			public bool includeFileAndLine;
-			public bool	includeQpcTime;
+            /// <summary>Set to true to capture and include the message source file name and line number</summary>
+            public bool includeFileAndLine;
+            /// <summary>Set to true to include the QpcTime in the output text.</summary>
+            public bool includeQpcTime;
 
-			public List<string> excludeFileNamesSet;
+            /// <summary>A list of strings for file names that will not be tracked or purged by the ring.</summary>
+            public List<string> excludeFileNamesSet;
 
-			public FileRotationLoggingConfig(string name, string dirPath) : this(name, dirPath, LogGate.All) { }
-			public FileRotationLoggingConfig(string name, string dirPath, LogGate logGate) : this(name, dirPath, logGate, 2000, 1000000, DefaultMesgQueueSize) { }
-			public FileRotationLoggingConfig(string name, string dirPath, LogGate logGate, int maxFilesInRing, int advanceAfterFileSize, int mesgQueueSize)
+            /// <summary>Set to true if the ring is expected to create the directory if needed or if it should disable logging if the directory does not exist.</summary>
+            public bool createDirectoryIfNeeded;
+
+            /// <summary>Simple constructor: applyies LogGate.All and other default settings of 2000 files in ring, 1000000 byes per file, DefaultMesgQueueSize.</summary>
+            public FileRotationLoggingConfig(string name, string dirPath) : this(name, dirPath, LogGate.All) { }
+            /// <summary>Simple constructor: uses default settings of 2000 files in ring, 1000000 byes per file, DefaultMesgQueueSize</summary>
+            public FileRotationLoggingConfig(string name, string dirPath, LogGate logGate) : this(name, dirPath, logGate, 2000, 1000000, DefaultMesgQueueSize) { }
+            /// <summary>Standard constructor</summary>
+            public FileRotationLoggingConfig(string name, string dirPath, LogGate logGate, int maxFilesInRing, int advanceAfterFileSize, int mesgQueueSize) : this()
 			{
 				this.name = name;
 				this.dirPath = dirPath;
@@ -195,6 +228,8 @@ namespace MosaicLib
 				advanceRules.fileAgeLimitInSec = 24.0 * 3600.0;		// 1 day
 
 				excludeFileNamesSet = new List<string>();
+
+                createDirectoryIfNeeded = true;
 			}
 		}
 

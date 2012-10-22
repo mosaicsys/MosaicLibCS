@@ -35,7 +35,7 @@ namespace MosaicLib.Modular.Part
 
 	/// <summary>
 	/// This abstract class is the standard base class to be used by most types of Active Parts.  
-	/// It derives from PartBase, and implements IActivePartBase and INotifyable.
+	/// It derives from SimplePartBase, and implements IActivePartBase and INotifyable.
 	/// </summary>
 	/// <remarks>
 	/// This class requires that the derived class implement the following methods:
@@ -51,9 +51,6 @@ namespace MosaicLib.Modular.Part
 	///		Of these the following are expeted to be overriden in most Active Parts:
 	///		DisposeCalledPassdown, PerformGoOnlineAction, PerformGoOfflineAction, PerformMainLoopService
 	/// 
-	/// This class implements the following essential methods/properties:
-	///		BaseState, BaseStateNotifier
-	///		
 	/// This class defines the following sub-classes for local use and for use by derived classes:
 	///		BasicActionImpl, StringActionImpl.
 	///		
@@ -61,7 +58,7 @@ namespace MosaicLib.Modular.Part
 	/// the thread will wakeup whenever the object is signaled/Notified.
 	/// </remarks>
 
-	public abstract class SimpleActivePartBase : PartBase, IActivePartBase, INotifyable
+	public abstract class SimpleActivePartBase : SimplePartBase, IActivePartBase, INotifyable
 	{
 		//-----------------------------------------------------------------
 		#region sub classes
@@ -99,21 +96,18 @@ namespace MosaicLib.Modular.Part
 		//-----------------------------------------------------------------
 		#region CTOR and DTOR (et. al.)
 
-		public SimpleActivePartBase(string partID, string partType) : this(partID, partType, TimeSpan.FromSeconds(0.1)) {}
+		public SimpleActivePartBase(string partID, string partType) : this(partID, partType, TimeSpan.FromSeconds(0.1), true, 10) {}
 		public SimpleActivePartBase(string partID, string partType, TimeSpan waitTimeLimit) : this(partID, partType, waitTimeLimit, true, 10) {}
 		public SimpleActivePartBase(string partID, string partType, TimeSpan waitTimeLimit, bool enableQueue, int queueSize) : base(partID, partType)
 		{
-			this.waitTimeLimit = waitTimeLimit;
+            TreatPartAsBusyWhenInternalPartBusyCountIsNonZero = true;       // allow derived objects to default to be able to use CreateInternalBusyFlagHolderObject
+
+            this.waitTimeLimit = waitTimeLimit;
 
 			actionQ = new ActionQueue(partID + ".q", enableQueue, queueSize);
 			// NOTE: mActionQ.NotifyOnEnqueue.AddItem(mThreadWakeupNotifier) is performed as part of StartPart - which must not be invoked until the derived class is fully constructed.
 
-			log = new Logging.Logger(partID);
-
-			BaseStatePublishedNotificationList = new EventHandlerNotificationList<IBaseState>(this);
-            BaseStateChangeEmitter = Log.Emitter(Logging.MesgType.Trace);
-	
-			actionLoggingReference = new ActionLogging(log, ActionLoggingConfig.Info_Error_Debug_Debug);
+			actionLoggingReference = new ActionLogging(Log, ActionLoggingConfig.Info_Error_Debug_Debug);
 		}
 	
 		protected sealed override void Dispose(DisposeType disposeType)
@@ -145,8 +139,10 @@ namespace MosaicLib.Modular.Part
         //-----------------------------------------------------------------
 		#region IActivePartBase interface methods
 
-		public override IBaseState BaseState { get { return publishedBaseState.Object; } }		// base class defines this as abstract
-		public INotificationObject<IBaseState> BaseStateNotifier { get { return publishedBaseState; } }
+        // private volatile bool isStarting = false;        // currently unused
+        private volatile bool hasBeenStarted = false;
+        private volatile bool hasBeenStopped = false;
+        private volatile bool hasStopBeenRequested = false;
 
         /// <summary>Stub for behavior derived objects would like to perform before the main action queue is enabled.</summary>
         protected virtual void PreStartPart() { }
@@ -155,6 +151,8 @@ namespace MosaicLib.Modular.Part
 		{
 			using (Logging.EnterExitTrace t = new Logging.EnterExitTrace(Log, "StartPart", Logging.MesgType.Debug))
 			{
+                // isStarting = true;       // flag is not used at present
+
                 PreStartPart();
 
 				if (actionQ != null)
@@ -172,6 +170,8 @@ namespace MosaicLib.Modular.Part
 					throw new System.NullReferenceException(FmtStdEC("Failed to construct service thread"));
 
 				mainThread.Start();
+
+                hasBeenStarted = true;
 			}
 		}
 
@@ -187,6 +187,8 @@ namespace MosaicLib.Modular.Part
                 if (actionQ != null)
 					actionQ.QueueEnable = false;	// this tells the thread to exit (if it is already running)
 
+                hasStopBeenRequested = true; 
+
                 if (mainThread != null)
 				{
 					threadWakeupNotifier.Notify();
@@ -196,8 +198,14 @@ namespace MosaicLib.Modular.Part
 				}
 
 				Log.Info.Emit("Part stopped");
+
+                hasBeenStopped = true;
 			}
 		}
+
+        public bool HasBeenStopped { get { return (hasBeenStopped || (actionQ != null && !actionQ.QueueEnable)); } }
+        public bool HasBeenStarted { get { return (hasBeenStarted); } }
+        public bool IsRunning { get { return (HasBeenStarted && !HasBeenStopped); } }
 
 		private static object startIfNeededMutex = new object();
 
@@ -205,7 +213,7 @@ namespace MosaicLib.Modular.Part
 		{
 			lock (startIfNeededMutex)		// only one caller of StartPartIfNeeded will be processed at a time (system wide...)
 			{
-				if (actionQ == null || mainThread == null)
+                if (!HasBeenStarted)
 					StartPart();
 			}
 		}
@@ -310,6 +318,9 @@ namespace MosaicLib.Modular.Part
 		//-----------------------------------------------------------------
 		#region object service thread related methods
 
+        /// <summary>
+        /// Default main loop method for this part.  invoked PerformMainLoopService, IssueNextQueueAction and WaitForSomethingToDo in a loop until actionQ has been disabled.
+        /// </summary>
 		protected virtual void MainThreadFcn()
 		{
 			using (Logging.EnterExitTrace t = new Logging.EnterExitTrace(Log, "MainThreadFcn", Logging.MesgType.Debug))
@@ -333,18 +344,38 @@ namespace MosaicLib.Modular.Part
 			}
 		}
 
+        /// <summary>
+        /// Returns true once part stop has been requested (gets set after PreStopPart completes and actionQ has been disabled)
+        /// </summary>
+        protected bool HasStopBeenRequested { get { return (hasStopBeenRequested || (actionQ != null && !actionQ.QueueEnable)); } }
+
+        /// <summary>
+        /// empty base class method that can be overriden by derived classes to perform periodic service under control of the Part's main loop.
+        /// </summary>
 		protected virtual void PerformMainLoopService() 
 		{
 		}
 
+        /// <summary>
+        /// Attempts to get and perform the next action from the actionQ.
+        /// </summary>
+        /// <returns>True if an action was performed or false otherwise.</returns>
 		protected virtual bool IssueNextQueuedAction()
 		{
-			IProviderFacet action = actionQ.GetNextAction();
+            IProviderFacet peekAction = actionQ.GetNextAction(true);        // peek into the queue
 
-			if (action == null)
-				return false;
+            if (peekAction == null) // queue is empty
+                return false;
 
-			PerformAction(action);
+            using (IDisposable busyFlag = CreateInternalBusyFlagHolderObject("Issuing next queued action", peekAction.ToString()))
+            {
+                IProviderFacet action = actionQ.GetNextAction();
+
+			    if (action == null)
+				    return false;
+
+                PerformAction(action);
+            }
 
 			return true;
 		}
@@ -360,6 +391,9 @@ namespace MosaicLib.Modular.Part
         /// <summary>Requests to cancel the CurrentAction if it is non null and its state IsPendingCompletion</summary>
         protected void RequestCancelCurrentAction() { if (CurrentActionState.IsPendingCompletion) CurrentAction.RequestCancel(); }
 
+        /// <summary>
+        /// Sets the CurrentAction to the given action value, asks the given action to IssueAndInvokeAction and then sets CurrentAction to null.
+        /// </summary>
 		protected virtual void PerformAction(IProviderFacet action)
 		{
             CurrentAction = action;
@@ -370,22 +404,23 @@ namespace MosaicLib.Modular.Part
             CurrentAction = null;
 		}
 
+        /// <summary>Waits for threadWakeupNotifier to be signaled or default waitTimeLimit to elapse (used to set Parts's default spin rate).</summary>
+        /// <returns>True if the object was signaled or false if the timeout caused flow to return to the caller.</returns>
 		protected bool WaitForSomethingToDo()
 		{
 			return WaitForSomethingToDo(threadWakeupNotifier, waitTimeLimit);
 		}
 
-		protected bool WaitForSomethingToDo(TimeSpan waitTimeLimit)
+        /// <summary>Waits for threadWakeupNotifier to be signaled or given waitTimeLimit to elapse.</summary>
+        /// <returns>True if the object was signaled or false if the timeout caused flow to return to the caller.</returns>
+        protected bool WaitForSomethingToDo(TimeSpan waitTimeLimit)
 		{
 			return WaitForSomethingToDo(threadWakeupNotifier, waitTimeLimit);
 		}
 
-		protected bool WaitForSomethingToDo(Utils.IWaitable waitable)
-		{
-			return WaitForSomethingToDo(waitable, waitTimeLimit);
-		}
-
-		protected virtual bool WaitForSomethingToDo(Utils.IWaitable waitable, TimeSpan waitTimeLimit)
+        /// <summary>Most generic version of WaitForSomethingToDo.  caller provides IWaitable object and waitTimeLimit.</summary>
+        /// <returns>True if the object was signaled or false if the timeout caused flow to return to the caller.</returns>
+        protected virtual bool WaitForSomethingToDo(Utils.IWaitable waitable, TimeSpan waitTimeLimit)
 		{
 			return waitable.Wait(waitTimeLimit);
 		}
@@ -399,87 +434,14 @@ namespace MosaicLib.Modular.Part
 		protected WaitEventNotifier threadWakeupNotifier = new WaitEventNotifier(WaitEventNotifier.Behavior.WakeOne);
 		protected ActionQueue actionQ = null;
 		protected System.Threading.Thread mainThread = null;
-		private Logging.ILogger log = null;
 		protected ActionLogging actionLoggingReference = null;
 
         protected ActionQueue ActionQueue { get { return actionQ; } }
 
-        /// <summary>Gives derived objects access to the Logger.ILogger created by this SimpleActivePartBase during construction.</summary>
-        protected Logging.ILogger Log { get { return log; } }
+        protected override bool AreAllActionQueuesEmpty { get { return ActionQueue.IsEmpty; } }
 
         /// <summary>ActionLogging object that is used as the reference for commands created by SimpleActivePartBase and by many derived Part objects.</summary>
         protected ActionLogging ActionLoggingReference { get { return actionLoggingReference; } }
-
-		private Logging.IMesgEmitter stateChangeEmitter = null;
-
-        /// <summary>Defines the emitter that is used for state change event log messages.  Defaults to Log.Emitter(Logging.MesgType.Trace).  When set to null Logging.MesgEmitterImpl.Null is used to emit these messages (into the void).</summary>
-		protected Logging.IMesgEmitter BaseStateChangeEmitter { get { return (stateChangeEmitter != null ? stateChangeEmitter : Logging.MesgEmitterImpl.Null); } set { stateChangeEmitter = value; } }
-
-		private BaseState privateBaseState;
-		protected BaseState PrivateBaseState { get { return privateBaseState; } set { privateBaseState = value; } }
-
-		private InterlockedNotificationRefObject<IBaseState> publishedBaseState = new InterlockedNotificationRefObject<IBaseState>();
-		protected Utils.EventHandlerNotificationList<IBaseState> BaseStatePublishedNotificationList = null;
-
-		protected void PublishBaseState(string reason)
-		{
-			IBaseState entryState = publishedBaseState.VolatileObject;
-			UseState entryUseState = (entryState != null ? entryState.UseState : UseState.Initial);
-			ConnState entryConnState = (entryState != null ? entryState.ConnState : ConnState.Initial);
-            string entryActionName = (entryState != null ? entryState.ActionName : String.Empty);
-
-			IBaseState publishState = PrivateBaseState;
-
-			publishedBaseState.Object = PrivateBaseState;
-
-            bool includeAction = (publishState.ActionName != String.Empty || entryActionName != publishState.ActionName);
-
-			if (entryUseState != publishState.UseState)
-            {
-                if (!includeAction)
-                    BaseStateChangeEmitter.Emit("<PartUseStateChange to=\"{0}\" from=\"{1}\" reason=\"{2}\"/>", publishState.UseState, entryUseState, reason);
-                else
-                    BaseStateChangeEmitter.Emit("<PartUseStateChange to=\"{0}\",\"{1}\", from=\"{2}\",\"{3}\", reason=\"{2}\"/>", publishState.UseState, publishState.ActionName, entryUseState, entryActionName, reason);
-            }
-			if (entryConnState != publishState.ConnState)
-				BaseStateChangeEmitter.Emit("<PartConnStateChange to=\"{0}\" from=\"{1}\" reason=\"{2}\"/>", publishState.ConnState, entryConnState, reason);
-
-			if (BaseStatePublishedNotificationList != null)
-				BaseStatePublishedNotificationList.Notify(publishState);
-		}
-
-		protected void SetBaseState(UseState useState, string reason, bool publish)
-		{
-			privateBaseState.UseState = useState;
-			if (publish)
-				PublishBaseState(reason);
-		}
-
-        protected void SetBaseState(UseState useState, string actionName, string reason, bool publish)
-        {
-            privateBaseState.SetState(useState, actionName);
-            if (publish)
-                PublishBaseState(reason);
-        }
-
-        protected void SetBaseState(ConnState commState, string reason, bool publish)
-		{
-			privateBaseState.ConnState = commState;
-			if (publish)
-				PublishBaseState(reason);
-		}
-
-        protected void SetBaseState(UseState useState, ConnState connState, string reason, bool publish)
-        {
-            SetBaseState(useState, null, connState, reason, publish);
-        }
-
-        protected void SetBaseState(UseState useState, string actionName, ConnState connState, string reason, bool publish)
-		{
-			privateBaseState.SetState(useState, actionName, connState);
-			if (publish)
-				PublishBaseState(reason);
-		}
 
 		#endregion
 
