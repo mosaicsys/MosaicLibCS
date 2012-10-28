@@ -21,11 +21,11 @@
 
 namespace MosaicLib.Utils
 {
-	using System;
+    using System;
     using System.Text;
-	using System.Collections.Generic;
+    using System.Collections.Generic;
 
-	#region Unassociated Functions
+    #region Unassociated Functions
 
     /// <summary>
     /// Fcns class is essentially a namespace for series of static helper methods
@@ -209,11 +209,55 @@ namespace MosaicLib.Utils
         }
 
         #endregion
+
+        #region general static [] comparison methods
+
+        /// <summary>Returns true if both lists have the same contents.  Returns false if they do not.</summary>
+        public static bool Equals<ItemType>(ItemType[] a, ItemType[] b)
+        {
+            if (a == null && b == null)
+                return true;
+            if ((a == null) || (b == null))
+                return false;
+            if (a.Length != b.Length)
+                return false;
+
+            int n = a.Length;
+            for (int idx = 0; idx < n; idx++)
+            {
+                if (!object.Equals(a[idx], b[idx]))
+                    return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>Returns true if both the array and the list have the same contents.  Returns false if they do not.</summary>
+        public static bool Equals<ItemType>(ItemType[] a, IList<ItemType> b)
+        {
+            if (a == null && b == null)
+                return true;
+            if ((a == null) || (b == null))
+                return false;
+            if (a.Length != b.Count)
+                return false;
+
+            int n = a.Length;
+            for (int idx = 0; idx < n; idx++)
+            {
+                if (!object.Equals(a[idx], b[idx]))
+                    return false;
+            }
+
+            return true;
+        }
+
+        #endregion
     }
 
 	#endregion
 
-#if (true) // disable until we switch to 3.5
+    // Library is now being built under DotNet 3.5 (or later)
     #region Extension Functions
 
     /// <summary>
@@ -221,6 +265,17 @@ namespace MosaicLib.Utils
     /// </summary>
     public static partial class ExtensionMethods
     {
+        #region static System.Text.StringBuilder extension methods
+
+        /// <summary>Extension method that allows a StringBuilder contents to be cleared.</summary>
+        public static StringBuilder Reset(this StringBuilder sb)
+        {
+            sb.Remove(0, sb.Length);
+            return sb;
+        }
+        
+        #endregion
+
         #region static System.Text.StringBuilder.CheckedAppendFormat extension methods
 
         /// <summary>Invokes System.Text.StringBuilder.AppendFormat with the given args within a try/catch pattern.</summary>
@@ -339,11 +394,23 @@ namespace MosaicLib.Utils
         }
 
         #endregion
+
+        #region Array comparisons extension methods
+
+        public static bool IsEqualTo<ItemType>(this ItemType[] lhs, ItemType[] rhs)
+        {
+            return Utils.Fcns.Equals(lhs, rhs);
+        }
+
+        public static bool IsEqualTo<ItemType>(this ItemType[] lhs, IList<ItemType> rhs)
+        {
+            return Utils.Fcns.Equals(lhs, rhs);
+        }
+
+        #endregion
     }
 
     #endregion
-
-#endif
 
     #region Enum
 
@@ -404,22 +471,21 @@ namespace MosaicLib.Utils
 			if (!enumT.IsEnum)
 				throw new System.InvalidOperationException(Fcns.CheckedFormat("Type:'{0}' is not usable with Utils.Enum.TryParse.  It must be a System.Enum", typeof(EnumT).ToString()));
 
-			if (string.IsNullOrEmpty(s))
-			{
-				result = parseFailedResult;
-				return false;
-			}
-
-			try 
-			{
-				result = (EnumT) System.Enum.Parse(typeof(EnumT), s);
-				return true;
-			}
-			catch (InvalidCastException)
-			{
-				result = parseFailedResult;
-				return false;
-			}
+            try
+            {
+                result = (EnumT)System.Enum.Parse(typeof(EnumT), s);
+                return true;
+            }
+            catch (System.ArgumentException)
+            {
+                result = parseFailedResult;
+                return false;
+            }
+            catch (InvalidCastException)
+            {
+                result = parseFailedResult;
+                return false;
+            }
 		}
 
 		#endregion

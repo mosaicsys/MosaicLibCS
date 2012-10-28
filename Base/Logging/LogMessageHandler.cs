@@ -358,7 +358,7 @@ namespace MosaicLib
 				{
 					lmh = logMesgHandler;
                     if (lmh == null)
-    					Utils.Assert.BreakpointFault("LogMesgHandlerLogger: LMH == null");
+    					Utils.Asserts.TakeBreakpointAfterFault("LogMesgHandlerLogger: LMH == null");
 
 					sourceInfo = new LoggerSourceInfo(LoggerID_InternalLogger, Name);
 				}
@@ -514,9 +514,9 @@ namespace MosaicLib
 					this.flushAfterEachWrite = flushAfterEachWrite;
 
                     if (lineFmt == null)
-                        Utils.Assert.BreakpointFault("LineFmt is null");
+                        Utils.Asserts.TakeBreakpointAfterFault("LineFmt is null");
                     if (ostream == null)
-                        Utils.Assert.BreakpointFault("ostream is null");
+                        Utils.Asserts.TakeBreakpointAfterFault("ostream is null");
 				}
 
 				protected override void InnerHandleLogMessage(LogMessage lm)
@@ -604,7 +604,7 @@ namespace MosaicLib
 					this.appName = appName;
 					this.lineFmt = new LineFormat(false, true, true, true, true, false, "\n", " ");
                     if (String.IsNullOrEmpty(appName))
-    					Utils.Assert.BreakpointFault("AppName is empty");
+    					Utils.Asserts.TakeBreakpointAfterFault("AppName is empty");
 				}
 
 				protected override void InnerHandleLogMessage(LogMessage lm)

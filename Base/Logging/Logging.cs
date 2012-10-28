@@ -532,6 +532,8 @@ namespace MosaicLib
 		{
 			public SequencedLoggerConfigObserver(Utils.ISequencedObjectSource<LoggerConfig, int> lcSource) : base(lcSource) { }
 
+            public SequencedLoggerConfigObserver(SequencedLoggerConfigObserver rhs) : base(rhs) { }
+
             /// <summary>Returns cached copy from LoggerConfig Source</summary>
             public ILoggerConfig LoggerConfig { get { return Object; } }
 
@@ -607,12 +609,12 @@ namespace MosaicLib
             MesgType MesgType { get; }
             /// <summary>Returns the string body of the message or the empty string if none was given</summary>
             string Mesg { get; }
-            /// <summary>Returns a, possibly null, byte array of binary data that is associated with this message.</summary>
-            byte[] Data { get; }
             /// <summary>Returns a, possibly empty, array of keyword strings that are associated with this message.</summary>
             string[] KeywordArray { get; }
             /// <summary>Returns an easily printable concatinated and comma delimited copy of the strings in the KeywordArray</summary>
             string Keywords { get; }
+            /// <summary>Returns a, possibly null, byte array of binary data that is associated with this message.</summary>
+            byte[] Data { get; }
             /// <summary>Returns the QpcTimeStamp at which this message was emitted or zero if it has not been emitted</summary>
             QpcTimeStamp EmittedQpcTime { get; }
             /// <summary>Returns the sequence number that the distribution system assigned to this message when it was emitted, or zero if it has not been emitted</summary>
@@ -642,15 +644,15 @@ namespace MosaicLib
             /// <summary>Default constructor.</summary>
 			public LogMessage () {}
 
-            /// <summary>Copy constructor</summary>
+            /// <summary>Copy constructor - creates a duplicate of the given rhs</summary>
             public LogMessage(LogMessage rhs) 
             {
                 loggerSourceInfo = rhs.LoggerSourceInfo;
                 mesgType = rhs.MesgType;
                 mesg = rhs.Mesg;
                 sourceStackFrame = rhs.SourceStackFrame;
-                keywordArray = new List<string>(rhs.KeywordArray).ToArray();
-                data = ((rhs.Data != null) ? new List<byte>(rhs.Data).ToArray() : null);
+                keywordArray = rhs.KeywordArray.Clone() as string[];
+                data = ((rhs.Data != null) ? (rhs.Data.Clone() as byte []) : null);
                 emitted = rhs.emitted;
                 emittedDateTime = rhs.EmittedDateTime;
                 emittedQpcTime = rhs.EmittedQpcTime;
@@ -661,7 +663,7 @@ namespace MosaicLib
             /// <summary>Resets contents to default state</summary>
             public void Reset() { ResetEmitted(); mesgType = MesgType.None; mesg = string.Empty; KeywordArray = null; sourceStackFrame = null; threadID = -1; SeqNum = NullMessageSeqNum; }
             /// <summary>Asserts that the message is in the not-emitted state.  Primarily used for enforcing that pool messages are recycled correctly.</summary>
-            public void AssertNotEmitted(string caller) { if (Emitted) Utils.Assert.BreakpointFault("AssertNotEmitted failed for:" + caller); }
+            public void AssertNotEmitted(string caller) { if (Emitted) Utils.Asserts.TakeBreakpointAfterFault("AssertNotEmitted failed for:" + caller); }
 
             /// <summary>Sets up contents from a given source with no explicitly given Mesg</summary>
             public void Setup(LoggerSourceInfo loggerSourceInfo, MesgType mesgType, System.Diagnostics.StackFrame sourceStackFrame)
@@ -715,7 +717,7 @@ namespace MosaicLib
             private static readonly string[] emptyKeywordArray = new string[0];
             private string[] keywordArray = null;
             /// <summary>Returns the current KeywordArray (which may be empty).  Setter requires that the message has not been emitted. </summary>
-            public string[] KeywordArray { get { return (keywordArray != null ? keywordArray : emptyKeywordArray); } set { AssertNotEmitted("KeywordArray property Set"); keywordArray = value; } }
+            public string[] KeywordArray { get { return (keywordArray ?? emptyKeywordArray); } set { AssertNotEmitted("KeywordArray property Set"); keywordArray = value; } }
             /// <summary>Returns an easily printable, comma seperated string of the given keywords or the empty string if there are none</summary>
             public string Keywords { get { return (keywordArray != null ? String.Join(",", keywordArray) : String.Empty); } }
 
@@ -749,7 +751,7 @@ namespace MosaicLib
 			{ 
 				AssertNotEmitted("NoteEmitted call");
                 if (loggerSourceInfo == null)
-    				Utils.Assert.BreakpointFault("NoteEmitted failed: SourceID == null");
+    				Utils.Asserts.TakeBreakpointAfterFault("NoteEmitted failed: SourceID == null");
 
                 emitted = true;
 				emittedQpcTime.SetToNow();
@@ -805,18 +807,30 @@ namespace MosaicLib
             /// <summary>Gives the caller access to the message type that this emitter will generate</summary>
             MesgType MesgType { get; }
 
+            /// <summary>Variant of CheckedFormat for the same parameter signature</summary>
             void Emit(string str);
+            /// <summary>Variant of CheckedFormat for the same parameter signature</summary>
             void Emit(string fmt, object arg0);
+            /// <summary>Variant of CheckedFormat for the same parameter signature</summary>
             void Emit(string fmt, object arg0, object arg1);
+            /// <summary>Variant of CheckedFormat for the same parameter signature</summary>
             void Emit(string fmt, object arg0, object arg1, object arg2);
+            /// <summary>Variant of CheckedFormat for the same parameter signature</summary>
             void Emit(string fmt, params object[] args);
+            /// <summary>Variant of CheckedFormat for the same parameter signature</summary>
             void Emit(IFormatProvider provider, string fmt, params object[] args);
-            
+
+            /// <summary>Variant of CheckedFormat for the same parameter signature for nested use with offset distance to root caller for stack frame recording</summary>
             void Emit(int skipNStackLevels, string str);
-			void Emit(int skipNStackLevels, string fmt, object arg0);
-			void Emit(int skipNStackLevels, string fmt, object arg0, object arg1);
-			void Emit(int skipNStackLevels, string fmt, object arg0, object arg1, object arg2);
-			void Emit(int skipNStackLevels, string fmt, params object [] args);
+            /// <summary>Variant of CheckedFormat for the same parameter signature for nested use with offset distance to root caller for stack frame recording</summary>
+            void Emit(int skipNStackLevels, string fmt, object arg0);
+            /// <summary>Variant of CheckedFormat for the same parameter signature for nested use with offset distance to root caller for stack frame recording</summary>
+            void Emit(int skipNStackLevels, string fmt, object arg0, object arg1);
+            /// <summary>Variant of CheckedFormat for the same parameter signature for nested use with offset distance to root caller for stack frame recording</summary>
+            void Emit(int skipNStackLevels, string fmt, object arg0, object arg1, object arg2);
+            /// <summary>Variant of CheckedFormat for the same parameter signature for nested use with offset distance to root caller for stack frame recording</summary>
+            void Emit(int skipNStackLevels, string fmt, params object[] args);
+            /// <summary>Variant of CheckedFormat for the same parameter signature for nested use with offset distance to root caller for stack frame recording</summary>
             void Emit(int skipNStackLevels, IFormatProvider provider, string fmt, params object[] args);
         }
 
@@ -918,9 +932,113 @@ namespace MosaicLib
 
 		#endregion
 
-		//-------------------------------------------------------------------
-		#region IMesgEmitter implementation class
+        //-------------------------------------------------------------------
+        #region BasicLoggerBase
 
+        /// <summary>
+        /// This class is a utility/base class that assists in implementing IBasicLogger objects.
+        /// It provides common glue code for supporting the various means of getting IMesgEmitter objects
+        /// from the IBasicLogger.  This class is abstract in that it makes no assumptions about the implementation
+        /// of any specific IMesgEmitter.  As such it requires a derived class to implement the CreateMesgEmitter 
+        /// abstract method which is used as a factory to create actual IMesgEmitter implementation objects for the
+        /// client to use to emit messages.
+        /// </summary>
+
+        public abstract class BasicLoggerBase : IBasicLogger
+        {
+            /// <summary>Default constructor</summary>
+            public BasicLoggerBase() { }
+
+            /// <summary>Copy constructor</summary>
+            public BasicLoggerBase(BasicLoggerBase rhs)
+            {
+                LoggerConfigObserver = new SequencedLoggerConfigObserver(rhs.LoggerConfigObserver);
+            }
+
+            /// <summary>
+            /// Allows a derived class to provide a LoggerConfigObserver for this object that it can safely use to determine if it
+            /// is expected to record stack frames (or not).
+            /// </summary>
+            protected SequencedLoggerConfigObserver LoggerConfigObserver { get; set; }
+
+            /// <summary>
+            /// Derived class must implement this method to create a message emitter of the requested type.
+            /// The BasicLoggerBase will retain the created emitter and use it for all later logging requests of that type.
+            /// </summary>
+            /// <param name="mesgType">Gives the message type that the emitter is to produce.</param>
+            /// <returns>An implementation of the IMesgEmitter interface that may be used to emit messages for the requested type.</returns>
+            protected abstract IMesgEmitter CreateMesgEmitter(MesgType mesgType);
+
+            #region IBaseMessageLogger interface
+
+            /// <summary>Returns a message emitter for Error messages from this logger</summary>
+            public IMesgEmitter Error { get { return (error ?? (error = Emitter(MesgType.Error))); } }
+            /// <summary>Returns a message emitter for Warning messages from this logger</summary>
+            public IMesgEmitter Warning { get { return (warning ?? (warning = Emitter(MesgType.Warning))); } }
+            /// <summary>Returns a message emitter for Signif messages from this logger</summary>
+            public IMesgEmitter Signif { get { return (signif ?? (signif = Emitter(MesgType.Signif))); } }
+            /// <summary>Returns a message emitter for Info messages from this logger</summary>
+            public IMesgEmitter Info { get { return (info ?? (info = Emitter(MesgType.Info))); } }
+            /// <summary>Returns a message emitter for Debug messages from this logger</summary>
+            public IMesgEmitter Debug { get { return (debug ?? (debug = Emitter(MesgType.Debug))); } }
+            /// <summary>Returns a message emitter for Trace messages from this logger</summary>
+            public IMesgEmitter Trace { get { return (trace ?? (trace = Emitter(MesgType.Trace))); } }
+
+            /// <summary>Returns a message emitter that will emit messages of the given MesgType and from this logger.</summary>
+            public IMesgEmitter Emitter(MesgType mesgType)
+            {
+                IMesgEmitter emitter = null;
+
+                int mesgTypeIdx = (int)mesgType;
+                if (mesgTypeIdx > (int)MesgType.None && mesgTypeIdx < emitters.Length)
+                {
+                    emitter = emitters[mesgTypeIdx];
+                    if (emitter == null)
+                    {
+                        emitter = emitters[mesgTypeIdx] = CreateMesgEmitter(mesgType);
+                    }
+                }
+
+                return ((emitter != null) ? emitter : MesgEmitterImpl.Null);
+            }
+
+            /// <summary>Helper method: Gets the current System.Diagnostics.StackFrame of the caller (up skipNFrames levels)</summary>
+            /// <returns>Selected StackFrame if stack frame tagging support is currently enabled or null if it is not</returns>
+            public System.Diagnostics.StackFrame GetStackFrame(int skipNFrames)
+            {
+                if (LoggerConfigObserver != null && LoggerConfigObserver.RecordSourceStackFrame)
+                    return new System.Diagnostics.StackFrame(skipNFrames + 1, true);
+                else
+                    return null;
+            }
+
+            #endregion
+
+            /// <summary>
+            /// Preallocated array of IMesgEmitters that have been created.  Allows this caller to create only the emitters that are actually used
+            /// but also allows it to reuse each emitter type without effort.
+            /// </summary>
+            private IMesgEmitter[] emitters = new IMesgEmitter[((int)MesgType.Max) + 1];
+
+            /// <summary>
+            /// per type IMesgEmitter cached results to further improve the code paths for the high usage direct message type IMesgEmitter properies
+            /// </summary>
+            private IMesgEmitter error, warning, signif, info, debug, trace;
+        }
+
+        #endregion
+        
+        //-------------------------------------------------------------------
+		#region IMesgEmitter 
+
+        /// <summary>
+        /// This is the primary IMesgEmitter implementation class that is used with all ILogger objects (but not with all IBasicLogger ones).
+        /// This implementation class provides implementations of each of the Emit signatures by using the ILogger object to determine if the
+        /// Emitter's message type is enabled, and if so it allocates a log message from the distribution pool, places the message string into
+        /// the log message object and then emits the message back through the ILogger into the distribution system.
+        /// All Emit method signatures which make use of formating make use of Utils.Fcns.CheckedFormat to eliminate common causes of logging
+        /// induced exceptions.
+        /// </summary>
 		public class MesgEmitterImpl : IMesgEmitter
 		{
             public ILogger Logger { get; set; }
@@ -1022,7 +1140,7 @@ namespace MosaicLib
 			#endregion
 		}
 
-		#endregion
+        #endregion
 
 		//-------------------------------------------------------------------
 		#region LoggerBase
@@ -1033,36 +1151,55 @@ namespace MosaicLib
 		/// This class is used as the base for the Logger class and the QueuedLogger class.
 		/// </summary>
 
-		public abstract class LoggerBase : ILogger
-		{
-			private IMesgEmitter myTraceEmitter = MesgEmitterImpl.Null;
-			protected IMesgEmitter MyTraceEmitter { get { return myTraceEmitter; } }
+        public abstract class LoggerBase : BasicLoggerBase, ILogger
+        {
+            #region MyTraceEmitter - used for logging trace messages related to use of the logger itself
 
-			public LoggerBase(string name, string groupName, LogGate initialInstanceLogGate, bool traceLoggerCtor)
+            /// <summary>MyTraceEmitter storage field.  Defaults to MesgEmitterImpl.Null</summary>
+            private IMesgEmitter myTraceEmitter = MesgEmitterImpl.Null;
+            /// <summary>Property provides IMesgEmitter that is used for logger trace messages (construction, destrution, cloning, ...)</summary>
+            protected IMesgEmitter MyTraceEmitter { get { return myTraceEmitter; } }
+
+            #endregion
+
+            /// <summary>
+            /// Base class constructor.  
+            /// Intializes all internal behavior logic including:
+            /// <list type="bullet">
+            /// <item>captures handle to distribution engine</item>
+            /// <item>captures and configured initial Instance Log Gate</item>
+            /// <item>looks up and saves source info for this named logger</item>
+            /// <item>Initializes base class LoggerConfigObserver used to handle distributed per logger/group configuration behavior.</item>
+            /// <item>Captures and applies custom logger group name assignment.</item>
+            /// <item>Sets up optional MyTraceEmitter and emits created message if enabled.</item>
+            /// </list>
+            /// </summary>
+            public LoggerBase(string name, string groupName, LogGate initialInstanceLogGate, bool traceLoggerCtor)
 			{
 				dist = GetLogMessageDistribution();
                 if (dist == null)
-				    Utils.Assert.BreakpointFault(ClassName + ": LogMessageDistribution is null");
+				    Utils.Asserts.TakeBreakpointAfterFault(ClassName + ": LogMessageDistribution is null");
 
 				sourceInfo = dist.GetLoggerSourceInfo(name);
-                instanceLogGate = initialInstanceLogGate;
-                distLoggerConfigObserver = new SequencedLoggerConfigObserver(sourceInfo.LoggerConfigSource);
+                InstanceLogGate = initialInstanceLogGate;
+                LoggerConfigObserver = new SequencedLoggerConfigObserver(sourceInfo.LoggerConfigSource);
 
 				if (!string.IsNullOrEmpty(groupName) && groupName != GroupName)
 					GroupName = groupName;
 
 				if (traceLoggerCtor)
-					myTraceEmitter = new MesgEmitterImpl() { Logger = this, MesgType = MesgType.Trace, SkipNAdditionalStackFrames = 1 } ;	// this emitter records the stack frame 1 above its caller
+					myTraceEmitter = new MesgEmitterImpl() { Logger = this, MesgType = MesgType.Trace, SkipNAdditionalStackFrames = 1 } ;	// this emitter records the stack frame 1 above its caller, ie our caller
 
 				MyTraceEmitter.Emit("{0} object has been created", ClassName);
 			}
 
-			public LoggerBase(LoggerBase rhs)
+            /// <summary>Copy constructor for cloning.  Produces a seperate instance of a LoggerBase object that is initialized to the same settings as the copy source but which can be used independantly of it.</summary>
+            public LoggerBase(LoggerBase rhs)
+                : base(rhs)
 			{
 				dist = rhs.dist;
 				sourceInfo = rhs.sourceInfo;
-				instanceLogGate = rhs.instanceLogGate;
-				distLoggerConfigObserver = rhs.distLoggerConfigObserver;
+                InstanceLogGate = rhs.InstanceLogGate;
 				myTraceEmitter = rhs.myTraceEmitter;
 
 				MyTraceEmitter.Emit("{0} object has been copied", ClassName);
@@ -1070,43 +1207,65 @@ namespace MosaicLib
 
 			#region ILogger implementation
 
+            /// <summary>Returns the Name of this logger object, as given when the logger was constructed.  This will be used as the source string in all log messages that are created by this logger object.</summary>
 			public string Name { get { return sourceInfo.Name; } }
-			public LoggerSourceInfo LoggerSourceInfo { get { return sourceInfo; } }
 
-			public string GroupName 
+            /// <summary>Returns the full LoggerSourceInfo obtained from the log distribution system when the logger was constructed.</summary>
+            public LoggerSourceInfo LoggerSourceInfo { get { return sourceInfo; } }
+
+            /// <summary>
+            /// Returns the logger's active group name.  
+            /// May be set to change the logger's active group name to the name of another distribution group.
+            /// Setting this name to null or empty returns the logger to the default distribution group.
+            /// Setting this name to a non-configured group in the distribution system will block distribution of the messages it creates
+            /// until one or more LMH (LogMessageHandlers) are added to the group or until the group is linked to another group that will handle the messages.
+            /// </summary>
+            public string GroupName 
 			{
-				get { return distLoggerConfigObserver.GroupName; }
+				get { return LoggerConfigObserver.GroupName; }
 				set
 				{
 					dist.SetLoggerDistributionGroupName(sourceInfo.ID, value);
-					distLoggerConfigObserver.Update();
+					LoggerConfigObserver.Update();
 				}
 			}
 
-			public System.Diagnostics.StackFrame GetStackFrame(int skipNFrames) 
-			{
-				if (distLoggerConfigObserver.RecordSourceStackFrame)
-					return new System.Diagnostics.StackFrame(skipNFrames + 1, true);
-				else
-					return null;
-			}
+            /// <summary>
+            /// Logger instance specific source gate.  
+            /// May be used to block message types at the source before consulting the corespondingly configured gate for this logger name in the distribution system.
+            /// </summary>
+            public LogGate InstanceLogGate { get; set; }
 
-			public LogGate InstanceLogGate { get { return instanceLogGate; } set { instanceLogGate = value; } }
-			public bool IsTypeEnabled(MesgType mesgType)
+            /// <summary>
+            /// Consults the InstanceSourceGate and the LoggerConfig observed from the distribution system to determine if the given message type is currently enabled.
+            /// </summary>
+            public bool IsTypeEnabled(MesgType mesgType)
 			{
-				if (!instanceLogGate.IsTypeEnabled(mesgType) || loggerHasBeenShutdown)
+				if (!InstanceLogGate.IsTypeEnabled(mesgType) || loggerHasBeenShutdown)
 					return false;
 
-				distLoggerConfigObserver.Update();
-				if (!distLoggerConfigObserver.IsTypeEnabled(mesgType))
+				LoggerConfigObserver.Update();
+				if (!LoggerConfigObserver.IsTypeEnabled(mesgType))
 					return false;
 
 				return true;
 			}
 
-			public LogMessage GetLogMessage(MesgType mesgType, System.Diagnostics.StackFrame sourceStackFrame) { return GetLogMessage(mesgType, string.Empty, sourceStackFrame, false); }
-			public LogMessage GetLogMessage(MesgType mesgType, string mesg, System.Diagnostics.StackFrame sourceStackFrame) { return GetLogMessage(mesgType, mesg, sourceStackFrame, false); }
-			public virtual LogMessage GetLogMessage(MesgType mesgType, string mesg, System.Diagnostics.StackFrame sourceStackFrame, bool allocateFromDist)	//!< @retval returns a new message with type, source, message, file and line filled in.
+            /// <summary>Allocates and returns a non-pooled message of the requsted type, log message string is initialzed to be empty.</summary>
+            public LogMessage GetLogMessage(MesgType mesgType, System.Diagnostics.StackFrame sourceStackFrame) 
+            { 
+                return GetLogMessage(mesgType, string.Empty, sourceStackFrame, false); 
+            }
+
+            /// <summary>Allocates and returns a non-pooled message of the requsted type, and initializes it with the given message string</summary>
+            public LogMessage GetLogMessage(MesgType mesgType, string mesg, System.Diagnostics.StackFrame sourceStackFrame) 
+            { 
+                return GetLogMessage(mesgType, mesg, sourceStackFrame, false); 
+            }
+
+            /// <summary></summary>
+            //!< @retval returns a new message with type, source, message, file and line filled in.
+            public virtual LogMessage GetLogMessage(MesgType mesgType, string mesg, System.Diagnostics.StackFrame sourceStackFrame, bool allocateFromDist)	
 			{
 				LogMessage lm = null;
 				if (!loggerHasBeenShutdown)
@@ -1122,7 +1281,7 @@ namespace MosaicLib
                 if (lm != null)
                 {
                     if (!lm.IsUnique)
-                        Utils.Assert.BreakpointFault("Allocated Message is no Unique");
+                        Utils.Asserts.TakeBreakpointAfterFault("Allocated Message is not Unique");
 
                     lm.Setup(sourceInfo, mesgType, mesg, GetStackFrame(1));
                 }
@@ -1137,57 +1296,49 @@ namespace MosaicLib
 					dist.DistributeMessage(ref mesg);
 			}
 
-            public virtual bool WaitForDistributionComplete(TimeSpan timeLimit)		//!< Waits for last message emitted by this logger to have been distributed and processed.
+            /// <summary>Waits for last message emitted by this logger to have been distributed and processed</summary>
+            /// <returns>true if distribution of the last message emitted here completed within the given time limit, false otherwise.</returns>
+            public virtual bool WaitForDistributionComplete(TimeSpan timeLimit)		
 			{
 				return dist.WaitForDistributionComplete(sourceInfo.ID, timeLimit);
 			}
 
-			public virtual void Shutdown()										//!< shuts down this source and prevents it from allocating or emitting further log messages.
+            /// <summary>shuts down this source and prevents it from allocating or emitting further log messages.</summary>
+            public virtual void Shutdown()
 			{
 				MyTraceEmitter.Emit("{0} object has been shutdown", ClassName);
 
-				instanceLogGate = LogGate.None;
+				InstanceLogGate = LogGate.None;
 				loggerHasBeenShutdown = true;
 			}
 
 			#endregion
 
-            #region IBaseMessageLogger interface
+            #region BasicLoggerBase implementation
 
-            public IMesgEmitter Error { get { return Emitter(MesgType.Error); } }
-            public IMesgEmitter Warning { get { return Emitter(MesgType.Warning); } }
-            public IMesgEmitter Signif { get { return Emitter(MesgType.Signif); } }
-            public IMesgEmitter Info { get { return Emitter(MesgType.Info); } }
-            public IMesgEmitter Debug { get { return Emitter(MesgType.Debug); } }
-            public IMesgEmitter Trace { get { return Emitter(MesgType.Trace); } }
-            public IMesgEmitter Emitter(MesgType mesgType)
+            /// <summary>Provide implementation for abstract IMesgEmitter creation method as required by BasicLoggerBase</summary>
+            protected override IMesgEmitter CreateMesgEmitter(MesgType mesgType)
             {
-                IMesgEmitter emitter = null;
-
-                int mesgTypeIdx = (int)mesgType;
-                if (mesgTypeIdx > (int)MesgType.None && mesgTypeIdx < emitters.Length)
-                {
-                    emitter = emitters[mesgTypeIdx];
-                    if (emitter == null)
-                        emitter = emitters[mesgTypeIdx] = new MesgEmitterImpl() {Logger = this, MesgType = mesgType, SkipNAdditionalStackFrames = 0};
-                }
-
-                return ((emitter != null) ? emitter : MesgEmitterImpl.Null);
+                return new MesgEmitterImpl() { Logger = this, MesgType = mesgType, SkipNAdditionalStackFrames = 0 };
             }
 
             #endregion
 
+            #region protected fields
+
+            /// <summary>Property defined by implementation class to describe the type of class that this logger falls into.  Used in assert and trace messages.</summary>
             protected abstract string ClassName { get; }
 
-			protected ILogMessageDistribution dist = null;				// the distribution system to which we belong
-			protected LoggerSourceInfo sourceInfo = null;				// stores the reference id and name
+            /// <summary>the distribution system to which we belong</summary>
+            protected ILogMessageDistribution dist = null;
+            /// <summary>stores the reference id and name</summary>
+            protected LoggerSourceInfo sourceInfo = null;
+
+            /// <summary>Set to true to indicate that the logger has been shutdown</summary>
 			protected volatile bool loggerHasBeenShutdown = false;
-
-			protected LogGate instanceLogGate = LogGate.All;			// The logger instance specific gate level that we use.
-			protected SequencedLoggerConfigObserver	distLoggerConfigObserver = null;	// handle obtained from sourceInfo
-
-			protected IMesgEmitter [] emitters = new IMesgEmitter [((int) MesgType.Max) + 1];
-		}
+        
+            #endregion
+        }
 
 		#endregion
 
@@ -1308,7 +1459,7 @@ namespace MosaicLib
         /// By default start and stop messages use MesgType.Debug.
         /// </summary>
         /// <remarks>
-        ///	using (var tTract = MosaicLib.Logging.TimerTrace(logger, "MeasurementName")) { [do stuff] }
+        ///	using (MosaicLib.Logging.TimerTrace(logger, "MeasurementName")) { [do stuff] }
         /// </remarks>
         public class TimerTrace
 			: CtorDisposeTrace
@@ -1329,13 +1480,25 @@ namespace MosaicLib
 				startTime = Time.Qpc.TimeNow;
 			}
 
+            public double Count { get { return count; } set { count = value; haveCount = true; } }
+
+            private double count = 0.0;
+            private bool haveCount = false;
+
 			protected override void Dispose(Utils.DisposableBase.DisposeType disposeType)
 			{
 				if (disposeType == DisposeType.CalledExplicitly && mesgEmitter != null)
 				{
 					double runTime = Time.Qpc.TimeNow - startTime;
 
-					mesgEmitter.Emit(1 + disposeSkipNStackFrames, "{0} [runTime:{1:f6}]", disposeStr, runTime);
+                    if (!haveCount)
+    					mesgEmitter.Emit(1 + disposeSkipNStackFrames, "{0} [runTime:{1:f6}]", disposeStr, runTime);
+                    else if (runTime != 0.0)
+                        mesgEmitter.Emit(1 + disposeSkipNStackFrames, "{0} [runTime:{1:f6} count:{2} rate:{3:f3}]", disposeStr, runTime, count, count / runTime);
+                    else
+                        mesgEmitter.Emit(1 + disposeSkipNStackFrames, "{0} [runTime:{1:f6} count:{2}]", disposeStr, runTime, count);
+
+
 					disposeStr = null;		// prevent additional dispose message
 				}
 

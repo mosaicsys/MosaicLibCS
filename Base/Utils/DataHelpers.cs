@@ -635,7 +635,7 @@ namespace MosaicLib.Utils
                 sequenceNumberGen = new AtomicUInt64() as IAtomicValue<ValueType>;
 
             if (sequenceNumberGen == null)
-                Utils.Assert.ThrowFault(Utils.Fcns.CheckedFormat("SequenceNumberBase ValueType:{0} must be System.Int32, System.Int64, System.UInt32 or System.UInt64", typeof(ValueType)));
+                Asserts.ThrowAfterFault(Utils.Fcns.CheckedFormat("SequenceNumberBase ValueType:{0} must be System.Int32, System.Int64, System.UInt32 or System.UInt64", typeof(ValueType)));
 
             SkipZero = skipZero;
             sequenceNumberGen.VolatileValue = initialValue;
@@ -700,7 +700,7 @@ namespace MosaicLib.Utils
 		public InterlockedSequenceNumberInt() : base(0, false, false) {}
 		public InterlockedSequenceNumberInt(int initialValue) : base(initialValue, false, true) { }
 
-		private new bool SkipZero { get { return base.SkipZero; } set { Utils.Assert.ThrowCondition(value == false, "InterlockedSequenceNumberInt.SkipZero must be false"); base.SkipZero = false; } }
+		private new bool SkipZero { get { return base.SkipZero; } set { Asserts.ThrowIfConditionIsNotTrue(value == false, "InterlockedSequenceNumberInt.SkipZero must be false"); base.SkipZero = false; } }
 
 		public virtual void Notify() { InnerIncrementNumber(); }
     }
@@ -729,7 +729,7 @@ namespace MosaicLib.Utils
         public InterlockedSequenceNumberUInt64() : base(0, false, false) { }
         public InterlockedSequenceNumberUInt64(System.UInt64 initialValue) : base(initialValue, false, true) { }
 
-        private new bool SkipZero { get { return base.SkipZero; } set { Utils.Assert.ThrowCondition(value == false, "InterlockedSequenceNumberUInt64.SkipZero must be false"); base.SkipZero = false; } }
+        private new bool SkipZero { get { return base.SkipZero; } set { Asserts.ThrowIfConditionIsNotTrue(value == false, "InterlockedSequenceNumberUInt64.SkipZero must be false"); base.SkipZero = false; } }
 
         public virtual void Notify() { InnerIncrementNumber(); }
     }
@@ -752,6 +752,14 @@ namespace MosaicLib.Utils
 			hasBeenUpdated = false;
 			Update(); 
 		}
+
+        public SequenceNumberObserver(SequenceNumberObserver<SeqNumberType> rhs)
+        {
+            sequenceNumberSource = rhs.sequenceNumberSource;
+            copyOfLastValue = rhs.copyOfLastValue;
+            hasBeenUpdated = rhs.hasBeenUpdated;
+            Update();
+        }
 
 		private ISequenceNumberValue<SeqNumberType> sequenceNumberSource;
 		private SeqNumberType copyOfLastValue;
@@ -881,6 +889,13 @@ namespace MosaicLib.Utils
 			Update();
 		}
 
+        public SequencedRefObjectSourceObserver(SequencedRefObjectSourceObserver<ObjectType, SeqNumberType> rhs)
+        {
+            objSource = rhs.objSource;
+            seqNumObserver = new SequenceNumberObserver<SeqNumberType>(rhs.seqNumObserver);
+            localObjCopy = rhs.localObjCopy;
+        }
+
 		#region ISequencedRefObjectSourceObserver<ObjectType, SeqNumberType> Members
 
 		public ObjectType Object { get { return localObjCopy; } }
@@ -912,6 +927,13 @@ namespace MosaicLib.Utils
 			IsUpdateNeeded = true;
 			Update();
 		}
+
+        public SequencedValueObjectSourceObserver(SequencedValueObjectSourceObserver<ObjectType, SeqNumberType> rhs)
+        {
+            objSource = rhs.objSource;
+            seqNumObserver = new SequenceNumberObserver<SeqNumberType>(rhs.seqNumObserver);
+            localObjCopy = rhs.localObjCopy;
+        }
 
 		#region ISequencedValueObjectSourceObserver<ObjectType, SeqNumberType> Members
 

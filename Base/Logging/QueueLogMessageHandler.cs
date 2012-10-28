@@ -152,7 +152,7 @@ namespace MosaicLib
                         if (targetLMH != null)
                             targetLMH.Shutdown();
 
-						Utils.Assert.BreakpointFault("QLMH thread Startup test failed");
+						Utils.Asserts.TakeBreakpointAfterFault("QLMH thread Startup test failed");
 						return;
 					}
 

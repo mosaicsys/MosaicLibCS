@@ -134,7 +134,7 @@ namespace MosaicLib.Utils
 
 			if (!EnteringDispose())
 			{
-				Assert.BreakpointFault("DisposableBase::Attempt to invoke Dispose() renterantly or concurrently");
+				Asserts.TakeBreakpointAfterFault("DisposableBase::Attempt to invoke Dispose() renterantly or concurrently");
 				return;
 			}
 
@@ -151,7 +151,7 @@ namespace MosaicLib.Utils
 			}
 			catch (System.Exception ex)
 			{
-				Assert.BreakpointFault("DisposableBase::Dispose(CalledExplicitly) triggered exception", ex);
+				Asserts.TakeBreakpointAfterFault("DisposableBase::Dispose(CalledExplicitly) triggered exception", ex);
 				throw;
 			}
 			finally
@@ -175,7 +175,7 @@ namespace MosaicLib.Utils
 			//  the finalizer infrastructure will be the only source of any thread that may continue to attempt to access this object.
 
             if (!EnteringDispose())
-    			Assert.BreakpointFault("DisposableBase: unexpected renterant or concurrent use of Finalizer detected");
+    			Asserts.TakeBreakpointAfterFault("DisposableBase: unexpected renterant or concurrent use of Finalizer detected");
 
 			try
 			{
@@ -183,7 +183,7 @@ namespace MosaicLib.Utils
 			}
 			catch (System.Exception ex)
 			{
-				Assert.BreakpointFault("DisposableBase::Dispose(CalledByFinalizer) triggered exception", ex);
+				Asserts.TakeBreakpointAfterFault("DisposableBase::Dispose(CalledByFinalizer) triggered exception", ex);
 			}
 
             // we leave the activeDisposeCounter non-zero so that any later call will take a breakpoint

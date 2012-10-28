@@ -370,7 +370,7 @@ namespace MosaicLib.Modular.Action
 		private void HandleInvalidStateChange(string methodName, ActionLogging logging)
 		{
 			string ec = Utils.Fcns.CheckedFormat("ActionState.{0}: is not legal while action is in state '{1}'", methodName, StateCode);
-			Utils.Assert.BreakpointFault(ec);
+			Utils.Asserts.TakeBreakpointAfterFault(ec);
 			SetStateInvalid(ec, logging);
 		}
 

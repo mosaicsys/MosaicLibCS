@@ -321,13 +321,13 @@ namespace MosaicLib.File
 
 			if (!IsDirEntryIDValid(entryID))
 			{
-				Utils.Assert.BreakpointFault("PerformIncrementalCleanup:: oldest entry is not valid?");
+				Utils.Asserts.TakeBreakpointAfterFault("PerformIncrementalCleanup:: oldest entry is not valid?");
 
 				return;
 			}
 			else if (entryID == activeFileEntryID)
 			{
-				Utils.Assert.BreakpointCondition((totalNumberOfManagedFiles > 1), "Cleanup cannot be done: active file (newest) is only");
+				Utils.Asserts.TakeBreakpointIfConditionIsNotTrue((totalNumberOfManagedFiles > 1), "Cleanup cannot be done: active file (newest) is only");
 
 				// cannot delete the active file
 				return;
@@ -337,7 +337,7 @@ namespace MosaicLib.File
 			FileInfo entryFileInfo = entryToDelete.FileSystemInfo as FileInfo;
 			if (entryFileInfo == null)
 			{
-				Utils.Assert.BreakpointFault("PerformIncrementalCleanup:: oldest entry is not a file");
+				Utils.Asserts.TakeBreakpointAfterFault("PerformIncrementalCleanup:: oldest entry is not a file");
 
 				return;
 			}
@@ -649,14 +649,14 @@ namespace MosaicLib.File
 					else
 					{
 						activeFileInfo.Clear();
-						Utils.Assert.BreakpointFault("Setup: entry ID in MapByCreated is not valid");
+						Utils.Asserts.TakeBreakpointAfterFault("Setup: entry ID in MapByCreated is not valid");
 						continue;
 					}
 
 					// verify that the entry is a file
 					if (!activeFileInfo.IsFile)
 					{
-						Utils.Assert.BreakpointFault("Setup: entry ID in MapByCreated is not a file");
+						Utils.Asserts.TakeBreakpointAfterFault("Setup: entry ID in MapByCreated is not a file");
 						continue;
 					}
 
@@ -826,7 +826,7 @@ namespace MosaicLib.File
 			DirectoryEntryInfo entryInfo = new DirectoryEntryInfo(filePath);
 			FileSystemInfo entryFSI = entryInfo.FileSystemInfo;
 
-			Utils.Assert.LogCondition((nameWasInMap == entryInfo.Exists), "GenerateNextActiveFile: name already exists only if it was removed from map");
+			Utils.Asserts.LogIfConditionIsNotTrue((nameWasInMap == entryInfo.Exists), "GenerateNextActiveFile: name already exists only if it was removed from map");
 
 			if (entryInfo.Exists)
 			{
@@ -906,7 +906,7 @@ namespace MosaicLib.File
 
 			DirectoryEntryInfo entry = dirEntryList[entryID];
 
-			Utils.Assert.BreakpointCondition(entry.IsEmpty, "AddDirEntry::selected entry is empty");
+			Utils.Asserts.TakeBreakpointIfConditionIsNotTrue(entry.IsEmpty, "AddDirEntry::selected entry is empty");
 
 			entry.Path = filePathToAdd;		// this triggers the entry to update its contents to reflect the information about the given file path
 

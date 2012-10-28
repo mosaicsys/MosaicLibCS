@@ -112,7 +112,7 @@ namespace MosaicLib.Utils.Pooling
 		{
             if (refCount.VolatileValue <= 0)
             {
-                Assert.BreakpointFault("RemoveReference called on released object");
+                Asserts.TakeBreakpointAfterFault("RemoveReference called on released object");
                 objRef = null;
                 return;
             }
@@ -150,7 +150,7 @@ namespace MosaicLib.Utils.Pooling
             {
                 // NOTE: the following tests are performed explicitly to prevent calling into Utils.Assert static class (and thus attemting to construct a new Logger instance before the distribution signleton has been constructed.
                 if (!IsUnique || BelongsToPool)
-                    Utils.Assert.BreakpointFault("ReleaseObjectToPoolDelegate can only be set when object instance IsUnique and when it does not already belong to a pool");
+                    Asserts.TakeBreakpointAfterFault("ReleaseObjectToPoolDelegate can only be set when object instance IsUnique and when it does not already belong to a pool");
 
                 releaseObjectToPoolDelegate = value;
             }
@@ -184,9 +184,9 @@ namespace MosaicLib.Utils.Pooling
             bool objectsAreTheSame = (this == objRefAsMe);
 
             if (!objectsAreTheSame)
-                Utils.Assert.BreakpointConditionFailed("reference given to RemoveReference must refer to the the invoked object");
+                Asserts.TakeBreakpointAfterConditionCheckFailed("reference given to RemoveReference must refer to the the invoked object");
             if (refCount.VolatileValue != 0)
-                Utils.Assert.BreakpointConditionFailed(Utils.Fcns.CheckedFormat("ReleaseFinalObjectReferenceAndReturnToPool called with non-zero refCount:{0}", refCount));
+                Asserts.TakeBreakpointAfterConditionCheckFailed(Utils.Fcns.CheckedFormat("ReleaseFinalObjectReferenceAndReturnToPool called with non-zero refCount:{0}", refCount));
 
             // perform object specific cleanup
             PerformPostReleaseCleanup();
@@ -285,7 +285,7 @@ namespace MosaicLib.Utils.Pooling
                 obj = ConstructNewObject();
 
             if (!obj.IsUnique)
-                Assert.BreakpointFault("Pool.GetFreeObjectFromPool gave non-Unique object");
+                Asserts.TakeBreakpointAfterFault("Pool.GetFreeObjectFromPool gave non-Unique object");
 
             return obj;
         }
@@ -349,7 +349,7 @@ namespace MosaicLib.Utils.Pooling
 
             if (item == null || item.ReleaseObjectToPoolDelegate != roReleaseObjectToPoolDelegate)
             {
-    			Utils.Assert.BreakpointConditionFailed("Pool.ReleaseObjectToPool failed: returned object is not of correct type or does not belong to this pool.");
+    			Asserts.TakeBreakpointAfterConditionCheckFailed("Pool.ReleaseObjectToPool failed: returned object is not of correct type or does not belong to this pool.");
                 return; // caller will dispose of objRef as appropriate
             }
 

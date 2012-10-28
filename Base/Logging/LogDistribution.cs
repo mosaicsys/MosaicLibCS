@@ -322,7 +322,7 @@ namespace MosaicLib
                 }
 
                 if (!InnerIsDistGroupIDValid(defaultDistGroupID))
-                    Assert.BreakpointFault("DistGroupID_Default is not valid after initializing Distribution Group table.");
+                    Asserts.TakeBreakpointAfterFault("DistGroupID_Default is not valid after initializing Distribution Group table.");
 
 				// create the loggerID used for messages that come from the distribution system
 
@@ -330,7 +330,7 @@ namespace MosaicLib
 				if (InnerIsLoggerIDValid(lmdLoggerID))
 					distSourceID = perLoggerIDInfoList [lmdLoggerID].sourceID;
 				else
-                    Utils.Assert.BreakpointFault("A valid DistSourceID could not be created");
+                    Utils.Asserts.TakeBreakpointAfterFault("A valid DistSourceID could not be created");
 			}
 
 			protected override void Dispose(DisposeType disposeType)
@@ -377,7 +377,7 @@ namespace MosaicLib
 						lsid = perLoggerIDInfoList [lid].sourceID;
 
                     if (lsid == null)
-    					Utils.Assert.BreakpointFault("GetLoggerSourceInfo result null");
+    					Utils.Asserts.TakeBreakpointAfterFault("GetLoggerSourceInfo result null");
 				}
 
 				return lsid;
@@ -505,7 +505,7 @@ namespace MosaicLib
 					}
 
 					if (mesgQueue == null || !mesgQueue.IsEnabled || mesgQueueDistThread == null)
-						Utils.Assert.BreakpointFault("LMD::StartQueuedMessageDelivery MesgQueue did not enable or thread not created.");
+						Utils.Asserts.TakeBreakpointAfterFault("LMD::StartQueuedMessageDelivery MesgQueue did not enable or thread not created.");
 				}
 			}
 
@@ -623,7 +623,7 @@ namespace MosaicLib
 
 					if (!InnerIsDistGroupIDValid(dgid))
 					{
-						Utils.Assert.BreakpointFault("AddLogMessageHandler...::Given GroupName could not be created.");
+						Utils.Asserts.TakeBreakpointAfterFault("AddLogMessageHandler...::Given GroupName could not be created.");
 						return;
 					}
 
@@ -651,7 +651,7 @@ namespace MosaicLib
 
 					if (!InnerIsDistGroupIDValid(dgid))
 					{
-						Utils.Assert.BreakpointFault("MapLoggersToDistributionGroup::Given GroupName could not be created.");
+						Utils.Asserts.TakeBreakpointAfterFault("MapLoggersToDistributionGroup::Given GroupName could not be created.");
 						return;
 					}
 
@@ -667,7 +667,7 @@ namespace MosaicLib
 						}
 						catch (SystemException ex)
 						{
-							Utils.Assert.LogFault(Utils.Fcns.CheckedFormat("MapLoggersToDistributionGroup grp:{0}, regex:{1} failed", groupName, matchStr), ex);
+							Utils.Asserts.LogFaultOccurance(Utils.Fcns.CheckedFormat("MapLoggersToDistributionGroup grp:{0}, regex:{1} failed", groupName, matchStr), ex);
 						}
 					}
 
@@ -683,7 +683,7 @@ namespace MosaicLib
 
 					if (!InnerIsDistGroupIDValid(dgid))
 					{
-						Utils.Assert.BreakpointFault("SetDistributionGroupGate::Given GroupName could not be created.");
+						Utils.Asserts.TakeBreakpointAfterFault("SetDistributionGroupGate::Given GroupName could not be created.");
 						return;
 					}
 
@@ -721,7 +721,7 @@ namespace MosaicLib
 
                     if (!InnerIsDistGroupIDValid(fromDgid) || !InnerIsDistGroupIDValid(linkToDgid))
                     {
-                        Utils.Assert.BreakpointFault("LinkDistributionGroups::One or both given group names could not be created.");
+                        Utils.Asserts.TakeBreakpointAfterFault("LinkDistributionGroups::One or both given group names could not be created.");
                         return;
                     }
 
@@ -834,7 +834,7 @@ namespace MosaicLib
 			protected void MesgQueueDistThreadFcn()
 			{
                 if (!(mesgQueue.IsEnabled && mesgQueueDistThreadWakeupNotification != null))
-    				Utils.Assert.BreakpointFault("MesgQueueDistThreadFcn is not ready to start");
+    				Utils.Asserts.TakeBreakpointAfterFault("MesgQueueDistThreadFcn is not ready to start");
 
 				const int maxMesgDequeueCount = 100;
 				List<LogMessage> logMesgList = new List<LogMessage>(maxMesgDequeueCount);
@@ -950,7 +950,7 @@ namespace MosaicLib
 				}
 
                 if (!(qCount == 0 && !qEnabled))
-    				Utils.Assert.BreakpointFault("MesgQueueDistThreadFcn: Abnormal exit conditions");
+    				Utils.Asserts.TakeBreakpointAfterFault("MesgQueueDistThreadFcn: Abnormal exit conditions");
 			}
 
 			LogMessage InnerGetLogMessage(bool blockDuringShutdown)
@@ -1034,7 +1034,7 @@ namespace MosaicLib
 			{
 				if (!InnerIsDistGroupIDValid(dgid))
 				{
-					Utils.Assert.BreakpointFault("dgid valid in InnerUpdateLoggerDistGroupConfigForGroup");
+					Utils.Asserts.TakeBreakpointAfterFault("dgid valid in InnerUpdateLoggerDistGroupConfigForGroup");
 					return;
 				}
 

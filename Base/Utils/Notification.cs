@@ -155,7 +155,7 @@ namespace MosaicLib.Utils
 					eventH = new System.Threading.ManualResetEvent(false);
 					break;
 				default:
-					Utils.Assert.Fault("Unexpected WaitEventNotifier.Behavior value", AssertType.ThrowException);
+					Asserts.NoteFaultOccurance("Unexpected WaitEventNotifier.Behavior value", AssertType.ThrowException);
 					break;
 			}
 		}
@@ -212,7 +212,7 @@ namespace MosaicLib.Utils
 			}
 			catch (Exception e)
 			{
-				Assert.BreakpointFault("eventH.WaitOne failed", e);
+				Asserts.TakeBreakpointAfterFault("eventH.WaitOne failed", e);
 			}
 			finally
 			{
@@ -238,7 +238,7 @@ namespace MosaicLib.Utils
 			}
 			catch (Exception e)
 			{
-				Assert.BreakpointFault("eventH.WaitOne(msec) failed", e);
+				Asserts.TakeBreakpointAfterFault("eventH.WaitOne(msec) failed", e);
 			}
 			finally
 			{
@@ -278,7 +278,7 @@ namespace MosaicLib.Utils
 			}
 			catch (Exception e)
 			{
-				Assert.BreakpointFault("eventH.Set failed", e);
+				Asserts.TakeBreakpointAfterFault("eventH.Set failed", e);
 			}
 		}
 
@@ -293,7 +293,7 @@ namespace MosaicLib.Utils
 			}
 			catch (Exception e)
 			{
-				Assert.BreakpointFault("eventH.Reset failed", e);
+				Asserts.TakeBreakpointAfterFault("eventH.Reset failed", e);
 			}
 		}
 
@@ -581,7 +581,7 @@ namespace MosaicLib.Utils
 			}
 
 			if (exceptions != 0)
-				Utils.Assert.BreakpointFault(Utils.Fcns.CheckedFormat("{0} exceptions triggered while invoking registered event delegate(s)", exceptions));
+				Asserts.TakeBreakpointAfterFault(Utils.Fcns.CheckedFormat("{0} exceptions triggered while invoking registered event delegate(s)", exceptions));
 		}
 
 		#endregion
@@ -665,7 +665,7 @@ namespace MosaicLib.Utils
 			}
 
 			if (exceptions != 0)
-				Utils.Assert.BreakpointFault(Utils.Fcns.CheckedFormat("{0} exceptions triggered while invoking registered event delegate(s)", exceptions));
+				Asserts.TakeBreakpointAfterFault(Utils.Fcns.CheckedFormat("{0} exceptions triggered while invoking registered event delegate(s)", exceptions));
 		}
 
 		#endregion

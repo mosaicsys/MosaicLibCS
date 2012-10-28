@@ -294,8 +294,8 @@ namespace MosaicLib.Modular.Part
 			this.partID = partID;
             this.partType = partType;
 
-			Assert.Condition(!String.IsNullOrEmpty(partID), "PartID is valid");
-			Assert.Condition(!String.IsNullOrEmpty(partType), "PartType is valid");
+			Asserts.CheckIfConditionIsNotTrue(!String.IsNullOrEmpty(partID), "PartID is valid");
+			Asserts.CheckIfConditionIsNotTrue(!String.IsNullOrEmpty(partType), "PartType is valid");
 		}
 
 		protected string FmtWin32EC(int win32EC) { return Utils.EC.FmtWin32EC(PartID, win32EC); }
@@ -434,6 +434,8 @@ namespace MosaicLib.Modular.Part
     public abstract class SimplePartBase : PartBaseBase
     {
         #region Construction and Destruction
+
+        protected SimplePartBase(string partID) : this(partID, new System.Diagnostics.StackFrame(1).GetMethod().DeclaringType.ToString()) { }
 
         protected SimplePartBase(string partID, string partType) : this(partID, partType, new Logging.Logger(partID)) { }
 

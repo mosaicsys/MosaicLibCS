@@ -154,7 +154,7 @@ namespace MosaicLib
 					if (effectiveSourceInfo != null)
 						queueIsEnabled = true;
 					else
-						Utils.Assert.Fault("EnableQueue failed: EffectiveSourceID is not valid", Utils.AssertType.ThrowException);
+						Utils.Asserts.NoteFaultOccurance("EnableQueue failed: EffectiveSourceID is not valid", Utils.AssertType.ThrowException);
 				}
 			}
 			public void DisableQueue() { queueIsEnabled = false; }
