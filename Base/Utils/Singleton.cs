@@ -74,9 +74,15 @@ namespace MosaicLib.Utils
     }
 
     /// <summary>
-    /// Primary Singleton class.  Implements SingletonInstanceBehavior (defaults to AutoConstruct) for Instance property.  This class is renterant and support MT safe use.
+    /// Singleton Helper class.  
+    /// This class is renterant and support MT safe use.  
+    /// Two constructors are supported.  Default constructor for this object selects SingletonInstanceBehavior.AutoConstruct.  
+    /// Second constructor allows caller to explicitly define the instance behavior.
     /// </summary>
-    /// <typeparam name="TSingletonObject"></typeparam>
+    /// <typeparam name="TSingletonObject">
+    /// This type parameter gives both the type of the Instance property and is the type that will be constructed using its 
+    /// defafult constructor for AutoConstruct behaviour.  This type must be a class and must support a default constructor.
+    /// </typeparam>
     public class SingletonHelper<TSingletonObject> : SingletonHelper<TSingletonObject, TSingletonObject>
         where TSingletonObject : class, new()
     {
@@ -84,6 +90,19 @@ namespace MosaicLib.Utils
         public SingletonHelper(SingletonInstanceBehavior behavior) : base(behavior) { }
     }
 
+    /// <summary>
+    /// Singleton Helper class with seperate specifictation of the type that the Instance property returns and of the type that is constructed for AutoConstruct behaviors.
+    /// This class is renterant and support MT safe use.  
+    /// Two constructors are supported.  Default constructor for this object selects SingletonInstanceBehavior.AutoConstruct.  
+    /// Second constructor allows caller to explicitly define the instance behavior.
+    /// </summary>
+    /// <typeparam name="TSingletonInstanceProperty">
+    /// Defines the type of object that is returned by the SingletonHelper's Instance property.  It must be a class or interface.
+    /// </typeparam>
+    /// <typeparam name="TSingletonObject">
+    /// This type parameter gives the type of object that will be constructed using its defafult constructor for AutoConstruct behaviour.
+    /// This type must be a class, it must support a default constructor and it must be castable to the TSingletonInstanceProperty type.
+    /// </typeparam>
     public class SingletonHelper<TSingletonInstanceProperty, TSingletonObject>
         : Utils.DisposableBase, System.IDisposable, ISingleton<TSingletonInstanceProperty>
         where TSingletonObject : class, TSingletonInstanceProperty, new()
