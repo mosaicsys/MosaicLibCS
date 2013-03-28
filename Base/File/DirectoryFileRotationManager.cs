@@ -566,7 +566,7 @@ namespace MosaicLib.File
 			}
 			else
 			{
-				logger.Debug.Emit("Directory is usable: path:'{0}' number of fileS:{1} active file:'{2}'", 
+				logger.Debug.Emit("Directory is usable: path:'{0}' number of files:{1} active file:'{2}'", 
 											dirPath, dirEntryIDListSortedByName.Count, activeFileInfo.Name);
 			}
 
