@@ -49,7 +49,10 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="File\DirectoryEntryInfo.cs" />
     <Compile Include="File\DirectoryFileRotationManager.cs" />
+    <Compile Include="File\DirectoryTreeEntryInfo.cs" />
+    <Compile Include="File\DirectoryTreePruningManager.cs" />
     <Compile Include="Logging\BasicFallbackLogger.cs" />
     <Compile Include="Logging\LogDistribution.cs" />
     <Compile Include="Logging\Logging.cs" />
@@ -78,6 +81,8 @@
     <Compile Include="Serial\SlidingBuffer.cs" />
     <Compile Include="Serial\TcpSerialIO.cs" />
     <Compile Include="Serial\UdpSerialIO.cs" />
+    <Compile Include="Semi\E084\E084.cs" />
+    <Compile Include="Semi\E084\E084IOSupport.cs" />
     <Compile Include="Time\MMTimer.cs" />
     <Compile Include="Time\QpcTime.cs" />
     <Compile Include="Time\Ticks.cs" />

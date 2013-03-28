@@ -158,7 +158,7 @@ namespace MosaicLib.SerialIO
 				}
 
 			}
-			catch (SystemException e)
+			catch (System.Exception e)
 			{
 				faultCode = "Exception:" + e.Message;
 			}
@@ -188,7 +188,7 @@ namespace MosaicLib.SerialIO
 				if (dataSP != null)
 					DisposeDataSocket();
 			}
-			catch (SystemException e)
+			catch (System.Exception e)
 			{
 				faultCode = "Exception:" + e.Message;
 			}

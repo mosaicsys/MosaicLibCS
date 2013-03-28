@@ -31,174 +31,6 @@ namespace MosaicLib.File
 	using MosaicLib.Modular.Part;
 
 	//-------------------------------------------------------------------
-	#region DirectoryEntryInfo
-
-	public class DirectoryEntryInfo
-	{
-		#region private instance variables
-
-		protected string path = string.Empty;
-		protected string name = string.Empty;
-		protected FileSystemInfo fsiItem = null;
-        protected Time.QpcTimeStamp timeStamp = Time.QpcTimeStamp.Zero;
-
-        #endregion
-
-		#region public methods and properties
-
-		public DirectoryEntryInfo() { }
-		public DirectoryEntryInfo(FileSystemInfo fsiItem) { this.FileSystemInfo = fsiItem; }
-		public DirectoryEntryInfo(string path) { Path = path; }
-
-        /// <summary>
-        /// Refreshes contained FileSystemInfo from stored path
-        /// </summary>
-		public void Refresh() 
-		{
-            if (Exists && (IsFile || IsDirectory))
-            {
-                FileSystemInfo.Refresh();
-                timeStamp.SetToNow();
-            }
-            else if (!string.IsNullOrEmpty(path))
-                Path = path;		// trigger a full rescan
-		}
-
-        /// <summary>Resets path and stored information to the empty state</summary>
-		public void Clear()
-		{
-			path = string.Empty;
-			name = string.Empty;
-			fsiItem = null;
-		}
-
-        /// <summary>Getter returns the stored FileSystemInfo for the entry or null if the entry IsEmpty.  Setter replaces sets this object to reference and reflect the state and path information from the given FileSystemInfo object.</summary>
-        public FileSystemInfo FileSystemInfo 
-		{ 
-			get { return fsiItem; }
-			set
-			{
-				if (value == null)
-					Clear();
-				else
-				{
-					fsiItem = value;
-					path = fsiItem.FullName;
-					name = fsiItem.Name;
-					timeStamp.SetToNow();
-				}
-			}
-		}
-
-        /// <summary>Returns the FileSystemInfo property as a FileInfo (null if the item is not a File)</summary>
-        public FileInfo FileInfo { get { return fsiItem as FileInfo; } }
-        /// <summary>Returns the FileSystemInfo property as a DirectoryInfo (nul if the item is not a Directory)</summary>
-        public DirectoryInfo DirectoryInfo { get { return fsiItem as DirectoryInfo; } }
-        /// <summary>Returns true if the path or the FileSystemInfo are null or empty</summary>
-        public bool IsEmpty { get { return (string.IsNullOrEmpty(Path) || FileSystemInfo == null); } }
-        /// <summary>Returns true if the FileSystemInfo is a File</summary>
-        public bool IsFile { get { return (fsiItem is FileInfo); } }
-        /// <summary>Returns true if the FileSystemInfo is a Directory</summary>
-        public bool IsDirectory { get { return (fsiItem is DirectoryInfo); } }
-        /// <summary>Returns ture if the FileSystemInfo exists and is a file</summary>
-        public bool IsExistingFile { get { return IsFile && Exists; } }
-        /// <summary>Returns true if the FileSystemInfo esists and is a directory</summary>
-        public bool IsExistingDirectory { get { return IsDirectory && Exists; } }
-
-        /// <summary>Getter returns the full path to the current object.  Setter resets the object and updates its informtion to contain the FileSystemInfo for the file system object at the given path or null if there is none.</summary>
-        public string Path 
-		{ 
-			get { return path; } 
-			set 
-			{
-				Clear();
-				if (value != null)
-				{
-					if (System.IO.File.Exists(value))
-						fsiItem = new FileInfo(value);
-					else if (System.IO.Directory.Exists(value))
-						fsiItem = new DirectoryInfo(value);
-					else
-						fsiItem = new FileInfo(value);
-
-					path = fsiItem.FullName;
-					name = fsiItem.Name;
-					timeStamp.SetToNow();
-				}
-			} 
-		}
-
-        /// <summary>Returns the leaf name of the FileSystemInfo full path (file name or last directory name in hierarchy)</summary>
-        public string Name { get { return name; } }
-
-        /// <summary>Returns the length of the referenced file in bytes or 0 if the file does not exist or if the the given path is empty or is not a file.</summary>
-        public Int64 Length
-		{
-			get
-			{
-				FileInfo fi = FileSystemInfo as FileInfo;
-				return ((fi != null && fi.Exists) ? fi.Length : 0);
-			}
-		}
-
-        /// <summary>Returns true if the path is a file or directory that exists.</summary>
-        public bool Exists
-		{
-			get
-			{
-				if (IsFile)
-					return FileInfo.Exists;
-				else if (IsDirectory)
-					return DirectoryInfo.Exists;
-				else
-					return false;
-			}
-		}
-
-        /// <summary>Returns the amount of time that has elapsed from the FileSystemInfo.CreateionTime to now as a DateTime.</summary>
-        public TimeSpan CreationAge 
-		{
-			get
-			{
-				if (!IsEmpty)
-					return (DateTime.Now - FileSystemInfo.CreationTime);
-				else
-					return TimeSpan.Zero;
-			}
-		}
-
-        /// <summary>Returns the QpcTimeStamp of the last object creation or its last Refresh</summary>
-        public Time.QpcTimeStamp QpcTimeStamp { get { return timeStamp; } }
-
-        /// <summary>Returns the DateTime that is the oldest from the referenced file system object's creation time, last modified time, and last accessed time, in UTC.</summary>
-        protected DateTime OldestFileSystemInfoDateTimeUtc
-        {
-            get
-            {
-                if (!IsEmpty)
-                {
-                    DateTime oldestTime = FileSystemInfo.CreationTimeUtc;
-
-                    if (oldestTime > FileSystemInfo.LastWriteTimeUtc)
-                        oldestTime = FileSystemInfo.LastWriteTimeUtc;
-                    if (oldestTime > FileSystemInfo.LastAccessTimeUtc)
-                        oldestTime = FileSystemInfo.LastAccessTimeUtc;
-
-                    return oldestTime;
-                }
-                else
-                {
-                    return DateTime.Now;
-                }
-            }
-        }
-
-		#endregion
-	}
-
-	#endregion
-
-	//-------------------------------------------------------------------
 	#region DirectoryFileRotationManager
 
 	/// <summary>
@@ -352,7 +184,7 @@ namespace MosaicLib.File
 				entryFileInfo.Delete();
 				logger.Info.Emit("Cleanup deleted file:'{0}', size:{1} age:{2} hours", nameToDelete, entryFileInfo.Length, fileAgeInHours.ToString("f3"));
 			}
-			catch (SystemException e)
+			catch (System.Exception e)
 			{
 				logger.Error.Emit("Cleanup failed to delete file:'{0}', code:{1}", nameToDelete, e.Message);
 			}
@@ -522,8 +354,8 @@ namespace MosaicLib.File
 			dirEntryList.Clear();
 			dirEntryVectFreeIDStack.Clear();
 
-			dirEntryIDMapByName.Clear();
-			dirEntryIDMapByCreatedFTimeUtc.Clear();
+			dirEntryIDListSortedByName.Clear();
+			dirEntryIDListSortedByCreatedFTimeUtc.Clear();
 			oldestFileDirEntryID = DirEntryID_Invalid;
 
 			numSubDirEntries = 0;
@@ -634,86 +466,91 @@ namespace MosaicLib.File
 				activeFileNumber = 0;
 				bool matchFound = false;
 
-				IList<Int64> itemKeys = dirEntryIDMapByCreatedFTimeUtc.Keys;
-				IList<int> itemValues = dirEntryIDMapByCreatedFTimeUtc.Values;
+				IList<Int64> itemKeys = dirEntryIDListSortedByCreatedFTimeUtc.Keys;
+				IList<List<int>> itemValues = dirEntryIDListSortedByCreatedFTimeUtc.Values;
 
-				for (int idx = dirEntryIDMapByCreatedFTimeUtc.Count - 1; !matchFound && idx >= 0; idx--)
+				for (int idx = dirEntryIDListSortedByCreatedFTimeUtc.Count - 1; !matchFound && idx >= 0; idx--)
 				{
 					Int64 itemFTime = itemKeys[idx];
-					int itemEntryID = itemValues[idx];
+                    List<int> itemEntryIDList = itemValues[idx];
 
-					activeFileEntryID = itemEntryID;
+                    foreach (int itemEntryID in itemEntryIDList)
+                    {
+                        activeFileEntryID = itemEntryID;
 
-					if (IsDirEntryIDValid(activeFileEntryID))
-						activeFileInfo = dirEntryList[activeFileEntryID];
-					else
-					{
-						activeFileInfo.Clear();
-						Utils.Asserts.TakeBreakpointAfterFault("Setup: entry ID in MapByCreated is not valid");
-						continue;
-					}
+                        if (IsDirEntryIDValid(activeFileEntryID))
+                            activeFileInfo = dirEntryList[activeFileEntryID];
+                        else
+                        {
+                            activeFileInfo.Clear();
+                            Utils.Asserts.TakeBreakpointAfterFault("Setup: entry ID in ListSortedByCreated is not valid");
+                            continue;
+                        }
 
-					// verify that the entry is a file
-					if (!activeFileInfo.IsFile)
-					{
-						Utils.Asserts.TakeBreakpointAfterFault("Setup: entry ID in MapByCreated is not a file");
-						continue;
-					}
+                        // verify that the entry is a file
+                        if (!activeFileInfo.IsFile)
+                        {
+                            Utils.Asserts.TakeBreakpointAfterFault("Setup: entry ID in ListSortedByCreated is not a file");
+                            continue;
+                        }
 
-					// divide the name into prefix, middle and suffix fields
+                        // divide the name into prefix, middle and suffix fields
 
-					string fileName = activeFileInfo.Name;
-					bool fileNameIsValidMatch = true;
+                        string fileName = activeFileInfo.Name;
+                        bool fileNameIsValidMatch = true;
 
-					int fileNamePrefixLen = config.fileNamePrefix.Length;
-					int fileNameSuffixLen = config.fileNameSuffix.Length;
+                        int fileNamePrefixLen = config.fileNamePrefix.Length;
+                        int fileNameSuffixLen = config.fileNameSuffix.Length;
 
-                    int split1Idx = Math.Min(fileNamePrefixLen, fileName.Length);   // prevent attempting to call Substring with a second arg that is beyond the end of the string.
-                    string prefix = fileName.Substring(0, split1Idx);
-                    string rest = fileName.Substring(split1Idx);
-					int restLen = rest.Length;
+                        int split1Idx = Math.Min(fileNamePrefixLen, fileName.Length);   // prevent attempting to call Substring with a second arg that is beyond the end of the string.
+                        string prefix = fileName.Substring(0, split1Idx);
+                        string rest = fileName.Substring(split1Idx);
+                        int restLen = rest.Length;
 
-					string middle = string.Empty, suffix = string.Empty;
+                        string middle = string.Empty, suffix = string.Empty;
 
-					if (restLen >= fileNameSuffixLen)
-					{
-						int splitPoint = restLen - fileNameSuffixLen;
+                        if (restLen >= fileNameSuffixLen)
+                        {
+                            int splitPoint = restLen - fileNameSuffixLen;
 
-						middle = rest.Substring(0, splitPoint);
-						suffix = rest.Substring(splitPoint);
-					}
-					else
-					{
-						// this file name does not match requirements - exclude from search for current active file
-						fileNameIsValidMatch = false;
-					}
+                            middle = rest.Substring(0, splitPoint);
+                            suffix = rest.Substring(splitPoint);
+                        }
+                        else
+                        {
+                            // this file name does not match requirements - exclude from search for current active file
+                            fileNameIsValidMatch = false;
+                        }
 
-					// test if the prefix and suffix's match
-					if (prefix != config.fileNamePrefix || suffix != config.fileNameSuffix)
-						fileNameIsValidMatch = false;
+                        // test if the prefix and suffix's match
+                        if (prefix != config.fileNamePrefix || suffix != config.fileNameSuffix)
+                            fileNameIsValidMatch = false;
 
-					// test if the middle is valid
-					if (numFileNumberDigits > 0)
-					{
-						int testFileNumber = -1;
-						bool match = int.TryParse(middle, out testFileNumber);
-						
-						if (testFileNumber >= 0 && middle.Length == numFileNumberDigits && match)
-							activeFileNumber = testFileNumber;
-						else
-							fileNameIsValidMatch = false;
-					}
-					else
-					{
-						// for FileNamePattern.ByDate files, we assume that the middle is valid if it is not empty
-						if (middle.Length == 0)
-							fileNameIsValidMatch = false;
-					}
+                        // test if the middle is valid
+                        if (numFileNumberDigits > 0)
+                        {
+                            int testFileNumber = -1;
+                            bool match = int.TryParse(middle, out testFileNumber);
 
-					matchFound = fileNameIsValidMatch;
+                            if (testFileNumber >= 0 && middle.Length == numFileNumberDigits && match)
+                                activeFileNumber = testFileNumber;
+                            else
+                                fileNameIsValidMatch = false;
+                        }
+                        else
+                        {
+                            // for FileNamePattern.ByDate files, we assume that the middle is valid if it is not empty
+                            if (middle.Length == 0)
+                                fileNameIsValidMatch = false;
+                        }
+
+                        matchFound = fileNameIsValidMatch;
+                        if (matchFound)
+                            break;
+                    }
 				}
 
-				if (!matchFound && dirEntryIDMapByCreatedFTimeUtc.Count != 0)
+				if (!matchFound && dirEntryIDListSortedByCreatedFTimeUtc.Count != 0)
 					logger.Warning.Emit("Setup Warning: no valid active file found in non-empty directory '{0}'", dirPath);
 			}
 
@@ -730,7 +567,7 @@ namespace MosaicLib.File
 			else
 			{
 				logger.Debug.Emit("Directory is usable: path:'{0}' number of fileS:{1} active file:'{2}'", 
-											dirPath, dirEntryIDMapByCreatedFTimeUtc.Count, activeFileInfo.Name);
+											dirPath, dirEntryIDListSortedByName.Count, activeFileInfo.Name);
 			}
 
 			setupPerformed = true;
@@ -770,15 +607,24 @@ namespace MosaicLib.File
 			// if the file just got created then add its entry to the age map
 			if (!wasExistingFile && activeFileInfo.IsExistingFile)
 			{
-				// need to add the file to the dirEntryIDMapByCreatedFTimeUtc
+				// need to add the file to the dirEntryIDListSortedByCreatedFTimeUtc
 
-				dirEntryIDMapByCreatedFTimeUtc.Add(activeFileInfo.FileSystemInfo.CreationTime.ToFileTimeUtc(), activeFileEntryID);
-				oldestFileDirEntryID = DirEntryID_Invalid;	// trigger rescan to determin the oldest file
+                AddFileInfoItemToListSortedByCreate(activeFileInfo.FileSystemInfo.CreationTime.ToFileTimeUtc(), activeFileEntryID);
 			}
 
 			if (newSize != oldSize)
 				totalSizeOfManagedFiles += (newSize - oldSize);
 		}
+
+        protected void AddFileInfoItemToListSortedByCreate(Int64 fileTimeUTC, int itemEntryID)
+        {
+            List<int> entryIDList = null;
+            if (!dirEntryIDListSortedByCreatedFTimeUtc.TryGetValue(fileTimeUTC, out entryIDList) || entryIDList == null)
+                dirEntryIDListSortedByCreatedFTimeUtc[fileTimeUTC] = entryIDList = new List<int>();
+
+            entryIDList.Add(itemEntryID);
+            oldestFileDirEntryID = DirEntryID_Invalid;	// trigger rescan to determin the oldest file
+        }
 
 		protected void GenerateNextActiveFile()
 		{
@@ -863,8 +709,13 @@ namespace MosaicLib.File
 			int entryID = DirEntryID_Invalid;
 
 			int oldestIdx = 0;
-            if (dirEntryIDMapByCreatedFTimeUtc.Values.Count >= 1)
-				entryID = dirEntryIDMapByCreatedFTimeUtc.Values[oldestIdx];
+            IList<List<int>> values = dirEntryIDListSortedByCreatedFTimeUtc.Values;
+            if (values.Count >= 1)
+            {
+                List<int> entryIDList = values[oldestIdx];
+                if (entryIDList != null && entryIDList.Count > 0)
+                    entryID = entryIDList[0];
+            }
 
 			return entryID;
 		}
@@ -873,7 +724,7 @@ namespace MosaicLib.File
 		{
 			int entryID = DirEntryID_Invalid;
 
-			if (!dirEntryIDMapByName.TryGetValue(fileName, out entryID))
+			if (!dirEntryIDListSortedByName.TryGetValue(fileName, out entryID))
 				return DirEntryID_Invalid;
 
 			return entryID;
@@ -914,9 +765,8 @@ namespace MosaicLib.File
 
 			if (entry.IsExistingFile)
 			{
-				// if the file already exists then add the entryID to the MapByCreated time.
-				dirEntryIDMapByCreatedFTimeUtc.Add(entry.FileSystemInfo.CreationTime.ToFileTimeUtc(), entryID);
-				oldestFileDirEntryID = DirEntryID_Invalid;
+				// if the file already exists then add the entryID to the ListSortedByCreated time.
+                AddFileInfoItemToListSortedByCreate(entry.FileSystemInfo.CreationTime.ToFileTimeUtc(), entryID);
 
 				totalSizeOfManagedFiles += entry.Length;
 			}
@@ -948,7 +798,7 @@ namespace MosaicLib.File
 				}
 
 				// else the file does not already exist (it will be created externally)
-				//	as such we do not add it to the dirEntryIDMapByCreatedFTimeUtc map.  
+				//	as such we do not add it to the dirEntryIDListSortedByCreatedFTimeUtc map.  
 				//	MaintainActiveFileInfo will take that action after the file has been created.
 			}
 
@@ -957,9 +807,9 @@ namespace MosaicLib.File
 			//	a file then it will have been added to the map by create data and added
 			//	to the total managed size above (in the IsFile block).
 
-			dirEntryIDMapByName.Add(entry.Name, entryID);
+			dirEntryIDListSortedByName.Add(entry.Name, entryID);
 
-			totalNumberOfManagedFiles = dirEntryIDMapByName.Count;
+			totalNumberOfManagedFiles = dirEntryIDListSortedByName.Count;
 
 			return entryID;
 		}
@@ -1002,64 +852,39 @@ namespace MosaicLib.File
 			// if the name is not empty then find it in the map by name and erase it
 			if (!string.IsNullOrEmpty(name))
 			{
-				bool foundIDInNameMap = dirEntryIDMapByName.Remove(name);
+				bool foundIDInNameMap = dirEntryIDListSortedByName.Remove(name);
 
 				if (!foundIDInNameMap)
 					found = false;
 			}
 
 			// if the createTime is not zero then search through all the items with the matching create time
-			//	and delete the item(s) that refer to the given enterID
+			//	and remove the entryID from the SortedByCreated list.
 
-			IList<Int64> keys = dirEntryIDMapByCreatedFTimeUtc.Keys;
-			IList<int> values = dirEntryIDMapByCreatedFTimeUtc.Values;
-
-			if (createUtcFTime != 0)
+            if (createUtcFTime != 0)
 			{
-				int entryIdx = dirEntryIDMapByCreatedFTimeUtc.IndexOfKey(createUtcFTime);
+                List<int> entryIDList = null;
 
-				// find the first occurance of this create time in the sorted list
-				while (entryIdx > 0)
-				{
-					int prevEntryIdx = entryIdx - 1;
-					if (keys[prevEntryIdx] != createUtcFTime)
-						break;
-					entryIdx = prevEntryIdx;
-				}
+                bool foundTimeKey = dirEntryIDListSortedByCreatedFTimeUtc.TryGetValue(createUtcFTime, out entryIDList);
 
-				// search forward until we either find the entry for this entryID
-				bool foundIDInTimeMap = false;
+                if (entryIDList != null)
+                {
+                    found = entryIDList.Remove(entryID);
+                }
+                else
+                {
+                    found = false;
+                }
 
-				// find and remove any entries that match the creation time and entryID
-				while (entryIdx < dirEntryIDMapByCreatedFTimeUtc.Count)
-				{
-					if (keys[entryIdx] != createUtcFTime)
-						break;
-
-					if (values[entryIdx] != entryID)
-					{
-						entryIdx++;
-						continue;
-					}
-
-					// remove this entry and update the keys and values arrays to reflected the removal
-
-					dirEntryIDMapByCreatedFTimeUtc.RemoveAt(entryIdx);
-					keys = dirEntryIDMapByCreatedFTimeUtc.Keys;
-					values = dirEntryIDMapByCreatedFTimeUtc.Values;
-					foundIDInTimeMap = true;
-
-					// loop to reprocess the same entryIdx
-				}
-
-				if (!foundIDInTimeMap)
-					found = false;
+                // if the key ends up with a null or empty entryIDList then remove the key from the ListSortedByCreated
+                if (foundTimeKey && (entryIDList == null || entryIDList.Count == 0))
+                    dirEntryIDListSortedByCreatedFTimeUtc.Remove(createUtcFTime);
 			}
 
 			if (!found)
 				logger.Error.Emit("RemoveDirEntry: attempt to remove '{0}' from entry:{1} failed: entry not found in all expected locations", name, entryID);
 
-			totalNumberOfManagedFiles = dirEntryIDMapByName.Count;
+			totalNumberOfManagedFiles = dirEntryIDListSortedByName.Count;
 
 			return found;
 		}
@@ -1088,10 +913,10 @@ namespace MosaicLib.File
 		List<DirectoryEntryInfo>	dirEntryList = new List<DirectoryEntryInfo>();				//!< vector of all the actual directory entries, in no particular order
 		Stack<int>					dirEntryVectFreeIDStack = new Stack<int>();		//!< list of vector indecies for empty directory entries.
 
-		SortedList<string, int>		dirEntryIDMapByName = new SortedList<string,int>();
-		SortedList<Int64, int>		dirEntryIDMapByCreatedFTimeUtc = new SortedList<long,int>();
+		SortedList<string, int>		dirEntryIDListSortedByName = new SortedList<string,int>();
+        SortedList<Int64, List<int>> dirEntryIDListSortedByCreatedFTimeUtc = new SortedList<Int64, List<int>>();
 
-		int							oldestFileDirEntryID = -1;		//!< the directory entry id of the oldest file.  cleared any time the dirEntryIDMapByCreatedFTimeUtc is modified, filled in as needed by IsDirectoryCleanupNeeded
+		int							oldestFileDirEntryID = -1;		//!< the directory entry id of the oldest file.  cleared any time the dirEntryIDListSortedByCreatedFTimeUtc is modified, filled in as needed by IsDirectoryCleanupNeeded
 
 		int numSubDirEntries = 0;
 		int numBadDirEntries = 0;

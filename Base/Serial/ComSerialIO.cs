@@ -130,7 +130,7 @@ namespace MosaicLib.SerialIO
 			ComPortUartConfig uartConfig = comPortConfig.UartConfig;
 
 			sp = new System.IO.Ports.SerialPort();
-			sp.PortName = comPortConfig.PortName;
+			// sp.PortName = comPortConfig.PortName;        // do this when opening the port
 			sp.BaudRate = uartConfig.BaudRateInt;
 			sp.DataBits = uartConfig.DataBits;
 			sp.Handshake = uartConfig.Handshake;
@@ -187,10 +187,13 @@ namespace MosaicLib.SerialIO
 
 				SetBaseState(ConnState.Connecting, actionName + ".Inner.DoOpen", true);
 
-				if (!sp.IsOpen)
-					sp.Open();
+                if (!sp.IsOpen)
+                {
+                    sp.PortName = comPortConfig.PortName;
+                    sp.Open();
+                }
 			}
-			catch (SystemException e)
+			catch (System.Exception e)
 			{
 				faultCode = "Exception:" + e.Message;
 			}
@@ -216,7 +219,7 @@ namespace MosaicLib.SerialIO
 				if (InnerIsConnected)
 					sp.Close();
 			}
-			catch (SystemException e)
+			catch (System.Exception e)
 			{
 				faultCode = "Exception:" + e.Message;
 			}

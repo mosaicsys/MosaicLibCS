@@ -665,7 +665,7 @@ namespace MosaicLib
 						{
 							dgInfo.loggerNameMatchRegex = new System.Text.RegularExpressions.Regex(matchStr);
 						}
-						catch (SystemException ex)
+						catch (System.Exception ex)
 						{
 							Utils.Asserts.LogFaultOccurance(Utils.Fcns.CheckedFormat("MapLoggersToDistributionGroup grp:{0}, regex:{1} failed", groupName, matchStr), ex);
 						}

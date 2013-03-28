@@ -5,11 +5,11 @@ using System.Runtime.InteropServices;
 // General Information about an assembly is controlled through the following 
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyTitle("MosaicLibCS")]
-[assembly: AssemblyDescription("Mosaic Systems Inc., Base component library")]
+[assembly: AssemblyTitle("MosaicLibCS_WPF")]
+[assembly: AssemblyDescription("")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("Mosaic Systems Inc.")]
-[assembly: AssemblyProduct("MosaicLibCSBase")]
+[assembly: AssemblyCompany("")]
+[assembly: AssemblyProduct("MosaicLibCS_WPF")]
 [assembly: AssemblyCopyright("Copyright (c) Mosaic Systems Inc.  All rights reserved.")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
@@ -20,7 +20,7 @@ using System.Runtime.InteropServices;
 [assembly: ComVisible(false)]
 
 // The following GUID is for the ID of the typelib if this project is exposed to COM
-[assembly: Guid("1D97E79E-5E68-457e-8E0A-B841CD110A83")]
+[assembly: Guid("436e7ea7-b5bf-429b-b67e-758c9bb38768")]
 
 // Version information for an assembly consists of the following four values:
 //

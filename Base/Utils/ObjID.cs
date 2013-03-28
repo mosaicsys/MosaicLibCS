@@ -29,6 +29,7 @@ namespace MosaicLib.Utils
     /// </summary>
 	public interface IObjID
 	{
+        // Gives the "Name" or Object ID of the current object.
 		string ObjID { get; }
 	}
 
@@ -37,33 +38,48 @@ namespace MosaicLib.Utils
     /// </summary>
 	public class ObjIDBase : IObjID
 	{
-		private string objID = string.Empty;
-		public string ObjID { get { return objID; } }
-		private string className = string.Empty;
-		public string ClassName { get { return ClassName; } }
+        /// <summary>Public implementation for the IObjID.ObjID property.</summary>
+        public string ObjID { get; private set; }
 
-        public ObjIDBase(string objID) : this(string.Empty, objID, string.Empty) { }
-		public ObjIDBase(string className, string objID) : this (className, objID, string.Empty) {}
-		public ObjIDBase(string className, string objID, string objIDStrSuffix)
+        /// <summary>Carries the "ClassName" that was given at construction time.  Will either be the actual source code class name or some shorthand version thereof.</summary>
+        public string ClassName { get; private set; }
+
+        /// <summary>Basic constructor.  Takes ClassName from class name of caller.  Uses empty suffix.</summary>
+        public ObjIDBase(string objID) : this(1, objID, string.Empty) { }
+        /// <summary>Basic constructor.  Caller specifies ObjID and ClassName.  Uses empty suffix.</summary>
+        public ObjIDBase(string className, string objID) : this(className, objID, string.Empty) { }
+
+        /// <summary>Nested constructor.  Takes ClassName from class name of caller n=skipStackFrames stack frames up from here.  Uses empty suffix.</summary>
+        public ObjIDBase(int skipStackFrames, string objID) : this(new System.Diagnostics.StackFrame(skipStackFrames + 1).GetType().Name, objID, string.Empty) { }
+
+        /// <summary>Nested constructor.  Takes ClassName from class name of caller n=skipStackFrames stack frames up from here.</summary>
+        public ObjIDBase(int skipStackFrames, string objID, string objIDStrSuffix) : this(new System.Diagnostics.StackFrame(skipStackFrames + 1).GetType().Name, objID, objIDStrSuffix) { }
+
+        /// <summary>
+        /// Essential constructor: caller specifies className, objID and objIDStrSuffix.  
+        /// If className is given as null or empty, method takes class name from caller's type definition.  
+        /// If objID is given as null or empty, method takes 8 hex digit hash code of this object to use as ObjID.
+        /// </summary>
+        public ObjIDBase(string className, string objID, string objIDStrSuffix)
 		{
             if (string.IsNullOrEmpty(className))
                 className = new System.Diagnostics.StackFrame(1).GetType().Name;    // get the name of the caller's type
 
-            this.className = className;
+            ClassName = className;
 
-            if (string.IsNullOrEmpty(objIDStrSuffix))
-				objIDStrSuffix = string.Empty;
+            objIDStrSuffix = Fcns.MapNullToEmpty(objIDStrSuffix);
 
 			if (!string.IsNullOrEmpty(objID))
-				this.objID = objID + objIDStrSuffix;
-
-			if (string.IsNullOrEmpty(objID))
+				objID = objID + objIDStrSuffix;
+            else
 			{
 				object obj = this;
 				string objHashCodeStr = obj.GetHashCode().ToString("x8");
 
 				objID = Utils.Fcns.CheckedFormat("{0}{1}", objHashCodeStr, objIDStrSuffix);
 			}
+
+            ObjID = objID;
 		}
 	}
 

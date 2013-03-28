@@ -1,0 +1,8 @@
+*.ncb
+*.bak
+*.user
+*.suo
+Release
+Debug
+/Base/Xtras/Dml32Wrapper/Dml32
+/Base/Xtras/Dml32Wrapper/ConsoleDmlHost/bin/Run

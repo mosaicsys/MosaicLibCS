@@ -502,7 +502,10 @@ namespace MosaicLib.Utils
 
 	#region Sequenced object interfaces
 
-	/// <summary>Combines the IObjectSource and ISequenceNumberValue interfaces to represent a source of sequenced objects.</summary>
+    /// <summary>
+    /// Combines the <see cref="MosaicLib.Utils.IObjectSource{ObjectType}"/> and <see cref="MosaicLib.Utils.ISequenceNumberValue{SeqNumberType}"/> 
+    /// interfaces to represent a source of sequenced objects.
+    /// </summary>
 	/// <typeparam name="ObjectType">Defines the type of the sequenced object.</typeparam>
 	/// <typeparam name="SeqNumberType">Defines the numeric type used by this sequence number's counter.</typeparam>
 	public interface ISequencedObjectSource<ObjectType, SeqNumberType> : IObjectSource<ObjectType>, ISequenceNumberValue<SeqNumberType> { }
@@ -540,17 +543,17 @@ namespace MosaicLib.Utils
 	#region Sequenced Ref and Value object observer interfaces
 
 	/// <summary>Inteface defines a ISequencedObjectSourceObserver for use with ref type objects</summary>
-	/// <typeparam name="ObjectType">Defines the type of the observed object.  Must be a ref type.</typeparam>
+	/// <typeparam name="RefObjectType">Defines the type of the observed object.  Must be a ref type.</typeparam>
 	/// <typeparam name="SeqNumberType">Defines the type of the sequence number.</typeparam>
-	public interface ISequencedRefObjectSourceObserver<ObjectType, SeqNumberType> : ISequencedObjectSourceObserver<ObjectType, SeqNumberType>
-		where ObjectType : class
+	public interface ISequencedRefObjectSourceObserver<RefObjectType, SeqNumberType> : ISequencedObjectSourceObserver<RefObjectType, SeqNumberType>
+		where RefObjectType : class
 	{ }
 
 	/// <summary>Inteface defines a ISequencedObjectSourceObserver for use with value type objects</summary>
-	/// <typeparam name="ObjectType">Defines the type of the observed object.  Must be a value type.</typeparam>
+	/// <typeparam name="ValueObjectType">Defines the type of the observed object.  Must be a value type.</typeparam>
 	/// <typeparam name="SeqNumberType">Defines the type of the sequence number.</typeparam>
-	public interface ISequencedValueObjectSourceObserver<ObjectType, SeqNumberType> : ISequencedObjectSourceObserver<ObjectType, SeqNumberType>
-		where ObjectType : struct
+    public interface ISequencedValueObjectSourceObserver<ValueObjectType, SeqNumberType> : ISequencedObjectSourceObserver<ValueObjectType, SeqNumberType>
+        where ValueObjectType : struct
 	{ }
 
 	#endregion
@@ -815,14 +818,16 @@ namespace MosaicLib.Utils
 	//-------------------------------------------------
 	#region Sequenced Ref and Value object implementations
 
-	/// <summary>A variation of a GuardedRefObject that can be used as an ISequencedRefObjectSource</summary>
-	/// <typeparam name="ObjectType">Gives the type of the guarded object.  Must be a ref type.</typeparam>
-	public class GuardedSequencedRefObject<ObjectType> : GuardedRefObject<ObjectType>, ISequencedObjectSource<ObjectType, int> where ObjectType : class
+    /// <summary>
+    /// A variation of a <see cref="MosaicLib.Utils.GuardedRefObject{RefObjectType}"/> that can be used as an <see cref="MosaicLib.Utils.ISequencedObjectSource{RefObjectType, SeqNumberType}"/>
+    /// </summary>
+	/// <typeparam name="RefObjectType">Gives the type of the guarded object.  Must be a ref type.</typeparam>
+    public class GuardedSequencedRefObject<RefObjectType> : GuardedRefObject<RefObjectType>, ISequencedObjectSource<RefObjectType, int> where RefObjectType : class
 	{
 		public GuardedSequencedRefObject() { }
-		public GuardedSequencedRefObject(ObjectType initialValue) { Object = initialValue; }
+        public GuardedSequencedRefObject(RefObjectType initialValue) { Object = initialValue; }
 
-		public override ObjectType Object { set { lock (mutex) { volatileObjHandle = value; seqNum.Increment(); } } }
+        public override RefObjectType Object { set { lock (mutex) { volatileObjHandle = value; seqNum.Increment(); } } }
 
 		public virtual bool HasBeenSet	{ get { return seqNum.HasBeenSet; } }		// lock not needed for access to set once volatile boolean
 		public virtual int SequenceNumber { get { lock (mutex) { return seqNum.VolatileSequenceNumber; } } }
@@ -832,14 +837,16 @@ namespace MosaicLib.Utils
 		protected SequenceNumberInt seqNum = new SequenceNumberInt();
 	}
 
-	/// <summary>A variation of a VolatileRefObject that can be used as an ISequencedRefObjectSource</summary>
-	/// <typeparam name="ObjectType">Gives the type of the access controlled object.  Must be a ref type.</typeparam>
-	public class InterlockedSequencedRefObject<ObjectType> : VolatileRefObject<ObjectType>, ISequencedObjectSource<ObjectType, int> where ObjectType : class
+    /// <summary>
+    /// A variation of a <see cref="MosaicLib.Utils.VolatileRefObject{ValueObjectType}"/> that can be used as an <see cref="MosaicLib.Utils.ISequencedObjectSource{RefObjectType, SeqNumberType}"/>
+    /// </summary>
+	/// <typeparam name="ValueObjectType">Gives the type of the access controlled object.  Must be a ref type.</typeparam>
+    public class InterlockedSequencedRefObject<ValueObjectType> : VolatileRefObject<ValueObjectType>, ISequencedObjectSource<ValueObjectType, int> where ValueObjectType : class
 	{
 		public InterlockedSequencedRefObject() {}
-		public InterlockedSequencedRefObject(ObjectType initialValue) { Object = initialValue; }
+        public InterlockedSequencedRefObject(ValueObjectType initialValue) { Object = initialValue; }
 
-		public override ObjectType Object { set { volatileObjHandle = value; seqNum.Increment(); } }
+        public override ValueObjectType Object { set { volatileObjHandle = value; seqNum.Increment(); } }
 		public virtual bool HasBeenSet { get { return seqNum.HasBeenSet; } }		// lock not needed for access to set once volatile boolean
 		public virtual int SequenceNumber { get { return seqNum.SequenceNumber; } }
 		public virtual int VolatileSequenceNumber { get { return seqNum.VolatileSequenceNumber; } }

@@ -46,6 +46,9 @@ namespace MosaicLib.SerialIO
 		{ 
 			portConfig = config;
 
+            // change the default so that SerialPort objects do not automatically flip between Busy and Idle while running commands
+            AutomaticallyIncAndDecBusyCountAroundActionInvoke = false;
+
 			Error = Log.Emitter(config.ErrorMesgType);
 			Info = Log.Emitter(config.InfoMesgType);
 			Debug = Log.Emitter(config.DebugMesgType);

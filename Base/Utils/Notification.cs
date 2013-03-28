@@ -35,7 +35,7 @@ namespace MosaicLib.Utils
 	#endregion
 
 	//-------------------------------------------------
-	#region Notification targets: notification and wait objects
+	#region Notification targets: notification and wait object interfaces
 
 	/// <summary> This interface defines the Notify method which a client may invoke on a INotifyable object to Notify it that something has happened. </summary>
 	public interface INotifyable
@@ -48,7 +48,9 @@ namespace MosaicLib.Utils
 	/// <typeparam name="EventArgsType">The type of the eventArgs parameter that will be passed to the Notify call.</typeparam>
 	public interface INotifyable<EventArgsType>
 	{
-        /// <summary>Caller invokes this to Notify a target object that something noticable has happened and passes the requested EventArgType argument to it.</summary>
+        /// <summary>
+        /// Caller invokes this to Notify a target object that something noticable has happened and passes the requested EventArgType argument to it.
+        /// </summary>
         void Notify(EventArgsType eventArgs);
 	}
 
@@ -67,14 +69,22 @@ namespace MosaicLib.Utils
         bool Wait(TimeSpan timeLimit);
 	}
 
-	/// <summary>Objects that implement this interface provide the combined functinality of an INotifyable object and an IWaitable object</summary>
+	/// <summary>
+    /// Objects that implement this interface provide the combined functinality of an <see cref="INotifyable"/> object and an <see cref="IWaitable"/> object
+    /// </summary>
 	public interface IEventNotifier : INotifyable, IWaitable { }
 
-	/// <summary>
+    #endregion 	
+    
+    #region Notification targets: notification and wait implementation objects
+
+    /// <summary>
 	/// This is the base class for all EventNotifier type objects.  
 	/// It defines some abstract methods that must be implemented in a derived class and provides common implementations for some of the IEventNotifier methods.
 	/// </summary>
-
+    /// <remarks>
+    /// This base class provides a small number of helper/mapping functions for different variants on the WaitOne pattern.
+    /// </remarks>
 	public abstract class EventNotifierBase : DisposableBase, IEventNotifier
 	{
 		#region INotifyable Members
@@ -123,7 +133,6 @@ namespace MosaicLib.Utils
 	/// This class is both INotifyable and IWaitable.  It provides an implementation around an EventWaitHandle where the constructor can detemine the
 	/// signaling behavior of the object to be WakeOne, WakeAll or WakeAllSticky.  See description of Behavior enum items for more details  
 	/// </summary>
-
 	public class WaitEventNotifier : EventNotifierBase
 	{
 		#region CTor and related definitions
@@ -131,8 +140,6 @@ namespace MosaicLib.Utils
 		/// <summary> Enum defines the types of behavior that this object may have </summary>
 		public enum Behavior
 		{
-            /// <summary>Initial value placeholder.  Illegal in normal use.  Will throw exception if attempt is made to construct a WaitEventNotifier using this value.</summary>
-			Invalid = 0,
             /// <summary>Notify wakes one thread if any are waiting (AutoReset) or none if no threads are currently waiting</summary>
             WakeOne,
             /// <summary>Notify wakes all threads that are currently waiting (Pulse with ManualReset), or none if no threads are currently waiting</summary>
@@ -162,62 +169,67 @@ namespace MosaicLib.Utils
 
 		#endregion
 
-		#region EventNotifierBase Members
+        #region EventNotifierBase.DisposableBase Members
+
+        protected override void Dispose(DisposableBase.DisposeType disposeType)
+        {
+            if (disposeType == DisposeType.CalledExplicitly)
+                Utils.Fcns.DisposeOfObject(ref eventH);
+        }
+
+        #endregion
+
+        #region EventNotifierBase Members
 
         /// <summary>Caller invokes this to Notify a target object that something noticable has happened.</summary>
         public override void Notify()
 		{
 			if (behavior == Behavior.WakeAll)
-				PulseEvent();
+                EventWaitHandleHelper.PulseEvent(eventH);
 			else
-				SetEvent();
+                EventWaitHandleHelper.SetEvent(eventH);
 		}
 
-        /// <summary>returns true if the underlying object is currently set (so that first wait call is expected to return immiedately)</summary>
+        /// <summary>
+        /// When the configured behavior is WakeAll or WakeAllSticky then this method returns true if the underlying EventWaitHandle is in a signaling state.
+        /// In all other cases this returns false.
+        /// </summary>
+        /// <remarks>Each use of this property invokes a kernal call to check the state of the underlying event object.</remarks>
         public override bool IsSet
 		{
 			get
 			{
-				bool signaled = false;
-				System.Threading.EventWaitHandle ewh = eventH;
+                if (behavior == Behavior.WakeAllSticky || behavior == Behavior.WakeAll)
+				    return EventWaitHandleHelper.IsEventSet(eventH);
 
-				if (behavior == Behavior.WakeAllSticky && ewh != null)
-					signaled = ewh.WaitOne(0, false);
-
-				return signaled;
+                return false;
 			}
 		}
 
         /// <summary>Resets the underlying event.</summary>
         public override void Reset()
 		{
-			ResetEvent();
+            EventWaitHandleHelper.ResetEvent(eventH);
 		}
 
         /// <summary>returns true if object was signaling at end of wait, false otherwise</summary>
         public override bool Wait()
 		{
-			System.Threading.EventWaitHandle ewh = eventH;
+            bool signaled = false;
+            try
+            {
+                EnterWait();
 
-			if (ewh == null)
-				return false;
-
-			EnterWait();
-
-			bool signaled = false;
-
-			try
-			{
-				signaled = ewh.WaitOne();
-			}
-			catch (Exception e)
-			{
-				Asserts.TakeBreakpointAfterFault("eventH.WaitOne failed", e);
-			}
-			finally
-			{
-				LeaveWait(true);
-			}
+                signaled = EventWaitHandleHelper.WaitOne(eventH, false);
+            }
+            catch (System.Exception ex)
+            {
+                Asserts.TakeBreakpointAfterFault("ewhh.WaitOne() failed", ex);
+            }
+            finally
+            {
+                LeaveWait(signaled);
+            }
 
 			return signaled;
 		}
@@ -225,83 +237,30 @@ namespace MosaicLib.Utils
         /// <summary>returns true if object was signaling at end of wait, false otherwise</summary>
         public override bool WaitMSec(int timeLimitInMSec)
 		{
-			if (eventH == null)
-				return false;
+            bool signaled = false;
+            try
+            {
+                EnterWait();
 
-			EnterWait();
+                // only attempt to actually wait if the timeLimitInMSec is positive or if it is -1 (infinite - wait)
+                if ((timeLimitInMSec >= 0) || (timeLimitInMSec == -1))
+                    signaled = EventWaitHandleHelper.WaitOne(eventH, unchecked((uint)timeLimitInMSec), false);
+            }
+            catch (System.Exception ex)
+            {
+                Asserts.TakeBreakpointAfterFault("ewhh.WaitOne(msec) failed", ex);
+            }
+            finally
+            {
+                LeaveWait(signaled);
+            }
 
-			bool signaled = false;
-
-			try
-			{
-				signaled = eventH.WaitOne(timeLimitInMSec, false);
-			}
-			catch (Exception e)
-			{
-				Asserts.TakeBreakpointAfterFault("eventH.WaitOne(msec) failed", e);
-			}
-			finally
-			{
-				LeaveWait(signaled);
-			}
-
-			return signaled;
-		}
-
-		#endregion
-
-		#region EventNotifierBase.DisposableBase Members
-
-		protected override void Dispose(DisposableBase.DisposeType disposeType)
-		{
-			System.Threading.EventWaitHandle ewh = eventH;
-
-			if (ewh != null)
-			{
-				eventH = null;
-				ewh.Close();
-			}
+            return signaled;
 		}
 
 		#endregion
 
 		#region Private methods and instance variables
-
-		private void SetEvent()
-		{
-			System.Threading.EventWaitHandle ewh = eventH;
-
-			try
-			{
-				if (ewh != null)
-					ewh.Set();
-			}
-			catch (Exception e)
-			{
-				Asserts.TakeBreakpointAfterFault("eventH.Set failed", e);
-			}
-		}
-
-		private void ResetEvent()
-		{
-			System.Threading.EventWaitHandle ewh = eventH;
-
-			try
-			{
-				if (ewh != null)
-					ewh.Reset();
-			}
-			catch (Exception e)
-			{
-				Asserts.TakeBreakpointAfterFault("eventH.Reset failed", e);
-			}
-		}
-
-		private void PulseEvent()
-		{
-			SetEvent();
-			ResetEvent();
-		}
 
 		private void EnterWait()
 		{
@@ -312,15 +271,14 @@ namespace MosaicLib.Utils
 		{
 			int finalWaiters = numWaiters.Decrement();
 
-			if (finalWaiters == 0 && wasSignaled && eventH != null)
+			if (finalWaiters == 0 && wasSignaled && behavior == Behavior.WakeAllSticky)
 			{
-				if (behavior == Behavior.WakeAllSticky)
-					ResetEvent();
+                EventWaitHandleHelper.ResetEvent(eventH);
 			}
 		}
 
-		private System.Threading.EventWaitHandle eventH = null;
-		private Behavior behavior = Behavior.Invalid;
+		private System.Threading.EventWaitHandle eventH;
+		private Behavior behavior;
 		private AtomicInt32 numWaiters = new AtomicInt32(0);
 
 		#endregion
@@ -333,7 +291,16 @@ namespace MosaicLib.Utils
 	{
 		public NullNotifier() { }
 
-		#region EventNotifierBase Members
+        #region EventNotifierBase.DisposableBase Members
+
+        protected override void Dispose(DisposableBase.DisposeType disposeType)
+        {
+            // empty method - nothing to dispose
+        }
+
+        #endregion
+        
+        #region EventNotifierBase Members
 
 		public override void Notify() {}
 
@@ -353,26 +320,179 @@ namespace MosaicLib.Utils
 		}
 
 		#endregion
-
-		#region EventNotifierBase.DisposableBase Members
-
-		protected override void Dispose(DisposableBase.DisposeType disposeType) { }	// empty method - nothing to dispose
-
-		#endregion
 	}
+
+    /// <summary>
+    /// static class containing a number of <see cref="System.Threading.EventWaitHandle"/> related static methods that may be used to safely manipulate an EventWaitHandle object.
+    /// </summary>
+    internal static class EventWaitHandleHelper
+    {
+        public static bool IsEventSet(System.Threading.EventWaitHandle eventWaitHandle)
+        {
+            try
+            {
+                Microsoft.Win32.SafeHandles.SafeWaitHandle safeWaitHandle;
+                if (GetValidSafeWaitHandle(eventWaitHandle, out safeWaitHandle))
+                    return (WaitForSingleObjectEx(safeWaitHandle, 0, false) == WAIT_TIMEOUT);
+            }
+            catch (System.Exception ex)
+            {
+                Asserts.TakeBreakpointAfterFault("EventWaitHandleHelper.IsEventSet failed", ex);
+            }
+
+            return false;
+        }
+
+        public static bool WaitOne(System.Threading.EventWaitHandle eventWaitHandle, bool allowAlertToExitWait)
+        {
+            try
+            {
+                Microsoft.Win32.SafeHandles.SafeWaitHandle safeWaitHandle;
+                if (GetValidSafeWaitHandle(eventWaitHandle, out safeWaitHandle))
+                    return (WaitForSingleObjectEx(safeWaitHandle, INFINITE, allowAlertToExitWait) == WAIT_OBJECT_0);
+            }
+            catch (System.Exception ex)
+            {
+                Asserts.TakeBreakpointAfterFault("EventWaitHandleHelper.WaitOne (a) failed", ex);
+            }
+
+            return false;
+        }
+
+        public static bool WaitOne(System.Threading.EventWaitHandle eventWaitHandle, uint milliseconds, bool allowAlertToExitWait)
+        {
+            try
+            {
+                Microsoft.Win32.SafeHandles.SafeWaitHandle safeWaitHandle;
+                if (GetValidSafeWaitHandle(eventWaitHandle, out safeWaitHandle))
+                    return (WaitForSingleObjectEx(safeWaitHandle, milliseconds, allowAlertToExitWait) == WAIT_OBJECT_0);
+            }
+            catch (System.Exception ex)
+            {
+                Asserts.TakeBreakpointAfterFault("EventWaitHandleHelper.WaitOne (b) failed", ex);
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Calls kernel.dll::SetEvent on the SafeWaitHandle contained in the given EventWaitHandle object.
+        /// </summary>
+        public static void SetEvent(System.Threading.EventWaitHandle eventWaitHandle)
+        {
+            try
+            {
+                // capture a copy of the SafeWaitHandle from it
+                Microsoft.Win32.SafeHandles.SafeWaitHandle safeWaitHandle = (eventWaitHandle != null ? eventWaitHandle.SafeWaitHandle : null);
+
+                // if the handle is not closed and it is not invalid then attempt to call Win32.SetEvent on it
+                if (safeWaitHandle != null && !safeWaitHandle.IsClosed && !safeWaitHandle.IsInvalid)
+                    SetEvent(safeWaitHandle);
+            }
+            catch (System.Exception ex)
+            {
+                Asserts.TakeBreakpointAfterFault("EventWaitHandleHelper.SetEvent failed", ex);
+            }
+        }
+
+        /// <summary>
+        /// Calls kernel.dll::ResetEvent on the SafeWaitHandle contained in the given EventWaitHandle object.
+        /// </summary>
+        public static void ResetEvent(System.Threading.EventWaitHandle eventWaitHandle)
+        {
+            try
+            {
+                // capture a copy of the SafeWaitHandle from it
+                Microsoft.Win32.SafeHandles.SafeWaitHandle safeWaitHandle = (eventWaitHandle != null ? eventWaitHandle.SafeWaitHandle : null);
+
+                // if the handle is not closed and it is not invalid then attempt to call Win32.SetEvent on it
+                if (safeWaitHandle != null && !safeWaitHandle.IsClosed && !safeWaitHandle.IsInvalid)
+                    ResetEvent(safeWaitHandle);
+            }
+            catch (System.Exception ex)
+            {
+                Asserts.TakeBreakpointAfterFault("EventWaitHandleHelper.ResetEvent failed", ex);
+            }
+        }
+
+        /// <summary>
+        /// Calls kernel.dll::PulseEvent on the SafeWaitHandle contained in the given EventWaitHandle object.
+        /// </summary>
+        public static void PulseEvent(System.Threading.EventWaitHandle eventWaitHandle)
+        {
+            try
+            {
+                // capture a copy of the SafeWaitHandle from it
+                Microsoft.Win32.SafeHandles.SafeWaitHandle safeWaitHandle = (eventWaitHandle != null ? eventWaitHandle.SafeWaitHandle : null);
+
+                // if the handle is not closed and it is not invalid then attempt to call Win32.SetEvent on it
+                if (safeWaitHandle != null && !safeWaitHandle.IsClosed && !safeWaitHandle.IsInvalid)
+                    PulseEvent(safeWaitHandle);
+            }
+            catch (System.Exception ex)
+            {
+                Asserts.TakeBreakpointAfterFault("EventWaitHandleHelper.PulseEvent failed", ex);
+            }
+        }
+
+        private static bool GetValidSafeWaitHandle(System.Threading.EventWaitHandle eventWaitHandle, out Microsoft.Win32.SafeHandles.SafeWaitHandle safeWaitHandle)
+        {
+            // capture a copy of the SafeWaitHandle from it
+            safeWaitHandle = (eventWaitHandle != null ? eventWaitHandle.SafeWaitHandle : null);
+
+            // if the handle is not closed and it is not invalid then attempt to call Win32.SetEvent on it
+            return (safeWaitHandle != null && !safeWaitHandle.IsClosed && !safeWaitHandle.IsInvalid);
+        }
+
+        #region SetEvent Win32 system calls and related definitions
+
+        const UInt32 INFINITE = 0xFFFFFFFF;
+        const UInt32 WAIT_ABANDONED = 0x00000080;
+        const UInt32 WAIT_OBJECT_0 = 0x00000000;
+        const UInt32 WAIT_TIMEOUT = 0x00000102;
+        const UInt32 WAIT_IO_COMPLETION = 0x000000C0;
+        const UInt32 WAIT_FAILED = 0xFFFFFFFF;
+
+        [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+        private static extern uint WaitForSingleObjectEx(Microsoft.Win32.SafeHandles.SafeWaitHandle safeWaitHandle, uint dwMilliseconds, bool bAlertable);
+
+        [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool SetEvent(Microsoft.Win32.SafeHandles.SafeWaitHandle safeWaitHandle);
+
+        [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool ResetEvent(Microsoft.Win32.SafeHandles.SafeWaitHandle safeWaitHandle);
+
+        [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool PulseEvent(Microsoft.Win32.SafeHandles.SafeWaitHandle safeWaitHandle);
+
+        #endregion
+    }
 
 	#endregion
 
 	//-------------------------------------------------
 	#region Notification: list interfaces and implementation classes
 
-	/// <summary> Define the interface that is provided to clients to allow them to add and remove their BasicNotificationDelegates </summary>
+	/// <summary> 
+    /// Define the interface that is provided to clients to allow them to add and remove their 
+    /// <see cref="BasicNotificationDelegate"/> and <see cref="System.Threading.EventWaitHandle"/> object to a list that can be notified.
+    /// </summary>
 	public interface IBasicNotificationList
 	{
+        /// <summary>
+        /// <see cref="BasicNotificationDelegate"/> event interface.  Allows such delegates to be added/removed from the list.
+        /// </summary>
 		event BasicNotificationDelegate OnNotify;
 
+        /// <summary>Adds the given <see cref="INotifyable"/> target object to the list</summary>
 		void AddItem(INotifyable notifyableTarget);
-		void RemoveItem(INotifyable notifyableTarget);
+        /// <summary>Adds the first instance of the given <see cref="INotifyable"/> target object from the list</summary>
+        void RemoveItem(INotifyable notifyableTarget);
+
+        /// <summary>Adds the given <see cref="System.Threading.EventWaitHandle"/> object to the list</summary>
+        void AddItem(System.Threading.EventWaitHandle eventWaitHandle);
+        /// <summary>Removes the first instance of the given <see cref="System.Threading.EventWaitHandle"/> object from the list</summary>
+        void RemoveItem(System.Threading.EventWaitHandle eventWaitHandle);
 	}
 
 	/// <summary>Define the delegate type that is used with our generic IEventHandlerNotificationList and derived types</summary>
@@ -382,6 +502,8 @@ namespace MosaicLib.Utils
 	public interface IEventHandlerNotificationList<EventArgsType>
 	{
 		event EventHandlerDelegate<EventArgsType> OnNotify;
+
+        object Source { get; }
 	}
 
     /// <summary>
@@ -525,33 +647,43 @@ namespace MosaicLib.Utils
         }
     }
 
-	/// <summary> This class implements an MT safe event list for BasicNotificationDelegates. </summary>
+	/// <summary> This class implements an MT safe event list for BasicNotificationDelegates, INotifyable objects and EventWaitHandle objects. </summary>
 	/// <remarks> 
-	/// Add/Remove methods for IBasicNotificationList interface event are fully thread-safe and renterant.  
+	/// Add/Remove methods for supported notification targets are fully thread-safe and renterant.  
 	/// Notify method makes asynchronous atomic copy of the current list of delegates and then iteratively (and synchronously) invokes them within try/catch.  
 	/// As such Notify method may be safely used while invoking Add/Remove.  However please note that because invocation of the registered delegates occurs 
 	/// without owning the mutex, a delegate may be invoked after it has been removed.
 	/// Notify method is not intended to be renterantly invoked but will not generate any exceptions if this occurs.
 	/// </remarks>
-	public class BasicNotificationList : LockedDelegateListBase<BasicNotificationDelegate>, IBasicNotificationList, INotifyable
+	public class BasicNotificationList : IBasicNotificationList, INotifyable
 	{
 		#region IBasicNotificationList Members
 
 		public event BasicNotificationDelegate OnNotify
 		{
-			add		{ Add(value); }
-			remove	{ Remove(value); }
+            add { CreateEmptyObjectIfNeeded(ref basicNotificationDelegateList).Add(value); }
+            remove { CreateEmptyObjectIfNeeded(ref basicNotificationDelegateList).Remove(value); }
 		}
 
 		public void AddItem(INotifyable notifyableTarget)
 		{
-			OnNotify += notifyableTarget.Notify;
+            CreateEmptyObjectIfNeeded(ref notifyableList).Add(notifyableTarget);
 		}
 
 		public void RemoveItem(INotifyable notifyableTarget)
 		{
-			OnNotify -= notifyableTarget.Notify;
+            CreateEmptyObjectIfNeeded(ref notifyableList).Remove(notifyableTarget);
 		}
+
+        public void AddItem(System.Threading.EventWaitHandle eventWaitHandle)
+        {
+            CreateEmptyObjectIfNeeded(ref eventWaitHandleList).Add(eventWaitHandle);
+        }
+
+        public void RemoveItem(System.Threading.EventWaitHandle eventWaitHandle)
+        {
+            CreateEmptyObjectIfNeeded(ref eventWaitHandleList).Remove(eventWaitHandle);
+        }
 
 		#endregion
 
@@ -559,33 +691,64 @@ namespace MosaicLib.Utils
 
 		public virtual void Notify() 
 		{
-			// take atomic snapshot of the array of delegates to invoke
-			BasicNotificationDelegate [] array = Array;
+			int delegateExceptions = 0, notifyExceptions = 0, eventWaitHandleExeceptions = 0;
 
-			int exceptions = 0;
+            if (basicNotificationDelegateList != null)
+            {
+                foreach (BasicNotificationDelegate bnd in basicNotificationDelegateList.Array)
+                {
+                    try { (bnd ?? nullBasicNotificationDelegate)(); }
+                    catch { delegateExceptions++; }
+                }
+            }
 
-			if (array != null && array.Length != 0)
-			{
-				foreach (BasicNotificationDelegate bnd in array)
-				{
-					try
-					{
-						if (bnd != null)
-							bnd();
-					}
-					catch
-					{
-						exceptions++;
-					}
-				}
-			}
+            if (notifyableList != null)
+            {
+                foreach (INotifyable notificationItem in notifyableList.Array)
+                {
+                    try { (notificationItem ?? nullNotifier).Notify(); }
+                    catch { notifyExceptions++; }
+                }
+            }
 
-			if (exceptions != 0)
-				Asserts.TakeBreakpointAfterFault(Utils.Fcns.CheckedFormat("{0} exceptions triggered while invoking registered event delegate(s)", exceptions));
+            if (eventWaitHandleList != null)
+            {
+                foreach (System.Threading.EventWaitHandle eventWaitHandle in eventWaitHandleList.Array)
+                {
+                    try { EventWaitHandleHelper.SetEvent(eventWaitHandle); }
+                    catch { eventWaitHandleExeceptions++; }
+                }
+            }
+
+            if (delegateExceptions != 0 || notifyExceptions != 0 || eventWaitHandleExeceptions != 0)
+                Asserts.TakeBreakpointAfterFault(Utils.Fcns.CheckedFormat("Notify triggered exceptions: delegates:{0} inotifyable:{1} eventWaitHandle:{2}", delegateExceptions, notifyExceptions, eventWaitHandleExeceptions));
 		}
 
 		#endregion
-	}
+
+        #region Private fields and methods
+
+        LockedObjectListWithCachedArray<BasicNotificationDelegate> basicNotificationDelegateList = null;
+        LockedObjectListWithCachedArray<INotifyable> notifyableList = null;
+        LockedObjectListWithCachedArray<System.Threading.EventWaitHandle> eventWaitHandleList = null;
+
+        private static BasicNotificationDelegate nullBasicNotificationDelegate = (delegate() { });
+        private static NullNotifier nullNotifier = new NullNotifier();
+
+        protected static object objectCreationMutex = new object();
+        protected static TObjectType CreateEmptyObjectIfNeeded<TObjectType>(ref TObjectType objectHandleRef) where TObjectType : class, new()
+        {
+            if (objectHandleRef != null)
+                return objectHandleRef;
+
+            lock (objectCreationMutex) 
+            { 
+                return (objectHandleRef = objectHandleRef ?? new TObjectType()); 
+            }
+        }
+
+        #endregion
+    }
 
 	/// <summary> This generic class implements a MT safe event list for EventHandler delegates </summary>
 	/// <remarks> 
@@ -597,45 +760,27 @@ namespace MosaicLib.Utils
 	/// </remarks>
 	/// 
 
-	public class EventHandlerNotificationList<EventArgsType> : LockedDelegateListBase<EventHandlerDelegate<EventArgsType>>, IEventHandlerNotificationList<EventArgsType>, INotifyable<EventArgsType>, IBasicNotificationList
+    public class EventHandlerNotificationList<EventArgsType> : BasicNotificationList, IEventHandlerNotificationList<EventArgsType>, INotifyable<EventArgsType>
 	{
 		#region Ctor
 
 		/// <summary> Ctor defaults to using EventHandlerNotificationList instance itself as source of events </summary>
-		public EventHandlerNotificationList() { source = this; }
+		public EventHandlerNotificationList() { Source = this; }
 
 		/// <summary> Ctor allows caller to explicitly specify the source object that will be passed to the delegates on Notify </summary>
-		public EventHandlerNotificationList(object eventSourceObject) { source = eventSourceObject; }
+		public EventHandlerNotificationList(object eventSourceObject) { Source = eventSourceObject; }
 
 		#endregion
 
 		#region IEventHandlerNotificationList<EventArgsType> Members
 
-		public event EventHandlerDelegate<EventArgsType> OnNotify
+		public new event EventHandlerDelegate<EventArgsType> OnNotify
 		{
-			add { Add(value); }
-			remove { Remove(value); }
+            add { CreateEmptyObjectIfNeeded(ref eventNotificationDelegateList).Add(value); }
+            remove { CreateEmptyObjectIfNeeded(ref eventNotificationDelegateList).Remove(value); }
 		}
 
-		#endregion
-
-		#region IBasicNotificationList Members
-
-		event BasicNotificationDelegate IBasicNotificationList.OnNotify
-		{
-			add { Add(delegate(object source, EventArgsType eventArgs) { value(); }); }
-			remove { Remove(delegate(object source, EventArgsType eventArgs) { value(); }); }		// I am not certain that this works as expected...
-		}
-
-		public void AddItem(INotifyable notifyableTarget)
-		{
-			((IBasicNotificationList) this).OnNotify += notifyableTarget.Notify;
-		}
-
-		public void RemoveItem(INotifyable notifyableTarget)
-		{
-			((IBasicNotificationList) this).OnNotify -= notifyableTarget.Notify;
-		}
+        public object Source { get; set; }
 
 		#endregion
 
@@ -643,34 +788,32 @@ namespace MosaicLib.Utils
 
 		public virtual void Notify(EventArgsType eventArgs) 
 		{
-			// take atomic snapshot of the array of delegates to invoke
-			EventHandlerDelegate<EventArgsType> [] array = Array;
+            int delegateExceptions = 0;
 
-			int exceptions = 0;
+            if (eventNotificationDelegateList != null)
+            {
+                foreach (EventHandlerDelegate<EventArgsType> eventDelegate in eventNotificationDelegateList.Array)
+                {
+                    try { (eventDelegate ?? nullEventNotificationDelegate)(Source, eventArgs); }
+                    catch { delegateExceptions++; }
+                }
+            }
 
-			if (array != null && array.Length != 0)
-			{
-				foreach (EventHandlerDelegate<EventArgsType> ehd in array)
-				{
-					try
-					{
-						if (ehd != null)
-							ehd(source, eventArgs);
-					}
-					catch
-					{
-						exceptions++;
-					}
-				}
-			}
+            if (delegateExceptions != 0)
+                Asserts.TakeBreakpointAfterFault(Utils.Fcns.CheckedFormat("Notify(EventArgs) triggered exceptions: delegates:{0}", delegateExceptions));
 
-			if (exceptions != 0)
-				Asserts.TakeBreakpointAfterFault(Utils.Fcns.CheckedFormat("{0} exceptions triggered while invoking registered event delegate(s)", exceptions));
-		}
+            base.Notify();
+        }
 
 		#endregion
 
-		private readonly object source;
+        #region private fields
+
+        LockedObjectListWithCachedArray<EventHandlerDelegate<EventArgsType>> eventNotificationDelegateList = null;
+
+        private static EventHandlerDelegate<EventArgsType> nullEventNotificationDelegate = (delegate(object source, EventArgsType eventArgs) { });
+
+        #endregion
 	}
 
 	#endregion
@@ -679,17 +822,24 @@ namespace MosaicLib.Utils
 	#region Guarded Notification object(s)
 
 	/// <summary> 
-	/// Defines the interface that is provided by NotificationObjects.  
-	/// Supports access to (possibly guarded) Sequenced Object and registration of BasicNotificationDelegates with underlying NotificationList.
-    /// Current implementation classes include: InterlockedNotificationRefObject and GuardedNotificationValueObject.
-    /// May be used as a IBasicNotificationList and may be observed SequencedRefObjectSourceObserver or SequencedValueObjectSourceObserver as appropriate
+	/// Defines the interface that is provided by Notification Object type objects.  
+	/// These objects support access to a (possibly guarded) Sequenced Object and also support registration of BasicNotificationDelegates with an underlying NotificationList.
+    /// Current implementation classes include: <see cref="InterlockedNotificationRefObject{RefObjectType}"/> and <see cref="GuardedNotificationValueObject{ValueObjectType}"/>.
+    /// May be used as a <see cref="IBasicNotificationList"/> and may be observed using the 
+    /// <see cref="SequencedRefObjectSourceObserver{RefObjectType, SeqNumberType}"/> 
+    /// or <see cref="SequencedValueObjectSourceObserver{ValueObjectType, SeqNumberType}"/> 
+    /// as appropriate
 	/// </summary>
 	public interface INotificationObject<ObjectType> : ISequencedObjectSource<ObjectType, int>
 	{
+        /// <summary>Property gives the caller access to the IBasicNotificationList of INotifyable object that will be signaled when the contained object is replaced</summary>
 		IBasicNotificationList NotificationList { get; }
 	}
 
-	/// <summary> Implementation of INotificationObject for use with reference objects (classes).  Uses volatile handle to provide safe/synchronized access to object. </summary>
+	/// <summary> 
+    /// Implementation of <see cref="INotificationObject{RefObjectType}"/> for use with reference objects (classes).  
+    /// Uses volatile handle to provide safe/synchronized access to object. 
+    /// </summary>
 	public class InterlockedNotificationRefObject<RefObjectType> : InterlockedSequencedRefObject<RefObjectType>, INotificationObject<RefObjectType> where RefObjectType : class
 	{
 		public InterlockedNotificationRefObject() {}
@@ -703,7 +853,10 @@ namespace MosaicLib.Utils
 		private BasicNotificationList notificationList = new BasicNotificationList();
 	}
 
-	/// <summary> Implementation of IGuardedNotificationObject for use with value objects (structs).  Uses mutex to control and synchronize access to guarded value. </summary>
+	/// <summary>
+    /// Implementation of <see cref="INotificationObject{ValueObjectType}"/> for use with value objects (structs).  
+    /// Uses mutex to control and synchronize access to guarded value.
+    /// </summary>
 	public class GuardedNotificationValueObject<ValueObjectType> : GuardedSequencedValueObject<ValueObjectType>, INotificationObject<ValueObjectType> where ValueObjectType : struct
 	{
 		public GuardedNotificationValueObject() {}
@@ -725,14 +878,13 @@ namespace MosaicLib.Utils
 	//-------------------------------------------------
 	#region SharedWaitEventNotifierSet
 
-	/// <summary>This class is used to provide a pool of reusable (concurrently if needed) IEventNotifier objects.</summary>
+    /// <summary>This class is used to provide a pool of reusable (concurrently if needed) <see cref="IEventNotifier"/> objects.</summary>
 	/// <remarks>
-	/// Such a pool is used when dynamically constructed
-	/// objects need to make brief use of a IEventNotifier object so as to accomplish efficient sleeping in the context of a given call.  In general the
-	/// WakeAllSticky behavior should be used and the clients should be aware that the underlying IEventNotifier object may be in use by more than one client
-	/// at a time or for more than one purpose at a time.  However the ability to use such an object on an occasional basis is still a significant improvement
-	/// on providing wait responsiveness (no use of short fixed sleeps) without adding allocation and handle churn related to dynamic construction of 
-	/// IEventNotifier objects.
+	/// Such a pool is used when dynamically constructed objects need to make brief use of a IEventNotifier object so as to accomplish efficient 
+    /// sleeping in the context of a given call.  In general the WakeAllSticky behavior should be used and the clients should be aware that the 
+    /// underlying IEventNotifier object may be in use by more than one client at a time or for more than one purpose at a time.  
+    /// However the ability to use such an object on an occasional basis is still a significant improvement on providing wait responsiveness 
+    /// (no use of short fixed sleeps) without adding allocation and handle churn related to dynamic construction of <see cref="IEventNotifier"/> objects.
     /// 
     /// Generally this object is used as a type specific singleton.
 	/// </remarks>
@@ -781,7 +933,7 @@ namespace MosaicLib.Utils
 
 	#endregion
 
-	//-------------------------------------------------
+    //-------------------------------------------------
 }
 
 //-------------------------------------------------

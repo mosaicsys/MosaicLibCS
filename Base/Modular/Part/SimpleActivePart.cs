@@ -123,6 +123,19 @@ namespace MosaicLib.Modular.Part
 		#endregion
 
         //-----------------------------------------------------------------
+        #region Operational Settings
+
+        /// <summary>
+        /// When this property is set to true, the BaseState will automatically transition between Busy and Idle when Actions implementations are invoked and return.  
+        /// When it is false the derived object will be entirely responsible for causing the component to transition between the Busy and Idle states.  This value
+        /// defaults to True.
+        /// </summary>
+        public bool AutomaticallyIncAndDecBusyCountAroundActionInvoke { get; set; }
+
+        #endregion
+
+
+        //-----------------------------------------------------------------
         #region ActionLogger adjustments
 
         /// <summary>Setting this property causes the part's reference ActionLogger to be updated to use the newly specified emitter levels for all newly created ActionLoggers.</summary>
@@ -362,20 +375,12 @@ namespace MosaicLib.Modular.Part
         /// <returns>True if an action was performed or false otherwise.</returns>
 		protected virtual bool IssueNextQueuedAction()
 		{
-            IProviderFacet peekAction = actionQ.GetNextAction(true);        // peek into the queue
+            IProviderFacet action = actionQ.GetNextAction();
 
-            if (peekAction == null) // queue is empty
-                return false;
+		    if (action == null)
+			    return false;
 
-            using (IDisposable busyFlag = CreateInternalBusyFlagHolderObject("Issuing next queued action", peekAction.ToString()))
-            {
-                IProviderFacet action = actionQ.GetNextAction();
-
-			    if (action == null)
-				    return false;
-
-                PerformAction(action);
-            }
+            PerformAction(action);
 
 			return true;
 		}
@@ -389,19 +394,36 @@ namespace MosaicLib.Modular.Part
         protected readonly IActionState EmptyActionState = new ActionStateCopy();
 
         /// <summary>Requests to cancel the CurrentAction if it is non null and its state IsPendingCompletion</summary>
-        protected void RequestCancelCurrentAction() { if (CurrentActionState.IsPendingCompletion) CurrentAction.RequestCancel(); }
+        protected void RequestCancelCurrentAction() 
+        { 
+            if (CurrentActionState.IsPendingCompletion) 
+                CurrentAction.RequestCancel(); 
+        }
 
         /// <summary>
         /// Sets the CurrentAction to the given action value, asks the given action to IssueAndInvokeAction and then sets CurrentAction to null.
         /// </summary>
 		protected virtual void PerformAction(IProviderFacet action)
 		{
-            CurrentAction = action;
+            string actionName = (action != null) ? action.ToString() : null;
 
-            if (action != null)
-				action.IssueAndInvokeAction();
+            IDisposable busyFlag = null;
+            try
+            {
+                CurrentAction = action;
 
-            CurrentAction = null;
+                if (AutomaticallyIncAndDecBusyCountAroundActionInvoke)
+                    busyFlag = CreateInternalBusyFlagHolderObject("Issuing next queued action", actionName);
+
+                if (action != null)
+                    action.IssueAndInvokeAction();
+            }
+            finally
+            {
+                Fcns.DisposeOfObject(ref busyFlag);
+
+                CurrentAction = null;
+            }
 		}
 
         /// <summary>Waits for threadWakeupNotifier to be signaled or default waitTimeLimit to elapse (used to set Parts's default spin rate).</summary>

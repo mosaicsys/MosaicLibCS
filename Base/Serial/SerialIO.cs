@@ -206,12 +206,12 @@ namespace MosaicLib.SerialIO
 	/// <summary>This class is used with the SerialIO.Port Read Action.  It contains the set of parameters to be passed to the action and the place where the action records the results once it has been performed</summary>
 	/// <remarks>
 	/// The client creates an instance of this class and fills in the buffer and then creates a Read Action using the Param instance.  
-	/// Each time the client starets the action, the io device will attempt to process it and place all resulting information into this 
+	/// Each time the client starts the action, the io device will attempt to process it and place all resulting information into this 
 	/// instance and then mark the action as complete.  The ActionResultEnum property contains a summary code for the completion type of the action.  
 	/// If this summary code indicates that the action failed then the ResultCode property will be a non-empty string.  
 	/// If the summary code indicates that the operation was completed normally then the ResultCode property will be the empty string.
 	/// 
-	/// Please note that the ownership of this object is shared as long as their is an action that is queued or in progress which references this object.  
+	/// Please note that the ownership of this object is shared as long as there is an action that is queued or in progress which references this object.  
 	/// The action initiator must not modify the contents of this parameter object until such an action has completed.
 	/// </remarks>
 	public class ReadActionParam
@@ -249,12 +249,12 @@ namespace MosaicLib.SerialIO
 	/// <summary>This class is used with the SerialIO.Port Write Action.  It contains the set of parameters to be passed to the action and the place where the action records the results once it has been performed</summary>
 	/// <remarks>
 	/// The client creates an instance of this class and fills in the buffer and then creates a Write Action using the Param instance.  
-	/// Each time the client starets the action, the io device will attempt to process it and place all resulting information into this 
+	/// Each time the client starts the action, the io device will attempt to process it and place all resulting information into this 
 	/// instance and then mark the action as complete.  The ActionResultEnum property contains a summary code for the completion type of the action.  
 	/// If this summary code indicates that the action failed then the ResultCode property will be a non-empty string.  
 	/// If the summary code indicates that the operation was completed normally then the ResultCode property will be the empty string.
 	/// 
-	/// Please note that the ownership of this object is shared as long as their is an action that is queued or in progress which references this object.  
+	/// Please note that the ownership of this object is shared as long as there is an action that is queued or in progress which references this object.  
 	/// The action initiator must not modify the contents of this parameter object until such an action has completed.
 	/// </remarks>
 	public class WriteActionParam
@@ -342,7 +342,7 @@ namespace MosaicLib.SerialIO
 	//-----------------------------------------------------------------
 	#region Port Factory
 
-	public class InvalidPortConfigSpecStr : SystemException
+	public class InvalidPortConfigSpecStr : System.Exception
 	{
 		public InvalidPortConfigSpecStr(string mesg) : base(mesg) { }
 	}
