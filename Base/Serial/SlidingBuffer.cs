@@ -400,6 +400,8 @@ namespace MosaicLib.SerialIO
                         }
                     }
 
+                    // take the shortest scan pattern count as the shortest scan length we have failed to find a match for
+                    //  this then will allow us to start the next scan at just before this point in the buffer so that we do not rescan characters that are entirely known to not match any of the end chars.
                     if (shortestScanLen > scanEndCount)
                         shortestScanLen = scanEndCount;
 
@@ -447,7 +449,9 @@ namespace MosaicLib.SerialIO
                 }
                 else
                 {
-                    scanAfterCount = shortestScanLen;
+                    // Set the next scan to skip over most of the characters that have already been scanned.
+                    // The use of -1 forces the pattern to keep rescanning for all of the patterns in case the longest end pattern has not been completely received at this point.
+                    scanAfterCount = shortestScanLen - 1;
                     break;
                 }
             }
