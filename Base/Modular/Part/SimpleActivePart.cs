@@ -57,38 +57,71 @@ namespace MosaicLib.Modular.Part
 	/// INotifyable interface allows class instance to become the receiver for a BasicNotification event.  This behavior sets the mThreadWakeupNotifier so that
 	/// the thread will wakeup whenever the object is signaled/Notified.
 	/// </remarks>
-
 	public abstract class SimpleActivePartBase : SimplePartBase, IActivePartBase, INotifyable
 	{
 		//-----------------------------------------------------------------
 		#region sub classes
 
+        /// <summary>Normal Implementation object for IBaseAction type Actions.  Derives from ActionImplBase{NullObj, NullObj}.</summary>
 		public class BasicActionImpl : ActionImplBase<NullObj, NullObj>, IBasicAction
 		{
+            /// <summary>Constructor for use with simple action method delegate: ActionMethodDelegateStrResult.</summary>
 			public BasicActionImpl(ActionQueue actionQ, ActionMethodDelegateStrResult method, string mesg, ActionLogging loggingReference) : base(actionQ, method, new ActionLogging(mesg, loggingReference)) {}
-			public BasicActionImpl(ActionQueue actionQ, ActionMethodDelegateActionArgStrResult<NullObj, NullObj> method, string mesg, ActionLogging loggingReference) : base(actionQ, null, false, method, new ActionLogging(mesg, loggingReference)) { }
-			public BasicActionImpl(ActionQueue actionQ, FullActionMethodDelegate<NullObj, NullObj> method, string mesg, ActionLogging loggingReference) : base(actionQ, null, false, method, new ActionLogging(mesg, loggingReference)) { }
+            /// <summary>Constructor for use with more complete action method delegate: ActionMethodDelegateActionArgStrResult{NullObj, NullObj}.</summary>
+            public BasicActionImpl(ActionQueue actionQ, ActionMethodDelegateActionArgStrResult<NullObj, NullObj> method, string mesg, ActionLogging loggingReference) : base(actionQ, null, false, method, new ActionLogging(mesg, loggingReference)) { }
+            /// <summary>Constructor for use with full action method delegate: FullActionMethodDelegate{NullObj, NullObj}.</summary>
+            public BasicActionImpl(ActionQueue actionQ, FullActionMethodDelegate<NullObj, NullObj> method, string mesg, ActionLogging loggingReference) : base(actionQ, null, false, method, new ActionLogging(mesg, loggingReference)) { }
 		}
 
-		public class ParamActionImplBase<ParamType> : ActionImplBase<ParamType, NullObj>, IBasicAction, IClientFacetWithParam<ParamType>
+        /// <summary>Implementation object for IClientFacetWithParam{ParamType} type Actions.  Derives from ActionImplBase{ParamType, NullObj}.</summary>
+        public class ParamActionImplBase<ParamType> : ActionImplBase<ParamType, NullObj>, IBasicAction, IClientFacetWithParam<ParamType>
 		{
-			public ParamActionImplBase(ActionQueue actionQ, ParamType paramValue, ActionMethodDelegateActionArgStrResult<ParamType, NullObj> method, string mesg, ActionLogging loggingReference) : base(actionQ, paramValue, false, method, new ActionLogging(mesg, paramValue.ToString(), loggingReference)) { }
-			public ParamActionImplBase(ActionQueue actionQ, ParamType paramValue, FullActionMethodDelegate<ParamType, NullObj> method, string mesg, ActionLogging loggingReference) : base(actionQ, paramValue, false, method, new ActionLogging(mesg, paramValue.ToString(), loggingReference)) { }
+            /// <summary>Constructor for use with more complete action method delegate: ActionMethodDelegateActionArgStrResult{ParamType, NullObj}.</summary>
+            public ParamActionImplBase(ActionQueue actionQ, ParamType paramValue, ActionMethodDelegateActionArgStrResult<ParamType, NullObj> method, string mesg, ActionLogging loggingReference) : base(actionQ, paramValue, false, method, new ActionLogging(mesg, paramValue.ToString(), loggingReference)) { }
+            /// <summary>Constructor for use with full action method delegate: FullActionMethodDelegate{ParamType, NullObj}.</summary>
+            public ParamActionImplBase(ActionQueue actionQ, ParamType paramValue, FullActionMethodDelegate<ParamType, NullObj> method, string mesg, ActionLogging loggingReference) : base(actionQ, paramValue, false, method, new ActionLogging(mesg, paramValue.ToString(), loggingReference)) { }
 
-			public override bool SetParamValue(ParamType value) { bool done = base.SetParamValue(value); if (done) Logging.MesgDetail = value.ToString(); return done; }
-			public override ParamType ParamValue { set { base.ParamValue = value; Logging.MesgDetail = value.ToString(); } }
+            /// <summary>
+            /// Allows the caller to attempt to set the Action's ParamValue to the given value and updates the Logging.MesgDetail to value.ToString() if the value was updated successfully.
+            /// Overrides ActionImplBase{ParamType, NullObj} version of same method.
+            /// </summary>
+            /// <returns>true if the overriden SetParamValue method succeeded.</returns>
+			public override bool SetParamValue(ParamType value) 
+            { 
+                bool done = base.SetParamValue(value); 
+                if (done) 
+                    Logging.MesgDetail = value.ToString(); 
+                return done; 
+            }
+
+            /// <summary>Get or Set the Param value.  Setter updates the Logging.MesgDetail to value.ToString() after successfully setting the base.ParamValue to the given value.</summary>
+            /// <exception cref="System.FieldAccessException">thrown if setter is used when IsParamValueSettable is false.</exception>
+            public override ParamType ParamValue 
+            { 
+                set 
+                { 
+                    base.ParamValue = value; 
+                    Logging.MesgDetail = value.ToString(); 
+                } 
+            }
 		}
 
+        /// <summary>Implementation object for IBoolParamAction type Actions.  Derives from ParamActionImplBase{bool}.</summary>
         public class BoolActionImpl : ParamActionImplBase<bool>, IBoolParamAction
         {
-			public BoolActionImpl(ActionQueue actionQ, bool paramValue, ActionMethodDelegateActionArgStrResult<bool, NullObj> method, string mesg, ActionLogging loggingReference) : base(actionQ, paramValue, method, mesg, loggingReference) { }
+            /// <summary>Constructor for use with more complete action method delegate: ActionMethodDelegateActionArgStrResult{bool, NullObj}.</summary>
+            public BoolActionImpl(ActionQueue actionQ, bool paramValue, ActionMethodDelegateActionArgStrResult<bool, NullObj> method, string mesg, ActionLogging loggingReference) : base(actionQ, paramValue, method, mesg, loggingReference) { }
+            /// <summary>Constructor for use with full action method delegate: FullActionMethodDelegate{bool, NullObj}.</summary>
             public BoolActionImpl(ActionQueue actionQ, bool paramValue, FullActionMethodDelegate<bool, NullObj> method, string mesg, ActionLogging loggingReference) : base(actionQ, paramValue, method, mesg, loggingReference) { }
         }
 
-		public class StringActionImpl : ParamActionImplBase<string>, IStringParamAction
+        /// <summary>Implementation object for IStringParamAction type Actions.  Derives from ParamActionImplBase{string}.</summary>
+        public class StringActionImpl : ParamActionImplBase<string>, IStringParamAction
 		{
-			public StringActionImpl(ActionQueue actionQ, string paramValue, ActionMethodDelegateActionArgStrResult<string, NullObj> method, string mesg, ActionLogging loggingReference) : base(actionQ, paramValue, method, mesg, loggingReference) { }
-			public StringActionImpl(ActionQueue actionQ, string paramValue, FullActionMethodDelegate<string, NullObj> method, string mesg, ActionLogging loggingReference) : base(actionQ, paramValue, method, mesg, loggingReference) { }
+            /// <summary>Constructor for use with more complete action method delegate: ActionMethodDelegateActionArgStrResult{string, NullObj}.</summary>
+            public StringActionImpl(ActionQueue actionQ, string paramValue, ActionMethodDelegateActionArgStrResult<string, NullObj> method, string mesg, ActionLogging loggingReference) : base(actionQ, paramValue, method, mesg, loggingReference) { }
+            /// <summary>Constructor for use with full action method delegate: FullActionMethodDelegate{string, NullObj}.</summary>
+            public StringActionImpl(ActionQueue actionQ, string paramValue, FullActionMethodDelegate<string, NullObj> method, string mesg, ActionLogging loggingReference) : base(actionQ, paramValue, method, mesg, loggingReference) { }
 		}
 
 		#endregion
@@ -96,9 +129,60 @@ namespace MosaicLib.Modular.Part
 		//-----------------------------------------------------------------
 		#region CTOR and DTOR (et. al.)
 
-		public SimpleActivePartBase(string partID, string partType) : this(partID, partType, TimeSpan.FromSeconds(0.1), true, 10) {}
-		public SimpleActivePartBase(string partID, string partType, TimeSpan waitTimeLimit) : this(partID, partType, waitTimeLimit, true, 10) {}
-		public SimpleActivePartBase(string partID, string partType, TimeSpan waitTimeLimit, bool enableQueue, int queueSize) : base(partID, partType)
+        /// <summary>
+        /// Constructor variant: caller provides PartID.
+        /// PartType will be automatically derived from the class name of the derived type
+        /// </summary>
+        /// <param name="partID">Gives the PartID/Name that the part will report and use.</param>
+        public SimpleActivePartBase(string partID) 
+            : this(partID, new System.Diagnostics.StackFrame(1).GetMethod().DeclaringType.ToString(), TimeSpan.FromSeconds(0.1), true, 10) 
+        {}
+
+        /// <summary>
+        /// Constructor variant: caller provides PartID and nominal Service loop WaitTimeLimit
+        /// PartType will be automatically derived from the class name of the derived type
+        /// </summary>
+        /// <param name="partID">Gives the PartID/Name that the part will report and use.</param>
+        /// <param name="waitTimeLimit">Defines the nominal maximum period that the part's outer main thread loop will wait for the next notify occurrance.  Sets the default "spin" rate for the part.</param>
+        public SimpleActivePartBase(string partID, TimeSpan waitTimeLimit) 
+            : this(partID, new System.Diagnostics.StackFrame(1).GetMethod().DeclaringType.ToString(), waitTimeLimit, true, 10) 
+        {}
+
+        /// <summary>
+        /// Constructor variant: caller provides PartID, nominal Service loop WaitTimeLimit, initial queue enable, and maximum queue size.
+        /// PartType will be automatically derived from the class name of the derived type
+        /// </summary>
+        /// <param name="partID">Gives the PartID/Name that the part will report and use.</param>
+        /// <param name="waitTimeLimit">Defines the nominal maximum period that the part's outer main thread loop will wait for the next notify occurrance.  Sets the default "spin" rate for the part.</param>
+        /// <param name="enableQueue">Set to true for the parts ActionQueue to be enabled even before the part has been started.  Set to false to prevent actions from being started until this part has been started and has enabled its queue.</param>
+        /// <param name="queueSize">Defines the maximum number of pending actions that may be placed in the queue before further attempts to start new actions will be blocked and will fail.</param>
+        public SimpleActivePartBase(string partID, TimeSpan waitTimeLimit, bool enableQueue, int queueSize)
+            : this(partID, new System.Diagnostics.StackFrame(1).GetMethod().DeclaringType.ToString(), waitTimeLimit, enableQueue, queueSize)
+        {}
+
+        /// <summary>Constructor variant: caller provides PartID and PartType</summary>
+        /// <param name="partID">Gives the PartID/Name that the part will report and use.</param>
+        /// <param name="partType">Gives the PartType that this part will report</param>
+        public SimpleActivePartBase(string partID, string partType) 
+            : this(partID, partType, TimeSpan.FromSeconds(0.1), true, 10) 
+        {}
+
+        /// <summary>Constructor variant: caller provides PartID, PartType and nominal Service loop WaitTimeLimit</summary>
+        /// <param name="partID">Gives the PartID/Name that the part will report and use.</param>
+        /// <param name="partType">Gives the PartType that this part will report</param>
+        /// <param name="waitTimeLimit">Defines the nominal maximum period that the part's outer main thread loop will wait for the next notify occurrance.  Sets the default "spin" rate for the part.</param>
+        public SimpleActivePartBase(string partID, string partType, TimeSpan waitTimeLimit) 
+            : this(partID, partType, waitTimeLimit, true, 10) 
+        {}
+
+        /// <summary>Constructor variant: caller provides PartID, PartType, nominal Service loop WaitTimeLimit, initial queue enable, and maximum queue size.</summary>
+        /// <param name="partID">Gives the PartID/Name that the part will report and use.</param>
+        /// <param name="partType">Gives the PartType that this part will report</param>
+        /// <param name="waitTimeLimit">Defines the nominal maximum period that the part's outer main thread loop will wait for the next notify occurrance.  Sets the default "spin" rate for the part.</param>
+        /// <param name="enableQueue">Set to true for the parts ActionQueue to be enabled even before the part has been started.  Set to false to prevent actions from being started until this part has been started and has enabled its queue.</param>
+        /// <param name="queueSize">Defines the maximum number of pending actions that may be placed in the queue before further attempts to start new actions will be blocked and will fail.</param>
+        public SimpleActivePartBase(string partID, string partType, TimeSpan waitTimeLimit, bool enableQueue, int queueSize)
+            : base(partID, partType)
 		{
             TreatPartAsBusyWhenInternalPartBusyCountIsNonZero = true;       // allow derived objects to default to be able to use CreateInternalBusyFlagHolderObject
 
@@ -110,6 +194,11 @@ namespace MosaicLib.Modular.Part
 			actionLoggingReference = new ActionLogging(Log, ActionLoggingConfig.Info_Error_Debug_Debug);
 		}
 	
+        /// <summary>
+        /// Protected sealed implementation for DisposableBase.Dispose(DisposeType) abstract method.
+        /// During an explicit dispose this will Stop the part and then it will invoke the DisposeCallPassdown to 
+        /// allow derived classes to implement custom dispose logic after the part has been stopped.
+        /// </summary>
 		protected sealed override void Dispose(DisposeType disposeType)
 		{
 			if (disposeType == DisposeType.CalledExplicitly)
@@ -118,7 +207,13 @@ namespace MosaicLib.Modular.Part
 			DisposeCalledPassdown(disposeType);
 		}
 
-		protected virtual void DisposeCalledPassdown(DisposeType disposeType) {}
+        /// <summary>
+        /// Protected virtual method that may be overriden by by derived classes to implement disposal of any resources that have been allocated.
+        /// Implementation at this level has an empty body.
+        /// </summary>
+        /// <param name="disposeType">Indicates if the Dispose in progress is DisposeType.CalledExplicitly or if it has been DisposeType.CalledByFinalizer</param>
+		protected virtual void DisposeCalledPassdown(DisposeType disposeType) 
+        {}
 
 		#endregion
 
@@ -134,7 +229,6 @@ namespace MosaicLib.Modular.Part
 
         #endregion
 
-
         //-----------------------------------------------------------------
         #region ActionLogger adjustments
 
@@ -144,7 +238,6 @@ namespace MosaicLib.Modular.Part
         /// Changing this property while actions are being created will allow the actions resulting log messages to be taken from an arbitrary mix of the prior and new mesg levels as 
         /// the reference copy of the emitters may be updating while the reference actionLogger is being copied.
         /// </remarks>
-
         protected ActionLoggingConfig ActionLoggingConfig { get { return actionLoggingReference.Config; } set { actionLoggingReference.Config = value; } }
 
         #endregion
@@ -152,20 +245,24 @@ namespace MosaicLib.Modular.Part
         //-----------------------------------------------------------------
 		#region IActivePartBase interface methods
 
-        // private volatile bool isStarting = false;        // currently unused
         private volatile bool hasBeenStarted = false;
         private volatile bool hasBeenStopped = false;
         private volatile bool hasStopBeenRequested = false;
 
-        /// <summary>Stub for behavior derived objects would like to perform before the main action queue is enabled.</summary>
-        protected virtual void PreStartPart() { }
+        /// <summary>
+        /// Stub for behavior derived objects would like to perform before the main action queue is enabled.
+        /// WARNING: this method is not called by the Part's thread - it is called by some external client thread.
+        /// </summary>
+        protected virtual void PreStartPart() 
+        { }
 
+        /// <summary>
+        /// Method is used to start the Part's main thread.  Typically this is done implicitly as part of the use of a CreateGoOnlineAction method.
+        /// </summary>
 		public virtual void StartPart()
 		{
 			using (Logging.EnterExitTrace t = new Logging.EnterExitTrace(Log, "StartPart", Logging.MesgType.Debug))
 			{
-                // isStarting = true;       // flag is not used at present
-
                 PreStartPart();
 
 				if (actionQ != null)
@@ -188,9 +285,16 @@ namespace MosaicLib.Modular.Part
 			}
 		}
 
-        /// <summary>Stub for behavior derived objects would like to perform immediately before the main action queue is disabled.</summary>
-        protected virtual void PreStopPart() { }
+        /// <summary>
+        /// Stub for behavior derived objects would like to perform immediately before the main action queue is disabled.
+        /// WARNING: this method is not called by the Part's thread - it is called by some external client thread.
+        /// </summary>
+        protected virtual void PreStopPart() 
+        { }
 
+        /// <summary>
+        /// Method is used to gracefully stop the Part's main thread, typically at the end of the current action.
+        /// </summary>
 		public virtual void StopPart()
 		{
 			using (Logging.EnterExitTrace t = new Logging.EnterExitTrace(Log, "StopPart", Logging.MesgType.Debug))
@@ -207,6 +311,7 @@ namespace MosaicLib.Modular.Part
 					threadWakeupNotifier.Notify();
 
 					mainThread.Join();
+                    joinedThread = mainThread;
 					mainThread = null;
 				}
 
@@ -216,14 +321,27 @@ namespace MosaicLib.Modular.Part
 			}
 		}
 
-        public bool HasBeenStopped { get { return (hasBeenStopped || (actionQ != null && !actionQ.QueueEnable)); } }
-        public bool HasBeenStarted { get { return (hasBeenStarted); } }
-        public bool IsRunning { get { return (HasBeenStarted && !HasBeenStopped); } }
+        /// <summary>Returns true if the part has been started.  May be true before main loop has started.</summary>
+        public virtual bool HasBeenStarted { get { return (hasBeenStarted); } }
+        /// <summary>Returns true if the part has been stopped.  Will be true if the Part's main thread has stopped or if the Part's main actionQ has been disabled.</summary>
+        public virtual bool HasBeenStopped { get { return (hasBeenStopped || !AreAnyActionQueueEnabled); } }
+        /// <summary>Returns true if the part has been started and it has not been stopped (yet).</summary>
+        public virtual bool IsRunning { get { return (HasBeenStarted && !HasBeenStopped); } }
 
+        /// <summary>static mutex object used to make certain that only one thread at a time runs each Part's StartIfNeeded pattern.</summary>
 		private static object startIfNeededMutex = new object();
 
+        /// <summary>
+        /// Used to start parts as a side effect of performing the CreateGoOnlineAction method.  
+        /// Locks the startIfNeeded mutex and then calls StartPart if the part's HasBeenStarted flag is false.
+        /// Use of mutex protects against re-enternat use of CreateGoOnlineAction but not against concurrent patterns where 
+        /// CreateGoOnlineAction is used concurrently with an explicit call to StartPart.
+        /// </summary>
 		protected void StartPartIfNeeded()
 		{
+            if (HasBeenStarted)
+                return;
+
 			lock (startIfNeededMutex)		// only one caller of StartPartIfNeeded will be processed at a time (system wide...)
 			{
                 if (!HasBeenStarted)
@@ -231,11 +349,18 @@ namespace MosaicLib.Modular.Part
 			}
 		}
 
+        /// <summary>
+        /// Provide the default parameterless CreateGoOnlineAction implementation.  Synonym for calling CreateGoOnlineAction(false).
+        /// </summary>
 		public virtual IBasicAction CreateGoOnlineAction()
 		{
 			return (IBasicAction) CreateGoOnlineAction(false);
 		}
 
+        /// <summary>
+        /// Provide the default CreateGoOnlineAction(bool andInitialize) implementation.  
+        /// </summary>
+        /// <param name="andInitialize">caller passes in true if this GoOnline action should also initialize the part.</param>
 		public virtual IBoolParamAction CreateGoOnlineAction(bool andInitialize)
 		{
 			StartPartIfNeeded();
@@ -245,6 +370,9 @@ namespace MosaicLib.Modular.Part
 			return action;
 		}
 
+        /// <summary>
+        /// Provide the default CreateGoOfflineAction implementation.
+        /// </summary>
 		public virtual IBasicAction CreateGoOfflineAction()
 		{
 			ActionMethodDelegateActionArgStrResult<NullObj, NullObj> method  = PerformGoOfflineAction;
@@ -252,23 +380,31 @@ namespace MosaicLib.Modular.Part
 			return action;
 		}
 
-		// provide default CreateServiceAction method that creates one that will fail
-		//	when it is run.  Sub-class may override the given DoRunServiceAction method
-		//	to implement the ability to run services
-
+        /// <summary>
+        /// Method creates an unconfigured Service Action.  Caller is expected to update the Param with the name of the desired service before running.
+        /// </summary>
 		public virtual IStringParamAction CreateServiceAction() { return CreateServiceAction(string.Empty); }
 
+        /// <summary>
+        /// Method creates a Service Action with the Param preconfigured with the given value.
+        /// </summary>
 		public virtual IStringParamAction CreateServiceAction(string paramValue) 
 		{
 			IStringParamAction action = new StringActionImpl(actionQ, paramValue, PerformServiceAction, "Service", ActionLoggingReference) as IStringParamAction;
 			return action;
 		}
 
+        // provide default CreateServiceAction method that creates one that will fail
+        //	when it is run.  Sub-class may override the given DoRunServiceAction method
+        //	to implement the ability to run services
+
+
 		#endregion
 
 		//-----------------------------------------------------------------
 		#region INotifyable Members
 
+        /// <summary>Implementation method for the INotifyable interface.  Requests that the Part's thread wakeup if it is waiting on the threadWakeupNotifier.</summary>
 		public void Notify()
 		{
 			threadWakeupNotifier.Notify();
@@ -363,14 +499,14 @@ namespace MosaicLib.Modular.Part
         protected bool HasStopBeenRequested { get { return (hasStopBeenRequested || (actionQ != null && !actionQ.QueueEnable)); } }
 
         /// <summary>
-        /// empty base class method that can be overriden by derived classes to perform periodic service under control of the Part's main loop.
+        /// empty virtual base class method that can be overriden by derived classes to perform periodic service under control of the Part's main loop.
         /// </summary>
 		protected virtual void PerformMainLoopService() 
 		{
 		}
 
         /// <summary>
-        /// Attempts to get and perform the next action from the actionQ.
+        /// Attempts to get and perform the next action from the actionQ by calling PerformAction on it.
         /// </summary>
         /// <returns>True if an action was performed or false otherwise.</returns>
 		protected virtual bool IssueNextQueuedAction()
@@ -391,6 +527,7 @@ namespace MosaicLib.Modular.Part
         /// <summary>Returns the IActionState for the current action that the Part's main service loop is currently in IssueAndInvokeAction on, or an Initial/Empty IActionState if there is no such action.</summary>
         protected IActionState CurrentActionState { get { return ((CurrentAction != null) ? CurrentAction.ActionState : EmptyActionState); } }
 
+        /// <summary>Contains the ActinState that is used for the CurrentActionState when there is no CurrentAction.</summary>
         protected readonly IActionState EmptyActionState = new ActionStateCopy();
 
         /// <summary>Requests to cancel the CurrentAction if it is non null and its state IsPendingCompletion</summary>
@@ -452,15 +589,34 @@ namespace MosaicLib.Modular.Part
 		//-----------------------------------------------------------------
 		#region private and protected fields and related properties (includuing BaseState implementation)
 
+        /// <summary>Protected readonly field contains the default waitTimeLimit for the Part's thread.  Generally used when calling WaitForSomethingToDo().</summary>
 		protected readonly TimeSpan waitTimeLimit;
-		protected WaitEventNotifier threadWakeupNotifier = new WaitEventNotifier(WaitEventNotifier.Behavior.WakeOne);
-		protected ActionQueue actionQ = null;
-		protected System.Threading.Thread mainThread = null;
-		protected ActionLogging actionLoggingReference = null;
 
+        /// <summary>Protected readonly WaitEventNotifier used by the Part's main thread as part of the WaitForSomethingToDo pattern.</summary>
+        protected readonly WaitEventNotifier threadWakeupNotifier = new WaitEventNotifier(WaitEventNotifier.Behavior.WakeOne);
+
+        private System.Threading.Thread mainThread = null;
+        private System.Threading.Thread joinedThread = null;
+
+        /// <summary>Protected field used to define the default ActionLogging instance that is cloned when creating new actions.</summary>
+        private ActionLogging actionLoggingReference = null;
+
+        /// <summary>
+        /// Protected get only access to the property that is used by the Part to reference its underlying default ActionQueue instance.  
+        /// </summary>
         protected ActionQueue ActionQueue { get { return actionQ; } }
 
+        /// <summary>
+        /// Protected get only access to the property that is used by the Part to reference its underlying default ActionQueue instance.  
+        /// This property is using the symbol name of a prior field to permit get-only access in derived classes.
+        /// </summary>
+        protected ActionQueue actionQ { get; private set; }
+
+        /// <summary>Returns true if all ActionQueues are empty.</summary>
         protected override bool AreAllActionQueuesEmpty { get { return ActionQueue.IsEmpty; } }
+
+        /// <summary>Returns true if the part has a queue and if that queue is enabled.</summary>
+        public virtual bool AreAnyActionQueueEnabled { get { return (actionQ != null && actionQ.QueueEnable); } }
 
         /// <summary>ActionLogging object that is used as the reference for commands created by SimpleActivePartBase and by many derived Part objects.</summary>
         protected ActionLogging ActionLoggingReference { get { return actionLoggingReference; } }

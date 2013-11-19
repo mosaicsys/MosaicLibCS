@@ -156,10 +156,7 @@ namespace MosaicLib.SerialIO
 	#region TcpClientPort class
 
 	/// <summary>Provides an implementation of the SerialIO PortBase class for use as a TCP client/connection initiator.</summary>
-	/// <remarks>
-	/// </remarks>
-
-	class TcpClientPort : PortBase
+    internal class TcpClientPort : PortBase
 	{
 		#region CTor, DTor
 
@@ -169,6 +166,8 @@ namespace MosaicLib.SerialIO
 			: base(portConfig, className)
 		{
 			targetEPConfig = ipPortEndpointConfig;
+
+            PortBehavior = new PortBehaviorStorage() { DataDeliveryBehavior = DataDeliveryBehavior.ByteStream, IsNetworkPort = true, IsClientPort = true };
 
 			PrivateBaseState = new BaseState(false, true);
 			PublishBaseState("object constructed");
@@ -208,13 +207,13 @@ namespace MosaicLib.SerialIO
 			dataSP.ReceiveTimeout = 0;		// read operations are non-blocking at this level.
 			dataSP.SendTimeout = 0;			// write operations are non-blocking at this level.
 
-			UpdateList();
+            lastReadResult = ActionResultEnum.None;
 		}
 
 		protected void DisposeDataSocket()
 		{
 			MosaicLib.Utils.Fcns.DisposeOfObject(ref dataSP);
-			UpdateList();
+            lastReadResult = ActionResultEnum.None;
 		}
 
 		#endregion
@@ -223,15 +222,7 @@ namespace MosaicLib.SerialIO
 
 		IPPortEndpointConfig targetEPConfig = null;
 		protected Socket dataSP = null;
-		protected List<Socket> spList = new List<Socket>();
-
-		protected virtual void UpdateList()
-		{
-			if (dataSP != null)
-				spList = new List<Socket> { dataSP };
-			else
-				spList = new List<Socket>();
-		}
+        protected ActionResultEnum lastReadResult = ActionResultEnum.None;
 
 		#endregion
 
@@ -305,9 +296,9 @@ namespace MosaicLib.SerialIO
 					return faultCode;
 				}
 			}
-			catch (System.Exception e)
+			catch (System.Exception ex)
 			{
-				faultCode = "Exception:" + e.Message;
+				faultCode = "Exception:" + ex.Message;
 			}
 
 			if (string.IsNullOrEmpty(faultCode))
@@ -331,9 +322,9 @@ namespace MosaicLib.SerialIO
 				if (dataSP != null)
 					DisposeDataSocket();
 			}
-			catch (System.Exception e)
+			catch (System.Exception ex)
 			{
-				faultCode = "Exception:" + e.Message;
+				faultCode = "Exception:" + ex.Message;
 			}
 
 			if (string.IsNullOrEmpty(faultCode))
@@ -348,15 +339,29 @@ namespace MosaicLib.SerialIO
 			}
 		}
 
+        private QpcTimer readBytesAvailableSelectHoldoffTimer = new QpcTimer() { TriggerIntervalInSec = 0.1, AutoReset = true, Started = true };
+
 		protected override int InnerReadBytesAvailable
 		{
 			get
 			{
-				if (dataSP == null)
+ 				if (dataSP == null)
 					return 0;
 
-				return dataSP.Available;
-			}
+                try
+                {
+                    int availableBytes = dataSP.Available;
+
+                    if (readBytesAvailableSelectHoldoffTimer.IsTriggered && (availableBytes == 0) && dataSP.Poll(0, SelectMode.SelectRead))
+                        availableBytes = Math.Max(dataSP.Available, 1);       // force an indication of at least 1 byte if the socket indicates there are byte available
+
+                    return availableBytes;
+                }
+                catch
+                {
+                    return 1;       // cause caller to attempt to read this byte and thus have the read fail.
+                }
+            }
 		}
 
 		protected override bool InnerIsAnyWriteSpaceAvailable 
@@ -367,7 +372,7 @@ namespace MosaicLib.SerialIO
 			} 
 		}
 
-		protected override string InnerHandleRead(byte [] buffer, int startIdx, int maxCount, out int didCount)
+        protected override string InnerHandleRead(byte[] buffer, int startIdx, int maxCount, out int didCount, ref ActionResultEnum readResult)
 		{
 			didCount = 0;
 
@@ -378,7 +383,16 @@ namespace MosaicLib.SerialIO
 			{
 				SocketError sockError;
 
+                bool pollRead = dataSP.Poll(0, SelectMode.SelectRead);
 				didCount = dataSP.Receive(buffer, startIdx, maxCount, SocketFlags.None, out sockError);
+                if (didCount == 0 && maxCount > 0 && sockError == SocketError.Success && pollRead)
+                {
+                    // the remote socket port has been shutdown - report this to the caller and flag it on the port
+                    readResult = ActionResultEnum.ReadRemoteEndHasBeenClosed;
+                }
+
+                if (lastReadResult != readResult)
+                    lastReadResult = readResult;
 
 				if (sockError != SocketError.Success && sockError != SocketError.WouldBlock)
 				{
@@ -391,13 +405,13 @@ namespace MosaicLib.SerialIO
 				
 				return string.Empty;
 			}
-			catch (System.Exception e)
+			catch (System.Exception ex)
 			{
-				return "Exception:" + e.Message;
+				return "Exception:" + ex.Message;
 			}
 		}
 
-		protected override string InnerHandleWrite(byte [] buffer, int startIdx, int count, out int didCount)
+        protected override string InnerHandleWrite(byte[] buffer, int startIdx, int count, out int didCount, ref ActionResultEnum writeResult)
 		{
 			didCount = 0;
 
@@ -421,9 +435,9 @@ namespace MosaicLib.SerialIO
 				
 				return string.Empty;
 			}
-			catch (System.Exception e)
+			catch (System.Exception ex)
 			{
-				return "Exception:" + e.Message;
+				return "Exception:" + ex.Message;
 			}
 		}
 
@@ -436,10 +450,30 @@ namespace MosaicLib.SerialIO
 			}
 		}
 
-		protected virtual void ServicePortConnState()
+        protected virtual void ServicePortConnState()
+        {
+            ServicePortConnState(ConnState.Disconnected);
+        }
+
+		protected virtual void ServicePortConnState(ConnState remoteEndHasBeenClosedState)
 		{
 			if (BaseState.IsConnected && (dataSP == null || !dataSP.Connected))
 				SetBaseState(ConnState.ConnectionFailed, "Socket is no longer connected", true);
+
+            if (BaseState.IsConnected && (lastReadResult == ActionResultEnum.ReadRemoteEndHasBeenClosed))
+            {
+                try
+                {
+                    if (dataSP != null)
+                        DisposeDataSocket();
+
+                    SetBaseState(remoteEndHasBeenClosedState, "Socket remote end has been closed", true);
+                }
+                catch (System.Exception ex)
+                {
+                    SetBaseState(ConnState.ConnectionFailed, Fcns.CheckedFormat("Unable to close data socket while handling remote end closed: {0}", ex), true);                
+                }
+            }
 		}
 
 		protected override bool WaitForSomethingToDo(Utils.IWaitable waitable, TimeSpan waitTimeLimit)
@@ -453,20 +487,21 @@ namespace MosaicLib.SerialIO
 
 			int usec = (int) (waitTimeLimit.TotalSeconds * 1000000.0);
 
-			if (spList.Count > 0)
-			{
-				if (usec > 0)
-					Socket.Select(spList, null, null, usec);
-				else if (pendingReadActionsQueue.Count > 0)
-					System.Threading.Thread.Sleep(0);
-				else
-					return base.WaitForSomethingToDo(waitable, waitTimeLimit);
-			}
-			else
-				return base.WaitForSomethingToDo(waitable, waitTimeLimit);
+            if (dataSP != null)
+            {
+                bool isReadyReady = dataSP.Poll(usec, SelectMode.SelectRead);
+                if (isReadyReady || dataSP.Available != 0)
+                    return true;
 
-			return (dataSP != null && dataSP.Available != 0);
-		}
+                if (usec == 0 && pendingReadActionsQueue.Count > 0)
+                {
+                    System.Threading.Thread.Sleep(0);
+                    return false;
+                }
+            }
+
+            return base.WaitForSomethingToDo(waitable, waitTimeLimit);
+        }
 	}
 
 	#endregion
@@ -486,6 +521,8 @@ namespace MosaicLib.SerialIO
 			: base(portConfig, new IPPortEndpointConfig("", new IPEndPoint(IPAddress.None, 0)), "TcpServerPort")
 		{
 			serverEPConfig = serverPortEndpointConfig;
+
+            PortBehavior = new PortBehaviorStorage() { DataDeliveryBehavior = DataDeliveryBehavior.ByteStream, IsNetworkPort = true, IsServerPort = true };
 		}
 
 		protected override void DisposeCalledPassdown(DisposeType disposeType)		// this is called after StopPart has completed during dispose
@@ -519,14 +556,6 @@ namespace MosaicLib.SerialIO
 		IPPortEndpointConfig serverEPConfig = null;
 		Socket listenSP = null;
 
-		protected override void UpdateList()
-		{
-			base.UpdateList();
-
-			if (listenSP != null)
-				spList.Add(listenSP);
-		}
-
 		#endregion
 
 		protected override string InnerPerformGoOnlineAction(string actionName, bool andInitialize)
@@ -556,9 +585,9 @@ namespace MosaicLib.SerialIO
 
 				listenSP.Listen(1);
 			}
-			catch (System.Exception e)
+			catch (System.Exception ex)
 			{
-				faultCode = "Exception:" + e.Message;
+				faultCode = "Exception:" + ex.Message;
 			}
 
 			if (string.IsNullOrEmpty(faultCode))
@@ -582,10 +611,10 @@ namespace MosaicLib.SerialIO
 				if (listenSP != null)
 					DisposeListenSocket();
 			}
-			catch (System.Exception e)
+			catch (System.Exception ex)
 			{
 				if (string.IsNullOrEmpty(faultCode))
-					faultCode = "Exception:" + e.Message;
+					faultCode = "Exception:" + ex.Message;
 			}
 
 			if (string.IsNullOrEmpty(faultCode))
@@ -602,28 +631,38 @@ namespace MosaicLib.SerialIO
 
 		protected override void ServicePortConnState()
 		{
-			base.ServicePortConnState();
+			base.ServicePortConnState(ConnState.WaitingForConnect);
 
 			bool connPending = (listenSP != null && listenSP.Poll(0, SelectMode.SelectRead));
+            bool madeNewConnection = false;
 
 			if (connPending)
 			{
-				Socket newSocket = listenSP.Accept();
+                try
+                {
+                    Socket newSocket = listenSP.Accept();
 
-				if (dataSP != null)
-				{
-					DisposeDataSocket();
-					SetBaseState(ConnState.Disconnected, "Aborting connection to accept new incomming connection", true);
-				}
+                    if (dataSP != null)
+                    {
+                        DisposeDataSocket();
+                        SetBaseState(ConnState.Disconnected, "Aborting connection to accept new incomming connection", true);
+                    }
 
-				UseDataSocket(newSocket);
+                    UseDataSocket(newSocket);
 
-				string reason = Utils.Fcns.CheckedFormat("Accepted new connection from {0}", newSocket.RemoteEndPoint.ToString());
-				SetBaseState(ConnState.Connected, reason, true);
+                    string reason = Utils.Fcns.CheckedFormat("Accepted new connection from {0}", newSocket.RemoteEndPoint.ToString());
+                    SetBaseState(ConnState.Connected, reason, true);
+                    madeNewConnection = true;
+                }
+                catch (System.Exception ex)
+                {
+                    Log.Info.Emit("Accept failed for {0}: {1}, ignored", listenSP.LocalEndPoint, ex.Message);
+                }
 			}
-			else if (listenSP != null && !BaseState.IsConnected && BaseState.ConnState != ConnState.WaitingForConnect)
+			
+            if (!madeNewConnection && listenSP != null && !BaseState.IsConnected && BaseState.ConnState != ConnState.WaitingForConnect)
 			{
-				if (BaseState.TimeStamp.Age.TotalSeconds > 1.0)
+				if (BaseState.TimeStamp.Age.TotalSeconds > 0.20)
 					SetBaseState(ConnState.WaitingForConnect, "Reverting state after connection closed or lost", true);
 			}
 		}

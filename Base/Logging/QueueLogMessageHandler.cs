@@ -27,36 +27,82 @@ namespace MosaicLib
 
 	public static partial class Logging
 	{
+
 		public static partial class Handlers
 		{
+            /// <summary>
+            /// This class implements a special type of LogMessageHandler.  It is given another LMH instance and acts as a passthrough where messages that are given to this
+            /// LMH are queued and then an internal thread periodically passes larger groups of the queue messages into the given target LMH thus loosely decoupling the main message
+            /// distribution system from the per message performance of the target LMH.  This also improves the performance with some types of target LMH where there is a relatively
+            /// large cost to start writing a message but a relatively small cost two write two in a row after setting up to the write the first (file types for example).
+            /// </summary>
 			public class QueueLogMessageHandler : CommonLogMessageHandlerBase
 			{
-				public QueueLogMessageHandler(ILogMessageHandler targetLMH, int maxQueueSize) 
-					: base(targetLMH.Name, targetLMH.LoggerConfig.LogGate, targetLMH.LoggerConfig.RecordSourceStackFrame, targetLMH.LoggerConfig.SupportsReferenceCountedRelease)
-				{
-                    this.targetLMH = targetLMH;
+                /// <summary>
+                /// Single targetLMH constructor.  Derives name and LoggingConfig values from the given targetLMH.
+                /// </summary>
+                /// <param name="targetLMH">Gives the target LMH instance to which the queued messages will be delivered.</param>
+                /// <param name="maxQueueSize">Defines te maximum number of messages that can be held internally before messages are lost.</param>
+				public QueueLogMessageHandler(ILogMessageHandler targetLMH, int maxQueueSize)
+                    : this(targetLMH.Name, new[] { targetLMH }, maxQueueSize)
+				{ }
+
+                /// <summary>
+                /// Multiple targetLMH constructor.  Derives LoggingConfig values from the given targetLMH
+                /// </summary>
+                /// <param name="name">Gives the name of this LMH - different than the names of the target LMH instances</param>
+                /// <param name="targetLMHArray">Gives the set of LMH instance that are to be given the dequeued LogMessages.</param>
+                /// <param name="maxQueueSize">Defines te maximum number of messages that can be held internally before messages are lost.</param>
+                public QueueLogMessageHandler(string name, ILogMessageHandler[] targetLMHArray, int maxQueueSize)
+                    : base(name, LogGate.None, false, false)
+                {
+                    targetLMHArray = targetLMHArray ?? emptyLMHArray;
+
+                    LogGate logGate = LogGate.None;
+                    bool recordSourceStackFrame = false;
+                    bool supportsReferenceCountedRelease = true;
+
+                    foreach (ILogMessageHandler targetLMH in targetLMHArray)
+                    {
+                        logGate.MesgTypeMask |= targetLMH.LoggerConfig.LogGate.MesgTypeMask;
+                        recordSourceStackFrame |= targetLMH.LoggerConfig.RecordSourceStackFrame;
+                        supportsReferenceCountedRelease &= targetLMH.LoggerConfig.SupportsReferenceCountedRelease;
+                    }
+
+                    loggerConfig.LogGate = logGate;
+                    loggerConfig.RecordSourceStackFrame = recordSourceStackFrame;
+                    loggerConfig.SupportsReferenceCountedRelease = supportsReferenceCountedRelease;
+
+                    this.targetLMHArray = targetLMHArray;
+
                     dist = Logging.GetLogMessageDistribution();
 
                     mesgDeliveryList = new List<LogMessage>(10);		// define its initial capacity
 
-					mesgQueue = new MessageQueue(maxQueueSize);
-					mesgQueue.SetEffectiveSourceInfo(logger.LoggerSourceInfo);
-					mesgQueue.EnableQueue();
-					mesgQueueMutex = mesgQueue.Mutex;
+                    mesgQueue = new MessageQueue(maxQueueSize);
+                    mesgQueue.SetEffectiveSourceInfo(logger.LoggerSourceInfo);
+                    mesgQueue.EnableQueue();
+                    mesgQueueMutex = mesgQueue.Mutex;
 
-					// create and start the thread
-					mainThread = new System.Threading.Thread(MainThreadFcn);
-					mainThread.Start();
-				}
+                    // create and start the thread
+                    mainThread = new System.Threading.Thread(MainThreadFcn);
+                    mainThread.Start();
+                }
 			
 				const int minQueueSizeToWakeupDeliveryThread = 100;
 
 				// NOTE: neither the HandleLogMessage nor HandleLogMessages attempts to apply
 				//	the logGate to determine which messages should be passed.  If they make it
-				//	here, then they will be passed to the encapsulated lmh which will perform
+				//	here, then they will be passed to the encapsulated lmh(s) which will perform
 				//	its own message type gating.
 
-				public override void HandleLogMessage(LogMessage lm)
+                /// <summary>LogMessage Handling method API for direct call by clients which generate and distribute one message at a time.</summary>
+                /// <param name="lm">
+                /// Gives the message to handle (save, write, relay, ...).
+                /// LMH Implementation must either support Reference Counted message semenatics if method will save any reference to a this message for use beyond the scope of this call or
+                /// LMH must flag that it does not support Reference counted semantics in LoggerConfig by clearing the SupportReferenceCountedRelease
+                /// </param>
+                public override void HandleLogMessage(LogMessage lm)
 				{
                     bool notifyThread = false;
 					lock (mesgQueueMutex)
@@ -71,7 +117,13 @@ namespace MosaicLib
                         threadWakeupEvent.Notify();
 				}
 
-				public override void  HandleLogMessages(LogMessage[] lmArray)
+                /// <summary>LogMessage Handling method API for use on outputs of queued delivery engines which agregate and distribute one or more messages at a time.</summary>
+                /// <param name="lmArray">
+                /// Gives an array of message to handle as a set (save, write, relay, ...).  This set may be given to muliple handlers and as such may contain messages that are not relevant to this handler.
+                /// As such Handler may additionally filter out or skip any messages from the given set as approprate.
+                /// LMH Implementation must flag that it does not support Reference counted semantics in LoggerConfig or must support ReferenceCounting on this message if references to it are saved beyond the scope of this call.
+                /// </param>
+                public override void HandleLogMessages(LogMessage[] lmArray)
 				{
                     bool notifyThread = false;
 
@@ -87,14 +139,16 @@ namespace MosaicLib
                         threadWakeupEvent.Notify();
                 }
 
-				public override bool IsMessageDeliveryInProgress(int testMesgSeqNum)
+                /// <summary>Query method that may be used to tell if message delivery for a given message is still in progress on this handler.</summary>
+                public override bool IsMessageDeliveryInProgress(int testMesgSeqNum)
 				{
 					QueuedMesgSeqNumRange mesgQueueSeqNumRangeSnapshot = mesgQueueSeqNumRange;
 
 					return mesgQueueSeqNumRangeSnapshot.IsMesgSeqNumInRange(testMesgSeqNum);
 				}
 
-				public override void Flush()
+                /// <summary>Once called, this method only returns after the handler has made a reasonable effort to verify that all outsanding, pending messages, visible at the time of the call, have been full processed before the call returns.</summary>
+                public override void Flush()
 				{
 					int lastPutSeqNumSnapshot = mesgQueueSeqNumRange.lastSeqNumIn;
 
@@ -115,7 +169,12 @@ namespace MosaicLib
 					}
 				}
 
-				public override void Shutdown()
+                /// <summary>
+                /// Used to tell the handler that the LogMessageDistribution system is shuting down.  
+                /// Handler is expected to close, release and/or Dispose of any unmanged resources before returning from this call.  
+                /// Any attempt to pass messages after this point may be ignored by the handler.
+                /// </summary>
+                public override void Shutdown()
 				{
 					// stop new messages from being inserted into the queue and ask 
 					//	background thread to drain queue and stop
@@ -133,24 +192,39 @@ namespace MosaicLib
                     // NOTE: targetLMH is shutdown by the mainThread prior to its completion.
 				}
 
+                /// <summary>
+                /// Implementes locally adjusted version of the base classes DisposableBase.Dispose(disposeType) method.
+                /// Calls base.Dispose(disposeType).  If disposeType is CalledExplictly then it disposes of each of the contained targetLMH instances.
+                /// </summary>
+                /// <param name="disposeType">Indicates if this dispose call is made explicitly or by the finalizer.</param>
 				protected override void Dispose(MosaicLib.Utils.DisposableBase.DisposeType disposeType)
 				{
 					base.Dispose(disposeType);
 
-					targetLMH = null;
+                    if (disposeType == DisposeType.CalledExplicitly)
+                    {
+                        for (int idx = 0; idx < targetLMHArray.Length; idx++)
+                            Utils.Fcns.DisposeOfObject(ref targetLMHArray[idx]);
+                    }
+
+                    targetLMHArray = null;
 				}
 
 				const int maxMessagesToDequePerIteration = 500;
 				const double minDeliveryThreadSpinWaitPeriod = 0.050;		// 20 Hz
 
+                /// <summary>
+                /// This gives the method that is called by the internal service thread to pull messages from the back of the message queue and deliver them to the
+                /// target LMH instances.
+                /// </summary>
 				protected void MainThreadFcn()
 				{
-					if (targetLMH == null || !mesgQueue.IsEnabled || threadWakeupEvent == null)
+                    if (targetLMHArray == null || !mesgQueue.IsEnabled || threadWakeupEvent == null)
 					{
 						mesgQueue.DisableQueue();
 
-                        if (targetLMH != null)
-                            targetLMH.Shutdown();
+                        foreach (var lmh in targetLMHArray ?? emptyLMHArray)
+                            lmh.Shutdown();
 
 						Utils.Asserts.TakeBreakpointAfterFault("QLMH thread Startup test failed");
 						return;
@@ -185,7 +259,9 @@ namespace MosaicLib
 						{
 							didAnything = true;
 							flushRequested = false;
-							targetLMH.Flush();
+
+                            foreach (var lmh in targetLMHArray)
+    							lmh.Flush();
 						}
 
 						if (!didAnything)
@@ -198,11 +274,16 @@ namespace MosaicLib
 
 					uint totalDroppedMesgs = mesgQueue.TotalDroppedMesgCount;
 					if (totalDroppedMesgs != 0)
-						LogShutdownMesg(totalDroppedMesgs);
+						LogShutdownDroppedMessagesMesg(totalDroppedMesgs);
 
-					targetLMH.Shutdown();
+                    foreach (var lmh in targetLMHArray)
+                        lmh.Shutdown();
 				}
 
+                /// <summary>
+                /// Intennal method that pulls messages from the queue and delivers them to the set of target handlers.
+                /// </summary>
+                /// <param name="maxMessagesToDeque">Gives the maxmum number of messages to pull from the queue at a time.</param>
 				protected void ServiceQueueDelivery(int maxMessagesToDeque)
 				{
 					// get the next block of messages from the queue
@@ -213,10 +294,12 @@ namespace MosaicLib
 						return;
 
 					// delivere the messages
-                    if (!targetLMH.LoggerConfig.SupportsReferenceCountedRelease)
+                    if (!LoggerConfig.SupportsReferenceCountedRelease)
                         dist.ReallocateMessagesForNonRefCountedHandler(mesgDeliveryList);
-                        
-					targetLMH.HandleLogMessages(mesgDeliveryList.ToArray());
+
+                    LogMessage[] lmArray = mesgDeliveryList.ToArray();
+                    foreach (var lmh in targetLMHArray)
+                        lmh.HandleLogMessages(lmArray);
 
 					int lastDeliveredSeqNum = mesgQueueSeqNumRange.lastSeqNumOut;
 
@@ -240,16 +323,22 @@ namespace MosaicLib
 					NoteMessagesHaveBeenDelivered();
 				}
 
-				protected void LogShutdownMesg(uint totalLostMesgCount)
+                /// <summary>
+                /// Makes a final effort to record the number of dropped messages.
+                /// </summary>
+                /// <param name="totalLostMesgCount">Gives the number of messages that the queue dropped.</param>
+				protected void LogShutdownDroppedMessagesMesg(uint totalLostMesgCount)
 				{
 					logger.Error.Emit("Total mesgs dropped:{0}", totalLostMesgCount);
 
-					ServiceQueueDelivery(10);		// attempt to allow some more mesgs to be logged (so the above message makes it out as well
+					ServiceQueueDelivery(10);		// attempt to allow some more mesgs to be logged (so the above message makes it out as well)
 				}
 
 				#region private variables
 
-				ILogMessageHandler			targetLMH = null;
+                static readonly ILogMessageHandler[] emptyLMHArray = new ILogMessageHandler[0];
+
+                ILogMessageHandler[] targetLMHArray = null;
                 ILogMessageDistribution     dist = null;
                 System.Threading.Thread     mainThread = null;
 

@@ -352,8 +352,10 @@ namespace MosaicLib.PartsLib.Common.LPM.Sim
         public bool IsUnclamped { get { return ClampState.IsAtPos1; } }
         public bool IsDocked { get { return DockState.IsAtPos2; } }
         public bool IsUndocked { get { return DockState.IsAtPos1; } }
-        public bool IsVacOn { get { return VacState.IsAtPos2; } }
-        public bool IsVacOff { get { return VacState.IsAtPos1; } }
+        /// <summary>True if vacuum is enabled to the suction cups</summary>
+        public bool IsVacEnabled { get { return VacState.IsAtPos2; } }
+        /// <summary>True if vacuum is disabled from the suction cups</summary>
+        public bool IsVacDisabled { get { return VacState.IsAtPos1; } }
         public bool AreDoorKeysHorizontal { get { return DoorKeysState.IsAtPos2; } }
         public bool AreDoorKeysVertical { get { return DoorKeysState.IsAtPos1; } }
         public bool IsDoorOpen { get { return DoorOpenState.IsAtPos2; } }
@@ -362,7 +364,7 @@ namespace MosaicLib.PartsLib.Common.LPM.Sim
         public bool IsDoorUp { get { return DoorDownState.IsAtPos1; } }
 
         public bool IsCarrierOpen { get { return IsDoorOpen && IsDoorDown; } }
-        public bool IsCarrierClosed { get { return IsDoorUp && IsDoorClosed && AreDoorKeysVertical && IsVacOff; } }
+        public bool IsCarrierClosed { get { return IsDoorUp && IsDoorClosed && AreDoorKeysVertical && IsVacDisabled; } }
     }
 
     public enum PositionSummary

@@ -29,12 +29,14 @@ namespace MosaicLib.Utils
     /// </summary>
 	public interface IObjID
 	{
-        // Gives the "Name" or Object ID of the current object.
+        /// <summary>
+        /// Gives the "Name" or Object ID of the current object.
+        /// </summary>
 		string ObjID { get; }
 	}
 
     /// <summary>
-    /// Common simple base class that can be used to implement the IObjID interface either by inheritance or agregation.
+    /// Common simple base class that can be used to implement the IObjID interface either by inheritance or aggregation.
     /// </summary>
 	public class ObjIDBase : IObjID
 	{
@@ -83,7 +85,7 @@ namespace MosaicLib.Utils
 		}
 	}
 
-    /// <summary>This clase helps generate base64 versions of GUIDs for use as short objectIDs</summary>
+    /// <summary>This class helps generate base64 versions of GUIDs for use as short objectIDs</summary>
     public static class GuidB64
     {
         /// <summary>Returns the Base64 version of a new GUID as produced by call to System.Guid.NewGuid()</summary>

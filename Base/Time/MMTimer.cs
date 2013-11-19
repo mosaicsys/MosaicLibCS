@@ -22,42 +22,88 @@
 
 namespace MosaicLib.Time
 {
-	using System.Runtime.InteropServices;
+    using System;
+    using System.Runtime.InteropServices;
 
-    public static class MMTimer
+    /// <summary>
+    /// Static "namespace" for P-Invoke method names used to interact with winmm.dll
+    /// </summary>
+    public static class winmm_dll
     {
+        /// <summary>
+        /// winmm.dll timeBeginPeriod call.  Consult appropriate Win32 documentation for full details on parameters and use.
+        /// </summary>
         [DllImport("winmm.dll")]
 		internal static extern uint timeBeginPeriod(uint uMilliseconds);
 
-		[DllImport("winmm.dll")]
+        /// <summary>
+        /// winmm.dll timeEndPeriod call.  Consult appropriate Win32 documentation for full details on parameters and use.
+        /// </summary>
+        [DllImport("winmm.dll")]
 		internal static extern uint timeEndPeriod(uint uMilliseconds);
 
+        /// <summary>
+        /// winmm.dll timeGetTime call.  Consult appropriate Win32 documentation for full details on parameters and use.
+        /// </summary>
         [DllImport("winmm.dll")]
         public static extern uint timeGetTime();
     }
 
+    /// <summary>
+    /// This class has been deprecated and replaced by the newer version called winmm_dll
+    /// </summary>
+    [Obsolete("Use of this class has been deprecated and replaced by the newer version called winmm_dll. (2013-06-16)")]
+    public static class MMTimer
+    {
+        /// <summary>
+        /// winmm.dll timeBeginPeriod call.  Consult appropriate Win32 documentation for full details on parameters and use.
+        /// </summary>
+        [DllImport("winmm.dll")]
+        internal static extern uint timeBeginPeriod(uint uMilliseconds);
+
+        /// <summary>
+        /// winmm.dll timeEndPeriod call.  Consult appropriate Win32 documentation for full details on parameters and use.
+        /// </summary>
+        [DllImport("winmm.dll")]
+        internal static extern uint timeEndPeriod(uint uMilliseconds);
+
+        /// <summary>
+        /// winmm.dll timeGetTime call.  Consult appropriate Win32 documentation for full details on parameters and use.
+        /// </summary>
+        [DllImport("winmm.dll")]
+        public static extern uint timeGetTime();
+    }
+
+    /// <summary>
+    /// This class is used as a lifetime wrapper for the request to the Win32 kernel to increase the system mm timer resolution.
+    /// On construction this class uses winmm_dll.timeBeginPeriod and on explicit disposal this class performs the matching call to winmm_dll.timeEndPeriod.
+    /// </summary>
 	public class MMTimerPeriod : Utils.DisposableBase
 	{
-        /// <summary>Constrution requests winmm.dll/timeBeginPeriod(0)</summary>
-		public MMTimerPeriod() : this(0) {}
+        /// <summary>Constrution calls winmm_dll.timeBeginPeriod(1)</summary>
+		public MMTimerPeriod() : this(1) {}
 
-		/// <summary>Constrution requests winmm.dll/timeBeginPeriod(uMilliseconds)</summary>
+		/// <summary>Constrution calls winmm_dll/timeBeginPeriod(uMilliseconds)</summary>
 		public MMTimerPeriod(uint uMilliseconds) 
 		{
 			periodMilliseconds = uMilliseconds;
 
-			if (0 == MMTimer.timeBeginPeriod(periodMilliseconds))
+            if (0 == winmm_dll.timeBeginPeriod(periodMilliseconds))
 				periodHasBeenSet = true;
 		}
 
 		#region DisposableBase Members
 
+        /// <summary>
+        /// Implementation for abstract DisposableBase: regardless of DisposeType, if the timer period has been set then this method will invoke winmm_dll.timeEndPeriod to release the acquired timer resolution.
+        /// </summary>
+        /// <param name="type"></param>
 		protected override void Dispose(DisposeType type)
 		{
 			if (periodHasBeenSet)
 			{
 				periodHasBeenSet = false;
-				MMTimer.timeEndPeriod(periodMilliseconds);
+                winmm_dll.timeEndPeriod(periodMilliseconds);
 			}
 		}
 
@@ -65,8 +111,10 @@ namespace MosaicLib.Time
 
 		#region Member variables
 
-		uint periodMilliseconds = 0;
-		bool periodHasBeenSet = false;
+        /// <summary>Contains the requested timer resolution from the construction call</summary>
+		private uint periodMilliseconds = 0;
+        /// <summary>Flag indicates if construction call to timeBeginPeriod was successfull, or not.</summary>
+        private bool periodHasBeenSet = false;
 
 		#endregion
 	}

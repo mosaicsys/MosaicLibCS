@@ -37,7 +37,6 @@ namespace MosaicLib.Modular.Part
 	/// This enum provides a set of state codes that are helpfull in determining if a Part is usable and if not, then why, particularly whether the part is online or not.
 	/// All Parts support a UseState but they may only use the specific subset of the defined state codes that are relevant for that part and its capabilities.
 	/// </remarks>
-
 	public enum UseState
 	{
 		/// <summary>no valid value has been given or UseState is not supported by this part</summary>
@@ -97,10 +96,14 @@ namespace MosaicLib.Modular.Part
     //------------------------------------
     #region static class for static query methods on UseState and ConnState enum values (used by BaseState)
 
+    /// <summary>
+    /// Static utility method class used in relation to UseState and ConnState enums
+    /// </summary>
     public static class BaseStateFcns
     {
         //------------------------------------
 
+        /// <summary>Returns true if the given UseState value is any of the Online states.</summary>
         public static bool IsOnline(UseState useState)
         {
             switch (useState)
@@ -115,21 +118,25 @@ namespace MosaicLib.Modular.Part
             }
         }
 
+        /// <summary>Returns true if the given UseState value is any of the Busy states (OnlineBusy and AttemptOnline)</summary>
         public static bool IsBusy(UseState useState)
         {
             return (useState == UseState.OnlineBusy || useState == UseState.AttemptOnline);
         }
 
+        /// <summary>Returns true if the given ConnState value is any of the states that represent an active connection attempt being in progress (Conneting, WaitingForConnect)</summary>
         public static bool IsConnecting(ConnState connState)
         {
             return (connState == ConnState.Connecting || connState == ConnState.WaitingForConnect);
         }
 
+        /// <summary>Returns true if the given ConnState value is any of the connected states (Connected)</summary>
         public static bool IsConnected(ConnState connState)
         {
             return (connState == ConnState.Connected);
         }
 
+        /// <summary>Returns true if the given ConnState value is IsConnected or is IsConnecting</summary>
         public static bool IsConnectedOrConnecting(ConnState connState)
         {
             return (IsConnected(connState) || IsConnecting(connState));
@@ -151,7 +158,6 @@ namespace MosaicLib.Modular.Part
 	/// (properties) or in what order.  To obtain new values for the results of invoking such methods, the client must explicitly request a new IBaseState object
 	/// whic will then contain the more current results.
 	/// </remarks>
-
 	public interface IBaseState
 	{
 		/// <summary>return true if the part is simulated</summary>
@@ -203,7 +209,7 @@ namespace MosaicLib.Modular.Part
 		/// <summary>Returns a reference to the last published BaseState from the part</summary>
 		IBaseState BaseState { get; }
 
-        /// <summary>Property gives client access to the part's Guarded Notificdation Object for the part's BaseState property.</summary>
+        /// <summary>Property gives client access to the part's Notification Object for the part's BaseState property.</summary>
         INotificationObject<IBaseState> BaseStateNotifier { get; }
     }
 
@@ -212,8 +218,13 @@ namespace MosaicLib.Modular.Part
 	//-----------------------------------------------------------------
 	#region Active part interface
 
+    /// <summary>This interface is a client side view of an Action that has no parameter and no result.</summary>
 	public interface IBasicAction : IClientFacet { }
+
+    /// <summary>This interface is a client side view of an Action that has a boolean parameter and no result.</summary>
 	public interface IBoolParamAction : IClientFacetWithParam<bool>, IBasicAction { }
+
+    /// <summary>This interface is a client side view of an Action that has a string parameter and no result.</summary>
     public interface IStringParamAction : IClientFacetWithParam<string>, IBasicAction { }
 
 	/// <summary>
@@ -270,37 +281,48 @@ namespace MosaicLib.Modular.Part
 	#endregion
 
 	//-----------------------------------------------------------------
-	#region PartBase class
+	#region PartBaseBase class
 
 	/// <summary>
-	/// This abstract base class is generally used as a base class for all Part base classes (active or otherwise).  See SimplePartBase, and SimpleActivePart
+	/// This abstract base class is generally used as a base class for all Part base classes (active or otherwise).
+    /// <seealso cref="SimplePartBase"/> and <seealso cref="SimpleActivePartBase"/>
+    /// <para/>This class is derived from <see cref="DisposableBase"/>
 	/// </summary>
 	public abstract class PartBaseBase : DisposableBase, IPartBase
 	{
-		private readonly string partID = string.Empty;
-		private readonly string partType = string.Empty;
-
 		#region IPartBase Members
 
-		public string PartID { get { return partID; } }
-		public string PartType { get { return partType; } }
-		public abstract IBaseState BaseState { get; }
+        /// <summary>Reports the PartID, or name of the part</summary>
+        public string PartID { get; private set; }
+        /// <summary>Reports the PartType, or the name of the type of part </summary>
+        public string PartType { get; private set; }
+        /// <summary>Returns a reference to the last published BaseState from the part.  This property is abstract and must be implemented in a derived class.</summary>
+        public abstract IBaseState BaseState { get; }
+        /// <summary>Property gives client access to the part's Notification Object for the part's BaseState property.  This property is abstract and must be implemented in a derived class.</summary>
         public abstract INotificationObject<IBaseState> BaseStateNotifier { get; }
 
 		#endregion
 
+        /// <summary>
+        /// Protected base class constructor: initializes the PartID and PartType fields
+        /// </summary>
+        /// <param name="partID">This gives the name that the part will carry</param>
+        /// <param name="partType">This gives the type that the part will carry</param>
 		protected PartBaseBase(string partID, string partType) 
 		{
-			this.partID = partID;
-            this.partType = partType;
+			PartID = partID;
+            PartType = partType;
 
-			Asserts.CheckIfConditionIsNotTrue(!String.IsNullOrEmpty(partID), "PartID is valid");
-			Asserts.CheckIfConditionIsNotTrue(!String.IsNullOrEmpty(partType), "PartType is valid");
+			Asserts.CheckIfConditionIsNotTrue(!String.IsNullOrEmpty(PartID), "PartID is valid");
+			Asserts.CheckIfConditionIsNotTrue(!String.IsNullOrEmpty(PartType), "PartType is valid");
 		}
 
+        /// <summary>Protected utility method.  Returns the result of calling <code>Utils.EC.FmtWin32EC(PartID, win32EC);</code></summary>
 		protected string FmtWin32EC(int win32EC) { return Utils.EC.FmtWin32EC(PartID, win32EC); }
-		protected string FmtStdEC(string errorStr) { return Utils.EC.FmtStdEC(PartID, errorStr); }
-		protected string FmtStdEC(int errorCode, string errorStr) { return Utils.EC.FmtStdEC(PartID, errorCode, errorStr); }
+        /// <summary>Protected utility method.  Returns the result of calling <code>Utils.EC.FmtStdEC(PartID, errorStr);</code></summary>
+        protected string FmtStdEC(string errorStr) { return Utils.EC.FmtStdEC(PartID, errorStr); }
+        /// <summary>Protected utility method.  Returns the result of calling <code>Utils.EC.FmtStdEC(PartID, errorCode, errorStr);</code></summary>
+        protected string FmtStdEC(int errorCode, string errorStr) { return Utils.EC.FmtStdEC(PartID, errorCode, errorStr); }
 	};
 
 	#endregion
@@ -357,44 +379,86 @@ namespace MosaicLib.Modular.Part
 
 		#region public methods
 
-		static private IBaseState noneState = new BaseState();
+        /// <summary>static property that returns an empty IBaseState</summary>
+        public static IBaseState None { get { return new BaseState(); } }
 
-		public static IBaseState None { get { return noneState; } }
+        /// <summary>Constructor: allows caller to specify if the source part IsPrimaryPart or not</summary>
+        public BaseState(bool isPrimaryPart) 
+            : this() 
+        { 
+            IsPrimaryPart = isPrimaryPart; 
+        }
+        /// <summary>Constructor: allows caller to specify if the source part IsSimulated and IsParimaryPart</summary>
+        public BaseState(bool isSimulated, bool isPrimaryPart) 
+            : this(isPrimaryPart) 
+        { 
+            IsSimulated = isSimulated; 
+        }
 
-		public BaseState(bool isPrimaryPart) : this() { IsPrimaryPart = isPrimaryPart; }
-		public BaseState(bool isSimulated, bool isPrimaryPart) : this(isPrimaryPart) { IsSimulated = isSimulated; }
-        public BaseState(BaseState rhs) : this() { IsSimulated = rhs.IsSimulated; IsPrimaryPart = rhs.IsPrimaryPart; useState = rhs.useState; connState = rhs.connState; timeStamp = rhs.timeStamp; actionName = rhs.actionName; }
+        /// <summary>Copy constructor</summary>
+        public BaseState(IBaseState rhs) 
+            : this()
+        {
+            IsSimulated = rhs.IsSimulated;
+            IsPrimaryPart = rhs.IsPrimaryPart;
+            useState = rhs.UseState;
+            connState = rhs.ConnState;
+            actionName = rhs.ActionName;
+            timeStamp = rhs.TimeStamp;
+        }
 
-		public void SetSimulated(bool online) { SetSimulated(online, true); }
-		public void SetSimulated(bool online, bool primary)
+        /// <summary>Sets the part as Simulated and possibly puts it in an Online state.</summary>
+        public BaseState SetSimulated(bool online) 
+        { 
+            return SetSimulated(online, true); 
+        }
+
+        /// <summary>Sets the part as Simulator and allows it to be put in an Online state and/or to have its IsPrimaryPart property set.</summary>
+        public BaseState SetSimulated(bool online, bool primary)
 		{
 			IsSimulated = true;
 			IsPrimaryPart = primary;
-			SetState(online ? UseState.Online : UseState.Initial, ConnState.NotApplicable);
+			return SetState(online ? UseState.Online : UseState.Initial, ConnState.NotApplicable);
 		}
 
-		public void SetState(UseState useState, ConnState connState)
+        /// <summary>Sets the UseState and ConnState values and sets the contained TimeStamp to Now.</summary>
+        public BaseState SetState(UseState useState, ConnState connState)
 		{
 			this.useState = useState;
 			this.connState = connState;
 			timeStamp.SetToNow();
+            return this;
 		}
 
-        public void SetState(UseState useState, string actionName)
+        /// <summary>Sets the UseState and ActionName and sets the contained TimeStamp to Now.</summary>
+        public BaseState SetState(UseState useState, string actionName)
         {
             this.useState = useState;
             this.actionName = actionName;
             timeStamp.SetToNow();
+            return this;
         }
 
-        public void SetState(UseState useState, string actionName, ConnState connState)
+        /// <summary>Sets the UseState, the ActionName and the ConnState parameters and sets the TimeStamp to Now.</summary>
+        public BaseState SetState(UseState useState, string actionName, ConnState connState)
         {
             this.useState = useState;
             this.actionName = actionName;
             this.connState = connState;
             timeStamp.SetToNow();
+            return this;
         }
 
+        /// <summary>
+        /// Sets this structs contents to be a copy from the given IBaseState value.
+        /// </summary>
+        public BaseState SetState(IBaseState rhs)
+        {
+            this = new BaseState(rhs);
+            return this;
+        }
+
+        /// <summary>Provides a print/log/debug suitable string representation of the contents of this state object.</summary>
         public override string ToString()
 		{
             bool includeActionName = (IsBusy && (ActionName != String.Empty));
@@ -415,8 +479,6 @@ namespace MosaicLib.Modular.Part
 		}
 
 		#endregion
-
-        //------------------------------------
     }
 
 	#endregion
@@ -429,16 +491,26 @@ namespace MosaicLib.Modular.Part
     /// This class instantiates and gives derived classes use of a Logger via the Log property.  
     /// This class also implements all of the public properties and base protected utility methods that are used to implement and maintain the 
     /// Part's BaseState property including allowing clients to observe and/or subscribe to it.
+    /// <para/>This class is derived from <see cref="PartBaseBase"/> which is derived from <see cref="DisposableBase"/> which requires that 
+    /// derived class (eventually) implement abstract Dispose(DisposeType) method.
     /// </summary>
-
     public abstract class SimplePartBase : PartBaseBase
     {
         #region Construction and Destruction
 
+        /// <summary>Protected constructor: derived class specifies only the PartID, PartType will be automatically derived from the class name of the derived type.</summary>
+        /// <param name="partID">Gives the PartID/Name that the part will report and use.</param>
         protected SimplePartBase(string partID) : this(partID, new System.Diagnostics.StackFrame(1).GetMethod().DeclaringType.ToString()) { }
 
+        /// <summary>Protected constructor: derived class specifies the PartID and PartType to be used</summary>
+        /// <param name="partID">Gives the PartID/Name that the part will report and use.</param>
+        /// <param name="partType">Gives the PartType that this part will report</param>
         protected SimplePartBase(string partID, string partType) : this(partID, partType, new Logging.Logger(partID)) { }
 
+        /// <summary>Protected constructor: derived class specifies the PartID, PartType, and IBasicLogger instance to be used</summary>
+        /// <param name="partID">Gives the PartID/Name that the part will report and use.</param>
+        /// <param name="partType">Gives the PartType that this part will report</param>
+        /// <param name="basicLogger">Gives the <see cref="Logging.IBasicLogger"/>instance that the part shall use for logging.</param>
         protected SimplePartBase(string partID, string partType, Logging.IBasicLogger basicLogger)
             : base(partID, partType)
         {
@@ -472,15 +544,21 @@ namespace MosaicLib.Modular.Part
 
         #region BaseState support code - implements BaseState change logging, notification and common set methods
 
+        /// <summary>Gives the customized storage field for the BaseStateChangeEmitter property</summary>
         private Logging.IMesgEmitter stateChangeEmitter = null;
 
         /// <summary>Defines the emitter that is used for state change event log messages.  Defaults to Log.Emitter(Logging.MesgType.Trace).  When set to null Logging.MesgEmitterImpl.Null is used to emit these messages (into the void).</summary>
-        protected Logging.IMesgEmitter BaseStateChangeEmitter { get { return (stateChangeEmitter != null ? stateChangeEmitter : Logging.MesgEmitterImpl.Null); } set { stateChangeEmitter = value; } }
+        protected Logging.IMesgEmitter BaseStateChangeEmitter { get { return (stateChangeEmitter != null ? stateChangeEmitter : Logging.NullEmitter); } set { stateChangeEmitter = value; } }
 
+        /// <summary>This field actually stores the Part's BaseState</summary>
         private BaseState privateBaseState;
+        /// <summary>This protected get/set property gives derived objects access to get and set the privateBaseState field.</summary>
         protected BaseState PrivateBaseState { get { return privateBaseState; } set { privateBaseState = value; } }
 
+        /// <summary>private field which is the interlocked notificatino ref object that is used to publish boxed BaseState values using the IBaseState interface.</summary>
         private InterlockedNotificationRefObject<IBaseState> publishedBaseState = new InterlockedNotificationRefObject<IBaseState>();
+        
+        /// <summary>protected EventHandlerNotificationList{IBaseState} that may also be used to signal publication of new BaseState values</summary>
         protected Utils.EventHandlerNotificationList<IBaseState> BaseStatePublishedNotificationList = null;
 
         /// <summary>If this property is set to true, the part should indicate that it is busy whenever any action queue is non-empty.</summary>
@@ -649,6 +727,14 @@ namespace MosaicLib.Modular.Part
         protected void SetBaseState(UseState useState, string actionName, ConnState connState, string reason, bool publish)
         {
             privateBaseState.SetState(useState, actionName, connState);
+            if (publish)
+                PublishBaseState(reason);
+        }
+
+        /// <summary>Variant SetBaseState which allows the caller to set the BaseState contents to match a value from some other source.</summary>
+        protected void SetBaseState(IBaseState rhs, string reason, bool publish)
+        {
+            privateBaseState.SetState(rhs);
             if (publish)
                 PublishBaseState(reason);
         }

@@ -1,6 +1,6 @@
 //-------------------------------------------------------------------
 /*! @file ParseUtils.cs
- *  @breif Provides definitions and implementations of a series of Parseing related utility functions.
+ *  @breif Provides definitions and implementations of a series of Parsing related utility functions.
  * 
  * Copyright (c) Mosaic Systems Inc., All rights reserved
  * Copyright (c) 2008 Mosaic Systems Inc., All rights reserved
@@ -41,12 +41,14 @@ namespace MosaicLib.Utils
         SimpleFileName,
         /// <summary>span alphanumeric, '-', '_', '.', '\\', '/', ':'</summary>
         SimpleFilePath,
+        /// <summary>span numeric and letters 'a'-'f' and 'A'-'F'</summary>
+        HexDigits,
     }
 
     /// <summary>
     /// This is a helper object that represents an string with an index location into the string.  
     /// This object provides a number of helper methods, some static, that may be used with the object to perform common string parsing functions.
-    /// These helper methods are generally implemented to leave the object unmofied if the requested operation fails and to update the position when it succeeds.
+    /// These helper methods are generally implemented to leave the object unmodified if the requested operation fails and to update the position when it succeeds.
     /// This allows the helper methods to be used in chains and/or trees in order to perform more complex parsing functions.
     /// </summary>
     /// <remarks>
@@ -62,9 +64,6 @@ namespace MosaicLib.Utils
         /// <summary>Stores a reference to the original given string (or null if none)</summary>
         private string str;
 
-        /// <summary>Stores the index into the str string.</summary>
-		private int idx;
-
         #endregion
 
         //-----------------------------------------------------------------
@@ -77,7 +76,7 @@ namespace MosaicLib.Utils
         public StringScanner(string s, int i) : this() { Str = s; Idx = i; }
 
         /// <summary>Copy constructor.  Gives a scanner with the same string and position as the given scanner.</summary>
-        public StringScanner(StringScanner rhs) : this(rhs.str, rhs.idx) {}
+        public StringScanner(StringScanner rhs) : this(rhs.str, rhs.Idx) {}
 
         #endregion
 
@@ -85,25 +84,25 @@ namespace MosaicLib.Utils
         #region public state accessor properties, some are settable
 
         /// <summary>Gives access to the string that is currently referenced by this object.  May be set.  Setter also resets the current position.  Getter returns empty string if there is no contained string.</summary>
-        public string Str { get { return (str != null ? str : string.Empty); } set { str = (value != null ? value : string.Empty); idx = 0; } }
+        public string Str { get { return (str != null ? str : string.Empty); } set { str = (value != null ? value : string.Empty); Idx = 0; } }
 
-        /// <summary>Gives acces to the current index location in the contained string.  May be set</summary>
-        public int Idx { get { return idx; } set { idx = value; } }
+        /// <summary>Get/Set: gives the current index location in the contained string.</summary>
+        public int Idx { get; set; }
 
         /// <summary>Returns true if there are no more remaining characters in the string at the current position or if the current position is otherwise invalid.</summary>
-        public bool IsAtEnd { get { return (str == null || idx >= str.Length || idx < 0); } }
+        public bool IsAtEnd { get { return (str == null || Idx >= str.Length || Idx < 0); } }
 
         /// <summary>Returns true if the current index position referes to a legal character in the contained string</summary>
         public bool IsIdxValid { get { return (!IsAtEnd); } }
 
         /// <summary>Returns the character at the currently indexed scan position or the null character if the current index is not, or is no longer, valid.</summary>
-        public char Char { get { return (!IsAtEnd ? str[idx] : (char)0); } }
+        public char Char { get { return (!IsAtEnd ? str[Idx] : (char)0); } }
 
         /// <summary>Returns the number of characters that remain in the contained string to its end or 0 if the current index position is not, or is no longer, valid</summary>
-        public int NumChars { get { return (!IsAtEnd ? (str.Length - idx) : 0); } }
+        public int NumChars { get { return (!IsAtEnd ? (str.Length - Idx) : 0); } }
 
         /// <summary>Returns a new string containing the remaining characters in the contained string from the current position to its end (or the empty string if there are none)</summary>
-        public string Rest { get { return (IsAtEnd ? String.Empty : (idx == 0 ? Str : Str.Substring(idx))); } }
+        public string Rest { get { return (IsAtEnd ? String.Empty : (Idx == 0 ? Str : Str.Substring(Idx))); } }
 
         /// <summary>static Operator that may be used to increment the current position.  Does nothing if the current position is at (or past) the last position in the current string.</summary>
         public static StringScanner operator ++(StringScanner ss) { if (!ss.IsAtEnd) ss.Idx++; return ss; }
@@ -120,16 +119,28 @@ namespace MosaicLib.Utils
         //-------------------------------------
         #region Whitespace traversal functions
 
-        public void SkipOverWhiteSpace()
+        /// <summary>
+        /// Advances the Idx until the current Char is no longer a WhiteSpace char or the end or string is reached.
+        /// <para/>Returns "this" to allow caller to use call chaining, such as in the constructor.
+        /// </summary>
+        public StringScanner SkipOverWhiteSpace()
         {
-            while (IsIdxValid && Char.IsWhiteSpace(str[idx]))
-                idx++;
+            while (IsIdxValid && Char.IsWhiteSpace(str[Idx]))
+                Idx++;
+
+            return this;
         }
 
-        public void SkipToNextWhiteSpace()
+        /// <summary>
+        /// Advances the Idx until the current Char is a WhiteSpace char or the end of string is reached.
+        /// <para/>Returns "this" to allow caller to use call chaining, such as in the constructor.
+        /// </summary>
+        public StringScanner SkipToNextWhiteSpace()
         {
-            while (IsIdxValid && !Char.IsWhiteSpace(str[idx]))
+            while (IsIdxValid && !Char.IsWhiteSpace(str[Idx]))
                 Idx++;
+
+            return this;
         }
 
         #endregion
@@ -138,7 +149,11 @@ namespace MosaicLib.Utils
         #region Token match and extract functions
 
         /// <summary>
-        /// Returns true if the given char is a valid char in the set of chars defined by the tokenType
+        /// Returns true if the given char is a valid char in the set of chars defined by the tokenType.
+        /// TokenType.ToNextWhiteSpace accepts all characters except whitespace characters.
+        /// TokenType.AlphaNumeric accepts all letters and digits.
+        /// TokenType.SimpleFileName accepts all AlphaNumeric and adds '-', '_' and '.'
+        /// TokenType.SimpleFilePath accepts all SimpleFileName and adds '\\', '/' and ':'
         /// </summary>
         public static bool IsValidTokenChar(Char c, TokenType tokenType)
         {
@@ -148,14 +163,14 @@ namespace MosaicLib.Utils
                 case TokenType.AlphaNumeric: return (Char.IsLetterOrDigit(c));
                 case TokenType.SimpleFileName: return (Char.IsLetterOrDigit(c) || c == '-' || c == '_' || c == '.');
                 case TokenType.SimpleFilePath: return (Char.IsLetterOrDigit(c) || c == '-' || c == '_' || c == '.' || c == '\\' || c == '/' || c == ':');
+                case TokenType.HexDigits: return (Char.IsDigit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'));
                 default: return false;
             }
         }
 
         /// <summary>
-        /// Returns true if the given char is a valid end of token char.  
-        /// For TokenType.ToNextWhiteSpace the char must be IsWhiteSpace.  
-        /// For TokenType.AlphaNumeric and TokenType.SimpleFileName, the char must not be a valid TokenType.SimpleFileName char.
+        /// Returns true if the given char is a valid end of token char. 
+        /// For all TokenType's this reduces to Char.IsWhiteSpace(c)
         /// </summary>
         public static bool IsValidTokenEndChar(Char c, TokenType tokenType)
         {
@@ -165,14 +180,44 @@ namespace MosaicLib.Utils
                 case TokenType.AlphaNumeric: return (Char.IsWhiteSpace(c));
                 case TokenType.SimpleFileName: return (Char.IsWhiteSpace(c));
                 case TokenType.SimpleFilePath: return (Char.IsWhiteSpace(c));
+                case TokenType.HexDigits: return Char.IsWhiteSpace(c);
                 default: return false;
             }
         }
 
+        /// <summary>Determines if the current position in the Str matches the given token and returns true if so.  When returning false, the scanner Idx is not moved.  SkipsLeadingWhiteSpace, SkipsTrailingWhiteSpace, RequiresTokenEnd, TokenType.SimpleFileName</summary>
+        /// <param name="token">Gives the string that is being tested to determine if the current Idx position in Str matches, or not.</param>
+        public bool MatchToken(string token) 
+        { 
+            return MatchToken(token, true, true, true, TokenType.SimpleFileName); 
+        }
 
-        public bool MatchToken(string token) { return MatchToken(token, true, true, true); }
-        public bool MatchToken(string token, bool skipTrailingWhiteSpace, bool requireTokenEnd) { return MatchToken(token, true, skipTrailingWhiteSpace, requireTokenEnd); }
+        /// <summary>Determines if the current position in the Str matches the given token and returns true if so.  When returning false, the scanner Idx is not moved.  SkipsLeadingWhiteSpace, TokenType.SimpleFileName</summary>
+        /// <param name="token">Gives the string that is being tested to determine if the current Idx position in Str matches, or not.</param>
+        /// <param name="skipTrailingWhiteSpace">Set to true to allow the scanner to advance over trailing whitespace after a match is found.  Set to false to prevent this.</param>
+        /// <param name="requireTokenEnd">Set to true to require that the character after the match must be a TokenEnd character according to the TokenType.SimpleFileName rules.</param>
+        public bool MatchToken(string token, bool skipTrailingWhiteSpace, bool requireTokenEnd) 
+        {
+            return MatchToken(token, true, skipTrailingWhiteSpace, requireTokenEnd, TokenType.SimpleFileName); 
+        }
+
+        /// <summary>Determines if the current position in the Str matches the given token and returns true if so.  When returning false, the scanner Idx is not moved.  TokenType.SimpleFileName</summary>
+        /// <param name="token">Gives the string that is being tested to determine if the current Idx position in Str matches, or not.</param>
+        /// <param name="skipLeadingWhiteSpace">Set to true to allow the scanner to advance over leading whitespace before checking if a match is found.  Set to false to prevent this.</param>
+        /// <param name="skipTrailingWhiteSpace">Set to true to allow the scanner to advance over trailing whitespace after a match is found.  Set to false to prevent this.</param>
+        /// <param name="requireTokenEnd">Set to true to require that the character after the match must be a TokenEnd character according to the TokenType.SimpleFileName rules.</param>
         public bool MatchToken(string token, bool skipLeadingWhiteSpace, bool skipTrailingWhiteSpace, bool requireTokenEnd)
+        {
+            return MatchToken(token, skipLeadingWhiteSpace, skipTrailingWhiteSpace, requireTokenEnd, TokenType.SimpleFileName);
+        }
+
+        /// <summary>Determines if the current position in the Str matches the given token and returns true if so.  When returning false, the scanner Idx is not moved.</summary>
+        /// <param name="token">Gives the string that is being tested to determine if the current Idx position in Str matches, or not.</param>
+        /// <param name="skipLeadingWhiteSpace">Set to true to allow the scanner to advance over leading whitespace before checking if a match is found.  Set to false to prevent this.</param>
+        /// <param name="skipTrailingWhiteSpace">Set to true to allow the scanner to advance over trailing whitespace after a match is found.  Set to false to prevent this.</param>
+        /// <param name="requireTokenEnd">Set to true to require that the character after the match must be a TokenEnd character according to the selected tokenEndType rules.</param>
+        /// <param name="tokenEndType">Defines the TokenType that is used for token end checking when the requireTokenEnd parameter is true.</param>
+        public bool MatchToken(string token, bool skipLeadingWhiteSpace, bool skipTrailingWhiteSpace, bool requireTokenEnd, TokenType tokenEndType)
         {
             StringScanner localScan = this;
             StringScanner tokenScan = new StringScanner(token);
@@ -196,7 +241,7 @@ namespace MosaicLib.Utils
             if (!tokenScan.IsAtEnd)
                 return false;
 
-            if (requireTokenEnd && !localScan.IsAtEnd && !IsValidTokenEndChar(localScan.Char, TokenType.SimpleFileName))
+            if (requireTokenEnd && !localScan.IsAtEnd && !IsValidTokenEndChar(localScan.Char, tokenEndType))
                 return false;
 
             Idx = localScan.Idx;
@@ -207,9 +252,76 @@ namespace MosaicLib.Utils
             return true;
         }
 
-        public bool ExtractToken(out string tokenStr) { return ExtractToken(out tokenStr, TokenType.ToNextWhiteSpace, true, true, true); }
-        public bool ExtractToken(out string tokenStr, TokenType tokenType) { return ExtractToken(out tokenStr, tokenType, true, true, true); }
-        public bool ExtractToken(out string tokenStr, TokenType tokenType, bool skipLeadingWhiteSpace, bool skipTrailingWhiteSpace) { return ExtractToken(out tokenStr, tokenType, skipLeadingWhiteSpace, skipTrailingWhiteSpace, true); }
+        /// <summary>
+        /// Attempts to extract a non-empty sequence of characters at the current position using the default TokenType to determine when the sequence of characters must first end.  
+        /// <para/>returns the extracted token or String.Empty if no token could be successfully extracted.
+        /// <para/>TokenType.ToNextWhiteSpace, SkipLeadingWhiteSpace, SkipTrailingWhiteSpace, RequireTokenEnd
+        /// </summary>
+        public string ExtractToken()
+        {
+            string token;
+            ExtractToken(out token);
+            return token;
+        }
+
+        /// <summary>
+        /// Attempts to extract a non-empty sequence of characters at the current position using the given TokenType to determine when the sequence of characters must first end.  
+        /// <para/>returns the extracted token or String.Empty if no token could be successfully extracted.
+        /// <para/>SkipLeadingWhiteSpace, SkipTrailingWhiteSpace, RequireTokenEnd
+        /// </summary>
+        public string ExtractToken(TokenType tokenType, bool requireTokenEnd)
+        {
+            string token;
+            ExtractToken(out token, tokenType, true, true, requireTokenEnd);
+            return token;
+        }
+
+        /// <summary>
+        /// Attempts to extract a non-empty sequence of characters at the current position using the default TokenType to determine when the sequence of characters must first end.  
+        /// <para/>TokenType.ToNextWhiteSpace, SkipLeadingWhiteSpace, SkipTrailingWhiteSpace, RequireTokenEnd
+        /// </summary>
+        /// <param name="tokenStr">Out parameter the receives the contents of the token</param>
+        /// <returns>true if the token was extracted, false otherwise.  The Idx is not moved if this method returns false.</returns>
+        public bool ExtractToken(out string tokenStr) 
+        { 
+            return ExtractToken(out tokenStr, TokenType.ToNextWhiteSpace, true, true, true); 
+        }
+
+        /// <summary>
+        /// Attempts to extract a non-empty sequence of characters at the current position using the given tokenType to determine when the sequence of characters must first end.  
+        /// <para/>SkipLeadingWhiteSpace, SkipTrailingWhiteSpace, RequireTokenEnd
+        /// </summary>
+        /// <param name="tokenStr">Out parameter the receives the contents of the token or String.Empty if no valid token was extracted.</param>
+        /// <param name="tokenType">Defines the TokenType that is used to determine which characters can be collected into a contiguous character sequence as the extracted token.</param>
+        /// <returns>true if the token was extracted, false otherwise.  The Idx is not moved if this method returns false.</returns>
+        public bool ExtractToken(out string tokenStr, TokenType tokenType) 
+        { 
+            return ExtractToken(out tokenStr, tokenType, true, true, true); 
+        }
+
+        /// <summary>
+        /// Attempts to extract a non-empty sequence of characters at the current position using the given tokenType to determine when the sequence of characters must first end.  
+        /// <para/>RequireTokenEnd
+        /// </summary>
+        /// <param name="tokenStr">Out parameter the receives the contents of the token or String.Empty if no valid token was extracted.</param>
+        /// <param name="tokenType">Defines the TokenType that is used to determine which characters can be collected into a contiguous character sequence as the extracted token.</param>
+        /// <param name="skipLeadingWhiteSpace">If true the token extraction will only begin after skipping leading white space.</param>
+        /// <param name="skipTrailingWhiteSpace">If true, trailing whitespace will also be skipped if a token was successfully extracted.</param>
+        /// <returns>true if the token was extracted, false otherwise.  The Idx is not moved if this method returns false.</returns>
+        public bool ExtractToken(out string tokenStr, TokenType tokenType, bool skipLeadingWhiteSpace, bool skipTrailingWhiteSpace) 
+        { 
+            return ExtractToken(out tokenStr, tokenType, skipLeadingWhiteSpace, skipTrailingWhiteSpace, true); 
+        }
+
+        /// <summary>
+        /// Attempts to extract a non-empty sequence of characters at the current position using the given tokenType to determine when the sequence of characters must first end.  
+        /// </summary>
+        /// <param name="tokenStr">Out parameter the receives the contents of the token or String.Empty if no valid token was extracted.</param>
+        /// <param name="tokenType">Defines the TokenType that is used to determine which characters can be collected into a contiguous character sequence as the extracted token.</param>
+        /// <param name="skipLeadingWhiteSpace">If true the token extraction will only begin after skipping leading white space.</param>
+        /// <param name="skipTrailingWhiteSpace">If true, trailing whitespace will also be skipped if a token was successfully extracted.</param>
+        /// <param name="requireTokenEnd">If true then token extraction can only succeed if the next character after the end of the token is a valid TokenEnd character for the specified tokenType or if the end of the Str was reached.</param>
+        /// <returns>true if the token was extracted, false otherwise.  The Idx is not moved if this method returns false.</returns>
         public bool ExtractToken(out string tokenStr, TokenType tokenType, bool skipLeadingWhiteSpace, bool skipTrailingWhiteSpace, bool requireTokenEnd)
         {
             StringScanner localScan = this;
@@ -229,7 +341,7 @@ namespace MosaicLib.Utils
 
             for (; !localScan.IsAtEnd && IsValidTokenChar(localScan.Char, tokenType); localScan++) { }
 
-            // calculate the number of charactes we have traversed
+            // calculate the number of characters we have traversed
             int tokenLen = (localScan.Idx - tokenStart.Idx);
 
             // determine if we found the end
@@ -256,9 +368,9 @@ namespace MosaicLib.Utils
         #endregion
 
         //-------------------------------------
-
         #region debugging - support hover over quick view
 
+        /// <summary>Debugging assistant, returns the current Idx and the Rest of the string.</summary>
         public override string ToString()
         {
             return Utils.Fcns.CheckedFormat("Scanner:@{0},[{1}]", Idx, Rest);
@@ -269,7 +381,22 @@ namespace MosaicLib.Utils
         //-----------------------------------------------------------------
         #region Map use functions
 
-        public bool ParseTokenAndMapValueByName<ItemType>(Dictionary<string, ItemType> map, out ItemType value) { return ParseTokenAndMapValueByName<ItemType>(map, out value, true); }
+        /// <summary>Extracts an AlphaNumeric token from the scanner and uses the given Dictionary to find the ItemValue for the corresponding token.  SkipsLeadingWhiteSpace, SkipsTrailingWhiteSpace, RequiresTokenEnd, TokenType.AlphaNumeric</summary>
+        /// <typeparam name="ItemType">Defines the Dictionary's TValue type used in the given map</typeparam>
+        /// <param name="map">Gives the Dictionary of token/value pairs that will be used after extracting the next AlphaNumeric token.</param>
+        /// <param name="value">This out parameter receives the mapped value or the default value if the no token or match was found.</param>
+        /// <returns>true if the token was extracted and a matching Dictionary entry was found, false otherwise.  The Idx is not moved if this method returns false.</returns>
+        public bool ParseTokenAndMapValueByName<ItemType>(Dictionary<string, ItemType> map, out ItemType value) 
+        { 
+            return ParseTokenAndMapValueByName<ItemType>(map, out value, true); 
+        }
+
+        /// <summary>Extracts an AlphaNumeric token from the scanner and uses the given Dictionary to find the ItemValue for the corresponding token.  SkipsLeadingWhiteSpace, RequiresTokenEnd, TokenType.AlphaNumeric</summary>
+        /// <typeparam name="ItemType">Defines the Dictionary's TValue type used in the given map</typeparam>
+        /// <param name="map">Gives the Dictionary of token/value pairs that will be used after extracting the next AlphaNumeric token.</param>
+        /// <param name="value">This out parameter receives the mapped value or the default value if the no token or match was found.</param>
+        /// <param name="skipTrailingWhiteSpace">If true, trailing whitespace will also be skipped if a token was successfully extracted.</param>
+        /// <returns>true if the token was extracted and a matching Dictionary entry was found, false otherwise.  The Idx is not moved if this method returns false.</returns>
         public bool ParseTokenAndMapValueByName<ItemType>(Dictionary<string, ItemType> map, out ItemType value, bool skipTrailingWhiteSpace)
         {
             StringScanner localScanner = this;
@@ -283,7 +410,28 @@ namespace MosaicLib.Utils
             return success;
         }
 
-        public static bool FindTokenNameByValue<ItemType>(ItemType valueToFind, Dictionary<string, ItemType> map, out string tokenStr) { return FindTokenNameByValue<ItemType>(valueToFind, map, out tokenStr, string.Empty); }
+        /// <summary>
+        /// Uses a reverse iterative search in the Dictionary to find the string key value for the corresponding given ItemType valueToFind.
+        /// </summary>
+        /// <typeparam name="ItemType">Defines the Dictionary's TValue type used in the given map</typeparam>
+        /// <param name="valueToFind">Gives the ItemType value that the map will be searched to find the first entry that returns true from Object.Equals</param>
+        /// <param name="map">Defines the Dictionary instance to use for this search</param>
+        /// <param name="tokenStr">Is assigned the string value from the first found map entry for valueToFind on success.  Assigned to String.Empty if valueToFind was not found.</param>
+        /// <returns>true if the ItemType valueToFind was found in the given map and false otherwise.</returns>
+        public static bool FindTokenNameByValue<ItemType>(ItemType valueToFind, Dictionary<string, ItemType> map, out string tokenStr) 
+        { 
+            return FindTokenNameByValue<ItemType>(valueToFind, map, out tokenStr, string.Empty); 
+        }
+
+        /// <summary>
+        /// Uses a reverse iterative search in the Dictionary to find the string key value for the corresponding given ItemType valueToFind.
+        /// </summary>
+        /// <typeparam name="ItemType">Defines the Dictionary's TValue type used in the given map</typeparam>
+        /// <param name="valueToFind">Gives the ItemType value that the map will be searched to find the first entry that returns true from Object.Equals</param>
+        /// <param name="map">Defines the Dictionary instance to use for this search</param>
+        /// <param name="tokenStr">Is assigned the string value from the first found map entry for valueToFind on success.  Assigned to notFoundStr if valueToFind was not found.</param>
+        /// <param name="notFoundStr">Defines the contents of the output string placed in tokenStr if the ItemType valueToFind was not found in the given map.</param>
+        /// <returns>true if the ItemType valueToFind was found in the given map and false otherwise.</returns>
         public static bool FindTokenNameByValue<ItemType>(ItemType valueToFind, Dictionary<string, ItemType> map, out string tokenStr, string notFoundStr)
         {
             if (!map.ContainsValue(valueToFind))
@@ -305,12 +453,39 @@ namespace MosaicLib.Utils
             return false;
         }
 
+        /// <summary>
+        /// Searches the given Dictionary object to find the given tokenStr key value.
+        /// </summary>
+        /// <typeparam name="ItemType">Defines the Dictionary's TValue type used in the given map</typeparam>
+        /// <param name="tokenStr">Defines the token string to search for.</param>
+        /// <param name="map">Defines the Dictionary instance to use for this search</param>
+        /// <param name="value">Assigned to the ItemType value for the matching entry in the given map when tokenStr is found.  Otherwise is assigned to default(ItemType).</param>
+        /// <returns>true if the given tokenStr was found in the given map or false otherwise.</returns>
         public static bool FindTokenValueByName<ItemType>(string tokenStr, Dictionary<string, ItemType> map, out ItemType value)
         {
             return map.TryGetValue(tokenStr, out value);
         }
 
-        public static string FindTokenNameByValue<ItemType>(ItemType valueToFind, Dictionary<string, ItemType> map) { return FindTokenNameByValue(valueToFind, map, string.Empty); }
+        /// <summary>
+        /// Uses a reverse iterative search in the Dictionary to find the string key value for the corresponding given ItemType valueToFind and returns it.
+        /// </summary>
+        /// <typeparam name="ItemType">Defines the Dictionary's TValue type used in the given map</typeparam>
+        /// <param name="valueToFind">Gives the ItemType value that the map will be searched to find the first entry that returns true from Object.Equals</param>
+        /// <param name="map">Defines the Dictionary instance to use for this search</param>
+        /// <returns>the string value from the first found map entry for valueToFind on success or String.Empty if valueToFind was not found in map.</returns>
+        public static string FindTokenNameByValue<ItemType>(ItemType valueToFind, Dictionary<string, ItemType> map) 
+        { 
+            return FindTokenNameByValue(valueToFind, map, string.Empty); 
+        }
+
+        /// <summary>
+        /// Uses a reverse iterative search in the Dictionary to find the string key value for the corresponding given ItemType valueToFind and returns it.
+        /// </summary>
+        /// <typeparam name="ItemType">Defines the Dictionary's TValue type used in the given map</typeparam>
+        /// <param name="valueToFind">Gives the ItemType value that the map will be searched to find the first entry that returns true from Object.Equals</param>
+        /// <param name="map">Defines the Dictionary instance to use for this search</param>
+        /// <param name="notFoundStr">Defines the contents of the output string placed in tokenStr if the ItemType valueToFind was not found in the given map.</param>
+        /// <returns>the string value from the first found map entry for valueToFind on success or notFoundStr if valueToFind was not found in map.</returns>
         public static string FindTokenNameByValue<ItemType>(ItemType valueToFind, Dictionary<string, ItemType> map, string notFoundStr)
         {
             string token;
@@ -323,13 +498,47 @@ namespace MosaicLib.Utils
         //-------------------------------------
         #region Value Parsers
 
-        public bool ParseValue(out string value) { return ParseValue(out value, true); }
-        public bool ParseValue(out string value, bool skipTrailingWhiteSpace)
-        {
-            return ExtractToken(out value, TokenType.ToNextWhiteSpace, true, skipTrailingWhiteSpace);
+        /// <summary>
+        /// Extracts a TokenType.ToNextWhiteSpace token and assigns it to the given output value parameter.  
+        /// SkipLeadingWhiteSpace, SkipTrailingWhiteSpace, RequireTokenEnd.
+        /// </summary>
+        /// <param name="value">Receives the Extracted token value or String.Empty if no valid token was extracted.</param>
+        /// <returns>true if the ExtractToken method succeeds or false otherwise.</returns>
+        public bool ParseValue(out string value) 
+        { 
+            return ParseValue(out value, true); 
         }
 
-        public bool ParseValue(out Int32 value) { return ParseValue(out value, true); }
+        /// <summary>
+        /// Extracts a TokenType.ToNextWhiteSpace token and assigns it to the given output value parameter.  
+        /// SkipLeadingWhiteSpace, RequireTokenEnd
+        /// </summary>
+        /// <param name="value">Receives the Extracted token value or String.Empty if no valid token was extracted.</param>
+        /// <param name="skipTrailingWhiteSpace">If true, trailing whitespace will also be skipped if a token was successfully extracted.</param>
+        /// <returns>true if the ExtractToken method succeeds or false otherwise.</returns>
+        public bool ParseValue(out string value, bool skipTrailingWhiteSpace)
+        {
+            return ExtractToken(out value, TokenType.ToNextWhiteSpace, true, skipTrailingWhiteSpace, true);
+        }
+
+        /// <summary>
+        /// Extracts a TokenType.SimpleFileName token and parses it using Int32.TryParse as a Decimal number or as a HexNumber if the first two characters of the token are "0x" or "0X".
+        /// SkipLeadingWhiteSpace, SkipTrailingWhiteSpace, !RequireTokenEnd
+        /// </summary>
+        /// <param name="value">assigned to the parsed value or to zero if the extraction or parse were not successful.</param>
+        /// <returns>true on success or false otherwise.</returns>
+        public bool ParseValue(out Int32 value) 
+        { 
+            return ParseValue(out value, true); 
+        }
+
+        /// <summary>
+        /// Extracts a TokenType.SimpleFileName token and parses it using Int32.TryParse as a Decimal number or as a HexNumber if the first two characters of the token are "0x" or "0X".
+        /// RequireTokenEnd
+        /// </summary>
+        /// <param name="value">assigned to the parsed value or to zero if the extraction or parse were not successful.</param>
+        /// <param name="skipTrailingWhiteSpace">If true, trailing whitespace will also be skipped if a token was successfully extracted.</param>
+        /// <returns>true on success or false otherwise.</returns>
         public bool ParseValue(out Int32 value, bool skipTrailingWhiteSpace)
         {
             StringScanner localScanner = this;
@@ -342,7 +551,25 @@ namespace MosaicLib.Utils
 
             return success;
         }
-        public bool ParseValue(out UInt32 value) { return ParseValue(out value, true); }
+
+        /// <summary>
+        /// Extracts a TokenType.SimpleFileName token and parses it using Uint32.TryParse as a Decimal number or as a HexNumber if the first two characters of the token are "0x" or "0X".
+        /// SkipLeadingWhiteSpace, SkipTrailingWhiteSpace, !RequireTokenEnd
+        /// </summary>
+        /// <param name="value">assigned to the parsed value or to zero if the extraction or parse were not successful.</param>
+        /// <returns>true on success or false otherwise.</returns>
+        public bool ParseValue(out UInt32 value) 
+        { 
+            return ParseValue(out value, true); 
+        }
+
+        /// <summary>
+        /// Extracts a TokenType.SimpleFileName token and parses it using Uint32.TryParse as a Decimal number or as a HexNumber if the first two characters of the token are "0x" or "0X".
+        /// RequireTokenEnd
+        /// </summary>
+        /// <param name="value">assigned to the parsed value or to zero if the extraction or parse were not successful.</param>
+        /// <param name="skipTrailingWhiteSpace">If true, trailing whitespace will also be skipped if a token was successfully extracted.</param>
+        /// <returns>true on success or false otherwise.</returns>
         public bool ParseValue(out UInt32 value, bool skipTrailingWhiteSpace)
         {
             StringScanner localScanner = this;
@@ -356,7 +583,26 @@ namespace MosaicLib.Utils
             return success;
         }
 
-        public bool ParseValue(out bool value) { return ParseValue(out value, true); }
+        /// <summary>
+        /// Extracts a TokenType.AlphaNumeric token and parses it using the static bool ParseValue method which attempts to covert the token to a boolean value using the
+        /// <see cref="BooleanXmlAttributeTokenValueList"/> dictionary.
+        /// SkipLeadingWhiteSpace, SkipTrailingWhiteSpace, RequireTokenEnd
+        /// </summary>
+        /// <param name="value">assigned to the parsed value or to false if the extraction or parse were not successful.</param>
+        /// <returns>true on success or false otherwise.</returns>
+        public bool ParseValue(out bool value) 
+        { 
+            return ParseValue(out value, true); 
+        }
+
+        /// <summary>
+        /// Extracts a TokenType.AlphaNumeric token and parses it using the static bool ParseValue method which attempts to covert the token to a boolean value using the
+        /// <see cref="BooleanXmlAttributeTokenValueList"/> dictionary.
+        /// SkipLeadingWhiteSpace, RequireTokenEnd
+        /// </summary>
+        /// <param name="value">assigned to the parsed value or to false if the extraction or parse were not successful.</param>
+        /// <param name="skipTrailingWhiteSpace">If true, trailing whitespace will also be skipped if a token was successfully extracted.</param>
+        /// <returns>true on success or false otherwise.</returns>
         public bool ParseValue(out bool value, bool skipTrailingWhiteSpace)
         {
             StringScanner localScanner = this;
@@ -370,7 +616,26 @@ namespace MosaicLib.Utils
             return success;
         }
 
-        public bool ParseValue(out Double value) { return ParseValue(out value, true); }
+        /// <summary>
+        /// Extracts a TokenType.SimpleFileName token and parses it using the static Double ParseValue method which generally attempts to covert the token to a Double value using the
+        /// Double.TryParse method.
+        /// SkipLeadingWhiteSpace, SkipTrailingWhiteSpace, RequireTokenEnd
+        /// </summary>
+        /// <param name="value">assigned to the parsed value or to false if the extraction or parse were not successful.</param>
+        /// <returns>true on success or false otherwise.</returns>
+        public bool ParseValue(out Double value) 
+        { 
+            return ParseValue(out value, true); 
+        }
+
+        /// <summary>
+        /// Extracts a TokenType.SimpleFileName token and parses it using the static Double ParseValue method which generally attempts to covert the token to a Double value using the
+        /// Double.TryParse method.
+        /// SkipLeadingWhiteSpace, RequireTokenEnd
+        /// </summary>
+        /// <param name="value">assigned to the parsed value or to false if the extraction or parse were not successful.</param>
+        /// <param name="skipTrailingWhiteSpace">If true, trailing whitespace will also be skipped if a token was successfully extracted.</param>
+        /// <returns>true on success or false otherwise.</returns>
         public bool ParseValue(out Double value, bool skipTrailingWhiteSpace)
         {
             StringScanner localScanner = this;
@@ -384,14 +649,89 @@ namespace MosaicLib.Utils
             return success;
         }
 
-        public bool ParseValue<ItemType>(Dictionary<string, ItemType> map, out ItemType value) { return ParseValue(map, out value, true); }
+        /// <summary>
+        /// Extracts a TokenType.AlphaNumeric token and parses it using the static bool ParseValue method which attempts to covert the token to an ItemType value using the
+        /// given map dictionary.
+        /// SkipLeadingWhiteSpace, SkipTrailingWhiteSpace, RequireTokenEnd
+        /// </summary>
+        /// <param name="map">Defines the dictionary in which the token is to be found.</param>
+        /// <param name="value">assigned to the parsed value or to default(ItemType) if the extraction or token lookup were not successful.</param>
+        /// <returns>true on success or false otherwise.</returns>
+        public bool ParseValue<ItemType>(Dictionary<string, ItemType> map, out ItemType value) 
+        { 
+            return ParseValue(map, out value, true); 
+        }
+
+        /// <summary>
+        /// Extracts a TokenType.AlphaNumeric token and parses it using the static bool ParseValue method which attempts to covert the token to an ItemType value using the
+        /// given map dictionary.
+        /// SkipLeadingWhiteSpace, RequireTokenEnd
+        /// </summary>
+        /// <param name="map">Defines the dictionary in which the token is to be found.</param>
+        /// <param name="value">assigned to the parsed value or to default(ItemType) if the extraction or token lookup were not successful.</param>
+        /// <param name="skipTrailingWhiteSpace">If true, trailing whitespace will also be skipped if a token was successfully extracted.</param>
+        /// <returns>true on success or false otherwise.</returns>
         public bool ParseValue<ItemType>(Dictionary<string, ItemType> map, out ItemType value, bool skipTrailingWhiteSpace)
         {
             return ParseTokenAndMapValueByName<ItemType>(map, out value, skipTrailingWhiteSpace);
         }
 
+        /// <summary>
+        /// Extracts a TokenType.SimpleFileName token and parses it using the static MosaicLib.Utils.Enum.TryParse{EnumT} method to covert 
+        /// the token string into a corresponding EnumT value.
+        /// SkipLeadingWhiteSpace, SkipTrailingWhiteSpace, RequireTokenEnd
+        /// </summary>
+        /// <typeparam name="EnumT">Gives the Enum Type for the enumeration that is to be parsed into.  Must be of type System.Enum.</typeparam>
+        /// <param name="value">assigned to the parsed value or to default(EnumT) if the extraction or token lookup were not successful.</param>
+        /// <returns>true on success or false otherwise.</returns>
+        public bool ParseValue<EnumT>(out EnumT value) where EnumT : struct
+        {
+            return ParseValue<EnumT>(out value, default(EnumT), false, true);
+        }
+
+        /// <summary>
+        /// Extracts a TokenType.ToNextWhiteSpace token and parses it using the static MosaicLib.Utils.Enum.TryParse{EnumT} method to covert 
+        /// the token string into a corresponding EnumT value.  
+        /// TokenType.ToNextWhiteSpace is used so that the comma character can be used within the enum string token value so as to support flag enums
+        /// SkipLeadingWhiteSpace, RequireTokenEnd
+        /// </summary>
+        /// <typeparam name="EnumT">Gives the Enum Type for the enumeration that is to be parsed into.  Must be of type System.Enum.</typeparam>
+        /// <param name="value">assigned to the parsed value or to parseFailedResult if the extraction or token lookup were not successful.</param>
+        /// <param name="parseFailedResult">Defines the EnumT value that will be assigned to the result if the parse itself fails.</param>
+        /// <param name="ignoreCase">If true, ignore case; otherwise, regard case.</param>
+        /// <param name="skipTrailingWhiteSpace">If true, trailing whitespace will also be skipped if a token was successfully extracted.</param>
+        /// <returns>true on success or false otherwise.</returns>
+        public bool ParseValue<EnumT>(out EnumT value, EnumT parseFailedResult, bool ignoreCase, bool skipTrailingWhiteSpace) where EnumT : struct
+        {
+            StringScanner localScanner = this;
+            string token;
+            bool success = localScanner.ExtractToken(out token, TokenType.ToNextWhiteSpace, true, skipTrailingWhiteSpace, false);
+            success = MosaicLib.Utils.Enum.TryParse<EnumT>(token, out value, parseFailedResult, ignoreCase) && success;
+
+            if (success)
+                Idx = localScanner.Idx;
+
+            return success;
+        }
+
         #region Related public static String Value Parsers
 
+        /// <summary>
+        /// This method is a proxy for calling Int32.TryParse:
+        ///     Converts the string representation of a number to its 32-bit signed integer equivalent.
+        ///     A return value indicates whether the conversion succeeded or failed.
+        ///     This method first attempts to parse the token as a simple Integer if this fails then the method will determine
+        ///     if the token starts with "0x" or "0X" and if so it will attempt to parse the remainder of the token as a hexadecimal integer.
+        /// </summary>
+        /// <param name="token">A string containing a number to convert.</param>
+        /// <param name="value">
+        ///     When this method returns, contains the 32-bit signed integer value equivalent
+        ///     to the number contained in token, if the conversion succeeded, or zero if the
+        ///     conversion failed. The conversion fails if the s parameter is null, is not
+        ///     in a format compliant with style, or represents a number less than System.Int32.MinValue
+        ///     or greater than System.Int32.MaxValue. This parameter is passed uninitialized.
+        /// </param>
+        /// <returns>true if token was converted successfully, or false otherwise.</returns>
         public static bool ParseValue(string token, out Int32 value)
         {
             unchecked
@@ -411,6 +751,22 @@ namespace MosaicLib.Utils
             return false;
         }
 
+        /// <summary>
+        /// This method is a proxy for calling UInt32.TryParse:
+        ///     Converts the string representation of a number to its 32-bit unsigned integer equivalent.
+        ///     A return value indicates whether the conversion succeeded or failed.
+        ///     This method first attempts to parse the token as a simple Integer if this fails then the method will determine
+        ///     if the token starts with "0x" or "0X" and if so it will attempt to parse the remainder of the token as a hexadecimal integer.
+        /// </summary>
+        /// <param name="token">A string containing a number to convert.</param>
+        /// <param name="value">
+        ///     When this method returns, contains the 32-bit unsigned integer value equivalent
+        ///     to the number contained in token, if the conversion succeeded, or zero if the
+        ///     conversion failed. The conversion fails if the s parameter is null, is not
+        ///     in a format compliant with style, or represents a number less than System.UInt32.MinValue
+        ///     or greater than System.UInt32.MaxValue. This parameter is passed uninitialized.
+        /// </param>
+        /// <returns>true if token was converted successfully, or false otherwise.</returns>
         public static bool ParseValue(string token, out UInt32 value)
         {
             unchecked
@@ -430,6 +786,13 @@ namespace MosaicLib.Utils
             return false;
         }
 
+        /// <summary>
+        /// Accepts the given token and attempts to find a matching entry in the <see cref="BooleanXmlAttributeTokenValueList"/> dictionary.  
+        /// If a matching string is found in this dictionary then the value parameter is set to the corresponding boolean value and the method returns true.
+        /// </summary>
+        /// <param name="token">contains the string that shall be found in the <see cref="BooleanXmlAttributeTokenValueList"/> dictionary.</param>
+        /// <param name="value">assigned to the value entry value from the dictionary when a match is found or false when no match is found.</param>
+        /// <returns>True if a matching entry is found in the <see cref="BooleanXmlAttributeTokenValueList"/> dictionary, or false otherwise.</returns>
         public static bool ParseValue(string token, out bool value)
         {
             bool success = FindTokenValueByName<bool>(token, BooleanXmlAttributeTokenValueList, out value);
@@ -437,6 +800,21 @@ namespace MosaicLib.Utils
             return success;
         }
 
+        /// <summary>
+        /// This method is a proxy for calling Double.TryParse:
+        ///     Converts the string representation of a number to its double-precision floating-point
+        ///     number equivalent. A return value indicates whether the conversion succeeded
+        ///     or failed.
+        /// </summary>
+        /// <param name="token">A string containing a number to convert.</param>
+        /// <param name="value">
+        ///     When this method returns, contains the double-precision floating-point number
+        ///     equivalent to the token parameter, if the conversion succeeded, or zero if the
+        ///     conversion failed.  The conversion fails if the token parameter is null, is not
+        ///     a number in a valid format, or represents a number less than System.Double.MinValue
+        ///     or greater than System.Double.MaxValue. This parameter is passed uninitialized.
+        /// </param>
+        /// <returns>true if token was converted successfully, or false otherwise.</returns>
         public static bool ParseValue(string token, out Double value)
         {
             bool success = Double.TryParse(token, out value);
@@ -448,6 +826,9 @@ namespace MosaicLib.Utils
 
         #region Boolean token value maps
 
+        /// <summary>
+        /// This dictionary gives the list of accepted token strings for boolean values along with with actual boolean value that each one represents.
+        /// </summary>
         public static readonly Dictionary<string, bool> BooleanXmlAttributeTokenValueList = new Dictionary<string, bool>()
 		{
 			{"1", true}, 
@@ -466,19 +847,118 @@ namespace MosaicLib.Utils
 
         #endregion
 
+        #region ParseHexValue
+
+        /// <summary>
+        /// Attempts to parse a hexadecimal number at the current scanner position.  
+        /// MinDigits=1, MaxDigits=8, SkipLeadingWhiteSpace, SkipTrailingWhiteSpace, RequireTokenEnd
+        /// </summary>
+        /// <param name="value">receives the parsed value or zero if the parse was not successful.</param>
+        /// <returns>true if a valid Int32 hexadecimal number could be parsed, or false if not.  Does not move the scan position if the method returns false.</returns>
+        public bool ParseHexValue(out Int32 value)
+        {
+            return ParseHexValue(out value, 1, 8, true, true, true);
+        }
+
+        /// <summary>Attempts to parse a hexadecimal number at the current scanner position.</summary>
+        /// <param name="value">receives the parsed value or zero if the parse was not successful.</param>
+        /// <param name="minDigits">Defines the minimum number of hex digits that the hex number can include</param>
+        /// <param name="maxDigits">Defines the maximum number of hex digits that the hex number can include</param>
+        /// <param name="skipLeadingWhiteSpace">Set to true to allow the scanner to advance over leading whitespace before attempting to parse.  Set to false to prevent this.</param>
+        /// <param name="skipTrailingWhiteSpace">Set to true to allow the scanner to advance over trailing whitespace after successful parsing.  Set to false to prevent this.</param>
+        /// <param name="requireTokenEnd">Set to true to require that the character after the parse must be a valid TokenEnd for TokenType.HexDigits.  Set to false to accept any character after the last parsed digit.</param>
+        /// <returns>true if a valid Int32 hexadecimal number could be parsed, or false if not.  Does not move the scan position if the method returns false.</returns>
+        public bool ParseHexValue(out Int32 value, int minDigits, int maxDigits, bool skipLeadingWhiteSpace, bool skipTrailingWhiteSpace, bool requireTokenEnd)
+        {
+            StringScanner localScanner = this;
+
+            if (skipLeadingWhiteSpace)
+                localScanner.SkipOverWhiteSpace();
+
+            bool success = true;
+            value = 0;
+            int numDigits = 0;
+
+            while (success)
+            {
+                if (!localScanner.IsIdxValid)
+                    break;
+
+                char c = localScanner.Char;
+
+                if (Char.IsDigit(c))
+                    value = unchecked((value << 4) + ((int)c - '0'));
+                else if (c >= 'a' && c <= 'f')
+                    value = unchecked((value << 4) + (10 + ((int)c - 'a')));
+                else if (c >= 'A' && c <= 'F')
+                    value = unchecked((value << 4) + (10 + ((int)c - 'A')));
+                else
+                    break;
+
+                numDigits++;
+                localScanner++;
+
+                if (numDigits >= maxDigits)
+                    break;
+            }
+
+            if (numDigits < minDigits)
+                success = false;
+            else if (requireTokenEnd && !IsValidTokenEndChar(localScanner.Char, TokenType.HexDigits))
+                success = false;
+
+            if (skipTrailingWhiteSpace)
+                localScanner.SkipOverWhiteSpace();
+
+            if (success)
+                Idx = localScanner.Idx;
+            else
+                value = 0;
+
+            return success;
+        }
+
+        #endregion
+
         #endregion
 
         //-------------------------------------
         #region simple Xml (style) attribute Parsers
 
-        public bool ParseXmlAttribute(string attribName, out string value) { return ParseXmlAttribute(attribName, out value, true); }
+        /// <summary>
+        /// Attempts to parse an Xml style Attribute from the current position where the xml generally reads as
+        /// <code>attribName='value'</code>, 
+        /// <code>attribName="value"</code>, or
+        /// <code>attribName=value</code>, or
+        /// </summary>
+        /// <param name="attribName">gives the attribute name of the attribute that is to be parsed</param>
+        /// <param name="value">receives the string contents of the value portion of the matching attribute or String.Empty if the parse fails.</param>
+        /// <returns>true if the attributeName matched and a properly delimited string could be found, or false otherwise.</returns>
+        /// <remarks>Please note that the current implementation does not support automatic decode of any escaped characters in the value string.</remarks>
+        public bool ParseXmlAttribute(string attribName, out string value) 
+        { 
+            return ParseXmlAttribute(attribName, out value, true); 
+        }
+
+        /// <summary>
+        /// Attempts to parse an Xml style Attribute from the current position where the xml generally reads as
+        /// <code>attribName='value'</code>, 
+        /// <code>attribName="value"</code>, or
+        /// <code>attribName=value</code>, or
+        /// </summary>
+        /// <param name="attribName">gives the attribute name of the attribute that is to be parsed</param>
+        /// <param name="value">receives the string contents of the value portion of the matching attribute or String.Empty if the parse fails.</param>
+        /// <param name="skipTrailingWhiteSpace">Set to true to allow the scanner to advance over trailing whitespace after successful parsing.  Set to false to prevent this.</param>
+        /// <returns>true if the attributeName matched and a properly delimited string could be found, or false otherwise.</returns>
+        /// <remarks>Please note that the current implementation does not support automatic decode of any escaped characters in the value string.</remarks>
         public bool ParseXmlAttribute(string attribName, out string value, bool skipTrailingWhiteSpace)
         {
             bool success = true;
             StringScanner localScan = this;
             char termChar = (char)0;
 
-            const TokenType equalsUndelimitedValueTokenType = TokenType.SimpleFileName;
+            // the following defines the tokenEnd character(s) that are used when the parser does not recognize the attribute as either type of quote delimited attribute.
+            const TokenType equalsUndelimitedValueTokenType = TokenType.ToNextWhiteSpace;
 
             success = localScan.MatchToken(attribName, false, false);
 
@@ -519,7 +999,44 @@ namespace MosaicLib.Utils
             }
 
             int valueLen = valueEnd.Idx - valueStart.Idx;
-            value = valueStart.Str.Substring(valueStart.Idx, valueLen);
+            if (success)
+            {
+                Idx = localScan.Idx;
+                value = valueStart.Str.Substring(valueStart.Idx, valueLen);
+            }
+            else
+            {
+                value = String.Empty;
+            }
+
+            return success;
+        }
+
+        /// <summary>
+        /// Combines the ParseXmlAttribute and ParseValue methods for an Int32 value.
+        /// </summary>
+        /// <param name="attribName">gives the attribute name of the attribute that is to be parsed</param>
+        /// <param name="value">receives the parsed Int32 contents of the requested attribute value or zero if any portion of the operation failed.</param>
+        /// <returns>true if the attributeName matched and a properly delimited value string was found and could be parsed successfully and assigned to the value output parameter.</returns>
+        public bool ParseXmlAttribute(string attribName, out Int32 value) 
+        { 
+            return ParseXmlAttribute(attribName, out value, true); 
+        }
+
+        /// <summary>
+        /// Combines the ParseXmlAttribute and ParseValue methods for an Int32 value.
+        /// </summary>
+        /// <param name="attribName">gives the attribute name of the attribute that is to be parsed</param>
+        /// <param name="value">receives the parsed Int32 contents of the requested attribute value or zero if any portion of the operation failed.</param>
+        /// <param name="skipTrailingWhiteSpace">Set to true to allow the scanner to advance over trailing whitespace after successful parsing.  Set to false to prevent this.</param>
+        /// <returns>true if the attributeName matched and a properly delimited value string was found and could be parsed successfully and assigned to the value output parameter.</returns>
+        public bool ParseXmlAttribute(string attribName, out Int32 value, bool skipTrailingWhiteSpace)
+        {
+            StringScanner localScan = this;
+            string attribValue;
+            bool success = localScan.ParseXmlAttribute(attribName, out attribValue, skipTrailingWhiteSpace);
+
+            success = ParseValue(attribValue, out value) && success;
 
             if (success)
                 Idx = localScan.Idx;
@@ -527,58 +1044,170 @@ namespace MosaicLib.Utils
             return success;
         }
 
-        public bool ParseXmlAttribute(string attribName, out Int32 value) { return ParseXmlAttribute(attribName, out value, true); }
-        public bool ParseXmlAttribute(string attribName, out Int32 value, bool skipTrailingWhiteSpace)
-        {
-            string attribValue;
-            bool success = ParseXmlAttribute(attribName, out attribValue, skipTrailingWhiteSpace);
-
-            success = ParseValue(attribValue, out value) && success;
-
-            return success;
+        /// <summary>
+        /// Combines the ParseXmlAttribute and ParseValue methods for an UInt32 value.
+        /// </summary>
+        /// <param name="attribName">gives the attribute name of the attribute that is to be parsed</param>
+        /// <param name="value">receives the parsed UInt32 contents of the requested attribute value or zero if any portion of the operation failed.</param>
+        /// <returns>true if the attributeName matched and a properly delimited value string was found and could be parsed successfully and assigned to the value output parameter.</returns>
+        public bool ParseXmlAttribute(string attribName, out UInt32 value) 
+        { 
+            return ParseXmlAttribute(attribName, out value, true); 
         }
 
-        public bool ParseXmlAttribute(string attribName, out UInt32 value) { return ParseXmlAttribute(attribName, out value, true); }
+        /// <summary>
+        /// Combines the ParseXmlAttribute and ParseValue methods for an UInt32 value.
+        /// </summary>
+        /// <param name="attribName">gives the attribute name of the attribute that is to be parsed</param>
+        /// <param name="value">receives the parsed UInt32 contents of the requested attribute value or zero if any portion of the operation failed.</param>
+        /// <param name="skipTrailingWhiteSpace">Set to true to allow the scanner to advance over trailing whitespace after successful parsing.  Set to false to prevent this.</param>
+        /// <returns>true if the attributeName matched and a properly delimited value string was found and could be parsed successfully and assigned to the value output parameter.</returns>
         public bool ParseXmlAttribute(string attribName, out UInt32 value, bool skipTrailingWhiteSpace)
         {
+            StringScanner localScan = this;
             string attribValue;
-            bool success = ParseXmlAttribute(attribName, out attribValue, skipTrailingWhiteSpace);
+            bool success = localScan.ParseXmlAttribute(attribName, out attribValue, skipTrailingWhiteSpace);
 
             success = ParseValue(attribValue, out value) && success;
+
+            if (success)
+                Idx = localScan.Idx;
 
             return success;
         }
 
-        public bool ParseXmlAttribute(string attribName, out bool value) { return ParseXmlAttribute(attribName, out value, true); }
+        /// <summary>
+        /// Combines the ParseXmlAttribute and ParseValue methods for an bool value.
+        /// </summary>
+        /// <param name="attribName">gives the attribute name of the attribute that is to be parsed</param>
+        /// <param name="value">receives the parsed bool value of the requested attribute value or false if any portion of the operation failed.</param>
+        /// <returns>true if the attributeName matched and a properly delimited value string was found and could be parsed successfully and assigned to the value output parameter.</returns>
+        public bool ParseXmlAttribute(string attribName, out bool value) 
+        { 
+            return ParseXmlAttribute(attribName, out value, true); 
+        }
+
+        /// <summary>
+        /// Combines the ParseXmlAttribute and ParseValue methods for an bool value.
+        /// </summary>
+        /// <param name="attribName">gives the attribute name of the attribute that is to be parsed</param>
+        /// <param name="value">receives the parsed bool value of the requested attribute value or false if any portion of the operation failed.</param>
+        /// <param name="skipTrailingWhiteSpace">Set to true to allow the scanner to advance over trailing whitespace after successful parsing.  Set to false to prevent this.</param>
+        /// <returns>true if the attributeName matched and a properly delimited value string was found and could be parsed successfully and assigned to the value output parameter.</returns>
         public bool ParseXmlAttribute(string attribName, out bool value, bool skipTrailingWhiteSpace)
         {
+            StringScanner localScan = this;
             string attribValue;
-            bool success = ParseXmlAttribute(attribName, out attribValue, skipTrailingWhiteSpace);
+            bool success = localScan.ParseXmlAttribute(attribName, out attribValue, skipTrailingWhiteSpace);
 
             success = ParseValue(attribValue, out value) && success;
+
+            if (success)
+                Idx = localScan.Idx;
 
             return success;
         }
 
-        public bool ParseXmlAttribute(string attribName, out Double value) { return ParseXmlAttribute(attribName, out value, true); }
+        /// <summary>
+        /// Combines the ParseXmlAttribute and ParseValue methods for an Double value.
+        /// </summary>
+        /// <param name="attribName">gives the attribute name of the attribute that is to be parsed</param>
+        /// <param name="value">receives the parsed Double contents of the requested attribute value or zero if any portion of the operation failed.</param>
+        /// <returns>true if the attributeName matched and a properly delimited value string was found and could be parsed successfully and assigned to the value output parameter.</returns>
+        public bool ParseXmlAttribute(string attribName, out Double value) 
+        { 
+            return ParseXmlAttribute(attribName, out value, true); 
+        }
+
+        /// <summary>
+        /// Combines the ParseXmlAttribute and ParseValue methods for an Double value.
+        /// </summary>
+        /// <param name="attribName">gives the attribute name of the attribute that is to be parsed</param>
+        /// <param name="value">receives the parsed Double contents of the requested attribute value or zero if any portion of the operation failed.</param>
+        /// <param name="skipTrailingWhiteSpace">Set to true to allow the scanner to advance over trailing whitespace after successful parsing.  Set to false to prevent this.</param>
+        /// <returns>true if the attributeName matched and a properly delimited value string was found and could be parsed successfully and assigned to the value output parameter.</returns>
         public bool ParseXmlAttribute(string attribName, out Double value, bool skipTrailingWhiteSpace)
         {
+            StringScanner localScan = this;
             string attribValue;
-            bool success = ParseXmlAttribute(attribName, out attribValue, skipTrailingWhiteSpace);
+            bool success = localScan.ParseXmlAttribute(attribName, out attribValue, skipTrailingWhiteSpace);
 
             success = ParseValue(attribValue, out value) && success;
+
+            if (success)
+                Idx = localScan.Idx;
 
             return success;
         }
 
-        public bool ParseXmlAttribute<ItemType>(string attribName, Dictionary<string, ItemType> map, out ItemType value) { return ParseXmlAttribute(attribName, map, out value, true); }
+        /// <summary>
+        /// Combines the ParseXmlAttribute and ParseValue methods for an table mapped value.
+        /// </summary>
+        /// <typeparam name="ItemType">Defines the Dictionary's TValue type used in the given map</typeparam>
+        /// <param name="attribName">gives the attribute name of the attribute that is to be parsed</param>
+        /// <param name="map">Defines the dictionary in which the token is to be found.</param>
+        /// <param name="value">receives the found entry value contents of the requested attribute value or default(ItemType) if any portion of the operation failed.</param>
+        /// <returns>true if the attributeName matched and a properly delimited value string was found and could be parsed successfully and was found in the given map and assigned to the value output parameter.</returns>
+        public bool ParseXmlAttribute<ItemType>(string attribName, Dictionary<string, ItemType> map, out ItemType value) 
+        { 
+            return ParseXmlAttribute(attribName, map, out value, true); 
+        }
+
+        /// <summary>
+        /// Combines the ParseXmlAttribute and ParseValue methods for an table mapped value.
+        /// </summary>
+        /// <typeparam name="ItemType">Defines the Dictionary's TValue type used in the given map</typeparam>
+        /// <param name="attribName">gives the attribute name of the attribute that is to be parsed</param>
+        /// <param name="map">Defines the dictionary in which the token is to be found.</param>
+        /// <param name="value">receives the found entry value contents of the requested attribute value or default(ItemType) if any portion of the operation failed.</param>
+        /// <param name="skipTrailingWhiteSpace">Set to true to allow the scanner to advance over trailing whitespace after successful parsing.  Set to false to prevent this.</param>
+        /// <returns>true if the attributeName matched and a properly delimited value string was found and could be parsed successfully and was found in the given map and assigned to the value output parameter.</returns>
         public bool ParseXmlAttribute<ItemType>(string attribName, Dictionary<string, ItemType> map, out ItemType value, bool skipTrailingWhiteSpace)
         {
+            StringScanner localScan = this;
             string attribValue;
-            bool success = ParseXmlAttribute(attribName, out attribValue, skipTrailingWhiteSpace);
+            bool success = localScan.ParseXmlAttribute(attribName, out attribValue, skipTrailingWhiteSpace);
 
-            StringScanner localScan = new StringScanner(attribValue);
             success = FindTokenValueByName<ItemType>(attribValue, map, out value) && success;
+
+            if (success)
+                Idx = localScan.Idx;
+
+            return success;
+        }
+
+        /// <summary>
+        /// Combines the ParseXmlAttribute and ParseValue methods for the given EnumT enum type.
+        /// </summary>
+        /// <typeparam name="EnumT">Gives the Enum Type for the enumeration that is to be parsed into.  Must be of type System.Enum.</typeparam>
+        /// <param name="attribName">gives the attribute name of the attribute that is to be parsed</param>
+        /// <param name="value">receives the parsed EnumT contents of the requested attribute value or parseFailedValue if any portion of the operation failed.</param>
+        /// <returns>true if the attributeName matched and a properly delimited value string was found and could be parsed successfully and assigned to the value output parameter.</returns>
+        public bool ParseXmlAttribute<EnumT>(string attribName, out EnumT value) where EnumT : struct
+        {
+            return ParseXmlAttribute(attribName, out value, default(EnumT), false, true);
+        }
+
+        /// <summary>
+        /// Combines the ParseXmlAttribute and ParseValue methods for the given EnumT enum type.
+        /// </summary>
+        /// <typeparam name="EnumT">Gives the Enum Type for the enumeration that is to be parsed into.  Must be of type System.Enum.</typeparam>
+        /// <param name="attribName">gives the attribute name of the attribute that is to be parsed</param>
+        /// <param name="value">receives the parsed EnumT contents of the requested attribute value or parseFailedValue if any portion of the operation failed.</param>
+        /// <param name="parseFailedValue">Defines the EnumT value that will be assigned to the result if any part of the parse fails.</param>
+        /// <param name="ignoreCase">If true, ignore case; otherwise, regard case.</param>
+        /// <param name="skipTrailingWhiteSpace">Set to true to allow the scanner to advance over trailing whitespace after successful parsing.  Set to false to prevent this.</param>
+        /// <returns>true if the attributeName matched and a properly delimited value string was found and could be parsed successfully and assigned to the value output parameter.</returns>
+        public bool ParseXmlAttribute<EnumT>(string attribName, out EnumT value, EnumT parseFailedValue, bool ignoreCase, bool skipTrailingWhiteSpace) where EnumT : struct
+        {
+            StringScanner localScan = this;
+            string attribValue;
+            bool success = localScan.ParseXmlAttribute(attribName, out attribValue, skipTrailingWhiteSpace);
+
+            success = Utils.Enum.TryParse<EnumT>(attribValue, out value, parseFailedValue, ignoreCase) && success;
+
+            if (success)
+                Idx = localScan.Idx;
 
             return success;
         }

@@ -63,11 +63,17 @@ namespace MosaicLib.File
 
     public class DirectoryTreePruningManager : Utils.ObjIDBase
     {
+        #region Constants
+
         /// <summary>This defines the minimum number of files that a manager can be configured to keep in a directory tree.</summary>
 	    public const int ConfigPruneNumFilesMinValue = 2;
         /// <summary>This defines the maximum number of files that a manager can be configured to keep in a directory tree.</summary>
         /// <remarks>Value is choosen to aim for something on the order of 300 MBytes of memory to retain the tree.</remarks>
         public const int ConfigPruneNumFilesMaxValue = 1000000;
+
+        #endregion
+
+        #region Configuration related definitions
 
         /// <summary>Enum define the intended pruning behavior</summary>
 	    public enum PruneMode
@@ -106,6 +112,17 @@ namespace MosaicLib.File
 				MaxInitialAutoCleanupIterations = 100;
 				MaxEntriesToDeletePerIteration = 100;
 			}
+
+            /// <summary>Copy constructor</summary>
+            public Config(Config rhs)
+            {
+                DirPath = rhs.DirPath;
+                PruneRules = new PruneRules(rhs.PruneRules);
+                CreateDirectoryIfNeeded = rhs.CreateDirectoryIfNeeded;
+                PruneMode = rhs.PruneMode;
+                MaxInitialAutoCleanupIterations = rhs.MaxInitialAutoCleanupIterations;
+                MaxEntriesToDeletePerIteration = rhs.MaxEntriesToDeletePerIteration;
+            }
 		};
 
         /// <summary>
@@ -124,22 +141,85 @@ namespace MosaicLib.File
             public Int64 TreeTotalSizeLimit { get; set; }
             /// <summary>the user stated maximum age in seconds of the oldest file or zero for no limit</summary>
             public TimeSpan FileAgeLimit { get; set; }
+
+            /// <summary>Copy constructor</summary>
+            public PruneRules(PruneRules rhs) 
+                : this()
+            {
+                TreeNumItemsLimit = rhs.TreeNumItemsLimit;
+                TreeNumFilesLimit = rhs.TreeNumFilesLimit;
+                TreeTotalSizeLimit = rhs.TreeTotalSizeLimit;
+                FileAgeLimit = rhs.FileAgeLimit;
+            }
         }
 
-        public DirectoryTreePruningManager(string objIDStr)
+        #endregion
+
+        #region Constructors
+
+        /// <summary>Basic constructor.  objIDStr is used to initialize the ObjID base class.  Uses standard Logger based logging</summary>
+        public DirectoryTreePruningManager(string objIDStr) 
+            : this(objIDStr, (Dictionary<string, Logging.IMesgEmitter>) null) 
+        { }
+
+        /// <summary>Basic constructor.  objIDStr is used to initialize the ObjID base class.  emitterDictionary defines source for emitters or null to use standard Logger.</summary>
+        public DirectoryTreePruningManager(string objIDStr, Dictionary<string, Logging.IMesgEmitter> emitterDictionary)
             : base(0, objIDStr)
         {
-            Logger = new Logging.Logger(ObjID);
+            EmitterDictionary = emitterDictionary;
 
             Clear();
         }
 
-        public DirectoryTreePruningManager(string objIDStr, Config config)
-            : this(objIDStr)
+        /// <summary>Full constructor.  objIDStr is used to initialize the ObjID base class, config is used to trigger a Setup operation.  Uses standard Logger based logging</summary>
+        public DirectoryTreePruningManager(string objIDStr, Config config) 
+            : this(objIDStr, config, null) 
+        { }
+
+        /// <summary>Full constructor.  objIDStr is used to initialize the ObjID base class, config is used to trigger a Setup operation.  emitterDictionary defines source for emitters or null to use standard Logger.</summary>
+        public DirectoryTreePruningManager(string objIDStr, Config config, Dictionary<string, Logging.IMesgEmitter> emitterDictionary)
+            : this(objIDStr, emitterDictionary)
         {
             Setup(config);
         }
 
+        #endregion
+
+        #region Emitters
+
+        /// <summary>This emitter container contains the emitter that is used for all reported Issues (Errors)</summary>
+        [Logging.MesgEmitterProperty]
+        public Logging.MesgEmitterContainer Issue { get; set; }
+        /// <summary>This emitter container contains the emitter that is used for all information messages such as items being deleted</summary>
+        [Logging.MesgEmitterProperty]
+        public Logging.MesgEmitterContainer Info { get; set; }
+        /// <summary>This emitter container contains the emitter that is used for all debug messages</summary>
+        [Logging.MesgEmitterProperty]
+        public Logging.MesgEmitterContainer Debug { get; set; }
+
+        /// <summary>
+        /// This set only property may be used to set the object's emitter containers to contain the desired emitters.  There are three named emitters: Issue, Info, and Debug
+        /// </summary>
+        public Dictionary<string, Logging.IMesgEmitter> EmitterDictionary
+        {
+            set
+            {
+                if (value != null)
+                {
+                    Logging.SetAnnotatedInstanceEmitters<DirectoryTreePruningManager>(this, value);
+                }
+                else
+                {
+                    if (Logger == null)
+                        Logger = new Logging.Logger(ObjID);
+                    Issue = new Logging.MesgEmitterContainer(Logger.Info);
+                    Info = new Logging.MesgEmitterContainer(Logger.Info);
+                    Debug = new Logging.MesgEmitterContainer(Logger.Debug);
+                }
+            }
+        }
+
+        #endregion
 
         #region private fields
 
@@ -154,7 +234,10 @@ namespace MosaicLib.File
 
         private Time.QpcTimer blockPruningUntilAfterTimer = new MosaicLib.Time.QpcTimer() { SelectedBehavior = MosaicLib.Time.QpcTimer.Behavior.NewDefault };
 
+        /// <summary>Returns true if pruning is currently blocked for a period of time</summary>
         protected bool IsPruningBlocked { get { return (blockPruningUntilAfterTimer.Started && !blockPruningUntilAfterTimer.IsTriggered); } }
+
+        /// <summary>Sets the timer that is used to block pruning for the given blockPeriod TimeSpan</summary>
         protected void BlockPruningForPeriod(TimeSpan blockPeriod)
         {
             if (blockPeriod > TimeSpan.Zero)
@@ -166,6 +249,12 @@ namespace MosaicLib.File
         #endregion
 
         #region public methods
+
+        /// <summary>Get only property returns a clone of the last Config settings for which the object has been Setup, or null if the object has not been Setup yet.</summary>
+        public Config SetupConfig 
+        { 
+            get { return (config != null ? new Config(config) : null); } 
+        }
 
         /// <summary>Setup the manager to use the given configuration.</summary>
         /// <returns>true if directory contents are usable after setup is complete</returns>
@@ -200,7 +289,7 @@ namespace MosaicLib.File
         {
             bool didAnything = false;
 
-            treeRootEntry.UpdateTree(Logger.Info);
+            treeRootEntry.UpdateTree(Info.Emitter);
 
             if (cleanupIfNeeded && IsTreePruningNeeded)
                 didAnything = didAnything || PerformIncrementalPrune();
@@ -211,7 +300,7 @@ namespace MosaicLib.File
         /// <summary>Used to inform manager about the addition of another file or diretory which should be monitored by the manager (and which should eventually be pruned).</summary>
         public void NotePathAdded(string pathToAdd)
         {
-            NotePathAdded(pathToAdd, Logger.Info);
+            NotePathAdded(pathToAdd, Info.Emitter);
         }
 
         /// <summary>Used to inform manager about the addition of another file or diretory which should be monitored by the manager (and which should eventually be pruned).</summary>
@@ -246,6 +335,15 @@ namespace MosaicLib.File
                 issueEmitter.Emit("NotePathAdded '{0}' failed: error:'{1}'", pathToAdd, ex.ToString());
             }
         }
+
+        /// <summary>Gives the total size of this tree and all of the sub-nodes under this node</summary>
+        public Int64 TreeContentsSize { get { Service(false); return treeRootEntry.TreeContentsSize; } }
+        /// <summary>Gives the oldest file creation time or directory modification time for this tree or any of its sub-nodes</summary>
+        public DateTime OldestUtcTime { get { Service(false); return treeRootEntry.OldestUtcTime; } }
+        /// <summary>Gives the total number of items under and including this tree root node.</summary>
+        public int TreeItemCount { get { Service(false); return treeRootEntry.TreeItemCount; } }
+        /// <summary>Gives the total number of file items under and including this tree.</summary>
+        public int TreeFileCount { get { Service(false); return treeRootEntry.TreeFileCount; } }
 
         /// <summary>returns true if there are one or more items in the tree that need to be deleted</summary>
         public bool IsTreePruningNeeded 
@@ -305,7 +403,8 @@ namespace MosaicLib.File
         }
 
         /// <summary>
-        /// Attempts to delete files/directories given in the list of DirectoryEntryInfo items to prune
+        /// Attempts to delete files/directories given in the list of DirectoryEntryInfo items to prune.
+        /// <para/>returns the number of items that were successfully deleted.
         /// </summary>
         /// <param name="pruneItemList">Gives the list of DirectoryEntryInfo items that are to be removed from the file system.</param>
         /// <param name="deleteEmitter">Gives the IMesgEmitter that will recieve messages about the successfull deletions</param>
@@ -358,6 +457,7 @@ namespace MosaicLib.File
 
         /// <summary>
         /// Peform an incremental prune iteration.
+        /// <para/>returns true if any tree items where deleted, false otherwise.
         /// </summary>
         /// <returns>true if any tree items where deleted, false otherwise.</returns>
         /// <remarks>Number of deletions is limited by config.maxEntriesToDeletePerIteration</remarks>
@@ -372,20 +472,20 @@ namespace MosaicLib.File
             {
                 pruneItemList.Clear();
 
-                ExtractNextListOfIncrementalItemsToPrune(pruneItemList, Logger.Info);
+                ExtractNextListOfIncrementalItemsToPrune(pruneItemList, Info.Emitter);
 
                 int iterationItemsToDelete = pruneItemList.Count;
-                int iterationDeletedItemsCount = DeletePrunedItems(pruneItemList, Logger.Info, Logger.Info);
+                int iterationDeletedItemsCount = DeletePrunedItems(pruneItemList, Info.Emitter, Issue.Emitter);
                 deletedItemCount += iterationDeletedItemsCount;
 
                 if (iterationItemsToDelete == 0)
                 {
-                    Logger.Debug.Emit("Prune did not find any removable items under:'{0}'", treeRootEntry.Path);
+                    Debug.Emitter.Emit("Prune did not find any removable items under:'{0}'", treeRootEntry.Path);
                     incrementalPruneFailed = true;
                 }
                 else if (iterationDeletedItemsCount != iterationItemsToDelete)
                 {
-                    Logger.Debug.Emit("DeleteItems was not able to delete all of the items during this iteration: items:{0}, deleted items:{1}", iterationItemsToDelete, iterationDeletedItemsCount);
+                    Debug.Emitter.Emit("DeleteItems was not able to delete all of the items during this iteration: items:{0}, deleted items:{1}", iterationItemsToDelete, iterationDeletedItemsCount);
                     incrementalPruneFailed = true;
                 }
             }
@@ -393,14 +493,14 @@ namespace MosaicLib.File
             if (incrementalPruneFailed)
             {
                 TimeSpan blockPeriod = TimeSpan.FromSeconds(10.0);
-                Logger.Info.Emit("Incremental Prune failure blocking automatic pruning for {0:f1} seconds", blockPeriod.TotalSeconds);
+                Issue.Emitter.Emit("Incremental Prune failure blocking automatic pruning for {0:f1} seconds", blockPeriod.TotalSeconds);
 
                 BlockPruningForPeriod(blockPeriod);
             }
 
             if (deletedItemCount > 0)
 			{
-                Logger.Info.Emit("Incremental Prune deleted {0} items.  Directory state: path:'{1}' total files:{2}, items:{3}, size:{4:f3} Mb, Age:{5:f3} days"
+                Info.Emitter.Emit("Incremental Prune deleted {0} items.  Directory state: path:'{1}' total files:{2}, items:{3}, size:{4:f3} Mb, Age:{5:f3} days"
 											, deletedItemCount
 											, treeRootEntry.Path
 											, treeRootEntry.TreeFileCount 
@@ -423,6 +523,8 @@ namespace MosaicLib.File
 			setupPerformed = false;
 			setupFaultCode = "";
 
+            if (treeRootEntry == null)
+                treeRootEntry = new DirectoryTreeEntryNode();
 			treeRootEntry.Clear();
 
             BlockPruningForPeriod(TimeSpan.Zero);
@@ -454,15 +556,20 @@ namespace MosaicLib.File
                 if (fileExists)
                     SetFaultCode(Fcns.CheckedFormat("Setup Failure: target path '{0}' exists and does not specify a directory", config.DirPath));
                 else if (!dirExists)
-                    System.IO.Directory.CreateDirectory(config.DirPath);
+                {
+                    if (config.CreateDirectoryIfNeeded)
+                        System.IO.Directory.CreateDirectory(config.DirPath);
+                    else
+                        SetFaultCode(Fcns.CheckedFormat("Setup Failure: target directory '{0}' does not exist and could not be automatically created", config.DirPath));
+                }
 
                 if (!DidSetupFail)
                 {
 				    // directory exists or has been created - now scan it and record each of the entries that are found therein
 				    treeRootEntry.SetPathAndGetInfo(config.DirPath);
 
-                    treeRootEntry.BuildTree(Logger.Error);
-				    treeRootEntry.UpdateTree(Logger.Error);
+                    treeRootEntry.BuildTree(Issue.Emitter);
+                    treeRootEntry.UpdateTree(Issue.Emitter);
                 }
 			}
             catch (System.Exception ex)
@@ -492,7 +599,7 @@ namespace MosaicLib.File
 
             if (!DidSetupFail)
             {
-                Logger.Info.Emit("Directory is usable: path:'{0}' total files:{1}, items:{2}, size:{3:f3} Mb, Age:{4:f3} days",
+                Info.Emitter.Emit("Directory is usable: path:'{0}' total files:{1}, items:{2}, size:{3:f3} Mb, Age:{4:f3} days",
                                 config.DirPath, 
                                 treeRootEntry.TreeFileCount, 
                                 treeRootEntry.TreeItemCount, 
@@ -502,7 +609,7 @@ namespace MosaicLib.File
             }
             else
             {
-                Logger.Error.Emit("Dirctory is not usable: path:'{0}' fault:'{1}'", config.DirPath, SetupFaultCode);
+                Issue.Emitter.Emit("Dirctory is not usable: path:'{0}' fault:'{1}'", config.DirPath, SetupFaultCode);
             }
 
 			setupPerformed = true;
@@ -514,75 +621,11 @@ namespace MosaicLib.File
 			if (string.IsNullOrEmpty(setupFaultCode))
 			{
 				setupFaultCode = faultCode;
-                Logger.Error.Emit("FaultCode set to {0}", faultCode);
+                Issue.Emitter.Emit("FaultCode set to {0}", faultCode);
 			}
 		}
 
         #endregion
-
-#if (false)
-		void DirectoryTreePruningManager::NotePathAdded(const boostfs::path &path)
-		{
-			string ec;
-			boostfs::path workingRoot(treeRootEntry.Path());
-
-			boostfs::path fullPath(path);
-			fullPath = fullPath.normalize();
-			string fullPathStr = CopyStdStr<string>(fullPath.string());
-
-			boostfs::path relativePath(".");
-			std::vector<string> relativePathVect;
-
-			boostfs::path::iterator addIter = fullPath.begin();
-			const boostfs::path::iterator &addIterEnd = fullPath.end();
-
-			boostfs::path::iterator rootIter = workingRoot.begin();
-			const boostfs::path::iterator &rootIterEnd = workingRoot.end();
-
-			while (ec.empty() && rootIter != rootIterEnd)
-			{
-				bool atAddIterEnd = (addIter == addIterEnd);
-				string rootIterStr = CopyStdStr<string>(*rootIter);
-				string addIterStr = CopyStdStr<string>(*addIter);
-
-				if (atAddIterEnd || rootIterStr != addIterStr)
-				{
-					const char *workingRootCStrPtr = workingRoot.string().c_str();
-					ec = (chk_format("path '%s': not a proper sub-path under the monitored root path:'%s' ['%s'!='%s']") 
-									% fullPathStr % workingRootCStrPtr % addIterStr % rootIterStr).str();
-				}
-				else
-				{
-					rootIter++;
-					addIter++;
-				}
-			}
-
-			for (; addIter != addIterEnd; addIter++)
-			{
-				string addIterStr = CopyStdStr<string>(*addIter);
-				relativePath /= addIterStr.c_str();
-				relativePathVect.push_back(addIterStr);
-			}
-
-			if (ec.empty())
-			{
-				ec = treeRootEntry.AddRelativePathVect(relativePathVect);
-				if (!ec.empty())
-				{
-					ec = (chk_format("error adding path '%s': %s") % fullPathStr % ec).str();
-				}
-			}
-
-			if (ec.empty())
-				MLibLog_Debug(logger, chk_format("NotePathAdded succeeded for '%s'") % fullPathStr);
-			else
-				MLibLog_Error(logger, chk_format("NotePathAdded failed: %s") % ec);
-
-			Service(false);
-		}
-
-#endif
     }
 
     #endregion

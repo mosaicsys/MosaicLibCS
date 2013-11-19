@@ -24,6 +24,9 @@ namespace MosaicLib
 {
 	using System.Runtime.InteropServices;
 
+    /// <summary>
+    /// The contents of this file extend the Logging class/namespace.
+    /// </summary>
 	public static partial class Logging
 	{
 		/// <summary>
@@ -75,20 +78,28 @@ namespace MosaicLib
 				}
 			}
 
-			public static void LogError(string mesg) { Log("Error", mesg); }
-			public static void LogWarning(string mesg) { Log("Warning", mesg); }
-			public static void LogInfo(string mesg) { Log("Info", mesg); }
+            /// <summary>Logs the given mesg string using Type "Error"</summary>
+ 			public static void LogError(string mesg) { Log("Error", mesg); }
+            /// <summary>Logs the given mesg string using Type "Warning"</summary>
+            public static void LogWarning(string mesg) { Log("Warning", mesg); }
+            /// <summary>Logs the given mesg string using Type "Info"</summary>
+            public static void LogInfo(string mesg) { Log("Info", mesg); }
 
-			public static void LogError(string fmt, params object [] args) { Log("Error", fmt, args); }
-			public static void LogWarning(string fmt, params object [] args) { Log("Warning", fmt, args); }
-			public static void LogInfo(string fmt, params object [] args) { Log("Info", fmt, args); }
+            /// <summary>Formats the given arguments using CheckedFormat and Logs the resulting string using Type "Error"</summary>
+            public static void LogError(string fmt, params object[] args) { Log("Error", fmt, args); }
+            /// <summary>Formats the given arguments using CheckedFormat and Logs the resulting string using Type "Warning"</summary>
+            public static void LogWarning(string fmt, params object[] args) { Log("Warning", fmt, args); }
+            /// <summary>Formats the given arguments using CheckedFormat and Logs the resulting string using Type "Info"</summary>
+            public static void LogInfo(string fmt, params object[] args) { Log("Info", fmt, args); }
 
-			public static void Log(string type, string fmt, params object [] args)
+            /// <summary>Formats the given arguments using CheckedFormat and Logs the resulting string using using the given type string</summary>
+            public static void Log(string type, string fmt, params object[] args)
 			{
 				Log(type, Utils.Fcns.CheckedFormat(fmt, args));
 			}
 
-			public static void Log(string type, string mesg)
+            /// <summary>Appends a text line containing the current date, and the given type and message strings all seperated by tabs, to the current fallback logging file.</summary>
+            public static void Log(string type, string mesg)
 			{
 				System.DateTime localTime = System.DateTime.Now;
 				string dateTimeStr = localTime.ToString("o");
@@ -114,9 +125,9 @@ namespace MosaicLib
 							fs.Close();
 						}
 					}
-					catch (System.Exception e)
+					catch (System.Exception ex)
 					{
-						OutputDebugString("Caught exception {0} in BasicFallbackLogging.Log while writting to file {1}", e.Message, logFilePath);
+						OutputDebugString("Caught exception {0} in BasicFallbackLogging.Log while writting to file {1}", ex.Message, logFilePath);
 					}
 				}
 			}

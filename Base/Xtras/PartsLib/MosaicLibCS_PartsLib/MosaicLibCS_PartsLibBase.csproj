@@ -50,6 +50,9 @@
     <Compile Include="Common\Protocols\HART\HARTBusMaster.cs" />
     <Compile Include="Common\Protocols\HART\HARTProtocol.cs" />
     <Compile Include="Helpers\Actuator.cs" />
+    <Compile Include="MKS\Ascii485Protocol\Ascii485MfcCommands.cs" />
+    <Compile Include="MKS\Ascii485Protocol\Ascii485Protocol.cs" />
+    <Compile Include="MKS\Ascii485Protocol\Ascii485ProtocolBusMaster.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

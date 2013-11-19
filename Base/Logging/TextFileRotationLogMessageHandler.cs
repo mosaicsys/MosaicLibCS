@@ -28,14 +28,24 @@ namespace MosaicLib
 	{
 		public static partial class Handlers
 		{
+            /// <summary>
+            /// This class provides a Text file ring based <see cref="ILogMessageHandler"/> which makes use of a 
+            /// <see cref="MosaicLib.File.DirectoryFileRotationManager"/> to manage a directory in which text log files are automatically
+            /// created and removed so as to honor the size, count and age constraints from the <see cref="FileRotationLoggingConfig"/>
+            /// which defines the values for the various parameters that are used to control the log file retention rules.
+            /// </summary>
 			public class TextFileRotationLogMessageHandler : CommonLogMessageHandlerBase
 			{
 				#region Public interface methods
 
+                /// <summary>
+                /// Constructor - <see cref="FileRotationLoggingConfig"/> parameter defines all initial values for the configuration and operation of this LMH.
+                /// </summary>
 				public TextFileRotationLogMessageHandler(FileRotationLoggingConfig frlConfig) 
 					: base(frlConfig.name, frlConfig.logGate, frlConfig.includeFileAndLine, true)
 				{
 					// replace the default LogMessageHandlerLogger with a normal QueuedLogger.  This is for use by all levels of this LMH type.
+                    //  this allows generated messages to be inserted into and handled by the entire distribution system rather than just by this LMH instance.
 					logger = new QueuedLogger(Name, LogGate, frlConfig.includeFileAndLine);
 
 					config = frlConfig;
@@ -73,6 +83,7 @@ namespace MosaicLib
 					SetupDirMgr();
 				}
 
+                /// <summary>LogMessage Handling method API for direct call by clients which generate and distribute one message at a time.</summary>
 				public override void HandleLogMessage(LogMessage lm)
 				{
 					if (!IsMessageTypeEnabled(lm))
@@ -93,7 +104,8 @@ namespace MosaicLib
 					CompleteFileAccess();
 				}
 
-				public override void  HandleLogMessages(LogMessage[] lmArray)
+                /// <summary>LogMessage Handling method API for use on outputs of queued delivery engines which agregate and distribute one or more messages at a time.</summary>
+                public override void HandleLogMessages(LogMessage[] lmArray)
 				{
 					if (!StartFileAccess() || ostream == null)
 					{
@@ -116,23 +128,36 @@ namespace MosaicLib
 					CompleteFileAccess();
 				}
 
-				public override bool IsMessageDeliveryInProgress(int testMesgSeqNum) { return false; }
+                /// <summary>Query method that may be used to tell if message delivery for a given message is still in progress on this handler.</summary>
+                /// <remarks>This LMH type does not queue messages internally.  As such the returned value is always false.</remarks>
+                public override bool IsMessageDeliveryInProgress(int testMesgSeqNum) { return false; }
 
-				public override void Flush()
+                /// <summary>Once called, this method only returns after the handler has made a reasonable effort to verify that all outsanding, pending messages, visible at the time of the call, have been full processed before the call returns.</summary>
+                public override void Flush()
 				{
 					if (ostream != null && ostream.BaseStream.CanWrite)
 						ostream.Flush();
 				}
 
-				public override void Shutdown()
+                /// <summary>
+                /// Used to tell the handler that the LogMessageDistribution system is shuting down.  
+                /// Handler is expected to close, release and/or Dispose of any unmanged resources before returning from this call.  
+                /// Any attempt to pass messages after this point may be ignored by the handler.
+                /// </summary>
+                /// <remarks>This method calls <see cref="CloseFile"/></remarks>
+                public override void Shutdown()
 				{
 					CloseFile();
 				}
 
 				#endregion
 
-				#region private methods
+				#region private/protected methods
 
+                /// <summary>
+                /// This property returns true if the underlying <see cref="MosaicLib.File.DirectoryFileRotationManager"/> is not currently usable and requires that it be successfully
+                /// setup before it can be used to manage a file ring.  If the initial setup attempt fails then this method will only allow it to be retried every 30 seconds.
+                /// </summary>
 				protected bool IsDirMgrSetupNeeded 
 				{ 
 					get
@@ -150,6 +175,11 @@ namespace MosaicLib
 					}
 				}
 
+                /// <summary>
+                /// This method attempts to setup the <see cref="MosaicLib.File.DirectoryFileRotationManager"/> to manage the ring of log files.  This must be comleted successfully
+                /// before this LMH can be used to write to any log file.
+                /// </summary>
+                /// <returns>True if the setup operation was successfull</returns>
 				protected bool SetupDirMgr()
 				{
 					lastSetupAttemptTime.SetToNow();
@@ -165,9 +195,9 @@ namespace MosaicLib
 							return false;
 						}
 					}
-					catch (System.Exception e)
+					catch (System.Exception ex)
 					{
-						logger.Error.Emit("DirMgr '{0}' setup for path '{1}' threw exception:'{2}'", config.name, config.dirPath, e.Message);
+						logger.Error.Emit("DirMgr '{0}' setup for path '{1}' threw exception:'{2}'", config.name, config.dirPath, ex.Message);
 						return false;
 					}
 
@@ -184,6 +214,10 @@ namespace MosaicLib
 					return true;
 				}
 
+                /// <summary>
+                /// Attempts to activate the current (or next) file in the directory manager and then open the append ostream for it.
+                /// </summary>
+                /// <returns>true if an active file name could be determined and the ostream could be successfully opened to append to it.</returns>
 				protected bool ActivateFile()
 				{
 					bool isAdvanceNeeded = dirMgr.IsFileAdvanceNeeded();
@@ -208,6 +242,11 @@ namespace MosaicLib
 
 				const int MaxMessagesToHandleBeforeRescan = 100;
 
+                /// <summary>
+                /// Performs all actions required to start access to the active file.  This includes automatic attempts to reset the directory manager and
+                /// performing incremental cleanup actions when needed.
+                /// </summary>
+                /// <returns>the results from calling <see cref="ActivateFile"/>.  true if an active file name could be determined and the ostream could be successfully opened to append to it.</returns>
 				protected bool StartFileAccess()
 				{
 					bool dirMgrUsable = dirMgr.IsDirectoryUsable;
@@ -242,6 +281,9 @@ namespace MosaicLib
 					return ActivateFile();
 				}
 
+                /// <summary>
+                /// Flushes the ostream.
+                /// </summary>
 				protected void CompleteFileAccess()
 				{
 					if (ostream != null)
@@ -257,6 +299,9 @@ namespace MosaicLib
 					NoteMessagesHaveBeenDelivered();
 				}
 
+                /// <summary>
+                /// Closes the currently open ostream (if any).
+                /// </summary>
 				protected void CloseFile()
 				{
 					if (ostream != null)
@@ -266,6 +311,9 @@ namespace MosaicLib
 					}
 				}
 
+                /// <summary>
+                /// Logs a message to indicate how many messages this LMH has dropped because the directory manager is not in a usable state.
+                /// </summary>
 				protected void LogDroppedMessageCount()
 				{
 					if (droppedMessageCount == lastLoggedDroppedMessageCount)

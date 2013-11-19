@@ -26,8 +26,19 @@ namespace MosaicLib.Time
 
     #region GetTickCount
 
+    /// <summary>
+    /// public static class used as namespace wrapper for Kernel32.dll GetTickCount P-Invoke symbol name.
+    /// </summary>
     public static class Ticks
     {
+        /// <summary>
+        /// Calls the Win32 API GetTickCount method via the Kernel32.dll's GetTickCount entry point.
+        /// </summary>
+        /// <returns>the current system tick count - as milliseconds since the system was last started.</returns>
+        /// <remarks>
+        /// WARNING: this counter exceeds 32 bits, and thus wraps around, approximately every 49.7 days.
+        /// If casted to a signed value then this counter value changes sign approximately every 24.8 days.
+        /// </remarks>
         [DllImport("Kernel32.dll")]
         public static extern UInt32 GetTickCount();
     }

@@ -48,18 +48,45 @@ namespace MosaicLib
 
 		public class QueuedLogger : LoggerBase
 		{
-			public QueuedLogger(string name) : this (name, string.Empty) {}
-			public QueuedLogger(string name, LogGate initialInstanceLogGate, bool includeFileAndLines) : this(name, string.Empty, initialInstanceLogGate, includeFileAndLines) { }
-			public QueuedLogger(string name, string groupName) : this (name, groupName, LogGate.All, true) {}
-			public QueuedLogger(string name, string groupName, LogGate initialInstanceLogGate, bool includeFileAndLines) : base(name, groupName, initialInstanceLogGate, includeFileAndLines)
+            /// <summary>Constructor.  Uses given logger name.  Uses default group name, LogGate.All and enables instance trace logging</summary>
+            /// <param name="name">Provides the LoggerName (source ID) to use for this logger.</param>
+            public QueuedLogger(string name) 
+                : this (name, string.Empty) 
+            {}
+
+            /// <summary>Constructor.  Uses given logger name, and initialInstanceLogGate.  Enables instance trace logging</summary>
+            /// <param name="name">Provides the LoggerName (source ID) to use for this logger.</param>
+            /// <param name="initialInstanceLogGate">Defines the initial instance group gate that may be more restrictive than the gate assigned to the group or the logger through the distribution system.</param>
+            /// <param name="includeFileAndLines">Determines if the logger enables recording file and line numbers</param>
+			public QueuedLogger(string name, LogGate initialInstanceLogGate, bool includeFileAndLines) 
+                : this(name, string.Empty, initialInstanceLogGate, includeFileAndLines) 
+            { }
+
+            /// <summary>Constructor.  Uses given logger name, and group name.  Use LogGate.All and enables instance trace logging</summary>
+            /// <param name="name">Provides the LoggerName (source ID) to use for this logger.</param>
+            /// <param name="groupName">Provides the GroupName that this logger name will be assigned/moved to</param>
+			public QueuedLogger(string name, string groupName) 
+                : this (name, groupName, LogGate.All, true) 
+            {}
+
+            /// <summary>Detailed Constructor.  Uses given logger name, group name, and initialInstanceLogGate.  Use default group name and enables instance trace logging</summary>
+            /// <param name="name">Provides the LoggerName (source ID) to use for this logger.</param>
+            /// <param name="groupName">Provides the GroupName that this logger name will be assigned/moved to</param>
+            /// <param name="initialInstanceLogGate">Defines the initial instance group gate that may be more restrictive than the gate assigned to the group or the logger through the distribution system.</param>
+            /// <param name="includeFileAndLines">Determines if the logger enables recording file and line numbers</param>
+			public QueuedLogger(string name, string groupName, LogGate initialInstanceLogGate, bool includeFileAndLines) 
+                : base(name, groupName, initialInstanceLogGate, includeFileAndLines)
 			{
 				if (dist != null)
 					dist.StartQueuedMessageDelivery();
 			}
 
+            /// <summary>Copy constructor.</summary>
+            /// <param name="rhs">Gives the Logger instance to make a copy from.</param>
 			QueuedLogger(QueuedLogger rhs) : base(rhs) {}
 
-			public override void EmitLogMessage(ref LogMessage mesg)				//!< Emits and consumes the message (mesgP will be set to null)
+            /// <summary>Emits and consumes the message (mesg will be set to null)</summary>
+            public override void EmitLogMessage(ref LogMessage mesg)				//!< Emits and consumes the message (mesgP will be set to null)
 			{
 				if (mesg != null && !loggerHasBeenShutdown)
 				{
@@ -68,7 +95,9 @@ namespace MosaicLib
 				}
 			}
 
-			public override bool WaitForDistributionComplete(TimeSpan timeLimit)
+            /// <summary>Waits for last message emitted by this logger to have been distributed and processed</summary>
+            /// <returns>true if distribution of the last message emitted here completed within the given time limit, false otherwise.</returns>
+            public override bool WaitForDistributionComplete(TimeSpan timeLimit)
 			{
 				if (dist == null)
 					return false;
@@ -76,7 +105,8 @@ namespace MosaicLib
 				return dist.WaitForQueuedMessageDistributionComplete(sourceInfo.ID, timeLimit);
 			}
 
-			protected override string ClassName { get { return "QueuedLogger"; } }
+            /// <summary>Defines the ClassName value that will be used by the LoggerBase when generating trace messages (if enabled).</summary>
+            protected override string ClassName { get { return "QueuedLogger"; } }
 		}
 	}
 

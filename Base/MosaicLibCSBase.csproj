@@ -81,6 +81,9 @@
     <Compile Include="Serial\SlidingBuffer.cs" />
     <Compile Include="Serial\TcpSerialIO.cs" />
     <Compile Include="Serial\UdpSerialIO.cs" />
+    <Compile Include="Serial\Modbus\Modbus.cs" />
+    <Compile Include="Serial\Modbus\ModbusClient.cs" />
+    <Compile Include="Serial\Modbus\ModbusServer.cs" />
     <Compile Include="Semi\E084\E084.cs" />
     <Compile Include="Semi\E084\E084IOSupport.cs" />
     <Compile Include="Time\MMTimer.cs" />

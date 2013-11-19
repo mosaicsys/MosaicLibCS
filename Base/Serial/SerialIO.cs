@@ -35,13 +35,22 @@ namespace MosaicLib.SerialIO
 	#region PortConfig
 
 	//-----------------------------------------------------------------
-	/// <summary>Define the patterns of line termination that the port will expect to receive and/or write.</summary>
+	/// <summary>
+    /// Define the patterns of line termination that the port will expect to receive and/or write.
+    /// <para/>
+    /// None = 0, Auto, CR, CRLF, Custom
+    /// </summary>
 	public enum LineTerm
 	{
-		None = 0,		// binary stream
-		Auto,			// sends CRLF accepts any 
+        /// <summary>Used for ports that carry binary data.</summary>
+		None = 0,
+        /// <summary>Tx uses CRLF, Rx accepts CR, LF, CRLF or LFCR as a single EndOfLine condition.</summary>
+        Auto,
+        /// <summary>Tx and Rx EOL is CR only</summary>
         CR,
+        /// <summary>Tx and Rx EOL is CRLF</summary>
         CRLF,
+        /// <summary>Tx EOL is manually specified, Rx EOL detection is implemented using the <see cref="PacketEndScannerDelegate"/> delegate.</summary>
         Custom,
 	};
 
@@ -57,74 +66,228 @@ namespace MosaicLib.SerialIO
 	///		<UdpClient addr="127.0.0.1" port="5005"/>
 	///		<UdpServer addr="127.0.0.1" port="5006"/>		addr is optional - will use any if no address is provided
 	/// </remarks>
-
 	public struct PortConfig
-	{
-		private string name;
-		private string specStr;
-        private string[] rxPacketEndStrArray;
-        private string txPacketEndStr;
-        private byte[] txPacketEndStrByteArray;
-        private string loggerGroupID;				        // for normal logger
-        private string traceDataLoggerGroupID;				// for data trace logger
+    {
+        #region Constructors
 
-		public PortConfig(string name, string specStr, LineTerm lineTerm) : this(name, specStr, lineTerm, (lineTerm == LineTerm.Auto ? LineTerm.CRLF : lineTerm)) { }
-        public PortConfig(string name, string specStr, string[] rxPacketEndStrArray, LineTerm txLineTerm) : this(name, specStr, LineTerm.Custom, txLineTerm) { RxPacketEndStrArray = rxPacketEndStrArray; }
+        /// <summary>Constructor for normal non-packetized send/recive.</summary>
+        /// <param name="name">This gives the name that will be used for the port created from this config contents</param>
+        /// <param name="specStr">This gives the port target type configuration string that is used to define the type of port that will be created and where it will be connected to.</param>
+        /// <param name="lineTerm">Selects the RxLineTerm and the TxLineTerm.  RxLineTerm is set to this value while TxLineTerm is set to this value or CRLF if this value is Auto</param>
+        public PortConfig(string name, string specStr, LineTerm lineTerm) 
+            : this(name, specStr, lineTerm, (lineTerm == LineTerm.Auto ? LineTerm.CRLF : lineTerm)) 
+        {
+        }
+
+        /// <summary>Constructor for packetized communication using one or more packet end strings to deliniate packets</summary>
+        /// <param name="name">This gives the name that will be used for the port created from this config contents</param>
+        /// <param name="specStr">This gives the port target type configuration string that is used to define the type of port that will be created and where it will be connected to.</param>
+        /// <param name="rxPacketEndStrArray">
+        /// Explicitly defines the set of packet end strings.  Internally sets RxLineTerm to LineTerm.Custom.  
+        /// Selects packetized reception if this value is a non-empty array
+        /// </param>
+        /// <param name="txLineTerm">This determines the contents of the TxPacketEndStr to match the line termination characters selected here.</param>
+        public PortConfig(string name, string specStr, string[] rxPacketEndStrArray, LineTerm txLineTerm) 
+            : this(name, specStr, LineTerm.Custom, txLineTerm) 
+        { 
+            RxPacketEndStrArray = rxPacketEndStrArray; 
+        }
+
+        /// <summary>Constructor for packetized communication using client provided custom PacketEndScannerDelegate</summary>
+        /// <param name="name">This gives the name that will be used for the port created from this config contents</param>
+        /// <param name="specStr">This gives the port target type configuration string that is used to define the type of port that will be created and where it will be connected to.</param>
+        /// <param name="rxPacketEndScannerDelegate">Selects that the client will use packetized reception using this custom delegate to to detect packet boundaries.</param>
+        /// <param name="txLineTerm">This determines the contents of the TxPacketEndStr to match the line termination characters selected here.</param>
+        public PortConfig(string name, string specStr, PacketEndScannerDelegate rxPacketEndScannerDelegate, LineTerm txLineTerm)
+            : this(name, specStr, LineTerm.Custom, txLineTerm)
+        {
+            RxPacketEndScannerDelegate = rxPacketEndScannerDelegate;
+        }
+
+        /// <summary>Common Constructor for ports that use line termination.</summary>
+        /// <param name="name">This gives the name that will be used for the port created from this config contents</param>
+        /// <param name="specStr">This gives the port target type configuration string that is used to define the type of port that will be created and where it will be connected to.</param>
+        /// <param name="rxLineTerm">
+        /// This determines the connection mode and, in some cases, the specific patterns of line end characters that will be used.
+        /// Selects StripWhitespaceOnRx and requires use of packetized reception if LineTerm is neither None nor Custom.
+        /// </param>
+        /// <param name="txLineTerm">This determines the contents of the TxPacketEndStr to match the line termination characters selected here.</param>
         public PortConfig(string name, string specStr, LineTerm rxLineTerm, LineTerm txLineTerm)
-			: this()
+			: this(name, specStr)
 		{ 
-			this.name = name; 
-			this.specStr = specStr;
+            StripWhitespaceOnRx = (rxLineTerm != LineTerm.None && rxLineTerm != LineTerm.Custom);
 
-            StripWhitespaceOnRx = true;
-            switch (rxLineTerm)
-            {
-                case LineTerm.None: rxPacketEndStrArray = new string[0]; break;
-                case LineTerm.Auto: rxPacketEndStrArray = new string[] { "\r", "\n" }; StripWhitespaceOnRx = true; break;
-                case LineTerm.CR: rxPacketEndStrArray = new string[] { "\r" }; break;
-                case LineTerm.CRLF: rxPacketEndStrArray = new string[] { "\r\n" }; break;
-                case LineTerm.Custom: rxPacketEndStrArray = new string[0]; break;
-                default: rxPacketEndStrArray = null; break;
-            }
-            switch (txLineTerm)
-            {
-                case LineTerm.None: txPacketEndStr = String.Empty; break;
-                case LineTerm.Auto: txPacketEndStr = "\r\n"; break;
-                case LineTerm.CR: txPacketEndStr = "\r"; break;
-                case LineTerm.CRLF: txPacketEndStr = "\r\n"; break;
-                case LineTerm.Custom: txPacketEndStr = string.Empty; break;
-                default: txPacketEndStr = string.Empty; break;
-            }
-            txPacketEndStrByteArray = ByteArrayTranscoders.ByteStringTranscoder.Decode(txPacketEndStr);
+            RxLineTerm = rxLineTerm;
+            TxLineTerm = txLineTerm;
+        }
+
+        /// <summary>Standard basic constructor - requires name and specStr.  Sets many properties to their default values</summary>
+        /// <param name="name">This gives the name that will be used for the port created from this config contents</param>
+        /// <param name="specStr">This gives the port target type configuration string that is used to define the type of port that will be created and where it will be connected to.</param>
+        /// <remarks>
+        /// </remarks>
+        public PortConfig(string name, string specStr)
+            : this()
+        {
+            Name = name;
+            SpecStr = specStr;
 
             EnableAutoReconnect = false;
-			ReconnectHoldoff = TimeSpan.FromSeconds(5.0);
-			ConnectTimeout = TimeSpan.FromSeconds(5.0);
-			ReadTimeout = TimeSpan.FromSeconds(1.0);
-			WriteTimeout = TimeSpan.FromSeconds(1.0);
-			IdleTime = TimeSpan.FromSeconds(10.0);
-			SpinWaitTimeLimit = TimeSpan.FromSeconds(0.10);
+            ReconnectHoldoff = TimeSpan.FromSeconds(5.0);
+            ConnectTimeout = TimeSpan.FromSeconds(5.0);
+            ReadTimeout = TimeSpan.FromSeconds(1.0);
+            WriteTimeout = TimeSpan.FromSeconds(1.0);
+            IdleTime = TimeSpan.FromSeconds(10.0);
+            SpinWaitTimeLimit = TimeSpan.FromSeconds(0.10);
 
-			ErrorMesgType = Logging.MesgType.Error;
-			InfoMesgType = Logging.MesgType.Info;
-			DebugMesgType = Logging.MesgType.Debug;
+            ErrorMesgType = Logging.MesgType.Error;
+            InfoMesgType = Logging.MesgType.Info;
+            DebugMesgType = Logging.MesgType.Debug;
             TraceMesgType = Logging.MesgType.Trace;
             TraceDataMesgType = Logging.MesgType.Trace;
             LoggerGroupID = String.Empty;       // use default
-			TraceDataLoggerGroupID = "LDG.SerialIO.TraceData";
+            TraceDataLoggerGroupID = "LDG.SerialIO.TraceData";
 
-			RxBufferSize = 4096;
-			TxBufferSize = 4096;
+            RxBufferSize = 4096;
+            TxBufferSize = 4096;
         }
 
-		public string Name { get { return name; } }
-		public string SpecStr { get { return specStr; } }
+        /// <summary>Returns a new PortConfig instance derived from the given cloneFrom copy but with a new name and specStr value.</summary>
+        /// <param name="name">This gives the name that will be used for the port created from this config contents</param>
+        /// <param name="specStr">This gives the port target type configuration string that is used to define the type of port that will be created and where it will be connected to.</param>
+        /// <param name="cloneFrom">Gives the instance from which to copy all fields/Properties except the Name and SpecStr from.</param>
+        public PortConfig(string name, string specStr, PortConfig cloneFrom)
+            : this()
+        {
+            Name = name;
+            SpecStr = specStr;
+
+            rxPacketEndStrArray = cloneFrom.rxPacketEndStrArray;
+            rxPacketEndScannerDelegate = cloneFrom.rxPacketEndScannerDelegate;
+            txPacketEndStr = cloneFrom.txPacketEndStr;
+            txPacketEndStrByteArray = cloneFrom.txPacketEndStrByteArray;
+
+            loggerGroupID = cloneFrom.loggerGroupID;
+            traceDataLoggerGroupID = cloneFrom.traceDataLoggerGroupID;
+
+            StripWhitespaceOnRx = cloneFrom.StripWhitespaceOnRx;
+            EnableAutoReconnect = cloneFrom.EnableAutoReconnect;
+            ReconnectHoldoff = cloneFrom.ReconnectHoldoff;
+            ConnectTimeout = cloneFrom.ConnectTimeout;
+            ReadTimeout = cloneFrom.ReadTimeout;
+            WriteTimeout = cloneFrom.WriteTimeout;
+            IdleTime = cloneFrom.IdleTime;
+            SpinWaitTimeLimit = cloneFrom.SpinWaitTimeLimit;
+            ErrorMesgType = cloneFrom.ErrorMesgType;
+            InfoMesgType = cloneFrom.InfoMesgType;
+            DebugMesgType = cloneFrom.DebugMesgType;
+            TraceMesgType = cloneFrom.TraceMesgType;
+            TraceDataMesgType = cloneFrom.TraceDataMesgType;
+            RxBufferSize = cloneFrom.RxBufferSize;
+            TxBufferSize = cloneFrom.TxBufferSize;
+        }
+
+        #endregion
+
+        #region Public Get-only properties for construction time set values
+
+        /// <summary>Get only property.  Gives the PortConfig's Name value which will be used as the name of Serial Ports that are created from this PortConfig</summary>
+        public string Name { get; private set; }
+
+        /// <summary>Get only property.  Gives the PortConfig's target Specificiation String which will be used to choose the type of port and to specify how it is connected.</summary>
+        public string SpecStr { get; private set; }
+
+        #endregion
+
+        #region Public Set-only properties
+
+        /// <summary>
+        /// Set only property.  Sets the RxPacketEndStrArray based from a given LineTerm value.  
+        /// LineTerm.None, and LineTerm.Custom set the RxPacketEndStrArray to null.  
+        /// LineTerm.Auto sets the RxPacketEndStrArray to contain "\r" and "\n" and turns on StripWhitespaceOnRx (if not already on)
+        /// LineTerm.CR sets the RxPacketEndStrArray to "\r" and LineTerm.CRLF sets the RxPacketEndStrArray to "\r\n".
+        /// </summary>
+        public LineTerm RxLineTerm
+        {
+            set
+            {
+                if (RxPacketEndScannerDelegate != null)
+                    throw new System.ArgumentException("RxLineTerm (RxPacketEndStrArray) and RxPacketEndScanerDelegate cannot both be used as the same time");
+
+                switch (value)
+                {
+                    case LineTerm.None: RxPacketEndStrArray = new string[0]; break;
+                    case LineTerm.Auto: RxPacketEndStrArray = new string[] { "\r", "\n" }; StripWhitespaceOnRx = true; break;
+                    case LineTerm.CR: RxPacketEndStrArray = new string[] { "\r" }; break;
+                    case LineTerm.CRLF: RxPacketEndStrArray = new string[] { "\r\n" }; break;
+                    case LineTerm.Custom: RxPacketEndStrArray = null; break;
+                    default: RxPacketEndStrArray = null; break;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Set only property.  Sets the TxPacketEndStr based on the given LineTerm value.
+        /// LineTerm.None, and LineTerm.Custom set TxPacketEndStr to the empty string.
+        /// LineTerm.CR set the TxPacketEndStr to "\r".  LineTerm.CRLF and LineTerm.Auto set the TxPacketEndStr to "\r\n"
+        /// </summary>
+        public LineTerm TxLineTerm
+        {
+            set
+            {
+                switch (value)
+                {
+                    case LineTerm.None: TxPacketEndStr = String.Empty; break;
+                    case LineTerm.Auto: TxPacketEndStr = "\r\n"; break;
+                    case LineTerm.CR: TxPacketEndStr = "\r"; break;
+                    case LineTerm.CRLF: TxPacketEndStr = "\r\n"; break;
+                    case LineTerm.Custom: TxPacketEndStr = string.Empty; break;
+                    default: TxPacketEndStr = string.Empty; break;
+                }
+            }
+        }
+
+        #endregion
+
+        #region Public Properties
+
+        /// <summary>
+        /// Get/Set property.  
+        /// Getter returns the contains array or the an empty string[] array if the assigned value was null.
+        /// Setter verifies that no RxPacketendScannerDelegate has been selected (throws ArgumentException if not) and then sets the contained value from the given one.
+        /// </summary>
         public string[] RxPacketEndStrArray
         {
             get { return ((rxPacketEndStrArray != null) ? rxPacketEndStrArray : emptyStrArray); }
-            set { rxPacketEndStrArray = (value != null ? value : emptyStrArray); }
+            set 
+            {
+                if (rxPacketEndScannerDelegate != null)
+                    throw new System.ArgumentException("RxPacketEndStrArray and RxPacketEndScanerDelegate cannot both be used as the same time");
+                rxPacketEndStrArray = value;
+            }
         }
 
+        /// <summary>
+        /// Get/Set property.
+        /// Getter returns the client provided PacketEndScannerDelegate, or null if the client has not assigned one.
+        /// Setter verifies that the RxPacketEndStrArray does not specify any end patterns (throws ArgumentException if not) and then sets the contained value from the given one.
+        /// </summary>
+        public PacketEndScannerDelegate RxPacketEndScannerDelegate
+        {
+            get { return rxPacketEndScannerDelegate; }
+            set 
+            {
+                if (RxPacketEndStrArray.Length > 0)
+                    throw new System.ArgumentException("RxPacketEndScanerDelegate and RxPacketEndStrArray cannot both be used as the same time");
+                rxPacketEndScannerDelegate = value; 
+            }
+        }
+
+        /// <summary>
+        /// Get/Set property.  Gives the string who's ascii byte equivilant will be appended to every Write operation.  
+        /// Nothing will be appended if this string is assigned as null or the empty string.
+        /// Returns empty string even if assigned to null.
+        /// </summary>
         public string TxPacketEndStr
         {
             get { return ((txPacketEndStr != null) ? txPacketEndStr : String.Empty); }
@@ -134,44 +297,86 @@ namespace MosaicLib.SerialIO
                 txPacketEndStrByteArray = ByteArrayTranscoders.ByteStringTranscoder.Decode(txPacketEndStr);
             }
         }
+
+        /// <summary>Get only property.  Returns the byte array equivilant of the TxPacketEndStr.</summary>
         public byte[] TxLineTermBytes
         {
-            get { return txPacketEndStrByteArray; }
+            get { return (txPacketEndStrByteArray ?? emptyByteArray); }
         }
 
+        /// <summary>Only valid in packet mode.  Selects that leading and trailing whitespace shall be removed from the data contained in each Packet produced by the port.</summary>
         public bool StripWhitespaceOnRx { get; set; }
+        /// <summary>Set to true so that the port will automatically attempt to reconnect any time the current connection is lost.  When false the client is responsible for performing such actions explicitly when needed.</summary>
         public bool EnableAutoReconnect { get; set; }
+        /// <summary>Defines the period of time after failing to connect before the next connection attempt can be made.  Only used whne EnableAutoReconnect is true.</summary>
         public TimeSpan ReconnectHoldoff { get; set; }
+        /// <summary>Defines the maximum period of time between attempting to open a connection and completing the connection before the connection attempt is viewed as having failed.  Not supported for all connection types.</summary>
         public TimeSpan ConnectTimeout { get; set; }
+        /// <summary>
+        /// Defines the maximum period of time that a Read Action may be outstanding and be partially completed before it will be viewed has having failed due to the time limit being reached. 
+        /// Use is context and port type dependant.
+        /// </summary>
         public TimeSpan ReadTimeout { get; set; }
+        /// <summary>
+        /// Defines the maximum period of time between starting a write operation and completing the operation before it will be viewed has having failed due to the time limit being reached.
+        /// Use is context and port type depedant.
+        /// </summary>
         public TimeSpan WriteTimeout { get; set; }
-        public TimeSpan IdleTime { get; set; }      // time between successive reads for port to transition from receiving to idle - mainly used as a timeout for packet mode.
+        /// <summary>Defines the minimum time between successive Read Actions for the port to transition from receiving to idle.  Used as the packet timeout for packetized ports.  Used as the flush idle period for all ports.</summary>
+        public TimeSpan IdleTime { get; set; }
+        /// <summary>Defines the port's thread wait time limit for spinning when otherwise idle.  This is rarely overridden from its default value.</summary>
         public TimeSpan SpinWaitTimeLimit { get; set; }
 
+        /// <summary>Defines the Logging.MesgType that is produced by the port for error messages that it produces</summary>
         public Logging.MesgType ErrorMesgType { get; set; }
+        /// <summary>Defines the Logging.MesgType that is produced by the port for information messages that it produces</summary>
         public Logging.MesgType InfoMesgType { get; set; }
+        /// <summary>Defines the Logging.MesgType that is produced by the port for debug messages that it produces</summary>
         public Logging.MesgType DebugMesgType { get; set; }
+        /// <summary>Defines the Logging.MesgType that is produced by the port for trace messages that it produces</summary>
         public Logging.MesgType TraceMesgType { get; set; }
+        /// <summary>Defines the Logging.MesgType that is produced by the port for data trace messages that it produces</summary>
         public Logging.MesgType TraceDataMesgType { get; set; }
 
+        /// <summary>Defines the Logger GroupID that the port will use for its message logger.  When empty or null the port will use the default Logger GroupID.</summary>
         public string LoggerGroupID
         {
             get { return (loggerGroupID ?? String.Empty); }
             set { loggerGroupID = value; }
         }
+
+        /// <summary>Defines the Logger GroupID that the port will use for its trace logger.  When empty or null the port will use the default Logger GroupID.</summary>
         public string TraceDataLoggerGroupID 
 		{ 
 			get { return (traceDataLoggerGroupID ?? String.Empty); } 
 			set { traceDataLoggerGroupID = value; } 
 		}
 
+        /// <summary>Defines the receiver buffer size that the port will use.  Purpose and meaning is port type specific.</summary>
         public uint RxBufferSize { get; set; }
+
+        /// <summary>Defines the transmit buffer size that the port will use.  Purpose and meaning is port type specific.</summary>
         public uint TxBufferSize { get; set; }
 
-		public bool IdleTimerEnabled { get { return (IdleTime != TimeSpan.Zero); } }
+        /// <summary>Returns true if the IdleTime is non-zero</summary>
+        public bool IdleTimerEnabled { get { return (IdleTime != TimeSpan.Zero); } }
 
-        static string[] emptyStrArray = new string[0];
-	}
+        #endregion
+
+        #region Private fields
+
+        private string[] rxPacketEndStrArray;
+        private PacketEndScannerDelegate rxPacketEndScannerDelegate;
+        private string txPacketEndStr;
+        private byte[] txPacketEndStrByteArray;
+        private string loggerGroupID;				        // for normal logger
+        private string traceDataLoggerGroupID;				// for data trace logger
+
+        private static string[] emptyStrArray = new string[0];
+        private static byte[] emptyByteArray = new byte[0];
+
+        #endregion
+    }
 
 	#endregion
 
@@ -194,6 +399,8 @@ namespace MosaicLib.SerialIO
 		ReadFailed,
 		/// <summary>user requested cancel operation on this action</summary>
 		ReadCanceled,
+        /// <summary>special failure case where the other end of the connection has closed the connection and there are no more bytes to read from it.</summary>
+        ReadRemoteEndHasBeenClosed,
 
 		/// <summary>given number of bytes were successfully posted to the port</summary>
 		WriteDone,
@@ -219,32 +426,48 @@ namespace MosaicLib.SerialIO
 		// items that are based to the request
 		private Byte [] buffer = null;
 		private int bytesToRead = 0;
-		private bool waitForAllBytes = false;
 
 		// results from completion of the read
-		private QpcTimeStamp startTime = QpcTimeStamp.Zero;
 		private volatile int bytesRead = 0;
 		private volatile ActionResultEnum actionResultEnum = ActionResultEnum.None;
 		private volatile string resultCode = null;
 
+        /// <summary>Constructs an empty object with no allocated buffer</summary>
 		public ReadActionParam() { }
-		public ReadActionParam(int bufferSize) : this(new byte[bufferSize]) { }
-		public ReadActionParam(byte [] buffer) : this(buffer, (buffer != null ? buffer.Length : 0)) { }
-		public ReadActionParam(byte [] buffer, int bytesToRead) : this() { Buffer = buffer; BytesToRead = bytesToRead;  }
+        /// <summary>Constructs the object and allocates buffer of indicated size.</summary>
+        public ReadActionParam(int bufferSize) : this(new byte[bufferSize]) { }
+        /// <summary>Constructs the object to use given buffer.</summary>
+        public ReadActionParam(byte[] buffer) : this() { Buffer = buffer; }
+        /// <summary>Constructs the object to use given buffer and to specify the number of bytes to read.</summary>
+        public ReadActionParam(byte[] buffer, int bytesToRead) : this() { Buffer = buffer; BytesToRead = bytesToRead; }
 
-		public void Reset() { startTime = QpcTimeStamp.Zero; actionResultEnum = ActionResultEnum.None; resultCode = null; }
-        public void Start() { Reset(); startTime = QpcTimeStamp.Now; }
+        /// <summary>Clears the StartTime, BytesRead, ActionResultEnum and ResultCode</summary>
+        /// <remarks>This method is normally only used by a Port object itself</remarks>
+        public void Reset() { StartTime = QpcTimeStamp.Zero; bytesRead = 0; actionResultEnum = ActionResultEnum.None; resultCode = null; }
+        /// <summary>Resets and object and then sets the StartTime to Now.</summary>
+        /// <remarks>This method is normally only used by a Port object itself</remarks>
+        public void Start() { Reset(); StartTime = QpcTimeStamp.Now; }
 
-		public Byte [] Buffer { get { return buffer; } set { buffer = value; bytesToRead = (buffer != null ? buffer.Length : 0); } }
-		public int BytesToRead { get { return bytesToRead; } set { if (buffer != null) bytesToRead = Math.Min(value, buffer.Length); else bytesToRead = 0; } }
-		public bool WaitForAllBytes { get { return waitForAllBytes; } set { waitForAllBytes = value; } }
+        /// <summary>Provides Get/Set access to the buffer that is referenced by this object.  Setter also sets the BytesToRead to the length of the given buffer.</summary>
+        public Byte[] Buffer { get { return buffer; } set { buffer = value; bytesToRead = (buffer ?? emptyByteArray).Length; } }
+        /// <summary>Provides Get/Set access to the Number of Bytes To Read.  Setter constrains the assigned value so that it cannot exceed the buffer length.</summary>
+        public int BytesToRead { get { return bytesToRead; } set { bytesToRead = Math.Min(value, (buffer ?? emptyByteArray).Length); } }
+        /// <summary>Set to true so that Read operatin will only complete after reading BytesToRead bytes.  Set to false so that the Read Action will complete as soon as it has read at least one byte.</summary>
+        public bool WaitForAllBytes { get; set; }
 
-		public QpcTimeStamp StartTime { get { return startTime; } }
-		public bool HasBeenStarted { get { return startTime != QpcTimeStamp.Zero; } }
-		public int BytesRead { get { return bytesRead; } set { bytesRead = value; } }
-		public ActionResultEnum ActionResultEnum { get { return actionResultEnum; } set { actionResultEnum = value; } }
-		public string ResultCode { get { return resultCode; } set { resultCode = value; } }
-	}
+        /// <summary>Gives the time at which the Read Action started, or zero if it has not been started.</summary>
+        public QpcTimeStamp StartTime { get; private set; }
+        /// <summary>Returns true if the StartTime is non-zero</summary>
+        public bool HasBeenStarted { get { return !StartTime.IsZero; } }
+        /// <summary>Returns the number of bytes read.  This may be used to setup a Read action to append to a set of bytes that are already in the corresponding buffer if this value is non-zero when the Read action is Started.</summary>
+        public int BytesRead { get { return bytesRead; } set { bytesRead = value; } }
+        /// <summary>Returns the ActionResultEnum value after the read action has completed.</summary>
+        public ActionResultEnum ActionResultEnum { get { return actionResultEnum; } set { actionResultEnum = value; } }
+        /// <summary>Returns the string ResultCode after the Read Action has completed.  This is generally the same value as the Read Action's ResultCode value.</summary>
+        public string ResultCode { get { return resultCode; } set { resultCode = value; } }
+
+        private static byte[] emptyByteArray = new byte[0];
+    }
 
 	/// <summary>This class is used with the SerialIO.Port Write Action.  It contains the set of parameters to be passed to the action and the place where the action records the results once it has been performed</summary>
 	/// <remarks>
@@ -265,28 +488,48 @@ namespace MosaicLib.SerialIO
 		private bool isNonBlocking = false;
 
 		// results from completion of the read
-		private QpcTimeStamp startTime = QpcTimeStamp.Zero;
 		private volatile int bytesWritten = 0;
 		private volatile ActionResultEnum actionResultEnum = ActionResultEnum.None;
 		private volatile string resultCode = null;
 
-		public WriteActionParam() { }
-		public WriteActionParam(byte [] buffer) : this(buffer, (buffer != null ? buffer.Length : 0)) { }
-		public WriteActionParam(byte [] buffer, int bytesToWrite) : this() { Buffer = buffer; BytesToWrite = bytesToWrite; }
+        /// <summary>Constructs an empty object with no allocated buffer</summary>
+        public WriteActionParam() { }
+        /// <summary>Constructs the object to write the contents of the given buffer.  BytesToWrite is automatically set to the buffer length.</summary>
+        public WriteActionParam(byte[] buffer) : this() { Buffer = buffer; }
+        /// <summary>Constructs the object to write from the given buffer and to specify the number of bytes to write.</summary>
+        public WriteActionParam(byte[] buffer, int bytesToWrite) : this() { Buffer = buffer; BytesToWrite = bytesToWrite; }
 
-		public void Reset() { startTime = QpcTimeStamp.Zero; bytesWritten = 0; actionResultEnum = ActionResultEnum.None; resultCode = null; }
-		public void Start() { Reset(); startTime = QpcTimeStamp.Now; }
+        /// <summary>Clears the StartTime, BytesToWritten, ActionResultEnum and ResultCode</summary>
+        /// <remarks>This method is normally only used by a Port object itself</remarks>
+        public void Reset() { StartTime = QpcTimeStamp.Zero; bytesWritten = 0; actionResultEnum = ActionResultEnum.None; resultCode = null; }
+        /// <summary>Resets and object and then sets the StartTime to Now.</summary>
+        /// <remarks>This method is normally only used by a Port object itself</remarks>
+        public void Start() { Reset(); StartTime = QpcTimeStamp.Now; }
 
-		public Byte [] Buffer { get { return buffer; } set { buffer = value; bytesToWrite = (buffer != null ? buffer.Length : 0); } }
-		public int BytesToWrite { get { return bytesToWrite; } set { if (buffer != null) bytesToWrite = Math.Min(value, buffer.Length); else bytesToWrite = 0; } }
+        /// <summary>Provides Get/Set access to the buffer that is referenced by this object.  Setter also sets the BytesToRead to the length of the given buffer.</summary>
+        public Byte[] Buffer { get { return buffer; } set { buffer = value; bytesToWrite = (buffer ?? emptyByteArray).Length; } }
+        /// <summary>Provides Get/Set access to the Number of Bytes To Write.  Setter constrains the assigned value so that it cannot exceed the buffer length.</summary>
+        public int BytesToWrite { get { return bytesToWrite; } set { bytesToWrite = Math.Min(value, (buffer ?? emptyByteArray).Length); } }
+        /// <summary>
+        /// Determines how the Write Action will be serviced.  When false the Write Action will wait in the port until the transmit buffer has available space.
+        /// When true the write operation will fail immediately if the transmit buffer does not have any available space when the Write Action is started.
+        /// If set to true then the write operation will only be accepted if the transmit buffer has some space available 
+        /// </summary>
 		public bool IsNonBlocking { get { return isNonBlocking; } set { isNonBlocking = value; } }
 
-		public QpcTimeStamp StartTime { get { return startTime; } }
-		public bool HasBeenStarted { get { return startTime != QpcTimeStamp.Zero; } }
-		public int BytesWritten { get { return bytesWritten; } set { bytesWritten = value; } }
-		public ActionResultEnum ActionResultEnum { get { return actionResultEnum; } set { actionResultEnum = value; } }
-		public string ResultCode { get { return resultCode; } set { resultCode = value; } }
-	}
+        /// <summary>Gives the time at which the Write Action started, or zero if it has not been started.</summary>
+        public QpcTimeStamp StartTime { get; private set; }
+        /// <summary>Returns true if the StartTime is non-zero</summary>
+        public bool HasBeenStarted { get { return !StartTime.IsZero; } }
+        /// <summary>Returns the number of bytes written.</summary>
+        public int BytesWritten { get { return bytesWritten; } set { bytesWritten = value; } }
+        /// <summary>Returns the ActionResultEnum value after the read action has completed.</summary>
+        public ActionResultEnum ActionResultEnum { get { return actionResultEnum; } set { actionResultEnum = value; } }
+        /// <summary>Returns the string ResultCode after the Write Action has completed.  This is generally the same value as the Write Action's ResultCode value.</summary>
+        public string ResultCode { get { return resultCode; } set { resultCode = value; } }
+
+        private static byte[] emptyByteArray = new byte[0];
+    }
 
 	//-----------------------------------------------------------------
 
@@ -298,6 +541,9 @@ namespace MosaicLib.SerialIO
 
     /// <summary>Interface to client facet of a Port GetNextPacket Action.  Result is the next packet extracted from the internal sliding buffer.</summary>
     public interface IGetNextPacketAction : IClientFacetWithResult<Packet> { }
+
+    /// <summary>Interface to client facet of a Port Flush Action.  Parameter type is TimeSpan which contains the desired Flush Period to use.</summary>
+    public interface IFlushAction : IClientFacetWithParam<TimeSpan> { }
 
 	/// <summary>Interface that defines the functionality provided by a MosaicLib.SerialIO.IPort including the ability to create read, write and flush actions.</summary>
 	/// <remarks>
@@ -312,6 +558,9 @@ namespace MosaicLib.SerialIO
         /// <summary>Gives the Port Name</summary>
 		string Name { get; }
 
+        /// <summary>Gives information about the port's underlying behavior</summary>
+        IPortBehavior PortBehavior { get; }
+
         /// <summary>Gives the current PortConfig</summary>
         PortConfig PortConfig { get; }
 
@@ -323,7 +572,7 @@ namespace MosaicLib.SerialIO
         IWriteAction CreateWriteAction(WriteActionParam param);
 
         /// <summary>Returns an IBasicAction.  Underlying action TimeSpan parameter has been initilized to given value of flushWaitTime.  This action may be used to flush the port of characters for the given wait time period.</summary>
-        IBasicAction CreateFlushAction(TimeSpan flushWaitLimit);
+        IFlushAction CreateFlushAction(TimeSpan flushWaitLimit);
 
         // the following methods are only useful with Port's that have an associated SlidingPacketBuffer
 
@@ -337,15 +586,77 @@ namespace MosaicLib.SerialIO
         IGetNextPacketAction CreateGetNextPacketAction();
 	}
 
+    /// <summary>
+    /// This interface defines as set of properies that may be used by clients to determine information about the behavior of the port that might effect
+    /// how the client would normally use it.
+    /// </summary>
+    public interface IPortBehavior
+    {
+        /// <summary>Gives the DataDeliveryBehavior enum value that this port believes it implements</summary>
+        DataDeliveryBehavior DataDeliveryBehavior { get; }
+
+        /// <summary>Returns true if this port's underlying engine is network based (EtherNet or WIFI, ...)</summary>
+        /// <remarks>false for COM ports, true for TCP and UDP ports.</remarks>
+        bool IsNetworkPort { get; }
+
+        /// <summary>Returns true if this port's DataDeliveryBehavior is ByteStream</summary>
+        /// <remarks>true for COM ports and TCP ports.</remarks>
+        bool IsByteStreamPort { get; }
+
+        /// <summary>Returns true if this port's DataDeliveryBehavior is Datagram</summary>
+        /// <remarks>true for UDP ports</remarks>
+        bool IsDatagramPort { get; }
+
+        /// <summary>Returns true if this port generally initiates the connection to the transport medium</summary>
+        /// <remarks>true for COM ports and TCP and UDP Client ports</remarks>
+        bool IsClientPort { get; }
+
+        /// <summary>Returns true if this port generally accepts connections from the transport medium</summary>
+        /// <remarks>true for TCP and UDP server ports</remarks>
+        bool IsServerPort { get; }
+    }
+
+    /// <summary>
+    /// This enum defines a set of values that help characterize the data delivery behavior for this port.  
+    /// Currently the only normal values are ByteStream and Datagram.
+    /// </summary>
+    public enum DataDeliveryBehavior
+    {
+        /// <summary>Indicates that this port does not know what Data Delivery Behavior it implements.</summary>
+        Undefined = 0,
+
+        /// <summary>
+        /// Indicates that bytes are generally delivered in order but that they deliniation between groups of bytes at the recieving end may be 
+        /// arbitrarily different from the delinations at the sending end provided that the byte order is not modified.
+        /// </summary>
+        ByteStream,
+
+        /// <summary>Indicates that bytes are generally delivered in the same units (and agregation) as they are written in</summary>
+        Datagram,
+
+        /// <summary>Indicates that this port does not deliver any data...</summary>
+        None,
+    }
+
 	#endregion
 
 	//-----------------------------------------------------------------
 	#region Port Factory
 
+    /// <summary>Old exception type thrown for an invalid or unrecognized PortConfig SpecStr</summary>
+    [Obsolete("This type has been replaced by the functionally identical InvalidPortConfigSpecStrException which will now by thrown in its place (2013-06-14)")]
 	public class InvalidPortConfigSpecStr : System.Exception
 	{
-		public InvalidPortConfigSpecStr(string mesg) : base(mesg) { }
+        /// <summary>Exception constructor</summary>
+        public InvalidPortConfigSpecStr(string mesg) : base(mesg) { }
 	}
+
+    /// <summary>This Exception type is thrown for an invalid or unrecognized PortConfig SpecStr</summary>
+    public class InvalidPortConfigSpecStrException : System.Exception
+    {
+        /// <summary>Exception constructor</summary>
+        public InvalidPortConfigSpecStrException(string mesg) : base(mesg) { }
+    }
 
 	/// <summary>This static class provides static methods that may be used to create various types of SerialIO.IPort objects.</summary>
 	public static partial class Factory
@@ -353,12 +664,11 @@ namespace MosaicLib.SerialIO
 		/// <summary>Create an IPort implementation object based on the first element in the SpecStr in the given portConfig struct.</summary>
 		/// <param name="portConfig">Provides all configuration details for the port to be created.</param>
 		/// <returns>The created SerialIO.Port object as an IPort.  Throws an InvalidPortConfigSpecStr exception if the required concrete type cannot be determined from the portConfig.SpecStr.</returns>
-
 		public static IPort CreatePort(PortConfig portConfig)
 		{
 			bool success = true;
 			Utils.StringScanner specScan = new StringScanner(portConfig.SpecStr);
-			System.Exception e = null;
+			System.Exception ex = null;
 
 			string elementName = null;
 			IPPortEndpointConfig epConfig = null;
@@ -383,7 +693,7 @@ namespace MosaicLib.SerialIO
 				if (comPortConfig.IsValid)
 					return CreateComPort(portConfig, comPortConfig);
 				else
-					e = new InvalidPortConfigSpecStr(Utils.Fcns.CheckedFormat("MosaicLib.SerialIO.Factory.CreatePort call failed: error:'{0}' for port:'{1}'", comPortConfig.ErrorCode, portConfig.Name));
+					ex = new InvalidPortConfigSpecStrException(Utils.Fcns.CheckedFormat("MosaicLib.SerialIO.Factory.CreatePort call failed: error:'{0}' for port:'{1}'", comPortConfig.ErrorCode, portConfig.Name));
 			}
 			else if (epConfig.IsValid)
 			{
@@ -406,13 +716,13 @@ namespace MosaicLib.SerialIO
 			}
 			else
 			{
-				e = new InvalidPortConfigSpecStr(Utils.Fcns.CheckedFormat("MosaicLib.SerialIO.Factory.CreatePort call failed: SpecStr parse error:'{0}'", epConfig.ErrorCode));
+                ex = new InvalidPortConfigSpecStrException(Utils.Fcns.CheckedFormat("MosaicLib.SerialIO.Factory.CreatePort call failed: SpecStr parse error:'{0}'", epConfig.ErrorCode));
 			}
 
-			if (e == null)
-				e = new InvalidPortConfigSpecStr(Utils.Fcns.CheckedFormat("MosaicLib.SerialIO.Factory.CreatePort call failed: SpecStr:'{0}' not recognized for port:'{1}'", portConfig.SpecStr, portConfig.Name));
+			if (ex == null)
+                ex = new InvalidPortConfigSpecStrException(Utils.Fcns.CheckedFormat("MosaicLib.SerialIO.Factory.CreatePort call failed: SpecStr:'{0}' not recognized for port:'{1}'", portConfig.SpecStr, portConfig.Name));
 
-			throw e;		// there is no return value since we threw instead.
+			throw ex;		// there is no return value since we threw instead.
 		}
 	}
 

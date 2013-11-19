@@ -4,9 +4,9 @@
  * the supported types of LogMessageHandlers.  It also contains
  * the implementation class(s) for some of these types.
  * 
- * Copyright (c) Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2008 Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2006 Mosaic Systems Inc., All rights reserved. (C++ library version)
+ * Copyright (c) Mosaic Systems Inc.  All rights reserved
+ * Copyright (c) 2008 Mosaic Systems Inc.  All rights reserved
+ * Copyright (c) 2006 Mosaic Systems Inc.  All rights reserved. (C++ library version)
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -39,7 +39,6 @@ namespace MosaicLib
 		/// <remarks>
 		/// See MosaicLib.Logging.Handlers pseuod namespace for base class helpers and implementation objects
 		/// </remarks>
-
 		public interface ILogMessageHandler
 		{
             /// <summary>Returns the name of this LogMessageHandler</summary>
@@ -89,42 +88,66 @@ namespace MosaicLib
 		// the following methodes provide globally usable factory methods for creating different types of
 		//	log message handler objects that may be used with the log distribution system.
 
+        /// <summary>Creates a ConsoleLogMessageHandler named "LMH.Console" with LogGate.All</summary>
 		public static ILogMessageHandler CreateConsoleLogMessageHandler() { return CreateConsoleLogMessageHandler("LMH.Console", LogGate.All); }
-		public static ILogMessageHandler CreateConsoleLogMessageHandler(LogGate logGate) { return CreateConsoleLogMessageHandler("LMH.Console", logGate); }
-		public static ILogMessageHandler CreateConsoleLogMessageHandler(string name) { return CreateConsoleLogMessageHandler(name, LogGate.All); }
-		public static ILogMessageHandler CreateConsoleLogMessageHandler(string name, LogGate logGate)
+        /// <summary>Creates a ConsoleLogMessageHandler named "LMH.Console" with given logGate</summary>
+        public static ILogMessageHandler CreateConsoleLogMessageHandler(LogGate logGate) { return CreateConsoleLogMessageHandler("LMH.Console", logGate); }
+        /// <summary>Creates a ConsoleLogMessageHandler with given name and LogGate.All</summary>
+        public static ILogMessageHandler CreateConsoleLogMessageHandler(string name) { return CreateConsoleLogMessageHandler(name, LogGate.All); }
+        /// <summary>Creates a ConsoleLogMessageHandler given name and logGate</summary>
+        public static ILogMessageHandler CreateConsoleLogMessageHandler(string name, LogGate logGate)
 		{
 			return new Handlers.ConsoleLogMesssageHandler(name, logGate, new Handlers.LineFormat(false, true, true, " "));
 		}
 
+        /// <summary>Creates a SimpleFileLogMessageHandler to write to the given filePath, does not include files and line numbers, uses LogGate.All.  lmh name is "LMH." + filePath</summary>
 		public static ILogMessageHandler CreateSimpleFileLogMessageHandler(string filePath) { return CreateSimpleFileLogMessageHandler(filePath, false, LogGate.All); }
-		public static ILogMessageHandler CreateSimpleFileLogMessageHandler(string filePath, LogGate logGate) { return CreateSimpleFileLogMessageHandler(filePath, false, logGate); }
-		public static ILogMessageHandler CreateSimpleFileLogMessageHandler(string filePath, bool includeFileAndLines) { return CreateSimpleFileLogMessageHandler(filePath, includeFileAndLines, LogGate.All); }
-		public static ILogMessageHandler CreateSimpleFileLogMessageHandler(string filePath, bool includeFileAndLines, LogGate logGate)		//!< lmh name is "LMH." + filePath
+        /// <summary>Creates a SimpleFileLogMessageHandler to write to the given filePath, does not include files and lines, uses given LogGate.  lmh name is "LMH." + filePath</summary>
+        public static ILogMessageHandler CreateSimpleFileLogMessageHandler(string filePath, LogGate logGate) { return CreateSimpleFileLogMessageHandler(filePath, false, logGate); }
+        /// <summary>Creates a SimpleFileLogMessageHandler to write to the given filePath, uses LogGate.All.  Optionally includes files and line numbers.  lmh name is "LMH." + filePath</summary>
+        public static ILogMessageHandler CreateSimpleFileLogMessageHandler(string filePath, bool includeFileAndLines) { return CreateSimpleFileLogMessageHandler(filePath, includeFileAndLines, LogGate.All); }
+        /// <summary>Creates a SimpleFileLogMessageHandler to write to the given filePath, and given LogGate value.  Optionally includes files and line numbers.  lmh name is "LMH." + filePath</summary>
+        public static ILogMessageHandler CreateSimpleFileLogMessageHandler(string filePath, bool includeFileAndLines, LogGate logGate)
 		{
 			return new Handlers.SimpleFileLogMessageHandler(filePath, includeFileAndLines, logGate);
 		}
 
-		public static ILogMessageHandler CreateWin32DebugLogMessageHandler(string appName) { return CreateWin32DebugLogMessageHandler(appName, "LMH.Debug", LogGate.All); }
-		public static ILogMessageHandler CreateWin32DebugLogMessageHandler(string appName, LogGate logGate) { return CreateWin32DebugLogMessageHandler(appName, "LMH.Debug", logGate); }
-		public static ILogMessageHandler CreateWin32DebugLogMessageHandler(string appName, string name) { return CreateWin32DebugLogMessageHandler(appName, name, LogGate.All); }
-		public static ILogMessageHandler CreateWin32DebugLogMessageHandler(string appName, string name, LogGate logGate)	//!< appName is used to prefix all messages that are sent to the debugger
+        /// <summary>Creates a Win32DebugLogMessageHandler named "LMH.Debug" with LogGate.All</summary>
+        /// <remarks>appName is used to prefix all messages that are sent to the debugger</remarks>
+        public static ILogMessageHandler CreateWin32DebugLogMessageHandler(string appName) { return CreateWin32DebugLogMessageHandler(appName, "LMH.Debug", LogGate.All); }
+        /// <summary>Creates a Win32DebugLogMessageHandler named "LMH.Debug" with given logGate</summary>
+        /// <remarks>appName is used to prefix all messages that are sent to the debugger</remarks>
+        public static ILogMessageHandler CreateWin32DebugLogMessageHandler(string appName, LogGate logGate) { return CreateWin32DebugLogMessageHandler(appName, "LMH.Debug", logGate); }
+        /// <summary>Creates a Win32DebugLogMessageHandler with given name and LogGate.All</summary>
+        /// <remarks>appName is used to prefix all messages that are sent to the debugger</remarks>
+        public static ILogMessageHandler CreateWin32DebugLogMessageHandler(string appName, string name) { return CreateWin32DebugLogMessageHandler(appName, name, LogGate.All); }
+        /// <summary>Creates a Win32DebugLogMessageHandler given name and logGate</summary>
+        /// <remarks>appName is used to prefix all messages that are sent to the debugger</remarks>
+        public static ILogMessageHandler CreateWin32DebugLogMessageHandler(string appName, string name, LogGate logGate)
 		{
 			return new Handlers.Win32DebugLogMessageHandler(appName, name, logGate);
 		}
 
-		public static ILogMessageHandler CreateDiagnosticTraceLogMessageHandler() { return CreateDiagnosticTraceLogMessageHandler("LMH.DiagnosticTrace", LogGate.All); }
-		public static ILogMessageHandler CreateDiagnosticTraceLogMessageHandler(LogGate logGate) { return CreateDiagnosticTraceLogMessageHandler("LMH.DiagnosticTrace", logGate); }
-		public static ILogMessageHandler CreateDiagnosticTraceLogMessageHandler(string name) { return CreateDiagnosticTraceLogMessageHandler(name, LogGate.All); }
-		public static ILogMessageHandler CreateDiagnosticTraceLogMessageHandler(string name, LogGate logGate)
+        /// <summary>Creates a DiagnosticTraceLogMessageHandler named "LMH.DiagnosticTrace" with LogGate.All</summary>
+        public static ILogMessageHandler CreateDiagnosticTraceLogMessageHandler() { return CreateDiagnosticTraceLogMessageHandler("LMH.DiagnosticTrace", LogGate.All); }
+        /// <summary>Creates a DiagnosticTraceLogMessageHandler named "LMH.DiagnosticTrace" with given logGate</summary>
+        public static ILogMessageHandler CreateDiagnosticTraceLogMessageHandler(LogGate logGate) { return CreateDiagnosticTraceLogMessageHandler("LMH.DiagnosticTrace", logGate); }
+        /// <summary>Creates a DiagnosticTraceLogMessageHandler with given name and with LogGate.All</summary>
+        public static ILogMessageHandler CreateDiagnosticTraceLogMessageHandler(string name) { return CreateDiagnosticTraceLogMessageHandler(name, LogGate.All); }
+        /// <summary>Creates a DiagnosticTraceLogMessageHandler given name and logGate</summary>
+        public static ILogMessageHandler CreateDiagnosticTraceLogMessageHandler(string name, LogGate logGate)
 		{
 			return new Handlers.DiagnosticTraceLogMessageHandler(name, logGate, new Handlers.LineFormat(false, true, true, true, true, false, "", " "));
 		}
 
-		public static ILogMessageHandler CreateNullLogMessageHandler() { return CreateNullLogMessageHandler("LMH.Null", LogGate.None); }
-		public static ILogMessageHandler CreateNullLogMessageHandler(LogGate logGate) { return CreateNullLogMessageHandler("LMH.Null", logGate); }
-		public static ILogMessageHandler CreateNullLogMessageHandler(string name) { return CreateNullLogMessageHandler(name, LogGate.None); }
-		public static ILogMessageHandler CreateNullLogMessageHandler(string name, LogGate logGate)
+        /// <summary>Creates a NullLogMessageHandler named "LMH.Null" with LogGate.All</summary>
+        public static ILogMessageHandler CreateNullLogMessageHandler() { return CreateNullLogMessageHandler("LMH.Null", LogGate.None); }
+        /// <summary>Creates a NullLogMessageHandler named "LMH.Null" with given logGate</summary>
+        public static ILogMessageHandler CreateNullLogMessageHandler(LogGate logGate) { return CreateNullLogMessageHandler("LMH.Null", logGate); }
+        /// <summary>Creates a NullLogMessageHandler with given name and with LogGate.All</summary>
+        public static ILogMessageHandler CreateNullLogMessageHandler(string name) { return CreateNullLogMessageHandler(name, LogGate.None); }
+        /// <summary>Creates a NullLogMessageHandler given name and logGate</summary>
+        public static ILogMessageHandler CreateNullLogMessageHandler(string name, LogGate logGate)
 		{
 			return new Handlers.NullLogMessageHandler(name, logGate, false);
 		}
@@ -134,8 +157,10 @@ namespace MosaicLib
         /// <summary>The standard default mesg queue size: 5000</summary>
 		const int DefaultMesgQueueSize = 5000;
 
+        /// <summary>Creates a wrapper LMH that serves to Queue delivery of messages to the given targetLMH.  Uses DefaultMesgQueueSize</summary>
 		public static ILogMessageHandler CreateQueueLogMessageHandler(ILogMessageHandler targetLMH) { return CreateQueueLogMessageHandler(targetLMH, DefaultMesgQueueSize); }
-		public static ILogMessageHandler CreateQueueLogMessageHandler(ILogMessageHandler targetLMH, int maxQueueSize)
+        /// <summary>Creates a wrapper LMH that serves to Queue delivery of messages to the given targetLMH.  Uses given maxQueueSize</summary>
+        public static ILogMessageHandler CreateQueueLogMessageHandler(ILogMessageHandler targetLMH, int maxQueueSize)
 		{
 			return new Handlers.QueueLogMessageHandler(targetLMH, maxQueueSize);
 		}
@@ -233,6 +258,7 @@ namespace MosaicLib
 			}
 		}
 
+        /// <summary>Creates a QueueLogMessageHandler wrapped around a TextFileRotationLogMessageHandler configured using the given config value.</summary>
 		public static ILogMessageHandler CreateQueuedTextFileRotationDirectoryLogMessageHandler(FileRotationLoggingConfig config)
 		{
 			return new Handlers.QueueLogMessageHandler(new Handlers.TextFileRotationLogMessageHandler(config), config.mesgQueueSize);
@@ -249,6 +275,9 @@ namespace MosaicLib
 
 	public static partial class Logging
 	{
+        /// <summary>
+        /// This partial static class acts as a namespace in which all Handler related classes and definitions are found.
+        /// </summary>
 		public static partial class Handlers
 		{
 			//-------------------------------------------------------------------
@@ -265,12 +294,23 @@ namespace MosaicLib
 			/// are to be included in the handler's output and to perform output for that handler.  As such both
 			/// format to ostream and format to string versions are provided.
 			/// </summary>
-
 			public class LineFormat
 			{
+                /// <summary>Constructor variant.  includes level, data and uses default EOL and Tab strings.</summary>
 				public LineFormat(bool date, bool qpc, bool source) : this(date, qpc, true, source, true, false, defaultEolStr, defaultTabStr) { }
-				public LineFormat(bool date, bool qpc, bool source, string tabStr) : this(date, qpc, true, source, true, false, defaultEolStr, tabStr) { }
-				public LineFormat(bool date, bool qpc, bool level, bool source, bool fandl) : this(date, qpc, level, source, true, fandl, defaultEolStr, defaultTabStr) { }
+                /// <summary>Constructor variant.  includes level, data and uses default EOL string.</summary>
+                public LineFormat(bool date, bool qpc, bool source, string tabStr) : this(date, qpc, true, source, true, false, defaultEolStr, tabStr) { }
+                /// <summary>Constructor variant.  includes data and uses default EOL and Tab strings.</summary>
+                public LineFormat(bool date, bool qpc, bool level, bool source, bool fandl) : this(date, qpc, level, source, true, fandl, defaultEolStr, defaultTabStr) { }
+                /// <summary>Full constructor.</summary>
+                /// <param name="date">Set to true to include the Date portion in formatted output lines</param>
+                /// <param name="qpc">Set to true to include the QPC timestamp portion in formatted output lines</param>
+                /// <param name="level">Set to true to include the MesgType/LogLevel portion in formatted output lines</param>
+                /// <param name="source">Set to true to include the Logger/Source Name portion in formatted output lines</param>
+                /// <param name="data">Set to true to include the base64 coded optional Data in formatted output lines</param>
+                /// <param name="fandl">Set to treu to include the file name and line number in formatted output lines</param>
+                /// <param name="endlStr">Defines the end-of-line string that is used in formatted output lines</param>
+                /// <param name="tabStr">Defines the tab string that is used as a column seperator in output lines</param>
 				public LineFormat(bool date, bool qpc, bool level, bool source, bool data, bool fandl, string endlStr, string tabStr)
 				{
 					this.date = date;
@@ -283,12 +323,22 @@ namespace MosaicLib
 					this.tabStr = tabStr;
 				}
 
+                /// <summary>True if the Date is included in formatted output lines.</summary>
 				public bool IncludeDate { get { return date; } }
-				public bool IncludeQpc { get { return qpc; } }
-				public bool IncludeLevel { get { return level; } }
-				public bool IncludeSource { get { return source; } }
-				public bool IncludeFileAndLine { get { return fAndL; } }
+                /// <summary>True if the QPC timestamp is included in formatted output lines.</summary>
+                public bool IncludeQpc { get { return qpc; } }
+                /// <summary>True if the MesgType/LogLevel is included in formatted output lines.</summary>
+                public bool IncludeLevel { get { return level; } }
+                /// <summary>True if the Logger/Source Name is included in formatted output lines.</summary>
+                public bool IncludeSource { get { return source; } }
+                /// <summary>True if the source File and Line information is included in formatted output lines.</summary>
+                public bool IncludeFileAndLine { get { return fAndL; } }
 
+                /// <summary>
+                /// Formats the given message as configured and incrementally Writes it to the given StreamWriter
+                /// </summary>
+                /// <param name="lm">Gives the LogMessage instance to format and Write</param>
+                /// <param name="os">Gives the StreamWriter instance to Write the formatted message to.</param>
 				public void FormatLogMessageToOstream(LogMessage lm, System.IO.StreamWriter os)
 				{
 					if (!os.BaseStream.CanWrite)
@@ -312,7 +362,12 @@ namespace MosaicLib
 					{ os.Write(endLStr); }
 				}
 
-				public void FormatLogMessageToStringBuilder(LogMessage lm, System.Text.StringBuilder ostr)
+                /// <summary>
+                /// Formats the given message as configured and Appends it to the given StringBuilder
+                /// </summary>
+                /// <param name="lm">Gives the LogMessage instance to format and Append</param>
+                /// <param name="ostr">Gives the StringBuilder instance to Append the formatted message into.</param>
+                public void FormatLogMessageToStringBuilder(LogMessage lm, System.Text.StringBuilder ostr)
 				{
 					bool firstItem = (ostr.Length == 0);
 
@@ -332,13 +387,19 @@ namespace MosaicLib
 					{ ostr.Append(endLStr); }
 				}
 
+                /// <summary>Method is used to append a TabStr to the given StreamWriter if this is not the first Item in the line.</summary>
+                /// <param name="os">Gives the StreamWriter instance to Write the formatted message to.</param>
+                /// <param name="firstItem">ref boolean that is externally set to true and which is cleared by this method on the first call.</param>
 				protected void TabIfNeeded(System.IO.StreamWriter os, ref bool firstItem)
 				{
 					if (!firstItem)	os.Write(tabStr);
 					else			firstItem = false;
 				}
 
-				protected void TabIfNeeded(System.Text.StringBuilder ostr, ref bool firstItem) 
+				/// <summary>Method is used to append a TabStr to the given StringBuilder if this is not the first Item in the line.</summary>
+                /// <param name="ostr">Gives the StringBuilder instance to Append the formatted message into.</param>
+                /// <param name="firstItem">ref boolean that is externally set to true and which is cleared by this method on the first call.</param>
+                protected void TabIfNeeded(System.Text.StringBuilder ostr, ref bool firstItem) 
 				{
 					if (!firstItem)	ostr.Append(tabStr);
 					else			firstItem = false;
@@ -352,8 +413,13 @@ namespace MosaicLib
 
 			//-------------------------------------------------------------------
 
+            /// <summary>
+            /// This class is used in LogMessageHandlers to log messages and avoids the recursion issue by emitting these messages directly into the lmh's own HandleLogMessage thus bypassing the distribution system.
+            /// </summary>
 			public class LogMesgHandlerLogger : LoggerBase
 			{
+                /// <summary>Constructor</summary>
+                /// <param name="logMesgHandler">Gives the LMH to which emitted messages will be passed.</param>
 				public LogMesgHandlerLogger(ILogMessageHandler logMesgHandler) : base(logMesgHandler.Name, string.Empty, logMesgHandler.LoggerConfig.LogGate, false)
 				{
 					lmh = logMesgHandler;
@@ -363,30 +429,38 @@ namespace MosaicLib
 					sourceInfo = new LoggerSourceInfo(LoggerID_InternalLogger, Name);
 				}
 
+                /// <summary>Allocates and returns a new LogMessage.  messages are never obtained from LogMessage Distribution.</summary>
 				public override LogMessage GetLogMessage(MesgType mesgType, string mesg, System.Diagnostics.StackFrame sourceStackFrame, bool getFromDistribution)
 				{
 					return base.GetLogMessage(mesgType, mesg, sourceStackFrame, false);
 				}
 
-				public override void EmitLogMessage(ref LogMessage lm)				//!< Emits and consumes the message (lm will be set to null)
+                /// <summary>Handles emitting and consuming the given LogMessage.  ref parameter lm will be set to null</summary>
+				public override void EmitLogMessage(ref LogMessage lm)
 				{
-					if (lm != null && loggerHasBeenShutdown)
+					if (lm != null)
 					{
-						lm.NoteEmitted();
+                        lm.NoteEmitted();
 
-                        if (!lmh.LoggerConfig.SupportsReferenceCountedRelease && lm.BelongsToPool)
-                            dist.ReallocateMessageForNonRefCountedHandler(ref lm);
+                        if (!loggerHasBeenShutdown)
+                        {
+                            if (!lmh.LoggerConfig.SupportsReferenceCountedRelease && lm.BelongsToPool)
+                                dist.ReallocateMessageForNonRefCountedHandler(ref lm);
 
-                        lmh.HandleLogMessage(lm);
-						lm.RemoveReference(ref lm);
+                            lmh.HandleLogMessage(lm);
+                        }
+
+                        lm.RemoveReference(ref lm);
 					}
 				}
 
+                /// <summary>This mechanism is not supported here.  This method returns true immediately.</summary>
 				public override bool WaitForDistributionComplete(TimeSpan timeLimit) { return true; }
 
-				protected ILogMessageHandler lmh = null;
+				private ILogMessageHandler lmh = null;
 
-				protected override string ClassName { get { return "LogMesgHandlerLogger"; } }
+                /// <summary>Defines the ClassName value that will be used by the LoggerBase when generating trace messages (if enabled).</summary>
+                protected override string ClassName { get { return "LogMesgHandlerLogger"; } }
 			}
 
 			//-------------------------------------------------------------------
@@ -394,45 +468,60 @@ namespace MosaicLib
 			/// This class implements the basic and common parts of the ILogMessageHandler interface, especially those
 			/// parts that can be done easily and in a non-use specific manner.
 			/// </summary>
-
 			public abstract class CommonLogMessageHandlerBase : Utils.DisposableBase, ILogMessageHandler
 			{
-				public CommonLogMessageHandlerBase(string name, LogGate logGate, bool includeFileAneLine, bool supportReferenceCountedRelease) 
+                /// <summary>Basic constructor.</summary>
+                /// <param name="name">Defines the LMH name.</param>
+                /// <param name="logGate">Defines the LogGate value for messages handled here.  Messages with MesgType that is not included in this gate will be ignored.</param>
+                /// <param name="includeFileAndLines">Indicates if this handler should record and save source file and line numbers.</param>
+                /// <param name="supportReferenceCountedRelease">Indicates if this logger supports reference counted log message release.</param>
+				public CommonLogMessageHandlerBase(string name, LogGate logGate, bool includeFileAndLines, bool supportReferenceCountedRelease) 
 				{
 					this.name = name;
-                    loggerConfig = new LoggerConfig() { GroupName = "LMH:" + name, LogGate = logGate, RecordSourceStackFrame = includeFileAneLine, SupportsReferenceCountedRelease = supportReferenceCountedRelease };
+                    loggerConfig = new LoggerConfig() { GroupName = "LMH:" + name, LogGate = logGate, RecordSourceStackFrame = includeFileAndLines, SupportsReferenceCountedRelease = supportReferenceCountedRelease };
 
 					logger = new LogMesgHandlerLogger(this);
 				}
 
+                /// <summary>Gives the LMH's Name</summary>
 				public string Name { get { return name; } }
+                /// <summary>Gives the LogGate being used by this LMH</summary>
 				public LogGate LogGate { get { return loggerConfig.LogGate; } }
+                /// <summary>Gives the LoggerConfig that this LMH is using.</summary>
 				public LoggerConfig LoggerConfig { get { return loggerConfig; } }
 
-				public Utils.IBasicNotificationList NotifyOnCompletedDelivery { get { return notifyMessageDelevered; } }
+                /// <summary>Gives the notification list that must be notified on each delivery of a set of 1 or more messages.</summary>
+				public Utils.IBasicNotificationList NotifyOnCompletedDelivery { get { return notifyMessageDelivered; } }
 
+                /// <summary>Defines the abstract method that must be implemented and which is used to handle a single LogMessage</summary>
 				public abstract void HandleLogMessage(LogMessage lm);
+
+                /// <summary>Defines the abstract method that must be implemented and which is used to handle arrays of LogMessages</summary>
 				public abstract void HandleLogMessages(LogMessage [] lmArray);
 
+                /// <summary>Defines the abstract method that must be implemented and which is used to determine if a LogMessage's sequence number is still pending delivery in this handler.</summary>
 				public abstract bool IsMessageDeliveryInProgress(int testMesgSeqNum);
 
+                /// <summary>Defines the abstract, blocking, method that is used to force all pending messages to be commmitted before returning.</summary>
 				public abstract void Flush();
 
+                /// <summary>This abstract method will be called when the distribution system is being shutdown.  It allows the handler to gracefully close and release all related resources.</summary>
 				public abstract void Shutdown();
 
+                /// <summary>tell any interested Notifyable objects (as currently in the notifyMessageDelivered list) that messages have been delivered</summary>
 				protected void NoteMessagesHaveBeenDelivered()
 				{
-					// tell any interested Notifyable objects that messages have been delivered
-
-					notifyMessageDelevered.Notify();
+					notifyMessageDelivered.Notify();
 				}
 
+                /// <summary>Returns true if the MesgType from the given LogMessage is currently enabled in this handler's LoggerConfig object.</summary>
 				protected bool IsMessageTypeEnabled(LogMessage lm)
 				{
 					return ((lm != null) ? loggerConfig.IsTypeEnabled(lm.MesgType) : false);
 				}
 
-				protected override void Dispose(MosaicLib.Utils.DisposableBase.DisposeType disposeType)
+                /// <summary>Implements the required Dispose method from the Utils.DisposableBase class.  Calls Shutdown when called explicitly.</summary>
+                protected override void Dispose(MosaicLib.Utils.DisposableBase.DisposeType disposeType)
 				{
 					if (disposeType == DisposeType.CalledExplicitly)
 						Shutdown();
@@ -442,11 +531,16 @@ namespace MosaicLib
 				//	source ID that they are to use when generating their own messages (many of them
 				//	need to do this...)
 
+                /// <summary>Protected storage for this object's name</summary>
 				protected string name = null;
-				protected LoggerConfig loggerConfig = LoggerConfig.AllNoFL;
-				protected ILogger logger = null;
 
-				Utils.BasicNotificationList notifyMessageDelevered = new MosaicLib.Utils.BasicNotificationList();
+                /// <summary>Protected storage for this object's current loggerConfig</summary>
+                protected LoggerConfig loggerConfig = LoggerConfig.AllNoFL;
+
+                /// <summary>Protected storage for this object's internal ILogger object.</summary>
+                protected ILogger logger = null;
+
+                Utils.BasicNotificationList notifyMessageDelivered = new MosaicLib.Utils.BasicNotificationList();
 			}
 
 			//-------------------------------------------------------------------
@@ -467,9 +561,22 @@ namespace MosaicLib
 
 			public abstract class SimpleLogMessageHandlerBase : CommonLogMessageHandlerBase
 			{
-                public SimpleLogMessageHandlerBase(string name, LogGate logGate, bool includeFileAndLine, bool supportReferenceCountedRelease) : base(name, logGate, includeFileAndLine, supportReferenceCountedRelease) { }
+                /// <summary>Basic constructor.</summary>
+                /// <param name="name">Defines the LMH name.</param>
+                /// <param name="logGate">Defines the LogGate value for messages handled here.  Messages with MesgType that is not included in this gate will be ignored.</param>
+                /// <param name="includeFileAndLines">Indicates if this handler should record and save source file and line numbers.</param>
+                /// <param name="supportReferenceCountedRelease">Indicates if this logger supports reference counted log message release.</param>
+                public SimpleLogMessageHandlerBase(string name, LogGate logGate, bool includeFileAndLines, bool supportReferenceCountedRelease) 
+                    : base(name, logGate, includeFileAndLines, supportReferenceCountedRelease) 
+                { }
 
-				public override void HandleLogMessage(LogMessage lm)
+                /// <summary>LogMessage Handling method API for direct call by clients which generate and distribute one message at a time.</summary>
+                /// <param name="lm">
+                /// Gives the message to handle (save, write, relay, ...).
+                /// LMH Implementation must either support Reference Counted message semenatics if method will save any reference to a this message for use beyond the scope of this call or
+                /// LMH must flag that it does not support Reference counted semantics in LoggerConfig by clearing the SupportReferenceCountedRelease
+                /// </param>
+                public override void HandleLogMessage(LogMessage lm)
 				{
 					if (!IsMessageTypeEnabled(lm))
 						return;
@@ -479,7 +586,13 @@ namespace MosaicLib
 					NoteMessagesHaveBeenDelivered();
 				}
 
-				public override void HandleLogMessages(LogMessage [] lmArray)
+                /// <summary>LogMessage Handling method API for use on outputs of queued delivery engines which agregate and distribute one or more messages at a time.</summary>
+                /// <param name="lmArray">
+                /// Gives an array of message to handle as a set (save, write, relay, ...).  This set may be given to muliple handlers and as such may contain messages that are not relevant to this handler.
+                /// As such Handler may additionally filter out or skip any messages from the given set as approprate.
+                /// LMH Implementation must flag that it does not support Reference counted semantics in LoggerConfig or must support ReferenceCounting on this message if references to it are saved beyond the scope of this call.
+                /// </param>
+                public override void HandleLogMessages(LogMessage[] lmArray)
 				{
 					foreach (LogMessage lm in lmArray)
 					{
@@ -490,12 +603,35 @@ namespace MosaicLib
 					NoteMessagesHaveBeenDelivered();
 				}
 
-				public override bool IsMessageDeliveryInProgress(int testMesgSeqNum) { return false; }
+                /// <summary>Query method that may be used to tell if message delivery for a given message is still in progress on this handler.</summary>
+                /// <remarks>This default implementation returns false.</remarks>
+                public override bool IsMessageDeliveryInProgress(int testMesgSeqNum) 
+                { 
+                    return false; 
+                }
 
-				public override void Flush() { }
+                /// <summary>Once called, this method only returns after the handler has made a reasonable effort to verify that all outsanding, pending messages, visible at the time of the call, have been full processed before the call returns.</summary>
+                /// <remarks>This default implementation does nothing.  This method must be overriden/replaced in derived versions in order for message flushing logic to work correctly.</remarks>
+                public override void Flush() 
+                { }
 
-				public override void Shutdown() { Flush(); }
+                /// <summary>
+                /// Used to tell the handler that the LogMessageDistribution system is shuting down.  
+                /// Handler is expected to close, release and/or Dispose of any unmanged resources before returning from this call.  
+                /// Any attempt to pass messages after this point may be ignored by the handler.
+                /// </summary>
+                /// <remarks>This default implementation calls <see cref="Flush"/></remarks>
+                public override void Shutdown() 
+                { 
+                    Flush(); 
+                }
 
+                /// <summary>
+                /// This is the common abstract method that is used for handleing each log message.  This method must be implemented in a derived type
+                /// and must provide the type specific behavior used to process and record each message when using this base class.
+                /// The HandleLogMessage and HandleLogMessages methods above make use of this method to process each log message given to the LMH in order. 
+                /// </summary>
+                /// <param name="lm">Gives the LogMessage instance that is to be handled.</param>
 				protected abstract void InnerHandleLogMessage(LogMessage lm);							
 			}
 
@@ -503,10 +639,15 @@ namespace MosaicLib
 			/// <summary>
 			/// This class is a reasonable base class for all StreamWriter type LogMessageHandlers
 			/// </summary>
-
 			public class StreamWriterLogMessageHandlerBase : SimpleLogMessageHandlerBase
 			{
-				public StreamWriterLogMessageHandlerBase(string name, LogGate logGate, LineFormat lineFmt, System.IO.StreamWriter ostream, bool flushAfterEachWrite) 
+                /// <summary>Basic constructor.</summary>
+                /// <param name="name">Defines the LMH name.</param>
+                /// <param name="logGate">Defines the LogGate value for messages handled here.  Messages with MesgType that is not included in this gate will be ignored.</param>
+                /// <param name="lineFmt">Gives the line formatting rules that will be used for this LMH</param>
+                /// <param name="ostream">Gives the StreamWriter instance to which the output text will be written.</param>
+                /// <param name="flushAfterEachWrite">Set to true to flush the ostream after each write, or false to Flush only when explicitly told to by the LogDistribution system.</param>
+                public StreamWriterLogMessageHandlerBase(string name, LogGate logGate, LineFormat lineFmt, System.IO.StreamWriter ostream, bool flushAfterEachWrite) 
 					: base(name, logGate, lineFmt.IncludeFileAndLine, true)
 				{
 					this.lineFmt = lineFmt;
@@ -519,6 +660,9 @@ namespace MosaicLib
                         Utils.Asserts.TakeBreakpointAfterFault("ostream is null");
 				}
 
+                /// <summary>
+                /// Takes the given LogMessage, formats it and writes it to the ostream.  Calls Flush if the object was constructed with FlushAfterEachWrite set to true.
+                /// </summary>
 				protected override void InnerHandleLogMessage(LogMessage lm)
 				{
 					lineFmt.FormatLogMessageToOstream(lm, ostream);
@@ -526,12 +670,18 @@ namespace MosaicLib
 						Flush();
 				}
 
-				public override void Flush()		// override default impl from CommonLogMessageHandlerBase
+                /// <summary>
+                /// If the ostream is writable then this method will call Flush on it.
+                /// </summary>
+				public override void Flush()
 				{
 					if (ostream.BaseStream.CanWrite)
 						ostream.Flush();
 				}
 
+                /// <summary>
+                /// Calls base.Shutdown and then closes the ostream.  This method does not directly dispose of the ostream itself.
+                /// </summary>
 				public override void Shutdown()
 				{
 					base.Shutdown();
@@ -543,9 +693,14 @@ namespace MosaicLib
 					}
 				}
 
+                /// <summary>Gives access to the LineFormat instance that was given to this object at construction time.</summary>
 				protected LineFormat lineFmt = null;
-				protected System.IO.StreamWriter ostream = null;
-				protected bool flushAfterEachWrite = false;
+
+                /// <summary>Gives access to the ostream instance that was given to this object at construction time.</summary>
+                protected System.IO.StreamWriter ostream = null;
+
+                /// <summary>Gives access to the flushAfterEachWrite flag value that was original assigned at construction time.</summary>
+                protected bool flushAfterEachWrite = false;
 			};
 
 			//-------------------------------------------------------------------
@@ -555,9 +710,18 @@ namespace MosaicLib
 
 			#region Basic LogMessageHandler Implementation classes
 
-			public class ConsoleLogMesssageHandler : StreamWriterLogMessageHandlerBase
+            /// <summary>
+            /// This class provides the standard implementation for a Console Output LMH.
+            /// It is based on StreamWriterLogMessageHandlerBase used with the Console.OpenStandardOutput() method.
+            /// This version always calls Flush after each write.
+            /// </summary>
+            public class ConsoleLogMesssageHandler : StreamWriterLogMessageHandlerBase
 			{
-				public ConsoleLogMesssageHandler(string name, LogGate logGate, LineFormat lineFmt) 
+                /// <summary>Basic constructor.</summary>
+                /// <param name="name">Defines the LMH name.</param>
+                /// <param name="logGate">Defines the LogGate value for messages handled here.  Messages with MesgType that is not included in this gate will be ignored.</param>
+                /// <param name="lineFmt">Gives the line formatting rules that will be used for this LMH</param>
+                public ConsoleLogMesssageHandler(string name, LogGate logGate, LineFormat lineFmt) 
 					: base(name, logGate, lineFmt, new System.IO.StreamWriter(Console.OpenStandardOutput()), true) 
 				{ }
 			}
@@ -569,7 +733,11 @@ namespace MosaicLib
 			/// </summary>
 			public class SimpleFileLogMessageHandler : StreamWriterLogMessageHandlerBase
 			{
-				public SimpleFileLogMessageHandler(string filePath, bool includeFileAndLines, LogGate logGate) 
+                /// <summary>Basic constructor.</summary>
+                /// <param name="filePath">Gives the path to the file name to which log messages will be appended.  Also used to name the LMH instance as "LMH." + filePath</param>
+                /// <param name="includeFileAndLines">Indicates if this handler should record and include source file and line numbers.</param>
+                /// <param name="logGate">Defines the LogGate value for messages handled here.  Messages with MesgType that is not included in this gate will be ignored.</param>
+                public SimpleFileLogMessageHandler(string filePath, bool includeFileAndLines, LogGate logGate) 
 					: base("LMH." + filePath, logGate, 
 							new LineFormat(true, true, true, true, includeFileAndLines), 
 							new System.IO.StreamWriter(filePath, true, System.Text.Encoding.ASCII),
@@ -582,13 +750,15 @@ namespace MosaicLib
 					logger.Signif.Emit("File has been opened");
 				}
 
+                /// <summary>
+                /// Emits a set of messages to indicate that the file has been closed and then flushes and closes the file ostream
+                /// </summary>
 				public override void Shutdown()		// override default impl from CommonLogMessageHandlerBase
 				{
 					logger.Signif.Emit("File is being closed");
 					logger.Signif.Emit("----------------------------------------");
 
-					ostream.Flush();
-					ostream.Close();
+                    base.Shutdown();
 				}
 			}
 
@@ -599,7 +769,12 @@ namespace MosaicLib
 			/// </summary>
 			public class Win32DebugLogMessageHandler : SimpleLogMessageHandlerBase
 			{
-				public Win32DebugLogMessageHandler(string appName, string name, LogGate logGate) : base(name, logGate, false, true)
+                /// <summary>Basic constructor.</summary>
+                /// <param name="appName">Gives the name of the appication that will be used as a prefix for the debug log messages that are generated</param>
+                /// <param name="name">Defines the LMH name.</param>
+                /// <param name="logGate">Defines the LogGate value for messages handled here.  Messages with MesgType that is not included in this gate will be ignored.</param>
+                public Win32DebugLogMessageHandler(string appName, string name, LogGate logGate) 
+                    : base(name, logGate, false, true)
 				{
 					this.appName = appName;
 					this.lineFmt = new LineFormat(false, true, true, true, true, false, "\n", " ");
@@ -607,7 +782,10 @@ namespace MosaicLib
     					Utils.Asserts.TakeBreakpointAfterFault("AppName is empty");
 				}
 
-				protected override void InnerHandleLogMessage(LogMessage lm)
+                /// <summary>
+                /// Takes the given LogMessage, formats it and writes it to the Win32 debug output using the originally given AppName as a prefix.
+                /// </summary>
+                protected override void InnerHandleLogMessage(LogMessage lm)
 				{
 					System.Text.StringBuilder lineBuilder = new System.Text.StringBuilder();
 					lineBuilder.Append(appName);
@@ -629,13 +807,20 @@ namespace MosaicLib
 			/// </summary>
 			public class DiagnosticTraceLogMessageHandler : SimpleLogMessageHandlerBase
 			{
-				public DiagnosticTraceLogMessageHandler(string name, LogGate logGate, LineFormat lineFmt)
+                /// <summary>Basic constructor.</summary>
+                /// <param name="name">Defines the LMH name.</param>
+                /// <param name="logGate">Defines the LogGate value for messages handled here.  Messages with MesgType that is not included in this gate will be ignored.</param>
+                /// <param name="lineFmt">Gives the line formatting rules that will be used for this LMH</param>
+                public DiagnosticTraceLogMessageHandler(string name, LogGate logGate, LineFormat lineFmt)
 					: base(name, logGate, false, true)
 				{
 					this.lineFmt = lineFmt;
 				}
 
-				protected override void InnerHandleLogMessage(LogMessage lm)
+                /// <summary>
+                /// Takes the given LogMessage, formats it and writes it to the System.Diagnostics.Trace output as a TraceError, TraceWarning or TraceInformation message.
+                /// </summary>
+                protected override void InnerHandleLogMessage(LogMessage lm)
 				{
 					lineBuilder.Length = 0;		// clear line builder
 
@@ -671,9 +856,19 @@ namespace MosaicLib
 			/// </summary>
 			public class NullLogMessageHandler : SimpleLogMessageHandlerBase
 			{
-				public NullLogMessageHandler(string name, LogGate logGate, bool includeFileAndLine) : base(name, logGate, includeFileAndLine, true) { }
+                /// <summary>Basic constructor.</summary>
+                /// <param name="name">Defines the LMH name.</param>
+                /// <param name="logGate">Defines the LogGate value for messages handled here.  Messages with MesgType that is not included in this gate will be ignored.</param>
+                /// <param name="includeFileAndLines">Indicates if this handler should record and include source file and line numbers.</param>
+                public NullLogMessageHandler(string name, LogGate logGate, bool includeFileAndLines) 
+                    : base(name, logGate, includeFileAndLines, true)
+                { }
 
-				protected override void InnerHandleLogMessage(LogMessage lm) { }
+                /// <summary>
+                /// Takes the given LogMessage and ignores it.
+                /// </summary>
+                protected override void InnerHandleLogMessage(LogMessage lm) 
+                { }
 			};
 
 			#endregion

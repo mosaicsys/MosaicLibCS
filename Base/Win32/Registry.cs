@@ -28,10 +28,32 @@ namespace MosaicLib.Win32.Registry
 
     #region Fcns static class
 
+    /// <summary>
+    /// This static partial class is effectively a namespace for the Win32 Registry related classes, definitions, and static methods.
+    /// </summary>
     public static partial class Fcns
     {
         #region extern kernal functions
 
+        /// <summary>
+        /// Provide access to the Win32 RegFlushKey API call.  
+        /// This method is used to force a OS level registry commit for key changes that need to be persisted to disk.
+        /// In normal use this is performed at specific points in an application's installation/removal pattern.
+        /// </summary>
+        /// <param name="hKey">Gives the key handle value that identifies the key to be flushed.  Appears to be ignored in many Win32 implementations.</param>
+        /// <returns></returns>
+        /// <remarks>
+        /// From MSDN remarks on this API method:
+        /// Calling RegFlushKey is an expensive operation that significantly affects system-wide performance as it consumes disk bandwidth and blocks 
+        /// modifications to all keys by all processes in the registry hive that is being flushed until the flush operation completes. 
+        /// RegFlushKey should only be called explicitly when an application must guarantee that registry changes are persisted to disk immediately 
+        /// after modification. All modifications made to keys are visible to other processes without the need to flush them to disk.
+        /// Alternatively, the registry has a 'lazy flush' mechanism that flushes registry modifications to disk at regular intervals of time. 
+        /// In addition to this regular flush operation, registry changes are also flushed to disk at system shutdown. 
+        /// Allowing the 'lazy flush' to flush registry changes is the most efficient way to manage registry writes to the registry store on disk.
+        /// The RegFlushKey function returns only when all the data for the hive that contains the specified key has been written to the registry store on disk.
+        /// The RegFlushKey function writes out the data for other keys in the hive that have been modified since the last lazy flush or system start.
+        /// </remarks>
         [DllImport("advapi32")]
         public static extern int RegFlushKey(IntPtr hKey);
 
@@ -39,14 +61,28 @@ namespace MosaicLib.Win32.Registry
 
         #region Split Registry Key Path methods
 
+        /// <summary>Defines the default delimeter character that is used here to demarcate boundaries in a registry key path.</summary>
         public const char DefaultRegPathDelimiter = '\\';
-        public static readonly char [] DefaultRegPathDelimiters = new char [] { DefaultRegPathDelimiter, '/' };
 
+        /// <summary>Defines the set of delimeter characters that are used here to demarcate boundaries in a registry key path.</summary>
+        public static readonly char[] DefaultRegPathDelimiters = new char[] { DefaultRegPathDelimiter, '/' };
+
+        /// <summary>
+        /// Splits the given regKeyPath string into a sequence of key names contained in the returned array.  
+        /// </summary>
+        /// <param name="regKeyPath">A delimited registry key path (similar to a directory path) to split</param>
+        /// <returns>an Array of strings that contain the individual key strings as split from the given path string.</returns>
         public static string[] SplitRegistryKeyPath(string regKeyPath)
         {
             return SplitRegistryKeyPath(regKeyPath, DefaultRegPathDelimiters);
         }
 
+        /// <summary>
+        /// Splits the given regKeyPath string into a sequence of key names contained in the returned array.  
+        /// </summary>
+        /// <param name="regKeyPath">A delimited registry key path (similar to a directory path) to split</param>
+        /// <param name="delimiters">Gives the array of char values that are used as delimiters</param>
+        /// <returns>an Array of strings that contain the individual key strings as split from the given path string.</returns>
         public static string[] SplitRegistryKeyPath(string regKeyPath, char[] delimiters)
         {
             return regKeyPath.Split(delimiters);
@@ -56,21 +92,50 @@ namespace MosaicLib.Win32.Registry
 
         #region Open Registry Key Path methods
 
+        /// <summary>
+        /// Opens and returns the RegistryKey found at the given delimited full registry path.  Requests ReadWriteSubTree permissions.
+        /// </summary>
+        /// <param name="regKeyPath">Gives the delimited full registry key path to traverse.</param>
+        /// <returns>The RegistryKey instance for the requested path.</returns>
+        /// <exception cref="System.ArgumentException">If the requested regKeyPath is not valid or cannot be opened</exception>
         public static RegistryKey OpenRegistryKeyPath(string regKeyPath)
         {
             return OpenRegistryKeyPath(null, SplitRegistryKeyPath(regKeyPath, DefaultRegPathDelimiters), RegistryKeyPermissionCheck.ReadWriteSubTree);
         }
 
+        /// <summary>
+        /// Opens and returns the RegistryKey found at the given delimited full registry path.  Requests the given permissions.
+        /// </summary>
+        /// <param name="regKeyPath">Gives the delimited full registry key path to traverse.</param>
+        /// <param name="permissions">Gives the RegistryKeyPermissionCheck value for the requested permissions.</param>
+        /// <returns>The RegistryKey instance for the requested path.</returns>
+        /// <exception cref="System.ArgumentException">If the requested regKeyPath is not valid or cannot be opened</exception>
         public static RegistryKey OpenRegistryKeyPath(string regKeyPath, RegistryKeyPermissionCheck permissions) 
         {
             return OpenRegistryKeyPath(null, SplitRegistryKeyPath(regKeyPath, DefaultRegPathDelimiters), permissions);
         }
 
+        /// <summary>
+        /// Opens and returns the RegistryKey found at the given delimited partial registry path, starting at the given startAtKey.  Requests the given permissions.
+        /// </summary>
+        /// <param name="startAtKey">Gives the RegistryKey instance to start the relative traversal at, or null if the traversal should start at the root.</param>
+        /// <param name="relativeRegKeyPath">Gives the delimited partial registry key path to traverse starting at the given key.</param>
+        /// <param name="permissions">Gives the RegistryKeyPermissionCheck value for the requested permissions.</param>
+        /// <returns>The RegistryKey instance for the requested path.</returns>
+        /// <exception cref="System.ArgumentException">If the requested regKeyPath is not valid or cannot be opened</exception>
         public static RegistryKey OpenRegistryKeyPath(RegistryKey startAtKey, string relativeRegKeyPath, RegistryKeyPermissionCheck permissions)
         {
             return OpenRegistryKeyPath(startAtKey, SplitRegistryKeyPath(relativeRegKeyPath, DefaultRegPathDelimiters), permissions);
         }
 
+        /// <summary>
+        /// Opens and returns the RegistryKey found at the given partial registry path, starting at the given startAtKey.  Requests the given permissions.
+        /// </summary>
+        /// <param name="startAtKey">Gives the RegistryKey instance to start the relative traversal at, or null if the traversal should start at the root.</param>
+        /// <param name="keyPathArray">Gives the partial registry key path to traverse starting at the given key, in array form.</param>
+        /// <param name="permissions">Gives the RegistryKeyPermissionCheck value for the requested permissions.</param>
+        /// <returns>The RegistryKey instance for the requested path.</returns>
+        /// <exception cref="System.ArgumentException">If the requested regKeyPath is not valid or cannot be opened</exception>
         public static RegistryKey OpenRegistryKeyPath(RegistryKey startAtKey, string[] keyPathArray, RegistryKeyPermissionCheck permissions)
         {
             RegistryKey currentKey = startAtKey;
@@ -135,11 +200,16 @@ namespace MosaicLib.Win32.Registry
 
         #region Registry Hive Helper methods
 
+        /// <summary>
+        /// Accepts a given Registry Hive name and returns the RegistryHive instance that matches.
+        /// Supports HKEY_CLASSES_ROOT, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, HKEY_USERS, HKEY_CURRENT_CONFIG, and HKEY_PERMORMANCE_DATA.
+        /// Also supports corresponding shorthand versions HKCR, HKCU, HKLM, HKU, HKCC, and HKPD.
+        /// </summary>
         static public RegistryHive GetRegistryHiveCode(string hiveName)
         {
             switch (hiveName)
             {
-                case "HKEY_CLASSES_ROOT": case "HDCR": return RegistryHive.ClassesRoot;
+                case "HKEY_CLASSES_ROOT": case "HKCR": case "HDCR": return RegistryHive.ClassesRoot;        // HDCR appears to have been a typo - preserving for backward compatibility.
                 case "HKEY_CURRENT_USER": case "HKCU": return RegistryHive.CurrentUser;
                 case "HKEY_LOCAL_MACHINE": case "HKLM": return RegistryHive.LocalMachine;
                 case "HKEY_USERS": case "HKU": return RegistryHive.Users;
@@ -150,6 +220,9 @@ namespace MosaicLib.Win32.Registry
             }
         }
 
+        /// <summary>
+        /// Returns a pre-existing RegistryKey that corresponds to the given hiveName as converted to a RegistryHive type using the <see cref="GetRegistryHiveCode"/> method.
+        /// </summary>
         static public RegistryKey GetRegistryHiveKey(string hiveName)
         {
             RegistryHive hiveCode = GetRegistryHiveCode(hiveName);
@@ -173,9 +246,20 @@ namespace MosaicLib.Win32.Registry
 
     #region Registry Key Creation classes
 
+    /// <summary>
+    /// This struct is used to contain a registry key value pair.  
+    /// </summary>
     public struct RegValueSpec
     {
+        /// <summary>
+        /// Constructs a key value pair with the given valueName and valueObject.  
+        /// Sets valueKind to RegistryValueKind.Unknown which will cause any call to RegistryKey.SetValue to attempt to dynamically derive the type from the actual type of the ValueObject.
+        /// </summary>
         public RegValueSpec(string valueName, object valueObject) : this(valueName, valueObject, RegistryValueKind.Unknown) { }
+        /// <summary>
+        /// Constructs a key value pair with the given valueName, valueObject, and valueKind.  
+        /// Sets valueKind to RegistryValueKind.Unknown which will cause any call to RegistryKey.SetValue to attempt to dynamically derive the type from the actual type of the ValueObject.
+        /// </summary>
         public RegValueSpec(string valueName, object valueObject, RegistryValueKind valueKind) 
             : this() 
         {
@@ -188,6 +272,10 @@ namespace MosaicLib.Win32.Registry
         object ValueObject { get; set; }
         RegistryValueKind ValueKind { get; set; }
 
+        /// <summary>
+        /// Local method Sets the value ValueName to contain the ValueObject, using the contained ValueKind, under the given underRegKey RegistryKey.
+        /// Uses RegistryKey.SetValue.
+        /// </summary>
         public void SetValue(RegistryKey underRegKey)
         {
             underRegKey.SetValue(ValueName, ValueObject, ValueKind);

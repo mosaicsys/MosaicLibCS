@@ -29,14 +29,14 @@ namespace MosaicLib.Utils.Pooling
 
     /// <summary>
     /// Defines a delegate that is used by a pooled object to allow it to release itself to the pool from which the object was created.  
-    /// Use of a delegate allows the pool to combine its own reference and the private method it uses to return objects to the pool without requireing that the pooled object knows anything about the pool to which it belongs.
+    /// Use of a delegate allows the pool to combine its own reference and the private method it uses to return objects to the pool without requiring that the pooled object knows anything about the pool to which it belongs.
     /// </summary>
 	public delegate void ReleaseObjectToPoolDelegate<ObjType>(ref ObjType oRef);
 
     /// <summary>This interface defines the behavior that clients of reference counted objects use to add and remove references to the object and to query its current reference count state.</summary>
     /// <remarks>
     /// Please note that IRefCountedObject's generally support both pooled and non-pooled use.  
-    /// Objects create within a pool may be handled and returned to the pool as long as all relevant external code honors the reference count sementics.  
+    /// Objects create within a pool may be handled and returned to the pool as long as all relevant external code honors the reference count semantics.  
     /// Objects that are manually created outside of a pool do not belong to any pool and will not be returned to any based on use of RemoveReference.
     /// Internal assertions about correct use of AddReference and RemoveReference are only enforced for objects that were created by, and belong to, a specific pool.
     /// </remarks>
@@ -46,7 +46,7 @@ namespace MosaicLib.Utils.Pooling
         ObjectType AddReference();
         /// <summary>Allows the caller to release a reference to an object and thus decrement the contained reference count.  If object belongs to a pool then it will be released to that pool once the reference count returns to zero.  Caller must pass the referring field or variable by reference as the method nulls the contents of the referenced handle.</summary>
         void RemoveReference(ref ObjectType refHandle);
-        /// <summary>Returns the current refernece count</summary>
+        /// <summary>Returns the current reference count</summary>
         int RefCount { get; }
         /// <summary>Returns true if the current RefCount is exactly 1</summary>
         bool IsUnique { get; }
@@ -66,7 +66,7 @@ namespace MosaicLib.Utils.Pooling
         /// <summary>
         /// Method that is used by pool or by object implementation to remove object references that are not returned to a pool 
         /// (ether because the object does not belong to one or because the pool is no longer enabled or has already reached its capacity limit)
-        /// If ObjectType implements IDisposable, then the refHandle's Dispose method will be invoked by this methed.
+        /// If ObjectType implements IDisposable, then the refHandle's Dispose method will be invoked by this method.
         /// </summary>
         void DisposeOfSelf(ref ObjectType selfObjRef);
 	}
@@ -81,7 +81,7 @@ namespace MosaicLib.Utils.Pooling
         int Capacity { get; }
         /// <summary>Returns the current number of object in the pool.</summary>
         int Count { get; }
-        /// <summary>Releases all objects from the pool and disables the return of objects to the pool.  Subsiquent calls to GetFreeObjectFromPool will explicitly create objects and will not associate them with the pool.</summary>
+        /// <summary>Releases all objects from the pool and disables the return of objects to the pool.  Subsequent calls to GetFreeObjectFromPool will explicitly create objects and will not associate them with the pool.</summary>
         void Shutdown();
 	}
 
@@ -93,7 +93,7 @@ namespace MosaicLib.Utils.Pooling
     /// <remarks>
     /// This class is defined as abstract to indicate that it cannot be directly constructed.
     /// 
-    /// If ObjectType is IDisposable, calls to RemoveReference will directly Dispose of the object when the final reference has been removed and the object does not belon to a pool.
+    /// If ObjectType is IDisposable, calls to RemoveReference will directly Dispose of the object when the final reference has been removed and the object does not belong to a pool.
     /// As such use of this base is not recommended for Objects which are also IDisposable unless the user is fully aware of this side effect of the final call to RemoveReferences.
     /// </remarks>
     public abstract class RefCountedRefObjectBase<ObjectType> : IPoolableRefCountedObject<ObjectType> where ObjectType : class, new()
@@ -124,7 +124,7 @@ namespace MosaicLib.Utils.Pooling
                     ReleaseFinalObjectReferenceAndReturnToPool(ref objRef);
 
                 if (objRef != null)
-                    DisposeOfSelf(ref objRef);     // directly call our own DiposeOfObject method to clear the given handle and, optionally, dispose of th eobject.
+                    DisposeOfSelf(ref objRef);     // directly call our own DiposeOfObject method to clear the given handle and, optionally, dispose of the object.
             }
             else
             {
@@ -148,7 +148,7 @@ namespace MosaicLib.Utils.Pooling
             get { return releaseObjectToPoolDelegate; }
             set
             {
-                // NOTE: the following tests are performed explicitly to prevent calling into Utils.Assert static class (and thus attemting to construct a new Logger instance before the distribution signleton has been constructed.
+                // NOTE: the following tests are performed explicitly to prevent calling into Utils.Assert static class (and thus attempting to construct a new Logger instance before the distribution singleton has been constructed.
                 if (!IsUnique || BelongsToPool)
                     Asserts.TakeBreakpointAfterFault("ReleaseObjectToPoolDelegate can only be set when object instance IsUnique and when it does not already belong to a pool");
 
@@ -165,10 +165,7 @@ namespace MosaicLib.Utils.Pooling
         /// <summary>Final low level method invoked on an selfObjRef when the object could not be returned to a pool.  Nulls the given selfObjRef and invokes the object's Dispose method if ObjectType implements IDisposable.</summary>
         public void DisposeOfSelf(ref ObjectType selfObjRef)
         {
-            if (typeof(ObjectType) is IDisposable)
-                Utils.Fcns.DisposeOfObject(ref selfObjRef);
-            else
-                selfObjRef = null;
+            Utils.Fcns.DisposeOfObject(ref selfObjRef);
         }
 
         #endregion
@@ -233,7 +230,7 @@ namespace MosaicLib.Utils.Pooling
         /// <summary>Default constructor - uses default initial pool size and capacity of 1000, and 10000 respectively.</summary>
 		public ObjectPool() : this(DefaultPoolSize, DefaultCapacity) {}
 
-        /// <summary>Constructor - caller defines the initial pool size and capacity.  Method enfores minimum capaticy of initialPoolSize and 10, whichever is greater.</summary>
+        /// <summary>Constructor - caller defines the initial pool size and capacity.  Method enforces minimum capacity of initialPoolSize and 10, whichever is greater.</summary>
         public ObjectPool(int initialPoolSize, int initialCapacity) 
 		{
 			if (initialCapacity < initialPoolSize)
@@ -369,13 +366,13 @@ namespace MosaicLib.Utils.Pooling
 
         #region Private instance variables
 
-        /// <summary>volatile bool used to determine if the pool is enabled.  Pool constrution enables the pool.  Explicit call to Shutdown or explicit disposal of this pool object. </summary>
+        /// <summary>volatile bool used to determine if the pool is enabled.  Pool construction enables the pool.  Explicit call to Shutdown or explicit disposal of this pool object. </summary>
         private volatile bool poolIsEnabled = false;
 
         /// <summary>object used as mutex for access to freeObjectStack and freeObjectStackCapacity.</summary>
         object freeObjectStackMutex = new object();
 
-        /// <summary>Stack of free objects that are currently in the pool.  Use of Fifo semantics is choosen to generally improve cache and virtual memory efficiency.</summary>
+        /// <summary>Stack of free objects that are currently in the pool.  Use of LIFO semantics is chosen to generally improve cache and virtual memory efficiency.</summary>
         Stack<IPoolableRefCountedObject<ObjectType>> freeObjectStack = null;
 
         /// <summary>field defines the maximum number of objects that the freeObjectStack can hold.</summary>

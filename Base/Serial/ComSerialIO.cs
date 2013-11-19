@@ -34,8 +34,12 @@ namespace MosaicLib.SerialIO
 	//-----------------------------------------------------------------
 	#region ComPort Factory method
 
-	public static partial class Factory
+    public static partial class Factory
 	{
+        /// <summary>Creates a Com type IPort implementation from the given portConfig and comPortConfig</summary>
+        /// <param name="portConfig">Provides all configuration details for the port to be created.</param>
+        /// <param name="comPortConfig">Provides the ComPort specific configuration information.  Typically derived by parsing the portConfig.SpecStr.</param>
+        /// <returns>the created Com type IPort object.</returns>
 		public static IPort CreateComPort(PortConfig portConfig, ComPortConfig comPortConfig)
 		{
 			return new ComPort(portConfig, comPortConfig);
@@ -53,24 +57,29 @@ namespace MosaicLib.SerialIO
 	///		<ComPort port="\\.\com200"><UartConfig baud="9600" DataBits="8" Mode="rs232-3wire" Parity="none" StopBits="1"/></ComPort>
 	///		<ComPort port="com1" uartConfig="9600,n,8,1"/>
 	/// </remarks>
-
 	public struct ComPortConfig
 	{
-		public ComPortConfig(string specStr) : this() { this.specStr = specStr; ParseSpec(); }
+        /// <summary>Constructor.  Parses the given specStr</summary>
+		public ComPortConfig(string specStr) : this() { SpecStr = specStr; ParseSpec(); }
 
-		string specStr;
 		string portName;
 		ComPortUartConfig uartConfig;
 		string faultCode;
 
-		public string SpecStr { get { return specStr; } }
-		public string PortName { get { return portName; } }
-		public ComPortUartConfig UartConfig { get { return uartConfig; } }
-		public bool IsValid { get { return string.IsNullOrEmpty(faultCode); } }
-		public string ErrorCode { get { return (IsValid ? string.Empty : ("ComPortConfig parse failed: " + faultCode)); } }
+        /// <summary>getter access to the SpecStr value from which this object was constructed, or null if the default constructor was used.</summary>
+        public string SpecStr { get; private set; }
+        /// <summary>getter access to the PortName that was parsed from the SpecStr, or null if no valid PortName has been so obtained.</summary>
+        public string PortName { get { return portName; } }
+        /// <summary>getter access to the ComPortUartConfig that was parsed from the SpecStr, or null if no valid UartConfig has been so obtained.</summary>
+        public ComPortUartConfig UartConfig { get { return uartConfig; } }
+        /// <summary>True if a valid SpecStr has been given to this object and false otherwise.</summary>
+        public bool IsValid { get { return faultCode == string.Empty; } }
+        /// <summary>Returns a non-empty description of the issue if IsValid is false.  returns empty string if IsValid is ture.</summary>
+        public string ErrorCode { get { return (IsValid ? string.Empty : (!String.IsNullOrEmpty(SpecStr) ? ("ComPortConfig parse failed: " + faultCode) : "No valid SpecStr has been parsed")); } }
 
 		private void ParseSpec()
 		{
+            faultCode = String.Empty;
 			Utils.StringScanner specScanner = new StringScanner(SpecStr);
 
             if (IsValid && !specScanner.MatchToken("<ComPort", false, false))
@@ -110,7 +119,8 @@ namespace MosaicLib.SerialIO
 	//-----------------------------------------------------------------
 	#region ComPort class
 
-	class ComPort : PortBase
+    /// <summary>Provides an implementation of the SerialIO PortBase class for use as a traditional Com type serial port (using RS-232, RS-422, or RS-485).</summary>
+    internal class ComPort : PortBase
 	{
 		#region CTor, DTor
 
@@ -118,6 +128,7 @@ namespace MosaicLib.SerialIO
 			: base(portConfig, "ComPort")
 		{
 			this.comPortConfig = comPortConfig;
+            PortBehavior = new PortBehaviorStorage() { DataDeliveryBehavior = DataDeliveryBehavior.ByteStream, IsClientPort = true };
 
 			PrivateBaseState = new BaseState(false, true);
 			PublishBaseState("object constructed");
@@ -193,9 +204,9 @@ namespace MosaicLib.SerialIO
                     sp.Open();
                 }
 			}
-			catch (System.Exception e)
+			catch (System.Exception ex)
 			{
-				faultCode = "Exception:" + e.Message;
+				faultCode = "Exception:" + ex.Message;
 			}
 
 			if (string.IsNullOrEmpty(faultCode))
@@ -219,9 +230,9 @@ namespace MosaicLib.SerialIO
 				if (InnerIsConnected)
 					sp.Close();
 			}
-			catch (System.Exception e)
+			catch (System.Exception ex)
 			{
-				faultCode = "Exception:" + e.Message;
+				faultCode = "Exception:" + ex.Message;
 			}
 
 			if (string.IsNullOrEmpty(faultCode))
@@ -240,10 +251,17 @@ namespace MosaicLib.SerialIO
 		{
 			get
 			{
-				if (!InnerIsConnected)
-					return 0;
+                if (!InnerIsConnected)
+                    return 0;
 
-				return sp.BytesToRead;
+                try
+                {
+                    return sp.BytesToRead;
+                }
+                catch
+                {
+                    return 1;       // cause caller to attempt to read this byte and thus have the read fail.
+                }
 			}
 		}
 
@@ -269,7 +287,7 @@ namespace MosaicLib.SerialIO
 			}
 		}
 
-		protected override string InnerHandleRead(byte [] buffer, int startIdx, int maxCount, out int didCount)
+        protected override string InnerHandleRead(byte[] buffer, int startIdx, int maxCount, out int didCount, ref ActionResultEnum readResult)
 		{
 			didCount = 0;
 
@@ -286,13 +304,13 @@ namespace MosaicLib.SerialIO
                 Log.Trace.Emit("TimeoutException:{0}", e);
                 return string.Empty;
             }
-            catch (System.Exception e)
+            catch (System.Exception ex)
             {
-                return "Exception:" + e.Message;
+                return "Exception:" + ex.Message;
             }
 		}
 
-		protected override string InnerHandleWrite(byte [] buffer, int startIdx, int count, out int didCount)
+        protected override string InnerHandleWrite(byte[] buffer, int startIdx, int count, out int didCount, ref ActionResultEnum writeResult)
 		{
 			didCount = 0;
 
@@ -309,12 +327,15 @@ namespace MosaicLib.SerialIO
 
 				return string.Empty;
 			}
-			catch (System.Exception e)
+			catch (System.Exception ex)
 			{
-				return "Exception:" + e.Message;
+				return "Exception:" + ex.Message;
 			}
 		}
 
+        /// <summary>
+        /// Returns true if a Serial Port is defined and it reports that it is IsOpen
+        /// </summary>
 		protected override bool InnerIsConnected
 		{
 			get

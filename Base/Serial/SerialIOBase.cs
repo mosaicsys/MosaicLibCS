@@ -36,6 +36,9 @@ namespace MosaicLib.SerialIO
 	//-----------------------------------------------------------------
 	#region PortBase
 
+    /// <summary>
+    /// This class is the base clase for most IPort type objects.  It implements the common logic and execution logic that all (or most) port types share.
+    /// </summary>
 	public abstract class PortBase : SimpleActivePartBase, IPort
 	{
 		//-----------------------------------------------------------------
@@ -73,9 +76,11 @@ namespace MosaicLib.SerialIO
 
 			BaseStatePublishedNotificationList.OnNotify += BaseStateChangedEventHandler;
 
-			if (config.RxPacketEndStrArray.Length > 0)
+			if (config.RxPacketEndStrArray.Length > 0 || config.RxPacketEndScannerDelegate != null)
 			{
                 slidingPacketBuffer = new SlidingPacketBuffer(config.RxBufferSize, config.RxPacketEndStrArray, config.IdleTime);
+                if (config.RxPacketEndScannerDelegate != null)
+                    slidingPacketBuffer.PacketEndScannerDelegate = config.RxPacketEndScannerDelegate;
 			}
 		}
 
@@ -87,6 +92,31 @@ namespace MosaicLib.SerialIO
 		private readonly PortConfig portConfig;
 		public string Name { get { return portConfig.Name; } }
 		public PortConfig PortConfig { get { return portConfig; } }
+
+        IPortBehavior IPort.PortBehavior { get { return PortBehavior; } }
+        protected PortBehaviorStorage PortBehavior { get; set; }
+
+        /// <summary>
+        /// Impelmentation and storage class for IPortBehavior interface.
+        /// </summary>
+        public struct PortBehaviorStorage : IPortBehavior
+        {
+            /// <summary>Gives the DataDeliveryBehavior enum value that this port believes it implements</summary>
+            public DataDeliveryBehavior DataDeliveryBehavior { get; set; }
+
+            /// <summary>Returns true if this port's underlying engine is network based (EtherNet or WIFI, ...)</summary>
+            /// <remarks>false for COM ports, true for TCP and UDP ports.</remarks>
+            public bool IsNetworkPort { get; set; }
+
+            /// <summary>Returns true if this port's DataDeliveryBehavior is ByteStream</summary>
+            public bool IsByteStreamPort { get { return DataDeliveryBehavior == DataDeliveryBehavior.ByteStream; } }
+            /// <summary>Returns true if this port's DataDeliveryBehavior is Datagram</summary>
+            public bool IsDatagramPort { get { return DataDeliveryBehavior == DataDeliveryBehavior.Datagram; } }
+            /// <summary>Returns true if this port generally initiates the connection to the transport medium</summary>
+            public bool IsClientPort { get; set; }
+            /// <summary>Returns true if this port generally accepts connections from the transport medium</summary>
+            public bool IsServerPort { get; set; }
+        }
 
 		protected class ReadAction : ActionImplBase<ReadActionParam, NullObj>, IReadAction
 		{
@@ -112,14 +142,14 @@ namespace MosaicLib.SerialIO
             return new WriteAction(actionQ, param, PerformWriteAction, new ActionLogging("Write", ActionLoggingTraceReference));
 		}
 
-		protected class FlushAction : ActionImplBase<TimeSpan, NullObj>, IBasicAction
+        protected class FlushAction : ActionImplBase<TimeSpan, NullObj>, IFlushAction
 		{
 			public FlushAction(ActionQueue actionQ, TimeSpan param, FullActionMethodDelegate<TimeSpan, NullObj> method, ActionLogging loggingReference)
                 : base(actionQ, param, false, method, loggingReference) 
 			{ }
 		}
 
-		public IBasicAction CreateFlushAction(TimeSpan flushWaitLimit)
+        public IFlushAction CreateFlushAction(TimeSpan flushWaitLimit)
 		{
             return new FlushAction(actionQ, flushWaitLimit, PerformFlushAction, new ActionLogging("Flush", ActionLoggingTraceReference));
 		}
@@ -267,8 +297,8 @@ namespace MosaicLib.SerialIO
 		protected virtual int InnerWriteSpaceAvailable { get { return 0; } }
 		protected virtual bool InnerIsAnyWriteSpaceAvailable { get { return (InnerWriteSpaceUsed < InnerWriteSpaceAvailable); } }
 
-		protected abstract string InnerHandleRead(byte [] buffer, int startIdx, int maxCount, out int didCount);
-		protected abstract string InnerHandleWrite(byte [] buffer, int startIdx, int count, out int didCount);
+		protected abstract string InnerHandleRead(byte [] buffer, int startIdx, int maxCount, out int didCount, ref ActionResultEnum readResult);
+        protected abstract string InnerHandleWrite(byte[] buffer, int startIdx, int count, out int didCount, ref ActionResultEnum readResult);
 		protected abstract bool InnerIsConnected { get; }
 
 		#endregion
@@ -336,7 +366,9 @@ namespace MosaicLib.SerialIO
 
 		protected void ServicePendingReadActions(QpcTimeStamp now)
 		{
-			if (HasSlidingBuffer)
+            ActionResultEnum readResult = ActionResultEnum.None;
+
+            if (HasSlidingBuffer)
 			{
 				// read characters into the sliding buffer
 
@@ -350,12 +382,12 @@ namespace MosaicLib.SerialIO
 					slidingPacketBuffer.GetBufferPutAccessInfo(128, out buffer, out nextPutIdx, out spaceRemaining);
 
 					int didCount = 0;
-					string ec = HandleRead("BufRead", buffer, nextPutIdx, spaceRemaining, out didCount);
+                    string ec = HandleRead("BufRead", buffer, nextPutIdx, spaceRemaining, out didCount, ref readResult);
 
 					if (didCount > 0)
 						slidingPacketBuffer.AddedNChars(didCount);
 
-					if (!string.IsNullOrEmpty(ec))
+                    if (!string.IsNullOrEmpty(ec))
 						this.SetBaseState(ConnState.ConnectionFailed, ec, true);
 				}
 
@@ -422,7 +454,7 @@ namespace MosaicLib.SerialIO
 					{
 						int rdBytes = Math.Min(rxBytesAvail, (rdActionParam.BytesToRead - rdActionParam.BytesRead));
 
-						ec = HandleRead("Read", rdActionParam.Buffer, rdActionParam.BytesRead, rdBytes, out gotCount);
+                        ec = HandleRead("Read", rdActionParam.Buffer, rdActionParam.BytesRead, rdBytes, out gotCount, ref readResult);
 					}
 				}
 
@@ -430,6 +462,8 @@ namespace MosaicLib.SerialIO
 					rdActionParam.BytesRead += gotCount;
 
                 bool readComplete = (rdActionParam.WaitForAllBytes ? (rdActionParam.BytesRead >= rdActionParam.BytesToRead) : (gotCount > 0));
+                if (ec == null && (readResult != ActionResultEnum.None && readResult != ActionResultEnum.ReadDone && readResult != ActionResultEnum.ReadRemoteEndHasBeenClosed))
+                    ec = Fcns.CheckedFormat("HandleRead gave: {0}", readResult);
 				if (ec == null && readComplete)
 					ec = string.Empty;
 
@@ -443,7 +477,10 @@ namespace MosaicLib.SerialIO
 				{
 					bool readSuccess = (ec == string.Empty);
 
-					rdActionParam.ActionResultEnum = (readSuccess ? ActionResultEnum.ReadDone : (readTimeout ? ActionResultEnum.ReadTimeout : ActionResultEnum.ReadFailed));
+                    if (readResult == ActionResultEnum.None)
+                        rdActionParam.ActionResultEnum = (readSuccess ? ActionResultEnum.ReadDone : (readTimeout ? ActionResultEnum.ReadTimeout : ActionResultEnum.ReadFailed));
+                    else
+                        rdActionParam.ActionResultEnum = readResult;
 					rdAction.CompleteRequest(rdActionParam.ResultCode = ec);
 					pendingReadActionsQueue.Dequeue();
 					continue;
@@ -474,6 +511,7 @@ namespace MosaicLib.SerialIO
 				// write more bytes if possible
 				string ec = null;
 				bool isAnyTxSpaceAvailable = false;
+                ActionResultEnum writeResult = ActionResultEnum.None;
 
 				if (isAnyTxSpaceAvailable = InnerIsAnyWriteSpaceAvailable)
 				{
@@ -482,7 +520,7 @@ namespace MosaicLib.SerialIO
 
 					if (bytesToTx > 0)
 					{
-						ec = HandleWrite("Write", wrActionParam.Buffer, wrActionParam.BytesWritten, bytesToTx, out didCount);
+						ec = HandleWrite("Write", wrActionParam.Buffer, wrActionParam.BytesWritten, bytesToTx, out didCount, ref writeResult);
 
 						if (didCount > 0)
 							wrActionParam.BytesWritten += didCount;
@@ -503,7 +541,7 @@ namespace MosaicLib.SerialIO
 					if (string.IsNullOrEmpty(ec) && bufferWriteComplete && !writeComplete && isAnyTxSpaceAvailable)
 					{
 						// write the line termination. - Keep trying until all of it has been written
-						ec = HandleWrite("Write", txTermBytes, didTermCount, bytesToTx, out didCount);
+						ec = HandleWrite("Write", txTermBytes, didTermCount, bytesToTx, out didCount, ref writeResult);
 						if (didCount > 0)
 							wrActionParam.BytesWritten += didCount;
 
@@ -511,12 +549,16 @@ namespace MosaicLib.SerialIO
 					}
 
 					bool writeFailed = !string.IsNullOrEmpty(ec);
-                    if (writeComplete || writeFailed)
+                    if (writeComplete || writeFailed || writeResult != ActionResultEnum.None)
 					{
                         bool actionStillActive = wrAction.ActionState.IsPendingCompletion;      // it may alredy have been canceled in some cases
                         if (actionStillActive)
                         {
-                            wrActionParam.ActionResultEnum = writeFailed ? ActionResultEnum.WriteFailed : ActionResultEnum.WriteDone;
+                            if (writeResult == ActionResultEnum.None)
+                                wrActionParam.ActionResultEnum = writeFailed ? ActionResultEnum.WriteFailed : ActionResultEnum.WriteDone;
+                            else
+                                wrActionParam.ActionResultEnum = writeResult;
+
                             wrAction.CompleteRequest(wrActionParam.ResultCode = Utils.Fcns.MapNullToEmpty(ec));
                         }
 
@@ -575,6 +617,29 @@ namespace MosaicLib.SerialIO
 			if (AreAnyActionsPending)
 				CancelPendingActions(actionName + " Action invoked");
 
+            // flush the sliding buffer first.
+            if (HasSlidingBuffer && (slidingPacketBuffer.BufferDataCount > 0))
+            {
+                for (; ; )
+                {
+                    slidingPacketBuffer.Service();
+                    Packet p = slidingPacketBuffer.GetNextPacket();
+                    if (p != null)
+                        GenerateDataTrace(actionName + " " + p.Type.ToString(), String.Empty, p.Data, 0, p.Data.Length);
+                    else
+                        break;
+                }
+
+                if (slidingPacketBuffer.BufferDataCount > 0)
+                {
+                    byte[] buffer;
+                    int getIdx, getCount;
+                    slidingPacketBuffer.GetBufferGetAccessInfo(out buffer, out getIdx, out getCount);
+                    GenerateDataTrace(actionName + " Sliding Buffer", String.Empty, buffer, getIdx, getCount);
+                    slidingPacketBuffer.FlushBuffer();
+                }
+            }
+
 			// need to flush line buffer if this port is using one
 
 			QpcTimeStamp actionStartTime = QpcTimeStamp.Now;
@@ -583,12 +648,15 @@ namespace MosaicLib.SerialIO
 			bool portWasIdle = false;
 			bool idleTimeReached = false;
 			int didCount = 0;
+            string rc = string.Empty;
 
 			for (; ; )
 			{
 				QpcTimeStamp now = QpcTimeStamp.Now;
-				string rc = HandleRead(actionName, flushBuf, 0, flushBuf.Length, out didCount);
+                ActionResultEnum readResult = ActionResultEnum.None;
+				rc = HandleRead(actionName, flushBuf, 0, flushBuf.Length, out didCount, ref readResult);
 				bool success = string.IsNullOrEmpty(rc);
+                bool forceFlushDone = (readResult != ActionResultEnum.None && readResult != ActionResultEnum.ReadDone);
 
 				portIsIdle = (didCount == 0);
 
@@ -597,33 +665,35 @@ namespace MosaicLib.SerialIO
 				else
 					idleTimeReached = (now - idleStartTime) > PortConfig.IdleTime;
 
-				if (!success || idleTimeReached)
-					return rc;
+                if (!success || idleTimeReached || forceFlushDone)
+                    break;
 
 				if ((now - actionStartTime) > timeLimit)
 				{
 					if (!portIsIdle)
 						rc = actionName + " time limit reached before port fully idle";
 
-					return rc;
+					break;
 				}
 
 				WaitForSomethingToDo(TimeSpan.FromMilliseconds(10));		// check at 100 Hz nominal rate.
 			}
+
+            return rc;
 		}
 
-		protected string HandleRead(string actionName, byte [] buffer, int startIdx, int maxCount, out int didCount)
+        protected string HandleRead(string actionName, byte[] buffer, int startIdx, int maxCount, out int didCount, ref ActionResultEnum readResult)
 		{
-			string rc = InnerHandleRead(buffer, startIdx, maxCount, out didCount);
+			string rc = InnerHandleRead(buffer, startIdx, maxCount, out didCount, ref readResult);
 
 			GenerateDataTrace(actionName, rc, buffer, startIdx, didCount);
 
 			return (string.IsNullOrEmpty(rc) ? string.Empty : rc);
 		}
 
-		protected string HandleWrite(string actionName, byte [] buffer, int startIdx, int count, out int didCount)
+		protected string HandleWrite(string actionName, byte [] buffer, int startIdx, int count, out int didCount, ref ActionResultEnum writeResult)
 		{
-			string rc = InnerHandleWrite(buffer, startIdx, count, out didCount);
+            string rc = InnerHandleWrite(buffer, startIdx, count, out didCount, ref writeResult);
 
 			GenerateDataTrace(actionName, rc, buffer, startIdx, didCount);
 
@@ -714,9 +784,9 @@ namespace MosaicLib.SerialIO
 
 				mesg = traceSB.ToString();
 			}
-			catch (System.Exception e)
+			catch (System.Exception ex)
 			{
-				mesg = "GenerateDataTrace failed:" + e.Message;
+				mesg = "GenerateDataTrace failed:" + ex.Message;
 			}
 
 			TraceData.Emit(mesg);
@@ -734,7 +804,11 @@ namespace MosaicLib.SerialIO
 
 	public class NullPort : PortBase
 	{
-		public NullPort(PortConfig portConfig) : base(portConfig, "NullPort") { }
+		public NullPort(PortConfig portConfig) 
+            : base(portConfig, "NullPort")
+        {
+            PortBehavior = new PortBehaviorStorage() { DataDeliveryBehavior = DataDeliveryBehavior.None };
+        }
 
 		protected override string InnerPerformGoOnlineAction(string actionName, bool andInitialize)
 		{
@@ -753,13 +827,13 @@ namespace MosaicLib.SerialIO
 			get { return 0; }
 		}
 
-		protected override string InnerHandleRead(byte [] buffer, int startIdx, int maxCount, out int didCount)
+		protected override string InnerHandleRead(byte [] buffer, int startIdx, int maxCount, out int didCount, ref ActionResultEnum readResult)
 		{
 			didCount = 0;
 			return string.Empty;
 		}
 
-		protected override string InnerHandleWrite(byte [] buffer, int startIdx, int count, out int didCount)
+        protected override string InnerHandleWrite(byte[] buffer, int startIdx, int count, out int didCount, ref ActionResultEnum writeResult)
 		{
 			didCount = count;
 			return string.Empty;

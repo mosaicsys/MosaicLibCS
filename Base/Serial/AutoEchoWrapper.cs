@@ -30,12 +30,25 @@ namespace MosaicLib.SerialIO
 
 	//-------------------------------------------------------------------
 
+    /// <summary>
+    /// This class provides a wrapper object for an IPort that writes back any byte that it receives from the port.
+    /// </summary>
 	public class AutoEchoWrapper : SimpleActivePartBase
 	{
 		//----------------------------------------
-		public AutoEchoWrapper(IPort wrappedPort) : this(wrappedPort.PartID + ".aew", wrappedPort) { }
+        /// <summary>
+        /// Constructor derives the aew wrapper's name from the name of the given port.
+        /// </summary>
+		public AutoEchoWrapper(IPort wrappedPort) 
+            : this(wrappedPort.PartID + ".aew", wrappedPort) 
+        { }
 
-		public AutoEchoWrapper(string wrapperName, IPort wrappedPort)
+        /// <summary>
+        /// Constructor
+        /// </summary>
+        /// <param name="wrapperName">Gives the name that the wrapper is to use for the log messages that it creates</param>
+        /// <param name="wrappedPort">Gives the IPort instance that the AEW is to implement auto echo for</param>
+        public AutoEchoWrapper(string wrapperName, IPort wrappedPort)
 			: base(wrapperName, "AutoEchoWrapper")
 		{
 			port = wrappedPort;
@@ -79,14 +92,20 @@ namespace MosaicLib.SerialIO
 		//----------------------------------------
 		#region SimpleActivePart overridden methods
 
+        /// <summary>
+        /// Implementation for virtual base that disposes of the given IPort instance and then calls the base class version of this method.
+        /// </summary>
 		protected override void DisposeCalledPassdown(MosaicLib.Utils.DisposableBase.DisposeType disposeType)
 		{
-			if (disposeType == DisposeType.CalledExplicitly)
+            if (disposeType == DisposeType.CalledExplicitly)
 				MosaicLib.Utils.Fcns.DisposeOfObject(ref port);
 
-			base.DisposeCalledPassdown(disposeType);
-		}
+            base.DisposeCalledPassdown(disposeType);
+        }
 
+        /// <summary>
+        /// Implemenation for for required GoOnline Action: runs the corresponding command on the related IPort instance and returns its result
+        /// </summary>
 		protected override string PerformGoOnlineAction(bool andInitialize)
 		{
             IBasicAction iba = (IBasicAction) port.CreateGoOnlineAction(andInitialize);
@@ -95,7 +114,10 @@ namespace MosaicLib.SerialIO
 			return rc;
 		}
 
-		protected override string PerformGoOfflineAction()
+        /// <summary>
+        /// Implemenation for for required GoOffline Action: runs the corresponding command on the related IPort instance and returns its result
+        /// </summary>
+        protected override string PerformGoOfflineAction()
 		{
             IBasicAction iba = (IBasicAction) port.CreateGoOfflineAction();
 			string rc = iba.Run();
@@ -103,6 +125,10 @@ namespace MosaicLib.SerialIO
 			return rc;
 		}
 
+        /// <summary>
+        /// Provides overriden implementation for Main Loop Service method.  Reflects associated IPort ConnState changes into this object.
+        /// Services the underlying port read and port write actions to implement the basic functionality of this object.
+        /// </summary>
 		protected override void PerformMainLoopService()
 		{
 			System.Threading.Thread.Sleep(1);

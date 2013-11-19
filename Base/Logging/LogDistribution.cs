@@ -32,16 +32,24 @@ namespace MosaicLib
 		//-------------------------------------------------------------------
 		#region early definitions
 
-		const int DistGroupID_Default = 0;		// the groupID to which all logger source names belong if they are not explicitly remapped to some other group
-		const int DistGroupID_Invalid = -1;		// the groupID to indicate that none was provided.
+        /// <summary>the groupID to which all logger source names belong if they are not explicitly remapped to some other group</summary>
+		const int DistGroupID_Default = 0;
+        /// <summary>the groupID to indicate that none was provided.</summary>
+        const int DistGroupID_Invalid = -1;
 
-		public enum LoggerNameMatchType
+        /// <summary>Enum defines the different means that a string can be used to determine if a Logger Name is to be included in a specific matching group.</summary>
+        public enum LoggerNameMatchType
 		{
-			None = 0,			//!< string does not match any logger names (default for all groups except default group)
-			MatchPrefix,		//!< string must equal the leading characters of each selected logger name
-			MatchSuffix,		//!< string must equal the trailing characters of each selected logger name
-			MatchContains,		//!< string must be present in each selected logger name
-			Regex,				//!< string is a regular expression that matches each of the names in the desired set of logger names
+            /// <summary>string does not match any logger names (default for all groups except default group)</summary>
+            None = 0,
+            /// <summary>string must equal the leading characters of each selected logger name</summary>
+            MatchPrefix,
+            /// <summary>string must equal the trailing characters of each selected logger name</summary>
+            MatchSuffix,
+            /// <summary>string must be present in each selected logger name</summary>
+            MatchContains,
+            /// <summary>string is a regular expression that matches each of the names in the desired set of logger names</summary>
+            Regex,
 		}
 
 		#endregion
@@ -77,6 +85,9 @@ namespace MosaicLib
 
             /// <summary>request distribution to start support for queued logging</summary>
             void StartQueuedMessageDelivery();
+
+            /// <summary>request distribution to stop support for queued logging</summary>
+            void StopQueuedMessageDelivery();
 
             /// <summary>used to allow a queued logger to request that it block until its last emitted message has been fully delivered or the time limit is reached (renterant method on multiple callers)</summary>
             bool WaitForQueuedMessageDistributionComplete(int loggerID, TimeSpan timeLimit);
@@ -294,7 +305,7 @@ namespace MosaicLib
 
 			volatile MessageQueue				mesgQueue = null;
 			SequencedLoggerConfigSource			mesgQueueLoggerGateSource = new SequencedLoggerConfigSource(LoggerConfig.AllWithFL);
-			volatile System.Threading.Thread	mesgQueueDistThread = null;
+			System.Threading.Thread	            mesgQueueDistThread = null;
 			Utils.WaitEventNotifier				mesgQueueDistThreadWakeupNotification = new MosaicLib.Utils.WaitEventNotifier(MosaicLib.Utils.WaitEventNotifier.Behavior.WakeAllSticky);
 
 			volatile Utils.Pooling.ObjectPool<LogMessage> mesgPool = new MosaicLib.Utils.Pooling.ObjectPool<LogMessage>(PreallocatedPoolItems, PoolCapacity);
@@ -364,7 +375,8 @@ namespace MosaicLib
 
 			// methods used by ILoggers
 
-			public LoggerSourceInfo GetLoggerSourceInfo(string name)
+            /// <summary>used to create/lookup the LoggerSourceIDPtr for a given logger name</summary>
+            public LoggerSourceInfo GetLoggerSourceInfo(string name)
 			{
 				int lid = LoggerID_Invalid;
 				LoggerSourceInfo lsid = null;
@@ -383,7 +395,8 @@ namespace MosaicLib
 				return lsid;
 			}
 
-			public void SetLoggerDistributionGroupName(int id, string groupName)
+            /// <summary>used to update a logger's distribution group name</summary>
+            public void SetLoggerDistributionGroupName(int id, string groupName)
 			{
 				lock (distMutex)
 				{
@@ -410,7 +423,8 @@ namespace MosaicLib
 				}
 			}
 
-			public LogMessage GetLogMessage()
+            /// <summary>this method is fully renterant.  Once the allocated message has been given to the distribution system, the caller must make no further use of or reference to it.</summary>
+            public LogMessage GetLogMessage()
 			{
 				// this code can safely use the InnerGetLogMessage method to access the pool
 				//	due to its internal implementation.  Please see the comments in the Inner
@@ -421,7 +435,8 @@ namespace MosaicLib
 				return InnerGetLogMessage(true);
 			}
 
-			public void DistributeMessage(ref LogMessage lm)
+            /// <summary>used to distribute a message from the loggerID listed as the message's source.  This method consumes the given message.  The caller's handle will be nulled by this method.</summary>
+            public void DistributeMessage(ref LogMessage lm)
 			{
 				lock (distMutex)
 				{
@@ -435,7 +450,8 @@ namespace MosaicLib
 				}
 			}
 
-			public bool WaitForDistributionComplete(int lid, TimeSpan timeLimit)
+            /// <summary>used to allow a logger to request that it block until its last emitted message has been fully delivered or the time limit is reached (renterant method on multiple callers)</summary>
+            public bool WaitForDistributionComplete(int lid, TimeSpan timeLimit)
 			{
 				// first take a snapshot of the last mesg seq num that has been distributed from this source
 
@@ -477,7 +493,8 @@ namespace MosaicLib
 				return !isMessageDeliveryInProgress;
 			}
 
-			public void StartQueuedMessageDelivery()
+            /// <summary>request distribution to start support for queued logging</summary>
+            public void StartQueuedMessageDelivery()
 			{
 				// use preliminary asynchronous MT safe test to determine if the thread is already started (do not need to lock in that case)
 				if (mesgQueueDistThread != null && mesgQueue != null && mesgQueue.IsEnabled)
@@ -500,7 +517,7 @@ namespace MosaicLib
 
 					if (mesgQueue != null && mesgQueue.IsEnabled)
 					{
-						mesgQueueDistThread = new System.Threading.Thread(MesgQueueDistThreadFcn);
+                        mesgQueueDistThread = new System.Threading.Thread(MesgQueueDistThreadFcn) { IsBackground = true, Name = "LogDist.QueuedLoggerMessageDelivery" };
 						mesgQueueDistThread.Start();
 					}
 
@@ -509,7 +526,37 @@ namespace MosaicLib
 				}
 			}
 
-			public bool WaitForQueuedMessageDistributionComplete(int id, TimeSpan timeLimit)
+            /// <summary>request distribution to stop support for queued logging</summary>
+            public void StopQueuedMessageDelivery()
+            {
+                if (mesgQueueDistThread == null && (mesgQueue == null || mesgQueue.IsEnabled == false))
+                    return;
+
+                System.Threading.Thread threadToJoin = null;
+
+                lock (distMutex)
+                {
+                    if (mesgQueueDistThread == null && (mesgQueue == null || mesgQueue.IsEnabled == false))
+                        return;
+
+                    if (mesgQueue != null)
+                        mesgQueue.DisableQueue();
+
+                    threadToJoin = mesgQueueDistThread;
+                    mesgQueueDistThread = null;
+
+                    mesgQueue = null;
+                }
+
+                if (threadToJoin != null)
+                {
+                    threadToJoin.Join();
+                    Utils.Fcns.DisposeOfObject(ref threadToJoin);
+                }
+            }
+
+            /// <summary>used to allow a queued logger to request that it block until its last emitted message has been fully delivered or the time limit is reached (renterant method on multiple callers)</summary>
+            public bool WaitForQueuedMessageDistributionComplete(int id, TimeSpan timeLimit)
 			{
 				// first take a snapshot of the last mesg seq num that has been enqueued to the message queue
 
@@ -555,18 +602,25 @@ namespace MosaicLib
 				return WaitForDistributionComplete(id, timeRemaining);
 			}
 
-			public void EnqueueMessageForDistribution(ref LogMessage lm)
+            /// <summary>used to support QueuedLogger loggers.  This method consumes the given message.  The caller's handle will be nulled by this method.</summary>
+            public void EnqueueMessageForDistribution(ref LogMessage lm)
 			{
-				if (mesgQueue == null)
-					StartQueuedMessageDelivery();
+                MessageQueue capturedMesgQueue = mesgQueue;
+
+                if (capturedMesgQueue == null)
+                {
+                    StartQueuedMessageDelivery();
+                    capturedMesgQueue = mesgQueue;
+                }
 
 				if (lm != null)
 				{
 					// enqueue the given message and then reset the pointer that was passed to us.
 					//	(this method consumes the given message);
 
-					if (mesgQueue != null)
-						mesgQueue.EnqueueMesg(lm);
+                    if (capturedMesgQueue != null)
+                        capturedMesgQueue.EnqueueMesg(lm);
+
 					lm.RemoveReference(ref lm);		// mesgQueue always adds a reference internally - as such we must explicitly remove the caller's reference before returing
 				}
 			}
@@ -833,7 +887,9 @@ namespace MosaicLib
 
 			protected void MesgQueueDistThreadFcn()
 			{
-                if (!(mesgQueue.IsEnabled && mesgQueueDistThreadWakeupNotification != null))
+                MessageQueue myMesgQueue = mesgQueue;
+
+                if (!(myMesgQueue.IsEnabled && mesgQueueDistThreadWakeupNotification != null))
     				Utils.Asserts.TakeBreakpointAfterFault("MesgQueueDistThreadFcn is not ready to start");
 
 				const int maxMesgDequeueCount = 100;
@@ -845,11 +901,11 @@ namespace MosaicLib
 
 				do
 				{
-					qEnabled = mesgQueue.IsEnabled;
+                    qEnabled = myMesgQueue.IsEnabled;
 					if (!qEnabled)
 						qDisabledCount++;
 
-					qCount = mesgQueue.QueueCount;
+					qCount = myMesgQueue.QueueCount;
 
 					if (qCount == 0)
 					{
@@ -863,7 +919,7 @@ namespace MosaicLib
 						//	we can process the block of messages in an atomic manner relative to
 						//	pulling them from the queue.
 
-						if (mesgQueue.DequeueMesgSet(maxMesgDequeueCount, ref logMesgList) == 0)
+						if (myMesgQueue.DequeueMesgSet(maxMesgDequeueCount, ref logMesgList) == 0)
 							continue;
 
 						// divide up the block of messages into sub-sections each of which
@@ -1275,54 +1331,70 @@ namespace MosaicLib
 		//-------------------------------------------------------------------
 		// singleton LogMessageDistributionImpl system and method used to setup log message distribution groups
 
+        /// <summary>Gives the caller access to the ILogMessageDistribution singleton</summary>
 		public static ILogMessageDistribution GetLogMessageDistribution()
 		{
 			return LogMessageDistributionImpl.Instance; 
 		}
 
-		private static LogMessageDistributionImpl GetLogMessageDistributionImpl()
+        /// <summary>Internal method used to get access to the LMD singleton using its implementation type rather than its primary public interface.</summary>
+        private static LogMessageDistributionImpl GetLogMessageDistributionImpl()
 		{
 			return LogMessageDistributionImpl.Instance; 
 		}
 
-		public static LogMessage AllocateLogMessageFromDistribution()		//!< @retval a LogMessage to an available LogMessage from the distribution's pool (or empty pointer if it is not available or has been shutdown)
+        /// <summary>Method allocates a LogMessage from the distribution pool.  This method is generally used only by Loggers</summary>
+        /// <returns>A log message to use, allocated from the distribution pool, or null if the distribution engine has been shutdown already.</returns>
+        public static LogMessage AllocateLogMessageFromDistribution()		
 		{
 			return GetLogMessageDistribution().GetLogMessage();
 		}
 
-		private static readonly string defaultDistributionGroupName = "LDG.Default";
+        /// <summary>Internal "constant" that defines the name of the Default Log Distribution Group.</summary>
+        private static readonly string defaultDistributionGroupName = "LDG.Default";
+
+        /// <summary>Internal "constant" that defines the name of the Lookup Log Distribution Group.  Loggers placed in this group can be remapped to other groups using the MapLoggersToDistirbutionGroup method</summary>
         private static readonly string lookupDistributionGroupName = "LDG.Lookup";
 
+        /// <summary>This is the default Logging Distribution Group name.  This group is used for all cases where a logger does not otherwise specify a different one and/or it has not been mapped to use another one.</summary>
 		public static string DefaultDistributionGroupName { get { return defaultDistributionGroupName; } }
+
+        /// <summary>This is the custom distribution group name that is used to indicate that mapping should be applied to it.</summary>
         public static string LookupDistributionGroupName { get { return lookupDistributionGroupName; } }
 
-		public static void AddLogMessageHandlerToDistributionGroup(string groupName, ILogMessageHandler logMessageHandler)		//!< Adds LogMessageHandler to the given distribution group
+        /// <summary>Adds the given ILogMessageHandler to the indicated group</summary>
+        public static void AddLogMessageHandlerToDistributionGroup(string groupName, ILogMessageHandler logMessageHandler)		//!< Adds LogMessageHandler to the given distribution group
 		{
 			GetLogMessageDistributionImpl().AddLogMessageHandlerToDistributionGroup(logMessageHandler, groupName);
 		}
 
-		public static void MapLoggersToDistributionGroup(LoggerNameMatchType matchType, string matchStr, string groupName)	//!< Defines default mapping from LoggerNames to group names for logger's that have not specifcally given a group name
+        /// <summary>(re)Maps the selected loggers to the given group name.  Loggers must have initially placed themselves in the LookupDistributionGroupName group in order to support being mapped.</summary>
+        public static void MapLoggersToDistributionGroup(LoggerNameMatchType matchType, string matchStr, string groupName)
 		{
 			GetLogMessageDistributionImpl().MapLoggersToDistributionGroup(matchType, matchStr, groupName);
 		}
 
-		public static void SetDistributionGroupGate(string groupName, LogGate logGate)
+        /// <summary>Sets a gate level for messages to a given group so that it may be more restritive than that of the most permissive handler that is attached to the group.</summary>
+        public static void SetDistributionGroupGate(string groupName, LogGate logGate)
 		{
 			GetLogMessageDistributionImpl().SetDistributionGroupGate(groupName, logGate);
 		}
 
+        /// <summary>Links distribution to one group to also distribute its messages through a second group as well.</summary>
         public static void LinkDistributionToGroup(string fromGroupName, string toGroupName)
         {
             GetLogMessageDistributionImpl().LinkDistributionToGroup(fromGroupName, toGroupName);
         }
 
+        /// <summary>Links distibution from a custom group to also distribute its messages through the default group.</summary>
         public static void LinkDistributionToDefaultGroup(string fromGroupName)
         {
             GetLogMessageDistributionImpl().LinkDistributionToGroup(fromGroupName, DefaultDistributionGroupName);
         }
 
 
-		public static void SetDistributionGroupName(string sourceName, string groupName)
+        /// <summary>Changes the group used by specific source name to a different target group name on a source by source basis.</summary>
+        public static void SetDistributionGroupName(string sourceName, string groupName)
 		{
 			ILogMessageDistribution dist = GetLogMessageDistribution();
 			LoggerSourceInfo lsInfo = dist.GetLoggerSourceInfo(sourceName);
@@ -1330,19 +1402,22 @@ namespace MosaicLib
 				dist.SetLoggerDistributionGroupName(lsInfo.ID, groupName);
 		}
 
-		public static void ShutdownLogging()
+        /// <summary>Stops the logging distrigution system and flushes all buffers.  Normally this should be the last intended use of the Log Distribution System.</summary>
+        public static void ShutdownLogging()
 		{
 			GetLogMessageDistributionImpl().Shutdown();
 		}
 
 		//-------------------------------------------------------------------
 
-		public static void AddLogMessageHandlerToDefaultDistributionGroup(ILogMessageHandler logMessageHandler)
+        /// <summary>Adds the given ILogMessaeHandler to the default distribution group.</summary>
+        public static void AddLogMessageHandlerToDefaultDistributionGroup(ILogMessageHandler logMessageHandler)
 		{
 			AddLogMessageHandlerToDistributionGroup(DefaultDistributionGroupName, logMessageHandler);
 		}
 
-		public static void SetDefaultDistributionGroupGate(LogGate logGate)
+        /// <summary>Sets the group gate level for the default distribution group.</summary>
+        public static void SetDefaultDistributionGroupGate(LogGate logGate)
 		{
 			SetDistributionGroupGate(DefaultDistributionGroupName, logGate);
 		}

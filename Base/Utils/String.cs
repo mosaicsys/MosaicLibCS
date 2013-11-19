@@ -51,15 +51,24 @@ namespace MosaicLib.Utils
         /// <summary>Maps the given boolean value to either given trueStr or given falseStr</summary>
         public static string MapToString(bool value, string trueStr, string falseStr) { return (value ? trueStr : falseStr); }
 
-        /// <summary>Maps the given boolean value to either given trueStr or given falseStr</summary>
+        /// <summary>Maps the given boolean value to an integer value of 1 for true and 0 for false</summary>
         public static int MapToInt(bool value) { return (value ? 1 : 0); }
 
 		#endregion
 
 		#region static CheckedFormat methods
 
-		/// <summary>Invokes System.String.Format with the given args within a try/catch pattern.</summary>
-		public static string CheckedFormat(string fmt, object arg0)
+		/// <summary>
+        /// Invokes System.String.Format with the given args within a try/catch pattern.
+        /// System.String.Forma replaces the format item in a specified System.String with the text equivalent of the value of a specified System.Object instance.
+        /// </summary>
+        /// <param name="fmt">A composite format string.</param>
+        /// <param name="arg0">An System.Object to format.</param>
+        /// <returns>
+        ///     A copy of fmt in which the first format item has been replaced by the
+        ///     System.String equivalent of arg0.
+        /// </returns>
+        public static string CheckedFormat(string fmt, object arg0)
 		{
             try
             {
@@ -79,8 +88,19 @@ namespace MosaicLib.Utils
             }
 		}
 
-		/// <summary>Invokes System.String.Format with the given args within a try/catch pattern.</summary>
-		public static string CheckedFormat(string fmt, object arg0, object arg1)
+		/// <summary>
+        /// Invokes System.String.Format with the given args within a try/catch pattern.
+        /// System.String.Format replaces the format item in a specified System.String with the text equivalent
+        ///     of the value of two specified System.Object instances.
+        /// </summary>
+        /// <param name="fmt">A composite format string.</param>
+        /// <param name="arg0">The first System.Object to format.</param>
+        /// <param name="arg1">The second System.Object to format.</param>
+        /// <returns>
+        ///     A copy of format in which the first and second format items have
+        ///     been replaced by the System.String equivalents of arg0 and arg1.
+        /// </returns>
+        public static string CheckedFormat(string fmt, object arg0, object arg1)
 		{
 			try
 			{
@@ -100,8 +120,20 @@ namespace MosaicLib.Utils
             }
         }
 
-		/// <summary>Invokes System.String.Format with the given args within a try/catch pattern.</summary>
-		public static string CheckedFormat(string fmt, object arg0, object arg1, object arg2)
+		/// <summary>
+        /// Invokes System.String.Format with the given args within a try/catch pattern.
+        /// System.String.Format replaces the format item in a specified System.String with the text equivalent
+        ///     of the value of three specified System.Object instances.
+        /// </summary>
+        /// <param name="fmt">A composite format string.</param>
+        /// <param name="arg0">The first System.Object to format.</param>
+        /// <param name="arg1">The second System.Object to format.</param>
+        /// <param name="arg2">The third System.Object to format.</param>
+        /// <returns>
+        ///     A copy of format in which the first, second, and third format items have
+        ///     been replaced by the System.String equivalents of arg0, arg1, and arg2.
+        /// </returns>
+        public static string CheckedFormat(string fmt, object arg0, object arg1, object arg2)
 		{
 			try
 			{
@@ -121,8 +153,18 @@ namespace MosaicLib.Utils
             }
         }
 
-		/// <summary>Invokes System.String.Format with the given args within a try/catch pattern.</summary>
-		public static string CheckedFormat(string fmt, params object [] args)
+		/// <summary>
+        /// Invokes System.String.Format with the given args within a try/catch pattern.
+        /// System.String.Format replaces the format item in a specified System.String with the text equivalent
+        ///     of the value of a corresponding System.Object instance in a specified array.
+        /// </summary>
+        /// <param name="fmt">A composite format string.</param>
+        /// <param name="args">An System.Object array containing zero or more objects to format.</param>
+        /// <returns>
+        ///     A copy of fmt in which the format items have been replaced by the System.String
+        ///     equivalent of the corresponding instances of System.Object in args.
+        /// </returns>
+        public static string CheckedFormat(string fmt, params object[] args)
 		{
 			try
 			{
@@ -143,7 +185,19 @@ namespace MosaicLib.Utils
         }
 
 
-        /// <summary>Invokes System.String.Format with the given args within a try/catch pattern.</summary>
+        /// <summary>
+        /// Invokes System.String.Format with the given args within a try/catch pattern.
+        /// System.String.Format replaces the format item in a specified System.String with the text equivalent
+        ///     of the value of a corresponding System.Object instance in a specified array.
+        ///     A specified parameter supplies culture-specific formatting information.
+        /// </summary>
+        /// <param name="provider">An System.IFormatProvider that supplies culture-specific formatting information.</param>
+        /// <param name="fmt">A composite format string.</param>
+        /// <param name="args">An System.Object array containing zero or more objects to format.</param>
+        /// <returns>
+        ///     A copy of fmt in which the format items have been replaced by the System.String
+        ///     equivalent of the corresponding instances of System.Object in args.
+        /// </returns>
         public static string CheckedFormat(IFormatProvider provider, string fmt, params object[] args)
         {
             try
@@ -397,14 +451,48 @@ namespace MosaicLib.Utils
 
         #region Array comparisons extension methods
 
+        /// <summary>
+        /// Extension method version of static Utils.Fcns.Equals method for two arrays
+        /// Returns true if both lists have the same contents.  Returns false if they do not.
+        /// </summary>
         public static bool IsEqualTo<ItemType>(this ItemType[] lhs, ItemType[] rhs)
         {
             return Utils.Fcns.Equals(lhs, rhs);
         }
 
+        /// <summary>
+        /// Extension method version of static Utils.Fcns.Equals method for an array and a list, both generics with the same ItemType.
+        /// Returns true if both the array and the list have the same contents.  Returns false if they do not.
+        /// </summary>
         public static bool IsEqualTo<ItemType>(this ItemType[] lhs, IList<ItemType> rhs)
         {
             return Utils.Fcns.Equals(lhs, rhs);
+        }
+
+        #endregion
+
+        #region Array access extension methods
+
+        /// <summary>
+        /// Extension method version of Array indexed get access that handles all out of range accesses by returning the given default value
+        /// </summary>
+        public static ItemType SafeAccess<ItemType>(this ItemType[] array, int idx, ItemType defaultValue)
+        {
+            if (array == null || idx < 0 || idx >= array.Length)
+                return defaultValue;
+            else
+                return array[idx];
+        }
+
+        /// <summary>
+        /// Extension method version of Array indexed get access that handles all out of range accesses by returning the default(<typeparam name="ItemType"/>)
+        /// </summary>
+        public static ItemType SafeAccess<ItemType>(this ItemType[] array, int idx)
+        {
+            if (array == null || idx < 0 || idx >= array.Length)
+                return default(ItemType);
+            else
+                return array[idx];
         }
 
         #endregion
@@ -421,50 +509,100 @@ namespace MosaicLib.Utils
 	{
 		#region TryParse
 
-		/// <summary>Helper function to parse a string s as an enum of type EnumT</summary>
-		/// <typeparam name="EnumT">The specific Enum type to parse.  This must be an System.Enum</typeparam>
+        /// <summary>
+        /// Helper function to parse a string s as an enum of type EnumT
+        ///     Uses System.Enum.Parse to convert the string representation of the name or numeric value of one or
+        ///     more enumerated constants to an equivalent enumerated object. 
+        /// </summary>
+        /// <typeparam name="EnumT">The specific Enum type to parse.  This must be an System.Enum</typeparam>
 		/// <param name="s">The string to parse</param>
 		/// <returns>parsed EnumT value on success, or default(EnumT) on failure</returns>
 		/// <exception cref="System.InvalidOperationException">Thrown if EnumT is not a type of enum.</exception>
 		public static EnumT TryParse<EnumT>(string s) where EnumT : struct
 		{
-			return TryParse<EnumT>(s, default(EnumT));
+			return TryParse<EnumT>(s, default(EnumT), true);
 		}
 
-		/// <summary>Helper function to parse a string s as an enum of type EnumT</summary>
-		/// <typeparam name="EnumT">The specific Enum type to parse.  This must be an System.Enum</typeparam>
+        /// <summary>
+        /// Helper function to parse a string s as an enum of type EnumT
+        ///     Uses System.Enum.Parse to convert the string representation of the name or numeric value of one or
+        ///     more enumerated constants to an equivalent enumerated object. 
+        /// </summary>
+        /// <typeparam name="EnumT">The specific Enum type to parse.  This must be an System.Enum</typeparam>
 		/// <param name="s">The string to parse</param>
 		/// <param name="parseFailedResult">Defines the EnumT value that will be returned if the parse fails</param>
 		/// <returns>parsed EnumT value on success, or parseFailedResult on failure</returns>
 		/// <exception cref="System.InvalidOperationException">Thrown if EnumT is not a type of enum.</exception>
 		public static EnumT TryParse<EnumT>(string s, EnumT parseFailedResult) where EnumT : struct
 		{
-			EnumT result;
-
-			TryParse<EnumT>(s, out result, parseFailedResult);
-
-			return result;
+			return TryParse<EnumT>(s, parseFailedResult, true);
 		}
 
-		/// <summary>Helper function to parse a string s as an enum of type EnumT</summary>
-		/// <typeparam name="EnumT">The specific Enum type to parse.  This must be an System.Enum</typeparam>
-		/// <param name="s">The string to parse</param>
-		/// <param name="result">Assigned to parsed EnumT value on success, or to default(EnumT) on failure.</param>
-		/// <returns>True if the Parse was successful, false otherwise</returns>
-		/// <exception cref="System.InvalidOperationException">Thrown if EnumT is not a type of enum.</exception>
-		public static bool TryParse<EnumT>(string s, out EnumT result) where EnumT : struct
+        /// <summary>
+        /// Helper function to parse a string s as an enum of type EnumT
+        ///     Uses System.Enum.Parse to convert the string representation of the name or numeric value of one or
+        ///     more enumerated constants to an equivalent enumerated object. 
+        /// </summary>
+        /// <typeparam name="EnumT">The specific Enum type to parse.  This must be an System.Enum</typeparam>
+        /// <param name="s">The string to parse</param>
+        /// <param name="parseFailedResult">Defines the EnumT value that will be returned if the parse fails</param>
+        /// <param name="ignoreCase">If true, ignore case; otherwise, regard case.</param>
+        /// <returns>parsed EnumT value on success, or parseFailedResult on failure</returns>
+        /// <exception cref="System.InvalidOperationException">Thrown if EnumT is not a type of enum.</exception>
+        public static EnumT TryParse<EnumT>(string s, EnumT parseFailedResult, bool ignoreCase) where EnumT : struct
+        {
+            EnumT result;
+
+            TryParse<EnumT>(s, out result, parseFailedResult, ignoreCase);
+
+            return result;
+        }
+
+        /// <summary>
+        /// Helper function to parse a string s as an enum of type EnumT
+        ///     Uses System.Enum.Parse to convert the string representation of the name or numeric value of one or
+        ///     more enumerated constants to an equivalent enumerated object. 
+        /// </summary>
+        /// <typeparam name="EnumT">The specific Enum type to parse.  This must be an System.Enum</typeparam>
+        /// <param name="s">The string containing the value to parse into the specified EnumT type.</param>
+        /// <param name="result">Assigned to the Parsed value on success or the default(EnumT) on failure</param>
+        /// <returns>True if the Parse was successful, false otherwise</returns>
+        /// <exception cref="System.InvalidOperationException">Thrown if EnumT is not a type of enum.</exception>
+        public static bool TryParse<EnumT>(string s, out EnumT result) where EnumT : struct
 		{
-			return TryParse<EnumT>(s, out result, default(EnumT));
+			return TryParse<EnumT>(s, out result, default(EnumT), true);
 		}
 
-		/// <summary>Helper function to parse a string s as an enum of type EnumT</summary>
-		/// <typeparam name="EnumT">The specific Enum type to parse.  This must be an System.Enum</typeparam>
-		/// <param name="s">The string to parse</param>
-		/// <param name="result">Assigned to the Parsed value on success or to parseFailedResult on failure</param>
-		/// <param name="parseFailedResult">Defines the EnumT value that will be assigned to the result if the parse fails</param>
-		/// <returns>True if the Parse was successful, false otherwise</returns>
-		/// <exception cref="System.InvalidOperationException">Thrown if EnumT is not a type of enum.</exception>
-		public static bool TryParse<EnumT>(string s, out EnumT result, EnumT parseFailedResult)
+        /// <summary>
+        /// Helper function to parse a string s as an enum of type EnumT
+        ///     Uses System.Enum.Parse to convert the string representation of the name or numeric value of one or
+        ///     more enumerated constants to an equivalent enumerated object. 
+        /// </summary>
+        /// <typeparam name="EnumT">The specific Enum type to parse.  This must be an System.Enum</typeparam>
+        /// <param name="s">The string containing the value to parse into the specified EnumT type.</param>
+        /// <param name="result">Assigned to the Parsed value on success or to parseFailedResult on failure</param>
+        /// <param name="parseFailedResult">Defines the EnumT value that will be assigned to the result if the parse itself fails.</param>
+        /// <returns>True if the Parse was successful, false otherwise</returns>
+        /// <exception cref="System.InvalidOperationException">Thrown if EnumT is not a type of enum.</exception>
+        public static bool TryParse<EnumT>(string s, out EnumT result, EnumT parseFailedResult) where EnumT : struct
+        {
+            return TryParse<EnumT>(s, out result, parseFailedResult, true);
+        }
+
+        /// <summary>
+        /// Helper function to parse a string s as an enum of type EnumT
+        ///     Uses System.Enum.Parse to convert the string representation of the name or numeric value of one or
+        ///     more enumerated constants to an equivalent enumerated object. 
+        ///     A parameter specifies whether the operation is case-sensitive.
+        /// </summary>
+        /// <typeparam name="EnumT">The specific Enum type to parse.  This must be an System.Enum</typeparam>
+        /// <param name="s">The string containing the value to parse into the specified EnumT type.</param>
+        /// <param name="result">Assigned to the Parsed value on success or to parseFailedResult on failure</param>
+        /// <param name="parseFailedResult">Defines the EnumT value that will be assigned to the result if the parse itself fails.</param>
+        /// <param name="ignoreCase">If true, ignore case; otherwise, regard case.</param>
+        /// <returns>True if the Parse was successful, false otherwise</returns>
+        /// <exception cref="System.InvalidOperationException">Thrown if EnumT is not a type of enum.</exception>
+        public static bool TryParse<EnumT>(string s, out EnumT result, EnumT parseFailedResult, bool ignoreCase) where EnumT : struct
 		{
 			Type enumT = typeof(EnumT);
 
@@ -473,7 +611,7 @@ namespace MosaicLib.Utils
 
             try
             {
-                result = (EnumT)System.Enum.Parse(typeof(EnumT), s);
+                result = (EnumT)System.Enum.Parse(typeof(EnumT), s, ignoreCase);
                 return true;
             }
             catch (System.ArgumentException)
@@ -516,7 +654,6 @@ namespace MosaicLib.Utils
 		/// <param name="dt">Specifies the DateTime value to convert</param>
 		/// <param name="dtFormat">Specifies the desired format from the set of supported enum values.</param>
 		/// <returns>The DateTime converted to a string based on the desired format.</returns>
-
 		public static string CvtToString(ref DateTime dt, DateTimeFormat dtFormat)
 		{
 			string result = string.Empty;
@@ -540,6 +677,15 @@ namespace MosaicLib.Utils
 
 			return result;
 		}
+
+        /// <summary>Converts the given DateTime value to a string using the given summary desired format</summary>
+        /// <param name="dt">Specifies the DateTime value to convert</param>
+        /// <param name="dtFormat">Specifies the desired format from the set of supported enum values.</param>
+        /// <returns>The DateTime converted to a string based on the desired format.</returns>
+        public static string CvtToString(DateTime dt, DateTimeFormat dtFormat)
+        {
+            return CvtToString(ref dt, dtFormat);
+        }
 	}
 
 	#endregion
@@ -547,8 +693,8 @@ namespace MosaicLib.Utils
 	#region Byte Array Transcoders
 
     /// <summary>
-    /// This interface defines a set of methods that are used to directly transcode between byte arrayes an strings.  
-    /// Objects that support this interface must do so in a reenterant manner so that a single transcoder object can be concurrently used by multiple threads.
+    /// This interface defines a set of methods that are used to directly transcode between byte arrays an strings.  
+    /// Objects that support this interface must do so in a reentrant manner so that a single transcoder object can be concurrently used by multiple threads.
     /// </summary>
 	public interface IByteArrayTranscoder
 	{
@@ -564,12 +710,12 @@ namespace MosaicLib.Utils
 		/// <returns>the encoded string</returns>
 		string Encode(byte [] sourceBuffer, int startOffset, int length);
 
-		/// <summary>Encodes the given byte range from the given source buffer, sets the codedStr to the resulting encoded string and returns true if the operation was successfull.</summary>
+		/// <summary>Encodes the given byte range from the given source buffer, sets the codedStr to the resulting encoded string and returns true if the operation was successful.</summary>
 		/// <param name="sourceBuffer">specifies the source buffer from which to encode bytes</param>
 		/// <param name="startOffset">specifies the index of the first byte in the source buffer</param>
 		/// <param name="length">specifies the number of bytes to encode from the source buffer</param>
 		/// <param name="codedStr">the output string parameter that will be set to the encoded string</param>
-		/// <returns>true if the operation was successfull, false otherwise.  The contents of the resulting encoded string are not defined if the return value is false.</returns>
+		/// <returns>true if the operation was successful, false otherwise.  The contents of the resulting encoded string are not defined if the return value is false.</returns>
 		bool Encode(byte [] sourceBuffer, int startOffset, int length, out string codedStr);
 
 		/// <summary>Decodes the given encoded string and returns the resulting decoded byte array.</summary>
@@ -577,10 +723,10 @@ namespace MosaicLib.Utils
 		/// <returns>the decoded byte array</returns>
 		byte [] Decode(string codedStr);
 
-		/// <summary>Decodes the given encoded, sets the decodedBuffer to the resulting decoded byte array and returns true if the operation was successfull.</summary>
+		/// <summary>Decodes the given encoded, sets the decodedBuffer to the resulting decoded byte array and returns true if the operation was successful.</summary>
 		/// <param name="codedStr">the string containing the encoded characters.</param>
 		/// <param name="decodedBuffer">the output byte array variable that will be set to a new array containing the decoded bytes</param>
-		/// <returns>true if the operation was successfull,false otherwise.  The contents of the resulting decoded buffer are not defined if the return value is false</returns>
+		/// <returns>true if the operation was successful, false otherwise.  The contents of the resulting decoded buffer are not defined if the return value is false</returns>
 		bool Decode(string codedStr, out byte [] decodedBuffer);
 	}
 
@@ -593,45 +739,86 @@ namespace MosaicLib.Utils
         /// <summary>Returns a Transcoder that converts directly between byte arrays and strings of the identical character (bit patterns).  Encode widens each byte, Decode truncates the upper bits in each character to give the resulting byte.</summary>
 		public static IByteArrayTranscoder ByteStringTranscoder { get { return byteArrayStringTranscoder; } }
 
-        /// <summary>Returns a Transcoder that converst between binary byte arrays and Base64 coded strings</summary>
+        /// <summary>Returns a Transcoder that converts between binary byte arrays and Base64 coded strings</summary>
 		public static IByteArrayTranscoder Base64UrlTranscoder { get { return base64UrlTranscoder; } }
 	}
 
     /// <summary>Base class for some transcoders.  Provides base implementations for most of the IByteArrayTranscoder methods</summary>
 	public abstract class ByteArrayTranscoderBase : IByteArrayTranscoder
 	{
+        /// <summary>
+        /// Protected read only empty byte array field.  Immutable.  Used for null transformation to minimize if statements in normal flow of control.
+        /// </summary>
 		protected readonly static byte [] emptyArray = new byte [0];
 
-		public string Encode(byte [] buffer) 
-		{ 
-			if (buffer == null) 
-				buffer = emptyArray; 
-			return Encode(buffer, 0, buffer.Length); 
+        /// <summary>Encodes the bytes in the given source buffer and returns the resulting encoded string.</summary>
+        /// <param name="sourceBuffer">specifies the source buffer from which to encode bytes</param>
+        /// <returns>the encoded string</returns>
+        public string Encode(byte[] sourceBuffer) 
+		{
+            if (sourceBuffer == null)
+                sourceBuffer = emptyArray;
+            return Encode(sourceBuffer, 0, sourceBuffer.Length); 
 		}
 
-		public string Encode(byte [] buffer, int startOffset, int length)
+        /// <summary>Encodes the given byte range from the given source buffer and returns the resulting encoded string</summary>
+        /// <param name="sourceBuffer">specifies the source buffer from which to encode bytes</param>
+        /// <param name="startOffset">specifies the index of the first byte in the source buffer</param>
+        /// <param name="length">specifies the number of bytes to encode from the source buffer</param>
+        /// <returns>the encoded string</returns>
+        public string Encode(byte[] sourceBuffer, int startOffset, int length)
 		{
 			string base64str;
-			Encode(buffer, startOffset, length, out base64str);
+			Encode(sourceBuffer, startOffset, length, out base64str);
 			return base64str;
 		}
 
-		public abstract bool Encode(byte [] sourceBuffer, int startOffset, int length, out string codedStr);
+        /// <summary>
+        /// Abstract method that is used to other Encode variants defined in this class.  Each specific type of transcoder directly implements this method.
+        /// Encodes the given byte range from the given source buffer, sets the codedStr to the resulting encoded string and returns true if the operation was successful.
+        /// </summary>
+        /// <param name="sourceBuffer">specifies the source buffer from which to encode bytes</param>
+        /// <param name="startOffset">specifies the index of the first byte in the source buffer</param>
+        /// <param name="length">specifies the number of bytes to encode from the source buffer</param>
+        /// <param name="codedStr">the output string parameter that will be set to the encoded string</param>
+        /// <returns>true if the operation was successful, false otherwise.  The contents of the resulting encoded string are not defined if the return value is false.</returns>
+        public abstract bool Encode(byte[] sourceBuffer, int startOffset, int length, out string codedStr);
 
-		public byte [] Decode(string codedStr)
+        /// <summary>Decodes the given encoded string and returns the resulting decoded byte array.</summary>
+        /// <param name="codedStr">the string containing the encoded characters.</param>
+        /// <returns>the decoded byte array</returns>
+        public byte[] Decode(string codedStr)
 		{
 			byte [] outArray = null;
 			Decode(codedStr, out outArray);
 			return outArray;
 		}
 
-		public abstract bool Decode(string codedStr, out byte [] decodedBuffer);
+        /// <summary>
+        /// Abstract method that is used to other Decode variants defined in this class.  Each specific type of transcoder directly implements this method.
+        /// Decodes the given encoded, sets the decodedBuffer to the resulting decoded byte array and returns true if the operation was successful.
+        /// </summary>
+        /// <param name="codedStr">the string containing the encoded characters.</param>
+        /// <param name="decodedBuffer">the output byte array variable that will be set to a new array containing the decoded bytes</param>
+        /// <returns>true if the operation was successful,false otherwise.  The contents of the resulting decoded buffer are not defined if the return value is false</returns>
+        public abstract bool Decode(string codedStr, out byte[] decodedBuffer);
 	}
 
-	/// <summary>Converts directly between byte arrays and strings of the identical characters.</summary>
+	/// <summary>
+    /// Converts directly between byte arrays and strings of the identical characters using simple Widen and Narrow operations.  
+    /// Narrow operation retains only the lower 8 bytes from each character in the transcoded string.
+    /// </summary>
 	public class ByteArrayStringTranscoder : ByteArrayTranscoderBase
 	{
-		public override bool Encode(byte [] sourceBuffer, int startOffset, int length, out string codedStr)
+        /// <summary>
+        /// Encodes the given byte range from the given source buffer, sets the codedStr to the resulting encoded string and returns true if the operation was successful.
+        /// </summary>
+        /// <param name="sourceBuffer">specifies the source buffer from which to encode bytes</param>
+        /// <param name="startOffset">specifies the index of the first byte in the source buffer</param>
+        /// <param name="length">specifies the number of bytes to encode from the source buffer</param>
+        /// <param name="codedStr">the output string parameter that will be set to the encoded string</param>
+        /// <returns>true if the operation was successful, false otherwise.  The contents of the resulting encoded string are not defined if the return value is false.</returns>
+        public override bool Encode(byte[] sourceBuffer, int startOffset, int length, out string codedStr)
 		{
 			codedStr = string.Empty;
 
@@ -660,7 +847,13 @@ namespace MosaicLib.Utils
 			return success;
 		}
 
-		public override bool Decode(string codedStr, out byte [] decodedBuffer)
+        /// <summary>
+        /// Decodes the given encoded, sets the decodedBuffer to the resulting decoded byte array and returns true if the operation was successful.
+        /// </summary>
+        /// <param name="codedStr">the string containing the encoded characters.</param>
+        /// <param name="decodedBuffer">the output byte array variable that will be set to a new array containing the decoded bytes</param>
+        /// <returns>true if the operation was successful,false otherwise.  The contents of the resulting decoded buffer are not defined if the return value is false</returns>
+        public override bool Decode(string codedStr, out byte[] decodedBuffer)
 		{
 			int len = (codedStr != null ? codedStr.Length : 0);
 			decodedBuffer = new byte [len];
@@ -707,7 +900,15 @@ namespace MosaicLib.Utils
 			return true;
 		}
 
-		public override bool Encode(byte [] sourceBuffer, int startOffset, int length, out string codedStr)
+        /// <summary>
+        /// Encodes the given byte range from the given source buffer, sets the codedStr to the resulting encoded string and returns true if the operation was successful.
+        /// </summary>
+        /// <param name="sourceBuffer">specifies the source buffer from which to encode bytes</param>
+        /// <param name="startOffset">specifies the index of the first byte in the source buffer</param>
+        /// <param name="length">specifies the number of bytes to encode from the source buffer</param>
+        /// <param name="codedStr">the output string parameter that will be set to the encoded string</param>
+        /// <returns>true if the operation was successful, false otherwise.  The contents of the resulting encoded string are not defined if the return value is false.</returns>
+        public override bool Encode(byte[] sourceBuffer, int startOffset, int length, out string codedStr)
 		{
 			int endIdx = startOffset + length;
 			if (sourceBuffer == null || endIdx > sourceBuffer.Length)
@@ -751,7 +952,13 @@ namespace MosaicLib.Utils
 			return true;
 		}
 
-		public override bool Decode(string codedStr, out byte [] decodedBuffer)
+        /// <summary>
+        /// Decodes the given encoded, sets the decodedBuffer to the resulting decoded byte array and returns true if the operation was successful.
+        /// </summary>
+        /// <param name="codedStr">the string containing the encoded characters.</param>
+        /// <param name="decodedBuffer">the output byte array variable that will be set to a new array containing the decoded bytes</param>
+        /// <returns>true if the operation was successful,false otherwise.  The contents of the resulting decoded buffer are not defined if the return value is false</returns>
+        public override bool Decode(string codedStr, out byte[] decodedBuffer)
 		{
 			decodedBuffer = emptyArray;
 			if (String.IsNullOrEmpty(codedStr))

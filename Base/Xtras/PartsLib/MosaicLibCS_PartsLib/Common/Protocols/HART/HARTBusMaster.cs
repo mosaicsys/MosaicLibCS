@@ -743,7 +743,7 @@ namespace MosaicLib.PartsLib.Protocols.HART
 
         private SerialIO.PortConfig portConfig;
         private SerialIO.IPort sp;
-        private Modular.Part.IBasicAction spFlushAction = null;
+        private SerialIO.IFlushAction spFlushAction = null;
         private bool lastCmdSuccess = false;
     }
 

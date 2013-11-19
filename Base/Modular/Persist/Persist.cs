@@ -20,22 +20,22 @@
  */
 //-------------------------------------------------------------------
 
-///<summary>
-/// This file defines a set of interfaces and classes that are used to assist in saving and loading persistable objects to and from text files.
-/// This code is modeled after the GSoapPersistentObjectFileUtils from the prior C++ MosaicLib and generally provides a set of relatively high efficiency
-///  utilities to support serialization, storage, retreival and deserialization of various object class families.
-/// 
-/// Critical characteristics include: 
-/// <list>
-///     <item>ability to configure storage to force full flush to disk on each write</item>
-///     <item>support for storage to a small ring of automatically named files so that at least one valid file is known present on disk at any time regardless of other externally induced failures.</item>
-///     <item>ability to automatically load the newest file in the ring when requested.</item>
-/// </list>
-///</summary>
-///<remarks>
-/// The classes and functions presented here are intended to provide a lightweight and simple means to persist a relatively small number of relatively small objects to disk.
-/// This code is not intended to used in cases where more full featured bussiness object storage and use tool kits such as the Hibernate family of tools (ORM tools).
-///</remarks>
+//<remarks>
+// This file defines a set of interfaces and classes that are used to assist in saving and loading persistable objects to and from text files.
+// This code is modeled after the GSoapPersistentObjectFileUtils from the prior C++ MosaicLib and generally provides a set of relatively high efficiency
+//  utilities to support serialization, storage, retreival and deserialization of various object class families.
+// 
+// Critical characteristics include: 
+// <list>
+//     <item>ability to configure storage to force full flush to disk on each write</item>
+//     <item>support for storage to a small ring of automatically named files so that at least one valid file is known present on disk at any time regardless of other externally induced failures.</item>
+//     <item>ability to automatically load the newest file in the ring when requested.</item>
+// </list>
+//</remarks>
+//<remarks>
+// The classes and functions presented here are intended to provide a lightweight and simple means to persist a relatively small number of relatively small objects to disk.
+// This code is not intended to used in cases where more full featured bussiness object storage and use tool kits such as the Hibernate family of tools (ORM tools).
+//</remarks>
 
 namespace MosaicLib.Modular.Persist
 {
@@ -126,6 +126,10 @@ namespace MosaicLib.Modular.Persist
 
     #region Execptions
 
+    /// <summary>
+    /// Exception type generated for specific Persist Storage related failures.  
+    /// Also used to encapsulate other caught excpetions and to re-throw or save them in this outer exception container.
+    /// </summary>
     public class PersistentStorageException : System.Exception
     {
         /// <summary>Initializes a new instance of the PersistentStorageException class and passes it the error message which describes the problem.</summary>
@@ -139,50 +143,149 @@ namespace MosaicLib.Modular.Persist
 
     #region Configs
 
+    /// <summary>
+    /// Preserve use of prior incorrect name for the time being.  Please use PersistentFileWriteConfig in place of this class.
+    /// </summary>
+    [Obsolete("This class name is not spelled correctly.  Please replace its use with the correctly named PersistentFileWriteConfig. (2013-04-02)")]
+    public class PerisistentFileWriteConfig : PersistentFileWriteConfig
+    {
+        /// <summary>Default constructor:  Same as PersistentFileWriteConfig.Fast</summary>
+        public PerisistentFileWriteConfig() 
+            : base() 
+        { }
+
+        /// <summary>Constructor that allows caller to sepecify the two contained settings: useWriteThroughSemantics and useFlushFileBuffersAfterWrite</summary>
+        /// <param name="useWriteThroughSemantics">controls use of FILE_FLAG_WRITE_THROUGH flag when opening file to write to it.</param>
+        /// <param name="useFlushFileBuffersAfterWrite">controls use of ::FlushFileBuffers method after writing to the file.</param>
+        public PerisistentFileWriteConfig(bool useWriteThroughSemantics, bool useFlushFileBuffersAfterWrite) 
+            : base(useWriteThroughSemantics, useFlushFileBuffersAfterWrite) 
+        { }
+
+        /// <summary>Copy constructor.  Sets new object to be a copy of the one given as rhs.</summary>
+        public PerisistentFileWriteConfig(PersistentFileWriteConfig rhs) : base(rhs) { }
+    }
+
     /// <summary>class contents are used to configure how conservative file write operations should be for purposes of Persistent Storage in each situation.</summary>
     /// <remarks>Shorthand static properties Fast, NoFileCaching and CommitToDisk represent the most common use cases for this object.</remarks>
-    public class PerisistentFileWriteConfig
+    public class PersistentFileWriteConfig
 	{
-        /// <summary>controls use of FILE_FLAG_WRITE_THROUGH flag when opening file to write to it</summary>
+        /// <summary>controls use of FILE_FLAG_WRITE_THROUGH flag when opening file to write to it.</summary>
 		public bool UseWriteThroughSemantics { get; set; }
 
         /// <summary>controls use of ::FlushFileBuffers method after writing to the file.</summary>
 		public bool UseFlushFileBuffersAfterWrite { get; set; }
 
-        public PerisistentFileWriteConfig() : this(false, false) {}
-        public PerisistentFileWriteConfig(bool useWriteThroughSemantics, bool useFlushFileBuffersAfterWrite)
+        /// <summary>Default constructor:  Same as PersistentFileWriteConfig.Fast</summary>
+        public PersistentFileWriteConfig() : this(false, false) {}
+
+        /// <summary>Constructor that allows caller to sepecify the two contained settings: useWriteThroughSemantics and useFlushFileBuffersAfterWrite</summary>
+        /// <param name="useWriteThroughSemantics">controls use of FILE_FLAG_WRITE_THROUGH flag when opening file to write to it.</param>
+        /// <param name="useFlushFileBuffersAfterWrite">controls use of ::FlushFileBuffers method after writing to the file.</param>
+        public PersistentFileWriteConfig(bool useWriteThroughSemantics, bool useFlushFileBuffersAfterWrite)
         {
             UseWriteThroughSemantics = useWriteThroughSemantics;
             UseFlushFileBuffersAfterWrite = useFlushFileBuffersAfterWrite;
         }
-        public PerisistentFileWriteConfig(PerisistentFileWriteConfig rhs)
+
+        /// <summary>Copy constructor.  Sets new object to be a copy of the one given as rhs.</summary>
+        public PersistentFileWriteConfig(PersistentFileWriteConfig rhs)
         {
             UseWriteThroughSemantics = rhs.UseWriteThroughSemantics;
             UseFlushFileBuffersAfterWrite = rhs.UseFlushFileBuffersAfterWrite;
         }
 
-        private static readonly PerisistentFileWriteConfig fast = new PerisistentFileWriteConfig(false, false);
-        private static readonly PerisistentFileWriteConfig noFileCacheing = new PerisistentFileWriteConfig(true, false);
-        private static readonly PerisistentFileWriteConfig commitToDisk = new PerisistentFileWriteConfig(true, true);
+        private static readonly PersistentFileWriteConfig fast = new PersistentFileWriteConfig(false, false);
+        private static readonly PersistentFileWriteConfig noFileCacheing = new PersistentFileWriteConfig(true, false);
+        private static readonly PersistentFileWriteConfig commitToDisk = new PersistentFileWriteConfig(true, true);
 
         /// <summary>Version to use for performance (allows OS to cache file writes).  Files Writes complete when OS has cached the updated file contents.</summary>
-        public static PerisistentFileWriteConfig Fast { get { return new PerisistentFileWriteConfig(fast); } }
+        public static PersistentFileWriteConfig Fast { get { return new PersistentFileWriteConfig(fast); } }
         /// <summary>Version to use tradeoff between performance and consisancy.  File Writes complete when OS has given the file contents to the disk drive for asynchronous/buffered writing.</summary>
-        public static PerisistentFileWriteConfig NoFileCaching { get { return new PerisistentFileWriteConfig(noFileCacheing); } }
+        public static PersistentFileWriteConfig NoFileCaching { get { return new PersistentFileWriteConfig(noFileCacheing); } }
         /// <summary>Most conservative version for optimal reliability.  File Writes complete only after disk drive has acknowledged updated sectors have been committed to perminent storage.</summary>
-        public static PerisistentFileWriteConfig CommitToDisk { get { return new PerisistentFileWriteConfig(commitToDisk); } }
+        public static PersistentFileWriteConfig CommitToDisk { get { return new PersistentFileWriteConfig(commitToDisk); } }
     }
 
     /// <summary>Enum defines different types of conditions under which and IPersistentStorage object will advance the file path after each Save operations.</summary>
     public enum AdvanceOnSaveRule
     {
+        /// <summary>Writer advances to next file for successfull and unsuccessfull writes.</summary>
         Allways,
+        /// <summary>Writer advances to next file only after successfull writes.</summary>
         OnSuccessOnly,
+        /// <summary>Writer advances to next file after successfull writes and after N failed writes (N is specified seperately)</summary>
         OnSuccessOrNFailures,
     }
 
+    /// <summary>
+    /// Preserve use of prior incorrect name for the time being.  Please use PersistentObjectFileRingConfig in place of this class.
+    /// </summary>
+    [Obsolete("This class name is not spelled correctly.  Please replace its use with the correctly named PersistentObjectFileRingConfig. (2013-04-02)")]
+    public class PerisistentObjectFileRingConfig : PersistentObjectFileRingConfig
+    {
+        /// <summary>
+        /// Most basic constructor: caller specifies fileBaseNameAndPath.  Uses defaults of fileRingSpecStr = "AB", PersistentFileWriteConfig.Fast, and AutoCreatePath = true
+        /// </summary>
+        /// <exception cref="System.ArgumentException">
+        /// If any of extracted FileBaseDirPath, FileBaseName, FileRingSpecStr are null or empty, or if ExpectedMaximumFileSize if is not greater than zero.
+        /// </exception>
+        public PerisistentObjectFileRingConfig(string fileBaseNameAndPath) 
+            : base(fileBaseNameAndPath) 
+        { }
+
+        /// <summary>
+        /// Basic constructor: caller specifies fileBaseNameAndPath and fileRingSpecStr.  Uses defaults of PersistentFileWriteConfig.Fast, and AutoCreatePath = true
+        /// </summary>
+        /// <exception cref="System.ArgumentException">
+        /// If any of extracted FileBaseDirPath, FileBaseName, FileRingSpecStr are null or empty, or if ExpectedMaximumFileSize if is not greater than zero.
+        /// </exception>
+        public PerisistentObjectFileRingConfig(string fileBaseNameAndPath, string fileRingSpecStr) 
+            : base(fileBaseNameAndPath, fileRingSpecStr) 
+        { }
+
+        /// <summary>
+        /// Detailed constructor.
+        /// </summary>
+        /// <param name="fileBaseNameAndPath">Gives the path to the file ring directory and the base name template of the files there.  fileRingSpecStr characters are appended to the file name portion of this string to generate the ring of final file names.</param>
+        /// <param name="fileRingSpecStr">Gives the set of characters which are used to define the ring.  "ABC" gives 3 files path\fileA.ext, path\fileB.ext and path\fileC.ext.</param>
+        /// <param name="expectedMaximumFileSize">Gives the pre-allocated serialization buffer size for save operations.</param>
+        /// <param name="fileWriteConfig">Gives the PersistentFileWriteConfig that the client would like to use for writing these files.</param>
+        /// <param name="autoCreatePath">Set to true to autmatically attempt to create the directories required to get to the path given by the fileBaseNameAndPath</param>
+        /// <exception cref="System.ArgumentException">
+        /// If any of extracted FileBaseDirPath, FileBaseName, FileRingSpecStr are null or empty, or if ExpectedMaximumFileSize if is not greater than zero.
+        /// </exception>
+        public PerisistentObjectFileRingConfig(string fileBaseNameAndPath, string fileRingSpecStr, int expectedMaximumFileSize, PersistentFileWriteConfig fileWriteConfig, bool autoCreatePath) 
+            : base(fileBaseNameAndPath, fileRingSpecStr, expectedMaximumFileSize, fileWriteConfig, autoCreatePath) 
+        { }
+
+        /// <summary>
+        /// Fully detailed contructors
+        /// </summary>
+        /// <param name="fileBaseDirPath">Gives path of the file ring dirctory</param>
+        /// <param name="fileBaseName">Gives the base file name to which ring spec characters are appended to generate the file names for the ring.</param>
+        /// <param name="fileExtension">Gives the file extension that will be appended after the ring spec character</param>
+        /// <param name="fileRingSpecStr">Gives the set of characters which are used to define the ring.  "ABC" gives 3 files path\fileA.ext, path\fileB.ext and path\fileC.ext.</param>
+        /// <param name="expectedMaximumFileSize">Gives the pre-allocated serialization buffer size for save operations.</param>
+        /// <param name="fileWriteConfig">Gives the PersistentFileWriteConfig that the client would like to use for writing these files.</param>
+        /// <param name="autoCreatePath">Set to true to autmatically attempt to create the directories required to get to the path given by the fileBaseNameAndPath</param>
+        /// <exception cref="System.ArgumentException">
+        /// If any of FileBaseDirPath, FileBaseName, FileRingSpecStr are null or empty, or if ExpectedMaximumFileSize if is not greater than zero.
+        /// </exception>
+        public PerisistentObjectFileRingConfig(string fileBaseDirPath, string fileBaseName, string fileExtension, string fileRingSpecStr, int expectedMaximumFileSize, PersistentFileWriteConfig fileWriteConfig, bool autoCreatePath)
+            : base(fileBaseDirPath, fileBaseName, fileExtension, fileRingSpecStr, expectedMaximumFileSize, fileWriteConfig, autoCreatePath)
+        { }
+
+        /// <summary>
+        /// Copy constructor
+        /// </summary>
+        /// <param name="rhs">provides the object from which to make a copy.</param>
+        public PerisistentObjectFileRingConfig(PersistentObjectFileRingConfig rhs) 
+            : base(rhs) 
+        {}
+    }
+
     /// <summary>class contents are used to configure operation of a PersistentObjectFileRing instance.</summary>
-    public class PerisistentObjectFileRingConfig : PerisistentFileWriteConfig
+    public class PersistentObjectFileRingConfig : PersistentFileWriteConfig
 	{
         /// <summary>Defines the base path used to contian the ring of file names</summary>
         public string FileBaseDirPath { get; set; }
@@ -206,12 +309,55 @@ namespace MosaicLib.Modular.Persist
         /// </summary>
         public bool ThrowOnAnyLoadFailure { get; set; }
 
-        public PerisistentObjectFileRingConfig(string fileBaseNameAndPath) : this(fileBaseNameAndPath, "AB", 8192, PerisistentFileWriteConfig.Fast, true) { }
-        public PerisistentObjectFileRingConfig(string fileBaseNameAndPath, string fileRingSpecStr) : this(fileBaseNameAndPath, fileRingSpecStr, 8192, PerisistentFileWriteConfig.Fast, true) { }
-        public PerisistentObjectFileRingConfig(string fileBaseNameAndPath, string fileRingSpecStr, int expectedMaximumFileSize, PerisistentFileWriteConfig fileWriteConfig, bool autoCreatePath) 
-            : this(Path.GetDirectoryName(fileBaseNameAndPath), Path.GetFileNameWithoutExtension(fileBaseNameAndPath), Path.GetExtension(fileBaseNameAndPath), fileRingSpecStr, expectedMaximumFileSize, PerisistentFileWriteConfig.Fast, autoCreatePath) { }
+        /// <summary>
+        /// Most basic constructor: caller specifies fileBaseNameAndPath.  Uses defaults of fileRingSpecStr = "AB", PersistentFileWriteConfig.Fast, and AutoCreatePath = true
+        /// </summary>
+        /// <exception cref="System.ArgumentException">
+        /// If any of extracted FileBaseDirPath, FileBaseName, FileRingSpecStr are null or empty, or if ExpectedMaximumFileSize if is not greater than zero.
+        /// </exception>
+        public PersistentObjectFileRingConfig(string fileBaseNameAndPath) 
+            : this(fileBaseNameAndPath, "AB", 8192, PersistentFileWriteConfig.Fast, true) 
+        { }
 
-        public PerisistentObjectFileRingConfig(string fileBaseDirPath, string fileBaseName, string fileExtension, string fileRingSpecStr, int expectedMaximumFileSize, PerisistentFileWriteConfig fileWriteConfig, bool autoCreatePath)
+        /// <summary>
+        /// Basic constructor: caller specifies fileBaseNameAndPath and fileRingSpecStr.  Uses defaults of PersistentFileWriteConfig.Fast, and AutoCreatePath = true
+        /// </summary>
+        /// <exception cref="System.ArgumentException">
+        /// If any of extracted FileBaseDirPath, FileBaseName, FileRingSpecStr are null or empty, or if ExpectedMaximumFileSize if is not greater than zero.
+        /// </exception>
+        public PersistentObjectFileRingConfig(string fileBaseNameAndPath, string fileRingSpecStr) 
+            : this(fileBaseNameAndPath, fileRingSpecStr, 8192, PersistentFileWriteConfig.Fast, true) 
+        { }
+
+        /// <summary>
+        /// Detailed constructor.
+        /// </summary>
+        /// <param name="fileBaseNameAndPath">Gives the path to the file ring directory and the base name template of the files there.  fileRingSpecStr characters are appended to the file name portion of this string to generate the ring of final file names.</param>
+        /// <param name="fileRingSpecStr">Gives the set of characters which are used to define the ring.  "ABC" gives 3 files path\fileA.ext, path\fileB.ext and path\fileC.ext.</param>
+        /// <param name="expectedMaximumFileSize">Gives the pre-allocated serialization buffer size for save operations.</param>
+        /// <param name="fileWriteConfig">Gives the PersistentFileWriteConfig that the client would like to use for writing these files.</param>
+        /// <param name="autoCreatePath">Set to true to autmatically attempt to create the directories required to get to the path given by the fileBaseNameAndPath</param>
+        /// <exception cref="System.ArgumentException">
+        /// If any of extracted FileBaseDirPath, FileBaseName, FileRingSpecStr are null or empty, or if ExpectedMaximumFileSize if is not greater than zero.
+        /// </exception>
+        public PersistentObjectFileRingConfig(string fileBaseNameAndPath, string fileRingSpecStr, int expectedMaximumFileSize, PersistentFileWriteConfig fileWriteConfig, bool autoCreatePath) 
+            : this(Path.GetDirectoryName(fileBaseNameAndPath), Path.GetFileNameWithoutExtension(fileBaseNameAndPath), Path.GetExtension(fileBaseNameAndPath), fileRingSpecStr, expectedMaximumFileSize, PersistentFileWriteConfig.Fast, autoCreatePath) 
+        { }
+
+        /// <summary>
+        /// Fully detailed contructors
+        /// </summary>
+        /// <param name="fileBaseDirPath">Gives path of the file ring dirctory</param>
+        /// <param name="fileBaseName">Gives the base file name to which ring spec characters are appended to generate the file names for the ring.</param>
+        /// <param name="fileExtension">Gives the file extension that will be appended after the ring spec character</param>
+        /// <param name="fileRingSpecStr">Gives the set of characters which are used to define the ring.  "ABC" gives 3 files path\fileA.ext, path\fileB.ext and path\fileC.ext.</param>
+        /// <param name="expectedMaximumFileSize">Gives the pre-allocated serialization buffer size for save operations.</param>
+        /// <param name="fileWriteConfig">Gives the PersistentFileWriteConfig that the client would like to use for writing these files.</param>
+        /// <param name="autoCreatePath">Set to true to autmatically attempt to create the directories required to get to the path given by the fileBaseNameAndPath</param>
+        /// <exception cref="System.ArgumentException">
+        /// If any of FileBaseDirPath, FileBaseName, FileRingSpecStr are null or empty, or if ExpectedMaximumFileSize if is not greater than zero.
+        /// </exception>
+        public PersistentObjectFileRingConfig(string fileBaseDirPath, string fileBaseName, string fileExtension, string fileRingSpecStr, int expectedMaximumFileSize, PersistentFileWriteConfig fileWriteConfig, bool autoCreatePath)
             : base(fileWriteConfig)
         {
             FileBaseDirPath = fileBaseDirPath;
@@ -227,7 +373,14 @@ namespace MosaicLib.Modular.Persist
             TestValues();
         }
 
-        public PerisistentObjectFileRingConfig(PerisistentObjectFileRingConfig rhs) : base(rhs)
+        /// <summary>
+        /// Copy constructor.  Generates a new object containing a copy of the information in the given rhs.
+        /// </summary>
+        /// <exception cref="System.ArgumentException">
+        /// If any of FileBaseDirPath, FileBaseName, FileRingSpecStr are null or empty, or if ExpectedMaximumFileSize if is not greater than zero.
+        /// </exception>
+        public PersistentObjectFileRingConfig(PersistentObjectFileRingConfig rhs)
+            : base(rhs)
         {
             FileBaseDirPath = rhs.FileBaseDirPath;
             FileBaseName = rhs.FileBaseName;
@@ -260,16 +413,25 @@ namespace MosaicLib.Modular.Persist
 
     #region PersistentStorageAdapater(s)
 
-    /// <summary>Adapter base class used to support common file ring based code used within specific adapter type specific derived classes.</summary>
-
+    /// <summary>
+    /// This class is the Adapter base class used to support common file ring based code used within specific adapter derived classes.
+    /// </summary>
+    /// <typeparam name="ObjType">
+    /// Defines the ObjType on which the IPersistentStorage operates.  Must be a class with default constructor that implements the IPersistSequenceable interface.
+    /// </typeparam>
     public abstract class PersistentObjectFileRingStorageAdapterBase<ObjType> 
         : IPersistentStorage<ObjType>
         where ObjType : class, IPersistSequenceable, new()
     {
-        public PersistentObjectFileRingStorageAdapterBase(string adapterInstanceName, PerisistentObjectFileRingConfig ringConfig)
+        /// <summary>
+        /// Constructor.
+        /// </summary>
+        /// <param name="adapterInstanceName">Gives the instance name.</param>
+        /// <param name="ringConfig">Gives the information that is used to configure where the ring is, which files it uses, and how it operates.</param>
+        public PersistentObjectFileRingStorageAdapterBase(string adapterInstanceName, PersistentObjectFileRingConfig ringConfig)
         {
             this.name = adapterInstanceName;
-            this.ringConfig = new PerisistentObjectFileRingConfig(ringConfig);  // create a local, invariant, copy of the caller provided ringConfig
+            this.ringConfig = new PersistentObjectFileRingConfig(ringConfig);  // create a local, invariant, copy of the caller provided ringConfig
             fileRingPathList = GetFileRingPathList(ringConfig);
 
             Object = new ObjType();
@@ -285,8 +447,10 @@ namespace MosaicLib.Modular.Persist
 
         #region protected methods, properties and fields
 
+        /// <summary>Field used to store the name of the object</summary>
         protected string name;
-        protected PerisistentObjectFileRingConfig ringConfig;
+        /// <summary>Field used to store the originally given configuration for the object</summary>
+        protected PersistentObjectFileRingConfig ringConfig;
 
         List<string> fileRingPathList;
         int fileRingNextPathIdx = 0;
@@ -294,13 +458,11 @@ namespace MosaicLib.Modular.Persist
         string lastUsedFilePath = string.Empty;
         uint sequentialSaveFailures = 0;
 
-        protected void ResetRingPosition(int lastLoadedIndex)
-        {
-            fileRingNextPathIdx = lastLoadedIndex;
-
-            AdvanceRingPositionAfterSave(true); // use this method to increment and wrap from the given index
-        }
-
+        /// <summary>
+        /// Used to optionally advance the ring position based on the success of the last save attempt and the ring config.  Always advances on successfull save.
+        /// Advances on failed save based on ringConfig.AdvanceOnSaveRules and ringConfig.AdvanceAfterNSaveFailures.
+        /// </summary>
+        /// <param name="saveSucceeded">passes the success/failure of the save attempt.</param>
         protected void AdvanceRingPositionAfterSave(bool saveSucceeded)
         {
             bool advance = false;
@@ -327,6 +489,9 @@ namespace MosaicLib.Modular.Persist
             // else we are staying on the current file.
         }
 
+        /// <summary>
+        /// Increments the fileRingNextPathIdx value and wraps it to stay within 0..fileRingPathList.Count.  Also zeros sequentialSaveFailures.
+        /// </summary>
         protected void AdvanceRingPosition()
         {
             fileRingNextPathIdx++;
@@ -335,8 +500,15 @@ namespace MosaicLib.Modular.Persist
             sequentialSaveFailures = 0;
         }
 
-
-        protected static List<string> GetFileRingPathList(PerisistentObjectFileRingConfig ringConfig)
+        /// <summary>
+        /// Builds the list of strings that represent the ring of file paths.  
+        /// For each character in ringConfig.FileRingSpecStr it generates a file path by 
+        /// combining the ringConfig.FileBaseName and one character from the fingConfig.FileRingSpecStr to make the name.
+        /// Then combines the ringConfig.FileBaseDirPath with the above deteremined name and sets the extension to ringConfig.FileExtension.
+        /// </summary>
+        /// <param name="ringConfig">passes in the ringConfig to use.</param>
+        /// <returns>a List of the generated file paths.</returns>
+        protected static List<string> GetFileRingPathList(PersistentObjectFileRingConfig ringConfig)
         {
             int numFilesInRing = ringConfig.FileRingSpecStr.Length;
             List<string> fileRingPathList = new List<string>();
@@ -352,6 +524,10 @@ namespace MosaicLib.Modular.Persist
 
         bool directoryPathKnownToExist = false;
 
+        /// <summary>
+        /// If the ringConfig.AutoCreatePath flag is set and the ringConfig.FileBaseDirPath path does not exist then this method attempts to create it using System.IO.Directory.CreateDirectory.
+        /// </summary>
+        /// <exception cref="PersistentStorageException">Throws this exception if the directory could not be created or if the ringConfig.FileBaseDirPath is not a directory.</exception>
         protected void CreateDirectoryIfNeeded()
         {
             if (ringConfig.AutoCreatePath && !directoryPathKnownToExist)
@@ -372,9 +548,9 @@ namespace MosaicLib.Modular.Persist
                 {
                     System.IO.Directory.CreateDirectory(ringConfig.FileBaseDirPath);
                 }
-                catch (System.Exception e)
+                catch (System.Exception ex)
                 {
-                    throw new PersistentStorageException(Utils.Fcns.CheckedFormat("CreateDirectory:'{0}' failed: [{1}]", ringConfig.FileBaseDirPath, e.ToString()));
+                    throw new PersistentStorageException(Utils.Fcns.CheckedFormat("CreateDirectory:'{0}' failed: [{1}]", ringConfig.FileBaseDirPath, ex.ToString()));
                 }
 
                 directoryPathKnownToExist = true;
@@ -385,18 +561,48 @@ namespace MosaicLib.Modular.Persist
 
         #region abstract methods to be implemented in derived class
 
+        /// <summary>
+        /// required abstract method.  Must reset the contents of the Object.  Used during loading so that a partial parse does not leave the object as a mixture of the contents of two files.
+        /// </summary>
         protected abstract void InnerClearObject();
+
+        /// <summary>
+        /// required abstract method.  Internal method used to actually attempt to read the object from the given stream.
+        /// </summary>
+        /// <param name="readStream">Gives the System.IO.Stream from which to attempt to read an object.</param>
+        /// <returns>The read object.</returns>
         protected abstract object InnerReadObject(System.IO.Stream readStream);
+
+        /// <summary>
+        /// required abstract method.  Used by the base class to write the object to the given stream.
+        /// </summary>
+        /// <param name="obj">Gives the object instance to write to the stream</param>
+        /// <param name="writeStream">Gives the System.IO.Stream to which to attempt to write the object.</param>
         protected abstract void InnerWriteObject(ObjType obj, System.IO.Stream writeStream);
 
         #endregion
 
         #region IPersistentStorage<ObjType> Members (et. al.)
 
+        /// <summary>Gives use access to the object to which loads are completed and from which saves are performed.</summary>
+        /// <remarks>
+        /// The actual object returned by this property may change as a result of other actions peformed on the underlying storage adapter object.
+        /// </remarks>
         public ObjType Object { get; set; }
 
+        /// <summary>Reads each of the files in the ring and returns the oldest valid dersialized object as measured by the contents of the PersistedVersionSequenceNumber</summary>
+        /// <returns>True if a valid file was found and loaded, false if no ring files were found (Object is set to defaults).</returns>
+        /// <exception cref="PersistentStorageException">throws PersistentStorageException on failure to load or parse any existing file in the ring.  If possible Object will be updated with most recent file prior to throwing the report of such a failure.</exception>
         public bool Load() { return Load(true); }
+
+        /// <summary>Reads each of the files in the ring and returns the oldest valid dersialized object as measured by the contents of the PersistedVersionSequenceNumber</summary>
+        /// <returns>True if a valid file was found and loaded, false if no ring files were found (Object is set to defaults).</returns>
         public bool LoadNoThrow() { return Load(false); }
+
+        /// <summary>Reads each of the files in the ring and returns the oldest valid dersialized object as measured by the contents of the PersistedVersionSequenceNumber</summary>
+        /// <returns>True if a valid file was found and loaded, false if no ring files were found (Object is set to defaults).</returns>
+        /// <exception cref="PersistentStorageException">throws PersistentStorageException on failure to load or parse any existing file in the ring.  If possible Object will be updated with most recent file prior to throwing the report of such a failure.</exception>
+        /// <param name="allowThrow">Pass true to allow called method to throw errors or false to prevent it from doing so.</param>
         public bool Load(bool allowThrow)
         {
             // load and parse each of the files and keep the one that has the most recent sequence number
@@ -411,7 +617,7 @@ namespace MosaicLib.Modular.Persist
             int existingFileCount = 0;
             int validFileCount = 0;
             bool reloadAtEnd = false;
-           
+
             System.Exception firstEx = null;
 
             for (int idx = 0; idx < fileRingPathList.Count; idx++)
@@ -464,16 +670,16 @@ namespace MosaicLib.Modular.Persist
                     if (firstEx == null)
                         firstEx = e;
                 }
-                catch (System.Exception e)
+                catch (System.Exception ex)
                 {
                     if (firstEx == null)
-                        firstEx = new PersistentStorageException(Utils.Fcns.CheckedFormat("Attempt to load '{0}' object from path '{1}' failed", typeof(ObjType), trialPath), e);
+                        firstEx = new PersistentStorageException(Utils.Fcns.CheckedFormat("Attempt to load '{0}' object from path '{1}' failed", typeof(ObjType), trialPath), ex);
                 }
             }
 
             if (firstEx == null && zeroSeqNumPath != null)
                 firstEx = new PersistentStorageException(Utils.Fcns.CheckedFormat("Loaded object '{0}' from path '{1}' contained zero sequence number", typeof(ObjType), zeroSeqNumPath));
-            
+
             if (firstEx == null && duplicateSeqNumPath != null)
                 firstEx = new PersistentStorageException(Utils.Fcns.CheckedFormat("Loaded object '{0}' from path '{1}' contained non-unique sequence number", typeof(ObjType), duplicateSeqNumPath));
 
@@ -501,10 +707,10 @@ namespace MosaicLib.Modular.Persist
                     if (firstEx == null)
                         firstEx = e;
                 }
-                catch (System.Exception e)
+                catch (System.Exception ex)
                 {
                     if (firstEx == null)
-                        firstEx = new PersistentStorageException(Utils.Fcns.CheckedFormat("Final reload failed: could not read object '{0}' from path '{1}'", typeof(ObjType), choosenObjPath), e);
+                        firstEx = new PersistentStorageException(Utils.Fcns.CheckedFormat("Final reload failed: could not read object '{0}' from path '{1}'", typeof(ObjType), choosenObjPath), ex);
                 }
             }
 
@@ -522,7 +728,11 @@ namespace MosaicLib.Modular.Persist
                 choosenObjSeqNum = 0;
             }
 
-            ResetRingPosition(choosenObjIdx);
+            {
+                fileRingNextPathIdx = choosenObjIdx;
+
+                AdvanceRingPosition(); // use this method to increment and wrap from the given index
+            }
 
             if (!reloadAtEnd)
                 Object = choosenObj;
@@ -539,10 +749,32 @@ namespace MosaicLib.Modular.Persist
                 return false;
         }
 
+        /// <summary>
+        /// Increments the current Object's PersistedVersionSequenceNumber (from the maximum of the object's current value and the last value written by the adapter), 
+        /// and then serializes and saves the Object's contents to the next file in the ring.
+        /// </summary>
+        /// <exception cref="PersistentStorageException">throws PersistentStorageException on failure to update, serialize, or write the Object's contents</exception>
         public void Save() { Save(Object, true); }
+
+        /// <summary>Sets the given object's PersistedVersionSequenceNumber to one more than the maximum of the last value written and the object's current value, saves the given object as the reference object, and then serializes and saves it contents to the next file in the ring.</summary>
+        /// <exception cref="PersistentStorageException">throws PersistentStorageException on failure to update, serialize, or write the Object's contents</exception>
         public void Save(ObjType value) { Save(value, true); }
+
+        /// <summary>Increments the current Object's PersistedVersionSequenceNumber, and then serializes and saves the Object's contents to the next file in the ring.</summary>
+        /// <param name="allowThrow">Pass true to allow called method to throw errors or false to prevent it from doing so.</param>
+        /// <exception cref="PersistentStorageException">throws PersistentStorageException on failure to update, serialize, or write the Object's contents</exception>
+        /// <returns>True on success or failure (when allowThrow is false)</returns>
         public bool Save(bool allowThrow) { return Save(Object, allowThrow); }
+
+        /// <summary>Increments the current Object's PersistedVersionSequenceNumber, and then serializes and saves the Object's contents to the next file in the ring.</summary>
+        /// <returns>True on success or failure</returns>
         public bool SaveNoThrow() { return Save(Object, false); }
+
+        /// <summary>Sets the given object's PersistedVersionSequenceNumber to one more than the maximum of the last value written and the object's current value, saves the given object as the reference object, and then serializes and saves it contents to the next file in the ring.</summary>
+        /// <param name="value">Pass in handle to object to Save (will have PersistedVersionSequenceNumber set to next value).  If null is passed, method will save constructor default and fail with an appropriate error.</param>
+        /// <param name="allowThrow">Pass true to allow called method to throw errors or false to prevent it from doing so.</param>
+        /// <exception cref="PersistentStorageException">throws PersistentStorageException on failure to update, serialize, or write the Object's contents</exception>
+        /// <returns>True on success or failure (when allowThrow is false)</returns>
         public bool Save(ObjType value, bool allowThrow)
         {
             System.Exception firstEx = null;
@@ -585,6 +817,8 @@ namespace MosaicLib.Modular.Persist
 
                     if (ringConfig.UseFlushFileBuffersAfterWrite)
                     {
+                        fs.Flush();     // flush any buffered data in the stream to the OS level before calling FlushFileBuffers
+
                         using (SafeHandle sh = fs.SafeFileHandle)
                         {
                             LocalWin32API.FlushFileBuffers(sh);
@@ -597,10 +831,10 @@ namespace MosaicLib.Modular.Persist
                     lastUsedFilePath = filePath;
                 }
             }
-            catch (System.Exception e)
+            catch (System.Exception ex)
             {
                 if (firstEx == null)
-                    firstEx = new PersistentStorageException(Utils.Fcns.CheckedFormat("Save '{0}' to path:'{1}' failed", typeof(ObjType), filePath), e);
+                    firstEx = new PersistentStorageException(Utils.Fcns.CheckedFormat("Save '{0}' to path:'{1}' failed", typeof(ObjType), filePath), ex);
             }
 
             LastExecption = firstEx;
@@ -615,25 +849,45 @@ namespace MosaicLib.Modular.Persist
             return saveSucceeded;
         }
 
+        /// <summary>
+        /// Tells engine to advance the internal ring pointer so that the next Save attempt will skip the last selected ring element.  
+        /// This is primarily intended to support custom advance rules when used with AdvanceOnSaveRule.OnSuccessOnly
+        /// </summary>
         public void AdvanceToNextFile()
         {
             AdvanceRingPosition();
         }
 
+        /// <summary> Returns the path to the most recently loaded or saved file</summary>
         public string LastObjectFilePath { get { return lastUsedFilePath; } }
 
+        /// <summary> Returns the execption generated by the last Load or Save operation or null if that operation was successfull.</summary>
         public System.Exception LastExecption { get; private set; }
 
         #endregion
-
     }
 
+    /// <summary>
+    /// This class is the most commonly used type that implements the IPersistentStorage interface.
+    /// This class uses a DataContractSerializer combined with XmlReader and XmlWriter objects to attempt to load objects
+    /// from the configured ring of files and to write objects to the next file in the ring when requested.
+    /// This class is based on the PersistentObjectFileRingStorageAdapterBase class that implements most of the
+    /// ring specific logic.
+    /// </summary>
+    /// <typeparam name="ObjType">
+    /// Defines the ObjType on which the IPersistentStorage operates.  Must be a class with default constructor that implements the IPersistSequenceable interface.
+    /// </typeparam>
     public class DataContractPersistentXmlTextFileRingStorageAdapter<ObjType>
         : PersistentObjectFileRingStorageAdapterBase<ObjType>
         , IPersistentStorage<ObjType>
         where ObjType : class, IPersistSequenceable, new()
     {
-        public DataContractPersistentXmlTextFileRingStorageAdapter(string name, PerisistentObjectFileRingConfig ringConfig)
+        /// <summary>
+        /// Constructor.
+        /// </summary>
+        /// <param name="name">Gives the instance name.</param>
+        /// <param name="ringConfig">Gives the information that is used to configure where the ring is, which files it uses, and how it operates.</param>
+        public DataContractPersistentXmlTextFileRingStorageAdapter(string name, PersistentObjectFileRingConfig ringConfig)
             : base(name, ringConfig)
         {
             xws.ConformanceLevel = System.Xml.ConformanceLevel.Auto;
@@ -645,16 +899,33 @@ namespace MosaicLib.Modular.Persist
         System.Xml.XmlWriterSettings xws = new System.Xml.XmlWriterSettings();
         DataContractSerializer dcs = new DataContractSerializer(typeof(ObjType));
 
-        protected override void  InnerClearObject()
+        /// <summary>
+        /// Must reset the contents of the Object.  Used during loading so that a partial parse does not leave the object as a mixture of the contents of two files.
+        /// Assigns Object to a new instance of <typeparamref name="ObjType"/>.
+        /// </summary>
+        protected override void InnerClearObject()
         {
             Object = new ObjType();
         }
 
+        /// <summary>
+        /// Internal method used to actually attempt to read the object from the given stream.
+        /// Calls ReadObject(readStream) on the contained DataContractSerializer.
+        /// </summary>
+        /// <param name="readStream">Gives the System.IO.Stream from which to attempt to read an object.</param>
+        /// <returns>The read object.</returns>
         protected override object InnerReadObject(System.IO.Stream readStream)
         {
             return dcs.ReadObject(readStream);
         }
 
+        /// <summary>
+        /// Used by the base class to write the object to the given stream.
+        /// Creates an XmlWriter from the given writeStream and the contained XmlWriterSettings.  
+        /// Then calls WriteObject(XmlWriter, obj) using the contained DataContractSerializer.
+        /// </summary>
+        /// <param name="obj">Gives the object instance to write to the stream</param>
+        /// <param name="writeStream">Gives the System.IO.Stream to which to attempt to write the object.</param>
         protected override void InnerWriteObject(ObjType obj, System.IO.Stream writeStream)
         {
             using (System.Xml.XmlWriter xw = System.Xml.XmlWriter.Create(writeStream, xws))
@@ -665,8 +936,20 @@ namespace MosaicLib.Modular.Persist
         }
     }
 
+    /// <summary>
+    /// This is a kernel32.dll Wind32 API access helper class that allows us to call FlushFileBuffers on a specific file handle in order to
+    /// force the file system to fully commit corresponding file write data to perminant storage when configured and desired.
+    /// </summary>
     public static partial class LocalWin32API
     {
+        /// <summary>
+        /// Provides locally usable version of Kernel32.dll's FlushFileBuffers API call.
+        /// In general this Win32 API call appears to be the only one that safely commits the posted write data for the given handle to perminant storage before completing.
+        /// Generally this requires blocking the caller until the drive write back caches for all applicable storage media have been fully flushed.  
+        /// The use of this method is often combined with the use of System.IO.FileOptions.WriteThrough (aka FILE_FLAG_WRITE_THROUGH)
+        /// </summary>
+        /// <param name="hFile">Gives a SafeHandle which tells Windows which file object to fully flush</param>
+        /// <returns>true on success, false on failure</returns>
         [DllImport("kernel32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool FlushFileBuffers(System.Runtime.InteropServices.SafeHandle hFile);

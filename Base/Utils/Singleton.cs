@@ -29,14 +29,19 @@ namespace MosaicLib.Utils
     public interface ISingleton<TSingletonInstanceProperty> where TSingletonInstanceProperty : class
     {
         /// <summary>
-        /// Gives caller access to the unerlying Singleton Instance.  
-        /// Behavior of this property is dependent on the Instance Behavior and my include AutoConstruct on first use, ManuallyAssign but Must be NonNull on first use (or use throws), or ManuallyAssign and may be null.
+        /// Gives caller access to the underlying Singleton Instance.  
+        /// Behavior of this property is dependent on the Instance Behavior and my include AutoConstruct on first use, ManuallyAssign but Must be NonNull on first 
+		/// use (or use throws), or ManuallyAssign and may be null.
         /// </summary>
         /// <exception cref="MosaicLib.Utils.SingletonException">
         /// Thrown on attempt to get value from this property when it is not auto construct, has not been assigned a non-null value and null is not a valid value.
-        /// Also Thrown on any attempt by the constructor to invoke, or depend on static construction, that attempts to implicitly, recursively, re-accesses the Singleton Instance perperty on the original thread that is constructing the first singleton instance.
+        /// Also Thrown on any attempt by the constructor to invoke, or depend on static construction, that attempts to implicitly, recursively, re-accesses the 
+		/// Singleton Instance property on the original thread that is constructing the first singleton instance.
         /// </exception>
-        /// <remarks>Underlying object construction exceptions for AutoConstruct case are not caught and will throw through to the caller's code that accesses the Instance if it cannot be successfully constructed on first use.</remarks>
+        /// <remarks>
+		/// Underlying object construction exceptions for AutoConstruct case are not caught and will throw through to the caller's code that accesses the 
+		/// Instance if it cannot be successfully constructed on first use.
+		/// </remarks>
         TSingletonInstanceProperty Instance { get; }
 
         /// <summary>
@@ -55,6 +60,9 @@ namespace MosaicLib.Utils
     /// </summary>
     public class SingletonException : System.Exception
     {
+        /// <summary>
+        /// Constructor - passes the given message through to the base constructor.
+        /// </summary>
         public SingletonException(string message) : base(message) { }
     }
 
@@ -75,24 +83,38 @@ namespace MosaicLib.Utils
 
     /// <summary>
     /// Singleton Helper class.  
-    /// This class is renterant and support MT safe use.  
+    /// This class is reentrant and support MT safe use.  
     /// Two constructors are supported.  Default constructor for this object selects SingletonInstanceBehavior.AutoConstruct.  
     /// Second constructor allows caller to explicitly define the instance behavior.
     /// </summary>
     /// <typeparam name="TSingletonObject">
     /// This type parameter gives both the type of the Instance property and is the type that will be constructed using its 
-    /// defafult constructor for AutoConstruct behaviour.  This type must be a class and must support a default constructor.
+    /// default constructor for AutoConstruct behavior.  This type must be a class and must support a default constructor.
     /// </typeparam>
     public class SingletonHelper<TSingletonObject> : SingletonHelper<TSingletonObject, TSingletonObject>
         where TSingletonObject : class, new()
     {
-        public SingletonHelper() : base() { }
-        public SingletonHelper(SingletonInstanceBehavior behavior) : base(behavior) { }
+        /// <summary>
+        /// Default constructor.  Constructs a SingletonHelper with AutoConstruct behavior.
+        /// Resulting SingletonHelper may be used as IDisposable and supports use with SingletonObjectTypes that are either IDisposable or not.
+        /// </summary>
+        public SingletonHelper() 
+            : base(SingletonInstanceBehavior.AutoConstruct) 
+        { }
+
+        /// <summary>
+        /// Base constructor.  Constructs a SingletonHelper with client given behavior.
+        /// Resulting SingletonHelper may be used as IDisposable and supports use with SingletonObjectTypes that are either IDisposable or not.
+        /// </summary>
+        /// <param name="behavior">Defines the Instance property construction and use behavior: AutoConsruct, ManuallyAssign_MustBeNonNull or ManuallyAssign_MayBeNull</param>
+        public SingletonHelper(SingletonInstanceBehavior behavior) 
+            : base(behavior) 
+        { }
     }
 
     /// <summary>
-    /// Singleton Helper class with seperate specifictation of the type that the Instance property returns and of the type that is constructed for AutoConstruct behaviors.
-    /// This class is renterant and support MT safe use.  
+    /// Singleton Helper class with separate specification of the type that the Instance property returns and of the type that is constructed for AutoConstruct behaviors.
+    /// This class is reentrant and support MT safe use.  
     /// Two constructors are supported.  Default constructor for this object selects SingletonInstanceBehavior.AutoConstruct.  
     /// Second constructor allows caller to explicitly define the instance behavior.
     /// </summary>
@@ -100,28 +122,74 @@ namespace MosaicLib.Utils
     /// Defines the type of object that is returned by the SingletonHelper's Instance property.  It must be a class or interface.
     /// </typeparam>
     /// <typeparam name="TSingletonObject">
-    /// This type parameter gives the type of object that will be constructed using its defafult constructor for AutoConstruct behaviour.
+    /// This type parameter gives the type of object that will be constructed using its default constructor for AutoConstruct behavior.
     /// This type must be a class, it must support a default constructor and it must be castable to the TSingletonInstanceProperty type.
     /// </typeparam>
     public class SingletonHelper<TSingletonInstanceProperty, TSingletonObject>
-        : Utils.DisposableBase, System.IDisposable, ISingleton<TSingletonInstanceProperty>
+        : SingletonHelperBase<TSingletonInstanceProperty>
         where TSingletonObject : class, TSingletonInstanceProperty, new()
         where TSingletonInstanceProperty : class
     {
-        #region Construction and Destruction
-
         /// <summary>
         /// Default constructor.  Constructs a SingletonHelper with AutoConstruct behavior.
         /// Resulting SingletonHelper may be used as IDisposable and supports use with SingletonObjectTypes that are either IDisposable or not.
         /// </summary>
-        public SingletonHelper() : this(SingletonInstanceBehavior.AutoConstruct) { }
+        public SingletonHelper() 
+            : this(SingletonInstanceBehavior.AutoConstruct) 
+        { }
 
         /// <summary>
         /// Base constructor.  Constructs a SingletonHelper with client given behavior.
         /// Resulting SingletonHelper may be used as IDisposable and supports use with SingletonObjectTypes that are either IDisposable or not.
         /// </summary>
         /// <param name="behavior">Defines the Instance property construction and use behavior: AutoConsruct, ManuallyAssign_MustBeNonNull or ManuallyAssign_MayBeNull</param>
-        public SingletonHelper(SingletonInstanceBehavior behavior) { Behavior = behavior; }
+        public SingletonHelper(SingletonInstanceBehavior behavior) 
+            : base(behavior, () => new TSingletonObject() as TSingletonInstanceProperty)
+        { }
+    }
+
+    /// <summary>
+    /// Singleton Helper Base class which uses a delegate to construct the instance when needed.
+    /// This class is reentrant and support MT safe use.  
+    /// </summary>
+    /// <typeparam name="TSingletonInstanceProperty">
+    /// Defines the type of object that is returned by the SingletonHelper's Instance property.  It must be a class or interface type.
+    /// </typeparam>
+    public class SingletonHelperBase<TSingletonInstanceProperty>
+        : Utils.DisposableBase, System.IDisposable, ISingleton<TSingletonInstanceProperty>
+        where TSingletonInstanceProperty : class
+    {
+        #region Construction and Destruction
+
+        /// <summary>
+        /// This delegate define the Func type that will be given to the SingletonHelperBase to allow it to construct an instance when needed.
+        /// </summary>
+        /// <returns>The constructed singleton instance casted as the given TSingletonInstanceProperty type.</returns>
+        public delegate TSingletonInstanceProperty InstanceConstructionDelegate();
+
+        /// <summary>
+        /// Default constructor.  Constructs a SingletonHelperBase with AutoConstruct behavior and client given InstanceConstructionDelegate.
+        /// Resulting SingletonHelper may be used as IDisposable and supports use with SingletonObjectTypes that are either IDisposable or not.
+        /// </summary>
+        /// <param name="instanceConstructionDelegate">Gives the delegate that will be invoked to construct the instance object if/when that is required</param>
+        public SingletonHelperBase(InstanceConstructionDelegate instanceConstructionDelegate) 
+            : this(SingletonInstanceBehavior.AutoConstruct, instanceConstructionDelegate) 
+        { }
+
+        /// <summary>
+        /// Base constructor.  Constructs a SingletonHelperBase with client given behavior and InstanceConstructionDelegate.
+        /// Resulting SingletonHelper may be used as IDisposable and supports use with SingletonObjectTypes that are either IDisposable or not.
+        /// </summary>
+        /// <param name="behavior">Defines the Instance property construction and use behavior: AutoConsruct, ManuallyAssign_MustBeNonNull or ManuallyAssign_MayBeNull</param>
+        /// <param name="instanceConstructionDelegate">Gives the delegate that will be invoked to construct the instance object if/when that is required</param>
+        public SingletonHelperBase(SingletonInstanceBehavior behavior, InstanceConstructionDelegate instanceConstructionDelegate) 
+        { 
+            Behavior = behavior;
+            this.instanceConstructionDelegate = instanceConstructionDelegate;
+
+            if (instanceConstructionDelegate == null)
+                throw new SingletonException("Attempt to specify a null InstanceConstructionDelegate");
+        }
 
         /// <summary>
         /// Callback method from DisposableBase on explicit destruction via client explicitly calling IDisposable.Dispose use or when called by finalizer.
@@ -160,21 +228,24 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        #region ISingleton<SingletonObjectType> Members
+        #region ISingleton<TSingletonInstanceProperty> Members
 
         /// <summary>
         /// Get property returns the current instance.  
-        /// If the stored instance is null and the createInstanceOnFirstUse ctor property was true (default) then the new instance is constructed using the default constructor.
+        /// If the stored instance is null and the createInstanceOnFirstUse constructor property was true (default) then the new instance is constructed using the 
+		/// default constructor.
         /// Set property assigns a non-null instance to the internal storage.  
         /// </summary>
         /// <exception cref="SingletonException">
-        /// Get property throws exception if instance is null and null is not defined as a legal instance value (optional ctor parameter)
-        /// Set property throws exception if the given value is null or if the contained instance is non-null at the time of the assignment.  In some Behavior dependent cases this property may first be assigned to null and then to a second instance to dispose of the current instance (if present) and thne replace it with another.  Generally this is only safe to do in setup and/or test conditions.
+        /// Get property throws exception if instance is null and null is not defined as a legal instance value (optional constructor parameter)
+        /// Set property throws exception if the given value is null or if the contained instance is non-null at the time of the assignment.  
+		/// In some Behavior dependent cases this property may first be assigned to null and then to a second instance to dispose of the current instance (if present) 
+		/// and then replace it with another.  Generally this is only safe to do in setup and/or test conditions.
         /// </exception>
 
         public TSingletonInstanceProperty Instance
         {
-            get 
+            get
             {
                 TSingletonInstanceProperty value = instance;
 
@@ -196,11 +267,14 @@ namespace MosaicLib.Utils
                                 //Warning: the above exception has taken some time to discover the need for.  
                                 // This code guards against a singleton object's constructor using other entities that may accidentally
                                 // attempt to use the Singleton before its construction is complete.  The mutex used here does not block the same thread calling back into the Instance property
-                                // and attempting this second construction and as such this excpetion is intended to highlight the probability of this situation exising in the SingletonObjectType
+                                // and attempting this second construction and as such this exception is intended to highlight the probability of this situation existing in the SingletonObjectType
                                 //  classes code.  Failure to block this case produces unexpected results since at minimum two singleton objects are created, of which only one is retained.
                             }
 
-                            value = new TSingletonObject();
+                            value = instanceConstructionDelegate();
+
+                            if (value == null)
+                                throw new SingletonException("InstanceConstructionDelegate returned null.");
 
                             recursiveConstructionCount.Decrement();
                         }
@@ -245,6 +319,11 @@ namespace MosaicLib.Utils
         public SingletonInstanceBehavior Behavior { get; private set; }
 
         /// <summary>
+        /// This private read only field holds the underlying delegate that is used to construct the instance if/when the SingltonHelper needs to do so.
+        /// </summary>
+        private readonly InstanceConstructionDelegate instanceConstructionDelegate = null;
+
+        /// <summary>
         /// Returns true if the held instance reference is currently non-null.  This method is non-blocking and will not cause any SingletonObjectType object to be constructed.
         /// </summary>
         public bool InstanceExists { get { return (instance != null); } }
@@ -257,9 +336,9 @@ namespace MosaicLib.Utils
         private bool CreateInstanceOnFirstUse { get { return (Behavior == SingletonInstanceBehavior.AutoConstruct || Behavior == SingletonInstanceBehavior.AutoConstructIfNeeded); } }
 
         /// <summary>True if behavior is AutoConstruct</summary>
-        private bool InstanceMayBeAssigned 
-        { 
-            get 
+        private bool InstanceMayBeAssigned
+        {
+            get
             {
                 switch (Behavior)
                 {
@@ -269,7 +348,7 @@ namespace MosaicLib.Utils
                     case SingletonInstanceBehavior.ManuallyAssign_MustBeNonNull: return true;
                     default: return false;
                 }
-            } 
+            }
         }
 
         /// <summary>True if behavior is ManuallyAssign_MayBeNull</summary>
@@ -277,7 +356,7 @@ namespace MosaicLib.Utils
 
         /// <summary>mutex object for access to change instance field</summary>
         private readonly object instanceMutex = new object();
-        /// <summary>volatile refernece to constructed or held singleton object</summary>
+        /// <summary>volatile reference to constructed or held singleton object</summary>
         private volatile TSingletonInstanceProperty instance = null;
         /// <summary>Instance recursion counter used to detect recursive use of Instance during auto construction of SingletonObjectType object.</summary>
         private AtomicInt32 recursiveConstructionCount = new AtomicInt32(0);

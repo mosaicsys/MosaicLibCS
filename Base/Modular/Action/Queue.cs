@@ -33,9 +33,12 @@ namespace MosaicLib.Modular.Action
 	/// This interface augments the IProviderFacet side interface with an IsStarted method that is used by the
 	/// Queue's Enqueue operation to verify that the Action is in the correct state prior to accepting it into the queue.
 	/// </summary>
-
 	public interface IEnqueableProviderFacet : IProviderFacet
 	{
+        /// <summary>
+        /// This method augments the rest of the IProviderFacet side interface and allows the Queue's Enqueue operation to verify that the 
+        /// Action is in the correct state prior to accepting it into the queue.
+        /// </summary>
 		bool IsStarted { get; }
 	}
 
@@ -73,6 +76,12 @@ namespace MosaicLib.Modular.Action
 
 		#endregion
 
+        /// <summary>
+        /// Constructor.  Requires a name, enabled flag and queueSize value.
+        /// </summary>
+        /// <param name="name">Gives the name of this queue (typically derived from the Part's Name to which the Queue belongs)</param>
+        /// <param name="enabled">Used to initialize the mQueueEnabled field.  Indicates if the Queue shall be enabled immediately.</param>
+        /// <param name="queueSize">Defines the maximum number of actions that can be contained at any one time.</param>
 		public ActionQueue(string name, bool enabled, int queueSize) 
 		{
 			mQueueName = name;
@@ -88,12 +97,11 @@ namespace MosaicLib.Modular.Action
 		/// <param name="action">Gives the action to enqueue.</param>
 		/// <returns>Empty string on success, error message on failure.</returns>
 		/// <remarks>
-		/// The given action must be non-null and in the Started state inorder for this method to succeed.  
-		/// In addition if the queue is not enabled or it full at the time the enqueue is requested, the given action will be completed with a non-empty 
+		/// The given action must be non-null and in the Started state in order for this method to succeed.  
+		/// In addition if the queue is not enabled or it is full at the time the enqueue is requested, the given action will be completed with a non-empty 
 		/// result code and the Enqueue operation will complete successfully.
 		/// </remarks>
-
-    	public string Enqueue(IEnqueableProviderFacet action)	//!< Note this method attempts to enqueue the given operation.  This method only returns an error string if the given operation is invalid or is not in a valid state to be enqueued.
+    	public string Enqueue(IEnqueableProviderFacet action)
 		{
 			if (action == null)
 				return mQueueName + ".Enqueue.Failed.ActionIsNull";

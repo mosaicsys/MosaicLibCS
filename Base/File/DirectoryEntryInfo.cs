@@ -3,9 +3,9 @@
  * @brief
  * (see descriptions below)
  * 
- * Copyright (c) Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2008 Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2007 Mosaic Systems Inc., All rights reserved. (C++ library version)
+ * Copyright (c) Mosaic Systems Inc.  All rights reserved
+ * Copyright (c) 2008 Mosaic Systems Inc.  All rights reserved
+ * Copyright (c) 2007 Mosaic Systems Inc.  All rights reserved. (C++ library version)
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,9 +38,13 @@ namespace MosaicLib.File
 	{
 		#region private instance variables
 
+        /// <summary>protected field gives derived types access to underlying backing store for Path property.</summary>
 		protected string path = string.Empty;
-		protected string name = string.Empty;
-		protected FileSystemInfo fsiItem = null;
+        /// <summary>protected field gives derived types access to underlying backing store for Name property.</summary>
+        protected string name = string.Empty;
+        /// <summary>protected field gives derived types access to underlying backing store for FileSystemInfo property.</summary>
+        protected FileSystemInfo fsiItem = null;
+        /// <summary>protected field gives derived types access to underlying backing store for QpcTimeStamp property.</summary>
         protected Time.QpcTimeStamp timeStamp = Time.QpcTimeStamp.Zero;
 
         #endregion
@@ -112,13 +116,13 @@ namespace MosaicLib.File
         public bool IsFile { get { return (fsiItem is FileInfo); } }
         /// <summary>Returns true if the FileSystemInfo is a Directory</summary>
         public bool IsDirectory { get { return (fsiItem is DirectoryInfo); } }
-        /// <summary>Returns ture if the FileSystemInfo exists and is a file</summary>
+        /// <summary>Returns true if the FileSystemInfo exists and is a file</summary>
         public bool IsExistingFile { get { return IsFile && Exists; } }
         /// <summary>Returns true if the FileSystemInfo esists and is a directory</summary>
         public bool IsExistingDirectory { get { return IsDirectory && Exists; } }
 
-        /// <summary>Getter returns the full path to the current object.  Setter resets the object and updates its informtion to contain the FileSystemInfo for the file system object at the given path or null if there is none.</summary>
-        public string Path 
+        /// <summary>Getter returns the full path to the current object.  Setter resets the object and updates its information to contain the FileSystemInfo for the file system object at the given path or null if there is none.</summary>
+        public virtual string Path 
 		{ 
 			get { return path; } 
 			set 

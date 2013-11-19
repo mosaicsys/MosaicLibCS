@@ -31,7 +31,7 @@ namespace MosaicLib.SerialIO
 
     //-------------------------------------------------------------------
 
-    #region basic SlidingBuffer
+    #region SlidingBuffer (base for SlidingPacketBuffer)
 
     /// <summary>Utility class provided to simplify buffer management related to chunking a stream of incoming characters into groups or frames.</summary>
 	/// <remarks>
@@ -42,7 +42,6 @@ namespace MosaicLib.SerialIO
 	/// buffer is placed at its first location.  This optimization help prevent the need for down copying for most casses on packetized communication systems since
 	/// there is frequently reception gaps between packets.
 	/// </remarks>
-
 	public class SlidingBuffer
 	{
         /// <summary>Constructor</summary>
@@ -86,7 +85,11 @@ namespace MosaicLib.SerialIO
 			nextPutIdx = putIdx;
 		}
 
-        /// <summary></summary>
+        /// <summary>
+        /// This method is called to indicate that the given number of bytes have been used from the buffer.  This causes the
+        /// SlidingBuffer to advance the getIdx by the given number of bytes.  It may cause the buffer to be Reset or Aligned
+        /// depending on the final state after the getIdx has been advanced.
+        /// </summary>
         public virtual void UsedNChars(int n)
 		{
 			getIdx += n;
@@ -99,7 +102,7 @@ namespace MosaicLib.SerialIO
 		}
 
         /// <summary>Empties the buffer by discarding any data that is currently in it.</summary>
-        public void FlushBuffer() { ResetBuffer(); }
+        public void FlushBuffer() { ResetBuffer(true); }
 
         /// <summary>Shifts any existing buffered data down so that the first byte in the buffer is obtained from index zero.  This makes the space available be as large as possible.</summary>
         public virtual void AlignBuffer()
@@ -121,7 +124,7 @@ namespace MosaicLib.SerialIO
             else
             {
                 // buffer is empty - just reset it.
-                ResetBuffer();
+                ResetBuffer(false);
             }
 		}
 
@@ -138,12 +141,17 @@ namespace MosaicLib.SerialIO
         /// <summary>Clears the buffer contents, aligns the empty buffer and updates the get and put timestamps.</summary>
         protected virtual void ResetBuffer()
         {
-            QpcTimeStamp now = QpcTimeStamp.Now;
+            ResetBuffer(true);
+        }
 
+        /// <summary>Clears the buffer contents, aligns the empty buffer and updates the get and put timestamps.  Optionally resets the get and put timers</summary>
+        protected virtual void ResetBuffer(bool resetTimers)
+        {
             getIdx = 0;
-            getTimeStamp = now;
             putIdx = 0;
-            putTimeStamp = now;
+
+            if (resetTimers)
+                getTimeStamp = putTimeStamp = QpcTimeStamp.Now;
 
             BufferHasBeenReset();
         }
@@ -175,13 +183,18 @@ namespace MosaicLib.SerialIO
         /// <summary>Returns the number of bytes that can be added to the buffer before it would become full.</summary>
         public int BufferDataSpaceRemaining { get { return (buffer.Length - putIdx); } }
 
-		protected byte []		buffer;
+        /// <summary>This is the field that references the underlying byte buffer that is used by this SlidingBuffer instance.</summary>
+		protected byte [] buffer;
 
-		protected int			getIdx = 0;
-		protected QpcTimeStamp	getTimeStamp = QpcTimeStamp.Zero;
+        /// <summary>This gives ths index into the buffer at which the first content byte is found (if any)</summary>
+		protected int getIdx = 0;
+        /// <summary>This gives the QpcTimeStamp at the point when the getIdx was last changed.</summary>
+        protected QpcTimeStamp getTimeStamp = QpcTimeStamp.Zero;
 
-		protected int			putIdx = 0;
-		protected QpcTimeStamp	putTimeStamp = QpcTimeStamp.Zero;
+        /// <summary>This gives the index into the buffer at which the next byte can be put into the buffer, or the buffer length if the buffer is full.</summary>
+        protected int putIdx = 0;
+        /// <summary>This gives the QpcTimeStamp at the point when the putIdx was last changed.</summary>
+        protected QpcTimeStamp putTimeStamp = QpcTimeStamp.Zero;
     }
 
     #endregion
@@ -214,65 +227,97 @@ namespace MosaicLib.SerialIO
     /// <summary>
     /// General class used to store a packet as extracted from a SlidingPacketBuffer.  
     /// </summary>
-
     public class Packet
     {
-        public Packet() : this(PacketType.None, null, String.Empty) { }
-        public Packet(PacketType type) : this(type, null, String.Empty) { }
-        public Packet(PacketType type, byte[] data) : this(type, data, String.Empty) { }
+        /// <summary>Default constructor.  Creates null packet of type None</summary>
+        public Packet() : this(PacketType.None, null, null) { }
+        /// <summary>Constructs an empty packet of the given type</summary>
+        public Packet(PacketType type) : this(type, null, null) { }
+        /// <summary>Constructs a packet of the given type with the given data content and no error</summary>
+        public Packet(PacketType type, byte[] data) : this(type, data, null) { }
+        /// <summary>Full constructor.</summary>
         public Packet(PacketType type, byte[] data, String errorCode) 
         {
-            this.type = type;
+            Type = type;
             this.data = data;
             this.dataStr = null;
             this.errorCode = errorCode;
         }
 
-        private PacketType type;
+        /// <summary>Private storage for data content</summary>
         private byte [] data;
-        private string dataStr;
+        /// <summary>Private storage for errorCode (if any) - Property handles mapping of null to empty</summary>
         private string errorCode;
+        /// <summary>Private storage for cached string version of data content</summary>
+        private string dataStr;
 
-        public PacketType Type { get { return type; } set { type = value; } }
+        /// <summary>Returns the PacketType for this Packet</summary>
+        public PacketType Type { get; set; }
+        /// <summary>Returns the Data content array for this Packet.  May be null if no data is assocaited with this Packet</summary>
         public byte[] Data { get { return data; } set { data = value; dataStr = null; } }
-        public string DataStr { get { return ((dataStr != null) ? dataStr : (dataStr = Utils.ByteArrayTranscoders.ByteStringTranscoder.Encode(data))); } }
-        public string ErrorCode { get { return (errorCode != null ? errorCode : String.Empty); } set { errorCode = value; } }
+        /// <summary>Contains the ErrorCode for property for any Packet.  Will return String.Empty whenever the internally stored copy of thie property is, or has been set to, null</summary>
+        public string ErrorCode { get { return (errorCode ?? String.Empty); } set { errorCode = value; } }
+        /// <summary>
+        /// By default this get property generates, saves and, returns a Transcoded string version of the Data property.  
+        /// This get property value is cached and will latch the first transcoded version until the Data property or the DataStr property is set to Null.
+        /// The setter sets the internal property storage field to null, without regard to the value assigned to the setter and thus resets the cached copy 
+        /// so that it will be re-generated during the next call to the getter.
+        /// </summary>
+        public string DataStr 
+        { 
+            get { return ((dataStr != null) ? dataStr : (dataStr = Utils.ByteArrayTranscoders.ByteStringTranscoder.Encode(data))); } 
+            set { dataStr = null; } 
+        }
 
-        public bool IsNullOrNone { get { return (type == PacketType.Null || type == PacketType.None); } }
-        public bool IsWhiteSpace { get { return (type == PacketType.WhiteSpace); } }
-        public bool IsData { get { return (type == PacketType.Data); } }
-        public bool IsNonEmptyData { get { return (IsData && data != null && data.Length > 0); } }
-        public bool IsError { get { return (type == PacketType.Error || type == PacketType.Timeout); } }
+        /// <summary>Returns true if the Type is PacketType.Null or PacketType.None</summary>
+        public bool IsNullOrNone { get { return (Type == PacketType.Null || Type == PacketType.None); } }
+        /// <summary>Returns true if the Type is PacketType.WhiteSpace</summary>
+        public bool IsWhiteSpace { get { return (Type == PacketType.WhiteSpace); } }
+        /// <summary>Returns true if the type is PacketType.Data</summary>
+        public bool IsData { get { return (Type == PacketType.Data); } }
+        /// <summary>Returns true if the type is PacketType.Data and the data array is non-null and non-empty</summary>
+        public bool IsNonEmptyData { get { return (IsData && Data != null && Data.Length > 0); } }
+        /// <summary>Returns true if the type is PacketType.Error or PacketType.Timeout</summary>
+        public bool IsError { get { return (Type == PacketType.Error || Type == PacketType.Timeout); } }
 
+        /// <summary>Returns true if the rhsAsObject is a non-null Packet instance and if its Type, Data and ErrorCode properties are the same</summary>
         public override bool Equals(object rhsAsObject)
         {
             Packet rhs = rhsAsObject as Packet;
             if (rhs == null)
                 return false;
 
-            return (type == rhs.type && data.Equals(rhs.data) && errorCode == rhs.errorCode);
+            return (Type == rhs.Type && data.Equals(rhs.data) && errorCode == rhs.errorCode);
         }
 
+        /// <summary>Passthrough to base.GetHashCode</summary>
         public override int GetHashCode()
         {
- 	         return base.GetHashCode();
+ 	        return base.GetHashCode();
         }
 
+        /// <summary>Fixed emptyData field used in place of null Data property during ToString operations.</summary>
         private static byte[] emptyData = new byte[0];
 
+        /// <summary>
+        /// Returns a string version of the Packet that indicates the type and length of the packet but does not include its data content
+        /// </summary>
         public override string ToString()
         {
             return ToString(false);
         }
 
+        /// <summary>
+        /// Returns a string version of the Packet that indicates its type and length or type and content based on the allwaysIncludeData parameter value.
+        /// </summary>
         public string ToString(bool allwaysIncludeData)
         {
             string typeAsStr = Type.ToString();
-            byte[] dataTemp = (Data != null ? Data : emptyData);
+            byte[] dataTemp = (Data ?? emptyData);
 
             if (!allwaysIncludeData || IsError)
             {
-                switch (type)
+                switch (Type)
                 {
                     case PacketType.Data:
                     case PacketType.Flushed:
@@ -294,10 +339,42 @@ namespace MosaicLib.SerialIO
         }
     }
 
+    /// <summary>
+    /// This delegate is used as an alternate Packet End detection tool.  
+    /// A client may provide an instance of this delegate type the SlidingPacketBuffer in which case the SlidingPacketBuffer will use the
+    /// delegate in place of its internal scanner to detect packet end conditions.  This allows the client to have full flexability in
+    /// determining when a full packet has arrived and in determining the rules for how to handle conditions where more than one
+    /// packet end exists in the buffer at the same time.
+    /// </summary>
+    /// <param name="buffer">Gives the delegate access to the internal buffer being used by the SlidingPacketBuffer.  The delegate shoult not modify the contents of this array.</param>
+    /// <param name="startIdx">Gives the delegate the index of the first content byte in the buffer.</param>
+    /// <param name="currentContentCount">Gives the delegate the current byte count in the buffer</param>
+    /// <param name="lastScannedContentCount">
+    /// Gives the delegate the content count during the last call to the delegate.  
+    /// This may be used to optimize out rescanning of early parts of the buffer.
+    /// </param>
+    /// <returns>The length of the next packet to generate from the buffer or 0 to indicate that no packet is ready to be removed from the buffer yet.</returns>
+    public delegate int PacketEndScannerDelegate(byte [] buffer, int startIdx, int currentContentCount, int lastScannedContentCount);
+
     #endregion
 
+    /// <summary>
+    /// This class implements a packetizing version of the SlidingBuffer.  
+    /// This implementation is given a set of criteria for determining the end of a given packet and uses the given criteria to scan the contents of the sliding buffer
+    /// looking for packet boundaries.  When such boundaries are found, this class extracts the head contents of the buffer up to the first found boundary and encapuslates
+    /// that byte block as a received packet which is placed in the packet queue.  
+    /// This class also supports triming whitespace from the data that is encapsulated in a packet, detecting timeout conditions where the buffer is not empty and no new data has arrived within
+    /// the required period so that incomplete packets may be configured to get flushed as timeout packets if the client would like.
+    /// </summary>
     public class SlidingPacketBuffer : SlidingBuffer
     {
+        /// <summary>Minimal constructor.  Requires that buffer size be specified directly.</summary>
+        /// <param name="size">gives the desired size of the buffer.  Defines the maximum number of bytes that can be in one packet.</param>
+        public SlidingPacketBuffer(uint size)
+            : base(size)
+        {
+        }
+
         /// <summary>Constructor</summary>
         /// <param name="size">gives the desired size of the buffer.  Defines the maximum number of bytes that can be in one packet.</param>
         /// <param name="packetEndStrArray">gives a list of one or more strings which define a packet end delimiter pattern.</param>
@@ -305,6 +382,11 @@ namespace MosaicLib.SerialIO
         public SlidingPacketBuffer(uint size, string[] packetEndStrArray, TimeSpan packetTimeout) 
             : this(size, packetEndStrArray, packetTimeout, true) { }
 
+        /// <summary>Constructor</summary>
+        /// <param name="size">gives the desired size of the buffer.  Defines the maximum number of bytes that can be in one packet.</param>
+        /// <param name="packetEndStrArray">gives a list of one or more strings which define a packet end delimiter pattern.</param>
+        /// <param name="packetTimeout">gives the maximum amount of time that may elpased from the last byte added before a valid packet end is found</param>
+        /// <param name="stripWhitespace">Sets the StripWhitespace property to the value given in this argument</param>
         public SlidingPacketBuffer(uint size, string[] packetEndStrArray, TimeSpan packetTimeout, bool stripWhitespace)
             : base(size)
         { 
@@ -359,63 +441,42 @@ namespace MosaicLib.SerialIO
         }
 
         /// <summary>Allows the sliding buffer to implement timeout detection on any partially received packet or other unrecognized data.</summary>
-        public void Service() { Service(false); }
+        public void Service() 
+        { 
+            Service(false); 
+        }
 
         /// <summary>Implements scan for new packets (invoked internally after reception of new data) and implements stale rx data detection and handling when no new data has been received.</summary>
         public void Service(bool performFullRescan)
         {
             // check for unscanned data
             if (performFullRescan)
-                scanAfterCount = 0;
+                lastScannedContentCount = 0;
+
+            if (BufferDataCount == 0 || BufferDataCount == lastScannedContentCount)
+                return;
+
+            PacketEndScannerDelegate scannerDelegate = packetEndScannerDelegate ?? defaultPacketEndScannerDelegate ?? (defaultPacketEndScannerDelegate = DefaultPacketEndScannerDelegate);
 
             bool foundPacket = false;
-            while (scanAfterCount < BufferDataCount)
+
+            for (;;)
             {
-                // find shortest packet with end characters
-                int shortestPacketLen = 0;
-                int shortestScanLen = BufferDataCount;
+                int bufferDataCount = BufferDataCount;
+                int nextPacketLen = scannerDelegate(buffer, getIdx, bufferDataCount, lastScannedContentCount);
 
-                for (int packetEndIdx = 0; packetEndIdx < numPacketEndStrs; packetEndIdx++)
+                if (nextPacketLen <= 0)
                 {
-                    int packetLen = 0;
-
-                    byte [] patternBytes = packetEndByteArrayList[packetEndIdx];
-                    int patternLen = patternBytes.Length;
-                    int scanEndCount = (BufferDataCount - patternLen) + 1;
-                    int scanEndIdx = getIdx + scanEndCount;
-
-                    for (int patternScanIdx = (scanAfterCount + getIdx); patternScanIdx < scanEndIdx; patternScanIdx++)
-                    {
-                        int patternOffset = 0;
-                        for (; patternOffset < patternLen; patternOffset++)
-                        {
-                            if (buffer[patternScanIdx + patternOffset] != patternBytes[patternOffset])
-                                break;
-                        }
-
-                        if (patternOffset == patternLen)
-                        {
-                            packetLen = (patternScanIdx + patternOffset - getIdx);
-                            break;
-                        }
-                    }
-
-                    // take the shortest scan pattern count as the shortest scan length we have failed to find a match for
-                    //  this then will allow us to start the next scan at just before this point in the buffer so that we do not rescan characters that are entirely known to not match any of the end chars.
-                    if (shortestScanLen > scanEndCount)
-                        shortestScanLen = scanEndCount;
-
-                    if (packetLen > 0 && (shortestPacketLen == 0 || packetLen < shortestPacketLen))
-                        shortestPacketLen = packetLen;
+                    lastScannedContentCount = bufferDataCount;
+                    break;
                 }
-
-                if (shortestPacketLen > 0)
+                else
                 {
+                    lastScannedContentCount = 0;
                     foundPacket = true;
-                    scanAfterCount = 0;
 
                     int dataCopyStartIdx = getIdx;
-                    int dataCopyLen = shortestPacketLen;
+                    int dataCopyLen = nextPacketLen;
 
                     if (StripWhitespace)
                     {
@@ -445,18 +506,11 @@ namespace MosaicLib.SerialIO
 
                     extractedPacketQueue.Enqueue(p);
 
-                    UsedNChars(shortestPacketLen);
-                }
-                else
-                {
-                    // Set the next scan to skip over most of the characters that have already been scanned.
-                    // The use of -1 forces the pattern to keep rescanning for all of the patterns in case the longest end pattern has not been completely received at this point.
-                    scanAfterCount = shortestScanLen - 1;
-                    break;
+                    UsedNChars(nextPacketLen);
                 }
             }
 
-            // drop leading whitespace from buffer immediately (this will prevent them from 
+            // drop leading whitespace from buffer immediately (this will prevent them from causing generation of unexpected timeout packets for trailing whitespace that is ignored)
             if (StripWhitespace && BufferDataCount > 0)
             {
                 if (IsWhiteSpace(buffer[getIdx]))
@@ -486,18 +540,77 @@ namespace MosaicLib.SerialIO
             }
         }
 
+        private PacketEndScannerDelegate defaultPacketEndScannerDelegate = null;
+
+        private int DefaultPacketEndScannerDelegate(byte[] buffer, int startIdx, int currentContentCount, int lastScannedContentCount)
+        {
+            // find shortest packet with end characters
+            int shortestPacketLen = 0;
+            int numPacketEndStrs = packetEndByteArrayList.Count;
+
+            for (int packetEndIdx = 0; packetEndIdx < numPacketEndStrs; packetEndIdx++)
+            {
+                int possiblePacketLen = 0;
+
+                byte [] patternBytes = packetEndByteArrayList[packetEndIdx];
+                int patternLen = patternBytes.Length;
+
+                // For each pattern we will the new bytes and some (or all) of the old bytes to see if we can find this end pattern in the buffer.
+                // To minimize rescan, each pattern's scan starts at the startIdx + the lastScannedContentCount, rewound at most patternLen - 1 bytes.  The rewind will not start earlier than
+                // startIdx for the scan
+                int patternScanStartIdx = Math.Max(startIdx, (startIdx + lastScannedContentCount - (patternLen - 1)));
+
+                // the scan ends at the startIdx + currentContentCount less patternLen - 1 bytes.  If patternLen is longer than currentContentCount then no scanning will take place on this pass.
+                // This scan end position makes certain that we do not attempt to check for the pattern past the end of the input buffer.
+                int scanLimitCount = (currentContentCount - (patternLen - 1));
+                if (shortestPacketLen > 0 && scanLimitCount > shortestPacketLen)
+                    scanLimitCount = shortestPacketLen;
+
+                int scanEndIdx = startIdx + scanLimitCount;
+
+                for (int patternScanIdx = patternScanStartIdx; patternScanIdx < scanEndIdx; patternScanIdx++)
+                {
+                    int patternOffset = 0;
+                    for (; patternOffset < patternLen; patternOffset++)
+                    {
+                        if (buffer[patternScanIdx + patternOffset] != patternBytes[patternOffset])
+                            break;
+                    }
+
+                    if (patternOffset == patternLen)
+                    {
+                        possiblePacketLen = (patternScanIdx + patternOffset - startIdx);
+                        break;
+                    }
+                }
+
+                if (possiblePacketLen > 0 && (shortestPacketLen == 0 || possiblePacketLen < shortestPacketLen))
+                    shortestPacketLen = possiblePacketLen;
+            }
+
+            return shortestPacketLen;
+        }
+
         /// <summary>Gets or set the current StripWhitespace flag.  When set to true, all leading and trailing white space is removed from packet data for Data packets.  Packet type will be changed to Whitespace if the resulting Data packet is empty.</summary>
         public bool StripWhitespace 
         { 
             get { return stripWhitespace; }
-            set { stripWhitespace = value; Service(true); } 
+            set 
+            { 
+                stripWhitespace = value; 
+                Service(true); 
+            } 
         }
 
         /// <summary>Gets or sets the current PacketTimeout value.  This value is used during Service calls to determine if remaining bytes in the buffer have been idle for to long in which case a timeout packet is generated and enqueued to discard them.  When this value is set to zero, no local timeout handling is performed within the sliding buffer.</summary>
         public TimeSpan PacketTimeout
         {
             get { return packetTimeout; }
-            set { packetTimeout = value; Service(true); }
+            set 
+            { 
+                packetTimeout = value; 
+                Service(true); 
+            }
         }
 
         /// <summary>Gets or sets the current set/array of non-null and non-empty packet end delimiter strings.</summary>
@@ -517,8 +630,6 @@ namespace MosaicLib.SerialIO
                     }
                 }
 
-                numPacketEndStrs = packetEndStrList.Count;
-
                 packetEndByteArrayList.Clear();
 
                 foreach (string s in packetEndStrList)
@@ -528,39 +639,80 @@ namespace MosaicLib.SerialIO
             }
         }
 
+        /// <summary>
+        /// When non-null this delegate is used in place of the PacketEndStrArray contents to scan for packet boundaries and use them to determin
+        /// when and how the inserted buffer data is divided into packets.  When null, the SlidingPacketBuffer uses its internal mechanism to detect these
+        /// boundaries based on the contents of the PacketEndStrArray property contents.  
+        /// Setting this property to a non-null value will clear the PacketEndStrArray property and will Service the buffer
+        /// </summary>
+        public PacketEndScannerDelegate PacketEndScannerDelegate 
+        {
+            get { return packetEndScannerDelegate; }
+            set
+            {
+                packetEndScannerDelegate = value;
+                if (value != null)
+                    PacketEndStrArray = new string[0];
+            }
+        }
+
+        /// <summary>
+        /// (Possibly) search through the added bytes looking for packet end marks.
+        /// This method may remove characters from the buffer, and may cause it to be Reset and/or to be shifted.
+        /// </summary>
+        /// <param name="nCharsAdded">Gives the number of characters that have been added to the buffer.</param>
         protected override void BufferHasBeenIncreased(int nCharsAdded)
         {
             // possibly search through the added bytes looking for packet end marks
             Service();  // this method may remove characters from the buffer, may cause it to be Reset or to be shifted.
         }
 
-        protected override void BufferHasBeenShifted(int byN)
-        {
-            // nothing to do. - scanAfterCount is an offset from the getIdx so when the buffer is shifted, there is no change in the scanAfterCount value.
-        }
-
+        /// <summary>
+        /// Records the side effects caused by Resetting the buffer.
+        /// Reset the scanner to force the next Service to do a full rescan.
+        /// </summary>
         protected override void BufferHasBeenReset()
         {
-            scanAfterCount = 0;     // reset the scaner to zero so that we start scanning from the start of the buffer
+            lastScannedContentCount = 0;
         }
 
+        /// <summary>
+        /// This method is called to indicate that the given number of bytes have been used from the buffer.  This causes the
+        /// SlidingBuffer to advance the getIdx by the given number of bytes.  It may cause the buffer to be Reset or Aligned
+        /// depending on the final state after the getIdx has been advanced.
+        /// </summary>
+        public override void UsedNChars(int n)
+        {
+            lastScannedContentCount = Math.Max(lastScannedContentCount - n, 0);
+
+            base.UsedNChars(n);
+        }
 
         /// <summary>Allows the caller to Reset both the buffer and the queue of extracted packets.</summary>
         /// <param name="clearQueue">set to true if this method should clear the queue in addition to emptying the buffer.</param>
-        protected void ResetBuffer(bool clearQueue)
+        [Obsolete("This method is obsolete due to a naming/signature conflict with the same method in the base class.  Please use ResetBuffer() or ResetBufferAndClearQueue() directly as needed.  (2013-11-19)")]
+        protected new void ResetBuffer(bool clearQueue)
         {
-            ResetBuffer();
-
             if (clearQueue)
-                extractedPacketQueue.Clear();
+                ResetBufferAndClearQueue();
+            else
+                base.ResetBuffer();
+        }
+
+        /// <summary>Call this method to Reset the sliding buffer and to clear the queue of packets that have already been extracted from it.</summary>
+        protected void ResetBufferAndClearQueue()
+        {
+            base.ResetBuffer();
+
+            extractedPacketQueue.Clear();
         }
 
         private bool stripWhitespace = false;
         private TimeSpan packetTimeout = TimeSpan.Zero;
         private List<string> packetEndStrList = new List<string>();
         private List<byte[]> packetEndByteArrayList = new List<byte[]>();
-        private int numPacketEndStrs = 0;
-        private int scanAfterCount = 0;
+        private PacketEndScannerDelegate packetEndScannerDelegate = null;
+        private int lastScannedContentCount = 0;
 
         private Queue<Packet> extractedPacketQueue = new Queue<Packet>();
 

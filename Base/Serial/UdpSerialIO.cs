@@ -40,12 +40,18 @@ namespace MosaicLib.SerialIO
 
 	public static partial class Factory
 	{
+        /// <summary>
+        /// static factory method used to create a UdpClientPort from the given portConfig and ipPortEndpointConfig
+        /// </summary>
 		public static IPort CreateUdpClientPort(PortConfig portConfig, IPPortEndpointConfig ipPortEndpointConfig)
 		{
 			return new UdpClientPort(portConfig, ipPortEndpointConfig);
 		}
 
-		public static IPort CreateUdpServerPort(PortConfig portConfig, IPPortEndpointConfig ipPortEndpointConfig)
+        /// <summary>
+        /// static factory method used to create a UdpServerPort from the given portConfig and ipPortEndpointConfig
+        /// </summary>
+        public static IPort CreateUdpServerPort(PortConfig portConfig, IPPortEndpointConfig ipPortEndpointConfig)
 		{
 			return new UdpServerPort(portConfig, ipPortEndpointConfig);
 		}
@@ -56,20 +62,32 @@ namespace MosaicLib.SerialIO
 	//-----------------------------------------------------------------
 	#region UdpClientPort class
 
-	/// <summary></summary>
-	/// <remarks>
-	/// </remarks>
+    internal class UdpClientPort : UdpPortBase
+    {
+        /// <summary>
+        /// Standard constructor.  Accepts PortConfig and IPPortEndpointConfig (parsed from PortConfig.SpecStr).
+        /// </summary>
+        public UdpClientPort(PortConfig portConfig, IPPortEndpointConfig ipPortEndpointConfig)
+            : base(portConfig, ipPortEndpointConfig, "UdpClientPort")
+        { }
+    }
 
-	class UdpClientPort : PortBase
+    #endregion
+
+    //-----------------------------------------------------------------
+    #region UdpClientPort class
+
+    /// <summary>Provides an implementation of the SerialIO PortBase class for use as a UDP client.</summary>
+    internal class UdpPortBase : PortBase
 	{
 		#region CTor, DTor
 
-		public UdpClientPort(PortConfig portConfig, IPPortEndpointConfig ipPortEndpointConfig) : this(portConfig, ipPortEndpointConfig, "UdpClientPort") {}
-
-		public UdpClientPort(PortConfig portConfig, IPPortEndpointConfig ipPortEndpointConfig, string className)
+		public UdpPortBase(PortConfig portConfig, IPPortEndpointConfig ipPortEndpointConfig, string className)
 			: base(portConfig, className)
 		{
 			targetEPConfig = ipPortEndpointConfig;
+
+            PortBehavior = new PortBehaviorStorage() { DataDeliveryBehavior = DataDeliveryBehavior.Datagram, IsNetworkPort = true, IsClientPort = true };
 
 			PrivateBaseState = new BaseState(false, true);
 			PublishBaseState("object constructed");
@@ -106,15 +124,11 @@ namespace MosaicLib.SerialIO
 
 			dataSP.ReceiveTimeout = 0;		// read operations are non-blocking at this level.
 			dataSP.SendTimeout = 0;			// write operations are non-blocking at this level.
-
-			UpdateList();
 		}
 
 		protected void DisposeDataSocket()
 		{
 			MosaicLib.Utils.Fcns.DisposeOfObject(ref dataSP);
-
-			UpdateList();
 		}
 
 		#endregion
@@ -123,15 +137,6 @@ namespace MosaicLib.SerialIO
 
 		IPPortEndpointConfig targetEPConfig = null;
 		protected Socket dataSP = null;
-		protected List<Socket> spList = new List<Socket>();
-
-		protected virtual void UpdateList()
-		{
-			if (dataSP != null)
-				spList = new List<Socket> { dataSP };
-			else
-				spList = new List<Socket>();
-		}
 
 		#endregion
 
@@ -158,9 +163,9 @@ namespace MosaicLib.SerialIO
 				}
 
 			}
-			catch (System.Exception e)
+			catch (System.Exception ex)
 			{
-				faultCode = "Exception:" + e.Message;
+				faultCode = "Exception:" + ex.Message;
 			}
 
 			if (string.IsNullOrEmpty(faultCode))
@@ -188,9 +193,9 @@ namespace MosaicLib.SerialIO
 				if (dataSP != null)
 					DisposeDataSocket();
 			}
-			catch (System.Exception e)
+			catch (System.Exception ex)
 			{
-				faultCode = "Exception:" + e.Message;
+				faultCode = "Exception:" + ex.Message;
 			}
 
 			if (string.IsNullOrEmpty(faultCode))
@@ -212,8 +217,15 @@ namespace MosaicLib.SerialIO
 				if (dataSP == null)
 					return 0;
 
-				return dataSP.Available;
-			}
+                try
+                {
+                    return dataSP.Available;
+                }
+                catch
+                {
+                    return 1;       // cause caller to attempt to read this byte and thus have the read fail.
+                }
+            }
 		}
 
 		protected override bool InnerIsAnyWriteSpaceAvailable 
@@ -224,7 +236,7 @@ namespace MosaicLib.SerialIO
 			} 
 		}
 
-		protected override string InnerHandleRead(byte [] buffer, int startIdx, int maxCount, out int didCount)
+        protected override string InnerHandleRead(byte[] buffer, int startIdx, int maxCount, out int didCount, ref ActionResultEnum readResult)
 		{
 			EndPoint fromEP;
 			string ec = string.Empty;
@@ -232,7 +244,7 @@ namespace MosaicLib.SerialIO
 			for (;;)
 			{
 				fromEP = targetEPConfig.IPEndPoint;
-				ec = InnerHandleRead(buffer, startIdx, maxCount, out didCount, ref fromEP);
+				ec = InnerHandleRead(buffer, startIdx, maxCount, out didCount, ref readResult, ref fromEP);
 
 				if (fromEP != targetEPConfig.IPEndPoint && didCount != 0)
 					continue;
@@ -241,12 +253,12 @@ namespace MosaicLib.SerialIO
 			}
 		}
 
-		protected override string InnerHandleWrite(byte [] buffer, int startIdx, int count, out int didCount)
+        protected override string InnerHandleWrite(byte[] buffer, int startIdx, int count, out int didCount, ref ActionResultEnum writeResult)
 		{
-			return InnerHandleWrite(buffer, startIdx, count, out didCount, targetEPConfig.IPEndPoint);
+			return InnerHandleWrite(buffer, startIdx, count, out didCount, ref writeResult, targetEPConfig.IPEndPoint);
 		}
 
-		protected string InnerHandleRead(byte [] buffer, int startIdx, int maxCount, out int didCount, ref EndPoint remoteEP)
+        protected string InnerHandleRead(byte[] buffer, int startIdx, int maxCount, out int didCount, ref ActionResultEnum readResult, ref EndPoint remoteEP)
 		{
 			didCount = 0;
 
@@ -259,13 +271,13 @@ namespace MosaicLib.SerialIO
 
 				return string.Empty;
 			}
-			catch (System.Exception e)
+			catch (System.Exception ex)
 			{
-				return "Exception:" + e.Message;
+				return "Exception:" + ex.Message;
 			}
 		}
 
-		protected string InnerHandleWrite(byte [] buffer, int startIdx, int count, out int didCount, EndPoint remoteEP)
+        protected string InnerHandleWrite(byte[] buffer, int startIdx, int count, out int didCount, ref ActionResultEnum writeResult, EndPoint remoteEP)
 		{
 			didCount = 0;
 
@@ -278,9 +290,9 @@ namespace MosaicLib.SerialIO
 
 				return string.Empty;
 			}
-			catch (System.Exception e)
+			catch (System.Exception ex)
 			{
-				return "Exception:" + e.Message;
+				return "Exception:" + ex.Message;
 			}
 		}
 
@@ -306,19 +318,20 @@ namespace MosaicLib.SerialIO
 
 			int usec = (int) (waitTimeLimit.TotalSeconds * 1000000.0);
 
-			if (spList.Count > 0)
+            if (dataSP != null)
 			{
-				if (usec > 0)
-					Socket.Select(spList, null, null, usec);
-				else if (pendingReadActionsQueue.Count > 0)
-					System.Threading.Thread.Sleep(0);
-				else
-					return base.WaitForSomethingToDo(waitable, waitTimeLimit);
-			}
-			else
-				return base.WaitForSomethingToDo(waitable, waitTimeLimit);
+                bool isReadyReady = dataSP.Poll(usec, SelectMode.SelectRead);
+                if (isReadyReady || dataSP.Available != 0)
+                    return true;
 
-			return (dataSP != null && dataSP.Available != 0);
+                if (usec == 0 && pendingReadActionsQueue.Count > 0)
+                {
+                    System.Threading.Thread.Sleep(0);
+                    return false;
+                }
+			}
+
+            return base.WaitForSomethingToDo(waitable, waitTimeLimit);
 		}
 	}
 
@@ -327,11 +340,8 @@ namespace MosaicLib.SerialIO
 	//-----------------------------------------------------------------
 	#region UdpServerPort class
 
-	/// <summary>Provides an implementation of the SerialIO PortBase class for use as a TCP client/connection initiator.</summary>
-	/// <remarks>
-	/// </remarks>
-
-	class UdpServerPort : UdpClientPort
+	/// <summary>Provides an implementation of the SerialIO PortBase class for use as a UDP server.</summary>
+	class UdpServerPort : UdpPortBase
 	{
 		#region CTor, DTor
 
@@ -339,6 +349,8 @@ namespace MosaicLib.SerialIO
 			: base(portConfig, new IPPortEndpointConfig("", new IPEndPoint(IPAddress.Any, 0)), "UdpServerPort")
 		{
 			serverEPConfig = serverPortEndpointConfig;
+
+            PortBehavior = new PortBehaviorStorage() { DataDeliveryBehavior = DataDeliveryBehavior.Datagram, IsNetworkPort = true, IsServerPort = true };
 		}
 
 		protected override void DisposeCalledPassdown(DisposeType disposeType)		// this is called after StopPart has completed during dispose
@@ -367,12 +379,12 @@ namespace MosaicLib.SerialIO
 
 		#endregion
 
-		protected override string InnerHandleRead(byte [] buffer, int startIdx, int maxCount, out int didCount)
+		protected override string InnerHandleRead(byte [] buffer, int startIdx, int maxCount, out int didCount, ref ActionResultEnum readResult)
 		{
 			EndPoint entryEP = connectedEP;
 			string ec = string.Empty;
 
-			ec = InnerHandleRead(buffer, startIdx, maxCount, out didCount, ref connectedEP);
+			ec = InnerHandleRead(buffer, startIdx, maxCount, out didCount, ref readResult, ref connectedEP);
 
 			if (entryEP != connectedEP && connectedEP != epNone)
 			{
@@ -383,10 +395,10 @@ namespace MosaicLib.SerialIO
 			return ec;
 		}
 
-		protected override string InnerHandleWrite(byte [] buffer, int startIdx, int count, out int didCount)
+        protected override string InnerHandleWrite(byte[] buffer, int startIdx, int count, out int didCount, ref ActionResultEnum writeResult)
 		{
 			if (connectedEP != epNone)
-				return InnerHandleWrite(buffer, startIdx, count, out didCount, connectedEP);
+				return InnerHandleWrite(buffer, startIdx, count, out didCount, ref writeResult, connectedEP);
 			else
 			{
 				didCount = 0;

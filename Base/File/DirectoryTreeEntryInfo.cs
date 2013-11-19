@@ -37,7 +37,7 @@ namespace MosaicLib.File
     /// This class is used to contain information about a directory entry and includes the name, boolean properties to indicate if the entry is a file or a directory, 
     /// as well as information about the size of the file (if it is one) and the creation, modification and last access times for the entry.
     /// </summary>
-    internal class DirectoryTreeEntryNode : DirectoryEntryInfo
+    public class DirectoryTreeEntryNode : DirectoryEntryInfo
 	{
         /// <summary>Default constructor - generates an empty tree item</summary>
         public DirectoryTreeEntryNode() 
@@ -81,19 +81,25 @@ namespace MosaicLib.File
         /// </summary>
         public bool IsTreeBuildNeeded { get; private set; }
 
-        /// <summary>Resets this node to its empty state</summary>
+        /// <summary>Resets this node to its fully empty state.  Also clears base.</summary>
         protected new void Clear()
+        {
+            ClearSubTreeInformation();
+            base.Clear();
+        }
+
+        /// <summary>Resets this node to its empty tree state.  Does not change relationship to its parent (if any)</summary>
+        protected void ClearSubTreeInformation()
         {
             IsTreeUpdateNeeded = false;
             IsTreeBuildNeeded = false;
-            ParentDirEntry = null;
+
             DirContentsNodeList.Clear();
             OldestDirEntryIdx = -1;
             TreeContentsSize = 0;
             OldestUtcTime = DateTime.MaxValue;
             TreeItemCount = 0;
             TreeFileCount = 0;
-            base.Clear();
         }
 
         /// <summary>Sets that this level in the tree needs to be updated.  Setting the update request from false to true ripples up the tree from this point to the root.</summary>
@@ -120,6 +126,16 @@ namespace MosaicLib.File
             DirContentsNodeList.Clear();
 		}
 
+        /// <summary>Getter returns the full path to the current object.  Setter Clears and resets the object and calls SetPathAndGetInfo.  Normally the tree must be Built after this before the contents can be traversed.</summary>
+        public override string Path
+        {
+            get { return base.Path; }
+            set
+            {
+                SetPathAndGetInfo(value);
+            }
+        }
+
         /// <summary>Resets this node to represent the contents of the tree from the given path</summary>
         public void SetPathAndGetInfo(string path) 
         { 
@@ -132,7 +148,7 @@ namespace MosaicLib.File
             if (clearFirst)
                 Clear();
 
-            Path = path;
+            base.Path = path;
 
             TreeItemCount = 1;
             TreeFileCount = (IsFile ? 1 : 0);
@@ -144,6 +160,13 @@ namespace MosaicLib.File
                 IsTreeBuildNeeded = true;
                 SetTreeUpdateNeeded(true);
             }
+        }
+
+        /// <summary>Forces the node to (re)build the tree and to update it afterward</summary>
+        public void RebuildTree(Logging.IMesgEmitter issueEmitter)
+        {
+            IsTreeBuildNeeded = true;
+            BuildTree(true, issueEmitter);
         }
 
         /// <summary>Requests the node to build the tree and to update it afterward</summary>
@@ -166,7 +189,7 @@ namespace MosaicLib.File
                     issueEmitter.Emit("BuildTree failed: Tree Path '{0}' is neither a normal file nor a normal directory.", Path);
                 }
 
-                Clear();
+                ClearSubTreeInformation();
 
                 foreach (string fsiPath in System.IO.Directory.GetFileSystemEntries(Path))
                 {
@@ -218,7 +241,7 @@ namespace MosaicLib.File
             if (!IsTreeUpdateNeeded && !forceUpdate)
                 return;
 
-            SetTreeUpdateNeeded(false);
+            IsTreeUpdateNeeded = false;
 
             Refresh();
 
@@ -255,12 +278,13 @@ namespace MosaicLib.File
                 OldestUtcTime = OldestFileSystemInfoDateTimeUtc;
         }
 
-        /// <summary>Reports the Age of the oldest item in the tree</summary>
-        public TimeSpan TreeAge { get { return (DateTime.Now - OldestUtcTime); } }				//!< Creation Age of oldest item in tree in seconds
+        /// <summary>Reports the Creation Age of the oldest item in the tree</summary>
+        public TimeSpan TreeAge { get { return (DateTime.UtcNow - OldestUtcTime); } }
 
         /// <summary>
         /// Addes a new node in the tree at the relative location under the given node produced by iteratavely concactinating the given list of relative path elements
-        /// onto the full path to this node and treversing downward until the relative path elements have been used up.
+        /// onto the full path to this node and treversing downward until the relative path elements have been used up.  
+        /// Performs UpdateTree prior to returning.
         /// </summary>
         public void AddRelativePath(IList<String> relativePathElementList, Logging.IMesgEmitter issueEmitter)
         {
@@ -382,6 +406,7 @@ namespace MosaicLib.File
         /// <summary>
         /// Appends a list of the DirectoryEntryInfo items for the tree item's that have been removed from the memory copy of the tree.  
         /// Caller is expected to attempt to delete the actual files/directories.
+        /// Performs UpdateTree prior to returning.
         /// </summary>
         public void AppendAndRemoveOldestTreeItem(List<DirectoryEntryInfo> pruneItemList, Logging.IMesgEmitter issueEmitter)
         {
@@ -391,6 +416,7 @@ namespace MosaicLib.File
         /// <summary>
         /// Appends a list of the DirectoryEntryInfo items for the tree item's that have been removed from the memory copy of the tree.  
         /// Caller is expected to attempt to delete the actual files/directories.
+        /// Performs UpdateTree prior to returning.
         /// </summary>
         public void AppendAndRemoveOldestTreeDirectory(List<DirectoryEntryInfo> pruneItemList, int maxEntriesToDeletePerIteration, Logging.IMesgEmitter issueEmitter)
         {
@@ -507,8 +533,8 @@ namespace MosaicLib.File
 			UpdateTree(issueEmitter);
         }
 
-        /// <summary></summary>
-        public int FindSubLeafName(string subLeafName)
+        /// <summary>Returns the index of the subNode with the given Name from the list of nodes that are directly under this one.  Returns -1 if no such Name was found.</summary>
+        private int FindSubLeafName(string subLeafName)
 		{
 			int dirContentsInfoListSize = DirContentsNodeList.Count;
 			for (int idx = 0; idx < dirContentsInfoListSize; idx++)
@@ -520,6 +546,27 @@ namespace MosaicLib.File
 
 			return -1;
 		}
+
+        /// <summary>Debug and logging assistance method</summary>
+        public override string ToString()
+        {
+            string fullPath = (FileSystemInfo != null ? FileSystemInfo.FullName : "");
+            string typeStr = "";
+            if (IsFile)
+                typeStr = "File";
+            else if (IsDirectory)
+                typeStr = "Directory";
+            else
+                typeStr = "UnknownType";
+
+            if (Exists)
+                typeStr = typeStr + "+Exists";
+
+            if (IsRootNode)
+                typeStr = typeStr + "+IsRoot";
+
+            return Fcns.CheckedFormat("'{0}' {1} Items:{2} Files:{3} Size:{4} [{5}]", Name, typeStr, TreeItemCount, TreeFileCount, TreeContentsSize, fullPath);
+        }
 	};
 	
     #endregion

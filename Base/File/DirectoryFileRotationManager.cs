@@ -3,9 +3,9 @@
  * @brief This file defines the DirectoryFileRotationManager class.
  * (see descriptions below)
  * 
- * Copyright (c) Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2008 Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2007 Mosaic Systems Inc., All rights reserved. (C++ library version)
+ * Copyright (c) Mosaic Systems Inc.  All rights reserved
+ * Copyright (c) 2008 Mosaic Systems Inc.  All rights reserved
+ * Copyright (c) 2007 Mosaic Systems Inc.  All rights reserved. (C++ library version)
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -81,24 +81,30 @@ namespace MosaicLib.File
 	///			This cache updates will be immediately effect both the decision of if the active file needs
 	///			to be advanced and effect the reported total size of the files in the diretory.
 	/// </remarks>
-
 	public class DirectoryFileRotationManager : SimplePartBase
 	{
 		#region SimplePartBase methods
 
-		protected override void Dispose(MosaicLib.Utils.DisposableBase.DisposeType disposeType) {}
+        /// <summary>Provide empty default implementation for method required by <see cref="MosaicLib.Utils.DisposableBase"/> base class.</summary>
+        protected override void Dispose(MosaicLib.Utils.DisposableBase.DisposeType disposeType) { }
 
 		#endregion
 
 		#region Public interface
 
-		public DirectoryFileRotationManager(string name) : base(name, typeof(DirectoryFileRotationManager).FullName)
+        /// <summary>Constructor:  Requires an instance name from which log messages will be generated.</summary>
+		public DirectoryFileRotationManager(string name) 
+            : base(name, typeof(DirectoryFileRotationManager).FullName)
 		{
 			logger = new Logging.QueuedLogger(name);
 			Clear();
 		}
 
-		public bool Setup(Config config)		//!< @retval true if directory contents are usable after setup is complete
+        /// <summary>
+        /// Sets up the manager using the given config.
+        /// Returns true if the directory contents are usable after the setup is complete
+        /// </summary>
+		public bool Setup(Config config)
 		{
 			Clear();
 
@@ -113,10 +119,14 @@ namespace MosaicLib.File
 			return IsDirectoryUsable;
 		}
 
-		public bool IsDirectoryUsable { get { return (setupPerformed && string.IsNullOrEmpty(setupFaultCode)); } }			//!< @retval true if configuration is valid and directory was found and scanned successfully
+        /// <summary>Returns true if configuration is valid and directory was found and scanned successfully</summary>
+		public bool IsDirectoryUsable { get { return (setupPerformed && string.IsNullOrEmpty(setupFaultCode)); } }
+
+        /// <summary>Returns the fault code, if any, produced during the last Setup call.</summary>
 		public string LastFaultCode { get { return setupFaultCode; } }
 
-		public bool IsDirectoryCleanupNeeded		//!< @retval true if there are files in the directory that need to be deleted
+        /// <summary>Returns true if there are files in the directory that need to be deleted</summary>
+		public bool IsDirectoryCleanupNeeded
 		{
 			get 
 			{
@@ -144,7 +154,9 @@ namespace MosaicLib.File
 				return false;
 			}
 		}
-		public void PerformIncrementalCleanup()		//!< deletes the oldest file in the directory as needed to cleanup the directory (max of one deletion per call)
+
+        /// <summary>deletes the oldest file in the directory as needed to cleanup the directory (max of one deletion per call)</summary>
+		public void PerformIncrementalCleanup()
 		{
 			if (!IsDirectoryCleanupNeeded)
 				return;
@@ -184,9 +196,9 @@ namespace MosaicLib.File
 				entryFileInfo.Delete();
 				logger.Info.Emit("Cleanup deleted file:'{0}', size:{1} age:{2} hours", nameToDelete, entryFileInfo.Length, fileAgeInHours.ToString("f3"));
 			}
-			catch (System.Exception e)
+			catch (System.Exception ex)
 			{
-				logger.Error.Emit("Cleanup failed to delete file:'{0}', code:{1}", nameToDelete, e.Message);
+				logger.Error.Emit("Cleanup failed to delete file:'{0}', code:{1}", nameToDelete, ex.Message);
 			}
 
 
@@ -194,8 +206,8 @@ namespace MosaicLib.File
 			RemoveDirEntry(entryID);
 		}
 
-
-		public string PathToActiveFile	//!< gives path to active file or the empty path if there is no active file (or if the directory is not usable)
+        /// <summary>returns the path to the active file or the empty path if there is no active file (or if the directory is not usable)</summary>
+		public string PathToActiveFile
 		{
 			get
 			{
@@ -211,8 +223,11 @@ namespace MosaicLib.File
 			}
 		}
 
-		public bool IsFileAdvanceNeeded() {return IsFileAdvanceNeeded(true); }				//!< @retval true if the client should stop using the current file and should start using a new file in the directory
-		public bool IsFileAdvanceNeeded(bool recheckActiveFileSizeNow)				//!< @retval true if the client should stop using the current file and should start using a new file in the directory
+        /// <summary>Returns true if the client should stop using the current file and should start using a new file in the directory</summary>
+		public bool IsFileAdvanceNeeded() { return IsFileAdvanceNeeded(true); }
+
+        /// <summary>Returns true if the client should stop using the current file and should start using a new file in the directory</summary>
+        public bool IsFileAdvanceNeeded(bool recheckActiveFileSizeNow)
 		{
 			if (!IsDirectoryUsable)
 				return false;			// if the directory is not usable then we do not need to advance (since we cannot ever advance)
@@ -259,7 +274,12 @@ namespace MosaicLib.File
 			return false;
 		}
 
-		public string AdvanceToNextActiveFile()	//!< @retval the path to the active file which the client should create.  If a prior file with the same name already exists it will have been deleted.  Returns empty path if the advance attempt failed (old file could not be deleted)
+        /// <summary>
+        /// Updates and returns the path to the next active file which the client should create and then use.
+        /// If a prior file with the same name already exists it will have been deleted.  
+        /// Returns empty path if the advance attempt failed (old file could not be deleted)
+        /// </summary>
+		public string AdvanceToNextActiveFile()
 		{
 			MaintainActiveFileInfo(true);
 
@@ -281,65 +301,93 @@ namespace MosaicLib.File
 
 		#region Config and related definitions
 
+        /// <summary>EntryID used when no valid value is known.  Is -1</summary>
 		private const int DirEntryID_Invalid = -1;
 
 		private const int ConfigPurgeNumFilesMinValue = 2;
 		private const int ConfigPurgeNumFilesMaxValue = 5000;
 
+        /// <summary>Defines the types of file nameing patterns that are supported here</summary>
 		public enum FileNamePattern
 		{
-			ByDate,						//!< <prefix>YYYYMMDD_hhmmssnn<suffix>
-			Numeric2DecimalDigits,		//!< <prefix>nn<suffix>
-			Numeric3DecimalDigits,		//!< <prefix>nnn<suffix>
-			Numeric4DecimalDigits,		//!< <prefix>nnnn<suffix>
+            /// <summary>{prefix}YYYYMMDD_hhmmssnn{suffix}</summary>
+			ByDate,
+            /// <summary>{prefix}nn{suffix}</summary>
+            Numeric2DecimalDigits,
+            /// <summary>{prefix}nnn{suffix}</summary>
+            Numeric3DecimalDigits,
+            /// <summary>{prefix}nnnn{suffix}</summary>
+            Numeric4DecimalDigits,
 		}
 
-		public class Config							//!< structure used to configure a DirectoryFileRotationManager
+        /// <summary>used to configure a DirectoryFileRotationManager</summary>
+		public class Config							//!< structure
 		{
 			// information about the base directory whose contents will be managed
-			public string					dirPath = string.Empty;
+            /// <summary>Gives the path to the directory to be "mananged" by the <see cref="DirectoryFileRotationManager"/></summary>
+			public string dirPath = string.Empty;
 
 			// information used to define file names that can be generated in the set
-			public string					fileNamePrefix = string.Empty;		//!< the common prefix shared by all managed files
-			public string					fileNameSuffix = string.Empty;		//!< the common suffix shared by all managed files
-			public FileNamePattern			fileNamePattern = FileNamePattern.ByDate;	//!< selects the pattern used to build actual file names
+            /// <summary>the common prefix shared by all managed files</summary>
+            public string fileNamePrefix = string.Empty;
+            /// <summary>the common suffix shared by all managed files</summary>
+            public string fileNameSuffix = string.Empty;
+            /// <summary>selects the pattern used to build actual file names</summary>
+            public FileNamePattern fileNamePattern = FileNamePattern.ByDate;
 
 			// information about files that may be in the directory and which should not be created or managed
-			public List<string>			excludeFileNamesSet = new List<string>(); //!< a set of the names of files to exclude from the set (ie they cannot be created or deleted by the manager
+            /// <summary>a set of the names of files to exclude from the set (ie they cannot be created or deleted by the manager</summary>
+            public List<string> excludeFileNamesSet = new List<string>();
 
 			// information on rules for advancing from one active file to the next one
 
-			public class AdvanceRules
+            /// <summary>Sub-class contains the parameters that define when the manager should advance to the next file.</summary>
+            public class AdvanceRules
 			{
-				public Int64				fileSizeLimit = 0;		//!< the maximum desired size of each file (0 for no limit)
-				public double				fileAgeLimitInSec = 0.0;	//!< file age limit in seconds (0 for no limit)
-				public double				testPeriodInSec = 10.0;	//!< the period after checking the active file's size before it will be checked again
+                /// <summary>the maximum desired size of each file (0 for no limit)</summary>
+                public Int64 fileSizeLimit = 0;
+                /// <summary>file age limit in seconds (0 for no limit)</summary>
+                public double fileAgeLimitInSec = 0.0;
+                /// <summary>the period after checking the active file's size before it will be checked again</summary>
+                public double testPeriodInSec = 10.0;
 			}
-			public AdvanceRules advanceRules = new AdvanceRules();
+
+            /// <summary>Gives the user choosen set of <see cref="AdvanceRules"/> values that should be used by the manager</summary>
+            public AdvanceRules advanceRules = new AdvanceRules();
 
 			// information about the rules for purging old files from the directory
 			//	These rules are used to check if the oldest file in the directory needs to be
 			//	deleted.  (note that rules are only applied when client explicitly checks and invokes the
 			//	cleanup method).
 
-			public class PurgeRules
+            /// <summary>Sub-class contains the paramters that define when the manager should prune an old file</summary>
+            public class PurgeRules
 			{
-				public int					dirNumFilesLimit = 0;	//!< the user stated maximum number of files (or zero for no limit).  Must be 0 or be between 2 and 5000
-				public Int64				dirTotalSizeLimit = 0;	//!< the user stated maximum size of the set of managed files or zero for no limit
-				public double				fileAgeLimitInSec = 0.0;	//!< the user stated maximum age in seconds of the oldest file or zero for no limit
-			}
-			public PurgeRules purgeRules = new PurgeRules();
+                /// <summary>the user stated maximum number of files (or zero for no limit).  Must be 0 or be between 2 and 5000</summary>
+                public int dirNumFilesLimit = 0;
+                /// <summary>the user stated maximum size of the set of managed files or zero for no limit</summary>
+                public Int64 dirTotalSizeLimit = 0;
+                /// <summary>the user stated maximum age in seconds of the oldest file or zero for no limit</summary>
+                public double fileAgeLimitInSec = 0.0;
+            }
+
+            /// <summary>Gives the user choosen set of <see cref="PurgeRules"/> values that should be used by the manager</summary>
+            public PurgeRules purgeRules = new PurgeRules();
 
 			// additional flags
-			public bool					enableAutomaticCleanup = true;
-			public int					maxAutoCleanupDeletes = 1000;
-			public bool					createDirectoryIfNeeded = false;
+            /// <summary>Set to true to enable automatic initial cleanup of the directory during the inital Setup operation.</summary>
+            public bool enableAutomaticCleanup = true;
+            /// <summary>Defines the maximum number of files that may be deleted during the initial auto cleanup (when enabled).</summary>
+            public int maxAutoCleanupDeletes = 1000;
+            /// <summary>Set to true in order that the manager may attempt to create the specified directory if it was not found during the Setup operation.</summary>
+            public bool createDirectoryIfNeeded = false;
 		}
 
 		#endregion
 
 		#region private methods
 
+        /// <summary>Resets the internal state of the manager</summary>
 		protected void Clear()
 		{
 			setupPerformed = false;
@@ -365,13 +413,21 @@ namespace MosaicLib.File
 			totalSizeOfManagedFiles = 0;
 		}
 
-		protected class SetupFailureException : System.Exception
+        /// <summary>Exception used internally when the Setup operation fails.</summary>
+        protected class SetupFailureException : System.Exception
 		{
+            /// <summary>
+            /// Exception constructor: requires a string mesg.
+            /// </summary>
 			public SetupFailureException(string mesg) : base(mesg) {}
 		}
 
-		protected bool SetupFailed { get { return (!string.IsNullOrEmpty(setupFaultCode)); } }
+        /// <summary>Returns true if the last setup operation failed.</summary>
+        protected bool SetupFailed { get { return (!string.IsNullOrEmpty(setupFaultCode)); } }
 
+        /// <summary>
+        /// Inner method used to implement the setup operation.  
+        /// </summary>
 		protected void InnerSetup(Config config)
 		{
 			// if needed, clear the prior state.
@@ -423,9 +479,9 @@ namespace MosaicLib.File
 			{
 				SetSetupFaultCode(sfe.Message);
 			}
-			catch (System.Exception e)
+			catch (System.Exception ex)
 			{
-				SetSetupFaultCode(Utils.Fcns.CheckedFormat("Setup Failure: encountered unexpected exception '{0}' while processing dir '{1}'", e.Message, dirPath));
+				SetSetupFaultCode(Utils.Fcns.CheckedFormat("Setup Failure: encountered unexpected exception '{0}' while processing dir '{1}'", ex.Message, dirPath));
 			}
 
 			if (!SetupFailed)
@@ -573,6 +629,7 @@ namespace MosaicLib.File
 			setupPerformed = true;
 		}
 
+        /// <summary>Internal method used to set the Setup Fault Code to a given value and to log it.</summary>
 		protected void SetSetupFaultCode(string faultCode)
 		{
 			if (string.IsNullOrEmpty(setupFaultCode))
@@ -586,8 +643,14 @@ namespace MosaicLib.File
 			}
 		}
 
+        /// <summary>Internal method used to track changes in the state of the active file.  Uses config.advanceRules.TestPeriodInSec to determine how often to refresh the observed copy of the file system information for the active file.</summary>
 		protected void MaintainActiveFileInfo() { MaintainActiveFileInfo(false); }
-		protected void MaintainActiveFileInfo(bool forceUpdate)
+
+        /// <summary>
+        /// Internal method used to track changes in the state of the active file.
+        /// The forceUpdate parameter may be used to cause the information to be immediately refreshed rather than waiting for the config.advanceRules.TestPeriodInSec to elapse between refreshes (default behavior).
+        /// </summary>
+        protected void MaintainActiveFileInfo(bool forceUpdate)
 		{
 			if (!IsDirEntryIDValid(activeFileEntryID))
 				return;
@@ -616,6 +679,9 @@ namespace MosaicLib.File
 				totalSizeOfManagedFiles += (newSize - oldSize);
 		}
 
+        /// <summary>
+        /// Updates the given creation time to the list of entryIDs sorted by creation time which is used to determine the oldest file during pruning operations.
+        /// </summary>
         protected void AddFileInfoItemToListSortedByCreate(Int64 fileTimeUTC, int itemEntryID)
         {
             List<int> entryIDList = null;
@@ -625,7 +691,9 @@ namespace MosaicLib.File
             entryIDList.Add(itemEntryID);
             oldestFileDirEntryID = DirEntryID_Invalid;	// trigger rescan to determin the oldest file
         }
-
+        /// <summary>
+        /// Internal method that is used to generate the next Active file name.  May delete the oldest file in order to reuse the name when appropriate.
+        /// </summary>
 		protected void GenerateNextActiveFile()
 		{
 			// any current active entry is no longer active
@@ -687,9 +755,9 @@ namespace MosaicLib.File
 					entryFSI.Delete();
 					logger.Debug.Emit("GenerateNextActiveFile: Deleted prior file:'{0}' size:{1} age:{2} hours", entryInfo.Name, fileSize, fileAgeInHours.ToString("f3"));
 				}
-				catch (System.Exception e)
+				catch (System.Exception ex)
 				{
-					logger.Error.Emit("GenerateNextActiveFile: failed to delete prior file:'{1}', error:'{1}'", entryInfo.Name, e.Message);
+					logger.Error.Emit("GenerateNextActiveFile: failed to delete prior file:'{1}', error:'{1}'", entryInfo.Name, ex.Message);
 					return;
 				}
 			}
@@ -704,6 +772,9 @@ namespace MosaicLib.File
             logger.Debug.Emit("GenerateNextActiveFile active file is now:'{0}' id:{1}", activeFileEntry.Name, activeFileEntryID);
 		}
 
+        /// <summary>
+        /// Returns the EntryID for the oldest file.  Returns DirEntryID_Invalid (-1) when there are not known files.
+        /// </summary>
 		protected int FindOldestDirEntryID()
 		{
 			int entryID = DirEntryID_Invalid;
@@ -720,6 +791,9 @@ namespace MosaicLib.File
 			return entryID;
 		}
 
+        /// <summary>
+        /// Attempts to find the EntryID for the given fileName.  Returns DirEntryID_Invalid (-1) if the name is not found.
+        /// </summary>
 		protected int FindDirEntryByFileName(string fileName)
 		{
 			int entryID = DirEntryID_Invalid;
@@ -730,6 +804,9 @@ namespace MosaicLib.File
 			return entryID;
 		}
 
+        /// <summary>
+        /// Adds a new directory entry for the given file path and returns the EntryID that was assigned to it.
+        /// </summary>
 		protected int AddDirEntry(string filePathToAdd, bool duringInitialScan)
 		{
 			int entryID = DirEntryID_Invalid;
@@ -814,7 +891,9 @@ namespace MosaicLib.File
 			return entryID;
 		}
 
-
+        /// <summary>
+        /// Removes the information about the indicated entryID from the local summary information and index tables.  Generally places the given entryID in the free list.
+        /// </summary>
 		protected bool RemoveDirEntry(int entryID)
 		{
 			bool found = IsDirEntryIDValid(entryID);
@@ -889,6 +968,9 @@ namespace MosaicLib.File
 			return found;
 		}
 
+        /// <summary>
+        /// Returns true if the given entryID is valid.
+        /// </summary>
 		protected bool IsDirEntryIDValid(int idIdx) { return (idIdx >= 0 && idIdx < dirEntryList.Count); }
 
 		#endregion

@@ -30,7 +30,11 @@ namespace MosaicLib.Modular.Common
     #region Basic types
 
     /// <summary>Define a Null type that can be used as a ParamType or a ResultType in ParamType and ResultType types in the IAction related pattern types.</summary>
-    public class NullObj { public NullObj() { } }
+    public class NullObj 
+    {
+        /// <summary>Default (only) constructor</summary>
+        public NullObj() { } 
+    }
 
     #endregion
 
@@ -60,7 +64,13 @@ namespace MosaicLib.Modular.Common
     [CollectionDataContract(ItemName = "nvi", Namespace = Constants.ModularNameSpace)]
     public class NamedValueList : List<NamedValue>
     {
+        /// <summary>Default constructor</summary>
         public NamedValueList() { }
+
+        /// <summary>
+        /// Copy constructor from IList{NamedValues}.  
+        /// Creates a new NamedValueList from the given list of NamedValues by cloning each of them.
+        /// </summary>
         public NamedValueList(IList<NamedValue> rhs)
         {
             Capacity = rhs.Count;
@@ -68,6 +78,14 @@ namespace MosaicLib.Modular.Common
                 Add(new NamedValue(rhsItem));
         }
 
+        /// <summary>
+        /// get/set index operator by name.  Gets the NamedValue for the requested name.  
+        /// getter returns the node from the contained list or a new NamedValue for the given name if the requested one was not found.
+        /// setter replaces the selected NamedValue item in the list or adds a new NamedValue object to the list.
+        /// </summary>
+        /// <param name="name">Gives the name for the desired NamedValue to get/replace</param>
+        /// <returns>The selected NamedValue as described in the summary</returns>
+        /// <exception cref="System.InvalidOperationException">thrown by setter if the given name is not equal to the Name property from the assigned NamedValue object</exception>
         public NamedValue this[string name]
         {
             get
@@ -82,8 +100,6 @@ namespace MosaicLib.Modular.Common
 
             set
             {
-                if (name == null)
-                    throw new System.NullReferenceException("Index string must not be null");
                 if (name != value.Name)
                     throw new System.InvalidOperationException("Index string must equal Name in given NamedValue object");
 
@@ -100,7 +116,16 @@ namespace MosaicLib.Modular.Common
             }
         }
 
-        protected Dictionary<string, int> nameToIndexDict = new Dictionary<string, int>();
+        /// <summary>Contains the dictionary used to convert from names to list indexes.  Only built if [name] index operator is used.</summary>
+        protected Dictionary<string, int> nameToIndexDict = null;
+
+        /// <summary>Method used by client to reset the nameToIndex Dictionary if contents of NamedValues list is changed outside of use of [name] index operator.</summary>
+        public void InvalidateNameToIndexDictionary() 
+        { 
+            nameToIndexDict = null; 
+        }
+
+        /// <summary>Internal method used to build the nameToIndexDictionary when needed.</summary>
         protected void BuildDictIfNeeded()
         {
             if (nameToIndexDict == null)
@@ -113,7 +138,6 @@ namespace MosaicLib.Modular.Common
                 }
             }
         }
-
     }
 
     /// <summary>
@@ -122,10 +146,15 @@ namespace MosaicLib.Modular.Common
     [DataContract(Namespace = Constants.ModularNameSpace)]
     public class NamedValue
     {
+        /// <summary>Constructor - builds NamedValue containing null string and binary data</summary>
         public NamedValue(string name) : this(name, null, null) { }
+        /// <summary>Constructor - builds NamedValue containing given string and null binary data</summary>
         public NamedValue(string name, string str) : this(name, str, null) { }
+        /// <summary>Constructor - builds NamedValue containing null string and given binary data.  Clones the binary data.</summary>
         public NamedValue(string name, byte[] data) : this(name, null, data) { }
+        /// <summary>Constructor - builds NamedValue containing given string and given binary data.  Clones the binary data if non-null</summary>
         public NamedValue(string name, string str, byte[] data) { Name = name; Str = str; Data = (data != null ? (byte[])data.Clone() : null); }
+        /// <summary>Copy constructor.  builds clone of the given rhs containing copy of Name and Str properties and clone of binary data if it is non-null.</summary>
         public NamedValue(NamedValue rhs) : this(rhs.Name, rhs.Str, rhs.Data) { }
 
         /// <summary>This property gives the caller access to the name of the named value</summary>
@@ -140,8 +169,11 @@ namespace MosaicLib.Modular.Common
         [DataMember(Order = 3, IsRequired = false, EmitDefaultValue = false)]
         public byte[] Data { get; set; }
 
+        /// <summary>Returns true if the object has a non-null Str property value</summary>
         public bool HasStrValue { get { return (Str != null); } }
+        /// <summary>Returns true if the object has a non-null Data property value</summary>
         public bool HasDataValue { get { return (Data != null); } }
+        /// <summary>Returns true if the object has a non-null Str property or a non-null Data property value</summary>
         public bool HasValue { get { return (HasStrValue || HasDataValue); } }
     }
 

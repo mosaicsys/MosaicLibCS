@@ -2,8 +2,8 @@
 /*! @file MosaicLibCSBase.cs
  *  @brief This file contains definitions that are shared by various subparts of the MosaicLib namespace
  * 
- * Copyright (c) Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2008 Mosaic Systems Inc., All rights reserved
+ * Copyright (c) Mosaic Systems Inc.  All rights reserved
+ * Copyright (c) 2008 Mosaic Systems Inc.  All rights reserved
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -46,6 +46,9 @@ namespace MosaicLib
 
         /// <summary>urn://mosaicsys.com/NS/MLib.Semi</summary>
         public const string SemiNameSpace = MosaicLib.Constants.MosaicLibNameSpaceRoot + ".Semi";
+
+        /// <summary>urn://mosaicsys.com/NS/MLib.Semi.E005</summary>
+        public const string E005NameSpace = MosaicLib.Constants.SemiNameSpace + ".E005";
 
         /// <summary>urn://mosaicsys.com/NS/MLib.Semi.E004</summary>
         public const string E084NameSpace = SemiNameSpace + ".E084";

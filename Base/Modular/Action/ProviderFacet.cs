@@ -28,7 +28,6 @@ namespace MosaicLib.Modular.Action
 	/// This interface defines the common Provider side portions of the Action implementation object.
 	/// The methods defined in this interface are used by the Action Queue and by generic provider base classes.
 	/// </summary>
-
 	public interface IProviderFacet
 	{
         /// <summary>Provider invokes this to dispatch the mark the action as issued and invoke its delegate method.</summary>
