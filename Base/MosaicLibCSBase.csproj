@@ -90,9 +90,13 @@
     <Compile Include="Time\QpcTime.cs" />
     <Compile Include="Time\Ticks.cs" />
     <Compile Include="Utils\Assert.cs" />
+    <Compile Include="Utils\ByteArrayTranscoders.cs" />
     <Compile Include="Utils\DataHelpers.cs" />
+    <Compile Include="Utils\Dates.cs" />
     <Compile Include="Utils\Disposable.cs" />
+    <Compile Include="Utils\Enums.cs" />
     <Compile Include="Utils\ErrorCodeUtils.cs" />
+    <Compile Include="Utils\ExtensionMethods.cs" />
     <Compile Include="Utils\Notification.cs" />
     <Compile Include="Utils\ObjID.cs" />
     <Compile Include="Utils\ParseUtils.cs" />

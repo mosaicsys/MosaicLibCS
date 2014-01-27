@@ -161,6 +161,30 @@ namespace MosaicLib.Modular.Action
         /// <summary>get/set property defines the Logging.IMesgEmitter that is used for Action Update related events generated using this object.  Assigning the Logger or Config properties has the side effect of settings this property as well.</summary>
         public Logging.IMesgEmitter Update { get { return updateEmitter; } set { updateEmitter = value; } }
 
+        /// <summary>
+        /// Set only property may be used to assign the Done, Error, State and/or Update emitters from provided key/emitter dictionary.  Logging.NullEmitter will be automatically substituted for each null Logging.IMesgEmitter value.
+        /// </summary>
+        public System.Collections.Generic.Dictionary<string, Logging.IMesgEmitter> Emitters
+        {
+            set
+            {
+                if (value == null)
+                    UpdateEmitters();
+                else
+                {
+                    Logging.IMesgEmitter emitter = null;
+                    if (value.TryGetValue("Done", out emitter)) 
+                        Done = emitter ?? Logging.NullEmitter;
+                    if (value.TryGetValue("Error", out emitter)) 
+                        Error = emitter ?? Logging.NullEmitter;
+                    if (value.TryGetValue("State", out emitter)) 
+                        State = emitter ?? Logging.NullEmitter;
+                    if (value.TryGetValue("Update", out emitter)) 
+                        Update = emitter ?? Logging.NullEmitter;
+                }
+            }
+        }
+
         /// <summary>Returns a string version of the Mesg and MesgDetail.</summary>
         public override string ToString()
 		{

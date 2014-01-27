@@ -355,6 +355,26 @@ namespace MosaicLib.Utils
 	}
 
     /// <summary>
+    /// INotifyable target which contains a counter that does IncrementSkipZero each time the Notify method is invoked.
+    /// </summary>
+    public class AtomicInt32CounterNotifier : INotifyable
+    {
+        /// <summary>Default constructor.</summary>
+        public AtomicInt32CounterNotifier() {}
+
+        /// <summary><see cref="INotifyable"/> Notify method.  Invokes counter.IncrementSkipZero.</summary>
+        public void Notify() { counter.IncrementSkipZero(); }
+
+        /// <summary>Get/Set property gives acceess to countained counter's Value property</summary>
+        public int Value { get { return counter.Value; } set { counter.Value = value; } }
+
+        /// <summary>Get/Set property gives acceess to countained counter's VolatileValue property</summary>
+        public int VolatileValue { get { return counter.VolatileValue; } set { counter.VolatileValue = value; } }
+
+        AtomicInt32 counter = new AtomicInt32();
+    }
+
+    /// <summary>
     /// static class containing a number of <see cref="System.Threading.EventWaitHandle"/> related static methods that may be used to safely manipulate an EventWaitHandle object.
     /// </summary>
     internal static class EventWaitHandleHelper
