@@ -69,6 +69,8 @@ namespace MosaicLib.SerialIO
 			portBaseStateObserver.Update();
 
 			SetBaseState(UseState.Initial, ConnState.Initial, "CTOR", true);
+
+            AddExplicitDisposeAction(() => MosaicLib.Utils.Fcns.DisposeOfObject(ref port));
 		}
 
 		//----------------------------------------
@@ -91,17 +93,6 @@ namespace MosaicLib.SerialIO
 
 		//----------------------------------------
 		#region SimpleActivePart overridden methods
-
-        /// <summary>
-        /// Implementation for virtual base that disposes of the given IPort instance and then calls the base class version of this method.
-        /// </summary>
-		protected override void DisposeCalledPassdown(MosaicLib.Utils.DisposableBase.DisposeType disposeType)
-		{
-            if (disposeType == DisposeType.CalledExplicitly)
-				MosaicLib.Utils.Fcns.DisposeOfObject(ref port);
-
-            base.DisposeCalledPassdown(disposeType);
-        }
 
         /// <summary>
         /// Implemenation for for required GoOnline Action: runs the corresponding command on the related IPort instance and returns its result

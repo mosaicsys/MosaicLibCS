@@ -164,7 +164,7 @@ namespace MosaicLib.Modular.Action
         /// <summary>
         /// Set only property may be used to assign the Done, Error, State and/or Update emitters from provided key/emitter dictionary.  Logging.NullEmitter will be automatically substituted for each null Logging.IMesgEmitter value.
         /// </summary>
-        public System.Collections.Generic.Dictionary<string, Logging.IMesgEmitter> Emitters
+        public System.Collections.Generic.IDictionary<string, Logging.IMesgEmitter> Emitters
         {
             set
             {

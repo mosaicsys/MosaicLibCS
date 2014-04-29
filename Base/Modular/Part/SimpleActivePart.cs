@@ -198,6 +198,9 @@ namespace MosaicLib.Modular.Part
         /// Protected sealed implementation for DisposableBase.Dispose(DisposeType) abstract method.
         /// During an explicit dispose this will Stop the part and then it will invoke the DisposeCallPassdown to 
         /// allow derived classes to implement custom dispose logic after the part has been stopped.
+        /// <para/>This method is sealed so that sub classes are required to make use of the DisposeCalledPassdown pattern or to add their
+        /// explicitDiposeAction to the list thereof by calling the PartBaseBase.AddExplicitDisposeAction to add such an action to the PartBaseBase's
+        /// list of such actions that it will invoke (in LIFO order) when it is being disposed.
         /// </summary>
 		protected sealed override void Dispose(DisposeType disposeType)
 		{
@@ -205,6 +208,8 @@ namespace MosaicLib.Modular.Part
 				StopPart();
 
 			DisposeCalledPassdown(disposeType);
+
+            base.Dispose(disposeType);
 		}
 
         /// <summary>

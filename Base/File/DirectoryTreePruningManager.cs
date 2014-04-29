@@ -163,7 +163,7 @@ namespace MosaicLib.File
         { }
 
         /// <summary>Basic constructor.  objIDStr is used to initialize the ObjID base class.  emitterDictionary defines source for emitters or null to use standard Logger.</summary>
-        public DirectoryTreePruningManager(string objIDStr, Dictionary<string, Logging.IMesgEmitter> emitterDictionary)
+        public DirectoryTreePruningManager(string objIDStr, IDictionary<string, Logging.IMesgEmitter> emitterDictionary)
             : base(0, objIDStr)
         {
             EmitterDictionary = emitterDictionary;
@@ -177,7 +177,7 @@ namespace MosaicLib.File
         { }
 
         /// <summary>Full constructor.  objIDStr is used to initialize the ObjID base class, config is used to trigger a Setup operation.  emitterDictionary defines source for emitters or null to use standard Logger.</summary>
-        public DirectoryTreePruningManager(string objIDStr, Config config, Dictionary<string, Logging.IMesgEmitter> emitterDictionary)
+        public DirectoryTreePruningManager(string objIDStr, Config config, IDictionary<string, Logging.IMesgEmitter> emitterDictionary)
             : this(objIDStr, emitterDictionary)
         {
             Setup(config);
@@ -200,7 +200,7 @@ namespace MosaicLib.File
         /// <summary>
         /// This set only property may be used to set the object's emitter containers to contain the desired emitters.  There are three named emitters: Issue, Info, and Debug
         /// </summary>
-        public Dictionary<string, Logging.IMesgEmitter> EmitterDictionary
+        public IDictionary<string, Logging.IMesgEmitter> EmitterDictionary
         {
             set
             {

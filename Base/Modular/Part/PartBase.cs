@@ -19,15 +19,14 @@
  * limitations under the License.
  */
 //-------------------------------------------------------------------
+using System;
+using MosaicLib.Utils;
+using MosaicLib.Time;
+using MosaicLib.Modular.Action;
 
 namespace MosaicLib.Modular.Part
 {
 	//-----------------------------------------------------------------
-
-	using System;
-	using MosaicLib.Utils;
-	using MosaicLib.Time;
-	using MosaicLib.Modular.Action;
 
 	//------------------------------------
 	#region enums UseState and ConnState
@@ -316,6 +315,36 @@ namespace MosaicLib.Modular.Part
 			Asserts.CheckIfConditionIsNotTrue(!String.IsNullOrEmpty(PartID), "PartID is valid");
 			Asserts.CheckIfConditionIsNotTrue(!String.IsNullOrEmpty(PartType), "PartType is valid");
 		}
+
+        /// <summary>
+        /// Provides the default implementation of the DiposeableBase.Dispose(disposeType) method.
+        /// <para/>iterates in LIFO order through the current contents of the list of explicit dispose actions and invokes each one in turn.
+        /// </summary>
+        protected override void Dispose(DisposableBase.DisposeType disposeType)
+        {
+            if (disposeType == DisposeType.CalledExplicitly)
+            {
+                System.Action[] explicitDisposeActionArray = explicitDisposeActionList.Array;
+                for (int idx = explicitDisposeActionArray.Length - 1; idx >= 0; idx--)
+                    explicitDisposeActionArray[idx]();
+            }
+            // NOTE: this pattern cannot be used when the finalizer is being used as no managed object (such as a list) can safely be used during finalization.
+        }
+
+        /// <summary>
+        /// Sub-class callable method used to add an explicitDisposeAction to the explicitDisposeActionList.  
+        /// All such added actions will be invoked in LIFO order when the part is being explicitly disposed.
+        /// For SimpleActiveParts this will occure after the part has been stopped and after the DisposeCalledPassdown(disposeType) has taken place.
+        /// </summary>
+        protected void AddExplicitDisposeAction(System.Action explicitDisposeAction)
+        {
+            explicitDisposeActionList.Add(explicitDisposeAction);
+        }
+
+        /// <summary>
+        /// This is a private list of actions that will be performed during an explicit dispose.  Will be traversed in revers order for disposal.
+        /// </summary>
+        private Utils.Collections.LockedObjectListWithCachedArray<System.Action> explicitDisposeActionList = new Utils.Collections.LockedObjectListWithCachedArray<System.Action>();
 
         /// <summary>Protected utility method.  Returns the result of calling <code>Utils.EC.FmtWin32EC(PartID, win32EC);</code></summary>
 		protected string FmtWin32EC(int win32EC) { return Utils.EC.FmtWin32EC(PartID, win32EC); }

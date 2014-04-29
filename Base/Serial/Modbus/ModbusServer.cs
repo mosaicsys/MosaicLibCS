@@ -114,7 +114,7 @@ namespace MosaicLib.SerialIO.Modbus.Server
         public Logging.MesgEmitterContainer Trace = new Logging.MesgEmitterContainer();
 
         /// <summary>Set only property used to set one or more of the <see cref="Logging.MesgEmitterContainer"/> from a caller provided dictionary of name -> emitter instance mappings.</summary>
-        public Dictionary<string, Logging.IMesgEmitter> Emitters { set { Logging.SetAnnotatedInstanceEmitters(this, value); } }
+        public IDictionary<string, Logging.IMesgEmitter> Emitters { set { Logging.SetAnnotatedInstanceEmitters(this, value); } }
 
         #endregion
 
@@ -314,7 +314,7 @@ namespace MosaicLib.SerialIO.Modbus.Server
 
             IPortBehavior portBehavior = port.PortBehavior;
 
-            Dictionary<string, Logging.IMesgEmitter> emitters = new Dictionary<string,Logging.IMesgEmitter>() { { "Issue", Log.Error }, {"Debug", Log.Debug}, {"Trace", Log.Trace} }; 
+            IDictionary<string, Logging.IMesgEmitter> emitters = new Dictionary<string,Logging.IMesgEmitter>() { { "Issue", Log.Error }, {"Debug", Log.Debug}, {"Trace", Log.Trace} }; 
 
             serverFunctionContainer = new ServerFunctionContainer() { ADUType = aduType, Emitters = emitters, UnitID = unitID, RTUAddr = unitID, MBAPUnitID = unitID, RespondToAllTargets = responseToAllUnits };
 
@@ -329,19 +329,8 @@ namespace MosaicLib.SerialIO.Modbus.Server
             portFlushAction.NotifyOnComplete.AddItem(threadWakeupNotifier);
 
             port.BaseStateNotifier.NotificationList.AddItem(threadWakeupNotifier);
-        }
 
-        /// <summary>
-        /// Requird implementation method which is used to handle explicit dispose operations from <see cref="MosaicLib.Modular.Part.SimpleActivePartBase"/>.
-        /// </summary>
-        protected override void DisposeCalledPassdown(DisposableBase.DisposeType disposeType)
-        {
-            base.DisposeCalledPassdown(disposeType);
-
-            if (disposeType == DisposeType.CalledExplicitly)
-            {
-                Fcns.DisposeOfObject(ref port);
-            }
+            AddExplicitDisposeAction(() => Fcns.DisposeOfObject(ref port));
         }
 
         /// <summary>

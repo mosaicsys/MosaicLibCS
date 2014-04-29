@@ -1620,16 +1620,21 @@ namespace MosaicLib
         /// This object is used to simplify configurable IMesgEmitters in client objects that do not have their own loggers 
         /// but which need to support emitting of messages using externally provided emitters.  This is a common case for nameless 
         /// utility classes that are generally embedded in some other object such as an active part and where the messages that they
-        /// emit can reasonably be reported to have come from the hosting part.
+        /// emit can reasonably be reported to have come from the hosting part.  Automatically handles mapping provided null values
+        /// so that the nullEmitter is used by default or whenever the Emitter has been explicitly assigned to null.
         /// </summary>
-        /// <remarks>This object is a struct to allow the JIT compiler to fully optimize the logic embedded in the Emitter property </remarks>
+        /// <remarks>This object is a struct to allow the JIT compiler to fully optimize the logic embedded in the Emitter property</remarks>
         public struct MesgEmitterContainer
         {
-            /// <summary>Internal storage for the emitter</summary>
+            /// <summary>Internal storage for the emitter.</summary>
             private IMesgEmitter mesgEmitter;
 
             /// <summary>get/set public accessable property.  setter may assigned an IMesgEmitter or null.  getter returns the given emitter or the NullEmitter by default or if the last set value was null.</summary>
-            public IMesgEmitter Emitter { get { return (mesgEmitter ?? NullEmitter); } set { mesgEmitter = value; } }
+            public IMesgEmitter Emitter 
+            { 
+                get { return mesgEmitter ?? (mesgEmitter = NullEmitter); } 
+                set { mesgEmitter = value ?? NullEmitter; } 
+            }
 
             /// <summary>Support implict casting from GenericMesgEmitterBase(IMesgEmitter proxy) to MesgEmitterContainer</summary>
             public static implicit operator MesgEmitterContainer(GenericMesgEmitterBase emitter)
@@ -1666,7 +1671,7 @@ namespace MosaicLib
         /// This choice is based on the expectation that this method will only typically be used during startup and thus the added overhead of the use of the PropertyInfo/FieldInfo SetValue method
         /// will be limited to the period during which objects are being constructed.
         /// </remarks>
-        public static void SetAnnotatedInstanceEmitters<TargetObjectType>(TargetObjectType targetObject, Dictionary<string, IMesgEmitter> emitterSet)
+        public static void SetAnnotatedInstanceEmitters<TargetObjectType>(TargetObjectType targetObject, IDictionary<string, IMesgEmitter> emitterSet)
         {
             Dictionary<string, Modular.Reflection.Attributes.ItemInfo<MesgEmitterPropertyAttribute>> itemDictionary
                 = Modular.Reflection.Attributes.AnnotatedClassItemAccessHelper<MesgEmitterPropertyAttribute>.ExtractItemInfoAccessDictionaryFrom(typeof(TargetObjectType), MosaicLib.Modular.Reflection.Attributes.ItemSelection.IncludeExplicitItems);
