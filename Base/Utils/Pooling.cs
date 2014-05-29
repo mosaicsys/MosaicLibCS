@@ -25,7 +25,160 @@ namespace MosaicLib.Utils.Pooling
 	using System;
 	using System.Collections.Generic;
 
-	#region Pooling Intefaces
+    #region Basic Pool Interface and implementation
+
+    /// <summary>This interface defines the public interface for Basic Object Pools.</summary>
+    public interface IBasicObjectPool<ObjectType>
+        where ObjectType : class
+    {
+        /// <summary>Method allows caller to obtain a free object from the pool.  Returned object will either be newly created for will have been returned to the pool when its reference count was decremented to zero.</summary>
+        ObjectType GetFreeObjectFromPool();
+        /// <summary>
+        /// Returns the given object to the pool.  Has no effect if given the null value.  Generally the object should have been acquired from the pool.  
+        /// <para/>The caller is required to pass the last variable/handle to theObject to this method by reference and this method will set the referenced variable/handle to null to complete the return of the object.
+        /// If the pool is already full then the object will be dropped or disposed (as appropriate) using Fcns.DisposeOfObject
+        /// </summary>
+        void ReturnObjectToPool(ref ObjectType objRef);
+        /// <summary>Returns the maximum number of pool objects that may be retained in the pool.  Additional objects will be dropped (and will be collected by the GC).</summary>
+        int Capacity { get; }
+        /// <summary>Returns the current number of object in the pool.</summary>
+        int Count { get; }
+        /// <summary>Releases all objects from the pool and disables the return of objects to the pool.  Subsequent calls to GetFreeObjectFromPool will explicitly create objects and will not associate them with the pool.</summary>
+        void Shutdown();
+    }
+
+    /// <summary>
+    /// This class implements a basic Object Pool where objects of a given type may be acquired from the pool (which creates them as needed) and may 
+    /// be returned to the pool (which may dispose them if the pool is already full).  The client is responsible for all object lifetime managment
+    /// </summary>
+    /// <typeparam name="ObjectType"></typeparam>
+    public class BasicObjectPool<ObjectType>
+        : Utils.DisposableBase
+        , IBasicObjectPool<ObjectType>
+        where ObjectType : class
+    {
+        #region Construction, Setup, Disposal
+
+        /// <summary>
+        /// Default constructor.  Enables the pool and sets the Capacity to the default of 1.  
+        /// Caller must set the ObjectFactoryDelegate property to a valid factory delegate before attempting to Get an object from the pool
+        /// </summary>
+        public BasicObjectPool()
+        {
+            Capacity = 1;
+            poolIsEnabled = true;
+            AddExplicitDisposeAction(() => Shutdown());
+        }
+
+        /// <summary>
+        /// This propery defines the delegate that is used to construct new objects in the pool.  This property is generally initialized during object construction.
+        /// <para/>This propertie's setter is not threadsafe and must not be changed after the first call to GetFreeObjectFromPool has been made if the GetFreeObjectFromPool method
+        /// is being used by more than one thread at a time.
+        /// </summary>
+        public System.Func<ObjectType> ObjectFactoryDelegate { get; set; }
+
+        #endregion
+
+        #region IObjectPool<ObjectType> Members
+
+        /// <summary>
+        /// Attempts to obtain a free object from the pool.  If there are none or if the pool is not enabled, then explicitly Constructs a new object and returns it.
+        /// </summary>
+        public virtual ObjectType GetFreeObjectFromPool()
+        {
+            ObjectType obj = null;
+
+            lock (freeObjectStackMutex)
+            {
+                if (poolIsEnabled && freeObjectStack.Count > 0)
+                    obj = freeObjectStack.Pop();
+            }
+
+            if (obj == null && ObjectFactoryDelegate != null)
+                obj = ObjectFactoryDelegate();
+
+            return obj;
+        }
+
+        /// <summary>
+        /// Returns the given object to the pool.  Has no effect if given the null value.  Generally the object should have been acquired from the pool.  
+        /// <para/>The caller is required to pass the last variable/handle to theObject to this method by reference and this method will set the referenced variable/handle to null to complete the return of the object.
+        /// If the pool is already full then the object will be dropped or disposed (as appropriate) using Fcns.DisposeOfObject
+        /// </summary>
+        public virtual void ReturnObjectToPool(ref ObjectType objRef)
+        {
+            ObjectType objRefCopy = objRef;
+
+            objRef = null;
+
+            if (objRefCopy != null)
+            {
+
+                lock (freeObjectStackMutex)
+                {
+                    if (poolIsEnabled && freeObjectStack.Count < freeObjectStackCapacity)
+                    {
+                        freeObjectStack.Push(objRefCopy);
+                        objRefCopy = null;
+                    }
+                }
+            }
+
+            Fcns.DisposeOfObject(ref objRefCopy);
+        }
+
+        /// <summary>Returns the maximum number of free objects that can be contained in the pool.</summary>
+        public int Capacity { get { return freeObjectStackCapacity; } set { freeObjectStackCapacity = value; } }
+
+        /// <summary>Returns the number of free objects in the pool.</summary>
+        public int Count { get { lock (freeObjectStackMutex) { return freeObjectStack.Count; } } }
+
+        /// <summary>Disables the pool and disposes of all objects that remain in the freeObjctStack.</summary>
+        public void Shutdown()
+        {
+            lock (freeObjectStackMutex)
+            {
+                // disable the pool
+                poolIsEnabled = false;
+
+                if (freeObjectStack != null)
+                {
+                    // remove and dispose of all objects in the freeObjectStack
+                    while (freeObjectStack.Count > 0)
+                    {
+                        ObjectType obj = freeObjectStack.Pop();
+                        Fcns.DisposeOfObject(ref obj);
+                    }
+
+                    freeObjectStack = null;
+                }
+
+                freeObjectStackCapacity = 0;
+            }
+        }
+
+        #endregion
+
+        #region Private instance variables
+
+        /// <summary>volatile bool used to determine if the pool is enabled.  Pool construction enables the pool.  Explicit call to Shutdown or explicit disposal of this pool object. </summary>
+        private volatile bool poolIsEnabled = false;
+
+        /// <summary>object used as mutex for access to freeObjectStack and freeObjectStackCapacity.</summary>
+        object freeObjectStackMutex = new object();
+
+        /// <summary>Stack of free objects that are currently in the pool.  Use of LIFO semantics is chosen to generally improve cache and virtual memory efficiency.</summary>
+        Stack<ObjectType> freeObjectStack = null;
+
+        /// <summary>field defines the maximum number of objects that the freeObjectStack can hold.</summary>
+        volatile int freeObjectStackCapacity = 0;
+
+        #endregion
+    }
+
+    #endregion
+
+    #region Reference counted object Pool related Intefaces
 
     /// <summary>
     /// Defines a delegate that is used by a pooled object to allow it to release itself to the pool from which the object was created.  
@@ -55,7 +208,7 @@ namespace MosaicLib.Utils.Pooling
 	}
 
     /// <summary>This interface is used by the Pool itself to assign the ReleaseObjectToPoolDelegate after a new object has been added to the pool.</summary>
-    public interface IPoolableRefCountedObject<ObjectType> : IRefCountedObject<ObjectType> where ObjectType : class, new()
+    public interface IPoolableRefCountedObject<ObjectType> : IRefCountedObject<ObjectType> where ObjectType : class
 	{
         /// <summary>Pool is allowed to get or set the ReleaseObjectToPoolDelegate.  Property may only be set when object IsUnique</summary>
         ReleaseObjectToPoolDelegate<ObjectType> ReleaseObjectToPoolDelegate { get; set; }
@@ -73,7 +226,7 @@ namespace MosaicLib.Utils.Pooling
 
     /// <summary>This interface defines the public interface for Object Pools based on object types that support the IPoolableRefCountedObject interface.</summary>
     public interface IObjectPool<ObjectType>
-		where ObjectType : class, IPoolableRefCountedObject<ObjectType>, new()
+		where ObjectType : class, IPoolableRefCountedObject<ObjectType>
 	{
         /// <summary>Method allows caller to obtain a free object from the pool.  Returned object will either be newly created for will have been returned to the pool when its reference count was decremented to zero.</summary>
         ObjectType GetFreeObjectFromPool();
@@ -85,9 +238,221 @@ namespace MosaicLib.Utils.Pooling
         void Shutdown();
 	}
 
-	#endregion
+    #endregion
 
-	#region Pooled object base classe
+    #region ObjectPool classes
+
+    /// <summary>This generic class provides the primary implementation for the IObjectPool generic interface.</summary>
+    /// <typeparam name="ObjectType">Non-abstract object type that supports the IPoolableRefCountedObject interface.  Supports ObjectTypes that are IDisposable.</typeparam>
+    /// <remarks>
+    /// Addition of support for IDisposable ObjectType's adds some complexity and release cost to this class.  
+    /// Given the rate at which ObjectPool's are generally created and disposed and given the added value of supporting disposable objects in the pool, the added overhead
+    /// is viewed as acceptable.
+    /// </remarks>
+
+    public class ObjectPool<ObjectType>
+        : ObjectPoolBase<ObjectType>
+        where ObjectType : class, IPoolableRefCountedObject<ObjectType>, new()
+    {
+        /// <summary>Default constructor - uses default initial pool size and capacity of 1000, and 10000 respectively.</summary>
+        public ObjectPool() 
+            : this(DefaultPoolSize, DefaultCapacity) 
+        { 
+        }
+
+        /// <summary>Constructor - caller defines the initial pool size and capacity.  Method enforces minimum capacity of initialPoolSize and 10, whichever is greater.</summary>
+        public ObjectPool(int initialPoolSize, int initialCapacity)
+            : base(initialPoolSize, initialCapacity, () => new ObjectType())
+        {}
+
+    }
+
+    /// <summary>This generic class provides the primary implementation for the IObjectPool generic interface.</summary>
+    /// <typeparam name="ObjectType">Non-abstract object type that supports the IPoolableRefCountedObject interface.  Supports ObjectTypes that are IDisposable.</typeparam>
+    /// <remarks>
+    /// Addition of support for IDisposable ObjectType's adds some complexity and release cost to this class.  
+    /// Given the rate at which ObjectPool's are generally created and disposed and given the added value of supporting disposable objects in the pool, the added overhead
+    /// is viewed as acceptable.
+    /// </remarks>
+
+    public class ObjectPoolBase<ObjectType>
+        : Utils.DisposableBase
+        , IObjectPool<ObjectType>
+        where ObjectType : class, IPoolableRefCountedObject<ObjectType>
+    {
+        #region Constructor and Destructor
+
+        /// <summary>This value gives the default pool size (number of pre-allocated objects) that will be used when the user uses the default constructor.</summary>
+        protected const int DefaultPoolSize = 1000;
+        /// <summary>This value gives the default capacity that will be used when the user uses the default constructor.</summary>
+        protected const int DefaultCapacity = 10000;
+        /// <summary>Gives the Minimum Capacity for any ObjectPool</summary>
+        protected const int MinimumCapacity = 10;
+
+        /// <summary>Default constructor - uses default initial pool size and capacity of 1000, and 10000 respectively.</summary>
+        public ObjectPoolBase(System.Func<ObjectType> objectFactoryDelegate) 
+            : this(DefaultPoolSize, DefaultCapacity, objectFactoryDelegate) 
+        { 
+        }
+
+        /// <summary>Constructor - caller defines the initial pool size and capacity.  Method enforces minimum capacity of initialPoolSize and 10, whichever is greater.</summary>
+        public ObjectPoolBase(int initialPoolSize, int initialCapacity, System.Func<ObjectType> objectFactoryDelegate)
+        {
+            if (initialCapacity < initialPoolSize)
+                initialCapacity = initialPoolSize;
+            if (initialCapacity < MinimumCapacity)
+                initialCapacity = MinimumCapacity;
+
+            ObjectFactoryDelegate = objectFactoryDelegate;
+
+            freeObjectStack = new Stack<IPoolableRefCountedObject<ObjectType>>(initialCapacity);
+            freeObjectStackCapacity = initialCapacity;
+
+            roReleaseObjectToPoolDelegate = ImplementReleaseObjectToPoolDelegate;
+
+            poolIsEnabled = true;
+
+            // explicitly allocated initialPoolSize elements and tell each one that we have removed the initial reference.  
+            // as such Initial objects enter the pool the same way that normal objects to.
+
+            for (int count = 0; count < initialPoolSize; count++)
+            {
+                ObjectType obj = ConstructNewObject();
+                obj.DecrementRefCount();            // skip the full release handler
+                freeObjectStack.Push(obj);
+            }
+        }
+
+        /// <summary>implementation method for DisposableBase.  On explicit dispose, this method will perform a Shutdown if needed so as to dispose of all objects in the stack.</summary>
+        protected override void Dispose(DisposableBase.DisposeType disposeType)
+        {
+            if (poolIsEnabled && disposeType == DisposeType.CalledExplicitly)
+                Shutdown();
+        }
+
+        private System.Func<ObjectType> ObjectFactoryDelegate { get; set; }
+
+        #endregion
+
+        #region IObjectPool<ObjectType> Members
+
+        /// <summary>Attempts to obtain a free object from the pool.  If there are none or if the pool is not enabled, then explicitly Constructs a new object and returns it.</summary>
+        public virtual ObjectType GetFreeObjectFromPool()
+        {
+            ObjectType obj = null;
+
+            lock (freeObjectStackMutex)
+            {
+                if (poolIsEnabled && freeObjectStack.Count > 0)
+                    obj = freeObjectStack.Pop().AddReference();
+            }
+
+            if (obj == null)
+                obj = ConstructNewObject();
+
+            if (!obj.IsUnique)
+                Asserts.TakeBreakpointAfterFault("Pool.GetFreeObjectFromPool gave non-Unique object");
+
+            return obj;
+        }
+
+        /// <summary>Returns the maximum number of free objects that can be contained in the pool.</summary>
+        public int Capacity { get { lock (freeObjectStackMutex) { return freeObjectStackCapacity; } } }
+
+        /// <summary>Returns the number of free objects in the pool.</summary>
+        public int Count { get { lock (freeObjectStackMutex) { return freeObjectStack.Count; } } }
+
+        /// <summary>Disables the pool and disposes of all objects that remain in the freeObjctStack.</summary>
+        public void Shutdown()
+        {
+            lock (freeObjectStackMutex)
+            {
+                // disable the pool
+                poolIsEnabled = false;
+
+                if (freeObjectStack != null)
+                {
+                    // remove and dispose of all objects in the freeObjectStack
+                    while (freeObjectStack.Count > 0)
+                    {
+                        IPoolableRefCountedObject<ObjectType> obj = freeObjectStack.Pop();
+                        ObjectType objAsDerivedType = obj as ObjectType;
+                        if (obj != null && objAsDerivedType != null)
+                            obj.DisposeOfSelf(ref objAsDerivedType);
+                    }
+
+                    freeObjectStack = null;
+                }
+
+                freeObjectStackCapacity = 0;
+            }
+        }
+
+        #endregion
+
+        #region Private instance methods
+
+        /// <summary>readonly instance to the ReleaseObjectToPoolDelegate for this pool.</summary>
+        private readonly ReleaseObjectToPoolDelegate<ObjectType> roReleaseObjectToPoolDelegate;
+
+        /// <summary>This method invokes default new() constructor on ObjectType and then assigns the resulting object's ReleaseObjectToPoolDelegate if this pool is currently enabled.</summary>
+        private ObjectType ConstructNewObject()
+        {
+            ObjectType obj = ObjectFactoryDelegate();
+
+            // mark newly created objects as belonging to this pool only if the pool is enabled
+            if (poolIsEnabled && obj != null)
+                obj.ReleaseObjectToPoolDelegate = roReleaseObjectToPoolDelegate;
+
+            return obj;
+        }
+
+        /// <summary>Implementation method for ReleaseToPoolDelegate.  Confirms that object implements IPoolableRefCountedObject and that it belongs to this pool.</summary>
+        /// <remarks>This delegate method is only called immediately after the object has decremented the reference count to zero.  As such the test for RefCount == 0 is not repeated here.</remarks>
+        private void ImplementReleaseObjectToPoolDelegate(ref ObjectType objRef)
+        {
+            IPoolableRefCountedObject<ObjectType> item = objRef as IPoolableRefCountedObject<ObjectType>;
+
+            if (item == null || item.ReleaseObjectToPoolDelegate != roReleaseObjectToPoolDelegate)
+            {
+                Asserts.TakeBreakpointAfterConditionCheckFailed("Pool.ReleaseObjectToPool failed: returned object is not of correct type or does not belong to this pool.");
+                return; // caller will dispose of objRef as appropriate
+            }
+
+            lock (freeObjectStackMutex)
+            {
+                if (poolIsEnabled && freeObjectStack.Count < freeObjectStackCapacity)
+                {
+                    objRef = null;
+                    freeObjectStack.Push(item);
+                    item = null;
+                }
+                // else - caller will dispose of objRef as appropriate
+            }
+        }
+
+        #endregion
+
+        #region Private instance variables
+
+        /// <summary>volatile bool used to determine if the pool is enabled.  Pool construction enables the pool.  Explicit call to Shutdown or explicit disposal of this pool object. </summary>
+        private volatile bool poolIsEnabled = false;
+
+        /// <summary>object used as mutex for access to freeObjectStack and freeObjectStackCapacity.</summary>
+        object freeObjectStackMutex = new object();
+
+        /// <summary>Stack of free objects that are currently in the pool.  Use of LIFO semantics is chosen to generally improve cache and virtual memory efficiency.</summary>
+        Stack<IPoolableRefCountedObject<ObjectType>> freeObjectStack = null;
+
+        /// <summary>field defines the maximum number of objects that the freeObjectStack can hold.</summary>
+        int freeObjectStackCapacity = 0;
+
+        #endregion
+    }
+
+    #endregion
+
+    #region Pooled object base class (RefCountedRefObjectBase)
 
     /// <summary>This is a common base class that may be used as the base for objects that need to implement the IRefCountedObject and IPoolableRefCountedObject interfaces.</summary>
     /// <remarks>
@@ -96,7 +461,7 @@ namespace MosaicLib.Utils.Pooling
     /// If ObjectType is IDisposable, calls to RemoveReference will directly Dispose of the object when the final reference has been removed and the object does not belong to a pool.
     /// As such use of this base is not recommended for Objects which are also IDisposable unless the user is fully aware of this side effect of the final call to RemoveReferences.
     /// </remarks>
-    public abstract class RefCountedRefObjectBase<ObjectType> : IPoolableRefCountedObject<ObjectType> where ObjectType : class, new()
+    public abstract class RefCountedRefObjectBase<ObjectType> : IPoolableRefCountedObject<ObjectType> where ObjectType : class
 	{
 		#region IPoolableRefCountedObject<ObjectType> implementation
         
@@ -203,183 +568,6 @@ namespace MosaicLib.Utils.Pooling
         private ReleaseObjectToPoolDelegate<ObjectType> releaseObjectToPoolDelegate = null;
 		private AtomicInt32 refCount = new AtomicInt32(1);
 	}
-
-	#endregion
-
-	#region ObjectPool class
-
-    /// <summary>This generic class provides the primary implementation for the IObjectPool generic interface.</summary>
-    /// <typeparam name="ObjectType">Non-abstract object type that supports the IPoolableRefCountedObject interface.  Supports ObjectTypes that are IDisposable.</typeparam>
-    /// <remarks>
-    /// Addition of support for IDisposable ObjectType's adds some complexity and release cost to this class.  
-    /// Given the rate at which ObjectPool's are generally created and disposed and given the added value of supporting disposable objects in the pool, the added overhead
-    /// is viewed as acceptable.
-    /// </remarks>
-
-    public class ObjectPool<ObjectType> 
-        : Utils.DisposableBase
-        , IObjectPool<ObjectType>
-		where ObjectType : class, IPoolableRefCountedObject<ObjectType>, new()
-	{
-		#region Constructor and Destructor
-
-		const int DefaultPoolSize = 1000;
-		const int DefaultCapacity = 10000;
-		const int MinimumCapacity = 10;
-
-        /// <summary>Default constructor - uses default initial pool size and capacity of 1000, and 10000 respectively.</summary>
-		public ObjectPool() : this(DefaultPoolSize, DefaultCapacity) {}
-
-        /// <summary>Constructor - caller defines the initial pool size and capacity.  Method enforces minimum capacity of initialPoolSize and 10, whichever is greater.</summary>
-        public ObjectPool(int initialPoolSize, int initialCapacity) 
-		{
-			if (initialCapacity < initialPoolSize)
-				initialCapacity = initialPoolSize;
-			if (initialCapacity < MinimumCapacity)
-				initialCapacity = MinimumCapacity;
-
-			freeObjectStack = new Stack<IPoolableRefCountedObject<ObjectType>>(initialCapacity);
-			freeObjectStackCapacity = initialCapacity;
-
-            roReleaseObjectToPoolDelegate = ImplementReleaseObjectToPoolDelegate;
-
-            poolIsEnabled = true;
-
-            // explicitly allocated initialPoolSize elements and tell each one that we have removed the initial reference.  
-            // as such Initial objects enter the pool the same way that normal objects to.
-
-            for (int count = 0; count < initialPoolSize; count++)
-			{
-				ObjectType obj = ConstructNewObject();
-                obj.DecrementRefCount();            // skip the full release handler
-                freeObjectStack.Push(obj);
-			}
-		}
-
-        /// <summary>implementation method for DisposableBase.  On explicit dispose, this method will perform a Shutdown if needed so as to dispose of all objects in the stack.</summary>
-        protected override void Dispose(DisposableBase.DisposeType disposeType)
-        {
-            if (poolIsEnabled && disposeType == DisposeType.CalledExplicitly)
-                Shutdown();
-        }
-
-        #endregion
-
-        #region IObjectPool<ObjectType> Members
-
-        /// <summary>Attempts to obtain a free object from the pool.  If there are none or if the pool is not enabled, then explicitly Constructs a new object and returns it.</summary>
-        public virtual ObjectType GetFreeObjectFromPool()
-        {
-            ObjectType obj = null;
-
-            lock (freeObjectStackMutex)
-            {
-                if (poolIsEnabled && freeObjectStack.Count > 0)
-                    obj = freeObjectStack.Pop().AddReference();
-            }
-
-            if (obj == null)
-                obj = ConstructNewObject();
-
-            if (!obj.IsUnique)
-                Asserts.TakeBreakpointAfterFault("Pool.GetFreeObjectFromPool gave non-Unique object");
-
-            return obj;
-        }
-
-        /// <summary>Returns the maximum number of free objects that can be contained in the pool.</summary>
-        public int Capacity { get { lock (freeObjectStackMutex) { return freeObjectStackCapacity; } } }
-
-        /// <summary>Returns the number of free objects in the pool.</summary>
-        public int Count { get { lock (freeObjectStackMutex) { return freeObjectStack.Count; } } }
-
-        /// <summary>Disables the pool and disposes of all objects that remain in the freeObjctStack.</summary>
-        public void Shutdown()
-        {
-            lock (freeObjectStackMutex)
-            {
-                // disable the pool
-                poolIsEnabled = false;
-
-                if (freeObjectStack != null)
-                {
-                    // remove and dispose of all objects in the freeObjectStack
-                    while (freeObjectStack.Count > 0)
-                    {
-                        IPoolableRefCountedObject<ObjectType> obj = freeObjectStack.Pop();
-                        ObjectType objAsDerivedType = obj as ObjectType;
-                        if (obj != null && objAsDerivedType != null)
-                            obj.DisposeOfSelf(ref objAsDerivedType);
-                    }
-
-                    freeObjectStack = null;
-                }
-
-                freeObjectStackCapacity = 0;
-            }
-        }
-
-        #endregion
-
-		#region Private instance methods
-
-        /// <summary>readonly instance to the ReleaseObjectToPoolDelegate for this pool.</summary>
-        private readonly ReleaseObjectToPoolDelegate<ObjectType> roReleaseObjectToPoolDelegate;
-
-        /// <summary>This method invokes default new() constructor on ObjectType and then assigns the resulting object's ReleaseObjectToPoolDelegate if this pool is currently enabled.</summary>
-        private ObjectType ConstructNewObject()
-        {
-            ObjectType obj = new ObjectType();
-
-            // mark newly created objects as belonging to this pool only if the pool is enabled
-            if (poolIsEnabled && obj != null)
-                obj.ReleaseObjectToPoolDelegate = roReleaseObjectToPoolDelegate;
-
-            return obj;
-        }
-
-        /// <summary>Implementation method for ReleaseToPoolDelegate.  Confirms that object implements IPoolableRefCountedObject and that it belongs to this pool.</summary>
-        /// <remarks>This delegate method is only called immediately after the object has decremented the reference count to zero.  As such the test for RefCount == 0 is not repeated here.</remarks>
-        private void ImplementReleaseObjectToPoolDelegate(ref ObjectType objRef)
-		{
-            IPoolableRefCountedObject<ObjectType> item = objRef as IPoolableRefCountedObject<ObjectType>;
-
-            if (item == null || item.ReleaseObjectToPoolDelegate != roReleaseObjectToPoolDelegate)
-            {
-    			Asserts.TakeBreakpointAfterConditionCheckFailed("Pool.ReleaseObjectToPool failed: returned object is not of correct type or does not belong to this pool.");
-                return; // caller will dispose of objRef as appropriate
-            }
-
-			lock (freeObjectStackMutex)
-			{
-                if (poolIsEnabled && freeObjectStack.Count < freeObjectStackCapacity)
-                {
-                    objRef = null;
-                    freeObjectStack.Push(item);
-                    item = null;
-                }
-                // else - caller will dispose of objRef as appropriate
-			}
-		}
-
-		#endregion
-
-        #region Private instance variables
-
-        /// <summary>volatile bool used to determine if the pool is enabled.  Pool construction enables the pool.  Explicit call to Shutdown or explicit disposal of this pool object. </summary>
-        private volatile bool poolIsEnabled = false;
-
-        /// <summary>object used as mutex for access to freeObjectStack and freeObjectStackCapacity.</summary>
-        object freeObjectStackMutex = new object();
-
-        /// <summary>Stack of free objects that are currently in the pool.  Use of LIFO semantics is chosen to generally improve cache and virtual memory efficiency.</summary>
-        Stack<IPoolableRefCountedObject<ObjectType>> freeObjectStack = null;
-
-        /// <summary>field defines the maximum number of objects that the freeObjectStack can hold.</summary>
-        int freeObjectStackCapacity = 0;
-
-        #endregion
-    }
 
 	#endregion
 }

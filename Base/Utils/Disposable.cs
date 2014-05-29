@@ -125,7 +125,9 @@ namespace MosaicLib.Utils
 
 	/// <summary>
 	/// This class is an abstract base class that defines and mostly implements a version the 
-	/// standard CLR IDisposable/Dispose/Finalize pattern.  
+	/// standard CLR IDisposable/Dispose/Finalize pattern. 
+    /// This class provides both a virtual method that may be overriden to field Dispose(DisposeType) 
+    /// calls as well as a Action delegate list pattern using the AddExplicitDisposeAction method.
 	/// </summary>
 	/// <remarks>
 	/// This version uses a slight variation on the standard user provided protected Dispose 
@@ -150,8 +152,10 @@ namespace MosaicLib.Utils
 		}
 
 		/// <summary>
-		/// This abstract method is implemented by a derived class and is used to perform resource cleanup either
+		/// This virtual method may be overriden by a derived class and is used to perform resource cleanup either
 		/// when a user of this object explicitly invokes its public Dispose() method or when this object's Finalizer is called.
+        /// The default implementation does nothing directly, however the internal method that calls this method for the DisposeType.CalledExplicitly case
+        /// will also invoke each of the System.Action delegates that have been given to this base class using the AddExplicitDisposeAction method.
 		/// </summary>
 		/// <param name="disposeType">
 		/// Defines the source of the Dispose call.  Used by invoked method to determine if it can safely access subordinate reference objects
@@ -162,7 +166,9 @@ namespace MosaicLib.Utils
 		/// When invoked by the Finalizer this method should explicitly release any unmanaged resources that it has obtained but must not invoke any methods on
 		/// non-null reference object handles that it continues to have access to.
 		/// </remarks>
-		protected abstract void Dispose(DisposeType disposeType);
+        protected virtual void Dispose(DisposeType disposeType)
+        { 
+        }
 
         /// <summary>
         /// true whenever the object has been Disposed explicitly and the System.GC.SuppressFinalize method has completed.
@@ -200,8 +206,24 @@ namespace MosaicLib.Utils
 			{
 				if (!IsDisposed)
 				{
+                    // call the virtual Dispose method first.
 					this.Dispose(DisposeType.CalledExplicitly);
 
+                    // when it is done, if any explicit Dispose actions have been added using the AddExplicitDisposeAction method then we capture the array of such
+                    //  actions and invoke them in revers order of their addition.
+                    if (explicitDisposeActionList != null)
+                    {
+                        Action[] explicitDisposeActionArray = explicitDisposeActionList.ToArray();
+                        explicitDisposeActionList = null;
+
+                        for (int idx = explicitDisposeActionArray.Length - 1; idx >= 0; idx--)
+                        {
+                            Action explicitDisposeAction = explicitDisposeActionArray[idx];
+                            explicitDisposeAction();
+                        }
+                    }
+
+                    // suppress the GC finalize for this object after the derived class injected dispose behavior has been completed.
 					System.GC.SuppressFinalize(this);
 
                     IsDisposed = true;
@@ -244,11 +266,34 @@ namespace MosaicLib.Utils
 			}
 
             // we leave the activeDisposeCounter non-zero so that any later call will take a breakpoint
-		}
+        }
 
-		#region Private methods and variables
+        #region Explict Dispose Action list and related methods
 
-		/// <summary>Called prior to invoking actual Dispose method.  Allows caller to determine if this is the first attempt to enter the Dispose(type) method or if this is a recursive or concurrent invocation.</summary>
+        /// <summary>
+        /// Sub-class callable method used to add an explicitDisposeAction to the explicitDisposeActionList.  
+        /// All such added actions will be invoked in LIFO order when the part is being explicitly disposed.
+        /// For SimpleActiveParts this will occure after the part has been stopped and after the DisposeCalledPassdown(disposeType) has taken place.
+        /// </summary>
+        protected void AddExplicitDisposeAction(Action explicitDisposeAction)
+        {
+            if (explicitDisposeActionList == null)
+                explicitDisposeActionList = new List<Action>();
+
+            explicitDisposeActionList.Add(explicitDisposeAction);
+        }
+
+        /// <summary>
+        /// This is a private list of actions that will be performed during an explicit dispose.  
+        /// <para/>Items in this list will be invoked by the Dispose() method after the inner Dispose(type) method returns.  Itms will be invoked in reverse of the order these items are added to the list.
+        /// </summary>
+        private List<Action> explicitDisposeActionList = null;
+
+        #endregion
+
+        #region Private methods and variables
+
+        /// <summary>Called prior to invoking actual Dispose method.  Allows caller to determine if this is the first attempt to enter the Dispose(type) method or if this is a recursive or concurrent invocation.</summary>
 		/// <returns>true if this is the only active attempt to enter the Dispose method, false otherwise (due to attempted recursion or concurrent use on more than one thread)</returns>
 		private bool EnteringDispose()
 		{

@@ -31,12 +31,17 @@ namespace MosaicLib.Modular.Reflection
 
         /// <summary>
         /// This is the base class for all custom <see cref="ItemInfo"/> and TItemAttribute classes that may be used here.
+        /// <para/>Provides a Name property and acts as the base class for attribute types that the AccessHelper can process
         /// </summary>
         [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field, AllowMultiple = false)]
         public class AnnotatedItemAttributeBase : System.Attribute
         {
             /// <summary>Default constructor.</summary>
-            public AnnotatedItemAttributeBase() : base() { Name = null; }
+            public AnnotatedItemAttributeBase() 
+                : base() 
+            {
+                Name = null; 
+            }
 
             /// <summary>
             /// This property allows the attribute definition to set the item Name that should be used in the type definition for this item.  
