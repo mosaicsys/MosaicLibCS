@@ -50,7 +50,7 @@ namespace MosaicLib
 
 					config = frlConfig;
 					dirMgr = new File.DirectoryFileRotationManager(config.name);
-					lineFmt = new LineFormat(true, config.includeQpcTime, true, true, true, config.includeFileAndLine, "\r\n", "\t");
+                    lineFmt = new LineFormat(true, config.includeQpcTime, true, true, true, config.includeFileAndLine, "\r\n", "\t") { IncludeThreadInfo = config.includeThreadInfo };
 
 					dirMgrConfig = new MosaicLib.File.DirectoryFileRotationManager.Config();
 

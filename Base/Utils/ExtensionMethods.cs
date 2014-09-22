@@ -183,6 +183,17 @@ namespace MosaicLib.Utils
             return (list == null || list.Count == 0);
         }
 
+        /// <summary>
+        /// Extension method sets all of the elements of the given array to the given value.  Has no effect if the array is null or is zero length.
+        /// </summary>
+        public static void SetAll<ItemType>(this ItemType[] array, ItemType value)
+        {
+            int numItems = ((array != null) ? array.Length : 0);
+
+            for (int idx = 0; idx < numItems; idx++)
+                array[idx] = value;
+        }
+
         #endregion
     }
 

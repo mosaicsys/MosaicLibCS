@@ -50,7 +50,10 @@ namespace MosaicLib
             /// <summary>Notification List that is signaled on any completed message delivery.</summary>
             Utils.IBasicNotificationList NotifyOnCompletedDelivery { get; }
 
-            /// <summary>LogMessage Handling method API for direct call by clients which generate and distribute one message at a time.</summary>
+            /// <summary>
+            /// LogMessage Handling method API for direct call by clients which generate and distribute one message at a time.
+            /// Handler is expected to re-test that the message is enabled before processing it (LogDistribution will already have done this for single messages)
+            /// </summary>
             /// <param name="lm">
             /// Gives the message to handle (save, write, relay, ...).
             /// LMH Implementation must either support Reference Counted message semenatics if method will save any reference to a this message for use beyond the scope of this call or
@@ -58,7 +61,10 @@ namespace MosaicLib
             /// </param>
             void HandleLogMessage(LogMessage lm);
 
-            /// <summary>LogMessage Handling method API for use on outputs of queued delivery engines which agregate and distribute one or more messages at a time.</summary>
+            /// <summary>
+            /// LogMessage Handling method API for use on outputs of queued delivery engines which agregate and distribute one or more messages at a time.
+            /// Handler is expected to test if each message is enabled before processing it.
+            /// </summary>
             /// <param name="lmArray">
             /// Gives an array of message to handle as a set (save, write, relay, ...).  This set may be given to muliple handlers and as such may contain messages that are not relevant to this handler.
             /// As such Handler may additionally filter out or skip any messages from the given set as approprate.
@@ -223,6 +229,8 @@ namespace MosaicLib
             public bool includeFileAndLine;
             /// <summary>Set to true to include the QpcTime in the output text.</summary>
             public bool includeQpcTime;
+            /// <summary>Set to true to include the ThreadInfo in the output text.</summary>
+            public bool includeThreadInfo;
 
             /// <summary>A list of strings for file names that will not be tracked or purged by the ring.</summary>
             public List<string> excludeFileNamesSet;
@@ -321,6 +329,7 @@ namespace MosaicLib
 					this.fAndL = fandl;
 					this.endLStr = endlStr;
 					this.tabStr = tabStr;
+                    IncludeKeywords = true;
 				}
 
                 /// <summary>True if the Date is included in formatted output lines.</summary>
@@ -331,8 +340,12 @@ namespace MosaicLib
                 public bool IncludeLevel { get { return level; } }
                 /// <summary>True if the Logger/Source Name is included in formatted output lines.</summary>
                 public bool IncludeSource { get { return source; } }
+                /// <summary>True if the ThreadName and/or ThreadID is to be included in the formatted output lines.</summary>
+                public bool IncludeThreadInfo { get; set; }
                 /// <summary>True if the source File and Line information is included in formatted output lines.</summary>
                 public bool IncludeFileAndLine { get { return fAndL; } }
+                /// <summary>get/set property:  True if keywords information will be included in formatted output lines.</summary>
+                public bool IncludeKeywords { get; set; }
 
                 /// <summary>
                 /// Formats the given message as configured and incrementally Writes it to the given StreamWriter
@@ -351,9 +364,12 @@ namespace MosaicLib
 					if (level) { TabIfNeeded(os, ref firstItem); os.Write(ConvertToFixedWidthString(lm.MesgType)); }
 					if (source) { TabIfNeeded(os, ref firstItem); os.Write(lm.LoggerName); }
 					{ TabIfNeeded(os, ref firstItem); os.Write(lm.Mesg); }
-					{ TabIfNeeded(os, ref firstItem); os.Write(lm.Keywords); }
-					if (data) { TabIfNeeded(os, ref firstItem); os.Write("[{0}]", base64UrlCoder.Encode(lm.Data)); }
-
+                    if (IncludeKeywords) { os.Write(tabStr); os.Write(lm.Keywords); }
+                    if (data) { os.Write(tabStr); os.Write("[{0}]", base64UrlCoder.Encode(lm.Data)); }
+                    if (IncludeThreadInfo)
+                    {
+                        { os.Write(tabStr); os.Write(Utils.Fcns.CheckedFormat("tid:{0:x4}", lm.ThreadID)); }
+                    }
 					if (fAndL && lm.SourceStackFrame != null)
 					{
 						{ os.Write(tabStr); os.Write(lm.SourceStackFrame.GetFileName()); }
@@ -376,9 +392,12 @@ namespace MosaicLib
 					if (level) { TabIfNeeded(ostr, ref firstItem); ostr.Append(ConvertToFixedWidthString(lm.MesgType)); }
 					if (source) { TabIfNeeded(ostr, ref firstItem); ostr.Append(lm.LoggerName); }
 					{ TabIfNeeded(ostr, ref firstItem); ostr.Append(lm.Mesg); }
-                    { TabIfNeeded(ostr, ref firstItem); ostr.Append(lm.Keywords); }
-					if (data) { TabIfNeeded(ostr, ref firstItem); ostr.Append("["); ostr.Append(base64UrlCoder.Encode(lm.Data)); ostr.Append("]"); }
-
+                    if (IncludeKeywords) { ostr.Append(tabStr); ostr.Append(lm.Keywords); }
+                    if (data) { ostr.Append(tabStr); ostr.Append("["); ostr.Append(base64UrlCoder.Encode(lm.Data)); ostr.Append("]"); }
+                    if (IncludeThreadInfo)
+                    {
+                        { ostr.Append(tabStr); ostr.Append(Utils.Fcns.CheckedFormat("tid:{0:x4}", lm.ThreadID)); }
+                    }
 					if (fAndL && lm.SourceStackFrame != null)
 					{
 						{ ostr.Append(tabStr); ostr.Append(lm.SourceStackFrame.GetFileName()); }

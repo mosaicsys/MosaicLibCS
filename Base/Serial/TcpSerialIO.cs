@@ -372,6 +372,32 @@ namespace MosaicLib.SerialIO
 			} 
 		}
 
+        /// <summary>
+        /// Method returns true for errors that indicate that an connected TCP socket is no longer usable even if it is not automatically closed by the OS.
+        /// </summary>
+        private static bool IsPerminantSocketFailure(SocketError sockErr)
+        {
+            switch (sockErr)
+            {
+                case SocketError.AccessDenied:
+                case SocketError.Fault:
+                case SocketError.NetworkDown:
+                case SocketError.NetworkUnreachable:
+                case SocketError.ConnectionAborted:
+                case SocketError.ConnectionReset:
+                case SocketError.ConnectionRefused:
+                case SocketError.Shutdown:
+                case SocketError.TimedOut:
+                case SocketError.NotConnected:
+                case SocketError.HostDown:
+                case SocketError.HostUnreachable:
+                case SocketError.Disconnecting:
+                    return true;
+                default: 
+                    return false;
+            }
+        }
+
         protected override string InnerHandleRead(byte[] buffer, int startIdx, int maxCount, out int didCount, ref ActionResultEnum readResult)
 		{
 			didCount = 0;
@@ -397,8 +423,16 @@ namespace MosaicLib.SerialIO
 				if (sockError != SocketError.Success && sockError != SocketError.WouldBlock)
 				{
 					string faultCode = "Socket.Receive failed with error:" + sockError.ToString();
-					if (!dataSP.Connected)
-						SetBaseState(ConnState.ConnectionFailed, faultCode, true);
+
+                    if (!dataSP.Connected)
+                    {
+                        SetBaseState(ConnState.ConnectionFailed, faultCode + " [Error closed socket]", true);
+                    }
+                    else if (IsPerminantSocketFailure(sockError))
+                    {
+                        SetBaseState(ConnState.ConnectionFailed, faultCode + " [Perminant Error occured on open socket]", true);
+                    }
+                    // else we assume that the connection might still work.
 
 					return faultCode;
 				}
@@ -427,11 +461,19 @@ namespace MosaicLib.SerialIO
 				if (sockError != SocketError.Success && sockError != SocketError.WouldBlock)
 				{
 					string faultCode = "Socket.Send failed with error:" + sockError.ToString();
-					if (!dataSP.Connected)
-						SetBaseState(ConnState.ConnectionFailed, faultCode, true);
+
+                    if (!dataSP.Connected)
+                    {
+                        SetBaseState(ConnState.ConnectionFailed, faultCode + " [Error closed socket]", true);
+                    }
+                    else if (IsPerminantSocketFailure(sockError))
+                    {
+                        SetBaseState(ConnState.ConnectionFailed, faultCode + " [Perminant Error occured on open socket]", true);
+                    }
+                    // else we assume that the connection might still work.
 
 					return faultCode;
-			}
+    			}
 				
 				return string.Empty;
 			}

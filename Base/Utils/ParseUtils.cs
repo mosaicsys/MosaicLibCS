@@ -721,7 +721,7 @@ namespace MosaicLib.Utils
         ///     Converts the string representation of a number to its 32-bit signed integer equivalent.
         ///     A return value indicates whether the conversion succeeded or failed.
         ///     This method first attempts to parse the token as a simple Integer if this fails then the method will determine
-        ///     if the token starts with "0x" or "0X" and if so it will attempt to parse the remainder of the token as a hexadecimal integer.
+        ///     if the token starts with "0x", "0X", or "$" and if so it will attempt to parse the remainder of the token as a hexadecimal integer.
         /// </summary>
         /// <param name="token">A string containing a number to convert.</param>
         /// <param name="value">
@@ -741,6 +741,13 @@ namespace MosaicLib.Utils
 
                 if ((token.StartsWith("0x") || token.StartsWith("0X"))
                     && Int32.TryParse(token.Substring(2), System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out value)
+                    )
+                {
+                    return true;
+                }
+
+                if (token.StartsWith("$")
+                    && Int32.TryParse(token.Substring(1), System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out value)
                     )
                 {
                     return true;

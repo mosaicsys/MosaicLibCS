@@ -41,18 +41,13 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="BrooksInst\SProtocol\SProtocol.cs" />
-    <Compile Include="Brooks\LPM\Brooks_LPM.cs" />
-    <Compile Include="Brooks\LPM\Brooks_LPM_Sim.cs" />
     <Compile Include="Common\E084\E084ActiveTransferSimEngine.cs" />
     <Compile Include="Common\LPM\LPMSim.cs" />
     <Compile Include="Common\MassFlow\MassFlow.cs" />
+    <Compile Include="Common\Motion\Motion.cs" />
     <Compile Include="Common\Protocols\HART\HARTBusMaster.cs" />
     <Compile Include="Common\Protocols\HART\HARTProtocol.cs" />
     <Compile Include="Helpers\Actuator.cs" />
-    <Compile Include="MKS\Ascii485Protocol\Ascii485MfcCommands.cs" />
-    <Compile Include="MKS\Ascii485Protocol\Ascii485Protocol.cs" />
-    <Compile Include="MKS\Ascii485Protocol\Ascii485ProtocolBusMaster.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

@@ -594,8 +594,17 @@ namespace MosaicLib.Modular.Part
 		//-----------------------------------------------------------------
 		#region private and protected fields and related properties (includuing BaseState implementation)
 
+        /// <summary>Public get protected set field contains the default WaitTimeLimit for the Part's thread.  Generally used when calling WaitForSomethingToDo().  Setter clamps value to be between minWaitTimeLimit and maxWaitTimeLimit seconds</summary>
+        protected TimeSpan WaitTimeLimit { get { return innerWaitTimeLimitStore; } private set { innerWaitTimeLimitStore = ((value >= minWaitTimeLimit) ? ((value <= maxWaitTimeLimit) ? value : maxWaitTimeLimit) : minWaitTimeLimit); } }
         /// <summary>Protected readonly field contains the default waitTimeLimit for the Part's thread.  Generally used when calling WaitForSomethingToDo().</summary>
-		protected readonly TimeSpan waitTimeLimit;
+        protected TimeSpan waitTimeLimit { get { return innerWaitTimeLimitStore; } private set { innerWaitTimeLimitStore = value; } }
+
+        /// <summary>Defines the maximum value that the WaitTimeLimit property can be set to.  0.5 seconds.</summary>
+        protected static readonly TimeSpan maxWaitTimeLimit = TimeSpan.FromSeconds(0.5);
+        /// <summary>Defines the minimum value that the WaitTimeLimit property can be set to.  0.0 seconds.</summary>
+        protected static readonly TimeSpan minWaitTimeLimit = TimeSpan.FromSeconds(0.0);
+        /// <summary>Internal backing storage for the waitTimeLimit and WaitTimeLimit properties</summary>
+        private TimeSpan innerWaitTimeLimitStore;
 
         /// <summary>Protected readonly WaitEventNotifier used by the Part's main thread as part of the WaitForSomethingToDo pattern.</summary>
         protected readonly WaitEventNotifier threadWakeupNotifier = new WaitEventNotifier(WaitEventNotifier.Behavior.WakeOne);

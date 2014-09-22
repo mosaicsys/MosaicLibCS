@@ -18,7 +18,6 @@
  * limitations under the License.
  */
 
-
 namespace MosaicLib.PartsLib.Common.LPM.Sim
 {
     using System;

@@ -103,32 +103,32 @@ namespace MosaicLib
 
 		/// <summary>this enum defines a set of message types and an implicit ranking of their severities</summary>
         [DataContract(Namespace=Constants.LoggingNameSpace)]
-		public enum MesgType
+		public enum MesgType : int
 		{
             /// <summary>used as a gate to surpress passing all mesg types</summary>
             [EnumMember]
 			None = 0,
             /// <summary>used to record occurance of setup related (ctor) issues that may prevent use of the affected entity</summary>
             [EnumMember]
-            Fatal,
+            Fatal = 1,
             /// <summary>used to record occurance of unexpected failures that might prevent future actions from operating correctly</summary>
             [EnumMember]
-            Error,
+            Error = 2,
             /// <summary>used to record occurance of unexpected failures which are not expected to prevent future actions from operating correctly.</summary>
             [EnumMember]
-            Warning,
+            Warning = 3,
             /// <summary>used to record occurance of significant milestones and/or changes during normal operation of the system</summary>
             [EnumMember]
-            Signif,
+            Signif = 4,
             /// <summary>used to record occurance of relatively insignificant items.</summary>
             [EnumMember]
-            Info,
+            Info = 5,
             /// <summary>used to record occurance of information that is intended to provide an even more detailed view</summary>
             [EnumMember]
-            Debug,
+            Debug = 6,
             /// <summary>used to record occurance of very frequent events such as those used to track data transfer, flow of control, construction and destruction, etc...</summary>
             [EnumMember]
-            Trace,
+            Trace = 7,
             /// <summary>used as a level to permit passing all mesg types</summary>
             [EnumMember]
             All,			
@@ -244,6 +244,17 @@ namespace MosaicLib
             /// <summary>Constructor for mask with initialBits specified explicitly</summary>
             public MesgTypeMask(int initialBits) { maskBits = initialBits; }
 
+            /// <summary>Constructor for parsing from a string version</summary>
+            public MesgTypeMask(string parseStr) : this()
+            {
+                MesgTypeMask mtm;
+                if (TryParse(parseStr, out mtm))
+                    maskBits = mtm.maskBits;
+            }
+
+            /// <summary>Helper property for unit testing.  This property is not expected to be applicable for general use.</summary>
+            public int MaskBits { get { return maskBits; } }
+
             /// <summary>Returns a mask derived from the given mesgType and maskType.</summary>
             /// <param name="mesgType">Defines the mesg type enum value from which the mask is derived.</param>
             /// <param name="maskType">Defines whether the mask is a Bit mask (only one bit set) or a Level mask (all bits at this or any more severe level are set).</param>
@@ -267,7 +278,7 @@ namespace MosaicLib
 					case MaskType.Bit:
 						return unchecked(1 << shift);
 					case MaskType.Level:
-						return unchecked((1 << (shift + 1)) - 1);	// include all the bits at the current level and above it
+						return unchecked((1 << (shift + 1)) - 1);	// include all the bits at the current level and all levels above it (ie bits at pregressively lower bit possitions)
 					default:
 						return 0;
 				}
@@ -298,20 +309,22 @@ namespace MosaicLib
                 {
                     case 0: detail = "None"; break;
                     case -1: detail = "All"; break;
-                    case (1 << (int)(MesgType.Fatal)): detail = "Fatal"; break;
-                    case (1 << (int)(MesgType.Error)): detail = "Error"; break;
-                    case (1 << (int)(MesgType.Warning)): detail = "Warning"; break;
-                    case (1 << (int)(MesgType.Signif)): detail = "Signif"; break;
-                    case (1 << (int)(MesgType.Info)): detail = "Info"; break;
-                    case (1 << (int)(MesgType.Debug)): detail = "Debug"; break;
-                    case (1 << (int)(MesgType.Trace)): detail = "Trace"; break;
-                    case ((1 << ((int)(MesgType.Fatal) + 1)) - 1): detail = "Fatal+"; break;
-                    case ((1 << ((int)(MesgType.Error) + 1)) - 1): detail = "Error+"; break;
-                    case ((1 << ((int)(MesgType.Warning) + 1)) - 1): detail = "Warning+"; break;
-                    case ((1 << ((int)(MesgType.Signif) + 1)) - 1): detail = "Signif+"; break;
-                    case ((1 << ((int)(MesgType.Info) + 1)) - 1): detail = "Info+"; break;
-                    case ((1 << ((int)(MesgType.Debug) + 1)) - 1): detail = "Debug+"; break;
-                    case ((1 << ((int)(MesgType.Trace) + 1)) - 1): detail = "Trace+"; break;
+
+                    case (1 << ((int)(MesgType.Fatal) - 1)): detail = "Fatal"; break;
+                    case (1 << ((int)(MesgType.Error) - 1)): detail = "Error"; break;
+                    case (1 << ((int)(MesgType.Warning) - 1)): detail = "Warning"; break;
+                    case (1 << ((int)(MesgType.Signif) - 1)): detail = "Signif"; break;
+                    case (1 << ((int)(MesgType.Info) - 1)): detail = "Info"; break;
+                    case (1 << ((int)(MesgType.Debug) - 1)): detail = "Debug"; break;
+                    case (1 << ((int)(MesgType.Trace) - 1)): detail = "Trace"; break;
+
+                    // case ((1 << ((int)(MesgType.Fatal) - 0)) - 1): detail = "Fatal+"; break;     // there is nothing above Fatal so we cannot have a Fatal+
+                    case ((1 << ((int)(MesgType.Error) - 0)) - 1): detail = "Error+"; break;
+                    case ((1 << ((int)(MesgType.Warning) - 0)) - 1): detail = "Warning+"; break;
+                    case ((1 << ((int)(MesgType.Signif) - 0)) - 1): detail = "Signif+"; break;
+                    case ((1 << ((int)(MesgType.Info) - 0)) - 1): detail = "Info+"; break;
+                    case ((1 << ((int)(MesgType.Debug) - 0)) - 1): detail = "Debug+"; break;
+                    case ((1 << ((int)(MesgType.Trace) - 0)) - 1): detail = "Trace+"; break;
                     default: detail = "Custom"; break;
                 }
 
@@ -325,21 +338,21 @@ namespace MosaicLib
                     {"None", 0},
                     {"All", -1},
 
-                    {"Fatal", (int)(MesgType.Fatal)},
-                    {"Error", (int)(MesgType.Error)},
-                    {"Warning", (int)(MesgType.Warning)},
-                    {"Signif", (int)(MesgType.Signif)},
-                    {"Info", (int)(MesgType.Info)},
-                    {"Debug", (int)(MesgType.Debug)},
-                    {"Trace", (int)(MesgType.Trace)},
+                    {"Fatal", (1 << ((int)(MesgType.Fatal) - 1))},
+                    {"Error", (1 << ((int)(MesgType.Error) - 1))},
+                    {"Warning", (1 << ((int)(MesgType.Warning) - 1))},
+                    {"Signif", (1 << ((int)(MesgType.Signif) - 1))},
+                    {"Info", (1 << ((int)(MesgType.Info) - 1))},
+                    {"Debug", (1 << ((int)(MesgType.Debug) - 1))},
+                    {"Trace", (1 << ((int)(MesgType.Trace) - 1))},
 
-                    {"Fatal+", ((1 << ((int)(MesgType.Fatal) + 1)) - 1)},
-                    {"Error+", ((1 << ((int)(MesgType.Error) + 1)) - 1)},
-                    {"Warning+", ((1 << ((int)(MesgType.Warning) + 1)) - 1)},
-                    {"Signif+", ((1 << ((int)(MesgType.Signif) + 1)) - 1)},
-                    {"Info+", ((1 << ((int)(MesgType.Info) + 1)) - 1)},
-                    {"Debug+", ((1 << ((int)(MesgType.Debug) + 1)) - 1)},
-                    {"Trace+", ((1 << ((int)(MesgType.Trace) + 1)) - 1)},
+                    // {"Fatal+", ((1 << ((int)(MesgType.Fatal) - 0)) - 1)},     // there is nothing above Fatal so we cannot have a Fatal+
+                    {"Error+", ((1 << ((int)(MesgType.Error) - 0)) - 1)},
+                    {"Warning+", ((1 << ((int)(MesgType.Warning) - 0)) - 1)},
+                    {"Signif+", ((1 << ((int)(MesgType.Signif) - 0)) - 1)},
+                    {"Info+", ((1 << ((int)(MesgType.Info) - 0)) - 1)},
+                    {"Debug+", ((1 << ((int)(MesgType.Debug) - 0)) - 1)},
+                    {"Trace+", ((1 << ((int)(MesgType.Trace) - 0)) - 1)},
                 };
 
             /// <summary>Provides a method that will attempt to generate a MesgTypeMask from a given string resulting from calling ToString on another MesgTypeMask.  Returns true if the original could be reconstructed or false if the string was not recognized and was not decodable.</summary>
@@ -349,9 +362,16 @@ namespace MosaicLib
                 bool success = false;
                 Utils.StringScanner scan = new MosaicLib.Utils.StringScanner(s);
 
-                if (scan.ParseTokenAndMapValueByName<int>(MesgTypeMaskNameMap, out maskBits) && (scan.IsAtEnd || scan.Char == '['))     // ignore trailing [$hh] if it is present
+                string name = scan.ExtractToken(MosaicLib.Utils.TokenType.AlphaNumeric, false);
+                if (scan.Char == '+')
+                {
+                    name = name + scan.Char;
+                    scan.Idx++;
+                }
+
+                if (Utils.StringScanner.FindTokenValueByName(name, MesgTypeMaskNameMap, out maskBits) && (scan.IsAtEnd || scan.Char == '['))    // ignore trailing [$hh] if it is present
                     success = true;
-                else if (scan.MatchToken("Custom[$") && scan.ParseValue(out maskBits) && scan.MatchToken("]") && scan.IsAtEnd)
+                else if (name == "Custom" && scan.MatchToken("[$", false, false) && scan.ParseHexValue(out maskBits, 1, 8, false, false, false) && scan.MatchToken("]", false, false) && scan.IsAtEnd)
                     success = true;
 
                 mtm = new MesgTypeMask(maskBits);
@@ -726,10 +746,22 @@ namespace MosaicLib
                 EmittedQpcTime = rhs.EmittedQpcTime;
                 SeqNum = rhs.SeqNum;
                 ThreadID = rhs.ThreadID;
+                threadName = rhs.threadName;
             }
 
             /// <summary>Resets contents to default state</summary>
-            public void Reset() { ResetEmitted(); MesgType = MesgType.None; mesg = string.Empty; KeywordArray = null; SourceStackFrame = null; ThreadID = -1; SeqNum = NullMessageSeqNum; }
+            public void Reset()
+            { 
+                ResetEmitted(); 
+                MesgType = MesgType.None; 
+                mesg = string.Empty; 
+                KeywordArray = null; 
+                SourceStackFrame = null; 
+                ThreadID = -1; 
+                ThreadName = null; 
+                SeqNum = NullMessageSeqNum; 
+            }
+
             /// <summary>Asserts that the message is in the not-emitted state.  Primarily used for enforcing that pool messages are recycled correctly.</summary>
             public void AssertNotEmitted(string caller) { if (Emitted) Utils.Asserts.TakeBreakpointAfterFault("AssertNotEmitted failed for:" + caller); }
 
@@ -825,11 +857,20 @@ namespace MosaicLib
             /// <summary>Returns the message Sequence number as assigned when the message was emitted.  May be used to determine when the message has been delivered from the distribution system.</summary>
             public int SeqNum { get; internal set; }
 
-            /// <summary>Returns the ThreadID that initially setup the message.</summary>
+            /// <summary>Returns the ThreadID that initially setup this message.</summary>
             public int ThreadID { get; private set; }
 
-            /// <summary>Method used to set the contained ThreadID during setup</summary>
-            private void SetThreadID() { ThreadID = System.Threading.Thread.CurrentThread.ManagedThreadId; }
+            private string threadName = null;
+            /// <summary>Returns the ThreadName that initially setup this message.</summary>
+            public string ThreadName { get { return threadName ?? String.Empty; } private set { threadName = value; } }
+
+            /// <summary>Method used to set the contained ThreadID and ThreadName during setup</summary>
+            private void SetThreadID() 
+            {
+                System.Threading.Thread currentThread = System.Threading.Thread.CurrentThread;
+                ThreadID = currentThread.ManagedThreadId;
+                threadName = currentThread.Name;
+            }
 
             /// <summary>Method used to get the EmittedDataTime formatted as a standard string.</summary>
             public string GetFormattedDateTime() { return GetFormattedDateTime(Utils.Dates.DateTimeFormat.LogDefault); }
@@ -1643,7 +1684,7 @@ namespace MosaicLib
             }
 
             /// <summary>Explicit contructor from a given IMesgEmitter instance</summary>
-            public MesgEmitterContainer(IMesgEmitter emitter) 
+            public MesgEmitterContainer(IMesgEmitter emitter)
                 : this()
             {
                 Emitter = emitter;
@@ -1976,6 +2017,8 @@ namespace MosaicLib
 			private const string defaultCtorPrefixStr = "Ctor:";
 			private const string defaultDisposePrefixStr = "Dispose:";
 
+            public string ExtraMessage { get; set; }
+
             /// <summary>Defines the default message type that will be used for messages emitted by this object.</summary>
 			protected const MesgType defaultMesgType = MesgType.Trace;
 
@@ -2033,10 +2076,12 @@ namespace MosaicLib
                 {
                     if (disposeStr != null)
                     {
+                        string finalDisposeStr = (String.IsNullOrEmpty(ExtraMessage) ? disposeStr : Utils.Fcns.CheckedFormat("{0} [{1}]", disposeStr, ExtraMessage));
+
                         if (disposeType == DisposeType.CalledExplicitly && mesgEmitter != null)
-                            mesgEmitter.Emit(disposeSkipNStackFrames + 1, disposeStr);
+                            mesgEmitter.Emit(disposeSkipNStackFrames + 1, finalDisposeStr);
                         else if (warningEmitter != null)
-                            warningEmitter.Emit(disposeSkipNStackFrames + 1, "Unexpected '{0}' disposal of trace object for mesg:'{1}'", disposeType.ToString(), disposeStr);
+                            warningEmitter.Emit(disposeSkipNStackFrames + 1, "Unexpected '{0}' disposal of trace object for mesg:{1}", disposeType, finalDisposeStr);
                     }
                 }
                 catch

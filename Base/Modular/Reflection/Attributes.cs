@@ -252,13 +252,19 @@ namespace MosaicLib.Modular.Reflection
                     bool canRead = pi.CanRead;
                     bool canWrite = pi.CanWrite;
                     Type piType = pi.PropertyType;
-                    bool isPublic = (pi.GetGetMethod() ?? pi.GetSetMethod()).IsPublic;
+                    MethodInfo getPMI = pi.GetGetMethod();
+                    MethodInfo setPMI = pi.GetSetMethod();
+                    bool isGetMethodAvailable = (getPMI != null);
+                    bool isGetMethodPublic = (isGetMethodAvailable && getPMI.IsPublic);
+                    bool isSetMethodAvailable = (setPMI != null);
+                    bool isSetMethodPublic = (isSetMethodAvailable && setPMI.IsPublic);
+                    bool isGetOrSetMethodPublic = (isGetMethodPublic || isSetMethodPublic);
 
                     attribArray = pi.GetCustomAttributes(ItemAttributeType, false);
                     TItemAttribute ia = (attribArray.Length == 1 ? (attribArray[0] as TItemAttribute) : null);
 
-                    bool includeThisPublicProperty = (isPublic && (includeAllPublicProperties || (ia != null && includeExplicitPublicItems)));
-                    bool includeThisExplicitProperty = (!isPublic && (ia != null && includeExplicitItems));
+                    bool includeThisPublicProperty = (isGetOrSetMethodPublic && (includeAllPublicProperties || (ia != null && includeExplicitPublicItems)));
+                    bool includeThisExplicitProperty = (!isGetOrSetMethodPublic && (ia != null && includeExplicitItems));
                     if (!includeThisPublicProperty && !includeThisExplicitProperty)
                         continue;		// skip properties that are not selected for inclusion
 

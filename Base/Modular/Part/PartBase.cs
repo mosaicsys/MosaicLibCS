@@ -82,9 +82,9 @@ namespace MosaicLib.Modular.Part
 		WaitingForConnect,
 		/// <summary>Connection to remote device is believed to be available and/or operating correctly</summary>
 		Connected,
-		/// <summary>Connection to remote device is not available (rejected or failed while in use)</summary>
+        /// <summary>Connection to remote device is not available (rejected or failed while in use).  State supports automatic reconnection attempt</summary>
 		ConnectionFailed,
-		/// <summary>Attempt to connect failed.  May automatically transition back to AttemptConnect</summary>
+		/// <summary>Attempt to connect failed.  State supports automatic reconnection attempt</summary>
 		ConnectFailed,
 		/// <summary>Connection has been explicitly stopped</summary>
 		Disconnected,

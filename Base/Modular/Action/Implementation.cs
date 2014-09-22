@@ -527,11 +527,17 @@ namespace MosaicLib.Modular.Action
 	public interface IProviderActionBase<ParamType, ResultType> 
         : IProviderActionBase
 	{
-        /// <summary>Gives the provider get access to the ParamValue as last set by the client.</summary>
-		ParamType ParamValue { get; }
+        /// <summary>
+        /// Gives the provider get/set access to the ParamValue as last set by the client.
+        /// <para/>Access to setter gives specific powers to the action provider that should be used with caution.  Generally the provider should only change the parameter contents while the command is active.
+        /// </summary>
+        ParamType ParamValue { get; set; }
 
-        /// <summary>Gives the provider set access to the ResultValue that will be given to the client once the Action is complete.</summary>
-		ResultType ResultValue { set; }
+        /// <summary>
+        /// Gives the provider get/set access to the ResultValue that will be given to the client once the Action is complete.
+        /// <para/>Generally the provider should only change the parameter contents while the command is active.
+        /// </summary>
+        ResultType ResultValue { get; set; }
 
         /// <summary>Used by the provider to mark an Action as complete and provide the corresponding resultCode and resultValue in a single call.</summary>
         /// <param name="resultCode">Gives the error code, or non if the string is empty to indicate the success or failure of the action.</param>
@@ -906,11 +912,32 @@ namespace MosaicLib.Modular.Action
 
 		#region IProviderActionBase<ParamType, ResultType> (et. al.)
 
-        /// <summary>Gives the provider get access to the ParamValue as last set by the client.</summary>
-        ParamType IProviderActionBase<ParamType, ResultType>.ParamValue { get { return paramValue; } }
+        /// <summary>
+        /// Gives the provider get/set access to set the ParamValue - getter simple returns the stored value as last set by the client or the provider.  Setter locks the actionState, sets the value and Emits an action event
+        /// </summary>
+        ParamType IProviderActionBase<ParamType, ResultType>.ParamValue
+        {
+            get { return paramValue; }
+            set
+            {
+                lock (actionStateMutex)
+                {
+                    paramValue = value;
 
-        /// <summary>Gives the provider set access to the ResultValue that will be given to the client once the Action is complete.</summary>
-        ResultType IProviderActionBase<ParamType, ResultType>.ResultValue { set { resultValue = value; } }
+                    EmitActionEvent(Utils.Fcns.CheckedFormat("Provider set paramValue to '{0}'", value.ToString()), actionState.StateCode);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gives the provider get/set access to the ResultValue - directly assigns and reads the internal storage without locks as the provider should only access this when the action is in progress.
+        /// Final ResultValue will be available to the client once the Action is complete.
+        /// </summary>
+        ResultType IProviderActionBase<ParamType, ResultType>.ResultValue
+        {
+            get { return resultValue; }
+            set { resultValue = value; }
+        }
 
         /// <summary>Used by the provider to mark an Action as complete and provide the corresponding resultCode and resultValue in a single call.</summary>
         /// <param name="resultCode">Gives the error code, or non if the string is empty to indicate the success or failure of the action.</param>
@@ -1082,7 +1109,7 @@ namespace MosaicLib.Modular.Action
 
 
 		#endregion
-	}
+    }
 
 	#endregion
 

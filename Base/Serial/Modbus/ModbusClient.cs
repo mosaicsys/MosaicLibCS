@@ -590,7 +590,7 @@ namespace MosaicLib.SerialIO.Modbus.Client
     /// and to use that port to perform the underlying data transfers required to run Modbus Client Functions, assuming that the port can be used to connect
     /// to an appropriately configured Modbus Server.
     /// </summary>
-    public class ModbusClientFunctionPortAdapter : Modular.Part.SimplePartBase
+    public class ModbusClientFunctionPortAdapter : Modular.Part.SimplePartBase, IModbusClientFunctionAdapter
     {
         #region static values
 
