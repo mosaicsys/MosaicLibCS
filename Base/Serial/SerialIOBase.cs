@@ -387,8 +387,14 @@ namespace MosaicLib.SerialIO
 					if (didCount > 0)
 						slidingPacketBuffer.AddedNChars(didCount);
 
-                    if (!string.IsNullOrEmpty(ec))
-						this.SetBaseState(ConnState.ConnectionFailed, ec, true);
+                    if (!string.IsNullOrEmpty(ec) && BaseState.ConnState != ConnState.ConnectionFailed)
+                    {
+                        // only mark that the connection has failed if a lower level has not already done this (preserve its reason string).
+                        // this is only done for connections with a SlidingBuffer since other connectsion can decide when to go offline or 
+                        // reset the connection during their normal handling of completed actions.
+
+                        this.SetBaseState(ConnState.ConnectionFailed, ec, true);
+                    }
 				}
 
                 slidingPacketBuffer.Service();

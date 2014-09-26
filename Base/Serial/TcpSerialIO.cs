@@ -210,10 +210,16 @@ namespace MosaicLib.SerialIO
             lastReadResult = ActionResultEnum.None;
 		}
 
-		protected void DisposeDataSocket()
+        protected void DisposeDataSocket() 
+        { 
+            DisposeDataSocket(true); 
+        }
+
+		protected void DisposeDataSocket(bool clearLastReadResult)
 		{
 			MosaicLib.Utils.Fcns.DisposeOfObject(ref dataSP);
-            lastReadResult = ActionResultEnum.None;
+            if (clearLastReadResult)
+                lastReadResult = ActionResultEnum.None;
 		}
 
 		#endregion
@@ -426,10 +432,12 @@ namespace MosaicLib.SerialIO
 
                     if (!dataSP.Connected)
                     {
+                        DisposeDataSocket(false);
                         SetBaseState(ConnState.ConnectionFailed, faultCode + " [Error closed socket]", true);
                     }
                     else if (IsPerminantSocketFailure(sockError))
                     {
+                        DisposeDataSocket(false);
                         SetBaseState(ConnState.ConnectionFailed, faultCode + " [Perminant Error occured on open socket]", true);
                     }
                     // else we assume that the connection might still work.
@@ -464,10 +472,12 @@ namespace MosaicLib.SerialIO
 
                     if (!dataSP.Connected)
                     {
+                        DisposeDataSocket(false);
                         SetBaseState(ConnState.ConnectionFailed, faultCode + " [Error closed socket]", true);
                     }
                     else if (IsPerminantSocketFailure(sockError))
                     {
+                        DisposeDataSocket(false);
                         SetBaseState(ConnState.ConnectionFailed, faultCode + " [Perminant Error occured on open socket]", true);
                     }
                     // else we assume that the connection might still work.
@@ -499,8 +509,11 @@ namespace MosaicLib.SerialIO
 
 		protected virtual void ServicePortConnState(ConnState remoteEndHasBeenClosedState)
 		{
-			if (BaseState.IsConnected && (dataSP == null || !dataSP.Connected))
-				SetBaseState(ConnState.ConnectionFailed, "Socket is no longer connected", true);
+            if (BaseState.IsConnected && (dataSP == null || !dataSP.Connected))
+            {
+                DisposeDataSocket(false);
+                SetBaseState(ConnState.ConnectionFailed, "Socket is no longer connected", true);
+            }
 
             if (BaseState.IsConnected && (lastReadResult == ActionResultEnum.ReadRemoteEndHasBeenClosed))
             {

@@ -41,6 +41,12 @@ namespace MosaicLib.PartsLib.Common.LPM.Sim
         /// <summary>Property gives client access to the part's Guarded Notificdation Object for the part's PublicState property.</summary>
         INotificationObject<State> PublicStateNotifier { get; }
 
+        /// <summary>Property gives client access to the part's port base state</summary>
+        IBaseState PortBaseState { get; }
+
+        /// <summary>Property gives client access to the IBaseState notifier for the part's port</summary>
+        INotificationObject<IBaseState> PortBaseStateNotifier { get; }
+
         /// <summary>Creates a command to set the indicated simulated PIO active inputs to the given pinsState value</summary>
         IBasicAction CreateSetE084ActivePins(PIOSelect pioSelect, IActiveToPassivePinsState pinsState);
 

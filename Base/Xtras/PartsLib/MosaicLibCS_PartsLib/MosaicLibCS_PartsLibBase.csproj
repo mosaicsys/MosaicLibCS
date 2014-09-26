@@ -44,7 +44,6 @@
     <Compile Include="Common\E084\E084ActiveTransferSimEngine.cs" />
     <Compile Include="Common\LPM\LPMSim.cs" />
     <Compile Include="Common\MassFlow\MassFlow.cs" />
-    <Compile Include="Common\Motion\Motion.cs" />
     <Compile Include="Common\Protocols\HART\HARTBusMaster.cs" />
     <Compile Include="Common\Protocols\HART\HARTProtocol.cs" />
     <Compile Include="Helpers\Actuator.cs" />

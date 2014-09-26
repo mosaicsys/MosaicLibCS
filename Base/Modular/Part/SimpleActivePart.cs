@@ -284,6 +284,12 @@ namespace MosaicLib.Modular.Part
 				if (mainThread == null)
 					throw new System.NullReferenceException(FmtStdEC("Failed to construct service thread"));
 
+                string initialName = mainThread.Name;
+                if (String.IsNullOrEmpty(initialName))
+                    mainThread.Name = PartID;
+                else
+                    mainThread.Name = Fcns.CheckedFormat("{0} [{1}]", PartID, mainThread.Name);
+
 				mainThread.Start();
 
                 hasBeenStarted = true;
