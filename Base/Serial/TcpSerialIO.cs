@@ -188,7 +188,7 @@ namespace MosaicLib.SerialIO
 			UseDataSocket(s);
 
 			dataSP.Bind(new IPEndPoint(IPAddress.Any, 0));
-		}
+        }
 
 		protected void UseDataSocket(Socket s)
 		{
@@ -208,15 +208,21 @@ namespace MosaicLib.SerialIO
 			dataSP.SendTimeout = 0;			// write operations are non-blocking at this level.
 
             lastReadResult = ActionResultEnum.None;
-		}
+
+
+            SelectSocketMonitor.Instance.AddSocketToList(dataSP, true, false, true, threadWakeupNotifier);
+        }
 
         protected void DisposeDataSocket() 
-        { 
+        {
             DisposeDataSocket(true); 
         }
 
 		protected void DisposeDataSocket(bool clearLastReadResult)
 		{
+            if (dataSP != null)
+                SelectSocketMonitor.Instance.RemoveSocketFromList(dataSP);
+
 			MosaicLib.Utils.Fcns.DisposeOfObject(ref dataSP);
             if (clearLastReadResult)
                 lastReadResult = ActionResultEnum.None;
@@ -541,6 +547,7 @@ namespace MosaicLib.SerialIO
 				return base.WaitForSomethingToDo(waitable, waitTimeLimit);
 
 			int usec = (int) (waitTimeLimit.TotalSeconds * 1000000.0);
+            usec = 1;
 
             if (dataSP != null)
             {
@@ -597,10 +604,15 @@ namespace MosaicLib.SerialIO
 			listenSP.Blocking = false;
 
 			listenSP.Bind(serverEPConfig.IPEndPoint);
+
+            SelectSocketMonitor.Instance.AddSocketToList(listenSP, true, false, true, threadWakeupNotifier);
 		}
 
 		private void DisposeListenSocket()
 		{
+            if (listenSP != null)
+                SelectSocketMonitor.Instance.RemoveSocketFromList(listenSP);
+
 			MosaicLib.Utils.Fcns.DisposeOfObject(ref listenSP);
 		}
 

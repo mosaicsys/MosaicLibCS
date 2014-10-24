@@ -379,6 +379,8 @@ namespace MosaicLib.Time
         /// </summary>
         private QpcTimer Start(QpcTimeStamp now)
         {
+            ElapsedTimeAtLastTrigger = TimeSpan.Zero;
+
             lastTriggerTimestamp = now;
             nextTriggerTimestamp = now + triggerIntervalInSec;
 
@@ -390,6 +392,7 @@ namespace MosaicLib.Time
         /// </summary>
         public QpcTimer Stop()
         {
+            ElapsedTimeAtLastTrigger = ElapsedTime;
             lastTriggerTimestamp = QpcTimeStamp.Zero;
             return this;
         }
@@ -419,6 +422,13 @@ namespace MosaicLib.Time
 
 			bool triggered = (now > nextTriggerTimestamp);
 
+            if (triggered && !lastTriggered)
+            {
+                ElapsedTimeAtLastTrigger = GetElapsedTime(now);
+            }
+
+            lastTriggered = triggered;
+
 			if (triggered && AutoReset)
 			{
                 // update the lastTriggerTimestamp to match the incoming nextTriggerTimestamp
@@ -446,6 +456,11 @@ namespace MosaicLib.Time
         public TimeSpan ElapsedTime { get { return GetElapsedTime(QpcTimeStamp.Now); } }
 
         /// <summary>
+        /// Gives the value of the ElapsedTime property at the time that the timer last transitioned to triggered or was stopped.  This value is set to TimeSpan.Zero when the timer is started.
+        /// </summary>
+        public TimeSpan ElapsedTimeAtLastTrigger { get; private set; }
+
+        /// <summary>
         /// Gives the Elapsed Time between the given now value and the time that the timer last expired as a TimeSpan value.
         /// </summary>
         /// <param name="now"></param>
@@ -465,6 +480,9 @@ namespace MosaicLib.Time
 
         /// <summary>QpcTimeStamp of the next time after which the timer will have expired</summary>
         private QpcTimeStamp nextTriggerTimestamp;
+
+        /// <summary>Boolean used to do delta detect on the triggered value to know when to update the ElapsedTimeAtLastTrigger property.</summary>
+        private bool lastTriggered;
 
         /// <summary>Configured expieration interval in seconds</summary>
         private double triggerIntervalInSec;

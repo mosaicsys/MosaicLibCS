@@ -27,8 +27,11 @@ namespace MosaicLib.Utils
     //-------------------------------------------------------------------
     #region Helper functions and classes
 
-    /// <summary>Provide placeholder to put DisposeOfObject method</summary>
-	public static partial class Fcns
+    /// <summary>
+    /// Fcns class is essentially a namespace for series of static helper methods
+    /// <para/>inclues: DisposeOf... methods, CheckedFormat and other String related methods, array/list specific Equals methods, ...
+    /// </summary>
+    public static partial class Fcns
 	{
 		/// <summary>
         /// Helper function used to dispose of things who's type can be casted to an IDisposable type.  

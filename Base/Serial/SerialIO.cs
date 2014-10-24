@@ -109,13 +109,13 @@ namespace MosaicLib.SerialIO
         /// <param name="specStr">This gives the port target type configuration string that is used to define the type of port that will be created and where it will be connected to.</param>
         /// <param name="rxLineTerm">
         /// This determines the connection mode and, in some cases, the specific patterns of line end characters that will be used.
-        /// Selects StripWhitespaceOnRx and requires use of packetized reception if LineTerm is neither None nor Custom.
+        /// Selects TrimWhitespaceOnRx and requires use of packetized reception if LineTerm is neither None nor Custom.
         /// </param>
         /// <param name="txLineTerm">This determines the contents of the TxPacketEndStr to match the line termination characters selected here.</param>
         public PortConfig(string name, string specStr, LineTerm rxLineTerm, LineTerm txLineTerm)
 			: this(name, specStr)
 		{ 
-            StripWhitespaceOnRx = (rxLineTerm != LineTerm.None && rxLineTerm != LineTerm.Custom);
+            TrimWhitespaceOnRx = (rxLineTerm != LineTerm.None && rxLineTerm != LineTerm.Custom);
 
             RxLineTerm = rxLineTerm;
             TxLineTerm = txLineTerm;
@@ -170,7 +170,8 @@ namespace MosaicLib.SerialIO
             loggerGroupID = cloneFrom.loggerGroupID;
             traceDataLoggerGroupID = cloneFrom.traceDataLoggerGroupID;
 
-            StripWhitespaceOnRx = cloneFrom.StripWhitespaceOnRx;
+            TrimWhitespaceOnRx = cloneFrom.TrimWhitespaceOnRx;
+            DiscardWhitespacePacketsOnRx = cloneFrom.DiscardWhitespacePacketsOnRx;
             EnableAutoReconnect = cloneFrom.EnableAutoReconnect;
             ReconnectHoldoff = cloneFrom.ReconnectHoldoff;
             ConnectTimeout = cloneFrom.ConnectTimeout;
@@ -204,7 +205,7 @@ namespace MosaicLib.SerialIO
         /// <summary>
         /// Set only property.  Sets the RxPacketEndStrArray based from a given LineTerm value.  
         /// LineTerm.None, and LineTerm.Custom set the RxPacketEndStrArray to null.  
-        /// LineTerm.Auto sets the RxPacketEndStrArray to contain "\r" and "\n" and turns on StripWhitespaceOnRx (if not already on)
+        /// LineTerm.Auto sets the RxPacketEndStrArray to contain "\r" and "\n" and turns on TrimWhitespaceOnRx (if not already on)
         /// LineTerm.CR sets the RxPacketEndStrArray to "\r" and LineTerm.CRLF sets the RxPacketEndStrArray to "\r\n".
         /// </summary>
         public LineTerm RxLineTerm
@@ -217,7 +218,7 @@ namespace MosaicLib.SerialIO
                 switch (value)
                 {
                     case LineTerm.None: RxPacketEndStrArray = new string[0]; break;
-                    case LineTerm.Auto: RxPacketEndStrArray = new string[] { "\r", "\n" }; StripWhitespaceOnRx = true; break;
+                    case LineTerm.Auto: RxPacketEndStrArray = new string[] { "\r", "\n" }; TrimWhitespaceOnRx = true; break;
                     case LineTerm.CR: RxPacketEndStrArray = new string[] { "\r" }; break;
                     case LineTerm.CRLF: RxPacketEndStrArray = new string[] { "\r\n" }; break;
                     case LineTerm.Custom: RxPacketEndStrArray = null; break;
@@ -305,7 +306,12 @@ namespace MosaicLib.SerialIO
         }
 
         /// <summary>Only valid in packet mode.  Selects that leading and trailing whitespace shall be removed from the data contained in each Packet produced by the port.</summary>
-        public bool StripWhitespaceOnRx { get; set; }
+        [Obsolete("This property been replaced with the more clearly named TrimWhitespaceOnRx property.  Please replace use of StripWhitepaceOnRx accordingly.  [2014-10-24]")]
+        public bool StripWhitespaceOnRx { get { return TrimWhitespaceOnRx; } set { TrimWhitespaceOnRx = value; } }
+        /// <summary>Only valid in packet mode.  Selects that leading and trailing whitespace shall be removed from the data contained in each Packet produced by the port.</summary>
+        public bool TrimWhitespaceOnRx { get; set; }
+        /// <summary>Only valid in packet mode.  Selects that whitespace packets shall be removed/discarded from the Packet sequence produced by the port.</summary>
+        public bool DiscardWhitespacePacketsOnRx { get; set; }
         /// <summary>Set to true so that the port will automatically attempt to reconnect any time the current connection is lost.  When false the client is responsible for performing such actions explicitly when needed.</summary>
         public bool EnableAutoReconnect { get; set; }
         /// <summary>Defines the period of time after failing to connect before the next connection attempt can be made.  Only used whne EnableAutoReconnect is true.</summary>

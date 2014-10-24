@@ -169,11 +169,11 @@ namespace MosaicLib.PartsLib.Helpers
             PublishState();
         }
 
-        public void Service(QpcTimeStamp now) { Service(false, now); }
+        public void Service(QpcTimeStamp now) { Service(false, now, false); }
 
-        protected void Service(bool forcePublish, QpcTimeStamp now)
+        protected void Service(bool forcePublish, QpcTimeStamp now, bool reset)
         {
-            if (PrivateState.IsAtTarget)
+            if (PrivateState.IsAtTarget && !reset)
                 return;
 
             ActuatorPosition nextState = ActuatorPosition.None;
@@ -181,19 +181,25 @@ namespace MosaicLib.PartsLib.Helpers
             switch (PrivateState.TargetPos)
             {
                 case ActuatorPosition.AtPos1:
-                    if (PrivateState.PosState != ActuatorPosition.MovingToPos1)
+                    if (reset)
+                        nextState = PrivateState.TargetPos;
+                    else if (PrivateState.PosState != ActuatorPosition.MovingToPos1)
                         nextState = ActuatorPosition.MovingToPos1;
                     else if (PrivateState.TimeInState >= Config.Motion2To1Time.TotalSeconds)
                         nextState = PrivateState.TargetPos;
                     break;
                 case ActuatorPosition.AtPos2:
-                    if (PrivateState.PosState != ActuatorPosition.MovingToPos2)
+                    if (reset)
+                        nextState = PrivateState.TargetPos;
+                    else if (PrivateState.PosState != ActuatorPosition.MovingToPos2)
                         nextState = ActuatorPosition.MovingToPos2;
                     else if (PrivateState.TimeInState >= Config.Motion1To2Time.TotalSeconds)
                         nextState = PrivateState.TargetPos;
                     break;
                 case ActuatorPosition.None:
-                    if (PrivateState.IsInMotion)
+                    if (reset)
+                        nextState = PrivateState.TargetPos;
+                    else if (PrivateState.IsInMotion)
                         nextState = ActuatorPosition.Inbetween;
                     break;  // do not change the current state
                 default:
@@ -201,7 +207,7 @@ namespace MosaicLib.PartsLib.Helpers
                     break;
             }
 
-            if (PrivateState.PosState != nextState && nextState != ActuatorPosition.None)
+            if (reset || (PrivateState.PosState != nextState && nextState != ActuatorPosition.None))
             {
                 ActuatorPosition entryState = PrivateState.PosState;
                 string entryStateStr = PrivateState.PosStateStr;
@@ -214,21 +220,31 @@ namespace MosaicLib.PartsLib.Helpers
                 forcePublish = true;
             }
 
-            if (forcePublish)
+            if (forcePublish || reset)
                 PublishState();
         }
 
         public void SetTarget(ActuatorPosition targetPos)
         {
-            if (PrivateState.TargetPos != targetPos)
+            SetTarget(targetPos, false);
+        }
+
+        public void SetTarget(ActuatorPosition targetPos, bool reset)
+        {
+            if (PrivateState.TargetPos != targetPos || reset)
             {
                 PrivateState.TargetPos = targetPos;
                 PrivateState.TargetPosStr = Config.ToString(targetPos);
 
                 logger.Info.Emit("Target position changed to:{0} [{1}]", PrivateState.TargetPosStr, PrivateState.TargetPos);
 
-                Service(true, QpcTimeStamp.Now);
+                Service(true, QpcTimeStamp.Now, reset);
             }
+        }
+
+        public void ResetStateTo(ActuatorPosition position)
+        {
+            SetTarget(position, true);
         }
 
         public void AbortMove()

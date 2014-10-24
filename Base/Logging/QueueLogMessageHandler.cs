@@ -85,8 +85,7 @@ namespace MosaicLib
                     mesgQueueMutex = mesgQueue.Mutex;
 
                     // create and start the thread
-                    mainThread = new System.Threading.Thread(MainThreadFcn);
-                    mainThread.Start();
+                    StartIfNeeded();
                 }
 			
 				const int minQueueSizeToWakeupDeliveryThread = 100;
@@ -193,6 +192,24 @@ namespace MosaicLib
 				}
 
                 /// <summary>
+                /// Re-enabled the queue and restart the mesg queue thread.
+                /// </summary>
+                public override void StartIfNeeded()
+                {
+                    mesgQueue.EnableQueue();
+
+                    if (mainThread == null)
+                    {
+                        mainThread = new System.Threading.Thread(MainThreadFcn)
+                        {
+                            Name = this.Name,
+                            IsBackground = true,        // allow the application to shutdown even if the client code forgets to 
+                        };
+                        mainThread.Start();
+                    }
+                }
+
+                /// <summary>
                 /// Implementes locally adjusted version of the base classes DisposableBase.Dispose(disposeType) method.
                 /// Calls base.Dispose(disposeType).  If disposeType is CalledExplictly then it disposes of each of the contained targetLMH instances.
                 /// </summary>
@@ -229,6 +246,9 @@ namespace MosaicLib
 						Utils.Asserts.TakeBreakpointAfterFault("QLMH thread Startup test failed");
 						return;
 					}
+
+                    foreach (var lmh in targetLMHArray)
+                        lmh.StartIfNeeded();
 
 					while (mesgQueue.IsEnabled)
 					{

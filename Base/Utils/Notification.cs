@@ -20,11 +20,15 @@
  */
 //-------------------------------------------------------------------
 
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
+using MosaicLib.Time;
+
 namespace MosaicLib.Utils
 {
-	using System;
-	using System.Collections.Generic;
-
 	//-------------------------------------------------
 	#region Notification targets: delegates
 
@@ -93,7 +97,17 @@ namespace MosaicLib.Utils
 
 		#endregion
 
-		#region IWaitable Members
+        #region internal properties
+
+        internal object CreatedInPool { get; set; }
+
+        /// <summary>Provides a message emitter that may be used to record a Trace of the Notification and Wait useage of this object</summary>
+        public Logging.IMesgEmitter TraceEmitter { get { return traceEmitter ?? Logging.NullEmitter; } set { traceEmitter = value; } }
+        private Logging.IMesgEmitter traceEmitter = null;
+
+        #endregion
+
+        #region IWaitable Members
 
         /// <summary>returns true if the underlying object is currently set (so that first wait call is expected to return immediately)</summary>
         public abstract bool IsSet { get; }
@@ -139,11 +153,11 @@ namespace MosaicLib.Utils
 		/// <summary> Enum defines the types of behavior that this object may have </summary>
 		public enum Behavior
 		{
-            /// <summary>Notify wakes one thread if any are waiting (AutoReset) or none if no threads are currently waiting</summary>
+            /// <summary>Notify wakes one thread if any are waiting (AutoReset) or none if no threads are currently waiting (uses AutoResetEvent internally)</summary>
             WakeOne,
-            /// <summary>Notify wakes all threads that are currently waiting (Pulse with ManualReset), or none if no threads are currently waiting</summary>
+            /// <summary>Notify wakes all threads that are currently waiting (Pulse with ManualReset), or none if no threads are currently waiting (uses ManualResetEvent internally)</summary>
             WakeAll,
-            /// <summary>Notify wakes all threads if any are waiting.  If no threads are waiting then it wakes the next thread or threads that attempt to invoke Wait on the previously signaled object.  Last caller to return from Wait in this manner will reset the object to its non-signaling state.  (based on ManualReset)</summary>
+            /// <summary>Notify wakes all threads if any are waiting.  If no threads are waiting then it wakes the next thread or threads that attempt to invoke Wait on the previously signaled object.  Last caller to return from Wait in this manner will reset the object to its non-signaling state.  (uses ManualResetEvent internally)</summary>
             WakeAllSticky,
 		}
 
@@ -152,35 +166,41 @@ namespace MosaicLib.Utils
         /// </summary>
 		public WaitEventNotifier(Behavior behavior) 
 		{
-			this.behavior = behavior;
+            this.behavior = behavior;
 
 			switch (behavior)
 			{
 				case Behavior.WakeOne:
-					eventH = new System.Threading.AutoResetEvent(false);
+                    eventH = EventWaitHandleHelper.CreateEvent(false, false);
 					break;
 				case Behavior.WakeAll:
 				case Behavior.WakeAllSticky:
-					eventH = new System.Threading.ManualResetEvent(false);
-					break;
+                    eventH = EventWaitHandleHelper.CreateEvent(true, false);
+                    break;
 				default:
 					Asserts.NoteFaultOccurance("Unexpected WaitEventNotifier.Behavior value", AssertType.ThrowException);
 					break;
 			}
+
+            useEnterAndLeaveWait = (behavior == Behavior.WakeAllSticky);
+
+            AddExplicitDisposeAction(() => Release());
 		}
+
+        private bool useEnterAndLeaveWait = false;
 
 		#endregion
 
         #region EventNotifierBase.DisposableBase Members
 
         /// <summary>
-        /// Internal implementation method for DisposeableBase.Dispose(DisposeType) abstract method.
-        /// Releases any held unmanaged/disposable objects when called explicitly.
+        /// Releases the underlying notification object by closing the SafeWaitHandle maintained here.  
+        /// This object is no longer usable for notification purposes after calling this method.
+        /// Normally this is used during an explicit dispose pattern.
         /// </summary>
-        protected override void Dispose(DisposableBase.DisposeType disposeType)
+        public void Release()
         {
-            if (disposeType == DisposeType.CalledExplicitly)
-                Utils.Fcns.DisposeOfObject(ref eventH);
+            EventWaitHandleHelper.Close(eventH);
         }
 
         #endregion
@@ -190,10 +210,15 @@ namespace MosaicLib.Utils
         /// <summary>Caller invokes this to Notify a target object that something notable has happened.</summary>
         public override void Notify()
 		{
-			if (behavior == Behavior.WakeAll)
-                EventWaitHandleHelper.PulseEvent(eventH);
-			else
-                EventWaitHandleHelper.SetEvent(eventH);
+            string methodName = new System.Diagnostics.StackFrame().GetMethod().Name;
+
+            using (var eeTrace = new Logging.EnterExitTrace(TraceEmitter, methodName, 0))
+            {
+                if (behavior == Behavior.WakeAll)
+                    EventWaitHandleHelper.PulseEvent(eventH);
+                else
+                    EventWaitHandleHelper.SetEvent(eventH);
+            }
 		}
 
         /// <summary>
@@ -215,53 +240,78 @@ namespace MosaicLib.Utils
         /// <summary>Resets the underlying event.</summary>
         public override void Reset()
 		{
-            EventWaitHandleHelper.ResetEvent(eventH);
+            string methodName = new System.Diagnostics.StackFrame().GetMethod().Name;
+
+            using (var eeTrace = new Logging.EnterExitTrace(TraceEmitter, methodName, 0))
+            {
+                EventWaitHandleHelper.ResetEvent(eventH);
+            }
 		}
 
         /// <summary>returns true if object was signaling at end of wait, false otherwise</summary>
         public override bool Wait()
 		{
-            bool signaled = false;
-            try
-            {
-                EnterWait();
+            string methodName = new System.Diagnostics.StackFrame().GetMethod().Name;
 
-                signaled = EventWaitHandleHelper.WaitOne(eventH, false);
-            }
-            catch (System.Exception ex)
+            using (var eeTrace = new Logging.EnterExitTrace(TraceEmitter, methodName, 0))
             {
-                EventWaitHandleHelper.HandleEventException(ex, "EventWaitHandleHelper.WaitOne()");
-            }
-            finally
-            {
-                LeaveWait(signaled);
-            }
+                bool signaled = false;
+                try
+                {
+                    if (useEnterAndLeaveWait)
+                        EnterWait();
 
-			return signaled;
+                    signaled = EventWaitHandleHelper.WaitOne(eventH, true);
+                }
+                catch (System.Exception ex)
+                {
+                    EventWaitHandleHelper.HandleEventException(ex, "EventWaitHandleHelper.WaitOne()");
+                }
+                finally
+                {
+                    if (useEnterAndLeaveWait)
+                        LeaveWait(signaled);
+                }
+
+                if (signaled)
+                    eeTrace.ExtraMessage = "signaled";
+
+                return signaled;
+            }
 		}
 
         /// <summary>returns true if object was signaling at end of wait, false otherwise</summary>
         public override bool WaitMSec(int timeLimitInMSec)
 		{
-            bool signaled = false;
-            try
-            {
-                EnterWait();
+            string methodName = Fcns.CheckedFormat("{0}({1})", new System.Diagnostics.StackFrame().GetMethod().Name, timeLimitInMSec);
 
-                // only attempt to actually wait if the timeLimitInMSec is positive or if it is -1 (infinite - wait)
-                if ((timeLimitInMSec >= 0) || (timeLimitInMSec == -1))
-                    signaled = EventWaitHandleHelper.WaitOne(eventH, unchecked((uint)timeLimitInMSec), false);
-            }
-            catch (System.Exception ex)
+            using (var eeTrace = new Logging.EnterExitTrace(TraceEmitter, methodName, 0))
             {
-                EventWaitHandleHelper.HandleEventException(ex, "EventWaitHandleHelper.WaitOne(msec)");
-            }
-            finally
-            {
-                LeaveWait(signaled);
-            }
+                bool signaled = false;
+                try
+                {
+                    if (useEnterAndLeaveWait)
+                        EnterWait();
 
-            return signaled;
+                    // only attempt to actually wait if the timeLimitInMSec is positive or if it is -1 (infinite - wait)
+                    if ((timeLimitInMSec >= 0) || (timeLimitInMSec == -1))
+                        signaled = EventWaitHandleHelper.WaitOne(eventH, unchecked((uint)timeLimitInMSec), true);
+                }
+                catch (System.Exception ex)
+                {
+                    EventWaitHandleHelper.HandleEventException(ex, "EventWaitHandleHelper.WaitOne(msec)");
+                }
+                finally
+                {
+                    if (useEnterAndLeaveWait)
+                        LeaveWait(signaled);
+                }
+
+                if (signaled)
+                    eeTrace.ExtraMessage = "signaled";
+
+                return signaled;
+            }
 		}
 
 		#endregion
@@ -283,8 +333,8 @@ namespace MosaicLib.Utils
 			}
 		}
 
-		private System.Threading.EventWaitHandle eventH;
-		private Behavior behavior;
+        private SafeWaitHandle eventH;
+		internal Behavior behavior;
 		private AtomicInt32 numWaiters = new AtomicInt32(0);
 
 		#endregion
@@ -300,19 +350,6 @@ namespace MosaicLib.Utils
         /// </summary>
 		public NullNotifier() { }
 
-        #region EventNotifierBase.DisposableBase Members
-
-        /// <summary>
-        /// Internal implementation method for DisposeableBase.Dispose(DisposeType) abstract method.
-        /// Empty method - there is nothing to dispose in this sub-type of IEventNotifier
-        /// </summary>
-        protected override void Dispose(DisposableBase.DisposeType disposeType)
-        {
-            // empty method - nothing to dispose
-        }
-
-        #endregion
-        
         #region EventNotifierBase Members
 
         /// <summary>
@@ -379,6 +416,183 @@ namespace MosaicLib.Utils
     /// </summary>
     internal static class EventWaitHandleHelper
     {
+        #region Methods that act directly on SafeWaitHandle values
+
+
+        /// <summary>
+        /// SafeWaitHandle extension method.  Returns true if the given safeWaitHandle is not null, is not Closed and is not Invalid.
+        /// </summary>
+        public static bool IsValid(this SafeWaitHandle safeWaitHandle)
+        {
+            return (safeWaitHandle != null && !safeWaitHandle.IsClosed && !safeWaitHandle.IsInvalid);
+        }
+
+        /// <summary>
+        /// Creates and returns a SafeWaitHandle for a created Win32 event using the Kernel32::CreateEvent API via pInvoke.  Security Event Attributes is passed as null so default security will be used.
+        /// </summary>
+        public static SafeWaitHandle CreateEvent(bool manualReset, bool initialState)
+        {
+            return Win32.CreateEvent((IntPtr)null, manualReset, initialState, null);
+        }
+
+        /// <summary>
+        /// Creates and returns a SafeWaitHandle for a created Win32 event using the Kernel32::CreateEvent API via pInvoke.  Security Event Attributes is passed as null so default security will be used.
+        /// </summary>
+        public static SafeWaitHandle CreateEvent(bool manualReset, bool initialState, string publicName)
+        {
+            return Win32.CreateEvent((IntPtr)null, manualReset, initialState, publicName);
+        }
+
+        /// <summary>
+        /// Attempts to close an open safeWaitHandle.  Does nothing if the safeWaitHandle is Invalid or has already been closed
+        /// </summary>
+        public static void Close(SafeWaitHandle safeWaitHandle)
+        {
+            try
+            {
+                if (safeWaitHandle.IsValid())
+                    safeWaitHandle.Close();
+            }
+            catch (System.Exception ex)
+            {
+                EventWaitHandleHelper.HandleEventException(ex, "EventWaitHandleHelper.Close");
+            }
+        }
+
+        /// <summary>
+        /// Tests if the given EventWaitHandle instance is signaling by obtaining a SafeHandle from it and then invoking WaitForSingleObjectEx with a zero timeout and looking at the return code
+        /// to see if it is WAIT_OBJECT_0 or some other code.  This method has the side effect of clearing the signaling state for any underlying event object that is configure to AutoReset.
+        /// </summary>
+        public static bool IsEventSet(SafeWaitHandle safeWaitHandle)
+        {
+            try
+            {
+                if (safeWaitHandle.IsValid())
+                    return (Win32.WaitForSingleObjectEx(safeWaitHandle, 0, true) == Win32.WAIT_OBJECT_0);
+            }
+            catch (System.Exception ex)
+            {
+                EventWaitHandleHelper.HandleEventException(ex, "EventWaitHandleHelper.IsEventSet");
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Waits for the given EventWaitHandle instance to become signaling by obtaining a SafeHandle from it and then invoking WaitForSingleObjectEx with an INFINITE timeout.
+        /// Returns true if the wait handle became signaling and returned WAIT_OBJECT_0, or false otherwise.  
+        /// This method has the side effect of clearing the signaling state for any underlying event object that is configure to AutoReset.
+        /// </summary>
+        public static bool WaitOne(SafeWaitHandle safeWaitHandle, bool allowAlertToExitWait)
+        {
+            try
+            {
+                if (safeWaitHandle.IsValid())
+                    return (Win32.WaitForSingleObjectEx(safeWaitHandle, Win32.INFINITE, allowAlertToExitWait) == Win32.WAIT_OBJECT_0);
+            }
+            catch (System.Exception ex)
+            {
+                EventWaitHandleHelper.HandleEventException(ex, "EventWaitHandleHelper.WaitOne (Inf)");
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Waits for the given EventWaitHandle instance to become signaling by obtaining a SafeHandle from it and then invoking WaitForSingleObjectEx with the given milliseconds time limit.
+        /// Returns true if the wait handle became signaling and returned WAIT_OBJECT_0, or false otherwise.  
+        /// This method has the side effect of clearing the signaling state for any underlying event object that is configure to AutoReset.
+        /// </summary>
+        public static bool WaitOne(SafeWaitHandle safeWaitHandle, uint milliseconds, bool allowAlertToExitWait)
+        {
+            try
+            {
+                if (safeWaitHandle.IsValid())
+                    return (Win32.WaitForSingleObjectEx(safeWaitHandle, milliseconds, allowAlertToExitWait) == Win32.WAIT_OBJECT_0);
+            }
+            catch (System.Exception ex)
+            {
+                HandleEventException(ex, "EventWaitHandleHelper.WaitOne (TimeLimit)");
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Calls kernel.dll::SetEvent on the SafeWaitHandle contained in the given EventWaitHandle object.
+        /// </summary>
+        public static void SetEvent(SafeWaitHandle safeWaitHandle)
+        {
+            try
+            {
+                if (safeWaitHandle.IsValid())
+                    Win32.SetEvent(safeWaitHandle);
+            }
+            catch (System.Exception ex)
+            {
+                EventWaitHandleHelper.HandleEventException(ex, "EventWaitHandleHelper.SetEvent");
+            }
+        }
+
+        /// <summary>
+        /// Calls kernel.dll::ResetEvent on the SafeWaitHandle contained in the given EventWaitHandle object.
+        /// </summary>
+        public static void ResetEvent(SafeWaitHandle safeWaitHandle)
+        {
+            try
+            {
+                if (safeWaitHandle.IsValid())
+                    Win32.ResetEvent(safeWaitHandle);
+            }
+            catch (System.Exception ex)
+            {
+                EventWaitHandleHelper.HandleEventException(ex, "EventWaitHandleHelper.ResetEvent");
+            }
+        }
+
+        /// <summary>
+        /// Calls kernel.dll::PulseEvent on the SafeWaitHandle contained in the given EventWaitHandle object.
+        /// </summary>
+        public static void PulseEvent(SafeWaitHandle safeWaitHandle)
+        {
+            try
+            {
+                if (safeWaitHandle.IsValid())
+                    Win32.PulseEvent(safeWaitHandle);
+            }
+            catch (System.Exception ex)
+            {
+                EventWaitHandleHelper.HandleEventException(ex, "EventWaitHandleHelper.PulseEvent");
+            }
+        }
+
+        #endregion
+
+        #region Exception handling
+
+        /// <summary>
+        /// Directly handles ThreadAbortExceptions by logging them and using a short sleep to prevent uncontrolled spin in a incorrectly protected client.
+        /// Attempts to take a breakpoint (if a debugger is attached) and log a suitable message for all other exception types.
+        /// </summary>
+        public static void HandleEventException(Exception ex, string locationStr)
+        {
+            string faultStr = Fcns.CheckedFormat("{0} failed: {1}", locationStr, ex);
+
+            if (ex is System.Threading.ThreadAbortException)
+            {
+                Asserts.NoteConditionCheckFailed(faultStr, AssertType.Log);
+                System.Threading.Thread.Sleep(10);     // prevent uncontrolled spinning
+            }
+            else
+            {
+                Asserts.TakeBreakpointAfterFault(faultStr);
+            }
+        }
+
+        #endregion
+
+        #region System.Threading.EventWaitHandle versions of these methods
+
         /// <summary>
         /// Tests if the given EventWaitHandle instance is signaling by obtaining a SafeHandle from it and then invoking WaitForSingleObjectEx with a zero timeout and looking at the return code
         /// to see if it is WAIT_OBJECT_0 or some other code.  This method has the side effect of clearing the signaling state for any underlying event object that is configure to AutoReset.
@@ -387,9 +601,9 @@ namespace MosaicLib.Utils
         {
             try
             {
-                Microsoft.Win32.SafeHandles.SafeWaitHandle safeWaitHandle;
+                SafeWaitHandle safeWaitHandle;
                 if (GetValidSafeWaitHandle(eventWaitHandle, out safeWaitHandle))
-                    return (WaitForSingleObjectEx(safeWaitHandle, 0, false) == WAIT_OBJECT_0);
+                    return IsEventSet(safeWaitHandle);
             }
             catch (System.Exception ex)
             {
@@ -408,9 +622,9 @@ namespace MosaicLib.Utils
         {
             try
             {
-                Microsoft.Win32.SafeHandles.SafeWaitHandle safeWaitHandle;
+                SafeWaitHandle safeWaitHandle;
                 if (GetValidSafeWaitHandle(eventWaitHandle, out safeWaitHandle))
-                    return (WaitForSingleObjectEx(safeWaitHandle, INFINITE, allowAlertToExitWait) == WAIT_OBJECT_0);
+                    return WaitOne(safeWaitHandle, Win32.INFINITE, allowAlertToExitWait);
             }
             catch (System.Exception ex)
             {
@@ -429,9 +643,9 @@ namespace MosaicLib.Utils
         {
             try
             {
-                Microsoft.Win32.SafeHandles.SafeWaitHandle safeWaitHandle;
+                SafeWaitHandle safeWaitHandle;
                 if (GetValidSafeWaitHandle(eventWaitHandle, out safeWaitHandle))
-                    return (WaitForSingleObjectEx(safeWaitHandle, milliseconds, allowAlertToExitWait) == WAIT_OBJECT_0);
+                    return WaitOne(safeWaitHandle, milliseconds, allowAlertToExitWait);
             }
             catch (System.Exception ex)
             {
@@ -441,21 +655,6 @@ namespace MosaicLib.Utils
             return false;
         }
 
-        public static void HandleEventException(Exception ex, string locationStr)
-        {
-            string faultStr = Fcns.CheckedFormat("{0} failed: {1}", locationStr, ex);
-
-            if (ex is System.Threading.ThreadAbortException)
-            {
-                Asserts.LogFaultOccurance(faultStr);
-                System.Threading.Thread.Sleep(10);     // prevent uncontrolled spinning
-            }
-            else
-            {
-                Asserts.TakeBreakpointAfterFault(faultStr);
-            }
-        }
-
         /// <summary>
         /// Calls kernel.dll::SetEvent on the SafeWaitHandle contained in the given EventWaitHandle object.
         /// </summary>
@@ -463,7 +662,7 @@ namespace MosaicLib.Utils
         {
             try
             {
-                Microsoft.Win32.SafeHandles.SafeWaitHandle safeWaitHandle;
+                SafeWaitHandle safeWaitHandle;
                 if (GetValidSafeWaitHandle(eventWaitHandle, out safeWaitHandle))
                     SetEvent(safeWaitHandle);
             }
@@ -480,7 +679,7 @@ namespace MosaicLib.Utils
         {
             try
             {
-                Microsoft.Win32.SafeHandles.SafeWaitHandle safeWaitHandle;
+                SafeWaitHandle safeWaitHandle;
                 if (GetValidSafeWaitHandle(eventWaitHandle, out safeWaitHandle))
                     ResetEvent(safeWaitHandle);
             }
@@ -497,7 +696,7 @@ namespace MosaicLib.Utils
         {
             try
             {
-                Microsoft.Win32.SafeHandles.SafeWaitHandle safeWaitHandle;
+                SafeWaitHandle safeWaitHandle;
                 if (GetValidSafeWaitHandle(eventWaitHandle, out safeWaitHandle))
                     PulseEvent(safeWaitHandle);
             }
@@ -511,35 +710,52 @@ namespace MosaicLib.Utils
         /// Attempts to obtain a valid safeWaitHandle from the given eventWaitHandle and return true if the produced safeWaitHandle value is non-null, is not Closed and it is not Invalid.
         /// </summary>
         /// <returns>true if the safeWaitHandle value appears to be usable (it is not null, not Closed and not IsInvalid), or false otherwise.</returns>
-        private static bool GetValidSafeWaitHandle(System.Threading.EventWaitHandle eventWaitHandle, out Microsoft.Win32.SafeHandles.SafeWaitHandle safeWaitHandle)
+        private static bool GetValidSafeWaitHandle(System.Threading.EventWaitHandle eventWaitHandle, out SafeWaitHandle safeWaitHandle)
         {
             // capture a copy of the SafeWaitHandle from it
             safeWaitHandle = (eventWaitHandle != null ? eventWaitHandle.SafeWaitHandle : null);
 
             // if the handle is not closed and it is not invalid then attempt to call Win32.SetEvent on it
-            return (safeWaitHandle != null && !safeWaitHandle.IsClosed && !safeWaitHandle.IsInvalid);
+            return safeWaitHandle.IsValid();
         }
 
+        #endregion
+    }
+
+    /// <summary>
+    /// Internal static class used to get access to Win32 system calls that are useful in this library.
+    /// </summary>
+    internal static class Win32
+    {
         #region SetEvent Win32 system calls and related definitions
 
-        private const UInt32 INFINITE = 0xFFFFFFFF;
-        private const UInt32 WAIT_ABANDONED = 0x00000080;
-        private const UInt32 WAIT_OBJECT_0 = 0x00000000;
-        private const UInt32 WAIT_TIMEOUT = 0x00000102;
-        private const UInt32 WAIT_IO_COMPLETION = 0x000000C0;
-        private const UInt32 WAIT_FAILED = 0xFFFFFFFF;
+        public const UInt32 INFINITE = 0xFFFFFFFF;
+        public const UInt32 WAIT_ABANDONED = 0x00000080;
+        public const UInt32 WAIT_OBJECT_0 = 0x00000000;
+        public const UInt32 WAIT_TIMEOUT = 0x00000102;
+        public const UInt32 WAIT_IO_COMPLETION = 0x000000C0;
+        public const UInt32 WAIT_FAILED = 0xFFFFFFFF;
 
-        [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
-        private static extern uint WaitForSingleObjectEx(Microsoft.Win32.SafeHandles.SafeWaitHandle safeWaitHandle, uint dwMilliseconds, bool bAlertable);
+        [DllImport("kernel32.dll", EntryPoint = "CreateEvent", SetLastError = true, CharSet = CharSet.Auto, BestFitMapping = false)]
+        public static extern SafeWaitHandle CreateEvent(IntPtr lpEventAttributes, bool bManualReset, bool bInitialState, string lpName);
 
-        [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
-        private static extern bool SetEvent(Microsoft.Win32.SafeHandles.SafeWaitHandle safeWaitHandle);
+        [DllImport("kernel32.dll", EntryPoint = "WaitForSingleObjectEx", SetLastError = true)]
+        public static extern uint WaitForSingleObjectEx(SafeWaitHandle safeWaitHandle, uint dwMilliseconds, bool bAlertable);
 
-        [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
-        private static extern bool ResetEvent(Microsoft.Win32.SafeHandles.SafeWaitHandle safeWaitHandle);
+        [DllImport("kernel32.dll", EntryPoint = "SetEvent", SetLastError = true)]
+        public static extern bool SetEvent(SafeWaitHandle safeWaitHandle);
 
-        [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
-        private static extern bool PulseEvent(Microsoft.Win32.SafeHandles.SafeWaitHandle safeWaitHandle);
+        [DllImport("kernel32.dll", EntryPoint = "ResetEvent", SetLastError = true)]
+        public static extern bool ResetEvent(SafeWaitHandle safeWaitHandle);
+
+        [DllImport("kernel32.dll", EntryPoint = "PulseEvent", SetLastError = true)]
+        public static extern bool PulseEvent(SafeWaitHandle safeWaitHandle);
+
+        [DllImport("kernel32.dll", EntryPoint = "GetCurrentThreadId", BestFitMapping = false)]
+        public static extern int GetCurrentThreadId();
+
+        [DllImport("kernel32.dll", EntryPoint = "GetCurrentProcessId", BestFitMapping = false)]
+        public static extern int GetCurrentProcessId();
 
         #endregion
     }
@@ -570,6 +786,14 @@ namespace MosaicLib.Utils
         /// <summary>Removes the first instance of the given <see cref="System.Threading.EventWaitHandle"/> object from the list</summary>
         void RemoveItem(System.Threading.EventWaitHandle eventWaitHandle);
 	}
+
+    /// <summary>
+    /// Combines the capabilities of a IBasicNotificationList interface (ability to add and remove target objects) and the ability for any party to
+    /// notify the list.
+    /// </summary>
+    public interface INotifyableBasicNotificationList : IBasicNotificationList, INotifyable
+    {
+    }
 
 	/// <summary>Define the delegate type that is used with our generic IEventHandlerNotificationList and derived types</summary>
 	public delegate void EventHandlerDelegate<EventArgsType>(object source, EventArgsType eventArgs);
@@ -715,7 +939,6 @@ namespace MosaicLib.Utils
 	/// without owning the mutex, a delegate may be invoked after it has been removed.
 	/// Notify method is not intended to be reentrantly invoked but will not generate any exceptions if this occurs.
 	/// </remarks>
-	/// 
 
     public class EventHandlerNotificationList<EventArgsType> : BasicNotificationList, IEventHandlerNotificationList<EventArgsType>, INotifyable<EventArgsType>
 	{
@@ -807,11 +1030,11 @@ namespace MosaicLib.Utils
 		IBasicNotificationList NotificationList { get; }
 	}
 
-	/// <summary> 
+    /// <summary> 
     /// Implementation of <see cref="INotificationObject{RefObjectType}"/> for use with reference objects (classes).  
     /// Uses volatile handle to provide safe/synchronized access to object. 
     /// </summary>
-	public class InterlockedNotificationRefObject<RefObjectType> : InterlockedSequencedRefObject<RefObjectType>, INotificationObject<RefObjectType> where RefObjectType : class
+	public class InterlockedNotificationRefObject<RefObjectType> : InterlockedSequencedRefObject<RefObjectType>, INotifyable, INotificationObject<RefObjectType> where RefObjectType : class
 	{
         /// <summary>Default Constructor.  By default the contained Object will be null and sequence number will be in its initial, unset, state.</summary>
         public InterlockedNotificationRefObject() { }
@@ -824,14 +1047,18 @@ namespace MosaicLib.Utils
         /// <summary>Property gives the caller access to the IBasicNotificationList of INotifyable object that will be signaled when the contained object is replaced</summary>
         public IBasicNotificationList NotificationList { get { return notificationList; } }
 
+        /// <summary>Caller invokes this to Notify all items in the NotificatinList that something notable has happened.  This is done automatically when publishing a new object but may be done explicitly using this method without publishing a new object.</summary>
+        public void Notify() { notificationList.Notify(); }
+
 		private BasicNotificationList notificationList = new BasicNotificationList();
-	}
+
+    }
 
 	/// <summary>
     /// Implementation of <see cref="INotificationObject{ValueObjectType}"/> for use with value objects (structs).  
     /// Uses mutex to control and synchronize access to guarded value.
     /// </summary>
-	public class GuardedNotificationValueObject<ValueObjectType> : GuardedSequencedValueObject<ValueObjectType>, INotificationObject<ValueObjectType> where ValueObjectType : struct
+    public class GuardedNotificationValueObject<ValueObjectType> : GuardedSequencedValueObject<ValueObjectType>, INotifyable, INotificationObject<ValueObjectType> where ValueObjectType : struct
 	{
         /// <summary>Default Constructor.  By default the contained Object will be null and sequence number will be in its initial, unset, state.</summary>
         public GuardedNotificationValueObject() { }
@@ -847,7 +1074,10 @@ namespace MosaicLib.Utils
         /// <summary>Property gives the caller access to the IBasicNotificationList of INotifyable object that will be signaled when the contained object is replaced</summary>
         public IBasicNotificationList NotificationList { get { return notificationList; } }
 
-		private BasicNotificationList notificationList = new BasicNotificationList();
+        /// <summary>Caller invokes this to Notify all items in the NotificatinList that something notable has happened.  This is done automatically when publishing a new object but may be done explicitly using this method without publishing a new object.</summary>
+        public void Notify() { notificationList.Notify(); }
+
+        private BasicNotificationList notificationList = new BasicNotificationList();
 	}
 
 	#endregion
@@ -865,6 +1095,8 @@ namespace MosaicLib.Utils
     /// 
     /// Generally this object is used as a type specific singleton.
 	/// </remarks>
+    
+    [Obsolete("Use of SharedWaitEventNotifiderSet is obsolete.  Deficiencies in implementation of PulseEvent Win32 API call prevents correct use of the WakeAll and WakeAllSticky type WaitEventNotifiers [2014-10-21]")]
 	public class SharedWaitEventNotifierSet : DisposableBase
 	{
         /// <summary>
@@ -890,7 +1122,7 @@ namespace MosaicLib.Utils
             IEventNotifier[] newArray = new IEventNotifier[setSize];
 
             for (int idx = 0; idx < newArray.Length; idx++)
-                newArray[idx] = new WaitEventNotifier(notifierBehavior);
+                newArray[idx] = new WaitEventNotifier(notifierBehavior) { CreatedInPool = this };
 
             eventSetArray = newArray;
 		}
@@ -949,6 +1181,86 @@ namespace MosaicLib.Utils
     }
 
 	#endregion
+
+    //-------------------------------------------------
+    #region EventNotifierPool
+
+    /// <summary>This class is used to provide a pool of reusable <see cref="IEventNotifier"/> objects.</summary>
+    public class EventNotifierPool : DisposableBase
+    {
+        /// <summary>
+        /// Defines the default initial pool size for a WaitEventNotifiderPool when using the default constructor.
+        /// </summary>
+        public const int defaultInitialPoolSize = 16;
+
+        /// <summary>
+        /// Defines the default maximum pool size for a WaitEventNotifiderPool when using the default constructor.
+        /// </summary>
+        public const int defaultMaximumPoolSize = 256;
+
+        /// <summary>
+        /// Constructs a set of defaultInitialPoolSize (16) WaitEventNotifier.Behavior.WakeOne WaitEventNotifiers and sets the maxumum pool size to defaultMaximumPoolSize (256).
+        /// </summary>
+        public EventNotifierPool() 
+            : this(defaultInitialPoolSize, defaultMaximumPoolSize, WaitEventNotifier.Behavior.WakeOne) 
+        { 
+        }
+
+        /// <summary>
+        /// Constructs pool with the given initial, and maximum pool size and defines the behavior of the pooled objects using the given behavior
+        /// </summary>
+        public EventNotifierPool(int initialPoolSize, int maximumPoolSize, WaitEventNotifier.Behavior behavior) 
+        {
+            Behavior = behavior;
+
+            eventNotifierPool = new MosaicLib.Utils.Pooling.BasicObjectPool<WaitEventNotifier>()
+            {
+                Capacity = maximumPoolSize,
+                ObjectFactoryDelegate = () => new WaitEventNotifier(behavior) { CreatedInPool = this }
+            };
+
+            foreach (var wen in Enumerable.Range(0, initialPoolSize).Select((idx) => eventNotifierPool.GetFreeObjectFromPool()))
+            {
+                var wenRef = wen;
+                eventNotifierPool.ReturnObjectToPool(ref wenRef);
+            }
+
+            AddExplicitDisposeAction(() => eventNotifierPool.Shutdown());
+        }
+
+        /// <summary>
+        /// Allows the caller to determine the WaitEventNotifier.Behavior that is used to construct new WaitEventNotifiers in this pool.
+        /// </summary>
+        public WaitEventNotifier.Behavior Behavior { get; private set; }
+        private Pooling.BasicObjectPool<WaitEventNotifier> eventNotifierPool;
+
+        /// <summary>
+        /// Returns the a WaitEventNotifier object from the pool casted as an IEventNotifier.  
+        /// </summary>
+        public IEventNotifier GetInstanceFromPool()
+        {
+            return eventNotifierPool.GetFreeObjectFromPool();
+        }
+
+        /// <summary>
+        /// Returns the given object to the pool.  given Item must be non-null and must have been returned by a call to GetInstanceFromPool above.
+        /// </summary>
+        public void ReturnInstanceToPool(ref IEventNotifier item)
+        {
+            WaitEventNotifier wenRef = item as WaitEventNotifier;
+
+            if (item == null)
+                throw new System.NullReferenceException("Given item is null");
+            else if (wenRef == null || wenRef.behavior != Behavior || !System.Object.ReferenceEquals((object) this, wenRef.CreatedInPool))
+                throw new System.NotSupportedException("Given item was not obtained from this pool.");
+
+            item = null;
+            eventNotifierPool.ReturnObjectToPool(ref wenRef);
+        }
+    }
+
+
+    #endregion
 
     //-------------------------------------------------
 }

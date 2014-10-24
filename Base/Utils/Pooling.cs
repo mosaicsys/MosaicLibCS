@@ -45,6 +45,10 @@ namespace MosaicLib.Utils.Pooling
         int Count { get; }
         /// <summary>Releases all objects from the pool and disables the return of objects to the pool.  Subsequent calls to GetFreeObjectFromPool will explicitly create objects and will not associate them with the pool.</summary>
         void Shutdown();
+        /// <summary>Restarts the pool if it has been Shutdown since it was constructed or since the last time it was Started.</summary>
+        void StartIfNeeded();
+        /// <summary>Returns true if the pool is enabled</summary>
+        bool IsPoolEnabled { get; }
     }
 
     /// <summary>
@@ -66,8 +70,8 @@ namespace MosaicLib.Utils.Pooling
         public BasicObjectPool()
         {
             Capacity = 1;
-            poolIsEnabled = true;
             AddExplicitDisposeAction(() => Shutdown());
+            StartIfNeeded();
         }
 
         /// <summary>
@@ -128,10 +132,10 @@ namespace MosaicLib.Utils.Pooling
         }
 
         /// <summary>Returns the maximum number of free objects that can be contained in the pool.</summary>
-        public int Capacity { get { return freeObjectStackCapacity; } set { freeObjectStackCapacity = value; } }
+        public int Capacity { get { return (IsPoolEnabled ? freeObjectStackCapacity : 0); } set { freeObjectStackCapacity = value; } }
 
         /// <summary>Returns the number of free objects in the pool.</summary>
-        public int Count { get { lock (freeObjectStackMutex) { return freeObjectStack.Count; } } }
+        public int Count { get { lock (freeObjectStackMutex) { return ((freeObjectStack != null) ? freeObjectStack.Count : 0); } } }
 
         /// <summary>Disables the pool and disposes of all objects that remain in the freeObjctStack.</summary>
         public void Shutdown()
@@ -152,10 +156,26 @@ namespace MosaicLib.Utils.Pooling
 
                     freeObjectStack = null;
                 }
-
-                freeObjectStackCapacity = 0;
             }
         }
+
+        /// <summary>Restarts the pool if it has been Shutdown since it was constructed or since the last time it was Started.</summary>
+        public void StartIfNeeded()
+        {
+            lock (freeObjectStackMutex)
+            {
+                if (!poolIsEnabled)
+                {
+                    if (freeObjectStack == null)
+                        freeObjectStack = new Stack<ObjectType>();
+
+                    poolIsEnabled = true;
+                }
+            }
+        }
+
+        /// <summary>Returns true if the pool is enabled</summary>
+        public bool IsPoolEnabled { get { return poolIsEnabled;  } }
 
         #endregion
 
@@ -165,13 +185,13 @@ namespace MosaicLib.Utils.Pooling
         private volatile bool poolIsEnabled = false;
 
         /// <summary>object used as mutex for access to freeObjectStack and freeObjectStackCapacity.</summary>
-        object freeObjectStackMutex = new object();
+        private object freeObjectStackMutex = new object();
 
         /// <summary>Stack of free objects that are currently in the pool.  Use of LIFO semantics is chosen to generally improve cache and virtual memory efficiency.</summary>
-        Stack<ObjectType> freeObjectStack = null;
+        private Stack<ObjectType> freeObjectStack = null;
 
         /// <summary>field defines the maximum number of objects that the freeObjectStack can hold.</summary>
-        volatile int freeObjectStackCapacity = 0;
+        private volatile int freeObjectStackCapacity = 0;
 
         #endregion
     }
@@ -236,6 +256,8 @@ namespace MosaicLib.Utils.Pooling
         int Count { get; }
         /// <summary>Releases all objects from the pool and disables the return of objects to the pool.  Subsequent calls to GetFreeObjectFromPool will explicitly create objects and will not associate them with the pool.</summary>
         void Shutdown();
+        /// <summary>(re)Enables the use of the pool if it has been Shutdown.  Has no effect if it has just been constructed or if it has already been started.</summary>
+        void StartIfNeeded();
 	}
 
     #endregion
@@ -298,29 +320,18 @@ namespace MosaicLib.Utils.Pooling
         /// <summary>Constructor - caller defines the initial pool size and capacity.  Method enforces minimum capacity of initialPoolSize and 10, whichever is greater.</summary>
         public ObjectPoolBase(int initialPoolSize, int initialCapacity, System.Func<ObjectType> objectFactoryDelegate)
         {
-            if (initialCapacity < initialPoolSize)
-                initialCapacity = initialPoolSize;
-            if (initialCapacity < MinimumCapacity)
-                initialCapacity = MinimumCapacity;
+            InitialCapacity = initialCapacity;
+            InitialPoolSize = initialPoolSize;
+            if (InitialCapacity < InitialPoolSize)
+                InitialCapacity = InitialPoolSize;
+            if (InitialCapacity < MinimumCapacity)
+                InitialCapacity = MinimumCapacity;
 
             ObjectFactoryDelegate = objectFactoryDelegate;
 
-            freeObjectStack = new Stack<IPoolableRefCountedObject<ObjectType>>(initialCapacity);
-            freeObjectStackCapacity = initialCapacity;
-
             roReleaseObjectToPoolDelegate = ImplementReleaseObjectToPoolDelegate;
 
-            poolIsEnabled = true;
-
-            // explicitly allocated initialPoolSize elements and tell each one that we have removed the initial reference.  
-            // as such Initial objects enter the pool the same way that normal objects to.
-
-            for (int count = 0; count < initialPoolSize; count++)
-            {
-                ObjectType obj = ConstructNewObject();
-                obj.DecrementRefCount();            // skip the full release handler
-                freeObjectStack.Push(obj);
-            }
+            StartIfNeeded();
         }
 
         /// <summary>implementation method for DisposableBase.  On explicit dispose, this method will perform a Shutdown if needed so as to dispose of all objects in the stack.</summary>
@@ -357,10 +368,10 @@ namespace MosaicLib.Utils.Pooling
         }
 
         /// <summary>Returns the maximum number of free objects that can be contained in the pool.</summary>
-        public int Capacity { get { lock (freeObjectStackMutex) { return freeObjectStackCapacity; } } }
+        public int Capacity { get { lock (freeObjectStackMutex) { return (IsPoolEnabled ? freeObjectStackCapacity : 0); } } }
 
         /// <summary>Returns the number of free objects in the pool.</summary>
-        public int Count { get { lock (freeObjectStackMutex) { return freeObjectStack.Count; } } }
+        public int Count { get { lock (freeObjectStackMutex) { return ((freeObjectStack != null) ? freeObjectStack.Count : 0); } } }
 
         /// <summary>Disables the pool and disposes of all objects that remain in the freeObjctStack.</summary>
         public void Shutdown()
@@ -388,9 +399,40 @@ namespace MosaicLib.Utils.Pooling
             }
         }
 
+        /// <summary>(re)Enables the use of the pool if it has been Shutdown.  Has no effect if it has just been constructed or if it has already been started.</summary>
+        public void StartIfNeeded()
+        {
+            lock (freeObjectStackMutex)
+            {
+                if (!poolIsEnabled)
+                {
+                    if (freeObjectStack == null)
+                    {
+                        freeObjectStack = new Stack<IPoolableRefCountedObject<ObjectType>>(InitialCapacity);
+                        freeObjectStackCapacity = InitialCapacity;
+                    }
+
+                    poolIsEnabled = true;
+
+                    // explicitly allocate InitialPoolSize elements and tell each one that we have removed the initial reference.  
+                    // as such Initial objects enter the pool the same way that normal objects to.
+
+                    for (int count = freeObjectStack.Count; count < InitialPoolSize; count++)
+                    {
+                        ObjectType obj = ConstructNewObject();
+                        obj.DecrementRefCount();            // skip the full release handler
+                        freeObjectStack.Push(obj);
+                    }
+                }
+            }
+        }
+
+        /// <summary>Returns true if the pool is enabled</summary>
+        public bool IsPoolEnabled { get { return poolIsEnabled; } }
+
         #endregion
 
-        #region Private instance methods
+        #region Private and Protected instance methods
 
         /// <summary>readonly instance to the ReleaseObjectToPoolDelegate for this pool.</summary>
         private readonly ReleaseObjectToPoolDelegate<ObjectType> roReleaseObjectToPoolDelegate;
@@ -439,13 +481,16 @@ namespace MosaicLib.Utils.Pooling
         private volatile bool poolIsEnabled = false;
 
         /// <summary>object used as mutex for access to freeObjectStack and freeObjectStackCapacity.</summary>
-        object freeObjectStackMutex = new object();
+        private object freeObjectStackMutex = new object();
+
+        private int InitialCapacity { get; set; }
+        private int InitialPoolSize { get; set; }
 
         /// <summary>Stack of free objects that are currently in the pool.  Use of LIFO semantics is chosen to generally improve cache and virtual memory efficiency.</summary>
-        Stack<IPoolableRefCountedObject<ObjectType>> freeObjectStack = null;
+        private Stack<IPoolableRefCountedObject<ObjectType>> freeObjectStack = null;
 
         /// <summary>field defines the maximum number of objects that the freeObjectStack can hold.</summary>
-        int freeObjectStackCapacity = 0;
+        private int freeObjectStackCapacity = 0;
 
         #endregion
     }

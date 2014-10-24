@@ -141,6 +141,7 @@ namespace MosaicLib
 				private int							lid = 0;
 				public int							distGroupID = DistGroupID_Default;
 				private LoggerConfig				distGroupConfig = LoggerConfig.None;
+                private bool                        disabled;
 
 				public SequencedLoggerConfigSource	seqLoggerConfigSource = null;
 				public LoggerSourceInfo				sourceID = null;							// contains Logger Name and ID. - only filled in after construction
@@ -156,14 +157,41 @@ namespace MosaicLib
 
 				public LoggerConfig DistGroupConfig
 				{
-					get { return distGroupConfig; }
+					get 
+                    { 
+                        return distGroupConfig; 
+                    }
 					set {
-						if (!distGroupConfig.Equals(value))
-							seqLoggerConfigSource.LoggerConfig = distGroupConfig = value;
+                        if (!distGroupConfig.Equals(value))
+                        {
+                            distGroupConfig = value;
+                            PublishDistGroupConfig();
+                        }
 					}
 				}
 
-				public PerLoggerIDInfo(int loggerID) 
+                public bool Disabled
+                {
+                    get { return disabled; }
+                    set
+                    {
+                        if (disabled != value)
+                        {
+                            disabled = value;
+                            PublishDistGroupConfig();
+                        }
+                    }
+                }
+
+                private void PublishDistGroupConfig()
+                {
+                    if (!disabled)
+                        seqLoggerConfigSource.LoggerConfig = distGroupConfig;
+                    else
+                        seqLoggerConfigSource.LoggerConfig = new LoggerConfig(distGroupConfig) { LogGate = LogGate.None };
+                }
+
+                public PerLoggerIDInfo(int loggerID) 
 				{ 
 					lid = loggerID; seqLoggerConfigSource = new SequencedLoggerConfigSource(distGroupConfig); 
 				}
@@ -196,10 +224,32 @@ namespace MosaicLib
                 /// <summary>readonly property gives caller access to the stored Distribution Group ID for this group.</summary>
                 public int DistGroupID { get { return id; } }
 
+                private bool disabled = false;
+                public bool Disabled
+                {
+                    get { return disabled; }
+                    set
+                    {
+                        if (disabled != value)
+                        {
+                            disabled = value;
+                            loggerConfigWrittenNotification.Notify();
+                        }
+                    }
+                }
+
                 /// <summary>stores the current LoggerConfig setting for this group.</summary>
                 private LoggerConfig groupLoggerConfigSetting = LoggerConfig.AllNoFL;
                 /// <summary>public property access to stored LoggerConfig.  Signals that a logger config update is needed whenever the property is set.</summary>
-                public LoggerConfig GroupLoggerConfigSetting { get { return groupLoggerConfigSetting; } set { groupLoggerConfigSetting = value; groupLoggerConfigSetting.GroupName = DistGroupName; loggerConfigWrittenNotification.Notify(); } }
+                public LoggerConfig GroupLoggerConfigSetting 
+                { 
+                    get { return groupLoggerConfigSetting; } 
+                    set 
+                    {
+                        groupLoggerConfigSetting = new LoggerConfig(value) { GroupName = DistGroupName }; 
+                        loggerConfigWrittenNotification.Notify(); 
+                    } 
+                }
 
                 /// <summary>This is the list of info objects for the log message handlers that will recieve messages that are distributed to/through this group.</summary>
                 public List<DistHandlerInfo> distHandlerInfoList = new List<DistHandlerInfo>();
@@ -274,6 +324,8 @@ namespace MosaicLib
                     }
 
 					LoggerConfig updatedLoggerConfig = distHandlerLoggerConfigOr & groupLoggerConfigSetting;
+                    if (Disabled)
+                        updatedLoggerConfig.LogGate = LogGate.None;
 
                     if (!distHandlerLoggerConfigAnd.SupportsReferenceCountedRelease)
                         updatedLoggerConfig.SupportsReferenceCountedRelease = false;
@@ -308,7 +360,10 @@ namespace MosaicLib
 			System.Threading.Thread	            mesgQueueDistThread = null;
 			Utils.WaitEventNotifier				mesgQueueDistThreadWakeupNotification = new MosaicLib.Utils.WaitEventNotifier(MosaicLib.Utils.WaitEventNotifier.Behavior.WakeAllSticky);
 
-			volatile Utils.Pooling.ObjectPool<LogMessage> mesgPool = new MosaicLib.Utils.Pooling.ObjectPool<LogMessage>(PreallocatedPoolItems, PoolCapacity);
+            /// <summary>
+            /// A mesgPool is created by the distribution engine during initial construction and remains available.  It cannot be set to null.
+            /// </summary>
+			readonly Utils.Pooling.ObjectPool<LogMessage> mesgPool = new MosaicLib.Utils.Pooling.ObjectPool<LogMessage>(PreallocatedPoolItems, PoolCapacity);
 
 			#endregion
 
@@ -517,8 +572,13 @@ namespace MosaicLib
 
 					if (mesgQueue != null && mesgQueue.IsEnabled)
 					{
-                        mesgQueueDistThread = new System.Threading.Thread(MesgQueueDistThreadFcn) { IsBackground = true, Name = "LogDist.QueuedLoggerMessageDelivery" };
-						mesgQueueDistThread.Start();
+                        mesgQueueDistThread = new System.Threading.Thread(MesgQueueDistThreadFcn) 
+                        { 
+                            IsBackground = true, 
+                            Name = "LogDist.QueuedLoggerRelay",
+                        };
+
+                        mesgQueueDistThread.Start();
 					}
 
 					if (mesgQueue == null || !mesgQueue.IsEnabled || mesgQueueDistThread == null)
@@ -798,8 +858,47 @@ namespace MosaicLib
                 }
             }
 
+            public void StartupIfNeeded()
+            {
+                StartupIfNeeded(!shutdown ? "Logging started" : "Logging restarted");
+            }
 
-			public void Shutdown() { Shutdown("Distribution has been stopped."); }
+            public void StartupIfNeeded(string mesg)
+            {
+                lock (distMutex)
+                {
+                    if (!shutdown)
+                        return;
+
+                    mesgPool.StartIfNeeded();
+
+                    InnerRestartAllHandlers();
+
+                    shutdown = false;
+
+                    // Enable all of the dist groups (internally will restore their distribution group gates to prior value)
+                    for (int dgid = 0; dgid < distGroupIDInfoList.Count; dgid++)
+                    {
+                        PerDistGroupIDInfo dgInfo = distGroupIDInfoList[dgid];
+                        dgInfo.Disabled = false;
+                    }
+
+
+                    // now Enable all of the logger's (internally will restore their distribution group gate to prior value)
+                    for (int lid = 0; lid < perLoggerIDInfoList.Count; lid++)
+                    {
+                        PerLoggerIDInfo lInfo = perLoggerIDInfoList[lid];
+                        lInfo.Disabled = false;
+                    }
+
+                    InnerLogLog(MesgType.Debug, mesg);
+                }
+            }
+
+			public void Shutdown() 
+            { 
+                Shutdown("Distribution has been stopped."); 
+            }
 
 			public void Shutdown(string mesg)
 			{
@@ -809,18 +908,18 @@ namespace MosaicLib
 					if (shutdown)
 						return;
 
-					// set all of the dist group log gates to none
+                    // now Diable all of the logger's (internally will set their distribution group gate to None)
+                    for (int lid = 0; lid < perLoggerIDInfoList.Count; lid++)
+                    {
+                        PerLoggerIDInfo lInfo = perLoggerIDInfoList[lid];
+                        lInfo.Disabled = true;
+                    }
+
+                    // Disable all of the dist groups
 					for (int dgid = 0; dgid < distGroupIDInfoList.Count; dgid++)
 					{
 						PerDistGroupIDInfo dgInfo = distGroupIDInfoList [dgid];
-						dgInfo.GroupLoggerConfigSetting = LoggerConfig.None;
-					}
-
-					// now set all of the logger's to log gate of none.
-					for (int lid = 0; lid < perLoggerIDInfoList.Count; lid++)
-					{
-						PerLoggerIDInfo lInfo = perLoggerIDInfoList [lid];
-						lInfo.DistGroupConfig = LoggerConfig.None;
+                        dgInfo.Disabled = true;
 					}
 
 					shutdown = true;
@@ -855,16 +954,7 @@ namespace MosaicLib
 				{
 					InnerShutdownAllHandlers();						// stop all handlers
 
-					perLoggerIDInfoList.Clear();					// release each of the logger info objects
-					loggerNameToIDMap.Clear();						// clear the name to id map
-
-					distGroupIDInfoList.Clear();					// release each of the distribution groups
-
-					if (mesgPool != null)							// release the message pool
-					{
-						mesgPool.Shutdown();						// deallocate and disable its vector of saved objects.
-						mesgPool = null;
-					}
+					mesgPool.Shutdown();						// deallocate and disable its vector of saved objects.
 				}
 			}
 
@@ -1014,13 +1104,7 @@ namespace MosaicLib
 				if (shutdown && blockDuringShutdown)
 					return null;
 
-				// the mesgPool handle is volatile and can be released (set to null) at any point
-				Utils.Pooling.ObjectPool<LogMessage> mesgPoolHandle = mesgPool;
-
-				if (mesgPoolHandle != null)
-					return mesgPoolHandle.GetFreeObjectFromPool();
-				else
-					return new LogMessage();
+				return mesgPool.GetFreeObjectFromPool();
 			}
 
 			protected void InnerLogLog(MesgType mesgType, string mesg)
@@ -1042,7 +1126,6 @@ namespace MosaicLib
 			{
 				int lid = LoggerID_Invalid;
 
-				if (!shutdown)
 				{
 					if (loggerNameToIDMap.TryGetValue(loggerName, out lid))
 						return (InnerIsLoggerIDValid(lid) ? lid : LoggerID_Invalid);
@@ -1071,7 +1154,7 @@ namespace MosaicLib
 			{
 				int dgid = DistGroupID_Invalid;
 
-				if (!shutdown && !string.IsNullOrEmpty(name))
+				if (!string.IsNullOrEmpty(name))
 				{
 					if (distGroupNameToIDMap.TryGetValue(name, out dgid) || !createIfNeeded)
 						return (InnerIsDistGroupIDValid(dgid) ? dgid : DistGroupID_Invalid);
@@ -1319,9 +1402,20 @@ namespace MosaicLib
 				}
 			}
 
+            protected void InnerRestartAllHandlers()
+            {
+                foreach (PerDistGroupIDInfo dgInfo in distGroupIDInfoList)
+                {
+                    foreach (DistHandlerInfo dhInfo in dgInfo.distHandlerInfoList)
+                    {
+                        if (dhInfo.Valid)
+                            dhInfo.LMH.StartIfNeeded();
+                    }
+                }
+            }
 
 			#endregion
-		}
+        }
 
 		#endregion
 
@@ -1386,7 +1480,7 @@ namespace MosaicLib
             GetLogMessageDistributionImpl().LinkDistributionToGroup(fromGroupName, toGroupName);
         }
 
-        /// <summary>Links distibution from a custom group to also distribute its messages through the default group.</summary>
+        /// <summary>Links distribution from a custom group to also distribute its messages through the default group.</summary>
         public static void LinkDistributionToDefaultGroup(string fromGroupName)
         {
             GetLogMessageDistributionImpl().LinkDistributionToGroup(fromGroupName, DefaultDistributionGroupName);
@@ -1402,11 +1496,17 @@ namespace MosaicLib
 				dist.SetLoggerDistributionGroupName(lsInfo.ID, groupName);
 		}
 
-        /// <summary>Stops the logging distrigution system and flushes all buffers.  Normally this should be the last intended use of the Log Distribution System.</summary>
+        /// <summary>Stops the logging distribution system and flushes all buffers.  Normally this should be the last intended use of the Log Distribution System.</summary>
         public static void ShutdownLogging()
 		{
 			GetLogMessageDistributionImpl().Shutdown();
 		}
+
+        /// <summary>(re)Starts the logging distribution system if it has been shutdown since the last time it was initially constructed or re-started.</summary>
+        public static void StartLoggingIfNeeded()
+        {
+            GetLogMessageDistributionImpl().StartupIfNeeded();
+        }
 
 		//-------------------------------------------------------------------
 

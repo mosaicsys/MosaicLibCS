@@ -578,13 +578,15 @@ namespace MosaicLib.PartsLib.Protocols.HART
         public BusMaster(string name, string targetSpecStr, bool autoConnect)
             : base(name, "HART.BusMaster")
         {
-            portConfig = new SerialIO.PortConfig(name + ".sp", targetSpecStr, MosaicLib.SerialIO.LineTerm.None);
-            portConfig.EnableAutoReconnect = autoConnect;
-            portConfig.SpinWaitTimeLimit = TimeSpan.FromSeconds(0.001);
-            portConfig.TraceDataLoggerGroupID = "LGID.Trace";
-            portConfig.TraceDataMesgType = Logging.MesgType.Trace;
-            portConfig.TraceMesgType = Logging.MesgType.Trace;
-            portConfig.DebugMesgType = Logging.MesgType.Trace;
+            portConfig = new SerialIO.PortConfig(name + ".sp", targetSpecStr, MosaicLib.SerialIO.LineTerm.None)
+            {
+                EnableAutoReconnect = autoConnect,
+                SpinWaitTimeLimit = TimeSpan.FromSeconds(0.001),
+                TraceDataLoggerGroupID = Logging.LookupDistributionGroupName,       // support mapping of this logger into a non-default group.
+                TraceDataMesgType = Logging.MesgType.Trace,
+                TraceMesgType = Logging.MesgType.Trace,
+                DebugMesgType = Logging.MesgType.Trace,
+            };
 
             try
             {

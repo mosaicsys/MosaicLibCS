@@ -82,6 +82,7 @@ namespace MosaicLib.WPF.Logging
         public MosaicLib.Time.QpcTimeStamp  EmittedQpcTime { get { return lm.EmittedQpcTime; } }
         public int  SeqNum { get { return lm.SeqNum; } }
         public int  ThreadID { get { return lm.ThreadID; } }
+        public int Win32ThreadID { get { return lm.Win32ThreadID; } }
         public DateTime  EmittedDateTime { get { return lm.EmittedDateTime; } }
         public string  GetFormattedDateTime() { return lm.GetFormattedDateTime(); }
         public string  GetFormattedDateTime(MosaicLib.Utils.Dates.DateTimeFormat dtFormat) { return lm.GetFormattedDateTime(dtFormat); }

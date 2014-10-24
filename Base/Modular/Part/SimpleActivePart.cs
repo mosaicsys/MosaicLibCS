@@ -33,6 +33,17 @@ namespace MosaicLib.Modular.Part
 	//-----------------------------------------------------------------
 	#region SimpleActivePartBase
 
+    /// <summary>Defines the logic that a SimpleActivePart uses for clearing the threadWakeupNotifier object that is used in WaitForSomethingToDo calls.</summary>
+    public enum ThreadWakeupNotifierResetHandling : int
+    {
+        /// <summary>Old version (current default): threadWakeupNotifier is explicitly reset in loop just prior to calling PerformMainLoopService and is implicilty AutoReset when WaitForSomethingToDo returns true.</summary>
+        ExplicitlyResetNotifierAtStartOfEachLoop = 0,
+        /// <summary>recommended: threadWakeupNotifier is not explicitly Reset in the main loop.  WaitForSomethingToDo is called with the WaitTimeLimit if IssueNextQueuedAction returned false or with TimeSpan.Zero if IssueNextQueuedAction returned true.</summary>
+        AutoResetIsUsedToResetNotifier = 1,
+        /// <summary>threadWakeupNotifier is not explicitly Reset in the main loop.  WaitForSomethingToDo is called with the WaitTimeLimit if IssueNextQueuedAction returned false.  Loop does not call WaitForSomethingToDo (and thus does not AutoReset the threadWakeupNotifier) at all if IssueNextQueuedAction returns true (to indicate that an action was performed).</summary>
+        AutoResetIsUsedToResetNotifierWhenNoActionsHaveBeenPerformed = 2,
+    }
+
 	/// <summary>
 	/// This abstract class is the standard base class to be used by most types of Active Parts.  
 	/// It derives from SimplePartBase, and implements IActivePartBase and INotifyable.
@@ -189,7 +200,13 @@ namespace MosaicLib.Modular.Part
             this.waitTimeLimit = waitTimeLimit;
 
 			actionQ = new ActionQueue(partID + ".q", enableQueue, queueSize);
-			// NOTE: mActionQ.NotifyOnEnqueue.AddItem(mThreadWakeupNotifier) is performed as part of StartPart - which must not be invoked until the derived class is fully constructed.
+
+            actionQ.NotifyOnEnqueue.AddItem(threadWakeupNotifier);
+            AddExplicitDisposeAction(() => 
+                {
+                    actionQ.NotifyOnEnqueue.RemoveItem(threadWakeupNotifier);
+                    threadWakeupNotifier.Release();
+                });
 
 			actionLoggingReference = new ActionLogging(Log, ActionLoggingConfig.Info_Error_Debug_Debug);
 		}
@@ -232,6 +249,16 @@ namespace MosaicLib.Modular.Part
         /// </summary>
         public bool AutomaticallyIncAndDecBusyCountAroundActionInvoke { get; set; }
 
+        /// <summary>Defines the logic that this SimpleActivePart is using for clearing the threadWakeupNotifier object that is used in WaitForSomethingToDo calls.</summary>
+        public ThreadWakeupNotifierResetHandling ThreadWakeupNotifierResetHandling { get; set; }
+
+        /// <summary>
+        /// Defines the maximum number of Actions that can be invoked per iteration of the outer service loop (ie per call to PerformMainLoopService/WaitForSomethingToDo).
+        /// <para/>Defaults to 1, setter will clamp the given value to be between 1 and 100.
+        /// </summary>
+        public int MaxActionsToInvokePerServiceLoop { get { return maxActionsToInvokePerServiceLoop; } set { maxActionsToInvokePerServiceLoop = Math.Max(1, Math.Min(100, value)); } }
+        private int maxActionsToInvokePerServiceLoop = 1;
+
         #endregion
 
         //-----------------------------------------------------------------
@@ -271,26 +298,23 @@ namespace MosaicLib.Modular.Part
                 PreStartPart();
 
 				if (actionQ != null)
-				{
-					actionQ.NotifyOnEnqueue.OnNotify += this.Notify;
 					actionQ.QueueEnable = true;
-				}
 				else
 					throw new System.NullReferenceException(FmtStdEC("Failed to construct action queue"));
 
-				if (mainThread == null)
-					mainThread = new System.Threading.Thread(MainThreadFcn);
+                if (mainThread == null)
+                {
+                    mainThread = new System.Threading.Thread(MainThreadFcn)
+                    {
+                        Name = PartID,
+                    };
 
-				if (mainThread == null)
-					throw new System.NullReferenceException(FmtStdEC("Failed to construct service thread"));
-
-                string initialName = mainThread.Name;
-                if (String.IsNullOrEmpty(initialName))
-                    mainThread.Name = PartID;
-                else
-                    mainThread.Name = Fcns.CheckedFormat("{0} [{1}]", PartID, mainThread.Name);
-
-				mainThread.Start();
+                    mainThread.Start();
+                }
+                else if (mainThread.ThreadState == System.Threading.ThreadState.Unstarted)
+                {
+                    mainThread.Start();
+                }
 
                 hasBeenStarted = true;
 			}
@@ -483,23 +507,45 @@ namespace MosaicLib.Modular.Part
         /// </summary>
 		protected virtual void MainThreadFcn()
 		{
-			using (Logging.EnterExitTrace t = new Logging.EnterExitTrace(Log, "MainThreadFcn", Logging.MesgType.Debug))
+			using (Logging.EnterExitTrace entryExitTrace = new Logging.EnterExitTrace(Log, "MainThreadFcn", Logging.MesgType.Debug))
 			{
-				// The following is the part's main loop:
+                System.Threading.Thread currentThread = System.Threading.Thread.CurrentThread;
+                Log.Debug.Emit("ThreadInfo: Name:'{0}', Managed ThreadID:{1:d4}, Win32 ThreadID:${2:x4}", (currentThread.Name ?? String.Empty), currentThread.ManagedThreadId, Utils.Win32.GetCurrentThreadId());
+
+                // The following is the part's main loop:
 				//	Loop until the action queue has been disabled
 
 				while (actionQ.QueueEnable)
 				{
-					// Reset the thread notification signal state so that we will only signal
-					//	if a new notification has occurred since we started this loop.  We do not want to prevent the loop from sleeping because of somthing that
-					//	we did before the loop started
+                    if (ThreadWakeupNotifierResetHandling == ThreadWakeupNotifierResetHandling.ExplicitlyResetNotifierAtStartOfEachLoop)
+                    {
+					    // Reset the thread notification signal state so that we will only signal
+					    //	if a new notification has occurred since we started this loop.  We do not want to prevent the loop from sleeping because of somthing that
+					    //	we did before the loop started
 
-					threadWakeupNotifier.Reset();
+					    threadWakeupNotifier.Reset();
+                    }
 
 					PerformMainLoopService();
 
-					if (!IssueNextQueuedAction())
-						WaitForSomethingToDo();
+                    int didActionCount = 0;
+                    do
+                    {
+                        if (IssueNextQueuedAction())
+                            didActionCount++;
+                        else
+                            break;
+                    } while (didActionCount < MaxActionsToInvokePerServiceLoop);
+
+                    if (didActionCount == 0)
+                    {
+                        // no action was performed - call WaitForSomethingToDo to slow the background spin loop rate to the rate determined by the WaitTimeLimit property.
+                        WaitForSomethingToDo();
+                    }
+                    else if (ThreadWakeupNotifierResetHandling == ThreadWakeupNotifierResetHandling.AutoResetIsUsedToResetNotifier)
+                    {
+                        WaitForSomethingToDo(TimeSpan.Zero);
+                    }
 				}
 			}
 		}
@@ -518,8 +564,8 @@ namespace MosaicLib.Modular.Part
 
         /// <summary>
         /// Attempts to get and perform the next action from the actionQ by calling PerformAction on it.
+        /// <para/>True if an action was performed or false otherwise.
         /// </summary>
-        /// <returns>True if an action was performed or false otherwise.</returns>
 		protected virtual bool IssueNextQueuedAction()
 		{
             IProviderFacet action = actionQ.GetNextAction();
@@ -574,25 +620,33 @@ namespace MosaicLib.Modular.Part
             }
 		}
 
-        /// <summary>Waits for threadWakeupNotifier to be signaled or default waitTimeLimit to elapse (used to set Parts's default spin rate).</summary>
-        /// <returns>True if the object was signaled or false if the timeout caused flow to return to the caller.</returns>
+        /// <summary>
+        /// Waits for threadWakeupNotifier to be signaled or default waitTimeLimit to elapse (used to set Parts's default spin rate).
+        /// <para/>True if the object was signaled or false if the timeout caused flow to return to the caller.
+        /// </summary>
 		protected bool WaitForSomethingToDo()
 		{
 			return WaitForSomethingToDo(threadWakeupNotifier, waitTimeLimit);
 		}
 
-        /// <summary>Waits for threadWakeupNotifier to be signaled or given waitTimeLimit to elapse.</summary>
-        /// <returns>True if the object was signaled or false if the timeout caused flow to return to the caller.</returns>
+        /// <summary>
+        /// Waits for threadWakeupNotifier to be signaled or given waitTimeLimit to elapse.
+        /// <para/>True if the object was signaled or false if the timeout caused flow to return to the caller.
+        /// </summary>
         protected bool WaitForSomethingToDo(TimeSpan waitTimeLimit)
 		{
 			return WaitForSomethingToDo(threadWakeupNotifier, waitTimeLimit);
 		}
 
-        /// <summary>Most generic version of WaitForSomethingToDo.  caller provides IWaitable object and waitTimeLimit.</summary>
-        /// <returns>True if the object was signaled or false if the timeout caused flow to return to the caller.</returns>
+        /// <summary>
+        /// Most generic version of WaitForSomethingToDo.  caller provides IWaitable object and waitTimeLimit.
+        /// <para/>True if the object was signaled or false if the timeout caused flow to return to the caller.
+        /// </summary>
         protected virtual bool WaitForSomethingToDo(Utils.IWaitable waitable, TimeSpan waitTimeLimit)
 		{
-			return waitable.Wait(waitTimeLimit);
+            bool signaled = waitable.Wait(waitTimeLimit);
+
+            return signaled;
 		}
 
 		#endregion
@@ -600,8 +654,9 @@ namespace MosaicLib.Modular.Part
 		//-----------------------------------------------------------------
 		#region private and protected fields and related properties (includuing BaseState implementation)
 
-        /// <summary>Public get protected set field contains the default WaitTimeLimit for the Part's thread.  Generally used when calling WaitForSomethingToDo().  Setter clamps value to be between minWaitTimeLimit and maxWaitTimeLimit seconds</summary>
-        protected TimeSpan WaitTimeLimit { get { return innerWaitTimeLimitStore; } private set { innerWaitTimeLimitStore = ((value >= minWaitTimeLimit) ? ((value <= maxWaitTimeLimit) ? value : maxWaitTimeLimit) : minWaitTimeLimit); } }
+        /// <summary>Protected get/set field contains the default WaitTimeLimit for the Part's thread.  Generally used when calling WaitForSomethingToDo().  Setter clamps value to be between minWaitTimeLimit (0.0) and maxWaitTimeLimit (0.5) seconds</summary>
+        protected TimeSpan WaitTimeLimit { get { return innerWaitTimeLimitStore; } set { innerWaitTimeLimitStore = ((value >= minWaitTimeLimit) ? ((value <= maxWaitTimeLimit) ? value : maxWaitTimeLimit) : minWaitTimeLimit); } }
+
         /// <summary>Protected readonly field contains the default waitTimeLimit for the Part's thread.  Generally used when calling WaitForSomethingToDo().</summary>
         protected TimeSpan waitTimeLimit { get { return innerWaitTimeLimitStore; } private set { innerWaitTimeLimitStore = value; } }
 

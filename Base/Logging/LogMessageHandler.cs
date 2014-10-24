@@ -26,6 +26,7 @@ namespace MosaicLib
 {
 	using System;
 	using System.Collections.Generic;
+    using MosaicLib.Utils;
 
 	public static partial class Logging
 	{
@@ -84,6 +85,11 @@ namespace MosaicLib
             /// Any attempt to pass messages after this point may be ignored by the handler.
             /// </summary>
             void Shutdown();
+
+            /// <summary>
+            /// Used to tell the handler to (re)Start processing distributed messages, as if the handler has just been constructed.
+            /// </summary>
+            void StartIfNeeded();
 		}
 
 		#endregion
@@ -347,6 +353,15 @@ namespace MosaicLib
                 /// <summary>get/set property:  True if keywords information will be included in formatted output lines.</summary>
                 public bool IncludeKeywords { get; set; }
 
+                /// <summary>Converts the thread info in the given message into a string consiting of the managed TID, the Win32 TID (in hex) and the thread name if it is not null or empty.</summary>
+                private string FormatThreadInfo(LogMessage lm)
+                {
+                    if (String.IsNullOrEmpty(lm.ThreadName))
+                        return Utils.Fcns.CheckedFormat("tid:{0:d4}/${1:x4}", lm.ThreadID, lm.Win32ThreadID);
+                    else
+                        return Utils.Fcns.CheckedFormat("tid:{0:d4}/${1:x4}/{2}", lm.ThreadID, lm.Win32ThreadID, lm.ThreadName);
+                }
+
                 /// <summary>
                 /// Formats the given message as configured and incrementally Writes it to the given StreamWriter
                 /// </summary>
@@ -366,10 +381,7 @@ namespace MosaicLib
 					{ TabIfNeeded(os, ref firstItem); os.Write(lm.Mesg); }
                     if (IncludeKeywords) { os.Write(tabStr); os.Write(lm.Keywords); }
                     if (data) { os.Write(tabStr); os.Write("[{0}]", base64UrlCoder.Encode(lm.Data)); }
-                    if (IncludeThreadInfo)
-                    {
-                        { os.Write(tabStr); os.Write(Utils.Fcns.CheckedFormat("tid:{0:x4}", lm.ThreadID)); }
-                    }
+                    if (IncludeThreadInfo) { os.Write(tabStr); os.Write(FormatThreadInfo(lm)); }
 					if (fAndL && lm.SourceStackFrame != null)
 					{
 						{ os.Write(tabStr); os.Write(lm.SourceStackFrame.GetFileName()); }
@@ -394,10 +406,7 @@ namespace MosaicLib
 					{ TabIfNeeded(ostr, ref firstItem); ostr.Append(lm.Mesg); }
                     if (IncludeKeywords) { ostr.Append(tabStr); ostr.Append(lm.Keywords); }
                     if (data) { ostr.Append(tabStr); ostr.Append("["); ostr.Append(base64UrlCoder.Encode(lm.Data)); ostr.Append("]"); }
-                    if (IncludeThreadInfo)
-                    {
-                        { ostr.Append(tabStr); ostr.Append(Utils.Fcns.CheckedFormat("tid:{0:x4}", lm.ThreadID)); }
-                    }
+                    if (IncludeThreadInfo) { ostr.Append(tabStr); ostr.Append(FormatThreadInfo(lm)); }
 					if (fAndL && lm.SourceStackFrame != null)
 					{
 						{ ostr.Append(tabStr); ostr.Append(lm.SourceStackFrame.GetFileName()); }
@@ -526,6 +535,11 @@ namespace MosaicLib
 
                 /// <summary>This abstract method will be called when the distribution system is being shutdown.  It allows the handler to gracefully close and release all related resources.</summary>
 				public abstract void Shutdown();
+
+                /// <summary>This virtual method will be called when the distribution system is being restarted.  It can be overriden to allows a drived handler class to handler to (re)Start processing distributed messages, as if the handler has just been constructed.</summary>
+                public virtual void StartIfNeeded()
+                {
+                }
 
                 /// <summary>tell any interested Notifyable objects (as currently in the notifyMessageDelivered list) that messages have been delivered</summary>
 				protected void NoteMessagesHaveBeenDelivered()
@@ -677,6 +691,17 @@ namespace MosaicLib
                         Utils.Asserts.TakeBreakpointAfterFault("LineFmt is null");
                     if (ostream == null)
                         Utils.Asserts.TakeBreakpointAfterFault("ostream is null");
+
+                    // add an action to close the ostream when this object is disposed.
+                    AddExplicitDisposeAction(
+                        () =>
+                        {
+                            if (this.ostream != null)
+                            {
+                                this.ostream.Close();
+                                this.ostream = null;
+                            }
+                        });
 				}
 
                 /// <summary>
@@ -705,11 +730,8 @@ namespace MosaicLib
 				{
 					base.Shutdown();
 
-					if (ostream != null)
-					{
-						ostream.Close();
-						ostream = null;
-					}
+                    // shutdown no longer closes the ostream
+                    ostream.Flush();
 				}
 
                 /// <summary>Gives access to the LineFormat instance that was given to this object at construction time.</summary>
@@ -766,7 +788,7 @@ namespace MosaicLib
 						ostream.Write("\r\n");
 
 					logger.Signif.Emit("----------------------------------------");
-					logger.Signif.Emit("File has been opened");
+					logger.Signif.Emit("LogMessageHandler starting: File has been opened");
 				}
 
                 /// <summary>
@@ -774,11 +796,22 @@ namespace MosaicLib
                 /// </summary>
 				public override void Shutdown()		// override default impl from CommonLogMessageHandlerBase
 				{
-					logger.Signif.Emit("File is being closed");
+                    logger.Signif.Emit("LogMessageHandler Shutdown");
 					logger.Signif.Emit("----------------------------------------");
 
                     base.Shutdown();
 				}
+
+                /// <summary>
+                /// Emits a message to indicate that the handler has been re-started
+                /// </summary>
+                public override void StartIfNeeded()
+                {
+                    base.StartIfNeeded();
+
+                    logger.Signif.Emit("----------------------------------------");
+                    logger.Signif.Emit("LogMessageHandler has been re-started");
+                }
 			}
 
 			//-------------------------------------------------------------------

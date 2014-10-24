@@ -214,7 +214,7 @@ namespace MosaicLib.SerialIO
 	    None,
         /// <summary>data was obtained and is included</summary>
 	    Data,
-        /// <summary>data was obtained: all of it was whitespace and was dicarded</summary>
+        /// <summary>data was obtained: all of it was whitespace.  It may have been trimmed</summary>
 	    WhiteSpace,
         /// <summary>packet represents data that has been/is being flushed from the port</summary>
 	    Flushed,
@@ -478,6 +478,7 @@ namespace MosaicLib.SerialIO
                     int dataCopyStartIdx = getIdx;
                     int dataCopyLen = nextPacketLen;
 
+                    bool isWhitespace = (dataCopyLen == 0);
                     if (StripWhitespace)
                     {
                         while (dataCopyLen > 0)
@@ -496,15 +497,29 @@ namespace MosaicLib.SerialIO
 
                             dataCopyLen--;
                         }
+
+                        isWhitespace = (dataCopyLen == 0);
+                    }
+                    else
+                    {
+                        isWhitespace = true;    // assume that it is all whitespace
+                        for (int scanOffset = 0; scanOffset < dataCopyLen; scanOffset++)
+                        {
+                            if (!IsWhiteSpace(buffer[getIdx + scanOffset]))
+                                isWhitespace = false;
+                        }
                     }
 
                     // extract bytes from buffer and append into new packet
-                    Packet p = new Packet(((dataCopyLen > 0) ? PacketType.Data : PacketType.WhiteSpace), new byte[dataCopyLen]);
+                    if (!isWhitespace || !DiscardWhitespacePackets)
+                    {
+                        Packet p = new Packet((!isWhitespace ? PacketType.Data : PacketType.WhiteSpace), new byte[dataCopyLen]);
 
-                    if (dataCopyLen > 0)
-                        System.Buffer.BlockCopy(buffer, dataCopyStartIdx, p.Data, 0, dataCopyLen);
+                        if (dataCopyLen > 0)
+                            System.Buffer.BlockCopy(buffer, dataCopyStartIdx, p.Data, 0, dataCopyLen);
 
-                    extractedPacketQueue.Enqueue(p);
+                        extractedPacketQueue.Enqueue(p);
+                    }
 
                     UsedNChars(nextPacketLen);
                 }
@@ -601,6 +616,9 @@ namespace MosaicLib.SerialIO
                 Service(true); 
             } 
         }
+
+        /// <summary>Get/Set property.  When set to true, Whitespace packets will be discarded at the point that they are created (they will not be enqueued).  If this property is changed while the buffer is in use, the results may not be well defined until the buffer is next fully empty.</summary>
+        public bool DiscardWhitespacePackets { get; set; }
 
         /// <summary>Gets or sets the current PacketTimeout value.  This value is used during Service calls to determine if remaining bytes in the buffer have been idle for to long in which case a timeout packet is generated and enqueued to discard them.  When this value is set to zero, no local timeout handling is performed within the sliding buffer.</summary>
         public TimeSpan PacketTimeout

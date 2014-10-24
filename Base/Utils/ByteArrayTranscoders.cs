@@ -70,12 +70,16 @@ namespace MosaicLib.Utils
 	{
 		private static IByteArrayTranscoder byteArrayStringTranscoder = new ByteArrayStringTranscoder();
 		private static IByteArrayTranscoder base64UrlTranscoder = new Base64UrlTranscoder();
+        private static IByteArrayTranscoder hexTranscoder = new HexByteArrayTranscoder() { UseByteSeperator = true, UseWordSeperator = true };
 
         /// <summary>Returns a Transcoder that converts directly between byte arrays and strings of the identical character (bit patterns).  Encode widens each byte, Decode truncates the upper bits in each character to give the resulting byte.</summary>
 		public static IByteArrayTranscoder ByteStringTranscoder { get { return byteArrayStringTranscoder; } }
 
         /// <summary>Returns a Transcoder that converts between binary byte arrays and Base64 coded strings</summary>
 		public static IByteArrayTranscoder Base64UrlTranscoder { get { return base64UrlTranscoder; } }
+
+        /// <summary>Returns a Transcoder that converts between binary byte arrays and hexadecimal coded strings</summary>
+        public static IByteArrayTranscoder HexStringTranscoder { get { return hexTranscoder; } }
 	}
 
     /// <summary>Base class for some transcoders.  Provides base implementations for most of the IByteArrayTranscoder methods</summary>
@@ -139,7 +143,7 @@ namespace MosaicLib.Utils
         public abstract bool Decode(string codedStr, out byte[] decodedBuffer);
 	}
 
-	/// <summary>
+    /// <summary>
     /// Converts directly between byte arrays and strings of the identical characters using simple Widen and Narrow operations.  
     /// Narrow operation retains only the lower 8 bytes from each character in the transcoded string.
     /// </summary>
@@ -361,6 +365,101 @@ namespace MosaicLib.Utils
 			return success;
 		}
 	}
+
+
+    /// <summary>
+    /// Converts directly between byte arrays and strings containing the corresponding sequence of hexidecimal values.  
+    /// </summary>
+    public class HexByteArrayTranscoder : ByteArrayTranscoderBase
+    {
+        /// <summary>
+        /// Default constructor.  Sets UseByteSeperator and UseWordSeperator to true.
+        /// </summary>
+        public HexByteArrayTranscoder()
+            : base()
+        {
+            UseByteSeperator = true;
+            UseWordSeperator = true;
+        }
+
+        /// <summary>Set to true to have the transcoder include spaces between the two "bytes" in each "word" of hex output.</summary>
+        public bool UseByteSeperator { get; set; }
+
+        /// <summary>Set to true to have the transcoder include spaces between "words" in the hex output (sets of 4 hex digits)</summary>
+        public bool UseWordSeperator { get; set; }
+
+        /// <summary>
+        /// Encodes the given byte range from the given source buffer, sets the codedStr to the resulting encoded hex string and returns true if the operation was successful.
+        /// </summary>
+        /// <param name="sourceBuffer">specifies the source buffer from which to encode bytes</param>
+        /// <param name="startOffset">specifies the index of the first byte in the source buffer</param>
+        /// <param name="length">specifies the number of bytes to encode from the source buffer</param>
+        /// <param name="codedStr">the output string parameter that will be set to the encoded string</param>
+        /// <returns>true if the operation was successful, false otherwise.  The contents of the resulting encoded string are not defined if the return value is false.</returns>
+        public override bool Encode(byte[] sourceBuffer, int startOffset, int length, out string codedStr)
+        {
+            codedStr = string.Empty;
+
+            System.Text.StringBuilder sb = new System.Text.StringBuilder();
+            if (sourceBuffer == null)
+                sourceBuffer = emptyArray;
+
+            int sbLength = sourceBuffer.Length;
+            if (startOffset >= sbLength)
+                return false;
+
+            int endOffset = startOffset + length;
+            bool success = true;
+            if (endOffset > sbLength)
+            {
+                endOffset = sbLength;
+                success = false;
+            }
+
+            sb.EnsureCapacity((endOffset - startOffset) * 3);
+
+            int lastIdx = endOffset - 1;
+            for (int idx = startOffset; idx <= lastIdx; idx++)
+            {
+                sb.CheckedAppendFormat("{0:x2}", unchecked((int)sourceBuffer[idx]));
+
+                bool isLastByte = (idx == lastIdx);
+                bool appendSeperator = !isLastByte && (((idx % 2) == 0) ? UseWordSeperator : UseByteSeperator);
+
+                if (appendSeperator)
+                    sb.Append(" ");
+            }
+
+            codedStr = sb.ToString();
+            return success;
+        }
+
+        /// <summary>
+        /// Decodes the given hex codedStr, sets the decodedBuffer to the resulting decoded byte array and returns true if the operation was successful.
+        /// </summary>
+        /// <param name="codedStr">the string containing the encoded characters.</param>
+        /// <param name="decodedBuffer">the output byte array variable that will be set to a new array containing the decoded bytes</param>
+        /// <returns>true if the operation was successful,false otherwise.  The contents of the resulting decoded buffer are not defined if the return value is false</returns>
+        public override bool Decode(string codedStr, out byte[] decodedBuffer)
+        {
+            List<byte> byteBuilder = new List<byte>();
+
+            bool success = true;
+            StringScanner ss = new StringScanner(codedStr);
+            while (success && !ss.IsAtEnd)
+            {
+                int value;
+                success = ss.ParseHexValue(out value, 2, 2, true, true, false);
+                success &= (value >= 0 && value <= 255);
+                if (success)
+                    byteBuilder.Add(unchecked((byte)value));
+            }
+
+            decodedBuffer = byteBuilder.ToArray();
+
+            return success;
+        }
+    }
 
 	#endregion
 }

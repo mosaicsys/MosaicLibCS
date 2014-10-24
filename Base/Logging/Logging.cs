@@ -488,6 +488,16 @@ namespace MosaicLib
 		{
             // all LoggerConfig objects are constructed using default constructor.  Client may set properties using post CTOR {} notation.
 
+            /// <summary>Copy constructor</summary>
+            public LoggerConfig(LoggerConfig rhs) 
+                : this()
+            {
+                GroupName = rhs.GroupName;
+                LogGate = rhs.LogGate;
+                RecordSourceStackFrame = rhs.RecordSourceStackFrame;
+                SupportsReferenceCountedRelease = rhs.SupportsReferenceCountedRelease;
+            }
+
             /// <summary>Name of corresponding Logger Group.  May be empty if no group is associated.  For LogMessageHandlers, this name will be derived from the Handler's name</summary>
             public String GroupName { get; set; }
 
@@ -704,6 +714,9 @@ namespace MosaicLib
             /// <summary>Returns the ThreadID of the thread that setup this message</summary>
             int ThreadID { get; }
 
+            /// <summary>Returns the Win32 ThreadID (from kernel32.GetCurrentThreadID) of the thread that setup this message</summary>
+            int Win32ThreadID { get; }
+
             /// <summary>Returns the DataTime taken at the time the message was emitted or the empty DateTime if it has not bee emitted.</summary>
             DateTime EmittedDateTime { get; }
 
@@ -746,6 +759,7 @@ namespace MosaicLib
                 EmittedQpcTime = rhs.EmittedQpcTime;
                 SeqNum = rhs.SeqNum;
                 ThreadID = rhs.ThreadID;
+                Win32ThreadID = rhs.Win32ThreadID;
                 threadName = rhs.threadName;
             }
 
@@ -757,7 +771,8 @@ namespace MosaicLib
                 mesg = string.Empty; 
                 KeywordArray = null; 
                 SourceStackFrame = null; 
-                ThreadID = -1; 
+                ThreadID = -1;
+                Win32ThreadID = -1;
                 ThreadName = null; 
                 SeqNum = NullMessageSeqNum; 
             }
@@ -860,6 +875,9 @@ namespace MosaicLib
             /// <summary>Returns the ThreadID that initially setup this message.</summary>
             public int ThreadID { get; private set; }
 
+            /// <summary>Returns the Win32 ThreadID (from kernel32.GetCurrentThreadID) of the thread that setup this message</summary>
+            public int Win32ThreadID { get; private set; }
+
             private string threadName = null;
             /// <summary>Returns the ThreadName that initially setup this message.</summary>
             public string ThreadName { get { return threadName ?? String.Empty; } private set { threadName = value; } }
@@ -870,6 +888,8 @@ namespace MosaicLib
                 System.Threading.Thread currentThread = System.Threading.Thread.CurrentThread;
                 ThreadID = currentThread.ManagedThreadId;
                 threadName = currentThread.Name;
+
+                Win32ThreadID = Utils.Win32.GetCurrentThreadId();
             }
 
             /// <summary>Method used to get the EmittedDataTime formatted as a standard string.</summary>
@@ -2017,9 +2037,13 @@ namespace MosaicLib
 			private const string defaultCtorPrefixStr = "Ctor:";
 			private const string defaultDisposePrefixStr = "Dispose:";
 
+            /// <summary>String that may be assigned by the client to include additional information in the [] section of the dispose message that is generated.</summary>
             public string ExtraMessage { get; set; }
 
-            /// <summary>Defines the default message type that will be used for messages emitted by this object.</summary>
+            /// <summary>
+            /// Defines the default message type that will be used for messages emitted by this object.
+            /// <para/>currently MesgType.Trace
+            /// </summary>
 			protected const MesgType defaultMesgType = MesgType.Trace;
 
             /// <summary>Constructor.  Uses default prefix strings and MesgType.Trace log message type.</summary>
@@ -2043,7 +2067,7 @@ namespace MosaicLib
             public CtorDisposeTrace(IBasicLogger logger, string traceID, MesgType mesgType, int ctorSkipNStackFrames)
 				: this(logger, traceID, mesgType, defaultCtorPrefixStr, ctorSkipNStackFrames + 1, defaultDisposePrefixStr, 0) {}
 
-            /// <summary>Full Constructor.</summary>
+            /// <summary>Full Constructor for use with Logger.</summary>
             /// <param name="logger">Gives logger instance to use.</param>
             /// <param name="traceID">Gives traceID string to use in resulting emitted messages.</param>
             /// <param name="mesgType">Gives the MesgType to use for the emitted messages.</param>
@@ -2066,6 +2090,25 @@ namespace MosaicLib
 				this.disposeSkipNStackFrames = disposeSkipNStackFrames;
 			}
 
+            /// <summary>Full Constructor for use with emitter.</summary>
+            /// <param name="emitter">Gives emiter instance to use for normal output.</param>
+            /// <param name="traceID">Gives traceID string to use in resulting emitted messages.</param>
+            /// <param name="ctorPrefixStr">Gives the name used for ctor type emitted messages.  Typically used when sub-classing this object for other purposes.</param>
+            /// <param name="ctorSkipNStackFrames">Defines the number of stack frames to skip for the stack frame that is used as the source for the emitted ctor message.</param>
+            /// <param name="disposePrefixStr">Gives the name used for dispose type emitted messages.  Typically used when sub-classing this object for other purposes.</param>
+            /// <param name="disposeSkipNStackFrames">Defines the number of stack frames to skip for the stack frame that is used as the source for the emitted dispose message.</param>
+            public CtorDisposeTrace(IMesgEmitter emitter, string traceID, string ctorPrefixStr, int ctorSkipNStackFrames, string disposePrefixStr, int disposeSkipNStackFrames)
+            {
+                mesgEmitter = emitter ?? Logging.NullEmitter;
+
+                string ctorStr = ctorPrefixStr + traceID;
+                mesgEmitter.Emit(ctorSkipNStackFrames + 1, ctorStr);
+
+                disposeStr = disposePrefixStr + traceID;
+                this.disposeSkipNStackFrames = disposeSkipNStackFrames;
+            }
+
+
             /// <summary>
             /// Protected implementation for this abstract method in <see cref="Utils.DisposableBase"/> abstract base class.
             /// </summary>
@@ -2074,11 +2117,34 @@ namespace MosaicLib
 			{
                 try
                 {
-                    if (disposeStr != null)
+                    if (disposeType == DisposeType.CalledExplicitly && disposeStr != null 
+                        && ((mesgEmitter != null && mesgEmitter.IsEnabled) || (warningEmitter != null && warningEmitter.IsEnabled)))
                     {
-                        string finalDisposeStr = (String.IsNullOrEmpty(ExtraMessage) ? disposeStr : Utils.Fcns.CheckedFormat("{0} [{1}]", disposeStr, ExtraMessage));
+                        string timeCountRateStr = String.Empty;
+                        double runTime = RunTime;
 
-                        if (disposeType == DisposeType.CalledExplicitly && mesgEmitter != null)
+                        if (!HaveStartTime)
+                        {}
+                        else if (!HaveCount)
+                            timeCountRateStr = Utils.Fcns.CheckedFormat("runTime:{0:f6}", RunTime);
+                        else if (runTime == 0.0)
+                            timeCountRateStr = Utils.Fcns.CheckedFormat("runTime:{0:f6} count:{1}", RunTime, Count);
+                        else
+                            timeCountRateStr = Utils.Fcns.CheckedFormat("runTime:{0:f6} count:{1} rate:{2:f3}", RunTime, Count, Count / runTime);
+
+                        bool haveExtraMessage = !String.IsNullOrEmpty(ExtraMessage);
+                        string finalDisposeStr;
+
+                        if (!HaveStartTime && !haveExtraMessage)
+                            finalDisposeStr = disposeStr;
+                        else if (HaveStartTime && !haveExtraMessage)
+                            finalDisposeStr = Utils.Fcns.CheckedFormat("{0} [{1}]", disposeStr, timeCountRateStr);
+                        else if (!HaveStartTime && haveExtraMessage)
+                            finalDisposeStr = Utils.Fcns.CheckedFormat("{0} [{1}]", disposeStr, ExtraMessage);
+                        else
+                            finalDisposeStr = Utils.Fcns.CheckedFormat("{0} [{1} {2}]", disposeStr, timeCountRateStr, ExtraMessage);
+
+                        if (mesgEmitter != null)
                             mesgEmitter.Emit(disposeSkipNStackFrames + 1, finalDisposeStr);
                         else if (warningEmitter != null)
                             warningEmitter.Emit(disposeSkipNStackFrames + 1, "Unexpected '{0}' disposal of trace object for mesg:{1}", disposeType, finalDisposeStr);
@@ -2087,7 +2153,9 @@ namespace MosaicLib
                 catch
                 { }
 
+                // clear the mesgEmitter and warningEmitter to prevent this method from attempting to log any additional content
 				mesgEmitter = warningEmitter = null;
+                disposeStr = null;
 			}
 
             /// <summary>Storage for string that will be emitted on dispose</summary>
@@ -2098,6 +2166,45 @@ namespace MosaicLib
             protected IMesgEmitter warningEmitter = Logging.NullEmitter;
             /// <summary>Storage for count of number of stack frames to skip on dispose.</summary>
             protected int disposeSkipNStackFrames = 0;
+
+            /// <summary>Property used by derived classes to track start/end timing</summary>
+            public double StartTime { get { return startTime; } set { startTime = value; HaveStartTime = true; } }
+
+            /// <summary>Backing field for StartTime property</summary>
+            private double startTime = 0.0;
+
+            /// <summary>Method sets the StartTime property to Time.Qpc.TimeNow</summary>
+            public void SetStartTime()
+            {
+                StartTime = Time.Qpc.TimeNow;
+            }
+
+            /// <summary>Returns true if the StartTime property has been set</summary>
+            public bool HaveStartTime { get; private set; }
+
+            /// <summary>Returns the time in seconds (from QPC) that have elapsed since the SetStartTime method was called.  Returns zero if HaveStartTime is not true (ie the StartTime property has not been set or the SetStartTime method has not been called).</summary>
+            public double RunTime
+            {
+                get
+                {
+                    return (HaveStartTime ? (Time.Qpc.TimeNow - StartTime) : 0.0);
+                }
+            }
+
+            /// <summary>
+            /// Set by client code, prior to Stop, to define the number of "items" that have been processed between the Start and Stop messages.
+            /// Causes Stop message to include the elpased time, the count, and the rate (if appropriate) in the Stop: messages.
+            /// <para/>Count is a double so that the pattern can be used in more rate determination type cases.
+            /// </summary>
+            public double Count { get { return count; } set { count = value; HaveCount = true; } }
+
+            /// <summary>
+            /// Gets set to true if the Count property has been assigned.  False otherwise.
+            /// </summary>
+            public bool HaveCount { get; private set; }
+
+            /// <summary>Backing store for the Count property</summary>
+            private double count = 0.0;
 		}
 
 		//-------------------------------------------------------------------
@@ -2118,20 +2225,29 @@ namespace MosaicLib
             /// <summary>constructor.  Uses caller's method name as traceID</summary>
             /// <param name="logger">provides logger that will be used to emit enter(ctor) and leave(dispose) messages</param>
 			public EnterExitTrace(IBasicLogger logger)
-				: base(logger, new System.Diagnostics.StackFrame(1).GetMethod().Name, defaultMesgType, entryPrefixStr, 1, exitPrefixStr, 0) {}
+				: base(logger, new System.Diagnostics.StackFrame(1).GetMethod().Name, defaultMesgType, entryPrefixStr, 1, exitPrefixStr, 0) 
+            {
+                SetStartTime();
+            }
 
             /// <summary>constructor.</summary>
             /// <param name="logger">provides logger that will be used to emit Enter(ctor) and Exit(dispose) messages</param>
             /// <param name="traceID">Gives caller provided traceID to generate "Enter:{traceID}" and "Exit:{traceID}" messages for.</param>
             public EnterExitTrace(IBasicLogger logger, string traceID)
-				: base(logger, traceID, defaultMesgType, entryPrefixStr, 1, exitPrefixStr, 0) {}
+				: base(logger, traceID, defaultMesgType, entryPrefixStr, 1, exitPrefixStr, 0)
+            {
+                SetStartTime();
+            }
 
             /// <summary>constructor.</summary>
             /// <param name="logger">provides logger that will be used to emit Enter(ctor) and Exit(dispose) messages</param>
             /// <param name="traceID">Gives caller provided traceID to generate "Enter:{traceID}" and "Exit:{traceID}" messages for.</param>
             /// <param name="mesgType">Gives message type to use for emitted Enter and Leave messages</param>
             public EnterExitTrace(IBasicLogger logger, string traceID, MesgType mesgType)
-				: base(logger, traceID, mesgType, entryPrefixStr, 1, exitPrefixStr, 0) {}
+				: base(logger, traceID, mesgType, entryPrefixStr, 1, exitPrefixStr, 0)
+            {
+                SetStartTime();
+            }
 
             /// <summary>constructor.</summary>
             /// <param name="logger">provides logger that will be used to emit Enter(ctor) and Exit(dispose) messages</param>
@@ -2139,8 +2255,21 @@ namespace MosaicLib
             /// <param name="mesgType">Gives message type to use for emitted Enter and Leave messages</param>
             /// <param name="ctorSkipNStackFrames">Gives number of stack frames to skip for the stack frame used for the emitted Enter message.</param>
             public EnterExitTrace(IBasicLogger logger, string traceID, MesgType mesgType, int ctorSkipNStackFrames)
-				: base(logger, traceID, mesgType, entryPrefixStr, ctorSkipNStackFrames + 1, exitPrefixStr, 0) {}
-		}
+				: base(logger, traceID, mesgType, entryPrefixStr, ctorSkipNStackFrames + 1, exitPrefixStr, 0) 
+            {
+                SetStartTime();
+            }
+
+            /// <summary>constructor for use with emitter.</summary>
+            /// <param name="emitter">Gives emiter instance to use for normal output.</param>
+            /// <param name="traceID">Gives caller provided traceID to generate "Enter:{traceID}" and "Exit:{traceID}" messages for.</param>
+            /// <param name="ctorSkipNStackFrames">Gives number of stack frames to skip for the stack frame used for the emitted Enter message.</param>
+            public EnterExitTrace(IMesgEmitter emitter, string traceID, int ctorSkipNStackFrames)
+                : base(emitter, traceID, entryPrefixStr, ctorSkipNStackFrames + 1, exitPrefixStr, 0)
+            {
+                SetStartTime();
+            }
+        }
 
 		//-------------------------------------------------------------------
 
@@ -2179,42 +2308,18 @@ namespace MosaicLib
             public TimerTrace(IBasicLogger logger, string traceID, MesgType mesgType, int ctorSkipNStackFrames)
 				: base(logger, traceID, mesgType, startPrefixStr, ctorSkipNStackFrames + 1, stopPrefixStr, 0)
 			{
-				startTime = Time.Qpc.TimeNow;
+                SetStartTime();
 			}
 
-            /// <summary>
-            /// Set by client code, prior to Stop, to define the number of "items" that have been processed between the Start and Stop messages.
-            /// Causes Stop message to include the elpased time, the count, and the rate (if appropriate) in the Stop: messages.
-            /// </summary>
-            public double Count { get { return count; } set { count = value; haveCount = true; } }
-
-            private double count = 0.0;
-            private bool haveCount = false;
-
-            /// <summary>
-            /// Custom dispose method used to change the standard message that is emitted on dispose.
-            /// </summary>
-			protected override void Dispose(Utils.DisposableBase.DisposeType disposeType)
-			{
-				if (disposeType == DisposeType.CalledExplicitly && mesgEmitter != null)
-				{
-					double runTime = Time.Qpc.TimeNow - startTime;
-
-                    if (!haveCount)
-    					mesgEmitter.Emit(1 + disposeSkipNStackFrames, "{0} [runTime:{1:f6}]", disposeStr, runTime);
-                    else if (runTime != 0.0)
-                        mesgEmitter.Emit(1 + disposeSkipNStackFrames, "{0} [runTime:{1:f6} count:{2} rate:{3:f3}]", disposeStr, runTime, count, count / runTime);
-                    else
-                        mesgEmitter.Emit(1 + disposeSkipNStackFrames, "{0} [runTime:{1:f6} count:{2}]", disposeStr, runTime, count);
-
-
-					disposeStr = null;		// prevent additional dispose message
-				}
-
-				base.Dispose(disposeType);
-			}
-
-			private double startTime;
+            /// <summary>constructor for use with emitter.</summary>
+            /// <param name="emitter">Gives emiter instance to use for normal output.</param>
+            /// <param name="traceID">Gives caller provided traceID to generate "Enter:{traceID}" and "Exit:{traceID}" messages for.</param>
+            /// <param name="ctorSkipNStackFrames">Gives number of stack frames to skip for the stack frame used for the emitted Enter message.</param>
+            public TimerTrace(IMesgEmitter emitter, string traceID, int ctorSkipNStackFrames)
+                : base(emitter, traceID, startPrefixStr, ctorSkipNStackFrames + 1, stopPrefixStr, 0)
+            {
+                SetStartTime();
+            }
 		}
 
 		#endregion

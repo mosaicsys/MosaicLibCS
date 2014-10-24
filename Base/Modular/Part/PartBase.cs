@@ -534,6 +534,9 @@ namespace MosaicLib.Modular.Part
         /// <summary>public property that may be used to gain access to the INotificationObject that is used to manage publication and notification of this part's BaseState.</summary>
         public override INotificationObject<IBaseState> BaseStateNotifier { get { return publishedBaseState; } }    // base class defines this as abstract
 
+        /// <summary>Implementation class may call this method to notify all targets in the BaseStateNotifier's NotificationList without publishing a new base state value</summary>
+        protected void NotifyBaseStateNotifier() { publishedBaseState.Notify(); }
+
         #endregion
 
         #region Logging related fields and protected properties
@@ -652,7 +655,7 @@ namespace MosaicLib.Modular.Part
         /// <summary>
         /// Increments the internal part busy counter and Creates an internal busy flag holder object which is returned.  When the returned object is explicitly disposed it will decrement the internal part busy flag automatically.
         /// Caller is responsible for following an object dispose pattern that will cause the returned object to be disposed of at the correct time.
-        /// This variant uses a reason of "StartBusy:" + flagPublishName when first incrementing the busy flag and "EndBusy:" + flagPublishName when the returned object is disposed and the counter is decremented.
+        /// This variant uses a reason of "StartBusy:" + flagName when first incrementing the busy flag and "EndBusy:" + flagName when the returned object is disposed and the counter is decremented.
         /// </summary>
         protected IDisposable CreateInternalBusyFlagHolderObject(string flagName, string startingActionName)
         {

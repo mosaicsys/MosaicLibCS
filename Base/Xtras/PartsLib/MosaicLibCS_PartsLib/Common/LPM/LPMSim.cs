@@ -159,6 +159,7 @@ namespace MosaicLib.PartsLib.Common.LPM.Sim
             PositionState = new PositionState(rhs.PositionState);
             DisplayState = new DisplayState(rhs.DisplayState);
             CycleCount = rhs.CycleCount;
+            CmdRateHz = rhs.CmdRateHz;
         }
 
         [DataMember]
@@ -186,6 +187,8 @@ namespace MosaicLib.PartsLib.Common.LPM.Sim
 
         [DataMember]
         public Int32 CycleCount { get; set; }
+
+        public Double CmdRateHz { get; set; }
     }
 
     [DataContract]
@@ -296,7 +299,6 @@ namespace MosaicLib.PartsLib.Common.LPM.Sim
         public PassiveToActivePinsState E84_AGV_OutputBits { get; set; }
 
         public IPassiveToActivePinsState GetE84OutputBits(PIOSelect pioSelect) { return ((pioSelect == PIOSelect.OHT) ? E84_OHT_OutputBits : E84_AGV_OutputBits); }
-
     }
 
     [DataContract]
@@ -494,6 +496,7 @@ namespace MosaicLib.PartsLib.Common.LPM.Sim
             OffBackgroundColor = rhs.OffBackgroundColor;
             OnBackgroundColor = rhs.OnBackgroundColor;
             State = rhs.State;
+            LastLampCmdState = rhs.LastLampCmdState;
             IsInternal = rhs.IsInternal;
         }
 
@@ -510,6 +513,8 @@ namespace MosaicLib.PartsLib.Common.LPM.Sim
         [DataMember]
         public bool IsInternal { get; set; }
 
+        public OnOffFlashState LastLampCmdState { get; set; }
+
         public override int GetHashCode() { return base.GetHashCode(); }
 
         public override bool Equals(object rhsAsObj)
@@ -521,6 +526,7 @@ namespace MosaicLib.PartsLib.Common.LPM.Sim
                     && OffBackgroundColor == rhs.OffBackgroundColor
                     && OnBackgroundColor == rhs.OnBackgroundColor
                     && State == rhs.State
+                    && LastLampCmdState == rhs.LastLampCmdState
                     && IsInternal == rhs.IsInternal);
         }
     }

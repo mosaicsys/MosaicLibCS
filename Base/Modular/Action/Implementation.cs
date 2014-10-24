@@ -663,10 +663,10 @@ namespace MosaicLib.Modular.Action
 		protected ActionLogging Logging { get { return logging; } }
 
         /// <summary>Protected Static property that Action's use as a source for WaitEventNotifiers to be used when waiting without any other useable event notifier.</summary>
-        protected static SharedWaitEventNotifierSet sharedWaitEventNotifierSet { get { return sharedWaitEventNotifierSetSingleton.Instance; } }
+        protected static EventNotifierPool eventNotifierPool { get { return eventNotifierPoolSingleton.Instance; } }
 
         /// <summary>Private static SingletonHelper used to create and manage the standard Action's SharedWaitEventNotifierSet</summary>
-        private static Utils.ISingleton<SharedWaitEventNotifierSet> sharedWaitEventNotifierSetSingleton = new SingletonHelperBase<SharedWaitEventNotifierSet>(() => new SharedWaitEventNotifierSet());
+        private static Utils.ISingleton<EventNotifierPool> eventNotifierPoolSingleton = new SingletonHelperBase<EventNotifierPool>(() => new EventNotifierPool());
 
 		#endregion
 
@@ -698,7 +698,7 @@ namespace MosaicLib.Modular.Action
 			if (!actionState.IsPendingCompletion)
 				return actionState.IsComplete;
 
-			IEventNotifier ien = sharedWaitEventNotifierSet.GetNextEventNotifier();
+			IEventNotifier ien = eventNotifierPool.GetInstanceFromPool();
 
             try
             {
@@ -726,7 +726,16 @@ namespace MosaicLib.Modular.Action
             finally
             {
                 if (ien != null)
-                    NotifyOnComplete.RemoveItem(ien);
+                {
+                    try
+                    {
+                        NotifyOnComplete.RemoveItem(ien);
+                        eventNotifierPool.ReturnInstanceToPool(ref ien);
+                    }
+                    catch
+                    { 
+                    }
+                }
             }
 
 			return ActionState.IsComplete;

@@ -29,6 +29,7 @@ namespace MosaicLib.Utils
 
     /// <summary>
     /// Fcns class is essentially a namespace for series of static helper methods
+    /// <para/>inclues: DisposeOf... methods, CheckedFormat and other String related methods, array/list specific Equals methods, ...
     /// </summary>
     public static partial class Fcns
     {
