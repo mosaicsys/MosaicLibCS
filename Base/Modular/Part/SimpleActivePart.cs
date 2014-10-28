@@ -509,8 +509,7 @@ namespace MosaicLib.Modular.Part
 		{
 			using (Logging.EnterExitTrace entryExitTrace = new Logging.EnterExitTrace(Log, "MainThreadFcn", Logging.MesgType.Debug))
 			{
-                System.Threading.Thread currentThread = System.Threading.Thread.CurrentThread;
-                Log.Debug.Emit("ThreadInfo: Name:'{0}', Managed ThreadID:{1:d4}, Win32 ThreadID:${2:x4}", (currentThread.Name ?? String.Empty), currentThread.ManagedThreadId, Utils.Win32.GetCurrentThreadId());
+                LogThreadInfo(Log.Debug);
 
                 // The following is the part's main loop:
 				//	Loop until the action queue has been disabled
@@ -549,6 +548,15 @@ namespace MosaicLib.Modular.Part
 				}
 			}
 		}
+
+        /// <summary>
+        /// Generates and emits a log message including the current Managed Thread's name and id as well as the current Win32 ThreadID on which this managed thread is running.
+        /// </summary>
+        protected void LogThreadInfo(Logging.IMesgEmitter emitter)
+        {
+            System.Threading.Thread currentThread = System.Threading.Thread.CurrentThread;
+            emitter.Emit("ThreadInfo: Name:'{0}', Managed ThreadID:{1:d4}, Win32 ThreadID:${2:x4}", (currentThread.Name ?? String.Empty), currentThread.ManagedThreadId, Utils.Win32.GetCurrentThreadId());
+        }
 
         /// <summary>
         /// Returns true once part stop has been requested (gets set after PreStopPart completes and actionQ has been disabled)

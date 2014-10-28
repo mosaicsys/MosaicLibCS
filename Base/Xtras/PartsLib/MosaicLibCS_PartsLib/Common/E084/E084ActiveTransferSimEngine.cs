@@ -600,7 +600,7 @@ namespace MosaicLib.PartsLib.Common.E084
             TimeSpan loweringTime = TimeSpan.FromSeconds(2.0);
             TimeSpan placementTransitionTime = TimeSpan.FromSeconds(0.5);
             TimeSpan raisingTime = TimeSpan.FromSeconds(2.0);
-            TimeSpan deselectDelay = TimeSpan.FromSeconds(0.5);
+            TimeSpan deselectDelay = TimeSpan.FromSeconds(0.1);
 
             privateState.TransferCount++;
             privateState.TransferProgressStr = "Unloading:Select for U_REQ";
@@ -770,7 +770,7 @@ namespace MosaicLib.PartsLib.Common.E084
 
         bool Spin()
         {
-            WaitForSomethingToDo(TimeSpan.FromSeconds(0.1));
+            WaitForSomethingToDo(TimeSpan.FromSeconds(0.02));
 
             ServiceInstantActionQueue();
 

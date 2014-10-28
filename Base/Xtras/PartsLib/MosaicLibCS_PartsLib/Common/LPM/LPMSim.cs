@@ -69,7 +69,8 @@ namespace MosaicLib.PartsLib.Common.LPM.Sim
 
             if (FastMotion)
 			{
-				ShortMotionTime = TimeSpan.FromSeconds(0.5);
+				VacuumOffMotionTime = VacuumOnMotionTime = ClampMotionTime = TimeSpan.FromSeconds(0.1);
+                TBarMotionTime = TimeSpan.FromSeconds(0.25);
 				MidMotionTime = TimeSpan.FromSeconds(0.75);
 				LongMotionTime = TimeSpan.FromSeconds(1.0);
 			}
@@ -83,13 +84,17 @@ namespace MosaicLib.PartsLib.Common.LPM.Sim
 			ResetDefaultMapOnStart = rhs.ResetDefaultMapOnStart;
 			ResetE84OnStart = rhs.ResetE84OnStart;
             FastMotion = rhs.FastMotion;
-			ShortMotionTime = rhs.ShortMotionTime;
+            VacuumOffMotionTime = rhs.VacuumOffMotionTime;
+            VacuumOnMotionTime = rhs.VacuumOnMotionTime;
+            ClampMotionTime = rhs.ClampMotionTime;
+            TBarMotionTime = rhs.TBarMotionTime;
 			MidMotionTime = rhs.MidMotionTime;
 			LongMotionTime = rhs.LongMotionTime;
 			DefaultMapResult = rhs.DefaultMapResult;
 		}
 
-        private LPMSimPartConfigBase(string lpmName, string portSpecStr, string persistDirBasePathStr) : this ()
+        private LPMSimPartConfigBase(string lpmName, string portSpecStr, string persistDirBasePathStr) 
+            : this ()
         {
             this.LPMName = lpmName;
             this.PortSpecStr = portSpecStr;
@@ -100,7 +105,10 @@ namespace MosaicLib.PartsLib.Common.LPM.Sim
         {
             ResetDefaultMapOnStart = true;
             ResetE84OnStart = true;
-		    ShortMotionTime = TimeSpan.FromSeconds(0.75);       // t-bar, vacuum, clamp
+            VacuumOffMotionTime = TimeSpan.FromSeconds(0.5);
+            VacuumOnMotionTime = TimeSpan.FromSeconds(0.25);
+            ClampMotionTime = TimeSpan.FromSeconds(0.5);
+		    TBarMotionTime = TimeSpan.FromSeconds(0.75);
 		    MidMotionTime = TimeSpan.FromSeconds(1.5);         // pivot, shuttle
 		    LongMotionTime = TimeSpan.FromSeconds(3.0);        // door
 
@@ -117,7 +125,10 @@ namespace MosaicLib.PartsLib.Common.LPM.Sim
         public bool ResetE84OnStart { get; set; }
 
         public bool FastMotion { get; private set; }
-        public TimeSpan ShortMotionTime { get; set; }       // t-bar, vacuum, clamp
+        public TimeSpan VacuumOnMotionTime { get; set; }
+        public TimeSpan VacuumOffMotionTime { get; set; }
+        public TimeSpan ClampMotionTime { get; set; }
+        public TimeSpan TBarMotionTime { get; set; }
         public TimeSpan MidMotionTime { get; set; }         // pivot, shuttle
         public TimeSpan LongMotionTime { get; set; }        // door
 
