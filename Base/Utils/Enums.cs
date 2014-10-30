@@ -126,7 +126,7 @@ namespace MosaicLib.Utils
         /// <param name="parseFailedResult">Defines the EnumT value that will be assigned to the result if the parse itself fails.</param>
         /// <param name="ignoreCase">If true, ignore case; otherwise, regard case.</param>
         /// <returns>True if the Parse was successful, false otherwise</returns>
-        /// <exception cref="System.InvalidOperationException">Thrown if EnumT is not a type of enum.</exception>
+        /// <exception cref="System.InvalidOperationException">Thrown if EnumT is not a type of enum. (where clause only requires it is a type of struct)</exception>
         public static bool TryParse<EnumT>(string s, out EnumT result, EnumT parseFailedResult, bool ignoreCase) where EnumT : struct
 		{
 			Type enumT = typeof(EnumT);
@@ -139,13 +139,14 @@ namespace MosaicLib.Utils
                 result = (EnumT)System.Enum.Parse(typeof(EnumT), s, ignoreCase);
                 return true;
             }
-            catch (System.ArgumentException)
+            catch (System.Exception)
             {
-                result = parseFailedResult;
-                return false;
-            }
-            catch (InvalidCastException)
-            {
+                // we expect System.ArgumentExecption or System.InvalidCastException but have observed System.OverflowException as well
+                //  Documentation for System.Enum.Parse added possibility of throw for System.OverflowExecption in documentation for .Net 3.5 (was not in 2.0 or 3.0)
+                //  Catching all System.Exceptions here is still safe since the risk of additional undocumented exceptions that can be thrown is much larger than the
+                //  risk that we will fail to pass on some other unexpected type of exception that is not a direct result of calling System.Enum.Parse.
+                // Prior code had only caught System.ArgumentException and System.InvalidCastException
+
                 result = parseFailedResult;
                 return false;
             }

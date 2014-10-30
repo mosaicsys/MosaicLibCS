@@ -1032,9 +1032,11 @@ namespace MosaicLib
             /// <summary>Returns a message emitter that will emit messages of the given MesgType and from this logger.</summary>
             IMesgEmitter Emitter(MesgType mesgType);
 
-            /// <summary>Helper method: Gets the current System.Diagnostics.StackFrame of the caller (up skipNStackFrames levels from the level above this method)</summary>
+            /// <summary>
+            /// Helper method: Gets the current System.Diagnostics.StackFrame of the caller (up skipNStackFrames levels from the level above this method)
+            /// <para/>Returns created StackFrame if stack frame tagging support is currently enabled or null if it is not
+            /// </summary>
             /// <param name="skipNStackFrames">Gives the number of additional stack frame to skip, from the one above this one, when acquiring a StackFrame to get the source file and line number from.</param>
-            /// <returns>Selected StackFrame if stack frame tagging support is currently enabled or null if it is not</returns>
             System.Diagnostics.StackFrame GetStackFrame(int skipNStackFrames);
         }
 
