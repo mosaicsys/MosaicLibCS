@@ -1,0 +1,122 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="3.5" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProductVersion>9.0.30729</ProductVersion>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>{DFD5D17D-1977-4B56-A4EB-5955B40B6ABB}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>MosaicLib</RootNamespace>
+    <AssemblyName>MosaicLibCSBase</AssemblyName>
+    <TargetFrameworkVersion>v3.5</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <DocumentationFile>bin\Debug\MosaicLibCSBase.XML</DocumentationFile>
+    <NoWarn>1591, 1587</NoWarn>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <DocumentationFile>bin\Release\MosaicLibCSBase.XML</DocumentationFile>
+    <NoWarn>1591, 1587</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.configuration" />
+    <Reference Include="System.Core">
+      <RequiredTargetFramework>3.5</RequiredTargetFramework>
+    </Reference>
+    <Reference Include="System.Data" />
+    <Reference Include="System.Runtime.Serialization">
+      <RequiredTargetFramework>3.0</RequiredTargetFramework>
+    </Reference>
+    <Reference Include="System.ServiceModel">
+      <RequiredTargetFramework>3.0</RequiredTargetFramework>
+    </Reference>
+    <Reference Include="System.Xml" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="File\DirectoryEntryInfo.cs" />
+    <Compile Include="File\DirectoryFileRotationManager.cs" />
+    <Compile Include="File\DirectoryTreeEntryInfo.cs" />
+    <Compile Include="File\DirectoryTreePruningManager.cs" />
+    <Compile Include="Logging\BasicFallbackLogger.cs" />
+    <Compile Include="Logging\LogDistribution.cs" />
+    <Compile Include="Logging\Logging.cs" />
+    <Compile Include="Logging\LogMessageHandler.cs" />
+    <Compile Include="Logging\MessageQueue.cs" />
+    <Compile Include="Logging\QueuedLogger.cs" />
+    <Compile Include="Logging\QueueLogMessageHandler.cs" />
+    <Compile Include="Logging\TextFileRotationLogMessageHandler.cs" />
+    <Compile Include="Modular\Action\ClientFacet.cs" />
+    <Compile Include="Modular\Action\Implementation.cs" />
+    <Compile Include="Modular\Action\ProviderFacet.cs" />
+    <Compile Include="Modular\Action\Queue.cs" />
+    <Compile Include="Modular\Common\Common.cs" />
+    <Compile Include="Modular\Config\Config.cs" />
+    <Compile Include="Modular\Config\ConfigProviders.cs" />
+    <Compile Include="Modular\Config\ConfigValueSetAdapter.cs" />
+    <Compile Include="Modular\Interconnect\Values.cs" />
+    <Compile Include="Modular\Part\PartBase.cs" />
+    <Compile Include="Modular\Part\SimpleActivePart.cs" />
+    <Compile Include="Modular\Persist\Persist.cs" />
+    <Compile Include="Modular\Reflection\Attributes.cs" />
+    <Compile Include="Modular\Reflection\GetterSetterFactory.cs" />
+    <Compile Include="MosaicLibCSBase.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Serial\AutoEchoWrapper.cs" />
+    <Compile Include="Serial\ComSerialIO.cs" />
+    <Compile Include="Serial\SerialIO.cs" />
+    <Compile Include="Serial\SerialIOBase.cs" />
+    <Compile Include="Serial\SerialPortSpec.cs" />
+    <Compile Include="Serial\SlidingBuffer.cs" />
+    <Compile Include="Serial\TcpSerialIO.cs" />
+    <Compile Include="Serial\UdpSerialIO.cs" />
+    <Compile Include="Serial\Modbus\Modbus.cs" />
+    <Compile Include="Serial\Modbus\ModbusClient.cs" />
+    <Compile Include="Serial\Modbus\ModbusServer.cs" />
+    <Compile Include="Semi\E084\E084.cs" />
+    <Compile Include="Semi\E084\E084IOSupport.cs" />
+    <Compile Include="Time\MMTimer.cs" />
+    <Compile Include="Time\QpcTime.cs" />
+    <Compile Include="Time\Ticks.cs" />
+    <Compile Include="Utils\Assert.cs" />
+    <Compile Include="Utils\ByteArrayTranscoders.cs" />
+    <Compile Include="Utils\Collections.cs" />
+    <Compile Include="Utils\DataHelpers.cs" />
+    <Compile Include="Utils\Dates.cs" />
+    <Compile Include="Utils\Disposable.cs" />
+    <Compile Include="Utils\Enums.cs" />
+    <Compile Include="Utils\ErrorCodeUtils.cs" />
+    <Compile Include="Utils\ExtensionMethods.cs" />
+    <Compile Include="Utils\Notification.cs" />
+    <Compile Include="Utils\ObjID.cs" />
+    <Compile Include="Utils\ParseUtils.cs" />
+    <Compile Include="Utils\Pooling.cs" />
+    <Compile Include="Utils\Singleton.cs" />
+    <Compile Include="Utils\String.cs" />
+    <Compile Include="Win32\Registry.cs" />
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
+       Other similar extension points exist, see Microsoft.Common.targets.
+  <Target Name="BeforeBuild">
+  </Target>
+  <Target Name="AfterBuild">
+  </Target>
+  -->
+</Project>

@@ -798,7 +798,7 @@ namespace MosaicLib.File
 		{
 			int entryID = DirEntryID_Invalid;
 
-			if (!dirEntryIDListSortedByName.TryGetValue(fileName, out entryID))
+			if (!dirEntryIDListSortedByName.TryGetValue(fileName ?? String.Empty, out entryID))
 				return DirEntryID_Invalid;
 
 			return entryID;

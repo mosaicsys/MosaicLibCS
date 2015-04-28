@@ -238,7 +238,7 @@ namespace MosaicLib.PartsLib.Common.E084
         {
             SetBaseState(UseState.Offline, "GoOffline Action has been performed", true);
 
-            SetCurrentActivity(ActivitySelect.Offline, "Peforming GoOffline Action");
+            SetCurrentActivity(ActivitySelect.Offline, "Performing GoOffline Action");
 
             nextActivitySelect = ActivitySelect.None;
             lastSetA2PPins = new ActiveToPassivePinsState();

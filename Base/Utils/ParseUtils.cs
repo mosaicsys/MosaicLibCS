@@ -463,7 +463,7 @@ namespace MosaicLib.Utils
         /// <returns>true if the given tokenStr was found in the given map or false otherwise.</returns>
         public static bool FindTokenValueByName<ItemType>(string tokenStr, Dictionary<string, ItemType> map, out ItemType value)
         {
-            return map.TryGetValue(tokenStr, out value);
+            return map.TryGetValue(tokenStr ?? String.Empty, out value);
         }
 
         /// <summary>
@@ -677,42 +677,200 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Extracts a TokenType.SimpleFileName token and parses it using the static MosaicLib.Utils.Enum.TryParse{EnumT} method to covert 
-        /// the token string into a corresponding EnumT value.
-        /// SkipLeadingWhiteSpace, SkipTrailingWhiteSpace, RequireTokenEnd
+        /// Extracts a TokenType.ToNextWhiteSpace token and parses it as one of the supported value types:
+        ///  bool, float, double, sbyte, short, int, long, byte, ushort, uint, ulong, or an Enumeration Type using the MosaicLib.Utils.Enum.TryParse{EnumT} method, 
+        /// <para/>TokenType.ToNextWhiteSpace is used so that the comma character can be used within the enum string token value so as to support flag enums
+        /// <para/>Integer values can be represented as decimal values or as hex values when preceeded with "0x", "0X", or "$".
+        /// <para/>SkipLeadingWhiteSpace, SkipTrailingWhiteSpace, !RequireTokenEnd, !IgnoreCase
         /// </summary>
-        /// <typeparam name="EnumT">Gives the Enum Type for the enumeration that is to be parsed into.  Must be of type System.Enum.</typeparam>
-        /// <param name="value">assigned to the parsed value or to default(EnumT) if the extraction or token lookup were not successful.</param>
+        /// <typeparam name="ValueType">Gives the ValueType to parse.  Must be of type string, bool, float, double, sbyte, short, int, long, byte, ushort, uint, ulong, or System.Enum</typeparam>
+        /// <param name="value">assigned to the parsed value or to parseFailedResult if the token extraction or type specific parse was not successful.</param>
         /// <returns>true on success or false otherwise.</returns>
-        public bool ParseValue<EnumT>(out EnumT value) where EnumT : struct
+        public bool ParseValue<ValueType>(out ValueType value)
         {
-            return ParseValue<EnumT>(out value, default(EnumT), false, true);
+            return ParseValue<ValueType>(out value, default(ValueType), false, true);
         }
 
         /// <summary>
-        /// Extracts a TokenType.ToNextWhiteSpace token and parses it using the static MosaicLib.Utils.Enum.TryParse{EnumT} method to covert 
-        /// the token string into a corresponding EnumT value.  
-        /// TokenType.ToNextWhiteSpace is used so that the comma character can be used within the enum string token value so as to support flag enums
-        /// SkipLeadingWhiteSpace, RequireTokenEnd
+        /// Extracts a TokenType.ToNextWhiteSpace token and parses it as one of the supported value types:
+        ///  string, bool, float, double, sbyte, short, int, long, byte, ushort, uint, ulong, or an Enumeration Type using the MosaicLib.Utils.Enum.TryParse{EnumT} method, 
+        /// <para/>returns the successfully parsed value or the given default parseFailedResults if the parse was not successful.
+        /// <para/>TokenType.ToNextWhiteSpace is used so that the comma character can be used within the enum string token value so as to support flag enums
+        /// <para/>Integer values can be represented as decimal values or as hex values when preceeded with "0x", "0X", or "$".
+        /// <para/>SkipLeadingWhiteSpace, SkipTrailingWhiteSpace, !IgnoreCase, !RequireTokenEnd
         /// </summary>
-        /// <typeparam name="EnumT">Gives the Enum Type for the enumeration that is to be parsed into.  Must be of type System.Enum.</typeparam>
-        /// <param name="value">assigned to the parsed value or to parseFailedResult if the extraction or token lookup were not successful.</param>
-        /// <param name="parseFailedResult">Defines the EnumT value that will be assigned to the result if the parse itself fails.</param>
-        /// <param name="ignoreCase">If true, ignore case; otherwise, regard case.</param>
+        /// <typeparam name="ValueType">Gives the ValueType to parse.  Must be of type string, bool, float, double, sbyte, short, int, long, byte, ushort, uint, ulong, or System.Enum.</typeparam>
+        /// <param name="parseFailedResult">Defines the value that will be assigned to the result if any part of the parse fails.</param>
+        public ValueType ParseValue<ValueType>(ValueType parseFailedResult)
+        {
+            ValueType value;
+            ParseValue(out value, parseFailedResult, false, true);
+            return value;
+        }
+
+        /// <summary>
+        /// Extracts a TokenType.ToNextWhiteSpace token and parses it as one of the supported value types:
+        ///  string, bool, float, double, sbyte, short, int, long, byte, ushort, uint, ulong, or an Enumeration Type using the MosaicLib.Utils.Enum.TryParse{EnumT} method, 
+        /// <para/>returns the successfully parsed value or the given default parseFailedResults if the parse was not successful.
+        /// <para/>TokenType.ToNextWhiteSpace is used so that the comma character can be used within the enum string token value so as to support flag enums
+        /// <para/>Integer values can be represented as decimal values or as hex values when preceeded with "0x", "0X", or "$".
+        /// <para/>SkipLeadingWhiteSpace, !RequireTokenEnd
+        /// </summary>
+        /// <typeparam name="ValueType">Gives the ValueType to parse.  Must be of type string, bool, float, double, sbyte, short, int, long, byte, ushort, uint, ulong, or System.Enum.</typeparam>
+        /// <param name="parseFailedResult">Defines the value that will be assigned to the result if any part of the parse fails.</param>
+        /// <param name="ignoreCase">If true, ignore case; otherwise, regard case.  Only relevant for System.Enum types.</param>
+        /// <param name="skipTrailingWhiteSpace">If true, trailing whitespace will also be skipped if a token was successfully extracted.</param>
+        public ValueType ParseValue<ValueType>(ValueType parseFailedResult, bool ignoreCase, bool skipTrailingWhiteSpace)
+        {
+            ValueType value;
+            ParseValue(out value, parseFailedResult, ignoreCase, skipTrailingWhiteSpace);
+            return value;
+        }
+
+        /// <summary>
+        /// Extracts a TokenType.ToNextWhiteSpace token and parses it as one of the supported value types:
+        ///  string, bool, float, double, sbyte, short, int, long, byte, ushort, uint, ulong, or an Enumeration Type using the MosaicLib.Utils.Enum.TryParse{EnumT} method, 
+        /// <para/>TokenType.ToNextWhiteSpace is used so that the comma character can be used within the enum string token value so as to support flag enums
+        /// <para/>Integer values can be represented as decimal values or as hex values when preceeded with "0x", "0X", or "$".
+        /// <para/>SkipLeadingWhiteSpace, !RequireTokenEnd
+        /// </summary>
+        /// <typeparam name="ValueType">Gives the ValueType to parse.  Must be of type string, bool, float, double, sbyte, short, int, long, byte, ushort, uint, ulong, or System.Enum.</typeparam>
+        /// <param name="value">assigned to the parsed value or to parseFailedResult if the token extraction or type specific parse was not successful.</param>
+        /// <param name="parseFailedResult">Defines the value that will be assigned to the result if any part of the parse fails.</param>
+        /// <param name="ignoreCase">If true, ignore case; otherwise, regard case.  Only relevant for System.Enum types.</param>
         /// <param name="skipTrailingWhiteSpace">If true, trailing whitespace will also be skipped if a token was successfully extracted.</param>
         /// <returns>true on success or false otherwise.</returns>
-        public bool ParseValue<EnumT>(out EnumT value, EnumT parseFailedResult, bool ignoreCase, bool skipTrailingWhiteSpace) where EnumT : struct
+        public bool ParseValue<ValueType>(out ValueType value, ValueType parseFailedResult, bool ignoreCase, bool skipTrailingWhiteSpace)
         {
+            value = parseFailedResult;
+
+            Type valueTypeType = typeof(ValueType);
+
             StringScanner localScanner = this;
             string token;
             bool success = localScanner.ExtractToken(out token, TokenType.ToNextWhiteSpace, true, skipTrailingWhiteSpace, false);
-            success = MosaicLib.Utils.Enum.TryParse<EnumT>(token, out value, parseFailedResult, ignoreCase) && success;
+
+            if (success)
+            {
+                if (valueTypeType.IsEnum)
+                    success = MosaicLib.Utils.Enum.TryParse<ValueType>(token, out value, parseFailedResult, ignoreCase);
+                else
+                {
+                    object valueObject = null;
+
+                    if (valueTypeType == typeof(string))
+                    {
+                        success = true;
+                        valueObject = token;
+                    }
+                    else if (valueTypeType == typeof(bool))
+                    {
+                        bool typedValue;
+                        success = ParseValue(token, out typedValue);
+                        valueObject = typedValue;
+                    }
+                    else if (valueTypeType == typeof(float))
+                    {
+                        float typedValue;
+                        success = float.TryParse(token, out typedValue);
+                        valueObject = typedValue;
+                    }
+                    else if (valueTypeType == typeof(double))
+                    {
+                        double typedValue;
+                        success = double.TryParse(token, out typedValue);
+                        valueObject = typedValue;
+                    }
+                    else
+                    {
+                        System.Globalization.NumberStyles numberStyle = System.Globalization.NumberStyles.Integer;
+                        string tryParseValueFromStr = token;
+                        if (token.StartsWith("0x") || token.StartsWith("0X"))
+                        {
+                            numberStyle = System.Globalization.NumberStyles.HexNumber;
+                            tryParseValueFromStr = token.Substring(2);
+                        }
+                        else if (token.StartsWith("$"))
+                        {
+                            numberStyle = System.Globalization.NumberStyles.HexNumber;
+                            tryParseValueFromStr = token.Substring(1);
+                        }
+
+                        if (valueTypeType == typeof(byte))
+                        {
+                            byte typedValue;
+                            success = byte.TryParse(tryParseValueFromStr, numberStyle, System.Globalization.CultureInfo.InvariantCulture, out typedValue);
+                            valueObject = typedValue;
+                        }
+                        else if (valueTypeType == typeof(sbyte))
+                        {
+                            sbyte typedValue;
+                            success = sbyte.TryParse(tryParseValueFromStr, numberStyle, System.Globalization.CultureInfo.InvariantCulture, out typedValue);
+                            valueObject = typedValue;
+                        }
+                        else if (valueTypeType == typeof(short))
+                        {
+                            short typedValue;
+                            success = short.TryParse(tryParseValueFromStr, numberStyle, System.Globalization.CultureInfo.InvariantCulture, out typedValue);
+                            valueObject = typedValue;
+                        }
+                        else if (valueTypeType == typeof(int))
+                        {
+                            int typedValue;
+                            success = int.TryParse(tryParseValueFromStr, numberStyle, System.Globalization.CultureInfo.InvariantCulture, out typedValue);
+                            valueObject = typedValue;
+                        }
+                        else if (valueTypeType == typeof(long))
+                        {
+                            long typedValue;
+                            success = long.TryParse(tryParseValueFromStr, numberStyle, System.Globalization.CultureInfo.InvariantCulture, out typedValue);
+                            valueObject = typedValue;
+                        }
+                        else if (valueTypeType == typeof(long))
+                        {
+                            long typedValue;
+                            success = long.TryParse(tryParseValueFromStr, numberStyle, System.Globalization.CultureInfo.InvariantCulture, out typedValue);
+                            valueObject = typedValue;
+                        }
+                        else if (valueTypeType == typeof(ushort))
+                        {
+                            ushort typedValue;
+                            success = ushort.TryParse(tryParseValueFromStr, numberStyle, System.Globalization.CultureInfo.InvariantCulture, out typedValue);
+                            valueObject = typedValue;
+                        }
+                        else if (valueTypeType == typeof(uint))
+                        {
+                            uint typedValue;
+                            success = uint.TryParse(tryParseValueFromStr, numberStyle, System.Globalization.CultureInfo.InvariantCulture, out typedValue);
+                            valueObject = typedValue;
+                        }
+                        else if (valueTypeType == typeof(ulong))
+                        {
+                            ulong typedValue;
+                            success = ulong.TryParse(tryParseValueFromStr, numberStyle, System.Globalization.CultureInfo.InvariantCulture, out typedValue);
+                            valueObject = typedValue;
+                        }
+                    }
+
+                    try
+                    {
+                        value = (ValueType)valueObject;
+                    }
+                    catch
+                    {
+                        success = false;
+                    }
+                }
+            }
 
             if (success)
                 Idx = localScanner.Idx;
+            else
+                value = parseFailedResult;
 
             return success;
         }
+
 
         #region Related public static String Value Parsers
 
@@ -763,7 +921,7 @@ namespace MosaicLib.Utils
         ///     Converts the string representation of a number to its 32-bit unsigned integer equivalent.
         ///     A return value indicates whether the conversion succeeded or failed.
         ///     This method first attempts to parse the token as a simple Integer if this fails then the method will determine
-        ///     if the token starts with "0x" or "0X" and if so it will attempt to parse the remainder of the token as a hexadecimal integer.
+        ///     if the token starts with "0x", "0X", or "$" and if so it will attempt to parse the remainder of the token as a hexadecimal integer.
         /// </summary>
         /// <param name="token">A string containing a number to convert.</param>
         /// <param name="value">
@@ -783,6 +941,13 @@ namespace MosaicLib.Utils
 
                 if ((token.StartsWith("0x") || token.StartsWith("0X"))
                     && UInt32.TryParse(token.Substring(2), System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out value)
+                    )
+                {
+                    return true;
+                }
+
+                if (token.StartsWith("$")
+                    && UInt32.TryParse(token.Substring(1), System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out value)
                     )
                 {
                     return true;

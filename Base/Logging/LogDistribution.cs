@@ -1127,7 +1127,7 @@ namespace MosaicLib
 				int lid = LoggerID_Invalid;
 
 				{
-					if (loggerNameToIDMap.TryGetValue(loggerName, out lid))
+					if (loggerNameToIDMap.TryGetValue(loggerName ?? String.Empty, out lid))
 						return (InnerIsLoggerIDValid(lid) ? lid : LoggerID_Invalid);
 
 					// the name was not in the table: need to create a new one
@@ -1156,7 +1156,7 @@ namespace MosaicLib
 
 				if (!string.IsNullOrEmpty(name))
 				{
-					if (distGroupNameToIDMap.TryGetValue(name, out dgid) || !createIfNeeded)
+					if (distGroupNameToIDMap.TryGetValue(name ?? String.Empty, out dgid) || !createIfNeeded)
 						return (InnerIsDistGroupIDValid(dgid) ? dgid : DistGroupID_Invalid);
 
 					// the name was not in the table: need to create a new one
@@ -1444,20 +1444,20 @@ namespace MosaicLib
 			return GetLogMessageDistribution().GetLogMessage();
 		}
 
-        /// <summary>Internal "constant" that defines the name of the Default Log Distribution Group.</summary>
+        /// <summary>Internal "constant" that defines the name of the Default Log Distribution Group.  "LDG.Default"</summary>
         private static readonly string defaultDistributionGroupName = "LDG.Default";
 
-        /// <summary>Internal "constant" that defines the name of the Lookup Log Distribution Group.  Loggers placed in this group can be remapped to other groups using the MapLoggersToDistirbutionGroup method</summary>
+        /// <summary>Internal "constant" that defines the name of the Lookup Log Distribution Group.  Loggers placed in this group can be remapped to other groups using the MapLoggersToDistirbutionGroup method.  "LDG.Lookup"</summary>
         private static readonly string lookupDistributionGroupName = "LDG.Lookup";
 
-        /// <summary>This is the default Logging Distribution Group name.  This group is used for all cases where a logger does not otherwise specify a different one and/or it has not been mapped to use another one.</summary>
+        /// <summary>This is the default Logging Distribution Group name.  This group is used for all cases where a logger does not otherwise specify a different one and/or it has not been mapped to use another one.  "LDG.Default"</summary>
 		public static string DefaultDistributionGroupName { get { return defaultDistributionGroupName; } }
 
-        /// <summary>This is the custom distribution group name that is used to indicate that mapping should be applied to it.</summary>
+        /// <summary>This is the custom distribution group name that is used to indicate that mapping should be applied to it.  "LDG.Lookup"</summary>
         public static string LookupDistributionGroupName { get { return lookupDistributionGroupName; } }
 
         /// <summary>Adds the given ILogMessageHandler to the indicated group</summary>
-        public static void AddLogMessageHandlerToDistributionGroup(string groupName, ILogMessageHandler logMessageHandler)		//!< Adds LogMessageHandler to the given distribution group
+        public static void AddLogMessageHandlerToDistributionGroup(string groupName, ILogMessageHandler logMessageHandler)
 		{
 			GetLogMessageDistributionImpl().AddLogMessageHandlerToDistributionGroup(logMessageHandler, groupName);
 		}

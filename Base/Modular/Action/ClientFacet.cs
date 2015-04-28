@@ -217,7 +217,7 @@ namespace MosaicLib.Modular.Action
 		/// <summary>Starts the action if it is in an Idle state and return string.Empty or returns an error message if the action is not in a state from which it can be started.</summary>
 		string Start();
 
-		/// <summary>Waits until the action is complete or the given time limit is reached.  Returns ActionState.ResultCode or suitable string if the action was not complete within the stated time limit.</summary>
+		/// <summary>Waits until the action is complete or the given time limit is reached.  Returns true if the action was already complete or if it completed within the stated time limit.  Returns false otherwise</summary>
 		bool WaitUntilComplete(TimeSpan timeLimit);
 
 		/// <summary>Waits until the action is complete.  Returns ActionState.ResultCode</summary>

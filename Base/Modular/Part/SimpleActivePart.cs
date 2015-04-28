@@ -77,20 +77,30 @@ namespace MosaicLib.Modular.Part
 		public class BasicActionImpl : ActionImplBase<NullObj, NullObj>, IBasicAction
 		{
             /// <summary>Constructor for use with simple action method delegate: ActionMethodDelegateStrResult.</summary>
-			public BasicActionImpl(ActionQueue actionQ, ActionMethodDelegateStrResult method, string mesg, ActionLogging loggingReference) : base(actionQ, method, new ActionLogging(mesg, loggingReference)) {}
+			public BasicActionImpl(ActionQueue actionQ, ActionMethodDelegateStrResult method, string mesg, ActionLogging loggingReference) 
+                : base(actionQ, method, new ActionLogging(mesg, loggingReference)) 
+            {}
             /// <summary>Constructor for use with more complete action method delegate: ActionMethodDelegateActionArgStrResult{NullObj, NullObj}.</summary>
-            public BasicActionImpl(ActionQueue actionQ, ActionMethodDelegateActionArgStrResult<NullObj, NullObj> method, string mesg, ActionLogging loggingReference) : base(actionQ, null, false, method, new ActionLogging(mesg, loggingReference)) { }
+            public BasicActionImpl(ActionQueue actionQ, ActionMethodDelegateActionArgStrResult<NullObj, NullObj> method, string mesg, ActionLogging loggingReference) 
+                : base(actionQ, null, false, method, new ActionLogging(mesg, loggingReference)) 
+            { }
             /// <summary>Constructor for use with full action method delegate: FullActionMethodDelegate{NullObj, NullObj}.</summary>
-            public BasicActionImpl(ActionQueue actionQ, FullActionMethodDelegate<NullObj, NullObj> method, string mesg, ActionLogging loggingReference) : base(actionQ, null, false, method, new ActionLogging(mesg, loggingReference)) { }
+            public BasicActionImpl(ActionQueue actionQ, FullActionMethodDelegate<NullObj, NullObj> method, string mesg, ActionLogging loggingReference) 
+                : base(actionQ, null, false, method, new ActionLogging(mesg, loggingReference)) 
+            { }
 		}
 
         /// <summary>Implementation object for IClientFacetWithParam{ParamType} type Actions.  Derives from ActionImplBase{ParamType, NullObj}.</summary>
         public class ParamActionImplBase<ParamType> : ActionImplBase<ParamType, NullObj>, IBasicAction, IClientFacetWithParam<ParamType>
 		{
             /// <summary>Constructor for use with more complete action method delegate: ActionMethodDelegateActionArgStrResult{ParamType, NullObj}.</summary>
-            public ParamActionImplBase(ActionQueue actionQ, ParamType paramValue, ActionMethodDelegateActionArgStrResult<ParamType, NullObj> method, string mesg, ActionLogging loggingReference) : base(actionQ, paramValue, false, method, new ActionLogging(mesg, paramValue.ToString(), loggingReference)) { }
+            public ParamActionImplBase(ActionQueue actionQ, ParamType paramValue, ActionMethodDelegateActionArgStrResult<ParamType, NullObj> method, string mesg, ActionLogging loggingReference) 
+                : base(actionQ, paramValue, false, method, new ActionLogging(mesg, paramValue.ToString(), loggingReference)) 
+            { }
             /// <summary>Constructor for use with full action method delegate: FullActionMethodDelegate{ParamType, NullObj}.</summary>
-            public ParamActionImplBase(ActionQueue actionQ, ParamType paramValue, FullActionMethodDelegate<ParamType, NullObj> method, string mesg, ActionLogging loggingReference) : base(actionQ, paramValue, false, method, new ActionLogging(mesg, paramValue.ToString(), loggingReference)) { }
+            public ParamActionImplBase(ActionQueue actionQ, ParamType paramValue, FullActionMethodDelegate<ParamType, NullObj> method, string mesg, ActionLogging loggingReference) 
+                : base(actionQ, paramValue, false, method, new ActionLogging(mesg, paramValue.ToString(), loggingReference)) 
+            { }
 
             /// <summary>
             /// Allows the caller to attempt to set the Action's ParamValue to the given value and updates the Logging.MesgDetail to value.ToString() if the value was updated successfully.
@@ -100,8 +110,8 @@ namespace MosaicLib.Modular.Part
 			public override bool SetParamValue(ParamType value) 
             { 
                 bool done = base.SetParamValue(value); 
-                if (done) 
-                    Logging.MesgDetail = value.ToString(); 
+                if (done)
+                    Logging.MesgDetail = "{0}".CheckedFormat(value);
                 return done; 
             }
 
@@ -111,8 +121,8 @@ namespace MosaicLib.Modular.Part
             { 
                 set 
                 { 
-                    base.ParamValue = value; 
-                    Logging.MesgDetail = value.ToString(); 
+                    base.ParamValue = value;
+                    Logging.MesgDetail = "{0}".CheckedFormat(value);
                 } 
             }
 		}
@@ -201,10 +211,11 @@ namespace MosaicLib.Modular.Part
 
 			actionQ = new ActionQueue(partID + ".q", enableQueue, queueSize);
 
-            actionQ.NotifyOnEnqueue.AddItem(threadWakeupNotifier);
+            IBasicNotificationList notificiationList = actionQ.NotifyOnEnqueue;
+            notificiationList.AddItem(threadWakeupNotifier);
             AddExplicitDisposeAction(() => 
                 {
-                    actionQ.NotifyOnEnqueue.RemoveItem(threadWakeupNotifier);
+                    notificiationList.RemoveItem(threadWakeupNotifier);
                     threadWakeupNotifier.Release();
                 });
 

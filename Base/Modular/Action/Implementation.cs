@@ -103,8 +103,12 @@ namespace MosaicLib.Modular.Action
 	/// </summary>
 	public class ActionLogging
 	{
+        /// <summary>Copy constructor for use in creating ActionLogging objects for new Action objects: Mesg empty, MesgDetails empty. For use with Property Initializers</summary>
+        public ActionLogging(ActionLogging copyFrom) : this(string.Empty, string.Empty, copyFrom.Logger, copyFrom.Config, copyFrom.Done, copyFrom.Error, copyFrom.State, copyFrom.Update) { }
+
         /// <summary>Copy constructor for use in creating ActionLogging objects for new Action objects: Mesg specified, MesgDetails empty.</summary>
         public ActionLogging(string mesg, ActionLogging copyFrom) : this(mesg, string.Empty, copyFrom.Logger, copyFrom.Config, copyFrom.Done, copyFrom.Error, copyFrom.State, copyFrom.Update) { }
+
         /// <summary>Copy constructor for use in creating ActionLogging objects for new Action objects: Mesg ane MesgDetails specified.</summary>
         public ActionLogging(string mesg, string mesgDetails, ActionLogging copyFrom) : this(mesg, mesgDetails, copyFrom.Logger, copyFrom.Config, copyFrom.Done, copyFrom.Error, copyFrom.State, copyFrom.Update) { }
 
@@ -565,13 +569,14 @@ namespace MosaicLib.Modular.Action
 	#endregion
 
 	//-------------------------------------------------
-	#region ActionImpl class
+	#region ActionImplBase class
 
 	/// <summary>
-	/// Each of the public Action Factory methods provided by a Part generally constructs an instance of an ActionImpl object that is 
+	/// Each of the public Action Factory methods provided by a Part generally constructs an action instance derived from the ActionImplBase class that is 
 	/// templatized on the parameter and result type of the action and then returns the object to the client using the appropriate version of its IClientFacet interface.
-	/// This class provides the basic implementation for all Actions.  It retains the Part's queue that it will enqueue itself into on start, the specific version of the
+	/// This class provides the basic implementation for all Actions.  It retains the Part's queue in that it will enqueue itself into on start.  Then the specific version of the
 	/// delegate that will be invoked when it is issued, and an ActionLogging instance that it uses to emit action related messages and errors.
+    /// <para/>Use MosaicLib.Modular.Common.NullObj in place of the ParamType or ResultType if that capability is not needed for this action implementation type.
 	/// </summary>
 	/// <typeparam name="ParamType">Defines the type of the Parameter value that may be provided with this Action.</typeparam>
 	/// <typeparam name="ResultType">Defines the type of the Result value that may be provided by the Part on successfull completion of this Action.</typeparam>
@@ -688,7 +693,7 @@ namespace MosaicLib.Modular.Action
             return Start(null, false); 
         }
 
-        /// <summary>Waits until the action is complete or the given time limit is reached.  Returns ActionState.ResultCode or suitable string if the action was not complete within the stated time limit.</summary>
+        /// <summary>Waits until the action is complete or the given time limit is reached.  Returns true if the action was already complete or if it completed within the stated time limit.  Returns false otherwise</summary>
         /// <remarks>Obtains an IEventNotifier from the shared set and uses it.</remarks>
         public bool WaitUntilComplete(TimeSpan timeout)
 		{

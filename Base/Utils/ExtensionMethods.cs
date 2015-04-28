@@ -145,23 +145,67 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method version of Array indexed get access that handles all out of range accesses by returning the given default value
         /// </summary>
-        public static ItemType SafeAccess<ItemType>(this ItemType[] array, int idx, ItemType defaultValue)
+        public static ItemType SafeAccess<ItemType>(this ItemType[] fromArray, int getFromIndex, ItemType defaultValue)
         {
-            if (array == null || idx < 0 || idx >= array.Length)
+            if (fromArray == null || getFromIndex < 0 || getFromIndex >= fromArray.Length)
                 return defaultValue;
             else
-                return array[idx];
+                return fromArray[getFromIndex];
         }
 
         /// <summary>
         /// Extension method version of Array indexed get access that handles all out of range accesses by returning the default(<typeparam name="ItemType"/>)
         /// </summary>
-        public static ItemType SafeAccess<ItemType>(this ItemType[] array, int idx)
+        public static ItemType SafeAccess<ItemType>(this ItemType[] fromArray, int getFromIndex)
         {
-            if (array == null || idx < 0 || idx >= array.Length)
+            if (fromArray == null || getFromIndex < 0 || getFromIndex >= fromArray.Length)
                 return default(ItemType);
             else
-                return array[idx];
+                return fromArray[getFromIndex];
+        }
+
+        /// <summary>
+        /// Extension method version of Array indexed sub-array get access that handles all out of range accesses by returning either a partial sub-array or an empty array.
+        /// </summary>
+        public static ItemType[] SafeAccess<ItemType>(this ItemType[] fromArray, int getFromIndex, int getSubArrayLength)
+        {
+            getSubArrayLength = Math.Max(0, Math.Min(getSubArrayLength, (fromArray.Length - getFromIndex + 1)));
+            ItemType[] subArray = new ItemType[getSubArrayLength];
+
+            if (fromArray != null && getFromIndex >= 0 && getFromIndex < fromArray.Length)
+                System.Array.Copy(fromArray, getFromIndex, subArray, 0, getSubArrayLength);
+
+            return subArray;
+        }
+
+        /// <summary>
+        /// Extension method version of Array element assignement.  Attempts to assign the given value into the given intoArray at the given putIndex location.
+        /// Does nothing if the intoArray is not valid or does not have any such value.
+        /// Returns the given intoArray value.
+        /// </summary>
+        public static ItemType[] SafePut<ItemType>(this ItemType[] intoArray, int putIndex, ItemType value)
+        {
+            if (intoArray != null && putIndex >= 0 && putIndex < intoArray.Length)
+                intoArray[putIndex] = value;
+
+            return intoArray;
+        }
+
+        /// <summary>
+        /// Extension method version of Array sub-section assignement.  Attempts to assign the given fromArray contents into the given intoArray starting at the given putStartIndex location.
+        /// Will perform a partial copy of the fromArray if only part of its fits into the intoArray. 
+        /// Returns the given intoArray value.
+        /// </summary>
+        public static ItemType[] SafePut<ItemType>(this ItemType[] intoArray, int putStartIndex, ItemType[] fromArray)
+        {
+            if (intoArray != null && fromArray != null && putStartIndex >= 0 && putStartIndex < intoArray.Length)
+            {
+                int copyLength = Math.Min(fromArray.Length, intoArray.Length - putStartIndex + 1);
+
+                System.Array.Copy(fromArray, 0, intoArray, putStartIndex, copyLength);
+            }
+
+            return intoArray;
         }
 
         #endregion
@@ -194,6 +238,18 @@ namespace MosaicLib.Utils
             for (int idx = 0; idx < numItems; idx++)
                 array[idx] = value;
         }
+
+        /// <summary>
+        /// Extension method version of IList indexed get access that handles all out of range accesses by returning the given default value
+        /// </summary>
+        public static ItemType SafeAccess<ItemType>(this IList<ItemType> fromList, int getFromIndex, ItemType defaultValue)
+        {
+            if (fromList == null || getFromIndex < 0 || getFromIndex >= fromList.Count)
+                return defaultValue;
+            else
+                return fromList[getFromIndex];
+        }
+
 
         #endregion
     }

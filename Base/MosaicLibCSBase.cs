@@ -44,6 +44,9 @@ namespace MosaicLib
         /// <summary>urn://mosaicsys.com/NS/MLib.Modular</summary>
         public const string ModularNameSpace = MosaicLibNameSpaceRoot + ".Modular";
 
+        /// <summary>urn://mosaicsys.com/NS/MLib.Modular.Config</summary>
+        public const string ConfigNameSpace = ModularNameSpace + ".Config";
+
         /// <summary>urn://mosaicsys.com/NS/MLib.Semi</summary>
         public const string SemiNameSpace = MosaicLib.Constants.MosaicLibNameSpaceRoot + ".Semi";
 

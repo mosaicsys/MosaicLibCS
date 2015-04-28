@@ -22,12 +22,14 @@
  */
 //-------------------------------------------------------------------
 
+using System;
+using System.Collections.Generic;
+using MosaicLib.Utils;
+using MosaicLib.Modular.Config;
+using MosaicLib.Modular.Config.Attributes;
+
 namespace MosaicLib
 {
-	using System;
-	using System.Collections.Generic;
-    using MosaicLib.Utils;
-
 	public static partial class Logging
 	{
 		//-------------------------------------------------------------------
@@ -222,7 +224,7 @@ namespace MosaicLib
                 public long dirTotalSizeLimit;
                 /// <summary>the user stated maximum age in seconds of the oldest file or zero for no limit</summary>
                 public double fileAgeLimitInSec;
-                /// <summary>the user stated maximum age in seconds of the oldest file or zero for no limit (TimeSpan.Zero for no limit)</summary>
+                /// <summary>the user stated maximum age of the oldest file or TimeSpan.Zero for no limit</summary>
                 public TimeSpan FileAgeLimit { get { return TimeSpan.FromSeconds(fileAgeLimitInSec); } set { fileAgeLimitInSec = value.TotalSeconds; } }
             }
             /// <summary>Defines the set of values that determine when old files in the ring must be purged/deleted.</summary>
@@ -244,6 +246,8 @@ namespace MosaicLib
             /// <summary>Set to true if the ring is expected to create the directory if needed or if it should disable logging if the directory does not exist.</summary>
             public bool createDirectoryIfNeeded;
 
+            /// <summary>Simple constructor - intended for use with property initializers and/or load from config: gives empty dirPath, LogGate.None, zeros for maxFilesInRing, advanceAfterFileSize and mesgQueueSize.  uses defaults for all other values.</summary>
+            public FileRotationLoggingConfig(string name) : this(name, String.Empty, LogGate.None, 0, 0, 0) { }
             /// <summary>Simple constructor: applyies LogGate.All and other default settings of 2000 files in ring, 1000000 byes per file, DefaultMesgQueueSize.</summary>
             public FileRotationLoggingConfig(string name, string dirPath) : this(name, dirPath, LogGate.All) { }
             /// <summary>Simple constructor: uses default settings of 2000 files in ring, 1000000 byes per file, DefaultMesgQueueSize</summary>
@@ -270,6 +274,72 @@ namespace MosaicLib
 
                 createDirectoryIfNeeded = true;
 			}
+
+            /// <summary>
+            /// Use this method to read the stock set of ModularConfig points using the given configKeyPrefixStr and to update this ring configuration using the valid, non-zero values read from these keys.
+            /// <para/>Keys are LogGate, DirectoryPath, MaxFilesToKeep, MaxFileAgeToKeepInDays, MaxTotalSizeToKeep, AdvanceAfterFileReachesSize, AdvanceAfterFileReachesAge
+            /// </summary>
+            public FileRotationLoggingConfig UpdateFromModularConfig(string configKeyPrefixStr, Logging.IMesgEmitter issueEmitter, Logging.IMesgEmitter valueEmitter)
+            {
+                ConfigValueSetAdapter<ConfigKeyValuesHelper> adapter = new ConfigValueSetAdapter<ConfigKeyValuesHelper>() { ValueSet = new ConfigKeyValuesHelper(), SetupIssueEmitter = issueEmitter, ValueNoteEmitter = valueEmitter }.Setup(configKeyPrefixStr);
+
+                ConfigKeyValuesHelper configValues = adapter.ValueSet;
+
+                logGate |= configValues.LogGate;
+
+                if (!String.IsNullOrEmpty(configValues.DirectoryPath))
+                    dirPath = configValues.DirectoryPath;
+
+                if (configValues.MaxFilesToKeep != 0)
+                    purgeRules.dirNumFilesLimit = configValues.MaxFilesToKeep;
+                if (configValues.MaxFileAgeToKeep != TimeSpan.Zero)
+                    purgeRules.FileAgeLimit = configValues.MaxFileAgeToKeep;
+                if (configValues.MaxTotalSizeToKeep != 0)
+                    purgeRules.dirTotalSizeLimit = configValues.MaxTotalSizeToKeep;
+                
+                if (configValues.AdvanceAfterFileReachesSize != 0)
+                    advanceRules.fileSizeLimit = configValues.AdvanceAfterFileReachesSize;
+                if (configValues.AdvanceAfterFileReachesAge != TimeSpan.Zero)
+                    advanceRules.FileAgeLimit = configValues.AdvanceAfterFileReachesAge;
+
+                return this;
+            }
+
+            /// <summary>Glue class - used to define config points that can be used to setup a FileRotationLoggingConfig object.  This class is required because the ConfigValueSetAdapter does not support use with structs (which FileRotationLoggingConfig is)</summary>
+            public class ConfigKeyValuesHelper
+            {
+                /// <summary>Target property for a key of the same name</summary>
+                [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
+                public Logging.LogGate LogGate { get; set; }
+
+                /// <summary>Target property for a key of the same name</summary>
+                [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
+                public string DirectoryPath { get; set; }
+
+                /// <summary>Target property for a key of the same name</summary>
+                [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
+                public int MaxFilesToKeep { get; set; }
+
+                /// <summary>Target property for a key of the same name</summary>
+                [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
+                public double MaxFileAgeToKeepInDays { get; set; }
+                /// <summary>TimeSpan version of corresponding InDays property</summary>
+                public TimeSpan MaxFileAgeToKeep { get { return TimeSpan.FromDays(MaxFileAgeToKeepInDays); } }
+
+                /// <summary>Target property for a key of the same name</summary>
+                [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
+                public long MaxTotalSizeToKeep { get; set; }
+
+                /// <summary>Target property for a key of the same name</summary>
+                [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
+                public int AdvanceAfterFileReachesSize { get; set; }
+
+                /// <summary>Target property for a key of the same name</summary>
+                [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
+                public double AdvanceAfterFileReachesAgeInDays { get; set; }
+                /// <summary>TimeSpan version of corresponding InDays property</summary>
+                public TimeSpan AdvanceAfterFileReachesAge { get { return TimeSpan.FromDays(AdvanceAfterFileReachesAgeInDays); } }
+            }
 		}
 
         /// <summary>Creates a QueueLogMessageHandler wrapped around a TextFileRotationLogMessageHandler configured using the given config value.</summary>

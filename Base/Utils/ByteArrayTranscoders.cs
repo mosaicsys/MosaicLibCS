@@ -71,6 +71,7 @@ namespace MosaicLib.Utils
 		private static IByteArrayTranscoder byteArrayStringTranscoder = new ByteArrayStringTranscoder();
 		private static IByteArrayTranscoder base64UrlTranscoder = new Base64UrlTranscoder();
         private static IByteArrayTranscoder hexTranscoder = new HexByteArrayTranscoder() { UseByteSeperator = true, UseWordSeperator = true };
+        private static IByteArrayTranscoder hexTranscoderNoPadding = new HexByteArrayTranscoder() { UseByteSeperator = false, UseWordSeperator = false };
 
         /// <summary>Returns a Transcoder that converts directly between byte arrays and strings of the identical character (bit patterns).  Encode widens each byte, Decode truncates the upper bits in each character to give the resulting byte.</summary>
 		public static IByteArrayTranscoder ByteStringTranscoder { get { return byteArrayStringTranscoder; } }
@@ -80,7 +81,10 @@ namespace MosaicLib.Utils
 
         /// <summary>Returns a Transcoder that converts between binary byte arrays and hexadecimal coded strings</summary>
         public static IByteArrayTranscoder HexStringTranscoder { get { return hexTranscoder; } }
-	}
+
+        /// <summary>Returns a Transcoder that converts between binary byte arrays and hexadecimal coded strings.  Encoded output strings have no added padding whitespace.</summary>
+        public static IByteArrayTranscoder HexStringTranscoderNoPadding { get { return hexTranscoderNoPadding; } }
+    }
 
     /// <summary>Base class for some transcoders.  Provides base implementations for most of the IByteArrayTranscoder methods</summary>
 	public abstract class ByteArrayTranscoderBase : IByteArrayTranscoder
@@ -388,6 +392,9 @@ namespace MosaicLib.Utils
         /// <summary>Set to true to have the transcoder include spaces between "words" in the hex output (sets of 4 hex digits)</summary>
         public bool UseWordSeperator { get; set; }
 
+        /// <summary>Encode generates upper case hex letters (A..F) when true.  Encode generates lower case hex letters (a..f) when false</summary>
+        public bool UseUpperCase { get; set; }
+
         /// <summary>
         /// Encodes the given byte range from the given source buffer, sets the codedStr to the resulting encoded hex string and returns true if the operation was successful.
         /// </summary>
@@ -421,7 +428,10 @@ namespace MosaicLib.Utils
             int lastIdx = endOffset - 1;
             for (int idx = startOffset; idx <= lastIdx; idx++)
             {
-                sb.CheckedAppendFormat("{0:x2}", unchecked((int)sourceBuffer[idx]));
+                if (UseUpperCase)
+                    sb.CheckedAppendFormat("{0:X2}", unchecked((int)sourceBuffer[idx]));
+                else 
+                    sb.CheckedAppendFormat("{0:x2}", unchecked((int)sourceBuffer[idx]));
 
                 bool isLastByte = (idx == lastIdx);
                 bool appendSeperator = !isLastByte && (((idx % 2) == 0) ? UseWordSeperator : UseByteSeperator);

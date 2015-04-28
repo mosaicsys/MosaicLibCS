@@ -115,7 +115,7 @@ namespace MosaicLib.SerialIO
             {
                 ec = Utils.Fcns.CheckedFormat("Did not find expected element end in SpecStr:'{0}'", specScan.Str);
             }
-            else if (!CannedIPAddresses.TryGetValue(addrAttribValue, out ipAddr)
+            else if (!CannedIPAddresses.TryGetValue(addrAttribValue ?? String.Empty, out ipAddr)
 						&& !IPAddress.TryParse(addrAttribValue, out ipAddr))
 			{
 				ec = Utils.Fcns.CheckedFormat("valid IPAddress could not be extracted from addr attribute:'{0}' in SpecStr:'{1}'", addrAttribValue, specScan.Str);

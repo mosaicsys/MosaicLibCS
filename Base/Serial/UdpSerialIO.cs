@@ -696,7 +696,7 @@ namespace MosaicLib.SerialIO
             foreach (var s in socketList)
             {
                 TableItem tableItem;
-                if (referenceTable.TryGetValue(s, out tableItem) && tableItem != null)
+                if (s != null && referenceTable.TryGetValue(s, out tableItem) && tableItem != null)
                     tableItem.touched = true;
             }
         }

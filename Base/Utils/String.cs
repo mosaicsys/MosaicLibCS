@@ -31,6 +31,7 @@ namespace MosaicLib.Utils
     /// Fcns class is essentially a namespace for series of static helper methods
     /// <para/>inclues: DisposeOf... methods, CheckedFormat and other String related methods, array/list specific Equals methods, ...
     /// </summary>
+    /// <remarks>These methods are now also Extension Methods</remarks>
     public static partial class Fcns
 	{
 		#region static String value mapping functions
@@ -38,22 +39,22 @@ namespace MosaicLib.Utils
 		/// <summary>Maps the given string value to the empty string if it is null</summary>
 		/// <param name="s">The string to test for null and optionally map</param>
 		/// <returns>The given string s if it was not null or the empty string if it was.</returns>
-		public static string MapNullToEmpty(string s) { return ((s == null) ? string.Empty : s); }
+		public static string MapNullToEmpty(this string s) { return ((s == null) ? string.Empty : s); }
 
 		/// <summary>Maps the given string value to the empty string if it is null</summary>
 		/// <param name="s">The string to test for null or empty and to optionally map</param>
 		/// <param name="mappedS">The string value to return when the reference string s is null or empty</param>
 		/// <returns>The given string s if it was not null or the empty string if it was.</returns>
-		public static string MapNullOrEmptyTo(string s, string mappedS) { return (string.IsNullOrEmpty(s) ? mappedS : s); }
+		public static string MapNullOrEmptyTo(this string s, string mappedS) { return (string.IsNullOrEmpty(s) ? mappedS : s); }
 
         /// <summary>Maps the given boolean value to either "1" or "0"</summary>
-        public static string MapToString(bool value) { return (value ? "1" : "0"); }
+        public static string MapToString(this bool value) { return (value ? "1" : "0"); }
 
         /// <summary>Maps the given boolean value to either given trueStr or given falseStr</summary>
-        public static string MapToString(bool value, string trueStr, string falseStr) { return (value ? trueStr : falseStr); }
+        public static string MapToString(this bool value, string trueStr, string falseStr) { return (value ? trueStr : falseStr); }
 
         /// <summary>Maps the given boolean value to an integer value of 1 for true and 0 for false</summary>
-        public static int MapToInt(bool value) { return (value ? 1 : 0); }
+        public static int MapToInt(this bool value) { return (value ? 1 : 0); }
 
 		#endregion
 
@@ -69,7 +70,7 @@ namespace MosaicLib.Utils
         ///     A copy of fmt in which the first format item has been replaced by the
         ///     System.String equivalent of arg0.
         /// </returns>
-        public static string CheckedFormat(string fmt, object arg0)
+        public static string CheckedFormat(this string fmt, object arg0)
 		{
             try
             {
@@ -101,7 +102,7 @@ namespace MosaicLib.Utils
         ///     A copy of format in which the first and second format items have
         ///     been replaced by the System.String equivalents of arg0 and arg1.
         /// </returns>
-        public static string CheckedFormat(string fmt, object arg0, object arg1)
+        public static string CheckedFormat(this string fmt, object arg0, object arg1)
 		{
 			try
 			{
@@ -134,7 +135,7 @@ namespace MosaicLib.Utils
         ///     A copy of format in which the first, second, and third format items have
         ///     been replaced by the System.String equivalents of arg0, arg1, and arg2.
         /// </returns>
-        public static string CheckedFormat(string fmt, object arg0, object arg1, object arg2)
+        public static string CheckedFormat(this string fmt, object arg0, object arg1, object arg2)
 		{
 			try
 			{
@@ -165,7 +166,7 @@ namespace MosaicLib.Utils
         ///     A copy of fmt in which the format items have been replaced by the System.String
         ///     equivalent of the corresponding instances of System.Object in args.
         /// </returns>
-        public static string CheckedFormat(string fmt, params object[] args)
+        public static string CheckedFormat(this string fmt, params object[] args)
 		{
 			try
 			{
@@ -199,7 +200,7 @@ namespace MosaicLib.Utils
         ///     A copy of fmt in which the format items have been replaced by the System.String
         ///     equivalent of the corresponding instances of System.Object in args.
         /// </returns>
-        public static string CheckedFormat(IFormatProvider provider, string fmt, params object[] args)
+        public static string CheckedFormat(this IFormatProvider provider, string fmt, params object[] args)
         {
             try
             {
@@ -224,7 +225,7 @@ namespace MosaicLib.Utils
         #region static String [] methods
 
         /// <summary>Returns true if both lists have the same contents.  Returns false if they do not.</summary>
-        public static bool Equals(String[] a, String[] b)
+        public static bool Equals(this String[] a, String[] b)
         {
             if (a == null && b == null)
                 return true;
@@ -244,7 +245,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>Returns true if both the array and the list have the same contents.  Returns false if they do not.</summary>
-        public static bool Equals(String[] a, IList<String> b)
+        public static bool Equals(this String[] a, IList<String> b)
         {
             if (a == null && b == null)
                 return true;

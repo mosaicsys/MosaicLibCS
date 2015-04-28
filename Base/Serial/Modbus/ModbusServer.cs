@@ -387,25 +387,32 @@ namespace MosaicLib.SerialIO.Modbus.Server
 
         private string InnerRunRelayAction(IBasicAction portAction, string description)
         {
-            portAction.NotifyOnComplete.AddItem(threadWakeupNotifier);
+            IBasicNotificationList notifyOnComplete = portAction.NotifyOnComplete;
 
-            string resultCode = Fcns.MapNullOrEmptyTo(portAction.Start(), null);
-
-            while (resultCode == null)
+            try
             {
-                WaitForSomethingToDo();
+                notifyOnComplete.AddItem(threadWakeupNotifier);
 
-                InnerServiceFCServerAndStateRelay();
+                string resultCode = Fcns.MapNullOrEmptyTo(portAction.Start(), null);
 
-                if (portAction.ActionState.IsComplete)
-                    break;
+                while (resultCode == null)
+                {
+                    WaitForSomethingToDo();
+
+                    InnerServiceFCServerAndStateRelay();
+
+                    if (portAction.ActionState.IsComplete)
+                        break;
+                }
+
+                resultCode = (portAction.ActionState.ResultCode ?? Fcns.CheckedFormat("Internal: port.{0} complete with null ResultCode", description));
+
+                return resultCode;
             }
-
-            portAction.NotifyOnComplete.RemoveItem(threadWakeupNotifier);
-
-            resultCode = (portAction.ActionState.ResultCode ?? Fcns.CheckedFormat("Internal: port.{0} complete with null ResultCode", description));
-
-            return resultCode;
+            finally
+            {
+                notifyOnComplete.RemoveItem(threadWakeupNotifier);
+            }
         }
 
         QpcTimeStamp bufferFillStartTime = QpcTimeStamp.Zero;

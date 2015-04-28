@@ -146,6 +146,7 @@ namespace MosaicLib.Utils
             /// Changes made by other threads produce race conditions where the side effects of the change on another thread may, or may not, be visible in the array contents
             /// until the thread reading this property invokes it entirely after another thread in question's Add or Remove method has returned from that method invocation.
             /// This method does not attempt to lock or update the underlying Array value unless it knows that at least one change has been completed to the list contents.
+            /// <para/>Also note that the caller must clone the returned array if the caller intends to change its contents as the returned array may be shared by multiple callers.
             /// </summary>
             /// <remarks>
             /// If any change to the list has been recorded via the rebuild flag then this property will lock access to the list, 

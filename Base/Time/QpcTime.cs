@@ -446,12 +446,12 @@ namespace MosaicLib.Time
 		}
 
         /// <summary>
-        /// Gives  the ElapsedTimeInSeconds since the timer last expired.
+        /// Gives  the ElapsedTimeInSeconds since the timer was last started or expired.
         /// </summary>
         public double ElapsedTimeInSeconds { get { return GetElapsedTime(QpcTimeStamp.Now).TotalSeconds; } }
 
         /// <summary>
-        /// Gives the ElapsedTime since the timer last expired as a TimeSpan.
+        /// Gives the ElapsedTime since the timer was last started or expired as a TimeSpan.
         /// </summary>
         public TimeSpan ElapsedTime { get { return GetElapsedTime(QpcTimeStamp.Now); } }
 

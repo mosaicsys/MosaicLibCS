@@ -1,5 +1,5 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="3.5" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
@@ -12,6 +12,10 @@
     <AssemblyName>MosaicLibCSBase</AssemblyName>
     <TargetFrameworkVersion>v3.5</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
+    <FileUpgradeFlags>
+    </FileUpgradeFlags>
+    <OldToolsVersion>3.5</OldToolsVersion>
+    <UpgradeBackupLocation />
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -36,6 +40,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
+    <Reference Include="System.configuration" />
     <Reference Include="System.Core">
       <RequiredTargetFramework>3.5</RequiredTargetFramework>
     </Reference>
@@ -66,6 +71,10 @@
     <Compile Include="Modular\Action\ProviderFacet.cs" />
     <Compile Include="Modular\Action\Queue.cs" />
     <Compile Include="Modular\Common\Common.cs" />
+    <Compile Include="Modular\Config\Config.cs" />
+    <Compile Include="Modular\Config\ConfigProviders.cs" />
+    <Compile Include="Modular\Config\ConfigValueSetAdapter.cs" />
+    <Compile Include="Modular\Interconnect\Values.cs" />
     <Compile Include="Modular\Part\PartBase.cs" />
     <Compile Include="Modular\Part\SimpleActivePart.cs" />
     <Compile Include="Modular\Persist\Persist.cs" />

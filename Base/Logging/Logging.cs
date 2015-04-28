@@ -418,10 +418,79 @@ namespace MosaicLib
             /// <summary>get/set property that gives external access to the underlying MesgTypeMask that this object contains and uses.</summary>
             public MesgTypeMask MesgTypeMask { get { return mask; } set { mask = value; } }
 
-            /// <summary>Provide added debugging support using override for LogGate.ToString() method.</summary>
+            /// <summary>Provide added debugging support.</summary>
             public override string ToString()
             {
+                return ToString(false);
+            }
+
+            /// <summary>Provide added debugging support.  Then allowTerseVersion is true, this method can return strings like "Debug", etc. in place of the longer versions.</summary>
+            public string ToString(bool allowTerseVersion)
+            {
+                if (allowTerseVersion)
+                {
+                    if (this == LogGate.All)
+                        return "All";
+                    if (this == LogGate.Error)
+                        return "Error";
+                    if (this == LogGate.Warning)
+                        return "Warning";
+                    if (this == LogGate.Signif)
+                        return "Signif";
+                    if (this == LogGate.Info)
+                        return "Info";
+                    if (this == LogGate.Debug)
+                        return "Debug";
+                    if (this == LogGate.Trace)
+                        return "Trace";
+                    if (this == LogGate.None)
+                        return "None";
+                }
+
                 return Utils.Fcns.CheckedFormat("LogGate:{0}", mask);
+            }
+
+            /// <summary>Dictionary of names to corresponding common LogGate values.</summary>
+            public static readonly Dictionary<string, LogGate> LogGateNameMap
+                = new Dictionary<string, LogGate>()
+                {
+                    {"None", LogGate.None},
+                    {"All", LogGate.All},
+                    {"Error", LogGate.Error},
+                    {"Warning", LogGate.Warning},
+                    {"Signif", LogGate.Signif},
+                    {"Info", LogGate.Info},
+                    {"Debug", LogGate.Debug},
+                    {"Trace", LogGate.Trace},
+                };
+
+            /// <summary>
+            /// Provides a method that will attempt to generate a LogGate from a given string resulting from calling ToString on another LogGate.  
+            /// Returns true if the original could be reconstructed or false if the string was not recognized and was not decodable.
+            /// </summary>
+            public bool TryParse(string valueStr)
+            {
+                LogGate logGate = this;
+
+                if (Utils.StringScanner.FindTokenValueByName(valueStr, LogGateNameMap, out logGate))
+                {
+                    mask = logGate.mask;
+                    return true;
+                }
+
+                Utils.StringScanner scan = new MosaicLib.Utils.StringScanner(valueStr);
+                if (scan.MatchToken("LogGate:", false, false, false, MosaicLib.Utils.TokenType.ToNextWhiteSpace))
+                {
+                    MesgTypeMask mtm = mask;
+
+                    if (MesgTypeMask.TryParse(scan.Rest, out mtm))
+                    {
+                        mask = mtm;
+                        return true;
+                    }
+                }
+
+                return false;
             }
 
             /// <summary>Static LogGate that has no message types enabled.</summary>
@@ -1088,7 +1157,7 @@ namespace MosaicLib
             /// <summary>retval returns a new message with type, source, message, file and line filled in.</summary>
             LogMessage GetLogMessage(MesgType mesgType, string mesg, System.Diagnostics.StackFrame sourceStackFrame, bool allocatedFromDist);
 
-            /// <summary>Emits and consumes the message (mesgP will be set to null)</summary>
+            /// <summary>Emits the message.  Takes ownership by setting the caller's reference to null.</summary>
 			void EmitLogMessage(ref LogMessage mesg);
 
             /// <summary>Waits for last message emitted by this logger to have been distributed and processed.</summary>
@@ -1099,6 +1168,17 @@ namespace MosaicLib
 		};
 
 		#endregion
+
+        #region ILogger Extension methods
+
+        /// <summary>ILogger extension methods: Makes a copy of the given message and Emits it.</summary>
+        public static void CopyAndEmitLogMessage(this ILogger logger, LogMessage mesg)
+        {
+            LogMessage mesgCopy = new LogMessage(mesg);
+            logger.EmitLogMessage(ref mesgCopy);
+        }
+
+        #endregion
 
         //-------------------------------------------------------------------
         #region BasicLoggerBase
@@ -1137,7 +1217,7 @@ namespace MosaicLib
             /// <returns>An implementation of the IMesgEmitter interface that may be used to emit messages for the requested type.</returns>
             protected abstract IMesgEmitter CreateMesgEmitter(MesgType mesgType);
 
-            #region IBaseMessageLogger interface
+            #region IBasicLogger interface
 
             /// <summary>Returns a message emitter for Error messages from this logger</summary>
             public IMesgEmitter Error { get { return (error ?? (error = Emitter(MesgType.Error))); } }
@@ -1227,6 +1307,12 @@ namespace MosaicLib
             /// This ILogger is also used to obtain Stack Frames and to allocate LogMessage objects.
             /// </summary>
             public ILogger Logger { get; set; }
+
+            /// <summary>Debugging helper method</summary>
+            public override string ToString()
+            {
+                return Utils.Fcns.CheckedFormat("LoggerEmitter {0} {1}{2}", MesgType, Logger.Name, (CollectStackFrames ? " CollectsStackFrams" : String.Empty));
+            }
 
 			#region IMesgEmitter Members
 
@@ -1555,12 +1641,22 @@ namespace MosaicLib
             /// <summary>get/set property: Allows an emitter to be used recusively where it records the caller of its caller (etc.)</summary>
             public int SkipNAdditionalStackFrames { get; set; }
 
+            /// <summary>Debugging helper method</summary>
+            public override string ToString()
+            {
+                return Utils.Fcns.CheckedFormat("{0} Generic Emitter", MesgType);
+            }
+
+
             #region IMesgEmitter Members
 
             /// <summary>get/protected set property.  If this is not set to True then the emitter will block emitting all frames.</summary>
             public virtual bool IsEnabled { get; protected set; }
 
-            /// <summary>get/set property: Defines the MesgType that this emitter is assocaited with.  Mainly used for LogMessage type emitters.</summary>
+            /// <summary>
+            /// get/set property: Defines the MesgType that this emitter is assocaited with.  
+            /// Mainly used for LogMessage type emitters.  May not have any actual use in other derived message emitter types.
+            /// </summary>
             public MesgType MesgType { get; set; }
 
             /// <summary>get/protected set propterty implements.  Set to enable the collection of StackFrames for the emitted Items generated by this instance.</summary>
@@ -1746,7 +1842,7 @@ namespace MosaicLib
 
                 Modular.Reflection.Attributes.ItemInfo<MesgEmitterPropertyAttribute> item = null;
 
-                if (itemDictionary.TryGetValue(targetItemName, out item))
+                if (itemDictionary.TryGetValue(targetItemName ?? String.Empty, out item))
                 {
                     try
                     {
@@ -1932,8 +2028,8 @@ namespace MosaicLib
 				return lm;
 			}
 
-            /// <summary>Emits and consumes the message (mesg will be set to null)</summary>
-			public virtual void EmitLogMessage(ref LogMessage mesg)
+            /// <summary>Emits the message.  Takes ownership by setting the caller's reference to null.</summary>
+            public virtual void EmitLogMessage(ref LogMessage mesg)
 			{
 				if (mesg != null && !loggerHasBeenShutdown)
 					dist.DistributeMessage(ref mesg);
@@ -1981,6 +2077,12 @@ namespace MosaicLib
 			protected volatile bool loggerHasBeenShutdown = false;
         
             #endregion
+
+            /// <summary>Debug helper method</summary>
+            public override string ToString()
+            {
+                return Utils.Fcns.CheckedFormat("Logger:{0}", Name);
+            }
         }
 
 		#endregion
@@ -2258,6 +2360,15 @@ namespace MosaicLib
             /// <param name="ctorSkipNStackFrames">Gives number of stack frames to skip for the stack frame used for the emitted Enter message.</param>
             public EnterExitTrace(IBasicLogger logger, string traceID, MesgType mesgType, int ctorSkipNStackFrames)
 				: base(logger, traceID, mesgType, entryPrefixStr, ctorSkipNStackFrames + 1, exitPrefixStr, 0) 
+            {
+                SetStartTime();
+            }
+
+            /// <summary>constructor for use with emitter.</summary>
+            /// <param name="emitter">Gives emiter instance to use for normal output.</param>
+            /// <param name="traceID">Gives caller provided traceID to generate "Enter:{traceID}" and "Exit:{traceID}" messages for.</param>
+            public EnterExitTrace(IMesgEmitter emitter, string traceID)
+                : base(emitter, traceID, entryPrefixStr, 1, exitPrefixStr, 0)
             {
                 SetStartTime();
             }

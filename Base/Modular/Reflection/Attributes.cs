@@ -22,6 +22,7 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using MosaicLib.Utils;
 
 namespace MosaicLib.Modular.Reflection
 {
@@ -31,24 +32,119 @@ namespace MosaicLib.Modular.Reflection
 
         /// <summary>
         /// This is the base class for all custom <see cref="ItemInfo"/> and TItemAttribute classes that may be used here.
-        /// <para/>Provides a Name property and acts as the base class for attribute types that the AccessHelper can process
+        /// <para/>Provides a Name property and acts as the base class for attribute types that the AccessHelper can process.
+        /// <para/>Name property defaults to null, NameAdjust property defaults to NameAdjust.Prefix0
         /// </summary>
         [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field, AllowMultiple = false)]
         public class AnnotatedItemAttributeBase : System.Attribute
         {
-            /// <summary>Default constructor.</summary>
+            /// <summary>
+            /// Default constructor.
+            /// <para/>Sets Name = null, NameAdjust = NameAdjust.Prefix0
+            /// </summary>
             public AnnotatedItemAttributeBase() 
                 : base() 
             {
                 Name = null; 
+                NameAdjust = NameAdjust.Prefix0;
             }
 
             /// <summary>
             /// This property allows the attribute definition to set the item Name that should be used in the type definition for this item.  
-            /// Use null or empty to use the field or property name as the item name.
+            /// Use null to force use the field or property MemberInfo.Name as the derived name.
+            /// <para/>Defaults to null.
             /// </summary>
             public virtual string Name { get; set; }
+
+            /// <summary>
+            /// This property is used to guide the generation of the derived name by choosing which strategy is to be used.
+            /// <para/>Defaults to Prefix0.  Other choices are None, Format, Prefix1, Prefix2, or Prefix3
+            /// </summary>
+            public virtual NameAdjust NameAdjust { get; set; }
+
+            /// <summary>
+            /// Generates a derived name from the given memberInfo's Name, the Name property, the NameAdjust property and the given paramsStrArray contents
+            /// </summary>
+            public string GenerateFullName(MemberInfo memberInfo, params string[] paramsStrArray)
+            {
+                return GenerateFullName(memberInfo.Name, paramsStrArray);
+            }
+
+            /// <summary>
+            /// Generates a derived name from the given memberName, the Name property, the NameAdjust property and the given paramsStrArray contents
+            /// </summary>
+            public string GenerateFullName(string memberName, params string[] paramsStrArray)
+            {
+                string inferredName = Name ?? memberName ?? String.Empty;
+
+                switch (NameAdjust)
+                {
+                    case NameAdjust.None: return inferredName;
+                    case NameAdjust.Format: return (Name ?? String.Empty).CheckedFormat(paramsStrArray);
+                    case Attributes.NameAdjust.FormatWithMemberName:
+                        {
+                            List<string> paramsStrList = new List<string>();
+                            paramsStrList.Add(memberName);
+                            paramsStrList.AddRange(paramsStrArray);
+                            return (Name ?? String.Empty).CheckedFormat(paramsStrList.ToArray());
+                        }
+                    case NameAdjust.Prefix0: return paramsStrArray.SafeAccess(0, String.Empty) + inferredName;
+                    case NameAdjust.Prefix1: return paramsStrArray.SafeAccess(1, String.Empty) + inferredName;
+                    case NameAdjust.Prefix2: return paramsStrArray.SafeAccess(2, String.Empty) + inferredName;
+                    case NameAdjust.Prefix3: return paramsStrArray.SafeAccess(3, String.Empty) + inferredName;
+                    default: return String.Empty;
+                }
+            }
         }
+
+        /// <summary>
+        /// Enum is used with <see cref="MosaicLib.Modular.Reflection.Attributes.AnnotatedItemAttributeBase"/> 
+        /// to define how an Annotated Item's full name is adjusted/generated from its derived Name (memberInfo.Name combined with Name property) and the
+        /// array of params strings that are generally given to the corresonding Setup type method that actually generates the full names.  
+        /// <para/>Supported values: None, Format, Prefix0, Prefix1, Prefix2, Prefix3
+        /// <para/>A, B, C, D are also supported for backwards compatibility - these map to Prefix0 through Prefix3 respectively.
+        /// </summary>
+        public enum NameAdjust : int
+        {
+            /// <summary>The item's Name property (if non-null) or the items MemberInfo.Name will be used without further modification.</summary>
+            None = 0,
+
+            /// <summary>
+            /// Uses the Name property as the format string combined with the corresonding params string array values
+            /// to support more arbitrary mechanisms for generating derived names.  
+            /// This version uses MosaicLib.Utils.Fcns.CheckedFormat and as such will produce error messages if the referenced {} arguments do not match the actual set of params strings
+            /// that are passed to the method.
+            /// </summary>
+            Format,
+
+            /// <summary>
+            /// Uses the Name property as the format string combined with the corresonding params string array values, prefixed with the memberInfo.Name value,
+            /// to support more arbitrary mechanisms for generating derived names.  As such format field {0} becomes the memberInfo.Name while {1} ... {n} given params string array
+            /// values 0 .. n-1.
+            /// This version uses MosaicLib.Utils.Fcns.CheckedFormat and as such will produce error messages if the referenced {} arguments do not match the actual set of params strings
+            /// that are passed to the method.
+            /// </summary>
+            FormatWithMemberName,
+
+
+            /// <summary>The params string[0] is used as a prefix (if it is present and non-empty).  This is the default value.</summary>
+            Prefix0,
+            /// <summary>The params string[1] is used as a prefix (if it is present and non-empty)</summary>
+            Prefix1,
+            /// <summary>The params string[2] is used as a prefix (if it is present and non-empty)</summary>
+            Prefix2,
+            /// <summary>The params string[3] is used as a prefix (if it is present and non-empty)</summary>
+            Prefix3,
+
+            /// <summary>For backwards compatibility.  Identical to Prefix0</summary>
+            A = Prefix0,
+            /// <summary>For backwards compatibility.  Identical to Prefix1</summary>
+            B = Prefix1,
+            /// <summary>For backwards compatibility.  Identical to Prefix2</summary>
+            C = Prefix2,
+            /// <summary>For backwards compatibility.  Identical to Prefix3</summary>
+            D = Prefix3,
+        };
 
         /// <summary>
         /// Defines which public properties and/or fields are included in the ValueSet representation 
@@ -119,6 +215,17 @@ namespace MosaicLib.Modular.Reflection
             public bool CanGetValue { get { return (IsField || (IsProperty && PropertyInfo.CanRead)); } }
             /// <summary>True if the item can set the member value.  True for all fields and for properties that CanWrite.</summary>
             public bool CanSetValue { get { return (IsField || (IsProperty && PropertyInfo.CanWrite)); } }
+
+            /// <summary>Generate string version of this Item Info for debugging and logging purposes.</summary>
+            public override string ToString()
+            {
+                if (PropertyInfo != null)
+                    return Fcns.CheckedFormat("Property {0}{1}{2}", PropertyInfo.Name, (CanGetValue ? ",Get" : ",NoGet"), (CanSetValue ? ",Set" : ",NoSet"));
+                else if (FieldInfo != null)
+                    return Fcns.CheckedFormat("Field {0}", FieldInfo.Name);
+                else
+                    return Fcns.CheckedFormat("UnknownMemberType {0}", MemberInfo.Name);
+            }
         }
 
         /// <summary>
@@ -141,8 +248,26 @@ namespace MosaicLib.Modular.Reflection
                 {
                     if (ItemAttribute != null && ItemAttribute.Name != null)
                         return ItemAttribute.Name;
-                    return MemberInfo.Name;
+                    else
+                        return MemberInfo.Name;
                 }
+            }
+
+            /// <summary>
+            /// Generates a derived name from the given memberInfo's Name, the Name property, the NameAdjust property and the given paramsStrArray contents
+            /// </summary>
+            public string GenerateFullName(params string[] paramsStrArray)
+            {
+                if (ItemAttribute != null)
+                    return ItemAttribute.GenerateFullName(MemberInfo, paramsStrArray);
+                else
+                    return DerivedName;
+            }
+
+            /// <summary>Generate string version of this templatized Item Info for debugging and logging purposes.</summary>
+            public override string ToString()
+            {
+                return Fcns.CheckedFormat("{0} :: {1}", DerivedName, base.ToString());
             }
         }
 

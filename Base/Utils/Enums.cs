@@ -39,11 +39,11 @@ namespace MosaicLib.Utils
         ///     Uses System.Enum.Parse to convert the string representation of the name or numeric value of one or
         ///     more enumerated constants to an equivalent enumerated object. 
         /// </summary>
-        /// <typeparam name="EnumT">The specific Enum type to parse.  This must be an System.Enum</typeparam>
+        /// <typeparam name="EnumT">The specific Enum type to parse.  This method will throw if this is not derived from System.Enum</typeparam>
 		/// <param name="s">The string to parse</param>
 		/// <returns>parsed EnumT value on success, or default(EnumT) on failure</returns>
 		/// <exception cref="System.InvalidOperationException">Thrown if EnumT is not a type of enum.</exception>
-		public static EnumT TryParse<EnumT>(string s) where EnumT : struct
+		public static EnumT TryParse<EnumT>(string s)
 		{
 			return TryParse<EnumT>(s, default(EnumT), true);
 		}
@@ -53,12 +53,12 @@ namespace MosaicLib.Utils
         ///     Uses System.Enum.Parse to convert the string representation of the name or numeric value of one or
         ///     more enumerated constants to an equivalent enumerated object. 
         /// </summary>
-        /// <typeparam name="EnumT">The specific Enum type to parse.  This must be an System.Enum</typeparam>
+        /// <typeparam name="EnumT">The specific Enum type to parse.  This method will throw if this is not derived from System.Enum</typeparam>
 		/// <param name="s">The string to parse</param>
 		/// <param name="parseFailedResult">Defines the EnumT value that will be returned if the parse fails</param>
 		/// <returns>parsed EnumT value on success, or parseFailedResult on failure</returns>
 		/// <exception cref="System.InvalidOperationException">Thrown if EnumT is not a type of enum.</exception>
-		public static EnumT TryParse<EnumT>(string s, EnumT parseFailedResult) where EnumT : struct
+		public static EnumT TryParse<EnumT>(string s, EnumT parseFailedResult)
 		{
 			return TryParse<EnumT>(s, parseFailedResult, true);
 		}
@@ -68,13 +68,13 @@ namespace MosaicLib.Utils
         ///     Uses System.Enum.Parse to convert the string representation of the name or numeric value of one or
         ///     more enumerated constants to an equivalent enumerated object. 
         /// </summary>
-        /// <typeparam name="EnumT">The specific Enum type to parse.  This must be an System.Enum</typeparam>
+        /// <typeparam name="EnumT">The specific Enum type to parse.  This method will throw if this is not derived from System.Enum</typeparam>
         /// <param name="s">The string to parse</param>
         /// <param name="parseFailedResult">Defines the EnumT value that will be returned if the parse fails</param>
         /// <param name="ignoreCase">If true, ignore case; otherwise, regard case.</param>
         /// <returns>parsed EnumT value on success, or parseFailedResult on failure</returns>
         /// <exception cref="System.InvalidOperationException">Thrown if EnumT is not a type of enum.</exception>
-        public static EnumT TryParse<EnumT>(string s, EnumT parseFailedResult, bool ignoreCase) where EnumT : struct
+        public static EnumT TryParse<EnumT>(string s, EnumT parseFailedResult, bool ignoreCase)
         {
             EnumT result;
 
@@ -88,12 +88,12 @@ namespace MosaicLib.Utils
         ///     Uses System.Enum.Parse to convert the string representation of the name or numeric value of one or
         ///     more enumerated constants to an equivalent enumerated object. 
         /// </summary>
-        /// <typeparam name="EnumT">The specific Enum type to parse.  This must be an System.Enum</typeparam>
+        /// <typeparam name="EnumT">The specific Enum type to parse.  This method will throw if this is not derived from System.Enum</typeparam>
         /// <param name="s">The string containing the value to parse into the specified EnumT type.</param>
         /// <param name="result">Assigned to the Parsed value on success or the default(EnumT) on failure</param>
         /// <returns>True if the Parse was successful, false otherwise</returns>
         /// <exception cref="System.InvalidOperationException">Thrown if EnumT is not a type of enum.</exception>
-        public static bool TryParse<EnumT>(string s, out EnumT result) where EnumT : struct
+        public static bool TryParse<EnumT>(string s, out EnumT result)
 		{
 			return TryParse<EnumT>(s, out result, default(EnumT), true);
 		}
@@ -103,13 +103,13 @@ namespace MosaicLib.Utils
         ///     Uses System.Enum.Parse to convert the string representation of the name or numeric value of one or
         ///     more enumerated constants to an equivalent enumerated object. 
         /// </summary>
-        /// <typeparam name="EnumT">The specific Enum type to parse.  This must be an System.Enum</typeparam>
+        /// <typeparam name="EnumT">The specific Enum type to parse.  This method will throw if this is not derived from System.Enum</typeparam>
         /// <param name="s">The string containing the value to parse into the specified EnumT type.</param>
         /// <param name="result">Assigned to the Parsed value on success or to parseFailedResult on failure</param>
         /// <param name="parseFailedResult">Defines the EnumT value that will be assigned to the result if the parse itself fails.</param>
         /// <returns>True if the Parse was successful, false otherwise</returns>
         /// <exception cref="System.InvalidOperationException">Thrown if EnumT is not a type of enum.</exception>
-        public static bool TryParse<EnumT>(string s, out EnumT result, EnumT parseFailedResult) where EnumT : struct
+        public static bool TryParse<EnumT>(string s, out EnumT result, EnumT parseFailedResult)
         {
             return TryParse<EnumT>(s, out result, parseFailedResult, true);
         }
@@ -120,14 +120,14 @@ namespace MosaicLib.Utils
         ///     more enumerated constants to an equivalent enumerated object. 
         ///     A parameter specifies whether the operation is case-sensitive.
         /// </summary>
-        /// <typeparam name="EnumT">The specific Enum type to parse.  This must be an System.Enum</typeparam>
+        /// <typeparam name="EnumT">The specific Enum type to parse.  This method will throw if this is not derived from System.Enum</typeparam>
         /// <param name="s">The string containing the value to parse into the specified EnumT type.</param>
         /// <param name="result">Assigned to the Parsed value on success or to parseFailedResult on failure</param>
         /// <param name="parseFailedResult">Defines the EnumT value that will be assigned to the result if the parse itself fails.</param>
         /// <param name="ignoreCase">If true, ignore case; otherwise, regard case.</param>
         /// <returns>True if the Parse was successful, false otherwise</returns>
         /// <exception cref="System.InvalidOperationException">Thrown if EnumT is not a type of enum. (where clause only requires it is a type of struct)</exception>
-        public static bool TryParse<EnumT>(string s, out EnumT result, EnumT parseFailedResult, bool ignoreCase) where EnumT : struct
+        public static bool TryParse<EnumT>(string s, out EnumT result, EnumT parseFailedResult, bool ignoreCase)
 		{
 			Type enumT = typeof(EnumT);
 

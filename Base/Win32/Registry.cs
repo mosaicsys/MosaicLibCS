@@ -123,7 +123,7 @@ namespace MosaicLib.Win32.Registry
         /// <param name="permissions">Gives the RegistryKeyPermissionCheck value for the requested permissions.</param>
         /// <returns>The RegistryKey instance for the requested path.</returns>
         /// <exception cref="System.ArgumentException">If the requested regKeyPath is not valid or cannot be opened</exception>
-        public static RegistryKey OpenRegistryKeyPath(RegistryKey startAtKey, string relativeRegKeyPath, RegistryKeyPermissionCheck permissions)
+        public static RegistryKey OpenRegistryKeyPath(this RegistryKey startAtKey, string relativeRegKeyPath, RegistryKeyPermissionCheck permissions)
         {
             return OpenRegistryKeyPath(startAtKey, SplitRegistryKeyPath(relativeRegKeyPath, DefaultRegPathDelimiters), permissions);
         }
@@ -136,7 +136,7 @@ namespace MosaicLib.Win32.Registry
         /// <param name="permissions">Gives the RegistryKeyPermissionCheck value for the requested permissions.</param>
         /// <returns>The RegistryKey instance for the requested path.</returns>
         /// <exception cref="System.ArgumentException">If the requested regKeyPath is not valid or cannot be opened</exception>
-        public static RegistryKey OpenRegistryKeyPath(RegistryKey startAtKey, string[] keyPathArray, RegistryKeyPermissionCheck permissions)
+        public static RegistryKey OpenRegistryKeyPath(this RegistryKey startAtKey, string[] keyPathArray, RegistryKeyPermissionCheck permissions)
         {
             RegistryKey currentKey = startAtKey;
             bool preventDisposeCurrentKey = true;       // it came from the one we were given on call
@@ -223,7 +223,7 @@ namespace MosaicLib.Win32.Registry
         /// <summary>
         /// Returns a pre-existing RegistryKey that corresponds to the given hiveName as converted to a RegistryHive type using the <see cref="GetRegistryHiveCode"/> method.
         /// </summary>
-        static public RegistryKey GetRegistryHiveKey(string hiveName)
+        static public RegistryKey GetRegistryHiveKey(this string hiveName)
         {
             RegistryHive hiveCode = GetRegistryHiveCode(hiveName);
             switch (hiveCode)
