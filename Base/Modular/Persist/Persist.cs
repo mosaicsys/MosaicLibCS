@@ -726,7 +726,7 @@ namespace MosaicLib.Modular.Persist
 
             if (!loadedValidObject)
             {
-                if (firstEx == null && existingFileCount != 0)
+                if (firstEx == null)
                 {
                     if (existingFileCount != 0)
                         firstEx = new PersistentStorageException(Utils.Fcns.CheckedFormat("No found file could be loaded (starting at '{0}'), using default object contents for '{1}'", fileRingPathArray[0], typeof(ObjType)));
