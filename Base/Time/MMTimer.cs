@@ -118,6 +118,37 @@ namespace MosaicLib.Time
 
 		#endregion
 	}
+
+    /// <summary>
+    /// This class is derived from SharedResourceSetupAndReleaseBase and allows clients to use a Token per client mechansim to bump the mmTimer to its maximum rate
+    /// </summary>
+    public class MMTimerSharedReasource : Utils.Collections.SharedResourceSetupAndReleaseBase
+    {
+        /// <summary>
+        /// Singleton instance of the MMTimerSharedResource class for clients to use with its GetSharedResourceReferenceToken method.
+        /// </summary>
+        public static MMTimerSharedReasource Instance { get { return singletonHelper.Instance; } }
+
+        private static Utils.SingletonHelperBase<MMTimerSharedReasource> singletonHelper = new Utils.SingletonHelperBase<MMTimerSharedReasource>(Utils.SingletonInstanceBehavior.AutoConstructIfNeeded, () => new MMTimerSharedReasource());
+
+        private MMTimerPeriod mmTimerPeriod = null;
+
+        /// <summary>
+        /// Method called by SharedResourceSetupAndReleaseBase to Setup the shared resource.
+        /// </summary>
+        protected override void Setup(string clientName)
+        {
+            mmTimerPeriod = new MMTimerPeriod();
+        }
+
+        /// <summary>
+        /// Method called by SharedResourceSetupAndReleaseBase to Release the shared resource.
+        /// </summary>
+        protected override void Release(string clientName)
+        {
+            Utils.Fcns.DisposeOfObject(ref mmTimerPeriod);
+        }
+    }
 }
 
 //-------------------------------------------------------------------

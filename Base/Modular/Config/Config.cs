@@ -855,6 +855,8 @@ namespace MosaicLib.Modular.Config
 
             if (icka.IsUsable)
                 TraceEmitter.Emit("{0} succeeded: InitialValue:'{1}'", methodName, icka.ValueAsString);
+            else if (keyAccessSpec.Flags.IsOptional && icka.ProviderFlags.KeyWasNotFound && !keyAccessSpec.Flags.SilenceIssues)
+                TraceEmitter.Emit("{0} failed: error:'{1}', InitialValue:'{2}'", methodName, icka.ResultCode, icka.ValueAsString);
             else if (!keyAccessSpec.Flags.SilenceIssues)
                 IssueEmitter.Emit("{0} failed: error:'{1}', InitialValue:'{2}'", methodName, icka.ResultCode, icka.ValueAsString);
 
@@ -889,7 +891,7 @@ namespace MosaicLib.Modular.Config
                     // if the client is asking for a ReadOnlyOnce key and we have already seen this key as a read only once key then return a clone of the previously seen version.
                     if (flags.ReadOnlyOnce && readOnlyOnceKeyDictionary.TryGetValue(key ?? String.Empty, out icka) && icka != null)
                     {
-                        Logger.Debug.Emit("{0}: Using clone of prior instance:{1} [ROO]", methodName, icka.ToString(ToStringDetailLevel.Full));
+                        Trace.Trace.Emit("{0}: Using clone of prior instance:{1} [ROO]", methodName, icka.ToString(ToStringDetailLevel.Full));
 
                         icka = new ConfigKeyAccessImpl(icka, this) { Flags = flags };
                     }
@@ -897,7 +899,7 @@ namespace MosaicLib.Modular.Config
                     // if this key has been seen before then return a clone of the previously seen one.
                     if (icka == null && allSeenKeysDictionary.TryGetValue(key ?? String.Empty, out icka) && icka != null)
                     {
-                        Logger.Debug.Emit("{0}: Starting with clone of prior instance:{1}", methodName, icka.ToString(ToStringDetailLevel.Full));
+                        Trace.Trace.Emit("{0}: Starting with clone of prior instance:{1}", methodName, icka.ToString(ToStringDetailLevel.Full));
 
                         icka = new ConfigKeyAccessImpl(icka, this) { Flags = flags };
 
@@ -912,7 +914,7 @@ namespace MosaicLib.Modular.Config
 
                             if (icka != null)
                             {
-                                Logger.Debug.Emit("{0}: Found provider:{1}", methodName, provider.Name);
+                                Trace.Trace.Emit("{0}: Found provider:{1}", methodName, provider.Name);
 
                                 break;
                             }
@@ -944,8 +946,6 @@ namespace MosaicLib.Modular.Config
 
                 if (icka.IsUsable)
                     Logger.Debug.Emit("{0}: gave {1}", methodName, ickaAsStr);
-                else if (!flags.SilenceIssues)
-                    IssueEmitter.Emit("{0}: gave {1}", methodName, ickaAsStr);
 
                 return icka;
             }

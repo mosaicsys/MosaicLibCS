@@ -413,7 +413,26 @@ namespace MosaicLib.Utils
         /// <remarks>
         /// This is expected to be especially useful for situations where multiple independent assemblies may need to support use of shared resources and resource setup like logging.
         /// </remarks>
-        public abstract class SharedResourceSetupAndReleaseBase
+        public abstract class SharedResourceSetupAndReleaseBase : SharedResourceSetupAndReleaseBase<IDisposable, Details.SharedResourceTokenBase>
+        {
+        }
+
+        /// <summary>
+        /// This class is a form of container class that uses client visible Token objects to allow multiple clients to collaborate in setting up use of some common
+        /// resource when the first client creates the corresponding token and implements automatic release of the shared resource when the last client disposes
+        /// of the last token.
+        /// <para/>This is an abstract class that must be subclased by a class that implements the abstract Setup and Release methods.
+        /// </summary>
+        /// <remarks>
+        /// This is expected to be especially useful for situations where multiple independent assemblies may need to support use of shared resources and resource setup like logging.
+        /// </remarks>
+        /// <typeparam name="ITokenTypeT">This gives the externally exposed type used for the internal token implmentation type.  This must implement IDisposaible.</typeparam>
+        /// <typeparam name="TokenTypeT">
+        /// This gives the class that is being used as the Token type implementation class.  
+        /// This must support a default constructor, and must implement both {ITokenTypeT} and Details.ISharedResourceTokenBase. 
+        /// It must also be IDisposable
+        /// </typeparam>
+        public abstract class SharedResourceSetupAndReleaseBase<ITokenTypeT, TokenTypeT> where ITokenTypeT : IDisposable where TokenTypeT : Details.ISharedResourceTokenBase, ITokenTypeT, new()
         {
             /// <summary>
             /// Clients call this method to obtain a token that indicates they are making use of the shared resource.  
@@ -421,18 +440,13 @@ namespace MosaicLib.Utils
             /// The first client to call this method will cause the resource to be setup using this classes abstract Setup method and the last client to dispose
             /// of their token (obtained from this method) will cause this class to use the abstract Release method to release the resource.
             /// </summary>
-            public IDisposable GetSharedResourceReferenceToken(string clientName)
+            public ITokenTypeT GetSharedResourceReferenceToken(string clientName)
             {
-                TokenImpl token = null;
+                TokenTypeT token = new TokenTypeT() { ClientName = clientName, ReleaseAction = HandleTokenBeingDisposed };
 
                 lock (tokenListMutex)
                 {
-                    int entryListCount = tokenList.Count;
-                    token = new TokenImpl(clientName, HandleTokenBeingDisposed);
-                    tokenList.Add(token);
-
-                    if (entryListCount == 0)
-                        Setup(clientName);
+                    InnerAddToken(token);
                 }
 
                 return token;
@@ -457,50 +471,107 @@ namespace MosaicLib.Utils
             /// Abstract method.  Invoked by this base class when the first client calls GetSharedResourceReferenceToken, passing in the name given by the first client.
             /// <para/>Please note that the method call occurs while owning the mutex on the list of clients and as such use of subordinate locks may cause a deadlock risk.
             /// </summary>
-            protected abstract void Setup(string clientName);
+            protected abstract void Setup(string firstClientName);
 
             /// <summary>
             /// Abstract method.  Invoked by this base class when the last client disposes of the token that it obtained, passing in the name given by that client when it first created its token (which is saved in the token).
             /// <para/>Please note that the method call occurs while owning the mutex on the list of clients and as such use of subordinate locks may cause a deadlock risk.
             /// </summary>
-            protected abstract void Release(string clientName);
+            protected abstract void Release(string lastClientName);
 
             /// <summary>
             /// This method is given as a delegate to each newly created token so that the token may call it when the token is disposed.  
             /// This method locks the list, removes the given token from the list and if the list is now empty, the method invokes the Release method, passing in the
             /// client name that was captured and saved in the token when it was created.
+            /// <para/>Note: this method must only be called while owning the mutex that enforces thread safe access to the list of tokens.
             /// </summary>
-            private void HandleTokenBeingDisposed(TokenImpl token)
+            private void HandleTokenBeingDisposed(Details.ISharedResourceTokenBase token)
             {
                 lock (tokenListMutex)
                 {
-                    tokenList.Remove(token);
-
-                    if (tokenList.Count == 0)
-                        Release(token.ClientName);
+                    InnerRemoveToken(token);
                 }
+            }
+
+            /// <summary>
+            /// This is the internal method used to add the given token to the list of client tokens that have requested use of this shared resource.
+            /// If the list was empty before the token was added, then this method calls the Setup method with the name of the client that created the given token.
+            /// <para/>Note: this method must only be called while owning the mutex that enforces thread safe access to the list of tokens.
+            /// </summary>
+            protected virtual void InnerAddToken(Details.ISharedResourceTokenBase token)
+            {
+                bool listWasEmptyOnEntry = (tokenList.Count == 0);
+
+                tokenList.Add(token);
+
+                if (listWasEmptyOnEntry)
+                    Setup(token.ClientName);
+            }
+
+            /// <summary>
+            /// This is the internal method used to remove the given token to the list of client tokens that have requested use of this shared resource.
+            /// If the list is empty after the token has been removed then this method calls the Release method with the name of the client that created the given token.
+            /// </summary>
+            protected virtual void InnerRemoveToken(Details.ISharedResourceTokenBase token)
+            {
+                tokenList.Remove(token);
+
+                bool updatedListIsEmpty = (tokenList.Count == 0);
+
+                if (updatedListIsEmpty)
+                    Release(token.ClientName);
             }
 
             /// <summary>Mutex object used to guard access to the tokenList</summary>
             private object tokenListMutex = new object();
 
             /// <summary>The list of tokens that have been created and which have not been disposed.</summary>
-            private List<TokenImpl> tokenList = new List<TokenImpl>();
+            private List<Details.ISharedResourceTokenBase> tokenList = new List<Details.ISharedResourceTokenBase>();
 
-            /// <summary>Token implementation class.  Derived from Disposable base.  Constructor retains a clientName and releaseAction.  The releaseAction will be invoked when the token is disposed.</summary>
-            private class TokenImpl : DisposableBase
+        }
+
+        namespace Details
+        {
+            /// <summary>
+            /// public interface used by templatized version of SharedResourceSetupAndReleaseBase to define what it needs to be able to do with a token implementation object in order
+            /// to do its job correctly.  Offers a ClientName getter and setter and a ReleaseAction setter.
+            /// </summary>
+            public interface ISharedResourceTokenBase : IDisposable
             {
                 /// <summary>
-                /// Token constructor.  Captures the given clientName and adds the given releaseAction to the base class' Explicit Dispose Action list.
+                /// Allows the caller to get or set the ClientName that is informally associated with this token.
                 /// </summary>
-                public TokenImpl(string clientName, Action<TokenImpl> releaseAction)
+                string ClientName { get; set; }
+
+                /// <summary>
+                /// Allows the caller to add an assigned action to the set of such actions that will be invoked when the object is disposed.
+                /// </summary>
+                Action<ISharedResourceTokenBase> ReleaseAction { set; }
+            }
+
+            /// <summary>
+            /// Shared Resource type Token implementation class.  
+            /// Derived from Disposable base.  To support use as with templatized SharedResourceSetupAndReleaseBase class, property initializers are used   
+            /// Constructor retains a clientName and releaseAction.  
+            /// The releaseAction will be invoked when the token is disposed.
+            /// </summary>
+            public class SharedResourceTokenBase : DisposableBase, ISharedResourceTokenBase
+            {
+                /// <summary>
+                /// Gives the name of the client assigned as a property intitializer when the token was initially constructed
+                /// </summary>
+                public string ClientName { get; set; }
+
+                /// <summary>
+                /// Each assigned ReleaseAction gets added to the explicit dispose action list provided by DisposableBase (wrapped in a binding delegate).  Generally only the SharedResourceSetupAndReleaseBase will make use of this to add its own release action.
+                /// </summary>
+                public Action<ISharedResourceTokenBase> ReleaseAction 
                 {
-                    ClientName = clientName;
-
-                    AddExplicitDisposeAction(() => releaseAction(this));
+                    set
+                    {
+                        AddExplicitDisposeAction(() => value(this));
+                    } 
                 }
-
-                public string ClientName { get; private set; }
             }
         }
     }
