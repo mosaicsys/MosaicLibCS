@@ -43,7 +43,7 @@ using System.Reflection;
 
 namespace MosaicLib.WPF.Logging
 {
-    using MosaicLib;
+    using MosaicLib;        // apparently this makes MosaicLib get searched before MosaicLib.WPF.Logging for resolving symbols here.
 
     public class LogFilterConfig
     {

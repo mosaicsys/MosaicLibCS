@@ -1098,6 +1098,9 @@ namespace MosaicLib.Modular.Action
 		{
 			lock (actionStateMutex)
 			{
+                // reset the last resultValue each time the action is started (so that prior results cannot be accidentally reused if the action fails to actually get started).
+                resultValue = default(ResultType);
+
 				if (!actionState.CanStart)
 				{
 					string ec = "Action.Start failed: action is not Idle";

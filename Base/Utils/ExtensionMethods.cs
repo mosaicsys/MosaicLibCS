@@ -35,7 +35,7 @@ namespace MosaicLib.Utils
     {
         #region general static [] comparison methods
 
-        /// <summary>Returns true if both arrays have the same length and contents.  Returns false if they do not.</summary>
+        /// <summary>Returns true if both arrays have the same length and contents (using Object.Equals).  Returns false if they do not.</summary>
         public static bool Equals<ItemType>(ItemType[] a, ItemType[] b)
         {
             if (a == null && b == null)
@@ -55,7 +55,7 @@ namespace MosaicLib.Utils
             return true;
         }
 
-        /// <summary>Returns true if both the array and the list have the same length and contents.  Returns false if they do not.</summary>
+        /// <summary>Returns true if both the array and the list have the same length and contents (using Object.Equals).  Returns false if they do not.</summary>
         public static bool Equals<ItemType>(ItemType[] a, IList<ItemType> b)
         {
             if (a == null && b == null)
@@ -75,7 +75,7 @@ namespace MosaicLib.Utils
             return true;
         }
 
-        /// <summary>Returns true if both of the lists have the same length and contents.  Returns false if they do not.</summary>
+        /// <summary>Returns true if both of the lists have the same length and contents (using Object.Equals).  Returns false if they do not.</summary>
         public static bool Equals<ItemType>(IList<ItemType> a, IList<ItemType> b)
         {
             if (a == null && b == null)
@@ -97,6 +97,30 @@ namespace MosaicLib.Utils
 
 
         #endregion
+
+        #region Migrated MapTo methods for booleans and similar cases.
+
+        /// <summary>Maps the given boolean value to either "1" or "0"</summary>
+        public static string MapToString(this bool value) { return (value ? "1" : "0"); }
+
+        /// <summary>Maps the given boolean value to either given trueStr or given falseStr</summary>
+        public static string MapToString(this bool value, string trueStr, string falseStr) { return (value ? trueStr : falseStr); }
+
+        /// <summary>Maps the given boolean value to an integer value of 1 for true and 0 for false</summary>
+        public static int MapToInt(this bool value) { return (value ? 1 : 0); }
+
+        /// <summary>
+        /// Generalized version of Map method.  If the given value does not Equals default(TValueType) then return the value, otherwise return replaceDefultWith.
+        /// </summary>
+        public static TValueType MapDefaultTo<TValueType>(this TValueType value, TValueType replaceDefaultWith)
+        {
+            if (!value.Equals(default(TValueType)))
+                return value;
+            else
+                return replaceDefaultWith;
+        }
+
+        #endregion
     }
 
     #endregion
@@ -113,7 +137,7 @@ namespace MosaicLib.Utils
 
         /// <summary>
         /// Extension method version of static Utils.Fcns.Equals method for two arrays
-        /// Returns true if both lists have the same length and contents.  Returns false if they do not.
+        /// Returns true if both lists have the same length and contents (using Object.Equals).  Returns false if they do not.
         /// </summary>
         public static bool IsEqualTo<ItemType>(this ItemType[] lhs, ItemType[] rhs)
         {
@@ -122,7 +146,7 @@ namespace MosaicLib.Utils
 
         /// <summary>
         /// Extension method version of static Utils.Fcns.Equals method for an array and a list, both generics with the same ItemType.
-        /// Returns true if both the array and the list have the same length and contents.  Returns false if they do not.
+        /// Returns true if both the array and the list have the same length and contents (using Object.Equals).  Returns false if they do not.
         /// </summary>
         public static bool IsEqualTo<ItemType>(this ItemType[] lhs, IList<ItemType> rhs)
         {
@@ -131,7 +155,7 @@ namespace MosaicLib.Utils
 
         /// <summary>
         /// Extension method version of static Utils.Fcns.Equals method for two lists, both generics with the same ItemType.
-        /// Returns true if both lists have the same length and contents.  Returns false if they do not.
+        /// Returns true if both lists have the same length and contents (using Object.Equals).  Returns false if they do not.
         /// </summary>
         public static bool IsEqualTo<ItemType>(this IList<ItemType> lhs, IList<ItemType> rhs)
         {

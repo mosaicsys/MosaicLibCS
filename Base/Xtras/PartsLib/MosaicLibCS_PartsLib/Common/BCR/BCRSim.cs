@@ -35,7 +35,7 @@ namespace MosaicLib.PartsLib.Common.BCR.Sim
 {
     #region IBCRSimPart
 
-	/// <summary>Use Service commands "Connect", "Disconnect", "Send:<str>" to perform various actions.</summary>
+	/// <summary>Use Service commands "Connect", "Disconnect", "Send:{str}" to perform various actions.</summary>
     public interface IBCRSimPart : IActivePartBase
 	{
         /// <summary>Property gives client access to the part's port base state</summary>
@@ -63,7 +63,7 @@ namespace MosaicLib.PartsLib.Common.BCR.Sim
 
         public string BCRName { get; set; }
 
-        [ConfigItem(Name = "Installed", ReadOnlyOnce = true)]
+        [ConfigItem(Name = "Installed", IsOptional = true, ReadOnlyOnce = true)]
         public bool Installed { get; set; }
 
         [ConfigItem(Name = "PortSpecStr", IsOptional = true, ReadOnlyOnce = true)]

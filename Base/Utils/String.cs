@@ -33,10 +33,22 @@ namespace MosaicLib.Utils
     /// </summary>
     /// <remarks>These methods are now also Extension Methods</remarks>
     public static partial class Fcns
-	{
-		#region static String value mapping functions
+    {
+        #region static IsNullOrEmpty method
 
-		/// <summary>Maps the given string value to the empty string if it is null</summary>
+        /// <summary>
+        /// Extension method version of String.IsNullOrEmpty(s).  Returns true if the given string is null or is String.Empty.  Returns false otherwise.
+        /// </summary>
+        public static bool IsNullOrEmpty(this string s)
+        {
+            return string.IsNullOrEmpty(s);
+        }
+
+        #endregion
+
+        #region static String value mapping functions
+
+        /// <summary>Maps the given string value to the empty string if it is null</summary>
 		/// <param name="s">The string to test for null and optionally map</param>
 		/// <returns>The given string s if it was not null or the empty string if it was.</returns>
 		public static string MapNullToEmpty(this string s) { return ((s == null) ? string.Empty : s); }
@@ -46,15 +58,6 @@ namespace MosaicLib.Utils
 		/// <param name="mappedS">The string value to return when the reference string s is null or empty</param>
 		/// <returns>The given string s if it was not null or the empty string if it was.</returns>
 		public static string MapNullOrEmptyTo(this string s, string mappedS) { return (string.IsNullOrEmpty(s) ? mappedS : s); }
-
-        /// <summary>Maps the given boolean value to either "1" or "0"</summary>
-        public static string MapToString(this bool value) { return (value ? "1" : "0"); }
-
-        /// <summary>Maps the given boolean value to either given trueStr or given falseStr</summary>
-        public static string MapToString(this bool value, string trueStr, string falseStr) { return (value ? trueStr : falseStr); }
-
-        /// <summary>Maps the given boolean value to an integer value of 1 for true and 0 for false</summary>
-        public static int MapToInt(this bool value) { return (value ? 1 : 0); }
 
 		#endregion
 

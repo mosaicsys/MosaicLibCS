@@ -191,6 +191,9 @@ namespace MosaicLib.Modular.Part
 
         /// <summary>returns true if either the UseState or the ConnState are not at their Undefined value.  Typically this means that the part has not be started or that it has not generated its initial value.</summary>
         bool IsDefined { get; }
+
+        /// <summary>Returns true if the given rhs is non-null and if the contents of this and the given rhs IBaseState are equal to each other.</summary>
+        bool IsEqualTo(IBaseState rhs);
 	}
 
 	/// <summary>
@@ -342,8 +345,8 @@ namespace MosaicLib.Modular.Part
 
 		private UseState useState;
 		private ConnState connState;
-		private QpcTimeStamp timeStamp;
         private string actionName;
+        private QpcTimeStamp timeStamp;
 
 		#endregion
 
@@ -376,6 +379,19 @@ namespace MosaicLib.Modular.Part
 
         /// <summary>returns true if either the UseState or the ConnState are not at their Undefined value.  Typically this means that the part has not be started or that it has not generated its initial value.</summary>
         public bool IsDefined { get { return (UseState != UseState.Undefined || ConnState != ConnState.Undefined); } }
+
+        /// <summary>Returns true if the given rhs is non-null and if the contents of this and the given rhs IBaseState are equal to each other.</summary>
+        public bool IsEqualTo(IBaseState rhs)
+        {
+            return (rhs != null
+                && IsSimulated == rhs.IsSimulated
+                && IsPrimaryPart == rhs.IsPrimaryPart
+                && UseState == rhs.UseState
+                && ConnState == rhs.ConnState
+                && ActionName == rhs.ActionName
+                && TimeStamp == rhs.TimeStamp
+                );
+        }
 
 		#endregion
 

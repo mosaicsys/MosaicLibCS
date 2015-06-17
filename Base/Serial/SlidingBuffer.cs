@@ -205,7 +205,10 @@ namespace MosaicLib.SerialIO
 
     #region SlidingPacketBuffer support types
 
-    /// <summary>Enum used to define various types of contents (or meanings) that a SlidingPacketBuffer Packet can contain/conveigh</summary>
+    /// <summary>
+    /// Enum used to define various types of contents (or meanings) that a SlidingPacketBuffer Packet can contain/conveigh.
+    /// <para/> Null = 0, None, Data, Whitespace, Flushed, Timeout, Error
+    /// </summary>
     public enum PacketType
     {
         /// <summary>Default constructor value</summary>
@@ -221,7 +224,7 @@ namespace MosaicLib.SerialIO
         /// <summary>packet contains partial data but no packet end pattern was found before packet accumulation time limit was reached.</summary>
 	    Timeout,
         /// <summary>packet contains an error code</summary>
-	    Error,			//!< packet data contains an error code.
+	    Error,
     };
 
     /// <summary>
@@ -255,8 +258,19 @@ namespace MosaicLib.SerialIO
         public PacketType Type { get; set; }
         /// <summary>Returns the Data content array for this Packet.  May be null if no data is assocaited with this Packet</summary>
         public byte[] Data { get { return data; } set { data = value; dataStr = null; } }
-        /// <summary>Contains the ErrorCode for property for any Packet.  Will return String.Empty whenever the internally stored copy of thie property is, or has been set to, null</summary>
-        public string ErrorCode { get { return (errorCode ?? String.Empty); } set { errorCode = value; } }
+
+        /// <summary>Contains the ErrorCode for property for any Packet.  Will return String.Empty whenever the internally stored copy of thie property is, or has been set to, null.  Setter will set Type to Error if it is Null</summary>
+        public string ErrorCode 
+        { 
+            get { return (errorCode ?? String.Empty); } 
+            set 
+            { 
+                errorCode = value;
+                if (Type == default(PacketType))
+                    Type = PacketType.Error;
+            }
+        }
+
         /// <summary>
         /// By default this get property generates, saves and, returns a Transcoded string version of the Data property.  
         /// This get property value is cached and will latch the first transcoded version until the Data property or the DataStr property is set to Null.
@@ -277,6 +291,10 @@ namespace MosaicLib.SerialIO
         public bool IsData { get { return (Type == PacketType.Data); } }
         /// <summary>Returns true if the type is PacketType.Data and the data array is non-null and non-empty</summary>
         public bool IsNonEmptyData { get { return (IsData && Data != null && Data.Length > 0); } }
+        /// <summary>Returns true if the type is PacketType.Data and the data array is null or empty</summary>
+        public bool IsEmptyData { get { return (IsData && (Data == null || Data.Length == 0)); } }
+        /// <summary>Returns true if the type is PacketType.Null or PacketType.None or the type is PacketType.Data and the data array is null or empty</summary>
+        public bool IsNullOrNoneOrEmptyData { get { return (IsNullOrNone || IsEmptyData); } }
         /// <summary>Returns true if the type is PacketType.Error or PacketType.Timeout</summary>
         public bool IsError { get { return (Type == PacketType.Error || Type == PacketType.Timeout); } }
 
@@ -353,7 +371,10 @@ namespace MosaicLib.SerialIO
     /// Gives the delegate the content count during the last call to the delegate.  
     /// This may be used to optimize out rescanning of early parts of the buffer.
     /// </param>
-    /// <returns>The length of the next packet to generate from the buffer or 0 to indicate that no packet is ready to be removed from the buffer yet.</returns>
+    /// <returns>
+    /// The length of the next packet to generate from the buffer or 0 to indicate that no packet is ready to be removed from the buffer yet.
+    /// A negative number indicates that the Math.Abs(given number) of characters should be removed from the buffer and handled as flushed bytes.
+    /// </returns>
     public delegate int PacketEndScannerDelegate(byte [] buffer, int startIdx, int currentContentCount, int lastScannedContentCount);
 
     #endregion
@@ -465,7 +486,7 @@ namespace MosaicLib.SerialIO
                 int bufferDataCount = BufferDataCount;
                 int nextPacketLen = scannerDelegate(buffer, getIdx, bufferDataCount, lastScannedContentCount);
 
-                if (nextPacketLen <= 0)
+                if (nextPacketLen == 0)
                 {
                     lastScannedContentCount = bufferDataCount;
                     break;
@@ -476,10 +497,17 @@ namespace MosaicLib.SerialIO
                     foundPacket = true;
 
                     int dataCopyStartIdx = getIdx;
-                    int dataCopyLen = nextPacketLen;
+                    bool isFlushedData = (nextPacketLen < 0);
 
-                    bool isWhitespace = (dataCopyLen == 0);
-                    if (StripWhitespace)
+                    nextPacketLen = Math.Abs(nextPacketLen);
+                    int dataCopyLen = Math.Min(bufferDataCount, nextPacketLen);
+
+                    bool isWhitespace = false;
+                    if (isFlushedData)
+                    {
+                        // we do not strip whitespace from flushed data.
+                    }
+                    else if (StripWhitespace)
                     {
                         while (dataCopyLen > 0)
                         {
@@ -513,7 +541,11 @@ namespace MosaicLib.SerialIO
                     // extract bytes from buffer and append into new packet
                     if (!isWhitespace || !DiscardWhitespacePackets)
                     {
-                        Packet p = new Packet((!isWhitespace ? PacketType.Data : PacketType.WhiteSpace), new byte[dataCopyLen]);
+                        Packet p;
+                        if (!isFlushedData)
+                            p = new Packet((!isWhitespace ? PacketType.Data : PacketType.WhiteSpace), new byte[dataCopyLen]);
+                        else
+                            p = new Packet(PacketType.Flushed, new byte[dataCopyLen]);
 
                         if (dataCopyLen > 0)
                             System.Buffer.BlockCopy(buffer, dataCopyStartIdx, p.Data, 0, dataCopyLen);

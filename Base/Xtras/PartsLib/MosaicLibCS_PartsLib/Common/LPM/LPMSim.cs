@@ -199,6 +199,32 @@ namespace MosaicLib.PartsLib.Common.LPM.Sim
 
             return this;
         }
+
+        public bool IsEqualTo(LPMSimPartConfigBase rhs)
+        {
+            return (LPMName == rhs.LPMName
+                    && Type == rhs.Type
+                    && PortSpecStr == rhs.PortSpecStr
+                    && PersistDirPathStr == rhs.PersistDirPathStr
+                    && Mapper_Installed == rhs.Mapper_Installed
+                    && E84_1_Installed == rhs.E84_1_Installed
+                    && E84_2_Installed == rhs.E84_2_Installed
+                    && IntegratedRFID_Type == rhs.IntegratedRFID_Type
+                    && SeperateRFID_Type == rhs.SeperateRFID_Type
+                    && ResetInputsOnStart == rhs.ResetInputsOnStart
+                    && ResetPositionOnStart == rhs.ResetPositionOnStart
+                    && ResetE84OnStart == rhs.ResetE84OnStart
+                    && UseFastMotion == rhs.UseFastMotion
+                    && VacuumOnMotionTime == rhs.VacuumOnMotionTime
+                    && VacuumOffMotionTime == rhs.VacuumOffMotionTime
+                    && ClampMotionTime == rhs.ClampMotionTime
+                    && TBarMotionTime == rhs.TBarMotionTime
+                    && MidMotionTime == rhs.MidMotionTime
+                    && LongMotionTime == rhs.LongMotionTime
+                    && MapResultPattern.IsEqualTo(rhs.MapResultPattern)
+                    && CarrierTypeSpec.IsEqualTo(rhs.CarrierTypeSpec)
+                    );
+        }
     }
 
     public enum LPType : int
@@ -269,6 +295,11 @@ namespace MosaicLib.PartsLib.Common.LPM.Sim
             ConfigValueSetAdapter<LPMSimConfigSetAndArrayItems> adapter = new ConfigValueSetAdapter<LPMSimConfigSetAndArrayItems>() { ValueSet = this, SetupIssueEmitter = issueEmitter, UpdateIssueEmitter = issueEmitter, ValueNoteEmitter = valueEmitter }.Setup(prefixStr);
 
             return this;
+        }
+
+        internal bool IsEqualTo(LPMSimConfigSetAndArrayItems rhs)
+        {
+            return ItemsAsArray.IsEqualTo(rhs.ItemsAsArray);
         }
     }
 
@@ -353,6 +384,23 @@ namespace MosaicLib.PartsLib.Common.LPM.Sim
         public Int32 CycleCount { get; set; }
 
         public Double CmdRateHz { get; set; }
+
+        public bool IsEqualTo(State rhs)
+        {
+            return (PersistedVersionSequenceNumber == rhs.PersistedVersionSequenceNumber
+                    && LPMName == rhs.LPMName
+                    && Config.IsEqualTo(rhs.Config)
+                    && PDODeviceTypeStr == rhs.PDODeviceTypeStr
+                    && Connected == rhs.Connected
+                    && SelectedSettings.IsEqualTo(rhs.SelectedSettings)
+                    && InputsState.IsEqualTo(rhs.InputsState)
+                    && OutputsState.IsEqualTo(rhs.OutputsState)
+                    && PositionState.IsEqualTo(rhs.PositionState)
+                    && DisplayState.IsEqualTo(rhs.DisplayState)
+                    && CycleCount == rhs.CycleCount
+                    && CmdRateHz == rhs.CmdRateHz
+                    );
+        }
     }
 
     [DataContract]
@@ -490,6 +538,24 @@ namespace MosaicLib.PartsLib.Common.LPM.Sim
 
         private bool lightCurtainBeamBroken = false;
         private ActiveToPassivePinsState e84_oht_InputBits, e84_agv_InputBits;
+
+        internal bool IsEqualTo(InputsState rhs)
+        {
+            return (PodPresenceSensorState.IsEqualTo(rhs.PodPresenceSensorState)
+                    && InfoPads == rhs.InfoPads
+                    && Button1Input == rhs.Button1Input
+                    && Button2Input == rhs.Button2Input
+                    && Button3Input == rhs.Button3Input
+                    && Button4Input == rhs.Button4Input
+                    && WaferProtrusionSensed == rhs.WaferProtrusionSensed
+                    && LightCurtainBeamBroken == rhs.LightCurtainBeamBroken
+                    && PinchSensorTripped == rhs.PinchSensorTripped
+                    && CDAHasFailed == rhs.CDAHasFailed
+                    && VacHasFailed == rhs.VacHasFailed
+                    && E84_OHT_InputBits.IsEqualTo(rhs.E84_OHT_InputBits)
+                    && E84_AGV_InputBits.IsEqualTo(rhs.E84_AGV_InputBits)
+                    );
+        }
     }
 
     [DataContract]
@@ -554,6 +620,13 @@ namespace MosaicLib.PartsLib.Common.LPM.Sim
         public PassiveToActivePinsState E84_AGV_OutputBits { get; set; }
 
         public IPassiveToActivePinsState GetE84OutputBits(PIOSelect pioSelect) { return ((pioSelect == PIOSelect.OHT) ? E84_OHT_OutputBits : E84_AGV_OutputBits); }
+
+        public bool IsEqualTo(OutputsState rhs)
+        {
+            return (E84_OHT_OutputBits.IsEqualTo(rhs.E84_OHT_OutputBits)
+                    && E84_AGV_OutputBits.IsEqualTo(rhs.E84_AGV_OutputBits)
+                    );
+        }
     }
 
     [DataContract]
@@ -591,6 +664,19 @@ namespace MosaicLib.PartsLib.Common.LPM.Sim
         public ActuatorState DoorOpenState { get; set; }
         [DataMember]
         public ActuatorState DoorDownState { get; set; }
+
+        public bool IsEqualTo(PositionState rhs)
+        {
+            return (rhs != null
+                    && ClampState.IsEqualTo(rhs.ClampState)
+                    && DockState.IsEqualTo(rhs.DockState)
+                    && VacState.IsEqualTo(rhs.VacState)
+                    && DoorKeysState.IsEqualTo(rhs.DoorKeysState)
+                    && DoorOpenState.IsEqualTo(rhs.DoorOpenState)
+                    && DoorDownState.IsEqualTo(rhs.DoorDownState)
+                    );
+        }
+
 
         public bool IsInMotion
         {
@@ -676,6 +762,14 @@ namespace MosaicLib.PartsLib.Common.LPM.Sim
         public DisplayItemState[] ButtonItemArray { get; set; }
         [DataMember]
         public DisplayItemState[] PanelItemArray { get; set; }
+
+        public bool IsEqualTo(DisplayState rhs)
+        {
+            return (rhs != null
+                    && ButtonItemArray.IsEqualTo(rhs.ButtonItemArray)
+                    && PanelItemArray.IsEqualTo(rhs.PanelItemArray)
+                    );
+        }
 
         public override int GetHashCode() { return base.GetHashCode(); }
 

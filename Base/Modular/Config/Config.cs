@@ -876,6 +876,8 @@ namespace MosaicLib.Modular.Config
         /// </summary>
         protected virtual IConfigKeyAccess TryGetConfigKeyAccess(string methodName, IConfigKeyAccessSpec keyAccessSpec)
         {
+            methodName = methodName + " [TryGetCKA]";
+
             keyAccessSpec = keyAccessSpec ?? emptyKeyAccessSpec;
             ConfigKeyAccessFlags flags = keyAccessSpec.Flags;
             string key = keyAccessSpec.Key;
@@ -884,7 +886,6 @@ namespace MosaicLib.Modular.Config
             {
                 IConfigKeyAccess icka = null;
                 bool tryUpdate = false;
-                Logging.IMesgEmitter issueEmitter = (flags.IsRequired ? IssueEmitter : Logger.Debug);
 
                 lock (mutex)
                 {
@@ -933,7 +934,7 @@ namespace MosaicLib.Modular.Config
                             icka = new ConfigKeyAccessImpl(key, flags, this, null) { ProviderFlags = new ConfigKeyProviderFlags() { KeyWasNotFound = true } };
 
                             if (!flags.SilenceIssues && !flags.IsOptional)
-                                issueEmitter.Emit("{0}: {1}", methodName, icka.ResultCode);
+                                Trace.Trace.Emit("{0}: {1}", methodName, icka.ResultCode);
                         }
                     }
                 }
@@ -945,7 +946,7 @@ namespace MosaicLib.Modular.Config
                 eeTrace.ExtraMessage = ickaAsStr;
 
                 if (icka.IsUsable)
-                    Logger.Debug.Emit("{0}: gave {1}", methodName, ickaAsStr);
+                    Trace.Trace.Emit("{0}: gave {1}", methodName, ickaAsStr);
 
                 return icka;
             }

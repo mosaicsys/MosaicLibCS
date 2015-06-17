@@ -581,7 +581,7 @@ namespace MosaicLib.PartsLib.Protocols.HART
             portConfig = new SerialIO.PortConfig(name + ".sp", targetSpecStr, MosaicLib.SerialIO.LineTerm.None)
             {
                 EnableAutoReconnect = autoConnect,
-                SpinWaitTimeLimit = TimeSpan.FromSeconds(0.001),
+                // SpinWaitTimeLimit = TimeSpan.FromSeconds(0.001),
                 TraceDataLoggerGroupID = Logging.LookupDistributionGroupName,       // support mapping of this logger into a non-default group.
                 TraceDataMesgType = Logging.MesgType.Trace,
                 TraceMesgType = Logging.MesgType.Trace,

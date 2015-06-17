@@ -240,7 +240,7 @@ namespace MosaicLib.SerialIO
 
         /// <summary>
         /// Base delegate method used to implement an IGetNextPacketAction.  
-        /// If the port has a sliding buffer then the method obtains the next packet from the sliding buffer and sets the action result to contain it.
+        /// If the port has a sliding buffer then the method obtains the next packet (or null if there none) from the sliding buffer and sets the action result to contain it.
         /// If the port does not have a sliding buffer then the action fails with an appropriate error message.
         /// </summary>
         protected void PerformGetNextPacket(IProviderActionBase<NullObj, Packet> action, out string resultCode)
@@ -545,12 +545,17 @@ namespace MosaicLib.SerialIO
 			}
 		}
 
+        private const bool notifyBaseStateOnAllChangesInNumberOfPacketsAvailable = false;
+
         private void UpdateNumberOfPacketsAvailable(int numberOfPacketsAvailable)
         {
             if (volatileNumberOfPacketsAvailable != numberOfPacketsAvailable)
             {
+                bool valueIncreased = (volatileNumberOfPacketsAvailable > numberOfPacketsAvailable);
                 volatileNumberOfPacketsAvailable = numberOfPacketsAvailable;
-                NotifyBaseStateNotifier();
+
+                if (valueIncreased || notifyBaseStateOnAllChangesInNumberOfPacketsAvailable)
+                    NotifyBaseStateNotifier();
             }
         }
 
@@ -684,17 +689,19 @@ namespace MosaicLib.SerialIO
             // flush the sliding buffer first.
             if (HasSlidingBuffer && (slidingPacketBuffer.BufferDataCount > 0))
             {
+                // first extract and record the set of flushed packets from the sliding buffer.
                 for (; ; )
                 {
                     slidingPacketBuffer.Service();
                     UpdateNumberOfPacketsAvailable(Math.Max(0, slidingPacketBuffer.NumPacketsReady - 1));
                     Packet p = slidingPacketBuffer.GetNextPacket();
-                    if (p != null)
+                    if (p != null && !p.IsNullOrNoneOrEmptyData)
                         GenerateDataTrace(actionName + " " + p.Type.ToString(), String.Empty, p.Data, 0, p.Data.Length);
                     else
                         break;
                 }
 
+                // then flush any remaining data from the buffer.
                 if (slidingPacketBuffer.BufferDataCount > 0)
                 {
                     byte[] buffer;

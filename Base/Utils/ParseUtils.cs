@@ -43,6 +43,10 @@ namespace MosaicLib.Utils
         SimpleFilePath,
         /// <summary>span numeric and letters 'a'-'f' and 'A'-'F'</summary>
         HexDigits,
+        /// <summary>span sequence of numeric digits</summary>
+        NumericDigits,
+        /// <summary>span a sequence of numeric digits, '.', '-', '+', 'e' and 'E'</summary>
+        NumericFloatDigits,
     }
 
     /// <summary>
@@ -164,6 +168,8 @@ namespace MosaicLib.Utils
                 case TokenType.SimpleFileName: return (Char.IsLetterOrDigit(c) || c == '-' || c == '_' || c == '.');
                 case TokenType.SimpleFilePath: return (Char.IsLetterOrDigit(c) || c == '-' || c == '_' || c == '.' || c == '\\' || c == '/' || c == ':');
                 case TokenType.HexDigits: return (Char.IsDigit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'));
+                case TokenType.NumericDigits: return (Char.IsDigit(c));
+                case TokenType.NumericFloatDigits: return (Char.IsDigit(c) || c == '-' || c == '.' || c == '+' || c == 'e' || c == 'E');
                 default: return false;
             }
         }
@@ -181,6 +187,8 @@ namespace MosaicLib.Utils
                 case TokenType.SimpleFileName: return (Char.IsWhiteSpace(c));
                 case TokenType.SimpleFilePath: return (Char.IsWhiteSpace(c));
                 case TokenType.HexDigits: return Char.IsWhiteSpace(c);
+                case TokenType.NumericDigits: return Char.IsWhiteSpace(c);
+                case TokenType.NumericFloatDigits: return Char.IsWhiteSpace(c);
                 default: return false;
             }
         }
@@ -617,7 +625,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Extracts a TokenType.SimpleFileName token and parses it using the static Double ParseValue method which generally attempts to covert the token to a Double value using the
+        /// Extracts a TokenType.ToNextWhiteSpace token and parses it using the static Double ParseValue method which generally attempts to covert the token to a Double value using the
         /// Double.TryParse method.
         /// SkipLeadingWhiteSpace, SkipTrailingWhiteSpace, RequireTokenEnd
         /// </summary>
@@ -629,7 +637,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Extracts a TokenType.SimpleFileName token and parses it using the static Double ParseValue method which generally attempts to covert the token to a Double value using the
+        /// Extracts a TokenType.ToNextWhiteSpace or TokenType.NumericFloatDigits (based on skipTrailingWhiteSpace value) token and parses it using the static Double ParseValue method which generally attempts to covert the token to a Double value using the
         /// Double.TryParse method.
         /// SkipLeadingWhiteSpace, RequireTokenEnd
         /// </summary>
@@ -640,7 +648,7 @@ namespace MosaicLib.Utils
         {
             StringScanner localScanner = this;
             string token;
-            bool success = localScanner.ExtractToken(out token, TokenType.SimpleFileName, true, skipTrailingWhiteSpace, false);
+            bool success = localScanner.ExtractToken(out token, (skipTrailingWhiteSpace ? TokenType.ToNextWhiteSpace : TokenType.NumericFloatDigits), true, skipTrailingWhiteSpace, false);
             success = ParseValue(token, out value) && success;
 
             if (success)

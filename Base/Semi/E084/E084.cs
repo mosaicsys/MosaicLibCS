@@ -199,7 +199,7 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
 		bool HO_AVBL { get; }
 
 		///<summary>ES (emergency stop) - Please see E084 standard for details on specific meaning of this signal.  External actors are required to halt motion immediately when this signal is not active.</summary>
-		///<remarks>NOTE: This signal is active (current flowing) whne motion is permitted.</remarks>
+		///<remarks>NOTE: This signal is active (current flowing) when motion is permitted.</remarks>
 		bool ES { get; }
 	}
 	
@@ -223,14 +223,21 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
         }
 
         /// <summary>
+        /// Returns true if the given pair of objects have the identical contents
+        /// </summary>
+        public bool IsEqualTo(IActiveToPassivePinsState rhs)
+        {
+            return (rhs != null && IFaceName == rhs.IFaceName && PackedWord == rhs.PackedWord);
+        }
+
+        /// <summary>
         /// Compares this object against the rhs to determine if they are both of the same type and, if so, if they have the same contents.
         /// </summary>
         /// <param name="rhsAsObject">defines the object against which this one will be compared.</param>
         /// <returns>true if both objects contain the same values, false if rhsAsObject is null, is not of this type or has different contents</returns>
         public override bool Equals(object rhsAsObject)
 		{
-			IActiveToPassivePinsState rhs = rhsAsObject as IActiveToPassivePinsState;
-            return ((rhs != null) ? (rhs.PackedWord == PackedWord) : false);
+            return IsEqualTo(rhsAsObject as IActiveToPassivePinsState);
 		}
 
         /// <summary>
@@ -352,14 +359,21 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
         }
 
         /// <summary>
+        /// Returns true if the given pair of objects have the identical contents
+        /// </summary>
+        public bool IsEqualTo(IPassiveToActivePinsState rhs)
+        {
+            return (rhs != null && IFaceName == rhs.IFaceName && PackedWord == rhs.PackedWord);
+        }
+
+        /// <summary>
         /// Compares this object against the rhs to determine if they are both of the same type and, if so, if they have the same contents.
         /// </summary>
         /// <param name="rhsAsObject">defines the object against which this one will be compared.</param>
         /// <returns>true if both objects contain the same values, false if rhsAsObject is null, is not of this type or has different contents</returns>
         public override bool Equals(object rhsAsObject)
 		{
-			IPassiveToActivePinsState rhs = rhsAsObject as IPassiveToActivePinsState;
-            return ((rhs != null) ? (rhs.PackedWord == PackedWord) : false);
+            return IsEqualTo(rhsAsObject as IPassiveToActivePinsState);
 		}
 
         /// <summary>
@@ -467,7 +481,7 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
         public bool HO_AVBL { get; set; }
 
 		///<summary>ES (emergency stop) - Please see E084 standard for details on specific meaning of this signal.  External actors are required to halt motion immediately when this signal is not active.</summary>
-		///<remarks>NOTE: This signal is active (current flowing) whne motion is permitted.</remarks>
+		///<remarks>NOTE: This signal is active (current flowing) when motion is permitted.</remarks>
         public bool ES { get; set; }
 	};
 

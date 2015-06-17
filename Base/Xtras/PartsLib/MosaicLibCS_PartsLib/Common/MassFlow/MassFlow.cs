@@ -19,11 +19,14 @@
  */
 //-------------------------------------------------------------------
 
+using System;
+
 namespace MosaicLib.PartsLib.Common.MassFlow
 {
     public enum MassFlowUnits
     {
         Undefined = 0,
+        None,
         percent,
         sccm,
         slm,
@@ -32,6 +35,7 @@ namespace MosaicLib.PartsLib.Common.MassFlow
     public enum PressureUnits
     {
         Undefined = 0,
+        None,
         PSI,
         Bar,
         MilliBar,
@@ -44,35 +48,49 @@ namespace MosaicLib.PartsLib.Common.MassFlow
     public enum TemperatureUnits
     {
         Undefined = 0,
+        None,
         DegC,
         DegK,
         DegF,
     }
 
+    [Obsolete("This interface has not been implemented and may eventually be removed (2015-05-08)")]
     public interface IMassFlowValue
     {
         double Value { get; }
         MassFlowUnits Units { get; }
     }
 
+    [Obsolete("This interface has not been implemented and may eventually be removed (2015-05-08)")]
     public interface IPressureValue
     {
         double Value { get; }
         PressureUnits Units { get; }
     }
 
+    [Obsolete("This interface has not been implemented and may eventually be removed (2015-05-08)")]
     public interface ITemperatureValue
     {
         double Value { get; }
         TemperatureUnits Units { get; }
     }
 
+    /// <summary>
+    /// A list of possible control modes for Mass Flow type devices.  Not all devices support all modes.
+    /// </summary>
     public enum MassFlowControlMode
     {
-        NoFlow = 0,             // control regulator is set fully closed
-        FullFlow,               // control regulator is set fully open - often used for purge flow
-        ControlFlow,            // control regulator is set to control flow
+        None = 0,
+        Normal = 1,
+        Closed = 2,
+        Open = 3,
+
+        ControlFlow = Normal,            // control regulator is set to control flow
+        NoFlow = Closed,             // control regulator is set fully closed
+        FullFlow = Open,               // control regulator is set fully open - often used for purge flow
         ControlPressure,        // control regulator is set to control pressure
+        ControlValve,           // 
+        Lock,                 // control regulator stops accepting new setpoints locks at current setpoint mode.
     }
 }
 

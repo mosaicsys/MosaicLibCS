@@ -149,6 +149,7 @@ namespace MosaicLib.Modular.Reflection
         /// <summary>
         /// Defines which public properties and/or fields are included in the ValueSet representation 
         /// As a flag enum, user may combine enum values using the or operator "|"
+        /// <para/>None = 0, IncludeExplicitPublicItems, IncludeAllPublicProperties, IncludeAllPublicFields, IncludeExplicitItems
         /// </summary>
         [Flags]
         public enum ItemSelection
@@ -163,6 +164,12 @@ namespace MosaicLib.Modular.Reflection
             IncludeAllPublicFields = 0x04,
             /// <summary>items include all fields or properties that carry an Attrirbute.Item attribute.</summary>
             IncludeExplicitItems = 0x08,
+            /// <summary>
+            /// This value must be combined with other values.  
+            /// When included it selects that inherited properties and fields should be considered in addition to declared ones.
+            /// When not included (the default), only declared properties and fields are considered.
+            /// </summary>
+            IncludeInheritedItems = 0x10,
         }
 
         /// <summary>
@@ -363,14 +370,20 @@ namespace MosaicLib.Modular.Reflection
 
                 object[] attribArray = null;
 
-                bool includeExplicitItems = ((itemSelection & ItemSelection.IncludeExplicitItems) != ItemSelection.None);
-                bool includeExplicitPublicItems = ((itemSelection & (ItemSelection.IncludeExplicitPublicItems | ItemSelection.IncludeExplicitItems)) != ItemSelection.None);
-                bool includeAllPublicProperties = ((itemSelection & ItemSelection.IncludeAllPublicProperties) != ItemSelection.None);
-                bool includeAllPublicFields = ((itemSelection & ItemSelection.IncludeAllPublicFields) != ItemSelection.None);
+                bool includeExplicitItems = ((itemSelection & ItemSelection.IncludeExplicitItems) != default(ItemSelection));
+                bool includeExplicitPublicItems = ((itemSelection & (ItemSelection.IncludeExplicitPublicItems | ItemSelection.IncludeExplicitItems)) != default(ItemSelection));
+                bool includeAllPublicProperties = ((itemSelection & ItemSelection.IncludeAllPublicProperties) != default(ItemSelection));
+                bool includeAllPublicFields = ((itemSelection & ItemSelection.IncludeAllPublicFields) != default(ItemSelection));
+                bool includeInheritedItems = ((itemSelection & ItemSelection.IncludeInheritedItems) != default(ItemSelection));
 
                 List<ItemInfo<TItemAttribute>> itemAccessInfoList = new List<ItemInfo<TItemAttribute>>();
 
-                PropertyInfo[] piSet = annotatedClassType.GetProperties(BindingFlags.DeclaredOnly | BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                BindingFlags bindingFlags = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
+
+                if (!includeInheritedItems)
+                    bindingFlags |= BindingFlags.DeclaredOnly;
+
+                PropertyInfo[] piSet = annotatedClassType.GetProperties(bindingFlags);
 
                 foreach (PropertyInfo pi in piSet)
                 {

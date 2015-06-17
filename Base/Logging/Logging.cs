@@ -1311,7 +1311,7 @@ namespace MosaicLib
             /// <summary>Debugging helper method</summary>
             public override string ToString()
             {
-                return Utils.Fcns.CheckedFormat("LoggerEmitter {0} {1}{2}", MesgType, Logger.Name, (CollectStackFrames ? " CollectsStackFrams" : String.Empty));
+                return Utils.Fcns.CheckedFormat("LoggerEmitter {0} {1}{2}", MesgType, Logger.Name, (CollectStackFrames ? " CollectsStackFrames" : String.Empty));
             }
 
 			#region IMesgEmitter Members

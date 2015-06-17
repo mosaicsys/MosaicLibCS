@@ -153,6 +153,7 @@ namespace MosaicLib.Modular.Part
         /// <summary>
         /// Constructor variant: caller provides PartID.
         /// PartType will be automatically derived from the class name of the derived type
+        /// <para/>PartID: use given value, PartType: use declaring class name (by reflection), WaitTimeLimit: 0.1 sec, enableQueue:true, queueSize:10
         /// </summary>
         /// <param name="partID">Gives the PartID/Name that the part will report and use.</param>
         public SimpleActivePartBase(string partID) 
@@ -162,6 +163,7 @@ namespace MosaicLib.Modular.Part
         /// <summary>
         /// Constructor variant: caller provides PartID and nominal Service loop WaitTimeLimit
         /// PartType will be automatically derived from the class name of the derived type
+        /// <para/>PartID: use given value, PartType: use declaring class name (by reflection), WaitTimeLimit: use given value, enableQueue:true, queueSize:10
         /// </summary>
         /// <param name="partID">Gives the PartID/Name that the part will report and use.</param>
         /// <param name="waitTimeLimit">Defines the nominal maximum period that the part's outer main thread loop will wait for the next notify occurrance.  Sets the default "spin" rate for the part.</param>
@@ -172,6 +174,7 @@ namespace MosaicLib.Modular.Part
         /// <summary>
         /// Constructor variant: caller provides PartID, nominal Service loop WaitTimeLimit, initial queue enable, and maximum queue size.
         /// PartType will be automatically derived from the class name of the derived type
+        /// <para/>PartID: use given value, PartType: use declaring class name (by reflection), WaitTimeLimit: use given value, enableQueue:use given value, queueSize:use given value
         /// </summary>
         /// <param name="partID">Gives the PartID/Name that the part will report and use.</param>
         /// <param name="waitTimeLimit">Defines the nominal maximum period that the part's outer main thread loop will wait for the next notify occurrance.  Sets the default "spin" rate for the part.</param>
@@ -181,14 +184,20 @@ namespace MosaicLib.Modular.Part
             : this(partID, new System.Diagnostics.StackFrame(1).GetMethod().DeclaringType.ToString(), waitTimeLimit, enableQueue, queueSize)
         {}
 
-        /// <summary>Constructor variant: caller provides PartID and PartType</summary>
+        /// <summary>
+        /// Constructor variant: caller provides PartID and PartType
+        /// <para/>PartID: use given value, PartType: use given value, WaitTimeLimit: 0.1 sec, enableQueue:true, queueSize:10
+        /// </summary>
         /// <param name="partID">Gives the PartID/Name that the part will report and use.</param>
         /// <param name="partType">Gives the PartType that this part will report</param>
         public SimpleActivePartBase(string partID, string partType) 
             : this(partID, partType, TimeSpan.FromSeconds(0.1), true, 10) 
         {}
 
-        /// <summary>Constructor variant: caller provides PartID, PartType and nominal Service loop WaitTimeLimit</summary>
+        /// <summary>
+        /// Constructor variant: caller provides PartID, PartType and nominal Service loop WaitTimeLimit
+        /// <para/>PartID: use given value, PartType: use given value, WaitTimeLimit: use given value, enableQueue:true, queueSize:10
+        /// </summary>
         /// <param name="partID">Gives the PartID/Name that the part will report and use.</param>
         /// <param name="partType">Gives the PartType that this part will report</param>
         /// <param name="waitTimeLimit">Defines the nominal maximum period that the part's outer main thread loop will wait for the next notify occurrance.  Sets the default "spin" rate for the part.</param>
@@ -603,7 +612,7 @@ namespace MosaicLib.Modular.Part
         /// <summary>Returns the IActionState for the current action that the Part's main service loop is currently in IssueAndInvokeAction on, or an Initial/Empty IActionState if there is no such action.</summary>
         protected IActionState CurrentActionState { get { return ((CurrentAction != null) ? CurrentAction.ActionState : EmptyActionState); } }
 
-        /// <summary>Contains the ActinState that is used for the CurrentActionState when there is no CurrentAction.</summary>
+        /// <summary>Contains the ActionState that is used for the CurrentActionState when there is no CurrentAction.</summary>
         protected readonly IActionState EmptyActionState = new ActionStateCopy();
 
         /// <summary>Requests to cancel the CurrentAction if it is non null and its state IsPendingCompletion</summary>

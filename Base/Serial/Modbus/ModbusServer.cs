@@ -360,7 +360,7 @@ namespace MosaicLib.SerialIO.Modbus.Server
 
         #endregion
 
-        #region
+        #region implementation methods
 
         /// <summary>Get/Set property defines the maximum time between the arrival of the first byte of a Modbus request and the completion of the reception of the entire request.</summary>
         public TimeSpan Timeout { get; set; }

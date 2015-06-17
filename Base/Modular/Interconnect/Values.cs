@@ -72,19 +72,51 @@ namespace MosaicLib.Modular.Interconnect.Values
         string[] ValueNamesArray { get; }
 
         /// <summary>
+        /// Returns a subset list of the overarll ValueNamesArray.  Allows the caller to get names that have been added since they last obtained a full array.
+        /// If maxNumItems is passed as zero then the full set of names starting at the given startIdx will be returned.
+        /// </summary>
+        string [] GetValueNamesRange(int startIdx, int maxNumItems);
+
+        /// <summary>Provides a property that returns the current total number of named values in this values interconnect table space</summary>
+        int ValueNamesArrayLength { get; }
+
+        /// <summary>
         /// This method is used to Set the table entry values for an array of IValueAdapter instances.  
         /// This arrayed set operation is performed atomically across all of the table entries referred to by the non-null adapters in the array.
         /// The optimize flag indicates if the caller would like all accessors to be set or just those that have their IsSetPending flag set.
         /// <para/>This method is specifically intended for use by ValueSetAdapter instances.
         /// </summary>
-        void Set(IValueAccessor[] adapterArray, bool optimize);
+        /// <param name="accessorArray">Gives an array of items.  Only non-null items will be Set.</param>
+        /// <param name="optimize">When false all accessors will have their current value pushed into the corresonding table entries.  When true, only accessors that have their IsSetPending property true will have their value pushed in to the corresponding table entries</param>
+        void Set(IValueAccessor[] accessorArray, bool optimize);
+
+        /// <summary>
+        /// This method is used to Set the table entry values for a portion of an array of IValueAdapter instances.  
+        /// This arrayed set operation is performed atomically across all of the table entries referred to by the non-null adapters in the array.
+        /// The optimize flag indicates if the caller would like all accessors to be set or just those that have their IsSetPending flag set.
+        /// <para/>This method is specifically intended for use by ValueSetAdapter instances.
+        /// </summary>
+        /// <param name="accessorArray">Gives an array of items.  Only non-null items will be Set.</param>
+        /// <param name="numEntriesToSet">Limits how much of the array will be used.  Maximum index of itesm that are looked at will be &lt; this value.</param>
+        /// <param name="optimize">When false all accessors will have their current value pushed into the corresonding table entries.  When true, only accessors that have their IsSetPending property true will have their value pushed in to the corresponding table entries</param>
+        void Set(IValueAccessor[] accessorArray, int numEntriesToSet, bool optimize);
 
         /// <summary>
         /// This method is used to Update a set/array of IValueAdapter instances from the corresponding set of interconnection table entry values.  
         /// This arrayed update operation is performed atomically across all of the table entries referred to by the non-null adapters in the array.
         /// <para/>This method is specifically intended for use by ValueSetAdapter instances.
         /// </summary>
-        void Update(IValueAccessor[] adapterArray);
+        /// <param name="accessorArray">Gives an array of items.  Only non-null items will be Updated.</param>
+        void Update(IValueAccessor[] accessorArray);
+
+        /// <summary>
+        /// This method is used to Update a set/array of IValueAdapter instances from the corresponding set of interconnection table entry values.  
+        /// This arrayed update operation is performed atomically across the table entries referred to by the non-null adapters in the array up to the given maximum item index to update.
+        /// <para/>This method is specifically intended for use by Custom update scanner instances.
+        /// </summary>
+        /// <param name="accessorArray">Gives an array of items.  Only non-null items will be Updated.</param>
+        /// <param name="numEntriesToUpdate">Limits how much of the array will be used.  Maximum index of itesm that are looked at will be &lt; this value.</param>
+        void Update(IValueAccessor[] accessorArray, int numEntriesToUpdate);
 
         /// <summary>Provides an IBasicNotificationList instance that will be Notified after each Set operation has been completed.</summary>
         IBasicNotificationList NotificationList { get; }
@@ -270,7 +302,42 @@ namespace MosaicLib.Modular.Interconnect.Values
         }
 
         /// <summary>Returns an array of the names of all of the values in this interconnection table instance.</summary>
-        public string[] ValueNamesArray { get { return tableItemNamesList.Array; } }
+        public string[] ValueNamesArray 
+        { 
+            get 
+            {
+                return GetValueNamesRange(0, 0);
+            } 
+        }
+
+        /// <summary>
+        /// Returns a subset list of the overarll ValueNamesArray.  Allows the caller to get names that have been added since they last obtained a full array.
+        /// If maxNumItems is passed as zero then the full set of names starting at the given startIdx will be returned.
+        /// </summary>
+        public string [] GetValueNamesRange(int startIdx, int maxNumItems)
+        {
+            lock (mutex)
+            {
+                int numItems = Math.Max(0, tableItemNamesList.Count - startIdx);
+                if (numItems > maxNumItems && maxNumItems > 0)
+                    numItems = maxNumItems;
+
+                if (numItems > 0 && startIdx >= 0)
+                    return tableItemNamesList.GetRange(startIdx, numItems).ToArray();
+                else
+                    return emptyStringArray;
+            }
+        }
+
+        private static readonly string[] emptyStringArray = new string[0];
+
+        /// <summary>
+        /// Provides a property that returns the current total number of named values in this values interconnect table space.
+        /// <para/>Please note:  this value is updated after items have actually been added to the array.  
+        /// It is possible that this value will be smaller than the ValueNamesArray length for a brief period of time while another thread is adding a new value accessor.
+        /// </summary>
+        public int ValueNamesArrayLength { get { return volatileTableItemNamesListCount; } }
+
 
         /// <summary>
         /// This method is used internally by IValueAccessor instances to lock the table space and set the corresponding table entry from the calling/given IValueAccessor instance.
@@ -293,12 +360,35 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// The optimize flag indicates if the caller would like all accessors to be set or just those that have their IsSetPending flag set.
         /// <para/>This method is specifically intended for use by ValueSetAdapter instances.
         /// </summary>
+        /// <param name="accessorArray">Gives an array of items.  Only non-null items will be Set.</param>
+        /// <param name="optimize">When false all accessors will have their current value pushed into the corresonding table entries.  When true, only accessors that have their IsSetPending property true will have their value pushed in to the corresponding table entries</param>
         public void Set(IValueAccessor[] accessorArray, bool optimize)
         {
+            accessorArray = accessorArray ?? emptyValueAccessorArray;
+
+            Set(accessorArray, accessorArray.Length, optimize);
+        }
+
+        /// <summary>
+        /// This method is used to Set the table entry values for a portion of an array of IValueAdapter instances.  
+        /// This arrayed set operation is performed atomically across all of the table entries referred to by the non-null adapters in the array.
+        /// The optimize flag indicates if the caller would like all accessors to be set or just those that have their IsSetPending flag set.
+        /// <para/>This method is specifically intended for use by ValueSetAdapter instances.
+        /// </summary>
+        /// <param name="accessorArray">Gives an array of items.  Only non-null items will be Set.</param>
+        /// <param name="numEntriesToSet">Limits how much of the array will be used.  Maximum index of itesm that are looked at will be &lt; this value.</param>
+        /// <param name="optimize">When false all accessors will have their current value pushed into the corresonding table entries.  When true, only accessors that have their IsSetPending property true will have their value pushed in to the corresponding table entries</param>
+        public void Set(IValueAccessor[] accessorArray, int numEntriesToSet, bool optimize)
+        {
+            accessorArray = accessorArray ?? emptyValueAccessorArray;
+            numEntriesToSet = Math.Min(numEntriesToSet, accessorArray.Length);
+
             lock (mutex)
             {
-                foreach (IValueAccessor accessor in accessorArray ?? emptyValueAccessorArray)
+                for (int idx = 0; idx < numEntriesToSet; idx++)
                 {
+                    IValueAccessor accessor = accessorArray[idx];
+
                     if (accessor != null && (!optimize || accessor.IsSetPending))
                         ((accessor as ValueAccessor) ?? emptyValueAccessor).InnerGuardedSetTableEntryFromValue();
                 }
@@ -308,6 +398,7 @@ namespace MosaicLib.Modular.Interconnect.Values
 
             notificationList.Notify();
         }
+
 
         /// <summary>
         /// This method is used internally by IValueAccessor instances to lock the table space and update the accessor's copy of the value and sequence number from the corresponding table entry.
@@ -328,16 +419,37 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// This arrayed update operation is performed atomically across all of the table entries refereed to by the non-null adapters in the array.
         /// <para/>This method is specifically intended for use by ValueSetAdapter instances.
         /// </summary>
+        /// <param name="accessorArray">Gives an array of items.  Only non-null items will be Updated.</param>
         public void Update(IValueAccessor[] accessorArray)
         {
+            accessorArray = accessorArray ?? emptyValueAccessorArray;
+
+            Update(accessorArray, accessorArray.Length);
+        }
+
+        /// <summary>
+        /// This method is used to Update a set/array of IValueAdapter instances from the corresponding set of interconnection table entry values.  
+        /// This arrayed update operation is performed atomically across the table entries referred to by the non-null adapters in the array up to the given maximum item index to update.
+        /// <para/>This method is specifically intended for use by Custom update scanner instances.
+        /// </summary>
+        /// <param name="accessorArray">Gives an array of items.  Only non-null items will be Updated.</param>
+        /// <param name="numEntriesToUpdate">Limits how much of the array will be used.  Maximum index of itesm that are looked at will be &lt; this value.</param>
+        public void Update(IValueAccessor[] accessorArray, int numEntriesToUpdate)
+        {
+            accessorArray = accessorArray ?? emptyValueAccessorArray;
+            numEntriesToUpdate = Math.Min(numEntriesToUpdate, accessorArray.Length);
+
             lock (mutex)
             {
-                foreach (IValueAccessor accessor in accessorArray ?? emptyValueAccessorArray)
+                for (int idx = 0; idx < numEntriesToUpdate; idx++)
                 {
+                    IValueAccessor accessor = accessorArray[idx];
+
                     ((accessor as ValueAccessor) ?? emptyValueAccessor).InnerGuardedUpdateValueFromTableEntry();
                 }
             }
         }
+
 
         /// <summary>Provides an IBasicNotificationList instance that will be Notified after each Set operation has been completed.</summary>
         public IBasicNotificationList NotificationList { get { return notificationList; } }
@@ -366,7 +478,11 @@ namespace MosaicLib.Modular.Interconnect.Values
                     table.Add(tableEntry);
                     tableItemNamesList.Add(name);
                     tableEntryDictionary[name] = tableEntry;
+
+                    volatileTableItemNamesListCount++;
                 }
+
+                globalSeqNum = InnerGuardedIncrementSkipZero(globalSeqNum);
             }
 
             return tableEntry;
@@ -384,8 +500,10 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// </summary>
         private object mutex = new object();
 
-        /// <summary>This list with cached array is used to support the ValueNamesArray property with minimal added work.</summary>
-        private Utils.Collections.LockedObjectListWithCachedArray<string> tableItemNamesList = new Utils.Collections.LockedObjectListWithCachedArray<string>();
+        /// <summary>Basic list of the names of all of the items in the table</summary>
+        private List<string> tableItemNamesList = new List<string>();
+        /// <summary>Volatile count of the number of items that have been added to the tableItemNamesList.  This is updated after the itesm have been added to the list.</summary>
+        private volatile int volatileTableItemNamesListCount = 0;
 
         /// <summary>This is the dictionary that is used to convert value names into the corresponding ValueTableEntry that is used for that name.</summary>
         private Dictionary<string, ValueTableEntry> tableEntryDictionary = new Dictionary<string, ValueTableEntry>();
@@ -776,11 +894,13 @@ namespace MosaicLib.Modular.Interconnect.Values
         {
             ValueInterconnect = valueInterconnect;
 
-            valueSetItemInfoList = AnnotatedClassItemAccessHelper<Attributes.ValueSetItemAttribute>.ExtractItemInfoAccessListFrom(typeof(TValueSet), ItemSelection.IncludeExplicitPublicItems);
+            valueSetItemInfoList = AnnotatedClassItemAccessHelper<Attributes.ValueSetItemAttribute>.ExtractItemInfoAccessListFrom(typeof(TValueSet), ItemSelection.IncludeExplicitPublicItems | ItemSelection.IncludeInheritedItems);
             NumItems = valueSetItemInfoList.Count;
 
             itemAccessSetupInfoArray = new ItemAccessSetupInfo[NumItems];
             valueAccessorArray = new IValueAccessor[NumItems];
+
+            OptimizeSets = true;
         }
 
         #endregion
@@ -897,11 +1017,17 @@ namespace MosaicLib.Modular.Interconnect.Values
                 }
             }
 
-            ValueInterconnect.Set(valueAccessorArray, optimizeSets);
+            ValueInterconnect.Set(valueAccessorArray, NumItems, optimizeSets);
 
             return this;
         }
 
+        /// <summary>
+        /// This property determines if the Set method uses ValueContainer equality testing to determine which IValueAccessor objects to actually write to the table.
+        /// When this property is true (the default), equality testing will be used to prevent updating table entires for IValueAccessors that do not have a set pending (due to change in container value).
+        /// When this property is false, all value table entries will be Set, without regard to whether their value might have changed.
+        /// </summary>
+        public bool OptimizeSets { get { return optimizeSets; } set { optimizeSets = value; } }
         private bool optimizeSets = false;
 
         /// <summary>
@@ -933,7 +1059,7 @@ namespace MosaicLib.Modular.Interconnect.Values
             if (ValueSet == null)
                 throw new System.NullReferenceException("ValueSet property must be non-null before Update can be called");
 
-            ValueInterconnect.Update(valueAccessorArray);
+            ValueInterconnect.Update(valueAccessorArray, NumItems);
 
             foreach (ItemAccessSetupInfo iasi in itemAccessSetupInfoArray)
             {

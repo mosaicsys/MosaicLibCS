@@ -56,17 +56,18 @@ namespace MosaicLib.SerialIO
 
 	//-----------------------------------------------------------------
 
-	/// <summary>This struct contains all of the information that is used to define the type and behavior of a SerialIO.Port</summary>
-	/// <remarks>
+	/// <summary>
+    /// This struct contains all of the information that is used to define the type and behavior of a SerialIO.Port.  
 	/// Valid SpecStr values:
-	///		<ComPort port="com1" uartConfig="9600,n,8,1"/>
-	///		<ComPort port="\\.\com200"><UartConfig baud="9600" DataBits="8" Mode="rs232-3wire" Parity="none" StopBits="1"/></ComPort>
-	///		<TcpClient addr="127.0.0.1" port="5002"/>
-	///		<TcpServer addr="127.0.0.1" port="8001"/>		addr is optional - will use any if no address is provided
-	///		<UdpClient addr="127.0.0.1" port="5005"/>
-	///		<UdpServer addr="127.0.0.1" port="5006"/>		addr is optional - will use any if no address is provided
-	/// </remarks>
-	public struct PortConfig
+    ///	<para/>	&lt;ComPort port="com1" uartConfig="9600,n,8,1"/&gt;
+    ///	<para/>	&lt;ComPort port="\\.\com200"&gt;&lt;UartConfig baud="9600" DataBits="8" Mode="rs232-3wire" Parity="none" StopBits="1"/&gt;&lt;/ComPort&gt;
+    ///	<para/>	&lt;TcpClient addr="127.0.0.1" port="5002"/&gt;
+    ///	<para/>	&lt;TcpServer addr="127.0.0.1" port="8001"/&gt;		addr is optional - will use any if no address is provided
+    ///	<para/>	&lt;UdpClient addr="127.0.0.1" port="5005"/&gt;
+    ///	<para/>	&lt;UdpServer addr="127.0.0.1" port="5006"/&gt;		addr is optional - will use any if no address is provided
+    ///	<para/> &lt;NullPort/&gt;
+    /// </summary>
+    public struct PortConfig
     {
         #region Constructors
 
@@ -121,11 +122,11 @@ namespace MosaicLib.SerialIO
             TxLineTerm = txLineTerm;
         }
 
-        /// <summary>Standard basic constructor - requires name and specStr.  Sets many properties to their default values</summary>
+        /// <summary>
+        /// Standard basic constructor - requires name and specStr.  Sets many properties to their default values.
+        /// </summary>
         /// <param name="name">This gives the name that will be used for the port created from this config contents</param>
         /// <param name="specStr">This gives the port target type configuration string that is used to define the type of port that will be created and where it will be connected to.</param>
-        /// <remarks>
-        /// </remarks>
         public PortConfig(string name, string specStr)
             : this()
         {
@@ -195,7 +196,17 @@ namespace MosaicLib.SerialIO
         /// <summary>Get only property.  Gives the PortConfig's Name value which will be used as the name of Serial Ports that are created from this PortConfig</summary>
         public string Name { get; private set; }
 
-        /// <summary>Get only property.  Gives the PortConfig's target Specificiation String which will be used to choose the type of port and to specify how it is connected.</summary>
+        /// <summary>
+        /// Get only property.  Gives the PortConfig's target Specificiation String which will be used to choose the type of port and to specify how it is connected.
+        /// Valid SpecStr values:
+        ///	<para/>	&lt;ComPort port="com1" uartConfig="9600,n,8,1"/&gt;
+        ///	<para/>	&lt;ComPort port="\\.\com200"&gt;&lt;UartConfig baud="9600" DataBits="8" Mode="rs232-3wire" Parity="none" StopBits="1"/&gt;&lt;/ComPort&gt;
+        ///	<para/>	&lt;TcpClient addr="127.0.0.1" port="5002"/&gt;
+        ///	<para/>	&lt;TcpServer addr="127.0.0.1" port="8001"/&gt;		addr is optional - will use any if no address is provided
+        ///	<para/>	&lt;UdpClient addr="127.0.0.1" port="5005"/&gt;
+        ///	<para/>	&lt;UdpServer addr="127.0.0.1" port="5006"/&gt;		addr is optional - will use any if no address is provided
+        ///	<para/> &lt;NullPort/&gt;
+        /// </summary>
         public string SpecStr { get; private set; }
 
         #endregion
@@ -314,7 +325,7 @@ namespace MosaicLib.SerialIO
         public bool DiscardWhitespacePacketsOnRx { get; set; }
         /// <summary>Set to true so that the port will automatically attempt to reconnect any time the current connection is lost.  When false the client is responsible for performing such actions explicitly when needed.</summary>
         public bool EnableAutoReconnect { get; set; }
-        /// <summary>Defines the period of time after failing to connect before the next connection attempt can be made.  Only used whne EnableAutoReconnect is true.</summary>
+        /// <summary>Defines the period of time after failing to connect before the next connection attempt can be made.  Only used when EnableAutoReconnect is true.</summary>
         public TimeSpan ReconnectHoldoff { get; set; }
         /// <summary>Defines the maximum period of time between attempting to open a connection and completing the connection before the connection attempt is viewed as having failed.  Not supported for all connection types.</summary>
         public TimeSpan ConnectTimeout { get; set; }
@@ -508,11 +519,17 @@ namespace MosaicLib.SerialIO
         /// <summary>Clears the StartTime, BytesToWritten, ActionResultEnum and ResultCode</summary>
         /// <remarks>This method is normally only used by a Port object itself</remarks>
         public void Reset() { StartTime = QpcTimeStamp.Zero; bytesWritten = 0; actionResultEnum = ActionResultEnum.None; resultCode = null; }
+
+        /// <summary>Resets the action params and assigns the Buffer to the given value, automatically setting the BufferLength to the Length of the given buffer (or 0 if buffer is null).</summary>
+        public void SetupToWrite(byte[] buffer) { Reset(); Buffer = buffer; }
+        /// <summary>Resets the action params and assigns the Buffer and BufferLength to the given values.</summary>
+        public void SetupToWrite(byte[] buffer, int bytesToWrite) { Reset(); Buffer = buffer; BytesToWrite = bytesToWrite; }
+
         /// <summary>Resets and object and then sets the StartTime to Now.</summary>
         /// <remarks>This method is normally only used by a Port object itself</remarks>
         public void Start() { Reset(); StartTime = QpcTimeStamp.Now; }
 
-        /// <summary>Provides Get/Set access to the buffer that is referenced by this object.  Setter also sets the BytesToRead to the length of the given buffer.</summary>
+        /// <summary>Provides Get/Set access to the buffer that is referenced by this object.  Setter also sets the BytesToWrite to the length of the given buffer.</summary>
         public Byte[] Buffer { get { return buffer; } set { buffer = value; bytesToWrite = (buffer ?? emptyByteArray).Length; } }
         /// <summary>Provides Get/Set access to the Number of Bytes To Write.  Setter constrains the assigned value so that it cannot exceed the buffer length.</summary>
         public int BytesToWrite { get { return bytesToWrite; } set { bytesToWrite = Math.Min(value, (buffer ?? emptyByteArray).Length); } }
@@ -577,18 +594,31 @@ namespace MosaicLib.SerialIO
         /// <summary>Returns an IWriteAction which refers to the given WriteActionParam instance and which may be used to execute a write using the WriteActionParams defined behavior</summary>
         IWriteAction CreateWriteAction(WriteActionParam param);
 
-        /// <summary>Returns an IBasicAction.  Underlying action TimeSpan parameter has been initilized to given value of flushWaitTime.  This action may be used to flush the port of characters for the given wait time period.</summary>
+        /// <summary>
+        /// Returns an IBasicAction.  Underlying action TimeSpan parameter has been initilized to given value of flushWaitTime.  
+        /// This action may be used to flush the port of characters for the given wait time period.
+        /// </summary>
         IFlushAction CreateFlushAction(TimeSpan flushWaitLimit);
 
         // the following methods are only useful with Port's that have an associated SlidingPacketBuffer
 
-        /// <summary>Asynchronous property that returns true for Ports that have been configured to use a SlidingBuffer and which have at least one packet decoded from the sliding buffer</summary>
+        /// <summary>
+        /// Asynchronous property that returns true for Ports that have been configured to use a SlidingBuffer and which have at least one packet decoded from the sliding buffer.  
+        /// Transitions from false to true will be associated with the part's BaseStateNotifier being notified.
+        /// </summary>
         bool HasPacket { get; }
 
-        /// <summary>Asynchronous property that returns the number of packets that are currently available to be dequeued from the Port.  This property will only be non-zero on Ports that have been configured to use a SlidingBuffer.</summary>
+        /// <summary>
+        /// Asynchronous property that returns the number of packets that are currently available to be dequeued from the Port.  
+        /// This property will only be non-zero on Ports that have been configured to use a SlidingBuffer.
+        /// Increases in the value of this value will be associated with the part's BaseStateNotifier being notified.
+        /// </summary>
         int NumPacketsReady { get; }
 
-        /// <summary>Returns an IGetNextPacketAction which may be executed to attempt to dequeue the next available Packet recieved by the Port.</summary>
+        /// <summary>
+        /// Returns an IGetNextPacketAction which may be executed to attempt to dequeue the next available Packet recieved by the Port.
+        /// GetNextPacketActions do not wait.  If there is no packet available then the action completes with the result (packet) set to null.
+        /// </summary>
         IGetNextPacketAction CreateGetNextPacketAction();
 	}
 
@@ -625,6 +655,7 @@ namespace MosaicLib.SerialIO
     /// <summary>
     /// This enum defines a set of values that help characterize the data delivery behavior for this port.  
     /// Currently the only normal values are ByteStream and Datagram.
+    /// <para/>Undefined = 0, ByteStream, Datagram, None
     /// </summary>
     public enum DataDeliveryBehavior
     {
@@ -669,8 +700,19 @@ namespace MosaicLib.SerialIO
 	{
 		/// <summary>Create an IPort implementation object based on the first element in the SpecStr in the given portConfig struct.</summary>
 		/// <param name="portConfig">Provides all configuration details for the port to be created.</param>
+        /// <returns>The created SerialIO.Port object as an IPort.  Throws an InvalidPortConfigSpecStr exception if the required concrete type cannot be determined from the portConfig.SpecStr</returns>
+        /// <exception cref="InvalidPortConfigSpecStr">thrown if the required concrete type cannot be determined from the portConfig.SpecStr</exception>
+        public static IPort CreatePort(PortConfig portConfig)
+        {
+            return CreatePort(portConfig, true);
+        }
+
+        /// <summary>Create an IPort implementation object based on the first element in the SpecStr in the given portConfig struct.</summary>
+		/// <param name="portConfig">Provides all configuration details for the port to be created.</param>
+        /// <param name="allowThrow">Set to true to allow this method to throw an exception if the given portConfig.SpecStr cannot be understood.  Set to false to force the method to construct and return a NullPort instead.</param>
 		/// <returns>The created SerialIO.Port object as an IPort.  Throws an InvalidPortConfigSpecStr exception if the required concrete type cannot be determined from the portConfig.SpecStr.</returns>
-		public static IPort CreatePort(PortConfig portConfig)
+        /// <exception cref="InvalidPortConfigSpecStr">thrown if the required concrete type cannot be determined from the portConfig.SpecStr and the allowThrow property is true</exception>
+        public static IPort CreatePort(PortConfig portConfig, bool allowThrow)
 		{
 			bool success = true;
 			Utils.StringScanner specScan = new StringScanner(portConfig.SpecStr);
@@ -728,7 +770,10 @@ namespace MosaicLib.SerialIO
 			if (ex == null)
                 ex = new InvalidPortConfigSpecStrException(Utils.Fcns.CheckedFormat("MosaicLib.SerialIO.Factory.CreatePort call failed: SpecStr:'{0}' not recognized for port:'{1}'", portConfig.SpecStr, portConfig.Name));
 
-			throw ex;		// there is no return value since we threw instead.
+            if (allowThrow)
+                throw ex;
+
+            return new NullPort(portConfig);
 		}
 	}
 

@@ -365,6 +365,15 @@ namespace MosaicLib.Modular.Common
         }
 
         /// <summary>
+        /// Property to attempt to interpret the contained value as a Nullable{double}.  This is especially useful for binding with WPF
+        /// </summary>
+        public double ? ValueAsDouble
+        {
+            get { return GetValue<double ?>(ContainerStorageType.Double, true, false); }
+            set { SetValue<double ?>(value); }
+        }
+
+        /// <summary>
         /// Equality testing implementation method.  Uses ValueContainer in signature to remove need for casting (as with Equals).
         /// </summary>
         public bool IsEqualTo(ValueContainer rhs)
@@ -446,7 +455,6 @@ namespace MosaicLib.Modular.Common
     }
 
     #endregion
-
 
     #region Named Values
 

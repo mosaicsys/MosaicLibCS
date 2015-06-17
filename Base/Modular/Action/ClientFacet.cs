@@ -289,6 +289,23 @@ namespace MosaicLib.Modular.Action
 
     #endregion
 
+    #region IClientFacet ExtentionMethods
+
+    /// <summary>
+    /// common "namespace" class to define extension methods within.
+    /// </summary>
+    public static partial class ExtentionMethods
+    {
+        /// <summary>Run the action to completion.  Returns the given action to support call chaining.</summary>
+        public static TClientFacetType RunInline<TClientFacetType>(this TClientFacetType action) where TClientFacetType : IClientFacet
+        {
+            action.Run();
+            return action;
+        }
+    }
+
+    #endregion
+
 	//-------------------------------------------------
 }
 

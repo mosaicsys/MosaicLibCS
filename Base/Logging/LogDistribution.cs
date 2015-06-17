@@ -193,7 +193,8 @@ namespace MosaicLib
 
                 public PerLoggerIDInfo(int loggerID) 
 				{ 
-					lid = loggerID; seqLoggerConfigSource = new SequencedLoggerConfigSource(distGroupConfig); 
+					lid = loggerID; 
+                    seqLoggerConfigSource = new SequencedLoggerConfigSource(distGroupConfig); 
 				}
 			}
 

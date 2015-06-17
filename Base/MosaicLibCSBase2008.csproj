@@ -89,8 +89,10 @@
     <Compile Include="Serial\Modbus\Modbus.cs" />
     <Compile Include="Serial\Modbus\ModbusClient.cs" />
     <Compile Include="Serial\Modbus\ModbusServer.cs" />
+    <Compile Include="Semi\E005\E005.cs" />
     <Compile Include="Semi\E084\E084.cs" />
     <Compile Include="Semi\E084\E084IOSupport.cs" />
+    <Compile Include="Semi\E087\E087.cs" />
     <Compile Include="Time\MMTimer.cs" />
     <Compile Include="Time\QpcTime.cs" />
     <Compile Include="Time\Ticks.cs" />

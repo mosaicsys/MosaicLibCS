@@ -654,19 +654,34 @@ namespace MosaicLib.Utils
 		bool IsUpdateNeeded { get; set; }
         /// <summary>updates the local copy of the source's value(s), returns true if the update was needed.</summary>
 		bool Update();
+
+        /// <summary>Variant of ISequenceSourceObserver.Update suitable for use with call chaining.  Updates local copy of the source's value.</summary>
+        ISequencedSourceObserver UpdateInline();
 	}
 
 	/// <summary>This interface gives the client access to the Object from the source that was obtained during the last Update call.</summary>
-	public interface ISequencedObjectSourceObserver<ObjectType> : IObjectSource<ObjectType>, ISequencedSourceObserver { }
+	public interface ISequencedObjectSourceObserver<ObjectType> 
+        : IObjectSource<ObjectType>, ISequencedSourceObserver 
+    {
+        /// <summary>Variant of ISequenceSourceObserver.Update suitable for use with call chaining.  Updates local copy of the source's value.</summary>
+        new ISequencedObjectSourceObserver<ObjectType> UpdateInline();
+    }
 
 	/// <summary>This interface combines the functionality of a ISequencedSourceObserver and an ISequenceNumberValue</summary>
 	/// <typeparam name="SeqNumberType">Defines the type of the sequence number</typeparam>
-	public interface ISequenceNumberObserver<SeqNumberType> : ISequenceNumberValue<SeqNumberType>, ISequencedSourceObserver { }
+	public interface ISequenceNumberObserver<SeqNumberType> 
+        : ISequenceNumberValue<SeqNumberType>, ISequencedSourceObserver 
+    { }
 
 	/// <summary>This interface combines an ISequencedObjectSourceObserver and a ISequenceNumberValue</summary>
 	/// <typeparam name="ObjectType">Defines the type of the observed object</typeparam>
 	/// <typeparam name="SeqNumberType">Defines the type of the sequence number</typeparam>
-	public interface ISequencedObjectSourceObserver<ObjectType, SeqNumberType> : ISequencedObjectSourceObserver<ObjectType>, ISequenceNumberValue<SeqNumberType> { }
+	public interface ISequencedObjectSourceObserver<ObjectType, SeqNumberType> 
+        : ISequencedObjectSourceObserver<ObjectType>, ISequenceNumberValue<SeqNumberType> 
+    {
+        /// <summary>Variant of ISequenceSourceObserver.Update suitable for use with call chaining.  Updates local copy of the source's value.</summary>
+        new ISequencedObjectSourceObserver<ObjectType, SeqNumberType> UpdateInline();
+    }
 
 	#endregion
 
@@ -677,14 +692,20 @@ namespace MosaicLib.Utils
 	/// <typeparam name="SeqNumberType">Defines the type of the sequence number.</typeparam>
 	public interface ISequencedRefObjectSourceObserver<RefObjectType, SeqNumberType> : ISequencedObjectSourceObserver<RefObjectType, SeqNumberType>
 		where RefObjectType : class
-	{ }
+	{
+        /// <summary>Variant of ISequenceSourceObserver.Update suitable for use with call chaining.  Updates local copy of the source's value.</summary>
+        new ISequencedRefObjectSourceObserver<RefObjectType, SeqNumberType> UpdateInline();
+    }
 
 	/// <summary>Interface defines a ISequencedObjectSourceObserver for use with value type objects</summary>
 	/// <typeparam name="ValueObjectType">Defines the type of the observed object.  Must be a value type.</typeparam>
 	/// <typeparam name="SeqNumberType">Defines the type of the sequence number.</typeparam>
     public interface ISequencedValueObjectSourceObserver<ValueObjectType, SeqNumberType> : ISequencedObjectSourceObserver<ValueObjectType, SeqNumberType>
         where ValueObjectType : struct
-	{ }
+	{
+        /// <summary>Variant of ISequenceSourceObserver.Update suitable for use with call chaining.  Updates local copy of the source's value.</summary>
+        new ISequencedValueObjectSourceObserver<ValueObjectType, SeqNumberType> UpdateInline();
+    }
 
 	#endregion
 
@@ -1001,6 +1022,11 @@ namespace MosaicLib.Utils
 			return doUpdate;
 		}
 
+        /// <summary>Variant of ISequenceSourceObserver.Update suitable for use with call chaining.  Updates local copy of the source's value.</summary>
+        public ISequenceNumberObserver<SeqNumberType> UpdateInline() { Update(); return this; }
+
+        ISequencedSourceObserver ISequencedSourceObserver.UpdateInline() { return UpdateInline(); }
+
 		#endregion
 
 		#region ISequenceNumberValue<SeqNumberType> Members
@@ -1152,6 +1178,13 @@ namespace MosaicLib.Utils
         /// <summary>Returns the current sequence number read as a volatile (no locking) - May return zero if sequence number is set to skip zero and Increment is in progress on another thread</summary>
         public SeqNumberType VolatileSequenceNumber { get { return seqNumObserver.VolatileSequenceNumber; } }
 
+        /// <summary>Variant of ISequenceSourceObserver.Update suitable for use with call chaining.  Updates local copy of the source's value.</summary>
+        public ISequencedRefObjectSourceObserver<RefObjectType, SeqNumberType> UpdateInline() { Update(); return this; }
+
+        ISequencedObjectSourceObserver<RefObjectType, SeqNumberType> ISequencedObjectSourceObserver<RefObjectType, SeqNumberType>.UpdateInline() { return UpdateInline(); }
+        ISequencedObjectSourceObserver<RefObjectType> ISequencedObjectSourceObserver<RefObjectType>.UpdateInline() { return UpdateInline(); }
+        ISequencedSourceObserver ISequencedSourceObserver.UpdateInline() { return UpdateInline(); }
+
 		#endregion
 	}
 
@@ -1200,6 +1233,13 @@ namespace MosaicLib.Utils
         public SeqNumberType SequenceNumber { get { return seqNumObserver.SequenceNumber; } }
         /// <summary>Returns the current sequence number read as a volatile (no locking) - May return zero if sequence number is set to skip zero and Increment is in progress on another thread</summary>
         public SeqNumberType VolatileSequenceNumber { get { return seqNumObserver.VolatileSequenceNumber; } }
+
+        /// <summary>Variant of ISequenceSourceObserver.Update suitable for use with call chaining.  Updates local copy of the source's value.</summary>
+        public ISequencedValueObjectSourceObserver<ValueObjectType, SeqNumberType> UpdateInline() { Update(); return this; }
+
+        ISequencedObjectSourceObserver<ValueObjectType, SeqNumberType> ISequencedObjectSourceObserver<ValueObjectType, SeqNumberType>.UpdateInline() { return UpdateInline(); }
+        ISequencedObjectSourceObserver<ValueObjectType> ISequencedObjectSourceObserver<ValueObjectType>.UpdateInline() { return UpdateInline(); }
+        ISequencedSourceObserver ISequencedSourceObserver.UpdateInline() { return UpdateInline(); }
 
 		#endregion
 	}

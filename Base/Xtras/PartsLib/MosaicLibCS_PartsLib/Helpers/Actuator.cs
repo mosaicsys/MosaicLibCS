@@ -19,13 +19,13 @@
  */
 //-------------------------------------------------------------------
 
+using System;
+using System.Runtime.Serialization;
+using System.Collections.Generic;
+using MosaicLib.Time;
+
 namespace MosaicLib.PartsLib.Helpers
 {
-    using System;
-    using System.Runtime.Serialization;
-    using System.Collections.Generic;
-    using MosaicLib.Time;
-
     [DataContract]
     public enum ActuatorPosition
     {
@@ -138,6 +138,17 @@ namespace MosaicLib.PartsLib.Helpers
         public string PosStateStr { get; set; }
 
         public QpcTimeStamp TimeStamp { get; set; }
+
+        public bool IsEqualTo(ActuatorState rhs)
+        {
+            return (rhs != null
+                    && TargetPos == rhs.TargetPos
+                    && TargetPosStr == rhs.TargetPosStr
+                    && PosState == rhs.PosState
+                    && PosStateStr == rhs.PosStateStr
+                    && TimeStamp == rhs.TimeStamp
+                    );
+        }
 
         [DataMember]
         public double TimeInState { get { return TimeStamp.Age.TotalSeconds; } set { TimeStamp = QpcTimeStamp.Now + TimeSpan.FromSeconds(value); } }

@@ -122,7 +122,7 @@ namespace MosaicLib.Modular.Config
         {
             ConfigInstance = configInstance;
 
-            configItemInfoList = AnnotatedClassItemAccessHelper<Attributes.ConfigItemAttribute>.ExtractItemInfoAccessListFrom(typeof(TConfigValueSet), ItemSelection.IncludeExplicitPublicItems);
+            configItemInfoList = AnnotatedClassItemAccessHelper<Attributes.ConfigItemAttribute>.ExtractItemInfoAccessListFrom(typeof(TConfigValueSet), ItemSelection.IncludeExplicitPublicItems | ItemSelection.IncludeInheritedItems);
             NumItems = configItemInfoList.Count;
 
             keySetupInfoArray = new KeySetupInfo[NumItems];
@@ -194,7 +194,8 @@ namespace MosaicLib.Modular.Config
                     continue;
                 }
 
-                IConfigKeyAccess keyAccess = ConfigInstance.GetConfigKeyAccess(new ConfigKeyAccessSpec(fullKeyName, itemAttribute.AccessFlags));
+                ConfigKeyAccessFlags customAccessFlags = new ConfigKeyAccessFlags(itemAttribute.AccessFlags) { SilenceIssues = true };
+                IConfigKeyAccess keyAccess = ConfigInstance.GetConfigKeyAccess(new ConfigKeyAccessSpec(fullKeyName, customAccessFlags));
 
                 KeySetupInfo keySetupInfo = new KeySetupInfo()
                 {
@@ -205,16 +206,16 @@ namespace MosaicLib.Modular.Config
 
                 keySetupInfo.UpdateMemberFromKeyAccessAction = GenerateUpdateMemberFromKeyAccessAction(keySetupInfo);
 
-                Logging.IMesgEmitter slectedIssueEmitter = SetupIssueEmitter;
+                Logging.IMesgEmitter selectedIssueEmitter = SetupIssueEmitter;
 
-                if (!keyAccess.Flags.IsRequired && slectedIssueEmitter.IsEnabled)
-                    setupIssueEmitter = ValueNoteEmitter;
+                if (keyAccess.Flags.IsOptional && selectedIssueEmitter.IsEnabled)
+                    selectedIssueEmitter = ValueNoteEmitter;
 
                 if (!keyAccess.IsUsable)
                 {
                     if (!itemAttribute.SilenceIssues)
                     {
-                        slectedIssueEmitter.Emit("Member/Key '{0}'/'{1}' is not usable: {2}", memberName, keyAccess.Key, keyAccess.ResultCode);
+                        selectedIssueEmitter.Emit("Member/Key '{0}'/'{1}' is not usable: {2}", memberName, keyAccess.Key, keyAccess.ResultCode);
                         anySetupIssues = true;
                     }
                     continue;
@@ -223,7 +224,7 @@ namespace MosaicLib.Modular.Config
                 {
                     if (!itemAttribute.SilenceIssues)
                     {
-                        slectedIssueEmitter.Emit("Member/Key '{0}'/'{1}' is not usable: no valid accessor delegate could be generated for its ValueSet type:'{3}'", memberName, fullKeyName, itemInfo.ItemType, tConfigValueSetTypeStr);
+                        selectedIssueEmitter.Emit("Member/Key '{0}'/'{1}' is not usable: no valid accessor delegate could be generated for its ValueSet type:'{3}'", memberName, fullKeyName, itemInfo.ItemType, tConfigValueSetTypeStr);
                         anySetupIssues = true;
                     }
                     continue;
