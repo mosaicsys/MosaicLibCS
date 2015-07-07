@@ -338,20 +338,23 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// </summary>
         public int ValueNamesArrayLength { get { return volatileTableItemNamesListCount; } }
 
-
         /// <summary>
         /// This method is used internally by IValueAccessor instances to lock the table space and set the corresponding table entry from the calling/given IValueAccessor instance.
         /// </summary>
         internal void Set(IValueAccessor accessor)
         {
-            lock (mutex)
+            if (accessor != null)
             {
-                ((accessor as ValueAccessor) ?? emptyValueAccessor).InnerGuardedSetTableEntryFromValue();
+                lock (mutex)
+                {
+                    ((accessor as ValueAccessor) ?? emptyValueAccessor).InnerGuardedSetTableEntryFromValue();
+                    SynchrounousCustomPostSetTableEntryFromValueHandler(accessor);
 
-                globalSeqNum = InnerGuardedIncrementSkipZero(globalSeqNum);
+                    globalSeqNum = InnerGuardedIncrementSkipZero(globalSeqNum);
+                }
+
+                notificationList.Notify();
             }
-
-            notificationList.Notify();
         }
 
         /// <summary>
@@ -383,6 +386,8 @@ namespace MosaicLib.Modular.Interconnect.Values
             accessorArray = accessorArray ?? emptyValueAccessorArray;
             numEntriesToSet = Math.Min(numEntriesToSet, accessorArray.Length);
 
+            int numEntriesSet = 0;
+
             lock (mutex)
             {
                 for (int idx = 0; idx < numEntriesToSet; idx++)
@@ -390,13 +395,21 @@ namespace MosaicLib.Modular.Interconnect.Values
                     IValueAccessor accessor = accessorArray[idx];
 
                     if (accessor != null && (!optimize || accessor.IsSetPending))
+                    {
                         ((accessor as ValueAccessor) ?? emptyValueAccessor).InnerGuardedSetTableEntryFromValue();
+
+                        SynchrounousCustomPostSetTableEntryFromValueHandler(accessor);
+
+                        numEntriesSet++;
+                    }
                 }
 
-                globalSeqNum = InnerGuardedIncrementSkipZero(globalSeqNum);
+                if (numEntriesSet != 0)
+                    globalSeqNum = InnerGuardedIncrementSkipZero(globalSeqNum);
             }
 
-            notificationList.Notify();
+            if (numEntriesSet != 0)
+                notificationList.Notify();
         }
 
 
@@ -433,7 +446,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <para/>This method is specifically intended for use by Custom update scanner instances.
         /// </summary>
         /// <param name="accessorArray">Gives an array of items.  Only non-null items will be Updated.</param>
-        /// <param name="numEntriesToUpdate">Limits how much of the array will be used.  Maximum index of itesm that are looked at will be &lt; this value.</param>
+        /// <param name="numEntriesToUpdate">Limits how much of the array will be used.  Maximum index of items that are looked at will be &lt; this value.</param>
         public void Update(IValueAccessor[] accessorArray, int numEntriesToUpdate)
         {
             accessorArray = accessorArray ?? emptyValueAccessorArray;
@@ -456,6 +469,24 @@ namespace MosaicLib.Modular.Interconnect.Values
 
         /// <summary>Proides a sequence number that counts the total number of table-wide Set operations that have been performed.</summary>
         public UInt32 GlobalSeqNum { get { return globalSeqNum; } }
+
+        #endregion
+
+        #region functionality extension delegates to be used by derived classes
+
+        /// <summary>
+        /// This property may be used by a derived class to specify a custom handler that is given each IValueAccessor that has been used to perform an InnerGaugedSetTableEntryFromValue method.
+        /// <para/>Please note: this call is made synchronously while owning the table's mutex.  
+        /// Care must be exersized to minimize the time consumed in this method and to avoid creating any possiblity of a deadlock by attempting to acquire mutiple lock objects within the
+        /// call lifetime of this delegate.  This delegate may be combined with the use of the notificationList for combinations of synchronous and asynchronous signaling.
+        /// </summary>
+        protected Action<IValueAccessor> SynchrounousCustomPostSetTableEntryFromValueHandler
+        {
+            get { return synchronousCustomPostSetTableEntryFromValueHandler ?? emptyPostSetTableEntryFromValueHandler; }
+            set { synchronousCustomPostSetTableEntryFromValueHandler = null; }
+        }
+        private Action<IValueAccessor> synchronousCustomPostSetTableEntryFromValueHandler = null;
+        private static readonly Action<IValueAccessor> emptyPostSetTableEntryFromValueHandler = (iva) => { };
 
         #endregion
 

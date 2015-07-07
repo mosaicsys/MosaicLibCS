@@ -670,9 +670,13 @@ namespace MosaicLib.SerialIO
 			}
 
 			if (!baseState.IsOnline || !PortConfig.EnableAutoReconnect)
-				return;	
-		
-			bool stateSupportsAutoReconnect = ((baseState.ConnState == ConnState.ConnectFailed) || (baseState.ConnState == ConnState.ConnectionFailed));
+				return;
+
+            // we can attempt a reconnect from the ConnectFailed, ConnectionFailed or the DisconnectedByOtherEnd states.
+			bool stateSupportsAutoReconnect = ((baseState.ConnState == ConnState.ConnectFailed) 
+                                               || (baseState.ConnState == ConnState.ConnectionFailed) 
+                                               || (baseState.ConnState == ConnState.DisconnectedByOtherEnd)
+                                               );
 			TimeSpan timeInState = QpcTimeStamp.Now - baseState.TimeStamp;
 
 			if (stateSupportsAutoReconnect && timeInState > PortConfig.ReconnectHoldoff)

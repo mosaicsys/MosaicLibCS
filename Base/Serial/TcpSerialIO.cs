@@ -510,7 +510,7 @@ namespace MosaicLib.SerialIO
 
         protected virtual void ServicePortConnState()
         {
-            ServicePortConnState(ConnState.Disconnected);
+            ServicePortConnState(ConnState.DisconnectedByOtherEnd);
         }
 
 		protected virtual void ServicePortConnState(ConnState remoteEndHasBeenClosedState)

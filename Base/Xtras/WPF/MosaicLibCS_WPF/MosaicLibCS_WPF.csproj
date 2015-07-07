@@ -36,6 +36,7 @@
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
     <DocumentationFile>bin\Release\MosaicLibCS_WPF.XML</DocumentationFile>
+    <NoWarn>1591, 1587</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="PresentationCore">
@@ -63,6 +64,9 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="CommonSetup.cs" />
+    <Compile Include="Controls\BasicLED.xaml.cs">
+      <DependentUpon>BasicLED.xaml</DependentUpon>
+    </Compile>
     <Compile Include="InterconnectSupport.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="SharedTimers.cs" />
@@ -73,6 +77,12 @@
       <Project>{DFD5D17D-1977-4B56-A4EB-5955B40B6ABB}</Project>
       <Name>MosaicLibCSBase2010</Name>
     </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <Page Include="Controls\BasicLED.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

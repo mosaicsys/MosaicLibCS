@@ -88,7 +88,9 @@ namespace MosaicLib.Modular.Part
 		ConnectFailed,
 		/// <summary>Connection has been explicitly stopped</summary>
 		Disconnected,
-	}
+        /// <summary>Connection has been explicitly stopped by the other end</summary>
+        DisconnectedByOtherEnd,
+    }
 
 	#endregion
 

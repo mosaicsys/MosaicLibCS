@@ -95,11 +95,11 @@ namespace MosaicLib.Modular.Part
 		{
             /// <summary>Constructor for use with more complete action method delegate: ActionMethodDelegateActionArgStrResult{ParamType, NullObj}.</summary>
             public ParamActionImplBase(ActionQueue actionQ, ParamType paramValue, ActionMethodDelegateActionArgStrResult<ParamType, NullObj> method, string mesg, ActionLogging loggingReference) 
-                : base(actionQ, paramValue, false, method, new ActionLogging(mesg, paramValue.ToString(), loggingReference)) 
+                : base(actionQ, paramValue, false, method, new ActionLogging(mesg, "{0}".CheckedFormat(paramValue), loggingReference)) 
             { }
             /// <summary>Constructor for use with full action method delegate: FullActionMethodDelegate{ParamType, NullObj}.</summary>
             public ParamActionImplBase(ActionQueue actionQ, ParamType paramValue, FullActionMethodDelegate<ParamType, NullObj> method, string mesg, ActionLogging loggingReference) 
-                : base(actionQ, paramValue, false, method, new ActionLogging(mesg, paramValue.ToString(), loggingReference)) 
+                : base(actionQ, paramValue, false, method, new ActionLogging(mesg, "{0}".CheckedFormat(paramValue), loggingReference)) 
             { }
 
             /// <summary>
@@ -131,18 +131,26 @@ namespace MosaicLib.Modular.Part
         public class BoolActionImpl : ParamActionImplBase<bool>, IBoolParamAction
         {
             /// <summary>Constructor for use with more complete action method delegate: ActionMethodDelegateActionArgStrResult{bool, NullObj}.</summary>
-            public BoolActionImpl(ActionQueue actionQ, bool paramValue, ActionMethodDelegateActionArgStrResult<bool, NullObj> method, string mesg, ActionLogging loggingReference) : base(actionQ, paramValue, method, mesg, loggingReference) { }
+            public BoolActionImpl(ActionQueue actionQ, bool paramValue, ActionMethodDelegateActionArgStrResult<bool, NullObj> method, string mesg, ActionLogging loggingReference) 
+                : base(actionQ, paramValue, method, mesg, loggingReference) 
+            { }
             /// <summary>Constructor for use with full action method delegate: FullActionMethodDelegate{bool, NullObj}.</summary>
-            public BoolActionImpl(ActionQueue actionQ, bool paramValue, FullActionMethodDelegate<bool, NullObj> method, string mesg, ActionLogging loggingReference) : base(actionQ, paramValue, method, mesg, loggingReference) { }
+            public BoolActionImpl(ActionQueue actionQ, bool paramValue, FullActionMethodDelegate<bool, NullObj> method, string mesg, ActionLogging loggingReference) 
+                : base(actionQ, paramValue, method, mesg, loggingReference) 
+            { }
         }
 
         /// <summary>Implementation object for IStringParamAction type Actions.  Derives from ParamActionImplBase{string}.</summary>
         public class StringActionImpl : ParamActionImplBase<string>, IStringParamAction
 		{
             /// <summary>Constructor for use with more complete action method delegate: ActionMethodDelegateActionArgStrResult{string, NullObj}.</summary>
-            public StringActionImpl(ActionQueue actionQ, string paramValue, ActionMethodDelegateActionArgStrResult<string, NullObj> method, string mesg, ActionLogging loggingReference) : base(actionQ, paramValue, method, mesg, loggingReference) { }
+            public StringActionImpl(ActionQueue actionQ, string paramValue, ActionMethodDelegateActionArgStrResult<string, NullObj> method, string mesg, ActionLogging loggingReference) 
+                : base(actionQ, paramValue, method, mesg, loggingReference) 
+            { }
             /// <summary>Constructor for use with full action method delegate: FullActionMethodDelegate{string, NullObj}.</summary>
-            public StringActionImpl(ActionQueue actionQ, string paramValue, FullActionMethodDelegate<string, NullObj> method, string mesg, ActionLogging loggingReference) : base(actionQ, paramValue, method, mesg, loggingReference) { }
+            public StringActionImpl(ActionQueue actionQ, string paramValue, FullActionMethodDelegate<string, NullObj> method, string mesg, ActionLogging loggingReference) 
+                : base(actionQ, paramValue, method, mesg, loggingReference) 
+            { }
 		}
 
 		#endregion

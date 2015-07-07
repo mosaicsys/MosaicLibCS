@@ -101,7 +101,7 @@ namespace MosaicLib.Modular.Reflection
         /// Enum is used with <see cref="MosaicLib.Modular.Reflection.Attributes.AnnotatedItemAttributeBase"/> 
         /// to define how an Annotated Item's full name is adjusted/generated from its derived Name (memberInfo.Name combined with Name property) and the
         /// array of params strings that are generally given to the corresonding Setup type method that actually generates the full names.  
-        /// <para/>Supported values: None, Format, Prefix0, Prefix1, Prefix2, Prefix3
+        /// <para/>Supported values: None, Format, FormatWithMemberName, Prefix0, Prefix1, Prefix2, Prefix3
         /// <para/>A, B, C, D are also supported for backwards compatibility - these map to Prefix0 through Prefix3 respectively.
         /// </summary>
         public enum NameAdjust : int

@@ -38,6 +38,13 @@ namespace MosaicLib.WPF.Common
     {
         public static void HandleOnStartup(StartupEventArgs e, ref Logging.Logger appLogger)
         {
+            string logBaseName = System.Reflection.Assembly.GetCallingAssembly().FullName.Split(',').SafeAccess(0);        // split off the "name" of the assembly from the other parts that make up its "full" name.
+
+            HandleOnStartup(e, ref appLogger, logBaseName);
+        }
+
+        public static void HandleOnStartup(StartupEventArgs e, ref Logging.Logger appLogger, string logBaseName)
+        {
             MosaicLib.Modular.Config.Config.AddStandardProviders(e.Args);
 
             int ringQueueSize = 500;
@@ -45,13 +52,13 @@ namespace MosaicLib.WPF.Common
             Logging.ListMesgEmitter issueListEmitter = new Logging.ListMesgEmitter() { MesgType = Logging.MesgType.Error };
             Logging.ListMesgEmitter valuesListEmitter = new Logging.ListMesgEmitter() { MesgType = Logging.MesgType.Debug };
 
-            Logging.FileRotationLoggingConfig ringConfig = new Logging.FileRotationLoggingConfig("PlatformSimLogRing")
+            Logging.FileRotationLoggingConfig ringConfig = new Logging.FileRotationLoggingConfig((logBaseName ?? String.Empty) + "LogFile")
             {
                 mesgQueueSize = ringQueueSize,
                 nameUsesDateAndTime = true,
             }.UpdateFromModularConfig("Config.Logging.FileRing.", issueListEmitter, valuesListEmitter);
 
-            Logging.FileRotationLoggingConfig traceRingConfig = new Logging.FileRotationLoggingConfig("PlatformSimTraceRing")
+            Logging.FileRotationLoggingConfig traceRingConfig = new Logging.FileRotationLoggingConfig((logBaseName ?? String.Empty) + "TraceRing")
             {
                 mesgQueueSize = traceQueueSize,
                 nameUsesDateAndTime = false,     // will use 4 digit file names.  Limit of 100 files total
@@ -98,7 +105,6 @@ namespace MosaicLib.WPF.Common
             Logging.LogMessage lm = appLogger.GetLogMessage(Logging.MesgType.Signif, "App Deactiviated", appLogger.GetStackFrame(0));
             lm.KeywordArray = new string[] { "Application", "OnDeactivated" };
             appLogger.EmitLogMessage(ref lm);
-
         }
 
         public static void HandleOnExit(Logging.ILogger appLogger)
