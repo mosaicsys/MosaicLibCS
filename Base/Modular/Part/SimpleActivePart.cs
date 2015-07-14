@@ -237,6 +237,8 @@ namespace MosaicLib.Modular.Part
                 });
 
 			actionLoggingReference = new ActionLogging(Log, ActionLoggingConfig.Info_Error_Debug_Debug);
+
+            Interconnect.Parts.Parts.Instance.RegisterPart(this);
 		}
 	
         /// <summary>

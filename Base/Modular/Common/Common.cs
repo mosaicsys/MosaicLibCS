@@ -121,6 +121,17 @@ namespace MosaicLib.Modular.Common
             }
         }
 
+        /// <summary>
+        /// Returns true if the contained value is null.
+        /// </summary>
+        public bool IsNull
+        {
+            get
+            {
+                return (cvt == ContainerStorageType.Object && o == null);
+            }
+        }
+
         /// <summary>Clears the container.  Identical to setting it to its own default.</summary>
         public void Clear()
         {

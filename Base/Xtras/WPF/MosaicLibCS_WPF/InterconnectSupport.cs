@@ -99,9 +99,17 @@ namespace MosaicLib.WPF.Interconnect
         protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)
         {
             if (e.Property == valueAsObjectDP || e.Property == valueAsDoubleDP || e.Property == valueAsBooleanDP)
-                ValueAccessor.SetIfDifferent(new ValueContainer().SetFromObject(e.NewValue));
+            {
+                ValueContainer newValueVC = new ValueContainer().SetFromObject(e.NewValue);
+                if (!ValueAccessor.ValueContainer.IsEqualTo(newValueVC))
+                {
+                    ValueAccessor.Set(newValueVC);
+                }
+            }
             else
+            {
                 base.OnPropertyChanged(e);
+            }
         }
 
         private static System.Windows.DependencyProperty valueAsObjectDP = System.Windows.DependencyProperty.Register("ValueAsObject", typeof(System.Object), typeof(WPFValueAccessor));
@@ -122,7 +130,7 @@ namespace MosaicLib.WPF.Interconnect
         }
 
         /// <summary>Constructor allows the caller to give the IValuesInterconnection instance to use.</summary>
-        public WPFValueInterconnectAdapter(IValuesIneterconnection valuesInterconnectionInstanceToUse)
+        public WPFValueInterconnectAdapter(IValuesInterconnection valuesInterconnectionInstanceToUse)
         {
             ivi = valuesInterconnectionInstanceToUse;
         }
@@ -180,7 +188,7 @@ namespace MosaicLib.WPF.Interconnect
         /// <summary>Required INotifyPropertyChanged event</summary>
         public event PropertyChangedEventHandler PropertyChanged;
 
-        private IValuesIneterconnection ivi;
+        private IValuesInterconnection ivi;
 
         private List<WPFValueAccessor> wpfValueAccessorList = new List<WPFValueAccessor>();
 
@@ -299,7 +307,7 @@ namespace MosaicLib.WPF.Interconnect
         /// Constructor.  Finds the set of currently defined interconnect values, obtains a corresponding set of IValueAccessors from the desired interconnect value instance
         /// and builds the underlying dictionary keys and values from this set of IValueAccessor's Names and ValueContainer values.
         /// </summary>
-        public ValueContainerTrackingDictionary(Modular.Interconnect.Values.IValuesIneterconnection valuesInterconnect, params String[] matchPrefixStringArray)
+        public ValueContainerTrackingDictionary(Modular.Interconnect.Values.IValuesInterconnection valuesInterconnect, params String[] matchPrefixStringArray)
         {
             string[] valueNames = valuesInterconnect.ValueNamesArray;
 

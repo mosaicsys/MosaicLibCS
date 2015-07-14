@@ -70,6 +70,7 @@
     <Compile Include="Modular\Config\Config.cs" />
     <Compile Include="Modular\Config\ConfigProviders.cs" />
     <Compile Include="Modular\Config\ConfigValueSetAdapter.cs" />
+    <Compile Include="Modular\Interconnect\Parts.cs" />
     <Compile Include="Modular\Interconnect\Values.cs" />
     <Compile Include="Modular\Part\PartBase.cs" />
     <Compile Include="Modular\Part\SimpleActivePart.cs" />

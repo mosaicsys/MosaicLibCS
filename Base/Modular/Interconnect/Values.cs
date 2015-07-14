@@ -27,7 +27,7 @@ using MosaicLib.Utils;
 using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Reflection.Attributes;
 
-// Modular.Interconnect is the general namespace for tools that help interconnect Modular Parts without requiring that that have preexisting knowledge of each-other's classes.
+// Modular.Interconnect is the general namespace for tools that help interconnect Modular Parts without requiring that that have pre-existing knowledge of each-other's classes.
 // This file contains the definitions for the underlying Modular.Interconnect.Values portion of Modular.Interconnect.
 //  
 //  Modular.Interconnect.Values provides a set of tools that are used to define one or more table spaces for interconnected values.  
@@ -42,14 +42,20 @@ using MosaicLib.Modular.Reflection.Attributes;
 
 namespace MosaicLib.Modular.Interconnect.Values
 {
-    #region IValuesIneterconnection
+    #region IValuesInterconnection
+
+    /// <summary>
+    /// The name of this interface was spelled incorrectly.  Please replace its use with the correctly spelled <see cref="IValuesInterconnection"/> (2015-06-08)
+    /// </summary>
+    [Obsolete("The name of this interface was spelled incorrectly.  Please replace its use with the correctly spelled IValuesInterconnection (2015-06-08)")]
+    public interface IValuesIneterconnection : IValuesInterconnection { }
 
     /// <summary>
     /// This interface defines the basic externally visible methods and properties that are exposed by Values Interconnection implementation objects.
     /// Clients are generally expected to make most use of the GetValueAdapter factory methods methods.  
     /// ValueSetAdapter classes are generally expected to use the IValueAccessor array versions of the Set and Update methods.
     /// </summary>
-    public interface IValuesIneterconnection
+    public interface IValuesInterconnection
     {
         /// <summary>Returns the name of this values interconnection (table space) object.</summary>
         string Name { get; }
@@ -230,13 +236,13 @@ namespace MosaicLib.Modular.Interconnect.Values
         #region Singleton instance
 
         /// <summary>Gives the caller get and set access to the singleton IValueInterconnection instance that is used to provide application wide value interconnection.</summary>
-        public static IValuesIneterconnection Instance
+        public static IValuesInterconnection Instance
         {
             get { return singletonInstanceHelper.Instance; }
             set { singletonInstanceHelper.Instance = value; }
         }
 
-        private static SingletonHelperBase<IValuesIneterconnection> singletonInstanceHelper = new SingletonHelperBase<IValuesIneterconnection>(SingletonInstanceBehavior.AutoConstructIfNeeded, () => new ValuesInterconnection("MainInterconnect"));
+        private static SingletonHelperBase<IValuesInterconnection> singletonInstanceHelper = new SingletonHelperBase<IValuesInterconnection>(SingletonInstanceBehavior.AutoConstructIfNeeded, () => new ValuesInterconnection("MainValuesInterconnect"));
 
         #endregion
     }
@@ -254,7 +260,7 @@ namespace MosaicLib.Modular.Interconnect.Values
     /// atomically consistent updates to the table and accessors.  The use of the array versions of Set and Update allow this atomicity to span across updates from and sets to arbitrary sets of
     /// named value table entries.
     /// </summary>
-    public class ValuesInterconnection : IValuesIneterconnection
+    public class ValuesInterconnection : IValuesInterconnection
     {
         #region construction
 
@@ -480,10 +486,10 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// Care must be exersized to minimize the time consumed in this method and to avoid creating any possiblity of a deadlock by attempting to acquire mutiple lock objects within the
         /// call lifetime of this delegate.  This delegate may be combined with the use of the notificationList for combinations of synchronous and asynchronous signaling.
         /// </summary>
-        protected Action<IValueAccessor> SynchrounousCustomPostSetTableEntryFromValueHandler
+        public Action<IValueAccessor> SynchrounousCustomPostSetTableEntryFromValueHandler
         {
             get { return synchronousCustomPostSetTableEntryFromValueHandler ?? emptyPostSetTableEntryFromValueHandler; }
-            set { synchronousCustomPostSetTableEntryFromValueHandler = null; }
+            set { synchronousCustomPostSetTableEntryFromValueHandler = value; }
         }
         private Action<IValueAccessor> synchronousCustomPostSetTableEntryFromValueHandler = null;
         private static readonly Action<IValueAccessor> emptyPostSetTableEntryFromValueHandler = (iva) => { };
@@ -921,7 +927,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// For use with Property Initializers and the Setup method to define and setup the adapter instance for use.
         /// <para/>Please Note: the Setup method must be called before the adapter can be used.  
         /// </summary>
-        public ValueSetAdapter(IValuesIneterconnection valueInterconnect)
+        public ValueSetAdapter(IValuesInterconnection valueInterconnect)
         {
             ValueInterconnect = valueInterconnect;
 
@@ -948,7 +954,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <summary>Defines the emitter used to emit Update related changes in config point values.  Defaults to the null emitter.</summary>
         public Logging.IMesgEmitter ValueNoteEmitter { get { return FixupEmitterRef(ref valueNoteEmitter); } set { valueNoteEmitter = value; } }
 
-        private IValuesIneterconnection ValueInterconnect{ get; set; }        // delay making default ConfigInstance assignment until Setup method.
+        private IValuesInterconnection ValueInterconnect{ get; set; }        // delay making default ConfigInstance assignment until Setup method.
 
         /// <summary>
         /// This method determines the set of full Parameter Names from the ValueSet's annotated items, and creates a set of IValueAccessor objects for them.
@@ -974,7 +980,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <param name="baseNames">
         /// Gives a list of 1 or more base names that are prepended to specific sub-sets of the list of item names based on each item's NameAdjust attribute property value.
         /// </param>
-        public ValueSetAdapter<TValueSet> Setup(IValuesIneterconnection valueInterconnect, params string[] baseNames)
+        public ValueSetAdapter<TValueSet> Setup(IValuesInterconnection valueInterconnect, params string[] baseNames)
         {
             if (valueInterconnect != null || ValueInterconnect == null)
                 ValueInterconnect = valueInterconnect ?? Values.Instance;

@@ -19,12 +19,13 @@
  */
 //-------------------------------------------------------------------
 
+using System;
+using System.Text;
+using System.Collections.Generic;
+using System.Linq;
+
 namespace MosaicLib.Utils
 {
-    using System;
-    using System.Text;
-    using System.Collections.Generic;
-
     #region Unassociated Functions
 
     /// <summary>
@@ -272,7 +273,7 @@ namespace MosaicLib.Utils
 
 	#endregion
 
-    // Library is now being built under DotNet 3.5 (or later)
+    // Library is now being built under DotNet 3.5 (or later) so we can make use of extension methods.
     #region Extension Functions
 
     /// <summary>
@@ -409,6 +410,162 @@ namespace MosaicLib.Utils
         }
 
         #endregion
+    }
+
+    #endregion
+
+    #region String matching utilites
+
+    namespace StringMatching
+    {
+        /// <summary>
+        /// This is a list (set) of Rule objects that supports deep cloneing.  This set is expected to be used with the MatchesAny extension method
+        /// </summary>
+        public class MatchRuleSet : List<MatchRule>
+        {
+            /// <summary>Default constructor</summary>
+            public MatchRuleSet() { }
+            /// <summary>constructor starting with an externally provided set of rules</summary>
+            public MatchRuleSet(IEnumerable<MatchRule> rules) : base(rules) { }
+            /// <summary>copy constructor - makes a deep clone of the given rhs value.</summary>
+            public MatchRuleSet(MatchRuleSet rhs) : base(rhs.Select((r) => new MatchRule(r))) { }
+
+            /// <summary>Debugging and Logging helper method</summary>
+            public override string ToString()
+            {
+                return String.Join(",", this.Select((r) => r.ToString()).ToArray());
+            }
+        }
+
+        /// <summary>
+        /// ExtensionMethods for StringMatching.
+        /// </summary>
+        public static partial class ExtensionMethods
+        {
+            /// <summary>
+            /// Creates and returns a clone (deep copy) of the given set if the set is non-null or returns null if the given set is null.
+            /// </summary>
+            public static MatchRuleSet Clone(this MatchRuleSet set)
+            {
+                if (set != null)
+                    return new MatchRuleSet(set);
+                else
+                    return null;
+            }
+
+            /// <summary>
+            /// Resturns true if the given testString Matches any rule in the given set's list of MatchRule objects.
+            /// If the given set is null or it is empty then the method returns false.
+            /// </summary>
+            public static bool MatchesAny(this MatchRuleSet set, String testString)
+            {
+                return set.MatchesAny(testString, false);
+            }
+
+            /// <summary>
+            /// Resturns true if the given testString Matches any rule in the given set's list of MatchRule objects.
+            /// If the given set is null or empty then the method returns valueToUseWhenSetIsNullOrEmpty.
+            /// </summary>
+            public static bool MatchesAny(this MatchRuleSet set, String testString, bool valueToUseWhenSetIsNullOrEmpty)
+            {
+                if (set != null && set.Count != 0)
+                {
+                    foreach (MatchRule rule in set)
+                    {
+                        if (rule.Matches(testString))
+                            return true;
+                    }
+                }
+                return valueToUseWhenSetIsNullOrEmpty;
+            }
+        }
+
+        /// <summary>
+        /// Simple container/implementation object for a single rule (MatchType and RuleString) used to determine if a string matches a given rule.
+        /// <para/>This object is immutable in that none of its public or protected portions allow its contents to be changed.
+        /// <para/>This object is not re-enterant (not thread safe) when using MatchType.Regex.
+        /// </summary>
+        public class MatchRule
+        {
+            /// <summary>
+            /// Constructor.  Caller provides matchType and ruleString.  
+            /// If matchType is MatchType.Regex then ruleString is used to construct a <see cref="System.Text.RegularExpressions.Regex"/> object which may throw a System.ArguementExecption
+            /// if the given ruleString is not a valid Regular Expression string.
+            /// </summary>
+            /// <exception cref="System.ArgumentException">Thrown if MatchType is Regex and the given ruleString is not a valid regular expression.</exception>
+            public MatchRule(MatchType matchType, String ruleString)
+            {
+                MatchType = matchType;
+                RuleString = ruleString;
+                if (MatchType == MatchType.Regex)
+                    regex = new System.Text.RegularExpressions.Regex(RuleString);
+            }
+
+            /// <summary>
+            /// Copy constructor.
+            /// <exception cref="System.ArgumentException">Thrown if MatchType is Regex and the rhs's RuleString is not a valid regular expression.</exception>
+            /// </summary>
+            public MatchRule(MatchRule rhs)
+            {
+                MatchType = rhs.MatchType;
+                RuleString = rhs.RuleString;
+                if (MatchType == MatchType.Regex)
+                    regex = new System.Text.RegularExpressions.Regex(RuleString);
+            }
+
+            /// <summary>Defines the type of match test that this rule is used to test for (Prefix, Suffix, Contains, Regex match).</summary>
+            public MatchType MatchType { get; private set; }
+            /// <summary>Defines the string used to test a given test string with: an expected prefix, suffix, substring, or a regular expression against which test strings are checked for a match.</summary>
+            public String RuleString { get; private set; }
+            /// <summary>Internal storage for the pre-computed regular expression engine if this object was constructed using StringMatchType.Regex.</summary>
+            private System.Text.RegularExpressions.Regex regex = null;
+
+            /// <summary>
+            /// Resturns true if the given testString matches the rule contained in this object based on the contstructed contents of the MatchType and RuleString.
+            /// Prefix checks if testString StartsWith the RuleString, Suffix tests if testString EndsWith RuleString, 
+            /// Contains tests if testString Contains RuleString, and Regex tests if RuleString as regular expression IsMatch of testString.
+            /// </summary>
+            public bool Matches(String testString)
+            {
+                testString = testString ?? String.Empty;
+
+                switch (MatchType)
+                {
+                    case MatchType.None: return false;
+                    case MatchType.Any: return true;
+                    case MatchType.Prefix: return testString.StartsWith(RuleString);
+                    case MatchType.Suffix: return testString.EndsWith(RuleString);
+                    case MatchType.Contains: return testString.Contains(RuleString);
+                    case MatchType.Regex: return regex.IsMatch(testString);
+                    default: return false;
+                }
+            }
+
+            /// <summary>
+            /// Debugging and logging helper method
+            /// </summary>
+            public override string ToString()
+            {
+                return "MatchType.{0} '{1}'".CheckedFormat(MatchType, RuleString);
+            }
+        }
+
+        /// <summary>Enum defines the different means that a RuleString can be used to determine if a given test string is to be included in a given set, or not.</summary>
+        public enum MatchType : int
+        {
+            /// <summary>does not match any string values without regard to the contents of the corresponding RuleString</summary>
+            None = 0,
+            /// <summary>matches any string value without regard to the contents of the corresponding RuleString </summary>
+            Any,
+            /// <summary>matches string values that start with the contents of the corresponding RuleString</summary>
+            Prefix,
+            /// <summary>matches string values that end with the contents of the corresponding RuleString</summary>
+            Suffix,
+            /// <summary>matches string value that contain a sub-string equal to the contents of the corresponding RuleString</summary>
+            Contains,
+            /// <summary>compiles the RuleString as a Regular Expression and the checks if the regular expression finds any match in each given test string</summary>
+            Regex,
+        }
     }
 
     #endregion
