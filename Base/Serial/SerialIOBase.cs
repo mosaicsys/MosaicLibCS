@@ -286,9 +286,11 @@ namespace MosaicLib.SerialIO
 			}
 
 			if (success)
-				SetBaseState(UseState.Online, actionName + ".Done", true);
-			else
-				SetBaseState(UseState.AttemptOnlineFailed, actionName + ".Failed", true);
+				SetBaseState(UseState.Online, actionName + " Done", true);
+			else if (PortConfig.EnableAutoReconnect)
+                SetBaseState(UseState.OnlineFailure, actionName + " Failed (will attempt auto reconnect)", true);
+            else
+                SetBaseState(UseState.AttemptOnlineFailed, actionName + " Failed", true);
 
 			return (success ? string.Empty : rc);
 		}
@@ -337,37 +339,56 @@ namespace MosaicLib.SerialIO
 		//-----------------------------------------------------------------
 		#region Other abstract utility methods to be implemented by a sub-class
 
+        /// <summary>Abstract method used so that derived class can perform port type specific actions when the port is going online.  Returns empty string on success or non-empty string on failure.</summary>
 		protected abstract string InnerPerformGoOnlineAction(string actionName, bool andInitialize);
-		protected abstract string InnerPerformGoOfflineAction(string actionName);
+        /// <summary>Abstract method used so that derived class can perform port type specific actions when the port is going offline.  Returns empty string on success or non-empty string on failure.</summary>
+        protected abstract string InnerPerformGoOfflineAction(string actionName);
 
-		protected abstract int InnerReadBytesAvailable { get; }
-		protected virtual int InnerWriteSpaceUsed { get { return 0; } }
-		protected virtual int InnerWriteSpaceAvailable { get { return 0; } }
-		protected virtual bool InnerIsAnyWriteSpaceAvailable { get { return (InnerWriteSpaceUsed < InnerWriteSpaceAvailable); } }
+        /// <summary>Abstract getter property.  Returns the number of bytes that are currently available to be read or zero if there are none.</summary>
+        protected abstract int InnerReadBytesAvailable { get; }
+        /// <summary>Virtual getter property.  Returns the number of bytes in the write buffer that are currently used so as to allow the port to block issuing write actions when there is insufficient space.  base class implementation returns 0.</summary>
+        protected virtual int InnerWriteSpaceUsed { get { return 0; } }
+        /// <summary>Virtual getter property.  Returns the size of the write buffer, or zero if there is none.  base class implementation returns 0.</summary>
+        protected virtual int InnerWriteSpaceAvailable { get { return 0; } }
+        /// <summary>Virtual getter property.  Returns true if the InnerWriteSpaceUsed is less than the InnerWriteSpaceAvailable</summary>
+        protected virtual bool InnerIsAnyWriteSpaceAvailable { get { return (InnerWriteSpaceUsed < InnerWriteSpaceAvailable); } }
 
-		protected abstract string InnerHandleRead(byte [] buffer, int startIdx, int maxCount, out int didCount, ref ActionResultEnum readResult);
-        protected abstract string InnerHandleWrite(byte[] buffer, int startIdx, int count, out int didCount, ref ActionResultEnum readResult);
-		protected abstract bool InnerIsConnected { get; }
+        /// <summary>Abstract method that is implemented in the derived class to perform the low level reading of bytes from the port into the given buffer.  Method assigns the actual transfered count and the readResult</summary>
+        protected abstract string InnerHandleRead(byte[] buffer, int startIdx, int maxCount, out int didCount, ref ActionResultEnum readResult);
+        /// <summary>Abstract method that is implemented in the derived class to perform the low level writing of bytes to the port from the given buffer.  Method assigns the actual transfered count and the writeResult</summary>
+        protected abstract string InnerHandleWrite(byte[] buffer, int startIdx, int count, out int didCount, ref ActionResultEnum writeResult);
+        /// <summary>Abstract getter property.  Returns true if the underlying port is known to be connected or false otherwise.</summary>
+        protected abstract bool InnerIsConnected { get; }
 
 		#endregion
 
 		//-----------------------------------------------------------------
 		#region private and protected fields and related properties
 
+        /// <summary>ActionLogging reference to be used for read, write, flush and get next packet actions.  resulting action logging will use the traceDataLogger.</summary>
         protected ActionLogging ActionLoggingTraceReference { get; private set; }
 
-		protected readonly Logging.ILogger traceDataLogger = null;
+        /// <summary>ILogger that is used to all trace Data output.  Generally this is directed to a trace suitable logging group and set of corresponding log message handlers.</summary>
+        protected readonly Logging.ILogger traceDataLogger = null;
 
-		protected readonly Logging.IMesgEmitter Error;
+        /// <summary>Logging.IMesgEmitter that is to be used for Error type messages</summary>
+        protected readonly Logging.IMesgEmitter Error;
+        /// <summary>Logging.IMesgEmitter that is to be used for Info type messages</summary>
         protected readonly Logging.IMesgEmitter Info;
+        /// <summary>Logging.IMesgEmitter that is to be used for Debug type messages</summary>
         protected readonly Logging.IMesgEmitter Debug;
+        /// <summary>Logging.IMesgEmitter that is to be used for Trace type messages</summary>
         protected readonly Logging.IMesgEmitter Trace;
+        /// <summary>Logging.IMesgEmitter that is to be used for TraceData type messages</summary>
         protected readonly Logging.IMesgEmitter TraceData;
 
-		protected Queue<IProviderActionBase<ReadActionParam, NullObj>> pendingReadActionsQueue = new Queue<IProviderActionBase<ReadActionParam, NullObj>>();
-		protected Queue<IProviderActionBase<WriteActionParam, NullObj>> pendingWriteActionsQueue = new Queue<IProviderActionBase<WriteActionParam, NullObj>>();
+        /// <summary>Gives a queue of the current pending read actions</summary>
+        protected Queue<IProviderActionBase<ReadActionParam, NullObj>> pendingReadActionsQueue = new Queue<IProviderActionBase<ReadActionParam, NullObj>>();
+        /// <summary>Gives a queue of the current pending write actions</summary>
+        protected Queue<IProviderActionBase<WriteActionParam, NullObj>> pendingWriteActionsQueue = new Queue<IProviderActionBase<WriteActionParam, NullObj>>();
 
-		protected bool AreAnyActionsPending { get { return (pendingReadActionsQueue.Count != 0 || pendingWriteActionsQueue.Count != 0); } }
+        /// <summary>Returns true if the pendingReadActionQueue is not empty or the pendingWriteActionsQueue is not empty.</summary>
+        protected bool AreAnyActionsPending { get { return (pendingReadActionsQueue.Count != 0 || pendingWriteActionsQueue.Count != 0); } }
 
 		private byte [] flushBuf = new byte [512];
 
@@ -380,7 +401,8 @@ namespace MosaicLib.SerialIO
 		//-----------------------------------------------------------------
 		#region Common utility methods
 
-		protected void ServicePendingActions()
+        /// <summary>Services the two pending actions queues.  Also checks if actions should be canceled due to the Base UseState and Base ConnState or when the InnerIsConnected property is false.</summary>
+        protected void ServicePendingActions()
         {
             if (AreAnyActionsPending)
             {
@@ -559,7 +581,7 @@ namespace MosaicLib.SerialIO
             }
         }
 
-		protected void ServicePendingWriteActions(QpcTimeStamp now)
+        protected void ServicePendingWriteActions(QpcTimeStamp now)
 		{
 			while (pendingWriteActionsQueue.Count > 0)
 			{

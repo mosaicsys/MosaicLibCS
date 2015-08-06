@@ -19,15 +19,16 @@
  */
 //-------------------------------------------------------------------
 
+using System;
+using System.Collections.Generic;
+using System.ServiceModel;
+using System.Runtime.Serialization;
+using System.Runtime.InteropServices;
+using System.Linq;
+using MosaicLib.Utils;
+
 namespace MosaicLib.Modular.Common
 {
-    using System;
-    using System.Collections.Generic;
-    using System.ServiceModel;
-    using System.Runtime.Serialization;
-    using MosaicLib.Utils;
-    using System.Runtime.InteropServices;
-
     #region Basic types
 
     /// <summary>Define a Null type that can be used as a ParamType or a ResultType in ParamType and ResultType types in the IAction related pattern types.</summary>
@@ -65,6 +66,15 @@ namespace MosaicLib.Modular.Common
     /// </summary>
     public struct ValueContainer
     {
+        /// <summary>
+        /// Custom value constructor.  Constructs the object and then assigns its initial value as ValueAsObject = given initialValueAsObject.
+        /// </summary>
+        public ValueContainer(System.Object initialValueAsObject)
+            : this()
+        {
+            ValueAsObject = initialValueAsObject;
+        }
+
         /// <summary>A quick encoding on the field/union field in which the value has been placed.</summary>
         public ContainerStorageType cvt;
 
@@ -122,13 +132,24 @@ namespace MosaicLib.Modular.Common
         }
 
         /// <summary>
-        /// Returns true if the contained value is null.
+        /// Returns true if the contained type is ContainerStorageType.Object and contained value is null.
+        /// </summary>
+        public bool IsNullObject
+        {
+            get
+            {
+                return (cvt == ContainerStorageType.Object && o == null);
+            }
+        }
+
+        /// <summary>
+        /// Returns true if the contained type is a reference type and contained value is null.
         /// </summary>
         public bool IsNull
         {
             get
             {
-                return (cvt == ContainerStorageType.Object && o == null);
+                return (cvt.IsReferenceType() && o == null);
             }
         }
 
@@ -140,7 +161,10 @@ namespace MosaicLib.Modular.Common
             u = default(Union);
         }
 
-        /// <summary></summary>
+        /// <summary>
+        /// Accepts a given type and attempts to generate an apporpriate ContainerStorageType (and isNullable) value as the best container storage type to use with the given Type.
+        /// Unrecognized type default as ContainerStorageType.Object.
+        /// </summary>
         public static void DecodeType(Type type, out ContainerStorageType decodedValueType, out bool isNullable)
         {
             isNullable = (type.IsGenericType && (type.GetGenericTypeDefinition() == typeof(System.Nullable<>)));
@@ -162,12 +186,26 @@ namespace MosaicLib.Modular.Common
             else if (valueType == typeof(System.UInt64)) decodedValueType = ContainerStorageType.UInt64;
             else if (valueType == typeof(System.Single)) decodedValueType = ContainerStorageType.Single;
             else if (valueType == typeof(System.Double)) decodedValueType = ContainerStorageType.Double;
+            else if (valueType == stringType) decodedValueType = ContainerStorageType.String;
+            else if (iListOfStringType.IsAssignableFrom(valueType))
+            {
+                isNullable = false;
+                decodedValueType = ContainerStorageType.IListOfString;
+            }
+            else if (valueType.IsEnum)
+            {
+                isNullable = false;
+                decodedValueType = ContainerStorageType.String;
+            }
             else
             {
-                isNullable = false;     // this flag is not useful when used with object types
+                isNullable = false;     // this flag is not useful when used with reference types
                 decodedValueType = ContainerStorageType.Object;
             }
         }
+
+        private static readonly Type stringType = typeof(System.String);
+        private static readonly Type iListOfStringType = typeof(IList<System.String>);
 
         /// <summary>
         /// get/set property.
@@ -186,6 +224,8 @@ namespace MosaicLib.Modular.Common
                 {
                     default:
                     case ContainerStorageType.Object: return o;
+                    case ContainerStorageType.String: return o;
+                    case ContainerStorageType.IListOfString: return o;
                     case ContainerStorageType.Boolean: return u.b;
                     case ContainerStorageType.SByte: return u.i8;
                     case ContainerStorageType.Int16: return u.i16;
@@ -268,7 +308,9 @@ namespace MosaicLib.Modular.Common
                     switch (decodedValueType)
                     {
                         default:
-                        case ContainerStorageType.Object: o = value; cvt = ContainerStorageType.Object; break;
+                        case ContainerStorageType.Object: o = (System.Object) value; cvt = ContainerStorageType.Object; break;
+                        case ContainerStorageType.String: o = ((value != null) ? ((System.Object) value).ToString() : null); break;
+                        case ContainerStorageType.IListOfString: o = (System.Collections.Generic.IList<System.String>)((System.Object)value); break;
                         case ContainerStorageType.Boolean: u.b = (System.Boolean)System.Convert.ChangeType(value, typeof(System.Boolean)); break;
                         case ContainerStorageType.SByte: u.i8 = (System.SByte)System.Convert.ChangeType(value, typeof(System.SByte)); break;
                         case ContainerStorageType.Int16: u.i16 = (System.Int16)System.Convert.ChangeType(value, typeof(System.Int16)); break;
@@ -320,26 +362,40 @@ namespace MosaicLib.Modular.Common
         }
 
         /// <summary>
+        /// property is updated each time GetValue is called.  null indicates that the transfer and/or conversion was successfull while any other value indicates why it was not.
+        /// </summary>
+        public System.Exception LastGetValueException { get; private set; }
+
+        /// <summary>
         /// Typed GetValue method.  
         /// Requires that caller has pre-decoded the TValueType to obtain the expected ContainerStorageType and a flag to indicate if the TValueType is a nullable type.
         /// If the contained value type matches the decodedValueType then this method simply transfers the value from the corresponding storage field to the value.
         /// Otherwise the method uses the System.Convert.ChangeType method to attempt to convert the contained value into the desired TValueType type.
         /// If this transfer or conversion is successful then this method and returns the transfered/converted value.  If this transfer/conversion is not
         /// successful then this method returns default(TValueType).  
-        /// If rethrow is true and the method counters any excpetions then it will rethrow the exception.
+        /// If rethrow is true and the method encounters any excpetions then it will rethrow the exception.
         /// </summary>
         public TValueType GetValue<TValueType>(ContainerStorageType decodedValueType, bool isNullable, bool rethrow)
         {
+            Type TValueTypeType = typeof(TValueType);
             TValueType value;
+
+            LastGetValueException = null;
 
             try
             {
-                if (decodedValueType == cvt)
+                if (TValueTypeType.IsEnum)
+                {
+                    value = (TValueType) System.Enum.Parse(TValueTypeType, ValueAsObject.ToString(), false);
+                }
+                else if (decodedValueType == cvt)
                 {
                     switch (cvt)
                     {
                         default:
                         case ContainerStorageType.Object: value = (TValueType)o; break;
+                        case ContainerStorageType.String: value = (TValueType)o; break;
+                        case ContainerStorageType.IListOfString: value = (TValueType)o; break;
                         case ContainerStorageType.Boolean: value = (TValueType)((System.Object)u.b); break;
                         case ContainerStorageType.SByte: value = (TValueType)((System.Object)u.i8); break;
                         case ContainerStorageType.Int16: value = (TValueType)((System.Object)u.i16); break;
@@ -355,24 +411,91 @@ namespace MosaicLib.Modular.Common
                 }
                 else if (!isNullable)
                 {
-                    value = (TValueType)System.Convert.ChangeType(ValueAsObject, typeof(TValueType));
+                    value = default(TValueType);
+                    System.Object valueAsObject = ValueAsObject;
+
+                    bool conversionDone = false;
+                    if (!conversionDone && decodedValueType == ContainerStorageType.String)
+                    {
+                        // convert contained type to a String using object.ToString()
+                        value = (TValueType)System.Convert.ChangeType(((valueAsObject != null) ? valueAsObject.ToString() : null), typeof(TValueType));
+                        conversionDone = true;
+                    }
+                    
+                    if (!conversionDone && !decodedValueType.IsReferenceType() && valueAsObject is System.String)
+                    {
+                        // if the string is not empty then attempt to parse the string to the desired type.  This only succeeds if the entire string is parsed as the desired type.
+                        StringScanner ss = new StringScanner(valueAsObject as System.String ?? String.Empty);
+                        if (!ss.IsAtEnd)
+                        {
+                            switch (decodedValueType)
+                            {
+                                case ContainerStorageType.Boolean: value = (TValueType)System.Convert.ChangeType(ss.ParseValue<System.Boolean>(false), typeof(System.Boolean)); conversionDone = ss.IsAtEnd; break;
+                                case ContainerStorageType.SByte: value = (TValueType)System.Convert.ChangeType(ss.ParseValue<System.SByte>(0), typeof(System.SByte)); conversionDone = ss.IsAtEnd; break;
+                                case ContainerStorageType.Int16: value = (TValueType)System.Convert.ChangeType(ss.ParseValue<System.Int16>(0), typeof(System.Int16)); conversionDone = ss.IsAtEnd; break;
+                                case ContainerStorageType.Int32: value = (TValueType)System.Convert.ChangeType(ss.ParseValue<System.Int32>(0), typeof(System.Int32)); conversionDone = ss.IsAtEnd; break;
+                                case ContainerStorageType.Int64: value = (TValueType)System.Convert.ChangeType(ss.ParseValue<System.Int64>(0), typeof(System.Int64)); conversionDone = ss.IsAtEnd; break;
+                                case ContainerStorageType.Byte: value = (TValueType)System.Convert.ChangeType(ss.ParseValue<System.Byte>(0), typeof(System.Byte)); conversionDone = ss.IsAtEnd; break;
+                                case ContainerStorageType.UInt16: value = (TValueType)System.Convert.ChangeType(ss.ParseValue<System.UInt16>(0), typeof(System.UInt16)); conversionDone = ss.IsAtEnd; break;
+                                case ContainerStorageType.UInt32: value = (TValueType)System.Convert.ChangeType(ss.ParseValue<System.UInt32>(0), typeof(System.UInt32)); conversionDone = ss.IsAtEnd; break;
+                                case ContainerStorageType.UInt64: value = (TValueType)System.Convert.ChangeType(ss.ParseValue<System.UInt64>(0), typeof(System.UInt64)); conversionDone = ss.IsAtEnd; break;
+                                case ContainerStorageType.Single: value = (TValueType)System.Convert.ChangeType(ss.ParseValue<System.Single>(0.0f), typeof(System.Single)); conversionDone = ss.IsAtEnd; break;
+                                case ContainerStorageType.Double: value = (TValueType)System.Convert.ChangeType(ss.ParseValue<System.Double>(0.0f), typeof(System.Double)); conversionDone = ss.IsAtEnd; break;
+                                default: break;
+                            }
+                        }
+                    }
+
+                    if (!conversionDone)
+                    {
+                        value = (TValueType)System.Convert.ChangeType(valueAsObject, typeof(TValueType));
+                    }
                 }
                 else
                 {
                     value = default(TValueType);
-                    bool valueIsIntendedToBeNull = (cvt == ContainerStorageType.Object && o == null);
-                    if (!valueIsIntendedToBeNull && rethrow)
-                        throw new ValueContainerGetValueException("Unable to get {0} as type '{1}': No known conversion exists".CheckedFormat(this, typeof(TValueType)), null);
+                    bool valueIsIntendedToBeNull = (cvt.IsReferenceType() && o == null);
+                    if (!valueIsIntendedToBeNull)
+                        LastGetValueException = new ValueContainerGetValueException("Unable to get {0} as type '{1}': No known conversion exists".CheckedFormat(this, typeof(TValueType)), null);
                 }
             }
             catch (System.Exception ex)
             {
                 value = default(TValueType);
-                if (rethrow)
-                    throw new ValueContainerGetValueException("Unable to get {0} as type '{1}': {2}".CheckedFormat(this, typeof(TValueType), ex.Message), null);
+                LastGetValueException = new ValueContainerGetValueException("Unable to get {0} as type '{1}': {2}".CheckedFormat(this, typeof(TValueType), ex.Message), ex);
             }
 
+            if (rethrow && LastGetValueException != null)
+                throw LastGetValueException;
+
             return value;
+        }
+
+        /// <summary>
+        /// Typed TryGetValue method.  
+        /// Requires that caller has pre-decoded the TValueType to obtain the expected ContainerStorageType and a flag to indicate if the TValueType is a nullable type.
+        /// If the contained value type matches the decodedValueType then this method simply transfers the value from the corresponding storage field to the value.
+        /// Otherwise the method uses the System.Convert.ChangeType method to attempt to convert the contained value into the desired TValueType type.
+        /// If this transfer or conversion is successful then this method and assigns the transfered/converted value and returns true.  
+        /// If this transfer/conversion is not successful then this method assigns default(TValueType) and returns false.  
+        /// If rethrow is true and the method encounters any excpetions then it will rethrow the exception.
+        /// </summary>
+        public bool TryGetValue<TValueType>(out TValueType result, ContainerStorageType decodedValueType, bool isNullable, bool rethrow)
+        {
+            result = default(TValueType);
+            try
+            {
+                result = GetValue<TValueType>(decodedValueType, isNullable, rethrow);
+                return (LastGetValueException == null);
+            }
+            catch (System.Exception ex)
+            {
+                if (LastGetValueException == null)
+                    LastGetValueException = ex;
+                if (rethrow)
+                    throw;
+                return false;
+            }
         }
 
         /// <summary>
@@ -392,7 +515,9 @@ namespace MosaicLib.Modular.Common
             if (cvt != rhs.cvt)
                 return false;
 
-            if (cvt == ContainerStorageType.Object)
+            if (cvt == ContainerStorageType.IListOfString)
+                return (o as IList<String>).IsEqualTo(rhs.o as IList<String>);
+            else if (cvt.IsReferenceType())
                 return System.Object.Equals(o, rhs.o);
             else
                 return u.IsEqualTo(rhs.u);
@@ -416,11 +541,22 @@ namespace MosaicLib.Modular.Common
         /// <summary>Override ToString for logging and debugging.</summary>
         public override string ToString()
         {
-            if (cvt == ContainerStorageType.Object)
-                return Fcns.CheckedFormat("{0}:'{1}'", cvt, ValueAsObject);
-            else
-                return Fcns.CheckedFormat("{0}:{1}", cvt, ValueAsObject);
+            if (IsNull)
+                return "Null:{0}".CheckedFormat(cvt);
+
+            switch (cvt)
+            {
+                case ContainerStorageType.Object:
+                case ContainerStorageType.String:
+                    return Fcns.CheckedFormat("{0}:'{1}'", cvt, o);
+                case ContainerStorageType.IListOfString:
+                    return Fcns.CheckedFormat("{0}:|{1}|", cvt, String.Join("|", ((o as IList<String>) ?? emptyIListOfString).ToArray())); 
+                default:
+                    return Fcns.CheckedFormat("{0}:{1}", cvt, ValueAsObject);
+            }
         }
+
+        private static readonly IList<String> emptyIListOfString = new List<String>().AsReadOnly();
     }
 
     /// <summary>Enumeration that is used with the ValueContainer struct.</summary>
@@ -428,6 +564,10 @@ namespace MosaicLib.Modular.Common
     {
         /// <summary>Use Object field -(the default value: 0)</summary>
         Object = 0,
+        /// <summary>Use Object field as a String</summary>
+        String,
+        /// <summary>Use Object field as an IList{String} - usually contains a ReadOnlyCollection{String}</summary>
+        IListOfString,
         /// <summary>Use Union.Boolean field</summary>
         Boolean,
         /// <summary>Use Union.SByte field</summary>
@@ -450,6 +590,26 @@ namespace MosaicLib.Modular.Common
         Single,
         /// <summary>Use Union.Double field</summary>
         Double,
+    }
+
+    /// <summary>Standard extension methods wrapper class/namespace</summary>
+    public static partial class ExtensionMethods
+    {
+        /// <summary>
+        /// Returns true if the given ContainerStorageType is a reference type.  (Currently Object, String, IListOfString)
+        /// </summary>
+        public static bool IsReferenceType(this ContainerStorageType cst)
+        {
+            switch (cst)
+            {
+                case ContainerStorageType.Object:
+                case ContainerStorageType.String:
+                case ContainerStorageType.IListOfString:
+                    return true;
+                default:
+                    return false;
+            }
+        }
     }
 
     /// <summary>

@@ -50,7 +50,7 @@ namespace MosaicLib.Modular.Part
 		Online,
 		/// <summary>part is online and is performing some action</summary>
 		OnlineBusy,
-		/// <summary>part is online but is not functioning correctly</summary>
+		/// <summary>part is online but is not functioning correctly.  May include cases where a GoOnline action partially succeeded.</summary>
 		OnlineFailure,
 		/// <summary>part was explicitly told to go offline</summary>
 		Offline,

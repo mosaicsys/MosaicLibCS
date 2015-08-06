@@ -29,6 +29,8 @@ using System.Linq;
 using MosaicLib.Utils;
 using System.Text;
 using System.Collections;
+using Microsoft.Win32;
+using MosaicLib.Modular.Common;
 
 namespace MosaicLib.Modular.Config
 {
@@ -37,7 +39,7 @@ namespace MosaicLib.Modular.Config
     /// <summary>
     /// Base IConfigKeyProvider implementation class.
     /// </summary>
-    public abstract class ConfigKeyProviderBase : IConfigKeyProvider
+    public abstract class ConfigKeyProviderBase : DisposableBase, IConfigKeyProvider
     {
         /// <summary>
         /// Constructor.  Requires name.  Other properties shall be initialized using property initializer list.
@@ -94,7 +96,7 @@ namespace MosaicLib.Modular.Config
         /// This method returns the empty string on success or an error code on failure.
         /// </summary>
         /// <remarks>At the IConfigKeyProvider level this method will be invoked for each sub-set of keys that share the same original provider</remarks>
-        public virtual string SetValues(KeyValuePair<IConfigKeyAccess, string>[] keyAccessAndValuesPairArray, string commentStr)
+        public virtual string SetValues(KeyValuePair<IConfigKeyAccess, ValueContainer>[] keyAccessAndValuesPairArray, string commentStr)
         {
             if (BaseFlags.IsFixed)
                 return Fcns.CheckedFormat("Invalid: Provider '{0}' does not support Setting key values", Name);
@@ -134,11 +136,11 @@ namespace MosaicLib.Modular.Config
         /// with the CommonKeyPrefix.
         /// <para/>Method supports call chaining.
         /// </summary>
-        public DictionaryConfigKeyProvider ImportInitialValues(KeyValuePair<string, string> [] nameValuePairArray)
+        public DictionaryConfigKeyProvider ImportInitialValues(KeyValuePair<string, ValueContainer>[] nameValuePairArray)
         {
             ConfigKeyAccessFlags flags = new ConfigKeyAccessFlags();
 
-            AddConfigKeyAccessArray(nameValuePairArray.Select((kvp) => new ConfigKeyAccessImpl(KeyPrefix + kvp.Key, flags, null, this) { ValueAsString = kvp.Value }).ToArray());
+            AddConfigKeyAccessArray(nameValuePairArray.Select((kvp) => new ConfigKeyAccessImpl(KeyPrefix + kvp.Key, flags, null, this) { ValueContainer = kvp.Value }).ToArray());
 
             return this;
         }
@@ -153,7 +155,7 @@ namespace MosaicLib.Modular.Config
                 keyItemDictionary[ckai.Key] = new Item()
                 {
                     key = ckai.Key,
-                    initialValueAsString = ckai.ValueAsString,
+                    initialContainedValue = ckai.ValueContainer,
                     ckai = ckai,
                 };
             }
@@ -167,7 +169,7 @@ namespace MosaicLib.Modular.Config
             /// <summary>The key name</summary>
             public string key;
             /// <summary>The initial value from construction time.</summary>
-            public string initialValueAsString;
+            public ValueContainer initialContainedValue;
             /// <summary>The provider reference ConfigKeyAccessImpl object used for this key</summary>
             public ConfigKeyAccessImpl ckai;
             /// <summary>The last comment string given to this key if the dictionary is not fixed.</summary>
@@ -239,7 +241,7 @@ namespace MosaicLib.Modular.Config
         /// This method returns the empty string on success or an error code on failure.
         /// </summary>
         /// <remarks>At the IConfigKeyProvider level this method will be invoked for each sub-set of keys that share the same original provider</remarks>
-        public override string SetValues(KeyValuePair<IConfigKeyAccess, string>[] keyAccessAndValuesPairArray, string commentStr)
+        public override string SetValues(KeyValuePair<IConfigKeyAccess, ValueContainer>[] keyAccessAndValuesPairArray, string commentStr)
         {
             if (BaseFlags.IsFixed)
                 return Fcns.CheckedFormat("Invalid: Provider '{0}' does not support Setting key values", Name);
@@ -258,7 +260,7 @@ namespace MosaicLib.Modular.Config
                     firstError = firstError ?? Fcns.CheckedFormat("Internal: key:'{0}' is not valid for use with provider:'{1}', required key prefix:'{2}'", kvpIcka.Key, Name, KeyPrefix);
                 else if (!keyItemDictionary.TryGetValue(key ?? String.Empty, out item) || item == null || item.ckai == null)
                 {
-                    item = new Item() { key = key, ckai = new ConfigKeyAccessImpl(key, kvpIcka.Flags, null, this) { ValueAsString = kvp.Value }, initialValueAsString = kvp.Value, comment = commentStr };
+                    item = new Item() { key = key, ckai = new ConfigKeyAccessImpl(key, kvpIcka.Flags, null, this) { ValueContainer = kvp.Value }, initialContainedValue = kvp.Value, comment = commentStr };
                     keyItemDictionary[key] = item;
 
                     numChangedItems++;
@@ -271,31 +273,41 @@ namespace MosaicLib.Modular.Config
                         firstError = firstError ?? Fcns.CheckedFormat("Internal: key:'{0}' is fixed in provider:'{1}'", kvpIcka.Key, Name);
                     else
                     {
-                        string entryValueAsString = item.ckai.ValueAsString;
+                        ValueContainer entryValue = item.ckai.ValueContainer;
 
-                        item.ckai.ValueAsString = kvp.Value;
+                        item.ckai.ValueContainer = kvp.Value;
                         item.comment = commentStr;
 
                         numChangedItems++;
 
-                        if (entryValueAsString == item.initialValueAsString)
-                            Logger.Debug.Emit("{0}: key:'{1}' value changed to '{2}' [from initial value:'{3}']", Name, key, kvp.Value, item.initialValueAsString);
+                        if (entryValue.IsEqualTo(item.initialContainedValue))
+                            Logger.Debug.Emit("{0}: key:'{1}' value changed to {2} [from initial value:{3}]", Name, key, kvp.Value, item.initialContainedValue);
                         else
-                            Logger.Debug.Emit("{0}: key:'{1}' value changed to '{2}' [from:'{3}', initial:'{4}']", Name, key, kvp.Value, entryValueAsString, item.initialValueAsString);
+                            Logger.Debug.Emit("{0}: key:'{1}' value changed to {2} [from:{3}, initial:{4}]", Name, key, kvp.Value, entryValue, item.initialContainedValue);
                     }
                 }
             }
 
             if (numChangedItems > 0)
-                firstError = firstError ?? HandleSetValuesChangedContents();
+            {
+                string changeEC = HandleSetValuesChangedContents();
+                firstError = firstError ?? changeEC;
+            }
 
             return firstError ?? String.Empty;
         }
 
         /// <summary>
-        /// Method that may be overriden in derived objects to persist changes to the dictionary
+        /// Method that may be overriden in derived objects to persist changes to the dictionary.  
+        /// Default implementation returns String.Empty if the BaseFlags.IsFixed is false otherwise it returns an appropriate error message.
         /// </summary>
-        protected virtual string HandleSetValuesChangedContents() { return String.Empty; }
+        protected virtual string HandleSetValuesChangedContents() 
+        {
+            if (!BaseFlags.IsFixed)
+                return String.Empty; 
+            else
+                return "{0} only supports Fixed value keys".CheckedFormat(Name);
+        }
     }
 
     /// <summary>
@@ -317,7 +329,7 @@ namespace MosaicLib.Modular.Config
             if (mainArgs != null)
             {
                 List<string> unusedArgsList = new List<string>() { };
-                List<KeyValuePair<string, string>> generatedKeyValuePairList = new List<KeyValuePair<string, string>>(); 
+                List<KeyValuePair<string, ValueContainer>> generatedKeyValuePairList = new List<KeyValuePair<string, ValueContainer>>(); 
 
                 for (int idx = 0; idx < mainArgs.Length; idx++)
                 {
@@ -330,7 +342,7 @@ namespace MosaicLib.Modular.Config
                     {
                         string key = KeyPrefix + kvTokenArray[0];
                         string value = kvTokenArray[1];
-                        generatedKeyValuePairList.Add(new KeyValuePair<string, string>(key, value));
+                        generatedKeyValuePairList.Add(new KeyValuePair<string, ValueContainer>(key, new ValueContainer(value)));
                     }
                 }
 
@@ -341,6 +353,14 @@ namespace MosaicLib.Modular.Config
 
                 ImportInitialValues(generatedKeyValuePairList.ToArray());
             }
+        }
+
+        /// <summary>
+        /// Method always fails because this provider only supports fixed values.
+        /// </summary>
+        protected override string HandleSetValuesChangedContents()
+        {
+            return "{0} does not support saving values".CheckedFormat(Name);
         }
     }
 
@@ -358,7 +378,7 @@ namespace MosaicLib.Modular.Config
         {
             KeyPrefix = keyPrefix;
 
-            List<KeyValuePair<string, string>> generatedKeyValuePairList = new List<KeyValuePair<string, string>>();
+            List<KeyValuePair<string, ValueContainer>> generatedKeyValuePairList = new List<KeyValuePair<string, ValueContainer>>();
 
             IDictionary envVarIDictionary = System.Environment.GetEnvironmentVariables();
             foreach (object keyObject in envVarIDictionary.Keys)
@@ -369,7 +389,7 @@ namespace MosaicLib.Modular.Config
 
                 if (keyStr != null && valueStr != null)
                 {
-                    generatedKeyValuePairList.Add(new KeyValuePair<string,string>(KeyPrefix + keyStr, valueStr));
+                    generatedKeyValuePairList.Add(new KeyValuePair<string, ValueContainer>(KeyPrefix + keyStr, new ValueContainer(valueStr)));
                 }
             }
 
@@ -392,7 +412,7 @@ namespace MosaicLib.Modular.Config
         {
             KeyPrefix = keyPrefix;
 
-            Dictionary<string, string> generatedKeyValueDictionary = new Dictionary<string, string>();
+            Dictionary<string, ValueContainer> generatedKeyValueDictionary = new Dictionary<string, ValueContainer>();
 
             appSettings = System.Configuration.ConfigurationManager.AppSettings;
 
@@ -401,9 +421,14 @@ namespace MosaicLib.Modular.Config
                 if (!generatedKeyValueDictionary.ContainsKey(key))
                 {
                     string[] valuesArray = appSettings.GetValues(key) ?? emptyKeyValuesArray;
+                    string firstValue = valuesArray.SafeAccess(0, String.Empty);
 
                     appSettingsDictionary[key] = valuesArray;
-                    generatedKeyValueDictionary[key] = valuesArray.SafeAccess(0, String.Empty);
+
+                    if (valuesArray.Length <= 1)
+                        generatedKeyValueDictionary[key] = new ValueContainer(firstValue);
+                    else
+                        generatedKeyValueDictionary[key] = new ValueContainer(valuesArray);     // will produce IListOfString content
                 }
             }
 
@@ -484,7 +509,7 @@ namespace MosaicLib.Modular.Config
                         }
                         if (!includeFilesKeysDictionary.ContainsKey(fullKey))
                         {
-                            includeFilesKeysDictionary[fullKey] = new ConfigKeyAccessImpl(fullKey, flags, null, this) { ValueAsString = keyItem.Value };
+                            includeFilesKeysDictionary[fullKey] = new ConfigKeyAccessImpl(fullKey, flags, null, this) { ValueContainer = new ValueContainer(keyItem.Value) };
                         }
                         else
                         {
@@ -515,7 +540,8 @@ namespace MosaicLib.Modular.Config
     public class IniFileConfigKeyProvider : DictionaryConfigKeyProvider
     {
         /// <summary>
-        /// Constructor:  
+        /// Constructor: Accepts provider name, filePath to ini file to read/write, keyPrefix to prefix on all contained keys, 
+        /// and isReadWrite to indicate if the INI file is writable or not (ie if all of the keys should be IsFixed).
         /// </summary>
         public IniFileConfigKeyProvider(string name, string filePath, string keyPrefix, bool isReadWrite)
             : base(name, !isReadWrite)
@@ -583,9 +609,9 @@ namespace MosaicLib.Modular.Config
                         valueItem.ckai = new ConfigKeyAccessImpl("{0}{1}".CheckedFormat(KeyPrefix, valueItem.fileKeyName), defaultAccessFlags, null, this);
 
                     if (valueItem.hasEquals)
-                        valueItem.ckai.ValueAsString = linePartsArray.SafeAccess(1, String.Empty);
+                        valueItem.ckai.ValueContainer = new ValueContainer(linePartsArray.SafeAccess(1, String.Empty));
                     else
-                        valueItem.ckai.ValueAsString = null;
+                        valueItem.ckai.ValueContainer = new ValueContainer();
 
                     valueItemList.Add(valueItem);
                 }
@@ -656,6 +682,196 @@ namespace MosaicLib.Modular.Config
 
                 return mesg;
             }
+        }
+    }
+
+    #endregion
+    
+    #region RegistryKeyTreeProvider
+
+    /// <summary>
+    /// Provides a type of DicationaryConfigKeyProvier obtained by loading a windows registry key tree
+    /// <para/>[SectionName]
+    /// <para/>key1=value1
+    /// <para/>key2=value2
+    /// </summary>
+    public class RegistryKeyTreeProvider : DictionaryConfigKeyProvider
+    {
+        /// <summary>
+        /// Constructor: Accepts provider name, rootKeyPath to enumerate through, keyPrefix to prefix on all contained keys, 
+        /// and isReadWrite to indicate if the INI file is writable or not (ie if all of the keys should be IsFixed).
+        /// </summary>
+        public RegistryKeyTreeProvider(string name, string registryRootPath, string keyPrefix, bool isReadWrite)
+            : base(name, !isReadWrite)
+        {
+            if (isReadWrite)
+            {
+                BaseFlags = new ConfigKeyProviderFlags(BaseFlags) { MayBeChanged = true, IsPersisted = true };
+                defaultAccessFlags.MayBeChanged = true;
+            }
+
+            KeyPrefix = keyPrefix;
+
+            RegistryRootPath = registryRootPath;
+
+            AddExplicitDisposeAction(
+                () => 
+                {
+                    openRegKeyList.ForEach((regKey) => Fcns.DisposeOfGivenObject(regKey));
+                    openRegKeyList.Clear(); 
+                });
+
+            try
+            {
+                RegistryKeyPermissionCheck keyTreePermissions = isReadWrite ? Microsoft.Win32.RegistryKeyPermissionCheck.ReadWriteSubTree : Microsoft.Win32.RegistryKeyPermissionCheck.ReadSubTree;
+
+                List<string> regKeyPathList = new List<string>(Win32.Registry.Fcns.SplitRegistryKeyPath(RegistryRootPath));
+                string lastKey = null;
+                if (regKeyPathList.Count > 0)
+                {
+                    lastKey = regKeyPathList[regKeyPathList.Count-1];
+                    regKeyPathList.RemoveAt(regKeyPathList.Count-1);
+                }
+                string [] parentPathArray = regKeyPathList.ToArray();
+
+                using (RegistryKey parentReadOnlyKey = Win32.Registry.Fcns.OpenRegistryKeyPath(null, parentPathArray, RegistryKeyPermissionCheck.ReadSubTree))
+                {
+                    RegistryKey rootRegKey = Win32.Registry.Fcns.OpenRegistryKeyPath(parentReadOnlyKey, lastKey, keyTreePermissions);
+                    openRegKeyList.Add(rootRegKey);
+
+                    Enumerate(keyPrefix, rootRegKey, keyTreePermissions);
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Logger.Error.Emit("Unable to successfully enumerate Registry keys and values under '{0}': {1}", RegistryRootPath, ex.ToString());
+            }
+
+            AddConfigKeyAccessArray(valueItemList.Select((vItem) => vItem.ckai).ToArray());
+        }
+
+        ConfigKeyAccessFlags defaultAccessFlags = new ConfigKeyAccessFlags();
+
+        private void Enumerate(string keyPrefix, RegistryKey regKey, RegistryKeyPermissionCheck keyTreePermissions)
+        {
+            if (regKey == null)
+                return;
+
+            string currentKeyName = regKey.Name;
+
+            string[] valueNames = regKey.GetValueNames();
+
+            foreach (string valueName in valueNames)
+            {
+                try
+                {
+                    RegistryValueKind valueKind = regKey.GetValueKind(valueName);
+                    object valueAsObject = regKey.GetValue(valueName, null);
+                    ValueContainer valueContainer = new ValueContainer(valueAsObject);
+                    bool isFixed = false;
+
+                    ValueItem item = null;
+                    string keyName = "{0}{1}".CheckedFormat(keyPrefix, valueName);
+
+                    item = new ValueItem() { parentRegKey = regKey, valueName = valueName, initialValueKind = valueKind, lastContainedValue = valueContainer, isFixed = isFixed };
+
+                    item.ckai = new ConfigKeyAccessImpl(keyName, defaultAccessFlags, null, this) { ValueContainer = item.lastContainedValue };
+                    if (item.isFixed)
+                        item.ckai.ProviderFlags = item.ckai.ProviderFlags.MergeWith(new ConfigKeyProviderFlags() { IsFixed = true });
+
+                    valueItemList.Add(item);
+                }
+                catch (System.Exception ex)
+                {
+                    Logger.Debug.Emit("Could not extract '{0}/{1}'s type or value: {2}", currentKeyName, valueName, ex);
+                }
+            }
+
+            string[] subKeyNames = regKey.GetSubKeyNames();
+
+            foreach (string subKeyName in subKeyNames)
+            {
+                try
+                {
+                    RegistryKey subKey = Win32.Registry.Fcns.OpenRegistryKeyPath(regKey, subKeyName, keyTreePermissions);
+                    openRegKeyList.Add(subKey);
+
+                    string subKeyPrefix = "{0}{1}.".CheckedFormat(keyPrefix, subKeyName);
+
+                    Enumerate(subKeyPrefix, subKey, keyTreePermissions);
+                }
+                catch (System.Exception ex)
+                {
+                    Logger.Debug.Emit("Could not enumerate into registry sub-key '{0}/{1}': {2}", currentKeyName, subKeyName, ex); 
+                }
+            }
+        }
+
+        /// <summary>
+        /// Set this property to True to force each HandleSetValuesChangedContents call to flush the registry to disk before returning (or not). 
+        /// </summary>
+        public bool ForceFullFlushOnUpdate { get; set; }
+
+        string RegistryRootPath {get; set;}
+
+        List<RegistryKey> openRegKeyList = new List<RegistryKey>();
+        List<ValueItem> valueItemList = new List<ValueItem>();
+
+        class ValueItem
+        {
+            public RegistryKey parentRegKey;
+
+            public string valueName;
+            public RegistryValueKind initialValueKind;
+            public bool isFixed;
+            public ConfigKeyAccessImpl ckai;
+            public ValueContainer lastContainedValue;
+        }
+
+        /// <summary>
+        /// This method will attempt to update any registry keys for values that have been changed since they were last updated.
+        /// </summary>
+        protected override string HandleSetValuesChangedContents()
+        {
+            string mesg = null;
+
+            int updateCount = 0;
+
+            try
+            {
+                foreach (ValueItem item in valueItemList)
+                {
+                    if (!item.ckai.ProviderFlags.IsFixed && !item.lastContainedValue.IsEqualTo(item.ckai.ValueContainer))
+                    {
+                        try
+                        {
+                            bool doSet = !item.isFixed;
+
+                            if (doSet)
+                            {
+                                item.parentRegKey.SetValue(item.valueName, item.ckai.ValueContainer.ValueAsObject);
+                                item.lastContainedValue = item.ckai.ValueContainer;
+                                updateCount++;
+                            }
+                        }
+                        catch (System.Exception ex)
+                        {
+                            mesg = mesg ?? "Could not write key to registry failed at '{0}': {1}".CheckedFormat(item.ckai.Key, ex);
+                        }
+                    }
+                }
+
+                if (ForceFullFlushOnUpdate && updateCount != 0)
+                {
+                    MosaicLib.Win32.Registry.Fcns.RegFlushKey(new IntPtr());
+                }
+            }
+            catch (System.Exception ex)
+            {
+                mesg = mesg ?? "Registry key write failed under '{0}': {1}".CheckedFormat(RegistryRootPath, ex);
+            }
+
+            return mesg ?? String.Empty;
         }
     }
 
@@ -746,7 +962,7 @@ namespace MosaicLib.Modular.Config
         public string Key { get; set; }
 
         /// <summary>Value property give the key's value (default, current, or fixed) formatted as a string.</summary>
-        [DataMember(Order = 100)]
+        [DataMember(Order = 100, IsRequired=false, EmitDefaultValue=false)]
         public string Value { get; set; }
 
 #if (false) 

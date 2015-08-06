@@ -900,6 +900,8 @@ namespace MosaicLib.Utils
         /// <returns>true if token was converted successfully, or false otherwise.</returns>
         public static bool ParseValue(string token, out Int32 value)
         {
+            token = token ?? string.Empty;
+
             unchecked
             {
                 if (Int32.TryParse(token, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out value))
@@ -942,6 +944,8 @@ namespace MosaicLib.Utils
         /// <returns>true if token was converted successfully, or false otherwise.</returns>
         public static bool ParseValue(string token, out UInt32 value)
         {
+            token = token ?? string.Empty;
+
             unchecked
             {
                 if (UInt32.TryParse(token, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out value))
@@ -997,6 +1001,8 @@ namespace MosaicLib.Utils
         /// <returns>true if token was converted successfully, or false otherwise.</returns>
         public static bool ParseValue(string token, out Double value)
         {
+            token = token ?? string.Empty;
+
             bool success = Double.TryParse(token, out value);
 
             return success;

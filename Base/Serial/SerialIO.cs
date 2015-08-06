@@ -402,7 +402,10 @@ namespace MosaicLib.SerialIO
 
 	//-----------------------------------------------------------------
 
-	/// <summary>This enum defines a set of values that are used to catagorize the results of a given Read or Write action on a SerialIO.Port.</summary>
+	/// <summary>
+    /// This enum defines a set of values that are used to catagorize the results of a given Read or Write action on a SerialIO.Port.
+    /// <para/>Values: None(0, default), ReadDone, ReadTimeout, ReadFailed, ReadCanceled, ReadRemoteEndHasBeenClosed, WriteDone, WriteFailed, WriteCanceled
+    /// </summary>
 	public enum ActionResultEnum
 	{
 		/// <summary>enum value when no result state is known (action has been reset or is in progress)</summary>
@@ -513,6 +516,8 @@ namespace MosaicLib.SerialIO
         public WriteActionParam() { }
         /// <summary>Constructs the object to write the contents of the given buffer.  BytesToWrite is automatically set to the buffer length.</summary>
         public WriteActionParam(byte[] buffer) : this() { Buffer = buffer; }
+        /// <summary>Constructs the object to write the contents of the given string value (transcoded using ByteArrayTranscoders.ByteStringTranscoder).  BytesToWrite is automatically set to the string's length.</summary>
+        public WriteActionParam(string value) : this() { BufferAsStr = value; }
         /// <summary>Constructs the object to write from the given buffer and to specify the number of bytes to write.</summary>
         public WriteActionParam(byte[] buffer, int bytesToWrite) : this() { Buffer = buffer; BytesToWrite = bytesToWrite; }
 
@@ -520,8 +525,10 @@ namespace MosaicLib.SerialIO
         /// <remarks>This method is normally only used by a Port object itself</remarks>
         public void Reset() { StartTime = QpcTimeStamp.Zero; bytesWritten = 0; actionResultEnum = ActionResultEnum.None; resultCode = null; }
 
-        /// <summary>Resets the action params and assigns the Buffer to the given value, automatically setting the BufferLength to the Length of the given buffer (or 0 if buffer is null).</summary>
+        /// <summary>Resets the action params and assigns the Buffer to the given buffer, automatically setting the BufferLength to the Length of the given buffer (or 0 if buffer is null).</summary>
         public void SetupToWrite(byte[] buffer) { Reset(); Buffer = buffer; }
+        /// <summary>Resets the action params and assigns the Buffer to the given string value transcoded using the ByteArrayTranscoder.ByteStringTranscoder, automatically setting the BufferLength to the Length of the given string (or 0 if the string is null or empty).</summary>
+        public void SetupToWrite(string value) { Reset(); BufferAsStr = value; }
         /// <summary>Resets the action params and assigns the Buffer and BufferLength to the given values.</summary>
         public void SetupToWrite(byte[] buffer, int bytesToWrite) { Reset(); Buffer = buffer; BytesToWrite = bytesToWrite; }
 
@@ -529,10 +536,19 @@ namespace MosaicLib.SerialIO
         /// <remarks>This method is normally only used by a Port object itself</remarks>
         public void Start() { Reset(); StartTime = QpcTimeStamp.Now; }
 
+
         /// <summary>Provides Get/Set access to the buffer that is referenced by this object.  Setter also sets the BytesToWrite to the length of the given buffer.</summary>
         public Byte[] Buffer { get { return buffer; } set { buffer = value; bytesToWrite = (buffer ?? emptyByteArray).Length; } }
         /// <summary>Provides Get/Set access to the Number of Bytes To Write.  Setter constrains the assigned value so that it cannot exceed the buffer length.</summary>
         public int BytesToWrite { get { return bytesToWrite; } set { bytesToWrite = Math.Min(value, (buffer ?? emptyByteArray).Length); } }
+
+        /// <summary>
+        /// Provides Get/Set access to the byte array buffer that is referenced by this object, but converted to/from a System.String using the ByteArrayTranscoders.ByteStringTranscoder.  
+        /// Setter also sets the BytesToWrite to the length of the given String.
+        /// Setting this to the null string is identical to setting it to the empty string.
+        /// </summary>
+        public string BufferAsStr { get { return ByteArrayTranscoders.ByteStringTranscoder.Encode(Buffer ?? emptyByteArray); } set { Buffer = ByteArrayTranscoders.ByteStringTranscoder.Decode(value ?? string.Empty); } }
+
         /// <summary>
         /// Determines how the Write Action will be serviced.  When false the Write Action will wait in the port until the transmit buffer has available space.
         /// When true the write operation will fail immediately if the transmit buffer does not have any available space when the Write Action is started.

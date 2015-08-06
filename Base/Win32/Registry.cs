@@ -61,10 +61,16 @@ namespace MosaicLib.Win32.Registry
 
         #region Split Registry Key Path methods
 
-        /// <summary>Defines the default delimeter character that is used here to demarcate boundaries in a registry key path.</summary>
+        /// <summary>
+        /// Defines the default delimeter character that is used here to demarcate boundaries in a registry key path.
+        /// <para/>Is the \ character (backslash)
+        /// </summary>
         public const char DefaultRegPathDelimiter = '\\';
 
-        /// <summary>Defines the set of delimeter characters that are used here to demarcate boundaries in a registry key path.</summary>
+        /// <summary>
+        /// Defines the set of delimeter characters that are used here to demarcate boundaries in a registry key path.
+        /// <para/>consists of the DefaultRegPathDelimeter (\) and the forward slash / characters.
+        /// </summary>
         public static readonly char[] DefaultRegPathDelimiters = new char[] { DefaultRegPathDelimiter, '/' };
 
         /// <summary>

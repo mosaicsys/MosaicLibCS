@@ -76,7 +76,7 @@ namespace MosaicLib.PartsLib.Common.BCR.Sim
             BCRName = BCRName ?? String.Empty;
 
             // update values from any lpmInstanceName derived keys.
-            adapter = new ConfigValueSetAdapter<BCRSimPartConfigBase>() { ValueSet = this, SetupIssueEmitter = issueEmitter, UpdateIssueEmitter = issueEmitter, ValueNoteEmitter = issueEmitter }.Setup(BCRName + ".");
+            adapter = new ConfigValueSetAdapter<BCRSimPartConfigBase>() { ValueSet = this, SetupIssueEmitter = issueEmitter, UpdateIssueEmitter = issueEmitter, ValueNoteEmitter = valueEmitter }.Setup(BCRName + ".");
 
             return this;
         }

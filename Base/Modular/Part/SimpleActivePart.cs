@@ -604,6 +604,11 @@ namespace MosaicLib.Modular.Part
         /// Attempts to get and perform the next action from the actionQ by calling PerformAction on it.
         /// <para/>True if an action was performed or false otherwise.
         /// </summary>
+        /// <remarks>
+        /// This method does not need to put a busyFlag around pulling the next action from the queue since the the concept of being busy
+        /// is only visible outside of the part when publishing the BaseState.  As such the busyFlag is only used in the PerformAction method
+        /// that this method calls.
+        /// </remarks>
 		protected virtual bool IssueNextQueuedAction()
 		{
             IProviderFacet action = actionQ.GetNextAction();
@@ -615,22 +620,6 @@ namespace MosaicLib.Modular.Part
 
 			return true;
 		}
-
-        /// <summary>Returns the IProviderFacet for the current action that the Part's main service loop is currently in IssueAndInvokeAction on, or null if none.</summary>
-        protected IProviderFacet CurrentAction { get; private set; }
-
-        /// <summary>Returns the IActionState for the current action that the Part's main service loop is currently in IssueAndInvokeAction on, or an Initial/Empty IActionState if there is no such action.</summary>
-        protected IActionState CurrentActionState { get { return ((CurrentAction != null) ? CurrentAction.ActionState : EmptyActionState); } }
-
-        /// <summary>Contains the ActionState that is used for the CurrentActionState when there is no CurrentAction.</summary>
-        protected readonly IActionState EmptyActionState = new ActionStateCopy();
-
-        /// <summary>Requests to cancel the CurrentAction if it is non null and its state IsPendingCompletion</summary>
-        protected void RequestCancelCurrentAction() 
-        { 
-            if (CurrentActionState.IsPendingCompletion) 
-                CurrentAction.RequestCancel(); 
-        }
 
         /// <summary>
         /// Sets the CurrentAction to the given action value, asks the given action to IssueAndInvokeAction and then sets CurrentAction to null.
@@ -657,6 +646,22 @@ namespace MosaicLib.Modular.Part
                 CurrentAction = null;
             }
 		}
+
+        /// <summary>Returns the IProviderFacet for the current action that the Part's main service loop is currently in IssueAndInvokeAction on, or null if none.</summary>
+        protected IProviderFacet CurrentAction { get; private set; }
+
+        /// <summary>Returns the IActionState for the current action that the Part's main service loop is currently in IssueAndInvokeAction on, or an Initial/Empty IActionState if there is no such action.</summary>
+        protected IActionState CurrentActionState { get { return ((CurrentAction != null) ? CurrentAction.ActionState : EmptyActionState); } }
+
+        /// <summary>Contains the ActionState that is used for the CurrentActionState when there is no CurrentAction.</summary>
+        protected readonly IActionState EmptyActionState = new ActionStateCopy();
+
+        /// <summary>Requests to cancel the CurrentAction if it is non null and its state IsPendingCompletion</summary>
+        protected void RequestCancelCurrentAction()
+        {
+            if (CurrentActionState.IsPendingCompletion)
+                CurrentAction.RequestCancel();
+        }
 
         /// <summary>
         /// Waits for threadWakeupNotifier to be signaled or default waitTimeLimit to elapse (used to set Parts's default spin rate).

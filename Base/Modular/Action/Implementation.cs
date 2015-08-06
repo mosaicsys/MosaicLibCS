@@ -1070,6 +1070,20 @@ namespace MosaicLib.Modular.Action
 
 		#region Other
 
+        /// <summary>
+        /// Local implementation for assistance in logging and debugging.
+        /// </summary>
+        public override string ToString()
+        {
+            string mesg = logging.Mesg;
+            string mesgDetail = logging.MesgDetail;
+
+            if (mesgDetail.IsNullOrEmpty())
+                return "{0} state:{1}".CheckedFormat(mesg, ActionState);
+            else
+                return "{0} '{1}' state:{2}".CheckedFormat(mesg, mesgDetail, ActionState);
+        }
+
         /// <summary>Protected method is used internally to record that the ActionState may have been changed so as to force the generation of a new clone when one of the clients next asks for it.</summary>
         protected void NoteActionStateUpdated()
         {
@@ -1080,13 +1094,13 @@ namespace MosaicLib.Modular.Action
         /// <summary>Protected common method used to generate and emit consistently formatted ActionEvent records</summary>
 		protected void EmitActionEvent(string eventStr, ActionStateCode actionStateCode) 
 		{
-			logging.State.Emit("<ActionEvent id=\"{0}\" state=\"{1}\">{2}</ActionEvent>", logging.Mesg, actionStateCode.ToString(), eventStr); 
+			logging.State.Emit("<ActionEvent id=\"{0}\" state=\"{1}\">{2}</ActionEvent>", logging.Mesg, actionStateCode, eventStr); 
 		}
 
         /// <summary>Protected common method used to generate and emit consistently formatted ActionError records</summary>
         protected void EmitActionError(string eventStr, ActionStateCode actionStateCode) 
 		{ 
-			logging.Error.Emit("<ActionError id=\"{0}\" state=\"{1}\">{2}</ActionError>", logging.Mesg, actionStateCode.ToString(), eventStr); 
+			logging.Error.Emit("<ActionError id=\"{0}\" state=\"{1}\">{2}</ActionError>", logging.Mesg, actionStateCode, eventStr); 
 		}
 
         /// <summary>
@@ -1094,6 +1108,7 @@ namespace MosaicLib.Modular.Action
         /// This method may attempt to update the ParamValue if paramProvided is true and then attempts to mark the Action as Started and then enqueue the Action into
         /// the ActionQueue object that the Part will use for this Action.
         /// </summary>
+        /// <exception cref="System.InvalidCastException">Thown if paramProvided is true and given paramValueObj cannot be casted to this implementation's ParamType.</exception>
         public string Start(object paramValueObj, bool paramProvided)
 		{
 			lock (actionStateMutex)
@@ -1112,7 +1127,7 @@ namespace MosaicLib.Modular.Action
 				if (paramProvided)
 				{
 					paramValue = (ParamType) paramValueObj;	// will throw on error
-					EmitActionEvent(Utils.Fcns.CheckedFormat("paramValue has been set to '{0}' by Start", paramValueObj.ToString()), actionState.StateCode);
+					EmitActionEvent(Utils.Fcns.CheckedFormat("paramValue has been set to '{0}' by Start", paramValueObj), actionState.StateCode);
 				}
 
                 isCancelRequestActive = false;

@@ -29,6 +29,7 @@ using System.Linq;
 using MosaicLib.Utils;
 using System.Text;
 using System.Collections;
+using MosaicLib.Modular.Common;
 
 namespace MosaicLib.Modular.Config
 {
@@ -103,6 +104,18 @@ namespace MosaicLib.Modular.Config
         {
             return Fcns.CheckedFormat("{0}{1}", (IsFixed ? "Fixed" : "MayBeChanged"), (KeyWasNotFound ? "+NotFound" : String.Empty));
         }
+
+        /// <summary>
+        /// Returns a ConfigKeyProviderFlags object that is the logical or of the contents of this one and the contents of the given rhs.
+        /// <para/>MayBeChanged is the logical and as it is simply the inverse of IsFixed which is logically ored when merging these two struct contents.
+        /// </summary>
+        public ConfigKeyProviderFlags MergeWith(ConfigKeyProviderFlags rhs)
+        {
+            IsFixed |= rhs.IsFixed;
+            IsPersisted |= rhs.IsPersisted;
+            KeyWasNotFound |= rhs.KeyWasNotFound;
+            return this;
+        }
     }
 
     #endregion
@@ -175,6 +188,28 @@ namespace MosaicLib.Modular.Config
         }
 
         /// <summary>
+        /// Extension method to get a typed value from a IConfigKeyAccess object.  
+        /// Returns the key's value parsed as the given type if the key exists and could be parsed successfully.
+        /// Returns the given defaultValue in all other cases.
+        /// Updates the keyAccess's ResultCode field to the empty string on success or to a description of the failure reason on failure (if possible)
+        /// Throws ValueContainerGetValueException if the key's contained value cannot be converted to the desired type and the user has passed rethrow as true.
+        /// </summary>
+        /// <exception cref="MosaicLib.Modular.Common.ValueContainerGetValueException">May be thrown if the contained value cannot be converted to the desired type and the caller has passed rethrow = true</exception>
+        public static ValueT GetValue<ValueT>(this IConfigKeyAccess keyAccess, ValueT defaultValue, bool rethrow)
+        {
+            string key = ((keyAccess != null) ? keyAccess.Key : String.Empty);
+            string methodName = Fcns.CheckedFormat("{0}<{1}>(key:'{2}', default:'{3}')", new System.Diagnostics.StackFrame().GetMethod().Name, typeof(ValueT), key, defaultValue);
+
+            ValueT value;
+
+            //Todo: support rethrow
+            if (keyAccess != null && Config.TryGetValue(methodName, keyAccess, out value, defaultValue))
+                return value;
+            else
+                return defaultValue;
+        }
+
+        /// <summary>
         /// Extension method to attempt get a typed value from a IConfigKeyAccess object.  
         /// Returns assignes the key's parsed value to the value output parmeter and returns true if the key exists and could be parsed successfully.
         /// Returns assigns the given defaultValue to the value output parameter and returns false in all other cases.
@@ -197,15 +232,24 @@ namespace MosaicLib.Modular.Config
         }
 
         /// <summary>
-        /// Convienience extension method for use in calling a keyAccess object's SetValue method.
+        /// Convienience extension method for use in setting the keyAccess's keys value and then updatinging the keyAccess to reflect the new value.
         /// Attempts to assign the given key's value from the valueAsObject.  Returns empty string on success or a description of the failure reason on failure.
         /// </summary>
+        [Obsolete("Please use the ValueContainer variant in place of this one (2015-08-03)")]
         public static string SetValue(this IConfigKeyAccess keyAccess, object valueAsObject, string commentStr)
+        {
+            return keyAccess.SetValue(new ValueContainer(valueAsObject), commentStr);
+        }
+
+        /// <summary>
+        /// Convienience extension method for use in setting the keyAccess's keys value and then updatinging the keyAccess to reflect the new value.
+        /// Attempts to assign the given key's value from the valueContainer.  Returns empty string on success or a description of the failure reason on failure.
+        /// </summary>
+        public static string SetValue(this IConfigKeyAccess keyAccess, ValueContainer valueContainer, string commentStr)
         {
             if (keyAccess != null)
             {
-                string valueAsString = ((valueAsObject != null) ? valueAsObject.ToString() : String.Empty);
-                string ec = Config.Instance.SetValue(keyAccess, valueAsString, commentStr);
+                string ec = Config.Instance.SetValue(keyAccess, valueContainer, commentStr);
                 keyAccess.UpdateValue();
                 return ec;
             }
@@ -309,6 +353,7 @@ namespace MosaicLib.Modular.Config
         /// This method returns the empty string on success or an error code on failure.
         /// <para/>This method does not update the given keyAccess's value.  keyAccess is only used to define the key to use along with the pertinant value of its flags (primarily for SilenceIssues)
         /// </summary>
+        [Obsolete("Please use the ValueContainer variant in place of this one (2015-08-03)")]
         string SetValue(IConfigKeyAccess keyAccess, string valueAsString, string commentStr);
 
         /// <summary>
@@ -317,8 +362,32 @@ namespace MosaicLib.Modular.Config
         /// The method may enforce constraints on the permitted values that may be so saved and may require that the given flags match externally known
         /// values for this key.  
         /// This method returns the empty string on success or an error code on failure.
+        /// On failure, all keys that could be updated will have been and the returned error code will be from the first key that could not be updated.
+        /// <para/>This method does not update any given keyAccess's value.  keyAccess is only used to define the key to use along with the pertinant value of its flags (primarily for SilenceIssues)
         /// </summary>
+        [Obsolete("Please use the ValueContainer variant in place of this one (2015-08-03)")]
         string SetValues(KeyValuePair<IConfigKeyAccess, string>[] keyAccessAndValuesPairArray, string commentStr);
+
+        /// <summary>
+        /// This method allows the caller to update the persisted value for a specific key (if this is supported for the given key).
+        /// This method will generally record the given comment to help explain why the change was made.  
+        /// The method may enforce constraints on the permitted values that may be so saved and may require that the given flags match externally known
+        /// values for this key.  
+        /// This method returns the empty string on success or an error code on failure.
+        /// <para/>This method does not update the given keyAccess's value.  keyAccess is only used to define the key to use along with the pertinant value of its flags (primarily for SilenceIssues)
+        /// </summary>
+        string SetValue(IConfigKeyAccess keyAccess, ValueContainer valueContainer, string commentStr);
+
+        /// <summary>
+        /// This method allows the caller to attempt to update a set of values of the indicated keys to contain the corresponding ValueContainer values.
+        /// This method will generally record the given comment to help explain why the change was made.  
+        /// The method may enforce constraints on the permitted values that may be so saved and may require that the given flags match externally known
+        /// values for this key.  
+        /// This method returns the empty string on success or an error code on failure.  
+        /// On failure, all keys that could be updated will have been and the returned error code will be from the first key that could not be updated.
+        /// <para/>This method does not update any given keyAccess's value.  keyAccess is only used to define the key to use along with the pertinant value of its flags (primarily for SilenceIssues)
+        /// </summary>
+        string SetValues(KeyValuePair<IConfigKeyAccess, ValueContainer>[] keyAccessAndValuesPairArray, string commentStr);
     }
 
     /// <summary>
@@ -386,8 +455,11 @@ namespace MosaicLib.Modular.Config
         /// <summary>Returns true if the Flags indicate that the key is ReadOnlyOnce or the ProviderFlags indicate that it IsFixed or if the KeyWasNotFound.</summary>
         bool ValueIsFixed { get; }
 
-        /// <summary>Returns the current value of the key as a string (i.e. as it is stored and handled by the configuration system).  May be null, such as when the key was not found.</summary>
+        /// <summary>Returns the current value of the key as a string.  May be null, such as when the key was not found.</summary>
         string ValueAsString { get; }
+
+        /// <summary>Returns the current value of the key in a ValueContainer as the provider last read (or saved) it.  May contain null, such as when the key was not found.</summary>
+        Common.ValueContainer ValueContainer { get; }
 
         /// <summary>True if this KeyAccess object is usable (ResultCode is empty)</summary>
         bool IsUsable { get; }
@@ -508,14 +580,13 @@ namespace MosaicLib.Modular.Config
         IConfigKeyAccess GetConfigKeyAccess(IConfigKeyAccessSpec keyAccessSpec);
 
         /// <summary>
-        /// This method allows the caller to update a set of values of the indicated keys to contain the corresponding valueAsString values.
+        /// This method allows the caller to update a set of values of the indicated keys to contain the corresponding ValueContainer values.
         /// This method will generally record the given comment to help explain why the change was made.  
-        /// The method may enforce constraints on the permitted values that may be so saved and may require that the given flags match externally known
-        /// values for this key.  
+        /// The method may enforce constraints on the permitted values that may be so saved and may require that the given flags match externally known values for this key.  
         /// This method returns the empty string on success or an error code on failure.
         /// </summary>
         /// <remarks>At the IConfigKeyProvider level this method will be invoked for each sub-set of keys that share the same original provider</remarks>
-        string SetValues(KeyValuePair<IConfigKeyAccess, string>[] keyAccessAndValuesPairArray, string commentStr);
+        string SetValues(KeyValuePair<IConfigKeyAccess, ValueContainer>[] keyAccessAndValuesPairArray, string commentStr);
     }
 
     #endregion
@@ -603,52 +674,54 @@ namespace MosaicLib.Modular.Config
         /// </summary>
         internal static bool TryGetValue<ValueT>(string methodName, IConfigKeyAccess keyAccess, out ValueT value, ValueT defaultValue)
         {
+            bool getSuccess = false;
+
             if (keyAccess != null)
             {
-                string valueAsStr = keyAccess.ValueAsString;
+                ValueContainer valueContainer = keyAccess.ValueContainer;
                 string resultCode = keyAccess.ResultCode;
 
-                string castSuccess = valueAsStr.TryGetValue(out value, defaultValue, false);
-
-                string ec = Fcns.MapNullOrEmptyTo(resultCode, castSuccess);
-
-                if (String.IsNullOrEmpty(ec))
+                try
                 {
+                    value = valueContainer.GetValue<ValueT>(true);
                     keyAccess.ResultCode = null;
-                    return true;
+                    getSuccess = true;
                 }
-                else
+                catch (System.Exception ex)
                 {
                     value = defaultValue;
+
+                    string ec = Fcns.MapNullOrEmptyTo(resultCode, ex.ToString());
 
                     if (!keyAccess.Flags.SilenceIssues)
                         Config.Instance.IssueEmitter.Emit("{0} failed: {1}", methodName, ec);
 
-                    if (!String.IsNullOrEmpty(valueAsStr) || !keyAccess.Flags.IsOptional)
+                    if (!valueContainer.IsNull || !keyAccess.Flags.IsOptional)
                         keyAccess.ResultCode = ec;
-
-                    return false;
                 }
             }
             else
             {
                 value = defaultValue;
-                return false;
             }
+
+            return getSuccess;
         }
 
         #endregion
 
-        #region extension method(s) that are used as part of the Config infrastructure and may be reused elsewhere if desired
+        #region extension method(s) that were used as part of the Config infrastructure
 
         /// <summary>
-        /// This extension method attempts to take a given string valueStr parameter, and parse it to produce a value of the indicated type {ValueT}.
+        /// Please replace use of this method with use of corresponding methods in ValueContainer class.
+        /// <para/>This extension method attempts to take a given string valueStr parameter, and parse it to produce a value of the indicated type {ValueT}.
         /// If valueStr can be successfully parsed, the value is assigned to the value parameter and the method returns an empty string.
         /// If valueStr cannot be successfully parsed as a {ValueT} object, then the method assigns the defaultValue to value and returns a description of the failure reason.
         /// <para/>Supported types: string, bool, float, double, sbyte, short, int, long, byte, ushort, uint, ulong, or System.Enum
         /// <para/>Uses StringScanner.ParseValue which supports decimal and hex notations ($, 0x, 0X) for integer types.
         /// </summary>
         /// <typeparam name="ValueT">Gives the ValueT to parse.  Must be of type string, bool, float, double, sbyte, short, int, long, byte, ushort, uint, ulong, or System.Enum</typeparam>
+        [Obsolete("Please replace use of this method with use of corresponding methods in ValueContainer class (2015-08-06)")]
         public static string TryGetValue<ValueT>(this string valueStr, out ValueT value, ValueT defaultValue, bool ignoreCase) 
         {
             if (typeof(ValueT) == typeof(string))
@@ -967,10 +1040,10 @@ namespace MosaicLib.Modular.Config
 
             using (var eeTrace = new Logging.EnterExitTrace(TraceEmitter, methodName))
             {
-                string entryValueAsStr = icka.ValueAsString;
+                ValueContainer entryValue = icka.ValueContainer;
                 string entryResultCode = icka.ResultCode;
 
-                string updatedValueAsStr = entryValueAsStr;
+                ValueContainer updatedValue = entryValue;
                 string updatedResultCode = entryResultCode;
 
                 ConfigKeyAccessImpl ckai = icka as ConfigKeyAccessImpl;
@@ -990,7 +1063,7 @@ namespace MosaicLib.Modular.Config
 
                     if (updatedICKA != null)
                     {
-                        updatedValueAsStr = updatedICKA.ValueAsString;
+                        updatedValue = updatedICKA.ValueContainer;
                         updatedResultCode = updatedICKA.ResultCode;
                     }
                     else if (icka.IsUsable)
@@ -1001,15 +1074,15 @@ namespace MosaicLib.Modular.Config
 
                 bool valueChanged = false, resultCodeChanged = false;
 
-                if (ckai != null && entryValueAsStr != updatedValueAsStr)
-                    ckai.ValueAsString = updatedValueAsStr;
+                if (ckai != null && !entryValue.IsEqualTo(updatedValue))
+                    ckai.ValueContainer = updatedValue;
 
                 if (entryResultCode != updatedResultCode)
                     icka.ResultCode = updatedResultCode;
 
                 if (valueChanged && !resultCodeChanged)
                 {
-                    Logger.Debug.Emit("{0}: key '{1}' value updated to '{2}' [from:'{3}']", methodName, icka.Key, icka.ValueAsString, entryValueAsStr);
+                    Logger.Debug.Emit("{0}: key '{1}' value updated to {2} [from:{3}]", methodName, icka.Key, icka.ValueContainer, entryValue);
                     eeTrace.ExtraMessage = "Value udpated";
                 }
                 else if (resultCodeChanged && !valueChanged)
@@ -1019,7 +1092,7 @@ namespace MosaicLib.Modular.Config
                 }
                 else if (valueChanged && resultCodeChanged)
                 {
-                    Logger.Debug.Emit("{0}: key '{1}' value&rc updated to '{2}'/'{3}' [from:'{4}'/'{5}']", methodName, icka.Key, icka.ValueAsString, icka.ResultCode, entryValueAsStr, entryResultCode);
+                    Logger.Debug.Emit("{0}: key '{1}' value&rc updated to {2}/'{3}' [from:{4}/'{5}']", methodName, icka.Key, icka.ValueContainer, icka.ResultCode, entryValue, entryResultCode);
                     eeTrace.ExtraMessage = "Value and ResultCode udpated";
                 }
                 else
@@ -1078,9 +1151,10 @@ namespace MosaicLib.Modular.Config
         /// </summary>
         public string SetValue(IConfigKeyAccess keyAccess, string valueAsString, string commentStr)
         {
-            string methodName = Fcns.CheckedFormat("{0}({1}, value:'{2}', comment:{3})", new System.Diagnostics.StackFrame().GetMethod().Name, keyAccess.ToString(ToStringDetailLevel.ReferenceInfoOnly), valueAsString, commentStr);
+            ValueContainer valueContainer = new ValueContainer() { ValueAsObject = valueAsString };
+            string methodName = Fcns.CheckedFormat("{0}({1}, value:{2}, comment:{3})", new System.Diagnostics.StackFrame().GetMethod().Name, keyAccess.ToString(ToStringDetailLevel.ReferenceInfoOnly), valueContainer, commentStr);
 
-            return SetValues(methodName, keyAccess.Flags.SilenceIssues, new [] { new KeyValuePair<IConfigKeyAccess, string>(keyAccess, valueAsString) }, commentStr);
+            return SetValues(methodName, keyAccess.Flags.SilenceIssues, new[] { new KeyValuePair<IConfigKeyAccess, ValueContainer>(keyAccess, valueContainer) }, commentStr);
         }
 
         /// <summary>
@@ -1090,7 +1164,38 @@ namespace MosaicLib.Modular.Config
         /// values for this key.  
         /// This method returns the empty string on success or an error code on failure.
         /// </summary>
-        public string SetValues(KeyValuePair<IConfigKeyAccess, string>[] keyAccessAndValuesPairArray, string commentStr)
+        public string SetValues(KeyValuePair<IConfigKeyAccess, string>[] keyAccessAndValuesAsStrPairArray, string commentStr)
+        {
+            KeyValuePair<IConfigKeyAccess, ValueContainer>[] keyAccessAndValuesPairArray = keyAccessAndValuesAsStrPairArray.Select((kvps) => new KeyValuePair<IConfigKeyAccess, ValueContainer>(kvps.Key, new ValueContainer() { ValueAsObject = kvps.Value })).ToArray();
+
+            return SetValues(keyAccessAndValuesPairArray, commentStr);
+        }
+
+        /// <summary>
+        /// This method allows the caller to update the persisted value for a specific key (if this is supported for the given key).
+        /// This method will generally record the given comment to help explain why the change was made.  
+        /// The method may enforce constraints on the permitted values that may be so saved and may require that the given flags match externally known
+        /// values for this key.  
+        /// This method returns the empty string on success or an error code on failure.
+        /// <para/>This method does not update the given keyAccess's value.  keyAccess is only used to define the key to use along with the pertinant value of its flags (primarily for SilenceIssues)
+        /// </summary>
+        public string SetValue(IConfigKeyAccess keyAccess, ValueContainer valueContainer, string commentStr)
+        {
+            string methodName = Fcns.CheckedFormat("{0}({1}, value:{2}, comment:{3})", new System.Diagnostics.StackFrame().GetMethod().Name, keyAccess.ToString(ToStringDetailLevel.ReferenceInfoOnly), valueContainer, commentStr);
+
+            return SetValues(methodName, keyAccess.Flags.SilenceIssues, new[] { new KeyValuePair<IConfigKeyAccess, ValueContainer>(keyAccess, valueContainer) }, commentStr);
+        }
+
+        /// <summary>
+        /// This method allows the caller to attempt to update a set of values of the indicated keys to contain the corresponding ValueContainer values.
+        /// This method will generally record the given comment to help explain why the change was made.  
+        /// The method may enforce constraints on the permitted values that may be so saved and may require that the given flags match externally known
+        /// values for this key.  
+        /// This method returns the empty string on success or an error code on failure.  
+        /// On failure, all keys that could be updated will have been and the returned error code will be from the first key that could not be updated.
+        /// <para/>This method does not update any given keyAccess's value.  keyAccess is only used to define the key to use along with the pertinant value of its flags (primarily for SilenceIssues)
+        /// </summary>
+        public string SetValues(KeyValuePair<IConfigKeyAccess, ValueContainer>[] keyAccessAndValuesPairArray, string commentStr)
         {
             StringBuilder sb = new StringBuilder();
             sb.CheckedAppendFormat("{0}(", new System.Diagnostics.StackFrame().GetMethod().Name);
@@ -1100,7 +1205,7 @@ namespace MosaicLib.Modular.Config
             {
                 if (sb.Length != 0)
                     sb.Append(',');
-                sb.CheckedAppendFormat("'{0}'<='{1}'", kop.Key.ToString(ToStringDetailLevel.ReferenceInfoOnly), kop.Value);
+                sb.CheckedAppendFormat("'{0}'<={1}", kop.Key.ToString(ToStringDetailLevel.ReferenceInfoOnly), kop.Value);
 
                 silenceIssues &= kop.Key.Flags.SilenceIssues;
             }
@@ -1115,21 +1220,35 @@ namespace MosaicLib.Modular.Config
         /// The method may enforce constraints on the permitted values that may be so saved and may require that the given flags match externally known values for this key.  
         /// This method returns the empty string on success or the first non-empty error code it encountered on failure.
         /// </summary>
-        protected virtual string SetValues(string methodName, bool silenceIssues, KeyValuePair<IConfigKeyAccess, string>[] keyAccessAndValuesPairArray, string commentStr)
+        protected virtual string SetValues(string methodName, bool silenceIssues, KeyValuePair<IConfigKeyAccess, ValueContainer>[] keyAccessAndValuesPairArray, string commentStr)
         {
             string firstError = null;
 
             using (var eeTrace = new Logging.EnterExitTrace(TraceEmitter, methodName))
             {
                 // first sort the keys by their provider
-                Dictionary<IConfigKeyProviderInfo, List<KeyValuePair<IConfigKeyAccess, string>>> dictionaryOfListsOfItemsByProvider = new Dictionary<IConfigKeyProviderInfo, List<KeyValuePair<IConfigKeyAccess, string>>>();
+                Dictionary<IConfigKeyProviderInfo, List<KeyValuePair<IConfigKeyAccess, ValueContainer>>> dictionaryOfListsOfItemsByProvider = new Dictionary<IConfigKeyProviderInfo, List<KeyValuePair<IConfigKeyAccess, ValueContainer>>>();
 
                 foreach (var kvp in keyAccessAndValuesPairArray)
                 {
                     IConfigKeyAccess icka = kvp.Key;
+
+                    if (icka == null)
+                    {
+                        firstError = firstError ?? "null IConfigKeyAccess encountered";
+                        continue;
+                    }
+
                     IConfigKeyProviderInfo providerInfo = icka.ProviderInfo;
+
+                    if (!icka.IsUsable || providerInfo == null)
+                    {
+                        firstError = firstError ?? "{0} is not usable or is missing a provider".CheckedFormat(icka);
+                        continue;
+                    }
+
                     if (!dictionaryOfListsOfItemsByProvider.ContainsKey(providerInfo))
-                        dictionaryOfListsOfItemsByProvider[providerInfo] = new List<KeyValuePair<IConfigKeyAccess, string>>();
+                        dictionaryOfListsOfItemsByProvider[providerInfo] = new List<KeyValuePair<IConfigKeyAccess, ValueContainer>>();
 
                     dictionaryOfListsOfItemsByProvider[providerInfo].Add(kvp);
                 }
@@ -1197,7 +1316,7 @@ namespace MosaicLib.Modular.Config
             DerivedFromKey = rhs;
 
             ResultCode = rhs.ResultCode;
-            ValueAsString = rhs.ValueAsString;
+            ValueContainer = rhs.ValueContainer;
             HasValue = rhs.HasValue;
 
             ConfigBaseInstance = configBaseInstance;
@@ -1229,7 +1348,7 @@ namespace MosaicLib.Modular.Config
         public string Description { get { return description ?? String.Empty; } set { description = value; } }
         private string description;
 
-        private string resultCode, valueAsString;
+        private string resultCode;
 
         /// <summary>
         /// Empty when access is valid, last Update call succeeded, and client has not assigned any other error.  
@@ -1244,13 +1363,28 @@ namespace MosaicLib.Modular.Config
         /// <summary>Returns the current value of the key as a string (i.e. as it is stored and handled by the configuration system).  May be null, such as when the key was not found.</summary>
         public string ValueAsString
         {
-            get { return valueAsString; }
-            internal set
+            get 
             {
-                valueAsString = value;
-                HasValue = (value != null);
+                if (valueContainer.cvt == ContainerStorageType.String)
+                    return valueContainer.GetValue<string>(ContainerStorageType.String, false, false);
+                else if (valueContainer.cvt.IsReferenceType())
+                    return valueContainer.GetValue<string>(ContainerStorageType.String, false, false);
+                else
+                    return valueContainer.ToString();
             }
         }
+
+        public ValueContainer ValueContainer
+        {
+            get { return valueContainer; }
+            set 
+            { 
+                valueContainer = value;
+                HasValue = !value.IsNull;
+            }
+        }
+
+        private Common.ValueContainer valueContainer;
 
         /// <summary>True if this KeyAccess object is usable (ResultCode is empty)</summary>
         public bool IsUsable { get { return String.IsNullOrEmpty(ResultCode); } }
@@ -1298,9 +1432,9 @@ namespace MosaicLib.Modular.Config
                 case ToStringDetailLevel.Full:
                 default:
                     if (IsUsable)
-                        return Fcns.CheckedFormat("key:'{0}' Value:'{1}' flags:{2} from:{3} {4}", Key, ValueAsString, Flags, ProviderName, ProviderFlags);
+                        return Fcns.CheckedFormat("key:'{0}' Value:{1} flags:{2} from:{3} {4}", Key, ValueContainer, Flags, ProviderName, ProviderFlags);
                     else
-                        return Fcns.CheckedFormat("key:'{0}' Value:'{1}' flags:{2} from:{3} {4} ec:'{5}'", Key, ValueAsString, Flags, ProviderName, ProviderFlags, ResultCode);
+                        return Fcns.CheckedFormat("key:'{0}' Value:{1} flags:{2} from:{3} {4} ec:'{5}'", Key, ValueContainer, Flags, ProviderName, ProviderFlags, ResultCode);
             }
         }
 

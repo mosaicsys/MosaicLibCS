@@ -60,6 +60,8 @@
     <Compile Include="Common\Protocols\HART\HARTProtocol.cs" />
     <Compile Include="Helpers\Actuator.cs" />
     <Compile Include="Helpers\EventRateTool.cs" />
+    <Compile Include="Scan\ScanEngine\ScanEngine.cs" />
+    <Compile Include="Scan\Plugins\Sim\MFC.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
