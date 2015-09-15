@@ -696,7 +696,7 @@ namespace MosaicLib.Modular.Config
                     if (!keyAccess.Flags.SilenceIssues)
                         Config.Instance.IssueEmitter.Emit("{0} failed: {1}", methodName, ec);
 
-                    if (!valueContainer.IsNull || !keyAccess.Flags.IsOptional)
+                    if (!valueContainer.IsNullOrNone || !keyAccess.Flags.IsOptional)
                         keyAccess.ResultCode = ec;
                 }
             }
@@ -1380,7 +1380,7 @@ namespace MosaicLib.Modular.Config
             set 
             { 
                 valueContainer = value;
-                HasValue = !value.IsNull;
+                HasValue = !value.IsNullOrNone;
             }
         }
 
@@ -1389,7 +1389,7 @@ namespace MosaicLib.Modular.Config
         /// <summary>True if this KeyAccess object is usable (ResultCode is empty)</summary>
         public bool IsUsable { get { return String.IsNullOrEmpty(ResultCode); } }
 
-        /// <summary>True if this KeyAccess object has a non-null ValueAsString.  Generally ValueAsString is only null if the given key was not found.</summary>
+        /// <summary>True if this KeyAccess object's ValueContainer contents are not null or None.  Generally this is false when the given key was not found.</summary>
         public bool HasValue { get; private set; }
 
         /// <summary>

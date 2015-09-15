@@ -440,8 +440,7 @@ namespace MosaicLib.Modular.Config
                     {
                         try
                         {
-                            ConstructorInfo ctorInfo = itemInfo.ItemType.GetConstructor(new Type[] { });
-                            castedValue = ctorInfo.Invoke(new object[] { });
+                            castedValue = System.Enum.ToObject(itemInfo.ItemType, 0);
 
                             ika.ResultCode = Fcns.CheckedFormat("Attempt to cast value '{0}' to type '{1}' failed: unable to construct default value for type [{2}]", valueAsStr, itemInfo.ItemType, ex1);
                         }

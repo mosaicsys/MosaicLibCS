@@ -93,9 +93,9 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.MFC
 
             if (!forceClosed && !forceOpen)
             {
-                if ((setpointTargetInPercentFS <= 5.0) && (trackingSetpointPercentFS < 5.0))
+                if ((setpointTargetInPercentFS <= ConfigValues.SetpointThresholdForCloseInPercentOfFS) && (trackingSetpointPercentFS <= ConfigValues.SetpointThresholdForCloseInPercentOfFS))
                     forceClosed = true;
-                else if ((setpointTargetInPercentFS >= 105.0) && (trackingSetpointPercentFS >= 105.0))
+                else if ((setpointTargetInPercentFS >= ConfigValues.SetpointThresholdForOpenInPercentOfFS) && (trackingSetpointPercentFS >= ConfigValues.SetpointThresholdForOpenInPercentOfFS))
                     forceOpen = true;
             }
 
@@ -137,26 +137,47 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.MFC
         }
     }
 
-    /// <summary>Used with <see cref="MFCSimScanEnginePlugin"/> as TConfigValueSetType</summary>
+    /// <summary>
+    /// Used with <see cref="MFCSimScanEnginePlugin"/> as TConfigValueSetType.  
+    /// Defines the values that are used to configure how a specific MFCSimScanEnginePlugin behaves.
+    /// </summary>
     public class MFCSimPluginConfig : ICloneable
     {
+        /// <summary>
+        /// Default constructor.
+        /// <para/>FullScaleFlow = 1000.0, FlowNoise = 5.0, FullScaleResponsePeriodInSeconds = 1.25, SetpointThresholdForCloseInPercentOfFS = 5.0, SetpointThresholdForOpenInPercentOfFS = 105.0
+        /// </summary>
         public MFCSimPluginConfig()
         {
-            FullScaleFlow = 1000.0;     // nominally in sccm
+            FullScaleFlow = 1000.0;
             FlowNoise = 5.0;
             FullScaleResponsePeriodInSeconds = 1.25;
+            SetpointThresholdForCloseInPercentOfFS = 5.0;
+            SetpointThresholdForOpenInPercentOfFS = 105.0;
         }
 
+        /// <summary>Gives the full scale flow for this MFC in user units.  Normally has units of sccm</summary>
         [ConfigItem]
         public double FullScaleFlow { get; set; }
 
+        /// <summary>Gives the flow noise that this MFC will exhibit in user units.  This is the half width of the +- range.  Total range of noise will be twice this value.</summary>
         [ConfigItem]
         public double FlowNoise { get; set; }
 
+        /// <summary>Gives the nominal period that this MFC takes to "ramp" its slew limited setpoint from 0% to 100% of full scale in units of seconds.</summary>
         [ConfigItem]
         public double FullScaleResponsePeriodInSeconds { get { return FullScaleResponsePeriod.TotalSeconds; } set { FullScaleResponsePeriod = TimeSpan.FromSeconds(value); } }
 
+        /// <summary>Gives the nominal period that this MFC takes to "ramp" its slew limited setpoint from 0% to 100% as a TimeSpan.</summary>
         public TimeSpan FullScaleResponsePeriod { get; set; }
+
+        /// <summary>Defines threshold setpoint value, as a percent of full scale flow, at or below which the MFC will act as if it has been asked to Open (requires both target and slew limited setpoint to be at this threshold)</summary>
+        [ConfigItem]
+        public double SetpointThresholdForCloseInPercentOfFS { get; set; }
+
+        /// <summary>Defines threshold setpoint value, as a percent of full scale flow, at or above which the MFC will act as if it has been asked to Open (requires both target and slew limited setpoint to be at this threshold)</summary>
+        [ConfigItem]
+        public double SetpointThresholdForOpenInPercentOfFS { get; set; }
 
         public double ConvertFromPercentToFlow(double valueInPercent)
         {

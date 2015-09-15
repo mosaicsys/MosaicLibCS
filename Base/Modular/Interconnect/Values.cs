@@ -481,7 +481,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         #region functionality extension delegates to be used by derived classes
 
         /// <summary>
-        /// This property may be used by a derived class to specify a custom handler that is given each IValueAccessor that has been used to perform an InnerGaugedSetTableEntryFromValue method.
+        /// This property may be used by a derived class to specify a custom handler that is given each IValueAccessor that has been used to perform an InnerGuardedSetTableEntryFromValue method.
         /// <para/>Please note: this call is made synchronously while owning the table's mutex.  
         /// Care must be exersized to minimize the time consumed in this method and to avoid creating any possiblity of a deadlock by attempting to acquire mutiple lock objects within the
         /// call lifetime of this delegate.  This delegate may be combined with the use of the notificationList for combinations of synchronous and asynchronous signaling.
@@ -656,7 +656,10 @@ namespace MosaicLib.Modular.Interconnect.Values
             /// </summary>
             public object ValueAsObject 
             { 
-                get { return valueContainer.ValueAsObject; } 
+                get 
+                { 
+                    return valueContainer.ValueAsObject; 
+                } 
                 set 
                 {
                     ValueContainer = new ValueContainer().SetFromObject(value);
@@ -887,13 +890,81 @@ namespace MosaicLib.Modular.Interconnect.Values
             public ValueSetItemAttribute() 
                 : base()
             {
+                StorageType = ContainerStorageType.None;
             }
 
             /// <summary>
             /// When an item is marked to SilenceIssues, no issue messages will be emitted if the value cannot be accessed.  Value messages will still be emitted.
             /// </summary>
             public bool SilenceIssues { get; set; }
+
+            /// <summary>
+            /// When this property is set to be any value other than None (its default), the value marshalling will attempt to cast the member value to/from this cotnainer type when setting/getting container contents.
+            /// </summary>
+            public ContainerStorageType StorageType { get; set; }
         }
+    }
+
+    /// <summary>
+    /// ValueSet type agnostic interface for public methods in actual ValueSetAdapter implementation class
+    /// </summary>
+    public interface IValueSetAdapter
+    {
+        /// <summary>Defines the emitter used to emit Setup, Set, and Update related errors.  Defaults to the null emitter.</summary>
+        Logging.IMesgEmitter IssueEmitter { get; set; }
+
+        /// <summary>Defines the emitter used to emit Update related changes in config point values.  Defaults to the null emitter.</summary>
+        Logging.IMesgEmitter ValueNoteEmitter { get; set; }
+
+        /// <summary>
+        /// This method determines the set of full Parameter Names from the ValueSet's annotated items, and creates a set of IValueAccessor objects for them.
+        /// In most cases the client will immediately call Set or Update to transfer the values from or to the ValueSet.
+        /// <para/>Will use previously defined IValueInterconnect instance or the Values.Instance singleton.
+        /// <para/>Supports call chaining.
+        /// </summary>
+        /// <param name="baseNames">
+        /// Gives a list of 1 or more base names that are prepended to specific sub-sets of the list of item names based on each item's NameAdjust attribute property value.
+        /// </param>
+        IValueSetAdapter Setup(params string[] baseNames);
+
+        /// <summary>
+        /// This method determines the set of full Parameter Names from the ValueSet's annotated items, and creates a set of IValueAccessor objects for them.
+        /// In most cases the client will immediately call Set or Update to transfer the values from or to the ValueSet.
+        /// <para/>If a non-null valueInterconnect instnace is given then it will be used otherwise this method will use any previously defined IValueInterconnect instance or the Values.Instance singleton.
+        /// <para/>Supports call chaining.
+        /// </summary>
+        /// <param name="valueInterconnect">Allows the caller to (re)specifiy the IValueInterconnect instance that is to be used henceforth by this adapter</param>
+        /// <param name="baseNames">
+        /// Gives a list of 1 or more base names that are prepended to specific sub-sets of the list of item names based on each item's NameAdjust attribute property value.
+        /// </param>
+        IValueSetAdapter Setup(IValuesInterconnection valueInterconnect, params string[] baseNames);
+
+        /// <summary>
+        /// Transfer the values from the ValueSet's annotated members to the corresponding set of IValueAccessors and then tell the IValueInterconnect instance
+        /// to Set all of the IValueAccessors.
+        /// <para/>Supports call chaining.
+        /// </summary>
+        IValueSetAdapter Set();
+
+        /// <summary>
+        /// This property determines if the Set method uses ValueContainer equality testing to determine which IValueAccessor objects to actually write to the table.
+        /// When this property is true (the default), equality testing will be used to prevent updating table entires for IValueAccessors that do not have a set pending (due to change in container value).
+        /// When this property is false, all value table entries will be Set, without regard to whether their value might have changed.
+        /// </summary>
+        bool OptimizeSets { get; set; }
+
+        /// <summary>
+        /// Returns true if any of the IValueAccessors to which this adapter is attached indicate that there is a pending update 
+        /// (because the accessed value has been set elsewhere so there may be a new value to update that accessor from).
+        /// </summary>
+        bool IsUpdateNeeded { get; }
+
+        /// <summary>
+        /// Requests the IValueInterconnect instance to update all of the adapter's IValueAccessor objects and then transfers the updated values
+        /// from those accessor objects to the corresponding annotated ValueSet members.
+        /// <para/>Supports call chaining.
+        /// </summary>
+        IValueSetAdapter Update();
     }
 
     /// <summary>
@@ -906,7 +977,7 @@ namespace MosaicLib.Modular.Interconnect.Values
     /// <remarks>
     /// The primary methods/properties used on this adapter are: Construction, ValueSet, Setup, Set, Update, IsUpdateNeeded
     /// </remarks>
-    public class ValueSetAdapter<TValueSet> : DisposableBase where TValueSet : class
+    public class ValueSetAdapter<TValueSet> : DisposableBase, IValueSetAdapter where TValueSet : class
     {
         #region Ctor
 
@@ -1008,10 +1079,17 @@ namespace MosaicLib.Modular.Interconnect.Values
 
                 IValueAccessor valueAccessor = ValueInterconnect.GetValueAccessor(fullValueName);
 
+                ContainerStorageType useStorageType;
+                bool isNullable = false;
+                ValueContainer.DecodeType(itemInfo.ItemType, out useStorageType, out isNullable);
+                if (!itemAttribute.StorageType.IsNone())
+                    useStorageType = itemAttribute.StorageType;
+
                 ItemAccessSetupInfo itemAccessSetupInfo = new ItemAccessSetupInfo()
                 {
                     ValueAccessor = valueAccessor,
                     ItemInfo = itemInfo,
+                    UseStorageType = useStorageType,
                 };
 
                 GenerateMemberToFromValueAccessFuncs(itemAccessSetupInfo);
@@ -1118,6 +1196,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         void GenerateMemberToFromValueAccessFuncs(ItemAccessSetupInfo itemAccessSetupInfo)
         {
             ItemInfo<Attributes.ValueSetItemAttribute> itemInfo = itemAccessSetupInfo.ItemInfo;
+            ContainerStorageType useStorageType = itemAccessSetupInfo.UseStorageType;
 
             Action<TValueSet, IValueAccessor> innerBoundGetter = null;
             Action<TValueSet, IValueAccessor> innerBoundSetter = null;
@@ -1127,85 +1206,85 @@ namespace MosaicLib.Modular.Interconnect.Values
             {
                 Action<TValueSet, bool> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, bool>(itemInfo);
                 Func<TValueSet, bool> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, bool>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<bool>(pfGetter(valueSetObj), ContainerStorageType.Boolean, false); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<bool>(ContainerStorageType.Boolean, false, true)); };
+                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<bool>(pfGetter(valueSetObj), useStorageType, false); };
+                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<bool>(useStorageType, false, true)); };
             }
             else if (itemInfo.ItemType == typeof(sbyte))
             {
                 Action<TValueSet, sbyte> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, sbyte>(itemInfo);
                 Func<TValueSet, sbyte> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, sbyte>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<sbyte>(pfGetter(valueSetObj), ContainerStorageType.SByte, false); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<sbyte>(ContainerStorageType.SByte, false, true)); };
+                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<sbyte>(pfGetter(valueSetObj), useStorageType, false); };
+                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<sbyte>(useStorageType, false, true)); };
             }
             else if (itemInfo.ItemType == typeof(short))
             {
                 Action<TValueSet, short> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, short>(itemInfo);
                 Func<TValueSet, short> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, short>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<short>(pfGetter(valueSetObj), ContainerStorageType.Int16, false); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<short>(ContainerStorageType.Int16, false, true)); };
+                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<short>(pfGetter(valueSetObj), useStorageType, false); };
+                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<short>(useStorageType, false, true)); };
             }
             else if (itemInfo.ItemType == typeof(int))
             {
                 Action<TValueSet, int> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, int>(itemInfo);
                 Func<TValueSet, int> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, int>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<int>(pfGetter(valueSetObj), ContainerStorageType.Int32, false); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<int>(ContainerStorageType.Int32, false, true)); };
+                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<int>(pfGetter(valueSetObj), useStorageType, false); };
+                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<int>(useStorageType, false, true)); };
             }
             else if (itemInfo.ItemType == typeof(long))
             {
                 Action<TValueSet, long> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, long>(itemInfo);
                 Func<TValueSet, long> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, long>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<long>(pfGetter(valueSetObj), ContainerStorageType.Int64, false); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<long>(ContainerStorageType.Int64, false, true)); };
+                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<long>(pfGetter(valueSetObj), useStorageType, false); };
+                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<long>(useStorageType, false, true)); };
             }
             else if (itemInfo.ItemType == typeof(byte))
             {
                 Action<TValueSet, byte> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, byte>(itemInfo);
                 Func<TValueSet, byte> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, byte>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<byte>(pfGetter(valueSetObj), ContainerStorageType.Byte, false); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<byte>(ContainerStorageType.Byte, false, true)); };
+                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<byte>(pfGetter(valueSetObj), useStorageType, false); };
+                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<byte>(useStorageType, false, true)); };
             }
             else if (itemInfo.ItemType == typeof(ushort))
             {
                 Action<TValueSet, ushort> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, ushort>(itemInfo);
                 Func<TValueSet, ushort> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, ushort>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<ushort>(pfGetter(valueSetObj), ContainerStorageType.UInt16, false); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<ushort>(ContainerStorageType.UInt16, false, true)); };
+                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<ushort>(pfGetter(valueSetObj), useStorageType, false); };
+                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<ushort>(useStorageType, false, true)); };
             }
             else if (itemInfo.ItemType == typeof(uint))
             {
                 Action<TValueSet, uint> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, uint>(itemInfo);
                 Func<TValueSet, uint> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, uint>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<uint>(pfGetter(valueSetObj), ContainerStorageType.UInt32, false); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<uint>(ContainerStorageType.UInt32, false, true)); };
+                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<uint>(pfGetter(valueSetObj), useStorageType, false); };
+                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<uint>(useStorageType, false, true)); };
             }
             else if (itemInfo.ItemType == typeof(ulong))
             {
                 Action<TValueSet, ulong> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, ulong>(itemInfo);
                 Func<TValueSet, ulong> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, ulong>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<ulong>(pfGetter(valueSetObj), ContainerStorageType.UInt64, false); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<ulong>(ContainerStorageType.UInt64, false, true)); };
+                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<ulong>(pfGetter(valueSetObj), useStorageType, false); };
+                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<ulong>(useStorageType, false, true)); };
             }
             else if (itemInfo.ItemType == typeof(float))
             {
                 Action<TValueSet, float> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, float>(itemInfo);
                 Func<TValueSet, float> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, float>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<float>(pfGetter(valueSetObj), ContainerStorageType.Single, false); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<float>(ContainerStorageType.Single, false, true)); };
+                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<float>(pfGetter(valueSetObj), useStorageType, false); };
+                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<float>(useStorageType, false, true)); };
             }
             else if (itemInfo.ItemType == typeof(double))
             {
                 Action<TValueSet, double> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, double>(itemInfo);
                 Func<TValueSet, double> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, double>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<double>(pfGetter(valueSetObj), ContainerStorageType.Double, false); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<double>(ContainerStorageType.Double, false, true)); };
+                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<double>(pfGetter(valueSetObj), useStorageType, false); };
+                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<double>(useStorageType, false, true)); };
             }
             else if (itemInfo.ItemType == typeof(bool?))
             {
                 Action<TValueSet, bool?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, bool?>(itemInfo);
                 Func<TValueSet, bool?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, bool?>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<bool?>(pfGetter(valueSetObj), ContainerStorageType.Boolean, true); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<bool?>(ContainerStorageType.Boolean, true, true)); };
+                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<bool?>(pfGetter(valueSetObj), useStorageType, true); };
+                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<bool?>(useStorageType, true, true)); };
             }
             else if (itemInfo.ItemType == typeof(sbyte?))
             {
@@ -1218,92 +1297,103 @@ namespace MosaicLib.Modular.Interconnect.Values
             {
                 Action<TValueSet, short?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, short?>(itemInfo);
                 Func<TValueSet, short?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, short?>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<short?>(pfGetter(valueSetObj), ContainerStorageType.Int16, true); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<short?>(ContainerStorageType.Int16, true, true)); };
+                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<short?>(pfGetter(valueSetObj), useStorageType, true); };
+                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<short?>(useStorageType, true, true)); };
             }
             else if (itemInfo.ItemType == typeof(int?))
             {
                 Action<TValueSet, int?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, int?>(itemInfo);
                 Func<TValueSet, int?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, int?>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<int?>(pfGetter(valueSetObj), ContainerStorageType.Int32, true); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<int?>(ContainerStorageType.Int32, true, true)); };
+                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<int?>(pfGetter(valueSetObj), useStorageType, true); };
+                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<int?>(useStorageType, true, true)); };
             }
             else if (itemInfo.ItemType == typeof(long?))
             {
                 Action<TValueSet, long?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, long?>(itemInfo);
                 Func<TValueSet, long?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, long?>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<long?>(pfGetter(valueSetObj), ContainerStorageType.Int64, true); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<long?>(ContainerStorageType.Int64, true, true)); };
+                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<long?>(pfGetter(valueSetObj), useStorageType, true); };
+                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<long?>(useStorageType, true, true)); };
             }
             else if (itemInfo.ItemType == typeof(byte?))
             {
                 Action<TValueSet, byte?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, byte?>(itemInfo);
                 Func<TValueSet, byte?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, byte?>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<byte?>(pfGetter(valueSetObj), ContainerStorageType.Byte, true); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<byte?>(ContainerStorageType.Byte, true, true)); };
+                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<byte?>(pfGetter(valueSetObj), useStorageType, true); };
+                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<byte?>(useStorageType, true, true)); };
             }
             else if (itemInfo.ItemType == typeof(ushort?))
             {
                 Action<TValueSet, ushort?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, ushort?>(itemInfo);
                 Func<TValueSet, ushort?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, ushort?>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<ushort?>(pfGetter(valueSetObj), ContainerStorageType.UInt16, true); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<ushort?>(ContainerStorageType.UInt16, true, true)); };
+                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<ushort?>(pfGetter(valueSetObj), useStorageType, true); };
+                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<ushort?>(useStorageType, true, true)); };
             }
             else if (itemInfo.ItemType == typeof(uint?))
             {
                 Action<TValueSet, uint?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, uint?>(itemInfo);
                 Func<TValueSet, uint?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, uint?>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<uint?>(pfGetter(valueSetObj), ContainerStorageType.UInt32, true); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<uint?>(ContainerStorageType.UInt32, true, true)); };
+                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<uint?>(pfGetter(valueSetObj), useStorageType, true); };
+                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<uint?>(useStorageType, true, true)); };
             }
             else if (itemInfo.ItemType == typeof(ulong?))
             {
                 Action<TValueSet, ulong?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, ulong?>(itemInfo);
                 Func<TValueSet, ulong?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, ulong?>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<ulong?>(pfGetter(valueSetObj), ContainerStorageType.UInt64, true); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<ulong?>(ContainerStorageType.UInt64, true, true)); };
+                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<ulong?>(pfGetter(valueSetObj), useStorageType, true); };
+                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<ulong?>(useStorageType, true, true)); };
             }
             else if (itemInfo.ItemType == typeof(float?))
             {
                 Action<TValueSet, float?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, float?>(itemInfo);
                 Func<TValueSet, float?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, float?>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<float?>(pfGetter(valueSetObj), ContainerStorageType.Single, true); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<float?>(ContainerStorageType.Single, true, true)); };
+                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<float?>(pfGetter(valueSetObj), useStorageType, true); };
+                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<float?>(useStorageType, true, true)); };
             }
             else if (itemInfo.ItemType == typeof(double?))
             {
                 Action<TValueSet, double?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, double?>(itemInfo);
                 Func<TValueSet, double?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, double?>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<double?>(pfGetter(valueSetObj), ContainerStorageType.Double, true); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<double?>(ContainerStorageType.Double, true, true)); };
+                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<double?>(pfGetter(valueSetObj), useStorageType, true); };
+                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<double?>(useStorageType, true, true)); };
             }
             else if (itemInfo.ItemType == typeof(string))
             {
                 Action<TValueSet, string> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, string>(itemInfo);
                 Func<TValueSet, string> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, string>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<string>(pfGetter(valueSetObj), ContainerStorageType.Object, false); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<string>(ContainerStorageType.Object, false, true)); };
+                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<string>(pfGetter(valueSetObj), useStorageType, false); };
+                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<string>(useStorageType, false, true)); };
             }
             else if (itemInfo.ItemType == typeof(object))
             {
                 Action<TValueSet, object> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, object>(itemInfo);
                 Func<TValueSet, object> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, object>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<object>(pfGetter(valueSetObj), ContainerStorageType.Object, false); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<object>(ContainerStorageType.Object, false, true)); };
+                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<object>(pfGetter(valueSetObj), useStorageType, false); };
+                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<object>(useStorageType, false, true)); };
             }
             else if (itemInfo.ItemType.IsEnum)
             {
                 innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva)
                 {
-                    // this is less efficient but will work
-                    object valueAsObject = iva.ValueAsObject;
                     object parsedValueAsObject = null;
 
-                    string valueAsStr = valueAsObject as string;
-                    if (valueAsStr != null)
+                    object valueAsObject = iva.ValueContainer.ValueAsObject;
+                    bool valueIsString = iva.ValueContainer.cvt.IsString() || (valueAsObject is String);
+                    bool valueIsInt = iva.ValueContainer.cvt.IsInteger(true, false);
+
+                    if (valueIsString)
+                    {
+                        string valueAsStr = valueAsObject as string;
                         parsedValueAsObject = System.Enum.Parse(itemInfo.ItemType, valueAsStr);
+                    }
+                    else if (valueIsInt)
+                    {
+                        parsedValueAsObject = System.Enum.ToObject(itemInfo.ItemType, iva.ValueContainer.GetValue<Int64>(true));
+                    }
                     else
-                        parsedValueAsObject = valueAsObject;
+                    {
+                        // this is less efficient but might work in special cases (such as when the valueAsObject is really a boxed version of the desired type already casted as an object).
+                        parsedValueAsObject = System.Convert.ChangeType(valueAsObject, itemInfo.ItemType);
+                    }
 
                     if (itemInfo.IsProperty)
                         itemInfo.PropertyInfo.SetValue(valueSetObj, parsedValueAsObject, null);
@@ -1314,9 +1404,9 @@ namespace MosaicLib.Modular.Interconnect.Values
                 innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva)
                 {
                     if (itemInfo.IsProperty)
-                        iva.ValueAsObject = itemInfo.PropertyInfo.GetValue(valueSetObj, emptyObjectArray);
+                        iva.ValueContainer = new ValueContainer().SetValue<object>(itemInfo.PropertyInfo.GetValue(valueSetObj, emptyObjectArray), useStorageType, false);
                     else
-                        iva.ValueAsObject = itemInfo.FieldInfo.GetValue(valueSetObj);
+                        iva.ValueContainer = new ValueContainer().SetValue<object>(itemInfo.FieldInfo.GetValue(valueSetObj), useStorageType, false);
                 };
             }
             else
@@ -1324,7 +1414,7 @@ namespace MosaicLib.Modular.Interconnect.Values
                 innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva)
                 {
                     // this is less efficient but will work
-                    object valueAsObject = iva.ValueAsObject;
+                    object valueAsObject = iva.ValueContainer.ValueAsObject;
 
                     if (itemInfo.IsProperty)
                         itemInfo.PropertyInfo.SetValue(valueSetObj, valueAsObject, null);
@@ -1335,9 +1425,9 @@ namespace MosaicLib.Modular.Interconnect.Values
                 innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva)
                 {
                     if (itemInfo.IsProperty)
-                        iva.ValueAsObject = itemInfo.PropertyInfo.GetValue(valueSetObj, emptyObjectArray);
+                        iva.ValueContainer = new ValueContainer(itemInfo.PropertyInfo.GetValue(valueSetObj, emptyObjectArray));
                     else
-                        iva.ValueAsObject = itemInfo.FieldInfo.GetValue(valueSetObj);
+                        iva.ValueContainer = new ValueContainer(itemInfo.FieldInfo.GetValue(valueSetObj));
                 };
             }
  
@@ -1429,6 +1519,11 @@ namespace MosaicLib.Modular.Interconnect.Values
             /// </summary>
             public string ValueName { get { return ((ValueAccessor != null) ? ValueAccessor.Name : String.Empty); } }
 
+            /// <summary>
+            /// Gives the storage type that will be used with any container associated with this item
+            /// </summary>
+            public ContainerStorageType UseStorageType { get; set; }
+
             /// <summary>delegate that is used to set a specific member's value from a given config key's value object's stored value.</summary>
             /// <remarks>this item will be null for static items and for items that failed to be setup correctly.</remarks>
             public Action<TValueSet, Logging.IMesgEmitter, Logging.IMesgEmitter> MemberToValueAccessAction { get; set; }
@@ -1458,6 +1553,30 @@ namespace MosaicLib.Modular.Interconnect.Values
             if (emitterRef == null)
                 emitterRef = Logging.NullEmitter;
             return emitterRef;
+        }
+
+        #endregion
+
+        #region IValueSetAdapter explicit implementation methods
+
+        IValueSetAdapter IValueSetAdapter.Setup(params string[] baseNames)
+        {
+            return Setup(baseNames);
+        }
+
+        IValueSetAdapter IValueSetAdapter.Setup(IValuesInterconnection valueInterconnect, params string[] baseNames)
+        {
+            return Setup(valueInterconnect, baseNames);
+        }
+
+        IValueSetAdapter IValueSetAdapter.Set()
+        {
+            return Set();
+        }
+
+        IValueSetAdapter IValueSetAdapter.Update()
+        {
+            return Update();
         }
 
         #endregion

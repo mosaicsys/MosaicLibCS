@@ -73,7 +73,7 @@ namespace MosaicLib.WPF.Interconnect
             // extract new values from the IVA's ValueContainer
             ValueContainer valueContainer = ValueAccessor.ValueContainer;
             object valueAsObject = valueContainer.ValueAsObject;
-            double? valueAsDouble = valueContainer.ValueAsDouble;
+            double? valueAsDouble = valueContainer.GetValue<double?>(ContainerStorageType.Double, true, false);
             bool? valueAsBoolean = valueContainer.GetValue<bool?>(ContainerStorageType.Boolean, true, false);
             Int32? valueAsInt32 = valueContainer.GetValue<Int32?>(ContainerStorageType.Int32, true, false);
             string valueAsString = valueAsObject as string;

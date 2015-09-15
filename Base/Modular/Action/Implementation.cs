@@ -63,9 +63,9 @@ namespace MosaicLib.Modular.Action
             UpdateMesgType = rhs.UpdateMesgType;
         }
 
-        /// <summary>Gives the Logging.MesgType that is to be used for Action Completion messages.</summary>
+        /// <summary>Gives the Logging.MesgType that is to be used for successfull Action Completion messages.</summary>
         public Logging.MesgType DoneMesgType { get; protected set; }
-        /// <summary>Gives the Logging.MesgType that is to be used for Action Failed messages.</summary>
+        /// <summary>Gives the Logging.MesgType that is to be used for Action Failed messages (including failed Action Completion messages).</summary>
         public Logging.MesgType ErrorMesgType { get; protected set; }
         /// <summary>Gives the Logging.MesgType that is to be used for other Action state change messages.</summary>
         public Logging.MesgType StateMesgType { get; protected set; }
@@ -372,7 +372,7 @@ namespace MosaicLib.Modular.Action
 			bool isComplete = (toState == ActionStateCode.Complete);
 			bool includeRC = (isComplete || !string.IsNullOrEmpty(resultCode));
 			if (isComplete)
-				emitter = logging.Done;
+				emitter = includeRC ? logging.Error : logging.Done;
 
 			if (includeRC)
 				emitter.Emit("<ActionStateChange id=\"{0}\" to=\"{1}\" from=\"{2}\" rc=\"{3}\"/>", logging, toState, fromState, resultCode);

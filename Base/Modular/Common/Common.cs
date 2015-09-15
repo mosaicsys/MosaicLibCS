@@ -153,10 +153,21 @@ namespace MosaicLib.Modular.Common
             }
         }
 
+        /// <summary>
+        /// Returns true if the contained type is a reference type and contained value is null or the contained type is None
+        /// </summary>
+        public bool IsNullOrNone
+        {
+            get
+            {
+                return (cvt.IsNone() || IsNull);
+            }
+        }
+
         /// <summary>Clears the container.  Identical to setting it to its own default.</summary>
         public void Clear()
         {
-            cvt = default(ContainerStorageType);
+            cvt = default(ContainerStorageType);        // aka ContainerStorageType.None
             o = default(System.Object);
             u = default(Union);
         }
@@ -222,6 +233,7 @@ namespace MosaicLib.Modular.Common
             {
                 switch (cvt)
                 {
+                    case ContainerStorageType.None: return null;
                     default:
                     case ContainerStorageType.Object: return o;
                     case ContainerStorageType.String: return o;
@@ -307,8 +319,9 @@ namespace MosaicLib.Modular.Common
                     cvt = decodedValueType;
                     switch (decodedValueType)
                     {
+                        case ContainerStorageType.None: o = null; cvt = ContainerStorageType.None; break;
                         default:
-                        case ContainerStorageType.Object: o = (System.Object) value; cvt = ContainerStorageType.Object; break;
+                        case ContainerStorageType.Object: o = (System.Object)value; cvt = ContainerStorageType.Object; break;
                         case ContainerStorageType.String: o = ((value != null) ? ((System.Object) value).ToString() : null); break;
                         case ContainerStorageType.IListOfString: o = (System.Collections.Generic.IList<System.String>)((System.Object)value); break;
                         case ContainerStorageType.Boolean: u.b = (System.Boolean)System.Convert.ChangeType(value, typeof(System.Boolean)); break;
@@ -392,6 +405,7 @@ namespace MosaicLib.Modular.Common
                 {
                     switch (cvt)
                     {
+                        case ContainerStorageType.None: value = default(TValueType); break;
                         default:
                         case ContainerStorageType.Object: value = (TValueType)o; break;
                         case ContainerStorageType.String: value = (TValueType)o; break;
@@ -501,6 +515,7 @@ namespace MosaicLib.Modular.Common
         /// <summary>
         /// Property to attempt to interpret the contained value as a Nullable{double}.  This is especially useful for binding with WPF
         /// </summary>
+        [Obsolete("This method is now obsolete.  Please replace use of the getter with 'GetValue<double ?>(ContainerStorageType.Double, true, false)' and use of the setter with 'SetValue<double ?>(value)' (2015-09-01)")]
         public double ? ValueAsDouble
         {
             get { return GetValue<double ?>(ContainerStorageType.Double, true, false); }
@@ -519,6 +534,8 @@ namespace MosaicLib.Modular.Common
                 return (o as IList<String>).IsEqualTo(rhs.o as IList<String>);
             else if (cvt.IsReferenceType())
                 return System.Object.Equals(o, rhs.o);
+            else if (cvt.IsNone())
+                return true;
             else
                 return u.IsEqualTo(rhs.u);
         }
@@ -541,6 +558,9 @@ namespace MosaicLib.Modular.Common
         /// <summary>Override ToString for logging and debugging.</summary>
         public override string ToString()
         {
+            if (cvt.IsNone())
+                return "None";
+
             if (IsNull)
                 return "Null:{0}".CheckedFormat(cvt);
 
@@ -562,6 +582,8 @@ namespace MosaicLib.Modular.Common
     /// <summary>Enumeration that is used with the ValueContainer struct.</summary>
     public enum ContainerStorageType : int
     {
+        /// <summary>Custom value for cases where the storage type has not been defined</summary>
+        None = -1,
         /// <summary>Use Object field -(the default value: 0)</summary>
         Object = 0,
         /// <summary>Use Object field as a String</summary>
@@ -607,6 +629,45 @@ namespace MosaicLib.Modular.Common
                 case ContainerStorageType.IListOfString:
                     return true;
                 default:
+                    return false;
+            }
+        }
+
+        /// <summary>
+        /// Returns true if the given ContainerStorageType is None.
+        /// </summary>
+        public static bool IsNone(this ContainerStorageType cst)
+        {
+            return (cst == ContainerStorageType.None);
+        }
+
+        /// <summary>
+        /// Returns true if the given ContainerStorageType is String.
+        /// </summary>
+        public static bool IsString(this ContainerStorageType cst)
+        {
+            return (cst == ContainerStorageType.String);
+        }
+
+        /// <summary>
+        /// Returns true if the given ContainerStorageType is a signed or unsigned integer.  Boolean is treated as an unsigned type.
+        /// </summary>
+        public static bool IsInteger(this ContainerStorageType cst, bool includeSigned, bool includeUnsigned)
+        {
+            switch (cst)
+            {
+                case ContainerStorageType.SByte:
+                case ContainerStorageType.Int16:
+                case ContainerStorageType.Int32:
+                case ContainerStorageType.Int64: 
+                    return includeSigned;
+                case ContainerStorageType.Boolean:
+                case ContainerStorageType.Byte:
+                case ContainerStorageType.UInt16:
+                case ContainerStorageType.UInt32:
+                case ContainerStorageType.UInt64: 
+                    return includeUnsigned;
+                default: 
                     return false;
             }
         }

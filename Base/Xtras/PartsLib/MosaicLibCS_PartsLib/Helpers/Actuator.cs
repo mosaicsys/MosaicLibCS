@@ -26,11 +26,16 @@ using MosaicLib.Time;
 
 namespace MosaicLib.PartsLib.Helpers
 {
+    /// <summary>
+    /// Defines the positions that the ActuatorBase can be in/moved to
+    /// <para/>Valid targets: MoveToPos1, MoveToPos2, Inbetween, None
+    /// <para/>Other known states: AtPos1, AtPos2, MovingToPos1, MovingToPos2, Undefined (default), Fault
+    /// </summary>
     [DataContract]
-    public enum ActuatorPosition
+    public enum ActuatorPosition : int
     {
         [EnumMember]
-        Undefined,
+        Undefined = 0,
         [EnumMember]
         None,
         [EnumMember]
@@ -44,7 +49,12 @@ namespace MosaicLib.PartsLib.Helpers
         [EnumMember]
         Inbetween,
         [EnumMember]
-        Fault
+        Fault,
+
+        [EnumMember]
+        MoveToPos1 = AtPos1,
+        [EnumMember]
+        MoveToPos2 = AtPos2,
     }
 
     [DataContract]
@@ -85,7 +95,7 @@ namespace MosaicLib.PartsLib.Helpers
         [DataMember]
         public ActuatorPosition InitialPos { get; protected set; }
 
-        public string ToString(ActuatorPosition pos)
+        public virtual string ToString(ActuatorPosition pos)
         {
             switch (pos)
             {
@@ -157,9 +167,15 @@ namespace MosaicLib.PartsLib.Helpers
         public bool IsAtPos2 { get { return (IsAtTarget && PosState == ActuatorPosition.AtPos2); } }
         public bool IsAtTarget { get { return (TargetPos == ActuatorPosition.None || TargetPos == PosState); } }
         public bool IsInMotion { get { return (PosState == ActuatorPosition.MovingToPos1 || PosState == ActuatorPosition.MovingToPos2); } }
-        public static bool IsTargetPositionValid(ActuatorPosition pos) { return (pos == ActuatorPosition.AtPos1 || pos == ActuatorPosition.AtPos2 || pos == ActuatorPosition.None); }
-        public static bool IsActuatorPositionValid(ActuatorPosition pos) { return (pos == ActuatorPosition.AtPos1 || pos == ActuatorPosition.AtPos2 || pos == ActuatorPosition.MovingToPos1 || pos == ActuatorPosition.MovingToPos2 || pos == ActuatorPosition.Inbetween); }
+        public static bool IsTargetPositionValid(ActuatorPosition pos) { return pos.IsTargetPositionValid(); }
+        public static bool IsActuatorPositionValid(ActuatorPosition pos) { return pos.IsActuatorPositionValid(); }
         public bool IsValid { get { return (IsTargetPositionValid(TargetPos) && IsActuatorPositionValid(PosState)); } } 
+    }
+
+    public static partial class ExtensionMethods
+    {
+        public static bool IsTargetPositionValid(this ActuatorPosition pos) { return (pos == ActuatorPosition.AtPos1 || pos == ActuatorPosition.AtPos2 || pos == ActuatorPosition.None); }
+        public static bool IsActuatorPositionValid(this ActuatorPosition pos) { return (pos == ActuatorPosition.AtPos1 || pos == ActuatorPosition.AtPos2 || pos == ActuatorPosition.MovingToPos1 || pos == ActuatorPosition.MovingToPos2 || pos == ActuatorPosition.Inbetween); }
     }
 
     public class ActuatorBase

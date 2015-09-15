@@ -1441,6 +1441,28 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
+        /// Attempts to open the given path as an XML text file and read/deserialize the given object from it using the default transcoder
+        /// If the underlying File.Open or DataContractSerializer.ReadObject call fails, this method will either return the given defaultValue (of rethrow is false) or will rethrow the original exception.
+        /// </summary>
+        public ObjType ReadFromFile(String path, ObjType defaultValue, bool rethrow)
+        {
+            try
+            {
+                using (System.IO.FileStream fileStream = System.IO.File.Open(path, System.IO.FileMode.Open, System.IO.FileAccess.Read, System.IO.FileShare.Read))
+                {
+                    return ReadObject(fileStream);
+                }
+            }
+            catch
+            {
+                if (rethrow)
+                    throw;
+
+                return defaultValue;
+            }
+        }
+
+        /// <summary>
         /// Serializes the given object by calling WriteObject on the contained DataContractSerializer and passing it the given writeStream and the contains XmlWriterSettings.
         /// </summary>
         /// <param name="obj">Gives the object that is to be serialized</param>
@@ -1456,6 +1478,27 @@ namespace MosaicLib.Utils
                 xw.Flush();
             }
         }
+
+        /// <summary>
+        /// Attempts to open the given path as an XML text file and write/serialize the given object into it using the default transcoder.
+        /// If the underlying File.Open or DataContractSerializer.WiteObject call fails, this method will either return (of rethrow is false) or will rethrow the original exception.
+        /// </summary>
+        public void WriteToFile(ObjType obj, String path, bool rethrow)
+        {
+            try
+            {
+                using (System.IO.FileStream fileStream = System.IO.File.Open(path, System.IO.FileMode.OpenOrCreate, System.IO.FileAccess.Write, System.IO.FileShare.None))
+                {
+                    WriteObject(obj, fileStream);
+                }
+            }
+            catch
+            {
+                if (rethrow)
+                    throw;
+            }
+        }
+
 
         /// <summary>A string builder object that is constructed and (re)used by ConvertObjectToString.</summary>
         System.Text.StringBuilder sb = null;
