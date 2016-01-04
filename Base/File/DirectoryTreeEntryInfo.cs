@@ -220,7 +220,7 @@ namespace MosaicLib.File
             }
             catch (System.Exception ex)
             {
-                issueEmitter.Emit("BuiltTree failed at path:'{0}' error:{1}", path, ex.ToString());
+                issueEmitter.Emit("BuiltTree failed at path:'{0}' error:{1}", path, ex);
             }
         }
 

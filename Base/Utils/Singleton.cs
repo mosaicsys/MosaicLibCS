@@ -19,6 +19,7 @@
  */
 //-------------------------------------------------------------------
 
+using System;
 namespace MosaicLib.Utils
 {
 	//-------------------------------------------------
@@ -79,6 +80,53 @@ namespace MosaicLib.Utils
         ManuallyAssign_MustBeNonNull,
         /// <summary>Instance property is manually assigned.  It may be null or non-null at any point that a Singleton user/client attempts to use it.</summary>
         ManuallyAssign_MayBeNull,
+    }
+
+    /// <summary>
+    /// Local extentsion methods
+    /// </summary>
+    public static partial class ExtensionMethods
+    {
+        /// <summary>
+        /// Returns true if the given singletonInstanceBehavior is one of the values that allows a caller to assign the Instance directly.
+        /// <para/>AutoConstructIfNeeded, ManuallyAssign_MayBeNull, ManuallyAssign_MustBeNonNull
+        /// </summary>
+        public static bool InstanceCanBeManuallyAssignedBehavior(this SingletonInstanceBehavior singletonInstanceBehavior)
+        {
+            return (singletonInstanceBehavior == SingletonInstanceBehavior.AutoConstructIfNeeded 
+                    || singletonInstanceBehavior == SingletonInstanceBehavior.ManuallyAssign_MayBeNull 
+                    || singletonInstanceBehavior == SingletonInstanceBehavior.ManuallyAssign_MustBeNonNull
+                    );
+        }
+
+        /// <summary>
+        /// Returns true if the given singletonInstanceBehavior that may attempt to construct the instance when first required.
+        /// <para/>AutoConstruct, AutoConstructIfNeeded
+        /// </summary>
+        public static bool IsAutoConstructBehavior(this SingletonInstanceBehavior singletonInstanceBehavior)
+        {
+            return (singletonInstanceBehavior == SingletonInstanceBehavior.AutoConstruct 
+                    || singletonInstanceBehavior == SingletonInstanceBehavior.AutoConstructIfNeeded
+                    );
+        }
+
+        /// <summary>
+        /// Returns true if the singletonInstanceBehavior allows the Instace getter to return null.
+        /// <para/>ManuallyAssign_MayBeNull
+        /// </summary>
+        public static bool DoesBehaviorPermitInstanceGetterToReturnNull(this SingletonInstanceBehavior singletonInstanceBehavior)
+        {
+            return (singletonInstanceBehavior == SingletonInstanceBehavior.ManuallyAssign_MayBeNull);
+        }
+
+        /// <summary>
+        /// Returns true if the singletonInstanceBehavior allows the Instace to be set to null.
+        /// <para/>ManuallyAssign_MayBeNull, AutoConstructIfNeeded
+        /// </summary>
+        public static bool DoesBehaviorPermitInstanceToBeSetToNull(this SingletonInstanceBehavior singletonInstanceBehavior)
+        {
+            return (singletonInstanceBehavior == SingletonInstanceBehavior.ManuallyAssign_MayBeNull || singletonInstanceBehavior == SingletonInstanceBehavior.AutoConstructIfNeeded);
+        }
     }
 
     /// <summary>
@@ -181,14 +229,15 @@ namespace MosaicLib.Utils
         /// Resulting SingletonHelper may be used as IDisposable and supports use with SingletonObjectTypes that are either IDisposable or not.
         /// </summary>
         /// <param name="behavior">Defines the Instance property construction and use behavior: AutoConsruct, ManuallyAssign_MustBeNonNull or ManuallyAssign_MayBeNull</param>
-        /// <param name="instanceConstructionDelegate">Gives the delegate that will be invoked to construct the instance object if/when that is required</param>
+        /// <param name="instanceConstructionDelegate">Gives the delegate that will be invoked to construct the instance object if/when that is required.  Must not be null if the given behavior may AutoConstruct the instance.</param>
+        /// <exception cref="SingletonException">thrown if instanceConstructionDelegate is null and the given behavior may attempt to AutoConstruct the instance.</exception>
         public SingletonHelperBase(SingletonInstanceBehavior behavior, InstanceConstructionDelegate instanceConstructionDelegate) 
         { 
             Behavior = behavior;
             this.instanceConstructionDelegate = instanceConstructionDelegate;
 
-            if (instanceConstructionDelegate == null)
-                throw new SingletonException("Attempt to specify a null InstanceConstructionDelegate");
+            if (instanceConstructionDelegate == null && behavior.IsAutoConstructBehavior())
+                throw new SingletonException("Attempt to use a null instanceConstructionDelegate with {0} behavior".CheckedFormat(behavior));
         }
 
         /// <summary>
@@ -258,7 +307,7 @@ namespace MosaicLib.Utils
                     {
                         value = instance;
 
-                        if (value == null && CreateInstanceOnFirstUse)
+                        if (value == null && Behavior.IsAutoConstructBehavior())
                         {
                             if (recursiveConstructionCount.Increment() != 1)
                             {
@@ -283,8 +332,8 @@ namespace MosaicLib.Utils
                     }
                 }
 
-                if (value == null && !NullIsLegalInstanceValue)
-                    throw new SingletonException("Attempt to retrieve Instance from SingletonHelper before any singleton object was assigned");
+                if (value == null && !Behavior.DoesBehaviorPermitInstanceGetterToReturnNull())
+                    throw new SingletonException("Attempt to get Instance from {0} SingletonHelper before Instace was assigned to a non-null value".CheckedFormat(Behavior));
 
                 return value;
             }
@@ -293,14 +342,14 @@ namespace MosaicLib.Utils
             {
                 lock (instanceMutex)
                 {
-                    if (!InstanceMayBeAssigned)
-                        throw new SingletonException("Attempt to assign value to SingletonHelper whose Behavior does not permit this");
+                    if (!Behavior.InstanceCanBeManuallyAssignedBehavior())
+                        throw new SingletonException("Attempt to assign value to {0} SingletonHelper Instance".CheckedFormat(Behavior));
 
                     if (IsDisposed)
                         throw new SingletonException("Attempt to set Instance after SingletonHelper has been disposed");
 
-                    if (value == null && !NullIsLegalInstanceValue)
-                        throw new SingletonException("Attempt to set Instance to illegal null value");
+                    if (value == null && !Behavior.DoesBehaviorPermitInstanceToBeSetToNull())
+                        throw new SingletonException("Attempt to set Instance to null value with {0} behavior".CheckedFormat(Behavior));
 
                     if (instance != null && value != null)
                         throw new SingletonException("Attempt to replace existing non-null Instance");
@@ -332,32 +381,12 @@ namespace MosaicLib.Utils
 
         #region private fields and properties
 
-        /// <summary>True if behavior is AutoConstruct</summary>
-        private bool CreateInstanceOnFirstUse { get { return (Behavior == SingletonInstanceBehavior.AutoConstruct || Behavior == SingletonInstanceBehavior.AutoConstructIfNeeded); } }
-
-        /// <summary>True if behavior is AutoConstruct</summary>
-        private bool InstanceMayBeAssigned
-        {
-            get
-            {
-                switch (Behavior)
-                {
-                    case SingletonInstanceBehavior.AutoConstruct: return false;
-                    case SingletonInstanceBehavior.AutoConstructIfNeeded: return true;
-                    case SingletonInstanceBehavior.ManuallyAssign_MayBeNull: return true;
-                    case SingletonInstanceBehavior.ManuallyAssign_MustBeNonNull: return true;
-                    default: return false;
-                }
-            }
-        }
-
-        /// <summary>True if behavior is ManuallyAssign_MayBeNull</summary>
-        private bool NullIsLegalInstanceValue { get { return (Behavior == SingletonInstanceBehavior.ManuallyAssign_MayBeNull || Behavior == SingletonInstanceBehavior.AutoConstructIfNeeded); } }
-
         /// <summary>mutex object for access to change instance field</summary>
         private readonly object instanceMutex = new object();
+
         /// <summary>volatile reference to constructed or held singleton object</summary>
         private volatile TSingletonInstanceProperty instance = null;
+      
         /// <summary>Instance recursion counter used to detect recursive use of Instance during auto construction of SingletonObjectType object.</summary>
         private AtomicInt32 recursiveConstructionCount = new AtomicInt32(0);
 

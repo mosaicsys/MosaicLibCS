@@ -146,6 +146,10 @@ namespace MosaicLib.SerialIO
             DebugMesgType = Logging.MesgType.Debug;
             TraceMesgType = Logging.MesgType.Trace;
             TraceDataMesgType = Logging.MesgType.Trace;
+            TraceActionDoneMesgType = Logging.MesgType.Trace;
+            TraceActionErrorMesgType = Logging.MesgType.Debug;
+            TraceActionStateMesgType = Logging.MesgType.None;
+            TraceActionUpdateMesgType = Logging.MesgType.None;
             LoggerGroupID = String.Empty;       // use default
             TraceDataLoggerGroupID = "LDG.SerialIO.TraceData";
 
@@ -352,8 +356,21 @@ namespace MosaicLib.SerialIO
         public Logging.MesgType DebugMesgType { get; set; }
         /// <summary>Defines the Logging.MesgType that is produced by the port for trace messages that it produces</summary>
         public Logging.MesgType TraceMesgType { get; set; }
+
         /// <summary>Defines the Logging.MesgType that is produced by the port for data trace messages that it produces</summary>
         public Logging.MesgType TraceDataMesgType { get; set; }
+
+        /// <summary>Defines the Logging.MesgType that is used for Trace level port Action Done events.  Defaults to Logger.MesgType.Debug</summary>
+        public Logging.MesgType TraceActionDoneMesgType { get; set; }
+
+        /// <summary>Defines the Logging.MesgType that is used for Trace level port Action Error events.  Defaults to Logger.MesgType.Info</summary>
+        public Logging.MesgType TraceActionErrorMesgType { get; set; }
+
+        /// <summary>Defines the Logging.MesgType that is used for Trace level port Action State events.  Defaults to Logger.MesgType.None</summary>
+        public Logging.MesgType TraceActionStateMesgType { get; set; }
+
+        /// <summary>Defines the Logging.MesgType that is used for Trace level port Action Update events.  Defaults to Logger.MesgType.None</summary>
+        public Logging.MesgType TraceActionUpdateMesgType { get; set; }
 
         /// <summary>Defines the Logger GroupID that the port will use for its message logger.  When empty or null the port will use the default Logger GroupID.</summary>
         public string LoggerGroupID
@@ -696,14 +713,6 @@ namespace MosaicLib.SerialIO
 	//-----------------------------------------------------------------
 	#region Port Factory
 
-    /// <summary>Old exception type thrown for an invalid or unrecognized PortConfig SpecStr</summary>
-    [Obsolete("This type has been replaced by the functionally identical InvalidPortConfigSpecStrException which will now by thrown in its place (2013-06-14)")]
-	public class InvalidPortConfigSpecStr : System.Exception
-	{
-        /// <summary>Exception constructor</summary>
-        public InvalidPortConfigSpecStr(string mesg) : base(mesg) { }
-	}
-
     /// <summary>This Exception type is thrown for an invalid or unrecognized PortConfig SpecStr</summary>
     public class InvalidPortConfigSpecStrException : System.Exception
     {
@@ -717,7 +726,7 @@ namespace MosaicLib.SerialIO
 		/// <summary>Create an IPort implementation object based on the first element in the SpecStr in the given portConfig struct.</summary>
 		/// <param name="portConfig">Provides all configuration details for the port to be created.</param>
         /// <returns>The created SerialIO.Port object as an IPort.  Throws an InvalidPortConfigSpecStr exception if the required concrete type cannot be determined from the portConfig.SpecStr</returns>
-        /// <exception cref="InvalidPortConfigSpecStr">thrown if the required concrete type cannot be determined from the portConfig.SpecStr</exception>
+        /// <exception cref="InvalidPortConfigSpecStrException">thrown if the required concrete type cannot be determined from the portConfig.SpecStr</exception>
         public static IPort CreatePort(PortConfig portConfig)
         {
             return CreatePort(portConfig, true);
@@ -727,7 +736,7 @@ namespace MosaicLib.SerialIO
 		/// <param name="portConfig">Provides all configuration details for the port to be created.</param>
         /// <param name="allowThrow">Set to true to allow this method to throw an exception if the given portConfig.SpecStr cannot be understood.  Set to false to force the method to construct and return a NullPort instead.</param>
 		/// <returns>The created SerialIO.Port object as an IPort.  Throws an InvalidPortConfigSpecStr exception if the required concrete type cannot be determined from the portConfig.SpecStr.</returns>
-        /// <exception cref="InvalidPortConfigSpecStr">thrown if the required concrete type cannot be determined from the portConfig.SpecStr and the allowThrow property is true</exception>
+        /// <exception cref="InvalidPortConfigSpecStrException">thrown if the required concrete type cannot be determined from the portConfig.SpecStr and the allowThrow property is true</exception>
         public static IPort CreatePort(PortConfig portConfig, bool allowThrow)
 		{
 			bool success = true;

@@ -21,15 +21,16 @@
  */
 //-------------------------------------------------------------------
 
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.IO;
+
+using MosaicLib.Utils;
+using MosaicLib.Modular.Part;
+
 namespace MosaicLib.File
 {
-	using System;
-	using System.Collections;
-	using System.Collections.Generic;
-	using System.IO;
-
-	using MosaicLib.Modular.Part;
-
 	//-------------------------------------------------------------------
 	#region DirectoryFileRotationManager
 
@@ -437,7 +438,7 @@ namespace MosaicLib.File
 			// record the given configuration
 			this.config = config;
 			excludedFileSet = new System.Collections.Specialized.StringCollection();
-			excludedFileSet.AddRange(config.excludeFileNamesSet.ToArray());
+			excludedFileSet.AddRange(config.excludeFileNamesSet.SafeToArray());
 
 			string dirPath = config.dirPath;
 

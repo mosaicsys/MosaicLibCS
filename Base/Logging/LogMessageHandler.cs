@@ -405,7 +405,7 @@ namespace MosaicLib
 					this.fAndL = fandl;
 					this.endLStr = endlStr;
 					this.tabStr = tabStr;
-                    IncludeKeywords = true;
+                    IncludeNamedValueSet = true;
 				}
 
                 /// <summary>True if the Date is included in formatted output lines.</summary>
@@ -420,8 +420,8 @@ namespace MosaicLib
                 public bool IncludeThreadInfo { get; set; }
                 /// <summary>True if the source File and Line information is included in formatted output lines.</summary>
                 public bool IncludeFileAndLine { get { return fAndL; } }
-                /// <summary>get/set property:  True if keywords information will be included in formatted output lines.</summary>
-                public bool IncludeKeywords { get; set; }
+                /// <summary>get/set property:  True if NamedValueSet content information will be included in formatted output lines.</summary>
+                public bool IncludeNamedValueSet { get; set; }
 
                 /// <summary>Converts the thread info in the given message into a string consiting of the managed TID, the Win32 TID (in hex) and the thread name if it is not null or empty.</summary>
                 private string FormatThreadInfo(LogMessage lm)
@@ -449,7 +449,7 @@ namespace MosaicLib
 					if (level) { TabIfNeeded(os, ref firstItem); os.Write(ConvertToFixedWidthString(lm.MesgType)); }
 					if (source) { TabIfNeeded(os, ref firstItem); os.Write(lm.LoggerName); }
 					{ TabIfNeeded(os, ref firstItem); os.Write(lm.Mesg); }
-                    if (IncludeKeywords) { os.Write(tabStr); os.Write(lm.Keywords); }
+                    if (IncludeNamedValueSet) { os.Write(tabStr); os.Write(lm.NamedValueSet.ToString(false, true)); }
                     if (data) { os.Write(tabStr); os.Write("[{0}]", base64UrlCoder.Encode(lm.Data)); }
                     if (IncludeThreadInfo) { os.Write(tabStr); os.Write(FormatThreadInfo(lm)); }
 					if (fAndL && lm.SourceStackFrame != null)
@@ -474,7 +474,7 @@ namespace MosaicLib
 					if (level) { TabIfNeeded(ostr, ref firstItem); ostr.Append(ConvertToFixedWidthString(lm.MesgType)); }
 					if (source) { TabIfNeeded(ostr, ref firstItem); ostr.Append(lm.LoggerName); }
 					{ TabIfNeeded(ostr, ref firstItem); ostr.Append(lm.Mesg); }
-                    if (IncludeKeywords) { ostr.Append(tabStr); ostr.Append(lm.Keywords); }
+                    if (IncludeNamedValueSet) { ostr.Append(tabStr); ostr.Append(lm.NamedValueSet.ToString(false, true)); }
                     if (data) { ostr.Append(tabStr); ostr.Append("["); ostr.Append(base64UrlCoder.Encode(lm.Data)); ostr.Append("]"); }
                     if (IncludeThreadInfo) { ostr.Append(tabStr); ostr.Append(FormatThreadInfo(lm)); }
 					if (fAndL && lm.SourceStackFrame != null)

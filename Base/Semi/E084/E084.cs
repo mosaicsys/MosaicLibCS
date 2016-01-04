@@ -305,7 +305,7 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
 		///<summary>True if ActiveToPassive pins are idle.</summary>
         public bool IsIdle { get { return (0 == (PackedWord & ActiveToPassivePinBits.PinsBitMask)); } }
 
-		///<summary>True if ActiveToPassive pins have made a valid port selection.</summary>
+		///<summary>True if ActiveToPassive pins have made a valid port selection (VALID and CS_0 or CS_1).</summary>
         public bool IsSelectActive 
         { 
             get 

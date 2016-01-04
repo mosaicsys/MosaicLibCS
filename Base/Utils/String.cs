@@ -23,6 +23,7 @@ using System;
 using System.Text;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.Serialization;
 
 namespace MosaicLib.Utils
 {
@@ -30,7 +31,7 @@ namespace MosaicLib.Utils
 
     /// <summary>
     /// Fcns class is essentially a namespace for series of static helper methods
-    /// <para/>inclues: DisposeOf... methods, CheckedFormat and other String related methods, array/list specific Equals methods, ...
+    /// <para/>includes: DisposeOf... methods, CheckedFormat and other String related methods, array/list specific Equals methods, ...
     /// </summary>
     /// <remarks>These methods are now also Extension Methods</remarks>
     public static partial class Fcns
@@ -62,9 +63,40 @@ namespace MosaicLib.Utils
 
 		#endregion
 
-		#region static CheckedFormat methods
+        #region static String Ascii predicate method(s)
 
-		/// <summary>
+        /// <summary>
+        /// Returns true if all of the characters in this string have char values from 1 to 127, or the string is null or empty
+        /// </summary>
+        public static bool IsBasicAscii(this string s)
+        {
+            return IsBasicAscii(s, true);
+        }
+
+        /// <summary>
+        /// Returns true if all of the characters in this string have char values from 1 to 127, or the string is empty.  valueForNull is returned if the given string is null.
+        /// </summary>
+        public static bool IsBasicAscii(this string s, bool valueForNull)
+        {
+            if (s == null)
+                return valueForNull;
+
+            int sLength = s.Length;
+            for (int idx = 0; idx < sLength; idx++)
+            {
+                char c = s[idx];
+                if (c <= '\0' || c > 127)
+                    return false;
+            }
+
+            return true;
+        }
+
+        #endregion
+
+        #region static CheckedFormat methods
+
+        /// <summary>
         /// Invokes System.String.Format with the given args within a try/catch pattern.
         /// System.String.Format replaces the format item in a specified System.String with the text equivalent of the value of a specified System.Object instance.
         /// </summary>
@@ -410,6 +442,28 @@ namespace MosaicLib.Utils
         }
 
         #endregion
+
+        #region string and string array size estimate methods
+
+        /// <summary>Returns the estimated sizeof the contents of the given string in bytes, assuming that each character in the string will consume 2 bytes</summary>
+        public static int EstimatedContentSizeInBytes(this String s)
+        {
+            return (s.MapNullToEmpty().Length * sizeof(char));
+        }
+
+        /// <summary>Returns the estimated sizeof the contents of the given string array in bytes, assuming that each character in each string in the array will consume 2 bytes</summary>
+        public static int EstimatedContentSizeInBytes(this String[] sArray)
+        {
+            return (sArray.Sum((s) => s.MapNullToEmpty().Length) * sizeof(char));
+        }
+
+        /// <summary>Returns the estimated sizeof the contents of the given list of strings in bytes, assuming that each character in each string in the list will consume 2 bytes</summary>
+        public static int EstimatedContentSizeInBytes(this IList<String> sList)
+        {
+            return (sList.Sum((s) => s.MapNullToEmpty().Length) * sizeof(char));
+        }
+
+        #endregion
     }
 
     #endregion
@@ -421,6 +475,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// This is a list (set) of Rule objects that supports deep cloneing.  This set is expected to be used with the MatchesAny extension method
         /// </summary>
+        [CollectionDataContract(Namespace = Constants.UtilsNameSpace)]
         public class MatchRuleSet : List<MatchRule>
         {
             /// <summary>Default constructor</summary>
@@ -434,6 +489,31 @@ namespace MosaicLib.Utils
             public override string ToString()
             {
                 return String.Join(",", this.Select((r) => r.ToString()).ToArray());
+            }
+
+            /// <summary>
+            /// Getter constructs and returns a MatchRuleSet that contains a single MatchType.Any MatchRule.
+            /// </summary>
+            public static MatchRuleSet Any
+            {
+                get { return new MatchRuleSet() { new MatchRule(MatchType.Any, null) }; }
+            }
+
+            /// <summary>
+            /// Returns true if this MatchRuleSet contains an Any match rule (and will thus match anything).
+            /// </summary>
+            public bool IsAny 
+            { 
+                get { return this.Any((rule) => rule.MatchType == MatchType.Any); } 
+            }
+
+            /// <summary>
+            /// This method allows this class to be used with a dictionary style content initializer
+            /// </summary>
+            public MatchRuleSet Add(MatchType matchType, String ruleString)
+            {
+                Add(new MatchRule(matchType, ruleString));
+                return this;
             }
         }
 
@@ -485,6 +565,7 @@ namespace MosaicLib.Utils
         /// <para/>This object is immutable in that none of its public or protected portions allow its contents to be changed.
         /// <para/>This object is not re-enterant (not thread safe) when using MatchType.Regex.
         /// </summary>
+        [DataContract(Namespace = Constants.UtilsNameSpace)]
         public class MatchRule
         {
             /// <summary>
@@ -496,9 +577,8 @@ namespace MosaicLib.Utils
             public MatchRule(MatchType matchType, String ruleString)
             {
                 MatchType = matchType;
-                RuleString = ruleString;
-                if (MatchType == MatchType.Regex)
-                    regex = new System.Text.RegularExpressions.Regex(RuleString);
+                RuleString = ruleString ?? String.Empty;
+                BuildRegexIfNeeded();
             }
 
             /// <summary>
@@ -509,22 +589,36 @@ namespace MosaicLib.Utils
             {
                 MatchType = rhs.MatchType;
                 RuleString = rhs.RuleString;
-                if (MatchType == MatchType.Regex)
-                    regex = new System.Text.RegularExpressions.Regex(RuleString);
+                BuildRegexIfNeeded();
             }
 
             /// <summary>Defines the type of match test that this rule is used to test for (Prefix, Suffix, Contains, Regex match).</summary>
+            [DataMember(Order = 1)]
             public MatchType MatchType { get; private set; }
+
             /// <summary>Defines the string used to test a given test string with: an expected prefix, suffix, substring, or a regular expression against which test strings are checked for a match.</summary>
+            /// <remarks>Note that the constructor sanitizes this string at construction time so that this property will never return null.</remarks>
+            [DataMember(Order = 2)]
             public String RuleString { get; private set; }
+
             /// <summary>Internal storage for the pre-computed regular expression engine if this object was constructed using StringMatchType.Regex.</summary>
-            private System.Text.RegularExpressions.Regex regex = null;
+            internal System.Text.RegularExpressions.Regex regex = null;
+
+            /// <summary>This method will build the regex automatically if it has not already been built</summary>
+            internal System.Text.RegularExpressions.Regex BuildRegexIfNeeded()
+            {
+                if (regex == null && MatchType == StringMatching.MatchType.Regex)
+                    regex = new System.Text.RegularExpressions.Regex(RuleString);
+
+                return regex;
+            }
 
             /// <summary>
             /// Resturns true if the given testString matches the rule contained in this object based on the contstructed contents of the MatchType and RuleString.
             /// Prefix checks if testString StartsWith the RuleString, Suffix tests if testString EndsWith RuleString, 
             /// Contains tests if testString Contains RuleString, and Regex tests if RuleString as regular expression IsMatch of testString.
             /// </summary>
+            /// <exception cref="System.ArgumentException">May be thrown if MatchType is Regex and the rhs's RuleString is not a valid regular expression.</exception>
             public bool Matches(String testString)
             {
                 testString = testString ?? String.Empty;
@@ -536,7 +630,8 @@ namespace MosaicLib.Utils
                     case MatchType.Prefix: return testString.StartsWith(RuleString);
                     case MatchType.Suffix: return testString.EndsWith(RuleString);
                     case MatchType.Contains: return testString.Contains(RuleString);
-                    case MatchType.Regex: return regex.IsMatch(testString);
+                    case MatchType.Regex: return BuildRegexIfNeeded().IsMatch(testString);
+                    case MatchType.Exact: return (testString == RuleString);
                     default: return false;
                 }
             }
@@ -551,20 +646,30 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>Enum defines the different means that a RuleString can be used to determine if a given test string is to be included in a given set, or not.</summary>
+        [DataContract(Namespace = Constants.UtilsNameSpace)]
         public enum MatchType : int
         {
             /// <summary>does not match any string values without regard to the contents of the corresponding RuleString</summary>
+            [EnumMember]
             None = 0,
             /// <summary>matches any string value without regard to the contents of the corresponding RuleString </summary>
+            [EnumMember]
             Any,
             /// <summary>matches string values that start with the contents of the corresponding RuleString</summary>
+            [EnumMember]
             Prefix,
             /// <summary>matches string values that end with the contents of the corresponding RuleString</summary>
+            [EnumMember]
             Suffix,
             /// <summary>matches string value that contain a sub-string equal to the contents of the corresponding RuleString</summary>
+            [EnumMember]
             Contains,
             /// <summary>compiles the RuleString as a Regular Expression and the checks if the regular expression finds any match in each given test string</summary>
+            [EnumMember]
             Regex,
+            /// <summary>matches if the string value is exactly the same as the RuleString</summary>
+            [EnumMember]
+            Exact,
         }
     }
 

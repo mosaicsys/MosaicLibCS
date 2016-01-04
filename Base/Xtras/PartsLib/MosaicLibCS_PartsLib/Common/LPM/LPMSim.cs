@@ -408,6 +408,7 @@ namespace MosaicLib.PartsLib.Common.LPM.Sim
     {
         public SelectedSettings() 
         {
+            ActivateInfoPadsNow = true;
         }
 
         public SelectedSettings(SelectedSettings rhs)
@@ -421,6 +422,7 @@ namespace MosaicLib.PartsLib.Common.LPM.Sim
             SelectedCarrierTypeSpec = rhs.SelectedCarrierTypeSpec;
             SelectedCarrierType = rhs.SelectedCarrierType;
             SelectedInfoPads = rhs.SelectedInfoPads;
+            ActivateInfoPadsNow = rhs.ActivateInfoPadsNow;
         }
 
         public void UpdateFrom(LPMSimPartConfigBase config)
@@ -452,6 +454,8 @@ namespace MosaicLib.PartsLib.Common.LPM.Sim
 
         public InfoPads SelectedInfoPads { get; private set; }
 
+        public bool ActivateInfoPadsNow { get; set; }
+
         public bool IsEqualTo(SelectedSettings rhs)
         {
             return (SelectedMapResultPatternIndex == rhs.SelectedMapResultPatternIndex
@@ -461,6 +465,7 @@ namespace MosaicLib.PartsLib.Common.LPM.Sim
                     && SelectedCarrierTypeSpec == rhs.SelectedCarrierTypeSpec
                     && SelectedCarrierType == rhs.SelectedCarrierType
                     && SelectedInfoPads == rhs.SelectedInfoPads
+                    && ActivateInfoPadsNow == rhs.ActivateInfoPadsNow
                     );
         }
     }

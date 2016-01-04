@@ -738,17 +738,6 @@ namespace MosaicLib.SerialIO
             base.UsedNChars(n);
         }
 
-        /// <summary>Allows the caller to Reset both the buffer and the queue of extracted packets.</summary>
-        /// <param name="clearQueue">set to true if this method should clear the queue in addition to emptying the buffer.</param>
-        [Obsolete("This method is obsolete due to a naming/signature conflict with the same method in the base class.  Please use ResetBuffer() or ResetBufferAndClearQueue() directly as needed.  (2013-11-19)")]
-        protected new void ResetBuffer(bool clearQueue)
-        {
-            if (clearQueue)
-                ResetBufferAndClearQueue();
-            else
-                base.ResetBuffer();
-        }
-
         /// <summary>Call this method to Reset the sliding buffer and to clear the queue of packets that have already been extracted from it.</summary>
         protected void ResetBufferAndClearQueue()
         {

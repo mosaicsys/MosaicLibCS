@@ -40,10 +40,10 @@ using System.Configuration;
 using System.ComponentModel;
 using System.Reflection;
 
-
 namespace MosaicLib.WPF.Logging
 {
     using MosaicLib;        // apparently this makes MosaicLib get searched before MosaicLib.WPF.Logging for resolving symbols here.
+    using MosaicLib.Modular.Common;
 
     public class LogFilterConfig
     {
@@ -77,8 +77,7 @@ namespace MosaicLib.WPF.Logging
         public Logging.MesgType  MesgType { get { return lm.MesgType; } }
         public string  Mesg { get { return lm.Mesg; } }
         public byte[]  Data { get { return lm.Data; } }
-        public string[]  KeywordArray { get { return lm.KeywordArray; } }
-        public string  Keywords { get { return lm.Keywords; } }
+        public INamedValueSet NamedValueSet { get { return lm.NamedValueSet; } }
         public MosaicLib.Time.QpcTimeStamp  EmittedQpcTime { get { return lm.EmittedQpcTime; } }
         public int  SeqNum { get { return lm.SeqNum; } }
         public int  ThreadID { get { return lm.ThreadID; } }

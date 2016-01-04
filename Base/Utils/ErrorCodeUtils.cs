@@ -75,20 +75,6 @@ namespace MosaicLib.Utils
 			System.ComponentModel.Win32Exception e = new System.ComponentModel.Win32Exception(win32EC);
 			return e.Message;
 		}
-
-        /// <summary>
-        /// static helper method that is used to convert Win32 DWORD error codes into strings.  
-        /// Does this by creating a Win32Exception from the given win32EC error code value and then returns the Message that the exception created.
-        /// </summary>
-        /// <param name="win32EC">Gives the value of the Win32 Error Code that is to be converted to a string.</param>
-        /// <param name="noErrorReturnStr">Gives the value to return when win32EC is zero</param>
-        /// <param name="unknownErrorReturnStr">Unused - ignored.</param>
-        /// <returns>noErrorReturnStr if win32EC is zero or Message from constructed Win32Exception if win32EC is not zero.</returns>
-        [System.Obsolete("This method name is not spelled correctly.  Please replace its use with the correctly named CvtWin32ECToString. (2013-06-16)")]
-        public static string CvtWin32ECTostring(int win32EC, string noErrorReturnStr, string unknownErrorReturnStr)
-        {
-            return CvtWin32ECToString(win32EC, noErrorReturnStr, unknownErrorReturnStr);
-        }
     }
 }
 

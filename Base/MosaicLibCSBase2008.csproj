@@ -47,7 +47,11 @@
     <Reference Include="System.ServiceModel">
       <RequiredTargetFramework>3.0</RequiredTargetFramework>
     </Reference>
+    <Reference Include="System.ServiceModel.Web" />
     <Reference Include="System.Xml" />
+    <Reference Include="WindowsBase">
+      <RequiredTargetFramework>3.0</RequiredTargetFramework>
+    </Reference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="File\DirectoryEntryInfo.cs" />
@@ -72,6 +76,8 @@
     <Compile Include="Modular\Config\ConfigValueSetAdapter.cs" />
     <Compile Include="Modular\Interconnect\Parts.cs" />
     <Compile Include="Modular\Interconnect\Values.cs" />
+    <Compile Include="Modular\Interconnect\WCF.cs" />
+    <Compile Include="Modular\Interconnect\Sets.cs" />
     <Compile Include="Modular\Part\PartBase.cs" />
     <Compile Include="Modular\Part\SimpleActivePart.cs" />
     <Compile Include="Modular\Persist\Persist.cs" />
@@ -91,6 +97,7 @@
     <Compile Include="Serial\Modbus\ModbusClient.cs" />
     <Compile Include="Serial\Modbus\ModbusServer.cs" />
     <Compile Include="Semi\E005\E005.cs" />
+    <Compile Include="Semi\E041\E041.cs" />
     <Compile Include="Semi\E084\E084.cs" />
     <Compile Include="Semi\E084\E084IOSupport.cs" />
     <Compile Include="Semi\E087\E087.cs" />

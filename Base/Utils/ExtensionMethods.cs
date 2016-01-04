@@ -19,12 +19,13 @@
  */
 //-------------------------------------------------------------------
 
+using System;
+using System.Text;
+using System.Collections.Generic;
+using System.Linq;
+
 namespace MosaicLib.Utils
 {
-    using System;
-    using System.Text;
-    using System.Collections.Generic;
-
     #region Related Unassociated Functions
 
     /// <summary>
@@ -274,6 +275,30 @@ namespace MosaicLib.Utils
                 return fromList[getFromIndex];
         }
 
+        /// <summary>
+        /// Extension method "safe" version of ToArray method.  If the given collection is non-null then this method returns the Linq ToArray method applied to the collection.
+        /// If the collection is null then this method creates and returns an empty array of the given ItemType.
+        /// </summary>
+        public static ItemType[] SafeToArray<ItemType>(this ICollection<ItemType> collection)
+        {
+            return SafeToArray(collection, null);
+        }
+
+        /// <summary>
+        /// Extension method "safe" version of ToArray method.  If the given collection is non-null then this method returns the Linq ToArray method applied to the collection.
+        /// If the collection is null and the given fallbackArray is non-null then this method returns the fallbackArray.
+        /// If the collection and the fallbackArray values are null then this creates and returns an empty array of the given ItemType.
+        /// </summary>
+        public static ItemType[] SafeToArray<ItemType>(this ICollection<ItemType> collection, ItemType[] fallbackArray)
+        {
+            if (collection != null)
+                return collection.ToArray();
+
+            if (fallbackArray != null)
+                return fallbackArray;
+
+            return new ItemType[0];
+        }
 
         #endregion
     }

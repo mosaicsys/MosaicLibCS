@@ -21,13 +21,14 @@
  */
 //-------------------------------------------------------------------
 
+using System;
+using System.Runtime.InteropServices;
+using System.Runtime.Serialization;
+using System.Runtime.Serialization.Json;
+using System.IO;
+
 namespace MosaicLib.Utils
 {
-	//-------------------------------------------------
-	using System;
-    using System.Runtime.InteropServices;
-    using System.Runtime.Serialization;
-
 	//-------------------------------------------------
 	#region Data Packing, Unpacking, Byte Order manipulations
 
@@ -43,6 +44,8 @@ namespace MosaicLib.Utils
         public static UInt16 Pack(Byte msb, Byte lsb) { unchecked { return (UInt16) ((((UInt32) msb) << 8) | ((UInt32) lsb)); } }
         /// <summary>Packs the given set of 4 bytes as a UInt32 and returns it</summary>
         public static UInt32 Pack(Byte umsb, Byte ulsb, Byte lmsb, Byte llsb) { unchecked { return ((((UInt32)umsb) << 24) | (((UInt32)ulsb) << 16) | (((UInt32)lmsb) << 8) | ((UInt32)llsb)); } }
+        /// <summary>Packs the given set of 4 bytes as a UInt32 and returns it</summary>
+        public static UInt64 Pack(Byte msb8, Byte msb7, Byte msb6, Byte msb5, Byte msb4, Byte msb3, Byte msb2, Byte lsb) { unchecked { return ((((UInt64)msb8) << 56) | (((UInt64)msb7) << 48) | (((UInt64)msb6) << 40) | ((UInt64)msb5) << 32) | ((((UInt64)msb4) << 24) | (((UInt64)msb3) << 16) | (((UInt64)msb2) << 8) | ((UInt64)lsb)); } }
         /// <summary>Packs the given set of 3 bytes as the lower 24 bits of a UInt32 and returns it</summary>
         public static UInt32 Pack(Byte ulsb, Byte lmsb, Byte llsb) { unchecked { return ((((UInt32)ulsb) << 16) | (((UInt32)lmsb) << 8) | ((UInt32)llsb)); } }
         /// <summary>Packs the given pair of UInt16 values as a UInt32 and returns it</summary>
@@ -450,7 +453,13 @@ namespace MosaicLib.Utils
         public System.Int32 Exchange(System.Int32 value) { return System.Threading.Interlocked.Exchange(ref this.value, value); }
         /// <summary>Performs Interlocked.CompareExchange on the contained value.</summary>
         public System.Int32 CompareExchange(System.Int32 value, System.Int32 comparand) { return System.Threading.Interlocked.CompareExchange(ref this.value, value, comparand); }
-	}
+
+        /// <summary>Debugging helper</summary>
+        public override string ToString()
+        {
+            return "Value:{0}".CheckedFormat(VolatileValue);
+        }
+    }
 
 	/// <summary>
 	/// This struct provides the same functionality as AtomicInt32 but casted to act as an UInt32
@@ -481,7 +490,13 @@ namespace MosaicLib.Utils
         public System.UInt32 Exchange(System.UInt32 value) { return unchecked((UInt32)ai32.Exchange(unchecked((Int32)value))); }
         /// <summary>Performs Interlocked.CompareExchange on the contained value.</summary>
         public System.UInt32 CompareExchange(System.UInt32 value, System.UInt32 comparand) { return unchecked((UInt32)ai32.CompareExchange(unchecked((Int32)value), unchecked((Int32)comparand))); }
-	}
+
+        /// <summary>Debugging helper</summary>
+        public override string ToString()
+        {
+            return "Value:{0}".CheckedFormat(VolatileValue);
+        }
+    }
 
     /// <summary>
     /// This struct provides the standard System.Threading.Interlocked operations wrapped around a volatile System.Int64 value.  This is done to allow us to surpress the warnings that are generated when passing a volatile by reference
@@ -516,6 +531,12 @@ namespace MosaicLib.Utils
         public System.Int64 Exchange(System.Int64 value) { return System.Threading.Interlocked.Exchange(ref this.value, value); }
         /// <summary>Performs Interlocked.CompareExchange on the contained value.</summary>
         public System.Int64 CompareExchange(System.Int64 value, System.Int64 comparand) { return System.Threading.Interlocked.CompareExchange(ref this.value, value, comparand); }
+
+        /// <summary>Debugging helper</summary>
+        public override string ToString()
+        {
+            return "Value:{0}".CheckedFormat(VolatileValue);
+        }
     }
 
     /// <summary>
@@ -547,6 +568,12 @@ namespace MosaicLib.Utils
         public System.UInt64 Exchange(System.UInt64 value) { return unchecked((UInt64)ai64.Exchange(unchecked((Int64)value))); }
         /// <summary>Performs Interlocked.CompareExchange on the contained value.</summary>
         public System.UInt64 CompareExchange(System.UInt64 value, System.UInt64 comparand) { return unchecked((UInt64)ai64.CompareExchange(unchecked((Int64)value), unchecked((Int64)comparand))); }
+
+        /// <summary>Debugging helper</summary>
+        public override string ToString()
+        {
+            return "Value:{0}".CheckedFormat(VolatileValue);
+        }
     }
 
     // restore prior "warning CS0420: 'xxxx': a reference to a volatile field will not be treated as volatile" warning behavior
@@ -1247,6 +1274,147 @@ namespace MosaicLib.Utils
 	#endregion
 
     //-------------------------------------------------
+    #region DataContract serialization related interfaces
+
+    /// <summary>
+    /// This interface encapsulates a small set of standard use patterns for transcribing between DataContract objects 
+    /// and the corresponding serialized string and file formats.  Objects that implement this interface may be used to
+    /// serialize to and from the TObjectType
+    /// </summary>
+    /// <typeparam name="TObjectType">
+    /// The templatized object type on which this adapter is defined.  
+    /// Must be a DataContract or compatible type in order to be usable with adapters of this type.
+    /// </typeparam>
+    public interface IDataContractAdapter<TObjectType>
+    {
+        /// <summary>
+        /// Attempts to use an underlying DataContractSerializer to read the deserialize the corresponding object from the given stream using its ReadObject method.  
+        /// Returns the object if the read was successful.
+        /// </summary>
+        TObjectType ReadObject(System.IO.Stream readStream);
+
+        /// <summary>
+        /// Attempts to use an underlying DataContractSerializer to read the deserialize the corresponding object from the given string.
+        /// </summary>
+        /// <param name="s">Contains the text from which the DataCongtractSerializer is to deserialize the object.</param>
+        TObjectType ReadObject(String s);
+
+        /// <summary>
+        /// Attempts to open the given path as an serialized text file and read/deserialize the given object from it using an underlying DataContractSerializer
+        /// If the underlying File.Open or ReadObject method call fails, this method will either return the given defaultValue (of rethrow is false) or will rethrow the original exception.
+        /// </summary>
+        TObjectType ReadFromFile(String path, TObjectType defaultValue, bool rethrow);
+
+        /// <summary>
+        /// Serializes the given object by calling WriteObject on the contained DataContractSerializer and passing it the given writeStream.
+        /// </summary>
+        /// <param name="obj">Gives the object that is to be serialized</param>
+        /// <param name="writeStream">Gives the stream on which the serialized data is to be written.</param>
+        /// <exception cref="System.Runtime.Serialization.InvalidDataContractException">The type being serialized does not conform to data contract rules. For example, the System.Runtime.Serialization.DataContractAttribute attribute has not been applied to the type.</exception>
+        /// <exception cref="System.Runtime.Serialization.SerializationException">There is a problem with the instance being written</exception>
+        /// <exception cref="System.ServiceModel.QuotaExceededException">The maximum number of objects to serialize has been exceeded. Check the System.Runtime.Serialization.DataContractSerializer.MaxItemsInObjectGraph property.</exception>
+        void WriteObject(TObjectType obj, System.IO.Stream writeStream);
+
+        /// <summary>
+        /// Attempts to open the given path as a text file and write/serialize the given object into the file using an underlying DataContractSerializer.
+        /// If the underlying File.Open or DataContractSerializer.WiteObject call fails, this method will either return (of rethrow is false) or will rethrow the original exception.
+        /// </summary>
+        void WriteToFile(TObjectType obj, String path, bool rethrow);
+
+        /// <summary>
+        /// Serializes the given object by calling WriteObject on the underlying DataContractSerializer to serialize and write the object into a String
+        /// </summary>
+        /// <param name="obj">Gives the object that is to be serialized</param>
+        /// <returns>A string containing the serialized representation of the given object as serialized by the contained DataContracxtSerialzier</returns>
+        string ConvertObjectToString(TObjectType obj);
+    }
+
+    /// <summary>
+    /// Base class typically used when implementing the IDataContractAdapter interface.  
+    /// Provides implementations for helper methods that implemented purely based on use of other interface methods.
+    /// </summary>
+    /// <typeparam name="TObjectType">
+    /// The templatized object type on which this adapter is defined.  
+    /// Must be a DataContract or compatible object type in order to be usable with adapters of this type.
+    /// </typeparam>
+    public abstract class DataContractAdapterBase<TObjectType> 
+        : DisposableBase
+        , IDataContractAdapter<TObjectType>
+    {
+        /// <summary>
+        /// Attempts to use an underlying DataContractSerializer to read the deserialize the corresponding object from the given stream using its ReadObject method.  
+        /// Returns the object if the read was successful.
+        /// </summary>
+        public abstract TObjectType ReadObject(Stream readStream);
+
+        /// <summary>
+        /// Attempts to use an underlying DataContractSerializer to read the deserialize the corresponding object from the given string.
+        /// </summary>
+        /// <param name="s">Contains the text from which the DataCongtractSerializer is to deserialize the object.</param>
+        public abstract TObjectType ReadObject(string s);
+
+        /// <summary>
+        /// Attempts to open the given path as an serialized text file and read/deserialize the given object from it using an underlying DataContractSerializer
+        /// If the underlying File.Open or ReadObject method call fails, this method will either return the given defaultValue (of rethrow is false) or will rethrow the original exception.
+        /// </summary>
+        public TObjectType ReadFromFile(String path, TObjectType defaultValue, bool rethrow)
+        {
+            try
+            {
+                using (System.IO.FileStream fileStream = System.IO.File.Open(path, System.IO.FileMode.Open, System.IO.FileAccess.Read, System.IO.FileShare.Read))
+                {
+                    return ReadObject(fileStream);
+                }
+            }
+            catch
+            {
+                if (rethrow)
+                    throw;
+
+                return defaultValue;
+            }
+        }
+
+        /// <summary>
+        /// Serializes the given object by calling WriteObject on the contained DataContractSerializer and passing it the given writeStream.
+        /// </summary>
+        /// <param name="obj">Gives the object that is to be serialized</param>
+        /// <param name="writeStream">Gives the stream on which the serialized data is to be written.</param>
+        /// <exception cref="System.Runtime.Serialization.InvalidDataContractException">The type being serialized does not conform to data contract rules. For example, the System.Runtime.Serialization.DataContractAttribute attribute has not been applied to the type.</exception>
+        /// <exception cref="System.Runtime.Serialization.SerializationException">There is a problem with the instance being written</exception>
+        /// <exception cref="System.ServiceModel.QuotaExceededException">The maximum number of objects to serialize has been exceeded. Check the System.Runtime.Serialization.DataContractSerializer.MaxItemsInObjectGraph property.</exception>
+        public abstract void WriteObject(TObjectType obj, Stream writeStream);
+
+        /// <summary>
+        /// Attempts to open the given path as a text file and write/serialize the given object into the file using an underlying DataContractSerializer.
+        /// If the underlying File.Open or DataContractSerializer.WiteObject call fails, this method will either return (of rethrow is false) or will rethrow the original exception.
+        /// </summary>
+        public void WriteToFile(TObjectType obj, String path, bool rethrow)
+        {
+            try
+            {
+                using (System.IO.FileStream fileStream = System.IO.File.Open(path, System.IO.FileMode.OpenOrCreate, System.IO.FileAccess.Write, System.IO.FileShare.None))
+                {
+                    WriteObject(obj, fileStream);
+                }
+            }
+            catch
+            {
+                if (rethrow)
+                    throw;
+            }
+        }
+
+        /// <summary>
+        /// Serializes the given object by calling WriteObject on the underlying DataContractSerializer to serialize and write the object into a String
+        /// </summary>
+        /// <param name="obj">Gives the object that is to be serialized</param>
+        /// <returns>A string containing the serialized representation of the given object as serialized by the contained DataContracxtSerialzier</returns>
+        public abstract string ConvertObjectToString(TObjectType obj);
+    }
+
+    #endregion
+
     #region DataContractObject to/from xml string or byte stream helper
 
     /// <summary>
@@ -1254,13 +1422,13 @@ namespace MosaicLib.Utils
     /// and the corresponding ASCII Xml strings and files.  This object contains and makes use of a DataContractSerializer to
     /// implement that actual Serialization and Deserialization behavior.
     /// </summary>
-    /// <typeparam name="ObjType">
+    /// <typeparam name="TObjectType">
     /// The templatized object type on which this adapter is defined.  
     /// Must be a DataContract or compatible class in order to be usable by this adapter.
     /// </typeparam>
-    public class DataContractAsciiXmlAdapter<ObjType>
-        : DataContractXmlAdapter<ObjType>
-        where ObjType : class
+    public class DataContractAsciiXmlAdapter<TObjectType>
+        : DataContractXmlAdapter<TObjectType>
+        where TObjectType : class
     {
         /// <summary>
         /// Default constructor.
@@ -1275,12 +1443,12 @@ namespace MosaicLib.Utils
     /// and the corresponding Xml strings and files.  This object contains and makes use of a DataContractSerializer to
     /// implement that actual Serialization and Deserialization behavior.
     /// </summary>
-    /// <typeparam name="ObjType">
+    /// <typeparam name="TObjectType">
     /// The templatized object type on which this adapter is defined.  
-    /// Must be a DataContract or compatible class in order to be usable by this adapter.
+    /// Must be a DataContract or compatible object type in order to be usable by this adapter.
     /// </typeparam>
-    public class DataContractXmlAdapter<ObjType>
-        where ObjType : class
+    public class DataContractXmlAdapter<TObjectType>
+        : DataContractAdapterBase<TObjectType>
     {
         /// <summary>
         /// Base constructor.  
@@ -1401,28 +1569,28 @@ namespace MosaicLib.Utils
 
         #endregion
 
+        /// <summary>Gives the value of the VerifyObjectName parameter that will be passed to the DataContractSerializer's verifyObjectName parameter for ReadObject calls.</summary>
+        public bool VerifyObjectName { get; set; }
+
         /// <summary>Settings used when serializing an object to Xml</summary>
         protected System.Xml.XmlWriterSettings xws = new System.Xml.XmlWriterSettings();
 
         /// <summary>Settings used when deserializing an object from Xml</summary>
         protected System.Xml.XmlReaderSettings xrs = new System.Xml.XmlReaderSettings();
 
-        /// <summary>Gives the value of the VerifyObjectName parameter that will be passed to the DataContractSerializer's verifyObjectName parameter for ReadObject calls.</summary>
-        public bool VerifyObjectName { get; set; }
-
         /// <summary>The DataContractSerializer instance that is used by this adapter.</summary>
-        DataContractSerializer dcs = new DataContractSerializer(typeof(ObjType));
+        DataContractSerializer dcs = new DataContractSerializer(typeof(TObjectType));
 
         /// <summary>
         /// Attempts to use the contained DataContractSerializer to read the deserialize the corresponding object from the given stream using its ReadObject method.  
         /// Returns the object if the read was successful.
         /// </summary>
         /// <exception cref="System.Runtime.Serialization.SerializationException">The VerifyObjectName Property is set to true, and the element name and namespace do not correspond to the values set in the constructor.</exception>
-        public ObjType ReadObject(System.IO.Stream readStream)
+        public override TObjectType ReadObject(System.IO.Stream readStream)
         {
             using (System.Xml.XmlReader xr = System.Xml.XmlReader.Create(readStream, xrs))
             {
-                return dcs.ReadObject(xr, VerifyObjectName) as ObjType;
+                return (TObjectType) dcs.ReadObject(xr, VerifyObjectName);
             }
         }
 
@@ -1431,46 +1599,24 @@ namespace MosaicLib.Utils
         /// </summary>
         /// <param name="s">Contains the text from which the DataCongtractSerializer is to deserialize the object.</param>
         /// <exception cref="System.Runtime.Serialization.SerializationException">The VerifyObjectName Property is set to true, and the element name and namespace do not correspond to the values set in the constructor.</exception>
-        public ObjType ReadObject(String s)
+        public override TObjectType ReadObject(String s)
         {
             using (System.IO.StringReader sr = new System.IO.StringReader(s))
             using (System.Xml.XmlReader xr = System.Xml.XmlReader.Create(sr, xrs))
             {
-                return dcs.ReadObject(xr, VerifyObjectName) as ObjType;
+                return (TObjectType) dcs.ReadObject(xr, VerifyObjectName);
             }
         }
 
         /// <summary>
-        /// Attempts to open the given path as an XML text file and read/deserialize the given object from it using the default transcoder
-        /// If the underlying File.Open or DataContractSerializer.ReadObject call fails, this method will either return the given defaultValue (of rethrow is false) or will rethrow the original exception.
-        /// </summary>
-        public ObjType ReadFromFile(String path, ObjType defaultValue, bool rethrow)
-        {
-            try
-            {
-                using (System.IO.FileStream fileStream = System.IO.File.Open(path, System.IO.FileMode.Open, System.IO.FileAccess.Read, System.IO.FileShare.Read))
-                {
-                    return ReadObject(fileStream);
-                }
-            }
-            catch
-            {
-                if (rethrow)
-                    throw;
-
-                return defaultValue;
-            }
-        }
-
-        /// <summary>
-        /// Serializes the given object by calling WriteObject on the contained DataContractSerializer and passing it the given writeStream and the contains XmlWriterSettings.
+        /// Serializes the given object by calling WriteObject on the contained DataContractSerializer and passing it the given writeStream and the contains of the XmlWriterSettings.
         /// </summary>
         /// <param name="obj">Gives the object that is to be serialized</param>
         /// <param name="writeStream">Gives the stream on which the serialized data is to be written.</param>
         /// <exception cref="System.Runtime.Serialization.InvalidDataContractException">The type being serialized does not conform to data contract rules. For example, the System.Runtime.Serialization.DataContractAttribute attribute has not been applied to the type.</exception>
         /// <exception cref="System.Runtime.Serialization.SerializationException">There is a problem with the instance being written</exception>
         /// <exception cref="System.ServiceModel.QuotaExceededException">The maximum number of objects to serialize has been exceeded. Check the System.Runtime.Serialization.DataContractSerializer.MaxItemsInObjectGraph property.</exception>
-        public void WriteObject(ObjType obj, System.IO.Stream writeStream)
+        public override void WriteObject(TObjectType obj, System.IO.Stream writeStream)
         {
             using (System.Xml.XmlWriter xw = System.Xml.XmlWriter.Create(writeStream, xws))
             {
@@ -1478,27 +1624,6 @@ namespace MosaicLib.Utils
                 xw.Flush();
             }
         }
-
-        /// <summary>
-        /// Attempts to open the given path as an XML text file and write/serialize the given object into it using the default transcoder.
-        /// If the underlying File.Open or DataContractSerializer.WiteObject call fails, this method will either return (of rethrow is false) or will rethrow the original exception.
-        /// </summary>
-        public void WriteToFile(ObjType obj, String path, bool rethrow)
-        {
-            try
-            {
-                using (System.IO.FileStream fileStream = System.IO.File.Open(path, System.IO.FileMode.OpenOrCreate, System.IO.FileAccess.Write, System.IO.FileShare.None))
-                {
-                    WriteObject(obj, fileStream);
-                }
-            }
-            catch
-            {
-                if (rethrow)
-                    throw;
-            }
-        }
-
 
         /// <summary>A string builder object that is constructed and (re)used by ConvertObjectToString.</summary>
         System.Text.StringBuilder sb = null;
@@ -1509,7 +1634,7 @@ namespace MosaicLib.Utils
         /// </summary>
         /// <param name="obj">Gives the object that is to be serialized</param>
         /// <returns>A string containing the ASCII Xml representation of the given object as serialized by the contained DataContracxtSerialzier</returns>
-        public string ConvertObjectToString(ObjType obj)
+        public override string ConvertObjectToString(TObjectType obj)
         {
             if (sb == null)
                 sb = new System.Text.StringBuilder();
@@ -1528,8 +1653,157 @@ namespace MosaicLib.Utils
 
     #endregion
 
+    #region DataContract Json Adapter
+
+    /// <summary>
+    /// This adapter class encapsulates a small set of standard use patterns for transcribing between DataContract objects 
+    /// and the corresponding Xml strings and files.  This object contains and makes use of a DataContractSerializer to
+    /// implement that actual Serialization and Deserialization behavior.
+    /// </summary>
+    /// <typeparam name="TObjectType">
+    /// The templatized object type on which this adapter is defined.  
+    /// Must be a DataContract or compatible object type in order to be usable by this adapter.
+    /// </typeparam>
+    public class DataContractJsonAdapter<TObjectType>
+        : DataContractAdapterBase<TObjectType>
+    {
+        /// <summary>The DataContractJsonSerializer instance that is used by this adapter.</summary>
+        DataContractJsonSerializer dcjs = new DataContractJsonSerializer(typeof(TObjectType));
+
+        /// <summary>
+        /// Attempts to use the contained DataContractSerializer to read the deserialize the corresponding object from the given stream using its ReadObject method.  
+        /// Returns the object if the read was successful.
+        /// </summary>
+        /// <exception cref="System.Runtime.Serialization.SerializationException">The VerifyObjectName Property is set to true, and the element name and namespace do not correspond to the values set in the constructor.</exception>
+        public override TObjectType ReadObject(System.IO.Stream readStream)
+        {
+            return (TObjectType) dcjs.ReadObject(readStream);
+        }
+
+        /// <summary>
+        /// Attempts to use the contained DataContractSerializer to read the deserialize the corresponding object from the given string.
+        /// </summary>
+        /// <param name="s">Contains the text from which the DataCongtractSerializer is to deserialize the object.</param>
+        /// <exception cref="System.Runtime.Serialization.SerializationException">The VerifyObjectName Property is set to true, and the element name and namespace do not correspond to the values set in the constructor.</exception>
+        public override TObjectType ReadObject(String s)
+        {
+            byte [] byteArray = System.Text.Encoding.ASCII.GetBytes(s);
+            using (MemoryStream byteArrayStreamReader = new MemoryStream(byteArray, false))
+            {
+                return (TObjectType) dcjs.ReadObject(byteArrayStreamReader);
+            }
+        }
+
+        /// <summary>
+        /// Serializes the given object by calling WriteObject on the contained DataContractSerializer and passing it the given writeStream.
+        /// </summary>
+        /// <param name="obj">Gives the object that is to be serialized</param>
+        /// <param name="writeStream">Gives the stream on which the serialized data is to be written.</param>
+        /// <exception cref="System.Runtime.Serialization.InvalidDataContractException">The type being serialized does not conform to data contract rules. For example, the System.Runtime.Serialization.DataContractAttribute attribute has not been applied to the type.</exception>
+        /// <exception cref="System.Runtime.Serialization.SerializationException">There is a problem with the instance being written</exception>
+        /// <exception cref="System.ServiceModel.QuotaExceededException">The maximum number of objects to serialize has been exceeded. Check the System.Runtime.Serialization.DataContractSerializer.MaxItemsInObjectGraph property.</exception>
+        public override void WriteObject(TObjectType obj, System.IO.Stream writeStream)
+        {
+            dcjs.WriteObject(writeStream, obj);
+        }
+
+        /// <summary>
+        /// Serializes the given object by calling WriteObject on the contained DataContractSerializer to serialize and write the object into a String
+        /// </summary>
+        /// <param name="obj">Gives the object that is to be serialized</param>
+        /// <returns>A string containing the serialized representation of the given object as serialized by the contained DataContracxtSerialzier</returns>
+        public override string ConvertObjectToString(TObjectType obj)
+        {
+            if (writeMemoryStream == null)
+            {
+                writeMemoryStream = new MemoryStream();
+                AddExplicitDisposeAction(() => Fcns.DisposeOfObject(ref writeMemoryStream));
+            }
+
+            try 
+            {
+                dcjs.WriteObject(writeMemoryStream, obj);
+                writeMemoryStream.Flush();
+
+                byte[] buffer = writeMemoryStream.GetBuffer();
+                string result = System.Text.Encoding.ASCII.GetString(buffer, 0, unchecked((int) writeMemoryStream.Length));
+
+                writeMemoryStream.Position = 0;
+                writeMemoryStream.SetLength(0);
+
+                return result;
+            }
+            catch
+            {
+                Fcns.DisposeOfObject(ref writeMemoryStream);
+                throw;
+            }
+        }
+
+        private MemoryStream writeMemoryStream = null;
+    }
+    #endregion
+
     //-------------------------------------------------
 
+    #region ScopedLock
+
+    /// <summary>
+    /// This class is intened to allow more fine grain control of the use of a mutex object than the native lock keyword and/or basic Monitor methods directly support.
+    /// This object is generally expected to be used in the context of a using statement (along with its implicit finally calling this object's Dispose method).
+    /// This object additional supports the concept of Locking (and Releasing) the null objects which converts this object's behavior into a thread synchroniziation no-op.
+    /// As such this object can be used to implement a stanardized Lock/Release pattern even in cases where the underlying object may, or may not, actually be using a mutex object.
+    /// </summary>
+    public class ScopedLock : IDisposable
+    {
+        /// <summary>Default constructor.  Same as expicitly calling ScopedLock(null)</summary>
+        public ScopedLock() : this(null) { }
+
+        /// <summary>Optionally locking constructor.  If the given mutexObject is non-null then this constructor will Lock it.</summary>
+        public ScopedLock(object mutexObject)
+        {
+            Lock(mutexObject);
+        }
+
+        /// <summary>Calls Release in order to unlock any currently held lock.</summary>
+        public void Dispose()
+        {
+            Release();
+        }
+
+        /// <summary>field records the object (if any) that has been Locked (Entered) so that it may be Released(Exited) later.</summary>
+        private object lockedMutexObject = null;
+
+        /// <summary>Returns true if this object is currently holding a locked mutex object (and thus can be Released)</summary>
+        public bool HasLock { get { return (lockedMutexObject != null); } }
+
+        /// <summary>
+        /// This method is used to, optionally (if the given mutexObject is non-null), lock the given mutexObject by calling Monitor.Enter on it and then saving it to be the internally held locked mutexObject.
+        /// <para/>This method always calls Release inorder to Release any previoulsy held locked mutexObject before attempting to lock the given one.
+        /// </summary>
+        public void Lock(object mutexObject)
+        {
+            Release();
+
+            if (mutexObject != null)
+            {
+                System.Threading.Monitor.Enter(mutexObject);
+                lockedMutexObject = mutexObject;
+            }
+        }
+
+        /// <summary>If the object currently HasLock on a previously locked mutexObject then this method will Exit the monitor on it and clear the HasLock indication.</summary>
+        public void Release()
+        {
+            if (HasLock)
+            {
+                System.Threading.Monitor.Exit(lockedMutexObject);
+                lockedMutexObject = null;
+            }
+        }
+    }
+
+    #endregion
 }
 
 //-------------------------------------------------

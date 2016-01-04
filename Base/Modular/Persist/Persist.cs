@@ -187,20 +187,6 @@ namespace MosaicLib.Modular.Persist
 
     #region Configs
 
-    /// <summary>
-    /// Preserve use of prior incorrect name for the time being.  Please use PersistentFileWriteConfig in place of this class.
-    /// </summary>
-    [Obsolete("This class name is not spelled correctly.  Please replace its use with the correctly named PersistentFileWriteConfig. (2013-04-02)")]
-    public class PerisistentFileWriteConfig : PersistentFileWriteConfig
-    {
-        /// <summary>Obsolete - please use, and refer to, <see cref="PersistentFileWriteConfig"/> class instead</summary>
-        public PerisistentFileWriteConfig() : base() { }
-        /// <summary>Obsolete - please use, and refer to, <see cref="PersistentFileWriteConfig"/> class instead</summary>
-        public PerisistentFileWriteConfig(bool useWriteThroughSemantics, bool useFlushFileBuffersAfterWrite) : base(useWriteThroughSemantics, useFlushFileBuffersAfterWrite) { }
-        /// <summary>Obsolete - please use, and refer to, <see cref="PersistentFileWriteConfig"/> class instead</summary>
-        public PerisistentFileWriteConfig(PersistentFileWriteConfig rhs) : base(rhs) { }
-    }
-
     /// <summary>class contents are used to configure how conservative file write operations should be for purposes of Persistent Storage in each situation.</summary>
     /// <remarks>Shorthand static properties Fast, NoFileCaching and CommitToDisk represent the most common use cases for this object.</remarks>
     public class PersistentFileWriteConfig
@@ -257,28 +243,6 @@ namespace MosaicLib.Modular.Persist
         OnSuccessOnly,
         /// <summary>Writer advances to next file after successful writes and after N failed writes (N is specified separately)</summary>
         OnSuccessOrNFailures,
-    }
-
-    /// <summary>
-    /// Preserve use of prior incorrect name for the time being.  Please use PersistentObjectFileRingConfig in place of this class.
-    /// </summary>
-    [Obsolete("This class name is not spelled correctly.  Please replace its use with the correctly named PersistentObjectFileRingConfig. (2013-04-02)")]
-    public class PerisistentObjectFileRingConfig : PersistentObjectFileRingConfig
-    {
-        /// <summary>Obsolete constructor.  Please replace with use of the corresponding <see cref="PersistentObjectFileRingConfig"/> class's constructor</summary>
-        public PerisistentObjectFileRingConfig(string fileBaseNameAndPath) : base(fileBaseNameAndPath) { }
-        /// <summary>Obsolete constructor.  Please replace with use of the corresponding <see cref="PersistentObjectFileRingConfig"/> class's constructor</summary>
-        public PerisistentObjectFileRingConfig(string fileBaseNameAndPath, string fileRingSpecStr) : base(fileBaseNameAndPath, fileRingSpecStr) { }
-        /// <summary>Obsolete constructor.  Please replace with use of the corresponding <see cref="PersistentObjectFileRingConfig"/> class's constructor</summary>
-        public PerisistentObjectFileRingConfig(string fileBaseNameAndPath, string fileRingSpecStr, int expectedMaximumFileSize, PersistentFileWriteConfig fileWriteConfig, bool autoCreatePath) : base(fileBaseNameAndPath, fileRingSpecStr, expectedMaximumFileSize, fileWriteConfig, autoCreatePath) { }
-
-        /// <summary>Obsolete constructor.  Please replace with use of the corresponding <see cref="PersistentObjectFileRingConfig"/> class's constructor</summary>
-        public PerisistentObjectFileRingConfig(string fileBaseDirPath, string fileBaseName, string fileExtension, string fileRingSpecStr, int expectedMaximumFileSize, PersistentFileWriteConfig fileWriteConfig, bool autoCreatePath)
-            : base(fileBaseDirPath, fileBaseName, fileExtension, fileRingSpecStr, expectedMaximumFileSize, fileWriteConfig, autoCreatePath)
-        { }
-
-        /// <summary>Obsolete copy constructor.  Please replace with use of the corresponding <see cref="PersistentObjectFileRingConfig"/> class's constructor</summary>
-        public PerisistentObjectFileRingConfig(PersistentObjectFileRingConfig rhs) : base(rhs) { }
     }
 
     /// <summary>class contents are used to configure operation of a PersistentObjectFileRing instance.</summary>

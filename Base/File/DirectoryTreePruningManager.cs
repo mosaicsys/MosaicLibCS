@@ -332,7 +332,7 @@ namespace MosaicLib.File
             }
             catch (System.Exception ex)
             {
-                issueEmitter.Emit("NotePathAdded '{0}' failed: error:'{1}'", pathToAdd, ex.ToString());
+                issueEmitter.Emit("NotePathAdded '{0}' failed: error:'{1}'", pathToAdd, ex);
             }
         }
 
@@ -574,7 +574,7 @@ namespace MosaicLib.File
 			}
             catch (System.Exception ex)
             {
-                SetFaultCode(Fcns.CheckedFormat("Setup Failure: {0}", ex.ToString()));
+                SetFaultCode(Fcns.CheckedFormat("Setup Failure: {0}", ex));
             }
 
             if (!DidSetupFail)

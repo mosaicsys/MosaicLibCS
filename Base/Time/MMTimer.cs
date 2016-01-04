@@ -50,31 +50,6 @@ namespace MosaicLib.Time
     }
 
     /// <summary>
-    /// This class has been deprecated and replaced by the newer version called winmm_dll
-    /// </summary>
-    [Obsolete("Use of this class has been deprecated and replaced by the newer version called winmm_dll. (2013-06-16)")]
-    public static class MMTimer
-    {
-        /// <summary>
-        /// winmm.dll timeBeginPeriod call.  Consult appropriate Win32 documentation for full details on parameters and use.
-        /// </summary>
-        [DllImport("winmm.dll")]
-        internal static extern uint timeBeginPeriod(uint uMilliseconds);
-
-        /// <summary>
-        /// winmm.dll timeEndPeriod call.  Consult appropriate Win32 documentation for full details on parameters and use.
-        /// </summary>
-        [DllImport("winmm.dll")]
-        internal static extern uint timeEndPeriod(uint uMilliseconds);
-
-        /// <summary>
-        /// winmm.dll timeGetTime call.  Consult appropriate Win32 documentation for full details on parameters and use.
-        /// </summary>
-        [DllImport("winmm.dll")]
-        public static extern uint timeGetTime();
-    }
-
-    /// <summary>
     /// This class is used as a lifetime wrapper for the request to the Win32 kernel to increase the system mm timer resolution.
     /// On construction this class uses winmm_dll.timeBeginPeriod and on explicit disposal this class performs the matching call to winmm_dll.timeEndPeriod.
     /// </summary>

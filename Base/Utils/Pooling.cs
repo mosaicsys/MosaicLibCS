@@ -25,6 +25,107 @@ namespace MosaicLib.Utils.Pooling
 	using System;
 	using System.Collections.Generic;
 
+    #region Very basic FreeList object for single threaded use
+
+    /// <summary>
+    /// This class gives a very basic free list implementation where items can be added to the list (up to some limit)
+    /// and later be obtained from the list.  
+    /// Internally the implementation uses a LIFO queue to minimimize processor cache coherancy issues.
+    /// <para/>This implemenation requires the client to define a non-null FactoryDelegate that is used to construct new objects when needed.
+    /// <para/>The client may also define a ClearDelegate that, if non-null, will be used to clear each item that is returned to the free list.
+    /// <para/>NOTE: this type is NOT thread safe.  The client must make certain that only one thread attempts to make use of any given instance of this class at a time.
+    /// </summary>
+    /// <typeparam name="TItemType">Gives the type of object maintained by the list.  Must be a reference type (class)</typeparam>
+    class BasicFreeList<TItemType> where TItemType : class
+    {
+        /// <summary>
+        /// Constructor.  Sets MaxItemsToKeep to default to 10.  Sets WillDispose to true if TItemType is IDisposable
+        /// </summary>
+        public BasicFreeList()
+        {
+            MaxItemsToKeep = 10;
+            WillDispose = default(TItemType) is IDisposable;
+        }
+
+        /// <summary>
+        /// Delegate used to construct new TItemType objects when needed.  If this property is null then the Get method will return null if the list is empty.
+        /// </summary>
+        public Func<TItemType> FactoryDelegate { get; set; }
+
+        /// <summary>
+        /// Optional delegate.  
+        /// When non-null this delegate will be used to "Clear" items that are being returned to the list.  
+        /// Items that are discarded when the list is full will not be "Clear"ed.
+        /// </summary>
+        public Action<TItemType> ClearDelegate { get; set; }
+
+        /// <summary>
+        /// Defines the length of the free list, above which Released items will be discarded, rather than being appended to the free list.
+        /// </summary>
+        public int MaxItemsToKeep { get; set; }
+
+        /// <summary>Property determines if the Release function will call Dispose on objects that are discarded because the free list is full.</summary>
+        private bool WillDispose { get; set; }
+
+        /// <summary>
+        /// Attempts to obtain the last item in the free list (if it is not empty) and return it.
+        /// If the free list is empty and the FactoryDelegate is non-null then this method will invoke the FactoryDelegate to construct a new object and will return it.
+        /// If the list is empty and the FactoryDelegate is null then this method returns null.
+        /// </summary>
+        public TItemType Get()
+        {
+            int getIndex = freeList.Count - 1;
+            if (getIndex >= 0)
+            {
+                TItemType item = freeList[getIndex];
+                freeList.RemoveAt(getIndex);
+                return item;
+            }
+            
+            Func<TItemType> factoryDelegate = FactoryDelegate;
+
+            if (factoryDelegate != null)
+                return factoryDelegate();
+
+            return null;
+        }
+
+        /// <summary>
+        /// This method attempt to return the given item to the free list. 
+        /// If the given item is null then the method has no effect.
+        /// If the free list is no full then the item will be added to the back of the free list, optionally being cleared using the ClearDelegate first.
+        /// If the free list is no full then the item will be discarded.  
+        /// Before discarding, If TItemType is IDisposable then the item will be disposed using the Fcns.DisposeOfGivenObject first.
+        /// </summary>
+        public void Release(ref TItemType item)
+        {
+            if (item == null)
+                return;
+
+            if (freeList.Count < MaxItemsToKeep)
+            {
+                Action<TItemType> clearDelegate = ClearDelegate;
+                if (clearDelegate != null)
+                    clearDelegate(item);
+
+                freeList.Add(item);
+            }
+            else if (WillDispose)
+            {
+                Fcns.DisposeOfGivenObject(item);
+            }
+
+            item = null;
+        }
+
+        /// <summary>
+        /// This is the actual free list that is used to hold onto the items that have been Released and that are available to be given out by Get calls.
+        /// </summary>
+        private List<TItemType> freeList = new List<TItemType>();
+    }
+
+    #endregion
+
     #region Basic Pool Interface and implementation
 
     /// <summary>This interface defines the public interface for Basic Object Pools.</summary>

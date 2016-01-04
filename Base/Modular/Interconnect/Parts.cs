@@ -28,7 +28,7 @@ using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Part;
 
 // Modular.Interconnect is the general namespace for tools that help interconnect Modular Parts without requiring that that have pre-existing knowledge of each-other's classes.
-// This file contains the definitions for the underlying Modular.Interconnect.Actions namespace.
+// This file contains the definitions for the underlying Modular.Interconnect.Parts namespace.
 //  
 //  Modular.Interconnect.Parts provides a set of tools that are used to define one or more table spaces for interconnected parts.  
 //  These are implementations of the IPartsInterconnection interface that defines what capabilities such objects expose to client code.
@@ -69,6 +69,17 @@ namespace MosaicLib.Modular.Interconnect.Parts
         /// <param name="throwOnNotFound">When true this method will throw a PartIDNotFoundException if the given partID is not found.  When false the method will return null when the given partID is not found.</param>
         /// <exception cref="PartIDNotFoundException">Thrown when the partID is not found and throwOnNotFound is given as true.</exception>
         IStringParamAction CreateServiceAction(string partID, string serviceName, bool throwOnNotFound);
+
+        /// <summary>
+        /// Attempt to find a registered part and then asks it to create a service action with the given initial serviceName parameter value.
+        /// If the desired part cannot be found then the method returns null (if throwOnNotFound is false) or it throws a PartIDNotFoundException (if the throwOnNotFound is true).
+        /// </summary>
+        /// <param name="partID">Gives the part ID on which to create a service action.</param>
+        /// <param name="serviceName">Gives the initial value of the service name to be performed, or null, or string.Empty if the name is not already known.</param>
+        /// <param name="namedParamValues">Gives the initial value that the created action's NamedParamValues will be set to.</param>
+        /// <param name="throwOnNotFound">When true this method will throw a PartIDNotFoundException if the given partID is not found.  When false the method will return null when the given partID is not found.</param>
+        /// <exception cref="PartIDNotFoundException">Thrown when the partID is not found and throwOnNotFound is given as true.</exception>
+        IStringParamAction CreateServiceAction(string partID, string serviceName, INamedValueSet namedParamValues, bool throwOnNotFound);
 
         /// <summary>
         /// Attempts to register the given part as an available target for creation of Interconnected Actions
@@ -170,12 +181,29 @@ namespace MosaicLib.Modular.Interconnect.Parts
         /// <exception cref="PartIDNotFoundException">Thrown when the partID is not found and throwOnNotFound is given as true.</exception>
         public IStringParamAction CreateServiceAction(string partID, string serviceName, bool throwOnNotFound)
         {
+            return CreateServiceAction(partID, serviceName, null, throwOnNotFound);
+        }
+
+        /// <summary>
+        /// Attempt to find a registered part and then asks it to create a service action with the given initial serviceName parameter value.
+        /// If the desired part cannot be found then the method returns null (if throwOnNotFound is false) or it throws a PartIDNotFoundException (if the throwOnNotFound is true).
+        /// </summary>
+        /// <param name="partID">Gives the part ID on which to create a service action.</param>
+        /// <param name="serviceName">Gives the initial value of the service name to be performed, or null, or string.Empty if the name is not already known.</param>
+        /// <param name="namedParamValues">Gives the initial value that the created action's NamedParamValues will be set to.</param>
+        /// <param name="throwOnNotFound">When true this method will throw a PartIDNotFoundException if the given partID is not found.  When false the method will return null when the given partID is not found.</param>
+        /// <exception cref="PartIDNotFoundException">Thrown when the partID is not found and throwOnNotFound is given as true.</exception>
+        public IStringParamAction CreateServiceAction(string partID, string serviceName, INamedValueSet namedParamValues, bool throwOnNotFound)
+        {
             IActivePartBase part = FindPart(partID, throwOnNotFound);
 
-            if (part != null)
-                return part.CreateServiceAction(serviceName);
-            else
+            if (part == null)
                 return null;
+
+            IStringParamAction action = part.CreateServiceAction(serviceName);
+            action.NamedParamValues = namedParamValues;
+
+            return action;
         }
 
         /// <summary>

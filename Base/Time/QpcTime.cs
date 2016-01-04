@@ -20,11 +20,11 @@
  */
 //-------------------------------------------------------------------
 
+using System;
+using System.Runtime.InteropServices;
+
 namespace MosaicLib.Time
 {
-	using System;
-	using System.Runtime.InteropServices;
-
     #region Qpc static wrapper class
 
     /// <summary>This class acts as a form of namespace in which to place various QueryPerformanceCounter (QPC) related items</summary>

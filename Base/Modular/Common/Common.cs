@@ -26,6 +26,7 @@ using System.Runtime.Serialization;
 using System.Runtime.InteropServices;
 using System.Linq;
 using MosaicLib.Utils;
+using System.Collections;
 
 namespace MosaicLib.Modular.Common
 {
@@ -68,6 +69,9 @@ namespace MosaicLib.Modular.Common
     {
         /// <summary>
         /// Custom value constructor.  Constructs the object and then assigns its initial value as ValueAsObject = given initialValueAsObject.
+        /// <para/>ValueAsObject setter extracts the type information from the given object and then attempts to decode
+        /// and use the corresponding type specific value storage type, if it is one of the supported types.  
+        /// If the extracted type is not one of the supported container types then the given value is simply stored as the given System.Object.
         /// </summary>
         public ValueContainer(System.Object initialValueAsObject)
             : this()
@@ -122,6 +126,12 @@ namespace MosaicLib.Modular.Common
             [FieldOffset(0)]
             public System.Double f64;
 
+            /// <summary>Helper property to read/write a TimeSpan - internally gets/saves the i64 TickCount in the TimeSpan</summary>
+            public TimeSpan TimeSpan { get { return TimeSpan.FromTicks(i64); } set { i64 = value.Ticks; } }
+
+            /// <summary>Helper property to read/write a DateTime - internally gets/saves the i64 Binary representation in the DateTime</summary>
+            public DateTime DateTime { get { return DateTime.FromBinary(i64); } set { i64 = value.ToBinary(); } }
+
             /// <summary>
             /// Compare the contents of this instance to the rhs by comparing the contents of the largest fields that are in both.  For this purpose we are using u64.
             /// </summary>
@@ -154,6 +164,17 @@ namespace MosaicLib.Modular.Common
         }
 
         /// <summary>
+        /// Returns true if the container is empty, aka if the cvt is ContainerStorageType.None.
+        /// </summary>
+        public bool IsEmpty
+        {
+            get
+            {
+                return (cvt.IsNone());
+            }
+        }
+
+        /// <summary>
         /// Returns true if the contained type is a reference type and contained value is null or the contained type is None
         /// </summary>
         public bool IsNullOrNone
@@ -164,13 +185,123 @@ namespace MosaicLib.Modular.Common
             }
         }
 
-        /// <summary>Clears the container.  Identical to setting it to its own default.</summary>
-        public void Clear()
+        /// <summary>
+        /// Returns true if the contained value IsNull or IsEmpty (this is functionally identical to the IsNullOrNone property
+        /// </summary>
+        public bool IsNullOrEmpty
         {
-            cvt = default(ContainerStorageType);        // aka ContainerStorageType.None
-            o = default(System.Object);
-            u = default(Union);
+            get
+            {
+                return (IsEmpty || IsNull);
+            }
         }
+
+        /// <summary>
+        /// Returns an ValueContainer with cvt set to ContainerStorageType.Object and o set to Null
+        /// </summary>
+        public static ValueContainer Null 
+        { 
+            get 
+            { 
+                return new ValueContainer().SetToNullObject(); 
+            } 
+        }
+
+        /// <summary>
+        /// Returns an ValueContainer with cvt set to ContainerStorageType.None
+        /// </summary>
+        public static ValueContainer Empty 
+        { 
+            get 
+            { 
+                return new ValueContainer().SetToEmpty(); 
+            } 
+        }
+
+        /// <summary>
+        /// Sets the container to contain the null object: cvt = ContainerStorageType.Object (0), o = null, u = default(Union) = default(Union)
+        /// <para/>Supports call chaining
+        /// </summary>
+        public ValueContainer SetToNullObject()
+        {
+            cvt = ContainerStorageType.Object;
+            o = null;
+            u = default(Union);
+
+            return this;
+        }
+
+        /// <summary>
+        /// Sets the container to be empty: cvt = ContainerStorageType.None, o = null, u = default(Union) = default(Union)
+        /// <para/>Supports call chaining
+        /// </summary>
+        public ValueContainer SetToEmpty()
+        {
+            cvt = ContainerStorageType.None;
+            o = null;
+            u = default(Union);
+
+            return this;
+        }
+
+        /// <summary>
+        /// Sets the container to have the same contents as the given rhs.
+        /// <para/>Supports call chaining
+        /// </summary>
+        public ValueContainer CopyFrom(ValueContainer rhs)
+        {
+            cvt = rhs.cvt;
+            o = rhs.o;
+            u = rhs.u;
+
+            return this;
+        }
+
+        /// <summary>
+        /// Sets the container to have the same contents as the given rhs, performing deep copy 
+        /// if the given rhs is an IListOfString and the current contents are not equivilant to it.
+        /// <para/>Supports call chaining
+        /// </summary>
+        public ValueContainer DeepCopyFrom(ValueContainer rhs)
+        {
+            if (rhs.cvt != ContainerStorageType.IListOfString)
+                return CopyFrom(rhs);
+
+            // do this for all remainging paths through this code.
+            cvt = ContainerStorageType.IListOfString;
+            u = rhs.u;
+
+            IList<string> rhsILS = rhs.GetValue<IList<String>>(ContainerStorageType.IListOfString, false, false);
+            if (rhsILS == null)
+            {
+                o = null;
+                return this;
+            }
+
+            if (Object.ReferenceEquals(o, rhsILS))
+                return this;    // the two objects are already the same object - no more work to do.
+
+            // if rhsILS is already readonly then we simply save it and we are done.
+            if (rhsILS.IsReadOnly)
+            {
+                o = rhsILS;
+                return this;
+            }
+
+            // check if the current contents are already readonly and match the given rhsILS
+            IList<String> oaios = (o as IList<String>);
+            if (oaios != null && oaios.IsReadOnly && oaios.IsEqualTo(rhsILS))
+            {
+                // we do not need to copy or replace o since it has the desired contents
+                return this;
+            }
+
+            // finally we need to actually create a full readonly copy of the given rhsILS so that we can save the readonly copy in the value.
+            o = new List<String>(rhsILS).AsReadOnly();
+
+            return this;
+        }
+
 
         /// <summary>
         /// Accepts a given type and attempts to generate an apporpriate ContainerStorageType (and isNullable) value as the best container storage type to use with the given Type.
@@ -197,6 +328,8 @@ namespace MosaicLib.Modular.Common
             else if (valueType == typeof(System.UInt64)) decodedValueType = ContainerStorageType.UInt64;
             else if (valueType == typeof(System.Single)) decodedValueType = ContainerStorageType.Single;
             else if (valueType == typeof(System.Double)) decodedValueType = ContainerStorageType.Double;
+            else if (valueType == typeof(System.TimeSpan)) decodedValueType = ContainerStorageType.TimeSpan;
+            else if (valueType == typeof(System.DateTime)) decodedValueType = ContainerStorageType.DateTime;
             else if (valueType == stringType) decodedValueType = ContainerStorageType.String;
             else if (iListOfStringType.IsAssignableFrom(valueType))
             {
@@ -222,10 +355,10 @@ namespace MosaicLib.Modular.Common
         /// get/set property.
         /// getter returns the currently contained value casted as an System.Object
         /// setter extracts the type information from the given value and then attempts to decode
-        /// and use the type specific value storage type, if it is one of the supported types.  
+        /// and use the corresponding type specific value storage type, if it is one of the supported types.  
         /// If the extracted type is not one of the supported container types then the given value is simply stored as an System.Object.
+        /// If the given object is a ValueContainer then this object's contents are set to be a copy of the given containers contents.
         /// <para/>Use SetValue{System.Object}(value) if you want to force the container to store value as an object.
-        /// <para/>Supports call chaining
         /// </summary>
         public System.Object ValueAsObject
         {
@@ -249,6 +382,8 @@ namespace MosaicLib.Modular.Common
                     case ContainerStorageType.UInt64: return u.u64;
                     case ContainerStorageType.Single: return u.f32;
                     case ContainerStorageType.Double: return u.f64;
+                    case ContainerStorageType.TimeSpan: return u.TimeSpan;
+                    case ContainerStorageType.DateTime: return u.DateTime;
                 }
             }
             set
@@ -256,24 +391,33 @@ namespace MosaicLib.Modular.Common
                 if (value != null)
                 {
                     Type t = value.GetType();
-                    ContainerStorageType valueCVT;
-                    bool valueTypeIsNullable;
 
-                    DecodeType(t, out valueCVT, out valueTypeIsNullable);
+                    if (t == typeof(ValueContainer))
+                    {
+                        CopyFrom((ValueContainer)value);
+                    }
+                    else
+                    {
+                        ContainerStorageType valueCVT;
+                        bool valueTypeIsNullable;
 
-                    SetValue<System.Object>(value, valueCVT, valueTypeIsNullable);
+                        DecodeType(t, out valueCVT, out valueTypeIsNullable);
+
+                        SetValue<System.Object>(value, valueCVT, valueTypeIsNullable);
+                    }
                 }
                 else
                 {
-                    Clear();
+                    SetToNullObject();
                 }
             }
         }
 
         /// <summary>
         /// Type extracting setter.  Extracts the type information from the given value and then attempts to decode
-        /// and use the type specific value storage type, if it is one of the supported types.  If the extracted type
+        /// and use the corresponding type specific value storage type, if it is one of the supported types.  If the extracted type
         /// is not one of the supported container types then the given value is simply stored as an System.Object
+        /// If the given object is a ValueContainer then this object's contents are set to be a copy of the given containers contents.
         /// <para/>Use SetValue{System.Object}(value) if you want to force the container to store value as an object.
         /// <para/>Supports call chaining
         /// </summary>
@@ -308,7 +452,7 @@ namespace MosaicLib.Modular.Common
         /// </summary>
         public ValueContainer SetValue<TValueType>(TValueType value, ContainerStorageType decodedValueType, bool isNullable)
         {
-            Clear();
+            SetToNullObject();
 
             try
             {
@@ -323,7 +467,6 @@ namespace MosaicLib.Modular.Common
                         default:
                         case ContainerStorageType.Object: o = (System.Object)value; cvt = ContainerStorageType.Object; break;
                         case ContainerStorageType.String: o = ((value != null) ? ((System.Object) value).ToString() : null); break;
-                        case ContainerStorageType.IListOfString: o = (System.Collections.Generic.IList<System.String>)((System.Object)value); break;
                         case ContainerStorageType.Boolean: u.b = (System.Boolean)System.Convert.ChangeType(value, typeof(System.Boolean)); break;
                         case ContainerStorageType.SByte: u.i8 = (System.SByte)System.Convert.ChangeType(value, typeof(System.SByte)); break;
                         case ContainerStorageType.Int16: u.i16 = (System.Int16)System.Convert.ChangeType(value, typeof(System.Int16)); break;
@@ -335,6 +478,40 @@ namespace MosaicLib.Modular.Common
                         case ContainerStorageType.UInt64: u.u64 = (System.UInt64)System.Convert.ChangeType(value, typeof(System.UInt64)); break;
                         case ContainerStorageType.Single: u.f32 = (System.Single)System.Convert.ChangeType(value, typeof(System.Single)); break;
                         case ContainerStorageType.Double: u.f64 = (System.Double)System.Convert.ChangeType(value, typeof(System.Double)); break;
+                        case ContainerStorageType.TimeSpan: u.TimeSpan = (System.TimeSpan)System.Convert.ChangeType(value, typeof(System.TimeSpan)); break;
+                        case ContainerStorageType.DateTime: u.DateTime = (System.DateTime)System.Convert.ChangeType(value, typeof(System.DateTime)); break;
+                        case ContainerStorageType.IListOfString: 
+                            {
+                                Object valueAsObject = (System.Object)value;
+                                String [] valueAsArrayOfStrings = (valueAsObject as String []);
+
+                                if (valueAsObject == null)
+                                {
+                                    o = null;
+                                }
+                                else if (valueAsArrayOfStrings != null)
+                                {
+                                    IList<String> oailos = (o as IList<String>);
+                                    if (oailos == null || !oailos.IsReadOnly || !(oailos.IsEqualTo(valueAsArrayOfStrings)))
+                                        o = new List<String>(valueAsArrayOfStrings).AsReadOnly();
+                                    // else o already contains the same readonly List of string from the array - do not replace it
+                                }
+                                else
+                                {
+                                    IList<String> valueAsIListOfStrings = ((IList<String>) valueAsObject);     // cast should not throw unless TValueType is not castable to IList<String>
+                                    IList<String> oAsIListOfStrings = (o as IList<String>);
+
+                                    if (oAsIListOfStrings == null || !oAsIListOfStrings.IsReadOnly || !(oAsIListOfStrings.IsEqualTo(valueAsIListOfStrings)))
+                                    {
+                                        if (valueAsIListOfStrings == null || valueAsIListOfStrings.IsReadOnly)
+                                            o = valueAsIListOfStrings;
+                                        else
+                                            o = new List<String>(valueAsIListOfStrings).AsReadOnly();
+                                    }
+                                    // else o already contains the same readonly List of string contents as the given value.  no need to copy or change the existing contained value.
+                                }
+                                break;
+                            } 
                     }
                 }
                 else
@@ -383,12 +560,26 @@ namespace MosaicLib.Modular.Common
         /// Typed GetValue method.  
         /// Requires that caller has pre-decoded the TValueType to obtain the expected ContainerStorageType and a flag to indicate if the TValueType is a nullable type.
         /// If the contained value type matches the decodedValueType then this method simply transfers the value from the corresponding storage field to the value.
-        /// Otherwise the method uses the System.Convert.ChangeType method to attempt to convert the contained value into the desired TValueType type.
-        /// If this transfer or conversion is successful then this method and returns the transfered/converted value.  If this transfer/conversion is not
-        /// successful then this method returns default(TValueType).  
+        /// Otherwise if isNullable is false then the method uses the System.Convert.ChangeType method to attempt to convert the contained value into the desired TValueType type.
+        /// If this transfer or conversion used and is successful then this method and returns the transfered/converted value.  
+        /// If this transfer/conversion is not used or is not successful then this method returns default(TValueType).  
         /// If rethrow is true and the method encounters any excpetions then it will rethrow the exception.
         /// </summary>
         public TValueType GetValue<TValueType>(ContainerStorageType decodedValueType, bool isNullable, bool rethrow)
+        {
+            return GetValue<TValueType>(decodedValueType, isNullable, rethrow, true);
+        }
+
+        /// <summary>
+        /// Typed GetValue method.  
+        /// Requires that caller has pre-decoded the TValueType to obtain the expected ContainerStorageType and a flag to indicate if the TValueType is a nullable type.
+        /// If the contained value type matches the decodedValueType then this method simply transfers the value from the corresponding storage field to the value.
+        /// Otherwise if allowTypeChangeAttempt is true and isNullable is false then the method uses the System.Convert.ChangeType method to attempt to convert the contained value into the desired TValueType type.
+        /// If this transfer or conversion used and is successful then this method and returns the transfered/converted value.  
+        /// If this transfer/conversion is not used or is not successful then this method returns default(TValueType).  
+        /// If rethrow is true and the method encounters any excpetions then it will rethrow the exception.
+        /// </summary>
+        public TValueType GetValue<TValueType>(ContainerStorageType decodedValueType, bool isNullable, bool rethrow, bool allowTypeChangeAttempt)
         {
             Type TValueTypeType = typeof(TValueType);
             TValueType value;
@@ -409,7 +600,6 @@ namespace MosaicLib.Modular.Common
                         default:
                         case ContainerStorageType.Object: value = (TValueType)o; break;
                         case ContainerStorageType.String: value = (TValueType)o; break;
-                        case ContainerStorageType.IListOfString: value = (TValueType)o; break;
                         case ContainerStorageType.Boolean: value = (TValueType)((System.Object)u.b); break;
                         case ContainerStorageType.SByte: value = (TValueType)((System.Object)u.i8); break;
                         case ContainerStorageType.Int16: value = (TValueType)((System.Object)u.i16); break;
@@ -421,9 +611,24 @@ namespace MosaicLib.Modular.Common
                         case ContainerStorageType.UInt64: value = (TValueType)((System.Object)u.u64); break;
                         case ContainerStorageType.Single: value = (TValueType)((System.Object)u.f32); break;
                         case ContainerStorageType.Double: value = (TValueType)((System.Object)u.f64); break;
+                        case ContainerStorageType.TimeSpan: value = (TValueType)((System.Object)u.TimeSpan); break;
+                        case ContainerStorageType.DateTime: value = (TValueType)((System.Object)u.DateTime); break;
+                        case ContainerStorageType.IListOfString:
+                            {
+                                if (typeof(TValueType).Equals(typeof(string[])) && o != null)
+                                    value = (TValueType)((System.Object)((o as IList<String>).ToArray()));      // special case for reading from an IListOfString to an String array.
+                                else
+                                    value = (TValueType)o;      // all other cases the TValueType should be castable from an IList<String>
+
+                                break; 
+                            }
                     }
                 }
-                else if (!isNullable)
+                else if (decodedValueType == ContainerStorageType.TimeSpan && cvt.IsFloatingPoint() && allowTypeChangeAttempt)
+                {
+                    value = (TValueType)((System.Object) TimeSpan.FromSeconds((cvt == ContainerStorageType.Double) ? u.f64 : u.f32));
+                }
+                else if (!isNullable && allowTypeChangeAttempt)
                 {
                     value = default(TValueType);
                     System.Object valueAsObject = ValueAsObject;
@@ -435,8 +640,8 @@ namespace MosaicLib.Modular.Common
                         value = (TValueType)System.Convert.ChangeType(((valueAsObject != null) ? valueAsObject.ToString() : null), typeof(TValueType));
                         conversionDone = true;
                     }
-                    
-                    if (!conversionDone && !decodedValueType.IsReferenceType() && valueAsObject is System.String)
+
+                    if (!conversionDone && decodedValueType.IsValueType() && valueAsObject is System.String)
                     {
                         // if the string is not empty then attempt to parse the string to the desired type.  This only succeeds if the entire string is parsed as the desired type.
                         StringScanner ss = new StringScanner(valueAsObject as System.String ?? String.Empty);
@@ -455,6 +660,32 @@ namespace MosaicLib.Modular.Common
                                 case ContainerStorageType.UInt64: value = (TValueType)System.Convert.ChangeType(ss.ParseValue<System.UInt64>(0), typeof(System.UInt64)); conversionDone = ss.IsAtEnd; break;
                                 case ContainerStorageType.Single: value = (TValueType)System.Convert.ChangeType(ss.ParseValue<System.Single>(0.0f), typeof(System.Single)); conversionDone = ss.IsAtEnd; break;
                                 case ContainerStorageType.Double: value = (TValueType)System.Convert.ChangeType(ss.ParseValue<System.Double>(0.0f), typeof(System.Double)); conversionDone = ss.IsAtEnd; break;
+                                case ContainerStorageType.TimeSpan:
+                                    {
+                                        StringScanner ssd = new StringScanner(ss);
+                                        double d = 0.0;
+                                        if (ssd.ParseValue(out d) && ssd.IsAtEnd)
+                                        {
+                                            value = (TValueType)((System.Object)TimeSpan.FromSeconds(d));
+                                            conversionDone = true;
+                                            break;
+                                        }
+                                    }
+                                    {
+                                        string token = ss.ExtractToken();
+                                        TimeSpan ts;
+                                        conversionDone = TimeSpan.TryParse(token, out ts) && ss.IsAtEnd;
+                                        value = (TValueType)((System.Object)ts);
+                                        break;
+                                    }
+                                case ContainerStorageType.DateTime:
+                                    {
+                                        string token = ss.ExtractToken();
+                                        DateTime dt;
+                                        conversionDone = DateTime.TryParse(token, out dt) && ss.IsAtEnd;
+                                        value = (TValueType)((System.Object)dt);
+                                        break;
+                                    }
                                 default: break;
                             }
                         }
@@ -513,14 +744,39 @@ namespace MosaicLib.Modular.Common
         }
 
         /// <summary>
-        /// Property to attempt to interpret the contained value as a Nullable{double}.  This is especially useful for binding with WPF
+        /// Returns the estimated size of the given contents in bytes.  
+        /// For non-reference types this returns 16.  
+        /// For string types this returns the l6 + the length of the string in bytes
+        /// For string array and string list types, this returns 16 + the summed length of each of the strings in bytes + 16 bytes of overhead for each one.
         /// </summary>
-        [Obsolete("This method is now obsolete.  Please replace use of the getter with 'GetValue<double ?>(ContainerStorageType.Double, true, false)' and use of the setter with 'SetValue<double ?>(value)' (2015-09-01)")]
-        public double ? ValueAsDouble
+        public int EstimatedContentSizeInBytes
         {
-            get { return GetValue<double ?>(ContainerStorageType.Double, true, false); }
-            set { SetValue<double ?>(value); }
+            get
+            {
+                if (!cvt.IsReferenceType())
+                {
+                    return defaultBasePerItemSizeInBytes;      // we use a fixed estimate of 16 bytes for all non-object contents (including TimeStamp and DateTime)
+                }
+                else if (o is String)
+                {
+                    return defaultBasePerItemSizeInBytes + (o as String).EstimatedContentSizeInBytes();
+                }
+                else if (o is String[])
+                {
+                    return defaultBasePerItemSizeInBytes + (o as String[]).EstimatedContentSizeInBytes();
+                }
+                else if (o is IList<String>)
+                {
+                    return defaultBasePerItemSizeInBytes + (o as IList<String>).EstimatedContentSizeInBytes();
+                }
+                else
+                {
+                    return 0;
+                }
+            }
         }
+
+        private const int defaultBasePerItemSizeInBytes = 16;
 
         /// <summary>
         /// Equality testing implementation method.  Uses ValueContainer in signature to remove need for casting (as with Equals).
@@ -567,32 +823,36 @@ namespace MosaicLib.Modular.Common
             switch (cvt)
             {
                 case ContainerStorageType.Object:
+                    return "{0}:'{1}'".CheckedFormat(cvt, o);
                 case ContainerStorageType.String:
-                    return Fcns.CheckedFormat("{0}:'{1}'", cvt, o);
+                    return "'{0}'".CheckedFormat(o);
                 case ContainerStorageType.IListOfString:
-                    return Fcns.CheckedFormat("{0}:|{1}|", cvt, String.Join("|", ((o as IList<String>) ?? emptyIListOfString).ToArray())); 
+                    return "|{0}|".CheckedFormat(String.Join("|", ((o as IList<String>) ?? emptyIListOfString).ToArray())); 
                 default:
-                    return Fcns.CheckedFormat("{0}:{1}", cvt, ValueAsObject);
+                    return "{0}:{1}".CheckedFormat(cvt, ValueAsObject);
             }
         }
 
         private static readonly IList<String> emptyIListOfString = new List<String>().AsReadOnly();
     }
 
-    /// <summary>Enumeration that is used with the ValueContainer struct.</summary>
+    /// <summary>
+    /// Enumeration that is used with the ValueContainer struct.
+    /// <para/>None (0 : default), Object, String, IListOfString, Boolean, SByte, Int16, Int32, Int64, Byte, UInt16, UInt32, UInt64, Single, Double, TimeSpan, DateTime
+    /// </summary>
     public enum ContainerStorageType : int
     {
-        /// <summary>Custom value for cases where the storage type has not been defined</summary>
-        None = -1,
-        /// <summary>Use Object field -(the default value: 0)</summary>
-        Object = 0,
+        /// <summary>Custom value for cases where the storage type has not been defined -(the default value: 0)</summary>
+        None = 0,
+        /// <summary>Use Object field</summary>
+        Object,
         /// <summary>Use Object field as a String</summary>
         String,
         /// <summary>Use Object field as an IList{String} - usually contains a ReadOnlyCollection{String}</summary>
         IListOfString,
         /// <summary>Use Union.Boolean field</summary>
         Boolean,
-        /// <summary>Use Union.SByte field</summary>
+        /// <summary>Use Union.SByte field (signed)</summary>
         SByte,
         /// <summary>Use Union.Int16 field</summary>
         Int16,
@@ -600,7 +860,7 @@ namespace MosaicLib.Modular.Common
         Int32,
         /// <summary>Use Union.Int64 field</summary>
         Int64,
-        /// <summary>Use Union.Byte field</summary>
+        /// <summary>Use Union.Byte field (unsigned)</summary>
         Byte,
         /// <summary>Use Union.UInt16 field</summary>
         UInt16,
@@ -612,6 +872,10 @@ namespace MosaicLib.Modular.Common
         Single,
         /// <summary>Use Union.Double field</summary>
         Double,
+        /// <summary>Uses Union.Int64 field to contain the TimeSpan's tick value</summary>
+        TimeSpan,
+        /// <summary>Use Union.Int64 field to contain the DateTime's serialized Binary value.</summary>
+        DateTime,
     }
 
     /// <summary>Standard extension methods wrapper class/namespace</summary>
@@ -631,6 +895,14 @@ namespace MosaicLib.Modular.Common
                 default:
                     return false;
             }
+        }
+
+        /// <summary>
+        /// Returns true if the given ContainerStorageType is a value type (aka it is not a reference type).
+        /// </summary>
+        public static bool IsValueType(this ContainerStorageType cst)
+        {
+            return !cst.IsReferenceType();
         }
 
         /// <summary>
@@ -671,6 +943,29 @@ namespace MosaicLib.Modular.Common
                     return false;
             }
         }
+
+        /// <summary>
+        /// Returns true if the given ContainerStorageType is Boolean.
+        /// </summary>
+        public static bool IsBoolean(this ContainerStorageType cst)
+        {
+            return (cst == ContainerStorageType.Boolean);
+        }
+
+        /// <summary>
+        /// Returns true if the given ContainerStorageType is Double or Single.
+        /// </summary>
+        public static bool IsFloatingPoint(this ContainerStorageType cst)
+        {
+            switch (cst)
+            {
+                case ContainerStorageType.Double:
+                case ContainerStorageType.Single:
+                    return true;
+                default:
+                    return false;
+            }
+        }
     }
 
     /// <summary>
@@ -688,126 +983,1175 @@ namespace MosaicLib.Modular.Common
 
     #endregion
 
-    #region Named Values
+    #region ValueContainerEnvelope - DataContract envelope for ValueContainer
 
     /// <summary>
-    /// This object defines a list of NamedValue.  
-    /// This list allows use of a CollectionDataContractAttribute to allow the list element names to be explicitly specified
+    /// DataContract compatible Envelope for ValueContainer objects.  
+    /// Serializer and Deserializer attempt to efficiently transfer both the ContainerStorageType and the correspoinding value of the contained ValueContainer.
     /// </summary>
-    [CollectionDataContract(ItemName = "nvi", Namespace = Constants.ModularNameSpace)]
-    public class NamedValueList : List<NamedValue>
+    /// <remarks>
+    /// Please note the custom handling of the VC property allows this class to be used as the base class for DataContract objects where no class constructor is used when
+    /// creating the deserialized version of an object and thus the fields are all set to the default(type) values without regard to any coded constructor behavior.
+    /// </remarks>
+    [DataContract(Name = "VC", Namespace = Constants.ModularNameSpace)]
+    public class ValueContainerEnvelope
     {
-        /// <summary>Default constructor</summary>
-        public NamedValueList() { }
+        /// <summary>Default constructor.  By default the contained value will read as Empty until it has been explicitly set to some other value.</summary>
+        public ValueContainerEnvelope() { }
+
+        #region ValueContainer storage and construction default state handling that is compatible with reality of DataContract deserialization
 
         /// <summary>
-        /// Copy constructor from IList{NamedValues}.  
-        /// Creates a new NamedValueList from the given list of NamedValues by cloning each of them.
+        /// For serialized objects this property is initialized to the vc value given to the CreateEnvelopeFor method.
+        /// For deserialized objects this property is intialized by the type specific DataMember in the envelope serializtion class
+        /// The getter returns ValueContainer.None
         /// </summary>
-        public NamedValueList(IList<NamedValue> rhs)
-        {
-            Capacity = rhs.Count;
-            foreach (NamedValue rhsItem in rhs)
-                Add(new NamedValue(rhsItem));
+        public ValueContainer VC 
+        { 
+            get 
+            {
+                if (vcPropertySetterHasBeenUsed)
+                    return vc;
+                else
+                    return ValueContainer.Empty;
+            }
+            set 
+            { 
+                vc = value; 
+                vcPropertySetterHasBeenUsed = true; 
+            } 
         }
 
         /// <summary>
-        /// get/set index operator by name.  Gets the NamedValue for the requested name.  
-        /// getter returns the node from the contained list or a new NamedValue for the given name if the requested one was not found.
-        /// setter replaces the selected NamedValue item in the list or adds a new NamedValue object to the list.
+        /// Backing storage for the VC property.
         /// </summary>
-        /// <param name="name">Gives the name for the desired NamedValue to get/replace</param>
-        /// <returns>The selected NamedValue as described in the summary</returns>
-        /// <exception cref="System.InvalidOperationException">thrown by setter if the given name is not equal to the Name property from the assigned NamedValue object</exception>
+        private ValueContainer vc;
+
+        /// <summary>
+        /// Boolean to indicate if the backing store as been set through the VC property.  
+        /// This property allows the base class to determine if the VC should read as Empty (since it has not been set).
+        /// </summary>
+        private bool vcPropertySetterHasBeenUsed;
+
+        #endregion
+
+        #region serialization helper properties each as optional DataMembers
+
+        // expectation is that exactly one property/element will produce a non-default value and this will define both the ContainerStorageType and the value for the deserializer to produce.
+        // if no listed property produces a non-default value then the envelope will be empty and the deserializer will produce the default (empty) contained value.
+
+        [DataMember(EmitDefaultValue = false, IsRequired = false)]
+        private bool Null { get { return vc.IsNullObject; } set { if (value) VC = ValueContainer.Null; }}
+
+        [DataMember(EmitDefaultValue = false, IsRequired = false)]
+        private object o { get { return (vc.cvt == ContainerStorageType.Object ? vc.o : null); } set { VC = new ValueContainer() { cvt = ContainerStorageType.Object, o = value }; } }
+
+        [DataMember(EmitDefaultValue = false, IsRequired = false)]
+        private String s { get { return (vc.cvt == ContainerStorageType.String ? (vc.o as String) : null); } set { VC = new ValueContainer() { cvt = ContainerStorageType.String, o = value }; } }
+
+        [DataMember(EmitDefaultValue = false, IsRequired = false)]
+        private Details.sl sl { get { return ((vc.cvt == ContainerStorageType.IListOfString) ? new Details.sl(vc.o as IList<String>) : null); } set { VC = new ValueContainer() { cvt = ContainerStorageType.IListOfString, o = value.AsReadOnly() }; } }
+
+        [DataMember(EmitDefaultValue = false, IsRequired = false)]
+        private bool? b { get { return ((vc.cvt == ContainerStorageType.Boolean) ? (bool?)vc.u.b : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.Boolean, u = new ValueContainer.Union() { b = value.GetValueOrDefault() } } : ValueContainer.Null); } }
+
+        [DataMember(EmitDefaultValue = false, IsRequired = false)]
+        private Single? f32 { get { return ((vc.cvt == ContainerStorageType.Single) ? (Single?)vc.u.f32 : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.Single, u = new ValueContainer.Union() { f32 = value.GetValueOrDefault() } } : ValueContainer.Null); } }
+
+        [DataMember(EmitDefaultValue = false, IsRequired = false)]
+        private Double? f64 { get { return ((vc.cvt == ContainerStorageType.Double) ? (Double?)vc.u.f64 : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.Double, u = new ValueContainer.Union() { f64 = value.GetValueOrDefault() } } : ValueContainer.Null); } }
+
+        [DataMember(EmitDefaultValue = false, IsRequired = false)]
+        private SByte? i8 { get { return ((vc.cvt == ContainerStorageType.SByte) ? (SByte?)vc.u.i8 : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.SByte, u = new ValueContainer.Union() { i8 = value.GetValueOrDefault() } } : ValueContainer.Null); } }
+
+        [DataMember(EmitDefaultValue = false, IsRequired = false)]
+        private Int16? i16 { get { return ((vc.cvt == ContainerStorageType.Int16) ? (Int16?)vc.u.i16 : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.Int16, u = new ValueContainer.Union() { i16 = value.GetValueOrDefault() } } : ValueContainer.Null); } }
+
+        [DataMember(EmitDefaultValue = false, IsRequired = false)]
+        private Int32? i32 { get { return ((vc.cvt == ContainerStorageType.Int32) ? (Int16?)vc.u.i32 : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.Int32, u = new ValueContainer.Union() { i32 = value.GetValueOrDefault() } } : ValueContainer.Null); } }
+
+        [DataMember(EmitDefaultValue = false, IsRequired = false)]
+        private Int64? i64 { get { return ((vc.cvt == ContainerStorageType.Int64) ? (Int16?)vc.u.i64 : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.Int64, u = new ValueContainer.Union() { i64 = value.GetValueOrDefault() } } : ValueContainer.Null); } }
+
+        [DataMember(EmitDefaultValue = false, IsRequired = false)]
+        private Byte? u8 { get { return ((vc.cvt == ContainerStorageType.Byte) ? (Byte?)vc.u.u8 : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.Byte, u = new ValueContainer.Union() { u8 = value.GetValueOrDefault() } } : ValueContainer.Null); } }
+
+        [DataMember(EmitDefaultValue = false, IsRequired = false)]
+        private UInt16? u16 { get { return ((vc.cvt == ContainerStorageType.UInt16) ? (UInt16?)vc.u.u16 : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.UInt16, u = new ValueContainer.Union() { u16 = value.GetValueOrDefault() } } : ValueContainer.Null); } }
+
+        [DataMember(EmitDefaultValue = false, IsRequired = false)]
+        private UInt32? u32 { get { return ((vc.cvt == ContainerStorageType.UInt32) ? (UInt32?)vc.u.u32 : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.UInt32, u = new ValueContainer.Union() { u32 = value.GetValueOrDefault() } } : ValueContainer.Null); } }
+
+        [DataMember(EmitDefaultValue = false, IsRequired = false)]
+        private UInt64? u64 { get { return ((vc.cvt == ContainerStorageType.UInt64) ? (UInt64?)vc.u.u64 : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.UInt64, u = new ValueContainer.Union() { u64 = value.GetValueOrDefault() } } : ValueContainer.Null); } }
+
+        [DataMember(EmitDefaultValue = false, IsRequired = false)]
+        private TimeSpan? ts { get { return ((vc.cvt == ContainerStorageType.TimeSpan) ? (TimeSpan?)vc.u.TimeSpan : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.TimeSpan, u = new ValueContainer.Union() { TimeSpan = value.GetValueOrDefault() } } : ValueContainer.Null); } }
+
+        [DataMember(EmitDefaultValue = false, IsRequired = false)]
+        private DateTime? dt { get { return ((vc.cvt == ContainerStorageType.DateTime) ? (DateTime?)vc.u.DateTime : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.DateTime, u = new ValueContainer.Union() { DateTime = value.GetValueOrDefault() } } : ValueContainer.Null); } }
+
+        #endregion
+
+        /// <summary>Override ToString for logging and debugging.</summary>
+        public override string ToString()
+        {
+            return VC.ToString();
+        }
+    }
+
+    namespace Details
+    {
+        /// <summary>Internal - no documentation provided</summary>
+        [CollectionDataContract(ItemName = "s", Namespace = Constants.ModularNameSpace)]
+        internal class sl : List<String>
+        {
+            /// <summary>Internal - no documentation provided</summary>
+            public sl() { }
+            /// <summary>Internal - no documentation provided</summary>
+            public sl(IList<String> es) : base(es) { }
+        }
+    }
+
+    #endregion
+
+    #region ReadOnly Named Values interfaces
+
+    /// <summary>
+    /// This is the read-only interface to a NamedValueSet
+    /// </summary>
+    public interface INamedValueSet : IEnumerable<INamedValue>
+    {
+        /// <summary>Returns true if the set contains a NamedValue for the given name (after sanitization)</summary>
+        bool Contains(string name);
+
+        /// <summary>
+        /// If a NamedValue exists in the set for the given name (after sanitization), then this method returns the ValueContainer (VC) from that NamedValue.
+        /// Otherwise this method returns ValueContainer.Empty.
+        /// </summary>
+        ValueContainer GetValue(string name);
+
+        /// <summary>
+        /// Gets the number of NamedValues that are currently in the set.
+        /// </summary>
+        int Count { get; }
+
+        /// <summary>
+        /// String indexed property.  Returns the INamedValue from the set if it is found from the given name (after sanitization).  
+        /// Otherwise returns a new empty INamedValue using the given name (set contents are not changed by this).
+        /// </summary>
+        INamedValue this[string name] { get; }
+
+        /// <summary>
+        /// If a NamedValue exists in the set for the given name (after sanitization), then this method returns the index into the set (in enumerable order) for the corresponding NamedValue.
+        /// Otherwise this method returns -1.
+        /// </summary>
+        int IndexOf(string name);
+
+        /// <summary>
+        /// indexed property.  Returns the indexed INamedValue from the set (if the given index is valid).  
+        /// </summary>
+        /// <exception cref="System.ArgumentOutOfRangeException">thrown if given index is less than 0 or it is greater than or equal to the set's Count</exception>
+        INamedValue this[int index] { get; }
+
+        /// <summary>This property returns true if the collection has been set to be read only.</summary>
+        bool IsReadOnly { get; }
+
+        /// <summary>Returns true if the this INamedValueSet has the same contents, in the same order, as the given rhs.</summary>
+        bool IsEqualTo(INamedValueSet rhs);
+
+        /// <summary>Custom ToString variant that allows the caller to determine if the ro/rw postfix should be included on thie string result, and to determine if NamedValues with empty VCs should be treated as a keyword.</summary>
+        string ToString(bool includeROorRW, bool treatNameWithEmptyVCAsKeyword);
+
+        /// <summary>
+        /// Returns the approximate size of the contents in bytes. 
+        /// </summary>
+        int EstimatedContentSizeInBytes { get; }
+    }
+
+    /// <summary>
+    /// This is the read-only interface to a NamedValue
+    /// </summary>
+    public interface INamedValue
+    {
+        /// <summary>This property gives the caller access to the name of the named value</summary>
+        string Name { get; }
+
+        /// <summary>This property gives access to the ValueContainer contained of this named value</summary>
+        ValueContainer VC { get; }
+
+        /// <summary>This property is used internally to support VC returning ValueContainer.Empty when the VC property has never been explicitly set.</summary>
+        bool VCHasBeenSet { get; }
+
+        /// <summary>This property returns true if the item has been set to be read only.</summary>
+        bool IsReadOnly { get; }
+
+        /// <summary>Returns true if the this INamedValue is equal to the given rhs.</summary>
+        bool IsEqualTo(INamedValue rhs);
+
+        /// <summary>
+        /// Returns the approximate size of the contents in bytes. 
+        /// </summary>
+        int EstimatedContentSizeInBytes { get; }
+    }
+
+    #endregion
+
+    #region Named Values
+
+    /// <summary>
+    /// This class defines objects each of which act as a Set of NamedValues.  
+    /// This Set is internally represented by a List and may also be indexed using a Dictionary 
+    /// This object includes a CollectionDataContractAttribute so that it may be serialized as part of other DataContract objects.  Supporting this attribute
+    /// is based on the standard Add method signature and the support of the ICollection{NamedValue} interface.
+    /// </summary>
+    /// <remarks>
+    /// Note: in order to support use of Dictionary type indexing on the name, all Names are santized by replacing null with String.Empty
+    /// before being used as a kay.  As such the set can only contain one NamedValue with its Name set to null or Empty.
+    /// </remarks>
+    /// <remarks>
+    /// Note: the mechanism used to access and construct the underlying List is designed to support seamless operation with DataContract deserialization where
+    /// Initial constructed object contents do not make use of any default constructor and instead essentally zero-fill the object as if it were a struct rather than
+    /// being a class.
+    /// </remarks>
+    [CollectionDataContract(ItemName = "nvi", Namespace = Constants.ModularNameSpace)]
+    public class NamedValueSet : ICollection<NamedValue>, INamedValueSet
+    {
+        #region Empty constant
+
+        /// <summary>Returns a readonly empty NamedValueSet</summary>
+        public static NamedValueSet Empty { get { return empty; } }
+        private static readonly NamedValueSet empty = new NamedValueSet() { IsReadOnly = true };
+
+        #endregion
+
+        #region Contructors
+
+        /// <summary>Default constructor.  Creates an empty writable NamedValueSet</summary>
+        public NamedValueSet() 
+        { }
+
+        /// <summary>
+        /// Copy constructor from IEnumerable{NamedValues}.  
+        /// Creates a new NamedValueList as a set of copies of the given list of NamedValues.  Treats the null rhs as an empty set.
+        /// Produces a fully read/write set even if copying from a fully readonly rhs or copying from an rhs that includes readonly NamedValue items.
+        /// </summary>
+        public NamedValueSet(IEnumerable<INamedValue> rhsSet) 
+            : this(rhsSet, false) 
+        { }
+
+        /// <summary>
+        /// Copy constructor from IEnumerable{NamedValues}.  
+        /// Creates a new NamedValueList from the given list of NamedValues by cloning each of them.  Treats the null rhs as an empty set.
+        /// if asReadOnly is false then this produces a fully read/write set even if copying from a fully readonly rhs or copying from an rhs that includes readonly NamedValue items.
+        /// if asReadonly is true then this produces a fully IsReadOnly set which can reference any already readonly items from the given rhs set.
+        /// </summary>
+        public NamedValueSet(IEnumerable<INamedValue> rhsSet, bool asReadOnly)
+        {
+            if (rhsSet != null)
+            {
+                if (!asReadOnly)
+                {
+                    foreach (NamedValue rhsItem in rhsSet)
+                        list.Add(new NamedValue(rhsItem));
+                }
+                else
+                {
+                    foreach (NamedValue rhsItem in rhsSet)
+                        list.Add(rhsItem.ConvertToReadOnly());
+
+                    isReadOnly = true;      // we do not need to iterate through the contents again as we just filled it with readonly items.
+                }
+            }
+        }
+
+        #endregion
+
+        #region Locally defined helper utility methods and properties
+
+        /// <summary>
+        /// Provide an alternate name for the SetValue method.  This allows the class to be used with a Dictionary style initializer to add values to the set.
+        /// </summary>
+        public NamedValueSet Add(string name, object value)
+        {
+            return SetValue(name, value);
+        }
+
+        /// <summary>
+        /// Explicit ValueContainer getter.  Returns the ValueContainer contained in the named NamedValue.  Returns ValueContainer.Empty if the given name is not found in this list.
+        /// </summary>
+        public ValueContainer GetValue(string name)
+        {
+            NamedValue nv = AttemptToFindItemInList(name.Sanitize(), true);
+
+            return ((nv != null) ? nv.VC : ValueContainer.Empty);
+        }
+
+        /// <summary>
+        /// Explicit ValueContainer setter.  Updates the desired NamedValue to contain the given vc value, or adds a new NamedValue, initialized from the given name and vc value, to the list if it was not already present.
+        /// </summary>
+        /// <exception cref="System.NotSupportedException">thrown if the collection has been set to IsReadOnly</exception>
+        public NamedValueSet SetValue(string name, ValueContainer vc)
+        {
+            ThrowIfIsReadOnly("The SetValue method");
+
+            string sanitizedName = name.Sanitize();
+            int index = AttemptToFindItemIndexInList(sanitizedName, true);
+
+            if (index >= 0)
+            {
+                // we found a matching NamedValue in the list
+
+                NamedValue nv = list[index];
+                if (!nv.IsReadOnly)
+                {
+                    // update the value for the NamedValue item that is already in the set
+                    nv.VC = vc;
+                }
+                else
+                {
+                    // replace the NamedValue with a new one with the same name and the new value (dictionary does not need to be reset)
+                    list[index] = new NamedValue(sanitizedName) { VC = vc };
+                }
+            }
+            else
+            {
+                // name is not already in the set - make a new NamedValue with the given santized name and vc value and add it to the list.
+                nameToIndexDictionary = null;
+                list.Add(new NamedValue(sanitizedName) { VC = vc });
+            }
+            
+            return this;
+        }
+
+        /// <summary>
+        /// Explicit ValueContainer setter.  Updates the desired NamedValue to contain the given object value or adds a new NamedValue, initialized from the given name and object value, to the list if it was not already present.
+        /// In either case the given object value will be assigned into a ValueContainer automatically using this signature.
+        /// </summary>
+        /// <exception cref="System.NotSupportedException">thrown if the collection has been set to IsReadOnly</exception>
+        public NamedValueSet SetValue(string name, object value)
+        {
+            return SetValue(name, new ValueContainer(value));
+        }
+
+        /// <summary>
+        /// Asks the underlying SortedList to Remove the given name (after sanitization) from the set.
+        /// Returns true if the given sanitized name was found and removed from the set.  Returns false otherwise.
+        /// </summary>
+        /// <exception cref="System.NotSupportedException">thrown if the collection has been set to IsReadOnly</exception>
+        public bool Remove(string name)
+        {
+            ThrowIfIsReadOnly("The Remove name method");
+
+            string sanitizedName = name.Sanitize();
+
+            int index = AttemptToFindItemIndexInList(sanitizedName, false);     // do not create a dictionary for this effort since we are just going to delete it anyway
+
+            if (index >= 0)
+            {
+                nameToIndexDictionary = null;
+                list.RemoveAt(index);
+
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Removes the element at the given indexed element.  
+        /// </summary>
+        /// <exception cref="System.ArgumentOutOfRangeException">thrown if given index is less than 0 or it is greater than or equal to the set's Count</exception>
+        public void RemoveAt(int index)
+        {
+            ThrowIfIsReadOnly("The RemoveAt method");
+
+            if (index < 0 || index >= Count)
+                throw new System.ArgumentOutOfRangeException("index", "the given index is less than 0 or it is greater than or equal to the set's Count");
+
+            nameToIndexDictionary = null;
+            list.RemoveAt(index);
+        }
+
+        /// <summary>
+        /// get/set string indexed operator give caller access to a NamedValue for the given indexed name.
+        /// getter returns the indicated NamedValue, if found in this list, or returns an empty readonly NamedValue if the given name was not found in the list (returned value is not added to the list in this case)
+        /// setter requires that the given value is non-null and that its Name is equal to the string index given to the setter (see exceptions below).  Once accepted, this setter sets the indicated NamedValue to contain the ValueContainer from the given value NamedValue, or the setter adds the given NamedValue to the list if it was not already present in the list.
+        /// </summary>
+        /// <param name="name">Gives the name index to get or set a NamedValue from/to</param>
+        /// <returns>The indicated NamedValue or an empty NamedValue with the given name if the name was not found in this list</returns>
+        /// <exception cref="System.ArgumentNullException">This exception is thrown by the setter if the given value is null.</exception>
+        /// <exception cref="System.ArgumentException">This exception is thrown by the setter if the given value.Name propery is not equal to the string index.</exception>
         public NamedValue this[string name]
         {
             get
             {
-                BuildDictIfNeeded();
-                int idx = -1;
-                if (nameToIndexDict.TryGetValue(name ?? String.Empty, out idx))
-                    return this[idx];
-                else
-                    return new NamedValue(name);
-            }
+                string sanitizedName = name.Sanitize();
 
+                NamedValue nv = AttemptToFindItemInList(sanitizedName, true);
+
+                return nv ?? NamedValue.Empty;
+            }
             set
             {
-                if (name != value.Name)
-                    throw new System.InvalidOperationException("Index string must equal Name in given NamedValue object");
+                ThrowIfIsReadOnly("The String indexed setter property");
 
-                BuildDictIfNeeded();
-                int idx = -1;
-                if (nameToIndexDict.TryGetValue(name ?? String.Empty, out idx))
-                    this[idx] = value;
-                else
-                {
-                    idx = Count;
-                    Add(value);
-                    nameToIndexDict[name] = idx;
-                }
+                if (value == null)
+                    throw new System.ArgumentNullException("value");
+
+                string sanitizedName = name.Sanitize();
+
+                if (sanitizedName != value.Name.Sanitize())
+                    throw new System.ArgumentException("value.Name must match index string for string Indexed Setter.");
+
+                SetValue(sanitizedName, value.VC);
             }
         }
 
-        /// <summary>Contains the dictionary used to convert from names to list indexes.  Only built if [name] index operator is used.</summary>
-        protected Dictionary<string, int> nameToIndexDict = null;
-
-        /// <summary>Method used by client to reset the nameToIndex Dictionary if contents of NamedValues list is changed outside of use of [name] index operator.</summary>
-        public void InvalidateNameToIndexDictionary() 
-        { 
-            nameToIndexDict = null; 
-        }
-
-        /// <summary>Internal method used to build the nameToIndexDictionary when needed.</summary>
-        protected void BuildDictIfNeeded()
+        /// <summary>
+        /// indexed property.  Returns the indexed NamedValue from the set (if the given index is valid).  
+        /// </summary>
+        /// <exception cref="System.ArgumentOutOfRangeException">thrown if given index is less than 0 or it is greater than or equal to the set's Count</exception>
+        public NamedValue this[int index]
         {
-            if (nameToIndexDict == null)
+            get 
             {
-                nameToIndexDict = new Dictionary<string, int>();
-                for (int idx = 0; idx < Count; idx++)
+                if (index < 0 || index >= Count)
+                    throw new System.ArgumentOutOfRangeException("index", "the given index is less than 0 or it is greater than or equal to the set's Count");
+
+                return list[index];
+            }
+        }
+
+        #endregion
+
+        #region INamedValueSet (leftovers - most of the other members and properties are found in other regions of this class)
+
+        /// <summary>Returns true if the set contains a NamedValue for the given name (after sanitization)</summary>
+        public bool Contains(string name)
+        {
+            string sanitizedName = name.Sanitize();
+
+            return (AttemptToFindItemIndexInList(sanitizedName, true) >= 0);
+        }
+
+        INamedValue INamedValueSet.this[string name]
+        {
+            get { return this[name]; }
+        }
+
+        /// <summary>
+        /// If a NamedValue exists in the set for the given name (after sanitization), then this method returns the index into the set (in enumerable order) for the corresponding NamedValue.
+        /// Otherwise this method returns -1.
+        /// </summary>
+        public int IndexOf(string name)
+        {
+            string sanitizedName = name.Sanitize();
+
+            return AttemptToFindItemIndexInList(sanitizedName, true);
+        }
+
+        /// <summary>
+        /// indexed property.  Returns the indexed INamedValue from the set (if the given index is valid).  
+        /// </summary>
+        /// <exception cref="System.ArgumentOutOfRangeException">thrown if given index is less than 0 or it is greater than or equal to the set's Count</exception>
+        INamedValue INamedValueSet.this[int index] 
+        { 
+            get { return this[index]; } 
+        }
+
+        /// <summary>Returns true if the this INamedValueSet has the same contents, in the same order, as the given rhs.</summary>
+        public bool IsEqualTo(INamedValueSet rhs)
+        {
+            if (rhs == null || Count != rhs.Count || IsReadOnly != rhs.IsReadOnly)
+                return false;
+
+            int setCount = Count;
+            for (int index = 0; index < setCount; index++)
+            {
+                if (!list[index].IsEqualTo(rhs[index]))
+                    return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// This method is required to support the fact that INamedValueSet implements IEnumerable{INamedValue} and the standard enumerators already implemented by the underling SortedList
+        /// cannot be directly casted to this interface.
+        /// </summary>
+        /// <returns></returns>
+        IEnumerator<INamedValue> IEnumerable<INamedValue>.GetEnumerator()
+        {
+            return list.Select((nv) => nv as INamedValue).GetEnumerator();
+        }
+
+        #endregion
+
+        #region CollectionDataContract support and related ICollection<NamedValue>, IEnumerable<INamedValue>
+
+        /// <summary>
+        /// Gets the number of NamedValues that are currently in the set.
+        /// </summary>
+        public int Count
+        {
+            get { return list.Count; }
+        }
+
+        /// <summary>
+        /// Returns true if the set contains the given NamedValue instance.
+        /// </summary>
+        /// <remarks>This is essentially a useless method.  It is provied to that the class can implement ICollection{INamedValue}</remarks>
+        public bool Contains(NamedValue nv)
+        {
+            return list.Contains(nv);
+        }
+
+        /// <summary>
+        /// Copies the elements of the System.Collections.Generic.ICollection{T} to an System.Array, starting at a particular System.Array index.
+        /// </summary>
+        /// <param name="array">
+        /// The one-dimensional System.Array that is the destination of the elements copied from System.Collections.Generic.ICollection{T}. 
+        /// The System.Array must have zero-based indexing.
+        /// </param>
+        /// <param name="arrayIndex">The zero-based index in array at which copying begins.</param>
+        /// <exception cref="System.ArgumentNullException">thrown if the given array is null.</exception>
+        /// <exception cref="System.ArgumentOutOfRangeException">thrown if the given arrayIndex is less than zero.</exception>
+        /// <exception cref="System.ArgumentException">
+        /// thrown if the given array is not one-dimensional, or arrayIndex is greater than the length of the array, 
+        /// or the collection does not fit into the array at and after the given arrayIndex.
+        /// </exception>
+        public void CopyTo(NamedValue[] array, int arrayIndex)
+        {
+            list.CopyTo(array, arrayIndex);
+        }
+
+        /// <summary>
+        /// Asks the underlying SortedList to Add the given item using its sanitized Name as the key.
+        /// </summary>
+        /// <exception cref="System.ArgumentNullException">thrown if the given item is null.</exception>
+        /// <exception cref="System.NotSupportedException">thrown if the collection has been set to IsReadOnly</exception>
+        /// <exception cref="System.ArgumentException">thrown if an element with the same sanitized item.Name already exists in this set.</exception>
+        public void Add(NamedValue item)
+        {
+            ThrowIfIsReadOnly("The Add method");
+
+            if (item == null)
+                throw new System.ArgumentNullException("item");
+
+            string sanitizedName = item.Name.Sanitize();
+
+            if (AttemptToFindItemIndexInList(sanitizedName, false) >= 0)
+                throw new System.ArgumentException("An element with the same sanitized item.Name already exists in this set.");
+
+            nameToIndexDictionary = null;
+            list.Add(item);
+        }
+
+        /// <summary>
+        /// Asks the underlying SortedList to Remove the given name (after sanitization) from the set if both the name and value match the corresponding named item in the set.
+        /// Returns true if the given sanitized name was found and removed from the set.  Returns false otherwise.
+        /// </summary>
+        /// <exception cref="System.NotSupportedException">thrown if the collection has been set to IsReadOnly</exception>
+        /// <remarks>This is essentially a useless method.  It is provied to that the class can implement ICollection{INamedValue}</remarks>
+        public bool Remove(NamedValue nv)
+        {
+            ThrowIfIsReadOnly("The Remove NamedValue method");
+
+            nameToIndexDictionary = null;
+            return list.Remove(nv);
+        }
+
+        /// <summary>
+        /// Clears the underlying collection.
+        /// </summary>
+        /// <exception cref="System.NotSupportedException">thrown if the collection has been set to IsReadOnly</exception>
+        void ICollection<NamedValue>.Clear()
+        {
+            Clear();
+        }
+
+        /// <summary>
+        /// Clears the underlying collection.  Supports call chaining
+        /// </summary>
+        /// <exception cref="System.NotSupportedException">thrown if the collection has been set to IsReadOnly</exception>
+        public NamedValueSet Clear()
+        {
+            ThrowIfIsReadOnly("The Clear method");
+
+            nameToIndexDictionary = null;
+            list.Clear();
+
+            return this;
+        }
+
+        /// <summary>
+        /// Returns the corresponding Dict.Values's enumerator.
+        /// Required to support IEnumerable{NamedValue} interface.
+        /// </summary>
+        public IEnumerator<NamedValue> GetEnumerator()
+        {
+            return list.GetEnumerator();
+        }
+
+        /// <summary>
+        /// Returns the corresponding Dict.Values's enumerator.
+        /// Required to support IEnumerable{NamedValue} interface.
+        /// </summary>
+        IEnumerator IEnumerable.GetEnumerator()
+        {
+            return list.GetEnumerator();
+        }
+
+        #endregion 
+
+        #region IsReadOnly support
+
+        /// <summary>
+        /// This method can be used on a newly created NamedValueSet to set its IsReadOnly property to true while also supporting call chaining.
+        /// </summary>
+        /// <remarks>Use the ConvertToReadOnly extension method to convert INamedValueSet objects to be ReadOnly.</remarks>
+        public NamedValueSet MakeReadOnly()
+        {
+            if (!IsReadOnly)
+                IsReadOnly = true;
+
+            return this;
+        }
+
+        /// <summary>
+        /// getter returns true if the collection has been set to be read only.
+        /// if setter is given true then it sets the collection to be read only and sets all of the contained NamedValues to read only.
+        /// setter only accepts being given false if the collection has not already been set to read only.
+        /// </summary>
+        /// <exception cref="System.NotSupportedException">thrown if the setter is given false and collection has already been set to IsReadOnly</exception>
+        public bool IsReadOnly
+        {
+            get { return isReadOnly; }
+            set
+            {
+                if (value && !isReadOnly)
                 {
-                    NamedValue nvItem = this[idx];
-                    nameToIndexDict[nvItem.Name] = idx;
+                    isReadOnly = true;
+
+                    int setCount = Count;
+                    for (int idx = 0; idx < setCount; idx++)
+                    {
+                        list[idx].IsReadOnly = true;
+                    }
+                }
+                else if (!value && isReadOnly)
+                {
+                    ThrowIfIsReadOnly("Setting the IsReadOnly property to false");
                 }
             }
         }
+
+        /// <summary>
+        /// This method checks if the collection IsReadOnly and then throws a NotSupportedException if it is.
+        /// The exception message is the given reasonPrefix + " is not supported when this object IsReadOnly property has been set to true"
+        /// </summary>
+        /// <exception cref="System.NotSupportedException">thrown if the collection has been set to IsReadOnly</exception>
+        private void ThrowIfIsReadOnly(string reasonPrefix)
+        {
+            if (IsReadOnly)
+                throw new System.NotSupportedException(reasonPrefix + " is not supported when this object IsReadOnly property has been set to true");
+        }
+
+        private bool isReadOnly;
+
+        #endregion
+
+        #region Equality support
+
+        /// <summary>Support object level Equality testing versions.</summary>
+        public override bool Equals(object rhsAsObject)
+        {
+            return IsEqualTo(rhsAsObject as INamedValueSet);
+        }
+
+        /// <summary>Override GetHashCode because Equals has been.</summary>
+        public override int GetHashCode()
+        {
+            return base.GetHashCode();
+        }
+
+        #endregion
+
+        /// <summary>
+        /// Provide local debug/logging assistance version of this method
+        /// </summary>
+        public override string ToString()
+        {
+            return ToString(true, false);
+        }
+
+        /// <summary>Custom ToString variant that allows the caller to determine if the ro/rw postfix should be included on thie string result and if each NV with an empty VC should be treated like a keyword.</summary>
+        public string ToString(bool includeROorRW, bool treatNameWithEmptyVCAsKeyword)
+        {
+            return "[{0}]{1}".CheckedFormat(String.Join(",", list.Select((nv) => nv.ToString(includeROorRW, treatNameWithEmptyVCAsKeyword)).ToArray()), (includeROorRW ? (IsReadOnly ? "ro" : "rw") : String.Empty));
+        }
+
+        /// <summary>Returns the approximate size of the contents in bytes.</summary>
+        public int EstimatedContentSizeInBytes
+        {
+            get 
+            {
+                int numItems = Count;
+                int totalApproximateSize = 0;
+
+                for (int idx = 0; idx < numItems; idx++)
+                {
+                    totalApproximateSize += list[idx].EstimatedContentSizeInBytes;
+                }
+
+                return totalApproximateSize;
+            }
+        }
+
+        #region Underlying storage and indexing fields
+
+        /// <summary>This is the actual list of NamedValue objects that are contained in this set.</summary>
+        List<NamedValue> list = new List<NamedValue>();
+
+        /// <summary>
+        /// Return the NamedValue instance in the list who's Name matches the given sanitizedName, or null if there is none.
+        /// </summary>
+        private NamedValue AttemptToFindItemInList(string sanitizedName, bool createDictionaryIfNeeded)
+        {
+            int index = AttemptToFindItemIndexInList(sanitizedName, createDictionaryIfNeeded);
+
+            return ((index >= 0) ? list[index] : null);
+        }
+
+        /// <summary>
+        /// Return the index of the NamedValue in the list who's Name matches the given sanitizedName, or -1 if there is none.  
+        /// </summary>
+        private int AttemptToFindItemIndexInList(string sanitizedName, bool createDictionaryIfNeeded)
+        {
+            if (nameToIndexDictionary == null && Count >= minElementsToUseDicationary && createDictionaryIfNeeded)
+                GenerateDicationary();
+
+            if (nameToIndexDictionary != null)
+            {
+                int itemIndex = -1;
+
+                nameToIndexDictionary.TryGetValue(sanitizedName, out itemIndex);
+
+                return itemIndex;
+            }
+            else
+            {
+                int setCount = Count;
+                for (int idx = 0; idx < setCount; idx++)
+                {
+                    if (list[idx].Name == sanitizedName)
+                        return idx;
+                }
+
+                return -1;
+            }
+        }
+
+        /// <summary>This dictionary is only used to optimize access to sets that have at least 10 elements</summary>
+        volatile Dictionary<string, int> nameToIndexDictionary = null;
+
+        /// <summary>Defines the minimum Set size required to decide to create the nameToIndexDictionary</summary>
+        const int minElementsToUseDicationary = 10;
+
+        /// <summary>
+        /// Generates a Dictionary that can be used to index from a given sanitized name to the index of the corresponding NamedValue in the list.
+        /// </summary>
+        private void GenerateDicationary()
+        {
+            Dictionary<string, int> d = new Dictionary<string, int>();
+
+            int setCount = Count;
+            for (int idx = 0; idx < setCount; idx++)
+                d[list[idx].Name] = idx;
+
+            nameToIndexDictionary = d;
+        }
+
+        #endregion
+
     }
 
     /// <summary>
-    /// This object defines a single named value.  A named value is a pairing of a name and a string and/or a binary value.
+    /// This object defines a single named value.  A named value is a pairing of a name and a ValueContainer.
     /// </summary>
     [DataContract(Namespace = Constants.ModularNameSpace)]
-    public class NamedValue
+    public class NamedValue : INamedValue
     {
-        /// <summary>Constructor - builds NamedValue containing null string and binary data</summary>
-        public NamedValue(string name) : this(name, null, null) { }
-        /// <summary>Constructor - builds NamedValue containing given string and null binary data</summary>
-        public NamedValue(string name, string str) : this(name, str, null) { }
-        /// <summary>Constructor - builds NamedValue containing null string and given binary data.  Clones the binary data.</summary>
-        public NamedValue(string name, byte[] data) : this(name, null, data) { }
-        /// <summary>Constructor - builds NamedValue containing given string and given binary data.  Clones the binary data if non-null</summary>
-        public NamedValue(string name, string str, byte[] data) { Name = name; Str = str; Data = (data != null ? (byte[])data.Clone() : null); }
-        /// <summary>Copy constructor.  builds clone of the given rhs containing copy of Name and Str properties and clone of binary data if it is non-null.</summary>
-        public NamedValue(NamedValue rhs) : this(rhs.Name, rhs.Str, rhs.Data) { }
+        #region Empty constant
 
-        /// <summary>This property gives the caller access to the name of the named value</summary>
-        [DataMember(Order = 1, IsRequired = true)]
-        public string Name { get; set; }
+        /// <summary>Returns a readonly empty NamedValueSet</summary>
+        public static NamedValue Empty { get { return empty; } }
+        private static readonly NamedValue empty = new NamedValue(string.Empty) { IsReadOnly = true };
 
-        /// <summary>This property if non-null if the NV has been given a string value</summary>
-        [DataMember(Order = 2, IsRequired = false, EmitDefaultValue = false)]
-        public string Str { get; set; }
+        #endregion
 
-        /// <summary>This property is non-null if the NV has been given a binary value (possibly from a ValueSet or other E005DataSource)</summary>
-        [DataMember(Order = 3, IsRequired = false, EmitDefaultValue = false)]
-        public byte[] Data { get; set; }
+        #region Constructors
 
-        /// <summary>Returns true if the object has a non-null Str property value</summary>
-        public bool HasStrValue { get { return (Str != null); } }
-        /// <summary>Returns true if the object has a non-null Data property value</summary>
-        public bool HasDataValue { get { return (Data != null); } }
-        /// <summary>Returns true if the object has a non-null Str property or a non-null Data property value</summary>
-        public bool HasValue { get { return (HasStrValue || HasDataValue); } }
+        /// <summary>Constructor - builds NamedValue with the given name.  VC defaults to ValueContainer.Empty</summary>
+        public NamedValue(string name) 
+        {
+            Name = name;
+        }
+
+        /// <summary>Helper Constructor - builds NamedValue with the given name and object value.  VC is constructed to contain the given object value</summary>
+        public NamedValue(string name, object value)
+        {
+            Name = name;
+            VC = new ValueContainer(value);
+        }
+
+        /// <summary>
+        /// Copy constructor.  builds a copy of the given rhs using its Name and a copy of its VC.
+        /// The results of this copy operation are read/write even if the given rhs is readonly.
+        /// </summary>
+        public NamedValue(INamedValue rhs)
+            : this(rhs.Name)
+        {
+            vc = rhs.VC;
+            VCHasBeenSet = rhs.VCHasBeenSet;
+        }
+
+        /// <summary>
+        /// Copy constructor.  builds a copy  of the given rhs containing copy of Name and VC properties.
+        /// The IsReadOnly on resulting copy is set from asReadOnly.  
+        /// In addition if asReadonly is true and the given rhs is not readonly and its contained value is an IListOfString and the copy's contained value is set to a expliclty
+        /// copy of the given rhs.  This stop cannot be peformed for general contained values that have opaque Object values in them and it not required for String contents (already immutable)
+        /// and for all other value content types which do not naturaly share references.
+        /// </summary>
+        public NamedValue(INamedValue rhs, bool asReadOnly)
+            :this(rhs.Name)
+        {
+            if (asReadOnly)
+                vc = new ValueContainer().DeepCopyFrom(rhs.VC);
+            else
+                vc = rhs.VC;
+
+            VCHasBeenSet = rhs.VCHasBeenSet;
+            isReadOnly = asReadOnly;
+        }
+
+        #endregion
+
+        #region payload properties, serialzation and corresponiding proxy properties for managing serialization
+
+        /// <summary>This property gives the caller read-only access to the name of the named value</summary>
+        [DataMember(Order = 10)]
+        public string Name { get; internal set; }
+
+        /// <summary>This get/set property gives access to the ValueContainer contained of this named value</summary>
+        public ValueContainer VC 
+        {
+            get 
+            { 
+                return (VCHasBeenSet ? vc : ValueContainer.Empty); 
+            }
+            set 
+            {
+                ThrowIfIsReadOnly("VC property setter");
+                vc = value;
+                VCHasBeenSet = true; 
+            }
+        }
+        private ValueContainer vc;
+
+        /// <summary>
+        /// Returns true if the VC property setter has been explicitly called.  Returns false otherwise.  
+        /// Allows VC property getter to return ValueContainer.Empty (non-default value) until the VC property has been explicitly set.
+        /// </summary>
+        public bool VCHasBeenSet { get; private set; }
+
+        /// <summary>This private property is the version that is used to serialize/deserialize the contained ValueContainer</summary>
+        [DataMember(Order = 20)]
+        private ValueContainerEnvelope Env 
+        { 
+            get 
+            { 
+                return new ValueContainerEnvelope() { VC = VC }; 
+            } 
+            set 
+            {
+                ThrowIfIsReadOnly("Env property setter");
+                VC = value.VC; 
+            }
+        }
+
+        #endregion
+
+        #region Equality support
+
+        /// <summary>
+        /// Returns true if the given rhs has the same Name, VC contents and IsReadOnly value as the current object.
+        /// </summary>
+        public bool IsEqualTo(INamedValue rhs)
+        {
+            return (rhs != null 
+                    && Name == rhs.Name 
+                    && VC.IsEqualTo(rhs.VC) 
+                    && IsReadOnly == rhs.IsReadOnly
+                    );
+        }
+
+        /// <summary>Support object level Equality testing versions.</summary>
+        public override bool Equals(object rhsAsObject)
+        {
+            return IsEqualTo(rhsAsObject as INamedValue);
+        }
+
+        /// <summary>Override GetHashCode because Equals has been.</summary>
+        public override int GetHashCode()
+        {
+            return base.GetHashCode();
+        }
+
+        #endregion
+
+        #region IsReadOnly support
+
+        /// <summary>
+        /// getter returns true if the item has been set to be read only.
+        /// if setter is given true then it sets the item to be read only.
+        /// setter only accepts being given false if the item has not already been set to read only.
+        /// </summary>
+        /// <exception cref="System.NotSupportedException">thrown if the setter is given false and item has already been set to IsReadOnly</exception>
+        public bool IsReadOnly
+        {
+            get { return isReadOnly; }
+            set
+            {
+                if (value && !isReadOnly)
+                    isReadOnly = true;
+                else if (!value && isReadOnly)
+                    ThrowIfIsReadOnly("Setting the IsReadOnly property to false");
+            }
+        }
+
+        /// <summary>
+        /// This method checks if the item IsReadOnly and then throws a NotSupportedException if it is.
+        /// The exception message is the given reasonPrefix + " is not supported when this object IsReadOnly property has been set"
+        /// </summary>
+        /// <exception cref="System.NotSupportedException">thrown if the item has been set to IsReadOnly</exception>
+        private void ThrowIfIsReadOnly(string reasonPrefix)
+        {
+            if (IsReadOnly)
+                throw new System.NotSupportedException(reasonPrefix + " is not supported when this object IsReadOnly property has been set");
+        }
+
+        private bool isReadOnly;
+
+        #endregion
+
+        /// <summary>
+        /// Custom ToString variant that allows the caller to determine if the ro/rw postfix should be included on thie string result and if NV's with an empty VC should be treated like a keyword (by only returning the name)
+        /// </summary>
+        public string ToString(bool useDoubleEqualsForRW, bool treatNameWithEmptyVCAsKeyword)
+        {
+            if (VC.IsEmpty && treatNameWithEmptyVCAsKeyword)
+                return "{0}".CheckedFormat(Name);
+            else if (!useDoubleEqualsForRW || IsReadOnly)
+                return "{0}={1}".CheckedFormat(Name, VC);
+            else
+                return "{0}=={1}".CheckedFormat(Name, VC);
+        }
+
+        /// <summary>
+        /// Provide local debug/logging assistance version of this method.
+        /// </summary>
+        public override string ToString()
+        {
+            return ToString(true, false);
+        }
+
+        /// <summary>
+        /// Returns the approximate size of the contents in bytes. 
+        /// </summary>
+        public int EstimatedContentSizeInBytes 
+        {
+            get { return (Name.Length * sizeof(char)) + VC.EstimatedContentSizeInBytes; }
+        }
+    }
+
+    #endregion
+
+    #region NamedValue related extension methods
+
+    /// <summary>Standard extension methods wrapper class/namespace</summary>
+    public static partial class ExtensionMethods
+    {
+        /// <summary>
+        /// Sanitizes the given name for use as a Dictionary key by replacing any given null value with string.Empty.
+        /// </summary>
+        public static string Sanitize(this string name)
+        {
+            return name ?? string.Empty;
+        }
+
+        /// <summary>
+        /// Converts the given INamedValueSet iNvSet to a readonly NamedValueSet, either by casting or by copying.
+        /// If the given iNvSet value is null then this method return null.
+        /// If the given iNvSet value IsReadOnly and its type is actually a NamedValueSet then this method returns the given iNvSet down casted as a NamedValueSet (path used for serialziation)
+        /// Otherwise this method returns a new readonly NamedValueSet created as a sufficiently deep clone of the given iNvSet.
+        /// </summary>
+        public static NamedValueSet ConvertToReadOnly(this INamedValueSet iNvSet)
+        {
+            if (iNvSet == null)
+                return null;
+
+            // special case where we downcast readonly NamedValueSets (passed as INamedValueSets) so that we do not need to copy them after they are already readonly.
+            if (iNvSet.IsReadOnly && (iNvSet is NamedValueSet))
+                return iNvSet as NamedValueSet;
+
+            return new NamedValueSet(iNvSet, true);
+        }
+
+        /// <summary>
+        /// Converts the given INamedValue iNv to a readonly NamedValue, either by casting or by copying.
+        /// If the given iNv value IsReadOnly and its type is actually a NamedValue then this method returns the given iNv down casted as a NamedValue (path used for serialziation)
+        /// Otherwise this method returns a new readonly NamedValue this is a copy of the given inv.
+        /// </summary>
+        public static NamedValue ConvertToReadOnly(this INamedValue iNv)
+        {
+            if (iNv.IsReadOnly && (iNv is NamedValue))
+                return iNv as NamedValue;
+
+            return new NamedValue(iNv, true);
+        }
+
+        /// <summary>
+        /// Converts the given NamedValueSet nvSet to a read/write NamedValueSet by cloning if needed.
+        /// If the given nvSet value is not null and it is !IsReadonly then return the given value.
+        /// Otherwise this method constructs and returns a new readwrite NamedValueSet copy the given nvSet.
+        /// </summary>
+        public static NamedValueSet ConvertToWriteable(this NamedValueSet nvSet)
+        {
+            if (nvSet != null && !nvSet.IsReadOnly)
+                return nvSet;
+
+            return new NamedValueSet(nvSet, false);
+        }
+
+        /// <summary>
+        /// Converts the given NamedValue nv to a read/write NamedValue by cloning if needed.
+        /// If the given nv !IsReadonly then this method returns it unchanged.
+        /// Otherwise this method constructs and returns a new readonly NamedValue copy of the given nv.
+        /// </summary>
+        public static NamedValue ConvertToWriteable(this NamedValue nv)
+        {
+            if (!nv.IsReadOnly)
+                return nv;
+
+            return new NamedValue(nv, false);
+        }
+
+        /// <summary>
+        /// Returns true if the given iNvSet is either null or it refers to a NamedValueSet that is currently empty.
+        /// </summary>
+        public static bool IsNullOrEmpty(this INamedValueSet iNvSet)
+        {
+            return (iNvSet == null || iNvSet.Count == 0);
+        }
+
+        /// <summary>
+        /// Returns true if the given iNv is either null or it refers to a NamedValue that is currently empty (Name IsNullOrEmpty and VC IsEmpty)
+        /// </summary>
+        public static bool IsNullOrEmpty(this INamedValue iNv)
+        {
+            return (iNv == null || (iNv.Name.IsNullOrEmpty() && iNv.VC.IsEmpty));
+        }
+
+        /// <summary>
+        /// passes the given iNvSet through as the return value unless it is a non-null, empty set in which case this method returns null.
+        /// </summary>
+        public static INamedValueSet MapEmptyToNull(this INamedValueSet iNvSet)
+        {
+            bool isEmptySet = (iNvSet != null && iNvSet.Count == 0);
+            return (isEmptySet ? null : iNvSet);
+        }
+
+        /// <summary>
+        /// passes the given iNvSet through as the return value unless it is a null, in which case this method returns NamedValueSet.Empty.
+        /// </summary>
+        public static INamedValueSet MapNullToEmpty(this INamedValueSet iNvSet)
+        {
+            return (iNvSet ?? NamedValueSet.Empty);
+        }
+
+        /// <summary>
+        /// This method operates on the given lhs NamedValueSet and uses AddAndUpdate merge behavior to merge the contents of the rhs into the lhs
+        /// <para/>If the given lhs IsReadonly then a new NamedValueSet created as a copy of the contents of the given lhs and this new one is used in its place and is returned.
+        /// <para/>This method supports call chaining by returning the lhs after any modification have been made.
+        /// </summary>
+        /// <param name="lhs">Gives the object that the rhs NV items will be merged into</param>
+        /// <param name="rhs">Gives the object that contains the NV items that will be merged into the lhs and which may be used to update corresonding items in the lhs</param>
+        public static NamedValueSet MergeWith(this NamedValueSet lhs, INamedValueSet rhs)
+        {
+            return lhs.MergeWith(rhs, NamedValueMergeBehavior.AddAndUpdate);
+        }
+
+        /// <summary>
+        /// This method operates on the given lhs NamedValueSet and uses the given mergeBehavior to merge the contents of the given rhs into the lhs.
+        /// <para/>If the given lhs IsReadonly then a new NamedValueSet created as a copy of the contents of the given lhs and this new one is used in its place and is returned.
+        /// <para/>This method supports call chaining by returning the lhs after any modification have been made.
+        /// </summary>
+        /// <param name="lhs">Gives the object that the rhs NV items will be merged into</param>
+        /// <param name="rhs">Gives the object that contains the NV items that will be merged into the lhs and which may be used to update corresonding items in the lhs</param>
+        /// <param name="mergeBehavior">Defines the merge behavior that will be used for this merge when the rhs and lhs contain NV items with the same name but different values.  Defaults to NamedValueMergeBehavior.AddAndUpdate</param>
+        public static NamedValueSet MergeWith(this NamedValueSet lhs, INamedValueSet rhs, NamedValueMergeBehavior mergeBehavior)
+        {
+            bool add = mergeBehavior.IsAddSelected();
+            bool update = mergeBehavior.IsUpdateSelected();
+
+            if (lhs == null || lhs.IsReadOnly)
+                lhs = lhs.ConvertToWriteable();
+
+            if (rhs != null)
+            {
+                foreach (INamedValue rhsItem in rhs)
+                {
+                    bool lhsContainsRhsName = !lhs.Contains(rhsItem.Name);
+                    if (lhsContainsRhsName ? add : update)
+                        lhs.SetValue(rhsItem.Name, rhsItem.VC);
+                }
+            }
+
+            return lhs;
+        }
+
+        /// <summary>Returns true if the given mergeBehavior value has the AddNewItems flag set.</summary>
+        public static bool IsAddSelected(this NamedValueMergeBehavior mergeBehavior)
+        {
+            return ((mergeBehavior & NamedValueMergeBehavior.AddNewItems) != NamedValueMergeBehavior.None);
+        }
+
+        /// <summary>Returns true if the given mergeBehavior value has the UpdateExsitingItems flag set.</summary>
+        public static bool IsUpdateSelected(this NamedValueMergeBehavior mergeBehavior)
+        {
+            return ((mergeBehavior & NamedValueMergeBehavior.UpdateExistingItems) != NamedValueMergeBehavior.None);
+        }
+    }
+
+    [Flags]
+    public enum NamedValueMergeBehavior
+    {
+        None = 0,
+        /// <summary>Merge by adding new items from the rhs into the lhs only if the lhs does not already contains an element with the same name.</summary>
+        AddNewItems = 1,
+        /// <summary>Merge by updating only each item in the lhs that is also in the rhs by replacing the lhs item's value the corresponding rhs item's value.</summary>
+        UpdateExistingItems = 2,
+
+        /// <summary>Shorthand for AddNewItems</summary>
+        AddOnly = AddNewItems,
+        /// <summary>Shorthand for UpdateExistingItems</summary>
+        UpdateOnly = UpdateExistingItems,
+        /// <summary>Shorthand for AddNewItems | UpdateExistingItems</summary>
+        AddAndUpdate = AddNewItems | UpdateExistingItems,
     }
 
     #endregion

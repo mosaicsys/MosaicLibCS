@@ -26,6 +26,7 @@ using System.Linq;
 using MosaicLib.Utils;
 using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Reflection.Attributes;
+using System.Runtime.Serialization;
 
 // Modular.Interconnect is the general namespace for tools that help interconnect Modular Parts without requiring that that have pre-existing knowledge of each-other's classes.
 // This file contains the definitions for the underlying Modular.Interconnect.Values portion of Modular.Interconnect.
@@ -45,12 +46,6 @@ namespace MosaicLib.Modular.Interconnect.Values
     #region IValuesInterconnection
 
     /// <summary>
-    /// The name of this interface was spelled incorrectly.  Please replace its use with the correctly spelled <see cref="IValuesInterconnection"/> (2015-06-08)
-    /// </summary>
-    [Obsolete("The name of this interface was spelled incorrectly.  Please replace its use with the correctly spelled IValuesInterconnection (2015-06-08)")]
-    public interface IValuesIneterconnection : IValuesInterconnection { }
-
-    /// <summary>
     /// This interface defines the basic externally visible methods and properties that are exposed by Values Interconnection implementation objects.
     /// Clients are generally expected to make most use of the GetValueAdapter factory methods methods.  
     /// ValueSetAdapter classes are generally expected to use the IValueAccessor array versions of the Set and Update methods.
@@ -59,6 +54,18 @@ namespace MosaicLib.Modular.Interconnect.Values
     {
         /// <summary>Returns the name of this values interconnection (table space) object.</summary>
         string Name { get; }
+
+        /// <summary>
+        /// Gets/Sets the entire set of name mappings as an enumeration.  
+        /// This set of mappings is used by GetValueAccessor to support mapping from the given name to an alternate name on a case by case basis.  
+        /// This mapping table may be used to allow two (or more) entities to end up using the same table entry even if they do not know about each other in advance.
+        /// </summary>
+        IEnumerable<MapNameFromTo> MapNameFromToSet { get; set; }
+
+        /// <summary>
+        /// Adds the given set of MapNameFromTo items to the current mapping MapNameFromToSet.
+        /// </summary>
+        IValuesInterconnection AddRange(IEnumerable<MapNameFromTo> addMapNameFromToSet);
 
         /// <summary>
         /// IValueAdpater Factory method.  
@@ -133,6 +140,70 @@ namespace MosaicLib.Modular.Interconnect.Values
 
     #endregion
 
+    #region name mapping MapNameFromTo and MapNameFromToList
+
+    /// <summary>
+    /// Immutable item instance class for mapping names from one value to another.  
+    /// Generally used with MapNamesFromToList when interacting with values interconnect's MapNameFromToSet and related AddRange method
+    /// <para/>This class supports use with DataContract serialization and deserialization.
+    /// </summary>
+    [DataContract(Namespace = Constants.ModularInterconnectNameSpace)]
+    public class MapNameFromTo
+    {
+        /// <summary>
+        /// Basic constructor used to setup an instance's From and To property values to the given values.
+        /// </summary>
+        public MapNameFromTo(string from, string to)
+        {
+            From = from;
+            To = to;
+        }
+
+        /// <summary>Gives the from name for the mapping (the name that will be replaced with the To name).</summary>
+        [DataMember]
+        public string From { get; private set; }
+
+        /// <summary>Gives the to name for the mapping (the name that will actually be used to access the table).</summary>
+        [DataMember]
+        public string To { get; private set; }
+
+        /// <summary>Debugging and logging assistance method</summary>
+        public override string ToString()
+        {
+            return "'{0}'=>'{1}'".CheckedFormat(From, To);
+        }
+    }
+
+    /// <summary>
+    /// MapNameFromTo basic Collection class for mapping sets of names from one value to another.  
+    /// Generally used when interacting with values interconnect's MapNameFromToSet and related AddRange method.
+    /// <para/>This class supports use with DataContract serialization and deserialization.
+    /// </summary>
+    [CollectionDataContract(ItemName = "Map", Namespace = Constants.ModularInterconnectNameSpace)]
+    public class MapNameFromToList : List<MapNameFromTo>
+    {
+        /// <summary>Constructs an empty list.</summary>
+        public MapNameFromToList() { }
+
+        /// <summary>Constructs a list containing the elements from the given rhs enumerable source.</summary>
+        public MapNameFromToList(IEnumerable<MapNameFromTo> rhs) : base(rhs) { }
+
+        /// <summary>Helper method allows use with nested braces initialization (as with Dictionary)</summary>
+        public MapNameFromToList Add(string from, string to)
+        {
+            Add(new MapNameFromTo(from, to));
+            return this;
+        }
+
+        /// <summary>Debugging and logging assistance method</summary>
+        public override string ToString()
+        {
+            return "MapNameFromToList({0})".CheckedFormat(string.Join(",", this.Select((item) => item.ToString()).ToArray()));
+        }
+    }
+
+    #endregion
+
     #region IValueAccessor and IValueAccessor<TValueType>
 
     /// <summary>
@@ -177,11 +248,11 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <summary>Converts valueAsObject to a ValueContainer and then calls SetIfDifferent(valueContainer) to set the access and the corresponding interconnect table entry from it if needed.  This method supports call chaining.</summary>
         IValueAccessor SetIfDifferent(object valueAsObject);
 
-        /// <summary>This property returns true if the LastUpdateSeqNun is not the same as the CurrentSeqNum.</summary>
+        /// <summary>This property returns true if the ValueSeqNum is not the same as the CurrentSeqNum.</summary>
         bool IsUpdateNeeded { get; }
         /// <summary>This method updates the locally stored value and seqNum from the interconnection table space's corresponding table entry.  This method supports call chaining.</summary>
         IValueAccessor Update();
-        /// <summary>Gives the current sequence number of the value that is currently in the interconnection table.</summary>
+        /// <summary>Gives the current sequence number of the value that is currently in the interconnection table.  The value zero is only used when the table entry has never been assigned a value.</summary>
         UInt32 CurrentSeqNum { get; }
         /// <summary>Gives the sequence number of the value that was last Set to, or updated from, the interconnection table.  The accessor may be updated if this value is not equal to CurrentSeqNum.</summary>
         UInt32 ValueSeqNum { get; }
@@ -242,7 +313,73 @@ namespace MosaicLib.Modular.Interconnect.Values
             set { singletonInstanceHelper.Instance = value; }
         }
 
-        private static SingletonHelperBase<IValuesInterconnection> singletonInstanceHelper = new SingletonHelperBase<IValuesInterconnection>(SingletonInstanceBehavior.AutoConstructIfNeeded, () => new ValuesInterconnection("MainValuesInterconnect"));
+        private static SingletonHelperBase<IValuesInterconnection> singletonInstanceHelper = new SingletonHelperBase<IValuesInterconnection>(SingletonInstanceBehavior.AutoConstructIfNeeded, () => new ValuesInterconnection("ValuesInterconnectSingleton"));
+
+        #endregion
+
+        #region Global Values Interconnection table dictionary
+
+        /// <summary>
+        /// Attempts to add the given interconnectionTable to the static table dictionary maintained here.
+        /// if rethrow is true and any of the listed exception conditions (below) are encountered then they will be rethrown to the caller.
+        /// if rethrow is false and any of the listed exception conditions are encountered then the method will have no effect.
+        /// <para/>supports call chaining by returning given interconnectionTable instance.
+        /// </summary>
+        /// <exception cref="System.ArgumentNullException">Thrown if the given interconnectionTable is null</exception>
+        /// <exception cref="System.ArgumentException">Thrown if the given interconnectionTable's Name is null or empty, or if the dictionary already contains a table with the given name.</exception>
+        public static IValuesInterconnection AddTable(IValuesInterconnection interconnectionTable, bool rethrow)
+        {
+            try
+            {
+                if (interconnectionTable == null)
+                    throw new System.ArgumentNullException("interconnectionTable");
+                else if (interconnectionTable.Name.IsNullOrEmpty())
+                    throw new System.ArgumentException("given table Name cannot be null or empty", "interconnectTable", null);
+
+                lock (interconnectionTableDictionaryMutex)
+                {
+                    interconnectionTableDictionary.Add(interconnectionTable.Name, interconnectionTable);
+                }
+            }
+            catch (System.Exception ex)
+            {
+                if (rethrow)
+                    throw ex;
+            }
+
+            return interconnectionTable;
+        }
+
+        /// <summary>
+        /// Gets the desired IValueInterconnection table form the static table dictionary mantained here (if the name is found in the dectionary) and returns is.
+        /// If the given interconnectionTableName is null or Empty then this method returns the Values.Instance singleton.
+        /// If the given name is not null, not Empty, and is not found in the table then this method returns null unless the addNewTableIfMissing parameter is true, in which case
+        /// this method creates a new table of the given name, adds it to the table, and returns it.
+        /// </summary>
+        public static IValuesInterconnection GetTable(string interconnectionTableName, bool addNewTableIfMissing)
+        {
+            if (interconnectionTableName.IsNullOrEmpty())
+                return Instance;
+
+            lock (interconnectionTableDictionaryMutex)
+            {
+                IValuesInterconnection interconnectionTable = null;
+
+                if (interconnectionTableDictionary.TryGetValue(interconnectionTableName, out interconnectionTable) && interconnectionTable != null)
+                    return interconnectionTable;
+
+                if (addNewTableIfMissing)
+                {
+                    interconnectionTable = new ValuesInterconnection(interconnectionTableName, false);
+                    interconnectionTableDictionary[interconnectionTableName] = interconnectionTable;
+                }
+
+                return interconnectionTable;
+            }
+        }
+
+        private static object interconnectionTableDictionaryMutex = new object();
+        private static Dictionary<string, IValuesInterconnection> interconnectionTableDictionary = new Dictionary<string, IValuesInterconnection>();
 
         #endregion
     }
@@ -265,9 +402,18 @@ namespace MosaicLib.Modular.Interconnect.Values
         #region construction
 
         /// <summary>Constructor.  Requires an instance name.</summary>
-        public ValuesInterconnection(string name)
+        public ValuesInterconnection(string name) 
+            : this(name, true)
+        {
+        }
+
+        /// <summary>Constructor.  Allows the caller to determine if/when this interconnection table will be added to the static Global dictionary mantained in this class (provided that the given name is neither null nor empty)</summary>
+        public ValuesInterconnection(string name, bool registerSelfInDictionary)
         {
             Name = name;
+
+            if (registerSelfInDictionary && !Name.IsNullOrEmpty())
+                Values.AddTable(this, false);
         }
 
         #endregion
@@ -276,6 +422,30 @@ namespace MosaicLib.Modular.Interconnect.Values
 
         /// <summary>Returns the name of this values interconnection (table space) object.</summary>
         public string Name { get; private set; }
+
+        /// <summary>
+        /// Gets/Sets the entire set of name mappings as an enumeration.  
+        /// This set of mappings is used by GetValueAccessor to support mapping from the given name to an alternate name on a case by case basis.  
+        /// This mapping table may be used to allow two (or more) entities to end up using the same table entry even if they do not know about each other in advance.
+        /// </summary>
+        public IEnumerable<MapNameFromTo> MapNameFromToSet 
+        {
+            get { lock (mutex) { return nameMappingSet.ToArray(); } }
+            set { lock (mutex) { InnerSetMappingArray(value); } }
+        }
+
+        /// <summary>
+        /// Adds the given set of MapNameFromTo items to the current mapping MapNameFromToSet.
+        /// </summary>
+        public IValuesInterconnection AddRange(IEnumerable<MapNameFromTo> addMapNameFromToSet)
+        {
+            lock (mutex)
+            {
+                InnerAddRange(addMapNameFromToSet);
+            }
+
+            return this;
+        }
 
         /// <summary>
         /// IValueAdpater Factory method.  
@@ -289,6 +459,7 @@ namespace MosaicLib.Modular.Interconnect.Values
             ValueTableEntry tableEntry = InnerGetValueTableEntry(name);
 
             IValueAccessor adapter = new ValueAccessor(this, tableEntry);
+
             return adapter.Update();
         }
 
@@ -304,6 +475,7 @@ namespace MosaicLib.Modular.Interconnect.Values
             ValueTableEntry tableEntry = InnerGetValueTableEntry(name);
 
             IValueAccessor<TValueType> adapter = new ValueAccessor<TValueType>(this, tableEntry);
+
             return adapter.Update();
         }
 
@@ -504,11 +676,12 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// </summary>
         private ValueTableEntry InnerGetValueTableEntry(string name)
         {
-            name = name ?? String.Empty;
             ValueTableEntry tableEntry = null;
 
             lock (mutex)
             {
+                name = InnerMapSanitizedName(name.Sanitize());
+
                 if (!tableEntryDictionary.TryGetValue(name, out tableEntry) || tableEntry == null)
                 {
                     tableEntry = new ValueTableEntry(name, table.Count + 1);
@@ -523,6 +696,40 @@ namespace MosaicLib.Modular.Interconnect.Values
             }
 
             return tableEntry;
+        }
+
+        private MapNameFromToList nameMappingSet = new MapNameFromToList();
+        private volatile Dictionary<string, string> nameMappingDictionary = new Dictionary<string, string>();
+
+        protected void InnerSetMappingArray(IEnumerable<MapNameFromTo> nameMappingSet)
+        {
+            InnerResetNameMapping();
+            InnerAddRange(nameMappingSet);
+        }
+
+        protected string InnerMapSanitizedName(string name)
+        {
+            Dictionary<string, string> nmp = nameMappingDictionary;
+
+            string mappedName = null;
+            nmp.TryGetValue(name, out mappedName);
+
+            return mappedName ?? name;
+        }
+
+        protected void InnerResetNameMapping()
+        {
+            nameMappingSet = new MapNameFromToList();
+            nameMappingDictionary = new Dictionary<string, string>();
+        }
+
+        private void InnerAddRange(IEnumerable<MapNameFromTo> addMapNameFromToSet)
+        {
+            foreach (MapNameFromTo mapItem in addMapNameFromToSet)
+            {
+                nameMappingSet.Add(mapItem);
+                nameMappingDictionary[mapItem.From.Sanitize()] = mapItem.To.Sanitize();
+            }
         }
 
         #endregion
@@ -596,21 +803,36 @@ namespace MosaicLib.Modular.Interconnect.Values
             /// <summary>Backing store for the table entries ID.</summary>
             public int ID { get; private set; }
 
-            /// <summary>Contains the most recently assigned sequence number that goes with the current ValueAsObject value.</summary>
+            /// <summary>Contains the most recently assigned sequence number that goes with the current ValueAsObject value.  This value is only zero when the table entry has never been assigned a value.</summary>
             public UInt32 SeqNum { get { return seqNum; } }
+
             /// <summary>Contains the most recently assigned value in a container</summary>
-            public ValueContainer ValueContainer { get; private set; }
+            public ValueContainer ValueContainer { get { return valueContainer; } private set { valueContainer = value; } }
+
+            /// <summary>Backing store for ValueContainer propety</summary>
+            private ValueContainer valueContainer;
 
             /// <summary>used by one or more attached accessors to Set the value of the table entry.  Also increments the SeqNum, skipping zero which is reserved as the initial unwritten state.</summary>
+            /// <remarks>
+            /// Added special case for creating explicit copy of a IList{String} in if the given list is not equal to the current contents of the 
+            /// </remarks>
             public void Set(ref ValueContainer valueContainerIn)
             {
-                ValueContainer = valueContainerIn;
+                valueContainer.DeepCopyFrom(valueContainerIn);
 
                 seqNum = InnerGuardedIncrementSkipZero(seqNum);
             }
 
             /// <summary>Backing storeage for the SeqNum.  seqNum is defined to be volatile because it is observed without owning the table lock, even though it is only updated while owning the table lock.</summary>
             private volatile UInt32 seqNum = 0;
+
+            /// <summary>
+            /// Purely for debugging assistance - allows debugger to look at raw table directly.
+            /// </summary>
+            public override string ToString()
+            {
+                return "{0:d4}:{1} seqNum:{2} {3}".CheckedFormat(ID, Name, SeqNum, ValueContainer);
+            }
         }
 
         /// <summary>Implementation class for the IValueAccessor interface.  Provides pure ValueAsObject based use of the Value Interconnection instance that created this object</summary>
@@ -675,7 +897,6 @@ namespace MosaicLib.Modular.Interconnect.Values
                 if (InterconnectInstance != null)
                 {
                     InterconnectInstance.Set(this);
-                    IsSetPending = false;
                 }
 
                 return this;
@@ -724,7 +945,7 @@ namespace MosaicLib.Modular.Interconnect.Values
 
                 return this;
             }
-            /// <summary>Gives the current sequence number of the value that is currently in the interconnection table.</summary>
+            /// <summary>Gives the current sequence number of the value that is currently in the interconnection table.  The value zero is only used when the table entry has never been assigned a value.</summary>
             public UInt32 CurrentSeqNum { get { return ((TableEntry != null) ? TableEntry.SeqNum : 0); } }
             /// <summary>Gives the sequence number of the value that was last Set to, or updated from, the interconnection table.  The accessor may be updated if this value is not equal to CurrentSeqNum.</summary>
             public UInt32 ValueSeqNum { get; set; }
@@ -766,6 +987,8 @@ namespace MosaicLib.Modular.Interconnect.Values
             {
                 if (TableEntry != null)
                     TableEntry.Set(ref valueContainer);
+
+                IsSetPending = false;
 
                 ValueSeqNum = CurrentSeqNum;
             }
@@ -1370,6 +1593,13 @@ namespace MosaicLib.Modular.Interconnect.Values
                 innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<object>(pfGetter(valueSetObj), useStorageType, false); };
                 innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<object>(useStorageType, false, true)); };
             }
+            else if (itemInfo.ItemType == typeof(string[]))
+            {
+                Action<TValueSet, string []> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, string []>(itemInfo);
+                Func<TValueSet, string []> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, string []>(itemInfo);
+                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<IList<String>>(new List<string>(pfGetter(valueSetObj)), useStorageType, false); };
+                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { IList<string> ils = iva.ValueContainer.GetValue<IList<String>>(useStorageType, false, true); pfSetter(valueSetObj, (ils != null ? ils.ToArray() : null)); };
+            }
             else if (itemInfo.ItemType.IsEnum)
             {
                 innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva)
@@ -1411,6 +1641,7 @@ namespace MosaicLib.Modular.Interconnect.Values
             }
             else
             {
+                // when none of the above special cases match itemType then fallback to using ValueAsObject and reflection based property/field getters and setters.
                 innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva)
                 {
                     // this is less efficient but will work

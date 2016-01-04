@@ -31,6 +31,7 @@ using System.Text;
 using System.Collections;
 using Microsoft.Win32;
 using MosaicLib.Modular.Common;
+using MosaicLib.Utils.StringMatching;
 
 namespace MosaicLib.Modular.Config
 {
@@ -45,10 +46,19 @@ namespace MosaicLib.Modular.Config
         /// Constructor.  Requires name.  Other properties shall be initialized using property initializer list.
         /// Provider generated messages will use the string "Config.Provider.{name}" where {name} is the name given here.
         /// </summary>
-        public ConfigKeyProviderBase(string name)
+        public ConfigKeyProviderBase(string name) 
+            : this(name, null)
+        {}
+        /// <summary>
+        /// Constructor.  Requires name.  Other properties shall be initialized using property initializer list.
+        /// Provider generated messages will use the string "Config.Provider.{name}" where {name} is the name given here.
+        /// </summary>
+        public ConfigKeyProviderBase(string name, INamedValueSet metaData) 
         {
             Logger = new Logging.Logger("Config.Provider." + name);
             Name = name;
+
+            ProviderMetaData = new NamedValueSet() { { "Provider", Name } }.MergeWith(metaData).MakeReadOnly();
         }
 
         /// <summary>
@@ -73,11 +83,14 @@ namespace MosaicLib.Modular.Config
         /// <summary>Indicates the Basic Flags values that will be common to all keys that are served by this provider.  Currently used to indicate if all keys are Fixed.</summary>
         public ConfigKeyProviderFlags BaseFlags { get; protected set; }
 
+        /// <summary>Gives the default INamedValueSet that is put into each config key provided by this provider.</summary>
+        public INamedValueSet ProviderMetaData { get; private set; }
+
         /// <summary>
-        /// SearchForKeys allows the caller to "explore" the key space and find sets of known keys based on the given matchType and searchString values.  
-        /// If matchType is given as KeyMatchType.MatchAll then the searchString value is ignored.
+        /// SearchForKeys allows the caller to "explore" the key space and find sets of known keys based on the given MatchRuleSet contents.  
+        /// If matchRuleSet is passed as MatchRuleSet.All then all keys will be returned.
         /// </summary>
-        public abstract string[] SearchForKeys(KeyMatchType matchType, string searchString);
+        public abstract string[] SearchForKeys(MatchRuleSet matchRuleSet);
 
         /// <summary>
         /// Attempts to find information about the specified key and returns an object that implements the IConfigKeyAccess interface for this key.  
@@ -109,7 +122,7 @@ namespace MosaicLib.Modular.Config
         /// </summary>
         public override string ToString()
         {
-            return "'{0}' {1}".CheckedFormat(Name, BaseFlags);
+            return "'{0}' {1} {2}".CheckedFormat(Name, ProviderMetaData.ToString(false, true), BaseFlags);
         }
     }
 
@@ -122,11 +135,14 @@ namespace MosaicLib.Modular.Config
     /// </summary>
     public class DictionaryConfigKeyProvider : ConfigKeyProviderBase
     {
-        /// <summary>
-        /// Constructor
-        /// </summary>
+        /// <summary>Constructor</summary>
         public DictionaryConfigKeyProvider(string name, bool isFixed)
-            : base(name)
+            :this (name, isFixed, null)
+        {}
+
+        /// <summary>Constructor</summary>
+        public DictionaryConfigKeyProvider(string name, bool isFixed, INamedValueSet metaData) 
+            : base(name, metaData)
         {
             BaseFlags = new ConfigKeyProviderFlags() { IsFixed = isFixed };
         }
@@ -140,7 +156,7 @@ namespace MosaicLib.Modular.Config
         {
             ConfigKeyAccessFlags flags = new ConfigKeyAccessFlags();
 
-            AddConfigKeyAccessArray(nameValuePairArray.Select((kvp) => new ConfigKeyAccessImpl(KeyPrefix + kvp.Key, flags, null, this) { ValueContainer = kvp.Value }).ToArray());
+            AddConfigKeyAccessArray(nameValuePairArray.Select((kvp) => new ConfigKeyAccessImpl(KeyPrefix + kvp.Key, flags, null, this) { ValueContainer = kvp.Value, KeyMetaData = ProviderMetaData}).ToArray());
 
             return this;
         }
@@ -185,38 +201,15 @@ namespace MosaicLib.Modular.Config
         private static readonly Item emptyItem = new Item() { key = String.Empty };
 
         /// <summary>
-        /// SearchForKeys allows the caller to "explore" the key space and find sets of known keys based on the given matchType and searchString values.  
-        /// If matchType is given as KeyMatchType.MatchAll then the searchString value is ignored.
+        /// SearchForKeys allows the caller to "explore" the key space and find sets of known keys based on the given MatchRuleSet contents.  
+        /// If matchRuleSet is passed as MatchRuleSet.All then all keys will be returned.
         /// </summary>
-        public override string[] SearchForKeys(KeyMatchType matchType, string searchString)
+        public override string[] SearchForKeys(MatchRuleSet matchRuleSet)
         {
-            searchString = searchString ?? String.Empty;
-
-            switch (matchType)
-            {
-                case KeyMatchType.MatchAll:
-                    return keyItemDictionary.Keys.ToArray();
-                case KeyMatchType.MatchExact:
-                    if (keyItemDictionary.ContainsKey(searchString))
-                        return new string [] { searchString };
-                    else 
-                        return emptyStringArray;
-                case KeyMatchType.MatchPrefix:
-                    {
-                        List<string> matchList = new List<string>();
-
-                        foreach (string key in keyItemDictionary.Keys)
-                        {
-                            if (key.StartsWith(searchString))
-                                matchList.Add(key);
-                        }
-
-                        return matchList.ToArray();
-                    }
-
-                default:
-                    return emptyStringArray;
-            }
+            if (matchRuleSet.IsAny)
+                return keyItemDictionary.Keys.ToArray();
+            else
+                return keyItemDictionary.Keys.Where((key) => matchRuleSet.MatchesAny(key)).ToArray();
         }
 
         /// <summary>
@@ -260,12 +253,12 @@ namespace MosaicLib.Modular.Config
                     firstError = firstError ?? Fcns.CheckedFormat("Internal: key:'{0}' is not valid for use with provider:'{1}', required key prefix:'{2}'", kvpIcka.Key, Name, KeyPrefix);
                 else if (!keyItemDictionary.TryGetValue(key ?? String.Empty, out item) || item == null || item.ckai == null)
                 {
-                    item = new Item() { key = key, ckai = new ConfigKeyAccessImpl(key, kvpIcka.Flags, null, this) { ValueContainer = kvp.Value }, initialContainedValue = kvp.Value, comment = commentStr };
+                    item = new Item() { key = key, ckai = new ConfigKeyAccessImpl(key, kvpIcka.Flags, null, this) { ValueContainer = kvp.Value, KeyMetaData = ProviderMetaData }, initialContainedValue = kvp.Value, comment = commentStr };
                     keyItemDictionary[key] = item;
 
                     numChangedItems++;
 
-                    Logger.Debug.Emit("{0}: added new key:'{1}' value:'{2}'", Name, key, kvp.Value);
+                    Logger.Debug.Emit("added new key:'{0}' value:'{1}'", key, kvp.Value);
                 }
                 else
                 {
@@ -281,9 +274,9 @@ namespace MosaicLib.Modular.Config
                         numChangedItems++;
 
                         if (entryValue.IsEqualTo(item.initialContainedValue))
-                            Logger.Debug.Emit("{0}: key:'{1}' value changed to {2} [from initial value:{3}]", Name, key, kvp.Value, item.initialContainedValue);
+                            Logger.Debug.Emit("key:'{0}' value changed to {1} [from initial value:{2}]", key, kvp.Value, item.initialContainedValue);
                         else
-                            Logger.Debug.Emit("{0}: key:'{1}' value changed to {2} [from:{3}, initial:{4}]", Name, key, kvp.Value, entryValue, item.initialContainedValue);
+                            Logger.Debug.Emit("key:'{0}' value changed to {1} [from:{2}, initial:{3}]", key, kvp.Value, entryValue, item.initialContainedValue);
                     }
                 }
             }
@@ -322,7 +315,16 @@ namespace MosaicLib.Modular.Config
         /// the key/value pairs that were found.  These are added to the dictionary that is supported for this config key provider.
         /// </summary>
         public MainArgsConfigKeyProvider(string name, ref string[] mainArgs, string keyPrefix)
-            : base(name, true)
+            : this(name, ref mainArgs, keyPrefix, null)
+        {}
+
+        /// <summary>
+        /// Constructor.  Harvests the set of given arguments for ones that match the pattern {key}={value},
+        /// removes these from the set (array) and generates a dictionary of IConfigKeyAccess objects to represent
+        /// the key/value pairs that were found.  These are added to the dictionary that is supported for this config key provider.
+        /// </summary>
+        public MainArgsConfigKeyProvider(string name, ref string[] mainArgs, string keyPrefix, INamedValueSet metaData)
+            : base(name, true, metaData)
         {
             KeyPrefix = keyPrefix;
 
@@ -374,7 +376,14 @@ namespace MosaicLib.Modular.Config
         /// Constructor.  enumerates all current environment variables and adds them this provider's dictionary of key/value pairs using given keyPrefix value.
         /// </summary>
         public EnvVarsConfigKeyProvider(string name, string keyPrefix)
-            : base(name, true)
+            : this (name, keyPrefix, null)
+        {}
+
+        /// <summary>
+        /// Constructor.  enumerates all current environment variables and adds them this provider's dictionary of key/value pairs using given keyPrefix value.
+        /// </summary>
+        public EnvVarsConfigKeyProvider(string name, string keyPrefix, INamedValueSet metaData)
+            : base(name, true, metaData)
         {
             KeyPrefix = keyPrefix;
 
@@ -408,7 +417,15 @@ namespace MosaicLib.Modular.Config
         /// <para/>the selection to report the last value for given appSettings key/value pair appears to be a "feature" of the GetValues method.
         /// </summary>
         public AppConfigConfigKeyProvider(string name, string keyPrefix)
-            : base(name, true)
+            : this(name, keyPrefix, null)
+        {}
+
+        /// <summary>
+        /// Constructor:  iterates through all of the app config AppSettings and adds the last value given to each app setting key to the dictionary of known config key value pairs.
+        /// <para/>the selection to report the last value for given appSettings key/value pair appears to be a "feature" of the GetValues method.
+        /// </summary>
+        public AppConfigConfigKeyProvider(string name, string keyPrefix, INamedValueSet metaData)
+            : base(name, true, metaData)
         {
             KeyPrefix = keyPrefix;
 
@@ -463,11 +480,20 @@ namespace MosaicLib.Modular.Config
         /// then adds each of them to the dictionary of key/value pairs provided by this provider using the given keyPrefix combined with the IncludeKeyPrefix (as appropriate).
         /// </summary>
         public IncludeFilesConfigKeyProvider(string name, string searchPrefix, IConfig config, string keyPrefix)
-            : base(name, true)
+            : this(name, searchPrefix, config, keyPrefix, null)
+        {}
+
+        /// <summary>
+        /// Constructor: searches the existing config key space for keys that start with the search prefix, processes these keys as include file specifiers:
+        /// either path names or |includeKeyPrefix|includeFilePath| type items.  Then loads each of the resulting files, validates the KeyItem entires contained there and
+        /// then adds each of them to the dictionary of key/value pairs provided by this provider using the given keyPrefix combined with the IncludeKeyPrefix (as appropriate).
+        /// </summary>
+        public IncludeFilesConfigKeyProvider(string name, string searchPrefix, IConfig config, string keyPrefix, INamedValueSet metaData)
+            : base(name, true, metaData)
         {
             KeyPrefix = keyPrefix;
 
-            string[] includeKeysArray = config.SearchForKeys(KeyMatchType.MatchPrefix, searchPrefix);
+            string[] includeKeysArray = config.SearchForKeys(new MatchRuleSet() { { MatchType.Prefix, searchPrefix } });
 
             List<string> includeKeyValuesList = new List<string>(includeKeysArray.Select((key) => config.GetConfigKeyAccess(key).ValueAsString));
 
@@ -509,7 +535,7 @@ namespace MosaicLib.Modular.Config
                         }
                         if (!includeFilesKeysDictionary.ContainsKey(fullKey))
                         {
-                            includeFilesKeysDictionary[fullKey] = new ConfigKeyAccessImpl(fullKey, flags, null, this) { ValueContainer = new ValueContainer(keyItem.Value) };
+                            includeFilesKeysDictionary[fullKey] = new ConfigKeyAccessImpl(fullKey, flags, null, this) { ValueContainer = new ValueContainer(keyItem.Value), KeyMetaData = ProviderMetaData };
                         }
                         else
                         {
@@ -544,7 +570,15 @@ namespace MosaicLib.Modular.Config
         /// and isReadWrite to indicate if the INI file is writable or not (ie if all of the keys should be IsFixed).
         /// </summary>
         public IniFileConfigKeyProvider(string name, string filePath, string keyPrefix, bool isReadWrite)
-            : base(name, !isReadWrite)
+            : this(name, filePath, keyPrefix, isReadWrite, null)
+        {}
+
+        /// <summary>
+        /// Constructor: Accepts provider name, filePath to ini file to read/write, keyPrefix to prefix on all contained keys, 
+        /// and isReadWrite to indicate if the INI file is writable or not (ie if all of the keys should be IsFixed).
+        /// </summary>
+        public IniFileConfigKeyProvider(string name, string filePath, string keyPrefix, bool isReadWrite, INamedValueSet metaData)
+            : base(name, !isReadWrite, metaData)
         {
             if (isReadWrite)
                 BaseFlags = new ConfigKeyProviderFlags(BaseFlags) { MayBeChanged = true, IsPersisted = true };
@@ -562,7 +596,7 @@ namespace MosaicLib.Modular.Config
             }
             catch (System.Exception ex)
             {
-                Logger.Error.Emit("Unable to read INI file contents from File '{0}': {1}", fullFilePath, ex.ToString());
+                Logger.Error.Emit("Unable to read INI file contents from File '{0}': {1}", fullFilePath, ex);
             }
 
             trimmedFileLines = rawFileLines.Select((line) => line.Trim()).ToArray();
@@ -612,6 +646,8 @@ namespace MosaicLib.Modular.Config
                         valueItem.ckai.ValueContainer = new ValueContainer(linePartsArray.SafeAccess(1, String.Empty));
                     else
                         valueItem.ckai.ValueContainer = new ValueContainer();
+
+                    valueItem.ckai.KeyMetaData = ProviderMetaData;
 
                     valueItemList.Add(valueItem);
                 }
@@ -702,7 +738,15 @@ namespace MosaicLib.Modular.Config
         /// and isReadWrite to indicate if the INI file is writable or not (ie if all of the keys should be IsFixed).
         /// </summary>
         public RegistryKeyTreeProvider(string name, string registryRootPath, string keyPrefix, bool isReadWrite)
-            : base(name, !isReadWrite)
+            : this(name, registryRootPath, keyPrefix, isReadWrite, null)
+        {}
+
+        /// <summary>
+        /// Constructor: Accepts provider name, rootKeyPath to enumerate through, keyPrefix to prefix on all contained keys, 
+        /// and isReadWrite to indicate if the INI file is writable or not (ie if all of the keys should be IsFixed).
+        /// </summary>
+        public RegistryKeyTreeProvider(string name, string registryRootPath, string keyPrefix, bool isReadWrite, INamedValueSet metaData)
+            : base(name, !isReadWrite, metaData)
         {
             if (isReadWrite)
             {
@@ -744,7 +788,7 @@ namespace MosaicLib.Modular.Config
             }
             catch (System.Exception ex)
             {
-                Logger.Error.Emit("Unable to successfully enumerate Registry keys and values under '{0}': {1}", RegistryRootPath, ex.ToString());
+                Logger.Error.Emit("Unable to successfully enumerate Registry keys and values under '{0}': {1}", RegistryRootPath, ex);
             }
 
             AddConfigKeyAccessArray(valueItemList.Select((vItem) => vItem.ckai).ToArray());
@@ -775,7 +819,7 @@ namespace MosaicLib.Modular.Config
 
                     item = new ValueItem() { parentRegKey = regKey, valueName = valueName, initialValueKind = valueKind, lastContainedValue = valueContainer, isFixed = isFixed };
 
-                    item.ckai = new ConfigKeyAccessImpl(keyName, defaultAccessFlags, null, this) { ValueContainer = item.lastContainedValue };
+                    item.ckai = new ConfigKeyAccessImpl(keyName, defaultAccessFlags, null, this) { ValueContainer = item.lastContainedValue, KeyMetaData = ProviderMetaData};
                     if (item.isFixed)
                         item.ckai.ProviderFlags = item.ckai.ProviderFlags.MergeWith(new ConfigKeyProviderFlags() { IsFixed = true });
 
@@ -849,7 +893,14 @@ namespace MosaicLib.Modular.Config
 
                             if (doSet)
                             {
-                                item.parentRegKey.SetValue(item.valueName, item.ckai.ValueContainer.ValueAsObject);
+                                object valueAsObject = item.ckai.ValueContainer.ValueAsObject;
+
+                                // convert IList<String> values into string array values.
+                                IList<String> vaoailos = valueAsObject as IList<String>;
+                                if (vaoailos != null)
+                                    valueAsObject = vaoailos.ToArray();
+
+                                item.parentRegKey.SetValue(item.valueName, valueAsObject);
                                 item.lastContainedValue = item.ckai.ValueContainer;
                                 updateCount++;
                             }
@@ -964,12 +1015,6 @@ namespace MosaicLib.Modular.Config
         /// <summary>Value property give the key's value (default, current, or fixed) formatted as a string.</summary>
         [DataMember(Order = 100, IsRequired=false, EmitDefaultValue=false)]
         public string Value { get; set; }
-
-#if (false) 
-        // older Flags are on hold for now
-        /// <summary>Optional property allows the KeyItem to define usage specific flags.  When not defined, the value Fixed is used.  Explicitly setting the key Flags to Normal, or Default, indicates that the key is settable.</summary>
-        [DataMember(Order = 200, IsRequired = false, EmitDefaultValue = false)]
-#endif
 
         /// <summary>Optional meta-data property allows an include file to define the string name of the object type that is contained in the Value property.  Not currently used</summary>
         [DataMember(Order = 210, IsRequired = false, EmitDefaultValue = false)]
@@ -1158,7 +1203,6 @@ namespace MosaicLib.Modular.Config
 
                 if (!isValidEnumType)
                     return Fcns.CheckedFormat("Could not validate '{0}': TypeName:'{1}' is not a valid System.Enum Type", valueStr, TypeName);
-
 
                 try
                 {

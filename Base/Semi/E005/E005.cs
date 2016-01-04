@@ -20,33 +20,120 @@
  */
 //-------------------------------------------------------------------
 
+using System.Runtime.Serialization;
+
 namespace MosaicLib.Semi.E005
 {
 	//-------------------------------------------------------------------
 	// Section 9.6, Table 3: Data Item Dictionary
 
     /// <summary>
+    /// Alarm Category Code Byte (the Alarm severity portion of it)
+    /// </summary>
+    [DataContract(Namespace = Constants.SemiNameSpace)]
+    public enum ALCD : byte
+    {
+        /// <summary></summary>
+        [EnumMember]
+        PersonalSafety = 1,
+
+        /// <summary></summary>
+        [EnumMember]
+        EquipmentSafety = 2,
+
+        /// <summary></summary>
+        [EnumMember]
+        ParameterControlWarning = 3,
+
+        /// <summary></summary>
+        [EnumMember]
+        ParameterControlError = 4,
+
+        /// <summary></summary>
+        [EnumMember]
+        IrrecoverableError = 5,
+
+        /// <summary></summary>
+        [EnumMember]
+        EquipmentStatusWarning = 6,
+
+        /// <summary></summary>
+        [EnumMember]
+        AttentionFlags = 7,
+
+        /// <summary></summary>
+        [EnumMember]
+        DataIntegrity = 8,
+
+        // values 9-63 are reserved
+
+        // values 64..127 are available for custom meanings
+
+        /// <summary>First value in the custom region = 64</summary>
+        [EnumMember]
+        BeginCustomRegion = 64,
+
+        /// <summary>This is not an indication of any form of failure.  It is simply used to inform the user/decision authority of some occurrence and optionally request/prompt the user/decision authority to provide some input.  These generally do not have an associated ALID. (100)</summary>
+        [EnumMember]
+        E041_Attention = 100,
+
+        /// <summary>Similar to an alarm but not generally passed to the host, may not have a known ALID (101)</summary>
+        [EnumMember]
+        E041_Warning = 101,
+
+        /// <summary>Error annuciators are similar to Alarm annunciators except that they support (recovery) action invocation by the currently active decision authority. (102)</summary>
+        [EnumMember]
+        E041_Error = 102,
+
+        /// <summary>Under E041 Alarm annunciators are used simply to report exception conditions but they do not offer or support (recovery) action invocation by the decision authority. (103)</summary>
+        [EnumMember]
+        E041_Alarm = 103,
+    }
+
+    /// <summary>
     /// Carrier Action Acknowledge code (CAACK).
     /// </summary>
+    [DataContract(Namespace=Constants.SemiNameSpace)]
 	public enum CAACK : byte
 	{
         /// <summary>255: Local default value to use when there is no valid value.</summary>
+        [EnumMember]
 		Undefinded = 255,
         /// <summary>0: Acknowledged: the command/operation has been performed</summary>
-		AcknowledgedCommandHasBeenPerformed = 0,
-        /// <summary>1: </summary>
-		InvalidCommand = 1,
-        /// <summary>2: </summary>
+        [EnumMember]
+        AcknowledgedCommandHasBeenPerformed = 0,
+        /// <summary>1: The command was not valid</summary>
+        [EnumMember]
+        InvalidCommand = 1,
+        /// <summary>2: The command can not be performed successfully at this time.</summary>
+        [EnumMember]
         CannotPerformNow = 2,
         /// <summary>3: Invalid data or parameters were provided to this operation</summary>
+        [EnumMember]
         InvalidDataOrArgument = 3,
         /// <summary>4: Acknowledged: the command/operation has been accepted.  Its completion will be signaled by a collection event.</summary>
+        [EnumMember]
         AcknowledgedCompletionWillBeSignaledByLaterEvent = 4,
         /// <summary>5: Rejected: The target object's state does not permit this operation to be perfomed now.</summary>
+        [EnumMember]
         RejectedInvalidState = 5,
-        /// <summary>6: </summary>
+        /// <summary>6: Command performed but did not succeed.</summary>
+        [EnumMember]
         CommandPerformedWithErrors = 6,
 	}
+
+    [DataContract(Namespace = Constants.SemiNameSpace)]
+    public enum CPACK : byte
+    {
+        [EnumMember]
+        Accepted = 0,
+        [EnumMember]
+        CPNAME_ParameterNameDoesNotExist = 1,
+        [EnumMember]
+        CPVALUE_IllegalValueSpecified = 2,
+        [EnumMember]
+        CPVALUE_IllegalFormatSpecified = 3,
+    }
 
     /// <summary>ExtensionMethod wrapper class</summary>
     public static partial class ExtensionMethods
@@ -63,113 +150,215 @@ namespace MosaicLib.Semi.E005
     /// <summary>
     /// A code that is used to identify specifc error conditions.  Used in a wide variety of stream/functions
     /// </summary>
-	public enum ERRCODE : int
+    [DataContract(Namespace = Constants.SemiNameSpace)]
+    public enum ERRCODE : int
 	{
         /// <summary>-1: Local default value to use when there is no valid value.</summary>
+        [EnumMember]
         Undefined = -1,
+
         /// <summary>0: ERRCODE value to use for success</summary>
-		NoError = 0,
+        [EnumMember]
+        NoError = 0,
+
         /// <summary></summary>
-		UnknownObjectInObjectSpecifier = 1,
+        [EnumMember]
+        UnknownObjectInObjectSpecifier = 1,
+
         /// <summary></summary>
+        [EnumMember]
         UnknownTargetObjectType = 2,
+        
         /// <summary></summary>
+        [EnumMember]
         UnknownObjectInstance = 3,
+        
         /// <summary></summary>
+        [EnumMember]
         UnknownAttributeName = 4,
+        
         /// <summary></summary>
+        [EnumMember]
         ReadonlyAttributeAccessDenied = 5,
+        
         /// <summary></summary>
+        [EnumMember]
         UnknownObjectType = 6,
+        
         /// <summary></summary>
+        [EnumMember]
         InvalidAttributeValue = 7,
+        
         /// <summary></summary>
+        [EnumMember]
         SyntaxError = 8,
+        
         /// <summary></summary>
+        [EnumMember]
         VerificationError = 9,
+        
         /// <summary></summary>
+        [EnumMember]
         ValidationError = 10,
+        
         /// <summary></summary>
+        [EnumMember]
         ObjectIdentifierInUse = 11,
+        
         /// <summary></summary>
+        [EnumMember]
         ParametersImproperlySpecified = 12,
+        
         /// <summary></summary>
+        [EnumMember]
         InsufficientParametersSpecified = 13,
+        
         /// <summary></summary>
+        [EnumMember]
         UnsupportedOptionRequested = 14,
+        
         /// <summary></summary>
+        [EnumMember]
         Busy = 15,
+        
         /// <summary></summary>
+        [EnumMember]
         NotAvailableForProcessing = 16,
+        
         /// <summary></summary>
-        /// <summary></summary>
+        [EnumMember]
         CommandNotValidForCurrentState = 17,
+        
         /// <summary></summary>
+        [EnumMember]
         NoMaterialAltered = 18,
+        
         /// <summary></summary>
+        [EnumMember]
         MaterialPartiallyProcessed = 19,
+        
         /// <summary></summary>
+        [EnumMember]
         AllMaterialProcessed = 20,
+        
         /// <summary></summary>
+        [EnumMember]
         RecipeSpecificationRelatedError = 21,
+        
         /// <summary></summary>
+        [EnumMember]
         FailedDuringProcessing = 22,
+        
         /// <summary></summary>
+        [EnumMember]
         FailedWhileNotProcessing = 23,
+        
         /// <summary></summary>
+        [EnumMember]
         FailedDueToLackOfMaterial = 24,
+        
         /// <summary></summary>
+        [EnumMember]
         JobAborted = 25,
+        
         /// <summary></summary>
+        [EnumMember]
         JobStopped = 26,
+        
         /// <summary></summary>
+        [EnumMember]
         JobCancelled = 27,
+        
         /// <summary></summary>
+        [EnumMember]
         CannotChangeSelectedRecipe = 28,
+        
         /// <summary></summary>
+        [EnumMember]
         UnknownEvent = 29,
+        
         /// <summary></summary>
+        [EnumMember]
         DuplicateReportID = 30,
+        
         /// <summary></summary>
+        [EnumMember]
         UnknownDataReport = 31,
+        
         /// <summary></summary>
+        [EnumMember]
         DataReportNotLinked = 32,
+        
         /// <summary></summary>
+        [EnumMember]
         UnknownTraceReport = 33,
+        
         /// <summary></summary>
+        [EnumMember]
         DuplicateTraceID = 34,
+        
         /// <summary></summary>
+        [EnumMember]
         TooManyDataReports = 35,
+        
         /// <summary></summary>
+        [EnumMember]
         SamplePeriodOutOfRange = 36,
+        
         /// <summary></summary>
+        [EnumMember]
         GroupSizeToLarge = 37,
+        
         /// <summary></summary>
+        [EnumMember]
         RecoveryActionCurrentlyInvalid = 38,
+        
         /// <summary></summary>
+        [EnumMember]
         BusyWithAnotherRecoveryCurrentlyUnableToPerformTheRecovery = 39,
+        
         /// <summary></summary>
+        [EnumMember]
         NoActiveRecoveryAction = 40,
+        
         /// <summary></summary>
+        [EnumMember]
         ExceptionRecoveryFailed = 41,
+        
         /// <summary></summary>
+        [EnumMember]
         ExceptionRecoveryAborted = 42,
+        
         /// <summary></summary>
+        [EnumMember]
         InvalidTableElement = 43,
+        
         /// <summary></summary>
+        [EnumMember]
         UnknownTableElement = 44,
+        
         /// <summary></summary>
+        [EnumMember]
         CannotDeletePredefined = 45,
+        
         /// <summary></summary>
+        [EnumMember]
         InvalidToken = 46,
+        
         /// <summary></summary>
-        /// <summary></summary>
+        [EnumMember]
         InvalidParameter = 47,
+        
         /// <summary></summary>
+        [EnumMember]
         LoadPortDoesNotExist = 48,
+        
         /// <summary></summary>
+        [EnumMember]
         LoadPortAlreadyInUse = 49,
+
         /// <summary></summary>
+        [EnumMember]
         MissingCarrier = 50,
 
 		// 51..63 - reserved
@@ -178,12 +367,19 @@ namespace MosaicLib.Semi.E005
 		// >= 65536 - user defined
 
         /// <summary>Internal error: out of memory</summary>
+        [EnumMember]
         MemoryAllocationFailed = 100001,
+
         /// <summary>Internal error: The operation has not been implemented</summary>
+        [EnumMember]
         OperationIsNotImplemented = 100002,
+
         /// <summary>Internal error: The operation caused an unexpected exception to be thrown</summary>
+        [EnumMember]
         OperationThrewException = 100003,
+
         /// <summary>Internal error: The operation detected an internal error</summary>
+        [EnumMember]
         OperationDetectedInternalError = 100004,
 	}
 
@@ -199,4 +395,143 @@ namespace MosaicLib.Semi.E005
         }
     }
 
+    [DataContract(Namespace = Constants.SemiNameSpace)]
+    public enum ACKA : byte
+    {
+        [EnumMember]
+        False = 0,
+        [EnumMember]
+        True = 1,
+    }
+
+    [DataContract(Namespace = Constants.SemiNameSpace)]
+    public enum ACKC7 : byte
+    {
+        [EnumMember]
+        Accepted = 0,
+        [EnumMember]
+        PermissionNotGranted = 1,
+        [EnumMember]
+        LengthError = 2,
+        [EnumMember]
+        MatrixOverflow = 3,
+        [EnumMember]
+        PPIDNotFound = 4,
+        [EnumMember]
+        ModeNotSuppoted = 5,
+    }
+
+    [DataContract(Namespace = Constants.SemiNameSpace)]
+    public enum ACKC7A : byte
+    {
+        [EnumMember]
+        Accepted = 0,
+        [EnumMember]
+        MDLNIsNotConsistent = 1,
+        [EnumMember]
+        SOFTREVIsNotConsistent = 2,
+        [EnumMember]
+        InvalidCCODE = 3,
+        [EnumMember]
+        InvalidPPARMValue = 4,
+        /// <summary>See ERRW7</summary>
+        [EnumMember]
+        OtherError = 5,
+    }
+
+    [DataContract(Namespace = Constants.SemiNameSpace)]
+    public enum ACKC10
+    {
+        [EnumMember]
+        AcceptedForDisplay = 0,
+        [EnumMember]
+        MessageWillNotBeDisplayed = 1,
+        [EnumMember]
+        TerminalNotAvailable = 2,
+    }
+
+    [DataContract(Namespace = Constants.SemiNameSpace)]
+    public enum HCACK : byte
+    {
+        [EnumMember]
+        Acknowledge_CommandHasBeenPerformed = 0,
+        [EnumMember]
+        CommandDoesNotExist = 1,
+        [EnumMember]
+        CannotPerformNow = 2,
+        [EnumMember]
+        AtLeastOneParmeterIsInvalid = 3,
+        [EnumMember]
+        Acknowledge_CompletionWillBeSignaledLaterByEvent = 4,
+        [EnumMember]
+        Rejected_AlreadyInDesiredCondition = 5,
+        [EnumMember]
+        NoSuchObjectExists = 6,
+        [EnumMember]
+        OperationFailed = 64,
+        [EnumMember]
+        OtherError = 65,
+    }
+
+    [DataContract(Namespace = Constants.SemiNameSpace)]
+    public enum MF : byte
+    {
+        Wafer = 1,
+        [EnumMember]
+        Cassette = 2,
+        [EnumMember]
+        DieOrChip = 3,
+        [EnumMember]
+        Boat = 4,
+        [EnumMember]
+        Ingot = 5,
+        [EnumMember]
+        Leadframe = 6,
+        [EnumMember]
+        Lot = 7,
+        [EnumMember]
+        Magazine = 8,
+        [EnumMember]
+        Package = 9,
+        [EnumMember]
+        Plate = 10,
+        [EnumMember]
+        Tube = 11,
+        [EnumMember]
+        Waferframe = 12,
+        [EnumMember]
+        Carrier = 13,
+        [EnumMember]
+        Substrate = 14,
+    }
+
+    [DataContract(Namespace = Constants.SemiNameSpace)]
+    public enum PPChangeStatus : byte
+    {
+        [EnumMember]
+        None = 0,
+        [EnumMember]
+        Created = 1,
+        [EnumMember]
+        Edited = 2,
+        [EnumMember]
+        Deleted = 3,
+    }
+
+    [DataContract(Namespace = Constants.SemiNameSpace)]
+    public enum PPGNT : byte
+    {
+        [EnumMember]
+        Ok = 0,
+        [EnumMember]
+        AlreadyHave = 1,
+        [EnumMember]
+        NoSpace = 2,
+        [EnumMember]
+        InvalidPPID = 3,
+        [EnumMember]
+        BusyTryLater = 4,
+        [EnumMember]
+        WillNotAccept = 5,
+    }
 }

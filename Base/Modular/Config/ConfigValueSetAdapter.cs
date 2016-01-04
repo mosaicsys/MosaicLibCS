@@ -76,6 +76,11 @@ namespace MosaicLib.Modular.Config
             /// When an item is marked to SilenceIssues, no issue messages will be emitted if the config key cannot be accessed.  Value messages will still be emitted.
             /// </summary>
             public bool SilenceIssues { get { return accessFlags.SilenceIssues; } set { accessFlags.SilenceIssues = value; } }
+
+            /// <summary>
+            /// When an item is marked to SilenceLogging, neither Issue nor Value messages will be emitted in relation to attempts to access this key.
+            /// </summary>
+            public bool SilenceLogging { get { return accessFlags.SilenceLogging; } set { accessFlags.SilenceLogging = value; } }
         }
     }
 
@@ -309,13 +314,11 @@ namespace MosaicLib.Modular.Config
 
                     if (keySetupInfo.UpdateMemberFromKeyAccessAction != null)
                         keySetupInfo.UpdateMemberFromKeyAccessAction(ValueSet, (!keySetupInfo.ItemAttribute.SilenceIssues ? updateIssueEmitter : Logging.NullEmitter), valueNoteEmitter);
-                    else
+                    else if (!keyAccess.Flags.SilenceLogging)
                         ValueNoteEmitter.Emit("Member/Key '{0}'/'{1}' in type '{2}' was not changed: there is no member update delegate", keySetupInfo.FullItemName, keyAccess.Key, tConfigValueSetTypeStr);
                 }
             }
         }
-
-        /// Todo: Add Save(forceFullSave) which either saves changed key values or saves all key values.
 
         #endregion
 
@@ -491,18 +494,22 @@ namespace MosaicLib.Modular.Config
                         string valueAsString = keyAccess.ValueAsString;
                         innerBoundSetter(valueSetObj, keyAccess);
 
-                        if (String.IsNullOrEmpty(keyAccess.ResultCode))
+
+                        if (keyAccess.Flags.SilenceLogging)
+                        { }
+                        else if (String.IsNullOrEmpty(keyAccess.ResultCode))
                         {
                             valueUpdateEmitter.Emit("Updated Member/Key '{0}'/'{1}' with new value '{2}' [type:'{3}']", keySetupInfo.MemberName, keyAccess.Key, valueAsString, tConfigValueSetTypeStr);
                         }
-                        else
+                        else if (!keyAccess.Flags.SilenceIssues)
                         {
                             updateIssueEmitter.Emit("Updated failed on Member/Key '{0}'/'{1}', value '{2}', type '{3}', error:'{4}'", keySetupInfo.MemberName, keyAccess.Key, valueAsString, tConfigValueSetTypeStr, keyAccess.ResultCode);
                         }
                     }
                     catch (System.Exception ex)
                     {
-                        updateIssueEmitter.Emit("Member/Key '{0}'/'{1}' in type '{2}' could not be set: {3}", keySetupInfo.MemberName, keyAccess.Key, tConfigValueSetTypeStr, ex);
+                        if (!keyAccess.Flags.SilenceIssues)
+                            updateIssueEmitter.Emit("Member/Key '{0}'/'{1}' in type '{2}' could not be set: {3}", keySetupInfo.MemberName, keyAccess.Key, tConfigValueSetTypeStr, ex);
                     }
                 };
             }

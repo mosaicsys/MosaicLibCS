@@ -41,8 +41,17 @@ namespace MosaicLib
         /// <summary>urn://mosaicsys.com/NS/MLib.Logging</summary>
         public const string LoggingNameSpace = MosaicLibNameSpaceRoot + ".Logging";
 
+        /// <summary>urn://mosaicsys.com/NS/MLib.Utils</summary>
+        public const string UtilsNameSpace = MosaicLibNameSpaceRoot + ".Utils";
+
         /// <summary>urn://mosaicsys.com/NS/MLib.Modular</summary>
         public const string ModularNameSpace = MosaicLibNameSpaceRoot + ".Modular";
+
+        /// <summary>urn://mosaicsys.com/NS/MLib.Modular</summary>
+        public const string ModularActionNameSpace = ModularNameSpace + ".Action";
+
+        /// <summary>urn://mosaicsys.com/NS/MLib.Modular.InterConn</summary>
+        public const string ModularInterconnectNameSpace = ModularNameSpace + ".InterConn";
 
         /// <summary>urn://mosaicsys.com/NS/MLib.Modular.Config</summary>
         public const string ConfigNameSpace = ModularNameSpace + ".Config";

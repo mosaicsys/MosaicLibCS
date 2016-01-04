@@ -35,7 +35,7 @@ using System.Windows;
 
 namespace MosaicLib.WPF.Interconnect
 {
-    #region WPFValueAccessor and WPFValueInterconnectAdapter
+    #region WPFValueAccessor
 
     /// <summary>
     /// This class is used by with the WPFValueInterconnectAdapter to provide a simple connection between an IValueInterconnect and WPF using Bindable objects.
@@ -54,39 +54,48 @@ namespace MosaicLib.WPF.Interconnect
             ValueAccessor = iva;
         }
 
-        /// <summary>True if the WVA is active, i.e. client code has asked for this WPFValueAccessor instance by name.</summary>
-        internal bool IsActive { get; set; }
-
         /// <summary>Retains the IValueAccessor instance to which this object is connected.</summary>
         internal IValueAccessor ValueAccessor { get; private set; }
 
-        /// <summary>Callback from WPFValueInteronnectAdapater after the connected IValueAccessor has been updated to trigger the WVA to distribute the value to the corresponding dependency properties.</summary>
+        internal UInt32 LastServicedValueSeqNum { get; set; }
+
+        /// <summary>This property returns true if the ValueAccessor.IsUpdatedNeeded or (LastServicedValueSeqNum != ValueAccessor.ValueSeqNum).</summary>
+        /// <remarks>This property convers the case where a WVA is added after the matching IVA has been given its initial value (ie LastServicedValueSeqNum is zero and ValueAccessor.ValueSeqNum is not).</remarks>
+        internal bool IsUpdateNeeded { get { return (ValueAccessor.IsUpdateNeeded || (LastServicedValueSeqNum != ValueAccessor.ValueSeqNum)); } }
+
+        /// <summary>
+        /// Callback from WPFValueInteronnectAdapater after the connected IValueAccessor has been updated to trigger the WVA to distribute the value to the corresponding dependency properties.
+        /// </summary>
+        /// <remarks>
+        /// The DependencyObject.GetValue method is viewed as being relatively expensive.
+        /// </remarks>
         internal void NotifyValueHasBeenUpdated()
         {
-            // get current DP values.
-            object currentValueAsObject = GetValue(valueAsObjectDP);
-            double? currentValueAsDouble = (double?)GetValue(valueAsDoubleDP);
-            bool? currentValueAsBoolean = (bool?)GetValue(valueAsBooleanDP);
-            Int32? currentValueAsInt32 = (Int32?)GetValue(valueAsInt32DP);
-            string currentValueAsString = (string)GetValue(valueAsStringDP);
+            // update local copy of the ValueAccessor's ValueSeqNum
+            LastServicedValueSeqNum = ValueAccessor.ValueSeqNum;
 
             // extract new values from the IVA's ValueContainer
-            ValueContainer valueContainer = ValueAccessor.ValueContainer;
-            object valueAsObject = valueContainer.ValueAsObject;
-            double? valueAsDouble = valueContainer.GetValue<double?>(ContainerStorageType.Double, true, false);
-            bool? valueAsBoolean = valueContainer.GetValue<bool?>(ContainerStorageType.Boolean, true, false);
-            Int32? valueAsInt32 = valueContainer.GetValue<Int32?>(ContainerStorageType.Int32, true, false);
+            ValueContainer ivaVC = ValueAccessor.ValueContainer;
+            object valueAsObject = ivaVC.ValueAsObject;
+            double? valueAsDouble = ivaVC.GetValue<double?>(ContainerStorageType.Double, true, false);
+            bool? valueAsBoolean = ivaVC.GetValue<bool?>(ContainerStorageType.Boolean, true, false);
+            Int32? valueAsInt32 = ivaVC.GetValue<Int32?>(ContainerStorageType.Int32, true, false);
             string valueAsString = valueAsObject as string;
 
             // determin which versions of the ValueContainer's contents are different.
-            bool setObjectDP = !Object.ReferenceEquals(currentValueAsObject, valueAsObject);
-            bool setDoubleDP = (currentValueAsDouble != valueAsDouble);
-            bool setBooleanDP = (currentValueAsBoolean != valueAsBoolean);
-            bool setInt32DP = (currentValueAsInt32 != valueAsInt32);
-            bool setStringDP = (currentValueAsString != valueAsString);
+            bool setContainerDP = !lastVC.IsEqualTo(ivaVC);
+            bool setObjectDP = !Object.ReferenceEquals(lastValueAsObject, valueAsObject);
+            bool setDoubleDP = (lastValueAsDouble != valueAsDouble);
+            bool setBooleanDP = (lastValueAsBoolean != valueAsBoolean);
+            bool setInt32DP = (lastValueAsInt32 != valueAsInt32);
+            bool setStringDP = (lastValueAsString != valueAsString);
 
             // set the changed dependency properties inline.  This does not create a risk of recursion because this callstack allways originates with the WVIA's Service method.
             // Any WVA DP update loop will terminate in the OnPropertyChanged method below which just sets the corresonding IVA to the final value.
+
+            if (setContainerDP)
+                SetValue(vcDP, ivaVC);
+
             if (setObjectDP)
                 SetValue(valueAsObjectDP, valueAsObject);
 
@@ -103,6 +112,13 @@ namespace MosaicLib.WPF.Interconnect
                 SetValue(valueAsStringDP, valueAsString);
         }
 
+        private ValueContainer lastVC = ValueContainer.Empty;
+        private object lastValueAsObject = null;
+        private double? lastValueAsDouble = null;
+        private bool? lastValueAsBoolean = null;
+        private Int32? lastValueAsInt32 = null;
+        private string lastValueAsString = null;
+
         /// <summary>
         /// Callback from WPF to tell us that one of the dependency properties has been changed.
         /// For the dependency properties that are registered here, this method generates a ValueContainer from the property value 
@@ -110,14 +126,26 @@ namespace MosaicLib.WPF.Interconnect
         /// </summary>
         protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)
         {
-            if (e.Property == valueAsObjectDP || e.Property == valueAsDoubleDP || e.Property == valueAsBooleanDP || e.Property == valueAsInt32DP || e.Property == valueAsStringDP)
+            if (e.Property == vcDP || e.Property == valueAsObjectDP || e.Property == valueAsDoubleDP || e.Property == valueAsBooleanDP || e.Property == valueAsInt32DP || e.Property == valueAsStringDP)
             {
                 ValueContainer newValueVC = new ValueContainer().SetFromObject(e.NewValue);
 
                 if (!ValueAccessor.ValueContainer.IsEqualTo(newValueVC))
                 {
                     ValueAccessor.Set(newValueVC);
+                    lastVC = newValueVC;
                 }
+
+                if (e.Property == valueAsObjectDP)
+                    lastValueAsObject = e.NewValue;
+                else if (e.Property == valueAsDoubleDP)
+                    lastValueAsDouble = e.NewValue as double?;
+                else if (e.Property == valueAsBooleanDP)
+                    lastValueAsBoolean = e.NewValue as bool?;
+                else if (e.Property == valueAsInt32DP)
+                    lastValueAsInt32 = e.NewValue as Int32?;
+                else if (e.Property == valueAsStringDP)
+                    lastValueAsString = e.NewValue as String;
             }
             else
             {
@@ -125,6 +153,7 @@ namespace MosaicLib.WPF.Interconnect
             }
         }
 
+        private static System.Windows.DependencyProperty vcDP = System.Windows.DependencyProperty.Register("VC", typeof(ValueContainer), typeof(WPFValueAccessor));
         private static System.Windows.DependencyProperty valueAsObjectDP = System.Windows.DependencyProperty.Register("ValueAsObject", typeof(System.Object), typeof(WPFValueAccessor));
         private static System.Windows.DependencyProperty valueAsDoubleDP = System.Windows.DependencyProperty.Register("ValueAsDouble", typeof(System.Double?), typeof(WPFValueAccessor));
         private static System.Windows.DependencyProperty valueAsBooleanDP = System.Windows.DependencyProperty.Register("ValueAsBoolean", typeof(System.Boolean?), typeof(WPFValueAccessor));
@@ -132,11 +161,165 @@ namespace MosaicLib.WPF.Interconnect
         private static System.Windows.DependencyProperty valueAsStringDP = System.Windows.DependencyProperty.Register("ValueAsString", typeof(System.String), typeof(WPFValueAccessor));
     }
 
+    #endregion
+
+    #region WPFValueAccessorSubTreeFactoryFactory, WPFValueAccessorSubTreeFactory
+
+    /// <summary>
+    /// This class is used to support SubTreeFactory properties on other classes that can be used with WPF Binding Path statements
+    /// such as {Binding Path=SubTreeFactory[prefixStringHere]} to create (or re-obtain) a WPFValueAccessorSubTreeFactory for the given "prefixStringHere" sub-tree.
+    /// </summary>
+    public class WPFValueAccessorSubTreeFactoryFactory : Dictionary<string, WPFValueAccessorSubTreeFactory>
+    {
+        /// <summary>
+        /// Constructor is given the baseSubTreePrefix from the object that created this factory object and the baseWVIA that is the actual factory for all of the created
+        /// WPFValueAccessor objects that get created here.
+        /// </summary>
+        internal WPFValueAccessorSubTreeFactoryFactory(string baseSubTreePrefix, WPFValueInterconnectAdapter baseWVIA)
+        {
+            BaseSubTreePrefix = baseSubTreePrefix;
+            BaseWVIA = baseWVIA;
+        }
+
+        /// <summary>
+        /// Thie gives the accumulated base SubTreePrefix from the parent object that created this factory object.  
+        /// It will be prefixed onto each of the names given to this object when constructing WPFValueAccessorSubTreeFactory objects so that they will be created with a full prefix
+        /// even when this pattern is repeated for multiple layers.
+        /// </summary>
+        protected string BaseSubTreePrefix { get; set; }
+
+        /// <summary>Gives the base WPFValueInterconnectAdapter that will be used by all of the WPFValueAccessorSubTreeFactory objects that are created by this factory object.</summary>
+        protected WPFValueInterconnectAdapter BaseWVIA { get; set; }
+
+        #region Dictionary overrides
+
+        /// <summary>
+        /// Local "override" for base Dicationary's this[name] method.
+        /// Gets/Creates the WVISubTreeAdapter associated with the given name, creating a new one if it does not exist already.
+        /// </summary>
+        /// <param name="name">The name/key of the WVISubTreeAdapter instance to get.</param>
+        /// <returns>The WVISubTreeAdapter assocated with the given name.</returns>
+        /// <exception cref="System.ArgumentNullException">name is null.</exception>
+        public new WPFValueAccessorSubTreeFactory this[string name]
+        {
+            get
+            {
+                WPFValueAccessorSubTreeFactory subTreeFactory = null;
+
+                if (name != null && !base.ContainsKey(name))
+                {
+                    subTreeFactory = new WPFValueAccessorSubTreeFactory(BaseSubTreePrefix + name, BaseWVIA);
+                    base[name] = subTreeFactory;
+                }
+                else
+                {
+                    subTreeFactory = base[name];
+                }
+
+                return subTreeFactory;
+            }
+            set
+            {
+                throw new System.InvalidOperationException("Item[] setter cannot be used here");
+            }
+        }
+
+        #endregion
+    }
+
+    /// <summary>
+    /// This class acts as DataContext proxy replacement for the WPFValueInterconnectAdapter so that all WPFValueAccessors that are created by this DataContext object will have the
+    /// constructed prefix added to the indexed name in resulting WPF Binding statements.  This is combined with the WPFValueAcessorSubTreeFactoryFactory that is used as a value returned by
+    /// the SubTreeFactory property to create these objects with desired subTreePrefix values.  This both this class and the WPFValueInterconnectAdapter on which it is based support this
+    /// SubTreeFactory property which allows the sub-tree concept to be repeated in layers.
+    /// </summary>
+    public class WPFValueAccessorSubTreeFactory : Dictionary<string, WPFValueAccessor>
+    {
+        internal WPFValueAccessorSubTreeFactory(string subTreePrefix, WPFValueInterconnectAdapter baseWVIA) 
+        {
+            SubTreePrefix = subTreePrefix;
+            BaseWVIA = baseWVIA;
+        }
+
+        /// <summary>Gives the accumulated SubTreePrefix for this factory that will be prefixed to given names in order to fully specify the name of each WPFValueAccessor that is created here.</summary>
+        protected string SubTreePrefix { get; set; }
+
+        /// <summary>Gives the base WPFValueInterconnectAdapter that will be used to create all of the WPFValueAccessor objects that this factory is asked to create.</summary>
+        protected WPFValueInterconnectAdapter BaseWVIA { get; set; }
+
+        #region SubTreeFactory property for use in Path statements
+
+        /// <summary>
+        /// This property returns a WPFValueAccessorSubTreeFactory Factory object starting at the current SubTreePrefix in the BaseWVIA's namespace. 
+        /// This is typically used in the XAML to create DataContext as DC.SubStreeFactory[SubSubTreePrefix]
+        /// </summary>
+        public WPFValueAccessorSubTreeFactoryFactory SubTreeFactory
+        {
+            get
+            {
+                if (subTreeFactory == null)
+                    subTreeFactory = new WPFValueAccessorSubTreeFactoryFactory(SubTreePrefix, BaseWVIA);
+
+                return subTreeFactory;
+            }
+        }
+
+        private WPFValueAccessorSubTreeFactoryFactory subTreeFactory = null;
+
+        #endregion
+
+        #region Dictionary overrides
+
+        /// <summary>
+        /// Local "override" for base Dicationary's this[name] method.
+        /// Gets the WPFValueAccessor associated with the given name, obtaining one from the Base.
+        /// </summary>
+        /// <param name="name">The name/key of the WPFValueAccessor instance to get.</param>
+        /// <returns>The WPFValueAccessor assocated with the given name.</returns>
+        /// <exception cref="System.ArgumentNullException">name is null.</exception>
+        public new WPFValueAccessor this[string name]
+        {
+            get
+            {
+                WPFValueAccessor wva = null;
+
+                if ((name != null) && !base.ContainsKey(name))
+                {
+                    wva = BaseWVIA[SubTreePrefix + name];
+                    base[name] = wva;
+                }
+                else
+                {
+                    wva = base[name];
+                }
+
+                return wva;
+            }
+            set
+            {
+                throw new System.InvalidOperationException("Item[] setter cannot be used here");
+            }
+        }
+
+        #endregion
+    }
+
+    #endregion
+
+    #region WPFValueInterconnectAdapter
 
     /// <summary>
     /// This object provides a self expanding "Dictionary" of named WPFValueAccessor objects that can be setup as an indexed DataContext from which named WPFValueAccessors can be found and bound to.
     /// </summary>
-    public class WPFValueInterconnectAdapter : Dictionary<string, WPFValueAccessor>, INotifyCollectionChanged, INotifyPropertyChanged
+    /// <remarks>
+    /// This object is often used with the SubTreeFactory property to get access to a WPFVAlueAdapterSubTreeFactoryFactory that can then be used to create a named
+    /// WPFValueAdapterSubTreeFactory.  The resulting WPFValueAdapterSubTreeFactory is then used as a DataContext for a sub-portion of the overall WPF control space and allows it to use
+    /// Binding statements that refere to items in the SubTree using the prefix that was given to the WPFVAlueAdapterSubTreeFactoryFactory.
+    /// 
+    /// In addition we have found that the INotifyCollectionChanged and INotifyPropertyChanged interfaces are not useful for this collection object.  Instead this collection object
+    /// simply creates the WPFValueAdapters on the fly (along with their backing IValueAccessors) as Binding statements ask for them.
+    /// </remarks>
+    public class WPFValueInterconnectAdapter : Dictionary<string, WPFValueAccessor>
     {
         /// <summary>Default constructor - defaults to using the Values.Instance IValueInterconnection object</summary>
         public WPFValueInterconnectAdapter()
@@ -158,10 +341,30 @@ namespace MosaicLib.WPF.Interconnect
         {
             UpdateActiveItems();
 
-            ServiceAddedValueNames();
-
             return this;
         }
+
+        #region SubTreeFactory property for use in Path statements
+
+        /// <summary>
+        /// This property returns a WPFValueAccessorSubTreeFactory Factory object starting at the root of the current WPFValueInterconnectAdapter namespace  
+        /// This is typically used in the XAML to create DataContext as DC.SubStreeFactory[SubTreePrefix]
+        /// </summary>
+        public WPFValueAccessorSubTreeFactoryFactory SubTreeFactory
+        {
+            get
+            {
+                if (subTreeFactory == null)
+                    subTreeFactory = new WPFValueAccessorSubTreeFactoryFactory(String.Empty, this);
+
+                return subTreeFactory;
+            }
+        }
+
+        private WPFValueAccessorSubTreeFactoryFactory subTreeFactory = null;
+
+        #endregion
+
 
         #region Dictionary overrides
 
@@ -176,16 +379,22 @@ namespace MosaicLib.WPF.Interconnect
         {
             get
             {
+                WPFValueAccessor wva = null;
+
                 if ((name != null) && !base.ContainsKey(name))
                 {
-                    ivi.GetValueAccessor(name);
-                    ServiceAddedValueNames();
+                    IValueAccessor iva = ivi.GetValueAccessor(name);
+                    wva = new WPFValueAccessor(iva);
+
+                    activeWvaList.Add(wva);
+                    rebuildArrays = true;
+
+                    base[name] = wva;
                 }
-
-                WPFValueAccessor wva = base[name];
-
-                if (!wva.IsActive)
-                    ActivateWVA(wva);
+                else
+                {
+                    wva = base[name];
+                }
 
                 return wva;
             }
@@ -197,28 +406,13 @@ namespace MosaicLib.WPF.Interconnect
 
         #endregion
 
-        /// <summary>Required INotifyCollectionChanged event</summary>
-        public event NotifyCollectionChangedEventHandler CollectionChanged;
-
-        /// <summary>Required INotifyPropertyChanged event</summary>
-        public event PropertyChangedEventHandler PropertyChanged;
-
         private IValuesInterconnection ivi;
-
-        private List<WPFValueAccessor> wpfValueAccessorList = new List<WPFValueAccessor>();
 
         private List<WPFValueAccessor> activeWvaList = new List<WPFValueAccessor>();
         private bool rebuildArrays = true;
         private IValueAccessor[] activeIvaArray = null;
         private WPFValueAccessor[] wvaUpdateArray = null;
         private IValueAccessor[] ivaUpdateArray = null;
-
-        private void ActivateWVA(WPFValueAccessor wva)
-        {
-            activeWvaList.Add(wva);
-            rebuildArrays = true;
-            wva.IsActive = true;
-        }
 
         private void UpdateActiveItems()
         {
@@ -234,13 +428,14 @@ namespace MosaicLib.WPF.Interconnect
             int numItemsToCheck = activeIvaArray.Length;
             int numItemsToUpdate = 0;
 
-            for (int checkIvaIdx = 0; checkIvaIdx < numItemsToCheck; checkIvaIdx++)
+            for (int checkWvaIdx = 0; checkWvaIdx < numItemsToCheck; checkWvaIdx++)
             {
-                IValueAccessor iva = activeIvaArray[checkIvaIdx];
-                if (iva.IsUpdateNeeded)
+                WPFValueAccessor wva = activeWvaList[checkWvaIdx];
+
+                if (wva.IsUpdateNeeded)
                 {
-                    wvaUpdateArray[numItemsToUpdate] = activeWvaList[checkIvaIdx];
-                    ivaUpdateArray[numItemsToUpdate++] = iva;
+                    wvaUpdateArray[numItemsToUpdate] = wva;
+                    ivaUpdateArray[numItemsToUpdate++] = activeIvaArray[checkWvaIdx];
                 }
             }
 
@@ -252,134 +447,8 @@ namespace MosaicLib.WPF.Interconnect
                 wva.NotifyValueHasBeenUpdated();
             }
         }
-
-        private void ServiceAddedValueNames()
-        {
-            int currentNumItemsFromIVI = wpfValueAccessorList.Count;
-            if (currentNumItemsFromIVI < ivi.ValueNamesArrayLength)
-            {
-                int maxItemsToAddPerIteration = 100;
-                string[] addedNamesArray = ivi.GetValueNamesRange(currentNumItemsFromIVI, maxItemsToAddPerIteration);
-
-                foreach (string name in addedNamesArray)
-                {
-                    IValueAccessor iva = ivi.GetValueAccessor(name);
-                    WPFValueAccessor wva = new WPFValueAccessor(iva);
-                    wpfValueAccessorList.Add(wva);
-                    base[name] = wva;
-                }
-
-                // queue the generation of the event callbacks on the WPF dispatcher queue to prevent recursion from doing bad things to this structure.
-                Dispatcher.CurrentDispatcher.BeginInvoke(() => GenerateCollectionIncreasedEvents(addedNamesArray));
-            }
-        }
-
-        private void GenerateCollectionIncreasedEvents(string[] addedNamesArray)
-        {
-            if (CollectionChanged != null)
-            {
-                foreach (string name in addedNamesArray)
-                {
-                    CollectionChanged(this, new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, name));
-                }
-            }
-
-            if (PropertyChanged != null)
-            {
-                PropertyChanged(this, new PropertyChangedEventArgs("Count"));
-                PropertyChanged(this, new PropertyChangedEventArgs("Item[]"));
-                PropertyChanged(this, new PropertyChangedEventArgs("Keys"));
-                PropertyChanged(this, new PropertyChangedEventArgs("Values"));
-            }
-        }
     }
 
-
-    #endregion
-
-    #region ValueContainerTrackingDictionary
-
-    /// <summary>
-    /// This is a special case Dictionary that is used to collect and track a set of interconnect values.  
-    /// This class inherits from Dictionary{string, ValueContainer} where the keys and values come from the set of IValueAccessors found by this component at construction time.
-    /// After the initial setup is complete the client is expected to use the UpdateIfNeeded method(s) to scan for updated values, propagate their values into the dictionary and
-    /// potentially publish a cloned dictionary, typically into a DependencyProperty using the UpdateIfNeeded publishAction delegate to consume and publish a clone of the underlying
-    /// dictionary contents.
-    /// </summary>
-    [Obsolete("The use of this object is now obsolete.  It should be replaced with the use of the WPFValueInterconnectAdapter (2015-05-14)")]
-    public class ValueContainerTrackingDictionary : Dictionary<string, ValueContainer>
-    {
-        /// <summary>
-        /// Constructor.  Finds the set of currently defined interconnect values, obtains a corresponding set of IValueAccessors from the default interconnect value instance
-        /// and builds the underlying dictionary keys and values from this set of IValueAccessor's Names and ValueContainer values.
-        /// </summary>
-        public ValueContainerTrackingDictionary(params String[] matchPrefixStringArray)
-            : this(Modular.Interconnect.Values.Values.Instance, matchPrefixStringArray)
-        {
-        }
-
-        /// <summary>
-        /// Constructor.  Finds the set of currently defined interconnect values, obtains a corresponding set of IValueAccessors from the desired interconnect value instance
-        /// and builds the underlying dictionary keys and values from this set of IValueAccessor's Names and ValueContainer values.
-        /// </summary>
-        public ValueContainerTrackingDictionary(Modular.Interconnect.Values.IValuesInterconnection valuesInterconnect, params String[] matchPrefixStringArray)
-        {
-            string[] valueNames = valuesInterconnect.ValueNamesArray;
-
-            string[] filteredNames = valueNames.Where((s) => matchPrefixStringArray.Any((p) => s.StartsWith(p))).ToArray();
-
-            ivaArray = filteredNames.Select((n) => valuesInterconnect.GetValueAccessor(n)).ToArray();
-
-            foreach (IValueAccessor iva in ivaArray)
-            {
-                this[iva.Name] = iva.ValueContainer;
-            }
-        }
-
-        /// <summary>
-        /// Retains an array of the IValueAccessors that were found by the constructor.
-        /// </summary>
-        private IValueAccessor[] ivaArray;
-
-        /// <summary>
-        /// Scans through all of the IValueAccessors that were found at construction time to determine if any of them need to be updated.
-        /// Updates each of these IValueAccessors and then updates the underlyng dictionary by replacing the ValueContainer for the corresponding name.
-        /// <para/>Returns true if at least one IValueAccessor was updated, returns false if no IValueAccessors needed to be updated.
-        /// </summary>
-        public bool UpdateIfNeeded()
-        {
-            bool anyDeltas = false;
-
-            foreach (var iva in ivaArray)
-            {
-                if (iva.IsUpdateNeeded)
-                {
-                    iva.Update();
-                    anyDeltas = true;
-                    this[iva.Name] = iva.ValueContainer;
-                }
-            }
-
-            return anyDeltas;
-        }
-
-        /// <summary>
-        /// Uses the parameterless UpdateIfNeeded method to update the IValueAccessors and underlying dictionary if needed.
-        /// If any IValueAccessor was updated then this method generates a clone of the underlying dictionary and invokes the given publishAction with this cloned dictionary and finally returns true.
-        /// If no IValueAccessor needed to be udpated then this method simply returns false.
-        /// </summary>
-        public bool UpdateIfNeeded(Action<Dictionary<string, ValueContainer>> publishAction)
-        {
-            bool updateWasNeeded = UpdateIfNeeded();
-            if (updateWasNeeded && publishAction != null)
-            {
-                Dictionary<string, ValueContainer> clone = new Dictionary<string, ValueContainer>(this);
-                publishAction(clone);
-            }
-
-            return updateWasNeeded;
-        }
-    }
 
     #endregion
 }

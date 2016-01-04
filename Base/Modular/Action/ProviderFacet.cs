@@ -30,6 +30,12 @@ namespace MosaicLib.Modular.Action
 	/// </summary>
 	public interface IProviderFacet
 	{
+        /// <summary>
+        /// Gives provider access to a readonly NamedValueSet provided by the client and cloned by the action implementation when the action is started.
+        /// If the client did not provide any NamedParamValues then this property will return a readonly empty set so that it may safely be used by the provider without additional null checking.
+        /// </summary>
+        Common.INamedValueSet NamedParamValues { get; }
+
         /// <summary>Provider invokes this to dispatch the mark the action as issued and invoke its delegate method.</summary>
         void IssueAndInvokeAction();
 
@@ -42,14 +48,23 @@ namespace MosaicLib.Modular.Action
         /// <summary>Property gives access to the dynamically updating IActionState for this action</summary>
         IActionState ActionState { get; }
 
-        /// <summary>Provider invokes this to replace the ActionState's NamedValues and inform action's clients of the new values</summary>
-        void UpdateNamedValues(Common.NamedValueList namedValueList);
+        /// <summary>
+        /// Provider invokes this to replace the ActionState's NamedValueSet with a readonly copy of this given value and inform action's clients of the new values.  
+        /// </summary>
+        void UpdateNamedValues(Common.INamedValueSet namedValueSet);
 
         /// <summary>Provider invokes this to indicate that the action is complete and to provide the final resultCode</summary>
         void CompleteRequest(string resultCode);
 
-        /// <summary>Provider invokes this to indicate that the action is complete and to provide the final resultCode and set of NamedValues</summary>
-        void CompleteRequest(string resultCode, Common.NamedValueList namedValueList);
+        /// <summary>
+        /// Provider invokes this to indicate that the action is complete and to provide the final resultCode and set of NamedValues (from which a readonly copy is made and retained)
+        /// </summary>
+        void CompleteRequest(string resultCode, Common.INamedValueSet namedValueSet);
+
+        /// <summary>
+        /// Custom variant of normal ToString method that gives caller access to which parts of the action they want included in the string.
+        /// </summary>
+        string ToString(ToStringSelect select);
     }
 
 	//-------------------------------------------------

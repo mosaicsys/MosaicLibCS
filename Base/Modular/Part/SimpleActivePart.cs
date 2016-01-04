@@ -459,6 +459,17 @@ namespace MosaicLib.Modular.Part
 			return action;
 		}
 
+        /// <summary>
+        /// Method creates a Service Action with the Param and NamedParamValues preconfigured with the given value.
+        /// </summary>
+        public virtual IStringParamAction CreateServiceAction(string paramValue, NamedValueSet namedParamValues)
+        {
+            IStringParamAction action = new StringActionImpl(actionQ, paramValue, PerformServiceAction, "Service", ActionLoggingReference) as IStringParamAction;
+            action.NamedParamValues = namedParamValues;
+
+            return action;
+        }
+
         // provide default CreateServiceAction method that creates one that will fail
         //	when it is run.  Sub-class may override the given DoRunServiceAction method
         //	to implement the ability to run services
@@ -746,5 +757,39 @@ namespace MosaicLib.Modular.Part
 
 	#endregion
 
-	//-----------------------------------------------------------------
+    #region IClientFacet ExtentionMethods
+
+    /// <summary>
+    /// common "namespace" class to define extension methods within.
+    /// </summary>
+    public static partial class ExtentionMethods
+    {
+        /// <summary>Calls StartPart on the given part.  Returns the given part to support call chaining.</summary>
+        public static TPartType StartPartInline<TPartType>(this TPartType part) where TPartType : IActivePartBase
+        {
+            part.StartPart();
+
+            return part;
+        }
+
+        /// <summary>Calls StopPart on the given part.  Returns the given part to support call chaining.</summary>
+        public static TPartType StopPartInline<TPartType>(this TPartType part) where TPartType : IActivePartBase
+        {
+            part.StopPart();
+
+            return part;
+        }
+
+        /// <summary>Creates and runs a GoOnline(andInitialize) action on the given part.  Returns the given part to support call chaining.</summary>
+        public static TPartType RunGoOnlineActionInline<TPartType>(this TPartType part, bool andInitialize) where TPartType : IActivePartBase
+        {
+            part.CreateGoOnlineAction(andInitialize).RunInline();
+
+            return part;
+        }
+    }
+
+    #endregion
+    
+    //-----------------------------------------------------------------
 }

@@ -30,6 +30,8 @@ using MosaicLib.Utils.Collections;
 using System.Windows.Threading;
 using System.Windows;
 
+using MosaicLib.Modular.Common;
+
 namespace MosaicLib.WPF.Common
 {
     using MosaicLib;        // apparently this makes MosaicLib get searched before MosaicLib.WPF.Logging for resolving symbols here.
@@ -80,7 +82,7 @@ namespace MosaicLib.WPF.Common
 
             appLogger = new Logging.Logger("AppLogger");
             Logging.LogMessage lm = appLogger.GetLogMessage(Logging.MesgType.Signif, "App Starting", appLogger.GetStackFrame(0));
-            lm.KeywordArray = new string[] { "Application", "OnStartup" };
+            lm.NamedValueSet = new NamedValueSet() { { "Application", "OnStartup" } };
             appLogger.EmitLogMessage(ref lm);
 
             // emit the config messages obtained above.
@@ -103,14 +105,14 @@ namespace MosaicLib.WPF.Common
         public static void HandleOnDeactivated(Logging.ILogger appLogger)
         {
             Logging.LogMessage lm = appLogger.GetLogMessage(Logging.MesgType.Signif, "App Deactiviated", appLogger.GetStackFrame(0));
-            lm.KeywordArray = new string[] { "Application", "OnDeactivated" };
+            lm.NamedValueSet = new NamedValueSet() { { "Application", "OnDeactivated" } };
             appLogger.EmitLogMessage(ref lm);
         }
 
         public static void HandleOnExit(Logging.ILogger appLogger)
         {
             Logging.LogMessage lm = appLogger.GetLogMessage(Logging.MesgType.Signif, "App Stopping", appLogger.GetStackFrame(0));
-            lm.KeywordArray = new string[] { "Application", "OnExit" };
+            lm.NamedValueSet = new NamedValueSet() { { "Application", "OnExit" } };
             appLogger.EmitLogMessage(ref lm);
 
             Logging.ShutdownLogging();

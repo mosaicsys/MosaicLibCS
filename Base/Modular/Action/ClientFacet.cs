@@ -108,16 +108,17 @@
  //</list>
 //-------------------------------------------------
 
+using System;
+using MosaicLib.Utils;
+using MosaicLib.Time;
+using MosaicLib.Modular.Common;
+using System.Runtime.Serialization;
+
 namespace MosaicLib.Modular.Action
 {
 	//-------------------------------------------------
-	using System;
-	using MosaicLib.Utils;
-	using MosaicLib.Time;
-    using MosaicLib.Modular.Common;
 
-	//-------------------------------------------------
-	#region ActionStateCode
+    #region ActionStateCode
 
 	/// <summary>
 	///	This enum is used to define the set of states that represent the user's high level view of the progress of an Action.
@@ -130,20 +131,27 @@ namespace MosaicLib.Modular.Action
 	///	service provider.  The contents of the ResultCode are usually used to determine if the action was successfull or not.
 	/// </summary>
 
-	public enum ActionStateCode
+    [DataContract(Namespace=Constants.ModularActionNameSpace)]
+	public enum ActionStateCode : int
 	{
 		/// <summary>default ctor value for structs</summary>
+        [EnumMember]
 		Initial = 0,
 		/// <summary>state after valid creation by a provider</summary>
-		Ready,
+        [EnumMember]
+        Ready,
 		/// <summary>this state covers the operation from once the Start method has committed to enqueueing the operation until it is marked as having been issued.</summary>
-		Started,
+        [EnumMember]
+        Started,
 		/// <summary>provider has accepted this operation and is performing it</summary>
-		Issued,
+        [EnumMember]
+        Issued,
 		/// <summary>operation has been completed (successfully or not).</summary>
-		Complete,
+        [EnumMember]
+        Complete,
 		/// <summary>should never be in this state - cannot be Started or used</summary>
-		Invalid,
+        [EnumMember]
+        Invalid,
 	};
 
 	#endregion
@@ -192,9 +200,12 @@ namespace MosaicLib.Modular.Action
 		/// <summary>true if IsComplete and resultCode is null or empty</summary>
 		bool Succeeded { get; }
 
-        /// <summary>Carries a set of name/value pair objects that have been published along with this state.</summary>
-        Common.NamedValueList NamedValues { get; }
-	}
+        /// <summary>
+        /// Carries a set of name/value pair objects that have been published along with this state.
+        /// These may be used to carry progress information back to the client and/or to carry additional results back to the client once the Action is complete.
+        /// </summary>
+        Common.INamedValueSet NamedValues { get; }
+    }
 
 	#endregion
 
@@ -213,6 +224,13 @@ namespace MosaicLib.Modular.Action
 
         /// <summary>Property gives caller access to the IBasicNotificationList that is signaled each time the action's IActionState is updated.</summary>
         IBasicNotificationList NotifyOnUpdate { get; }
+
+        /// <summary>
+        /// Carries a set of name/value pair objects that can be passed by the client to the target Part as named parameter values based on the Common.NamedValueList
+        /// facility.  These may be used to carry an arbitrary set of parameters, by name, to the Action's implementing part.
+        /// A readonly copy of thie property is made when the action is Started and this clone is then made available to the provider.
+        /// </summary>
+        Common.INamedValueSet NamedParamValues { get; set; }
 
 		/// <summary>Starts the action if it is in an Idle state and return string.Empty or returns an error message if the action is not in a state from which it can be started.</summary>
 		string Start();
@@ -237,7 +255,26 @@ namespace MosaicLib.Modular.Action
 
 		/// <summary>Property gives access to the dynamically updating IActionState for this action</summary>
 		IActionState ActionState { get; }
-	}
+
+        /// <summary>
+        /// Custom variant of normal ToString method that gives caller access to which parts of the action they want included in the string.
+        /// </summary>
+        string ToString(ToStringSelect select);
+    }
+
+    /// <summary>
+    /// This enumeration is used to customize how the Action Implements the customizable ToString method.
+    /// <para/>IncludeMesgDetailAndState (default), IncludeMesgDetail, IncludeMesg
+    /// </summary>
+    public enum ToStringSelect : int
+    {
+        /// <summary>select to include the Mesg, the MesgDetail and the ActionState (the default)</summary>
+        MesgDetailAndState = 0,
+        /// <summary>select to include the Mesg and the MesgDetail but not the ActionState</summary>
+        MesgAndDetail = 1,
+        /// <summary>include just the Mesg</summary>
+        JustMesg = 2,
+    }
 
 	/// <summary>Properties about storage and use of a parameter value provided by an Action in parallel with the IClientFacet for some Action types.</summary>
 	public interface IParamValue<ParamType>
@@ -300,6 +337,13 @@ namespace MosaicLib.Modular.Action
         public static TClientFacetType RunInline<TClientFacetType>(this TClientFacetType action) where TClientFacetType : IClientFacet
         {
             action.Run();
+            return action;
+        }
+
+        /// <summary>Run the action to completion or until given timeLimit is reached.  Returns the given action to support call chaining.</summary>
+        public static TClientFacetType RunInline<TClientFacetType>(this TClientFacetType action, TimeSpan timeLimit) where TClientFacetType : IClientFacet
+        {
+            action.Run(timeLimit);
             return action;
         }
     }

@@ -127,10 +127,9 @@ namespace MosaicLib.Utils
 	}
 
 	/// <summary>
-	/// This class is an abstract base class that defines and mostly implements a version the 
-	/// standard CLR IDisposable/Dispose/Finalize pattern. 
-    /// This class provides both a virtual method that may be overriden to field Dispose(DisposeType) 
-    /// calls as well as a Action delegate list pattern using the AddExplicitDisposeAction method.
+	/// This class is a base class that defines and implements an extendable version the standard CLR IDisposable/Dispose/Finalize pattern. 
+    /// This class is typically used in one of two ways, either the derived class overrides the virtual Dispose(DisposeType disposeType) to field these calls directly
+    /// or the derived class uses the AddExplicitDisposeAction method to add one or more delegates that are to be called by this base class when it is being disposed explicitly.
 	/// </summary>
 	/// <remarks>
 	/// This version uses a slight variation on the standard user provided protected Dispose 
@@ -142,7 +141,6 @@ namespace MosaicLib.Utils
 	/// For more information on this pattern see the msdn.microsoft.com library under the topic
 	/// titled "Implementing Finalize and Dispose to Clean Up Unmanaged Resources".
 	/// </remarks>
-
 	public abstract class DisposableBase : DisposableBaseBase
 	{
 		/// <summary>Defines the variations under which the protected abstract Dispose(type) method may be called: CalledExplicitly, CalledByFinalizer</summary>

@@ -19,14 +19,14 @@
  * limitations under the License.
  */
 //-------------------------------------------------------------------
+using System;
+using System.Collections.Generic;
+using MosaicLib.Utils;
+using MosaicLib.Time;
+using MosaicLib.Modular.Config;
 
 namespace MosaicLib
 {
-	using System;
-	using System.Collections.Generic;
-	using MosaicLib.Utils;
-	using MosaicLib.Time;
-
 	public static partial class Logging
 	{
 		//-------------------------------------------------------------------
@@ -70,6 +70,9 @@ namespace MosaicLib
 		{
             /// <summary>used to create/lookup the LoggerSourceIDPtr for a given logger name</summary>
 			LoggerSourceInfo GetLoggerSourceInfo(string name);
+
+            /// <summary>used to create/lookup the LoggerSourceIDPtr for a given logger name, allowUseOfModularConfig can be given as false to suppress use of modular config key Logging.Loggers.[name].LogGate as source for additional LogGate value.</summary>
+            LoggerSourceInfo GetLoggerSourceInfo(string name, bool allowUseOfModularConfig);
 
             /// <summary>used to update a logger's distribution group name</summary>
             void SetLoggerDistributionGroupName(int loggerID, string groupName);
@@ -126,49 +129,87 @@ namespace MosaicLib
 			const int PreallocatedPoolItems = 100;		// the default pool size to start with
 			const int MesgQueueSize = 1000;				// big enough for serious use.
 
-			LoggerSourceInfo					distSourceID = null;				//!< sourceID for messages that originate in this distribution system.
+			LoggerSourceInfo distSourceID = null;				//!< sourceID for messages that originate in this distribution system.
 
             /// <summary>Mutex object for access to distribution system's internals.</summary>
-			Object								distMutex = new Object();
-			volatile bool						shutdown = false;					//!< volatile to support testing outside of lock ownership.  changes are still done inside lock
+			Object distMutex = new Object();
+			volatile bool shutdown = false;					//!< volatile to support testing outside of lock ownership.  changes are still done inside lock
 
-			Utils.SequenceNumberInt				mesgDistributionSeqGen = new MosaicLib.Utils.SequenceNumberInt(0, true);		// this is only used within the ownership of the mutex so it does not need to be interlocked
+			Utils.SequenceNumberInt mesgDistributionSeqGen = new MosaicLib.Utils.SequenceNumberInt(0, true);		// this is only used within the ownership of the mutex so it does not need to be interlocked
 
-			Utils.WaitEventNotifier				mesgDeliveryOccurredNotification = new MosaicLib.Utils.WaitEventNotifier(MosaicLib.Utils.WaitEventNotifier.Behavior.WakeAllSticky);
+			Utils.WaitEventNotifier	mesgDeliveryOccurredNotification = new MosaicLib.Utils.WaitEventNotifier(MosaicLib.Utils.WaitEventNotifier.Behavior.WakeAllSticky);
 
-			class PerLoggerIDInfo
-			{
-				private int							lid = 0;
-				public int							distGroupID = DistGroupID_Default;
-				private LoggerConfig				distGroupConfig = LoggerConfig.None;
-                private bool                        disabled;
+            class PerLoggerIDInfo
+            {
+                private int lid = 0;
+                public int distGroupID = DistGroupID_Default;
+                public IConfigKeyAccess loggersReduceLogGateICKA = null;
+                public IConfigKeyAccess loggersIncreaseLogGateICKA = null;
 
-				public SequencedLoggerConfigSource	seqLoggerConfigSource = null;
-				public LoggerSourceInfo				sourceID = null;							// contains Logger Name and ID. - only filled in after construction
+                public LogGate loggersReduceLogGateFromModularConfig = LogGate.All;
+                public LogGate loggersIncreaseLogGateFromModularConfig = LogGate.None;
 
-				public int							lastDistributedMesgSeqNum = 0;
+                private LoggerConfig distGroupConfig = LoggerConfig.None;
+                private bool disabled;
 
-				public int LoggerID { get { return lid; } }
+                public SequencedLoggerConfigSource seqLoggerConfigSource = null;
+                public LoggerSourceInfo sourceID = null;							// contains Logger Name and ID. - only filled in after construction
 
-				public string SelectedDistGroupName		// non-empty if the logger specifically identified a target group.
-				{
-					get { return distGroupConfig.GroupName; }
-				}
+                public int lastDistributedMesgSeqNum = 0;
 
-				public LoggerConfig DistGroupConfig
-				{
-					get 
-                    { 
-                        return distGroupConfig; 
+                public int LoggerID { get { return lid; } }
+
+                public string SelectedDistGroupName		// non-empty if the logger specifically identified a target group.
+                {
+                    get { return distGroupConfig.GroupName; }
+                }
+
+                public PerLoggerIDInfo UpdateLogGateFromModularConfig()
+                {
+                    bool updateLoggerConfigNeeded = false;
+
+                    if (loggersReduceLogGateICKA != null && (loggersReduceLogGateICKA.UpdateValue() || loggersReduceLogGateFromModularConfig == LogGate.All))
+                    {
+                        LogGate configGate = LogGate.All;
+                        configGate.TryParse(loggersReduceLogGateICKA.GetValue<string>(String.Empty));
+
+                        if (loggersReduceLogGateFromModularConfig != configGate)
+                        {
+                            loggersReduceLogGateFromModularConfig = configGate;
+                            updateLoggerConfigNeeded = true;
+                        }
                     }
-					set {
+
+                    if (loggersIncreaseLogGateICKA != null && (loggersIncreaseLogGateICKA.UpdateValue() || loggersIncreaseLogGateFromModularConfig == LogGate.None))
+                    {
+                        LogGate configGate = LogGate.None;
+                        configGate.TryParse(loggersIncreaseLogGateICKA.GetValue<string>(String.Empty));
+
+                        if (loggersIncreaseLogGateFromModularConfig != configGate)
+                        {
+                            loggersIncreaseLogGateFromModularConfig = configGate;
+                            updateLoggerConfigNeeded = true;
+                        }
+                    }
+
+                    if (updateLoggerConfigNeeded)
+                        UpdateAndPublishLoggerConfig();
+
+                    return this;
+                }
+
+                public LoggerConfig DistGroupConfig
+                {
+                    get { return distGroupConfig; }
+                    set
+                    {
                         if (!distGroupConfig.Equals(value))
                         {
                             distGroupConfig = value;
-                            PublishDistGroupConfig();
+                            UpdateAndPublishLoggerConfig();
                         }
-					}
-				}
+                    }
+                }
 
                 public bool Disabled
                 {
@@ -178,28 +219,34 @@ namespace MosaicLib
                         if (disabled != value)
                         {
                             disabled = value;
-                            PublishDistGroupConfig();
+                            UpdateAndPublishLoggerConfig();
                         }
                     }
                 }
 
-                private void PublishDistGroupConfig()
+                private void UpdateAndPublishLoggerConfig()
                 {
-                    if (!disabled)
-                        seqLoggerConfigSource.LoggerConfig = distGroupConfig;
-                    else
-                        seqLoggerConfigSource.LoggerConfig = new LoggerConfig(distGroupConfig) { LogGate = LogGate.None };
+                    seqLoggerConfigSource.LoggerConfig = GenerateCurrentLoggerConfig();
                 }
 
-                public PerLoggerIDInfo(int loggerID) 
-				{ 
-					lid = loggerID; 
-                    seqLoggerConfigSource = new SequencedLoggerConfigSource(distGroupConfig); 
-				}
-			}
+                public PerLoggerIDInfo(int loggerID)
+                {
+                    lid = loggerID;
+                    seqLoggerConfigSource = new SequencedLoggerConfigSource(GenerateCurrentLoggerConfig());
+                }
+                private LoggerConfig GenerateCurrentLoggerConfig()
+                {
+                    LoggerConfig loggerConfig = new LoggerConfig((!disabled)
+                                                                    ? (distGroupConfig & loggersReduceLogGateFromModularConfig)
+                                                                    : (new LoggerConfig(distGroupConfig) { LogGate = LogGate.None })
+                                                                    ) { LogGateIncrease = loggersIncreaseLogGateFromModularConfig };
+                    return loggerConfig;
+                }
+            }
 
-			List<PerLoggerIDInfo>		perLoggerIDInfoList = new List<PerLoggerIDInfo>();	// index by loggerID
-			Dictionary<string, int>		loggerNameToIDMap = new Dictionary<string, int>();
+			List<PerLoggerIDInfo> perLoggerIDInfoList = new List<PerLoggerIDInfo>();	// index by loggerID
+            PerLoggerIDInfo[] perLoggerIDInfoArray = new PerLoggerIDInfo[0];      // index by loggerID - always stays synchronized with perLoggerIDInfoList contents
+            Dictionary<string, int> loggerNameToIDMap = new Dictionary<string, int>();
 
 			class DistHandlerInfo
 			{
@@ -218,6 +265,7 @@ namespace MosaicLib
 			{
                 /// <summary>contains the name of the group.</summary>
 				private string groupName = string.Empty;
+
                 /// <summary>contains the group's ID (also used as an index into the distGroupIDInfoList)</summary>
                 private int id = DistGroupID_Invalid;
 
@@ -351,15 +399,16 @@ namespace MosaicLib
 				}
 			}
 
-			List<PerDistGroupIDInfo>			distGroupIDInfoList = new List<PerDistGroupIDInfo>();			// index by group id
-			Dictionary<string, int>				distGroupNameToIDMap = new Dictionary<string, int>();
+			List<PerDistGroupIDInfo> distGroupIDInfoList = new List<PerDistGroupIDInfo>();			// index by group id
+            PerDistGroupIDInfo[] distGroupIDInfoArray = new PerDistGroupIDInfo[0];
+            Dictionary<string, int> distGroupNameToIDMap = new Dictionary<string, int>();
 
 			// information used to implement queued logging.
 
-			volatile MessageQueue				mesgQueue = null;
-			SequencedLoggerConfigSource			mesgQueueLoggerGateSource = new SequencedLoggerConfigSource(LoggerConfig.AllWithFL);
-			System.Threading.Thread	            mesgQueueDistThread = null;
-			Utils.WaitEventNotifier				mesgQueueDistThreadWakeupNotification = new MosaicLib.Utils.WaitEventNotifier(MosaicLib.Utils.WaitEventNotifier.Behavior.WakeAllSticky);
+			volatile MessageQueue mesgQueue = null;
+			SequencedLoggerConfigSource mesgQueueLoggerGateSource = new SequencedLoggerConfigSource(LoggerConfig.AllWithFL);
+			System.Threading.Thread mesgQueueDistThread = null;
+			Utils.WaitEventNotifier	mesgQueueDistThreadWakeupNotification = new MosaicLib.Utils.WaitEventNotifier(MosaicLib.Utils.WaitEventNotifier.Behavior.WakeAllSticky);
 
             /// <summary>
             /// A mesgPool is created by the distribution engine during initial construction and remains available.  It cannot be set to null.
@@ -371,6 +420,9 @@ namespace MosaicLib
 			//-------------------------------------------------------------------
 			#region ctor and dispose
 
+            /// <summary>
+            /// Constructor
+            /// </summary>
 			public LogMessageDistributionImpl()
 			{
 				distSourceID = new LoggerSourceInfo(LoggerID_InternalLogger, "LogMessageDistributionImpl");
@@ -381,10 +433,13 @@ namespace MosaicLib
 				const int defaultDistGroupID = DistGroupID_Default;
                 PerDistGroupIDInfo dgInfo = null;
 
-                if (distGroupIDInfoList.Count == 0)
+                if (distGroupIDInfoList.Count == 0)     // this is only done once.
                 {
                     dgInfo = new PerDistGroupIDInfo(distGroupIDInfoList.Count, DefaultDistributionGroupName);
+
                     distGroupIDInfoList.Add(dgInfo);
+                    distGroupIDInfoArray = distGroupIDInfoList.ToArray();
+
                     distGroupNameToIDMap.Add(dgInfo.DistGroupName, dgInfo.DistGroupID);
                 }
 
@@ -393,10 +448,13 @@ namespace MosaicLib
 
 				// create the loggerID used for messages that come from the distribution system
 
-				int lmdLoggerID = InnerGetLoggerID("LogMessageDistributionImpl");
-				if (InnerIsLoggerIDValid(lmdLoggerID))
-					distSourceID = perLoggerIDInfoList [lmdLoggerID].sourceID;
-				else
+				int lmdLoggerID = InnerGetLoggerID("LogMessageDistributionImpl", false);    // block use of ModularConfig in order to avoid recursive use of the LogMessageDistribution singleton.
+                if (InnerIsLoggerIDValid(lmdLoggerID))
+                {
+                    perLoggerIDInfoArray = perLoggerIDInfoList.ToArray();
+                    distSourceID = perLoggerIDInfoArray[lmdLoggerID].sourceID;
+                }
+                else
                     Utils.Asserts.TakeBreakpointAfterFault("A valid DistSourceID could not be created");
 			}
 
@@ -433,16 +491,22 @@ namespace MosaicLib
 
             /// <summary>used to create/lookup the LoggerSourceIDPtr for a given logger name</summary>
             public LoggerSourceInfo GetLoggerSourceInfo(string name)
+            {
+                return GetLoggerSourceInfo(name, true);
+            }
+
+            /// <summary>used to create/lookup the LoggerSourceIDPtr for a given logger name, allowUseOfModularConfig can be given as false to suppress use of modular config key Logging.Loggers.[name].LogGate as source for additional LogGate value.</summary>
+            public LoggerSourceInfo GetLoggerSourceInfo(string name, bool allowUseOfModularConfig)
 			{
 				int lid = LoggerID_Invalid;
 				LoggerSourceInfo lsid = null;
 
 				lock (distMutex)
 				{
-					lid = InnerGetLoggerID(name);
+					lid = InnerGetLoggerID(name, allowUseOfModularConfig);
 
 					if (InnerIsLoggerIDValid(lid))
-						lsid = perLoggerIDInfoList [lid].sourceID;
+						lsid = perLoggerIDInfoArray[lid].sourceID;
 
                     if (lsid == null)
     					Utils.Asserts.TakeBreakpointAfterFault("GetLoggerSourceInfo result null");
@@ -459,7 +523,7 @@ namespace MosaicLib
 					if (shutdown || !InnerIsLoggerIDValid(id))
 						return;
 
-					PerLoggerIDInfo pli = perLoggerIDInfoList [id];
+					PerLoggerIDInfo pli = perLoggerIDInfoArray[id];
 
 					if (pli.SelectedDistGroupName != groupName)
 					{
@@ -468,7 +532,7 @@ namespace MosaicLib
 
 						pli.distGroupID = (System.String.IsNullOrEmpty(groupName) ? DistGroupID_Default : InnerGetDistGroupID(groupName, true));
 
-                        PerDistGroupIDInfo distGroupInfo = this.distGroupIDInfoList[pli.distGroupID];
+                        PerDistGroupIDInfo distGroupInfo = distGroupIDInfoArray[pli.distGroupID];
 
                         // record and inform the client that the DistGroup LoggerConfig has been changed
                         pli.DistGroupConfig = distGroupInfo.GroupLoggerConfigSetting;
@@ -519,9 +583,12 @@ namespace MosaicLib
 				{
 					if (!shutdown && InnerIsLoggerIDValid(lid))
 					{
-						testSeqNum = perLoggerIDInfoList [lid].lastDistributedMesgSeqNum;
-						dgid = perLoggerIDInfoList [lid].distGroupID;
-						isMessageDeliveryInProgress = InnerCheckIfMessageDeliveryIsStillInProgress(dgid, testSeqNum);
+                        PerLoggerIDInfo plIDInfo = perLoggerIDInfoArray[lid];
+
+                        testSeqNum = plIDInfo.lastDistributedMesgSeqNum;
+                        dgid = plIDInfo.distGroupID;
+
+                        isMessageDeliveryInProgress = InnerCheckIfMessageDeliveryIsStillInProgress(dgid, testSeqNum);
 					}
 				}
 
@@ -742,7 +809,7 @@ namespace MosaicLib
 						return;
 					}
 
-					PerDistGroupIDInfo dgInfo = distGroupIDInfoList [dgid];
+					PerDistGroupIDInfo dgInfo = distGroupIDInfoArray[dgid];
 
 					if (logMessageHandler != null)
 					{
@@ -770,7 +837,7 @@ namespace MosaicLib
 						return;
 					}
 
-					PerDistGroupIDInfo dgInfo = distGroupIDInfoList [dgid];
+					PerDistGroupIDInfo dgInfo = distGroupIDInfoArray[dgid];
 
 					dgInfo.loggerNameMatchType = matchType;
 					dgInfo.loggerNameMatchStr = matchStr;
@@ -802,7 +869,7 @@ namespace MosaicLib
 						return;
 					}
 
-					PerDistGroupIDInfo dgInfo = distGroupIDInfoList [dgid];
+					PerDistGroupIDInfo dgInfo = distGroupIDInfoArray[dgid];
 
                     // read the LoggerConfig (struct), update the LogGate field and then write it back to the PerDistGroupIDInfo so that it can notify observers of the change.
 					LoggerConfig lc = dgInfo.GroupLoggerConfigSetting;
@@ -840,8 +907,8 @@ namespace MosaicLib
                         return;
                     }
 
-                    PerDistGroupIDInfo fromDgInfo = distGroupIDInfoList[fromDgid];
-                    PerDistGroupIDInfo linkToDgInfo = distGroupIDInfoList[linkToDgid];
+                    PerDistGroupIDInfo fromDgInfo = distGroupIDInfoArray[fromDgid];
+                    PerDistGroupIDInfo linkToDgInfo = distGroupIDInfoArray[linkToDgid];
 
                     Queue<PerDistGroupIDInfo> linkBuildQueue = new Queue<PerDistGroupIDInfo>();
                     linkBuildQueue.Enqueue(linkToDgInfo);
@@ -878,17 +945,17 @@ namespace MosaicLib
                     shutdown = false;
 
                     // Enable all of the dist groups (internally will restore their distribution group gates to prior value)
-                    for (int dgid = 0; dgid < distGroupIDInfoList.Count; dgid++)
+                    for (int dgid = 0; dgid < distGroupIDInfoArray.Length; dgid++)
                     {
-                        PerDistGroupIDInfo dgInfo = distGroupIDInfoList[dgid];
+                        PerDistGroupIDInfo dgInfo = distGroupIDInfoArray[dgid];
                         dgInfo.Disabled = false;
                     }
 
 
                     // now Enable all of the logger's (internally will restore their distribution group gate to prior value)
-                    for (int lid = 0; lid < perLoggerIDInfoList.Count; lid++)
+                    for (int lid = 0; lid < perLoggerIDInfoArray.Length; lid++)
                     {
-                        PerLoggerIDInfo lInfo = perLoggerIDInfoList[lid];
+                        PerLoggerIDInfo lInfo = perLoggerIDInfoArray[lid];
                         lInfo.Disabled = false;
                     }
 
@@ -910,16 +977,16 @@ namespace MosaicLib
 						return;
 
                     // now Diable all of the logger's (internally will set their distribution group gate to None)
-                    for (int lid = 0; lid < perLoggerIDInfoList.Count; lid++)
+                    for (int lid = 0; lid < perLoggerIDInfoArray.Length; lid++)
                     {
-                        PerLoggerIDInfo lInfo = perLoggerIDInfoList[lid];
+                        PerLoggerIDInfo lInfo = perLoggerIDInfoArray[lid];
                         lInfo.Disabled = true;
                     }
 
                     // Disable all of the dist groups
-					for (int dgid = 0; dgid < distGroupIDInfoList.Count; dgid++)
+					for (int dgid = 0; dgid < distGroupIDInfoArray.Length; dgid++)
 					{
-						PerDistGroupIDInfo dgInfo = distGroupIDInfoList [dgid];
+						PerDistGroupIDInfo dgInfo = distGroupIDInfoArray[dgid];
                         dgInfo.Disabled = true;
 					}
 
@@ -1036,7 +1103,7 @@ namespace MosaicLib
 								lid = lsid.ID;
 
 							if (InnerIsLoggerIDValid(lid))
-								loggerIDInfo = perLoggerIDInfoList [lid];
+								loggerIDInfo = perLoggerIDInfoArray[lid];
 
 							if (loggerIDInfo != null)
 								mesgdgid = loggerIDInfo.distGroupID;
@@ -1062,7 +1129,7 @@ namespace MosaicLib
 							if (dgid != mesgdgid)
 							{
 								dgid = mesgdgid;
-								dgGate = distGroupIDInfoList [dgid].ActiveLoggerConfig.LogGate;
+								dgGate = distGroupIDInfoArray[dgid].ActiveLoggerConfig.LogGate;
 							}
 
 							// if the message type is enabled in the dist group then append it to the vector, 
@@ -1123,32 +1190,113 @@ namespace MosaicLib
 				}
 			}
 
-			protected int InnerGetLoggerID(string loggerName)
-			{
-				int lid = LoggerID_Invalid;
+            /// <summary>
+            /// This method gets, or creates, the loggerID for the given LoggerName.  If allowUseOfModularConfig is true then
+            /// the method will also attempt to extract a log gate using the ConfigKey Logging.Loggers.[loggerName].LogGate.
+            /// Passing false prevents use of modular config.
+            /// </summary>
+			protected int InnerGetLoggerID(string loggerName, bool allowUseOfModularConfig)
+            {
+                int lid = LoggerID_Invalid;
 
-				{
-					if (loggerNameToIDMap.TryGetValue(loggerName ?? String.Empty, out lid))
-						return (InnerIsLoggerIDValid(lid) ? lid : LoggerID_Invalid);
+                {
+                    if (loggerNameToIDMap.TryGetValue(loggerName ?? String.Empty, out lid))
+                        return (InnerIsLoggerIDValid(lid) ? lid : LoggerID_Invalid);
 
-					// the name was not in the table: need to create a new one
-					lid = perLoggerIDInfoList.Count;
-					perLoggerIDInfoList.Add(new PerLoggerIDInfo(lid));
-					loggerNameToIDMap.Add(loggerName, lid);
+                    IConfigKeyAccess loggersLogGateReduceICKA = null;
+                    IConfigKeyAccess loggersLogGateIncreaseICKA = null;
 
-					PerLoggerIDInfo lInfo = perLoggerIDInfoList [lid];
-					LoggerSourceInfo sourceID = new LoggerSourceInfo(lid, loggerName, lInfo.seqLoggerConfigSource.LoggerConfigSource);
+                    if (allowUseOfModularConfig)
+                    {
+                        string gateReduceKeyName = "Logging.Loggers.{0}.LogGate.Reduce".CheckedFormat(loggerName);
+                        string gateIncreaseKeyName = "Logging.Loggers.{0}.LogGate.Increase".CheckedFormat(loggerName);
 
-					lInfo.sourceID = sourceID;
-					lInfo.DistGroupConfig = distGroupIDInfoList [DistGroupID_Default].ActiveLoggerConfig;
+                        ConfigKeyAccessSpec reducedCKAS = new ConfigKeyAccessSpec(gateReduceKeyName, new ConfigKeyAccessFlags() { IsOptional = true, MayBeChanged = true, SilenceIssues = true });
+                        ConfigKeyAccessSpec increaseCKAS = new ConfigKeyAccessSpec(gateIncreaseKeyName, new ConfigKeyAccessFlags() { IsOptional = true, MayBeChanged = true, SilenceIssues = true });
 
-					InnerRemapLoggerToDistGroup(lid);
-				}
+                        loggersLogGateReduceICKA = Config.Instance.GetConfigKeyAccess(reducedCKAS);
+                        loggersLogGateIncreaseICKA = Config.Instance.GetConfigKeyAccess(increaseCKAS);
 
-				return lid;
-			}
+                        // if the ICKA that we found has a value then subscribe to later updates that might be made to this value.
+                        if (loggersLogGateReduceICKA.IsUsable || loggersLogGateIncreaseICKA.IsUsable)
+                            InnerSubscribeToModularConfigIfNeeded();
 
-			bool InnerIsLoggerIDValid(int lid) { return (lid >= 0 && lid < perLoggerIDInfoList.Count); }
+                        // map unusuable log gate ICKA items to null to prevent trying to use them when they were not defined.
+                        loggersLogGateReduceICKA = (loggersLogGateReduceICKA.IsUsable) ? loggersLogGateReduceICKA : null;
+                        loggersLogGateIncreaseICKA = (loggersLogGateIncreaseICKA.IsUsable) ? loggersLogGateIncreaseICKA : null;
+                    }
+
+                    // the name was not in the table: need to create a new one
+                    lid = perLoggerIDInfoArray.Length;
+
+                    loggerNameToIDMap.Add(loggerName, lid);
+
+                    PerLoggerIDInfo plIDInfo = new PerLoggerIDInfo(lid) 
+                        { 
+                            loggersReduceLogGateICKA = loggersLogGateReduceICKA,
+                            loggersIncreaseLogGateICKA = loggersLogGateIncreaseICKA,
+                        }.UpdateLogGateFromModularConfig();
+
+                    perLoggerIDInfoList.Add(plIDInfo);
+                    perLoggerIDInfoArray = perLoggerIDInfoList.ToArray();       // we expect there to be a significant amount of churn on this as logger IDs get added but that this churn will completely stop after the application reaches steady state.
+
+                    LoggerSourceInfo sourceID = new LoggerSourceInfo(lid, loggerName, plIDInfo.seqLoggerConfigSource.LoggerConfigSource);
+
+                    plIDInfo.sourceID = sourceID;
+                    plIDInfo.DistGroupConfig = distGroupIDInfoArray[DistGroupID_Default].ActiveLoggerConfig;
+
+                    InnerRemapLoggerToDistGroup(lid);
+                }
+
+                return lid;
+            }
+
+            private bool haveRegisteredWithModularConfig = false;
+
+            /// <summary>
+            /// This method is used each time we have made a Usable IConfigKeyAccess object to read a Logger's LogGate level.
+            /// The first time this method is called it will register the desired to be notified each time one or more config keys are changed.
+            /// </summary>
+            private void InnerSubscribeToModularConfigIfNeeded()
+            {
+                if (!haveRegisteredWithModularConfig)
+                {
+                    Config.Instance.ChangeNotificationList.OnNotify += new BasicNotificationDelegate(ChangeNotificationList_OnNotify);
+
+                    haveRegisteredWithModularConfig = true;
+                }
+            }
+
+            /// <summary>
+            /// This is the method that is used as a delegate to field Config ChangeNotification notifications.
+            /// To prevent this method from blocking the thread that called into the Config.Instance, we re-thread the call onto a ThreadPool thread.
+            /// As such changes in LogGate levels are applied somewhat after the provider(s) have been given new config key values and the config system has
+            /// informed its ChangeNotificationList that such a change has happened.
+            /// </summary>
+            void ChangeNotificationList_OnNotify()
+            {
+                System.Threading.ThreadPool.QueueUserWorkItem(HandleModularConfigNotification);
+            }
+
+            /// <summary>This method fields and implements the actual rescan of the PerLoggerIDInfo's LogGate ICKA objects.  This is done while owning the distMutex but is otherwise non-blocking.</summary>
+            void HandleModularConfigNotification(object state)
+            {
+                lock (distMutex)
+                {
+                    foreach (PerLoggerIDInfo plid in perLoggerIDInfoArray)
+                    {
+                        plid.UpdateLogGateFromModularConfig();
+                    }
+                }
+            }
+
+            /// <summary>
+            /// Returns true if the given lid is a valid index into the perLoggerIDInfoArray.
+            /// </summary>
+			bool InnerIsLoggerIDValid(int lid) 
+            { 
+                return (lid >= 0 && lid < perLoggerIDInfoArray.Length); 
+            }
 
 			int InnerGetDistGroupID(string name) { return InnerGetDistGroupID(name, false); }
 			protected int InnerGetDistGroupID(string name, bool createIfNeeded)
@@ -1162,13 +1310,23 @@ namespace MosaicLib
 
 					// the name was not in the table: need to create a new one
 					dgid = distGroupIDInfoList.Count;
-					distGroupIDInfoList.Add(new PerDistGroupIDInfo(dgid, name));
-					distGroupNameToIDMap.Add(name, dgid);
+
+                    distGroupIDInfoList.Add(new PerDistGroupIDInfo(dgid, name));
+                    distGroupIDInfoArray = distGroupIDInfoList.ToArray();
+
+                    distGroupNameToIDMap.Add(name, dgid);
 				}
 
 				return dgid;
 			}
-			bool InnerIsDistGroupIDValid(int gid) { return (gid >= 0 && gid < distGroupIDInfoList.Count); }
+
+            /// <summary>
+            /// Returns true if the given gid is a valid index into the distGroupIDInfoArray.
+            /// </summary>
+			bool InnerIsDistGroupIDValid(int gid) 
+            { 
+                return (gid >= 0 && gid < distGroupIDInfoArray.Length); 
+            }
 
 			protected void InnerUpdateLoggerDistGroupConfigForGroup(int dgid)
 			{
@@ -1178,15 +1336,15 @@ namespace MosaicLib
 					return;
 				}
 
-				PerDistGroupIDInfo dgInfo = distGroupIDInfoList [dgid];
+				PerDistGroupIDInfo dgInfo = distGroupIDInfoArray[dgid];
 				LoggerConfig activeLoggerConfig = dgInfo.ActiveLoggerConfig;
 
 				// tell all of the loggers about the new value of their distribution groups activeLogGate
-				int lid = 0, lastLID = perLoggerIDInfoList.Count - 1;
+				int lid = 0, lastLID = perLoggerIDInfoArray.Length - 1;
 
 				for (; lid <= lastLID; lid++)
 				{
-					PerLoggerIDInfo lInfo = perLoggerIDInfoList [lid];
+					PerLoggerIDInfo lInfo = perLoggerIDInfoArray[lid];
 
 					if (lInfo.distGroupID == dgid)
 						lInfo.DistGroupConfig = activeLoggerConfig;		// this property handles change detection
@@ -1197,7 +1355,7 @@ namespace MosaicLib
             /// <summary>Loop through each logger and determin which distribution group it belongs to (default if none)</summary>
 			protected void InnerRemapLoggersToDistGroups()
 			{
-				for (int lid = 0; lid < perLoggerIDInfoList.Count; lid++)
+				for (int lid = 0; lid < perLoggerIDInfoArray.Length; lid++)
 					InnerRemapLoggerToDistGroup(lid);
 			}
 
@@ -1210,7 +1368,7 @@ namespace MosaicLib
 				if (!InnerIsLoggerIDValid(lid))
 					return;
 
-				PerLoggerIDInfo plInfo = perLoggerIDInfoList [lid];
+				PerLoggerIDInfo plInfo = perLoggerIDInfoArray[lid];
 
 				// surpress logger name to dgid mapping for loggers that have been assigned a specific distGroupName
                 if (plInfo.SelectedDistGroupName != LookupDistributionGroupName)
@@ -1223,7 +1381,7 @@ namespace MosaicLib
 
 				// setup common vector iterator items
 
-				foreach (PerDistGroupIDInfo dgInfo in distGroupIDInfoList)
+				foreach (PerDistGroupIDInfo dgInfo in distGroupIDInfoArray)
 				{
 					// skip groups that have no match rules defined
 					if (dgInfo.loggerNameMatchType == LoggerNameMatchType.None || String.IsNullOrEmpty(dgInfo.loggerNameMatchStr))
@@ -1274,7 +1432,7 @@ namespace MosaicLib
 
 					if (InnerIsLoggerIDValid(lid))
 					{
-						PerLoggerIDInfo lInfo = perLoggerIDInfoList [lid];
+						PerLoggerIDInfo lInfo = perLoggerIDInfoArray[lid];
 						dgid = lInfo.distGroupID;
 						lInfo.lastDistributedMesgSeqNum = lm.SeqNum;
 					}
@@ -1282,7 +1440,7 @@ namespace MosaicLib
 					bool dgidValid = InnerIsDistGroupIDValid(dgid);
 
 					if (dgidValid)
-						dgConfig = distGroupIDInfoList [dgid].ActiveLoggerConfig;
+						dgConfig = distGroupIDInfoArray[dgid].ActiveLoggerConfig;
 
 					bool msgEnabled = dgConfig.IsTypeEnabled(lm.MesgType);
 
@@ -1299,7 +1457,7 @@ namespace MosaicLib
 				// all validation and testing of passed parameters is performed by caller
 				// message ptr is non-null, message type are enabled in group and distGroupID is known valid
 
-				PerDistGroupIDInfo srcDgInfo = distGroupIDInfoList[srcDistGroupID];
+				PerDistGroupIDInfo srcDgInfo = distGroupIDInfoArray[srcDistGroupID];
                 bool messageHasBeenReallocated = false;
 
                 // traverse groups to which this group is linked and deliver the message to each group's list of log message handlers.
@@ -1331,7 +1489,7 @@ namespace MosaicLib
 				// all validation and testing of passed parameters is performed by caller
 				// vector of messages is assumed non-empty, non-null, all types are enabled in group and distGroupID is known valid
 
-				PerDistGroupIDInfo srcDgInfo = distGroupIDInfoList[srcDistGroupID];
+				PerDistGroupIDInfo srcDgInfo = distGroupIDInfoArray[srcDistGroupID];
                 bool messagesHaveBeenReallocated = false;
 
                 // traverse groups to which this group is linked and deliver the messages to each group's list of log message handlers.
@@ -1367,7 +1525,7 @@ namespace MosaicLib
 				if (!InnerIsDistGroupIDValid(dgid))
 					return false;
 
-				PerDistGroupIDInfo dgInfo = distGroupIDInfoList[dgid];
+				PerDistGroupIDInfo dgInfo = distGroupIDInfoArray[dgid];
 
 				foreach (DistHandlerInfo dhInfo in dgInfo.distHandlerInfoList)
 				{
@@ -1381,7 +1539,7 @@ namespace MosaicLib
 			protected void InnerFlushAllHandlers()
 			{
 				// first shutdown each of the logger specific handlers
-				foreach (PerDistGroupIDInfo dgInfo in distGroupIDInfoList)
+				foreach (PerDistGroupIDInfo dgInfo in distGroupIDInfoArray)
 				{
 					foreach (DistHandlerInfo dhInfo in dgInfo.distHandlerInfoList)
 					{
@@ -1393,7 +1551,7 @@ namespace MosaicLib
 
 			protected void InnerShutdownAllHandlers()
 			{
-				foreach (PerDistGroupIDInfo dgInfo in distGroupIDInfoList)
+                foreach (PerDistGroupIDInfo dgInfo in distGroupIDInfoArray)
 				{
 					foreach (DistHandlerInfo dhInfo in dgInfo.distHandlerInfoList)
 					{
@@ -1405,7 +1563,7 @@ namespace MosaicLib
 
             protected void InnerRestartAllHandlers()
             {
-                foreach (PerDistGroupIDInfo dgInfo in distGroupIDInfoList)
+                foreach (PerDistGroupIDInfo dgInfo in distGroupIDInfoArray)
                 {
                     foreach (DistHandlerInfo dhInfo in dgInfo.distHandlerInfoList)
                     {

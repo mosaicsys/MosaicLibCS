@@ -20,13 +20,15 @@
  */
 //-------------------------------------------------------------------
 
+//-------------------------------------------------
+using System;
+using MosaicLib.Utils;
+using MosaicLib.Time;
+using MosaicLib.Modular.Common;
+using System.Runtime.Serialization;
+
 namespace MosaicLib.Modular.Action
 {
-	//-------------------------------------------------
-	using System;
-	using MosaicLib.Utils;
-	using MosaicLib.Time;
-
 	//-------------------------------------------------
 	#region ActionLoggingConfig and ActionLogging
 
@@ -229,6 +231,11 @@ namespace MosaicLib.Modular.Action
     /// <summary>
     /// This class is the basic class that implements an IActionState
     /// </summary>
+    /// <remarks>
+    /// This class does not directly support DataContract serialiation (it has no DataMembers itself) but it needs to be marked with the DataContract attribute
+    /// so that its derived types can be DataContract serialized.
+    /// </remarks>
+    [DataContract(Namespace = Constants.ModularActionNameSpace)]
     public class ActionStateImplBase : IActionState
     {
         #region Protected constructor(s)
@@ -243,12 +250,13 @@ namespace MosaicLib.Modular.Action
         /// </remarks>
         protected ActionStateImplBase(IActionState rhs)
         {
+            ActionStateImplBase rhsAsASIB = rhs as ActionStateImplBase;
+
             stateCode = rhs.StateCode;
             timeStamp = rhs.TimeStamp;
-            resultCode = rhs.ResultCode;
+            resultCode = ((rhsAsASIB != null) ? rhsAsASIB.resultCode : rhs.ResultCode);     // try to make a naked copy of the result code (rather than using the public ResultCode property that has additional logic).
             isCancelRequested = rhs.IsCancelRequested;
-            if (rhs.NamedValues != null)
-                namedValues = rhs.NamedValues;
+            namedValues = rhs.NamedValues.ConvertToReadOnly();
         }
 
         #endregion
@@ -263,8 +271,8 @@ namespace MosaicLib.Modular.Action
         protected string resultCode = null;
         /// <summary>Indicates if the client has requested that the current Action execution be canceled by the provider.</summary>
         protected volatile bool isCancelRequested = false;
-        /// <summary>Contains the last set of NameValues that have been given by the provider.</summary>
-        protected Common.NamedValueList namedValues = null;
+        /// <summary>Contains the last set of NameValues that have been given by the provider.  This will always be a readonly copy of a set that was passed in from elsewhere.</summary>
+        protected Common.NamedValueSet namedValues = null;
 
         #endregion
 
@@ -273,13 +281,13 @@ namespace MosaicLib.Modular.Action
         ///<summary>Custom ToString method gives assistance for debuging and logging</summary>
         public override string ToString()
         {
-            if (namedValues == null)
+            if (namedValues.IsNullOrEmpty())
                 return Fcns.CheckedFormat("{0} rc:'{1}'{2}", stateCode, resultCode, (IsCancelRequested ? " CancelRequested" : ""));
             else
                 return Fcns.CheckedFormat("{0} rc:'{1}'{2} {3}", stateCode, resultCode, (IsCancelRequested ? " CancelRequested" : ""), namedValues);
         }
 
-        /// <summary>Public Getter returns the published ActionStateCode.  Protected Setter updates the StateCode to the given value and the timeStamp.</summary>
+        /// <summary>Public Getter returns the published ActionStateCode.  Protected Setter updates the StateCode to the given value and sets the timeStamp to QpcTimeStamp.Now.</summary>
         public ActionStateCode StateCode
         {
             get { return stateCode; }
@@ -291,7 +299,10 @@ namespace MosaicLib.Modular.Action
         }
 
         /// <summary>Gives the TimeStamp for the last assigned value of the StateCode.</summary>
-        public Time.QpcTimeStamp TimeStamp { get { return timeStamp; } }
+        public Time.QpcTimeStamp TimeStamp 
+        { 
+            get { return timeStamp; } 
+        }
 
         /// <summary>Reports error message if !IsComplete, reports actual resultCode string if state IsComplete.</summary>
         public string ResultCode
@@ -310,7 +321,11 @@ namespace MosaicLib.Modular.Action
         }
 
         /// <summary>True if the client has requested the current Action execution to be canceled.</summary>
-        public bool IsCancelRequested { get { return isCancelRequested; } }
+        //[DataMember(Order = 20, EmitDefaultValue = false, IsRequired = false)]
+        public bool IsCancelRequested 
+        { 
+            get { return isCancelRequested; } 
+        }
 
         // simple state test methods (each matches one state)
         /// <summary>True if the StateCode is not ActionStateCode.Invalid</summary>
@@ -336,28 +351,85 @@ namespace MosaicLib.Modular.Action
         public bool Succeeded { get { return (IsComplete && string.IsNullOrEmpty(resultCode)); } }
 
         /// <summary>Carries a set of name/value pair objects that have been published along with this state.</summary>
-        public Common.NamedValueList NamedValues { get { return namedValues; } }
+        //[DataMember(Order = 30, EmitDefaultValue = false, IsRequired = false)]
+        public Common.INamedValueSet NamedValues
+        {
+            get { return namedValues ?? Common.NamedValueSet.Empty; }
+        }
 
         #endregion
     }
 
     /// <summary>
-    /// This is a basic storage wrapper object for IActionState.  Any code that wishes may use this class to create a clone of a given IActionState
+    /// This is a basic storage wrapper object for IActionState.  Any code that wishes may use this class to create a clone of a given IActionState.
+    /// This class is also used as the source/destination class for all DataContract serialization/deserialization of an IActionState's contents.
     /// </summary>
+    [DataContract(Name = "ActionState", Namespace = Constants.ModularActionNameSpace)]
     public class ActionStateCopy : ActionStateImplBase
     {
         /// <summary>Default constructor</summary>
-        public ActionStateCopy() : base() { }
+        public ActionStateCopy() 
+            : base() 
+        { }
+
+        /// <summary>
+        /// Special constructor to allow external code to build IActionState objects with special desired contents (esp Interconnect WCF)
+        /// </summary>
+        public ActionStateCopy(ActionStateCode stateCode, string resultCode, INamedValueSet namedValues)
+        {
+            this.StateCode = stateCode;
+            this.resultCode = resultCode;
+            this.namedValues = namedValues.ConvertToReadOnly();
+        }
 
         /// <summary>Copy constructor</summary>
         /// <remarks>
         /// Please note that the namedValues are not deep-cloned by this operation.  
         /// NVL cloning is done on entry to the ActionImpl class and from there it requred that the IActionState users do not modify the contents of these shared objects.
         /// </remarks>
-        public ActionStateCopy(IActionState rhs) : base(rhs) { }
+        public ActionStateCopy(IActionState rhs) 
+            : base(rhs) 
+        { }
+
+        /// <summary>
+        /// This property is only used for DataContract serialization/deserialization.
+        /// </summary>
+        [DataMember(Name = "StateCode", Order = 10)]
+        private ActionStateCode DC_StateCode { get { return base.StateCode; } set { StateCode = value; } }
+
+        /// <summary>
+        /// This property is only used for DataContract serialization/deserialization.
+        /// </summary>
+        [DataMember(Name = "ResultCode", Order = 20, EmitDefaultValue = false, IsRequired = false)]
+        private string DC_ResultCode { get { return base.ResultCode; } set { resultCode = value; } }
+
+        /// <summary>
+        /// This property is only used for DataContract serialization/deserialization.
+        /// </summary>
+        [DataMember(Name = "IsCancelRequested", Order = 30, EmitDefaultValue = false, IsRequired = false)]
+        private bool DC_IsCancelRequested { get { return base.isCancelRequested; } set { base.isCancelRequested = value; } }
+
+        /// <summary>
+        /// This property is only used for DataContract serialization/deserialization.
+        /// The property setter sets the IsReadOnly flag on the NamedValueSet instance that it is given.
+        /// It can (and should) do this because this setter is only called by DataContract deserialization and as such the NamedValueSet instance it is being given
+        /// has always been freshly constructed and has no other users or clients that are permitted to further change it.
+        /// </summary>
+        [DataMember(Name = "NamedValues", Order = 40, EmitDefaultValue = false, IsRequired = false)]
+        private NamedValueSet DC_NamedValues 
+        {
+            get { return base.namedValues; }
+            set {  base.namedValues = value.MakeReadOnly(); } 
+        }
+
+        /// <summary>Returns the approximate size of the contents in bytes.</summary>
+        public int EstimatedContentSizeInBytes
+        {
+            get { return (30 + 10 + DC_ResultCode.EstimatedContentSizeInBytes() + (DC_IsCancelRequested ? 40 : 0) + DC_NamedValues.MapNullToEmpty().EstimatedContentSizeInBytes); }
+        }
     }
 
-	///<summary>
+    ///<summary>
 	/// Define a class that contains the information necessary to determine the progress and success of a specfic Action.
 	/// The object is a struct 
 	///</summary>
@@ -370,9 +442,10 @@ namespace MosaicLib.Modular.Action
 		{
             Logging.IMesgEmitter emitter = logging.State;
 			bool isComplete = (toState == ActionStateCode.Complete);
-			bool includeRC = (isComplete || !string.IsNullOrEmpty(resultCode));
+            bool rcIsNonEmpty = !resultCode.IsNullOrEmpty();
+            bool includeRC = (isComplete || rcIsNonEmpty);
 			if (isComplete)
-				emitter = includeRC ? logging.Error : logging.Done;
+                emitter = rcIsNonEmpty ? logging.Error : logging.Done;
 
 			if (includeRC)
 				emitter.Emit("<ActionStateChange id=\"{0}\" to=\"{1}\" from=\"{2}\" rc=\"{3}\"/>", logging, toState, fromState, resultCode);
@@ -381,7 +454,7 @@ namespace MosaicLib.Modular.Action
 		}
 
         /// <summary>Used internally to gennerate and emit consistantly formatted ActinoNamedValueListUpdate records.</summary>
-        private static void EmitNamedValueListUpdateMesg(ActionLogging logging, ActionStateCode state, Common.NamedValueList nvl)
+        private static void EmitNamedValueListUpdateMesg(ActionLogging logging, ActionStateCode state, Common.INamedValueSet nvl)
         {
             Logging.IMesgEmitter emitter = logging.Update;
 
@@ -427,12 +500,14 @@ namespace MosaicLib.Modular.Action
             }
 		}
 
-        /// <summary>Allows the caller to update the contained namedValues list and emit a corresponding mesg if the ActionState IsStarted or IsIssued</summary>
-        public void UpdateNamedValues(Common.NamedValueList namedValueList, ActionLogging logging)
+        /// <summary>
+        /// Allows the caller to update the contained namedValues by replacing it with a readonly copy of the given namedValueSet.  Emits a corresponding mesg if the ActionState IsStarted or IsIssued
+        /// </summary>
+        public void UpdateNamedValues(Common.INamedValueSet namedValueSet, ActionLogging logging)
         {
             if (IsStarted || IsIssued)
             {
-                namedValues = namedValueList;
+                namedValues = namedValueSet.ConvertToReadOnly();
                 EmitNamedValueListUpdateMesg(logging, StateCode, namedValues);
             }
             else
@@ -449,9 +524,9 @@ namespace MosaicLib.Modular.Action
 
         /// <summary>
         /// Attempts to set the StateCode to ActionStateCode.Complete and to set the resultCode to the given value.  
-        /// Optionally updates the namedValues as well from the given list when the updateNVL flag is true.
+        /// Optionally updates the namedValues, by setting it to a readonly copy of the given namedValueSet, when the updateNVL flag is true.
         /// </summary>
-        public void SetStateComplete(string rc, ActionLogging logging, bool updateNVL, Common.NamedValueList namedValueList)
+        public void SetStateComplete(string rc, ActionLogging logging, bool updateNVL, Common.INamedValueSet namedValueSet)
 		{
 			ActionStateCode entryASC = stateCode;
 			bool isError = !String.IsNullOrEmpty(rc);
@@ -465,7 +540,7 @@ namespace MosaicLib.Modular.Action
                 StateCode = ActionStateCode.Complete;
                 if (updateNVL)
                 {
-                    namedValues = namedValueList;
+                    namedValues = namedValueSet.ConvertToReadOnly();
                     EmitNamedValueListUpdateMesg(logging, StateCode, namedValues);
                 }
                 EmitStateChangeMesg(logging, stateCode, entryASC, rc);
@@ -686,6 +761,45 @@ namespace MosaicLib.Modular.Action
         IBasicNotificationList IClientFacet.NotifyOnUpdate { get { return notifyOnUpdate; } }
         /// <summary>Property gives caller access to the IBasicNotificationList that is signaled each time the action's IActionState is updated.</summary>
         protected IBasicNotificationList NotifyOnUpdate { get { return notifyOnUpdate; } }
+
+        /// <summary>
+        /// Carries a set of name/value pair objects that can be passed by the client to the target Part as named parameter values based on the Common.NamedValueList
+        /// facility.  These may be used to carry an arbitrary set of parameters, by name, to the Action's implementing part.
+        /// A readonly copy of thie property is made when the action is Started and this clone is then made available to the provider.
+        /// </summary>
+        /// <remarks>
+        /// Client is free to replace this property at any time or to change the underlying set contents at any time.  
+        /// Start method will create a readonly copy and save it in the provider's version of the NamedParamValues property.
+        /// </remarks>
+        Common.INamedValueSet IClientFacet.NamedParamValues { get { return clientNamedParamValues; } set { clientNamedParamValues = value; } }
+        Common.INamedValueSet clientNamedParamValues = null;
+
+        /// <summary>
+        /// Gives provider access to a readonly NamedValueSet provided by the client and cloned by the action implementation when the action is started.
+        /// If the client did not provide any NamedParamValues then this property will return a readonly empty set so that it may safely be used by the provider without additional null checking.
+        /// </summary>
+        Common.INamedValueSet IProviderFacet.NamedParamValues
+        {
+            get { return providerNamedParamValues ?? Common.NamedValueSet.Empty; }
+        }
+        Common.INamedValueSet providerNamedParamValues = null;
+
+        /// <summary>
+        /// Updates the IProviderFacet.NamedParamValues property to be a readonly copy of the IClientFacet.NamedParamValues.
+        /// null is passed and handled at the IProviderFacet.NamedParamValues property getter level.
+        /// </summary>
+        protected void CaptureClientNamedParamValues()
+        {
+            if (clientNamedParamValues != null)
+            {
+                providerNamedParamValues = clientNamedParamValues.ConvertToReadOnly();
+                EmitActionEvent(Utils.Fcns.CheckedFormat("NamedParamValues has been set to '{0}' by Start", providerNamedParamValues), actionState.StateCode);
+            }
+            else
+            {
+                providerNamedParamValues = null;
+            }
+        }
 
         /// <summary>Starts the action if it is in an Idle state and return string.Empty or returns an error message if the action is not in a state from which it can be started.</summary>
         public string Start() 
@@ -988,7 +1102,7 @@ namespace MosaicLib.Modular.Action
                 }
                 catch (System.Exception ex)
                 {
-                    resultCode = Utils.Fcns.CheckedFormat("Internal: Method invoke threw unexpected exception: [{0}]", ex.ToString());
+                    resultCode = Utils.Fcns.CheckedFormat("Internal: Method invoke threw unexpected exception: [{0}]", ex);
                 }
 
 				ias = ActionState;
@@ -1003,8 +1117,12 @@ namespace MosaicLib.Modular.Action
 				if (resultCode != null)
 					CompleteRequest(resultCode);
 				else if (method != null)
-					EmitActionEvent("method return, action still pending", ActionState.StateCode);
+					EmitActionEvent("Invoked delegate return value indicates action is still pending", ias.StateCode);
 			}
+            else if (!resultCode.IsNullOrEmpty())
+            {
+                EmitActionError("Invoked delegate gave rc:'{0}' after action already complete".CheckedFormat(resultCode), ActionState.StateCode);
+            }
 		}
 
         /// <summary>
@@ -1013,12 +1131,14 @@ namespace MosaicLib.Modular.Action
         /// </summary>
         public bool IsCancelRequestActive { get { return isCancelRequestActive; } }
 
-        /// <summary>Provider invokes this to replace the ActionState's NamedValues and inform action's clients of the new values</summary>
-        public void UpdateNamedValues(Common.NamedValueList namedValueList)
+        /// <summary>
+        /// Provider invokes this to replace the ActionState's NamedValueSet with a readonly copy of this given value and inform action's clients of the new values.  
+        /// </summary>
+        public void UpdateNamedValues(Common.INamedValueSet namedValueSet)
         {
             lock (actionStateMutex)
             {
-                actionState.UpdateNamedValues((namedValueList != null) ? new Common.NamedValueList(namedValueList) : null, logging);
+                actionState.UpdateNamedValues(namedValueSet, logging);
                 NoteActionStateUpdated();
             }
         }
@@ -1030,20 +1150,20 @@ namespace MosaicLib.Modular.Action
         }
 
         /// <summary>Provider invokes this to indicate that the action is complete and to provide the final resultCode and set of NamedValues</summary>
-        public void CompleteRequest(string resultCode, Common.NamedValueList namedValueList) 
+        public void CompleteRequest(string resultCode, Common.INamedValueSet namedValueSet) 
         { 
-            CompleteRequest(resultCode, true, namedValueList); 
+            CompleteRequest(resultCode, true, namedValueSet); 
         }
 
         /// <summary>Internal private common implementation for the CompleteRequest method.</summary>
-        private void CompleteRequest(string resultCode, bool updateNVL, Common.NamedValueList namedValueList)
+        private void CompleteRequest(string resultCode, bool updateNVL, Common.INamedValueSet namedValueSet)
         {
 			if (resultCode == null)
 				resultCode = "Error.Action.NullResultCodeIsNotValid";
 
 			lock (actionStateMutex) 
-            { 
-                actionState.SetStateComplete(resultCode, logging, updateNVL, namedValueList);
+            {
+                actionState.SetStateComplete(resultCode, logging, updateNVL, namedValueSet);
                 NoteActionStateUpdated();
             }
 
@@ -1075,10 +1195,25 @@ namespace MosaicLib.Modular.Action
         /// </summary>
         public override string ToString()
         {
+            return ToString(default(ToStringSelect));
+        }
+
+        /// <summary>
+        /// Custom variant of normal ToString method that gives caller access to which parts of the action they want included in the string.
+        /// </summary>
+        public string ToString(ToStringSelect select)
+        {
             string mesg = logging.Mesg;
             string mesgDetail = logging.MesgDetail;
 
-            if (mesgDetail.IsNullOrEmpty())
+            bool includeMesgDetail = (!mesgDetail.IsNullOrEmpty() && (select != ToStringSelect.JustMesg));
+            bool includeState = (select == ToStringSelect.MesgDetailAndState);
+
+            if (!includeMesgDetail && !includeState)
+                return mesg;
+            else if (includeMesgDetail && !includeState)
+                return "{0} '{1}'".CheckedFormat(mesg, mesgDetail);
+            else if (!includeMesgDetail && includeState)
                 return "{0} state:{1}".CheckedFormat(mesg, ActionState);
             else
                 return "{0} '{1}' state:{2}".CheckedFormat(mesg, mesgDetail, ActionState);
@@ -1091,13 +1226,19 @@ namespace MosaicLib.Modular.Action
             notifyOnUpdate.Notify();
         }
 
-        /// <summary>Protected common method used to generate and emit consistently formatted ActionEvent records</summary>
+        /// <summary>
+        /// Protected common method used to generate and emit consistently formatted ActionEvent records
+        /// <para/>{ActionEvent id="{0}" state="{1}"}{2}{/ActionEvent}
+        /// </summary>
 		protected void EmitActionEvent(string eventStr, ActionStateCode actionStateCode) 
 		{
 			logging.State.Emit("<ActionEvent id=\"{0}\" state=\"{1}\">{2}</ActionEvent>", logging.Mesg, actionStateCode, eventStr); 
 		}
 
-        /// <summary>Protected common method used to generate and emit consistently formatted ActionError records</summary>
+        /// <summary>
+        /// Protected common method used to generate and emit consistently formatted ActionError records
+        /// <para/>{ActionError id="{0}" state="{1}"}{2}{/ActionError}
+        /// </summary>
         protected void EmitActionError(string eventStr, ActionStateCode actionStateCode) 
 		{ 
 			logging.Error.Emit("<ActionError id=\"{0}\" state=\"{1}\">{2}</ActionError>", logging.Mesg, actionStateCode, eventStr); 
@@ -1124,11 +1265,13 @@ namespace MosaicLib.Modular.Action
 					return ec;
 				}
 
-				if (paramProvided)
+                if (paramProvided)
 				{
 					paramValue = (ParamType) paramValueObj;	// will throw on error
 					EmitActionEvent(Utils.Fcns.CheckedFormat("paramValue has been set to '{0}' by Start", paramValueObj), actionState.StateCode);
 				}
+
+                CaptureClientNamedParamValues();
 
                 isCancelRequestActive = false;
 

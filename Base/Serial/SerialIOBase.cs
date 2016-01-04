@@ -64,9 +64,12 @@ namespace MosaicLib.SerialIO
             Trace = Log.Emitter(config.TraceMesgType);
             Logging.Logger logger = Log as Logging.Logger;
             if (logger != null)
-               logger.GroupName = config.LoggerGroupID;
+            {
+                logger.GroupName = config.LoggerGroupID;
+                logger.InstanceLogGate = Logging.LogGate.Debug;     // by default only emit Debug and above messages.  Logging.Logger.[name].LogGate.Increase config key can be used to elevate this level
+            }
 
-			traceDataLogger = new Logging.Logger(config.Name + ".Data", config.TraceDataLoggerGroupID);
+            traceDataLogger = new Logging.Logger(config.Name + ".Data", config.TraceDataLoggerGroupID);
 			TraceData = traceDataLogger.Emitter(config.TraceDataMesgType);
 
 			BaseStateChangeEmitter = Debug;
@@ -77,7 +80,7 @@ namespace MosaicLib.SerialIO
 			ActionLoggingReference.Error = Info;
 
             // most serial action progress messages are logged to the trace logger along with the data trace messages
-            ActionLoggingConfig traceActionLoggingConfig = new ActionLoggingConfig(config.DebugMesgType, config.InfoMesgType, config.TraceDataMesgType, config.TraceDataMesgType);
+            ActionLoggingConfig traceActionLoggingConfig = new ActionLoggingConfig(config.TraceActionDoneMesgType, config.TraceActionErrorMesgType, config.TraceActionStateMesgType, config.TraceActionUpdateMesgType);
             ActionLoggingTraceReference = new ActionLogging(traceDataLogger, traceActionLoggingConfig);
 
 			BaseStatePublishedNotificationList.OnNotify += BaseStateChangedEventHandler;
