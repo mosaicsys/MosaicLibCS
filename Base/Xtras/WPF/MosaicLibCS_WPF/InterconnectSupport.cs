@@ -421,8 +421,6 @@ namespace MosaicLib.WPF.Interconnect
                 activeIvaArray = activeWvaList.Select((wva) => wva.ValueAccessor).ToArray();
                 wvaUpdateArray = new WPFValueAccessor[activeWvaList.Count];
                 ivaUpdateArray = new IValueAccessor[activeWvaList.Count];
-
-                rebuildArrays = false;
             }
 
             int numItemsToCheck = activeIvaArray.Length;
@@ -432,7 +430,7 @@ namespace MosaicLib.WPF.Interconnect
             {
                 WPFValueAccessor wva = activeWvaList[checkWvaIdx];
 
-                if (wva.IsUpdateNeeded)
+                if (wva.IsUpdateNeeded || rebuildArrays)
                 {
                     wvaUpdateArray[numItemsToUpdate] = wva;
                     ivaUpdateArray[numItemsToUpdate++] = activeIvaArray[checkWvaIdx];
@@ -446,6 +444,8 @@ namespace MosaicLib.WPF.Interconnect
                 WPFValueAccessor wva = wvaUpdateArray[updateWvaIdx];
                 wva.NotifyValueHasBeenUpdated();
             }
+
+            rebuildArrays = false;
         }
     }
 

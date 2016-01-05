@@ -85,7 +85,7 @@ namespace MosaicLib.WPF.Logging
         public DateTime  EmittedDateTime { get { return lm.EmittedDateTime; } }
         public string  GetFormattedDateTime() { return lm.GetFormattedDateTime(); }
         public string  GetFormattedDateTime(MosaicLib.Utils.Dates.DateTimeFormat dtFormat) { return lm.GetFormattedDateTime(dtFormat); }
-        public string DisplayTime { get { return EmittedDateTime.ToString("HH:MM:SS.ffffff"); } }
+        public string DisplayTime { get { return EmittedDateTime.ToString("HH:mm:ss.ffffff"); } }
 
         #endregion
     }
