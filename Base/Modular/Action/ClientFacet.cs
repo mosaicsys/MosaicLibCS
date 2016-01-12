@@ -333,6 +333,20 @@ namespace MosaicLib.Modular.Action
     /// </summary>
     public static partial class ExtentionMethods
     {
+        /// <summary>Inline variant of action.Start that supports call chaining.  This method is only intended for use in cases where the action is already known to be ready to start (ie the start will not fail) as the result code from the underlying start call will be lost.</summary>
+        public static TClientFacetType StartInline<TClientFacetType>(this TClientFacetType action) where TClientFacetType : IClientFacet
+        {
+            action.Start();
+            return action;
+        }
+
+        /// <summary>Inline variant of action.Start that supports call chaining.  This method saves the result code from the Start call in the given resultCode out parameter.</summary>
+        public static TClientFacetType StartInline<TClientFacetType>(this TClientFacetType action, out string resultCode) where TClientFacetType : IClientFacet
+        {
+            resultCode = action.Start();
+            return action;
+        }
+
         /// <summary>Run the action to completion.  Returns the given action to support call chaining.</summary>
         public static TClientFacetType RunInline<TClientFacetType>(this TClientFacetType action) where TClientFacetType : IClientFacet
         {

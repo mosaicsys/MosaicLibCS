@@ -462,7 +462,7 @@ namespace MosaicLib.Modular.Part
         /// <summary>
         /// Method creates a Service Action with the Param and NamedParamValues preconfigured with the given value.
         /// </summary>
-        public virtual IStringParamAction CreateServiceAction(string paramValue, NamedValueSet namedParamValues)
+        public virtual IStringParamAction CreateServiceAction(string paramValue, INamedValueSet namedParamValues)
         {
             IStringParamAction action = new StringActionImpl(actionQ, paramValue, PerformServiceAction, "Service", ActionLoggingReference) as IStringParamAction;
             action.NamedParamValues = namedParamValues;
