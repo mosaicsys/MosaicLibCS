@@ -1112,7 +1112,11 @@ namespace MosaicLib.Modular.Action
 				// else the action is handled through some other means
 			}
 
-			if (ias != null && !ias.IsComplete)
+            // this method can only complete an action due to a generated resultCode if the action state is still Issued.
+            // if the action has been completed by the method and was re-started in the mean time then the state will be Started and not Issued and we must not 
+            //  complete any such restarted action.
+
+            if (ias != null && ias.IsIssued)
 			{
 				if (resultCode != null)
 					CompleteRequest(resultCode);

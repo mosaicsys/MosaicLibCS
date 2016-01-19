@@ -282,7 +282,7 @@ namespace MosaicLib.Modular.Part
 		/// <summary>Creates a Service Action and preinitializes its parameter to the given value.  All service action functionality is Part specific.</summary>
 		IStringParamAction CreateServiceAction(string serviceName);
 
-        /// <summary>Method creates a Service Action with the Param and NamedParamValues preconfigured with the given value.</summary>
+        /// <summary>Method creates a Service Action with the Param and NamedParamValues preconfigured with the given values.</summary>
         IStringParamAction CreateServiceAction(string paramValue, INamedValueSet namedParamValues);
     }
 

@@ -48,7 +48,7 @@ namespace MosaicLib.WPF.Logging
     public class LogFilterConfig
     {
         public LogFilterConfig() : this(Logging.LogGate.Debug) { }
-        public LogFilterConfig(Logging.LogGate displayLogGate) 
+        public LogFilterConfig(Logging.LogGate displayLogGate)
         {
             DisplayLogGate = displayLogGate;
         }
@@ -68,23 +68,23 @@ namespace MosaicLib.WPF.Logging
     public class LogMessageCollectionItem : ILogMessageCollectionItem
     {
         public LogMessageCollectionItem(Logging.ILogMessage lm) { this.lm = lm; }
-    
+
         protected Logging.ILogMessage lm;
 
         #region ILogMessage Members
 
-        public string  LoggerName { get { return lm.LoggerName; } }
-        public Logging.MesgType  MesgType { get { return lm.MesgType; } }
-        public string  Mesg { get { return lm.Mesg; } }
-        public byte[]  Data { get { return lm.Data; } }
+        public string LoggerName { get { return lm.LoggerName; } }
+        public Logging.MesgType MesgType { get { return lm.MesgType; } }
+        public string Mesg { get { return lm.Mesg; } }
+        public byte[] Data { get { return lm.Data; } }
         public INamedValueSet NamedValueSet { get { return lm.NamedValueSet; } }
-        public MosaicLib.Time.QpcTimeStamp  EmittedQpcTime { get { return lm.EmittedQpcTime; } }
-        public int  SeqNum { get { return lm.SeqNum; } }
-        public int  ThreadID { get { return lm.ThreadID; } }
+        public MosaicLib.Time.QpcTimeStamp EmittedQpcTime { get { return lm.EmittedQpcTime; } }
+        public int SeqNum { get { return lm.SeqNum; } }
+        public int ThreadID { get { return lm.ThreadID; } }
         public int Win32ThreadID { get { return lm.Win32ThreadID; } }
-        public DateTime  EmittedDateTime { get { return lm.EmittedDateTime; } }
-        public string  GetFormattedDateTime() { return lm.GetFormattedDateTime(); }
-        public string  GetFormattedDateTime(MosaicLib.Utils.Dates.DateTimeFormat dtFormat) { return lm.GetFormattedDateTime(dtFormat); }
+        public DateTime EmittedDateTime { get { return lm.EmittedDateTime; } }
+        public string GetFormattedDateTime() { return lm.GetFormattedDateTime(); }
+        public string GetFormattedDateTime(MosaicLib.Utils.Dates.DateTimeFormat dtFormat) { return lm.GetFormattedDateTime(dtFormat); }
         public string DisplayTime { get { return EmittedDateTime.ToString("HH:mm:ss.ffffff"); } }
 
         #endregion
@@ -94,24 +94,25 @@ namespace MosaicLib.WPF.Logging
         : System.Collections.ObjectModel.ObservableCollection<LogMessageCollectionItem>
         , IDisposable
     {
-        public LogMessageObservableCollection() : base() 
+        public LogMessageObservableCollection()
+            : base()
         {
             SynchronizationContext = System.Threading.SynchronizationContext.Current;
-            AddInstance(this); 
+            AddInstance(this);
         }
 
         #region Local members, properties and fields
 
         private LogFilterConfig logFilterConfig = new LogFilterConfig();
-        public LogFilterConfig LogFilterConfig 
-        { 
+        public LogFilterConfig LogFilterConfig
+        {
             get { return logFilterConfig; }
-            set 
-            { 
+            set
+            {
                 logFilterConfig = (value != null ? value : new LogFilterConfig(Logging.LogGate.None));
                 lastMesgSeqNumPair = new WpfLogMessageHandlerToolBase.SeqNumPair();
                 Update();
-            } 
+            }
         }
 
         public System.Threading.SynchronizationContext SynchronizationContext { get; private set; }
@@ -185,10 +186,10 @@ namespace MosaicLib.WPF.Logging
             System.GC.SuppressFinalize(this);
         }
 
-        ~LogMessageObservableCollection() 
-		{
-			this.Dispose(Utils.DisposableBase.DisposeType.CalledByFinalizer);
-		}
+        ~LogMessageObservableCollection()
+        {
+            this.Dispose(Utils.DisposableBase.DisposeType.CalledByFinalizer);
+        }
 
 
         #endregion
@@ -258,9 +259,9 @@ namespace MosaicLib.WPF.Logging
     {
         #region Construction
 
-        public WpfLogMessageHandlerToolBase() : this ("WpfLMH", Logging.LogGate.All, 10000) {}
+        public WpfLogMessageHandlerToolBase() : this("WpfLMH", Logging.LogGate.All, 10000) { }
         public WpfLogMessageHandlerToolBase(string name, Logging.LogGate defaultCollectionGate, int maxMessagesToKeep)
-            : base(name, defaultCollectionGate, false, false) 
+            : base(name, defaultCollectionGate, false, false)
         {
             rawLogMesgArray = new RawLogMesgArray(maxMessagesToKeep);
         }
@@ -279,7 +280,8 @@ namespace MosaicLib.WPF.Logging
 
         public struct SeqNumPair
         {
-            public SeqNumPair(Int64 lastMesgAddedSeqNum, UInt32 contentResetChangeSeqNum) : this()
+            public SeqNumPair(Int64 lastMesgAddedSeqNum, UInt32 contentResetChangeSeqNum)
+                : this()
             {
                 LastMesgAddedSeqNum = lastMesgAddedSeqNum;
                 ContentResetChangeSeqNum = contentResetChangeSeqNum;
@@ -386,9 +388,9 @@ namespace MosaicLib.WPF.Logging
             {
                 invokeDistributeUpdateCallsCreatedAndNotActive = true;
 
-                System.Threading.SynchronizationContext sc = LogMessageObservableCollection.DefaultSynchronizationContext;
-                if (sc != null)
-                    sc.Post(DistributeUpdateCalls, distributeUpdateCallsMutex);       // invoke my DistributeUpdateCalls in the context of the default LogMessageObservableCollection's SynchronizationContext
+                System.Threading.SynchronizationContext defaultSC = LogMessageObservableCollection.DefaultSynchronizationContext;
+                if (defaultSC != null)
+                    defaultSC.Post(DistributeUpdateCalls, distributeUpdateCallsMutex);       // invoke my DistributeUpdateCalls in the context of the default LogMessageObservableCollection's SynchronizationContext
                 else
                     System.Threading.ThreadPool.QueueUserWorkItem(DistributeUpdateCalls, distributeUpdateCallsMutex);       // if there is no default sc then use a ThreadPool thread
             }
@@ -398,19 +400,23 @@ namespace MosaicLib.WPF.Logging
 
         protected void DistributeUpdateCalls(object mutex)
         {
-            System.Threading.Thread.Sleep(DispatchUpdateStartDelay);        // block update loop rate to not exceed maximum rate
+            System.Threading.SynchronizationContext defaultSC = LogMessageObservableCollection.DefaultSynchronizationContext;
+            System.Threading.SynchronizationContext currentSC = System.Threading.SynchronizationContext.Current;
+
+            // block the outer update loop rate to not exceed maximum rate when being run from an thread other than the default one.
+            if (!object.ReferenceEquals(defaultSC, currentSC))
+                System.Threading.Thread.Sleep(DispatchUpdateStartDelay);
 
             lock (mutex)    // only run one instance at a time per mutex (blocks later queued calls)
             {
                 LogMessageObservableCollection[] activeCollectionSnapshot = LogMessageObservableCollection.InstanceArray;
-                System.Threading.SynchronizationContext currentSC = System.Threading.SynchronizationContext.Current;
 
                 invokeDistributeUpdateCallsCreatedAndNotActive = false;
 
                 foreach (LogMessageObservableCollection lmoc in activeCollectionSnapshot)
                 {
                     System.Threading.SynchronizationContext lmocSC = lmoc.SynchronizationContext;
-                    if (currentSC == lmocSC)
+                    if (object.ReferenceEquals(currentSC, lmocSC))
                         lmoc.Update();
                     else
                         lmocSC.Send(lmoc.Update, null); // syncronous cross thread invoke: only returs after the update is complete
@@ -427,7 +433,7 @@ namespace MosaicLib.WPF.Logging
 
         Utils.AtomicUInt32 contentResetChangeSeqNum = new MosaicLib.Utils.AtomicUInt32(1);
 
-        readonly TimeSpan DispatchUpdateStartDelay = TimeSpan.FromSeconds(0.100);       // limit update rate to 10 Hz
+        readonly TimeSpan DispatchUpdateStartDelay = TimeSpan.FromSeconds(0.030);       // limit update rate to 30 Hz
 
         #endregion
 
@@ -515,7 +521,7 @@ namespace MosaicLib.WPF.Logging
                 return numItemsAddedToSet;
             }
         }
-        
+
         #endregion
     }
 }
