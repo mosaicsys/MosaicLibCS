@@ -27,6 +27,7 @@ using System.Runtime.InteropServices;
 using System.Linq;
 using MosaicLib.Utils;
 using System.Collections;
+using System.Text;
 
 namespace MosaicLib.Modular.Common
 {
@@ -142,6 +143,17 @@ namespace MosaicLib.Modular.Common
         }
 
         /// <summary>
+        /// Returns true if the contained type is ContainerStorageType.Object.
+        /// </summary>
+        public bool IsObject
+        {
+            get
+            {
+                return (cvt == ContainerStorageType.Object);
+            }
+        }
+
+        /// <summary>
         /// Returns true if the contained type is ContainerStorageType.Object and contained value is null.
         /// </summary>
         public bool IsNullObject
@@ -149,6 +161,17 @@ namespace MosaicLib.Modular.Common
             get
             {
                 return (cvt == ContainerStorageType.Object && o == null);
+            }
+        }
+
+        /// <summary>
+        /// Returns true if the contained type is ContainerStorageType.Object and contained value is not null.
+        /// </summary>
+        public bool IsNonNullObject
+        {
+            get
+            {
+                return (cvt == ContainerStorageType.Object && o != null);
             }
         }
 
@@ -264,6 +287,15 @@ namespace MosaicLib.Modular.Common
         /// </summary>
         public ValueContainer DeepCopyFrom(ValueContainer rhs)
         {
+            if (rhs.IsNonNullObject)
+            {
+                ValueContainer[] vcArray = rhs.o as ValueContainer[];
+
+                if (vcArray != null)
+                {
+                    return new ValueContainer(vcArray.Select((item) => ValueContainer.Empty.DeepCopyFrom(item)).ToArray());
+                }
+            }
             if (rhs.cvt != ContainerStorageType.IListOfString)
                 return CopyFrom(rhs);
 
@@ -590,10 +622,12 @@ namespace MosaicLib.Modular.Common
             {
                 if (TValueTypeType.IsEnum)
                 {
+                    // This covers both string and numeric representations of the enumeration as the string representation of a number can also be parsed as the enum.
                     value = (TValueType) System.Enum.Parse(TValueTypeType, ValueAsObject.ToString(), false);
                 }
                 else if (decodedValueType == cvt)
                 {
+                    // no conversion is required.  The stored type already mataches what the client is asking for.
                     switch (cvt)
                     {
                         case ContainerStorageType.None: value = default(TValueType); break;
@@ -627,6 +661,11 @@ namespace MosaicLib.Modular.Common
                 else if (decodedValueType == ContainerStorageType.TimeSpan && cvt.IsFloatingPoint() && allowTypeChangeAttempt)
                 {
                     value = (TValueType)((System.Object) TimeSpan.FromSeconds((cvt == ContainerStorageType.Double) ? u.f64 : u.f32));
+                }
+                else if (decodedValueType.IsValueType() && !isNullable && !rethrow && IsNullOrEmpty)
+                {
+                    // if we are trying to convert an empty or null container to a value type and rethrow is not true then do not bother to attempt the conversion (it will fail).
+                    value = default(TValueType);
                 }
                 else if (!isNullable && allowTypeChangeAttempt)
                 {
@@ -786,6 +825,17 @@ namespace MosaicLib.Modular.Common
             if (cvt != rhs.cvt)
                 return false;
 
+            if (IsNonNullObject)
+            {
+                ValueContainer[] vcArray = o as ValueContainer[];
+                ValueContainer[] rhsVCArray = rhs.o as ValueContainer[];
+
+                if (vcArray != null)
+                {
+                    return vcArray.IsEqualTo(rhsVCArray);
+                }
+            }
+
             if (cvt == ContainerStorageType.IListOfString)
                 return (o as IList<String>).IsEqualTo(rhs.o as IList<String>);
             else if (cvt.IsReferenceType())
@@ -811,29 +861,103 @@ namespace MosaicLib.Modular.Common
             return base.GetHashCode();
         }
 
-        /// <summary>Override ToString for logging and debugging.</summary>
+        /// <summary>
+        /// Override ToString for logging and debugging.  
+        /// This format is generally similar to SML except that it generally uses square brackets as element delimiters rather than
+        /// greater and less than symbols (which are heavily used in XML and must thus be escaped when placing such strings in XML output).
+        /// </summary>
         public override string ToString()
         {
             if (cvt.IsNone())
-                return "None";
+                return "[None]";
 
             if (IsNull)
-                return "Null:{0}".CheckedFormat(cvt);
+            {
+                if (cvt == ContainerStorageType.Object)
+                    return "[Null]";
+                else
+                    return "[Null:{0}]".CheckedFormat(cvt);
+            }
+
+            if (cvt == ContainerStorageType.Object && o != null)
+            {
+                if (o is INamedValueSet)
+                {
+                    return (o as INamedValueSet).ToStringSML();
+                }
+
+                if (o is INamedValue)
+                {
+                    return (o as INamedValue).ToStringSML();
+                }
+
+                if (o is ValueContainer[])
+                {
+                    ValueContainer[] vcArray = o as ValueContainer[] ?? emptyValueContainerArray;
+
+                    return "[L {0}]".CheckedFormat(String.Join(" ", vcArray.Select((vc) => vc.ToStringSML()).ToArray()));
+                }
+            }
 
             switch (cvt)
             {
-                case ContainerStorageType.Object:
-                    return "{0}:'{1}'".CheckedFormat(cvt, o);
+                case ContainerStorageType.Boolean:
+                    return "[Bool {0}]".CheckedFormat(u.b);
+                case ContainerStorageType.SByte:
+                    return "[I1 {0}]".CheckedFormat(u.i8);
+                case ContainerStorageType.Int16:
+                    return "[I2 {0}]".CheckedFormat(u.i16);
+                case ContainerStorageType.Int32:
+                    return "[I4 {0}]".CheckedFormat(u.i32);
+                case ContainerStorageType.Int64:
+                    return "[I8 {0}]".CheckedFormat(u.i64);
+                case ContainerStorageType.Byte:
+                    if (o == null)      // this is a special case.  the o field may be set to a flag value when serializing Binary values where the storage type overlaps with binary values.
+                        return "[U1 {0}]".CheckedFormat(u.u8);
+                    else
+                        return "[Bi 0x{0:x2}]".CheckedFormat(u.u8);
+                case ContainerStorageType.UInt16:
+                    return "[U2 {0}]".CheckedFormat(u.u16);
+                case ContainerStorageType.UInt32:
+                    return "[U4 {0}]".CheckedFormat(u.u32);
+                case ContainerStorageType.UInt64:
+                    return "[U8 {0}]".CheckedFormat(u.u64);
+                case ContainerStorageType.Single:
+                    return "[F4 {0}]".CheckedFormat(u.f32);
+                case ContainerStorageType.Double:
+                    return "[F8 {0}]".CheckedFormat(u.f64);
                 case ContainerStorageType.String:
-                    return "'{0}'".CheckedFormat(o);
+                    {
+                        string s = o as string ?? string.Empty;
+
+                        if (s.IsBasicAscii(basicUnquotedStringExcludeList, false))
+                            return "[A {0}]".CheckedFormat(s);
+                        else
+                            return "[A \"{0}\"]".CheckedFormat(s.GenerateJSONVersion());
+                    }
+                case ContainerStorageType.DateTime:
+                    return "[DateTime {0}]".CheckedFormat(u.DateTime.ToString("o"));
+                case ContainerStorageType.TimeSpan:
+                    return "[TimeSpan {0}]".CheckedFormat(u.TimeSpan.TotalSeconds);
                 case ContainerStorageType.IListOfString:
-                    return "|{0}|".CheckedFormat(String.Join("|", ((o as IList<String>) ?? emptyIListOfString).ToArray())); 
+                    return "[LS {0}]".CheckedFormat(String.Join(" ", (((o as IList<String>) ?? emptyIListOfString).Select(s => new ValueContainer(s).ToStringSML())).ToArray()));
+                case ContainerStorageType.Object:
+                    return "[{0} '{1}']".CheckedFormat(cvt, o);
                 default:
-                    return "{0}:{1}".CheckedFormat(cvt, ValueAsObject);
+                    return "[{0} '{1}']".CheckedFormat(cvt, ValueAsObject);
             }
         }
 
+        /// <summary>ToString variant that support SML like output format.</summary>
+        public string ToStringSML()
+        {
+            return ToString();
+        }
+
+        private static readonly List<char> basicUnquotedStringExcludeList = new List<char>() { ' ', '\"', '[', ']' };
+
         private static readonly IList<String> emptyIListOfString = new List<String>().AsReadOnly();
+        private static readonly ValueContainer [] emptyValueContainerArray = new ValueContainer [0];
     }
 
     /// <summary>
@@ -1044,7 +1168,25 @@ namespace MosaicLib.Modular.Common
         private bool Null { get { return vc.IsNullObject; } set { if (value) VC = ValueContainer.Null; }}
 
         [DataMember(EmitDefaultValue = false, IsRequired = false)]
-        private object o { get { return (vc.cvt == ContainerStorageType.Object ? vc.o : null); } set { VC = new ValueContainer() { cvt = ContainerStorageType.Object, o = value }; } }
+        private object o 
+        { 
+            get 
+            {
+                if (vc.cvt != ContainerStorageType.Object || vc.IsNull)
+                    return null;
+
+                ValueContainer[] vta = vc.o as ValueContainer[];
+
+                if (vta != null)
+                    return null;
+
+                return vc.o;
+            } 
+            set 
+            { 
+                VC = new ValueContainer() { cvt = ContainerStorageType.Object, o = value }; 
+            } 
+        }
 
         [DataMember(EmitDefaultValue = false, IsRequired = false)]
         private String s { get { return (vc.cvt == ContainerStorageType.String ? (vc.o as String) : null); } set { VC = new ValueContainer() { cvt = ContainerStorageType.String, o = value }; } }
@@ -1090,6 +1232,26 @@ namespace MosaicLib.Modular.Common
 
         [DataMember(EmitDefaultValue = false, IsRequired = false)]
         private DateTime? dt { get { return ((vc.cvt == ContainerStorageType.DateTime) ? (DateTime?)vc.u.DateTime : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.DateTime, u = new ValueContainer.Union() { DateTime = value.GetValueOrDefault() } } : ValueContainer.Null); } }
+
+        [DataMember(EmitDefaultValue = false, IsRequired = false)]
+        private ValueContainerEnvelope [] vca 
+        { 
+            get 
+            {
+                if (vc.cvt != ContainerStorageType.Object)
+                    return null;
+
+                ValueContainer [] vta = vc.o as ValueContainer[];
+                if (vta == null)
+                    return null;
+
+                return vta.Select((vcItem) => new ValueContainerEnvelope() { VC = vcItem }).ToArray();
+            } 
+            set 
+            {
+                VC = new ValueContainer((value.Select((ve) => ve.VC)).ToArray());
+            } 
+        }
 
         #endregion
 
@@ -1163,6 +1325,9 @@ namespace MosaicLib.Modular.Common
         /// <summary>Custom ToString variant that allows the caller to determine if the ro/rw postfix should be included on thie string result, and to determine if NamedValues with empty VCs should be treated as a keyword.</summary>
         string ToString(bool includeROorRW, bool treatNameWithEmptyVCAsKeyword);
 
+        /// <summary>ToString variant that support SML like output format.</summary>
+        string ToStringSML();
+
         /// <summary>
         /// Returns the approximate size of the contents in bytes. 
         /// </summary>
@@ -1193,6 +1358,9 @@ namespace MosaicLib.Modular.Common
         /// Returns the approximate size of the contents in bytes. 
         /// </summary>
         int EstimatedContentSizeInBytes { get; }
+
+        /// <summary>ToString variant that support SML like output format.</summary>
+        string ToStringSML();
     }
 
     #endregion
@@ -1694,6 +1862,12 @@ namespace MosaicLib.Modular.Common
             return "[{0}]{1}".CheckedFormat(String.Join(",", list.Select((nv) => nv.ToString(includeROorRW, treatNameWithEmptyVCAsKeyword)).ToArray()), (includeROorRW ? (IsReadOnly ? "ro" : "rw") : String.Empty));
         }
 
+        /// <summary>ToString variant that support SML like output format.</summary>
+        public string ToStringSML()
+        {
+            return "[L {0}]".CheckedFormat(String.Join(" ", list.Select((nv) => nv.ToStringSML()).ToArray()));
+        }
+
         /// <summary>Returns the approximate size of the contents in bytes.</summary>
         public int EstimatedContentSizeInBytes
         {
@@ -1967,6 +2141,12 @@ namespace MosaicLib.Modular.Common
         public override string ToString()
         {
             return ToString(true, false);
+        }
+
+        /// <summary>ToString variant that support SML like output format.</summary>
+        public string ToStringSML()
+        {
+            return "[L {0} {1}]".CheckedFormat((new ValueContainer(Name)).ToStringSML(), VC.ToStringSML());
         }
 
         /// <summary>

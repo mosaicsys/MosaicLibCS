@@ -76,6 +76,7 @@
     <ProjectReference Include="..\..\..\MosaicLibCSBase2010.csproj">
       <Project>{DFD5D17D-1977-4B56-A4EB-5955B40B6ABB}</Project>
       <Name>MosaicLibCSBase2010</Name>
+      <Private>False</Private>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>

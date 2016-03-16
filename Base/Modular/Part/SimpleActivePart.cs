@@ -33,7 +33,9 @@ namespace MosaicLib.Modular.Part
 	//-----------------------------------------------------------------
 	#region SimpleActivePartBase
 
-    /// <summary>Defines the logic that a SimpleActivePart uses for clearing the threadWakeupNotifier object that is used in WaitForSomethingToDo calls.</summary>
+    /// <summary>
+    /// Defines the logic that a SimpleActivePart uses for clearing the threadWakeupNotifier object that is used in WaitForSomethingToDo calls.
+    /// </summary>
     public enum ThreadWakeupNotifierResetHandling : int
     {
         /// <summary>Old version (current default): threadWakeupNotifier is explicitly reset in loop just prior to calling PerformMainLoopService and is implicilty AutoReset when WaitForSomethingToDo returns true.</summary>
@@ -42,6 +44,33 @@ namespace MosaicLib.Modular.Part
         AutoResetIsUsedToResetNotifier = 1,
         /// <summary>threadWakeupNotifier is not explicitly Reset in the main loop.  WaitForSomethingToDo is called with the WaitTimeLimit if IssueNextQueuedAction returned false.  Loop does not call WaitForSomethingToDo (and thus does not AutoReset the threadWakeupNotifier) at all if IssueNextQueuedAction returns true (to indicate that an action was performed).</summary>
         AutoResetIsUsedToResetNotifierWhenNoActionsHaveBeenPerformed = 2,
+    }
+
+    /// <summary>
+    /// This enumeration defines the behaviors/handling that the SimpleActivePartBase class can now implement for base class level GoOnline and GoOffline actions.
+    /// </summary>
+    [Flags]
+    public enum GoOnlineAndGoOfflineHandling : int
+    {    
+        /// <summary>
+        /// Selects basic (default) handling.  Base UseState is not automatically updated and base Peform methods return not implemented result code.
+        /// </summary>
+        None = 0,
+
+        /// <summary>
+        /// Selects that internal default implementation of PerformGoOnline and PerformGoOffline will succeed.
+        /// </summary>
+        BasePerformMethodsSucceed = 1,
+
+        /// <summary>
+        /// Selects that execution of the GoOnline action sets Base UseState to AttemptOnline before starting initialize and then to Online or AttempOnlineFailed based on success of the normal PerformGoOnline method.
+        /// </summary>
+        GoOnlineUpdatesBaseUseState = 2,
+
+        /// <summary>
+        /// Selects that exeuction of the GoOffline action sets Base UseState to Offline before calling the normal PerformGoOffline method.
+        /// </summary>
+        GoOfflineUpdatesBaseUseState = 4,
     }
 
 	/// <summary>
@@ -289,6 +318,19 @@ namespace MosaicLib.Modular.Part
         public int MaxActionsToInvokePerServiceLoop { get { return maxActionsToInvokePerServiceLoop; } set { maxActionsToInvokePerServiceLoop = Math.Max(1, Math.Min(100, value)); } }
         private int maxActionsToInvokePerServiceLoop = 1;
 
+        /// <summary>
+        /// Defines this parts base state handling for the GoOnline and GoOffline actions.
+        /// </summary>
+        protected GoOnlineAndGoOfflineHandling GoOnlineAndGoOfflineHandling { get; set; }
+
+        /// <summary>
+        /// Returns true GoOnlineAndGoOfflineHandling has the indicated flag value(s) set in its current value
+        /// </summary>
+        protected bool CheckFlag(GoOnlineAndGoOfflineHandling flag)
+        {
+            return ((GoOnlineAndGoOfflineHandling & flag) == flag);
+        }
+
         #endregion
 
         //-----------------------------------------------------------------
@@ -491,23 +533,68 @@ namespace MosaicLib.Modular.Part
 		//-----------------------------------------------------------------
 		#region action related methods which may be re-implemented by sub-class
 
+        /// <summary>
+        /// This is the outer method that the corresponding action delegate points to.
+        /// </summary>
+        private string OuterPerformGoOnlineAction(IProviderActionBase<bool, NullObj> action)
+        {
+            string description = action.ToString(ToStringSelect.MesgAndDetail);
+            bool setBaseUseState = CheckFlag(GoOnlineAndGoOfflineHandling.GoOnlineUpdatesBaseUseState);
+
+            if (setBaseUseState)
+            {
+                SetBaseState(UseState.AttemptOnline, "{0} Started".CheckedFormat(description), true);
+            }
+
+            string result = PerformGoOnlineAction(action);
+
+            if (setBaseUseState)
+            {
+                if (result == string.Empty || action.ActionState.Succeeded)
+                    SetBaseState(UseState.Online, "{0} Completed".CheckedFormat(description), true);
+                else if (result != null)
+                    SetBaseState(UseState.Online, "{0} Failed: {1}".CheckedFormat(description, result), true);
+                else if (action.ActionState.Failed)
+                    SetBaseState(UseState.Online, "{0} Failed: {1}".CheckedFormat(description, action.ActionState.ResultCode), true);
+            }
+
+            return result;
+        }
+
 		/// <summary>Provide passthrough PerformGoOnlingAction implementation.  Invokes PerformGoOnlineAction(action.Param)</summary>
 		protected virtual string PerformGoOnlineAction(IProviderActionBase<bool, NullObj> action)
 		{
 			return PerformGoOnlineAction(action.ParamValue);
 		}
 
-		/// <summary>Stub method provides default GoOnlineAction.  Always fails.</summary>
-		/// <param name="andInitialize">true if caller wants method to initialize the part as then go online</param>
-		/// <returns>"Action:YYY not implemented"</returns>
+		/// <summary>Stub method provides default GoOnlineAction.  Fails if BasePerformMethodsSucceed flag is not set in GoOnlineAndGoOfflineHandling property value.</summary>
 		protected virtual string PerformGoOnlineAction(bool andInitialize)
 		{
-			// NOTE: this method is not intended to be called by derived classes as it allways failes
-			if (andInitialize)
-				return "Action:GoOnlineAndInitialize not implemented";
-			else
-				return "Action:GoOnline not implemented";
+            if (CheckFlag(Part.GoOnlineAndGoOfflineHandling.BasePerformMethodsSucceed))
+            {
+                return string.Empty;
+            }
+            else
+            {
+                // NOTE: this method is not intended to be called by derived classes as it allways failes
+                if (andInitialize)
+                    return "Action:GoOnlineAndInitialize not implemented";
+                else
+                    return "Action:GoOnline not implemented";
+            }
 		}
+
+        private string OuterPerformGoOfflineAction(IProviderActionBase<bool, NullObj> action)
+        {
+            string description = action.ToString(ToStringSelect.MesgAndDetail);
+
+            if (CheckFlag(GoOnlineAndGoOfflineHandling.GoOfflineUpdatesBaseUseState))
+                SetBaseState(UseState.Offline, "{0} Started".CheckedFormat(description), true);
+
+            string result = PerformGoOfflineAction(action);
+
+            return result;
+        }
 
 		/// <summary>Provide passthrough PerformGoOfflineAction implementation.  Invokes PerformGoOfflineAction();</summary>
 		protected virtual string PerformGoOfflineAction(IProviderActionBase action)
@@ -515,11 +602,17 @@ namespace MosaicLib.Modular.Part
 			return PerformGoOfflineAction();
 		}
 
-		/// <summary>Stub method provides default GoOfflineAction.  Always fails.</summary>
-		/// <returns>"Action:GoOffline not implemented"</returns>
-		protected virtual string PerformGoOfflineAction()
+        /// <summary>Stub method provides default GoOfflineAction.  Fails if BasePerformMethodsSucceed flag is not set in GoOnlineAndGoOfflineHandling property value.</summary>
+        protected virtual string PerformGoOfflineAction()
 		{
-			return "Action:GoOffline not implemented";
+            if (CheckFlag(Part.GoOnlineAndGoOfflineHandling.BasePerformMethodsSucceed))
+            {
+                return string.Empty;
+            }
+            else
+            {
+                return "Action:GoOffline not implemented";
+            }
 		}
 
 		/// <summary>Provide passthrough PerformGoOfflineAction implementation.  Invokes PerformGoOfflineAction();</summary>

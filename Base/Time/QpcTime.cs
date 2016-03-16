@@ -375,6 +375,18 @@ namespace MosaicLib.Time
         }
 
         /// <summary>
+        /// If the timer is not already Started, this method Starts the timer to run from now, using the current TriggerInterval.
+        /// If the timer is already Started, this method has no effect.
+        /// </summary>
+        public QpcTimer StartIfNeeded()
+        {
+            if (!Started)
+                Start();
+
+            return this;
+        }
+
+        /// <summary>
         /// Internal method: starts the timer to trigger after the TriggerInterval has elpased from the given starting timestamp.
         /// </summary>
         private QpcTimer Start(QpcTimeStamp now)

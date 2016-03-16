@@ -47,6 +47,10 @@ namespace MosaicLib.WPF.Common
 
         public static void HandleOnStartup(StartupEventArgs e, ref Logging.Logger appLogger, string logBaseName)
         {
+            System.Threading.Thread currentThread = System.Threading.Thread.CurrentThread;
+            if (currentThread.Name.IsNullOrEmpty())
+                currentThread.Name = "{0}.Main".CheckedFormat(logBaseName);
+
             MosaicLib.Modular.Config.Config.AddStandardProviders(e.Args);
 
             int ringQueueSize = 500;

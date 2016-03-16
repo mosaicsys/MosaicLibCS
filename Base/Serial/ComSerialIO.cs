@@ -159,8 +159,8 @@ namespace MosaicLib.SerialIO
 
 			sp.ReceivedBytesThreshold = 1;	// fire event after 1 character
 
-			sp.PinChanged += delegate(object sender, SerialPinChangedEventArgs e) { TraceData.Emit("<PinChangedEvent type=\"{0}\"/>", e.EventType); threadWakeupNotifier.Notify(); };
-			sp.ErrorReceived += delegate(object sender, SerialErrorReceivedEventArgs e) { TraceData.Emit("<ErrorReceivedEvent type=\"{0}\"/>", e.EventType); threadWakeupNotifier.Notify(); };
+			sp.PinChanged += delegate(object sender, SerialPinChangedEventArgs e) { TraceData.Emit("<PinChangedEvent type='{0}'/>", e.EventType); threadWakeupNotifier.Notify(); };
+			sp.ErrorReceived += delegate(object sender, SerialErrorReceivedEventArgs e) { TraceData.Emit("<ErrorReceivedEvent type='{0}'/>", e.EventType); threadWakeupNotifier.Notify(); };
 			sp.DataReceived += delegate(object sender, SerialDataReceivedEventArgs e) { threadWakeupNotifier.Notify(); };
 		}
 

@@ -68,16 +68,16 @@ namespace MosaicLib.Modular.Interconnect.Values
         IValuesInterconnection AddRange(IEnumerable<MapNameFromTo> addMapNameFromToSet);
 
         /// <summary>
-        /// IValueAdpater Factory method.  
-        /// Finds or creates a new table entry, assigns and ID and then creates an IValueAdapter that can be used to observe and/or set the value of the named table entry.
-        /// <para/>If the given name is null or empty then this method returns a stub IValueAdpater that is not attached to anything.
+        /// IValueAccessor Factory method.  
+        /// Finds or creates a new table entry, assigns and ID and then creates an IValueAccessor that can be used to observe and/or set the value of the named table entry.
+        /// <para/>If the given name is null or empty then this method returns a stub IValueAccessor that is not attached to anything.
         /// </summary>
         IValueAccessor GetValueAccessor(string name);
 
         /// <summary>
-        /// Typed (using generics) IValueAdpater{TValueType} Factory method.
-        /// Finds or creates a new table entry, assigns and ID and then creates an IValueAdapter{TValueType} that can be used to observe and/or set the value of the named table entry.
-        /// <para/>If the given name is null or empty then this method returns a stub IValueAdpater{TValueType} that is not attached to anything.
+        /// Typed (using generics) IValueAccessor{TValueType} Factory method.
+        /// Finds or creates a new table entry, assigns and ID and then creates an IValueAccessor{TValueType} that can be used to observe and/or set the value of the named table entry.
+        /// <para/>If the given name is null or empty then this method returns a stub IValueAccessor{TValueType} that is not attached to anything.
         /// </summary>
         IValueAccessor<TValueType> GetValueAccessor<TValueType>(string name);
 
@@ -94,7 +94,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         int ValueNamesArrayLength { get; }
 
         /// <summary>
-        /// This method is used to Set the table entry values for an array of IValueAdapter instances.  
+        /// This method is used to Set the table entry values for an array of IValueAccessor instances.  
         /// This arrayed set operation is performed atomically across all of the table entries referred to by the non-null adapters in the array.
         /// The optimize flag indicates if the caller would like all accessors to be set or just those that have their IsSetPending flag set.
         /// <para/>This method is specifically intended for use by ValueSetAdapter instances.
@@ -104,7 +104,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         void Set(IValueAccessor[] accessorArray, bool optimize);
 
         /// <summary>
-        /// This method is used to Set the table entry values for a portion of an array of IValueAdapter instances.  
+        /// This method is used to Set the table entry values for a portion of an array of IValueAccessor instances.  
         /// This arrayed set operation is performed atomically across all of the table entries referred to by the non-null adapters in the array.
         /// The optimize flag indicates if the caller would like all accessors to be set or just those that have their IsSetPending flag set.
         /// <para/>This method is specifically intended for use by ValueSetAdapter instances.
@@ -115,7 +115,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         void Set(IValueAccessor[] accessorArray, int numEntriesToSet, bool optimize);
 
         /// <summary>
-        /// This method is used to Update a set/array of IValueAdapter instances from the corresponding set of interconnection table entry values.  
+        /// This method is used to Update a set/array of IValueAccessor instances from the corresponding set of interconnection table entry values.  
         /// This arrayed update operation is performed atomically across all of the table entries referred to by the non-null adapters in the array.
         /// <para/>This method is specifically intended for use by ValueSetAdapter instances.
         /// </summary>
@@ -123,7 +123,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         void Update(IValueAccessor[] accessorArray);
 
         /// <summary>
-        /// This method is used to Update a set/array of IValueAdapter instances from the corresponding set of interconnection table entry values.  
+        /// This method is used to Update a set/array of IValueAccessor instances from the corresponding set of interconnection table entry values.  
         /// This arrayed update operation is performed atomically across the table entries referred to by the non-null adapters in the array up to the given maximum item index to update.
         /// <para/>This method is specifically intended for use by Custom update scanner instances.
         /// </summary>
@@ -448,8 +448,8 @@ namespace MosaicLib.Modular.Interconnect.Values
         }
 
         /// <summary>
-        /// IValueAdpater Factory method.  
-        /// Finds or creates a new table entry, assigns and ID and then creates an IValueAdapter that can be used to observe and/or set the value of the named table entry.
+        /// IValueAccessor Factory method.  
+        /// Finds or creates a new table entry, assigns and ID and then creates an IValueAccessor that can be used to observe and/or set the value of the named table entry.
         /// </summary>
         public IValueAccessor GetValueAccessor(string name)
         {
@@ -464,8 +464,8 @@ namespace MosaicLib.Modular.Interconnect.Values
         }
 
         /// <summary>
-        /// Typed (using generics) IValueAdpater{TValueType} Factory method.
-        /// Finds or creates a new table entry, assigns and ID and then creates an IValueAdapter{TValueType} that can be used to observe and/or set the value of the named table entry.
+        /// Typed (using generics) IValueAccessor{TValueType} Factory method.
+        /// Finds or creates a new table entry, assigns and ID and then creates an IValueAccessor{TValueType} that can be used to observe and/or set the value of the named table entry.
         /// </summary>
         public IValueAccessor<TValueType> GetValueAccessor<TValueType>(string name)
         {
@@ -536,7 +536,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         }
 
         /// <summary>
-        /// This method is used to Set the table entry values for an array of IValueAdapter instances.  
+        /// This method is used to Set the table entry values for an array of IValueAccessor instances.  
         /// This arrayed set operation is performed atomically across all of the table entries referred to by the non-null adapters in the array.
         /// The optimize flag indicates if the caller would like all accessors to be set or just those that have their IsSetPending flag set.
         /// <para/>This method is specifically intended for use by ValueSetAdapter instances.
@@ -551,7 +551,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         }
 
         /// <summary>
-        /// This method is used to Set the table entry values for a portion of an array of IValueAdapter instances.  
+        /// This method is used to Set the table entry values for a portion of an array of IValueAccessor instances.  
         /// This arrayed set operation is performed atomically across all of the table entries referred to by the non-null adapters in the array.
         /// The optimize flag indicates if the caller would like all accessors to be set or just those that have their IsSetPending flag set.
         /// <para/>This method is specifically intended for use by ValueSetAdapter instances.
@@ -606,7 +606,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         }
 
         /// <summary>
-        /// This method is used to Update a set/array of IValueAdapter instances from the corresponding set of interconnection table entry values.  
+        /// This method is used to Update a set/array of IValueAccessor instances from the corresponding set of interconnection table entry values.  
         /// This arrayed update operation is performed atomically across all of the table entries refereed to by the non-null adapters in the array.
         /// <para/>This method is specifically intended for use by ValueSetAdapter instances.
         /// </summary>
@@ -619,7 +619,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         }
 
         /// <summary>
-        /// This method is used to Update a set/array of IValueAdapter instances from the corresponding set of interconnection table entry values.  
+        /// This method is used to Update a set/array of IValueAccessor instances from the corresponding set of interconnection table entry values.  
         /// This arrayed update operation is performed atomically across the table entries referred to by the non-null adapters in the array up to the given maximum item index to update.
         /// <para/>This method is specifically intended for use by Custom update scanner instances.
         /// </summary>
@@ -1313,6 +1313,7 @@ namespace MosaicLib.Modular.Interconnect.Values
                     ValueAccessor = valueAccessor,
                     ItemInfo = itemInfo,
                     UseStorageType = useStorageType,
+                    ItemIsValueContainer = (itemInfo.ItemType == typeof(ValueContainer)),
                 };
 
                 GenerateMemberToFromValueAccessFuncs(itemAccessSetupInfo);
@@ -1600,6 +1601,13 @@ namespace MosaicLib.Modular.Interconnect.Values
                 innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<IList<String>>(new List<string>(pfGetter(valueSetObj)), useStorageType, false); };
                 innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { IList<string> ils = iva.ValueContainer.GetValue<IList<String>>(useStorageType, false, true); pfSetter(valueSetObj, (ils != null ? ils.ToArray() : null)); };
             }
+            else if (itemInfo.ItemType == typeof(ValueContainer))
+            {
+                Action<TValueSet, ValueContainer> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, ValueContainer>(itemInfo);
+                Func<TValueSet, ValueContainer> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, ValueContainer>(itemInfo);
+                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = pfGetter(valueSetObj); };
+                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer); };
+            }
             else if (itemInfo.ItemType.IsEnum)
             {
                 innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva)
@@ -1677,7 +1685,7 @@ namespace MosaicLib.Modular.Interconnect.Values
                         }
 
                         if (valueUpdateEmitter.IsEnabled)
-                            valueUpdateEmitter.Emit("Member:'{0}' transfered from Name:'{1}' value:'{2}' [type:'{3}']", itemAccessSetupInfo.MemberName, itemAccessSetupInfo.ValueName, valueAccessor.ValueAsObject, TValueSetTypeStr);
+                            valueUpdateEmitter.Emit("Member:'{0}' transfered from Name:'{1}' value:'{2}' [type:'{3}']", itemAccessSetupInfo.MemberName, itemAccessSetupInfo.ValueName, valueAccessor.ValueContainer, TValueSetTypeStr);
                     }
                     catch (System.Exception ex)
                     {
@@ -1699,7 +1707,7 @@ namespace MosaicLib.Modular.Interconnect.Values
                         itemAccessSetupInfo.LastTransferedValueSeqNum = 0;      // trigger that next update needs to retransfer the value.
 
                         if (valueUpdateEmitter.IsEnabled)
-                            valueUpdateEmitter.Emit("Member:'{0}' transfered to Name:'{1}' value:'{2}' [type:'{3}']", itemAccessSetupInfo.MemberName, itemAccessSetupInfo.ValueName, valueAccessor.ValueAsObject, TValueSetTypeStr);
+                            valueUpdateEmitter.Emit("Member:'{0}' transfered to Name:'{1}' value:'{2}' [type:'{3}']", itemAccessSetupInfo.MemberName, itemAccessSetupInfo.ValueName, valueAccessor.ValueContainer, TValueSetTypeStr);
                     }
                     catch (System.Exception ex)
                     {
@@ -1754,6 +1762,11 @@ namespace MosaicLib.Modular.Interconnect.Values
             /// Gives the storage type that will be used with any container associated with this item
             /// </summary>
             public ContainerStorageType UseStorageType { get; set; }
+
+            /// <summary>
+            /// Returns true if the Item data storage type is a ValueContainer (ie it is to receive exactly what is in the IVA without conversion)
+            /// </summary>
+            public bool ItemIsValueContainer { get; set; }
 
             /// <summary>delegate that is used to set a specific member's value from a given config key's value object's stored value.</summary>
             /// <remarks>this item will be null for static items and for items that failed to be setup correctly.</remarks>

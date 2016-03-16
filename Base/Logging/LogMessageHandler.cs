@@ -277,7 +277,7 @@ namespace MosaicLib
 
             /// <summary>
             /// Use this method to read the stock set of ModularConfig points using the given configKeyPrefixStr and to update this ring configuration using the valid, non-zero values read from these keys.
-            /// <para/>Keys are LogGate, DirectoryPath, MaxFilesToKeep, MaxFileAgeToKeepInDays, MaxTotalSizeToKeep, AdvanceAfterFileReachesSize, AdvanceAfterFileReachesAge
+            /// <para/>Keys are LogGate, DirectoryPath, MaxFilesToKeep, MaxFileAgeToKeepInDays, MaxTotalSizeToKeep, AdvanceAfterFileReachesSize, AdvanceAfterFileReachesAge, IncludeThreadInfo
             /// </summary>
             public FileRotationLoggingConfig UpdateFromModularConfig(string configKeyPrefixStr, Logging.IMesgEmitter issueEmitter, Logging.IMesgEmitter valueEmitter)
             {
@@ -301,6 +301,9 @@ namespace MosaicLib
                     advanceRules.fileSizeLimit = configValues.AdvanceAfterFileReachesSize;
                 if (configValues.AdvanceAfterFileReachesAge != TimeSpan.Zero)
                     advanceRules.FileAgeLimit = configValues.AdvanceAfterFileReachesAge;
+
+                if (configValues.IncludeThreadInfo)
+                    includeThreadInfo = true;
 
                 return this;
             }
@@ -337,8 +340,13 @@ namespace MosaicLib
                 /// <summary>Target property for a key of the same name</summary>
                 [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
                 public double AdvanceAfterFileReachesAgeInDays { get; set; }
+
                 /// <summary>TimeSpan version of corresponding InDays property</summary>
                 public TimeSpan AdvanceAfterFileReachesAge { get { return TimeSpan.FromDays(AdvanceAfterFileReachesAgeInDays); } }
+
+                /// <summary>Target property for a key of the same name</summary>
+                [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
+                public bool IncludeThreadInfo { get; set; }
             }
 		}
 
@@ -448,7 +456,7 @@ namespace MosaicLib
 					if (qpc) { TabIfNeeded(os, ref firstItem); os.Write((lm.EmittedQpcTime.Time % 1000.0).ToString("000.000000")); }
 					if (level) { TabIfNeeded(os, ref firstItem); os.Write(ConvertToFixedWidthString(lm.MesgType)); }
 					if (source) { TabIfNeeded(os, ref firstItem); os.Write(lm.LoggerName); }
-					{ TabIfNeeded(os, ref firstItem); os.Write(lm.Mesg); }
+					{ TabIfNeeded(os, ref firstItem); os.Write(lm.MesgEscaped); }
                     if (IncludeNamedValueSet) { os.Write(tabStr); os.Write(lm.NamedValueSet.ToString(false, true)); }
                     if (data) { os.Write(tabStr); os.Write("[{0}]", base64UrlCoder.Encode(lm.Data)); }
                     if (IncludeThreadInfo) { os.Write(tabStr); os.Write(FormatThreadInfo(lm)); }
@@ -473,7 +481,7 @@ namespace MosaicLib
 					if (qpc) { TabIfNeeded(ostr, ref firstItem); ostr.Append((lm.EmittedQpcTime.Time % 1000.0).ToString("000.000000")); }
 					if (level) { TabIfNeeded(ostr, ref firstItem); ostr.Append(ConvertToFixedWidthString(lm.MesgType)); }
 					if (source) { TabIfNeeded(ostr, ref firstItem); ostr.Append(lm.LoggerName); }
-					{ TabIfNeeded(ostr, ref firstItem); ostr.Append(lm.Mesg); }
+                    { TabIfNeeded(ostr, ref firstItem); ostr.Append(lm.MesgEscaped); }
                     if (IncludeNamedValueSet) { ostr.Append(tabStr); ostr.Append(lm.NamedValueSet.ToString(false, true)); }
                     if (data) { ostr.Append(tabStr); ostr.Append("["); ostr.Append(base64UrlCoder.Encode(lm.Data)); ostr.Append("]"); }
                     if (IncludeThreadInfo) { ostr.Append(tabStr); ostr.Append(FormatThreadInfo(lm)); }

@@ -624,12 +624,12 @@ namespace MosaicLib.Modular.Part
             if (entryUseState != publishState.UseState)
             {
                 if (!includeAction)
-                    BaseStateChangeEmitter.Emit("<PartUseStateChange to=\"{0}\" from=\"{1}\" reason=\"{2}\"/>", publishState.UseState, entryUseState, reason);
+                    BaseStateChangeEmitter.Emit("<PartUseStateChange to='{0}' from='{1}' reason='{2}'/>", publishState.UseState, entryUseState, reason.GenerateQuotableVersion());
                 else
-                    BaseStateChangeEmitter.Emit("<PartUseStateChange to=\"{0}\",\"{1}\", from=\"{2}\",\"{3}\", reason=\"{2}\"/>", publishState.UseState, publishState.ActionName, entryUseState, entryActionName, reason);
+                    BaseStateChangeEmitter.Emit("<PartUseStateChange to='{0}','{1}', from='{2}','{3}', reason='{2}'/>", publishState.UseState, publishState.ActionName, entryUseState, entryActionName, reason.GenerateQuotableVersion());
             }
             if (entryConnState != publishState.ConnState)
-                BaseStateChangeEmitter.Emit("<PartConnStateChange to=\"{0}\" from=\"{1}\" reason=\"{2}\"/>", publishState.ConnState, entryConnState, reason);
+                BaseStateChangeEmitter.Emit("<PartConnStateChange to='{0}' from='{1}' reason='{2}'/>", publishState.ConnState, entryConnState, reason.GenerateQuotableVersion());
 
             if (BaseStatePublishedNotificationList != null)
                 BaseStatePublishedNotificationList.Notify(publishState);

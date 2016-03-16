@@ -448,9 +448,9 @@ namespace MosaicLib.Modular.Action
                 emitter = rcIsNonEmpty ? logging.Error : logging.Done;
 
 			if (includeRC)
-				emitter.Emit("<ActionStateChange id=\"{0}\" to=\"{1}\" from=\"{2}\" rc=\"{3}\"/>", logging, toState, fromState, resultCode);
+                emitter.Emit("<ActionStateChange id='{0}' to='{1}' from='{2}' rc='{3}'/>", logging, toState, fromState, resultCode.GenerateQuotableVersion());
 			else
-				emitter.Emit("<ActionStateChange id=\"{0}\" to=\"{1}\" from=\"{2}\"/>", logging, toState, fromState);
+				emitter.Emit("<ActionStateChange id='{0}' to='{1}' from='{2}'/>", logging, toState, fromState);
 		}
 
         /// <summary>Used internally to gennerate and emit consistantly formatted ActinoNamedValueListUpdate records.</summary>
@@ -460,7 +460,7 @@ namespace MosaicLib.Modular.Action
 
             string nvls = (nvl != null ? nvl.ToString() : "");
 
-            emitter.Emit("<ActionNamedValueListUpdate id=\"{0}\" state=\"{1}\">{2}</ActionNamedValueListUpdate>", logging, state, nvls);
+            emitter.Emit("<ActionNamedValueListUpdate id='{0}' state='{1}'>{2}</ActionNamedValueListUpdate>", logging, state, nvls);
         }
 
         /// <summary>Method sets the volatile isCancelRequested value</summary>
@@ -771,7 +771,7 @@ namespace MosaicLib.Modular.Action
         /// Client is free to replace this property at any time or to change the underlying set contents at any time.  
         /// Start method will create a readonly copy and save it in the provider's version of the NamedParamValues property.
         /// </remarks>
-        Common.INamedValueSet IClientFacet.NamedParamValues { get { return clientNamedParamValues; } set { clientNamedParamValues = value; } }
+        public Common.INamedValueSet NamedParamValues { get { return clientNamedParamValues; } set { clientNamedParamValues = value; } }
         Common.INamedValueSet clientNamedParamValues = null;
 
         /// <summary>
@@ -1236,7 +1236,7 @@ namespace MosaicLib.Modular.Action
         /// </summary>
 		protected void EmitActionEvent(string eventStr, ActionStateCode actionStateCode) 
 		{
-			logging.State.Emit("<ActionEvent id=\"{0}\" state=\"{1}\">{2}</ActionEvent>", logging.Mesg, actionStateCode, eventStr); 
+			logging.State.Emit("<ActionEvent id='{0}' state='{1}'>{2}</ActionEvent>", logging.Mesg, actionStateCode, eventStr); 
 		}
 
         /// <summary>
@@ -1245,7 +1245,7 @@ namespace MosaicLib.Modular.Action
         /// </summary>
         protected void EmitActionError(string eventStr, ActionStateCode actionStateCode) 
 		{ 
-			logging.Error.Emit("<ActionError id=\"{0}\" state=\"{1}\">{2}</ActionError>", logging.Mesg, actionStateCode, eventStr); 
+			logging.Error.Emit("<ActionError id='{0}' state='{1}'>{2}</ActionError>", logging.Mesg, actionStateCode, eventStr); 
 		}
 
         /// <summary>

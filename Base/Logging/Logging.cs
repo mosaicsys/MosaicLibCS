@@ -796,6 +796,9 @@ namespace MosaicLib
             /// <summary>Returns the string body of the message or the empty string if none was given</summary>
             string Mesg { get; }
 
+            /// <summary>Returns an escaped version the string body of the message or the empty string if none was given</summary>
+            string MesgEscaped { get; }
+
             /// <summary>Returns a read-only instance of the, possibly empty, named value set that was given to this log message</summary>
             INamedValueSet NamedValueSet { get; }
 
@@ -848,6 +851,7 @@ namespace MosaicLib
                 loggerSourceInfo = rhs.LoggerSourceInfo;
                 MesgType = rhs.MesgType;
                 mesg = rhs.Mesg;
+                mesgEscaped = rhs.mesgEscaped;
                 SourceStackFrame = rhs.SourceStackFrame;
                 nvs = rhs.nvs;
                 data = ((rhs.Data != null) ? (rhs.Data.Clone() as byte []) : null);
@@ -866,6 +870,7 @@ namespace MosaicLib
                 ResetEmitted(); 
                 MesgType = MesgType.None; 
                 mesg = string.Empty;
+                mesgEscaped = null;
                 nvs = null;
                 SourceStackFrame = null; 
                 ThreadID = -1;
@@ -924,9 +929,23 @@ namespace MosaicLib
             /// <summary>Returns the current Message Body.  Returns empty string if the message has not been given a body.  Setter allows the contained mesg to be updated, provided that the message has not been emitted.</summary>
             public string Mesg 
 			{ 
-				get { return ((mesg != null) ? mesg : string.Empty); } 
+				get { return (mesg ?? string.Empty); } 
 				set { AssertNotEmitted("Mesg property Set"); mesg = value; }
 			}
+
+            /// <summary>Returns an escaped version the string body of the message or the empty string if none was given</summary>
+            public string MesgEscaped
+            {
+                get
+                {
+                    if (mesgEscaped == null)
+                        mesgEscaped = mesg.GenerateLoggingVersion();
+
+                    return mesgEscaped;
+                }
+            }
+
+            private string mesgEscaped = null;
 
 			// the message data - an optional binary block of bytes
 

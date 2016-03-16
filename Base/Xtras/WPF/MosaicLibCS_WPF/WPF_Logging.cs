@@ -75,7 +75,8 @@ namespace MosaicLib.WPF.Logging
 
         public string LoggerName { get { return lm.LoggerName; } }
         public Logging.MesgType MesgType { get { return lm.MesgType; } }
-        public string Mesg { get { return lm.Mesg; } }
+        public string Mesg { get { return lm.MesgEscaped; } }
+        public string MesgEscaped { get { return lm.MesgEscaped; } }
         public byte[] Data { get { return lm.Data; } }
         public INamedValueSet NamedValueSet { get { return lm.NamedValueSet; } }
         public MosaicLib.Time.QpcTimeStamp EmittedQpcTime { get { return lm.EmittedQpcTime; } }

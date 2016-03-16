@@ -53,20 +53,26 @@ namespace MosaicLib.Utils
         /// <summary>Maps the given string value to the empty string if it is null</summary>
 		/// <param name="s">The string to test for null and optionally map</param>
 		/// <returns>The given string s if it was not null or the empty string if it was.</returns>
-		public static string MapNullToEmpty(this string s) { return ((s == null) ? string.Empty : s); }
+		public static string MapNullToEmpty(this string s) 
+        { 
+            return ((s == null) ? string.Empty : s); 
+        }
 
-		/// <summary>Maps the given string value to the empty string if it is null</summary>
+		/// <summary>Maps the given string s value to the given mappedS value if the given s is null or empty</summary>
 		/// <param name="s">The string to test for null or empty and to optionally map</param>
 		/// <param name="mappedS">The string value to return when the reference string s is null or empty</param>
-		/// <returns>The given string s if it was not null or the empty string if it was.</returns>
-		public static string MapNullOrEmptyTo(this string s, string mappedS) { return (string.IsNullOrEmpty(s) ? mappedS : s); }
+		/// <returns>The given string s if it was not null and not empty or the given string mappedS.</returns>
+		public static string MapNullOrEmptyTo(this string s, string mappedS) 
+        { 
+            return (string.IsNullOrEmpty(s) ? mappedS : s); 
+        }
 
 		#endregion
 
         #region static String Ascii predicate method(s)
 
         /// <summary>
-        /// Returns true if all of the characters in this string have char values from 1 to 127, or the string is null or empty
+        /// Returns true if all of the characters in this string have char values from 32 to 127, or the string is null or empty
         /// </summary>
         public static bool IsBasicAscii(this string s)
         {
@@ -74,9 +80,19 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Returns true if all of the characters in this string have char values from 1 to 127, or the string is empty.  valueForNull is returned if the given string is null.
+        /// Returns true if all of the characters in this string have char values from 32 to 127, or the string is empty.  valueForNull is returned if the given string is null.
         /// </summary>
         public static bool IsBasicAscii(this string s, bool valueForNull)
+        {
+            return s.IsBasicAscii(null, valueForNull);
+        }
+
+        /// <summary>
+        /// Returns true if all of the characters in this string have char values from 32 to 127, or the string is empty.
+        /// If otherExcludeCharsList is not null then the method returns false if any character in s is also included in the given otherExcludeCharsList.
+        /// valueForNull is returned if the given string is null.
+        /// </summary>
+        public static bool IsBasicAscii(this string s, List<char> otherExcludeCharsList, bool valueForNull)
         {
             if (s == null)
                 return valueForNull;
@@ -85,11 +101,117 @@ namespace MosaicLib.Utils
             for (int idx = 0; idx < sLength; idx++)
             {
                 char c = s[idx];
-                if (c <= '\0' || c > 127)
+                if (!c.IsBasicAscii(otherExcludeCharsList))
                     return false;
             }
 
             return true;
+        }
+
+        /// <summary>
+        /// Returns true if the given char c's value is between 32 and 127.  If otherExcludeCharsList is not null then the method returns false if the given char c is included in the given otherExcludeCharsList.
+        /// </summary>
+        public static bool IsBasicAscii(this char c, List<char> otherExcludeCharsList)
+        {
+            if (c < 32 || c > 127)
+                return false;
+
+            if (otherExcludeCharsList != null && otherExcludeCharsList.Contains(c))
+                return false;
+
+            return true;
+        }
+
+        #endregion
+
+        #region static String Ascii escape methods
+
+        /// <summary>
+        /// Generate and return a "JSON escaped" version of given string s.
+        /// By default this escapes all non-printable characters and also escapes the escape charater and the double-quote character
+        /// </summary>
+        public static string GenerateJSONVersion(this string s)
+        {
+            if (s.IsBasicAscii(jsonForceEscapeCharList, true))
+                return s ?? string.Empty;
+
+            return s.GenerateEscapedVersion(jsonForceEscapeCharList);
+        }
+
+        private static readonly List<char> jsonForceEscapeCharList = new List<char>() { '\"', '\\' };
+
+        /// <summary>
+        /// Generate and return a escaped version of given string s that is suitable for logging.
+        /// By default this escapes all non-printable characters and also escapes the escape charater and the double-quote character
+        /// </summary>
+        public static string GenerateLoggingVersion(this string s)
+        {
+            if (s.IsBasicAscii(loggingForceEscapeCharList, true))
+                return s ?? string.Empty;
+
+            return s.GenerateEscapedVersion(loggingForceEscapeCharList);
+        }
+
+        private static readonly List<char> loggingForceEscapeCharList = new List<char>() { '\"', '\\' };
+
+        /// <summary>
+        /// Generate and return a escaped version of given string s that is suitable for inserting in-between single or double quotes.
+        /// By default this escapes all non-printable characters and also escapes the escape charater and the single and double-quote characters
+        /// </summary>
+        public static string GenerateQuotableVersion(this string s)
+        {
+            if (s.IsBasicAscii(quotesForceEscapeCharList, true))
+                return s ?? string.Empty;
+
+            return s.GenerateEscapedVersion(quotesForceEscapeCharList);
+        }
+
+        private static readonly List<char> quotesForceEscapeCharList = new List<char>() { '\'', '\"', '\\' };
+
+
+        /// <summary>
+        /// Generate and return "escaped" version of given string s.  Supports use for general JSON style escapeing.
+        /// Also generates escaped version of any other characters that are explicitly includes in the given extraEscapeCharList
+        /// (typically '\"' or '\'')
+        /// </summary>
+        public static string GenerateEscapedVersion(this string s, List<char> extraEscapeCharList)
+        {
+            s = s.MapNullToEmpty();
+
+            StringBuilder sb = new StringBuilder();
+
+            foreach (char c in s)
+            {
+                if (c.IsBasicAscii(extraEscapeCharList) && c != '\\')
+                {
+                    sb.Append(c);
+                }
+                else
+                {
+                    // this character is 
+                    switch (c)
+                    {
+                        case '\"': sb.Append("\\\""); break;        // double quote char - we may not get here depending on the contents of the extraEscapeCharList
+                        case '\'': sb.Append(@"\'"); break;         // single quote char - we may not get here depending on the contents of the extraEscapeCharList
+                        case '\\': sb.Append(@"\\"); break;         // escape char      // JSON calls this a reverse solidus
+                        case '\r': sb.Append(@"\r"); break;         // carrage return
+                        case '\n': sb.Append(@"\n"); break;         // line feed
+                        case '\t': sb.Append(@"\t"); break;         // (horizontal) tab
+                        case '\b': sb.Append(@"\b"); break;         // backspace
+                        case '\f': sb.Append(@"\f"); break;         // form feed
+                        case '\v': sb.Append(@"\v"); break;         // vertical tab
+                        default:
+                            if (c <= 0xff)
+                                sb.CheckedAppendFormat("\\x{0:x2}", unchecked((Byte)c));
+                            else
+                                sb.CheckedAppendFormat("\\u{0:x4}", unchecked((UInt16)c));
+
+                            break;
+                    }
+                }
+            }
+
+            return sb.ToString();
         }
 
         #endregion
