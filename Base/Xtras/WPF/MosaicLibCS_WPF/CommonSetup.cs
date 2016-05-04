@@ -59,6 +59,9 @@ namespace MosaicLib.WPF.Common
             None,
         }
 
+        public static FileRingLogMessageHandlerType DefaultMainLoggerType { get { return defaultMainLoggerType; } set { defaultMainLoggerType = value; } }
+        private static FileRingLogMessageHandlerType defaultMainLoggerType = FileRingLogMessageHandlerType.TextFileRotationDirectoryLogMessageHandler;
+
         public static void HandleOnStartup(StartupEventArgs e, ref Logging.Logger appLogger, string logBaseName)
         {
             System.Diagnostics.Process currentProcess = System.Diagnostics.Process.GetCurrentProcess();
@@ -76,7 +79,7 @@ namespace MosaicLib.WPF.Common
             Logging.ListMesgEmitter issueListEmitter = new Logging.ListMesgEmitter() { MesgType = Logging.MesgType.Error };
             Logging.ListMesgEmitter valuesListEmitter = new Logging.ListMesgEmitter() { MesgType = Logging.MesgType.Debug };
 
-            FileRingLogMessageHandlerType mainLoggerType = Config.Instance.GetConfigKeyAccessOnce("Config.Logging.MainLogger.Type").GetValue<FileRingLogMessageHandlerType>(FileRingLogMessageHandlerType.TextFileRotationDirectoryLogMessageHandler);
+            FileRingLogMessageHandlerType mainLoggerType = Config.Instance.GetConfigKeyAccessOnce("Config.Logging.MainLogger.Type").GetValue<FileRingLogMessageHandlerType>(DefaultMainLoggerType);
 
             Logging.FileRotationLoggingConfig fileRotationRingConfig = new Logging.FileRotationLoggingConfig(logBaseName.MapNullToEmpty() + "LogFile")
             {
