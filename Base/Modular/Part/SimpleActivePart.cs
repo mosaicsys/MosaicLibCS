@@ -267,6 +267,8 @@ namespace MosaicLib.Modular.Part
 
 			actionLoggingReference = new ActionLogging(Log, ActionLoggingConfig.Info_Error_Debug_Debug);
 
+            GoOnlineAndGoOfflineHandling = (GoOnlineAndGoOfflineHandling.BasePerformMethodsSucceed | GoOnlineAndGoOfflineHandling.GoOnlineUpdatesBaseUseState | GoOnlineAndGoOfflineHandling.GoOfflineUpdatesBaseUseState);
+
             Interconnect.Parts.Parts.Instance.RegisterPart(this);
 		}
 	
@@ -361,9 +363,11 @@ namespace MosaicLib.Modular.Part
         { }
 
         /// <summary>
-        /// Method is used to start the Part's main thread.  Typically this is done implicitly as part of the use of a CreateGoOnlineAction method.
+        /// Method used to Start the part.  Some parts automatically start whenever a GoOnlineAction is created.
+        /// This method may only safely be used on a part that has not already been started and which is not already being
+        /// started on another thread.
         /// </summary>
-		public virtual void StartPart()
+        public virtual void StartPart()
 		{
 			using (Logging.EnterExitTrace t = new Logging.EnterExitTrace(Log, "StartPart", Logging.MesgType.Debug))
 			{
@@ -439,21 +443,26 @@ namespace MosaicLib.Modular.Part
 		private static object startIfNeededMutex = new object();
 
         /// <summary>
-        /// Used to start parts as a side effect of performing the CreateGoOnlineAction method.  
+        /// This method determines if the part has already been started and starts the part if not.
+        /// This method is serialized through the use of a lock so that it gives consistent behavior even
+        /// if it is called from multiple threads.  Use of this method cannot be safely combined with the use of the direct StartPart method.
         /// Locks the startIfNeeded mutex and then calls StartPart if the part's HasBeenStarted flag is false.
-        /// Use of mutex protects against re-enternat use of CreateGoOnlineAction but not against concurrent patterns where 
+        /// Use of mutex protects against re-enterant use of CreateGoOnlineAction but not against concurrent patterns where 
         /// CreateGoOnlineAction is used concurrently with an explicit call to StartPart.
+        /// <para/>Supports call chaining
         /// </summary>
-		protected void StartPartIfNeeded()
+        public IActivePartBase StartPartIfNeeded()
 		{
             if (HasBeenStarted)
-                return;
+                return this;
 
 			lock (startIfNeededMutex)		// only one caller of StartPartIfNeeded will be processed at a time (system wide...)
 			{
                 if (!HasBeenStarted)
 					StartPart();
 			}
+
+            return this;
 		}
 
         /// <summary>

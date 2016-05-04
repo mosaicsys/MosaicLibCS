@@ -20,16 +20,17 @@
  */
 //-------------------------------------------------------------------
 
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+
+using MosaicLib.Modular.Part;
+using MosaicLib.Utils;
+
 namespace MosaicLib.File
 {
-	using System;
-	using System.Collections;
-	using System.Collections.Generic;
-	using System.IO;
-
-	using MosaicLib.Modular.Part;
-    using MosaicLib.Utils;
-
     #region DirectoryTreePruningManager
 
     /// <summary>
@@ -116,6 +117,14 @@ namespace MosaicLib.File
             /// <summary>Copy constructor</summary>
             public Config(Config rhs)
             {
+                SetFrom(rhs);
+            }
+
+            /// <summary>
+            /// Copy constructor helper method
+            /// </summary>
+            public void SetFrom(Config rhs)
+            {
                 DirPath = rhs.DirPath;
                 PruneRules = new PruneRules(rhs.PruneRules);
                 CreateDirectoryIfNeeded = rhs.CreateDirectoryIfNeeded;
@@ -151,6 +160,20 @@ namespace MosaicLib.File
                 TreeTotalSizeLimit = rhs.TreeTotalSizeLimit;
                 FileAgeLimit = rhs.FileAgeLimit;
             }
+
+            /// <summary>
+            /// Specific copy constructor.  
+            /// Sets FileAgeLimit, TreeNumFilesLimit and TreeTotalSizeLimit from similar fields in given purgeRules.
+            /// Sets TreeNumItemsLimit to zero.
+            /// </summary>
+            public PruneRules(Logging.FileRotationLoggingConfig.PurgeRules purgeRules)
+                : this()
+            {
+                FileAgeLimit = purgeRules.FileAgeLimit;
+                TreeNumFilesLimit = purgeRules.dirNumFilesLimit;
+                TreeTotalSizeLimit = purgeRules.dirTotalSizeLimit;
+                TreeNumItemsLimit = 0;
+            }
         }
 
         #endregion
@@ -180,6 +203,8 @@ namespace MosaicLib.File
         public DirectoryTreePruningManager(string objIDStr, Config config, IDictionary<string, Logging.IMesgEmitter> emitterDictionary)
             : this(objIDStr, emitterDictionary)
         {
+            EmitterDictionary = emitterDictionary;
+
             Setup(config);
         }
 
@@ -316,9 +341,10 @@ namespace MosaicLib.File
 
                 if (fullPathToAdd.StartsWith(workingRootPath))
                 {
-                    relativePathPart = System.IO.Path.Combine(@".", fullPathToAdd.Substring(workingRootPath.Length));
+                    // convert the full path into a relative path
+                    relativePathPart = @".{0}".CheckedFormat(fullPathToAdd.Substring(workingRootPath.Length));
 
-                    relativePathSegments = relativePathPart.Split(new char [] {System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar});
+                    relativePathSegments = relativePathPart.Split(new char[] { System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar }).Skip(1).ToArray();
                 }
 
                 string regeneratedFullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(workingRootPath, relativePathPart));

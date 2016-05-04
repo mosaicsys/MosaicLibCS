@@ -865,7 +865,7 @@ namespace MosaicLib
             }
 
             /// <summary>Resets contents to default state</summary>
-            public void Reset()
+            public LogMessage Reset()
             { 
                 ResetEmitted(); 
                 MesgType = MesgType.None; 
@@ -876,14 +876,22 @@ namespace MosaicLib
                 ThreadID = -1;
                 Win32ThreadID = -1;
                 ThreadName = null; 
-                SeqNum = NullMessageSeqNum; 
+                SeqNum = NullMessageSeqNum;
+
+                return this;
             }
 
             /// <summary>Asserts that the message is in the not-emitted state.  Primarily used for enforcing that pool messages are recycled correctly.</summary>
-            public void AssertNotEmitted(string caller) { if (Emitted) Utils.Asserts.TakeBreakpointAfterFault("AssertNotEmitted failed for:" + caller); }
+            public LogMessage AssertNotEmitted(string caller) 
+            { 
+                if (Emitted) 
+                    Utils.Asserts.TakeBreakpointAfterFault("AssertNotEmitted failed for:" + caller);
+
+                return this;
+            }
 
             /// <summary>Sets up contents from a given source with no explicitly given Mesg</summary>
-            public void Setup(LoggerSourceInfo loggerSourceInfo, MesgType mesgType, System.Diagnostics.StackFrame sourceStackFrame)
+            public LogMessage Setup(LoggerSourceInfo loggerSourceInfo, MesgType mesgType, System.Diagnostics.StackFrame sourceStackFrame)
             {
                 Mesg = null;
                 this.loggerSourceInfo = loggerSourceInfo;
@@ -891,10 +899,12 @@ namespace MosaicLib
                 SourceStackFrame = sourceStackFrame;
                 nvs = null;
                 SetThreadID();
+
+                return this;
             }
 
             /// <summary>Sets up contents from a given source with an explicitly given Mesg</summary>
-            public void Setup(LoggerSourceInfo loggerSourceInfo, MesgType mesgType, string mesg, System.Diagnostics.StackFrame sourceStackFrame)
+            public LogMessage Setup(LoggerSourceInfo loggerSourceInfo, MesgType mesgType, string mesg, System.Diagnostics.StackFrame sourceStackFrame)
             {
                 Mesg = mesg;
                 this.loggerSourceInfo = loggerSourceInfo;
@@ -902,6 +912,8 @@ namespace MosaicLib
                 SourceStackFrame = sourceStackFrame;
                 nvs = null;
                 SetThreadID();
+
+                return this;
             }
 
 			// information about the message source
@@ -983,15 +995,17 @@ namespace MosaicLib
             public DateTime EmittedDateTime { get; private set; }
 
             /// <summary>Resets the message to the non-emitted state. - used during internal Logging infrastructure message recycling.</summary>
-            void ResetEmitted()
+            LogMessage ResetEmitted()
 			{
 				Emitted = false;
 				EmittedQpcTime = QpcTimeStamp.Zero;
                 EmittedDateTime = DateTime.MinValue;
+
+                return this;
 			}
 
             /// <summary>Marks the message as having been emitted.</summary>
-            public void NoteEmitted() 
+            public LogMessage NoteEmitted() 
 			{ 
 				AssertNotEmitted("NoteEmitted call");
                 if (loggerSourceInfo == null)
@@ -1000,6 +1014,8 @@ namespace MosaicLib
                 Emitted = true;
 				EmittedQpcTime = QpcTimeStamp.Now;
 				EmittedDateTime = DateTime.Now;
+
+                return this;
 			}
 
             /// <summary>Returns the message Sequence number as assigned when the message was emitted.  May be used to determine when the message has been delivered from the distribution system.</summary>
@@ -1016,13 +1032,15 @@ namespace MosaicLib
             public string ThreadName { get { return threadName ?? String.Empty; } private set { threadName = value; } }
 
             /// <summary>Method used to set the contained ThreadID and ThreadName during setup</summary>
-            private void SetThreadID() 
+            private LogMessage SetThreadID() 
             {
                 System.Threading.Thread currentThread = System.Threading.Thread.CurrentThread;
                 ThreadID = currentThread.ManagedThreadId;
                 threadName = currentThread.Name;
 
                 Win32ThreadID = Utils.Win32.GetCurrentThreadId();
+
+                return this;
             }
 
             /// <summary>Method used to get the EmittedDataTime formatted as a standard string.</summary>
@@ -1186,6 +1204,11 @@ namespace MosaicLib
             /// </summary>
             /// <param name="skipNStackFrames">Gives the number of additional stack frame to skip, from the one above this one, when acquiring a StackFrame to get the source file and line number from.</param>
             System.Diagnostics.StackFrame GetStackFrame(int skipNStackFrames);
+
+            /// <summary>
+            /// This property returns true if this logger is currently configured to record stack frames
+            /// </summary>
+            bool IsRecordingSourceStackFrame { get; }
         }
 
 		/// <summary>This interface defines the methods that is provided by all entities that can act like log message sources.</summary>
@@ -1344,11 +1367,16 @@ namespace MosaicLib
             /// <returns>Selected StackFrame if stack frame tagging support is currently enabled or null if it is not</returns>
             public System.Diagnostics.StackFrame GetStackFrame(int skipNStackFrames)
             {
-                if (LoggerConfigObserver != null && LoggerConfigObserver.RecordSourceStackFrame)
+                if (IsRecordingSourceStackFrame)
                     return new System.Diagnostics.StackFrame(skipNStackFrames + 1, true);
                 else
                     return null;
             }
+
+            /// <summary>
+            /// This property returns true if this logger is currently configured to record stack frames
+            /// </summary>
+            public bool IsRecordingSourceStackFrame { get { return (LoggerConfigObserver != null && LoggerConfigObserver.RecordSourceStackFrame); } }
 
             #endregion
 
@@ -1390,7 +1418,8 @@ namespace MosaicLib
             /// <summary>Debugging helper method</summary>
             public override string ToString()
             {
-                return Utils.Fcns.CheckedFormat("LoggerEmitter {0} {1}{2}", MesgType, Logger.Name, (CollectStackFrames ? " CollectsStackFrames" : String.Empty));
+                bool loggerIsRecordingSourceStackFrames = (Logger != null && Logger.IsRecordingSourceStackFrame);
+                return Utils.Fcns.CheckedFormat("LoggerEmitter {0} {1}", MesgType, Logger.Name, (loggerIsRecordingSourceStackFrames ? " RecordingStackFrames" : String.Empty));
             }
 
 			#region IMesgEmitter Members
@@ -1401,12 +1430,6 @@ namespace MosaicLib
 			public override bool IsEnabled { get { return (Logger != null && Logger.IsTypeEnabled(MesgType)); } }
 
             /// <summary>
-            /// For this derived class this property will always return true.  
-            /// The GetStackFrame method will return null if stack frames are not intended to be collected.
-            /// </summary>
-            public override bool CollectStackFrames { get { return true; } }
-
-            /// <summary>
             /// Requests the Logger to obtain the stack frame of the caller skipNStackFrames up from here.  If the Logger is configured
             /// to collect source file and line numbers then it will return the acquired StackFrame otherwise it will return null to
             /// indicate that no StackFrame was acquired. 
@@ -1414,9 +1437,11 @@ namespace MosaicLib
             /// <param name="skipNStackFrames">Gives the number of additional stack frame to skip, from the one above this one, when acquiring a StackFrame to get the source file and line number from.</param>
             protected override System.Diagnostics.StackFrame GetStackFrame(int skipNStackFrames)
 			{
-				if (Logger == null)
+                bool loggerIsRecordingSourceStackFrames = (Logger != null && Logger.IsRecordingSourceStackFrame);
+                if (!loggerIsRecordingSourceStackFrames)
 					return null;
-				return Logger.GetStackFrame(1 + skipNStackFrames + SkipNAdditionalStackFrames);
+
+                return Logger.GetStackFrame(1 + skipNStackFrames + SkipNAdditionalStackFrames);
 			}
 
             /// <summary>Emit method variant.  If the Emitter IsEnabled then it will acquire a LogMessage, assign the given str as its mesg body and emit it using the associated Logger instance.</summary>
@@ -1765,7 +1790,7 @@ namespace MosaicLib
             /// <summary>Debugging helper method</summary>
             public override string ToString()
             {
-                return Utils.Fcns.CheckedFormat("{0} Generic Emitter", MesgType);
+                return Utils.Fcns.CheckedFormat("{0} Generic Emitter{1}", MesgType, (CollectStackFrames ? " +CollectsStackFrames" : String.Empty));
             }
 
             #region IMesgEmitter Members
@@ -2324,7 +2349,7 @@ namespace MosaicLib
         /// This class is used to provide a Trace on construction/destruction.  It logs a configurable message on construction and explicit disposal.
         /// Generally this class is used as the base class for the EnterExitTrace and TimerTrace classes.  By default messages use MesgType.Trace.
         /// </summary>
-        public class CtorDisposeTrace : Utils.DisposableBase
+        public class CtorDisposeTrace : IDisposable
 		{
 			private const string defaultCtorPrefixStr = "Ctor:";
 			private const string defaultDisposePrefixStr = "Dispose:";
@@ -2402,14 +2427,13 @@ namespace MosaicLib
 
 
             /// <summary>
-            /// Protected implementation for this abstract method in <see cref="Utils.DisposableBase"/> abstract base class.
+            /// Implementation method for <see cref="IDisposable"/> interface.
             /// </summary>
-            /// <param name="disposeType">Defines the dispose type.  This method is only expecting to field DisposeType.CalledExplicitly calls.</param>
-			protected override void Dispose(Utils.DisposableBase.DisposeType disposeType)
+			public void Dispose()
 			{
                 try
                 {
-                    if (disposeType == DisposeType.CalledExplicitly && disposeStr != null 
+                    if (disposeStr != null 
                         && ((mesgEmitter != null && mesgEmitter.IsEnabled) || (warningEmitter != null && warningEmitter.IsEnabled)))
                     {
                         string timeCountRateStr = String.Empty;
@@ -2439,7 +2463,7 @@ namespace MosaicLib
                         if (mesgEmitter != null)
                             mesgEmitter.Emit(disposeSkipNStackFrames + 1, finalDisposeStr);
                         else if (warningEmitter != null)
-                            warningEmitter.Emit(disposeSkipNStackFrames + 1, "Unexpected '{0}' disposal of trace object for mesg:{1}", disposeType, finalDisposeStr);
+                            warningEmitter.Emit(disposeSkipNStackFrames + 1, "Unexpected disposal of trace object for mesg:{0}", finalDisposeStr);
                     }
                 }
                 catch

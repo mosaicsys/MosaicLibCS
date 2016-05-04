@@ -20,10 +20,10 @@
  */
 //-------------------------------------------------------------------
 
+using System;
+
 namespace MosaicLib
 {
-	using System;
-
 	public static partial class Logging
 	{
 		public static partial class Handlers
@@ -50,7 +50,7 @@ namespace MosaicLib
 
 					config = frlConfig;
 					dirMgr = new File.DirectoryFileRotationManager(config.name);
-                    lineFmt = new LineFormat(true, config.includeQpcTime, true, true, true, config.includeFileAndLine, "\r\n", "\t") { IncludeThreadInfo = config.includeThreadInfo };
+                    lineFmt = new LineFormat(true, config.includeQpcTime, true, true, true, config.includeFileAndLine, "\r\n", "\t") { IncludeThreadInfo = config.includeThreadInfo, IncludeNamedValueSet = config.includeNamedValueSet };
 
 					dirMgrConfig = new MosaicLib.File.DirectoryFileRotationManager.Config();
 
@@ -65,16 +65,13 @@ namespace MosaicLib
 
 					dirMgrConfig.excludeFileNamesSet = config.excludeFileNamesSet;
 
-					dirMgrConfig.advanceRules.fileSizeLimit = config.advanceRules.fileSizeLimit;
-					dirMgrConfig.advanceRules.fileAgeLimitInSec = config.advanceRules.fileAgeLimitInSec;
+                    dirMgrConfig.advanceRules = config.advanceRules;
 					double testPeriodInSec = config.advanceRules.testPeriodInSec;
 					if (testPeriodInSec == 0.0)
 						testPeriodInSec = Math.Min(10.0, config.advanceRules.fileAgeLimitInSec / 3.0);
 					dirMgrConfig.advanceRules.testPeriodInSec = testPeriodInSec;
 
-					dirMgrConfig.purgeRules.dirNumFilesLimit = config.purgeRules.dirNumFilesLimit;
-					dirMgrConfig.purgeRules.dirTotalSizeLimit = config.purgeRules.dirTotalSizeLimit;
-					dirMgrConfig.purgeRules.fileAgeLimitInSec = config.purgeRules.fileAgeLimitInSec;
+                    dirMgrConfig.purgeRules = config.purgeRules;
 
 					dirMgrConfig.enableAutomaticCleanup = true;
 					dirMgrConfig.maxAutoCleanupDeletes = 200;

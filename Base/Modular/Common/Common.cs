@@ -488,7 +488,7 @@ namespace MosaicLib.Modular.Common
 
             try
             {
-                bool forceToNull = (isNullable && value == null);
+                bool forceToNull = (isNullable && (value == null));
 
                 if (!forceToNull)
                 {
@@ -660,14 +660,21 @@ namespace MosaicLib.Modular.Common
                 }
                 else if (decodedValueType == ContainerStorageType.TimeSpan && cvt.IsFloatingPoint() && allowTypeChangeAttempt)
                 {
+                    // support a direct conversion attempt from floating point value to TimeSpan by interpresting the floating value as seconds.
                     value = (TValueType)((System.Object) TimeSpan.FromSeconds((cvt == ContainerStorageType.Double) ? u.f64 : u.f32));
                 }
                 else if (decodedValueType.IsValueType() && !isNullable && !rethrow && IsNullOrEmpty)
                 {
-                    // if we are trying to convert an empty or null container to a value type and rethrow is not true then do not bother to attempt the conversion (it will fail).
+                    // support direct assignment of an empty or null container to a value type with rethrow = false by without any attempt to actually perform the conversion (it will fail).
                     value = default(TValueType);
                 }
-                else if (!isNullable && allowTypeChangeAttempt)
+                else if (isNullable && (IsNullOrEmpty || (allowTypeChangeAttempt && cvt == ContainerStorageType.String && (o as string).IsNullOrEmpty())))
+                {
+                    // we can always assign a null/empty container to a nullable type by setting the type to its default (aka null).
+                    // also allows simple conversion of any null or empty string to a nullable type using the same assignement to default (aka null).
+                    value = default(TValueType);
+                }
+                else if (allowTypeChangeAttempt)
                 {
                     value = default(TValueType);
                     System.Object valueAsObject = ValueAsObject;
@@ -700,6 +707,7 @@ namespace MosaicLib.Modular.Common
                                 case ContainerStorageType.Single: value = (TValueType)System.Convert.ChangeType(ss.ParseValue<System.Single>(0.0f), typeof(System.Single)); conversionDone = ss.IsAtEnd; break;
                                 case ContainerStorageType.Double: value = (TValueType)System.Convert.ChangeType(ss.ParseValue<System.Double>(0.0f), typeof(System.Double)); conversionDone = ss.IsAtEnd; break;
                                 case ContainerStorageType.TimeSpan:
+                                    // first attempt to parse the string as a double.  If that is completely successful then save it as a TimeSpan using FromSeconds.
                                     {
                                         StringScanner ssd = new StringScanner(ss);
                                         double d = 0.0;
@@ -710,6 +718,8 @@ namespace MosaicLib.Modular.Common
                                             break;
                                         }
                                     }
+                                    // next attempt to extract a single token (to next whitespace) and parse that as a TimeSpan using its TryParse method.  
+                                    // If that token was the entire input and it could be successfully parsed to a TimeSpan then the conversion is done.
                                     {
                                         string token = ss.ExtractToken();
                                         TimeSpan ts;
@@ -895,7 +905,10 @@ namespace MosaicLib.Modular.Common
                 {
                     ValueContainer[] vcArray = o as ValueContainer[] ?? emptyValueContainerArray;
 
-                    return "[L {0}]".CheckedFormat(String.Join(" ", vcArray.Select((vc) => vc.ToStringSML()).ToArray()));
+                    if (vcArray.Length > 0)
+                        return "[L {0}]".CheckedFormat(String.Join(" ", vcArray.Select((vc) => vc.ToStringSML()).ToArray()));
+                    else
+                        return "[L]";
                 }
             }
 
@@ -930,7 +943,9 @@ namespace MosaicLib.Modular.Common
                     {
                         string s = o as string ?? string.Empty;
 
-                        if (s.IsBasicAscii(basicUnquotedStringExcludeList, false))
+                        if (s.IsNullOrEmpty())
+                            return "[A]";
+                        else if (s.IsBasicAscii(basicUnquotedStringExcludeList, false))
                             return "[A {0}]".CheckedFormat(s);
                         else
                             return "[A \"{0}\"]".CheckedFormat(s.GenerateJSONVersion());
@@ -940,7 +955,13 @@ namespace MosaicLib.Modular.Common
                 case ContainerStorageType.TimeSpan:
                     return "[TimeSpan {0}]".CheckedFormat(u.TimeSpan.TotalSeconds);
                 case ContainerStorageType.IListOfString:
-                    return "[LS {0}]".CheckedFormat(String.Join(" ", (((o as IList<String>) ?? emptyIListOfString).Select(s => new ValueContainer(s).ToStringSML())).ToArray()));
+                    {
+                        IList<string> strList = (o as IList<string>) ?? emptyIListOfString;
+                        if (strList.Count > 0)
+                            return "[LS {0}]".CheckedFormat(String.Join(" ", (strList.Select(s => new ValueContainer(s).ToStringSML())).ToArray()));
+                        else
+                            return "[LS]";
+                    }
                 case ContainerStorageType.Object:
                     return "[{0} '{1}']".CheckedFormat(cvt, o);
                 default:
@@ -954,6 +975,7 @@ namespace MosaicLib.Modular.Common
             return ToString();
         }
 
+        /// <summary>Constists of ' ', '"', '[' and ']'</summary>
         private static readonly List<char> basicUnquotedStringExcludeList = new List<char>() { ' ', '\"', '[', ']' };
 
         private static readonly IList<String> emptyIListOfString = new List<String>().AsReadOnly();

@@ -31,6 +31,7 @@ using System.Windows.Threading;
 using System.Windows;
 
 using MosaicLib.Modular.Common;
+using MosaicLib.Modular.Config;
 
 namespace MosaicLib.WPF.Common
 {
@@ -38,6 +39,12 @@ namespace MosaicLib.WPF.Common
 
     public static partial class AppSetup
     {
+        /// <summary>
+        /// Defines the MesgType that is used for AppEvents that are generated here.  Defaults to MesgType.Signif
+        /// </summary>
+        public static Logging.MesgType AppEventMesgType { get { return appEventMesgType; } set { appEventMesgType = value; } }
+        private static Logging.MesgType appEventMesgType = Logging.MesgType.Signif;
+
         public static void HandleOnStartup(StartupEventArgs e, ref Logging.Logger appLogger)
         {
             string logBaseName = System.Reflection.Assembly.GetCallingAssembly().FullName.Split(',').SafeAccess(0);        // split off the "name" of the assembly from the other parts that make up its "full" name.
@@ -45,9 +52,20 @@ namespace MosaicLib.WPF.Common
             HandleOnStartup(e, ref appLogger, logBaseName);
         }
 
+        public enum FileRingLogMessageHandlerType
+        {
+            TextFileRotationDirectoryLogMessageHandler,
+            TextFileDateTreeDirectoryLogMessageHandler,
+            None,
+        }
+
         public static void HandleOnStartup(StartupEventArgs e, ref Logging.Logger appLogger, string logBaseName)
         {
+            System.Diagnostics.Process currentProcess = System.Diagnostics.Process.GetCurrentProcess();
             System.Threading.Thread currentThread = System.Threading.Thread.CurrentThread;
+            System.Reflection.Assembly currentExecAssy = System.Reflection.Assembly.GetExecutingAssembly();
+            System.Reflection.Assembly mainAssy = System.Reflection.Assembly.GetEntryAssembly();
+
             if (currentThread.Name.IsNullOrEmpty())
                 currentThread.Name = "{0}.Main".CheckedFormat(logBaseName);
 
@@ -58,11 +76,40 @@ namespace MosaicLib.WPF.Common
             Logging.ListMesgEmitter issueListEmitter = new Logging.ListMesgEmitter() { MesgType = Logging.MesgType.Error };
             Logging.ListMesgEmitter valuesListEmitter = new Logging.ListMesgEmitter() { MesgType = Logging.MesgType.Debug };
 
-            Logging.FileRotationLoggingConfig ringConfig = new Logging.FileRotationLoggingConfig((logBaseName ?? String.Empty) + "LogFile")
+            FileRingLogMessageHandlerType mainLoggerType = Config.Instance.GetConfigKeyAccessOnce("Config.Logging.MainLogger.Type").GetValue<FileRingLogMessageHandlerType>(FileRingLogMessageHandlerType.TextFileRotationDirectoryLogMessageHandler);
+
+            Logging.FileRotationLoggingConfig fileRotationRingConfig = new Logging.FileRotationLoggingConfig(logBaseName.MapNullToEmpty() + "LogFile")
             {
                 mesgQueueSize = ringQueueSize,
                 nameUsesDateAndTime = true,
-            }.UpdateFromModularConfig("Config.Logging.FileRing.", issueListEmitter, valuesListEmitter);
+            };
+
+            Logging.Handlers.TextFileDateTreeLogMessageHandler.Config dateTreeDirConfig = new Logging.Handlers.TextFileDateTreeLogMessageHandler.Config(logBaseName.MapNullToEmpty() + "Log", @".\Logs")
+            {
+                IncludeFileAndLine = false,
+                FileHeaderLines = new string []
+                {
+                    "================================================================================================================================",
+                    "Log file for '{0}'".CheckedFormat(logBaseName),
+                    "Main Assembly: '{0}'".CheckedFormat(mainAssy),
+                    "Process name:'{0}' id:{1}".CheckedFormat(currentProcess.ProcessName, currentProcess.Id),
+                    "================================================================================================================================",
+                },
+            };
+
+            switch (mainLoggerType)
+            {
+                case FileRingLogMessageHandlerType.TextFileRotationDirectoryLogMessageHandler:
+                    fileRotationRingConfig.UpdateFromModularConfig("Config.Logging.FileRing.", issueListEmitter, valuesListEmitter);
+                    break;
+                case  FileRingLogMessageHandlerType.TextFileDateTreeDirectoryLogMessageHandler:
+                    dateTreeDirConfig.UpdateFromModularConfig("Config.Logging.DateTree.", issueListEmitter, valuesListEmitter);
+                    break;
+
+                default:
+                case FileRingLogMessageHandlerType.None:
+                    break;
+            }
 
             Logging.FileRotationLoggingConfig traceRingConfig = new Logging.FileRotationLoggingConfig((logBaseName ?? String.Empty) + "TraceRing")
             {
@@ -71,12 +118,26 @@ namespace MosaicLib.WPF.Common
                 includeThreadInfo = true,
             }.UpdateFromModularConfig("Config.Logging.TraceRing.", issueListEmitter, valuesListEmitter);
 
-            Logging.ILogMessageHandler dirRingLMH = Logging.CreateQueuedTextFileRotationDirectoryLogMessageHandler(ringConfig);
+            Logging.ILogMessageHandler mainLMH = null;
+
+            switch (mainLoggerType)
+            {
+                case FileRingLogMessageHandlerType.TextFileRotationDirectoryLogMessageHandler:
+                    mainLMH = Logging.CreateQueuedTextFileRotationDirectoryLogMessageHandler(fileRotationRingConfig);
+                    break;
+                case FileRingLogMessageHandlerType.TextFileDateTreeDirectoryLogMessageHandler:
+                    mainLMH = Logging.CreateQueuedTextFileDateTreeLogMessageHandler(dateTreeDirConfig);
+                    break;
+                default:
+                case FileRingLogMessageHandlerType.None:
+                    break;
+            }
+
             Logging.ILogMessageHandler lmh = null; //  Logging.CreateDiagnosticTraceLogMessageHandler(Logging.LogGate.Debug);
             Logging.ILogMessageHandler wpfLMH = MosaicLib.WPF.Logging.WpfLogMessageHandlerToolBase.Instance;
 
-            if (dirRingLMH != null)
-                Logging.AddLogMessageHandlerToDefaultDistributionGroup(dirRingLMH);
+            if (mainLMH != null)
+                Logging.AddLogMessageHandlerToDefaultDistributionGroup(mainLMH);
             if (lmh != null)
                 Logging.AddLogMessageHandlerToDefaultDistributionGroup(lmh);
 
@@ -85,7 +146,7 @@ namespace MosaicLib.WPF.Common
                 Logging.AddLogMessageHandlerToDefaultDistributionGroup(wpfLMH);
 
             appLogger = new Logging.Logger("AppLogger");
-            Logging.LogMessage lm = appLogger.GetLogMessage(Logging.MesgType.Signif, "App Starting", appLogger.GetStackFrame(0));
+            Logging.LogMessage lm = appLogger.GetLogMessage(AppEventMesgType, "App Starting", appLogger.GetStackFrame(0));
             lm.NamedValueSet = new NamedValueSet() { { "AppEvent", "OnStartup" } };
             appLogger.EmitLogMessage(ref lm);
 
@@ -108,19 +169,19 @@ namespace MosaicLib.WPF.Common
 
         public static void HandleOnDeactivated(Logging.ILogger appLogger)
         {
-            Logging.LogMessage lm = appLogger.GetLogMessage(Logging.MesgType.Signif, "App Deactiviated", appLogger.GetStackFrame(0));
+            Logging.LogMessage lm = appLogger.GetLogMessage(AppEventMesgType, "App Deactiviated", appLogger.GetStackFrame(0));
             lm.NamedValueSet = new NamedValueSet() { { "AppEvent", "OnDeactivated" } };
+
             appLogger.EmitLogMessage(ref lm);
         }
 
         public static void HandleOnExit(Logging.ILogger appLogger)
         {
-            Logging.LogMessage lm = appLogger.GetLogMessage(Logging.MesgType.Signif, "App Stopping", appLogger.GetStackFrame(0));
+            Logging.LogMessage lm = appLogger.GetLogMessage(AppEventMesgType, "App Stopping", appLogger.GetStackFrame(0));
             lm.NamedValueSet = new NamedValueSet() { { "AppEvent", "OnExit" } };
             appLogger.EmitLogMessage(ref lm);
 
             Logging.ShutdownLogging();
         }
-
     }
 }

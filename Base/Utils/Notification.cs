@@ -105,6 +105,11 @@ namespace MosaicLib.Utils
         public Logging.IMesgEmitter TraceEmitter { get { return traceEmitter ?? Logging.NullEmitter; } set { traceEmitter = value; } }
         private Logging.IMesgEmitter traceEmitter = null;
 
+        /// <summary>
+        /// Returns true if the TraceEmitter IsEnabled.
+        /// </summary>
+        protected bool IsTraceEmitterEnabled { get { return (traceEmitter != null && traceEmitter.IsEnabled); } }
+
         #endregion
 
         #region IWaitable Members
@@ -210,9 +215,9 @@ namespace MosaicLib.Utils
         /// <summary>Caller invokes this to Notify a target object that something notable has happened.</summary>
         public override void Notify()
 		{
-            string methodName = new System.Diagnostics.StackFrame().GetMethod().Name;
+            string methodName = (IsTraceEmitterEnabled) ? new System.Diagnostics.StackFrame().GetMethod().Name : string.Empty;
 
-            using (var eeTrace = new Logging.EnterExitTrace(TraceEmitter, methodName, 0))
+            using (var eeTrace = (IsTraceEmitterEnabled) ? new Logging.EnterExitTrace(TraceEmitter, methodName, 0) : null)
             {
                 if (behavior == Behavior.WakeAll)
                     EventWaitHandleHelper.PulseEvent(eventH);
@@ -240,9 +245,9 @@ namespace MosaicLib.Utils
         /// <summary>Resets the underlying event.</summary>
         public override void Reset()
 		{
-            string methodName = new System.Diagnostics.StackFrame().GetMethod().Name;
+            string methodName = (IsTraceEmitterEnabled) ? new System.Diagnostics.StackFrame().GetMethod().Name : string.Empty;
 
-            using (var eeTrace = new Logging.EnterExitTrace(TraceEmitter, methodName, 0))
+            using (var eeTrace = (IsTraceEmitterEnabled) ? new Logging.EnterExitTrace(TraceEmitter, methodName, 0) : null)
             {
                 EventWaitHandleHelper.ResetEvent(eventH);
             }
@@ -251,9 +256,9 @@ namespace MosaicLib.Utils
         /// <summary>returns true if object was signaling at end of wait, false otherwise</summary>
         public override bool Wait()
 		{
-            string methodName = new System.Diagnostics.StackFrame().GetMethod().Name;
+            string methodName = (IsTraceEmitterEnabled) ? new System.Diagnostics.StackFrame().GetMethod().Name : string.Empty;
 
-            using (var eeTrace = new Logging.EnterExitTrace(TraceEmitter, methodName, 0))
+            using (var eeTrace = (IsTraceEmitterEnabled) ? new Logging.EnterExitTrace(TraceEmitter, methodName, 0) : null)
             {
                 bool signaled = false;
                 try
@@ -273,7 +278,7 @@ namespace MosaicLib.Utils
                         LeaveWait(signaled);
                 }
 
-                if (signaled)
+                if (signaled && eeTrace != null)
                     eeTrace.ExtraMessage = "signaled";
 
                 return signaled;
@@ -283,9 +288,9 @@ namespace MosaicLib.Utils
         /// <summary>returns true if object was signaling at end of wait, false otherwise</summary>
         public override bool WaitMSec(int timeLimitInMSec)
 		{
-            string methodName = Fcns.CheckedFormat("{0}({1})", new System.Diagnostics.StackFrame().GetMethod().Name, timeLimitInMSec);
+            string methodName = (IsTraceEmitterEnabled) ? Fcns.CheckedFormat("{0}({1})", new System.Diagnostics.StackFrame().GetMethod().Name, timeLimitInMSec) : string.Empty;
 
-            using (var eeTrace = new Logging.EnterExitTrace(TraceEmitter, methodName, 0))
+            using (var eeTrace = (IsTraceEmitterEnabled) ? new Logging.EnterExitTrace(TraceEmitter, methodName, 0) : null)
             {
                 bool signaled = false;
                 try
@@ -307,7 +312,7 @@ namespace MosaicLib.Utils
                         LeaveWait(signaled);
                 }
 
-                if (signaled)
+                if (signaled && eeTrace != null)
                     eeTrace.ExtraMessage = "signaled";
 
                 return signaled;

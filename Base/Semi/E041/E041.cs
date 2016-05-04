@@ -201,7 +201,25 @@ namespace MosaicLib.Semi.E041
         /// <summary>Returns true if any NamedValue in the given actionList has true for its value</summary>
         public static bool IsAnyActionEnabled(this INamedValueSet actionList)
         {
-            return actionList.Any((nv) => nv.VC.GetValue<bool>(false));
+            return actionList.Any((nv) => (nv.GetActionDisableReason() == string.Empty));
+        }
+
+        /// <summary>
+        /// Returns returns an empty string if the given actionEnableNV is valid and it either contains the empty string or a value that is castable to boolean true.
+        /// Returns a disable reason, either as the non-empty string contained in the given actionEnableNV's value or a generated description that indicates why the
+        /// actionEnableNV's value indicates that the action is not enabled.
+        /// </summary>
+        public static string GetActionDisableReason(this INamedValue actionEnableNV)
+        {
+            if (actionEnableNV.IsNullOrEmpty())
+                return "Given NV object:'{0}' is not a valid action enable".CheckedFormat(actionEnableNV);
+
+            ValueContainer actionEnableVC = actionEnableNV.VC;
+
+            if (actionEnableVC.cvt == ContainerStorageType.String)
+                return actionEnableVC.GetValue<string>(false) ?? "ActionDisableReasonIsNull";
+            else
+                return actionEnableVC.GetValue<bool>(false) ? String.Empty : "Action is not currently enabled {0}".CheckedFormat(actionEnableVC);
         }
     }
 
@@ -1209,11 +1227,14 @@ namespace MosaicLib.Semi.E041
                     if (!currentSelectedActionName.IsNullOrEmpty())
                         return "Action '{0}' has already been selected".CheckedFormat(currentSelectedActionName);
 
-                    if (!currentActionList.Contains(selectActionName))
+                    INamedValue selectedActionEnableNV = currentActionList[selectActionName];
+                    if (selectedActionEnableNV.IsNullOrEmpty())
                         return "Action '{0}' is not a valid selection.  {1}".CheckedFormat(selectActionName, currentActionList.ToString(false, true));
 
-                    if (!currentActionList.GetValue(selectActionName).GetValue<bool>(false))
-                        return "Action '{0}' is not a currently enabled.  {1}".CheckedFormat(selectActionName, currentActionList.ToString(false, true));
+                    string disableReason = selectedActionEnableNV.GetActionDisableReason();
+
+                    if (!disableReason.IsNullOrEmpty())
+                        return "Action '{0}' is not a currently enabled: '{1}'".CheckedFormat(selectActionName, disableReason, currentActionList.ToString(false, true));
 
                     ANState.SelectedActionName = selectActionName;
 

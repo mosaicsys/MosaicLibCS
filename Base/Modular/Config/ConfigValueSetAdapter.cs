@@ -24,6 +24,7 @@ using System.Collections.Generic;
 using MosaicLib.Utils;
 using MosaicLib.Modular.Reflection.Attributes;
 using System.Reflection;
+using MosaicLib.Modular.Common;
 
 namespace MosaicLib.Modular.Config
 {
@@ -115,8 +116,7 @@ namespace MosaicLib.Modular.Config
         /// </summary>
         public ConfigValueSetAdapter()
             : this(null)
-        {
-        }
+        { }
 
         /// <summary>
         /// Config instance constructor.  Assigns adapter to use given configInstance IConfig service instance.  This may be overriden during the Setup call.
@@ -421,6 +421,90 @@ namespace MosaicLib.Modular.Config
                 Func<TConfigValueSet, string> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TConfigValueSet, string>(itemInfo);
                 innerBoundSetter = delegate(TConfigValueSet valueSetObj, IConfigKeyAccess ika) { pfSetter(valueSetObj, ikaGetter(ika, pfGetter(valueSetObj))); };
             }
+            else if (itemInfo.ItemType == typeof(bool ?))
+            {
+                Func<IConfigKeyAccess, bool ?, bool ?> ikaGetter = (ika, defaultValue) => ika.GetValue<bool ?>(defaultValue);
+                Action<TConfigValueSet, bool ?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TConfigValueSet, bool ?>(itemInfo);
+                Func<TConfigValueSet, bool ?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TConfigValueSet, bool ?>(itemInfo);
+                innerBoundSetter = delegate(TConfigValueSet valueSetObj, IConfigKeyAccess ika) { pfSetter(valueSetObj, ikaGetter(ika, pfGetter(valueSetObj))); };
+            }
+            else if (itemInfo.ItemType == typeof(sbyte ?))
+            {
+                Func<IConfigKeyAccess, sbyte ?, sbyte ?> ikaGetter = (ika, defaultValue) => ika.GetValue<sbyte ?>(defaultValue);
+                Action<TConfigValueSet, sbyte ?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TConfigValueSet, sbyte ?>(itemInfo);
+                Func<TConfigValueSet, sbyte ?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TConfigValueSet, sbyte ?>(itemInfo);
+                innerBoundSetter = delegate(TConfigValueSet valueSetObj, IConfigKeyAccess ika) { pfSetter(valueSetObj, ikaGetter(ika, pfGetter(valueSetObj))); };
+            }
+            else if (itemInfo.ItemType == typeof(short ?))
+            {
+                Func<IConfigKeyAccess, short ?, short ?> ikaGetter = (ika, defaultValue) => ika.GetValue<short ?>(defaultValue);
+                Action<TConfigValueSet, short ?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TConfigValueSet, short ?>(itemInfo);
+                Func<TConfigValueSet, short ?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TConfigValueSet, short ?>(itemInfo);
+                innerBoundSetter = delegate(TConfigValueSet valueSetObj, IConfigKeyAccess ika) { pfSetter(valueSetObj, ikaGetter(ika, pfGetter(valueSetObj))); };
+            }
+            else if (itemInfo.ItemType == typeof(int ?))
+            {
+                Func<IConfigKeyAccess, int ?, int ?> ikaGetter = (ika, defaultValue) => ika.GetValue<int ?>(defaultValue);
+                Action<TConfigValueSet, int ?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TConfigValueSet, int ?>(itemInfo);
+                Func<TConfigValueSet, int ?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TConfigValueSet, int ?>(itemInfo);
+                innerBoundSetter = delegate(TConfigValueSet valueSetObj, IConfigKeyAccess ika) { pfSetter(valueSetObj, ikaGetter(ika, pfGetter(valueSetObj))); };
+            }
+            else if (itemInfo.ItemType == typeof(long ?))
+            {
+                Func<IConfigKeyAccess, long ?, long ?> ikaGetter = (ika, defaultValue) => ika.GetValue<long ?>(defaultValue);
+                Action<TConfigValueSet, long ?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TConfigValueSet, long ?>(itemInfo);
+                Func<TConfigValueSet, long ?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TConfigValueSet, long ?>(itemInfo);
+                innerBoundSetter = delegate(TConfigValueSet valueSetObj, IConfigKeyAccess ika) { pfSetter(valueSetObj, ikaGetter(ika, pfGetter(valueSetObj))); };
+            }
+            else if (itemInfo.ItemType == typeof(byte ?))
+            {
+                Func<IConfigKeyAccess, byte ?, byte ?> ikaGetter = (ika, defaultValue) => ika.GetValue<byte ?>(defaultValue);
+                Action<TConfigValueSet, byte ?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TConfigValueSet, byte ?>(itemInfo);
+                Func<TConfigValueSet, byte ?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TConfigValueSet, byte ?>(itemInfo);
+                innerBoundSetter = delegate(TConfigValueSet valueSetObj, IConfigKeyAccess ika) { pfSetter(valueSetObj, ikaGetter(ika, pfGetter(valueSetObj))); };
+            }
+            else if (itemInfo.ItemType == typeof(ushort ?))
+            {
+                Func<IConfigKeyAccess, ushort ?, ushort ?> ikaGetter = (ika, defaultValue) => ika.GetValue<ushort ?>(defaultValue);
+                Action<TConfigValueSet, ushort ?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TConfigValueSet, ushort ?>(itemInfo);
+                Func<TConfigValueSet, ushort ?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TConfigValueSet, ushort ?>(itemInfo);
+                innerBoundSetter = delegate(TConfigValueSet valueSetObj, IConfigKeyAccess ika) { pfSetter(valueSetObj, ikaGetter(ika, pfGetter(valueSetObj))); };
+            }
+            else if (itemInfo.ItemType == typeof(uint ?))
+            {
+                Func<IConfigKeyAccess, uint ?, uint ?> ikaGetter = (ika, defaultValue) => ika.GetValue<uint ?>(defaultValue);
+                Action<TConfigValueSet, uint ?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TConfigValueSet, uint ?>(itemInfo);
+                Func<TConfigValueSet, uint ?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TConfigValueSet, uint ?>(itemInfo);
+                innerBoundSetter = delegate(TConfigValueSet valueSetObj, IConfigKeyAccess ika) { pfSetter(valueSetObj, ikaGetter(ika, pfGetter(valueSetObj))); };
+            }
+            else if (itemInfo.ItemType == typeof(ulong ?))
+            {
+                Func<IConfigKeyAccess, ulong ?, ulong ?> ikaGetter = (ika, defaultValue) => ika.GetValue<ulong ?>(defaultValue);
+                Action<TConfigValueSet, ulong ?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TConfigValueSet, ulong ?>(itemInfo);
+                Func<TConfigValueSet, ulong ?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TConfigValueSet, ulong ?>(itemInfo);
+                innerBoundSetter = delegate(TConfigValueSet valueSetObj, IConfigKeyAccess ika) { pfSetter(valueSetObj, ikaGetter(ika, pfGetter(valueSetObj))); };
+            }
+            else if (itemInfo.ItemType == typeof(float ?))
+            {
+                Func<IConfigKeyAccess, float ?, float ?> ikaGetter = (ika, defaultValue) => ika.GetValue<float ?>(defaultValue);
+                Action<TConfigValueSet, float ?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TConfigValueSet, float ?>(itemInfo);
+                Func<TConfigValueSet, float ?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TConfigValueSet, float ?>(itemInfo);
+                innerBoundSetter = delegate(TConfigValueSet valueSetObj, IConfigKeyAccess ika) { pfSetter(valueSetObj, ikaGetter(ika, pfGetter(valueSetObj))); };
+            }
+            else if (itemInfo.ItemType == typeof(double ?))
+            {
+                Func<IConfigKeyAccess, double ?, double ?> ikaGetter = (ika, defaultValue) => ika.GetValue<double ?>(defaultValue);
+                Action<TConfigValueSet, double ?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TConfigValueSet, double ?>(itemInfo);
+                Func<TConfigValueSet, double ?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TConfigValueSet, double ?>(itemInfo);
+                innerBoundSetter = delegate(TConfigValueSet valueSetObj, IConfigKeyAccess ika) { pfSetter(valueSetObj, ikaGetter(ika, pfGetter(valueSetObj))); };
+            }
+            else if (itemInfo.ItemType == typeof(ValueContainer))
+            {
+                Func<IConfigKeyAccess, ValueContainer, ValueContainer> ikaGetter = (ika, defaultValue) => ika.ValueContainer;
+                Action<TConfigValueSet, ValueContainer> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TConfigValueSet, ValueContainer>(itemInfo);
+                Func<TConfigValueSet, ValueContainer> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TConfigValueSet, ValueContainer>(itemInfo);
+                innerBoundSetter = delegate(TConfigValueSet valueSetObj, IConfigKeyAccess ika) { pfSetter(valueSetObj, ikaGetter(ika, pfGetter(valueSetObj))); };
+            }
             else if (itemInfo.ItemType.IsEnum)
             {
                 innerBoundSetter = delegate(TConfigValueSet valueSetObj, IConfigKeyAccess ika)
@@ -462,13 +546,13 @@ namespace MosaicLib.Modular.Config
             }
             else if (itemInfo.ItemType == typeof(Logging.LogGate))
             {
-                Func<IConfigKeyAccess, Logging.LogGate, Logging.LogGate> ikaGetter 
-                    = (ika, defaultValue) 
-                        => 
-                        { 
-                            Logging.LogGate gate = defaultValue; 
-                            gate.TryParse(ika.GetValue<string>(defaultValue.ToString())); 
-                            return gate; 
+                Func<IConfigKeyAccess, Logging.LogGate, Logging.LogGate> ikaGetter
+                    = (ika, defaultValue)
+                        =>
+                        {
+                            Logging.LogGate gate = defaultValue;
+                            gate.TryParse(ika.GetValue<string>(defaultValue.ToString()));
+                            return gate;
                         };
                 Action<TConfigValueSet, Logging.LogGate> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TConfigValueSet, Logging.LogGate>(itemInfo);
                 Func<TConfigValueSet, Logging.LogGate> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TConfigValueSet, Logging.LogGate>(itemInfo);
@@ -494,10 +578,9 @@ namespace MosaicLib.Modular.Config
                         string valueAsString = keyAccess.ValueAsString;
                         innerBoundSetter(valueSetObj, keyAccess);
 
-
                         if (keyAccess.Flags.SilenceLogging)
                         { }
-                        else if (String.IsNullOrEmpty(keyAccess.ResultCode))
+                        else if (keyAccess.ResultCode.IsNullOrEmpty())
                         {
                             valueUpdateEmitter.Emit("Updated Member/Key '{0}'/'{1}' with new value '{2}' [type:'{3}']", keySetupInfo.MemberName, keyAccess.Key, valueAsString, tConfigValueSetTypeStr);
                         }

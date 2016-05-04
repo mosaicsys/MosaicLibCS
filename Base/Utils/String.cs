@@ -152,7 +152,7 @@ namespace MosaicLib.Utils
             return s.GenerateEscapedVersion(loggingForceEscapeCharList);
         }
 
-        private static readonly List<char> loggingForceEscapeCharList = new List<char>() { '\"', '\\' };
+        private static readonly List<char> loggingForceEscapeCharList = new List<char>() { '\\' };
 
         /// <summary>
         /// Generate and return a escaped version of given string s that is suitable for inserting in-between single or double quotes.
@@ -428,7 +428,7 @@ namespace MosaicLib.Utils
 	#endregion
 
     // Library is now being built under DotNet 3.5 (or later) so we can make use of extension methods.
-    #region Extension Functions
+    #region Extension Methods
 
     /// <summary>
     /// This class contains a set of extension methods.  At present this primarily adds variants of the CheckedFormat methods above to be used directly with Strings and StringBuilder
@@ -583,6 +583,78 @@ namespace MosaicLib.Utils
         public static int EstimatedContentSizeInBytes(this IList<String> sList)
         {
             return (sList.Sum((s) => s.MapNullToEmpty().Length) * sizeof(char));
+        }
+
+        #endregion
+
+        #region string prefix add/remote tools
+
+        /// <summary>
+        /// This takes the given from string value and adds the given prefix string value if the from string does not already start with the prefix string.
+        /// If from is null or empty then this method simply returns prefix.  
+        /// If prefix is null or empty or from already starts with prefix then this method returns from.
+        /// Otherwise this method returns prefix + from.
+        /// </summary>
+        public static string AddPrefixIfNeeded(this string from, string prefix)
+        {
+            if (from.IsNullOrEmpty())
+                return prefix;
+
+            if (prefix.IsNullOrEmpty() || from.StartsWith(prefix))
+                return from;
+
+            return prefix + from;
+        }
+
+        /// <summary>
+        /// This takes the given from string value and removes the given prefix string value if the from string starts with the prefix string.
+        /// If from is null or empty or prefix is null or empty then this method simply returns from. 
+        /// If from does not start with prefix then this method returns from.
+        /// Otherwise this method returns from.SubString(prefix.Length).
+        /// </summary>
+        public static string RemovePrefixIfNeeded(this string from, string prefix)
+        {
+            if (from.IsNullOrEmpty() || prefix.IsNullOrEmpty())
+                return from;
+
+            if (!from.StartsWith(prefix))
+                return from;
+
+            return from.Substring(prefix.Length);
+        }
+
+        /// <summary>
+        /// This takes the given from string value and adds the given suffix string value if the from string does not already end with the suffix string.
+        /// If from is null or empty then this method simply returns suffix.  
+        /// If suffix is null or empty or from already ends with suffix then this method returns from.
+        /// Otherwise this method returns from + suffix.
+        /// </summary>
+        public static string AddSuffixIfNeeded(this string from, string suffix)
+        {
+            if (from.IsNullOrEmpty())
+                return suffix;
+
+            if (suffix.IsNullOrEmpty() || from.EndsWith(suffix))
+                return from;
+
+            return from + suffix;
+        }
+
+        /// <summary>
+        /// This takes the given from string value and removes the given suffix string value if the from string starts with the suffix string.
+        /// If from is null or empty or suffix is null or empty then this method simply returns from. 
+        /// If from does not start with suffix then this method returns from.
+        /// Otherwise this method returns from.Substring(0, from.Length - suffix.Length).
+        /// </summary>
+        public static string RemoveSuffixIfNeeded(this string from, string suffix)
+        {
+            if (from.IsNullOrEmpty() || suffix.IsNullOrEmpty())
+                return from;
+
+            if (!from.EndsWith(suffix))
+                return from;
+
+            return from.Substring(0, from.Length - suffix.Length);
         }
 
         #endregion

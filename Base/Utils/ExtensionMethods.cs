@@ -127,7 +127,7 @@ namespace MosaicLib.Utils
     #endregion
 
     // Library is now being built under DotNet 3.5 (or later)
-    #region Extension Functions
+    #region Extension Methods
 
     /// <summary>
     /// This class contains a set of extension methods.  At present this primarily adds variants of the CheckedFormat methods above to be used directly with Strings and StringBuilder

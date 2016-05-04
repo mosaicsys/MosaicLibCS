@@ -248,31 +248,7 @@ namespace MosaicLib.File
 			if (!activeFSI.Exists)
 				return false;		// advance is not needed if the entry represents a file that does not exist (yet).
 
-			if (activeFileInfo == null)	// if we could not cast the entry's FSI to a FileInfo entry then advance is needed
-				return true;
-
-			// check for size limit reached
-			bool sizeLimitReached = (activeFileInfo.Length > config.advanceRules.fileSizeLimit 
-									 && config.advanceRules.fileSizeLimit > 0);
-
-			if (sizeLimitReached)
-				return true;
-
-			// then check for age limit reached
-			bool ageLimitReached = false;
-
-			if (config.advanceRules.fileAgeLimitInSec > 0.0)
-			{
-				double fileAgeInSec = activeFileEntry.CreationAge.TotalSeconds;
-
-				ageLimitReached = (fileAgeInSec > config.advanceRules.fileAgeLimitInSec);
-			}
-
-			if (ageLimitReached)
-				return true;
-
-			// neither limit reached
-			return false;
+            return config.advanceRules.IsFileAdvanceNeeded(activeFileInfo);
 		}
 
         /// <summary>
@@ -322,7 +298,7 @@ namespace MosaicLib.File
 		}
 
         /// <summary>used to configure a DirectoryFileRotationManager</summary>
-		public class Config							//!< structure
+		public class Config
 		{
 			// information about the base directory whose contents will be managed
             /// <summary>Gives the path to the directory to be "mananged" by the <see cref="DirectoryFileRotationManager"/></summary>
@@ -342,38 +318,16 @@ namespace MosaicLib.File
 
 			// information on rules for advancing from one active file to the next one
 
-            /// <summary>Sub-class contains the parameters that define when the manager should advance to the next file.</summary>
-            public class AdvanceRules
-			{
-                /// <summary>the maximum desired size of each file (0 for no limit)</summary>
-                public Int64 fileSizeLimit = 0;
-                /// <summary>file age limit in seconds (0 for no limit)</summary>
-                public double fileAgeLimitInSec = 0.0;
-                /// <summary>the period after checking the active file's size before it will be checked again</summary>
-                public double testPeriodInSec = 10.0;
-			}
-
-            /// <summary>Gives the user choosen set of <see cref="AdvanceRules"/> values that should be used by the manager</summary>
-            public AdvanceRules advanceRules = new AdvanceRules();
+            /// <summary>Gives the user choosen set of <see cref="MosaicLib.Logging.FileRotationLoggingConfig.AdvanceRules"/> values that should be used by the manager</summary>
+            public Logging.FileRotationLoggingConfig.AdvanceRules advanceRules = new Logging.FileRotationLoggingConfig.AdvanceRules();
 
 			// information about the rules for purging old files from the directory
 			//	These rules are used to check if the oldest file in the directory needs to be
 			//	deleted.  (note that rules are only applied when client explicitly checks and invokes the
 			//	cleanup method).
 
-            /// <summary>Sub-class contains the paramters that define when the manager should prune an old file</summary>
-            public class PurgeRules
-			{
-                /// <summary>the user stated maximum number of files (or zero for no limit).  Must be 0 or be between 2 and 5000</summary>
-                public int dirNumFilesLimit = 0;
-                /// <summary>the user stated maximum size of the set of managed files or zero for no limit</summary>
-                public Int64 dirTotalSizeLimit = 0;
-                /// <summary>the user stated maximum age in seconds of the oldest file or zero for no limit</summary>
-                public double fileAgeLimitInSec = 0.0;
-            }
-
-            /// <summary>Gives the user choosen set of <see cref="PurgeRules"/> values that should be used by the manager</summary>
-            public PurgeRules purgeRules = new PurgeRules();
+            /// <summary>Gives the user choosen set of <see cref="MosaicLib.Logging.FileRotationLoggingConfig.PurgeRules"/> values that should be used by the manager</summary>
+            public Logging.FileRotationLoggingConfig.PurgeRules purgeRules = new Logging.FileRotationLoggingConfig.PurgeRules();
 
 			// additional flags
             /// <summary>Set to true to enable automatic initial cleanup of the directory during the inital Setup operation.</summary>
@@ -692,12 +646,15 @@ namespace MosaicLib.File
             entryIDList.Add(itemEntryID);
             oldestFileDirEntryID = DirEntryID_Invalid;	// trigger rescan to determin the oldest file
         }
+
         /// <summary>
         /// Internal method that is used to generate the next Active file name.  May delete the oldest file in order to reuse the name when appropriate.
         /// </summary>
 		protected void GenerateNextActiveFile()
 		{
-			// any current active entry is no longer active
+            string methodName = new System.Diagnostics.StackFrame().GetMethod().Name;
+            
+            // any current active entry is no longer active
 			activeFileEntryID = DirEntryID_Invalid;
 
 			// increment the file number (for numeric files)
@@ -729,7 +686,7 @@ namespace MosaicLib.File
 				break;
 			}
 
-			string name = config.fileNamePrefix + middleStr + config.fileNameSuffix;
+			string name = "{0}{1}{2}".CheckedFormat(config.fileNamePrefix, middleStr, config.fileNameSuffix);
 
 			// we have a full path now.
 			int entryID = FindDirEntryByFileName(name);
@@ -741,7 +698,7 @@ namespace MosaicLib.File
 			DirectoryEntryInfo entryInfo = new DirectoryEntryInfo(filePath);
 			FileSystemInfo entryFSI = entryInfo.FileSystemInfo;
 
-			Utils.Asserts.LogIfConditionIsNotTrue((nameWasInMap == entryInfo.Exists), "GenerateNextActiveFile: name already exists only if it was removed from map");
+			Utils.Asserts.LogIfConditionIsNotTrue((nameWasInMap == entryInfo.Exists), "{0}: name already exists only if it was removed from map".CheckedFormat(methodName));
 
 			if (entryInfo.Exists)
 			{
@@ -750,15 +707,15 @@ namespace MosaicLib.File
 				double fileAgeInHours = entryInfo.CreationAge.TotalHours;
                 Int64 fileSize = entryInfo.Length;
 
-				logger.Trace.Emit("GenerateNextActiveFile: Attempting to delete prior file:'{0}' size:{1} age:{2} hours", entryInfo.Name, fileSize, fileAgeInHours.ToString("f3"));
+				logger.Trace.Emit("{0}: Attempting to delete prior file:'{1}' size:{2} age:{3} hours", methodName, entryInfo.Name, fileSize, fileAgeInHours.ToString("f3"));
 
 				try {
 					entryFSI.Delete();
-					logger.Debug.Emit("GenerateNextActiveFile: Deleted prior file:'{0}' size:{1} age:{2} hours", entryInfo.Name, fileSize, fileAgeInHours.ToString("f3"));
+                    logger.Debug.Emit("{0}: Deleted prior file:'{1}' size:{2} age:{3} hours", methodName, entryInfo.Name, fileSize, fileAgeInHours.ToString("f3"));
 				}
 				catch (System.Exception ex)
 				{
-					logger.Error.Emit("GenerateNextActiveFile: failed to delete prior file:'{1}', error:'{1}'", entryInfo.Name, ex.Message);
+                    logger.Error.Emit("{0}: failed to delete prior file:'{1}', error:'{2}'", methodName, entryInfo.Name, ex.Message);
 					return;
 				}
 			}
@@ -770,7 +727,7 @@ namespace MosaicLib.File
 
 			DirectoryEntryInfo activeFileEntry = dirEntryList[activeFileEntryID];
 
-            logger.Debug.Emit("GenerateNextActiveFile active file is now:'{0}' id:{1}", activeFileEntry.Name, activeFileEntryID);
+            logger.Debug.Emit("{0}: active file is now:'{1}' id:{2}", methodName, activeFileEntry.Name, activeFileEntryID);
 		}
 
         /// <summary>
@@ -1012,5 +969,42 @@ namespace MosaicLib.File
 
 	#endregion
 
-	//-------------------------------------------------------------------
+    #region ExtensionMethods
+
+    public static partial class ExtensionMethods
+    {
+        /// <summary>Returns true if the client should stop using the current file and should start using a new file in the directory</summary>
+        public static bool IsFileAdvanceNeeded(this Logging.FileRotationLoggingConfig.AdvanceRules advanceRules, FileInfo activeFileInfo)
+        {
+            if (activeFileInfo == null)	// if we could not cast the entry's FSI to a FileInfo entry then advance is needed
+                return true;
+
+            // check for size limit reached
+            bool sizeLimitReached = (activeFileInfo.Length > advanceRules.fileSizeLimit
+                                     && advanceRules.fileSizeLimit > 0);
+
+            if (sizeLimitReached)
+                return true;
+
+            // then check for age limit reached
+            bool ageLimitReached = false;
+
+            if (advanceRules.fileAgeLimitInSec > 0.0)
+            {
+                double fileAgeInSec = (DateTime.Now - activeFileInfo.CreationTime).TotalSeconds;
+
+                ageLimitReached = (fileAgeInSec > advanceRules.fileAgeLimitInSec);
+            }
+
+            if (ageLimitReached)
+                return true;
+
+            // neither limit reached
+            return false;
+        }
+    }
+
+    #endregion
+
+    //-------------------------------------------------------------------
 }

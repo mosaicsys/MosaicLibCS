@@ -65,6 +65,7 @@
     <Compile Include="Logging\MessageQueue.cs" />
     <Compile Include="Logging\QueuedLogger.cs" />
     <Compile Include="Logging\QueueLogMessageHandler.cs" />
+    <Compile Include="Logging\TextFileDateTreeLogMessageHandler.cs" />
     <Compile Include="Logging\TextFileRotationLogMessageHandler.cs" />
     <Compile Include="Modular\Action\ClientFacet.cs" />
     <Compile Include="Modular\Action\Implementation.cs" />

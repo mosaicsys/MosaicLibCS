@@ -198,7 +198,7 @@ namespace MosaicLib
             /// <summary>true for date_time in middle of name, false for 5 digits in middle of name.  files are named "[name][date_time].log" or "[name][nnnnn].log"</summary>
             public bool nameUsesDateAndTime;
 
-            /// <summary>Defines the set of values that determine when the ring must advance to the next file.</summary>
+            /// <summary>Sub-structure used to defines the set of values that determine when the ring must advance to the next file.</summary>
             public struct AdvanceRules
 			{
                 /// <summary>the maximum desired size of each file (0 for no limit)</summary>
@@ -215,7 +215,7 @@ namespace MosaicLib
             /// <summary>Defines the set of values that determine when the ring must advance to the next file.</summary>
             public AdvanceRules advanceRules;
 
-            /// <summary>Defines the set of values that determine when old files in the ring must be purged/deleted.</summary>
+            /// <summary>Sub-structure used to define the set of values that determine when old files in the ring must be purged/deleted.</summary>
             public struct PurgeRules
 			{
                 /// <summary>the user stated maximum number of files (or zero for no limit).  Must be 0 or be between 2 and 5000</summary>
@@ -224,8 +224,21 @@ namespace MosaicLib
                 public long dirTotalSizeLimit;
                 /// <summary>the user stated maximum age in seconds of the oldest file or zero for no limit</summary>
                 public double fileAgeLimitInSec;
+
                 /// <summary>the user stated maximum age of the oldest file or TimeSpan.Zero for no limit</summary>
                 public TimeSpan FileAgeLimit { get { return TimeSpan.FromSeconds(fileAgeLimitInSec); } set { fileAgeLimitInSec = value.TotalSeconds; } }
+                
+                /// <summary>
+                /// Specific copy constructor.  
+                /// Sets fileAgeLimit, dirNumFilesLimit and dirTotalSizeLimit from similar fields in given pruneRules.
+                /// </summary>
+                public PurgeRules(File.DirectoryTreePruningManager.PruneRules pruneRules)
+                    : this()
+                {
+                    FileAgeLimit = pruneRules.FileAgeLimit;
+                    dirNumFilesLimit = pruneRules.TreeNumFilesLimit;
+                    dirTotalSizeLimit = pruneRules.TreeTotalSizeLimit;
+                }
             }
             /// <summary>Defines the set of values that determine when old files in the ring must be purged/deleted.</summary>
             public PurgeRules purgeRules;
@@ -239,6 +252,8 @@ namespace MosaicLib
             public bool includeQpcTime;
             /// <summary>Set to true to include the ThreadInfo in the output text.</summary>
             public bool includeThreadInfo;
+            /// <summary>Set to true to include the NamedValueSet contents in the output text.</summary>
+            public bool includeNamedValueSet;
 
             /// <summary>A list of strings for file names that will not be tracked or purged by the ring.</summary>
             public List<string> excludeFileNamesSet;
@@ -262,6 +277,7 @@ namespace MosaicLib
 				this.nameUsesDateAndTime = true;
 				this.includeFileAndLine = true;
 				this.includeQpcTime = true;
+                this.includeNamedValueSet = true;
 
 				this.advanceRules = new AdvanceRules();
 				this.purgeRules = new PurgeRules();
@@ -277,7 +293,8 @@ namespace MosaicLib
 
             /// <summary>
             /// Use this method to read the stock set of ModularConfig points using the given configKeyPrefixStr and to update this ring configuration using the valid, non-zero values read from these keys.
-            /// <para/>Keys are LogGate, DirectoryPath, MaxFilesToKeep, MaxFileAgeToKeepInDays, MaxTotalSizeToKeep, AdvanceAfterFileReachesSize, AdvanceAfterFileReachesAge, IncludeThreadInfo
+            /// <para/>Keys are LogGate, DirectoryPath, MaxFilesToKeep, MaxFileAgeToKeepInDays, MaxTotalSizeToKeep, AdvanceAfterFileReachesSize, AdvanceAfterFileReachesAge, 
+            /// IncludeQPCTime, IncludeThreadInfo, IncludeFileAndLine
             /// </summary>
             public FileRotationLoggingConfig UpdateFromModularConfig(string configKeyPrefixStr, Logging.IMesgEmitter issueEmitter, Logging.IMesgEmitter valueEmitter)
             {
@@ -302,8 +319,17 @@ namespace MosaicLib
                 if (configValues.AdvanceAfterFileReachesAge != TimeSpan.Zero)
                     advanceRules.FileAgeLimit = configValues.AdvanceAfterFileReachesAge;
 
-                if (configValues.IncludeThreadInfo)
-                    includeThreadInfo = true;
+                if (configValues.IncludeQPCTime.HasValue)
+                    includeQpcTime = configValues.IncludeQPCTime.GetValueOrDefault();
+
+                if (configValues.IncludeThreadInfo.HasValue)
+                    includeThreadInfo = configValues.IncludeThreadInfo.GetValueOrDefault();
+
+                if (configValues.IncludeFileAndLine.HasValue)
+                    includeFileAndLine = configValues.IncludeFileAndLine.GetValueOrDefault();
+
+                if (configValues.IncludeNamedValueSet.HasValue)
+                    includeNamedValueSet = configValues.IncludeNamedValueSet.GetValueOrDefault();
 
                 return this;
             }
@@ -346,7 +372,19 @@ namespace MosaicLib
 
                 /// <summary>Target property for a key of the same name</summary>
                 [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
-                public bool IncludeThreadInfo { get; set; }
+                public bool? IncludeQPCTime { get; set; }
+
+                /// <summary>Target property for a key of the same name</summary>
+                [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
+                public bool? IncludeThreadInfo { get; set; }
+
+                /// <summary>Target property for a key of the same name</summary>
+                [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
+                public bool? IncludeFileAndLine { get; set; }
+
+                /// <summary>Target property for a key of the same name</summary>
+                [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
+                public bool? IncludeNamedValueSet { get; set; }
             }
 		}
 
@@ -356,7 +394,13 @@ namespace MosaicLib
 			return new Handlers.QueueLogMessageHandler(new Handlers.TextFileRotationLogMessageHandler(config), config.mesgQueueSize);
 		}
 
-		#endregion
+        /// <summary>Creates a QueueLogMessageHandler wrapped around a TextFileDateTreeLogMessageHandler configured using the given config value.</summary>
+        public static ILogMessageHandler CreateQueuedTextFileDateTreeLogMessageHandler(Handlers.TextFileDateTreeLogMessageHandler.Config config)
+        {
+            return new Handlers.QueueLogMessageHandler(new Handlers.TextFileDateTreeLogMessageHandler(config), config.MesgQueueSize);
+        }
+
+        #endregion
 
 		//-------------------------------------------------------------------
 
@@ -413,23 +457,47 @@ namespace MosaicLib
 					this.fAndL = fandl;
 					this.endLStr = endlStr;
 					this.tabStr = tabStr;
+                    IncludeThreadInfo = false;
                     IncludeNamedValueSet = true;
 				}
 
+                /// <summary>Copy constructor</summary>
+                public LineFormat(LineFormat rhs)
+                {
+                    SetFrom(rhs);
+                }
+
+                /// <summary>Copy constructor helper method</summary>
+                public void SetFrom(LineFormat rhs)
+                {
+                    date = rhs.date;
+                    qpc = rhs.qpc;
+                    level = rhs.level;
+                    source = rhs.source;
+                    data = rhs.data;
+                    fAndL = rhs.fAndL;
+                    endLStr = rhs.endLStr;
+                    tabStr = rhs.tabStr;
+                    IncludeNamedValueSet = rhs.IncludeNamedValueSet;
+                    IncludeThreadInfo = rhs.IncludeThreadInfo;
+                }
+
                 /// <summary>True if the Date is included in formatted output lines.</summary>
-				public bool IncludeDate { get { return date; } }
+                public bool IncludeDate { get { return date; } set { date = value; } }
                 /// <summary>True if the QPC timestamp is included in formatted output lines.</summary>
-                public bool IncludeQpc { get { return qpc; } }
+                public bool IncludeQpc { get { return qpc; } set { qpc = value; } }
                 /// <summary>True if the MesgType/LogLevel is included in formatted output lines.</summary>
-                public bool IncludeLevel { get { return level; } }
+                public bool IncludeLevel { get { return level; } set { level = value; } }
                 /// <summary>True if the Logger/Source Name is included in formatted output lines.</summary>
-                public bool IncludeSource { get { return source; } }
+                public bool IncludeSource { get { return source; } set { source = value; } }
+                /// <summary>get/set property:  True if NamedValueSet content information will be included in formatted output lines.</summary>
+                public bool IncludeNamedValueSet { get; set; }
+                /// <summary>True if (optioal) message data converted to base64 and is included in the formatted output lines.</summary>
+                public bool IncludeData { get { return data; } set { data = value; } }
                 /// <summary>True if the ThreadName and/or ThreadID is to be included in the formatted output lines.</summary>
                 public bool IncludeThreadInfo { get; set; }
                 /// <summary>True if the source File and Line information is included in formatted output lines.</summary>
-                public bool IncludeFileAndLine { get { return fAndL; } }
-                /// <summary>get/set property:  True if NamedValueSet content information will be included in formatted output lines.</summary>
-                public bool IncludeNamedValueSet { get; set; }
+                public bool IncludeFileAndLine { get { return fAndL; } set { fAndL = value; } }
 
                 /// <summary>Converts the thread info in the given message into a string consiting of the managed TID, the Win32 TID (in hex) and the thread name if it is not null or empty.</summary>
                 private string FormatThreadInfo(LogMessage lm)
