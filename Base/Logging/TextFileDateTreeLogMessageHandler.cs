@@ -53,7 +53,7 @@ namespace MosaicLib
                 {
                     public string Name { get; set; }
                     public string DateTreeFormat { get; set; }
-                    public string FileNamePrefix { get; private set; }
+                    public string FileNamePrefix { get; set; }
                     public string FileNameExtension { get; set; }
                     public Logging.LogGate LogGate { get; set; }
                     public bool IncludeDate { get { return LineFormat.IncludeDate; } set { LineFormat.IncludeDate = value; } }

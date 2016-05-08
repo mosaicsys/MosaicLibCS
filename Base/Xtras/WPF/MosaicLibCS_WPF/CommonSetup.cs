@@ -172,7 +172,7 @@ namespace MosaicLib.WPF.Common
 
         public static void HandleOnDeactivated(Logging.ILogger appLogger)
         {
-            Logging.LogMessage lm = appLogger.GetLogMessage(AppEventMesgType, "App Deactiviated", appLogger.GetStackFrame(0));
+            Logging.LogMessage lm = appLogger.GetLogMessage(AppEventMesgType, "App Deactivated", appLogger.GetStackFrame(0));
             lm.NamedValueSet = new NamedValueSet() { { "AppEvent", "OnDeactivated" } };
 
             appLogger.EmitLogMessage(ref lm);
