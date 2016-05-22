@@ -486,6 +486,7 @@ namespace MosaicLib.SerialIO
 
 				if (rdAction.IsCancelRequestActive)
 				{
+                    // read action cancel has been requested before we have attempted to complete it through other means.
 					rdActionParam.ActionResultEnum = ActionResultEnum.ReadCanceled;
 					rdAction.CompleteRequest(rdActionParam.ResultCode = "Action Canceled by request");
 					pendingReadActionsQueue.Dequeue();
@@ -553,18 +554,28 @@ namespace MosaicLib.SerialIO
 				if (ec == null && readTimeout)
 					ec = Utils.Fcns.CheckedFormat("Read failed: timeout after {0} sec, got {1} of {2} bytes", elapsed.TotalSeconds, rdActionParam.BytesRead, rdActionParam.BytesToRead);
 
-				if (ec != null)
-				{
-					bool readSuccess = (ec == string.Empty);
-
-                    if (readResult == ActionResultEnum.None)
-                        rdActionParam.ActionResultEnum = (readSuccess ? ActionResultEnum.ReadDone : (readTimeout ? ActionResultEnum.ReadTimeout : ActionResultEnum.ReadFailed));
+                if (ec != null)
+                {
+                    if (!rdAction.ActionState.IsIssued)
+                    {
+                        // do not attempt to process this read action further if it is no longer in the Issued state as it may have been aborted/completed elsewhere already, and in which case
+                        // it has already been removed from the pendingReadActionsQueue
+                        Log.Trace.Emit("current read action has been completed elsewhere.  Skipping post read completion: '{0}'", ec);
+                    }
                     else
-                        rdActionParam.ActionResultEnum = readResult;
-					rdAction.CompleteRequest(rdActionParam.ResultCode = ec);
-					pendingReadActionsQueue.Dequeue();
-					continue;
-				}
+                    {
+                        bool readSuccess = (ec == string.Empty);
+
+                        if (readResult == ActionResultEnum.None)
+                            rdActionParam.ActionResultEnum = (readSuccess ? ActionResultEnum.ReadDone : (readTimeout ? ActionResultEnum.ReadTimeout : ActionResultEnum.ReadFailed));
+                        else
+                            rdActionParam.ActionResultEnum = readResult;
+
+                        rdAction.CompleteRequest(rdActionParam.ResultCode = ec);
+                        pendingReadActionsQueue.Dequeue();
+                        continue;
+                    }
+                }
 
 				break;
 			}
@@ -645,7 +656,7 @@ namespace MosaicLib.SerialIO
 					bool writeFailed = !string.IsNullOrEmpty(ec);
                     if (writeComplete || writeFailed || writeResult != ActionResultEnum.None)
 					{
-                        bool actionStillActive = wrAction.ActionState.IsPendingCompletion;      // it may alredy have been canceled in some cases
+                        bool actionStillActive = wrAction.ActionState.IsIssued;      // it may alredy have been canceled in some cases
                         if (actionStillActive)
                         {
                             if (writeResult == ActionResultEnum.None)
@@ -672,7 +683,7 @@ namespace MosaicLib.SerialIO
 				else if (elapsed > portConfig.WriteTimeout)
 					ec = Utils.Fcns.CheckedFormat("Write failed: timeout after {0} sec.  did {1} of {2} bytes", elapsed.TotalSeconds.ToString("f6"), wrActionParam.BytesWritten, wrActionParam.BytesToWrite);
 
-				if (!string.IsNullOrEmpty(ec))
+                if (!string.IsNullOrEmpty(ec) && wrAction.ActionState.IsIssued)
 				{
 					wrActionParam.ActionResultEnum = ActionResultEnum.WriteFailed;
 					wrAction.CompleteRequest(wrActionParam.ResultCode = ec);
