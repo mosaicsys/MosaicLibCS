@@ -20,17 +20,15 @@
  */
 //-------------------------------------------------------------------
 
+using System;
+using System.IO.Ports;
+using MosaicLib.Utils;
+using MosaicLib.Time;
+using MosaicLib.Modular.Action;
+using MosaicLib.Modular.Part;
+
 namespace MosaicLib.SerialIO
 {
-	//-----------------------------------------------------------------
-
-	using System;
-	using System.IO.Ports;
-	using MosaicLib.Utils;
-	using MosaicLib.Time;
-	using MosaicLib.Modular.Action;
-	using MosaicLib.Modular.Part;
-
 	//-----------------------------------------------------------------
 	#region ComPort Factory method
 

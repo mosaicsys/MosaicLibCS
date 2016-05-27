@@ -1299,7 +1299,7 @@ namespace MosaicLib.Modular.Common
 
     #endregion
 
-    #region ReadOnly Named Values interfaces
+    #region ReadOnly Named Values interfaces (INamedValueSet, INamedValue)
 
     /// <summary>
     /// This is the read-only interface to a NamedValueSet

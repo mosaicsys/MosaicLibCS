@@ -20,21 +20,19 @@
  */
 //-------------------------------------------------------------------
 
+using System;
+using System.Collections.Generic;
+
+using System.Net;
+using System.Net.Sockets;
+
+using MosaicLib.Utils;
+using MosaicLib.Time;
+using MosaicLib.Modular.Action;
+using MosaicLib.Modular.Part;
+
 namespace MosaicLib.SerialIO
 {
-	//-----------------------------------------------------------------
-
-	using System;
-	using System.Collections.Generic;
-
-	using System.Net;
-	using System.Net.Sockets;
-
-	using MosaicLib.Utils;
-	using MosaicLib.Time;
-	using MosaicLib.Modular.Action;
-	using MosaicLib.Modular.Part;
-
 	//-----------------------------------------------------------------
 	#region ComPort Factory method
 
@@ -416,7 +414,8 @@ namespace MosaicLib.SerialIO
 
 	#endregion
 
-	//-----------------------------------------------------------------
+    //-----------------------------------------------------------------
+    #region SelectSocketMonitor
 
     /// <summary>
     /// This class implements a singleton threaded object that is used to repeatedly call select on a configured set of sockets and then inform
@@ -701,6 +700,8 @@ namespace MosaicLib.SerialIO
             }
         }
     }
+
+    #endregion
 
     //-----------------------------------------------------------------
 }

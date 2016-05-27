@@ -20,21 +20,19 @@
  */
 //-------------------------------------------------------------------
 
+using System;
+using System.Collections.Generic;
+
+using System.Net;
+using System.Net.Sockets;
+
+using MosaicLib.Utils;
+using MosaicLib.Time;
+using MosaicLib.Modular.Action;
+using MosaicLib.Modular.Part;
+
 namespace MosaicLib.SerialIO.Modbus.Client
 {
-	//-----------------------------------------------------------------
-
-	using System;
-	using System.Collections.Generic;
-
-	using System.Net;
-	using System.Net.Sockets;
-
-	using MosaicLib.Utils;
-	using MosaicLib.Time;
-	using MosaicLib.Modular.Action;
-	using MosaicLib.Modular.Part;
-
 	//--------------------------------------------------------------------------
 
     ///<summary>Function Storage and Execution object for FC02_ReadDiscretes function code.  <see cref="DiscreteFunctionBase{DerivedType}"/> for more details on use.</summary>

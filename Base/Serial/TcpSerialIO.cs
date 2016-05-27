@@ -20,21 +20,19 @@
  */
 //-------------------------------------------------------------------
 
+using System;
+using System.Collections.Generic;
+
+using System.Net;
+using System.Net.Sockets;
+
+using MosaicLib.Utils;
+using MosaicLib.Time;
+using MosaicLib.Modular.Action;
+using MosaicLib.Modular.Part;
+
 namespace MosaicLib.SerialIO
 {
-	//-----------------------------------------------------------------
-
-	using System;
-	using System.Collections.Generic;
-
-	using System.Net;
-	using System.Net.Sockets;
-
-	using MosaicLib.Utils;
-	using MosaicLib.Time;
-	using MosaicLib.Modular.Action;
-	using MosaicLib.Modular.Part;
-
 	//-----------------------------------------------------------------
 	#region ComPort Factory method
 
@@ -107,7 +105,7 @@ namespace MosaicLib.SerialIO
 			{
 				ec = Utils.Fcns.CheckedFormat("Could not extract addr attribute from SpecStr:'{0}'", specScan.Str);
 			}
-			else if (!specScan.ParseXmlAttribute("port", out portAttribValue))
+            else if (!specScan.ParseXmlAttribute("port", out portAttribValue))
 			{
 				ec = Utils.Fcns.CheckedFormat("Could not extract port attribute from SpecStr:'{0}'", specScan.Str);
 			}

@@ -24,6 +24,8 @@ using MosaicLib.Utils;
 using MosaicLib.Time;
 using MosaicLib.Modular.Action;
 using MosaicLib.Modular.Common;
+using System.Diagnostics;
+using System.Reflection;
 
 namespace MosaicLib.Modular.Part
 {
@@ -317,14 +319,19 @@ namespace MosaicLib.Modular.Part
 
         /// <summary>Reports the PartID, or name of the part</summary>
         public string PartID { get; private set; }
+
         /// <summary>Reports the PartType, or the name of the type of part </summary>
         public string PartType { get; private set; }
+
         /// <summary>Returns a reference to the last published BaseState from the part.  This property is abstract and must be implemented in a derived class.</summary>
         public abstract IBaseState BaseState { get; }
+
         /// <summary>Property gives client access to the part's Notification Object for the part's BaseState property.  This property is abstract and must be implemented in a derived class.</summary>
         public abstract INotificationObject<IBaseState> BaseStateNotifier { get; }
 
 		#endregion
+
+        #region Protected Construction (for use by derived classes only)
 
         /// <summary>
         /// Protected base class constructor: initializes the PartID and PartType fields
@@ -340,8 +347,21 @@ namespace MosaicLib.Modular.Part
 			Asserts.CheckIfConditionIsNotTrue(!String.IsNullOrEmpty(PartType), "PartType is valid");
 		}
 
+        #endregion
+
         // NOTE: Dispose specific behavior related to the use of the Explicit Dispose Action and the use of the AddExplicitDipsoseAction method have been moved to
         //  DisposeableBase class to support more common use of this delegate list based approach to disposal.
+
+        #region More utility properties and methods
+
+        /// <summary>Creates and returns the callers current StackFrame</summary>
+        public static StackFrame CurrentStackFrame { get { return new System.Diagnostics.StackFrame(1); } }
+
+        /// <summary>Creates a StackFrame for the caller and returns the stack frame's current method.</summary>
+        public static MethodBase CurrentMethod { get { return new System.Diagnostics.StackFrame(1).GetMethod(); } }
+
+        /// <summary>Creates a StackFrame for the caller and returns the Name of the stack frame's current method.</summary>
+        public static string CurrentMethodName { get { return new System.Diagnostics.StackFrame(1).GetMethod().Name; } }
 
         /// <summary>Protected utility method.  Returns the result of calling <code>Utils.EC.FmtWin32EC(PartID, win32EC);</code></summary>
 		protected string FmtWin32EC(int win32EC) { return Utils.EC.FmtWin32EC(PartID, win32EC); }
@@ -349,7 +369,9 @@ namespace MosaicLib.Modular.Part
         protected string FmtStdEC(string errorStr) { return Utils.EC.FmtStdEC(PartID, errorStr); }
         /// <summary>Protected utility method.  Returns the result of calling <code>Utils.EC.FmtStdEC(PartID, errorCode, errorStr);</code></summary>
         protected string FmtStdEC(int errorCode, string errorStr) { return Utils.EC.FmtStdEC(PartID, errorCode, errorStr); }
-	};
+
+        #endregion
+    };
 
 	#endregion
 

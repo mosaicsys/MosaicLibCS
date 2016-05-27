@@ -55,24 +55,26 @@ namespace MosaicLib.Modular.Action
 	{
 		#region private class and instance fields
 
-		const bool ActionQueueEnableDefault = false;
-		const int ActionQueueSizeDefault = 10;
+		private const bool ActionQueueEnableDefault = false;
+        private const int ActionQueueSizeDefault = 10;
 
-		string					mQueueName = null;
-		volatile bool			mQueueEnabled = false;
+        /// <summary>Gives the name of this ActionQueue</summary>
+        public string Name { get; private set; }
 
-		object					mQueueMutex = new object();
-		
-		BasicNotificationList	mNotifyOnEnqueueList = new BasicNotificationList();
+        private volatile bool queueEnabled = false;
 
-		AtomicInt32				mPtrQueueCount = new AtomicInt32(0);
-		IProviderFacet []		mPtrQueueArray = null;
-		int						mPtrQueueArraySize = 0;
-		int                     mPtrQueueArrayNextPutIdx = 0;
-        int                     mPtrQueueArrayNextGetIdx = 0;
+        private object queueMutex = new object();
 
-		AtomicInt32				mCancelRequestCount = new AtomicInt32(0);
-		int						mLastServicedCancelRequestCount = 0;
+        private BasicNotificationList notifyOnEnqueueList = new BasicNotificationList();
+
+        private AtomicInt32 queueCount = new AtomicInt32(0);
+        private IProviderFacet[] queueArray = null;
+        private int queueArraySize = 0;
+        private int queueArrayNextPutIdx = 0;
+        private int queueArrayNextGetIdx = 0;
+
+        private AtomicInt32 cancelRequestCount = new AtomicInt32(0);
+        private int lastServicedCancelRequestCount = 0;
 
 		#endregion
 
@@ -84,14 +86,14 @@ namespace MosaicLib.Modular.Action
         /// <param name="queueSize">Defines the maximum number of actions that can be contained at any one time.</param>
 		public ActionQueue(string name, bool enabled, int queueSize) 
 		{
-			mQueueName = name;
-            mPtrQueueArray = new IProviderFacet[queueSize];
-			mPtrQueueArraySize = mPtrQueueArray.Length;
-            mQueueEnabled = enabled;
+			Name = name;
+            queueArray = new IProviderFacet[queueSize];
+			queueArraySize = queueArray.Length;
+            queueEnabled = enabled;
 		}
 
 		/// <summary>NotificationList that will be Notified when an action is enqueued.  Typically set to signal the part's thread wakeup notifier.</summary>
-		public IBasicNotificationList NotifyOnEnqueue { get { return mNotifyOnEnqueueList; } }
+		public IBasicNotificationList NotifyOnEnqueue { get { return notifyOnEnqueueList; } }
 
 		/// <summary>Enqueue's the given action in the queue provided that it is valid and the queue is enabled.</summary>
 		/// <param name="action">Gives the action to enqueue.</param>
@@ -104,34 +106,34 @@ namespace MosaicLib.Modular.Action
     	public string Enqueue(IEnqueableProviderFacet action)
 		{
 			if (action == null)
-				return mQueueName + ".Enqueue.Failed.ActionIsNull";
+                return "{0}.Enqueue.Failed.ActionIsNull".CheckedFormat(Name);
 
 			if (!action.IsStarted)
-				return mQueueName + ".Enqueue.Failed.ActionHasNotBeenStarted";
+                return "{0}.Enqueue.Failed.ActionHasNotBeenStarted".CheckedFormat(Name);
 
-			lock (mQueueMutex)
+			lock (queueMutex)
 			{
-				if (!mQueueEnabled)
+				if (!queueEnabled)
 				{
-					action.CompleteRequest(mQueueName + ".Enqueue.Failed.QueueIsNotEnabled");
+                    action.CompleteRequest("{0}.Enqueue.Failed.QueueIsNotEnabled".CheckedFormat(Name));
 					return "";
 				}
 
 				ServiceCancelRequests();
 
-				if (mPtrQueueCount.VolatileValue >= mPtrQueueArraySize)
+				if (queueCount.VolatileValue >= queueArraySize)
 				{
-					action.CompleteRequest(mQueueName + ".Enqueue.Failed.QueueIsFull");
+                    action.CompleteRequest("{0}.Enqueue.Failed.QueueIsFull".CheckedFormat(Name));
 					return "";
 				}
 
-				mPtrQueueCount.Increment();
+				queueCount.Increment();
 
-				mPtrQueueArray[mPtrQueueArrayNextPutIdx++] = action;
-				if (mPtrQueueArrayNextPutIdx >= mPtrQueueArraySize)
-					mPtrQueueArrayNextPutIdx = 0;
+				queueArray[queueArrayNextPutIdx++] = action;
+				if (queueArrayNextPutIdx >= queueArraySize)
+					queueArrayNextPutIdx = 0;
 
-				mNotifyOnEnqueueList.Notify();
+				notifyOnEnqueueList.Notify();
 
 				return "";
 			}
@@ -149,12 +151,12 @@ namespace MosaicLib.Modular.Action
 			//  service pass that might react to it.  This optimization allows this method to be very cheap to use when no recent operation 
 			//	abort requests have been issued.
 
-			if (mCancelRequestCount.VolatileValue == mLastServicedCancelRequestCount)
+			if (cancelRequestCount.VolatileValue == lastServicedCancelRequestCount)
 				return;
 
-            lock (mQueueMutex)
+            lock (queueMutex)
             {
-                mLastServicedCancelRequestCount = mCancelRequestCount.Value;		// this is an atomic read of the volatile value
+                lastServicedCancelRequestCount = cancelRequestCount.Value;		// this is an atomic read of the volatile value
 
 			    // Now go through the queued operations and complete any that are flaged
 			    //	has CancelRequestActive.  For each of these we complete them and then
@@ -163,36 +165,39 @@ namespace MosaicLib.Modular.Action
 			    //	GetNextAction method must be able to correctly skip queue entries that
 			    //	have been reset since they were enqueued.
 
-			    int idx = mPtrQueueArrayNextGetIdx, numChecked = 0;
+			    int idx = queueArrayNextGetIdx, numChecked = 0;
 
-			    for (; numChecked < mPtrQueueCount.VolatileValue; numChecked++)
+			    for (; numChecked < queueCount.VolatileValue; numChecked++)
 			    {
-				    IProviderFacet queueItem = mPtrQueueArray[idx];
+				    IProviderFacet queueItem = queueArray[idx];
 
 					if (queueItem != null && queueItem.IsCancelRequestActive)
 				    {
-						queueItem.CompleteRequest(mQueueName + ":ServiceCancelRequests:ActionCanceledWhileEnqueued");
-						mPtrQueueArray[idx] = null;
+                        queueItem.CompleteRequest("{0}.ServiceCancelRequests.ActionCanceledWhileEnqueued".CheckedFormat(Name));
+						queueArray[idx] = null;
 				    }
 
-				    if (++idx >= mPtrQueueArraySize)
+				    if (++idx >= queueArraySize)
 					    idx = 0;
 			    }
             }
         }
 
+        public int Capacity { get { return queueArraySize; } }
+
         /// <summary>Returns a recent copy of the count of the number of objects in the queue.</summary>
-        public Int32 VolatileCount { get { return mPtrQueueCount.VolatileValue; } }
+        public Int32 VolatileCount { get { return queueCount.VolatileValue; } }
 
         /// <summary>Returns true if the a recent (volatile) copy of the count of the number of objects in the queue is zero.</summary>
         public bool IsEmpty { get { return (VolatileCount == 0); } }
 
-		/// <summary>Attempts to extract and return the next action in the queue.</summary>
-		/// <returns>The next extracted action or null if the queue is empty.</returns>
+		/// <summary>Attempts to extract and return the next action in the queue, or returns null if the queue did not contain an action.</summary>
         public IProviderFacet GetNextAction() { return GetNextAction(false); }
 
-        /// <summary>Attempts to extract and return the next action in the queue.</summary>
-        /// <returns>The next extracted action or null if the queue is empty.</returns>
+        /// <summary>
+        /// Attempts to (optinally) extract and return the next action in the queue, or returns null if the queue did not contain an action.
+        /// <para/>If peekOnly is provided as true and the method finds an action in the queue to return then it will not remove the action from the queue before returning it.
+        /// </summary>
         /// <param name="peekOnly">If this parameter is true then the returned action is not removed from the queue.</param>
         public IProviderFacet GetNextAction(bool peekOnly)
 		{
@@ -200,7 +205,7 @@ namespace MosaicLib.Modular.Action
 			//	Use an asynchronous check to see if the queue is known to be empty
 			//	in which case we just exit.
 
-			int queueCount = mPtrQueueCount.VolatileValue;
+			int queueCount = this.queueCount.VolatileValue;
 
 			if (queueCount == 0)
 				return null;
@@ -209,29 +214,28 @@ namespace MosaicLib.Modular.Action
 			ServiceCancelRequests();
 
 			// attempt to extract the first non-null op from the queue and return it.
-			//
 
-			lock (mQueueMutex)
+			lock (queueMutex)
 			{
 				// loop until the queue is empty or we find a non-null item in the list
 				for (; ; )
 				{
 					// retest that the queue is not empty 
-					queueCount = mPtrQueueCount.VolatileValue;
+                    queueCount = this.queueCount.VolatileValue;
 					if (queueCount == 0)
 						return null;
 
-					IProviderFacet action = mPtrQueueArray [mPtrQueueArrayNextGetIdx];
+					IProviderFacet action = queueArray [queueArrayNextGetIdx];
 
-                    if (peekOnly)
+                    if (peekOnly && action != null)
                         return action;
 
-                    mPtrQueueArray [mPtrQueueArrayNextGetIdx] = null;
+                    queueArray [queueArrayNextGetIdx] = null;
 
-					if (++mPtrQueueArrayNextGetIdx >= mPtrQueueArraySize)
-						mPtrQueueArrayNextGetIdx = 0;
+					if (++queueArrayNextGetIdx >= queueArraySize)
+						queueArrayNextGetIdx = 0;
 
-					mPtrQueueCount.Decrement();
+                    this.queueCount.Decrement();
 
 					// else loop again until we get a non-null one or we find that the queue was actually really empty
 					if (action != null)
@@ -246,11 +250,11 @@ namespace MosaicLib.Modular.Action
 		/// </summary>
 		public bool QueueEnable
 		{
-			get { lock (mQueueMutex) { return mQueueEnabled; } }
+			get { lock (queueMutex) { return queueEnabled; } }
 			set 
 			{
 				bool entryValue = false;
-				lock (mQueueMutex) { entryValue = mQueueEnabled; mQueueEnabled = value; }
+				lock (queueMutex) { entryValue = queueEnabled; queueEnabled = value; }
 
 				if (!value && entryValue)
 				{
@@ -260,7 +264,7 @@ namespace MosaicLib.Modular.Action
 					IProviderFacet action = null;
 
 					while ((action = GetNextAction()) != null)
-						action.CompleteRequest(mQueueName + ":DisableQueue:ActionHasBeenCanceled");
+						action.CompleteRequest("{0}.DisableQueue.ActionHasBeenCanceled".CheckedFormat(Name));
 				}
 			}
 		}
@@ -271,7 +275,7 @@ namespace MosaicLib.Modular.Action
 		/// </summary>
 		public void NoteCancelHasBeenRequestedOnRelatedAction()
 		{
-			mCancelRequestCount.Increment();
+			cancelRequestCount.Increment();
 		}
 	}
 

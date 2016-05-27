@@ -20,19 +20,17 @@
  */
 //-------------------------------------------------------------------
 
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using MosaicLib.Utils;
+using MosaicLib.Time;
+using MosaicLib.Modular.Common;
+using MosaicLib.Modular.Action;
+using MosaicLib.Modular.Part;
+
 namespace MosaicLib.SerialIO
 {
-	//-----------------------------------------------------------------
-
-	using System;
-	using System.Collections;
-	using System.Collections.Generic;
-	using MosaicLib.Utils;
-	using MosaicLib.Time;
-    using MosaicLib.Modular.Common;
-    using MosaicLib.Modular.Action;
-	using MosaicLib.Modular.Part;
-
 	//-----------------------------------------------------------------
 	#region PortBase
 

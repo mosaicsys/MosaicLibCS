@@ -20,21 +20,19 @@
  */
 //-------------------------------------------------------------------
 
+using System;
+using System.Collections.Generic;
+
+using System.Net;
+using System.Net.Sockets;
+
+using MosaicLib.Utils;
+using MosaicLib.Time;
+using MosaicLib.Modular.Action;
+using MosaicLib.Modular.Part;
+
 namespace MosaicLib.SerialIO.Modbus.Server
 {
-	//-----------------------------------------------------------------
-
-	using System;
-	using System.Collections.Generic;
-
-	using System.Net;
-	using System.Net.Sockets;
-
-	using MosaicLib.Utils;
-	using MosaicLib.Time;
-	using MosaicLib.Modular.Action;
-	using MosaicLib.Modular.Part;
-
 	//--------------------------------------------------------------------------
 
     /// <summary>
@@ -292,7 +290,7 @@ namespace MosaicLib.SerialIO.Modbus.Server
     #region Server port adapter(s)
 
     /// <summary>
-    /// Thie class defines a Simple IPart that may be used to create and control an IPort instance (from a given <see cref="MosaicLib.SerialIO.PortConfig"/> object)
+    /// Thie class defines an IActivePartBase that may be used to create and control an IPort instance (from a given <see cref="MosaicLib.SerialIO.PortConfig"/> object)
     /// and to use that port to perform the underlying data transfers required to run Modbus Client Functions, assuming that the port can be used to connect
     /// to an appropriately configured Modbus Server.
     /// </summary>

@@ -129,8 +129,8 @@ namespace MosaicLib.Modular.Action
 	/// and until the Action transitions to the Issued or directly to the Completed state.  Finally Issued Actions transition to the
 	///	Completed state once they have been performed.  Transition to the Completed state may be peformed by the Queue or by the
 	///	service provider.  The contents of the ResultCode are usually used to determine if the action was successfull or not.
+    ///	<para/>Initial, Ready, Started, Issued, Complete, Invalid
 	/// </summary>
-
     [DataContract(Namespace=Constants.ModularActionNameSpace)]
 	public enum ActionStateCode : int
 	{

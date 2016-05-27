@@ -20,21 +20,19 @@
  */
 //-------------------------------------------------------------------
 
+using System;
+using System.Collections.Generic;
+
+using System.Net;
+using System.Net.Sockets;
+
+using MosaicLib.Utils;
+using MosaicLib.Time;
+using MosaicLib.Modular.Action;
+using MosaicLib.Modular.Part;
+
 namespace MosaicLib.SerialIO.Modbus
 {
-	//-----------------------------------------------------------------
-
-	using System;
-	using System.Collections.Generic;
-
-	using System.Net;
-	using System.Net.Sockets;
-
-	using MosaicLib.Utils;
-	using MosaicLib.Time;
-	using MosaicLib.Modular.Action;
-	using MosaicLib.Modular.Part;
-
 	//--------------------------------------------------------------------------
 
     ///<summary>Defines an Application Data Unit framing type for an individual Modbus PDU operation.</summary>
@@ -435,7 +433,6 @@ namespace MosaicLib.SerialIO.Modbus
     }
 
     #endregion
-
 
     //--------------------------------------------------------------------------
 

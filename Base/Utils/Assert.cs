@@ -25,7 +25,11 @@ using System.Runtime.InteropServices;
 
 namespace MosaicLib.Utils
 {
-	/// <summary>Enum defines the behavior of the Assertion when it is triggered or produced</summary>
+	/// <summary>
+    /// Enum defines the behavior of the Assertion when it is triggered or produced.
+    /// <para/>LogFallback = 0, Log, DebugBreakpoint, ThrowException,
+    /// <para/>Assert.DefaultAssertType = AssertType.DebugBreakpoint
+    /// </summary>
 	public enum AssertType
 	{
         /// <summary>on assert: log message to fall back log.  Behavior common to all AssertTypes.</summary>
@@ -38,10 +42,11 @@ namespace MosaicLib.Utils
 		DebugBreakpoint,		
 
         /// <summary>on assert: log message to fall back log and throw AssertException with message</summary>
-        ThrowException,		    
+        ThrowException,
 
-        /// <summary>on assert: log message to fall back log and cause program to exit abortively</summary>
-        FatalExit,			    
+        /// <summary>The use of this value has been deprecated and is no longer supported</summary>
+        [Obsolete("The use of this value has been deprecated and is no longer supported (2016-05-28)")]
+        FatalExit,
 	};
 
 	/// <summary>Provides a specific exception type that is thrown on Asserts with the AssertType of ThrowExecption</summary>
@@ -99,7 +104,7 @@ namespace MosaicLib.Utils
         /// <summary>Throws an <see cref="AssertException"/> with the given ex as the inner exception. </summary>
         public static void ThrowAfterFault(string faultDesc, System.Exception ex) { NoteFaultOccurance(faultDesc, ex, AssertType.ThrowException, new System.Diagnostics.StackFrame(1, true)); }
 
-        /// <summary>Defines the default assert type for the following non-typed assert methods</summary>
+        /// <summary>Defines the default assert type for the following non-typed assert methods.  defaults to AssertType.DebugBreakpoint</summary>
         public static AssertType DefaultAssertType = AssertType.DebugBreakpoint;
 
         /// <summary>Asserts that the given cond condition is true.  If not then it uses the DefaultAssertType to define what action is taken.</summary>
@@ -139,11 +144,18 @@ namespace MosaicLib.Utils
 				AssertCommon(Fcns.CheckedFormat("AssertFault:{0} with exception:{1}", faultDesc, ex.Message), assertType, sourceFrame);
 		}
 
+        /// <summary>Defines the default Logging.MesgType used for logging asserts into log distribution (either directly or via QueuedLogger.  defaults to Logging.MesgType.Error</summary>
+        public static Logging.MesgType DefaultAssertLoggingMesgType = Logging.MesgType.Error;
+
+        /// <summary>Set this field to true if you would like non-log only assertions (such as DebugBreakpoint) to take a debug breakpoint.  defaults to false</summary>
+        public static bool EnableAssertDebugBreakpoints = false;
+
 		#endregion
 
 		#region Private methods
 
 		private static Logging.ILogger assertLogger = null;
+        private static Logging.ILogger queuedAssertLogger = null;
 
 		/// <summary> This is the inner-most implementation method for the Assert helper class.  It implements all of the assertType specific behavior for all assertions that get triggered.</summary>
 		private static void AssertCommon(string mesg, AssertType assertType, System.Diagnostics.StackFrame sourceFrame)
@@ -152,8 +164,15 @@ namespace MosaicLib.Utils
 
 			string logStr = Fcns.CheckedFormat("{0} at file:'{1}', line:{2}", mesg, sourceFrame.GetFileName(), sourceFrame.GetFileLineNumber());
 
-			if (assertType != AssertType.Log)
-				Logging.BasicFallbackLogging.LogError(logStr);
+            if (assertType != AssertType.Log)
+            {
+                Logging.BasicFallbackLogging.LogError(logStr);
+
+                if (queuedAssertLogger == null)       // in an MT world we might create a few of these simultaneously.  This is not a problem as the distribution engine supports such a construct so locking is not required here in order to get valid behavior.
+                    queuedAssertLogger = new Logging.QueuedLogger("MosaicLib.Utils.Assert");
+
+                queuedAssertLogger.Emitter(DefaultAssertLoggingMesgType).Emit(logStr);
+            }
 
 			bool ignoreFault = false;		// intended to be used by debug user to ignore such asserts on a case by case basis
 
@@ -162,7 +181,7 @@ namespace MosaicLib.Utils
                 if (assertLogger == null)       // in an MT world we might create a few of these simultaneously.  This is not a problem as the distribution engine supports such a construct so locking is not required here in order to get valid behavior.
                     assertLogger = new Logging.Logger("MosaicLib.Utils.Assert");
 
-                assertLogger.Warning.Emit(mesg);
+                assertLogger.Emitter(DefaultAssertLoggingMesgType).Emit(logStr);
 
 				return;
 			}
@@ -180,18 +199,14 @@ namespace MosaicLib.Utils
 
 			if (!ignoreFault)
 			{
-				// the remaining types always trigger a breakpoint
-				if (System.Diagnostics.Debugger.IsAttached)
+                // the remaining types always trigger a breakpoint if a debugger is attached and the hosting environment has set the EnabledAssertDebugBreakpoints flag
+                if (System.Diagnostics.Debugger.IsAttached && EnableAssertDebugBreakpoints)
 					System.Diagnostics.Debugger.Break();
-
-				// finally if the type is a FatalExit then call the Kernel32.dll FatalExit entry point
-				if (assertType == AssertType.FatalExit)
-					FatalExit(-1);
 			}
 		}
 
-		[DllImport("Kernel32.dll")]
-		private static extern void FatalExit(int exitCode);
+        //[DllImport("Kernel32.dll")]
+        //private static extern void FatalExit(int exitCode);
 
 		#endregion
 	}

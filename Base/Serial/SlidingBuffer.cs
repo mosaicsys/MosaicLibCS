@@ -20,15 +20,13 @@
  */
 //-------------------------------------------------------------------
 
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using MosaicLib.Time;
+
 namespace MosaicLib.SerialIO
 {
-	//-------------------------------------------------------------------
-
-    using System;
-    using System.Collections;
-    using System.Collections.Generic;
-	using MosaicLib.Time;
-
     //-------------------------------------------------------------------
 
     #region SlidingBuffer (base for SlidingPacketBuffer)

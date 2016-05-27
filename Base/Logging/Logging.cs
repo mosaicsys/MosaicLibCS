@@ -104,42 +104,49 @@ namespace MosaicLib
 		//-------------------------------------------------------------------
 		#region MesgType and related methods
 
-		/// <summary>this enum defines a set of message types and an implicit ranking of their severities</summary>
+		/// <summary>
+        /// This enum defines a set of message types and an implicit ranking of their severities.
+        /// <para/>message types: None, Fatal, Error, Warning, Signif, Info, Debug, Trace
+        /// <para/>other values: Max, All
+        /// </summary>
         [DataContract(Namespace=Constants.LoggingNameSpace)]
 		public enum MesgType : int
 		{
-            /// <summary>used as a gate to suppress passing all mesg types</summary>
+            /// <summary>used as a gate to suppress passing all mesg types.  0</summary>
             [EnumMember]
 			None = 0,
-            /// <summary>used to record occurrence of setup related (ctor) issues that may prevent use of the affected entity</summary>
+            /// <summary>used to record occurrence of setup related (ctor) issues that may prevent use of the affected entity.  1</summary>
             [EnumMember]
             Fatal = 1,
-            /// <summary>used to record occurrence of unexpected failures that might prevent future actions from operating correctly</summary>
+            /// <summary>used to record occurrence of unexpected failures that might prevent future actions from operating correctly.  2</summary>
             [EnumMember]
             Error = 2,
-            /// <summary>used to record occurrence of unexpected failures which are not expected to prevent future actions from operating correctly.</summary>
+            /// <summary>used to record occurrence of unexpected failures which are not expected to prevent future actions from operating correctly.  3</summary>
             [EnumMember]
             Warning = 3,
-            /// <summary>used to record occurrence of significant milestones and/or changes during normal operation of the system</summary>
+            /// <summary>used to record occurrence of significant milestones and/or changes during normal operation of the system.  4</summary>
             [EnumMember]
             Signif = 4,
-            /// <summary>used to record occurrence of relatively insignificant items.</summary>
+            /// <summary>used to record occurrence of relatively insignificant items.  5</summary>
             [EnumMember]
             Info = 5,
-            /// <summary>used to record occurrence of information that is intended to provide an even more detailed view</summary>
+            /// <summary>used to record occurrence of information that is intended to provide an even more detailed view.  6</summary>
             [EnumMember]
             Debug = 6,
-            /// <summary>used to record occurrence of very frequent events such as those used to track data transfer, flow of control, construction and destruction, etc...</summary>
+            /// <summary>used to record occurrence of very frequent events such as those used to track data transfer, flow of control, construction and destruction, etc...  7</summary>
             [EnumMember]
-            Trace = 7,
-            /// <summary>used as a level to permit passing all mesg types</summary>
-            [EnumMember]
-            All,			
-			
-            /// <summary>Defines the last MesgType member that represents an actual message type.  Used to size arrays that may be indexed by a MesgType (cast as an Int32)</summary>
+            Trace = 7,			
+            /// <summary>
+            /// Defines the last MesgType member that represents an actual message type.  Used to size arrays that may be indexed by a MesgType (cast as an Int32)
+            /// <para/>Max = Trace ( = 7)
+            /// </summary>
             [EnumMember]
             Max = Trace,
-		}
+
+            /// <summary>used as a level to permit passing all mesg types.  Max + 1</summary>
+            [EnumMember]
+            All,
+        }
 
         /// <summary>Returns mesgType.ToString()</summary>
 		public static string ConvertToString(MesgType mesgType) { return mesgType.ToString(); }
@@ -1192,8 +1199,17 @@ namespace MosaicLib
             /// <summary>Returns a message emitter for Trace messages from this logger</summary>
             IMesgEmitter Trace { get; }
 
-            /// <summary>Returns a message emitter that will emit messages of the given MesgType and from this logger.</summary>
+            /// <summary>
+            /// Returns a message emitter that will emit messages of the given MesgType and from this logger.
+            /// <para/>If the given mesgType is less than or equal to MesgType.None or if the given mesgType is > MesgType.Max then the method returns Logging.NullEmitter
+            /// </summary>
             IMesgEmitter Emitter(MesgType mesgType);
+
+            /// <summary>
+            /// MesgType indexed property.  This is a short hand version of the Emitter method defined here.
+            /// <para/>If the given mesgType is less than or equal to MesgType.None or if the given mesgType is > MesgType.Max then the method returns Logging.NullEmitter
+            /// </summary>
+            IMesgEmitter this[MesgType mesgType] { get; }
 
             /// <summary>Allows the caller to specify the default NamedValueSet value that is to be attached to all LogMessages generated by the logger's emitter for the given mesgType</summary>
             void SetDefaultNamedValueSetForEmitter(MesgType mesgType, INamedValueSet nvs);
@@ -1334,7 +1350,10 @@ namespace MosaicLib
             /// <summary>Returns a message emitter for Trace messages from this logger</summary>
             public IMesgEmitter Trace { get { return (trace ?? (trace = Emitter(MesgType.Trace))); } }
 
-            /// <summary>Returns a message emitter that will emit messages of the given MesgType and from this logger.</summary>
+            /// <summary>
+            /// Returns a message emitter that will emit messages of the given MesgType and from this logger.
+            /// <para/>If the given mesgType is less than or equal to MesgType.None or if the given mesgType is > MesgType.Max then the method returns Logging.NullEmitter
+            /// </summary>
             public IMesgEmitter Emitter(MesgType mesgType)
             {
                 IMesgEmitter emitter = null;
@@ -1350,6 +1369,15 @@ namespace MosaicLib
                 }
 
                 return ((emitter != null) ? emitter : Logging.NullEmitter);
+            }
+
+            /// <summary>
+            /// MesgType indexed property.  This is a short hand version of the Emitter method defined here.
+            /// <para/>If the given mesgType is less than or equal to MesgType.None or if the given mesgType is > MesgType.Max then the method returns Logging.NullEmitter
+            /// </summary>
+            public IMesgEmitter this[MesgType mesgType] 
+            {
+                get { return Emitter(mesgType); } 
             }
 
             /// <summary>Allows the caller to specify the default NamedValueSet value that is to be attached to all LogMessages generated by the logger's emitter for the given mesgType</summary>
