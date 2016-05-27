@@ -983,7 +983,6 @@ namespace MosaicLib.Utils
         /// Invokes each EventHandlerDelegate from a cached copy of the OnNotify event list, passing it a captured copy of the Source property and the given eventArgs property.
         /// Then invokes the base.Notify method so that this method can also be used to signal any of the supported BasicNotificationList targets.
         /// </summary>
-        /// <param name="eventArgs"></param>
 		public virtual void Notify(EventArgsType eventArgs) 
 		{
             int delegateExceptions = 0;

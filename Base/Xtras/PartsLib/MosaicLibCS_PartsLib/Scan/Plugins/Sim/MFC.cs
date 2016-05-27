@@ -34,7 +34,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.MFC
     /// This ScanEngine Plugin provides very basic simulated fucntionality of an MFC.
     /// <para/>Supports following channels:
     /// <para/>Inputs:  FlowSetpointTarget, FlowSetpointTargetInPercentOfFS (last writer wins), ControlModeSetpoint (Close, Analog, Open, Freeze, Normal, Offline), IsOnline
-    /// <para/>Outputs: TrackingFlowSetpoint, TrackingFlowSetpointInPercientOfFS, MeasuredFlowInPercentOfFS, MeasuredFlow, ValvePositionInPercent
+    /// <para/>Outputs: TrackingFlowSetpoint, TrackingFlowSetpointInPercientOfFS, MeasuredFlowInPercentOfFS, MeasuredFlow, ValvePositionInPercent, TotalOpertingHours, TotalFlow
     /// <para/>Supports the following config keys
     /// <para/>FullScaleFlow (1000.0), FlowNoise (5.0), FullScaleResponsePeriodInSeconds (1.25)
     /// </summary>
@@ -52,9 +52,17 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.MFC
         {
             base.Setup(scanEnginePartName);
 
-            flowSetpointTargetInputIVA = Values.Instance.GetValueAccessor<double>("{0}.FlowSetpointTarget".CheckedFormat(Name)).Set(0.0);
-            flowSetpointTargetInputInPercentOfFSIVA = Values.Instance.GetValueAccessor<double>("{0}.FlowSetpointTargetInPercentOfFS".CheckedFormat(Name)).Set(0.0);
+            IValuesInterconnection ivi = Values.Instance;
+
+            // Create "write once" iva's to indicate the mfc's flow units and full scale flow value.
+            ivi.GetValueAccessor("{0}.FlowUnits".CheckedFormat(Name)).Set(ConfigValues.FlowUnits);
+            ivi.GetValueAccessor("{0}.FullScaleFlow".CheckedFormat(Name)).Set(ConfigValues.FullScaleFlow);
+
+            flowSetpointTargetInputIVA = ivi.GetValueAccessor<double>("{0}.FlowSetpointTarget".CheckedFormat(Name)).Set(0.0);
+            flowSetpointTargetInputInPercentOfFSIVA = ivi.GetValueAccessor<double>("{0}.FlowSetpointTargetInPercentOfFS".CheckedFormat(Name)).Set(0.0);
         }
+
+        protected MFCSimPluginConfig deviceConfig = new MFCSimPluginConfig();
 
         protected IValueAccessor<double> flowSetpointTargetInputIVA;
         protected IValueAccessor<double> flowSetpointTargetInputInPercentOfFSIVA;
@@ -123,10 +131,16 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.MFC
                 trackingSetpointPercentFS = OutputValues.TrackingFlowSetpointInPercentOfFS;
             }
 
-            double flowNoise = (isOnline ? (ConfigValues.FlowNoise * (rng.NextDouble() * 2.0 - 1.0)) : 0.0);
+            double flowNoise = (isOnline ? (ConfigValues.FlowNoise * GetNextRandomInMinus1ToPlus1Range()) : 0.0);
+            double tempNoise = (isOnline ? (ConfigValues.TemperatureNoiseInDegC * GetNextRandomInMinus1ToPlus1Range()) : 0.0);
 
             OutputValues.MeasuredFlow = OutputValues.TrackingFlowSetpoint + flowNoise;
             OutputValues.MeasuredFlowInPercentOfFS = ConfigValues.ConvertToPercentOfFS(OutputValues.MeasuredFlow);
+
+            OutputValues.TotalOperatingHours += measuredServiceInterval.TotalHours;
+            OutputValues.TotalFlow += OutputValues.MeasuredFlow * measuredServiceInterval.TotalMinutes;
+
+            OutputValues.TemperatureInDegC = (ConfigValues.NominalTemperatureInDegC + tempNoise);
 
             if (forceClosed)
                 OutputValues.ValvePositionInPercent = 0.0;
@@ -134,6 +148,11 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.MFC
                 OutputValues.ValvePositionInPercent = 100.0;
             else 
                 OutputValues.ValvePositionInPercent = OutputValues.MeasuredFlowInPercentOfFS * 0.75;
+        }
+
+        private double GetNextRandomInMinus1ToPlus1Range()
+        {
+            return (rng.NextDouble() * 2.0 - 1.0);
         }
     }
 
@@ -145,16 +164,26 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.MFC
     {
         /// <summary>
         /// Default constructor.
-        /// <para/>FullScaleFlow = 1000.0, FlowNoise = 5.0, FullScaleResponsePeriodInSeconds = 1.25, SetpointThresholdForCloseInPercentOfFS = 5.0, SetpointThresholdForOpenInPercentOfFS = 105.0
+        /// <para/>
+        /// FullScaleFlow = 1000.0, FlowNoise = 5.0, 
+        /// NominalDeviceTemperatureInDegC = 27.0, DeviceTemperatureNoiseInDegC = 0.20,
+        /// FullScaleResponsePeriodInSeconds = 1.25, SetpointThresholdForCloseInPercentOfFS = 5.0, SetpointThresholdForOpenInPercentOfFS = 105.0
         /// </summary>
         public MFCSimPluginConfig()
         {
+            FlowUnits = MassFlowUnits.sccm;
             FullScaleFlow = 1000.0;
             FlowNoise = 5.0;
+            NominalTemperatureInDegC = 27.0;
+            TemperatureNoiseInDegC = 0.20;
             FullScaleResponsePeriodInSeconds = 1.25;
             SetpointThresholdForCloseInPercentOfFS = 5.0;
             SetpointThresholdForOpenInPercentOfFS = 105.0;
         }
+
+        /// <summary>Gives the full scale flow for this MFC in user units.  Normally has units of sccm</summary>
+        [ConfigItem]
+        public MassFlowUnits FlowUnits { get; set; }
 
         /// <summary>Gives the full scale flow for this MFC in user units.  Normally has units of sccm</summary>
         [ConfigItem]
@@ -163,6 +192,14 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.MFC
         /// <summary>Gives the flow noise that this MFC will exhibit in user units.  This is the half width of the +- range.  Total range of noise will be twice this value.</summary>
         [ConfigItem]
         public double FlowNoise { get; set; }
+
+        /// <summary>Gives the nominal device temperature in DegC</summary>
+        [ConfigItem]
+        public double NominalTemperatureInDegC { get; set; }
+
+        /// <summary>Gives the temperature noise in DegC</summary>
+        [ConfigItem]
+        public double TemperatureNoiseInDegC { get; set; }
 
         /// <summary>Gives the nominal period that this MFC takes to "ramp" its slew limited setpoint from 0% to 100% of full scale in units of seconds.</summary>
         [ConfigItem]
@@ -245,6 +282,18 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.MFC
 
         [ValueSetItem]
         public double ValvePositionInPercent { get; set; }
+
+        [ValueSetItem]
+        public double TotalOperatingHours { get; set; }
+
+        [ValueSetItem]
+        public double TemperatureInDegC { get; set; }
+
+        /// <summary>
+        /// Has same units as MeasuredFlow * time in units of minutes
+        /// </summary>
+        [ValueSetItem]
+        public double TotalFlow { get; set; }
     }
 }
 

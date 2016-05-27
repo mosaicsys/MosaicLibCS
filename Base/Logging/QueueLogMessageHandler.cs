@@ -20,11 +20,11 @@
  */
 //-------------------------------------------------------------------
 
+using System;
+using System.Collections.Generic;
+
 namespace MosaicLib
 {
-	using System;
-	using System.Collections.Generic;
-
 	public static partial class Logging
 	{
 
@@ -60,18 +60,15 @@ namespace MosaicLib
 
                     LogGate logGate = LogGate.None;
                     bool recordSourceStackFrame = false;
-                    bool supportsReferenceCountedRelease = true;
 
                     foreach (ILogMessageHandler targetLMH in targetLMHArray)
                     {
                         logGate.MesgTypeMask |= targetLMH.LoggerConfig.LogGate.MesgTypeMask;
                         recordSourceStackFrame |= targetLMH.LoggerConfig.RecordSourceStackFrame;
-                        supportsReferenceCountedRelease &= targetLMH.LoggerConfig.SupportsReferenceCountedRelease;
                     }
 
                     loggerConfig.LogGate = logGate;
                     loggerConfig.RecordSourceStackFrame = recordSourceStackFrame;
-                    loggerConfig.SupportsReferenceCountedRelease = supportsReferenceCountedRelease;
 
                     this.targetLMHArray = targetLMHArray;
 
@@ -314,9 +311,6 @@ namespace MosaicLib
 						return;
 
 					// delivere the messages
-                    if (!LoggerConfig.SupportsReferenceCountedRelease)
-                        dist.ReallocateMessagesForNonRefCountedHandler(mesgDeliveryList);
-
                     LogMessage[] lmArray = mesgDeliveryList.ToArray();
                     foreach (var lmh in targetLMHArray)
                         lmh.HandleLogMessages(lmArray);
@@ -332,7 +326,7 @@ namespace MosaicLib
 							continue;
 
 						lastDeliveredSeqNum = lm.SeqNum;
-						lm.RemoveReference(ref lm);
+                        lm = null;
 					}
 
 					mesgDeliveryList.Clear();

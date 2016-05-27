@@ -333,8 +333,6 @@ namespace MosaicLib.WPF.Logging
         {
             lock (rawLogMesgArrayMutex)
             {
-                if (lm != null && lm.BelongsToPool)
-                    Utils.Asserts.TakeBreakpointAfterFault("WpfLogMessageHandler must be given non-pooled messages.  It does not support ReferenceCounted message handling");
                 rawLogMesgArray.PutMessage(lm);
             }
 
@@ -347,9 +345,6 @@ namespace MosaicLib.WPF.Logging
             {
                 foreach (Logging.LogMessage lm in lmArray)
                 {
-                    if (lm != null && lm.BelongsToPool)
-                        Utils.Asserts.TakeBreakpointAfterFault("WpfLogMessageHandler must be given non-pooled messages.  It does not support ReferenceCounted message handling");
-
                     rawLogMesgArray.PutMessage(lm);
                 }
             }

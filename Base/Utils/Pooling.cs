@@ -156,7 +156,6 @@ namespace MosaicLib.Utils.Pooling
     /// This class implements a basic Object Pool where objects of a given type may be acquired from the pool (which creates them as needed) and may 
     /// be returned to the pool (which may dispose them if the pool is already full).  The client is responsible for all object lifetime managment
     /// </summary>
-    /// <typeparam name="ObjectType"></typeparam>
     public class BasicObjectPool<ObjectType>
         : Utils.DisposableBase
         , IBasicObjectPool<ObjectType>

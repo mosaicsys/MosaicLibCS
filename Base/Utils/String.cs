@@ -88,6 +88,14 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
+        /// Returns true if the given character value is between 32 and 127
+        /// </summary>
+        public static bool IsBasicAscii(this char c)
+        {
+            return IsBasicAscii(c, null);
+        }
+
+        /// <summary>
         /// Returns true if all of the characters in this string have char values from 32 to 127, or the string is empty.
         /// If otherExcludeCharsList is not null then the method returns false if any character in s is also included in the given otherExcludeCharsList.
         /// valueForNull is returned if the given string is null.
@@ -201,7 +209,7 @@ namespace MosaicLib.Utils
                         case '\f': sb.Append(@"\f"); break;         // form feed
                         case '\v': sb.Append(@"\v"); break;         // vertical tab
                         default:
-                            if (c <= 0xff)
+                            if (c >= 0x00 && c <= 0xff)
                                 sb.CheckedAppendFormat("\\x{0:x2}", unchecked((Byte)c));
                             else
                                 sb.CheckedAppendFormat("\\u{0:x4}", unchecked((UInt16)c));
@@ -655,6 +663,81 @@ namespace MosaicLib.Utils
                 return from;
 
             return from.Substring(0, from.Length - suffix.Length);
+        }
+
+        #endregion
+
+        #region char extension methods
+
+        /// <summary>
+        /// Returns true if the indexed char in the given string s is a valid digit ('0'-'9') or is an upper or lower case leter from 'A' to 'F'
+        /// </summary>
+        public static bool IsHexDigit(this string s, int index)
+        {
+            if (s != null && index >= 0 && index < s.Length)
+                return s[index].IsHexDigit(true, true);
+
+            return false;
+        }
+
+        /// <summary>
+        /// Returns true if the indexed char in the given string s is a valid digit ('0'-'9') and allowLowerCase or allowUpperCase is true, 
+        /// or it is a lower case letter from 'a' to 'f' and allowLowerCase is true,
+        /// or it is an upper case letter from 'A' to 'F' and allowUpperCase is true.
+        /// </summary>
+        public static bool IsHexDigit(this string s, int index, bool allowLowerCase, bool allowUpperCase)
+        {
+            if (s != null && index >= 0 && index < s.Length)
+                return s[index].IsHexDigit(allowLowerCase, allowUpperCase);
+
+            return false;
+        }
+
+        /// <summary>
+        /// Returns true if the given char c is a digit ('0'-'9') or is an upper or lower case leter from 'A' to 'F'
+        /// </summary>
+        public static bool IsHexDigit(this char c)
+        {
+            return c.IsHexDigit(true, true);
+        }
+
+        /// <summary>
+        /// Returns true if the given char c is a digit ('0'-'9') and allowLowerCase or allowUpperCase is true, 
+        /// or it is a lower case letter from 'a' to 'f' and allowLowerCase is true,
+        /// or it is an upper case letter from 'A' to 'F' and allowUpperCase is true.
+        /// </summary>
+        public static bool IsHexDigit(this char c, bool allowLowerCase, bool allowUpperCase)
+        {
+            switch (c)
+            {
+                case '0':
+                case '1':
+                case '2':
+                case '3':
+                case '4':
+                case '5':
+                case '6':
+                case '7':
+                case '8':
+                case '9':
+                    return (allowLowerCase || allowUpperCase);
+                case 'A':
+                case 'B':
+                case 'C':
+                case 'D':
+                case 'E':
+                case 'F':
+                    return allowUpperCase;
+                case 'a':
+                case 'b':
+                case 'c':
+                case 'd':
+                case 'e':
+                case 'f':
+                    return allowLowerCase;
+                default:
+                    return false;
+            }
         }
 
         #endregion

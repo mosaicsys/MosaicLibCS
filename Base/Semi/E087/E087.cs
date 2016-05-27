@@ -566,32 +566,36 @@ namespace MosaicLib.Semi.E087
 		PIOFailure,
         /// <summary>attempt was made to manually deliver a carrier to port in auto mode, or auto delivery was started to a port in manual mode (also sets PIOFailed)</summary>
 		AccessModeViolation,
-        /// <summary></summary>
+
 		CarrierVerificationFailure,
-        /// <summary></summary>
-		SlotMapReadFailed,
-        /// <summary></summary>
-		SlotMapVerificationFailed,
-        /// <summary></summary>
-		AttemptToUseOutOfServiceLoadPort,
-        /// <summary></summary>
-		CarrierPresenceError,
-        /// <summary></summary>
-		CarrierPlacementError,
+
+        SlotMapReadFailed,
+
+        SlotMapVerificationFailed,
+
+        AttemptToUseOutOfServiceLoadPort,
+
+        CarrierPresenceError,
+
+        CarrierPlacementError,
+
         /// <summary>Dock or Undock failed</summary>
 		CarrierDockFailure,
+
         /// <summary>Open or Close failed</summary>
 		CarrierDoorFailure,
-        /// <summary></summary>
-		DuplicateCarrierID,
-        /// <summary></summary>
-		CarrierRemovalError,
+
+        DuplicateCarrierID,
+
+        CarrierRemovalError,
+
         /// <summary>Clamp or Unclamp failed</summary>
 		CarrierClampFailure,
+
         /// <summary>manual transfer started but not finished</summary>
 		ManualTransferFailed,
-        /// <summary></summary>
-		PortOperationFailed,
+
+        PortOperationFailed,
 	}
 
 	//-------------------------------------------------------------------

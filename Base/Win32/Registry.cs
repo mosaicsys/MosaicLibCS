@@ -41,7 +41,7 @@ namespace MosaicLib.Win32.Registry
         /// In normal use this is performed at specific points in an application's installation/removal pattern.
         /// </summary>
         /// <param name="hKey">Gives the key handle value that identifies the key to be flushed.  Appears to be ignored in many Win32 implementations.</param>
-        /// <returns></returns>
+        /// <returns>a Win32 error code or 0 to indicate success.</returns>
         /// <remarks>
         /// From MSDN remarks on this API method:
         /// Calling RegFlushKey is an expensive operation that significantly affects system-wide performance as it consumes disk bandwidth and blocks 

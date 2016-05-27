@@ -23,6 +23,9 @@
 using System;
 using System.Runtime.InteropServices;
 
+using MosaicLib;
+using MosaicLib.Utils;
+
 namespace MosaicLib.Time
 {
     #region Qpc static wrapper class
@@ -248,7 +251,7 @@ namespace MosaicLib.Time
         public QpcTimer(double triggerIntervalInSec, bool autoReset)
             : this()
 		{
-            lastTriggerTimestamp = QpcTimeStamp.Zero;           // essentially calls Stop();
+            lastTriggerTimeStamp = QpcTimeStamp.Zero;           // essentially calls Stop();
 			TriggerIntervalInSec = triggerIntervalInSec;        // advances next
 			AutoReset = autoReset;
         }
@@ -261,7 +264,7 @@ namespace MosaicLib.Time
         /// Property can be used to get or set the TriggerInterval as a double value in units of seconds.  
         /// Setting this interval implicitly resets the timer to expire after the interval has elapsed since the last occurance (if it has already been started).
         /// </summary>
-        public double TriggerIntervalInSec { get { return triggerIntervalInSec; } set { triggerIntervalInSec = value; nextTriggerTimestamp = lastTriggerTimestamp + value; } }
+        public double TriggerIntervalInSec { get { return triggerIntervalInSec; } set { triggerIntervalInSec = value; nextTriggerTimeStamp = lastTriggerTimeStamp + value; } }
  
         /// <summary>
         /// Property can be used to get or set the TriggerInterval as a TimeSpan value.  
@@ -344,7 +347,7 @@ namespace MosaicLib.Time
         {
             get 
             { 
-                return !lastTriggerTimestamp.IsZero; 
+                return !lastTriggerTimeStamp.IsZero; 
             }
 
             set 
@@ -393,8 +396,8 @@ namespace MosaicLib.Time
         {
             ElapsedTimeAtLastTrigger = TimeSpan.Zero;
 
-            lastTriggerTimestamp = now;
-            nextTriggerTimestamp = now + triggerIntervalInSec;
+            lastTriggerTimeStamp = now;
+            nextTriggerTimeStamp = now + triggerIntervalInSec;
 
             return this;
         }
@@ -405,7 +408,7 @@ namespace MosaicLib.Time
         public QpcTimer Stop()
         {
             ElapsedTimeAtLastTrigger = ElapsedTime;
-            lastTriggerTimestamp = QpcTimeStamp.Zero;
+            lastTriggerTimeStamp = QpcTimeStamp.Zero;
             return this;
         }
 
@@ -429,33 +432,41 @@ namespace MosaicLib.Time
         /// </remarks>
 		public bool GetIsTriggered(QpcTimeStamp now)
 		{
-            if (lastTriggerTimestamp.IsZero || (triggerIntervalInSec < 0.0) || (triggerIntervalInSec == 0.0 && !ZeroTriggerIntervalRunsTimer))
-				return false;
+            bool isTimerRunning, isTimerTriggered;
 
-			bool triggered = (now > nextTriggerTimestamp);
+            InnerGetIsTriggered(now, out isTimerRunning, out isTimerTriggered);
 
-            if (triggered && !lastTriggered)
+            if (!isTimerRunning)
+                return false;
+
+            if (isTimerTriggered && !lastTriggered)
             {
                 ElapsedTimeAtLastTrigger = GetElapsedTime(now);
             }
 
-            lastTriggered = triggered;
+            lastTriggered = isTimerTriggered;
 
-			if (triggered && AutoReset)
+			if (isTimerTriggered && AutoReset)
 			{
                 // update the lastTriggerTimestamp to match the incoming nextTriggerTimestamp
-				lastTriggerTimestamp = nextTriggerTimestamp;
+				lastTriggerTimeStamp = nextTriggerTimeStamp;
 
                 // add the interval to the nextTriggerTimestamp
-				nextTriggerTimestamp.Add(triggerIntervalInSec);
+				nextTriggerTimeStamp.Add(triggerIntervalInSec);
 
                 // if the new nextTriggerTimestamp is already past then reset/restart the timer to expire after the full triggerInterval has elapsed from now.
-				if (nextTriggerTimestamp < now)
+				if (nextTriggerTimeStamp < now)
 					Start(now);
 			}
 
-			return triggered;
+			return isTimerTriggered;
 		}
+
+        private void InnerGetIsTriggered(QpcTimeStamp now, out bool isTimerRunning, out bool isTimerTriggered)
+        {
+            isTimerRunning = (Started && (triggerIntervalInSec > 0.0) || (triggerIntervalInSec == 0.0 && ZeroTriggerIntervalRunsTimer));
+            isTimerTriggered = isTimerRunning && (now > nextTriggerTimeStamp);
+        }
 
         /// <summary>
         /// Gives  the ElapsedTimeInSeconds since the timer was last started or expired.
@@ -475,12 +486,10 @@ namespace MosaicLib.Time
         /// <summary>
         /// Gives the Elapsed Time between the given now value and the time that the timer last expired as a TimeSpan value.
         /// </summary>
-        /// <param name="now"></param>
-        /// <returns></returns>
         public TimeSpan GetElapsedTime(QpcTimeStamp now)
         {
-            if (!lastTriggerTimestamp.IsZero || !ElapsedTimeIsZeroWhenStopped)
-                return (now - lastTriggerTimestamp);
+            if (!lastTriggerTimeStamp.IsZero || !ElapsedTimeIsZeroWhenStopped)
+                return (now - lastTriggerTimeStamp);
             else
                 return TimeSpan.Zero;
         }
@@ -488,10 +497,10 @@ namespace MosaicLib.Time
         #region private fields
 
         /// <summary>QpcTimeStamp of the last time the timer expired, or zero if the timer has not been started.</summary>
-        private QpcTimeStamp lastTriggerTimestamp;
+        private QpcTimeStamp lastTriggerTimeStamp;
 
         /// <summary>QpcTimeStamp of the next time after which the timer will have expired</summary>
-        private QpcTimeStamp nextTriggerTimestamp;
+        private QpcTimeStamp nextTriggerTimeStamp;
 
         /// <summary>Boolean used to do delta detect on the triggered value to know when to update the ElapsedTimeAtLastTrigger property.</summary>
         private bool lastTriggered;
@@ -501,6 +510,21 @@ namespace MosaicLib.Time
 
         #endregion
 
+        /// <summary>
+        /// Debugging and logging helper
+        /// </summary>
+        public override string ToString()
+        {
+            bool isTimerRunning, isTimerTriggered;
+
+            InnerGetIsTriggered(QpcTimeStamp.Now, out isTimerRunning, out isTimerTriggered);
+
+            return "QPCTimer {0} {1} {2} Interval:{3:f3} sec, Elapsed:{4:f3} ElapsedAtLastTrigger:{5:f3} {6}".CheckedFormat(
+                        Started ? "Started" : "-Started", isTimerRunning ? "Running" : "-Running", isTimerTriggered ? "Triggered" : "-Triggered",
+                        TriggerIntervalInSec, ElapsedTimeInSeconds, ElapsedTimeAtLastTrigger.TotalSeconds,
+                        SelectedBehavior
+                        );
+        }
     }
 
 	#endregion

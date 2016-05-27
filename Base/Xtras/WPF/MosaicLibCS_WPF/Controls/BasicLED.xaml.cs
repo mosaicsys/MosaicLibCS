@@ -12,7 +12,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
 
-namespace MosaicLibCS_WPF.Controls
+namespace MosaicLib.WPF.Controls
 {
     /// <summary>
     /// Interaction logic for BasicLED.xaml

@@ -2594,7 +2594,6 @@ namespace MosaicLib.Modular.Interconnect.WCF
         /// Enqueues the given rsau in either the pendingRemoteServiceActionUpdateCompleteQueue or the pendingRemoteServiceActionUpdateQueue depending on whether the 
         /// rsau's ActionState IsComplete, or not.
         /// </summary>
-        /// <param name="rsau"></param>
         private void EnqueuePendingRSAU(RemoteServiceActionUpdate rsau)
         {
             if (rsau.ActionState.IsComplete)
@@ -2752,7 +2751,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
 
         #region Connetion Abort handling.
 
-        /// <summary></summary>
+        /// <summary>Returns true if the current AbortReason is no null or empty.  Generally this indicates that the connection is being aborted.</summary>
         public bool IsAbortRequested { get { return !AbortReason.IsNullOrEmpty(); } }
 
         /// <summary>

@@ -19,21 +19,26 @@
  */
 //-------------------------------------------------------------------
 
+using System;
+using System.IO;
+using System.Collections.Generic;
+using System.Runtime.Serialization;
+using MosaicLib.Utils;
+using MosaicLib.Time;
+using MosaicLib.Modular;
+using MosaicLib.Modular.Part;
+using MosaicLib.PartsLib.Helpers;
+using MosaicLib.Semi.E084;
+
+using MosaicLib.PartsLib.Common.LPM;
+using LPM = MosaicLib.PartsLib.Common.LPM;
+using MosaicLib.Modular.Interconnect.Values.Attributes;
+using MosaicLib.Modular.Interconnect.Values;
+using MosaicLib.Modular.Config;
+using MosaicLib.Modular.Common;
+
 namespace MosaicLib.PartsLib.Common.E084
 {
-    using System;
-    using System.IO;
-    using System.Collections.Generic;
-    using System.Runtime.Serialization;
-    using MosaicLib.Utils;
-    using MosaicLib.Time;
-    using MosaicLib.Modular;
-    using MosaicLib.Modular.Part;
-    using MosaicLib.PartsLib.Helpers;
-    using MosaicLib.Semi.E084;
-
-    using LPMSim = MosaicLib.PartsLib.Common.LPM.Sim;
-
     public interface IE084ActiveTransferSimEngine : IActivePartBase
     {
         E084ActiveTransferSimEngineState State { get; }
@@ -42,7 +47,6 @@ namespace MosaicLib.PartsLib.Common.E084
         IBasicAction CreateStartResetAction();
         IBasicAction CreateStartSingleLoadAction();
         IBasicAction CreateStartSingleUnloadAction();
-        IBasicAction CreateEnableCycleAction(bool enableCycle);
     }
 
     public struct E084ActiveTransferSimEngineState
@@ -86,7 +90,7 @@ namespace MosaicLib.PartsLib.Common.E084
     {
         #region Construction
 
-        public E084ActiveTransferSimEngine(LPMSim.ILPMSimPart lpmSimPart)
+        public E084ActiveTransferSimEngine(LPM.Sim.ILPMSimPart lpmSimPart)
             : base(lpmSimPart.PartID + ".E84Sim", "E084ActiveTransferSimEngine")
         {
             ActionLoggingConfig = Modular.Action.ActionLoggingConfig.Info_Error_Trace_Trace;    // redefine the log levels for actions 
@@ -94,11 +98,50 @@ namespace MosaicLib.PartsLib.Common.E084
             //This part is a simulated primary part
             PrivateBaseState = new BaseState(true, true) { ConnState = ConnState.NotApplicable };
 
-            instantActionQ = new MosaicLib.Modular.Action.ActionQueue(PartID + ".iq", true, 10);
-
             this.lpmSimPart = lpmSimPart;
 
+            IVI = Modular.Interconnect.Values.Values.Instance;
+
+            statePublisherIVA = IVI.GetValueAccessor("{0}.State".CheckedFormat(PartID));
+
+            instantActionQ = new MosaicLib.Modular.Action.ActionQueue(PartID + ".iq", true, 10);
+
+            enableAutoLoadUnloadIVA = IVI.GetValueAccessor("{0}.EnableAutoLoadUnload".CheckedFormat(PartID));
+
+            string lpmPartBaseName = lpmSimPart.PartID;
+            lpmPodPlacementSensorValuesIVA = IVI.GetValueAccessor("{0}.PodPlacementSensorValue".CheckedFormat(lpmPartBaseName));
+            ohtPassiveToActivePinsStateIVA = IVI.GetValueAccessor("{0}.E84.OHT.PassiveToActivePinsState".CheckedFormat(lpmPartBaseName));
+            agvPassiveToActivePinsStateIVA = IVI.GetValueAccessor("{0}.E84.AGV.PassiveToActivePinsState".CheckedFormat(lpmPartBaseName));
+            ohtActiveToPassivePinsStateIVA = IVI.GetValueAccessor("{0}.E84.OHT.ActiveToPassivePinsState".CheckedFormat(lpmPartBaseName));
+            agvActiveToPassivePinsStateIVA = IVI.GetValueAccessor("{0}.E84.AGV.ActiveToPassivePinsState".CheckedFormat(lpmPartBaseName));
+
             PublishBaseState("Constructor.Complete");
+        }
+
+        #endregion
+
+        #region local fields and IVA support
+
+        private LPM.Sim.ILPMSimPart lpmSimPart;
+        private PIOSelect pioSelect = PIOSelect.OHT;
+        private IValuesInterconnection IVI { get; set; }
+
+        private IValueAccessor enableAutoLoadUnloadIVA;
+
+        private IValueAccessor ohtPassiveToActivePinsStateIVA;
+        private IValueAccessor agvPassiveToActivePinsStateIVA;
+        private IValueAccessor ohtActiveToPassivePinsStateIVA;
+        private IValueAccessor agvActiveToPassivePinsStateIVA;
+
+        private IValueAccessor SelectedPassiveToActivePinsStateIVA { get { return (pioSelect == PIOSelect.OHT ? ohtPassiveToActivePinsStateIVA : agvPassiveToActivePinsStateIVA); } }
+        private IValueAccessor SelectedActiveToPassivePinsStateIVA { get { return (pioSelect == PIOSelect.OHT ? ohtActiveToPassivePinsStateIVA : agvActiveToPassivePinsStateIVA); } }
+
+        private IValueAccessor lpmPodPlacementSensorValuesIVA;
+
+        private PodSensorValues LPMPodPlacementSensorValues 
+        { 
+            get { return lpmPodPlacementSensorValuesIVA.Update().ValueContainer.GetValue<PodSensorValues>(false); }
+            set { lpmPodPlacementSensorValuesIVA.Set(new ValueContainer(value)); }
         }
 
         #endregion
@@ -110,9 +153,12 @@ namespace MosaicLib.PartsLib.Common.E084
         public INotificationObject<E084ActiveTransferSimEngineState> StateNotifier { get { return publicStateNotifier; } }
         public E084ActiveTransferSimEngineState State { get { return publicStateNotifier.Object; } }
 
+        private IValueAccessor statePublisherIVA;
+
         protected void PublishPrivateState()
         {
             publicStateNotifier.Object = privateState;
+            statePublisherIVA.Set(privateState);
         }
 
         public IBasicAction CreateStartResetAction()
@@ -128,11 +174,6 @@ namespace MosaicLib.PartsLib.Common.E084
         public IBasicAction CreateStartSingleUnloadAction()
         {
             return new BasicActionImpl(instantActionQ, PerformSingleUnload, "Unload", ActionLoggingReference) as IBasicAction;
-        }
-
-        public IBasicAction CreateEnableCycleAction(bool enableCycle)
-        {
-            return new BasicActionImpl(instantActionQ, delegate() { return PerformSetEnableCycle(enableCycle); }, Utils.Fcns.CheckedFormat("SetEnableCycle({0})", enableCycle), ActionLoggingReference) as IBasicAction;
         }
 
         #endregion
@@ -157,9 +198,6 @@ namespace MosaicLib.PartsLib.Common.E084
         #endregion
 
         #region Internal implementation
-
-        LPMSim.ILPMSimPart lpmSimPart;
-        PIOSelect pioSelect = PIOSelect.OHT;
 
         enum ActivitySelect : byte
         {
@@ -244,7 +282,8 @@ namespace MosaicLib.PartsLib.Common.E084
             lastSetA2PPins = new ActiveToPassivePinsState();
             lastSetA2PPins.IFaceName = PartID;
             lastSetA2PPins.XferILock = true;
-            lpmSimPart.CreateSetE084ActivePins(pioSelect, lastSetA2PPins).Start();
+            ohtActiveToPassivePinsStateIVA.Set(lastSetA2PPins as IActiveToPassivePinsState);
+            agvActiveToPassivePinsStateIVA.Set(lastSetA2PPins as IActiveToPassivePinsState);
 
             privateState = new E084ActiveTransferSimEngineState() { StateStr = "Offline" };
 
@@ -315,32 +354,31 @@ namespace MosaicLib.PartsLib.Common.E084
             return String.Empty;
         }
 
-        private string PerformSetEnableCycle(bool enableCycle)
-        {
-            if (enableCycle)
-            {
-                if (IsReady)
-                    nextActivitySelect = ActivitySelect.AutoLoadAndUnload;
-                else
-                    return Utils.Fcns.CheckedFormat("SetEnableCycle(true) Request not permitted, engine is not ready [{0}]", currentActivity);
-            }
-            else
-            {
-                if (currentActivity == ActivitySelect.AutoLoadAndUnload)
-                    nextActivitySelect = ActivitySelect.Ready;
-                else
-                    return Utils.Fcns.CheckedFormat("SetEnableCycle(false) Request not permitted, engine is not cycling [{0}]", currentActivity);
-            }
-
-            return String.Empty;
-        }
-
         protected override void PerformMainLoopService()
         {
             Spin();
 
-            // service current activity
+            // service requests for auto load unload
+            if (enableAutoLoadUnloadIVA.IsUpdateNeeded)
+            {
+                if (enableAutoLoadUnloadIVA.Update().ValueContainer.GetValue<bool>(false))
+                {
+                    if (IsReady)
+                        nextActivitySelect = ActivitySelect.AutoLoadAndUnload;
+                    else
+                    {
+                        Log.Error.Emit("EnableAutoLoadUnload({0}) can not be handled, engine is not ready [{1}]", enableAutoLoadUnloadIVA.ValueContainer, currentActivity);
+                        enableAutoLoadUnloadIVA.Set(false);
+                    }
+                }
+                else
+                {
+                    if (currentActivity == ActivitySelect.AutoLoadAndUnload)
+                        nextActivitySelect = ActivitySelect.Ready;
+                }
+            }
 
+            // service current activity
             switch (currentActivity)
             {
                 default:
@@ -383,32 +421,38 @@ namespace MosaicLib.PartsLib.Common.E084
             nextActivitySelect = ActivitySelect.None;
         }
 
+        private IConfig config = Config.Instance;
+
         void ServiceResetActivity()
         {
             using (var eeLog = new Logging.EnterExitTrace(Log))
             {
-                LPMSim.State lpmState = lpmSimPart.PublicState;
-                IActiveToPassivePinsState a2pPinsState = lpmState.InputsState.GetE84InputsBits(pioSelect);
+                if (enableAutoLoadUnloadIVA.Update().ValueContainer.GetValue<bool>(false))
+                    enableAutoLoadUnloadIVA.Set(false);
+
+                IValueAccessor a2pPinsStateIVA = SelectedActiveToPassivePinsStateIVA;
+                IValueAccessor p2aPinsStateIVA = SelectedPassiveToActivePinsStateIVA;
+
+                IActiveToPassivePinsState a2pPinsState = new ActiveToPassivePinsState(a2pPinsStateIVA.Update().ValueContainer);
+                IPassiveToActivePinsState p2aPinsState = new PassiveToActivePinsState(p2aPinsStateIVA.Update().ValueContainer);
+
                 if (!a2pPinsState.IsIdle)
                 {
                     lastSetA2PPins = new ActiveToPassivePinsState();
                     lastSetA2PPins.IFaceName = PartID;
                     lastSetA2PPins.XferILock = true;
-                    IBasicAction clearPinsAction = lpmSimPart.CreateSetE084ActivePins(pioSelect, lastSetA2PPins);
-                    clearPinsAction.Run();
-                    if (clearPinsAction.ActionState.Failed)
-                    {
-                        Log.Error.Emit("Reset failed: unable to clear E084 pins:{0}", clearPinsAction);
-                        SetCurrentActivity(ActivitySelect.Offline, "Reset failed: unable to clear E084 A2P pins");
-                        return;
-                    }
+                    a2pPinsStateIVA.Set(lastSetA2PPins as IActiveToPassivePinsState);
+                }
+
+                if (config.GetConfigKeyAccessOnce("E84Sim.ResetForcesESandHO").GetValue<bool>(false) && !p2aPinsState.IsSelectable)
+                {
+                    p2aPinsStateIVA.Set(new PassiveToActivePinsState(p2aPinsState) { ES = true, HO_AVBL = true } as IPassiveToActivePinsState);
                 }
 
                 Spin(TimeSpan.FromSeconds(0.5));
 
-                lpmState = lpmSimPart.PublicState;
-                a2pPinsState = lpmState.InputsState.GetE84InputsBits(pioSelect);
-                IPassiveToActivePinsState p2aPinsState = lpmState.OutputsState.GetE84OutputBits(pioSelect);
+                a2pPinsState = new ActiveToPassivePinsState(a2pPinsStateIVA.Update().ValueContainer);
+                p2aPinsState = new PassiveToActivePinsState(p2aPinsStateIVA.Update().ValueContainer);
 
                 if (!p2aPinsState.IsSelectable)
                     SetCurrentActivity(ActivitySelect.WaitForPinsReady, Utils.Fcns.CheckedFormat("Reset complete with E84 P->A pins not selectable [{0}]", p2aPinsState));
@@ -421,10 +465,11 @@ namespace MosaicLib.PartsLib.Common.E084
 
         void ServiceWaitForPinsReadyActivity()
         {
-            LPMSim.State lpmState = lpmSimPart.PublicState;
+            IValueAccessor a2pPinsStateIVA = SelectedActiveToPassivePinsStateIVA;
+            IValueAccessor p2aPinsStateIVA = SelectedPassiveToActivePinsStateIVA;
 
-            IActiveToPassivePinsState a2pPinsState = lpmState.InputsState.GetE84InputsBits(pioSelect);
-            IPassiveToActivePinsState p2aPinsState = lpmState.OutputsState.GetE84OutputBits(pioSelect);
+            IActiveToPassivePinsState a2pPinsState = new ActiveToPassivePinsState(a2pPinsStateIVA.Update().ValueContainer);
+            IPassiveToActivePinsState p2aPinsState = new PassiveToActivePinsState(p2aPinsStateIVA.Update().ValueContainer);
 
             if (!a2pPinsState.IsIdle)
             {
@@ -442,10 +487,11 @@ namespace MosaicLib.PartsLib.Common.E084
 
         void ServiceReadyActivity()
         {
-            LPMSim.State lpmState = lpmSimPart.PublicState;
+            IValueAccessor a2pPinsStateIVA = SelectedActiveToPassivePinsStateIVA;
+            IValueAccessor p2aPinsStateIVA = SelectedPassiveToActivePinsStateIVA;
 
-            IActiveToPassivePinsState a2pPinsState = lpmState.InputsState.GetE84InputsBits(pioSelect);
-            IPassiveToActivePinsState p2aPinsState = lpmState.OutputsState.GetE84OutputBits(pioSelect);
+            IActiveToPassivePinsState a2pPinsState = new ActiveToPassivePinsState(a2pPinsStateIVA.Update().ValueContainer);
+            IPassiveToActivePinsState p2aPinsState = new PassiveToActivePinsState(p2aPinsStateIVA.Update().ValueContainer);
 
             if (!a2pPinsState.IsIdle)
             {
@@ -462,9 +508,9 @@ namespace MosaicLib.PartsLib.Common.E084
 
         void ServicePerformAutoLoadAndUnloadActivity()
         {
-            LPMSim.State lpmState = lpmSimPart.PublicState;
+            IValueAccessor p2aPinsStateIVA = SelectedPassiveToActivePinsStateIVA;
 
-            IPassiveToActivePinsState p2aPinsState = lpmState.OutputsState.GetE84OutputBits(pioSelect);
+            IPassiveToActivePinsState p2aPinsState = new PassiveToActivePinsState(p2aPinsStateIVA.Update().ValueContainer);
 
             // first keep waiting until passive to active pins are seletable
             if (!p2aPinsState.IsSelectable)
@@ -477,15 +523,15 @@ namespace MosaicLib.PartsLib.Common.E084
 
             // passive to active pins are selectable.
 
-            if (!lpmState.InputsState.PodPresenceSensorState.DoesPlacedEqualPresent)
+            if (!LPMPodPlacementSensorValues.DoesPlacedEqualPresent())
             {
-                SetCurrentActivity(ActivitySelect.WaitForPinsReady, Utils.Fcns.CheckedFormat("{0} failed: Unexpected Pod Presence state [{1}]", currentActivity, lpmState.InputsState.PodPresenceSensorState));
+                SetCurrentActivity(ActivitySelect.WaitForPinsReady, Utils.Fcns.CheckedFormat("{0} failed: Unexpected PodSensorValues [{1}]", currentActivity, LPMPodPlacementSensorValues));
                 return;
             }
 
             // transfer start holdoff timer
 
-            if (lpmState.InputsState.PodPresenceSensorState.IsPlacedAndPresent)
+            if (LPMPodPlacementSensorValues.IsProperlyPlaced())
             {
                 Log.Info.Emit("{0}: P2A is selectable and FOUP is placed, starting unload", currentActivity);
                 ServicePerformUnloadActivity();
@@ -522,7 +568,7 @@ namespace MosaicLib.PartsLib.Common.E084
             privateState.TransferCount++;
             privateState.TransferProgressStr = "Loading:Select for L_REQ";
             PublishPrivateState();
-            if (!SetA2PPins(new ActiveToPassivePinsState(idleA2PPins) { VALID = true, CS_0 = true })) return;
+            SetA2PPins(new ActiveToPassivePinsState(idleA2PPins) { VALID = true, CS_0 = true });
 
             nextP2APinBits = p2aPinBits | PassiveToActivePinBits.L_REQ_pin1;
             if (!WaitForP2ATransition(ref p2aPinBits, nextP2APinBits, PassiveToActivePinBits.L_REQ_pin1)) return; 
@@ -530,7 +576,7 @@ namespace MosaicLib.PartsLib.Common.E084
             privateState.TransferProgressStr = "Loading:Start T_REQ";
             PublishPrivateState();
 
-            if (!SetA2PPins(new ActiveToPassivePinsState(lastSetA2PPins) { TR_REQ = true })) return;
+            SetA2PPins(new ActiveToPassivePinsState(lastSetA2PPins) { TR_REQ = true });
 
             nextP2APinBits = p2aPinBits | PassiveToActivePinBits.READY_pin4;
             if (!WaitForP2ATransition(ref p2aPinBits, nextP2APinBits, PassiveToActivePinBits.READY_pin4)) return;
@@ -538,7 +584,7 @@ namespace MosaicLib.PartsLib.Common.E084
             privateState.TransferProgressStr = "Loading:Go BUSY";
             PublishPrivateState();
 
-            if (!SetA2PPins(new ActiveToPassivePinsState(lastSetA2PPins) { BUSY = true })) return;
+            SetA2PPins(new ActiveToPassivePinsState(lastSetA2PPins) { BUSY = true });
 
             privateState.TransferProgressStr = "Loading:Sim Lowering";
             PublishPrivateState();
@@ -548,11 +594,11 @@ namespace MosaicLib.PartsLib.Common.E084
             privateState.TransferProgressStr = "Loading:Placing Foup";
             PublishPrivateState();
 
-            if (!SetPodPresenceSensorState(LPMSim.PodPresenceSensorState.FoupPresentAndNotPlaced)) return;
+            LPMPodPlacementSensorValues = LPM.PodSensorValues.PresenceSensor;
 
             if (!Spin(placementTransitionTime)) return;
 
-            if (!SetPodPresenceSensorState(LPMSim.PodPresenceSensorState.FoupPresentAndPlaced)) return;
+            LPMPodPlacementSensorValues = LPM.PodSensorValues.ProperyPlaced;
 
             privateState.TransferProgressStr = "Loading:Wait L_REQ clear";
             PublishPrivateState();
@@ -568,7 +614,7 @@ namespace MosaicLib.PartsLib.Common.E084
             privateState.TransferProgressStr = "Loading:Go COMPT";
             PublishPrivateState();
 
-            if (!SetA2PPins(new ActiveToPassivePinsState(lastSetA2PPins) { TR_REQ = false, BUSY = false, COMPT = true })) return;
+            SetA2PPins(new ActiveToPassivePinsState(lastSetA2PPins) { TR_REQ = false, BUSY = false, COMPT = true });
 
             privateState.TransferProgressStr = "Loading:Wait READY clear";
             PublishPrivateState();
@@ -581,7 +627,7 @@ namespace MosaicLib.PartsLib.Common.E084
 
             if (!Spin(deselectDelay)) return;
 
-            if (!SetA2PPins(new ActiveToPassivePinsState(idleA2PPins))) return;
+            SetA2PPins(new ActiveToPassivePinsState(idleA2PPins));
 
             privateState.TransferProgressStr = String.Empty;
             PublishPrivateState();
@@ -605,7 +651,7 @@ namespace MosaicLib.PartsLib.Common.E084
             privateState.TransferCount++;
             privateState.TransferProgressStr = "Unloading:Select for U_REQ";
             PublishPrivateState();
-            if (!SetA2PPins(new ActiveToPassivePinsState(idleA2PPins) { VALID = true, CS_0 = true })) return;
+            SetA2PPins(new ActiveToPassivePinsState(idleA2PPins) { VALID = true, CS_0 = true });
 
             nextP2APinBits = p2aPinBits | PassiveToActivePinBits.U_REQ_pin2;
             if (!WaitForP2ATransition(ref p2aPinBits, nextP2APinBits, PassiveToActivePinBits.U_REQ_pin2)) return;
@@ -613,7 +659,7 @@ namespace MosaicLib.PartsLib.Common.E084
             privateState.TransferProgressStr = "Unloading:Start T_REQ";
             PublishPrivateState();
 
-            if (!SetA2PPins(new ActiveToPassivePinsState(lastSetA2PPins) { TR_REQ = true })) return;
+            SetA2PPins(new ActiveToPassivePinsState(lastSetA2PPins) { TR_REQ = true });
 
             nextP2APinBits = p2aPinBits | PassiveToActivePinBits.READY_pin4;
             if (!WaitForP2ATransition(ref p2aPinBits, nextP2APinBits, PassiveToActivePinBits.READY_pin4)) return;
@@ -621,21 +667,21 @@ namespace MosaicLib.PartsLib.Common.E084
             privateState.TransferProgressStr = "Unloading:Go BUSY";
             PublishPrivateState();
 
-            if (!SetA2PPins(new ActiveToPassivePinsState(lastSetA2PPins) { BUSY = true })) return;
+            SetA2PPins(new ActiveToPassivePinsState(lastSetA2PPins) { BUSY = true });
 
             privateState.TransferProgressStr = "Unloading:Sim Lowering";
             PublishPrivateState();
 
             if (!Spin(loweringTime)) return;
 
-            privateState.TransferProgressStr = "Unloading:Taking Foup";
+            privateState.TransferProgressStr = "Unloading:Removing Foup";
             PublishPrivateState();
 
-            if (!SetPodPresenceSensorState(LPMSim.PodPresenceSensorState.FoupPresentAndNotPlaced)) return;
+            LPMPodPlacementSensorValues = LPM.PodSensorValues.PresenceSensor;
 
             if (!Spin(placementTransitionTime)) return;
 
-            if (!SetPodPresenceSensorState(LPMSim.PodPresenceSensorState.FoupNotPresentAndNotPlaced)) return;
+            LPMPodPlacementSensorValues = LPM.PodSensorValues.None;
 
             privateState.TransferProgressStr = "Unloading:Wait U_REQ clear";
             PublishPrivateState();
@@ -651,7 +697,7 @@ namespace MosaicLib.PartsLib.Common.E084
             privateState.TransferProgressStr = "Unloading:Go COMPT";
             PublishPrivateState();
 
-            if (!SetA2PPins(new ActiveToPassivePinsState(lastSetA2PPins) { TR_REQ = false, BUSY = false, COMPT = true })) return;
+            SetA2PPins(new ActiveToPassivePinsState(lastSetA2PPins) { TR_REQ = false, BUSY = false, COMPT = true });
 
             privateState.TransferProgressStr = "Unloading:Wait READY clear";
             PublishPrivateState();
@@ -664,7 +710,7 @@ namespace MosaicLib.PartsLib.Common.E084
 
             if (!Spin(deselectDelay)) return;
 
-            if (!SetA2PPins(new ActiveToPassivePinsState(idleA2PPins))) return;
+            SetA2PPins(new ActiveToPassivePinsState(idleA2PPins));
 
             privateState.TransferProgressStr = String.Empty;
             PublishPrivateState();
@@ -678,60 +724,23 @@ namespace MosaicLib.PartsLib.Common.E084
         readonly ActiveToPassivePinsState idleA2PPins = new ActiveToPassivePinsState();
         ActiveToPassivePinsState lastSetA2PPins = new ActiveToPassivePinsState();
 
-        bool SetA2PPins(ActiveToPassivePinsState pinsState)
+        void SetA2PPins(ActiveToPassivePinsState pinsState)
         {
             lastSetA2PPins = pinsState;
             lastSetA2PPins.IFaceName = PartID;
             lastSetA2PPins.XferILock = true;    // so that log messages do not complain
 
-            IBasicAction setPinsAction = lpmSimPart.CreateSetE084ActivePins(pioSelect, pinsState);
-            setPinsAction.Start();
-
-            for (; ; )
-            {
-                if (setPinsAction.ActionState.Succeeded)
-                    return true;
-
-                if (setPinsAction.ActionState.Failed)
-                {
-                    SetCurrentActivity(ActivitySelect.Offline, Utils.Fcns.CheckedFormat("{0}[{1}] failed: unable to set E084 Active pins to '{2}'", currentActivity, privateState.TransferProgressStr, pinsState));
-                    return false;
-                }
-
-                if (!Spin())
-                    return false;
-            }
-        }
-
-        bool SetPodPresenceSensorState(LPMSim.PodPresenceSensorState sensorState)
-        {
-            IBasicAction setSensorStateAction = lpmSimPart.CreateSetPPSensorState(sensorState);
-            setSensorStateAction.Start();
-
-            for (; ; )
-            {
-                if (setSensorStateAction.ActionState.Succeeded)
-                    return true;
-
-                if (setSensorStateAction.ActionState.Failed)
-                {
-                    SetCurrentActivity(ActivitySelect.Offline, Utils.Fcns.CheckedFormat("{0}[{1}] failed: unable to set Pod Sensor State Active to '{2}'", currentActivity, privateState.TransferProgressStr, sensorState));
-                    return false;
-                }
-
-                if (!Spin())
-                    return false;
-            }
+            SelectedActiveToPassivePinsStateIVA.Set(lastSetA2PPins as IActiveToPassivePinsState);
         }
 
         bool WaitForP2ATransition(ref PassiveToActivePinBits trackBits, PassiveToActivePinBits waitForBits, PassiveToActivePinBits deltaPinsMask)
         {
+            IValueAccessor p2aPinsStateIVA = SelectedPassiveToActivePinsStateIVA;
+
             PassiveToActivePinBits fixedPinsMask = PassiveToActivePinBits.PinsBitMask & ~deltaPinsMask;
             for (; ; )
             {
-                LPMSim.State lpmState = lpmSimPart.PublicState;
-
-                IPassiveToActivePinsState p2aPinsState = lpmState.OutputsState.GetE84OutputBits(pioSelect);
+                IPassiveToActivePinsState p2aPinsState = new PassiveToActivePinsState(p2aPinsStateIVA.Update().ValueContainer);
 
                 PassiveToActivePinBits packedWord = p2aPinsState.PackedWord;
 

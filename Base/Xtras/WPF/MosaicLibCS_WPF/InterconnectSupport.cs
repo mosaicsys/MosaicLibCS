@@ -207,6 +207,10 @@ namespace MosaicLib.WPF.Interconnect
                         lastVC = newValueVC;
                     }
                 }
+                else if (!lastVC.IsEqualTo(newValueVC))
+                {
+                    lastVC = newValueVC;
+                }
 
                 if (e.Property == vcDP)
                     lastVC = newValueVC;

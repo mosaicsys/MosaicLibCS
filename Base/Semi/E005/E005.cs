@@ -33,35 +33,27 @@ namespace MosaicLib.Semi.E005
     [DataContract(Namespace = Constants.SemiNameSpace)]
     public enum ALCD : byte
     {
-        /// <summary></summary>
         [EnumMember]
         PersonalSafety = 1,
 
-        /// <summary></summary>
         [EnumMember]
         EquipmentSafety = 2,
 
-        /// <summary></summary>
         [EnumMember]
         ParameterControlWarning = 3,
 
-        /// <summary></summary>
         [EnumMember]
         ParameterControlError = 4,
 
-        /// <summary></summary>
         [EnumMember]
         IrrecoverableError = 5,
 
-        /// <summary></summary>
         [EnumMember]
         EquipmentStatusWarning = 6,
 
-        /// <summary></summary>
         [EnumMember]
         AttentionFlags = 7,
 
-        /// <summary></summary>
         [EnumMember]
         DataIntegrity = 8,
 
@@ -161,203 +153,153 @@ namespace MosaicLib.Semi.E005
         [EnumMember]
         NoError = 0,
 
-        /// <summary></summary>
         [EnumMember]
         UnknownObjectInObjectSpecifier = 1,
 
-        /// <summary></summary>
         [EnumMember]
         UnknownTargetObjectType = 2,
         
-        /// <summary></summary>
         [EnumMember]
         UnknownObjectInstance = 3,
         
-        /// <summary></summary>
         [EnumMember]
         UnknownAttributeName = 4,
         
-        /// <summary></summary>
         [EnumMember]
         ReadonlyAttributeAccessDenied = 5,
         
-        /// <summary></summary>
         [EnumMember]
         UnknownObjectType = 6,
         
-        /// <summary></summary>
         [EnumMember]
         InvalidAttributeValue = 7,
         
-        /// <summary></summary>
         [EnumMember]
         SyntaxError = 8,
         
-        /// <summary></summary>
         [EnumMember]
         VerificationError = 9,
         
-        /// <summary></summary>
         [EnumMember]
         ValidationError = 10,
         
-        /// <summary></summary>
         [EnumMember]
         ObjectIdentifierInUse = 11,
         
-        /// <summary></summary>
         [EnumMember]
         ParametersImproperlySpecified = 12,
         
-        /// <summary></summary>
         [EnumMember]
         InsufficientParametersSpecified = 13,
         
-        /// <summary></summary>
         [EnumMember]
         UnsupportedOptionRequested = 14,
         
-        /// <summary></summary>
         [EnumMember]
         Busy = 15,
         
-        /// <summary></summary>
         [EnumMember]
         NotAvailableForProcessing = 16,
         
-        /// <summary></summary>
         [EnumMember]
         CommandNotValidForCurrentState = 17,
         
-        /// <summary></summary>
         [EnumMember]
         NoMaterialAltered = 18,
         
-        /// <summary></summary>
         [EnumMember]
         MaterialPartiallyProcessed = 19,
         
-        /// <summary></summary>
         [EnumMember]
         AllMaterialProcessed = 20,
         
-        /// <summary></summary>
         [EnumMember]
         RecipeSpecificationRelatedError = 21,
         
-        /// <summary></summary>
         [EnumMember]
         FailedDuringProcessing = 22,
         
-        /// <summary></summary>
         [EnumMember]
         FailedWhileNotProcessing = 23,
         
-        /// <summary></summary>
         [EnumMember]
         FailedDueToLackOfMaterial = 24,
         
-        /// <summary></summary>
         [EnumMember]
         JobAborted = 25,
         
-        /// <summary></summary>
         [EnumMember]
         JobStopped = 26,
         
-        /// <summary></summary>
         [EnumMember]
         JobCancelled = 27,
         
-        /// <summary></summary>
         [EnumMember]
         CannotChangeSelectedRecipe = 28,
         
-        /// <summary></summary>
         [EnumMember]
         UnknownEvent = 29,
         
-        /// <summary></summary>
         [EnumMember]
         DuplicateReportID = 30,
         
-        /// <summary></summary>
         [EnumMember]
         UnknownDataReport = 31,
         
-        /// <summary></summary>
         [EnumMember]
         DataReportNotLinked = 32,
         
-        /// <summary></summary>
         [EnumMember]
         UnknownTraceReport = 33,
         
-        /// <summary></summary>
         [EnumMember]
         DuplicateTraceID = 34,
         
-        /// <summary></summary>
         [EnumMember]
         TooManyDataReports = 35,
         
-        /// <summary></summary>
         [EnumMember]
         SamplePeriodOutOfRange = 36,
         
-        /// <summary></summary>
         [EnumMember]
         GroupSizeToLarge = 37,
         
-        /// <summary></summary>
         [EnumMember]
         RecoveryActionCurrentlyInvalid = 38,
         
-        /// <summary></summary>
         [EnumMember]
         BusyWithAnotherRecoveryCurrentlyUnableToPerformTheRecovery = 39,
         
-        /// <summary></summary>
         [EnumMember]
         NoActiveRecoveryAction = 40,
         
-        /// <summary></summary>
         [EnumMember]
         ExceptionRecoveryFailed = 41,
         
-        /// <summary></summary>
         [EnumMember]
         ExceptionRecoveryAborted = 42,
         
-        /// <summary></summary>
         [EnumMember]
         InvalidTableElement = 43,
         
-        /// <summary></summary>
         [EnumMember]
         UnknownTableElement = 44,
         
-        /// <summary></summary>
         [EnumMember]
         CannotDeletePredefined = 45,
         
-        /// <summary></summary>
         [EnumMember]
         InvalidToken = 46,
         
-        /// <summary></summary>
         [EnumMember]
         InvalidParameter = 47,
         
-        /// <summary></summary>
         [EnumMember]
         LoadPortDoesNotExist = 48,
         
-        /// <summary></summary>
         [EnumMember]
         LoadPortAlreadyInUse = 49,
 
-        /// <summary></summary>
         [EnumMember]
         MissingCarrier = 50,
 

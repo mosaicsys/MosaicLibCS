@@ -134,7 +134,6 @@ namespace MosaicLib.PartsLib.Helpers
             TimeStamp = rhs.TimeStamp;
         }
 
-
         [DataMember]
         public ActuatorPosition TargetPos { get; set; }
 
@@ -169,7 +168,12 @@ namespace MosaicLib.PartsLib.Helpers
         public bool IsInMotion { get { return (PosState == ActuatorPosition.MovingToPos1 || PosState == ActuatorPosition.MovingToPos2); } }
         public static bool IsTargetPositionValid(ActuatorPosition pos) { return pos.IsTargetPositionValid(); }
         public static bool IsActuatorPositionValid(ActuatorPosition pos) { return pos.IsActuatorPositionValid(); }
-        public bool IsValid { get { return (IsTargetPositionValid(TargetPos) && IsActuatorPositionValid(PosState)); } } 
+        public bool IsValid { get { return (IsTargetPositionValid(TargetPos) && IsActuatorPositionValid(PosState)); } }
+
+        public override string ToString()
+        {
+            return PosStateStr;
+        }
     }
 
     public static partial class ExtensionMethods

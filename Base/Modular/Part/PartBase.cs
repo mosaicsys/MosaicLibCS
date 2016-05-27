@@ -26,6 +26,7 @@ using MosaicLib.Modular.Action;
 using MosaicLib.Modular.Common;
 using System.Diagnostics;
 using System.Reflection;
+using MosaicLib.Modular.Interconnect.Values;
 
 namespace MosaicLib.Modular.Part
 {
@@ -184,14 +185,17 @@ namespace MosaicLib.Modular.Part
 
 		/// <summary>summary property reports true if the UseState is in an Online state</summary>
 		bool IsOnline { get; }
-		/// <summary>summary property reports true if the UseState indicates that the device is busy.  Details of functionality depends on internal part behavior.</summary>
+
+        /// <summary>summary property reports true if the UseState indicates that the device is busy.  Details of functionality depends on internal part behavior.</summary>
 		bool IsBusy { get; }
 
 		/// <summary>summary property reports true if the ConnState indicates that the part is in the process of making a connection.</summary>
 		bool IsConnecting { get; }
-		/// <summary>summary property reports true if the ConnState indicates that the part's connection (if any) is connected.</summary>
+
+        /// <summary>summary property reports true if the ConnState indicates that the part's connection (if any) is connected.</summary>
 		bool IsConnected { get; }
-		/// <summary>summary property reports true if the ConnState indicates that the part's connection is connected or is making a connection</summary>
+
+        /// <summary>summary property reports true if the ConnState indicates that the part's connection is connected or is making a connection</summary>
 		bool IsConnectedOrConnecting { get; }
 
         /// <summary>returns true if either the UseState or the ConnState are not at their Undefined value.  Typically this means that the part has not be started or that it has not generated its initial value.</summary>
@@ -222,7 +226,58 @@ namespace MosaicLib.Modular.Part
 
 	#endregion
 
-	//-----------------------------------------------------------------
+    #region extension methods
+
+    public static partial class ExtensionMethods
+    {
+        /// <summary>
+        /// Returns true if the given baseState is non-null and its UseState is Initial or its ConnState is Initial
+        /// </summary>
+        public static bool IsUninitialized(this IBaseState baseState)
+        {
+            return (baseState != null && (baseState.UseState == UseState.Initial || baseState.ConnState == ConnState.Initial));
+        }
+
+        /// <summary>
+        /// Returns true if the given baseState is non-null and its UseState is Offline or Shutdown
+        /// </summary>
+        public static bool IsOffline(this IBaseState baseState)
+        {
+            return (baseState != null && (baseState.UseState == UseState.Offline || baseState.UseState == UseState.Shutdown));
+        }
+
+        /// <summary>
+        /// Returns true if the given baseState is null or its UseState is any Failure/Failed state or its ConnState is any Failed state.
+        /// </summary>
+        public static bool IsFaulted(this IBaseState baseState)
+        {
+            if (baseState == null)
+                return true;
+
+            switch (baseState.UseState)
+            {
+                case UseState.AttemptOnlineFailed:
+                case UseState.FailedToOffline:
+                case UseState.OnlineFailure:
+                    return true;
+                default:
+                    break;
+            }
+
+            switch (baseState.ConnState)
+            {
+                case ConnState.ConnectFailed:
+                case ConnState.ConnectionFailed:
+                    return true;
+            }
+
+            return false;
+        }
+    }
+
+    #endregion
+
+    //-----------------------------------------------------------------
 	#region Active part interface
 
     /// <summary>This interface is a client side view of an Action that has no parameter and no result.</summary>
@@ -371,7 +426,7 @@ namespace MosaicLib.Modular.Part
         protected string FmtStdEC(int errorCode, string errorStr) { return Utils.EC.FmtStdEC(PartID, errorCode, errorStr); }
 
         #endregion
-    };
+	};
 
 	#endregion
 
@@ -581,6 +636,8 @@ namespace MosaicLib.Modular.Part
             BaseStateChangeEmitter = Log.Emitter(Logging.MesgType.Trace);
 
             publishedBaseState.Object = PrivateBaseState;
+
+            BaseStatePublicationValueName = string.Empty;
         }
 
         #endregion
@@ -633,9 +690,39 @@ namespace MosaicLib.Modular.Part
         /// <summary>If this property is set to true, the part should indicate that it is busy whenever its internal part busy counter is non-zero</summary>
         protected bool TreatPartAsBusyWhenInternalPartBusyCountIsNonZero { get; set; }
 
+        /// <summary>
+        /// Set this to be non-null to enable BaseState publication via IVA.  
+        /// When this is set to the empty string, the IVA name will be derived from the PartID as [PartID].BaseState
+        /// When this is neither null nor empty then the IVA name will be the given string value.
+        /// <para/>Defaults to string.Empty to enable publication using the default name.
+        /// </summary>
+        protected string BaseStatePublicationValueName { get; set; }
+
+        /// <summary>
+        /// Defines the IValuesInterconnection instance that will be used by this PartBase class when creating base class level IValueAccessor objects.
+        /// When null (the default value) the part will use the default Modular.Interconnect.Values.Values.Instance.
+        /// <para/>publically settable (for use in initializers), getter is protected.
+        /// </summary>
+        public IValuesInterconnection PartBaseIVI { protected get; set; }
+
+        private IValueAccessor baseStatePublisherIVA = null;
+
+        private void SetupBaseStatePublisherIVAIfNeeded()
+        {
+            if (baseStatePublisherIVA == null && BaseStatePublicationValueName != null)
+            {
+                if (BaseStatePublicationValueName.IsNullOrEmpty())
+                    BaseStatePublicationValueName = "{0}.BaseState".CheckedFormat(PartID);
+
+                baseStatePublisherIVA = (PartBaseIVI ?? Values.Instance).GetValueAccessor(BaseStatePublicationValueName);
+            }
+        }
+
         /// <summary>Generates an updated copy of the base state, publishes it, logs specific transitions in use and/or connection state, and signals this parts base state published notification list.</summary>
         protected void PublishBaseState(string reason)
         {
+            SetupBaseStatePublisherIVAIfNeeded();
+
             IBaseState entryState = publishedBaseState.VolatileObject;
             UseState entryUseState = (entryState != null ? entryState.UseState : UseState.Initial);
             ConnState entryConnState = (entryState != null ? entryState.ConnState : ConnState.Initial);
@@ -655,6 +742,8 @@ namespace MosaicLib.Modular.Part
             IBaseState publishState = baseStateCopy;
 
             publishedBaseState.Object = publishState;
+            if (baseStatePublisherIVA != null)
+                baseStatePublisherIVA.Set(publishState);
 
             bool includeAction = (publishState.ActionName != String.Empty || entryActionName != publishState.ActionName);
 

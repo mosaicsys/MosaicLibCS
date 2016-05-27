@@ -26,107 +26,6 @@ using System.Linq;
 
 namespace MosaicLib.Utils
 {
-    #region Related Unassociated Functions
-
-    /// <summary>
-    /// Fcns class is essentially a namespace for series of static helper methods
-    /// <para/>inclues: DisposeOf... methods, CheckedFormat and other String related methods, array/list specific Equals methods, ...
-    /// </summary>
-    public static partial class Fcns
-    {
-        #region general static [] comparison methods
-
-        /// <summary>Returns true if both arrays have the same length and contents (using Object.Equals).  Returns false if they do not.</summary>
-        public static bool Equals<ItemType>(ItemType[] a, ItemType[] b)
-        {
-            if (a == null && b == null)
-                return true;
-            if ((a == null) || (b == null))
-                return false;
-            if (a.Length != b.Length)
-                return false;
-
-            int n = a.Length;
-            for (int idx = 0; idx < n; idx++)
-            {
-                if (!object.Equals(a[idx], b[idx]))
-                    return false;
-            }
-
-            return true;
-        }
-
-        /// <summary>Returns true if both the array and the list have the same length and contents (using Object.Equals).  Returns false if they do not.</summary>
-        public static bool Equals<ItemType>(ItemType[] a, IList<ItemType> b)
-        {
-            if (a == null && b == null)
-                return true;
-            if ((a == null) || (b == null))
-                return false;
-            if (a.Length != b.Count)
-                return false;
-
-            int n = a.Length;
-            for (int idx = 0; idx < n; idx++)
-            {
-                if (!object.Equals(a[idx], b[idx]))
-                    return false;
-            }
-
-            return true;
-        }
-
-        /// <summary>Returns true if both of the lists have the same length and contents (using Object.Equals).  Returns false if they do not.</summary>
-        public static bool Equals<ItemType>(IList<ItemType> a, IList<ItemType> b)
-        {
-            if (a == null && b == null)
-                return true;
-            if ((a == null) || (b == null))
-                return false;
-            if (a.Count != b.Count)
-                return false;
-
-            int n = a.Count;
-            for (int idx = 0; idx < n; idx++)
-            {
-                if (!object.Equals(a[idx], b[idx]))
-                    return false;
-            }
-
-            return true;
-        }
-
-
-        #endregion
-
-        #region Migrated MapTo methods for booleans and similar cases.
-
-        /// <summary>Maps the given boolean value to either "1" or "0"</summary>
-        public static string MapToString(this bool value) { return (value ? "1" : "0"); }
-
-        /// <summary>Maps the given boolean value to either given trueStr or given falseStr</summary>
-        public static string MapToString(this bool value, string trueStr, string falseStr) { return (value ? trueStr : falseStr); }
-
-        /// <summary>Maps the given boolean value to an integer value of 1 for true and 0 for false</summary>
-        public static int MapToInt(this bool value) { return (value ? 1 : 0); }
-
-        /// <summary>
-        /// Generalized version of Map method.  If the given value does not Equals default(TValueType) then return the value, otherwise return replaceDefultWith.
-        /// </summary>
-        public static TValueType MapDefaultTo<TValueType>(this TValueType value, TValueType replaceDefaultWith)
-        {
-            if (!value.Equals(default(TValueType)))
-                return value;
-            else
-                return replaceDefaultWith;
-        }
-
-        #endregion
-    }
-
-    #endregion
-
-    // Library is now being built under DotNet 3.5 (or later)
     #region Extension Methods
 
     /// <summary>
@@ -152,6 +51,15 @@ namespace MosaicLib.Utils
         public static bool IsEqualTo<ItemType>(this ItemType[] lhs, IList<ItemType> rhs)
         {
             return Utils.Fcns.Equals(lhs, rhs);
+        }
+
+        /// <summary>
+        /// Extension method version of static Utils.Fcns.Equals method for a list and an array, both generics with the same ItemType.
+        /// Returns true if both the array and the list have the same length and contents (using Object.Equals).  Returns false if they do not.
+        /// </summary>
+        public static bool IsEqualTo<ItemType>(this IList<ItemType> lhs, ItemType[] rhs)
+        {
+            return Utils.Fcns.Equals(rhs, lhs);
         }
 
         /// <summary>
@@ -238,7 +146,23 @@ namespace MosaicLib.Utils
         #region Other Array and IList related extension methods
 
         /// <summary>
-        /// Extension method returns true if given array is null or empty
+        /// Extension method returns true if the given array is null or its Length is zero.
+        /// </summary>
+        public static bool IsNullOrEmpty<TItemType>(this TItemType[] array)
+        {
+            return ((array == null) || (array.Length == 0));
+        }
+
+        /// <summary>
+        /// Extension method returns true if the given list is null or its Count is zero.
+        /// </summary>
+        public static bool IsNullOrEmpty<TItemType>(this IList<TItemType> list)
+        {
+            return ((list == null) || (list.Count == 0));
+        }
+
+        /// <summary>
+        /// Extension method returns true if given array is null or empty (Length == 0)
         /// </summary>
         public static bool IsEmpty<ItemType>(this ItemType[] array)
         {
@@ -246,7 +170,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Extension method returns true if given IList is null or empty
+        /// Extension method returns true if given IList is null or empty (Count == 0)
         /// </summary>
         public static bool IsEmpty<ItemType>(this IList<ItemType> list)
         {
@@ -298,6 +222,176 @@ namespace MosaicLib.Utils
                 return fallbackArray;
 
             return new ItemType[0];
+        }
+
+        #endregion
+
+        #region Math and number related extension methods
+
+        /// <summary>Returns the Math.Ceiling of the given value</summary>
+        public static double Ceiling(this double value)
+        {
+            return Math.Ceiling(value);
+        }
+
+        /// <summary>Returns the Math.Floor of the given value</summary>
+        public static double Floor(this double value)
+        {
+            return Math.Floor(value);
+        }
+
+        /// <summary>Returns the Math.Round of the given value</summary>
+        public static double Round(this double value)
+        {
+            return Math.Round(value);
+        }
+
+        /// <summary>Returns the Math.Round of the given value using the given MidpointRounding mode</summary>
+        public static double Round(this double value, MidpointRounding mode)
+        {
+            return Math.Round(value, mode);
+        }
+
+        /// <summary>Returns the Math.Round of the given value using the given number of digits and the given MidpointRounding mode</summary>
+        public static double Round(this double value, int digits, MidpointRounding mode)
+        {
+            return Math.Round(value, digits, mode);
+        }
+
+        /// <summary>Returns the given value clipped to make certain that it is between lowLimit and highLimit.</summary>
+        public static TValueType Clip<TValueType>(this TValueType value, TValueType lowLimit, TValueType highLimit) where TValueType : IComparable<TValueType>
+        {
+            return value.Clip(lowLimit, highLimit, value);
+        }
+
+        /// <summary>Returns the given value clipped to make certain that it is between lowLimit and highLimit.</summary>
+        public static TValueType Clip<TValueType>(this TValueType value, TValueType lowLimit, TValueType highLimit, TValueType invalidCompareValue) where TValueType : IComparable<TValueType>
+        {
+            int lowToHighLimitCompare = lowLimit.CompareTo(highLimit);
+
+            if (lowToHighLimitCompare > 0)
+                return invalidCompareValue;
+
+            int lowLimitCompare = lowLimit.CompareTo(value);
+            int highLimitCompare = highLimit.CompareTo(value);
+
+            if (lowLimitCompare <= 0 && highLimitCompare >= 0)
+                return value;
+            else if (lowLimitCompare < 0 && highLimitCompare < 0)
+                return highLimit;
+            else if (lowLimitCompare > 0 && highLimitCompare > 0)
+                return lowLimit;
+            else
+                return invalidCompareValue;
+        }
+
+        /// <summary>Returns the given value clipped to make certain that it is between lowLimit and highLimit.</summary>
+        public static double Clip(this double value, double lowLimit, double highLimit)
+        {
+            if (double.IsNaN(value))
+                return value;
+
+            return value.Clip(lowLimit, highLimit, double.NaN);
+        }
+
+        #endregion
+    }
+
+    #endregion
+
+    #region Related Unassociated Functions
+
+    /// <summary>
+    /// Fcns class is essentially a namespace for series of static helper methods
+    /// <para/>inclues: DisposeOf... methods, CheckedFormat and other String related methods, array/list specific Equals methods, ...
+    /// </summary>
+    public static partial class Fcns
+    {
+        #region general static [] comparison methods
+
+        /// <summary>Returns true if both arrays, a and b, have the same length and contents (using Object.Equals).  Returns false if they do not.</summary>
+        public static bool Equals<ItemType>(ItemType[] a, ItemType[] b)
+        {
+            if (a == null && b == null)
+                return true;
+            if ((a == null) || (b == null))
+                return false;
+            if (a.Length != b.Length)
+                return false;
+
+            int n = a.Length;
+            for (int idx = 0; idx < n; idx++)
+            {
+                if (!object.Equals(a[idx], b[idx]))
+                    return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>Returns true if both the array and the list have the same length and contents (using Object.Equals).  Returns false if they do not.</summary>
+        public static bool Equals<ItemType>(ItemType[] a, IList<ItemType> b)
+        {
+            if (a == null && b == null)
+                return true;
+            if ((a == null) || (b == null))
+                return false;
+            if (a.Length != b.Count)
+                return false;
+
+            int n = a.Length;
+            for (int idx = 0; idx < n; idx++)
+            {
+                if (!object.Equals(a[idx], b[idx]))
+                    return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>Returns true if both of the lists, a and b, have the same length and contents (using Object.Equals).  Returns false if they do not.</summary>
+        public static bool Equals<ItemType>(IList<ItemType> a, IList<ItemType> b)
+        {
+            if (a == null && b == null)
+                return true;
+            if ((a == null) || (b == null))
+                return false;
+            if (a.Count != b.Count)
+                return false;
+
+            int n = a.Count;
+            for (int idx = 0; idx < n; idx++)
+            {
+                if (!object.Equals(a[idx], b[idx]))
+                    return false;
+            }
+
+            return true;
+        }
+
+
+        #endregion
+
+        #region Migrated MapTo methods for booleans and similar cases.
+
+        /// <summary>Maps the given boolean value to either "1" or "0"</summary>
+        public static string MapToString(this bool value) { return (value ? "1" : "0"); }
+
+        /// <summary>Maps the given boolean value to either given trueStr or given falseStr</summary>
+        public static string MapToString(this bool value, string trueStr, string falseStr) { return (value ? trueStr : falseStr); }
+
+        /// <summary>Maps the given boolean value to an integer value of 1 for true and 0 for false</summary>
+        public static int MapToInt(this bool value) { return (value ? 1 : 0); }
+
+        /// <summary>
+        /// Generalized version of Map method.  If the given value does not Equals default(TValueType) then return the value, otherwise return replaceDefultWith.
+        /// </summary>
+        public static TValueType MapDefaultTo<TValueType>(this TValueType value, TValueType replaceDefaultWith)
+        {
+            if (!Object.Equals(value, default(TValueType)))
+                return value;
+            else
+                return replaceDefaultWith;
         }
 
         #endregion

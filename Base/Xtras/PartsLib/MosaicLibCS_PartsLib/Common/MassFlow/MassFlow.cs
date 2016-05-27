@@ -92,6 +92,33 @@ namespace MosaicLib.PartsLib.Common.MassFlow
         ControlValve,           // 
         Lock,                 // control regulator stops accepting new setpoints locks at current setpoint mode.
     }
+
+    public static partial class ExtensionMethods
+    {
+        /// <summary>
+        /// Returns true if the given value is Undefined or None
+        /// </summary>
+        public static bool IsUndefinedOrNone(this MassFlowUnits value)
+        {
+            return (value == MassFlowUnits.Undefined || value == MassFlowUnits.None);
+        }
+
+        /// <summary>
+        /// Returns true if the given value is Undefined or None
+        /// </summary>
+        public static bool IsUndefinedOrNone(this PressureUnits value)
+        {
+            return (value == PressureUnits.Undefined || value == PressureUnits.None);
+        }
+
+        /// <summary>
+        /// Returns true if the given value is Undefined or None
+        /// </summary>
+        public static bool IsUndefinedOrNone(this TemperatureUnits value)
+        {
+            return (value == TemperatureUnits.Undefined || value == TemperatureUnits.None);
+        }
+    }
 }
 
 //-------------------------------------------------------------------

@@ -33,9 +33,11 @@ using MosaicLib.PartsLib.Helpers;
 using MosaicLib.Modular.Config;
 using MosaicLib.Modular.Config.Attributes;
 
-using LPMSim = MosaicLib.PartsLib.Common.LPM.Sim;
+using LPM = MosaicLib.PartsLib.Common.LPM;
+using MosaicLib.PartsLib.Common.LPM;
 using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Action;
+using MosaicLib.Modular.Interconnect.Values;
 
 namespace MosaicLib.PartsLib.Common.E099.Sim
 {
@@ -44,7 +46,7 @@ namespace MosaicLib.PartsLib.Common.E099.Sim
         ITagRWSimEngineState State { get; }
         INotificationObject<ITagRWSimEngineState> StateNotifier { get; }
 
-        void AttachToLP(LPMSim.ILPMSimPart lpmSimPart);
+        void AttachToLP(LPM.Sim.ILPMSimPart lpmSimPart);
 
         IReadPagesAction CreateReadPagesAction(int startPageIdx, int numPages);
         IBasicAction CreateWritePageAction(ITagPageContents [] pages);
@@ -224,8 +226,9 @@ namespace MosaicLib.PartsLib.Common.E099.Sim
 
         /// <summary>Indicates that the user has set/cleared that a tag is actually present.  Tag read and write commands will fail if this is not true.</summary>
         bool TagIsPresent { get; }
+        bool CounterIsEnabled { get; }
 
-        ITagPageContents GetPage(int pageIdx);
+        ITagPageContents[] Pages { get; }
 
         bool IsEqualTo(ITagRWSimEngineState rhs);
     }
@@ -239,6 +242,8 @@ namespace MosaicLib.PartsLib.Common.E099.Sim
 
         public int Count { get; internal set; }
 
+        public bool CounterIsEnabled { get { return rawCounterIsEnabled && (Config.Mode != E099TagRWSimEngineMode.IDOnly); } internal set { rawCounterIsEnabled = value; } }
+        private bool rawCounterIsEnabled = true;
         public bool TagIsPresent{ get; internal set; }            // may be used by a client to determine if a page read or write command should fail
 
         public string ID 
@@ -276,7 +281,14 @@ namespace MosaicLib.PartsLib.Common.E099.Sim
             }
         }
 
-        public ITagPageContents GetPage(int pageIndex)
+        public ITagPageContents[] Pages { get; private set; }
+
+        internal void BuildPages()
+        {
+            Pages = Enumerable.Range(0, Config.NumPages).Select(pageIdx => GetPage(pageIdx)).ToArray();
+        }
+
+        private ITagPageContents GetPage(int pageIndex)
         {
             int pageStartOffset = pageIndex * Config.PageDataSize;
 
@@ -289,18 +301,22 @@ namespace MosaicLib.PartsLib.Common.E099.Sim
         {
             string countStr = String.Empty;
 
-            switch (Config.Mode)
+            if (CounterIsEnabled)
             {
-                default:
-                case E099TagRWSimEngineMode.IDOnly: return;    // there is nothing to do for these modes
-                case E099TagRWSimEngineMode.IDWith1DigitCounter: countStr = (Count % 10).ToString("d1"); break;
-                case E099TagRWSimEngineMode.IDWith2DigitCounter: countStr = (Count % 100).ToString("d2"); break;
-                case E099TagRWSimEngineMode.IDWith3DigitCounter: countStr = (Count % 1000).ToString("d3"); break;
-                case E099TagRWSimEngineMode.IDWith4DigitCounter: countStr = (Count % 10000).ToString("d4"); break;
-            }
+                switch (Config.Mode)
+                {
+                    default:
+                    case E099TagRWSimEngineMode.IDOnly: return;    // there is nothing to do for these modes
+                    case E099TagRWSimEngineMode.IDWith1DigitCounter: countStr = (Count % 10).ToString("d1"); break;
+                    case E099TagRWSimEngineMode.IDWith2DigitCounter: countStr = (Count % 100).ToString("d2"); break;
+                    case E099TagRWSimEngineMode.IDWith3DigitCounter: countStr = (Count % 1000).ToString("d3"); break;
+                    case E099TagRWSimEngineMode.IDWith4DigitCounter: countStr = (Count % 10000).ToString("d4"); break;
+                }
 
-            byte[] countAsByteArray = Utils.ByteArrayTranscoders.ByteStringTranscoder.Decode(countStr);
-            ContentByteArray.SafePut(Config.InitialCounterPutOffset, countAsByteArray);
+                byte[] countAsByteArray = Utils.ByteArrayTranscoders.ByteStringTranscoder.Decode(countStr);
+                ContentByteArray.SafePut(Config.InitialCounterPutOffset, countAsByteArray);
+                BuildPages();
+            }
         }
 
         public TagRWSimEngineState()
@@ -309,6 +325,7 @@ namespace MosaicLib.PartsLib.Common.E099.Sim
             ContentByteArray = EmptyByteArray;
             Count = 0;
             TagIsPresent = false;
+            BuildPages();
         }
 
         public TagRWSimEngineState(TagRWSimEngineState rhs) 
@@ -317,6 +334,8 @@ namespace MosaicLib.PartsLib.Common.E099.Sim
             ContentByteArray = rhs.ContentByteArray.Clone() as byte [];
             Count = rhs.Count;
             TagIsPresent = rhs.TagIsPresent;
+            rawCounterIsEnabled = rhs.rawCounterIsEnabled;
+            BuildPages();
         }
 
         public bool IsEqualTo(ITagRWSimEngineState rhs)
@@ -325,6 +344,7 @@ namespace MosaicLib.PartsLib.Common.E099.Sim
                     && ContentByteArray.IsEqualTo(rhs.ContentByteArray)
                     && Count == rhs.Count
                     && TagIsPresent == rhs.TagIsPresent
+                    && CounterIsEnabled == rhs.CounterIsEnabled
                     );
         }
     }
@@ -400,20 +420,22 @@ namespace MosaicLib.PartsLib.Common.E099.Sim
         /// Constructor for use wihtout an lpmSimPart.  Caller provides full part name and object does not look for carrier removed events.
         /// </summary>
         public E099TagRWSimEngine(string partID)
-            :this(partID, null)
+            :this(partID, null, null)
         { }
 
         /// <summary>
         /// Constructor for use with an lpmSimPart.  PartID = lpmSimPart.PartID + ".E99Sim",  object automatically increments count on carrier removed events.
         /// </summary>
-        public E099TagRWSimEngine(LPMSim.ILPMSimPart lpmSimPart)
-            : this(lpmSimPart.PartID + ".E99Sim", lpmSimPart)
+        public E099TagRWSimEngine(LPM.Sim.ILPMSimPart lpmSimPart)
+            : this(lpmSimPart.PartID + ".E99Sim", lpmSimPart, null)
         { }
 
-        protected E099TagRWSimEngine(string partID, LPMSim.ILPMSimPart lpmSimPart)
+        protected E099TagRWSimEngine(string partID, LPM.Sim.ILPMSimPart lpmSimPart, IValuesInterconnection ivi)
             : base(partID)
         {
             ActionLoggingConfig = Modular.Action.ActionLoggingConfig.Info_Error_Trace_Trace;    // redefine the log levels for actions 
+
+            IVI = ivi ?? Values.Instance;
 
             //This part is a simulated primary part
             PrivateBaseState = new BaseState(true, true) { ConnState = ConnState.NotApplicable };
@@ -425,24 +447,30 @@ namespace MosaicLib.PartsLib.Common.E099.Sim
 
             InitializePrivateState();
 
+            if (lpmSimPart != null)
+                AttachToLP(lpmSimPart);
+
             PublishBaseState("Constructor.Complete");
         }
 
-        public void AttachToLP(LPMSim.ILPMSimPart lpmSimPart)
+        public void AttachToLP(LPM.Sim.ILPMSimPart lpmSimPart)
         {
             LpmSimPart = lpmSimPart;
 
             string lpmPartID = lpmSimPart.PartID;
 
-            IBasicNotificationList notificationList = lpmSimPart.PublicStateNotifier.NotificationList;
-            notificationList.AddItem(threadWakeupNotifier);
-            AddExplicitDisposeAction(() => notificationList.RemoveItem(threadWakeupNotifier));
-
-            lpmSimPartStateObserver = new SequencedRefObjectSourceObserver<LPMSim.State, int>(lpmSimPart.PublicStateNotifier);
+            lpmSimPart.BaseStateNotifier.NotificationList.AddItem(this);
+            AddExplicitDisposeAction(() => { lpmSimPart.BaseStateNotifier.NotificationList.RemoveItem(this); });
 
             lpmSimPart.TagRWSimEngine = this;
             AddExplicitDisposeAction(() => { lpmSimPart.TagRWSimEngine = null; });
+
+            IValuesInterconnection ivi = IVI ?? Values.Instance;
+
+            podSensorValuesIVA = ivi.GetValueAccessor("{0}.PodSensorValues".CheckedFormat(lpmPartID));
         }
+
+        private IValuesInterconnection IVI { get; set; }
 
         #endregion
 
@@ -456,13 +484,21 @@ namespace MosaicLib.PartsLib.Common.E099.Sim
         #region public state and interface methods
 
         TagRWSimEngineState privateState;
+        IValueAccessor stateIVA;
         InterlockedNotificationRefObject<ITagRWSimEngineState> publicStateNotifier = new InterlockedNotificationRefObject<ITagRWSimEngineState>();
         public INotificationObject<ITagRWSimEngineState> StateNotifier { get { return publicStateNotifier; } }
         public ITagRWSimEngineState State { get { return publicStateNotifier.Object; } }
 
+        IValueAccessor tagIsPresentIVA;
+        IValueAccessor counterIsEnabledIVA;
+        IValueAccessor isOnlineIVA;
+
         protected void PublishPrivateState()
         {
-            publicStateNotifier.Object = new TagRWSimEngineState(privateState);
+            ITagRWSimEngineState pubObj = new TagRWSimEngineState(privateState) as ITagRWSimEngineState;
+
+            stateIVA.Set(pubObj);
+            publicStateNotifier.Object = pubObj;
         }
 
         private void InitializePrivateState()
@@ -475,7 +511,13 @@ namespace MosaicLib.PartsLib.Common.E099.Sim
                 TagIsPresent = true,
             };
 
+            stateIVA = IVI.GetValueAccessor("{0}.State".CheckedFormat(PartID));
+            tagIsPresentIVA = IVI.GetValueAccessor("{0}.TagIsPresent".CheckedFormat(PartID)).Set(privateState.TagIsPresent);
+            counterIsEnabledIVA = IVI.GetValueAccessor("{0}.CounterIsEnabled".CheckedFormat(PartID)).Set(true);
+            isOnlineIVA = IVI.GetValueAccessor("{0}.IsOnline".CheckedFormat(PartID)).Set(true);
+
             privateState.UpdateCounterPostfix();
+
             PublishPrivateState();
         }
 
@@ -483,28 +525,27 @@ namespace MosaicLib.PartsLib.Common.E099.Sim
 
         #region Internal implementation
 
-        public LPMSim.ILPMSimPart LpmSimPart { get; private set; }
+        public LPM.Sim.ILPMSimPart LpmSimPart { get; private set; }
 
-        ISequencedRefObjectSourceObserver<LPMSim.State, int> lpmSimPartStateObserver;
-        LPMSim.PodPresenceSensorState LastLPMSimConfirmedPPState = new LPMSim.PodPresenceSensorState();
+        IValueAccessor podSensorValuesIVA = null;
+        LPM.PodSensorValues lastLPMSimConfirmedPPState = LPM.PodSensorValues.None;
 
         protected override void PerformMainLoopService()
         {
             // track the LPMSim pod presance state and detect and handle each time that the carrier has been removed.  
             // Typically this increments the count
 
-            if (lpmSimPartStateObserver != null && lpmSimPartStateObserver.Update())
+            if (podSensorValuesIVA != null && podSensorValuesIVA.IsUpdateNeeded)
             {
-                LPMSim.State lpmSimState = lpmSimPartStateObserver.Object;
-                if (lpmSimState != null && lpmSimState.InputsState.PodPresenceSensorState.DoesPlacedEqualPresent)
-                {
-                    if (!LastLPMSimConfirmedPPState.IsEqualTo(lpmSimState.InputsState.PodPresenceSensorState))
-                    {
-                        if (LastLPMSimConfirmedPPState.IsPlacedAndPresent && lpmSimState.InputsState.PodPresenceSensorState.IsNeitherPlacedNorPresent)
-                            CarrierHasBeenRemoved();
+                PodSensorValues podSensorValues = podSensorValuesIVA.Update().ValueContainer.GetValue<PodSensorValues>(false);
 
-                        LastLPMSimConfirmedPPState = lpmSimState.InputsState.PodPresenceSensorState;
-                    }
+                if (lastLPMSimConfirmedPPState != podSensorValues)
+                {
+                    if (lastLPMSimConfirmedPPState == PodSensorValues.ProperyPlaced && podSensorValues == PodSensorValues.None)
+                        CarrierHasBeenRemoved();
+
+                    if (podSensorValues.DoesPlacedEqualPresent())
+                        lastLPMSimConfirmedPPState = podSensorValues;
                 }
             }
 
@@ -520,6 +561,22 @@ namespace MosaicLib.PartsLib.Common.E099.Sim
 
                 PublishPrivateState();
             }
+
+            if (counterIsEnabledIVA.IsUpdateNeeded || tagIsPresentIVA.IsUpdateNeeded)
+            {
+                privateState.CounterIsEnabled = counterIsEnabledIVA.Update().ValueContainer.GetValue<bool>(false);
+                privateState.TagIsPresent = tagIsPresentIVA.Update().ValueContainer.GetValue<bool>(false);
+
+                PublishPrivateState();
+            }
+
+            if (isOnlineIVA.IsUpdateNeeded)
+            {
+                if (isOnlineIVA.Update().ValueContainer.GetValue<bool>(false))
+                    PerformGoOnlineAction(false);
+                else
+                    PerformGoOfflineAction();
+            }
         }
 
         int carrierRemovedCounter = 0;
@@ -533,10 +590,13 @@ namespace MosaicLib.PartsLib.Common.E099.Sim
 
         private void IncrementCount()
         {
-            privateState.Count++;
-            privateState.UpdateCounterPostfix();
+            if (privateState.CounterIsEnabled)
+            {
+                privateState.Count++;
+                privateState.UpdateCounterPostfix();
 
-            PublishPrivateState();
+                PublishPrivateState();
+            }
         }
 
         #endregion
@@ -551,6 +611,7 @@ namespace MosaicLib.PartsLib.Common.E099.Sim
             }
 
             SetBaseState(UseState.Online, "Has been set online" + (andInitialize ? " and Initialized" : ""), true);
+            isOnlineIVA.Set(true);
 
             return String.Empty;
         }
@@ -558,25 +619,9 @@ namespace MosaicLib.PartsLib.Common.E099.Sim
         protected override string PerformGoOfflineAction()
         {
             SetBaseState(UseState.Offline, "Has been set offline", true);
+            isOnlineIVA.Set(false);
 
             return String.Empty;
-        }
-
-        protected override string PerformServiceAction(string serviceName)
-        {
-            switch (serviceName)
-            {
-                case "SetTagPresent":
-                    privateState.TagIsPresent = true;
-                    PublishPrivateState();
-                    return String.Empty;
-                case "ClearTagPresent":
-                    privateState.TagIsPresent = false;
-                    PublishPrivateState();
-                    return String.Empty;
-                default:
-                    return base.PerformServiceAction(serviceName);
-            }
         }
 
         private class ReadPagesAction : Modular.Action.ActionImplBase<NullObj, ITagPageContents[]>, IReadPagesAction

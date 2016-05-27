@@ -332,7 +332,6 @@ namespace MosaicLib.Modular.Reflection
         /// Templatized helper class used to facilitate use of attributes derived from <see cref="AnnotatedItemAttributeBase"/> including extracting them from 
         /// an annotated class and to help generate accessor functions for these annotated items.
         /// </summary>
-        /// <typeparam name="TItemAttribute"></typeparam>
         public static class AnnotatedClassItemAccessHelper<TItemAttribute> where TItemAttribute : AnnotatedItemAttributeBase, new()
         {
             /// <summary>This method is used to extract a set of ItemInfo objects from the given annotatedClassType and for its items that are defined by the given itemSelection.</summary>

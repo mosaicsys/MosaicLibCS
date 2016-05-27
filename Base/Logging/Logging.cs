@@ -31,7 +31,7 @@ using MosaicLib.Modular.Common;
 namespace MosaicLib
 {
 	/// <summary>
-	/// This static public class contains the definitions that are used to define the MosaicLib logging system.  
+	/// This static public class contains the definitions that are used to create the MosaicLib logging system.  
 	/// This system is designed to provide efficient, source identified, gate controllable, multi-threaded logging 
 	/// of messages and/or data from multiple sources into some number of, possibly source specific, message handlers.  
 	/// </summary>
@@ -39,13 +39,12 @@ namespace MosaicLib
 	/// Terms:
     /// <list type="bullet">
     /// <item>
-    ///		<see cref="Logging.LogMessage"/> - an object that is allocated from the distribution system, has a message placed within it and is then
-    ///			emitted into the logging system where it may be recorded in one or more destinations (LogMessageHandlers)
-    ///			LogMessages support use with strings and may be modified by making use of their Text.StringBuffer.  
+    ///		<see cref="Logging.LogMessage"/> - The basic log message object, has a message placed within it and is then
+    ///			emitted into the logging system where it may be recorded in one or more destinations (LogMessageHandlers).
     ///			LogMessages carry a sourceInfo (of the Logger from which they were allocated), a mesg type, a message, 
-    ///			an INamedValueSet and a timestamp.  In addition they are generally 
+    ///			an INamedValueSet and a timestamp.  In addition they may be 
     ///			annotated with the stack frame of the client code from which they were created so that the logging
-    ///			infrastructure has access to the file name and line number of the source code that allocated the message.  
+    ///			infrastructure have access to the file name and line number of the source code that allocated the message.  
     /// </item>
     /// <item>
     ///		LoggerName - each Logger is associated with a string that defines its name.  All Loggers
@@ -53,7 +52,7 @@ namespace MosaicLib
     ///			rules although each one may provide a separate locally defined LoggingConfig value.
     /// </item>
     /// <item>
-    ///		<see cref="Logging.Logger"/> - an object from which LogMessage(s) are obtained and into which LogMessage(s)
+    ///		<see cref="Logging.Logger"/> - an object from which LogMessages are obtained and into which LogMessages
     ///			are typically emitted.  Each Logger instance represents a single portal into
     ///			the log distribution system.  Multiple Logger instances may be constructed using 
     ///			the same LoggerName, in which case they share the same common distribution rules.  
@@ -76,7 +75,7 @@ namespace MosaicLib
     ///			if a given mesg type should be allocated and/or emitted.  LogGate values are typically applied in
     ///			a least restrictive to most restrictive manner (as a LogMessage is routed) so that messages that cannot
     ///			be processed (are gated off in all possible places they might go) will never be generated while other
-    ///			messages are forwarded to those consumers that might be interested in them.
+    ///			messages are forwarded to those handlers that might be interested in them.
     /// </item>
     /// <item>
     ///		<see cref="Logging.IMesgEmitter"/> - a shorthand helper class that is provided by loggers to client code and which can be used to generate
@@ -557,11 +556,8 @@ namespace MosaicLib
             /// <summary>Propery that is set to true if this Logger should record stack frames for source file and line number extraction.</summary>
             bool RecordSourceStackFrame { get; }
 
-            /// <summary>Determines allocation and release style for individual messages.</summary>
-            /// <remarks>
-            /// In LogMessageHandlers, this property indicates if the handler supports use of reference counted release strategy for the messages it handles (or not).  Some handlers may not support this and as such will prevent their loggers from using pooled log messages.
-            /// In Loggers, this property determines how the distribution system will allocate each message used by the logger.  If the property is true then pooled messages may be used for internally allocated and emitted used messages, otherwise a GC based message allocation and release approach is used.
-            /// </remarks>
+            /// <summary>Pooling of LogMessages has been removed.  This property is no longer supported.</summary>
+            [Obsolete("Pooling of LogMessages has been removed.  This property is no longer supported.")]
             bool SupportsReferenceCountedRelease { get; }
 		}
 
@@ -578,7 +574,6 @@ namespace MosaicLib
                 LogGate = rhs.LogGate;
                 LogGateIncrease = rhs.LogGateIncrease;
                 RecordSourceStackFrame = rhs.RecordSourceStackFrame;
-                SupportsReferenceCountedRelease = rhs.SupportsReferenceCountedRelease;
             }
 
             /// <summary>Name of corresponding Logger Group.  May be empty if no group is associated.  For LogMessageHandlers, this name will be derived from the Handler's name</summary>
@@ -594,21 +589,18 @@ namespace MosaicLib
             public bool IsTypeEnabled(MesgType testType) { return LogGate.IsTypeEnabled(testType); }
 
             /// <summary>Property that is set to true if this Logger should record stack frames for source file and line number extraction.</summary>
-            public bool RecordSourceStackFrame { get; set; }    // synonym for recordFileAndLine;            /// <summary></summary>
+            public bool RecordSourceStackFrame { get; set; }    // synonym for recordFileAndLine; 
 
-            /// <summary>Determines allocation and release style for individual messages.</summary>
-            /// <remarks>
-            /// In LogMessageHandlers, this property indicates if the handler supports use of reference counted release strategy for the messages it handles (or not).  Some handlers may not support this and as such will prevent their loggers from using pooled log messages.
-            /// In Loggers, this property determines how the distribution system will allocate each message used by the logger.  If the property is true then pooled messages may be used for internally allocated and emitted used messages, otherwise a GC based message allocation and release approach is used.
-            /// </remarks>
-            public bool SupportsReferenceCountedRelease { get; set; }
+            /// <summary>Pooling of LogMessages has been removed.  This property is no longer supported.</summary>
+            [Obsolete("Pooling of LogMessages has been removed.  This property is no longer supported.")]
+            public bool SupportsReferenceCountedRelease { get { return false; } set { } }
 
             /// <summary>Provide added debugging support using override for LoggerConfig.ToString() method.</summary>
             public override string ToString()
             {
                 string logGateIncreaseStr = ((LogGateIncrease == LogGate.None) ? "" : " incr:{0}".CheckedFormat(LogGateIncrease));
  
-                return Utils.Fcns.CheckedFormat("Grp:'{0}' {1}{2}{3}{4}", GroupName, LogGate, logGateIncreaseStr, (RecordSourceStackFrame ? " +FL" : ""), (SupportsReferenceCountedRelease ? " +RefRel" : ""));
+                return Utils.Fcns.CheckedFormat("Grp:'{0}' {1}{2}{3}", GroupName, LogGate, logGateIncreaseStr, (RecordSourceStackFrame ? " +FL" : ""));
             }
 
             /// <summary>
@@ -622,7 +614,6 @@ namespace MosaicLib
                     LogGate = (lhs.LogGate | rhs.LogGate),
                     LogGateIncrease = (lhs.LogGateIncrease | rhs.LogGateIncrease),
                     RecordSourceStackFrame = (lhs.RecordSourceStackFrame | rhs.RecordSourceStackFrame),
-                    SupportsReferenceCountedRelease = (lhs.SupportsReferenceCountedRelease | rhs.SupportsReferenceCountedRelease)
                 }; 
             }
 
@@ -637,7 +628,6 @@ namespace MosaicLib
                     LogGate = (lhs.LogGate & rhs.LogGate),
                     LogGateIncrease = lhs.LogGateIncrease,      // just keep the existing increase, do not reduce it using the value in the rhs.
                     RecordSourceStackFrame = (lhs.RecordSourceStackFrame & rhs.RecordSourceStackFrame),
-                    SupportsReferenceCountedRelease = (lhs.SupportsReferenceCountedRelease & rhs.SupportsReferenceCountedRelease)
                 };
             }
 
@@ -652,19 +642,18 @@ namespace MosaicLib
                     LogGate = (lhs.LogGate & rhs),
                     LogGateIncrease = lhs.LogGateIncrease,
                     RecordSourceStackFrame = lhs.RecordSourceStackFrame,
-                    SupportsReferenceCountedRelease = lhs.SupportsReferenceCountedRelease,
                 };
             }
 
-            private static LoggerConfig none = new LoggerConfig() { LogGate = LogGate.None, RecordSourceStackFrame = false, SupportsReferenceCountedRelease = true };
-            private static LoggerConfig allWithFL = new LoggerConfig() { LogGate = LogGate.All, RecordSourceStackFrame = true, SupportsReferenceCountedRelease = true };
-            private static LoggerConfig allNoFL = new LoggerConfig() { LogGate = LogGate.All, RecordSourceStackFrame = false, SupportsReferenceCountedRelease = true };
+            private static LoggerConfig none = new LoggerConfig() { LogGate = LogGate.None, RecordSourceStackFrame = false };
+            private static LoggerConfig allWithFL = new LoggerConfig() { LogGate = LogGate.All, RecordSourceStackFrame = true };
+            private static LoggerConfig allNoFL = new LoggerConfig() { LogGate = LogGate.All, RecordSourceStackFrame = false };
 
-            /// <summary>Returns LoggerConfig with LogGate = LogGate.None, RecordSourceStackFrame = false, SupportsReferenceCountedRelease = true</summary>
+            /// <summary>Returns LoggerConfig with LogGate = LogGate.None, RecordSourceStackFrame = false</summary>
 			public static LoggerConfig None { get { return none; } }
-            /// <summary>Returns LoggerConfig with LogGate = LogGate.All, RecordSourceStackFrame = true, SupportsReferenceCountedRelease = true</summary>
+            /// <summary>Returns LoggerConfig with LogGate = LogGate.All, RecordSourceStackFrame = true</summary>
             public static LoggerConfig AllNoFL { get { return allNoFL; } }
-            /// <summary>Returns LoggerConfig with LogGate = LogGate.All, RecordSourceStackFrame = false, SupportsReferenceCountedRelease = true</summary>
+            /// <summary>Returns LoggerConfig with LogGate = LogGate.All, RecordSourceStackFrame = false</summary>
             public static LoggerConfig AllWithFL { get { return allWithFL; } }
 		}
 
@@ -732,8 +721,9 @@ namespace MosaicLib
             public bool IsTypeEnabled(MesgType testType) { return LoggerConfig.IsTypeEnabled(testType); }
             /// <summary>Returns RecordSourceStackFrame from cached copy from LoggerConfig Source</summary>
             public bool RecordSourceStackFrame { get { return LoggerConfig.RecordSourceStackFrame; } }
-            /// <summary>Returns SupportsReferenceCountedRelease from cached copy from LoggerConfig Source</summary>
-            public bool SupportsReferenceCountedRelease { get { return LoggerConfig.SupportsReferenceCountedRelease; } }
+            /// <summary>Pooling of LogMessages has been removed.  This property is no longer supported.</summary>
+            [Obsolete("Pooling of LogMessages has been removed.  This property is no longer supported.")]
+            public bool SupportsReferenceCountedRelease { get { return false; } }
 		}
 
 		#endregion
@@ -844,7 +834,7 @@ namespace MosaicLib
 		///		distribution system can get the file name an line number of the allocating code.
 		/// </remarks>
 
-        public class LogMessage : Utils.Pooling.RefCountedRefObjectBase<LogMessage>, ILogMessage
+        public class LogMessage : ILogMessage
 		{
             /// <summary>Default constructor.</summary>
 			public LogMessage() 
@@ -855,7 +845,7 @@ namespace MosaicLib
             /// <summary>Copy constructor - creates a duplicate of the given rhs</summary>
             public LogMessage(LogMessage rhs) 
             {
-                loggerSourceInfo = rhs.LoggerSourceInfo;
+                LoggerSourceInfo = rhs.LoggerSourceInfo;
                 MesgType = rhs.MesgType;
                 mesg = rhs.Mesg;
                 mesgEscaped = rhs.mesgEscaped;
@@ -888,7 +878,11 @@ namespace MosaicLib
                 return this;
             }
 
-            /// <summary>Asserts that the message is in the not-emitted state.  Primarily used for enforcing that pool messages are recycled correctly.</summary>
+            /// <summary>
+            /// Asserts that the message is in the not-emitted state.  
+            /// Helps enforces that message contents cannot be changed after they have been emitted.
+            /// Primarily used for enforcing that pool messages are recycled correctly.
+            /// </summary>
             public LogMessage AssertNotEmitted(string caller) 
             { 
                 if (Emitted) 
@@ -901,7 +895,7 @@ namespace MosaicLib
             public LogMessage Setup(LoggerSourceInfo loggerSourceInfo, MesgType mesgType, System.Diagnostics.StackFrame sourceStackFrame)
             {
                 Mesg = null;
-                this.loggerSourceInfo = loggerSourceInfo;
+                LoggerSourceInfo = loggerSourceInfo;
                 MesgType = mesgType;
                 SourceStackFrame = sourceStackFrame;
                 nvs = null;
@@ -914,7 +908,7 @@ namespace MosaicLib
             public LogMessage Setup(LoggerSourceInfo loggerSourceInfo, MesgType mesgType, string mesg, System.Diagnostics.StackFrame sourceStackFrame)
             {
                 Mesg = mesg;
-                this.loggerSourceInfo = loggerSourceInfo;
+                LoggerSourceInfo = loggerSourceInfo;
                 MesgType = mesgType;
                 SourceStackFrame = sourceStackFrame;
                 nvs = null;
@@ -923,27 +917,28 @@ namespace MosaicLib
                 return this;
             }
 
-			// information about the message source
-			private LoggerSourceInfo loggerSourceInfo = null;					// messages all share a pointer to the same logger source id and string
-            /// <summary>Returns the LoggerSourceInfo of the logger that generated this message or null if message is in default state or no such source was given</summary>
-            public LoggerSourceInfo LoggerSourceInfo { get { return loggerSourceInfo; } }
+            /// <summary>
+            /// Returns the LoggerSourceInfo of the logger that generated this message or null if message is in default state or no such source was given.
+            /// Messages all share a reference to the same logger source id and string if they all come from the same source id.
+            /// </summary>
+            public LoggerSourceInfo LoggerSourceInfo { get; private set; }
             /// <summary>Returns true if the current SourceInfo is non null.</summary>
-            public bool IsLoggerSourceInfoValid { get { return (loggerSourceInfo != null); } }
+            public bool IsLoggerSourceInfoValid { get { return (LoggerSourceInfo != null); } }
 
             /// <summary>Returns the LoggerID in the Log Distribution System for the LoggerSourceInfo or LoggerID_Invalid if there is no valid LoggerSourceInfo</summary>
-            public int LoggerID { get { return (IsLoggerSourceInfoValid ? loggerSourceInfo.ID : LoggerID_Invalid); } }
+            public int LoggerID { get { return (IsLoggerSourceInfoValid ? LoggerSourceInfo.ID : LoggerID_Invalid); } }
             /// <summary>Returns the LoggerName for the logger reference in the given LoggerSourceInfo or a fixed string ("NULL_LOGGER") if there is none</summary>
             public string LoggerName { get { return GetLoggerName("NULL_LOGGER"); } }
             /// <summary>helper method used to Get LoggerName where caller specifies the string to return when the message has no defined LoggerSourceInfo</summary>
-            public string GetLoggerName(string nullLoggerName) { return (IsLoggerSourceInfoValid ? loggerSourceInfo.Name : nullLoggerName); }
+            public string GetLoggerName(string nullLoggerName) { return (IsLoggerSourceInfoValid ? LoggerSourceInfo.Name : nullLoggerName); }
 
 			// information about the actual event
 
             /// <summary>Returns the MesgType that the message was setup for or MesgType.None if the message has not been setup.</summary>
             public MesgType MesgType { get; private set; }
 
-			// the message text.
-			private string mesg = null;
+            /// <summary>This is the backing field for the string Message Body that has been given to this instance.</summary>
+            private string mesg = null;
 
             /// <summary>Returns the current Message Body.  Returns empty string if the message has not been given a body.  Setter allows the contained mesg to be updated, provided that the message has not been emitted.</summary>
             public string Mesg 
@@ -968,24 +963,38 @@ namespace MosaicLib
 
 			// the message data - an optional binary block of bytes
 
-			private byte [] data = null;
+            /// <summary>backing field for the optional binary message data</summary>
+            private byte[] data = null;
 
             /// <summary>Returns the current Message Data body as a block of bytes or null if there are none.  Setter allows the contained data body to be updated provided that the message has not been emitted. </summary>
             public byte[] Data
 			{
 				get { return data; }
-                set { AssertNotEmitted("Data property Set"); data = value; }
+                set 
+                { 
+                    AssertNotEmitted("Data property Set"); 
+                    data = value; 
+                }
 			}
 
 			// the message can contain an INamedValueSet
-            private static readonly INamedValueSet emptyNVS = new NamedValueSet() { IsReadOnly = true };
+
+            /// <summary>backing field for the optional log message INamedValueSet</summary>
             private INamedValueSet nvs = null;
 
             /// <summary>
             /// Getter returns a read-only instance of the, possibly empty, named value set that was given to this log message.
             /// Setter converts the given value from to be readonly (using the ConvertToReadOnly extension methods).  If the given value is null or is already readonly then it will be used by the LogMessage without change or cloning.
             /// </summary>
-            public INamedValueSet NamedValueSet { get { return nvs ?? emptyNVS; } set { AssertNotEmitted("NamedValueSet property Set"); nvs = value.ConvertToReadOnly(); } }
+            public INamedValueSet NamedValueSet 
+            { 
+                get { return nvs ?? Modular.Common.NamedValueSet.Empty; } 
+                set 
+                { 
+                    AssertNotEmitted("NamedValueSet property Set"); 
+                    nvs = value.ConvertToReadOnly(); 
+                } 
+            }
 
             /// <summary>Returns the System.Diagnostics.StackFrame from which the message was created/emitted.  May be null if SourceStackFrames are not being acquired.</summary>
             public System.Diagnostics.StackFrame SourceStackFrame { get; private set; }
@@ -1015,7 +1024,7 @@ namespace MosaicLib
             public LogMessage NoteEmitted() 
 			{ 
 				AssertNotEmitted("NoteEmitted call");
-                if (loggerSourceInfo == null)
+                if (LoggerSourceInfo == null)
     				Utils.Asserts.TakeBreakpointAfterFault("NoteEmitted failed: SourceID == null");
 
                 Emitted = true;
@@ -1056,9 +1065,13 @@ namespace MosaicLib
             /// <summary>Method used to get the EmittedDataTime formatted in one of the standard supported formats.</summary>
             public string GetFormattedDateTime(Utils.Dates.DateTimeFormat dtFormat) { return Utils.Dates.CvtToString(EmittedDateTime, dtFormat); }
 
-            /// <summary>Internal method used to cleanup the contents of a message on release to the message pool for internally recycled messages in the distribution system.</summary>
-            protected override void PerformPostReleaseCleanup() { Reset(); } // provide non-default post release cleanup behavior
-		};
+            /// <summary>This method has been deprecated.  Pooling of LogMessages has been removed.  (2016-03-10)</summary>
+            [Obsolete("This method has been deprecated.  Pooling of LogMessages has been removed.  (2016-03-10)")]
+            public void RemoveReference(ref LogMessage lm)
+            {
+                lm = null;
+            }
+        };
 
 		#endregion
 
@@ -2128,7 +2141,7 @@ namespace MosaicLib
 			{
 				dist = rhs.dist;
 				sourceInfo = rhs.sourceInfo;
-                explitilyGivenInstanceLogGate = rhs.explitilyGivenInstanceLogGate;
+                explicitlyGivenInstanceLogGate = rhs.explicitlyGivenInstanceLogGate;
                 optionallyElevatedLogGate = rhs.optionallyElevatedLogGate;
 				myTraceEmitter = rhs.myTraceEmitter;
 
@@ -2174,21 +2187,21 @@ namespace MosaicLib
                     if (LoggerConfigObserver.IsUpdateNeeded)
                     {
                         LoggerConfigObserver.Update();
-                        optionallyElevatedLogGate = explitilyGivenInstanceLogGate | LoggerConfigObserver.LogGateIncrease;
+                        optionallyElevatedLogGate = explicitlyGivenInstanceLogGate | LoggerConfigObserver.LogGateIncrease;
                     }
 
                     return optionallyElevatedLogGate;
                 }
                 set 
                 { 
-                    explitilyGivenInstanceLogGate = value;
+                    explicitlyGivenInstanceLogGate = value;
 
                     LoggerConfigObserver.Update();
-                    optionallyElevatedLogGate = explitilyGivenInstanceLogGate | LoggerConfigObserver.LogGateIncrease;
+                    optionallyElevatedLogGate = explicitlyGivenInstanceLogGate | LoggerConfigObserver.LogGateIncrease;
                 } 
             }
 
-            private LogGate explitilyGivenInstanceLogGate = LogGate.All;
+            private LogGate explicitlyGivenInstanceLogGate = LogGate.All;
             private LogGate optionallyElevatedLogGate = LogGate.All;
 
             /// <summary>
@@ -2219,28 +2232,17 @@ namespace MosaicLib
 
             /// <summary>
             /// Returns a new message with type, source, message, file and line filled in.  
-            /// allocateFromDist determines if method attempts to allocate the messages from the distribution system's pool.  
-            /// If a message cannot be obtained from the distribution pool then the method attempts to create the message using new.
-            /// In either case the obtained message is Setup with the given settings and content.
+            /// The obtained message is Setup with the given settings and content and is then returned.
+            /// allocateFromDist is now ignored.  All messages are created locally.
+            /// <para/>Note: if the loggerHasBeenShutdown then this method will return null.
             /// </summary>
             public virtual LogMessage GetLogMessage(MesgType mesgType, string mesg, System.Diagnostics.StackFrame sourceStackFrame, bool allocateFromDist)	
 			{
 				LogMessage lm = null;
-				if (!loggerHasBeenShutdown)
-				{
-                    bool allowAllocateFromDist = false;// disable pool based allocation for all messages (for now)
 
-                    // only allocate messages from the pool if the caller permits and if the group (currently) only has handlers that support reference counted release.
-                    if (allocateFromDist && LoggerSourceInfo.LoggerConfigSource.Object.SupportsReferenceCountedRelease && allowAllocateFromDist)
-						lm = dist.GetLogMessage();
-					else
-						lm = new LogMessage();
-				}
-                if (lm != null)
+                if (!loggerHasBeenShutdown)
                 {
-                    if (!lm.IsUnique)
-                        Utils.Asserts.TakeBreakpointAfterFault("Allocated Message is not Unique");
-
+                    lm = new LogMessage();
                     lm.Setup(sourceInfo, mesgType, mesg, GetStackFrame(1));
                 }
 

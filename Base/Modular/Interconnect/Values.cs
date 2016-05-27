@@ -27,6 +27,7 @@ using MosaicLib.Utils;
 using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Reflection.Attributes;
 using System.Runtime.Serialization;
+using System.Text.RegularExpressions;
 
 // Modular.Interconnect is the general namespace for tools that help interconnect Modular Parts without requiring that that have pre-existing knowledge of each-other's classes.
 // This file contains the definitions for the underlying Modular.Interconnect.Values portion of Modular.Interconnect.
@@ -60,12 +61,12 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// This set of mappings is used by GetValueAccessor to support mapping from the given name to an alternate name on a case by case basis.  
         /// This mapping table may be used to allow two (or more) entities to end up using the same table entry even if they do not know about each other in advance.
         /// </summary>
-        IEnumerable<MapNameFromTo> MapNameFromToSet { get; set; }
+        IEnumerable<IMapNameFromTo> MapNameFromToSet { get; set; }
 
         /// <summary>
         /// Adds the given set of MapNameFromTo items to the current mapping MapNameFromToSet.
         /// </summary>
-        IValuesInterconnection AddRange(IEnumerable<MapNameFromTo> addMapNameFromToSet);
+        IValuesInterconnection AddRange(IEnumerable<IMapNameFromTo> addMapNameFromToSet);
 
         /// <summary>
         /// IValueAccessor Factory method.  
@@ -140,7 +141,26 @@ namespace MosaicLib.Modular.Interconnect.Values
 
     #endregion
 
-    #region name mapping MapNameFromTo and MapNameFromToList
+    #region name mapping: IMapNameFromTo, MapNameFromTo, RegexMapNameFromTo and MapNameFromToList
+
+    public interface IMapNameFromTo
+    {
+        /// <summary>
+        /// Returns true if this is a simple map, or false if it is not (such as for a Regular Expression)
+        /// </summary>
+        bool IsSimpleMap { get; }
+
+        /// <summary>
+        /// Returns true if this map can be used to match and map the given from string.
+        /// </summary>
+        bool CanMap(string from);
+
+        /// <summary>
+        /// If this map can convert the given from string then it assigns the converted value to the given output to parameter and returns true.
+        /// If this map does not match the given from string or if the conversion fails then this method does not modify the to paramter and instead returns false.
+        /// </summary>
+        bool Map(string from, ref string to);
+    }
 
     /// <summary>
     /// Immutable item instance class for mapping names from one value to another.  
@@ -148,7 +168,7 @@ namespace MosaicLib.Modular.Interconnect.Values
     /// <para/>This class supports use with DataContract serialization and deserialization.
     /// </summary>
     [DataContract(Namespace = Constants.ModularInterconnectNameSpace)]
-    public class MapNameFromTo
+    public class MapNameFromTo : IMapNameFromTo
     {
         /// <summary>
         /// Basic constructor used to setup an instance's From and To property values to the given values.
@@ -172,7 +192,111 @@ namespace MosaicLib.Modular.Interconnect.Values
         {
             return "'{0}'=>'{1}'".CheckedFormat(From, To);
         }
+
+        /// <summary>
+        /// Returns true if this is a simple map, or false if it is not (such as for a Regular Expression)
+        /// </summary>
+        public bool IsSimpleMap { get { return true; } }
+
+        /// <summary>
+        /// Returns true if this map can be used to match and map the given from string.
+        /// </summary>
+        public bool CanMap(string from)
+        {
+            return (from == From);
+        }
+
+        /// <summary>
+        /// If this map can convert the given from string then it assigns the converted value to the given output to parameter and returns true.
+        /// If this map does not match the given from string or if the conversion fails then this method does not modify the to paramter and instead returns false.
+        /// </summary>
+        public bool Map(string from, ref string to)
+        {
+            if (CanMap(from))
+            {
+                to = To;
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }
     }
+
+    /// <summary>
+    /// Immutable item instance class for use of Regular expressions <seealso cref="System.Text.RegularExpressions.Regex"/> for mapping names from one value to another.  
+    /// Generally used with MapNamesFromToList when interacting with values interconnect's MapNameFromToSet and related AddRange method
+    /// <para/>This class supports use with DataContract serialization and deserialization.
+    /// </summary>
+    [DataContract(Namespace = Constants.ModularInterconnectNameSpace)]
+    public class RegexMapNameFromTo : MapNameFromTo
+    {
+        public RegexMapNameFromTo(string from, string to)
+            : base(from, to)
+        {
+            UpdateRegex();
+        }
+
+        System.Text.RegularExpressions.Regex regexFrom = null;
+
+        void UpdateRegex()
+        {
+            if (regexFrom == null)
+                regexFrom = new System.Text.RegularExpressions.Regex(From);
+        }
+
+        /// <summary>
+        /// Returns true if this is a simple map, or false if it is not (such as for a Regular Expression)
+        /// </summary>
+        public new bool IsSimpleMap { get { return false; } }
+
+        /// <summary>
+        /// Returns true if this map can be used to match and map the given from string.
+        /// </summary>
+        public new bool CanMap(string from)
+        {
+            try
+            {
+                UpdateRegex();
+
+                Match match = regexFrom.Match(from);
+                return match.Success;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// If this map can convert the given from string then it assigns the converted value to the given output to parameter and returns true.
+        /// If this map does not match the given from string or if the conversion fails then this method does not modify the to paramter and instead returns false.
+        /// </summary>
+        public new bool Map(string from, ref string to)
+        {
+            try
+            {
+                UpdateRegex();
+
+                Match match = regexFrom.Match(from);
+                if (match != null && match.Success)
+                {
+                    to = match.Result(To);
+                    return true;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+            catch
+            {
+                return false;
+            }
+        }
+    }
+
 
     /// <summary>
     /// MapNameFromTo basic Collection class for mapping sets of names from one value to another.  
@@ -180,13 +304,15 @@ namespace MosaicLib.Modular.Interconnect.Values
     /// <para/>This class supports use with DataContract serialization and deserialization.
     /// </summary>
     [CollectionDataContract(ItemName = "Map", Namespace = Constants.ModularInterconnectNameSpace)]
-    public class MapNameFromToList : List<MapNameFromTo>
+    [KnownType(typeof(MapNameFromTo))]
+    [KnownType(typeof(RegexMapNameFromTo))]
+    public class MapNameFromToList : List<IMapNameFromTo>, IMapNameFromTo
     {
         /// <summary>Constructs an empty list.</summary>
         public MapNameFromToList() { }
 
         /// <summary>Constructs a list containing the elements from the given rhs enumerable source.</summary>
-        public MapNameFromToList(IEnumerable<MapNameFromTo> rhs) : base(rhs) { }
+        public MapNameFromToList(IEnumerable<IMapNameFromTo> rhs) : base(rhs) { }
 
         /// <summary>Helper method allows use with nested braces initialization (as with Dictionary)</summary>
         public MapNameFromToList Add(string from, string to)
@@ -199,6 +325,34 @@ namespace MosaicLib.Modular.Interconnect.Values
         public override string ToString()
         {
             return "MapNameFromToList({0})".CheckedFormat(string.Join(",", this.Select((item) => item.ToString()).ToArray()));
+        }
+
+        /// <summary>
+        /// Returns true if this is a simple map, or false if it is not (such as for a Regular Expression)
+        /// </summary>
+        public bool IsSimpleMap { get { return this.All(map => map.IsSimpleMap); } }
+
+        /// <summary>
+        /// Returns true if at least one of the maps in this list can be used to match and map the given from string.
+        /// </summary>
+        public bool CanMap(string from)
+        {
+            return this.Any(mapFromTo => mapFromTo.CanMap(from));
+        }
+
+        /// <summary>
+        /// If this list of maps can convert the given from string then the first successful match is used to assign the converted value to the given output to parameter and this method returns true.
+        /// If this list maps does not find a match for the given from string then this method does not modify the to paramter and instead returns false.
+        /// </summary>
+        public bool Map(string from, ref string to)
+        {
+            foreach (IMapNameFromTo map in this)
+            {
+                if (map.Map(from, ref to))
+                    return true;
+            }
+
+            return false;
         }
     }
 
@@ -428,7 +582,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// This set of mappings is used by GetValueAccessor to support mapping from the given name to an alternate name on a case by case basis.  
         /// This mapping table may be used to allow two (or more) entities to end up using the same table entry even if they do not know about each other in advance.
         /// </summary>
-        public IEnumerable<MapNameFromTo> MapNameFromToSet 
+        public IEnumerable<IMapNameFromTo> MapNameFromToSet 
         {
             get { lock (mutex) { return nameMappingSet.ToArray(); } }
             set { lock (mutex) { InnerSetMappingArray(value); } }
@@ -437,7 +591,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <summary>
         /// Adds the given set of MapNameFromTo items to the current mapping MapNameFromToSet.
         /// </summary>
-        public IValuesInterconnection AddRange(IEnumerable<MapNameFromTo> addMapNameFromToSet)
+        public IValuesInterconnection AddRange(IEnumerable<IMapNameFromTo> addMapNameFromToSet)
         {
             lock (mutex)
             {
@@ -701,7 +855,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         private MapNameFromToList nameMappingSet = new MapNameFromToList();
         private volatile Dictionary<string, string> nameMappingDictionary = new Dictionary<string, string>();
 
-        protected void InnerSetMappingArray(IEnumerable<MapNameFromTo> nameMappingSet)
+        protected void InnerSetMappingArray(IEnumerable<IMapNameFromTo> nameMappingSet)
         {
             InnerResetNameMapping();
             InnerAddRange(nameMappingSet);
@@ -712,9 +866,13 @@ namespace MosaicLib.Modular.Interconnect.Values
             Dictionary<string, string> nmp = nameMappingDictionary;
 
             string mappedName = null;
-            nmp.TryGetValue(name, out mappedName);
+            if (nmp.TryGetValue(name, out mappedName) && mappedName != null)
+                return mappedName;
 
-            return mappedName ?? name;
+            if (nameMappingSet.Map(name, ref mappedName) && mappedName != null)
+                return mappedName;
+
+            return name;
         }
 
         protected void InnerResetNameMapping()
@@ -723,12 +881,13 @@ namespace MosaicLib.Modular.Interconnect.Values
             nameMappingDictionary = new Dictionary<string, string>();
         }
 
-        private void InnerAddRange(IEnumerable<MapNameFromTo> addMapNameFromToSet)
+        private void InnerAddRange(IEnumerable<IMapNameFromTo> addMapNameFromToSet)
         {
             foreach (MapNameFromTo mapItem in addMapNameFromToSet)
             {
                 nameMappingSet.Add(mapItem);
-                nameMappingDictionary[mapItem.From.Sanitize()] = mapItem.To.Sanitize();
+                if (mapItem.IsSimpleMap)
+                    nameMappingDictionary[mapItem.From.Sanitize()] = mapItem.To.Sanitize();
             }
         }
 

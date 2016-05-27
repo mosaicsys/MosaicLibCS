@@ -618,13 +618,10 @@ namespace MosaicLib
 
                         if (!loggerHasBeenShutdown)
                         {
-                            if (!lmh.LoggerConfig.SupportsReferenceCountedRelease && lm.BelongsToPool)
-                                dist.ReallocateMessageForNonRefCountedHandler(ref lm);
-
                             lmh.HandleLogMessage(lm);
                         }
 
-                        lm.RemoveReference(ref lm);
+                        lm = null;
 					}
 				}
 
@@ -652,7 +649,7 @@ namespace MosaicLib
 				public CommonLogMessageHandlerBase(string name, LogGate logGate, bool includeFileAndLines, bool supportReferenceCountedRelease) 
 				{
 					this.name = name;
-                    loggerConfig = new LoggerConfig() { GroupName = "LMH:" + name, LogGate = logGate, RecordSourceStackFrame = includeFileAndLines, SupportsReferenceCountedRelease = supportReferenceCountedRelease };
+                    loggerConfig = new LoggerConfig() { GroupName = "LMH:" + name, LogGate = logGate, RecordSourceStackFrame = includeFileAndLines };
 
 					logger = new LogMesgHandlerLogger(this);
 				}

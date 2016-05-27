@@ -148,16 +148,6 @@ namespace MosaicLib.WPF.Common
             if (wpfLMH != null)
                 Logging.AddLogMessageHandlerToDefaultDistributionGroup(wpfLMH);
 
-            appLogger = new Logging.Logger("AppLogger");
-            Logging.LogMessage lm = appLogger.GetLogMessage(AppEventMesgType, "App Starting", appLogger.GetStackFrame(0));
-            lm.NamedValueSet = new NamedValueSet() { { "AppEvent", "OnStartup" } };
-            appLogger.EmitLogMessage(ref lm);
-
-            // emit the config messages obtained above.
-            Logging.Logger appLoggerCopy = appLogger;
-            issueListEmitter.EmittedItemList.ForEach((item) => appLoggerCopy.Error.Emit(item.MesgStr));
-            valuesListEmitter.EmittedItemList.ForEach((item) => appLoggerCopy.Debug.Emit(item.MesgStr));
-
             // setup the loadPortTraceGroup - to recieve trace data from 
             string traceLoggingGroupName = "LGID.Trace";
 
@@ -168,6 +158,16 @@ namespace MosaicLib.WPF.Common
 
             Logging.LinkDistributionToGroup(Logging.DefaultDistributionGroupName, traceLoggingGroupName);
             Logging.MapLoggersToDistributionGroup(Logging.LoggerNameMatchType.Regex, @"(\.Data|\.Trace)", traceLoggingGroupName);
+
+            appLogger = new Logging.Logger("AppLogger");
+            Logging.LogMessage lm = appLogger.GetLogMessage(AppEventMesgType, "App Starting", appLogger.GetStackFrame(0));
+            lm.NamedValueSet = new NamedValueSet() { { "AppEvent", "OnStartup" } };
+            appLogger.EmitLogMessage(ref lm);
+
+            // emit the config messages obtained above.
+            Logging.Logger appLoggerCopy = appLogger;
+            issueListEmitter.EmittedItemList.ForEach((item) => appLoggerCopy.Error.Emit(item.MesgStr));
+            valuesListEmitter.EmittedItemList.ForEach((item) => appLoggerCopy.Debug.Emit(item.MesgStr));
         }
 
         public static void HandleOnDeactivated(Logging.ILogger appLogger)

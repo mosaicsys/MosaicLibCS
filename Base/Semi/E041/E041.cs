@@ -547,7 +547,7 @@ namespace MosaicLib.Semi.E041
     /// This includes registration and creation of AN Source objects (IANSource, IANOccurrence and IANCondition) that may be used by clients.
     /// It also includes means to obtain a sequenced IANState publisher for given ANNames and includes means to create SetSelectedActionName and RequestAbortAction service methods.
     /// </summary>
-    public interface IANManagerPart
+    public interface IANManagerPart : IActivePartBase
     {
         /// <summary>
         /// Requests that the manager create a new IANSource annunciator source for the given anSpec.  

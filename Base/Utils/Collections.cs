@@ -301,7 +301,6 @@ namespace MosaicLib.Utils
             /// <summary>
             /// Returns the current contents of the queue converted to an array
             /// </summary>
-            /// <returns></returns>
             public ItemType[] ToArray()
             {
                 lock (mutex)

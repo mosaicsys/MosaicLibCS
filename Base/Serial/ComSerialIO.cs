@@ -52,9 +52,11 @@ namespace MosaicLib.SerialIO
 	/// <summary>This struct is used to parse the specStr for a PortConfig when external code has decided that the PortConfig is a ComPort config</summary>
 	/// <remarks>
 	/// we support the following two formats
-	///		<ComPort port="\\.\com200"><UartConfig baud="9600" DataBits="8" Mode="rs232-3wire" Parity="none" StopBits="1"/></ComPort>
-	///		<ComPort port="com1" uartConfig="9600,n,8,1"/>
-	/// </remarks>
+    /// <para/>
+	///		(ComPort port="\\.\com200")(UartConfig baud="9600" DataBits="8" Mode="rs232-3wire" Parity="none" StopBits="1"/)(/ComPort)
+	///		(ComPort port="com1" uartConfig="9600,n,8,1"/)
+    /// <para/>Replace ( and ) with less than and greater than
+    /// </remarks>
 	public struct ComPortConfig
 	{
         /// <summary>Constructor.  Parses the given specStr</summary>

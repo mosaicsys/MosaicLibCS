@@ -72,7 +72,6 @@ namespace MosaicLib.Time
         /// <summary>
         /// Implementation for abstract DisposableBase: regardless of DisposeType, if the timer period has been set then this method will invoke winmm_dll.timeEndPeriod to release the acquired timer resolution.
         /// </summary>
-        /// <param name="type"></param>
 		protected override void Dispose(DisposeType type)
 		{
 			if (periodHasBeenSet)

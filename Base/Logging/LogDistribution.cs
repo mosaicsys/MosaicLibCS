@@ -19,6 +19,7 @@
  * limitations under the License.
  */
 //-------------------------------------------------------------------
+
 using System;
 using System.Collections.Generic;
 using MosaicLib.Utils;
@@ -98,19 +99,16 @@ namespace MosaicLib
             /// <summary>used to support QueuedLogger loggers.  This method consumes the given message.  The caller's handle will be nulled by this method.</summary>
             void EnqueueMessageForDistribution(ref LogMessage lm);
 
-            /// <summary>
-            /// Allows caller (typically distribution itself, queued handlers or custom message loggers) to scan and replace pooled messages with non-pooled ones for hanlders that do not support Reference Counted Semantics
-            /// </summary>
+            /// <summary>This method is not a no-op as LogMessage(s) are no longer pooled.  This method will be removed from this interface at a later date (2016-03-10)</summary>
+            [Obsolete("This method is not a no-op as LogMessage(s) are no longer pooled.  This method will be removed from this interface at a later date (2016-03-10)")]
             void ReallocateMessageForNonRefCountedHandler(ref LogMessage lm);
 
-            /// <summary>
-            /// Allows caller (typically distribution itself, queued handlers or custom message loggers) to scan and replace pooled messages with non-pooled ones for hanlders that do not support Reference Counted Semantics
-            /// </summary>
+            /// <summary>This method is not a no-op as LogMessage(s) are no longer pooled.  This method will be removed from this interface at a later date (2016-03-10)</summary>
+            [Obsolete("This method is not a no-op as LogMessage(s) are no longer pooled.  This method will be removed from this interface at a later date (2016-03-10)")]
             void ReallocateMessagesForNonRefCountedHandler(LogMessage[] lmArray);
 
-            /// <summary>
-            /// Allows caller (typically distribution itself, queued handlers or custom message loggers) to scan and replace pooled messages with non-pooled ones for hanlders that do not support Reference Counted Semantics
-            /// </summary>
+            /// <summary>This method is not a no-op as LogMessage(s) are no longer pooled.  This method will be removed from this interface at a later date (2016-03-10)</summary>
+            [Obsolete("This method is not a no-op as LogMessage(s) are no longer pooled.  This method will be removed from this interface at a later date (2016-03-10)")]
             void ReallocateMessagesForNonRefCountedHandler(List<LogMessage> lmList);
         };
 
@@ -376,9 +374,6 @@ namespace MosaicLib
                     if (Disabled)
                         updatedLoggerConfig.LogGate = LogGate.None;
 
-                    if (!distHandlerLoggerConfigAnd.SupportsReferenceCountedRelease)
-                        updatedLoggerConfig.SupportsReferenceCountedRelease = false;
-
 					if (activeLoggerConfig.Equals(updatedLoggerConfig))
 						return false;
 
@@ -409,11 +404,6 @@ namespace MosaicLib
 			SequencedLoggerConfigSource mesgQueueLoggerGateSource = new SequencedLoggerConfigSource(LoggerConfig.AllWithFL);
 			System.Threading.Thread mesgQueueDistThread = null;
 			Utils.WaitEventNotifier	mesgQueueDistThreadWakeupNotification = new MosaicLib.Utils.WaitEventNotifier(MosaicLib.Utils.WaitEventNotifier.Behavior.WakeAllSticky);
-
-            /// <summary>
-            /// A mesgPool is created by the distribution engine during initial construction and remains available.  It cannot be set to null.
-            /// </summary>
-			readonly Utils.Pooling.ObjectPool<LogMessage> mesgPool = new MosaicLib.Utils.Pooling.ObjectPool<LogMessage>(PreallocatedPoolItems, PoolCapacity);
 
 			#endregion
 
@@ -749,45 +739,26 @@ namespace MosaicLib
                     if (capturedMesgQueue != null)
                         capturedMesgQueue.EnqueueMesg(lm);
 
-					lm.RemoveReference(ref lm);		// mesgQueue always adds a reference internally - as such we must explicitly remove the caller's reference before returing
+                    lm = null;
 				}
 			}
 
-            /// <summary>
-            /// Allows caller (typically distribution itself, queued handlers or custom message loggers) to scan and replace pooled messages with non-pooled ones for hanlders that do not support Reference Counted Semantics
-            /// </summary>
+            /// <summary>This method is not a no-op as LogMessage(s) are no longer pooled.  This method will be removed from this interface at a later date (2016-03-10)</summary>
+            [Obsolete("This method is not a no-op as LogMessage(s) are no longer pooled.  This method will be removed from this interface at a later date (2016-03-10)")]
             public void ReallocateMessageForNonRefCountedHandler(ref LogMessage lm)
             {
-                if (lm != null && lm.BelongsToPool)
-                {
-                    LogMessage lmTemp = lm;
-                    lm = new LogMessage(lmTemp);
-                    lmTemp.RemoveReference(ref lmTemp);
-                }
             }
 
-            /// <summary>
-            /// Allows caller (typically distribution itself, queued handlers or custom message loggers) to scan and replace pooled messages with non-pooled ones for hanlders that do not support Reference Counted Semantics
-            /// </summary>
+            /// <summary>This method is not a no-op as LogMessage(s) are no longer pooled.  This method will be removed from this interface at a later date (2016-03-10)</summary>
+            [Obsolete("This method is not a no-op as LogMessage(s) are no longer pooled.  This method will be removed from this interface at a later date (2016-03-10)")]
             public void ReallocateMessagesForNonRefCountedHandler(LogMessage[] lmArray)
             {
-                for (int idx = 0; idx < lmArray.Length; idx++)
-                {
-                    ReallocateMessageForNonRefCountedHandler(ref lmArray[idx]);
-                }
             }
 
-            /// <summary>
-            /// Allows caller (typically distribution itself, queued handlers or custom message loggers) to scan and replace pooled messages with non-pooled ones for hanlders that do not support Reference Counted Semantics
-            /// </summary>
+            /// <summary>This method is not a no-op as LogMessage(s) are no longer pooled.  This method will be removed from this interface at a later date (2016-03-10)</summary>
+            [Obsolete("This method is not a no-op as LogMessage(s) are no longer pooled.  This method will be removed from this interface at a later date (2016-03-10)")]
             public void ReallocateMessagesForNonRefCountedHandler(List<LogMessage> lmList)
             {
-                for (int idx = 0; idx < lmList.Count; idx++)
-                {
-                    LogMessage lm = lmList[idx];
-                    ReallocateMessageForNonRefCountedHandler(ref lm);
-                    lmList[idx] = lm;
-                }
             }
 
             #endregion
@@ -938,8 +909,6 @@ namespace MosaicLib
                     if (!shutdown)
                         return;
 
-                    mesgPool.StartIfNeeded();
-
                     InnerRestartAllHandlers();
 
                     shutdown = false;
@@ -1021,8 +990,6 @@ namespace MosaicLib
 				lock (distMutex)
 				{
 					InnerShutdownAllHandlers();						// stop all handlers
-
-					mesgPool.Shutdown();						// deallocate and disable its vector of saved objects.
 				}
 			}
 
@@ -1088,65 +1055,59 @@ namespace MosaicLib
 						int dgid = DistGroupID_Invalid;
 						LogGate dgGate = LogGate.All;
 
-						for (int idx = 0; idx < logMesgList.Count; idx++)
-						{
-							LogMessage lm = logMesgList [idx];
-							LoggerSourceInfo lsid = null;
-							int lid = LoggerID_Invalid;
-							PerLoggerIDInfo loggerIDInfo = null;
-							int mesgdgid = DistGroupID_Invalid;
+                        for (int idx = 0; idx < logMesgList.Count; idx++)
+                        {
+                            LogMessage lm = logMesgList[idx];
+                            LoggerSourceInfo lsid = null;
+                            int lid = LoggerID_Invalid;
+                            PerLoggerIDInfo loggerIDInfo = null;
+                            int mesgdgid = DistGroupID_Invalid;
 
-							if (lm != null)
-								lsid = lm.LoggerSourceInfo;
+                            if (lm != null)
+                                lsid = lm.LoggerSourceInfo;
 
-							if (lsid != null)
-								lid = lsid.ID;
+                            if (lsid != null)
+                                lid = lsid.ID;
 
-							if (InnerIsLoggerIDValid(lid))
-								loggerIDInfo = perLoggerIDInfoArray[lid];
+                            if (InnerIsLoggerIDValid(lid))
+                                loggerIDInfo = perLoggerIDInfoArray[lid];
 
-							if (loggerIDInfo != null)
-								mesgdgid = loggerIDInfo.distGroupID;
+                            if (loggerIDInfo != null)
+                                mesgdgid = loggerIDInfo.distGroupID;
 
-							if (lm != null && !InnerIsDistGroupIDValid(mesgdgid))
-							{
-								lm.RemoveReference(ref lm);
-								logMesgList [idx] = null;
-								continue;
-							}
+                            if (InnerIsDistGroupIDValid(mesgdgid))
+                            {
+                                // if we have accumulated some messages in the vector and the new message's distGroupID is not the same as the
+                                //	the one(s) for the messages in the vector then distribute the vector contents and empty it so that a new
+                                //	vector can be started for the new int value.
 
-							// if we have accumulated some messages in the vector and the new message's distGroupID is not the same as the
-							//	the one(s) for the messages in the vector then distribute the vector contents and empty it so that a new
-							//	vector can be started for the new int value.
+                                if (dgid != mesgdgid && sameDistMesgSetList.Count != 0 && InnerIsDistGroupIDValid(dgid))
+                                {
+                                    // distribute the sameDistMesgSetList to its dgid (releases the pointers after they have been distributed).
+                                    InnerDistributeMessages(sameDistMesgSetList.ToArray(), dgid);
+                                    sameDistMesgSetList.Clear();
+                                }
 
-							if (dgid != mesgdgid && sameDistMesgSetList.Count != 0 && InnerIsDistGroupIDValid(dgid))
-							{
-								// distribute the sameDistMesgSetList to its dgid (releases the pointers after they have been distributed).
-								InnerDistributeMessages(sameDistMesgSetList.ToArray(), dgid);
-								sameDistMesgSetList.Clear();
-							}
+                                if (dgid != mesgdgid)
+                                {
+                                    dgid = mesgdgid;
+                                    dgGate = distGroupIDInfoArray[dgid].ActiveLoggerConfig.LogGate;
+                                }
 
-							if (dgid != mesgdgid)
-							{
-								dgid = mesgdgid;
-								dgGate = distGroupIDInfoArray[dgid].ActiveLoggerConfig.LogGate;
-							}
+                                // if the message type is enabled in the dist group then append it to the vector, 
+                                //	otherwise release it now (message will not be handled by any handlers)
 
-							// if the message type is enabled in the dist group then append it to the vector, 
-							//	otherwise release it now (message will not be handled by any handlers)
+                                if (dgGate.IsTypeEnabled(lm.MesgType))
+                                {
+                                    lm.SeqNum = mesgDistributionSeqGen.Increment();
 
-							if (dgGate.IsTypeEnabled(lm.MesgType))
-							{
-								lm.SeqNum = mesgDistributionSeqGen.Increment();
+                                    sameDistMesgSetList.Add(lm);
+                                }
+                            }
 
-								sameDistMesgSetList.Add(lm);
-							}
-							else
-								lm.RemoveReference(ref lm);
-
-							logMesgList [idx] = null;
-							lm = null;
-						}
+                            logMesgList[idx] = null;
+                            lm = null;
+                        }
 
 						// distribute the last set (if  any)
 						if (sameDistMesgSetList.Count != 0 && InnerIsDistGroupIDValid(dgid))
@@ -1172,7 +1133,7 @@ namespace MosaicLib
 				if (shutdown && blockDuringShutdown)
 					return null;
 
-				return mesgPool.GetFreeObjectFromPool();
+                return new LogMessage();
 			}
 
 			protected void InnerLogLog(MesgType mesgType, string mesg)
@@ -1448,8 +1409,7 @@ namespace MosaicLib
 						InnerDistributeMessage(ref lm, dgid);		// this may consume the message (and null our pointer)
 				}
 
-				if (lm != null)
-					lm.RemoveReference(ref lm);
+                lm = null;
 			}
 
 			protected void InnerDistributeMessage(ref LogMessage lm, int srcDistGroupID)
@@ -1458,17 +1418,10 @@ namespace MosaicLib
 				// message ptr is non-null, message type are enabled in group and distGroupID is known valid
 
 				PerDistGroupIDInfo srcDgInfo = distGroupIDInfoArray[srcDistGroupID];
-                bool messageHasBeenReallocated = false;
 
                 // traverse groups to which this group is linked and deliver the message to each group's list of log message handlers.
                 foreach (PerDistGroupIDInfo dgInfo in srcDgInfo.LinkedDistGroupArray)
                 {
-                    if (!srcDgInfo.ActiveLoggerConfig.SupportsReferenceCountedRelease && !messageHasBeenReallocated)
-                    {
-                        ReallocateMessageForNonRefCountedHandler(ref lm);
-                        messageHasBeenReallocated = true;
-                    }
-
                     // tell each of the log message handlers in this group to process this message
 
                     foreach (DistHandlerInfo dhInfo in dgInfo.distHandlerInfoList)
@@ -1479,9 +1432,7 @@ namespace MosaicLib
                 }
 
 				// release the message if we still have a handle to it
-
-				if (lm != null)
-					lm.RemoveReference(ref lm);
+                lm = null;
 			}
 
 			protected void InnerDistributeMessages(LogMessage [] lmArray, int srcDistGroupID)
@@ -1490,17 +1441,10 @@ namespace MosaicLib
 				// vector of messages is assumed non-empty, non-null, all types are enabled in group and distGroupID is known valid
 
 				PerDistGroupIDInfo srcDgInfo = distGroupIDInfoArray[srcDistGroupID];
-                bool messagesHaveBeenReallocated = false;
 
                 // traverse groups to which this group is linked and deliver the messages to each group's list of log message handlers.
                 foreach (PerDistGroupIDInfo dgInfo in srcDgInfo.LinkedDistGroupArray)
                 {
-                    if (!dgInfo.ActiveLoggerConfig.SupportsReferenceCountedRelease && !messagesHaveBeenReallocated)
-                    {
-                        ReallocateMessagesForNonRefCountedHandler(lmArray);
-                        messagesHaveBeenReallocated = true;
-                    }
-
                     // tell each of the log message handlers to process this vector of messages
 
                     foreach (DistHandlerInfo dhInfo in dgInfo.distHandlerInfoList)
@@ -1514,9 +1458,7 @@ namespace MosaicLib
 
 				for (int idx = 0; idx < lmArray.Length; idx++)
 				{
-					LogMessage lm = lmArray [idx];
 					lmArray [idx] = null;
-					lm.RemoveReference(ref lm);
 				}
 			}
 

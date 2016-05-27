@@ -460,7 +460,20 @@ namespace MosaicLib
                     {
                         string[] headerLines = (config.FileHeaderLines ?? emptyStringArray);
                         if (config.FileHeaderLinesDelegate != null)
-                            headerLines = headerLines.Concat(config.FileHeaderLinesDelegate()).ToArray();
+                        {
+                            string[] delegateHeaderLines = null;
+
+                            try
+                            {
+                                delegateHeaderLines = config.FileHeaderLinesDelegate();
+                            }
+                            catch (System.Exception ex)
+                            {
+                                delegateHeaderLines = new[] { "FileHeaderLinesDelegate generated unexpected exception: {0} '{1}'".CheckedFormat(ex.GetType(), ex.Message) };
+                            }
+
+                            headerLines = headerLines.Concat(delegateHeaderLines).ToArray();
+                        }
 
                         foreach (Logging.LogMessage lm in headerLines.Select(mesg => headerLoggerStub.GetLogMessage(MesgType.Info, mesg, null).NoteEmitted()).ToArray())
                         {

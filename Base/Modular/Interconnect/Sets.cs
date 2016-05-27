@@ -1831,7 +1831,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
         /// <summary>Contains the SeqNum from the trackingSourceSet from the last time we obtained</summary>
         private Int64 lastSetCopySeqNum = 0;
 
-        /// <summary></summary>
+        /// <summary>Gives a local copy of the lastSetCopy.SeqNumRangeInfo taken when the last set copy was made.</summary>
         private SeqNumRangeInfo lastSetCopySeqNumRangeInfo;
 
         /// <summary>IDataContractAdapter created at construction time that may be used by this set to perform serialization and deserialization.</summary>
@@ -2524,7 +2524,6 @@ namespace MosaicLib.Modular.Interconnect.Sets
     /// The ApplyDeltasConfig property can be changed after the set has been created and will be applied to ApplyDeltas calls that are performed after the propery has been changed.
     /// <para/>To refilter the entire set it is expected that the client will create a new AdjustableTrackingSet from the original source set.
     /// </summary>
-    /// <typeparam name="TObjectType"></typeparam>
     public class AdjustableTrackingSet<TObjectType> : TrackingSet<TObjectType>
     {
         /// <summary>Construtor variant.  caller must provide the set to track, the capacity of this set and the initail applyDeltasConfig instance to use (may be null).</summary>

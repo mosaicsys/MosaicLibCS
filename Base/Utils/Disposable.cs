@@ -83,7 +83,6 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Constructor:  Caller provides the delegate to be invoked on explicit dispose of this object.
         /// </summary>
-        /// <param name="disposeDelegate"></param>
         public InvokeDelegateOnDispose(DisposeDelegate disposeDelegate) { this.disposeDelegate = disposeDelegate; }
 
         /// <summary>

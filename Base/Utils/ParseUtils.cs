@@ -73,10 +73,10 @@ namespace MosaicLib.Utils
         //-----------------------------------------------------------------
         #region Constructors
 
-        /// <summary>Standard constructor.  Gives a scanner positioned at the first character in the given string.</summary>
+        /// <summary>Standard constructor.  Gives a scanner positioned at the first character in the given string (null is mapped to empty automatically).</summary>
         public StringScanner(string s) : this() { Str = s; }
 
-        /// <summary>Constructor.  Gives a new scanner at a specified position in the given string.</summary>
+        /// <summary>Constructor.  Gives a new scanner at a specified position in the given string (null is mapped to empty automatically).</summary>
         public StringScanner(string s, int i) : this() { Str = s; Idx = i; }
 
         /// <summary>Copy constructor.  Gives a scanner with the same string and position as the given scanner.</summary>
@@ -87,8 +87,16 @@ namespace MosaicLib.Utils
         //-----------------------------------------------------------------
         #region public state accessor properties, some are settable
 
-        /// <summary>Gives access to the string that is currently referenced by this object.  May be set.  Setter also resets the current position.  Getter returns empty string if there is no contained string.</summary>
-        public string Str { get { return (str != null ? str : string.Empty); } set { str = (value != null ? value : string.Empty); Idx = 0; } }
+        /// <summary>
+        /// Gives get/set access to the string that is currently referenced by this object.  
+        /// Setter accepts the given string and resets the current position to the start of the string (Idx = 0).  
+        /// Getter returns empty string if there is no contained string.
+        /// </summary>
+        public string Str 
+        { 
+            get { return str.MapNullToEmpty(); } 
+            set { str = value.MapNullToEmpty(); Idx = 0; } 
+        }
 
         /// <summary>Get/Set: gives the current index location in the contained string.</summary>
         public int Idx { get; set; }
@@ -109,7 +117,13 @@ namespace MosaicLib.Utils
         public string Rest { get { return (IsAtEnd ? String.Empty : (Idx == 0 ? Str : Str.Substring(Idx))); } }
 
         /// <summary>static Operator that may be used to increment the current position.  Does nothing if the current position is at (or past) the last position in the current string.</summary>
-        public static StringScanner operator ++(StringScanner ss) { if (!ss.IsAtEnd) ss.Idx++; return ss; }
+        public static StringScanner operator ++(StringScanner ss) 
+        { 
+            if (!ss.IsAtEnd) 
+                ss.Idx++; 
+
+            return ss; 
+        }
 
         #endregion
 
@@ -364,6 +378,60 @@ namespace MosaicLib.Utils
             // save the token (or the fraction thereof)
 
             tokenStr = Str.Substring(tokenStart.Idx, tokenLen);
+
+            Idx = localScan.Idx;
+
+            if (skipTrailingWhiteSpace)
+                SkipOverWhiteSpace();
+
+            return true;
+        }
+
+        /// <summary>
+        /// Extract sequential characters as a token until any of the chars in the given toDelimiterSet are found and return resulting token.
+        /// If any of the indicated delimiter characters are found then the resulting token is extracted from the scan source string, and the method succeeeds and updates the current scan position.
+        /// Otherwise the method fails and does not update the current scan position.
+        /// when true keepDelimter causes the method to include the delimiter in the resulting token while when false keepDelimieter cause it to skip over and discard delimiter.
+        /// When true, skipLeadingWhiteSpace and skipTrailingWhiteSpace causes the method to skip leading and/or traiing white space provided that the method was successful.
+        /// </summary>
+        public bool ExtractToken(out string tokenStr, ICollection<char> toDelimiterSet, bool keepDelimter, bool skipLeadingWhiteSpace, bool skipTrailingWhiteSpace)
+        {
+            StringScanner localScan = this;
+
+            if (!localScan.IsIdxValid || toDelimiterSet == null || toDelimiterSet.Count <= 0)
+            {
+                tokenStr = string.Empty;
+                return false;
+            }
+
+            if (skipLeadingWhiteSpace)
+                localScan.SkipOverWhiteSpace();
+
+            StringScanner tokenStart = localScan;
+
+            // advance to next delimiter, or end of string
+
+            bool foundDelimter = false;
+            for (; !localScan.IsAtEnd && !(foundDelimter = toDelimiterSet.Contains(localScan.Char)); localScan++)
+            { }
+
+            // calculate the number of characters we have traversed
+            int tokenLen = (localScan.Idx - tokenStart.Idx);
+
+            // determine if we found the end
+            bool tokenIsValid = foundDelimter;
+            if (!foundDelimter)
+            {
+                tokenStr = string.Empty;
+                return false;
+            }
+
+            // save the token (or the fraction thereof)
+
+            tokenStr = Str.Substring(tokenStart.Idx, tokenLen + keepDelimter.MapToInt());
+
+            if (foundDelimter)
+                localScan++;
 
             Idx = localScan.Idx;
 

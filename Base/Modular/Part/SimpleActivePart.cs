@@ -652,43 +652,59 @@ namespace MosaicLib.Modular.Part
 		{
 			using (Logging.EnterExitTrace entryExitTrace = new Logging.EnterExitTrace(Log, "MainThreadFcn", Logging.MesgType.Debug))
 			{
-                LogThreadInfo(Log.Debug);
+                try
+                {
+                    LogThreadInfo(Log.Debug);
 
-                // The following is the part's main loop:
-				//	Loop until the action queue has been disabled
+                    // The following is the part's main loop:
+                    //	Loop until the action queue has been disabled
 
-				while (actionQ.QueueEnable)
-				{
-                    if (ThreadWakeupNotifierResetHandling == ThreadWakeupNotifierResetHandling.ExplicitlyResetNotifierAtStartOfEachLoop)
+                    while (actionQ.QueueEnable)
                     {
-					    // Reset the thread notification signal state so that we will only signal
-					    //	if a new notification has occurred since we started this loop.  We do not want to prevent the loop from sleeping because of somthing that
-					    //	we did before the loop started
+                        if (ThreadWakeupNotifierResetHandling == ThreadWakeupNotifierResetHandling.ExplicitlyResetNotifierAtStartOfEachLoop)
+                        {
+                            // Reset the thread notification signal state so that we will only signal
+                            //	if a new notification has occurred since we started this loop.  We do not want to prevent the loop from sleeping because of somthing that
+                            //	we did before the loop started
 
-					    threadWakeupNotifier.Reset();
+                            threadWakeupNotifier.Reset();
+                        }
+
+                        PerformMainLoopService();
+
+                        int didActionCount = 0;
+                        do
+                        {
+                            if (IssueNextQueuedAction())
+                                didActionCount++;
+                            else
+                                break;
+                        } while (didActionCount < MaxActionsToInvokePerServiceLoop);
+
+                        if (didActionCount == 0)
+                        {
+                            // no action was performed - call WaitForSomethingToDo to slow the background spin loop rate to the rate determined by the WaitTimeLimit property.
+                            WaitForSomethingToDo();
+                        }
+                        else if (ThreadWakeupNotifierResetHandling == ThreadWakeupNotifierResetHandling.AutoResetIsUsedToResetNotifier)
+                        {
+                            WaitForSomethingToDo(TimeSpan.Zero);
+                        }
                     }
+                }
+                catch (System.Exception ex)
+                {
+                    // disable the queue so that clients will not block indefinitely after this part's main thread has stopped processing actions.
+                    actionQ.QueueEnable = false;
 
-					PerformMainLoopService();
+                    string methodName = new System.Diagnostics.StackFrame().GetMethod().Name;
+                    Log.Debug.Emit("{0} failed with unexpected excpetion: {1}", ex);
 
-                    int didActionCount = 0;
-                    do
-                    {
-                        if (IssueNextQueuedAction())
-                            didActionCount++;
-                        else
-                            break;
-                    } while (didActionCount < MaxActionsToInvokePerServiceLoop);
+                    entryExitTrace.ExtraMessage = "Caught unexpected exception: {0} '{1}'".CheckedFormat(ex.GetType(), ex.Message);
+                }
 
-                    if (didActionCount == 0)
-                    {
-                        // no action was performed - call WaitForSomethingToDo to slow the background spin loop rate to the rate determined by the WaitTimeLimit property.
-                        WaitForSomethingToDo();
-                    }
-                    else if (ThreadWakeupNotifierResetHandling == ThreadWakeupNotifierResetHandling.AutoResetIsUsedToResetNotifier)
-                    {
-                        WaitForSomethingToDo(TimeSpan.Zero);
-                    }
-				}
+                if (entryExitTrace.ExtraMessage.IsNullOrEmpty())
+                    entryExitTrace.ExtraMessage = "Normal exit";
 			}
 		}
 

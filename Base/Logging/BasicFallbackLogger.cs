@@ -51,7 +51,6 @@ namespace MosaicLib
 			/// <summary>
 			/// Provide local and public access to OutputDebugString method
 			/// </summary>
-			/// <param name="message"></param>
 			[DllImport("Kernel32.dll")]
 			public static extern void OutputDebugString(string message);
 
@@ -68,7 +67,6 @@ namespace MosaicLib
 			/// <summary>
 			/// Allows the caller to change the BasicFallbackLogger's text file to use a specific one.  Set to null to prevent BasicFallbackLogger from attempting to write to a file.
 			/// </summary>
-			/// <param name="path"></param>
 			public static void SetFilePath(string path)
 			{
 				lock (logFileMutex)

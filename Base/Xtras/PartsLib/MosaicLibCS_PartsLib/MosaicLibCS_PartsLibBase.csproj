@@ -52,7 +52,9 @@
   <ItemGroup>
     <Compile Include="Common\BCR\BCRSim.cs" />
     <Compile Include="Common\E084\E084ActiveTransferSimEngine.cs" />
+    <Compile Include="Common\E099\E099TagRW.cs" />
     <Compile Include="Common\E099\E099TagRWSimEngine.cs" />
+    <Compile Include="Common\LPM\LPM.cs" />
     <Compile Include="Common\LPM\LPMSim.cs" />
     <Compile Include="Common\MassFlow\MassFlow.cs" />
     <Compile Include="Common\Motion\Motion.cs" />
