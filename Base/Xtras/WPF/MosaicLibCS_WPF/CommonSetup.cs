@@ -85,19 +85,13 @@ namespace MosaicLib.WPF.Common
             {
                 mesgQueueSize = ringQueueSize,
                 nameUsesDateAndTime = true,
+                fileHeaderLines = Logging.GenerateDefaultHeaderLines(logBaseName),
             };
 
             Logging.Handlers.TextFileDateTreeLogMessageHandler.Config dateTreeDirConfig = new Logging.Handlers.TextFileDateTreeLogMessageHandler.Config(logBaseName.MapNullToEmpty() + "Log", @".\Logs")
             {
                 IncludeFileAndLine = false,
-                FileHeaderLines = new string []
-                {
-                    "================================================================================================================================",
-                    "Log file for '{0}'".CheckedFormat(logBaseName),
-                    "Main Assembly: '{0}'".CheckedFormat(mainAssy),
-                    "Process name:'{0}' id:{1}".CheckedFormat(currentProcess.ProcessName, currentProcess.Id),
-                    "================================================================================================================================",
-                },
+                FileHeaderLines = Logging.GenerateDefaultHeaderLines(logBaseName),
             };
 
             switch (mainLoggerType)
@@ -119,6 +113,7 @@ namespace MosaicLib.WPF.Common
                 mesgQueueSize = traceQueueSize,
                 nameUsesDateAndTime = false,     // will use 4 digit file names.  Limit of 100 files total
                 includeThreadInfo = true,
+                fileHeaderLines = Logging.GenerateDefaultHeaderLines("{0} Trace Output".CheckedFormat(logBaseName)),
             }.UpdateFromModularConfig("Config.Logging.TraceRing.", issueListEmitter, valuesListEmitter);
 
             Logging.ILogMessageHandler mainLMH = null;

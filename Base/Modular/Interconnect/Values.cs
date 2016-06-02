@@ -225,6 +225,50 @@ namespace MosaicLib.Modular.Interconnect.Values
     }
 
     /// <summary>
+    /// Immutable item instance class for use of common prefix replacement based mapping of names from one value to another.  
+    /// Generally used with MapNamesFromToList when interacting with values interconnect's MapNameFromToSet and related AddRange method
+    /// <para/>This class supports use with DataContract serialization and deserialization.
+    /// </summary>
+    [DataContract(Namespace = Constants.ModularInterconnectNameSpace)]
+    public class MapNamePrefixFromTo : MapNameFromTo
+    {
+        public MapNamePrefixFromTo(string fromPrefix, string toPrefix)
+            : base(fromPrefix, toPrefix)
+        {
+        }
+
+        /// <summary>
+        /// Returns true if this is a simple map, or false if it is not.  (not in this case)
+        /// </summary>
+        public new bool IsSimpleMap { get { return false; } }
+
+        /// <summary>
+        /// Returns true if this map can be used to match and map the given from string.
+        /// </summary>
+        public new bool CanMap(string from)
+        {
+            return from.MapNullToEmpty().StartsWith(From);
+        }
+
+        /// <summary>
+        /// If this map can convert the given from string then it assigns the converted value to the given output to parameter and returns true.
+        /// If this map does not match the given from string or if the conversion fails then this method does not modify the to paramter and instead returns false.
+        /// </summary>
+        public new bool Map(string from, ref string to)
+        {
+            if (from.MapNullToEmpty().StartsWith(From))
+            {
+                to = "{0}{1}".CheckedFormat(To, from.Substring(From.Length));
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }
+    }
+
+    /// <summary>
     /// Immutable item instance class for use of Regular expressions <seealso cref="System.Text.RegularExpressions.Regex"/> for mapping names from one value to another.  
     /// Generally used with MapNamesFromToList when interacting with values interconnect's MapNameFromToSet and related AddRange method
     /// <para/>This class supports use with DataContract serialization and deserialization.
@@ -296,7 +340,6 @@ namespace MosaicLib.Modular.Interconnect.Values
             }
         }
     }
-
 
     /// <summary>
     /// MapNameFromTo basic Collection class for mapping sets of names from one value to another.  

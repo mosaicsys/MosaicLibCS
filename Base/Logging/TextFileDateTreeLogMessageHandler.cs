@@ -64,7 +64,15 @@ namespace MosaicLib
                     public bool IncludeThreadInfo { get { return LineFormat.IncludeThreadInfo; } set { LineFormat.IncludeThreadInfo = value; } }
                     public bool IncludeNamedValueSet { get { return LineFormat.IncludeNamedValueSet; } set { LineFormat.IncludeNamedValueSet = value; } }
 
+                    /// <summary>
+                    /// Defines an, optionally null, array of lines of text that will be added at the top of each file that is created when using this configuration
+                    /// </summary>
                     public string[] FileHeaderLines { get; set; }
+
+                    /// <summary>
+                    /// When this is non-null, Defines an delegate that is invoked to return an array of lines of text that will be added at the top of each file that is created when using this configuration.
+                    /// The lines produced by this delegate will be added to the file after the FileHeaderLines have been added.
+                    /// </summary>
                     public Func<string[]> FileHeaderLinesDelegate { get; set; }
 
                     public LineFormat LineFormat { get; set; }
@@ -162,6 +170,8 @@ namespace MosaicLib
                         FileRotationLoggingConfig frlConfig = new FileRotationLoggingConfig(Name, DirPath)
                         {
                             dirPath = DirPath,
+                            fileNamePrefix = FileNamePrefix,
+                            fileNameSuffix = FileNameExtension,
                             logGate = LogGate,
                             includeQpcTime = IncludeQpc,
                             includeNamedValueSet = IncludeNamedValueSet,
@@ -174,6 +184,8 @@ namespace MosaicLib
                         frlConfig.UpdateFromModularConfig(configKeyPrefixStr, issueEmitter, valueEmitter);
 
                         DirPath = frlConfig.dirPath;
+                        FileNamePrefix = frlConfig.fileNamePrefix;
+                        FileNameExtension = frlConfig.fileNameSuffix;
                         LogGate = frlConfig.logGate;
 
                         IncludeQpc = frlConfig.includeQpcTime;
@@ -203,7 +215,6 @@ namespace MosaicLib
 					: base(configIn.Name, configIn.LogGate, configIn.IncludeFileAndLine, false)
 				{
                     config = new Config(configIn);
-                    headerLoggerStub = new Logger("Header");
                     
                     // replace the default LogMessageHandlerLogger with a normal QueuedLogger.  This is for use by all levels of this LMH type.
                     //  this allows generated messages to be inserted into and handled by the entire distribution system rather than just by this LMH instance.
@@ -304,8 +315,6 @@ namespace MosaicLib
                 bool setupPerformed = false;
                 string setupFaultCode = string.Empty;
 
-                /// <summary>This logger instance is used to obtain the log messages that will be formatted into the newly opened file to implement the header.</summary>
-                Logging.Logger headerLoggerStub;
                 LineFormat lineFmt = null;
 
                 /// <summary>
@@ -458,34 +467,18 @@ namespace MosaicLib
 
                     if (ostream != null && addHeader)
                     {
-                        string[] headerLines = (config.FileHeaderLines ?? emptyStringArray);
-                        if (config.FileHeaderLinesDelegate != null)
-                        {
-                            string[] delegateHeaderLines = null;
-
-                            try
-                            {
-                                delegateHeaderLines = config.FileHeaderLinesDelegate();
-                            }
-                            catch (System.Exception ex)
-                            {
-                                delegateHeaderLines = new[] { "FileHeaderLinesDelegate generated unexpected exception: {0} '{1}'".CheckedFormat(ex.GetType(), ex.Message) };
-                            }
-
-                            headerLines = headerLines.Concat(delegateHeaderLines).ToArray();
-                        }
-
-                        foreach (Logging.LogMessage lm in headerLines.Select(mesg => headerLoggerStub.GetLogMessage(MesgType.Info, mesg, null).NoteEmitted()).ToArray())
-                        {
-                            lineFmt.FormatLogMessageToOstream(lm, ostream);
-                            handledLogMessageCounter++;                            
-                        }
+                        GenerateAndProduceHeaderLines(config.FileHeaderLines, 
+                                                      config.FileHeaderLinesDelegate, 
+                                                      (lm) =>
+                                                        {
+                                                            lineFmt.FormatLogMessageToOstream(lm, ostream);
+                                                            handledLogMessageCounter++;
+                                                        }
+                        );
                     }
 
 					return (ostream != null);
 				}
-
-                private static readonly string[] emptyStringArray = new string[0];
 
                 /// <summary>Returns true if the client should stop using the current file and should start using a new file in the directory</summary>
                 public bool IsFileAdvanceNeeded(bool recheckActiveFileSizeNow)

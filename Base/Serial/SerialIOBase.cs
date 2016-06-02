@@ -585,7 +585,7 @@ namespace MosaicLib.SerialIO
         {
             if (volatileNumberOfPacketsAvailable != numberOfPacketsAvailable)
             {
-                bool valueIncreased = (volatileNumberOfPacketsAvailable > numberOfPacketsAvailable);
+                bool valueIncreased = (numberOfPacketsAvailable > volatileNumberOfPacketsAvailable);
                 volatileNumberOfPacketsAvailable = numberOfPacketsAvailable;
 
                 if (valueIncreased || notifyBaseStateOnAllChangesInNumberOfPacketsAvailable)

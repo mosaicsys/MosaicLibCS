@@ -55,8 +55,8 @@ namespace MosaicLib
 					dirMgrConfig = new MosaicLib.File.DirectoryFileRotationManager.Config();
 
 					dirMgrConfig.dirPath = config.dirPath;
-					dirMgrConfig.fileNamePrefix = config.name;
-					dirMgrConfig.fileNameSuffix = ".log";
+					dirMgrConfig.fileNamePrefix = config.fileNamePrefix;
+					dirMgrConfig.fileNameSuffix = config.fileNameSuffix;
 
 					if (config.nameUsesDateAndTime)
 						dirMgrConfig.fileNamePattern = File.DirectoryFileRotationManager.FileNamePattern.ByDate;
@@ -223,6 +223,8 @@ namespace MosaicLib
 					if (string.IsNullOrEmpty(activeFilePath))
 						return false;
 
+                    bool fileExists = System.IO.File.Exists(activeFilePath);
+
 					// establish the open mode.  if we are supposed to advance to a new file
 					//	 then make certain that we truncate the old file if it is still there.
 					bool append = !isAdvanceNeeded;
@@ -233,6 +235,20 @@ namespace MosaicLib
 
 					if (ostream != null && !ostream.BaseStream.CanWrite)
 						CloseFile();
+
+                    bool addHeader = (isAdvanceNeeded || !fileExists);
+
+                    if (ostream != null && addHeader)
+                    {
+                        GenerateAndProduceHeaderLines(config.fileHeaderLines, 
+                                                      config.fileHeaderLinesDelegate, 
+                                                      (lm) =>
+                                                        {
+                                                            lineFmt.FormatLogMessageToOstream(lm, ostream);
+                                                            handledLogMessageCounter++;
+                                                        }
+                        );
+                    }
 
 					return (ostream != null);
 				}

@@ -183,19 +183,36 @@ namespace MosaicLib.Modular.Action
             }
         }
 
+        /// <summary>
+        /// get only:  returns the maximum number of actions that the queue can contain at any one time.  
+        /// Attempts to add actions beyond this number will result in those actions being immediately completed with an error message that indicates that this queue is full.
+        /// </summary>
         public int Capacity { get { return queueArraySize; } }
 
-        /// <summary>Returns a recent copy of the count of the number of objects in the queue.</summary>
+        /// <summary>
+        /// Returns a recent copy of the count of the number of objects in the queue.  
+        /// This count will include actions that have been canceled after they were started and before they were issued (and will thus never be issued).
+        /// </summary>
         public Int32 VolatileCount { get { return queueCount.VolatileValue; } }
 
-        /// <summary>Returns true if the a recent (volatile) copy of the count of the number of objects in the queue is zero.</summary>
+        /// <summary>
+        /// Returns true if the a recent (volatile) copy of the count of the number of objects in the queue is zero.
+        /// The queue will not be empty if it contains any actions that were started and then immediately canceled.  It will remain non-empty until the GetNextAction method
+        /// is used which will consume previously canceled actions from the queue up to the next non-canceled action.
+        /// </summary>
         public bool IsEmpty { get { return (VolatileCount == 0); } }
 
-		/// <summary>Attempts to extract and return the next action in the queue, or returns null if the queue did not contain an action.</summary>
+		/// <summary>
+        /// Attempts to extract and return the next action in the queue, or returns null if the queue did not contain an action.
+        /// This method also processes and discards actions that have been both started and canceled already and removes them from the queue up to the point where this method
+        /// finds the first action in the queue that has not been canceled.
+        /// </summary>
         public IProviderFacet GetNextAction() { return GetNextAction(false); }
 
         /// <summary>
         /// Attempts to (optinally) extract and return the next action in the queue, or returns null if the queue did not contain an action.
+        /// This method also processes and discards actions that have been both started and canceled already and removes them from the queue up to the point where this method
+        /// finds the first action in the queue that has not been canceled.
         /// <para/>If peekOnly is provided as true and the method finds an action in the queue to return then it will not remove the action from the queue before returning it.
         /// </summary>
         /// <param name="peekOnly">If this parameter is true then the returned action is not removed from the queue.</param>
@@ -246,7 +263,8 @@ namespace MosaicLib.Modular.Action
 
 		/// <summary>
 		/// This property may be tested to determine if the queue is currently enabled and it may be set to enable or disable the queue.
-		/// When disabling the queue, all queued actions will be completed with a non-empty result code.
+		/// When disabling the queue, all queued actions will be completed with a non-empty result code which indicates that the action has been canceled
+        /// because this queue was disabled.
 		/// </summary>
 		public bool QueueEnable
 		{

@@ -24,6 +24,8 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
+
 using MosaicLib.Utils;
 using MosaicLib.Modular.Config;
 using MosaicLib.Modular.Config.Attributes;
@@ -190,8 +192,16 @@ namespace MosaicLib
 		{
             /// <summary>sink name - may be used as prefix to created files in directory</summary>
 			public string name;
+
             /// <summary>full path to directory in which to place files.  This directory is only intended to store files that relate to this rotation set</summary>
             public string dirPath;
+
+            /// <summary>the file name prefix to use for files generated using this configuration.</summary>
+            public string fileNamePrefix;
+
+            /// <summary>the file name suffix (usually something like '.log') to use for files generated using this configuration.</summary>
+            public string fileNameSuffix;
+
             /// <summary>The desired logGate.  Defaults to LogGate.None unless overriden in constructor</summary>
             public LogGate logGate;
 
@@ -261,17 +271,43 @@ namespace MosaicLib
             /// <summary>Set to true if the ring is expected to create the directory if needed or if it should disable logging if the directory does not exist.</summary>
             public bool createDirectoryIfNeeded;
 
+            /// <summary>
+            /// Defines an, optionally null, array of lines of text that will be added at the top of each file that is created when using this configuration
+            /// </summary>
+            public string[] fileHeaderLines;
+
+            /// <summary>
+            /// When this is non-null, Defines an delegate that is invoked to return an array of lines of text that will be added at the top of each file that is created when using this configuration.
+            /// The lines produced by this delegate will be added to the file after the fileHeaderLines have been added.
+            /// </summary>
+            public Func<string[]> fileHeaderLinesDelegate;
+
             /// <summary>Simple constructor - intended for use with property initializers and/or load from config: gives empty dirPath, LogGate.None, zeros for maxFilesInRing, advanceAfterFileSize and mesgQueueSize.  uses defaults for all other values.</summary>
-            public FileRotationLoggingConfig(string name) : this(name, String.Empty, LogGate.None, 0, 0, 0) { }
+            public FileRotationLoggingConfig(string name) 
+                : this(name, String.Empty, LogGate.None, 0, 0, 0) 
+            { }
+
             /// <summary>Simple constructor: applyies LogGate.All and other default settings of 2000 files in ring, 1000000 byes per file, DefaultMesgQueueSize.</summary>
-            public FileRotationLoggingConfig(string name, string dirPath) : this(name, dirPath, LogGate.All) { }
+            public FileRotationLoggingConfig(string name, string dirPath) 
+                : this(name, dirPath, LogGate.All) 
+            { }
+
             /// <summary>Simple constructor: uses default settings of 2000 files in ring, 1000000 byes per file, DefaultMesgQueueSize</summary>
-            public FileRotationLoggingConfig(string name, string dirPath, LogGate logGate) : this(name, dirPath, logGate, 2000, 1000000, DefaultMesgQueueSize) { }
-            /// <summary>Standard constructor</summary>
-            public FileRotationLoggingConfig(string name, string dirPath, LogGate logGate, int maxFilesInRing, int advanceAfterFileSize, int mesgQueueSize) : this()
+            public FileRotationLoggingConfig(string name, string dirPath, LogGate logGate) 
+                : this(name, dirPath, logGate, 2000, 1000000, DefaultMesgQueueSize) 
+            { }
+
+            /// <summary>
+            /// Standard constructor.
+            /// Sets fileNamePrefix to the given name and fileNameSuffix to '.log'
+            /// </summary>
+            public FileRotationLoggingConfig(string name, string dirPath, LogGate logGate, int maxFilesInRing, int advanceAfterFileSize, int mesgQueueSize) 
+                : this()
 			{
 				this.name = name;
 				this.dirPath = dirPath;
+                this.fileNamePrefix = name;
+                this.fileNameSuffix = ".log";
 				this.logGate = logGate;
 				this.mesgQueueSize = mesgQueueSize;
 				this.nameUsesDateAndTime = true;
@@ -304,18 +340,27 @@ namespace MosaicLib
 
                 logGate |= configValues.LogGate;
 
-                if (!String.IsNullOrEmpty(configValues.DirectoryPath))
+                if (!configValues.DirectoryPath.IsNullOrEmpty())
                     dirPath = configValues.DirectoryPath;
+
+                if (!configValues.FileNamePrefix.IsNullOrEmpty())
+                    fileNamePrefix = configValues.FileNamePrefix;
+
+                if (!configValues.FileNameSuffix.IsNullOrEmpty())
+                    fileNameSuffix = configValues.FileNameSuffix;
 
                 if (configValues.MaxFilesToKeep != 0)
                     purgeRules.dirNumFilesLimit = configValues.MaxFilesToKeep;
+
                 if (configValues.MaxFileAgeToKeep != TimeSpan.Zero)
                     purgeRules.FileAgeLimit = configValues.MaxFileAgeToKeep;
+
                 if (configValues.MaxTotalSizeToKeep != 0)
                     purgeRules.dirTotalSizeLimit = configValues.MaxTotalSizeToKeep;
                 
                 if (configValues.AdvanceAfterFileReachesSize != 0)
                     advanceRules.fileSizeLimit = configValues.AdvanceAfterFileReachesSize;
+
                 if (configValues.AdvanceAfterFileReachesAge != TimeSpan.Zero)
                     advanceRules.FileAgeLimit = configValues.AdvanceAfterFileReachesAge;
 
@@ -344,6 +389,14 @@ namespace MosaicLib
                 /// <summary>Target property for a key of the same name</summary>
                 [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
                 public string DirectoryPath { get; set; }
+
+                /// <summary>Target property for a key of the same name</summary>
+                [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
+                public string FileNamePrefix { get; set; }
+
+                /// <summary>Target property for a key of the same name</summary>
+                [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
+                public string FileNameSuffix { get; set; }
 
                 /// <summary>Target property for a key of the same name</summary>
                 [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
@@ -717,7 +770,48 @@ namespace MosaicLib
                 protected ILogger logger = null;
 
                 Utils.BasicNotificationList notifyMessageDelivered = new MosaicLib.Utils.BasicNotificationList();
-			}
+
+                #region Header line helper methods (used by thoese LMH types that support header lines)
+
+                /// <summary>
+                /// Helper method used to manage generation of the full set of header strings as the concatination of the given list and the delegate generated list,
+                ///  wrapping these messages in a corresponding set of LogMessages from the "header logger" and then consuming (logging) these messages using a caller provided
+                ///  message consuming delegate.
+                /// </summary>
+                protected void GenerateAndProduceHeaderLines(string[] baseHeaderLines, Func<string[]> headerLineDelegate, Action<Logging.LogMessage> headerLogMessageConsumer)
+                {
+                    string[] headerLines = (baseHeaderLines ?? emptyStringArray);
+                    if (headerLineDelegate != null)
+                    {
+                        string[] delegateHeaderLines = null;
+
+                        try
+                        {
+                            delegateHeaderLines = headerLineDelegate();
+                        }
+                        catch (System.Exception ex)
+                        {
+                            delegateHeaderLines = new[] { "HeaderLinesDelegate generated unexpected exception: {0} '{1}'".CheckedFormat(ex.GetType(), ex.Message) };
+                        }
+
+                        headerLines = headerLines.Concat(delegateHeaderLines).ToArray();
+                    }
+
+                    if (headerLoggerStub == null)
+                        headerLoggerStub = new Logger("Header");
+
+                    foreach (Logging.LogMessage lm in headerLines.Select(mesg => headerLoggerStub.GetLogMessage(MesgType.Info, mesg, null).NoteEmitted()).ToArray())
+                    {
+                        headerLogMessageConsumer(lm);
+                    }
+                }
+
+                /// <summary>This logger instance is used to obtain the log messages that will be formatted into the newly opened file to implement the header.</summary>
+                private Logging.Logger headerLoggerStub = null;
+                private static readonly string[] emptyStringArray = new string[0];
+
+                #endregion
+            }
 
 			//-------------------------------------------------------------------
 			/// <summary>
@@ -1069,6 +1163,38 @@ namespace MosaicLib
 			#endregion
 
 			//-------------------------------------------------------------------
-		}
-	}
+        }
+
+        #region helper method to generate default file header line arrays
+
+
+        /// <summary>
+        /// This method is used to generate a basic set of fixed header lines for use with configurable log message handlers that support them.
+        /// The resulting array consisists of a pattern that looks like:
+        /// <para/>================================================================================================================================
+        /// <para/>Log file for 'logBaseName'
+        /// <para/>Main Assembly: 'MainAssemblyName'
+        /// <para/>Process name:'GetCurrentPerocess.ProcessName' id:GetCurrentPerocess.Id
+        /// <para/>================================================================================================================================
+        /// </summary>
+
+        public static string[] GenerateDefaultHeaderLines(string logBaseName)
+        {
+            System.Diagnostics.Process currentProcess = System.Diagnostics.Process.GetCurrentProcess();
+            System.Reflection.Assembly mainAssy = System.Reflection.Assembly.GetEntryAssembly();
+
+            string[] defaultFileHeaderLines = new string[]
+            {
+                "================================================================================================================================",
+                "Log file for '{0}'".CheckedFormat(logBaseName),
+                "Main Assembly: '{0}'".CheckedFormat(mainAssy),
+                "Process name:'{0}' id:{1}".CheckedFormat(currentProcess.ProcessName, currentProcess.Id),
+                "================================================================================================================================",
+            };
+
+            return defaultFileHeaderLines;
+        }
+
+        #endregion
+    }
 }

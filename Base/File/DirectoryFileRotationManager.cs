@@ -212,10 +212,7 @@ namespace MosaicLib.File
 		{
 			get
 			{
-				DirectoryEntryInfo activeFileEntry = null;
-
-				if (IsDirEntryIDValid(activeFileEntryID))
-					activeFileEntry = dirEntryList[activeFileEntryID];
+                DirectoryEntryInfo activeFileEntry = ActiveFileDirectoryEntryInfo;
 
 				if (activeFileEntry != null && activeFileEntry.IsFile)
 					return activeFileEntry.FileSystemInfo.FullName;
@@ -224,8 +221,30 @@ namespace MosaicLib.File
 			}
 		}
 
+        /// <summary>
+        /// Returns the DirectoryEntryInfo for the active file or null if there is no such current active file entry or the entry is not a file.
+        /// </summary>
+        public DirectoryEntryInfo ActiveFileDirectoryEntryInfo
+        {
+            get
+            {
+                DirectoryEntryInfo activeFileEntry = null;
+
+                if (IsDirEntryIDValid(activeFileEntryID))
+                    activeFileEntry = dirEntryList[activeFileEntryID];
+
+                if (activeFileEntry != null && activeFileEntry.IsFile)
+                    return activeFileEntry;
+                else
+                    return null;
+            }
+        }
+
         /// <summary>Returns true if the client should stop using the current file and should start using a new file in the directory</summary>
-		public bool IsFileAdvanceNeeded() { return IsFileAdvanceNeeded(true); }
+		public bool IsFileAdvanceNeeded() 
+        { 
+            return IsFileAdvanceNeeded(true); 
+        }
 
         /// <summary>Returns true if the client should stop using the current file and should start using a new file in the directory</summary>
         public bool IsFileAdvanceNeeded(bool recheckActiveFileSizeNow)
