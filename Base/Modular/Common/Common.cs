@@ -99,19 +99,19 @@ namespace MosaicLib.Modular.Common
             /// <summary>SByte value in union</summary>
             [FieldOffset(0)]
             public System.SByte i8;
-            /// <summary>SByte value in union</summary>
-            [FieldOffset(0)]
-            public System.Int16 i16;
             /// <summary>Int16 value in union</summary>
             [FieldOffset(0)]
-            public System.Int32 i32;
+            public System.Int16 i16;
             /// <summary>Int32 value in union</summary>
             [FieldOffset(0)]
-            public System.Int64 i64;
+            public System.Int32 i32;
             /// <summary>Int64 value in union</summary>
             [FieldOffset(0)]
-            public System.Byte u8;
+            public System.Int64 i64;
             /// <summary>Byte value in union</summary>
+            [FieldOffset(0)]
+            public System.Byte u8;
+            /// <summary>UInt16 value in union</summary>
             [FieldOffset(0)]
             public System.UInt16 u16;
             /// <summary>UInt32 value in union</summary>
@@ -1672,7 +1672,6 @@ namespace MosaicLib.Modular.Common
         /// This method is required to support the fact that INamedValueSet implements IEnumerable{INamedValue} and the standard enumerators already implemented by the underling SortedList
         /// cannot be directly casted to this interface.
         /// </summary>
-        /// <returns></returns>
         IEnumerator<INamedValue> IEnumerable<INamedValue>.GetEnumerator()
         {
             return list.Select((nv) => nv as INamedValue).GetEnumerator();
@@ -1932,11 +1931,12 @@ namespace MosaicLib.Modular.Common
 
             if (nameToIndexDictionary != null)
             {
-                int itemIndex = -1;
+                int itemIndex;
 
-                nameToIndexDictionary.TryGetValue(sanitizedName, out itemIndex);
-
-                return itemIndex;
+                if (nameToIndexDictionary.TryGetValue(sanitizedName, out itemIndex))
+                    return itemIndex;
+                else
+                    return -1;
             }
             else
             {
