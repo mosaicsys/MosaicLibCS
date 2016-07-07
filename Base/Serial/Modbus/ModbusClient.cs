@@ -619,10 +619,12 @@ namespace MosaicLib.SerialIO.Modbus.Client
             portReadAction = port.CreateReadAction(portReadActionParam = new ReadActionParam() { WaitForAllBytes = false });
             portWriteAction = port.CreateWriteAction(portWriteActionParam = new WriteActionParam());
             portFlushAction = port.CreateFlushAction(FlushPeriod);
+            portReinitializeAction = port.CreateGoOnlineAction(true);
 
             portReadAction.NotifyOnComplete.AddItem(actionWaitEvent);
             portWriteAction.NotifyOnComplete.AddItem(actionWaitEvent);
             portFlushAction.NotifyOnComplete.AddItem(actionWaitEvent);
+            portReinitializeAction.NotifyOnComplete.AddItem(actionWaitEvent);
         }
 
         /// <summary>
@@ -652,6 +654,7 @@ namespace MosaicLib.SerialIO.Modbus.Client
         IWriteAction portWriteAction = null;
         WriteActionParam portWriteActionParam = null;
         IFlushAction portFlushAction = null;
+        IBasicAction portReinitializeAction = null;
         WaitEventNotifier actionWaitEvent = new WaitEventNotifier(WaitEventNotifier.Behavior.WakeOne);
 
         #endregion
@@ -769,6 +772,7 @@ namespace MosaicLib.SerialIO.Modbus.Client
             // Flush the port if the last command did not succeed.
             if (performInitialFlush && FlushPeriod != TimeSpan.Zero)
             {
+
                 portFlushAction.ParamValue = FlushPeriod;
                 portFlushAction.Run();      // failures will not directly effect the success/failure of the function execution
             }

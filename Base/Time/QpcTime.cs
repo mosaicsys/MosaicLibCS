@@ -494,6 +494,25 @@ namespace MosaicLib.Time
                 return TimeSpan.Zero;
         }
 
+        /// <summary>
+        /// If the timer is running and it is not currently triggered then this method returns the expected remaining time before the timer will next trigger.
+        /// Otherwise this method returns TimeSpan.Zero.
+        /// </summary>
+        public TimeSpan RemainingTime
+        {
+            get
+            {
+                QpcTimeStamp now = QpcTimeStamp.Now;
+                bool isTimerRunning, isTimerTriggered;
+                InnerGetIsTriggered(now, out isTimerRunning, out isTimerTriggered);
+
+                if (isTimerRunning && !isTimerTriggered && now < nextTriggerTimeStamp)
+                    return nextTriggerTimeStamp - now;
+                else
+                    return TimeSpan.Zero;
+            }
+        }
+
         #region private fields
 
         /// <summary>QpcTimeStamp of the last time the timer expired, or zero if the timer has not been started.</summary>
@@ -528,6 +547,33 @@ namespace MosaicLib.Time
     }
 
 	#endregion
+
+    #region Extension Methods
+
+    public static partial class ExtensionMethods
+    {
+        public static TimeSpan Min(this TimeSpan a, TimeSpan b)
+        {
+            return ((a <= b) ? a : b);
+        }
+
+        public static TimeSpan Max(this TimeSpan a, TimeSpan b)
+        {
+            return ((a >= b) ? a : b);
+        }
+
+        public static QpcTimeStamp Min(this QpcTimeStamp a, QpcTimeStamp b)
+        {
+            return ((a <= b) ? a : b);
+        }
+
+        public static QpcTimeStamp Max(this QpcTimeStamp a, QpcTimeStamp b)
+        {
+            return ((a >= b) ? a : b);
+        }
+    }
+
+    #endregion
 }
 
 //-------------------------------------------------------------------

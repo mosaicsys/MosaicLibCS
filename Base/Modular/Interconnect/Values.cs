@@ -1229,6 +1229,14 @@ namespace MosaicLib.Modular.Interconnect.Values
             { 
                 get 
                 {
+                    if (valueContainer.IsNullOrEmpty && !decodedValueType.IsReferenceType() && !decodedTypeIsNullable)
+                    {
+                        if ((LastValueGetException as System.NullReferenceException) == null)
+                            LastValueGetException = new NullReferenceException();
+
+                        return default(TValueType);
+                    }
+
                     LastValueGetException = null;
                     try
                     {

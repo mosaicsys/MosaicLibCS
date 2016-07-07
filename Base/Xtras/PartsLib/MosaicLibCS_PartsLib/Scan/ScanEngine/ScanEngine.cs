@@ -262,6 +262,20 @@ namespace MosaicLib.PartsLib.Scan.ScanEngine
         public abstract void UpdateOutputs();
 
         #endregion
+
+        #region helpers
+
+        protected double GetNextRandomInMinus1ToPlus1Range()
+        {
+            if (rng == null)
+                rng = new Random(unchecked((int) Qpc.CountNow));
+
+            return (rng.NextDouble() * 2.0 - 1.0);
+        }
+
+        protected Random rng = null;
+        
+        #endregion
     }
 
     #endregion

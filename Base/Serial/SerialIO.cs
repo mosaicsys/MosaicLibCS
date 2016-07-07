@@ -20,17 +20,16 @@
  */
 //-------------------------------------------------------------------
 
+using System;
+
+using MosaicLib.Utils;
+using MosaicLib.Time;
+using MosaicLib.Modular.Action;
+using MosaicLib.Modular.Part;
+using MosaicLib.Modular.Interconnect.Values;
+
 namespace MosaicLib.SerialIO
 {
-	//-----------------------------------------------------------------
-
-	using System;
-
-	using MosaicLib.Utils;
-	using MosaicLib.Time;
-	using MosaicLib.Modular.Action;
-	using MosaicLib.Modular.Part;
-
 	//-----------------------------------------------------------------
 	#region PortConfig
 
@@ -133,6 +132,8 @@ namespace MosaicLib.SerialIO
             Name = name;
             SpecStr = specStr;
 
+            PartBaseIVI = Values.Instance;
+
             EnableAutoReconnect = false;
             ReconnectHoldoff = TimeSpan.FromSeconds(5.0);
             ConnectTimeout = TimeSpan.FromSeconds(5.0);
@@ -166,6 +167,8 @@ namespace MosaicLib.SerialIO
         {
             Name = name;
             SpecStr = specStr;
+
+            PartBaseIVI = cloneFrom.PartBaseIVI;
 
             rxPacketEndStrArray = cloneFrom.rxPacketEndStrArray;
             rxPacketEndScannerDelegate = cloneFrom.rxPacketEndScannerDelegate;
@@ -266,6 +269,12 @@ namespace MosaicLib.SerialIO
         #endregion
 
         #region Public Properties
+
+        /// <summary>
+        /// Get/Set property.  May be set to define the IValuesInterconnection that the serial part will use for publishing its base state and its PortSpecStr (et. al.).
+        /// Constructor default is set from Values.Instance singleton.  If this value is explicitly assigned to null then the part will not create IVA's and/or publish related information.
+        /// </summary>
+        public IValuesInterconnection PartBaseIVI { get; set; }
 
         /// <summary>
         /// Get/Set property.  

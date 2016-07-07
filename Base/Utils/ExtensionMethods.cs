@@ -288,10 +288,41 @@ namespace MosaicLib.Utils
         /// <summary>Returns the given value clipped to make certain that it is between lowLimit and highLimit.</summary>
         public static double Clip(this double value, double lowLimit, double highLimit)
         {
+            return value.Clip(lowLimit, highLimit, Double.NaN);
+        }
+
+        /// <summary>Returns the given value clipped to make certain that it is between lowLimit and highLimit.</summary>
+        public static double Clip(this double value, double lowLimit, double highLimit, double invalidCompareValue)
+        {
             if (double.IsNaN(value))
                 return value;
 
-            return value.Clip(lowLimit, highLimit, double.NaN);
+            if (double.IsNaN(lowLimit) || double.IsNaN(highLimit))
+                return invalidCompareValue;
+
+            return value.Clip<double>(lowLimit, highLimit, invalidCompareValue);
+        }
+
+        /// <summary>Returns true if, and only if, the given value is no less than the given lowLimit, it is no greater than the given highLimit, and the given lowLimit is no greater than the given highLimit</summary>
+        public static bool IsInRange<TValueType>(this TValueType value, TValueType lowLimit, TValueType highLimit) where TValueType : IComparable<TValueType>
+        {
+            int lowToHighLimitCompare = lowLimit.CompareTo(highLimit);
+            int lowLimitCompare = lowLimit.CompareTo(value);
+            int highLimitCompare = highLimit.CompareTo(value);
+
+            if (lowToHighLimitCompare <= 0 && lowLimitCompare <= 0 && highLimitCompare >= 0)
+                return true;
+            else
+                return false;
+        }
+
+        /// <summary>Returns true if, and only if, the given value is not a NaN, it is no less than the given lowLimit, it is no greater than the given highLimit, and the given lowLimit is no greater than the given highLimit</summary>
+        public static bool IsInRange(this double value, double lowLimit, double highLimit)
+        {
+            if (double.IsNaN(value) || double.IsNaN(lowLimit) || double.IsNaN(highLimit))
+                return false;
+
+            return value.IsInRange<double>(lowLimit, highLimit);
         }
 
         #endregion

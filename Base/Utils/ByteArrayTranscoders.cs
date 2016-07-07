@@ -33,7 +33,7 @@ namespace MosaicLib.Utils
     /// </summary>
 	public interface IByteArrayTranscoder
 	{
-		/// <summary>Encodes the bytes in the given source buffer and returns the resulting encoded string.</summary>
+		/// <summary>Encodes the bytes in the given source buffer (optinally null) and returns the resulting encoded string.</summary>
 		/// <param name="sourceBuffer">specifies the source buffer from which to encode bytes</param>
 		/// <returns>the encoded string</returns>
 		string Encode(byte [] sourceBuffer);

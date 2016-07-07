@@ -698,7 +698,7 @@ namespace MosaicLib.Modular.Part
                     actionQ.QueueEnable = false;
 
                     string methodName = new System.Diagnostics.StackFrame().GetMethod().Name;
-                    Log.Debug.Emit("{0} failed with unexpected excpetion: {1}", ex);
+                    Log.Debug.Emit("{0} failed with unexpected exception: {1}", methodName, ex);
 
                     entryExitTrace.ExtraMessage = "Caught unexpected exception: {0} '{1}'".CheckedFormat(ex.GetType(), ex.Message);
                 }
@@ -778,6 +778,12 @@ namespace MosaicLib.Modular.Part
 
         /// <summary>Returns the IProviderFacet for the current action that the Part's main service loop is currently in IssueAndInvokeAction on, or null if none.</summary>
         protected IProviderFacet CurrentAction { get; private set; }
+
+        /// <summary>Returns the string description of the current action (with details, without state), or the empty string if the CurrentAction is null</summary>
+        protected string CurrentActionDescription 
+        { 
+            get { return ((CurrentAction != null) ? CurrentAction.ToString(ToStringSelect.MesgAndDetail) : string.Empty); } 
+        }
 
         /// <summary>Returns the IActionState for the current action that the Part's main service loop is currently in IssueAndInvokeAction on, or an Initial/Empty IActionState if there is no such action.</summary>
         protected IActionState CurrentActionState { get { return ((CurrentAction != null) ? CurrentAction.ActionState : EmptyActionState); } }

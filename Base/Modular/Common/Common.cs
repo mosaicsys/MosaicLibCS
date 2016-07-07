@@ -1931,11 +1931,12 @@ namespace MosaicLib.Modular.Common
 
             if (nameToIndexDictionary != null)
             {
-                int itemIndex = -1;
+                int itemIndex;
 
-                nameToIndexDictionary.TryGetValue(sanitizedName, out itemIndex);
-
-                return itemIndex;
+                if (nameToIndexDictionary.TryGetValue(sanitizedName, out itemIndex))
+                    return itemIndex;
+                else
+                    return -1;
             }
             else
             {

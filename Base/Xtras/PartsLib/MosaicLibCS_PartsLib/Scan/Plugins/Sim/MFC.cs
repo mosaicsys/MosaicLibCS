@@ -66,7 +66,6 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.MFC
 
         protected IValueAccessor<double> flowSetpointTargetInputIVA;
         protected IValueAccessor<double> flowSetpointTargetInputInPercentOfFSIVA;
-        protected Random rng = new Random();
 
         public override void UpdateInputs()
         {
@@ -148,11 +147,6 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.MFC
                 OutputValues.ValvePositionInPercent = 100.0;
             else 
                 OutputValues.ValvePositionInPercent = OutputValues.MeasuredFlowInPercentOfFS * 0.75;
-        }
-
-        private double GetNextRandomInMinus1ToPlus1Range()
-        {
-            return (rng.NextDouble() * 2.0 - 1.0);
         }
     }
 

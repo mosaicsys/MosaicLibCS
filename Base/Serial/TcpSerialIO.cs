@@ -593,7 +593,7 @@ namespace MosaicLib.SerialIO
 				DisposeListenSocket();
 		}
 
-		void CreateListenSocket()
+		void CreateListenSocketAndStartListening(int allowedListenBacklog)
 		{
 			listenSP = new Socket(serverEPConfig.IPEndPoint.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
 
@@ -602,6 +602,8 @@ namespace MosaicLib.SerialIO
 			listenSP.Blocking = false;
 
 			listenSP.Bind(serverEPConfig.IPEndPoint);
+
+            listenSP.Listen(allowedListenBacklog);
 
             SelectSocketMonitor.Instance.AddSocketToList(listenSP, true, false, true, threadWakeupNotifier);
 		}
@@ -638,8 +640,10 @@ namespace MosaicLib.SerialIO
 					SetBaseState(ConnState.Disconnected, actionName + ".Inner: active connection closed by initialize", true);
 				}
 
-				if (listenSP == null)
-					CreateListenSocket();
+                if (listenSP == null)
+                {
+                    CreateListenSocketAndStartListening(1);
+                }
 
 				if (listenSP == null)
 				{
@@ -647,8 +651,6 @@ namespace MosaicLib.SerialIO
 					SetBaseState(ConnState.ConnectFailed, actionName + ".Inner: Failed:" + faultCode, true);
 					return faultCode;
 				}
-
-				listenSP.Listen(1);
 			}
 			catch (System.Exception ex)
 			{

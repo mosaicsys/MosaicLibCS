@@ -50,6 +50,12 @@ namespace MosaicLib.SerialIO
             : base(config.Name, partType, config.SpinWaitTimeLimit) 
 		{ 
 			portConfig = config;
+            PartBaseIVI = config.PartBaseIVI;
+
+            if (PartBaseIVI != null)
+                PartBaseIVI.GetValueAccessor<string>("{0}.PortSpecStr".CheckedFormat(PartID)).Set(portConfig.SpecStr);
+            else
+                BaseStatePublicationValueName = null;       // prevent creating and publishing the base state.
 
             MaxActionsToInvokePerServiceLoop = 5;
 

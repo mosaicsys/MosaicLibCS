@@ -305,7 +305,7 @@ namespace MosaicLib.SerialIO.Modbus.Server
             this.fcServer = fcServer;
 
             Timeout = portConfig.ReadTimeout;
-            portConfig.ReadTimeout = TimeSpan.FromSeconds(Math.Min(0.1, Timeout.TotalSeconds));
+            portConfig.ReadTimeout = TimeSpan.FromSeconds(Math.Max(0.1, Timeout.TotalSeconds));
 
             port = SerialIO.Factory.CreatePort(portConfig);
             portBaseStateObserver = new SequencedRefObjectSourceObserver<IBaseState, Int32>(port.BaseStateNotifier);
@@ -321,10 +321,12 @@ namespace MosaicLib.SerialIO.Modbus.Server
             portReadAction = port.CreateReadAction(portReadActionParam = new ReadActionParam() { WaitForAllBytes = false });
             portWriteAction = port.CreateWriteAction(portWriteActionParam = new WriteActionParam());
             portFlushAction = port.CreateFlushAction(FlushPeriod);
+            portReinitializeAction = port.CreateGoOnlineAction(true);
 
             portReadAction.NotifyOnComplete.AddItem(threadWakeupNotifier);
             portWriteAction.NotifyOnComplete.AddItem(threadWakeupNotifier);
             portFlushAction.NotifyOnComplete.AddItem(threadWakeupNotifier);
+            portReinitializeAction.NotifyOnComplete.AddItem(threadWakeupNotifier);
 
             port.BaseStateNotifier.NotificationList.AddItem(threadWakeupNotifier);
 
@@ -355,6 +357,7 @@ namespace MosaicLib.SerialIO.Modbus.Server
         IWriteAction portWriteAction = null;
         WriteActionParam portWriteActionParam = null;
         IFlushAction portFlushAction = null;
+        IBasicAction portReinitializeAction = null;
 
         #endregion
 
@@ -424,13 +427,13 @@ namespace MosaicLib.SerialIO.Modbus.Server
 
             bool portIsConnected = portBaseStateObserver.Object.IsConnected;
 
-            if (portWriteAction.ActionState.IsPendingCompletion || portFlushAction.ActionState.IsPendingCompletion)
+            if (portWriteAction.ActionState.IsPendingCompletion || portFlushAction.ActionState.IsPendingCompletion || portReinitializeAction.ActionState.IsPendingCompletion)
             {
-                // we cannot service a new request until the write and/or flush from a prior service loop have completed.
+                // we cannot service a new request until the write, flush, and/or reinitialize actions started in any prior service loop have completed.
                 return;
             }
 
-            bool startFlush = false;
+            bool resyncCommandStream = false;
             bool startWrite = false;
 
             if (portIsConnected && portReadAction.ActionState.CanStart)
@@ -455,6 +458,7 @@ namespace MosaicLib.SerialIO.Modbus.Server
                         else
                         {
                             Log.Error.Emit("Invalid request received: {0} [numBytes:{1}]", ec, portReadActionParam.BytesRead);
+                            resyncCommandStream = true;
                         }
 
                         portReadActionParam.BytesRead = 0;
@@ -480,9 +484,11 @@ namespace MosaicLib.SerialIO.Modbus.Server
                     }
                 }
 
-                if (!startFlush)
+                if (!resyncCommandStream)
                 {
                     // start the read immediately even if we are also starting a write (keep the interface primed)
+                    // do not start the next read if we need to resync the command stream
+
                     if (portReadActionParam.BytesRead == 0)
                         bufferFillStartTime = QpcTimeStamp.Now;
 
@@ -513,9 +519,24 @@ namespace MosaicLib.SerialIO.Modbus.Server
 
                 portWriteAction.Start();
             }
-            else if (startFlush)
+            else if (resyncCommandStream)
             {
-                portFlushAction.Start();
+                IPortBehavior portBehavior = port.PortBehavior;
+
+                if (portBehavior.IsDatagramPort)
+                {
+                    // there is nothing to do for datagram ports.  
+                    // Each message is a seperate item so there is no "leftover" bytes from prior requests that we might need to get rid of.
+                }
+                else if (portBehavior.IsByteStreamPort && portBehavior.IsNetworkPort)
+                {
+                    Log.Debug.Emit("Forcing port to reset current connection after protocol decode error (drop and immediately reconnect)");
+                    portReinitializeAction.Start();
+                }
+                else
+                {
+                    portFlushAction.Start();
+                }
             }
         }
 
@@ -528,7 +549,6 @@ namespace MosaicLib.SerialIO.Modbus.Server
             }
 
             fcServer.Service();
-
         }
 
         #endregion

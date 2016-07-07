@@ -136,6 +136,12 @@ namespace MosaicLib.Utils
 
             try
             {
+                if (s == null)
+                {
+                    result = parseFailedResult;
+                    return false;
+                }
+
                 result = (EnumT)System.Enum.Parse(typeof(EnumT), s, ignoreCase);
                 return true;
             }
