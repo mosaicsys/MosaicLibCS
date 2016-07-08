@@ -23,6 +23,7 @@ using System.IO;
 using System.Collections.Generic;
 using System.Runtime.Serialization;
 using System.Linq;
+
 using MosaicLib.Utils;
 using MosaicLib.Time;
 using MosaicLib.Modular;
@@ -34,244 +35,911 @@ using MosaicLib.Modular.Config;
 using MosaicLib.Modular.Config.Attributes;
 using MosaicLib.Modular.Interconnect.Values;
 using MosaicLib.Modular.Interconnect.Values.Attributes;
+using MosaicLib.Modular.Common;
 
 namespace MosaicLib.PartsLib.Common.LPM
 {
     #region ILPMPart
 
+    /// <summary>
+    /// This interface defines the set of action factory methods and state publication that is required of parts that would like to support generic use
+    /// as a PDO device based on the requirements that are provided here.
+    /// </summary>
+    /// <remarks>
+    /// In addition to the formal requirments defined here, such PDO driver parts are also expected to support the following IVA names
+    /// <para/>"LPMState": contains the last published ILPMState object for gui data binding use (et. al.)
+    /// </remarks>
     public interface ILPMPart : IActivePartBase
 	{
+        /// <summary>
+        /// Action factory method.  When run, this action will cause this part to initialize the load port.  
+        /// This is noinally the same as creating and running a GoOnline(true) action.
+        /// </summary>
+        IBasicAction Initialize();
+
+        /// <summary>
+        /// This property can be used to attempt to obtain interface access to the TagRW capabilities of this part, if it supports them.  If the part does not support such capabilites right now then it will return true.
+        /// Typically this property getter is only used after the part has successfully been placed OnLine and has been Initialized.  For some devide types, the part cannot know if the physical hardware actually supports the corresponding functionality until the connection has been fully established.
+        /// In these cases the part will return false on for this property until the part has confirmed that the target device actually supports the required functions.
+        /// </summary>
+        E099.ITagRWPart TagRW { get; }
+
+        /// <summary>
+        /// Action factory method.  When run, this action will cause this part to attempt to clamp the carrier that has been placed.
+        /// <para/>Supported NamedParam values: Retry=true: indicates that the action is being used as part of an recovery action and should take additional steps to attempt to get the motion to succeed
+        /// </summary>
+        IBasicAction Clamp();
+
+        /// <summary>
+        /// Action factory method.  When run, this action will cause this part to attempt to unclamp the carrier that has been placed.
+        /// <para/>Supported NamedParam values: Retry=true: indicates that the action is being used as part of an recovery action and should take additional steps to attempt to get the motion to succeed
+        /// </summary>
+        IBasicAction Unclamp();
+
+        /// <summary>
+        /// Action factory method.  When run, this action will cause this part to attempt to dock the carrier that has been placed.
+        /// <para/>Supported NamedParam values: Retry=true: indicates that the action is being used as part of an recovery action and should take additional steps to attempt to get the motion to succeed
+        /// </summary>
+        IBasicAction Dock();
+
+        /// <summary>
+        /// Action factory method.  When run, this action will cause this part to attempt to undock, but not unclmap, the carrier that has been placed.
+        /// <para/>Supported NamedParam values: Retry=true: indicates that the action is being used as part of an recovery action and should take additional steps to attempt to get the motion to succeed
+        /// </summary>
+        IBasicAction Undock();
+
+        /// <summary>
+        /// Action factory method.  When run, this action will cause this part to attempt to open the carrier that has been placed.
+        /// if requestMap is true and the device supports mapping for the current carrier type, then the carrier will be mapped as the door is being opened.
+        /// <para/>Supported NamedParam values: Retry=true: indicates that the action is being used as part of an recovery action and should take additional steps to attempt to get the motion to succeed
+        /// </summary>
+        IBasicAction Open(bool requestMap);
+
+        /// <summary>
+        /// Action factory method.  When run, this action will cause this part to attempt to close the carrier that has been placed.
+        /// if requestMap is true and the device supports mapping for the current carrier type, then the carrier will be mapped as the door is being closed.
+        /// <para/>Supported NamedParam values: Retry=true: indicates that the action is being used as part of an recovery action and should take additional steps to attempt to get the motion to succeed
+        /// </summary>
+        IBasicAction Close(bool requestMap);
+
+        /// <summary>
+        /// Action factory method.  When run, this action will cause this part to attempt to map the carrier that has been placed.
+        /// <para/>Supported NamedParam values: Retry=true: indicates that the action is being used as part of an recovery action and should take additional steps to attempt to get the motion to succeed
+        /// </summary>
+        IBasicAction Map();
+
+        /// <summary>
+        /// Action factory method.  When run, this action will cause this part to clear any previously produced map result.
+        /// </summary>
+        IBasicAction ClearMap();
+
+        /// <summary>
+        /// Action factory method.  When run, this action will cause this part to explicitly run all normally used status commands, and then update and publish all related state information (if needed).
+        /// </summary>
+        IBasicAction Sync();
+
+        /// <summary>
+        /// Action factory method.  When run, this action will cause this part to update the E84OutputSetpoint from the given value, run the commands needed to update the device's copy of this and to verify that it was successfully applied to the E84 outputs (subject to masking contraints on HO and ES per any light curtain interlock information)
+        /// </summary>
+        IBasicAction SetE84OutputSetpoint(IPassiveToActivePinsState setpoint);
+
+        /// <summary>
+        /// Action factory method.  When run, if the given decodedPodInfo is non-null, this action will cause this part replace its internally determined decodedPodInfo with the copy of the given value, publish the change, and apply the given value to configure how future motion actions are performed.
+        /// If the given decodedPodInfo is null then this action will cause this part to return to using its normal internal logic for decoding, publishing and using the decoded pod into.
+        /// </summary>
+        IBasicAction SetDecodedPodInfoOverride(IDecodedPodInfo decodedPodInfo, bool andInitialize);
+
+        /// <summary>
+        /// Action factory method.  When run, this action will replace any previously provided IPortDisplayContextInfo publisher with the given value.
+        /// </summary>
+        IBasicAction SetPortDisplayContextInfoPublisher(INotificationObject<IPortDisplayContextInfo> publisher);
+
+        /// <summary>ILPMState state publisher.  This is also a notification object</summary>
+        INotificationObject<ILPMState> StatePublisher { get; }
     }
 
     #endregion
 
-    #region LPMartConfigBase
+    #region LPMState
 
-    public class LPMPartConfigBase
-	{
-        public LPMPartConfigBase(LPMPartConfigBase rhs)
-		{
-            LPMName = rhs.LPMName;
-            Type = rhs.Type;
-            PortSpecStr = rhs.PortSpecStr;
+    public interface ILPMState
+    {
+        INamedValueSet NVS { get; }
 
-            Mapper_Enable = rhs.Mapper_Enable;
-            E84_1_Enable = rhs.E84_1_Enable;
-            E84_2_Enable = rhs.E84_2_Enable;
-            IntegratedRFID_Enable = rhs.IntegratedRFID_Enable;
-            SeperateRFID_Type = rhs.SeperateRFID_Type;
+        IDeviceCapabilities DeviceCapabilities { get; }
+        IPodSensorValues PodSensorValues { get; }
+        IDecodedPodInfo DecodedPodInfo { get; }
+        IPositionState PositionState { get; }
 
-            CarrierTypeSpec = new LPMConfigSetAndArrayItems(rhs.CarrierTypeSpec);
-		}
+        IDisplayState DisplayStateSetpoint { get; }
+        IDisplayState DisplayState { get; }
+        IButtonSet ButtonSet { get; }
 
-        public LPMPartConfigBase(string lpmName, string persistDirBasePathStr) 
-            : this ()
+        IPassiveToActivePinsState E84OutputSetpoint { get; }
+        IPassiveToActivePinsState E84OutputReadback { get; }
+        IActiveToPassivePinsState E84Inputs { get; }
+
+        IMapResults MapResults { get; }
+
+        IPortDisplayContextInfo PortDisplayContextInfo { get; }
+
+        bool IsEqualTo(ILPMState rhs);
+    }
+
+    public class LPMState : ILPMState
+    {
+        public LPMState()
+            : this(true)
+        { }
+
+        private LPMState(bool initialize)
         {
-            LPMName = lpmName;
+            if (initialize)
+            {
+                DeviceCapabilities = new DeviceCapabilities();
+                PodSensorValues = new PodSensorValues();
+                DecodedPodInfo = new DecodedPodInfo();
+                PositionState = new PositionState();
+
+                DisplayStateSetpoint = new DisplayState();
+                DisplayState = new DisplayState();
+                ButtonSet = new ButtonSet();
+
+                E84OutputSetpoint = new PassiveToActivePinsState();
+                E84OutputReadback = new PassiveToActivePinsState();
+                E84Inputs = new ActiveToPassivePinsState();
+                MapResults = new MapResults();
+            }
         }
 
-        public LPMPartConfigBase()
+        public LPMState(ILPMState rhs)
         {
+            SetFrom(rhs);
         }
 
-        public string LPMName { get; set; }
-
-        [ConfigItem(ReadOnlyOnce = true, IsOptional = true)]        // IsOptional so that search path with LPAll does not log errors when it is not found.
-        public LPType Type { get; set; }
-
-        [ConfigItem(ReadOnlyOnce = true, IsOptional = true)]        // IsOptional so that search path with LPAll does not log errors when it is not found.
-        public string PortSpecStr { get; set; }
-
-        [ConfigItem(Name = "Mapper.Enable", IsOptional = true, ReadOnlyOnce = true)]
-        public bool Mapper_Enable { get; set; }
-
-        [ConfigItem(Name = "E84.1.Enable", IsOptional = true, ReadOnlyOnce = true)]
-        public bool E84_1_Enable { get; set; }
-
-        [ConfigItem(Name = "E84.2.Enable", IsOptional = true, ReadOnlyOnce = true)]
-        public bool E84_2_Enable { get; set; }
-
-        [ConfigItem(Name = "IntegratedRFID.Enable", IsOptional = true, ReadOnlyOnce = true)]
-        public LPTagRWType IntegratedRFID_Enable { get; set; }
-
-        [ConfigItem(Name = "SeperateRFID.Type", IsOptional = true, ReadOnlyOnce = true)]
-        public LPTagRWType SeperateRFID_Type { get; set; }
-
-        public LPMConfigSetAndArrayItems CarrierTypeSpec = new LPMConfigSetAndArrayItems() { Item1 = "FOUP InfoPads='None'" };
-
-        public LPMPartConfigBase Setup(Logging.IMesgEmitter issueEmitter, Logging.IMesgEmitter valueEmitter)
+        public LPMState SetFrom(ILPMState rhs)
         {
-            ConfigValueSetAdapter<LPMPartConfigBase> adapter;
+            NVS = rhs.NVS.IsNullOrEmpty() ? null : new NamedValueSet(rhs.NVS);
 
-            LPMName = LPMName ?? String.Empty;
+            DeviceCapabilities = new DeviceCapabilities(rhs.DeviceCapabilities);
+            PodSensorValues = new PodSensorValues(rhs.PodSensorValues);
+            DecodedPodInfo = new DecodedPodInfo(rhs.DecodedPodInfo);
+            PositionState = new PositionState(rhs.PositionState);
 
-            // update values from any LPAll derived kesy.  We never log issues when trying to read from LPAll prefixed keys.
-            adapter = new ConfigValueSetAdapter<LPMPartConfigBase>() { ValueSet = this, SetupIssueEmitter = Logging.NullEmitter, UpdateIssueEmitter = Logging.NullEmitter, ValueNoteEmitter = valueEmitter }.Setup("LPAll.");
-            CarrierTypeSpec.UpdateFromModularConfig("LPAll.CarrierTypeSpec.", Logging.NullEmitter, valueEmitter);
+            DisplayStateSetpoint = new DisplayState(rhs.DisplayStateSetpoint);
+            DisplayState = new DisplayState(rhs.DisplayState);
+            ButtonSet = new ButtonSet(rhs.ButtonSet);
 
-            // update values from any lpmInstanceName derived keys.
-            adapter = new ConfigValueSetAdapter<LPMPartConfigBase>() { ValueSet = this, SetupIssueEmitter = issueEmitter, UpdateIssueEmitter = issueEmitter, ValueNoteEmitter = valueEmitter }.Setup(LPMName + ".");
-            CarrierTypeSpec.UpdateFromModularConfig(LPMName + ".CarrierTypeSpec.", issueEmitter, valueEmitter);
+            E84OutputSetpoint = new PassiveToActivePinsState(rhs.E84OutputSetpoint);
+            E84OutputReadback = new PassiveToActivePinsState(rhs.E84OutputReadback);
+            E84Inputs = new ActiveToPassivePinsState(rhs.E84Inputs);
+            MapResults = new MapResults(rhs.MapResults);
 
+            PortDisplayContextInfo = rhs.PortDisplayContextInfo;
+            
             return this;
         }
 
-        public bool IsEqualTo(LPMPartConfigBase rhs)
+        INamedValueSet ILPMState.NVS { get { return nvs ?? NamedValueSet.Empty; } }
+
+        IDeviceCapabilities ILPMState.DeviceCapabilities { get { return DeviceCapabilities; } }
+        IPodSensorValues ILPMState.PodSensorValues { get { return this.PodSensorValues; } }
+        IDecodedPodInfo ILPMState.DecodedPodInfo { get { return this.DecodedPodInfo; } }
+        IPositionState ILPMState.PositionState { get { return this.PositionState; } }
+        IDisplayState ILPMState.DisplayStateSetpoint { get { return this.DisplayStateSetpoint; } }
+        IDisplayState ILPMState.DisplayState { get { return this.DisplayState; } }
+        IButtonSet ILPMState.ButtonSet { get { return this.ButtonSet; } }
+        IPassiveToActivePinsState ILPMState.E84OutputSetpoint { get { return this.E84OutputSetpoint; } }
+        IPassiveToActivePinsState ILPMState.E84OutputReadback { get { return this.E84OutputReadback; } }
+        IActiveToPassivePinsState ILPMState.E84Inputs { get { return this.E84Inputs; } }
+        IMapResults ILPMState.MapResults { get { return this.MapResults; } }
+        IPortDisplayContextInfo ILPMState.PortDisplayContextInfo { get { return this.PortDisplayContextInfo; } }
+
+        public NamedValueSet NVS { get { return (nvs ?? (nvs = new NamedValueSet())); } set { nvs = value; } }
+        private NamedValueSet nvs = null;
+
+        public DeviceCapabilities DeviceCapabilities { get; set; }
+        public PodSensorValues PodSensorValues { get; set; }
+        public DecodedPodInfo DecodedPodInfo { get; set; }
+        public PositionState PositionState { get; set; }
+
+        public DisplayState DisplayStateSetpoint { get; set; }
+        public DisplayState DisplayState { get; set; }
+        public ButtonSet ButtonSet { get; set; }
+
+        public PassiveToActivePinsState E84OutputSetpoint { get; set; }
+        public PassiveToActivePinsState E84OutputReadback { get; set; }
+        public ActiveToPassivePinsState E84Inputs { get; set; }
+        public MapResults MapResults { get; set; }
+
+        public IPortDisplayContextInfo PortDisplayContextInfo { get; set; }
+
+        public bool IsEqualTo(ILPMState rhs)
         {
-            return (LPMName == rhs.LPMName
-                    && Type == rhs.Type
-                    && PortSpecStr == rhs.PortSpecStr
-                    && Mapper_Enable == rhs.Mapper_Enable
-                    && E84_1_Enable == rhs.E84_1_Enable
-                    && E84_2_Enable == rhs.E84_2_Enable
-                    && IntegratedRFID_Enable == rhs.IntegratedRFID_Enable
-                    && SeperateRFID_Type == rhs.SeperateRFID_Type
-                    && CarrierTypeSpec.IsEqualTo(rhs.CarrierTypeSpec)
+            return (rhs != null
+                    && NVS.IsEqualTo(rhs.NVS)
+                    && DeviceCapabilities.IsEqualTo(rhs.DeviceCapabilities)
+                    && PodSensorValues.IsEqualTo(rhs.PodSensorValues)
+                    && DecodedPodInfo.IsEqualTo(rhs.DecodedPodInfo)
+                    && PositionState.IsEqualTo(rhs.PositionState)
+                    && DisplayStateSetpoint.IsEqualTo(rhs.DisplayStateSetpoint)
+                    && DisplayState.IsEqualTo(rhs.DisplayState)
+                    && ButtonSet.IsEqualTo(rhs.ButtonSet)
+                    && E84OutputSetpoint.IsEqualTo(rhs.E84OutputSetpoint)
+                    && E84OutputReadback.IsEqualTo(rhs.E84OutputReadback)
+                    && E84Inputs.IsEqualTo(rhs.E84Inputs)
+                    && MapResults.IsEqualTo(rhs.MapResults)
+                    && ((PortDisplayContextInfo == null && rhs.PortDisplayContextInfo == null) || (PortDisplayContextInfo != null && PortDisplayContextInfo.IsEqualTo(rhs.PortDisplayContextInfo)))
                     );
         }
     }
 
-    public enum LPType : int
+    #endregion
+
+    #region IPortDisplayContextInfo
+
+    /// <summary>
+    /// This interface defines the set of property values that may generally be used to drive a load port's lights from, depending on configuration.
+    /// </summary>
+    public interface IPortDisplayContextInfo
     {
-        None = 0,
-        Fixload6,
-        VisionLPM,
+        bool Manual { get; }
+        bool Auto { get; }
+        bool Error { get; }
+        bool Alarm { get; }
+        bool Busy { get; }
+        bool Loading { get; }
+        bool Unloading { get; }
+        bool LTSIsReadyToLoad { get; }
+        bool LTSIsReadyToUnload { get; }
+        DisplayItemState.OnOffFlashState Button1State { get; }      // usually only button or load button
+        DisplayItemState.OnOffFlashState Button2State { get; }      // usually unload button if they are separate
+
+        bool IsEqualTo(IPortDisplayContextInfo rhs);
     }
 
-    public enum LPTagRWType : int
+    public class PortDisplayContextInfo : IPortDisplayContextInfo
     {
-        None = 0,
-        Hermos,
-        BrooksRFID,
-    }
-
-    public class LPMConfigSetAndArrayItems
-    {
-        [ConfigItem(Name = "1", IsOptional=true, ReadOnlyOnce = true, SilenceIssues = true)]
-        public string Item1 { get; set; }
-        [ConfigItem(Name = "2", IsOptional = true, ReadOnlyOnce = true, SilenceIssues = true)]
-        public string Item2 { get; set; }
-        [ConfigItem(Name = "3", IsOptional = true, ReadOnlyOnce = true, SilenceIssues = true)]
-        public string Item3 { get; set; }
-        [ConfigItem(Name = "4", IsOptional = true, ReadOnlyOnce = true, SilenceIssues = true)]
-        public string Item4 { get; set; }
-        [ConfigItem(Name = "5", IsOptional = true, ReadOnlyOnce = true, SilenceIssues = true)]
-        public string Item5 { get; set; }
-        [ConfigItem(Name = "6", IsOptional = true, ReadOnlyOnce = true, SilenceIssues = true)]
-        public string Item6 { get; set; }
-        [ConfigItem(Name = "7", IsOptional = true, ReadOnlyOnce = true, SilenceIssues = true)]
-        public string Item7 { get; set; }
-        [ConfigItem(Name = "8", IsOptional = true, ReadOnlyOnce = true, SilenceIssues = true)]
-        public string Item8 { get; set; }
-        [ConfigItem(Name = "9", IsOptional = true, ReadOnlyOnce = true, SilenceIssues = true)]
-        public string Item9 { get; set; }
-        [ConfigItem(Name = "10", IsOptional = true, ReadOnlyOnce = true, SilenceIssues = true)]
-        public string Item10 { get; set; }
-
-        public LPMConfigSetAndArrayItems()
+        public PortDisplayContextInfo()
         { }
 
-        public LPMConfigSetAndArrayItems(LPMConfigSetAndArrayItems rhs)
+        public PortDisplayContextInfo(IPortDisplayContextInfo rhs)
         {
-            Item1 = rhs.Item1;
-            Item2 = rhs.Item2;
-            Item3 = rhs.Item3;
-            Item4 = rhs.Item4;
-            Item5 = rhs.Item5;
-            Item6 = rhs.Item6;
-            Item7 = rhs.Item7;
-            Item8 = rhs.Item8;
-            Item9 = rhs.Item9;
-            Item10 = rhs.Item10;
+            SetFrom(rhs);
         }
 
-        public string[] ItemsAsArray
+        public PortDisplayContextInfo SetFrom(IPortDisplayContextInfo rhs)
         {
-            get
-            {
-                String[] filteredArray = new[] { Item1, Item2, Item3, Item4, Item5, Item6, Item7, Item8, Item9, Item10 }.TakeWhile((s) => !String.IsNullOrEmpty(s)).ToArray();
-                return filteredArray;
-            }
-        }
-
-        public LPMConfigSetAndArrayItems UpdateFromModularConfig(string prefixStr, Logging.IMesgEmitter issueEmitter, Logging.IMesgEmitter valueEmitter)
-        {
-            ConfigValueSetAdapter<LPMConfigSetAndArrayItems> adapter = new ConfigValueSetAdapter<LPMConfigSetAndArrayItems>() { ValueSet = this, SetupIssueEmitter = issueEmitter, UpdateIssueEmitter = issueEmitter, ValueNoteEmitter = valueEmitter }.Setup(prefixStr);
+            Manual = rhs.Manual;
+            Auto = rhs.Auto;
+            Error = rhs.Error;
+            Alarm = rhs.Alarm;
+            Busy = rhs.Busy;
+            Loading = rhs.Loading;
+            Unloading = rhs.Unloading;
+            LTSIsReadyToLoad = rhs.LTSIsReadyToLoad;
+            LTSIsReadyToUnload = rhs.LTSIsReadyToUnload;
+            Button1State = rhs.Button1State;
+            Button2State = rhs.Button2State;
 
             return this;
         }
 
-        internal bool IsEqualTo(LPMConfigSetAndArrayItems rhs)
+        public bool Manual { get; set; }
+        public bool Auto { get; set; }
+        public bool Error { get; set; }
+        public bool Alarm { get; set; }
+        public bool Busy { get; set; }
+        public bool Loading { get; set; }
+        public bool Unloading { get; set; }
+        public bool LTSIsReadyToLoad { get; set; }
+        public bool LTSIsReadyToUnload { get; set; }
+        public DisplayItemState.OnOffFlashState Button1State { get; set; }
+        public DisplayItemState.OnOffFlashState Button2State { get; set; }
+
+        public bool IsEqualTo(IPortDisplayContextInfo rhs)
         {
-            return ItemsAsArray.IsEqualTo(rhs.ItemsAsArray);
+            return (rhs != null
+                    && Manual == rhs.Manual
+                    && Auto == rhs.Auto
+                    && Error == rhs.Error
+                    && Alarm == rhs.Alarm
+                    && Busy == rhs.Busy
+                    && Loading == rhs.Loading
+                    && Unloading == rhs.Unloading
+                    && LTSIsReadyToLoad == rhs.LTSIsReadyToLoad
+                    && LTSIsReadyToUnload == rhs.LTSIsReadyToUnload
+                    && Button1State == rhs.Button1State
+                    && Button2State == rhs.Button2State
+                    );
         }
     }
 
     #endregion
 
-    #region State related definitions
+    #region IDeviceCapabilites
 
+    /// <summary>
+    /// This interface provides the client with dynamically updated information about the capabilites of the device that the driver is currently connected to (or was last connected to).
+    /// <para/>Please note that additional capabilites may be indicated by using the INamedValueSet related capabiliites at the ILPMState level.
+    /// </summary>
+    public interface IDeviceCapabilities
+    {
+        /// <summary>This value indicates what form of CarrierID/Tag Reader capabilities this device supports, if any.</summary>
+        E099.TagReaderType TagReaderType { get; }
+
+        /// <summary>This value indicates whether the device has any E84 hardware available</summary>
+        bool HasE84 { get; }
+
+        /// <summary>This value indicates what mapping capabilities this device offers.</summary>
+        MapperCapabilities MapperCapabilities { get; }
+
+        /// <summary>Returns true if this object has the same contents as the given rhs one.</summary>
+        bool IsEqualTo(IDeviceCapabilities rhs);
+    }
+
+    /// <summary>
+    /// This enumeration give information about the type of mapper support this device offers
+    /// <para/>None, HasMapper, CanMapOnClose
+    /// </summary>
+    [Flags]
+    public enum MapperCapabilities : int
+    {
+        /// <summary>This device does not support any type of mapping.</summary>
+        None = 0,
+
+        /// <summary>This device has a mapper that, at minimum, can be used to map while opening the Carrier, or after opening the Carrier.</summary>
+        HasMapper = 1,
+
+        /// <summary>This device is able to map while closing the Carrier (generally by reversing the motions used to map while opening the Carrier).</summary>
+        CanMapOnClose = 2, 
+    }
+
+    public class DeviceCapabilities : IDeviceCapabilities
+    {
+        public DeviceCapabilities()
+        { }
+
+        public DeviceCapabilities(IDeviceCapabilities rhs)
+        {
+            SetFrom(rhs);
+        }
+
+        public DeviceCapabilities SetFrom(IDeviceCapabilities rhs)
+        {
+            TagReaderType = rhs.TagReaderType;
+            HasE84 = rhs.HasE84;
+            MapperCapabilities = rhs.MapperCapabilities;
+
+            return this;
+        }
+
+        /// <summary>This value indicates what form of CarrierID/Tag Reader capabilities this device supports, if any.</summary>
+        public E099.TagReaderType TagReaderType { get; set; }
+
+        /// <summary>This value indicates whether the device has any E84 hardware available</summary>
+        public bool HasE84 { get; set; }
+
+        /// <summary>This value indicates what mapping capabilities this device offers.</summary>
+        public MapperCapabilities MapperCapabilities { get; set; }
+
+        /// <summary>Returns true if this object has the same contents as the given rhs one.</summary>
+        public bool IsEqualTo(IDeviceCapabilities rhs)
+        {
+            return (rhs != null
+                    && TagReaderType == rhs.TagReaderType
+                    && HasE84 == rhs.HasE84
+                    && MapperCapabilities == rhs.MapperCapabilities
+                    );
+        }
+    }
+
+    #endregion
+
+    #region IMapResults and MapResults
+
+    /// <summary>
+    /// This interface defines the publisheable results from 
+    /// </summary>
+    public interface IMapResults
+    {
+        /// <summary>This is true whenever ResultCode has been set to null.  This is the state produced when a prior map result has been cleared by the start of some corresonding action</summary>
+        bool IsEmpty { get; }
+        /// <summary>This is true whenever the ResultCode is both non-null and non-empty</summary>
+        bool Failed { get; }
+        /// <summary>This is true when the ResultCode is the empty string.  This is the same as what is normally called Succeeded, except that it does not tell you anything about the contents of the SlotMap itself.</summary>
+        bool IsValid { get; }
+
+        SlotState[] SlotMap { get; }
+        string ResultCode { get; }
+
+        bool IsEqualTo(IMapResults rhs);
+    }
+
+    public class MapResults : IMapResults
+    {
+        public MapResults() { }
+
+        public MapResults(IMapResults rhs)
+        {
+            SetFrom(rhs.ResultCode, rhs.SlotMap);
+        }
+
+        public MapResults SetFrom(IMapResults rhs)
+        {
+            return SetFrom(rhs.ResultCode, rhs.SlotMap);
+        }
+
+        public MapResults SetFrom(string resultCode, SlotState[] slotStateArray = null)
+        {
+            ResultCode = resultCode;
+            SlotMap = (slotStateArray.IsNullOrEmpty() ? emptySlotMap : new List<SlotState>(slotStateArray).ToArray());
+
+            return this;
+        }
+
+        public MapResults Clear()
+        {
+            return SetFrom(emptyMapResults);
+        }
+
+        private readonly static IMapResults emptyMapResults = new MapResults();
+
+        /// <summary>This is true whenever ResultCode has been set to null.  This is the state produced when a prior map result has been cleared by the start of some corresonding action</summary>
+        public bool IsEmpty { get { return ResultCode == null; } }
+        /// <summary>This is true whenever the ResultCode is both non-null and non-empty</summary>
+        public bool Failed { get { return !ResultCode.IsNullOrEmpty(); } }
+        /// <summary>This is true when the ResultCode is the empty string.  This is the same as what is normally called Succeeded, except that it does not tell you anything about the contents of the SlotMap itself.</summary>
+        public bool IsValid { get { return ResultCode == string.Empty; } }
+
+        public SlotState[] SlotMap { get { return slotMap; } set { slotMap = value ?? emptySlotMap; } }
+        private SlotState[] slotMap = emptySlotMap;
+        private static readonly SlotState[] emptySlotMap = new SlotState[0];
+
+        public string ResultCode { get; set; }
+
+        public bool IsEqualTo(IMapResults rhs)
+        {
+            return (rhs != null
+                    && SlotMap.IsEqualTo(rhs.SlotMap)
+                    && ResultCode == rhs.ResultCode
+                    );
+        }
+
+        public override string ToString()
+        {
+            if (IsEmpty)
+                return "Empty";
+            else if (Failed)
+                return "Failed: {0}".CheckedFormat(ResultCode);
+            else
+                return "'{0}'".CheckedFormat(SlotMap.ToString(SlotStateStringFormat.Graphics));
+        }
+    }
+
+    #endregion
+
+    #region IPodSensorValues, PodSensorValues, related enums
+
+    public interface IPodSensorValues
+    {
+        PresentPlaced PresentPlaced { get; }
+        bool PresenceSensor { get; }
+        bool PlacementSensor { get; }
+        bool IsProperlyPlaced { get; }
+        bool IsPartiallyPlaced { get; }
+        bool IsNeitherPresentNorPlaced { get; }
+        bool DoesPlacedEqualPresent { get; }
+        bool IsPlacedOrPresent { get; }
+
+        InfoPads InfoPads { get; }
+        bool InfoPad_A { get; }
+        bool InfoPad_B { get; }
+        bool InfoPad_C { get; }
+        bool InfoPad_D { get; }
+
+        bool IsEqualTo(IPodSensorValues rhs);
+    }
+
+    public class PodSensorValues : IPodSensorValues
+    {
+        public PodSensorValues() 
+        { }
+
+        public PodSensorValues(IPodSensorValues rhs)
+        {
+            SetFrom(rhs);
+        }
+
+        public PodSensorValues SetFrom(IPodSensorValues rhs)
+        {
+            PresentPlaced = rhs.PresentPlaced;
+            InfoPads = rhs.InfoPads;
+            return this;
+        }
+
+        public PresentPlaced PresentPlaced { get; set; }
+        public bool PresenceSensor { get { return PresentPlaced.IsSet(PresentPlaced.Present); } }
+        public bool PlacementSensor { get { return PresentPlaced.IsSet(PresentPlaced.Placed); } }
+        public bool IsPartiallyPlaced { get { return PresentPlaced.IsSet(PresentPlaced.PartiallyPlaced); } }
+        public bool IsProperlyPlaced { get { return PresentPlaced.IsProperlyPlaced(); } }
+        public bool IsNeitherPresentNorPlaced { get { return PresentPlaced.IsNeitherPresentNorPlaced();} }
+        public bool DoesPlacedEqualPresent { get { return PresentPlaced.DoesPlacedEqualPresent(); } }
+        public bool IsPlacedOrPresent { get { return PresentPlaced.IsPlacedOrPresent(); } }
+
+        public InfoPads InfoPads { get; set; }
+
+        public bool InfoPad_A { get { return InfoPads.IsSet(InfoPads.A); } }
+        public bool InfoPad_B { get { return InfoPads.IsSet(InfoPads.B); } }
+        public bool InfoPad_C { get { return InfoPads.IsSet(InfoPads.C); } }
+        public bool InfoPad_D { get { return InfoPads.IsSet(InfoPads.D); } }
+
+        public bool IsEqualTo(IPodSensorValues rhs)
+        {
+            return (rhs != null
+                    && PresentPlaced == rhs.PresentPlaced
+                    && InfoPads == rhs.InfoPads
+                    );
+        }    
+    }
+
+    /// <summary>Present/Placed related flag enum</summary>
     [DataContract]
     [Flags]
-    public enum PodSensorValues : int
+    public enum PresentPlaced
     {
+        /// <summary>Neither Presence nor Placement sensors are active</summary>
         [EnumMember]
-        None = 0x0000,
-
+        None = 0x00,
+        /// <summary>Presence sensor is active</summary>
         [EnumMember]
-        PresenceSensor = 0x01,
+        Present = 0x01,
+        /// <summary>Placement sensor is active</summary>
         [EnumMember]
-        PlacementSensor = 0x02,
-
+        Placed = 0x02,
+        /// <summary>Placement sensor is partially active</summary>
         [EnumMember]
-        ProperyPlaced = PresenceSensor | PlacementSensor,
-
-        /// <summary>InfoPad A</summary>
-        [EnumMember]
-        A = 0x10,
-        /// <summary>InfoPad B</summary>
-        [EnumMember]
-        B = 0x20,
-        /// <summary>InfoPad C</summary>
-        [EnumMember]
-        C = 0x40,
-        /// <summary>InfoPad D</summary>
-        [EnumMember]
-        D = 0x80,
-
-        /// <summary>InfoPad A,B,C,D</summary>
-        [EnumMember]
-        InfoPad_All = (A | B | C | D),
-
-        [EnumMember]
-        OCA_Present = 0x8000,
-        [EnumMember]
-        OCA_Cassette_100mm_Present = 0x100,
-        [EnumMember]
-        OCA_Cassette_150mm_Present = 0x200,
-        [EnumMember]
-        OCA_Cassette_200mm_Present = 0x400,
+        PartiallyPlaced = 0x04,
     }
 
-    public static partial class ExtensionMethods
-    {
-        public static bool IsPresent(this PodSensorValues podSensorValues) { return ((podSensorValues & PodSensorValues.PresenceSensor) != PodSensorValues.None); }
-        public static bool IsPlaced(this PodSensorValues podSensorValues) { return ((podSensorValues & PodSensorValues.PlacementSensor) != PodSensorValues.None); }
-        public static bool IsProperlyPlaced(this PodSensorValues podSensorValues) { return (podSensorValues == PodSensorValues.ProperyPlaced); }
-
-        public static bool DoesPlacedEqualPresent(this PodSensorValues podSensorValues) { return (podSensorValues.IsPlaced() == podSensorValues.IsPlaced()); }
-        public static bool IsPlacedOrPresent(this PodSensorValues podSensorValues) { return (podSensorValues.IsPlaced() || podSensorValues.IsPlaced()); }
-
-        public static bool InfoPad_A(this PodSensorValues infoPads) { return ((infoPads & PodSensorValues.A) != PodSensorValues.None); }
-        public static bool InfoPad_B(this PodSensorValues infoPads) { return ((infoPads & PodSensorValues.B) != PodSensorValues.None); }
-        public static bool InfoPad_C(this PodSensorValues infoPads) { return ((infoPads & PodSensorValues.C) != PodSensorValues.None); }
-        public static bool InfoPad_D(this PodSensorValues infoPads) { return ((infoPads & PodSensorValues.D) != PodSensorValues.None); }
-    }
-
+    /// <summary>InfoPad flag enum</summary>
     [DataContract]
-    public class PositionState
+    [Flags]
+    public enum InfoPads
+    {
+        /// <summary>No InfoPad is currently active.  0x00</summary>
+        [EnumMember]
+        None = 0x00,
+        /// <summary>InfoPad A is active.  0x01</summary>
+        [EnumMember]
+        A = 0x01,
+        /// <summary>InfoPad B is active.  0x02</summary>
+        [EnumMember]
+        B = 0x02,
+        /// <summary>InfoPad C is active.  0x04</summary>
+        [EnumMember]
+        C = 0x04,
+        /// <summary>InfoPad D is active.  0x08</summary>
+        [EnumMember]
+        D = 0x08,
+    }
+
+    #endregion
+
+    #region IDecodedPodInfo, DecodedPodInfo, related enums
+
+    public interface IDecodedPodInfo
+    {
+        CarrierType CarrierType { get; }
+
+        OCA OCA { get; }
+
+        bool IsEqualTo(IDecodedPodInfo rhs);
+    }
+
+    public class DecodedPodInfo : IDecodedPodInfo
+    {
+        public DecodedPodInfo() 
+        { }
+
+        public DecodedPodInfo(IDecodedPodInfo rhs)
+        {
+            SetFrom(rhs);
+        }
+
+        public DecodedPodInfo SetFrom(IDecodedPodInfo rhs)
+        {
+            CarrierType = rhs.CarrierType;
+            OCA = rhs.OCA;
+
+            return this;
+        }
+
+        public CarrierType CarrierType { get; set; }
+
+        public OCA OCA { get; set; }
+
+        public bool IsEqualTo(IDecodedPodInfo rhs)
+        {
+            return (rhs != null
+                    && CarrierType == rhs.CarrierType
+                    && OCA == rhs.OCA
+                    );
+        }    
+    }
+
+    /// <summary>Flag enumeration that gives information about a Carrier including type (FOUP, FOSB, Cassette), Slots (25, 13, 26) and WaferSize (100, 125, 150, 200, 300, 450 mm)</summary>
+    [DataContract]
+    [Flags]
+    public enum CarrierType
+    {
+        /// <summary>There is currently no Carrier detected of any type.  0x00</summary>
+        [EnumMember]
+        None = 0x00,
+        /// <summary>A FOUP has been detected.  0x01</summary>
+        [EnumMember]
+        FOUP = 0x01,
+        /// <summary>A FOSB has been detected.  0x02</summary>
+        [EnumMember]
+        FOSB = 0x02,
+        /// <summary>A FOSB has been detected which has its door removed prior to placement.  0x04</summary>
+        [EnumMember]
+        FOSB_NoDoor = 0x04,
+        /// <summary>A Cassette has been detected (typically placed in an OCA).  0x08</summary>
+        [EnumMember]
+        Cassette = 0x08,
+        /// <summary>A generic Carrier has been detected (details must be determined through other means.  0x80</summary>
+        [EnumMember]
+        Other = 0x80,
+
+        /// <summary>The Carrier has 25 slots.  0x100</summary>
+        [EnumMember]
+        Slots_25 = 0x100,
+        /// <summary>The Carrier has 13 slots.  0x200</summary>
+        [EnumMember]
+        Slots_13 = 0x200,
+        /// <summary>The Carrier has 26 slots.  0x400</summary>
+        [EnumMember]
+        Slots_26 = 0x400,
+
+        /// <summary>The Carrier contains 100mm round substrates.  0x010000</summary>
+        [EnumMember]
+        Size_100mm = 0x010000,
+        /// <summary>The Carrier contains 125mm round substrates.  0x020000</summary>
+        [EnumMember]
+        Size_125mm = 0x020000,
+        /// <summary>The Carrier contains 150mm round substrates.  0x040000</summary>
+        [EnumMember]
+        Size_150mm = 0x040000,
+        /// <summary>The Carrier contains 200mm round substrates.  0x080000</summary>
+        [EnumMember]
+        Size_200mm = 0x080000,
+        /// <summary>The Carrier contains 300mm round substrates.  0x100000</summary>
+        [EnumMember]
+        Size_300mm = 0x100000,
+        /// <summary>The Carrier contains 450mm round substrates.  0x200000</summary>
+        [EnumMember]
+        Size_400mm = 0x200000,
+    }
+
+    /// <summary>Flag enumeration that gives information about OCA (if any)</summary>
+    [DataContract]
+    [Flags]
+    public enum OCA
+    {
+        /// <summary>No OCA is currently installed.  0x00</summary>
+        [EnumMember]
+        None = 0x00,
+
+        /// <summary>An OCA is installed.  0x01</summary>
+        [EnumMember]
+        Installed = 0x01,
+
+        /// <summary>The OCA is Open (for devices that can recognize this state).  0x02</summary>
+        [EnumMember]
+        Open = 0x02,
+
+        /// <summary>The OCA is Locked (for devices that can recognize this state).  0x04</summary>
+        [EnumMember]
+        Locked = 0x04,
+    }
+
+    #endregion
+
+    #region IPositionState, PositionState, IActuatorStates, ActuatorStates
+
+    public interface IPositionState
+    {
+        /// <summary>Clamped == AtPos2, Unclamped == AtPos1</summary>
+        ActuatorPosition ClampState { get; }
+        /// <summary>Docked == AtPos2, Undocked == AtPos1</summary>
+        ActuatorPosition DockState { get; }
+        /// <summary>Vacuum turned on == AtPos2, Vacuum turned off == AtPos1</summary>
+        ActuatorPosition VacState { get; }
+        /// <summary>Door Keys Horizontal (door unlatched from carrier) == AtPos2, Door Keys Vertical (door latched in carrier) == AtPos1</summary>
+        ActuatorPosition DoorKeysState { get; }
+        /// <summary>Door Open (away from carrier) == AtPos2, Door Closed (pressed into carrier) == AtPos1</summary>
+        ActuatorPosition DoorOpenState { get; }
+        /// <summary>Door Down == AtPos2, Door Up == AtPos1</summary>
+        ActuatorPosition DoorDownState { get; }
+
+        /// <summary>This property returns true if the device has been initialized/homed/referenced since we last started communicating with it</summary>
+        bool IsReferenced { get; }
+        /// <summary>This property returns true if the driver believes that the device is activly controlling its position.</summary>
+        bool IsServoOn { get; }
+
+        bool DockMotionILockTripped { get; }
+        bool ProtrusionSensorIsTripped { get; }
+
+        string InMotionReason { get; }
+
+        bool IsInMotion { get; }
+
+        bool IsValid { get; }
+        bool IsClamped { get; }
+        bool IsUnclamped { get; }
+        bool IsDocked { get; }
+        bool IsUndocked { get; }
+        /// <summary>True if vacuum is enabled to the suction cups</summary>
+        bool IsVacEnabled { get; }
+        /// <summary>True if vacuum is disabled from the suction cups</summary>
+        bool IsVacDisabled { get; }
+        bool IsVacSensed { get; }
+        bool AreDoorKeysHorizontal { get; }
+        bool AreDoorKeysVertical { get; }
+        bool IsDoorOpen { get; }
+        bool IsDoorClosed { get; }
+        bool IsDoorDown { get; }
+        bool IsDoorUp { get; }
+
+        bool IsCarrierOpen { get; }
+        bool IsCarrierClosed { get; }
+
+        bool IsEqualTo(IPositionState rhs);
+    }
+
+    public class PositionState : IPositionState
     {
         public PositionState()
+        { }
+
+        public PositionState(IPositionState rhs)
+        {
+            SetFrom(rhs);
+        }
+
+        public PositionState SetFrom(IPositionState rhs)
+        {
+            ClampState = rhs.ClampState;
+            DockState = rhs.DockState;
+            VacState = rhs.VacState;
+            DoorKeysState = rhs.DoorKeysState;
+            DoorOpenState = rhs.DoorOpenState;
+            DoorDownState = rhs.DoorDownState;
+            IsReferenced = rhs.IsReferenced;
+            IsServoOn = rhs.IsServoOn;
+            DockMotionILockTripped = rhs.DockMotionILockTripped;
+            ProtrusionSensorIsTripped = rhs.ProtrusionSensorIsTripped;
+            InMotionReason = rhs.InMotionReason;
+            IsVacSensed = rhs.IsVacSensed;
+            
+            return this;
+        }
+
+        public PositionState SetFrom(IActuatorStates actuatorStates)
+        {
+            ClampState = actuatorStates.ClampState.PosState;
+            DockState = actuatorStates.DockState.PosState;
+            VacState = actuatorStates.VacState.PosState;
+            DoorKeysState = actuatorStates.DoorKeysState.PosState;
+            DoorOpenState = actuatorStates.DoorOpenState.PosState;
+            DoorDownState = actuatorStates.DoorDownState.PosState;
+
+            bool statesValid = (actuatorStates.ClampState.IsValid && actuatorStates.DockState.IsValid && actuatorStates.VacState.IsValid && actuatorStates.DoorKeysState.IsValid && actuatorStates.DoorOpenState.IsValid && actuatorStates.DoorDownState.IsValid);
+
+            IsReferenced = statesValid;
+            IsServoOn |= statesValid;
+
+            return this;
+        }
+
+        /// <summary>Clamped == AtPos2, Unclamped/Released == AtPos1</summary>
+        public ActuatorPosition ClampState { get; set; }
+        /// <summary>Docked == AtPos2, Undocked == AtPos1</summary>
+        public ActuatorPosition DockState { get; set; }
+        /// <summary>Vacuum turned on == AtPos2, Vacuum turned off == AtPos1</summary>
+        public ActuatorPosition VacState { get; set; }
+        /// <summary>Door Keys Horizontal (door unlatched from carrier) == AtPos2, Door Keys Vertical (door latched in carrier) == AtPos1</summary>
+        public ActuatorPosition DoorKeysState { get; set; }
+        /// <summary>Door Open (away from carrier) == AtPos2, Door Closed (pressed into carrier) == AtPos1</summary>
+        public ActuatorPosition DoorOpenState { get; set; }
+        /// <summary>Door Down == AtPos2, Door Up == AtPos1</summary>
+        public ActuatorPosition DoorDownState { get; set; }
+
+        /// <summary>This property returns true if the device has been initialized/homed/referenced since we last started communicating with it</summary>
+        public bool IsReferenced { get; set;  }
+        /// <summary>This property returns true if the driver believes that the device is activly controlling its position.</summary>
+        public bool IsServoOn { get; set; }
+
+        public bool DockMotionILockTripped { get; set; }
+        public bool ProtrusionSensorIsTripped { get; set; }
+
+        public string InMotionReason { get; set; }
+
+        public bool IsVacSensed { get; set; }
+
+        public bool IsEqualTo(IPositionState rhs)
+        {
+            return (rhs != null
+                    && ClampState == rhs.ClampState
+                    && DockState == rhs.DockState
+                    && VacState == rhs.VacState
+                    && DoorKeysState == rhs.DoorKeysState
+                    && DoorOpenState == rhs.DoorOpenState
+                    && DoorDownState == rhs.DoorDownState
+                    && IsReferenced == rhs.IsReferenced
+                    && IsServoOn == rhs.IsServoOn
+                    && DockMotionILockTripped == rhs.DockMotionILockTripped
+                    && ProtrusionSensorIsTripped == rhs.ProtrusionSensorIsTripped
+                    && InMotionReason == rhs.InMotionReason
+                    && IsVacSensed == rhs.IsVacSensed
+                    );
+        }
+
+        public virtual bool IsInMotion
+        {
+            get
+            {
+                return (ClampState.IsInMotion() || DockState.IsInMotion() || VacState.IsInMotion()
+                        || DoorKeysState.IsInMotion() || DoorOpenState.IsInMotion() || DoorDownState.IsInMotion()
+                        || !InMotionReason.IsNullOrEmpty());
+            }
+        }
+
+        public bool IsValid
+        {
+            get
+            {
+                return (ClampState.IsValid() && DockState.IsValid() && VacState.IsValid()
+                        && DoorKeysState.IsValid() && DoorOpenState.IsValid() && DoorDownState.IsValid()
+                        && IsReferenced && IsServoOn);
+            }
+        }
+
+        public bool IsClamped { get { return ClampState.IsAtPos2(); } }
+        public bool IsUnclamped { get { return ClampState.IsAtPos1(); } }
+        public bool IsDocked { get { return DockState.IsAtPos2(); } }
+        public bool IsUndocked { get { return DockState.IsAtPos1(); } }
+        /// <summary>True if vacuum is enabled to the suction cups</summary>
+        public bool IsVacEnabled { get { return VacState.IsAtPos2(); } }
+        /// <summary>True if vacuum is disabled from the suction cups</summary>
+        public bool IsVacDisabled { get { return VacState.IsAtPos1(); } }
+        public bool AreDoorKeysHorizontal { get { return DoorKeysState.IsAtPos2(); } }
+        public bool AreDoorKeysVertical { get { return DoorKeysState.IsAtPos1(); } }
+        public bool IsDoorOpen { get { return DoorOpenState.IsAtPos2(); } }
+        public bool IsDoorClosed { get { return DoorOpenState.IsAtPos1(); } }
+        public bool IsDoorDown { get { return DoorDownState.IsAtPos2(); } }
+        public bool IsDoorUp { get { return DoorDownState.IsAtPos1(); } }
+
+        public bool IsCarrierOpen { get { return IsValid && IsDoorOpen && IsDoorDown; } }
+        public bool IsCarrierClosed { get { return IsValid && IsDoorUp && IsDoorClosed && AreDoorKeysVertical && IsVacDisabled; } }
+    }
+
+    public interface IActuatorStates
+    {
+        IActuatorState ClampState { get; }
+        IActuatorState DockState { get; }
+        IActuatorState VacState { get; }
+        IActuatorState DoorKeysState { get; }
+        IActuatorState DoorOpenState { get; }
+        IActuatorState DoorDownState { get; }
+
+        bool IsEqualTo(IActuatorStates rhs);
+    }
+
+    public class ActuatorStates : IActuatorStates
+    {
+        public ActuatorStates()
         {
             ClampState = new ActuatorState();
             DockState = new ActuatorState();
@@ -279,10 +947,14 @@ namespace MosaicLib.PartsLib.Common.LPM
             DoorKeysState = new ActuatorState();
             DoorOpenState = new ActuatorState();
             DoorDownState = new ActuatorState();
-            CycleCount = 0;
         }
 
-        public PositionState(PositionState rhs)
+        public ActuatorStates(IActuatorStates rhs)
+        {
+            SetFrom(rhs);
+        }
+
+        public ActuatorStates SetFrom(IActuatorStates rhs)
         {
             ClampState = new ActuatorState(rhs.ClampState);
             DockState = new ActuatorState(rhs.DockState);
@@ -290,26 +962,25 @@ namespace MosaicLib.PartsLib.Common.LPM
             DoorKeysState = new ActuatorState(rhs.DoorKeysState);
             DoorOpenState = new ActuatorState(rhs.DoorOpenState);
             DoorDownState = new ActuatorState(rhs.DoorDownState);
-            CycleCount = rhs.CycleCount;
+
+            return this;
         }
 
-        [DataMember]
         public ActuatorState ClampState { get; set; }
-        [DataMember]
         public ActuatorState DockState { get; set; }
-        [DataMember]
         public ActuatorState VacState { get; set; }
-        [DataMember]
         public ActuatorState DoorKeysState { get; set; }
-        [DataMember]
         public ActuatorState DoorOpenState { get; set; }
-        [DataMember]
         public ActuatorState DoorDownState { get; set; }
 
-        [DataMember]
-        public int CycleCount { get; set; }
+        IActuatorState IActuatorStates.ClampState { get { return this.ClampState; } }
+        IActuatorState IActuatorStates.DockState { get { return this.DockState; } }
+        IActuatorState IActuatorStates.VacState { get { return this.VacState; } }
+        IActuatorState IActuatorStates.DoorKeysState { get { return this.DoorKeysState; } }
+        IActuatorState IActuatorStates.DoorOpenState { get { return this.DoorOpenState; } }
+        IActuatorState IActuatorStates.DoorDownState { get { return this.DoorDownState; } }
 
-        public bool IsEqualTo(PositionState rhs)
+        public bool IsEqualTo(IActuatorStates rhs)
         {
             return (rhs != null
                     && ClampState.IsEqualTo(rhs.ClampState)
@@ -318,46 +989,13 @@ namespace MosaicLib.PartsLib.Common.LPM
                     && DoorKeysState.IsEqualTo(rhs.DoorKeysState)
                     && DoorOpenState.IsEqualTo(rhs.DoorOpenState)
                     && DoorDownState.IsEqualTo(rhs.DoorDownState)
-                    && CycleCount == rhs.CycleCount
                     );
         }
-
-        public bool IsInMotion
-        {
-            get
-            {
-                return (ClampState.IsInMotion || DockState.IsInMotion || VacState.IsInMotion
-                        || DoorKeysState.IsInMotion || DoorOpenState.IsInMotion || DoorDownState.IsInMotion);
-            }
-        }
-
-        public bool IsValid
-        {
-            get
-            {
-                return (ClampState.IsValid && DockState.IsValid && VacState.IsValid
-                        && DoorKeysState.IsValid && DoorOpenState.IsValid && DoorDownState.IsValid);
-            }
-        }
-
-        public bool IsClamped { get { return ClampState.IsAtPos2; } }
-        public bool IsUnclamped { get { return ClampState.IsAtPos1; } }
-        public bool IsDocked { get { return DockState.IsAtPos2; } }
-        public bool IsUndocked { get { return DockState.IsAtPos1; } }
-        /// <summary>True if vacuum is enabled to the suction cups</summary>
-        public bool IsVacEnabled { get { return VacState.IsAtPos2; } }
-        /// <summary>True if vacuum is disabled from the suction cups</summary>
-        public bool IsVacDisabled { get { return VacState.IsAtPos1; } }
-        public bool AreDoorKeysHorizontal { get { return DoorKeysState.IsAtPos2; } }
-        public bool AreDoorKeysVertical { get { return DoorKeysState.IsAtPos1; } }
-        public bool IsDoorOpen { get { return DoorOpenState.IsAtPos2; } }
-        public bool IsDoorClosed { get { return DoorOpenState.IsAtPos1; } }
-        public bool IsDoorDown { get { return DoorDownState.IsAtPos2; } }
-        public bool IsDoorUp { get { return DoorDownState.IsAtPos1; } }
-
-        public bool IsCarrierOpen { get { return IsDoorOpen && IsDoorDown; } }
-        public bool IsCarrierClosed { get { return IsDoorUp && IsDoorClosed && AreDoorKeysVertical && IsVacDisabled; } }
     }
+
+    #endregion
+
+    #region PositionsSummary
 
     public enum PositionSummary
     {
@@ -372,10 +1010,22 @@ namespace MosaicLib.PartsLib.Common.LPM
         DockedDoorDown,
     }
 
-    public class DisplayState
+    #endregion
+
+    #region DisplayState
+
+    public interface IDisplayState
+    {
+        IDisplayItemState[] ButtonItemArray { get; }
+        IDisplayItemState[] PanelItemArray { get; }
+        IDisplayItemState[] AllItemArray { get; }
+    }
+
+    public class DisplayState : IDisplayState
     {
         public const int DefaultNumPanelItems = 8;
         public const int DefaultNumButtonItems = 2;
+        public const int ButtonLampNumOffset = 8;
 
         public DisplayState()
             : this(DefaultNumPanelItems, DefaultNumButtonItems)
@@ -383,24 +1033,36 @@ namespace MosaicLib.PartsLib.Common.LPM
 
         public DisplayState(int numPanelItems, int numButtonItems)
         {
-            PanelItemArray = Enumerable.Range(1, numPanelItems).Select(ledNum => new DisplayItemState("LED{0}".CheckedFormat(ledNum)) { ItemNum = ledNum }).ToArray();
-            ButtonItemArray = Enumerable.Range(1, numButtonItems).Select(buttonNum => new DisplayItemState("Button{0}".CheckedFormat(buttonNum), "White") { ItemNum = buttonNum }).ToArray();
+            PanelItemArray = Enumerable.Range(0, numPanelItems).Select(ledIdx => new DisplayItemState("LED{0}".CheckedFormat(ledIdx + 1)) { ItemIdx = ledIdx, IsButton = false }).ToArray();
+            ButtonItemArray = Enumerable.Range(0, numButtonItems).Select(buttonIdx => new DisplayItemState("Button{0}".CheckedFormat(buttonIdx + 1), "LightBlue") { ItemIdx = buttonIdx, IsButton = true }).ToArray();
+            AllItemArray = PanelItemArray.Concat(ButtonItemArray).ToArray();
         }
 
-        public DisplayState(DisplayState rhs)
+        public DisplayState(IDisplayState rhs)
+        {
+            SetFrom(rhs);
+        }
+
+        public DisplayState SetFrom(IDisplayState rhs)
         {
             PanelItemArray = rhs.PanelItemArray.Select(item => new DisplayItemState(item)).ToArray();
             ButtonItemArray = rhs.ButtonItemArray.Select(item => new DisplayItemState(item)).ToArray();
+            AllItemArray = PanelItemArray.Concat(ButtonItemArray).ToArray();
+            return this;
         }
 
         public DisplayItemState[] ButtonItemArray { get; private set; }
         public DisplayItemState[] PanelItemArray { get; private set; }
+        public DisplayItemState[] AllItemArray { get; private set; }
 
-        public bool IsEqualTo(DisplayState rhs)
+        IDisplayItemState[] IDisplayState.ButtonItemArray { get { return this.ButtonItemArray; } }
+        IDisplayItemState[] IDisplayState.PanelItemArray { get { return this.PanelItemArray; } }
+        IDisplayItemState[] IDisplayState.AllItemArray { get { return this.AllItemArray; } }
+
+        public bool IsEqualTo(IDisplayState rhs)
         {
             return (rhs != null
-                    && PanelItemArray.IsEqualTo(rhs.PanelItemArray)
-                    && ButtonItemArray.IsEqualTo(rhs.ButtonItemArray)
+                    && AllItemArray.IsEqualTo(rhs.AllItemArray)
                     );
         }
 
@@ -413,32 +1075,94 @@ namespace MosaicLib.PartsLib.Common.LPM
         }
     }
 
-    public struct ButtonSet
+    public interface IButtonSet
     {
+        bool Button1 { get; }
+        bool Button2 { get; }
+
+        int Button1ChangeCount { get; }
+        int Button2ChangeCount { get; }
+
+        bool IsEqualTo(IButtonSet rhs);
+    }
+
+    public class ButtonSet : IButtonSet
+    {
+        public ButtonSet() { }
+
+        public ButtonSet(IButtonSet rhs)
+        {
+            SetFrom(rhs);
+        }
+
+        public ButtonSet SetFrom(IButtonSet rhs)
+        {
+            Button1 = rhs.Button1;
+            Button2 = rhs.Button2;
+
+            Button1ChangeCount = rhs.Button1ChangeCount;
+            Button2ChangeCount = rhs.Button2ChangeCount;
+
+            return this;
+        }
+
         public bool Button1 { get; set; }
         public bool Button2 { get; set; }
-        public bool Button3 { get; set; }
-        public bool Button4 { get; set; }
 
-        public bool IsEqual(ButtonSet rhs)
+        public int Button1ChangeCount { get; set; }
+        public int Button2ChangeCount { get; set; }
+
+        public void ButtonChanged(int buttonNum, bool value)
         {
-            return (Button1 == rhs.Button1 && Button2 == rhs.Button2 && Button3 == rhs.Button3 && Button4 == rhs.Button4);
+            switch (buttonNum)
+            {
+                case 1: Button1ChangeCount++; Button1 = value; break;
+                case 2: Button2ChangeCount++; Button2 = value; break;
+                default: break;
+            }
+        }
+
+        public bool IsEqualTo(IButtonSet rhs)
+        {
+            return (rhs != null 
+                    && Button1 == rhs.Button1 && Button2 == rhs.Button2
+                    && Button1ChangeCount == rhs.Button1ChangeCount && Button2ChangeCount == rhs.Button2ChangeCount);
         }
 
         public override string ToString()
         {
-            string[] buttonsDown = { (Button1 ? "1" : string.Empty), (Button2 ? "2" : string.Empty), (Button3 ? "3" : string.Empty), (Button4 ? "4" : string.Empty) };
+            string[] buttonsDown = { (Button1 ? "1" : string.Empty), (Button2 ? "2" : string.Empty) };
 
-            return string.Join(" ", buttonsDown.Where(s => !s.IsNullOrEmpty()).ToArray()).MapNullOrEmptyTo("None");
+            return "{0} {1} {2}".CheckedFormat(string.Join(" ", buttonsDown.Where(s => !s.IsNullOrEmpty()).ToArray()).MapNullOrEmptyTo("None"), Button1ChangeCount, Button2ChangeCount);
         }
     }
 
-    public class DisplayItemState
+    public interface IDisplayItemState
     {
+        bool IsButton { get; }
+        int ItemIdx { get; }
+        int LampNum { get; }
+        string Text { get; }
+        string BorderColor { get; }
+        string OffBackgroundColor { get; }
+        string OnBackgroundColor { get; }
+        DisplayItemState.OnOffFlashState State { get; }
+        bool IsInternal { get; }
+        DisplayItemState.OnOffFlashState LastLampCmdState { get; }
+        bool FlashStateIsOn { get; }
+        string CurrentBackgroundColor { get; }
+    }
+
+    public class DisplayItemState : IDisplayItemState
+    {
+        /// <summary>Represents the different states that an individual LPM physical annunciator (LED) can be set to</summary>
         public enum OnOffFlashState
         {
+            /// <summary>LED is in inactive state.  0</summary>
             Off = 0,
+            /// <summary>LED is in active state.  1</summary>
             On = 1,
+            /// <summary>LED is in cycling between and passive and active state.  2</summary>
             Flash = 2,
         };
 
@@ -467,9 +1191,15 @@ namespace MosaicLib.PartsLib.Common.LPM
             }
         }
 
-        public DisplayItemState(DisplayItemState rhs)
+        public DisplayItemState(IDisplayItemState rhs)
         {
-            ItemNum = rhs.ItemNum;
+            SetFrom(rhs);
+        }
+
+        public DisplayItemState SetFrom(IDisplayItemState rhs)
+        {
+            IsButton = rhs.IsButton;
+            ItemIdx = rhs.ItemIdx;
             Text = rhs.Text;
             BorderColor = rhs.BorderColor;
             OffBackgroundColor = rhs.OffBackgroundColor;
@@ -478,9 +1208,13 @@ namespace MosaicLib.PartsLib.Common.LPM
             LastLampCmdState = rhs.LastLampCmdState;
             IsInternal = rhs.IsInternal;
             FlashStateIsOn = rhs.FlashStateIsOn;
+
+            return this;
         }
 
-        public int ItemNum { get; set; }
+        public bool IsButton { get; set; }
+        public int ItemIdx { get; set; }
+        public int LampNum { get { return (ItemIdx + 1 + (IsButton ? DisplayState.ButtonLampNumOffset : 0)); } }
 
         public string Text { get; set; }
         public string BorderColor { get; set; }
@@ -512,7 +1246,7 @@ namespace MosaicLib.PartsLib.Common.LPM
 
         public override bool Equals(object obj)
         {
-            return IsEqualTo(obj as DisplayItemState);
+            return IsEqualTo(obj as IDisplayItemState);
         }
 
         public override int GetHashCode()
@@ -525,9 +1259,11 @@ namespace MosaicLib.PartsLib.Common.LPM
             return "{0} {1} {2}".CheckedFormat(Text, State, CurrentBackgroundColor);
         }
 
-        public bool IsEqualTo(DisplayItemState rhs)
+        public bool IsEqualTo(IDisplayItemState rhs)
         {
             return (rhs != null
+                    && IsButton == rhs.IsButton
+                    && ItemIdx == rhs.ItemIdx
                     && Text == rhs.Text
                     && BorderColor == rhs.BorderColor
                     && OffBackgroundColor == rhs.OffBackgroundColor
@@ -538,6 +1274,30 @@ namespace MosaicLib.PartsLib.Common.LPM
                     && FlashStateIsOn == rhs.FlashStateIsOn
                     );
         }
+    }
+
+    #endregion
+
+    #region Common extension methods
+
+    public static partial class ExtensionMethods
+    {
+        public static bool IsNeitherPresentNorPlaced(this PresentPlaced value) { return (value == PresentPlaced.None); }
+        public static bool IsPresent(this PresentPlaced value) { return value.IsSet(PresentPlaced.Present); }
+        public static bool IsPlaced(this PresentPlaced value) { return value.IsSet(PresentPlaced.Placed); }
+        public static bool IsProperlyPlaced(this PresentPlaced value) { return value.Matches(PresentPlaced.Present | PresentPlaced.Placed, PresentPlaced.Present | PresentPlaced.Placed); }
+        public static bool DoesPlacedEqualPresent(this PresentPlaced value) { return value.IsSet(PresentPlaced.Present) == value.IsSet(PresentPlaced.Placed); }
+        public static bool IsPlacedOrPresent(this PresentPlaced value) { return value.IsSet(PresentPlaced.Present) || value.IsSet(PresentPlaced.Placed); }
+
+        public static bool IsSet(this PresentPlaced value, PresentPlaced test) { return value.Matches(test, test); }
+        public static bool IsSet(this InfoPads value, InfoPads test) { return value.Matches(test, test); }
+        public static bool IsSet(this CarrierType value, CarrierType test) { return value.Matches(test, test); }
+        public static bool IsSet(this OCA value, OCA test) { return value.Matches(test, test); }
+
+        public static bool Matches(this PresentPlaced testValue, PresentPlaced mask, PresentPlaced expectedValue) { return ((testValue & mask) == expectedValue); }
+        public static bool Matches(this InfoPads testValue, InfoPads mask, InfoPads expectedValue) { return ((testValue & mask) == expectedValue); }
+        public static bool Matches(this CarrierType testValue, CarrierType mask, CarrierType expectedValue) { return ((testValue & mask) == expectedValue); }
+        public static bool Matches(this OCA testValue, OCA mask, OCA expectedValue) { return ((testValue & mask) == expectedValue); }
     }
 
     #endregion

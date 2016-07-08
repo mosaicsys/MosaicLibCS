@@ -57,6 +57,22 @@ namespace MosaicLib.PartsLib.Common.LPM.Sim
 
     #region LPMSimPartConfigBase
 
+    public enum LPType : int
+    {
+        None = 0,
+        Fixload6,
+        VisionLPM,
+    }
+
+    public enum LPTagRWType : int
+    {
+        None = 0,
+        Hermos,
+        BrooksRFID,
+        OmronV640,
+    }
+
+
     public class LPMSimPartConfigBase
 	{
         public LPMSimPartConfigBase(LPMSimPartConfigBase rhs)

@@ -69,6 +69,24 @@
     <Compile Include="Controls\BasicLED.xaml.cs">
       <DependentUpon>BasicLED.xaml</DependentUpon>
     </Compile>
+    <Compile Include="Controls\E84\E84_ActiveSide_CombinedControl.xaml.cs">
+      <DependentUpon>E84_ActiveSide_CombinedControl.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Controls\E84\E84_AtoP_Control.xaml.cs">
+      <DependentUpon>E84_AtoP_Control.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Controls\E84\E84_AtoP_Display.xaml.cs">
+      <DependentUpon>E84_AtoP_Display.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Controls\E84\E84_PassiveSide_CombinedControl.xaml.cs">
+      <DependentUpon>E84_PassiveSide_CombinedControl.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Controls\E84\E84_PtoA_Control.xaml.cs">
+      <DependentUpon>E84_PtoA_Control.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Controls\E84\E84_PtoA_Display.xaml.cs">
+      <DependentUpon>E84_PtoA_Display.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Controls\PartBaseStateLED.xaml.cs">
       <DependentUpon>PartBaseStateLED.xaml</DependentUpon>
     </Compile>
@@ -90,6 +108,30 @@
     <Page Include="Controls\BasicLED.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Controls\E84\E84_ActiveSide_CombinedControl.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Controls\E84\E84_AtoP_Control.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Controls\E84\E84_AtoP_Display.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Controls\E84\E84_PassiveSide_CombinedControl.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Controls\E84\E84_PtoA_Control.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Controls\E84\E84_PtoA_Display.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
     </Page>
     <Page Include="Controls\PartBaseStateLED.xaml">
       <Generator>MSBuild:Compile</Generator>

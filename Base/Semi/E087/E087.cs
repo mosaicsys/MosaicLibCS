@@ -22,9 +22,10 @@
 
 using System;
 using System.Collections.Generic;
+using System.Text;
+using System.Linq;
 using MosaicLib.Semi.E005;
 using MosaicLib.Utils;
-using System.Text;
 
 namespace MosaicLib.Semi.E087
 {
@@ -638,6 +639,40 @@ namespace MosaicLib.Semi.E087
     public static partial class ExtensionMethods
     {
         /// <summary>
+        /// Returns true if the given slotState parameter contains a known value (one of CorrectlyOccupied, Empty, NotEmpty, CrossSlotted, DoubleSlotted, or Undefined).
+        /// </summary>
+        public static bool IsValid(this SlotState slotState)
+        {
+            switch (slotState)
+            {
+                case SlotState.CorrectlyOccupied:
+                case SlotState.Empty:
+                case SlotState.NotEmpty:
+                case SlotState.CrossSlotted:
+                case SlotState.DoubleSlotted:
+                case SlotState.Undefined:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        /// <summary>
+        /// Returns true if the given slotState parameter contains a normal value (one of CorrectlyOccupied, or Empty).
+        /// </summary>
+        public static bool IsNormal(this SlotState slotState)
+        {
+            switch (slotState)
+            {
+                case SlotState.CorrectlyOccupied:
+                case SlotState.Empty:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        /// <summary>
         /// Sets the given slotStateList to contain the decoded version of the given fromSlotMapStr using the character parsing from the SlotState enum summary comments
         /// <para/>? = Invalid, ! = Undefined, - = Empty, * = NotEmpty, o = CorrectlyOccupied, D = DoubleSlotted, X = CrossSlotted, digits = corresponding states, all else = Invalid
         /// <para/>Returns the given slotStateList (or a new one if the method was passed null for the list.  If needed, the given list will be cleared before parsing.
@@ -688,15 +723,34 @@ namespace MosaicLib.Semi.E087
         }
 
         /// <summary>
+        /// Generates and returns an array of SlotStates decoded from the given fromSlotMapStr using the character parsing from the SlotState enum summary comments
+        /// <para/>? = Invalid, ! = Undefined, - = Empty, * = NotEmpty, o = CorrectlyOccupied, D = DoubleSlotted, X = CrossSlotted, digits = corresponding states, all else = Invalid
+        /// <para/>Returns the given slotStateList (or a new one if the method was passed null for the list.  If append is false and the list is not empty on entry, the given list will be cleared before parsing.
+        /// </summary>
+        public static SlotState [] ParseSlotStates(this string fromSlotMapStr)
+        {
+            return new List<SlotState>().Parse(fromSlotMapStr, true).ToArray();
+        }
+
+        /// <summary>
         /// Converts the given slotStateList to a string using the requested format of Graphics or Digits, and returns the string.
         /// </summary>
-        public static string ToString(this List<SlotState> slotStateList, SlotStateStringFormat format)
+        public static string ToString(this IList<SlotState> slotStateList, SlotStateStringFormat format)
         {
             return ToString(slotStateList, (format == SlotStateStringFormat.Graphics ? graphicsCharArray : digitsCharArray));
         }
 
+        /// <summary>
+        /// Converts the given slotStateList to a string using the requested format of Graphics or Digits, and returns the string.
+        /// </summary>
+        public static string ToString(this SlotState [] slotStateArray, SlotStateStringFormat format)
+        {
+            return ToString(slotStateArray, (format == SlotStateStringFormat.Graphics ? graphicsCharArray : digitsCharArray));
+        }
+
         /// <summary>Char array used to translate a SlotState value (casted as an integer + 1) into a graphical character</summary>
         public static readonly char[] graphicsCharArray = ("?!-*oDX".ToCharArray());
+
         /// <summary>Char array used to translate a SlotState value (casted as an integer) into a digit equivilant.  SlotState.Invalid is transformed to '?'</summary>
         public static readonly char[] digitsCharArray = ("?012345".ToCharArray());
 
@@ -706,13 +760,24 @@ namespace MosaicLib.Semi.E087
         /// char array index 1 is for SlotState.Undefined, etc... All states that after incrementing, do not map to valid index will
         /// be represented in the output by a ?.
         /// </summary>
-        public static string ToString(this List<SlotState> slotStateList, char[] slotStateToCharMappingArray)
+        public static string ToString(this IList<SlotState> slotStateList, char[] slotStateToCharMappingArray)
+        {
+            return slotStateList.ToArray().ToString(slotStateToCharMappingArray);
+        }
+
+        /// <summary>
+        /// Converts the given slotStateArray to a string using the given char array which is used to obtain the character for each
+        /// SlotState value (casted as an integer), shifted right by one.  char array index 0 is for the SlotState.Invalid state,
+        /// char array index 1 is for SlotState.Undefined, etc... All states that after incrementing, do not map to valid index will
+        /// be represented in the output by a ?.
+        /// </summary>
+        public static string ToString(this SlotState [] slotStateArray, char[] slotStateToCharMappingArray)
         {
             StringBuilder sb = new StringBuilder();
 
-            if (slotStateList != null)
+            if (slotStateArray != null)
             {
-                foreach (SlotState slotState in slotStateList)
+                foreach (SlotState slotState in slotStateArray)
                 {
                     sb.Append(slotStateToCharMappingArray.SafeAccess(1 + unchecked((int)slotState), '?'));
                 }

@@ -172,7 +172,12 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
         ///</summary>
 		///<remarks>This signal is NOT part of the E084 standard and is not included in the 25 pin connector.</remarks>
 		bool XferILock { get; }
-	}
+
+        /// <summary>
+        /// Returns true if this object has the same contents as the given rhs
+        /// </summary>
+        bool IsEqualTo(IActiveToPassivePinsState rhs);
+    }
 
     ///<summary>Interface used to define and access PassiveToActivePins state.</summary>
     ///<remarks>PassiveToActivePins use SIGNAL_COM (pin25) and SIGNAL_24V (pin 22) [references provided by Active side]</remarks>
@@ -214,7 +219,12 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
         ///<summary>ES (emergency stop) - Please see E084 standard for details on specific meaning of this signal.  External actors are required to halt motion immediately when this signal is not active.<para/>pin 8, 0x0080</summary>
 		///<remarks>NOTE: This signal is active (current flowing) when motion is permitted.</remarks>
 		bool ES { get; }
-	}
+
+        /// <summary>
+        /// Returns true if this object has the same contents as the given rhs
+        /// </summary>
+        bool IsEqualTo(IPassiveToActivePinsState rhs);
+    }
 	
 	#endregion
 
@@ -270,7 +280,7 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
         }
 
         /// <summary>
-        /// Returns true if the given pair of objects have the identical contents
+        /// Returns true if this object has the same contents as the given rhs
         /// </summary>
         public bool IsEqualTo(IActiveToPassivePinsState rhs)
         {
@@ -442,9 +452,8 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
             }
         }
 
-
         /// <summary>
-        /// Returns true if the given pair of objects have the identical contents
+        /// Returns true if this object has the same contents as the given rhs
         /// </summary>
         public bool IsEqualTo(IPassiveToActivePinsState rhs)
         {

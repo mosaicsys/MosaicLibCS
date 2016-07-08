@@ -763,6 +763,23 @@ namespace MosaicLib.Modular.Interconnect.Values
 
             int numEntriesSet = 0;
 
+            if (optimize)
+            {
+                bool areAnySetsPending = false;
+
+                foreach (IValueAccessor iva in accessorArray)
+                {
+                    if (iva.IsSetPending)
+                    {
+                        areAnySetsPending = true;
+                        break;
+                    }
+                }
+
+                if (!areAnySetsPending)
+                    return;
+            }
+
             lock (mutex)
             {
                 for (int idx = 0; idx < numEntriesToSet; idx++)

@@ -1158,7 +1158,7 @@ namespace MosaicLib.Utils
 
             if (numDigits < minDigits)
                 success = false;
-            else if (requireTokenEnd && !IsValidTokenEndChar(localScanner.Char, TokenType.HexDigits))
+            else if (requireTokenEnd && !localScanner.IsAtEnd && !IsValidTokenEndChar(localScanner.Char, TokenType.HexDigits))
                 success = false;
 
             if (skipTrailingWhiteSpace)

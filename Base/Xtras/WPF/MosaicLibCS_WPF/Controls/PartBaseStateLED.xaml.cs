@@ -1,18 +1,29 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+﻿//-------------------------------------------------------------------
+/*! @file PartBaseStateLED.cs
+ *  @brief
+ * 
+ * Copyright (c) Mosaic Systems Inc., All rights reserved.
+ * Copyright (c) 2016 Mosaic Systems Inc., All rights reserved.
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * 
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
-using MosaicLib.Modular.Part;
 using System.ComponentModel;
+using MosaicLib.Modular.Part;
+using MosaicLib.Utils;
 
 namespace MosaicLib.WPF.Controls
 {
@@ -29,33 +40,32 @@ namespace MosaicLib.WPF.Controls
             ellipseRGB_GS1 = ellipseRGB.GradientStops[0];
             ellipseRGB_GS2 = ellipseRGB.GradientStops[1];
 
-            lastPartBaseState = new BaseState();
-            //lastActiveColor = lastInactiveColor = ellipseRGB_GS2.Color;
+            lastPartBaseState = null;
             lastHighlightColor = ellipseRGB_GS1.Color;
             lastBorderWidth = ellipse.StrokeThickness;
         }
 
         private static readonly DependencyProperty partBaseStateDP = DependencyProperty.Register("PartBaseState", typeof(IBaseState), typeof(PartBaseStateLED));
-        private static readonly DependencyProperty borderWidthDP = DependencyProperty.Register("BorderWidth", typeof(double), typeof(PartBaseStateLED));
+        private static readonly DependencyProperty actionInfoDP = DependencyProperty.Register("ActionInfo", typeof(IActionInfo), typeof(PartBaseStateLED));
+        private static readonly DependencyProperty borderWidthDP = DependencyProperty.Register("BorderWidth", typeof(double ?), typeof(PartBaseStateLED));
         private static readonly DependencyProperty highlightColorDP = DependencyProperty.Register("HighlightColor", typeof(Color), typeof(PartBaseStateLED));
-        //private static readonly DependencyProperty idleColorDP = DependencyProperty.Register("IdleColor", typeof(Color), typeof(PartBaseStateLED));
-        //private static readonly DependencyProperty inactiveColorDP = DependencyProperty.Register("InactiveColor", typeof(Color), typeof(PartBaseStateLED));
+        private static readonly DependencyProperty includeConnectionStateDP = DependencyProperty.Register("IncludeConnectionState", typeof(bool?), typeof(PartBaseStateLED));
 
         public IBaseState PartBaseState { get { return (IBaseState)GetValue(partBaseStateDP); } set { SetValue(partBaseStateDP, value); } }
-        public double BorderWidth { get { return (double)GetValue(borderWidthDP); } set { SetValue(borderWidthDP, value); } }
+        public IActionInfo ActionInfo { get { return (IActionInfo)GetValue(actionInfoDP); } set { SetValue(actionInfoDP, value); } }
+        public double? BorderWidth { get { return (double?)GetValue(borderWidthDP); } set { SetValue(borderWidthDP, value); } }
         public Color HighlightColor { get { return (Color)GetValue(highlightColorDP); } set { SetValue(highlightColorDP, value); } }
-        //public Color ActiveColor { get { return (Color)GetValue(idleColorDP); } set { SetValue(idleColorDP, value); } }
-        //public Color InactiveColor { get { return (Color)GetValue(inactiveColorDP); } set { SetValue(inactiveColorDP, value); } }
+        public bool? IncludeConnectionState { get { return (bool?)GetValue(borderWidthDP); } set { SetValue(borderWidthDP, value); } }
 
         private RadialGradientBrush ellipseRGB = null;
         private GradientStop ellipseRGB_GS1 = null;
         private GradientStop ellipseRGB_GS2 = null;
 
         private IBaseState lastPartBaseState;
+        private IActionInfo lastActionInfo;
         private double lastBorderWidth;
         private Color lastHighlightColor;
-        //private Color lastActiveColor;
-        //private Color lastInactiveColor;
+        private bool lastIncludeConnectionState;
 
         /// <summary>
         /// Callback from WPF to tell us that one of the dependency properties has been changed.
@@ -65,14 +75,14 @@ namespace MosaicLib.WPF.Controls
         {
             if (e.Property == partBaseStateDP)
                 lastPartBaseState = (IBaseState)e.NewValue;
+            else if (e.Property == actionInfoDP)
+                lastActionInfo = (IActionInfo)e.NewValue;
             else if (e.Property == borderWidthDP)
-                lastBorderWidth = (double)e.NewValue;
+                lastBorderWidth = ((double?)e.NewValue).MapDefaultTo(1).GetValueOrDefault();
             else if (e.Property == highlightColorDP)
                 lastHighlightColor = (Color)e.NewValue;
-            //else if (e.Property == idleColorDP)
-            //    lastActiveColor = (Color)e.NewValue;
-            //else if (e.Property == inactiveColorDP)
-            //    lastInactiveColor = (Color)e.NewValue;
+            else if (e.Property == includeConnectionStateDP)
+                lastIncludeConnectionState = ((bool?)e.NewValue).GetValueOrDefault();
 
             Update();
 
@@ -81,9 +91,13 @@ namespace MosaicLib.WPF.Controls
 
         private void Update()
         {
-            Color color = uninitializedColor;
+            string toolTipMesg = "{0}".CheckedFormat(lastPartBaseState);
 
-            if (lastPartBaseState.IsFaulted())
+            Color color;
+
+            if (lastPartBaseState == null)
+                color = uninitializedColor;
+            else if (lastPartBaseState.IsFaulted())
                 color = errorColor;
             else if (lastPartBaseState.IsUninitialized())
                 color = uninitializedColor;
@@ -91,12 +105,37 @@ namespace MosaicLib.WPF.Controls
                 color = offlineColor;
             else if (lastPartBaseState.UseState == UseState.AttemptOnline || lastPartBaseState.IsConnecting)
                 color = initializingColor;
+            else if (lastIncludeConnectionState && !lastPartBaseState.IsConnected)
+                color = disconnectedColor;
             else if (lastPartBaseState.IsOnline || lastPartBaseState.IsConnected)
-                color = lastPartBaseState.IsBusy ? busyColor : idleColor;
+            {
+                if (lastPartBaseState.IsBusy)
+                {
+                    color = busyColor;
+                    toolTipMesg = "Busy, {0}".CheckedFormat(lastActionInfo);
+                }
+                else if (lastActionInfo != null && lastActionInfo.ActionState.Failed)
+                {
+                    color = actionFailedColor;
+                    toolTipMesg = "{0}".CheckedFormat(lastActionInfo);
+                }
+                else
+                {
+                    color = idleColor;
+                    toolTipMesg = "Idle, {0}".CheckedFormat(lastActionInfo);
+                }
+            }
             else
+            {
                 color = undefinedStateColor;
+            }
 
             UpdateAndSetColor(color);
+
+            if (ellipse != null)
+            {
+                ellipse.ToolTip = toolTipMesg;
+            }
         }
 
         private void UpdateAndSetColor(Color currentColor)
@@ -114,9 +153,11 @@ namespace MosaicLib.WPF.Controls
         private Color uninitializedColor = (Color)colorConverter.ConvertFrom("Goldenrod");
         private Color initializingColor = (Color)colorConverter.ConvertFrom("Gold");
         private Color idleColor = (Color) colorConverter.ConvertFrom("DarkGreen");
-        private Color busyColor = (Color)colorConverter.ConvertFrom("Green");
+        private Color busyColor = (Color)colorConverter.ConvertFrom("Lime");
         private Color errorColor = (Color)colorConverter.ConvertFrom("Red");
         private Color offlineColor = (Color)colorConverter.ConvertFrom("DarkGray");
+        private Color disconnectedColor = (Color)colorConverter.ConvertFrom("DarkRed");
         private Color undefinedStateColor = (Color)colorConverter.ConvertFrom("Pink");
+        private Color actionFailedColor = (Color)colorConverter.ConvertFrom("Orange");
     }
 }

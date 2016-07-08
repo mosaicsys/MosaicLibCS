@@ -49,29 +49,11 @@ namespace MosaicLib.PartsLib.Common.E099.Sim
         void AttachToLP(LPM.Sim.ILPMSimPart lpmSimPart);
 
         IReadPagesAction CreateReadPagesAction(int startPageIdx, int numPages);
-        IBasicAction CreateWritePageAction(ITagPageContents [] pages);
+        IBasicAction CreateWritePagesAction(ITagPageContents [] pages);
         IBasicAction CreateIncrementCounterAction();
     }
 
     public interface IReadPagesAction : Modular.Action.IClientFacetWithResult<ITagPageContents []> {}
-
-    public interface ITagPageContents
-    {
-        int PageIndex { get; }
-        byte [] ByteArray { get; }
-
-        bool Equals(object rhsAsObject);
-
-        string ToString(TagRWPageContentsStringFormat fmtToUse);
-    }
-
-    public enum TagRWPageContentsStringFormat
-    {
-        HexAndAscii = 0,
-        DecimalPageSpaceBytesInHex,
-        DecimalPageSpaceQuotedBytesInHex,
-        Default = HexAndAscii,
-    }
 
 	public enum E099TagRWSimEngineMode : int
 	{
@@ -349,69 +331,6 @@ namespace MosaicLib.PartsLib.Common.E099.Sim
         }
     }
 
-    public class TagPageContents : ITagPageContents
-    {
-        public int PageIndex { get; set; }
-        public byte[] ByteArray { get; set; }
-
-        public override bool Equals(object rhsAsObject)
-        {
-            ITagPageContents rhs = rhsAsObject as ITagPageContents;
-            if (rhs == null)
-                return false;
-
-            return (PageIndex == rhs.PageIndex && ByteArray.IsEqualTo(rhs.ByteArray));
-        }
-
-        public override int GetHashCode()
-        {
-            return base.GetHashCode();
-        }
-
-        public override string ToString()
-        {
-            return ToString(TagRWPageContentsStringFormat.Default);
-        }
-
-        public string ToString(TagRWPageContentsStringFormat fmtToUse)
-        {
-            switch (fmtToUse)
-            {
-                case TagRWPageContentsStringFormat.DecimalPageSpaceBytesInHex:
-                    // version used by some drivers
-                    return Fcns.CheckedFormat("{0:d2} {1}", (PageIndex + 1), ByteArrayTranscoders.HexStringTranscoderNoPadding.Encode(ByteArray));
-
-                case TagRWPageContentsStringFormat.DecimalPageSpaceQuotedBytesInHex:
-                    // version used by some drivers
-                    return Fcns.CheckedFormat("{0:d2} '{1}'", (PageIndex + 1), ByteArrayTranscoders.HexStringTranscoderNoPadding.Encode(ByteArray));
-
-                case TagRWPageContentsStringFormat.HexAndAscii:
-                default:
-                    // version used for screen display and logging.
-                    {
-                        StringBuilder sb = new StringBuilder();
-
-                        sb.CheckedAppendFormat("{0:d2}: {1} [", (PageIndex + 1), ByteArrayTranscoders.HexStringTranscoder.Encode(ByteArray));
-
-                        foreach (byte b in ByteArray)
-                        {
-                            char c = unchecked((char)b);
-
-                            if (Char.IsLetterOrDigit(c) || Char.IsPunctuation(c) || Char.IsSymbol(c))
-                                sb.Append(c);
-                            else
-                                sb.Append('.');
-                        }
-
-                        sb.Append(']');
-
-                        return sb.ToString();
-                    }
-            }
-        }
-    }
-
-
     public class E099TagRWSimEngine : SimpleActivePartBase, ITagRWSimEngine
     {
         #region Construction
@@ -467,7 +386,7 @@ namespace MosaicLib.PartsLib.Common.E099.Sim
 
             IValuesInterconnection ivi = IVI ?? Values.Instance;
 
-            podSensorValuesIVA = ivi.GetValueAccessor("{0}.PodSensorValues".CheckedFormat(lpmPartID));
+            presentPlacedIVA = ivi.GetValueAccessor<PresentPlaced>("{0}.PresentPlacedValue".CheckedFormat(lpmPartID));
         }
 
         private IValuesInterconnection IVI { get; set; }
@@ -527,25 +446,26 @@ namespace MosaicLib.PartsLib.Common.E099.Sim
 
         public LPM.Sim.ILPMSimPart LpmSimPart { get; private set; }
 
-        IValueAccessor podSensorValuesIVA = null;
-        LPM.PodSensorValues lastLPMSimConfirmedPPState = LPM.PodSensorValues.None;
+        IValueAccessor<PresentPlaced> presentPlacedIVA = null;
+        PresentPlaced? lastLPMSimConfirmedPPState = null;
 
         protected override void PerformMainLoopService()
         {
             // track the LPMSim pod presance state and detect and handle each time that the carrier has been removed.  
             // Typically this increments the count
 
-            if (podSensorValuesIVA != null && podSensorValuesIVA.IsUpdateNeeded)
+            if (presentPlacedIVA != null && presentPlacedIVA.IsUpdateNeeded)
             {
-                PodSensorValues podSensorValues = podSensorValuesIVA.Update().ValueContainer.GetValue<PodSensorValues>(false);
+                PresentPlaced presentPlacedValue = presentPlacedIVA.Update().Value;
 
-                if (lastLPMSimConfirmedPPState != podSensorValues)
+                if (lastLPMSimConfirmedPPState == null || presentPlacedValue != lastLPMSimConfirmedPPState.GetValueOrDefault())
                 {
-                    if (lastLPMSimConfirmedPPState == PodSensorValues.ProperyPlaced && podSensorValues == PodSensorValues.None)
+                    bool lastHasValue = lastLPMSimConfirmedPPState.HasValue;
+                    if (lastHasValue && lastLPMSimConfirmedPPState.GetValueOrDefault().IsProperlyPlaced() && presentPlacedValue.IsNeitherPresentNorPlaced())
                         CarrierHasBeenRemoved();
 
-                    if (podSensorValues.DoesPlacedEqualPresent())
-                        lastLPMSimConfirmedPPState = podSensorValues;
+                    if (presentPlacedValue.DoesPlacedEqualPresent())
+                        lastLPMSimConfirmedPPState = presentPlacedValue;
                 }
             }
 
@@ -624,6 +544,11 @@ namespace MosaicLib.PartsLib.Common.E099.Sim
             return String.Empty;
         }
 
+        public TagReaderType TagReaderType
+        {
+            get { return (TagReaderType.Reader | TagReaderType.Writer | TagReaderType.TIRIS); }
+        }
+
         private class ReadPagesAction : Modular.Action.ActionImplBase<NullObj, ITagPageContents[]>, IReadPagesAction
         {
             public ReadPagesAction(ActionQueue actionQ, ActionMethodDelegateActionArgStrResult<NullObj, ITagPageContents[]> method, ActionLogging logging) 
@@ -677,7 +602,7 @@ namespace MosaicLib.PartsLib.Common.E099.Sim
 
         private readonly static ITagPageContents[] EmptyPageContentsArray = new ITagPageContents[0];
 
-        public IBasicAction CreateWritePageAction(ITagPageContents[] pages)
+        public IBasicAction CreateWritePagesAction(ITagPageContents[] pages)
         {
             string pageNumListStr = String.Join(",", pages.Select((page) => page.PageIndex).Select((pageIdx) => Fcns.CheckedFormat("${0:x2}", pageIdx + 1)).ToArray());
             ActionMethodDelegateStrResult method = (() => PerformWritePageAction(pages));

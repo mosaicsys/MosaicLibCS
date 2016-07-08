@@ -27,13 +27,12 @@ using MosaicLib.Modular.Common;
 using System.Diagnostics;
 using System.Reflection;
 using MosaicLib.Modular.Interconnect.Values;
+using System.Text;
 
 namespace MosaicLib.Modular.Part
 {
-	//-----------------------------------------------------------------
-
-	//------------------------------------
-	#region enums UseState and ConnState
+    //-----------------------------------------------------------------
+    #region enums UseState and ConnState
 
 	/// <summary>Generic summary state for current usability of a part</summary>
 	/// <remarks>
@@ -98,7 +97,7 @@ namespace MosaicLib.Modular.Part
 
 	#endregion
 
-    //------------------------------------
+    //-----------------------------------------------------------------
     #region static class for static query methods on UseState and ConnState enum values (used by BaseState)
 
     /// <summary>
@@ -180,6 +179,9 @@ namespace MosaicLib.Modular.Part
         /// <summary>reports the, possibly empty, name of any action that part is currently performing</summary>
         string ActionName { get; }
 
+        /// <summary>reports the, possibly empty, reported reason for the last BaseState change</summary>
+        string Reason { get; }
+
 		/// <summary>reports the timestamp at which the new contents or state object was generated.</summary>
 		QpcTimeStamp TimeStamp { get; }
 
@@ -248,6 +250,8 @@ namespace MosaicLib.Modular.Part
 
         /// <summary>
         /// Returns true if the given baseState is null or its UseState is any Failure/Failed state or its ConnState is any Failed state.
+        /// <para/>Includes UseStates: AttemptOnlineFailed, FailedToOffline, OnlineFailure
+        /// <para/>includes ConnStates: ConnectFailed, ConnectionFailed
         /// </summary>
         public static bool IsFaulted(this IBaseState baseState)
         {
@@ -351,11 +355,11 @@ namespace MosaicLib.Modular.Part
 		/// <summary>Creates a blank Service Action.  Service actions require a string parameter value which must be provided to the created action before it is started.  All service action functionality is Part specific.</summary>
 		IStringParamAction CreateServiceAction();
 
-		/// <summary>Creates a Service Action and preinitializes its parameter to the given value.  All service action functionality is Part specific.</summary>
+        /// <summary>Creates a Service Action and preinitializes its parameter to the given serviceName value.  All service action functionality is Part specific.</summary>
 		IStringParamAction CreateServiceAction(string serviceName);
 
-        /// <summary>Method creates a Service Action with the Param and NamedParamValues preconfigured with the given values.</summary>
-        IStringParamAction CreateServiceAction(string paramValue, INamedValueSet namedParamValues);
+        /// <summary>Method creates a Service Action with the serviceName and NamedParamValues preconfigured with the given values.</summary>
+        IStringParamAction CreateServiceAction(string serviceName, INamedValueSet namedParamValues);
     }
 
 	#endregion
@@ -395,12 +399,18 @@ namespace MosaicLib.Modular.Part
         /// <param name="partType">This gives the type that the part will carry</param>
 		protected PartBaseBase(string partID, string partType) 
 		{
-			PartID = partID;
-            PartType = partType;
+            if (!partID.IsNullOrEmpty())
+                PartID = partID;
+            else
+    			PartID = "[DefaultPartID:${0:x4}]".CheckedFormat(partIDSeqNumGenerator.Increment());
 
-			Asserts.CheckIfConditionIsNotTrue(!String.IsNullOrEmpty(PartID), "PartID is valid");
-			Asserts.CheckIfConditionIsNotTrue(!String.IsNullOrEmpty(PartType), "PartType is valid");
+            if (!partType.IsNullOrEmpty())
+                PartType = partType;
+            else
+                PartType = this.GetType().ToString();
 		}
+
+        private static AtomicInt64 partIDSeqNumGenerator = new AtomicInt64();
 
         #endregion
 
@@ -445,6 +455,7 @@ namespace MosaicLib.Modular.Part
 		private ConnState connState;
         private string actionName;
         private QpcTimeStamp timeStamp;
+        private string reason;
 
 		#endregion
 
@@ -459,7 +470,9 @@ namespace MosaicLib.Modular.Part
         /// <summary>reports the ConnState of the part at the time the client obtained this state object</summary>
         public ConnState ConnState { get { return connState; } set { connState = value; timeStamp.SetToNow(); } }
         /// <summary>reports the, possibly empty, name of any action that part is currently performing</summary>
-        public string ActionName { get { return Utils.Fcns.MapNullToEmpty(actionName); } set { actionName = value; timeStamp.SetToNow(); } }
+        public string ActionName { get { return actionName.MapNullToEmpty(); } set { actionName = value; timeStamp.SetToNow(); } }
+        /// <summary>reports the, possibly empty, reported reason for the last BaseState change.</summary>
+        public string Reason { get { return reason.MapNullToEmpty(); } set { reason = value; timeStamp.SetToNow(); } }
         /// <summary>reports the timestamp at which the new contents or state object was generated.</summary>
         public QpcTimeStamp TimeStamp { get { return timeStamp; } }
 
@@ -487,6 +500,7 @@ namespace MosaicLib.Modular.Part
                 && UseState == rhs.UseState
                 && ConnState == rhs.ConnState
                 && ActionName == rhs.ActionName
+                && Reason == rhs.Reason
                 && TimeStamp == rhs.TimeStamp
                 );
         }
@@ -555,12 +569,33 @@ namespace MosaicLib.Modular.Part
             return this;
         }
 
-        /// <summary>Sets the UseState, the ActionName and the ConnState parameters and sets the TimeStamp to Now.</summary>
+        /// <summary>Sets the UseState, ActionName, and ConnState parameters and sets the TimeStamp to Now.</summary>
         public BaseState SetState(UseState useState, string actionName, ConnState connState)
         {
             this.useState = useState;
             this.actionName = actionName;
             this.connState = connState;
+            timeStamp.SetToNow();
+            return this;
+        }
+
+        /// <summary>Sets the UseState, ConnState, and the Reason parameters and sets the TimeStamp to Now.</summary>
+        public BaseState SetState(UseState useState, ConnState connState, string reason)
+        {
+            this.useState = useState;
+            this.connState = connState;
+            this.reason = reason;
+            timeStamp.SetToNow();
+            return this;
+        }
+
+        /// <summary>Sets the UseState, ActionName, ConnState, and the Reason parameters and sets the TimeStamp to Now.</summary>
+        public BaseState SetState(UseState useState, string actionName, ConnState connState, string reason)
+        {
+            this.useState = useState;
+            this.actionName = actionName;
+            this.connState = connState;
+            this.reason = reason;
             timeStamp.SetToNow();
             return this;
         }
@@ -574,24 +609,32 @@ namespace MosaicLib.Modular.Part
             return this;
         }
 
+        /// <summary>
+        /// Sets this structs contents to be a copy from the given IBaseState value and updates the reason to the given value
+        /// </summary>
+        public BaseState SetState(IBaseState rhs, string reason)
+        {
+            this = new BaseState(rhs) { reason = reason };
+            return this;
+        }
+
         /// <summary>Provides a print/log/debug suitable string representation of the contents of this state object.</summary>
         public override string ToString()
 		{
-            bool includeActionName = (IsBusy && (ActionName != String.Empty));
-            if (connState == ConnState.NotApplicable)
-            {
-                if (includeActionName)
-                    return Utils.Fcns.CheckedFormat("use:{0}, action:{1}", UseState, ActionName);
-                else
-                    return Utils.Fcns.CheckedFormat("use:{0}", UseState);
-            }
-            else
-            {
-                if (includeActionName)
-                    return Utils.Fcns.CheckedFormat("use:{0}, action:{1}, conn:{2}, ", UseState, ActionName, ConnState);
-                else
-                    return Utils.Fcns.CheckedFormat("use:{0}, conn:{1}", UseState, ConnState);
-            }
+            bool includeActionName = (IsBusy && (!actionName.IsNullOrEmpty()));
+            bool includeReason = (!reason.IsNullOrEmpty());
+            bool includeConnState = (connState != ConnState.NotApplicable);
+
+            StringBuilder sb = new StringBuilder();
+            sb.CheckedAppendFormat("use:{0}", useState);
+            if (includeActionName)
+                sb.CheckedAppendFormat(", action:{0}", actionName);
+            if (includeConnState)
+                sb.CheckedAppendFormat(", conn:{0}", connState);
+            if (includeReason)
+                sb.CheckedAppendFormat(", reason:[{0}]", reason);
+
+            return sb.ToString();
 		}
 
 		#endregion
@@ -646,6 +689,8 @@ namespace MosaicLib.Modular.Part
 
         /// <summary>public property that may be used to obtain a copy of the most recently generated IBaseState for this part.</summary>
         public override IBaseState BaseState { get { return publishedBaseState.VolatileObject; } }      // base class defines this as abstract - use VolatileObject since IBaseState will always be handling boxed copies.
+
+
 
         /// <summary>public property that may be used to gain access to the INotificationObject that is used to manage publication and notification of this part's BaseState.</summary>
         public override INotificationObject<IBaseState> BaseStateNotifier { get { return publishedBaseState; } }    // base class defines this as abstract
@@ -841,7 +886,7 @@ namespace MosaicLib.Modular.Part
         /// <summary>Variant SetBaseState which allows caller to set the useState</summary>
         protected void SetBaseState(UseState useState, string reason, bool publish)
         {
-            privateBaseState.UseState = useState;
+            privateBaseState.SetState(useState, privateBaseState.ConnState, reason);
             if (publish)
                 PublishBaseState(reason);
         }
@@ -862,15 +907,15 @@ namespace MosaicLib.Modular.Part
                 PublishBaseState(reason);
         }
 
-        /// <summary>Variant SetBaseState which allows caller to set the commState</summary>
-        protected void SetBaseState(ConnState commState, string reason, bool publish)
+        /// <summary>Variant SetBaseState which allows caller to set the connState</summary>
+        protected void SetBaseState(ConnState connState, string reason, bool publish)
         {
-            privateBaseState.ConnState = commState;
+            privateBaseState.SetState(privateBaseState.UseState, connState, reason);
             if (publish)
                 PublishBaseState(reason);
         }
 
-        /// <summary>Variant SetBaseState which allows caller to set the useState and the commState</summary>
+        /// <summary>Variant SetBaseState which allows caller to set the useState and the commState.  actionName will be set to null/empty.</summary>
         protected void SetBaseState(UseState useState, ConnState connState, string reason, bool publish)
         {
             SetBaseState(useState, null, connState, reason, publish);
@@ -879,7 +924,7 @@ namespace MosaicLib.Modular.Part
         /// <summary>Variant SetBaseState which allows caller to set the useState, the action name, and the commState</summary>
         protected void SetBaseState(UseState useState, string actionName, ConnState connState, string reason, bool publish)
         {
-            privateBaseState.SetState(useState, actionName, connState);
+            privateBaseState.SetState(useState, actionName, connState, reason);
             if (publish)
                 PublishBaseState(reason);
         }
@@ -887,7 +932,7 @@ namespace MosaicLib.Modular.Part
         /// <summary>Variant SetBaseState which allows the caller to set the BaseState contents to match a value from some other source.</summary>
         protected void SetBaseState(IBaseState rhs, string reason, bool publish)
         {
-            privateBaseState.SetState(rhs);
+            privateBaseState.SetState(rhs, reason);
             if (publish)
                 PublishBaseState(reason);
         }

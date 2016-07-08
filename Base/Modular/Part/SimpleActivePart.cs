@@ -20,16 +20,15 @@
  */
 //-------------------------------------------------------------------
 
+using System;
+using MosaicLib.Utils;
+using MosaicLib.Time;
+using MosaicLib.Modular.Action;
+using MosaicLib.Modular.Common;
+using MosaicLib.Modular.Interconnect.Values;
+
 namespace MosaicLib.Modular.Part
 {
-	//-----------------------------------------------------------------
-
-	using System;
-	using MosaicLib.Utils;
-	using MosaicLib.Time;
-	using MosaicLib.Modular.Action;
-    using MosaicLib.Modular.Common;
-
 	//-----------------------------------------------------------------
 	#region SimpleActivePartBase
 
@@ -40,8 +39,10 @@ namespace MosaicLib.Modular.Part
     {
         /// <summary>Old version (current default): threadWakeupNotifier is explicitly reset in loop just prior to calling PerformMainLoopService and is implicilty AutoReset when WaitForSomethingToDo returns true.</summary>
         ExplicitlyResetNotifierAtStartOfEachLoop = 0,
+
         /// <summary>recommended: threadWakeupNotifier is not explicitly Reset in the main loop.  WaitForSomethingToDo is called with the WaitTimeLimit if IssueNextQueuedAction returned false or with TimeSpan.Zero if IssueNextQueuedAction returned true.</summary>
         AutoResetIsUsedToResetNotifier = 1,
+
         /// <summary>threadWakeupNotifier is not explicitly Reset in the main loop.  WaitForSomethingToDo is called with the WaitTimeLimit if IssueNextQueuedAction returned false.  Loop does not call WaitForSomethingToDo (and thus does not AutoReset the threadWakeupNotifier) at all if IssueNextQueuedAction returns true (to indicate that an action was performed).</summary>
         AutoResetIsUsedToResetNotifierWhenNoActionsHaveBeenPerformed = 2,
     }
@@ -71,6 +72,134 @@ namespace MosaicLib.Modular.Part
         /// Selects that exeuction of the GoOffline action sets Base UseState to Offline before calling the normal PerformGoOffline method.
         /// </summary>
         GoOfflineUpdatesBaseUseState = 4,
+    }
+
+    /// <summary>
+    /// This enumeration is used to define 
+    /// </summary>
+    [Flags]
+    public enum SimpleActivePartBehaviorOptions
+    {
+        /// <summary>
+        /// Selects basic (default) handling.
+        /// </summary>
+        None = 0,
+
+        /// <summary>
+        /// Requests that the part autotmatically creates a ActionInfo and a LastActionInfo IVA and that it generate and publishes information about the current action
+        /// to the ActionInfo IVA at start and end of the CurrentAction and that it publish the final IActionInfo for the current action into the LastActionInfo when the current
+        /// action has been completed.
+        /// </summary>
+        PerformActionPublishesActionInfo = 1,
+    }
+
+    /// <summary>
+    /// Public and published interface about an action.
+    /// </summary>
+    public interface IActionInfo
+    {
+        /// <summary>Gives the basic "name" of the action</summary>
+        string Description { get; }
+
+        /// <summary>Gives the basic "name" of the action with details (such as the content of parameters and/or of any NamedParamValues)</summary>
+        string DescriptionWithDetails { get; }
+
+        /// <summary>Gives the last seens IActionState for this action</summary>
+        IActionState ActionState { get; }
+
+        /// <summary>Custom variant of normal ToString method that gives caller access to which parts of the action they want included in the string.</summary>
+        string ToString(ToStringSelect toStringSelect);
+    }
+
+    /// <summary>
+    /// Implementation object for IActionInfo.  This class is immutable.
+    /// </summary>
+    public class ActionInfo : IActionInfo
+    {
+        /// <summary>
+        /// Constructs an empty ActionInfo object.
+        /// </summary>
+        public ActionInfo()
+        {
+            Description = DescriptionWithDetails = string.Empty;
+            ActionState = EmptyActionState;
+        }
+
+        /// <summary>
+        /// Constructs an ActionInfo object with contents derived from the given action's description and state.
+        /// </summary>
+        public ActionInfo(IProviderFacet ipf)
+            : this(ipf, ipf.ActionState)
+        { }
+
+        /// <summary>
+        /// Constructs an ActionInfo object with contents derived from the given action's description and the given actionState.
+        /// </summary>
+        public ActionInfo(IProviderFacet ipf, IActionState actionState)
+        {
+            IClientFacet icf = ipf as IClientFacet;
+            if (icf != null)
+            {
+                Description = icf.ToString(ToStringSelect.JustMesg);
+                DescriptionWithDetails = icf.ToString(ToStringSelect.MesgAndDetail);
+            }
+            else
+            {
+                Description = DescriptionWithDetails = ipf.ToString();
+            }
+
+            ActionState = actionState;
+        }
+
+        /// <summary>
+        /// Constructs an ActionInfo object with descriptions copied from the given copyDescriptionsFrom object and with the given actionState
+        /// </summary>
+        public ActionInfo(IActionInfo copyDescriptionsFrom, IActionState actionState)
+        {
+            Description = copyDescriptionsFrom.Description;
+            DescriptionWithDetails = copyDescriptionsFrom.DescriptionWithDetails;
+            ActionState = actionState;
+        }
+
+        /// <summary>
+        /// Copy constructor
+        /// </summary>
+        public ActionInfo(IActionInfo rhs)
+        {
+            Description = rhs.Description;
+            DescriptionWithDetails = rhs.DescriptionWithDetails;
+            ActionState = rhs.ActionState;
+        }
+
+        /// <summary>
+        /// Helper function for debugging and logging
+        /// </summary>
+        public override string ToString()
+        {
+            return ToString(ToStringSelect.MesgDetailAndState);
+        }
+
+        /// <summary>Custom variant of normal ToString method that gives caller access to which parts of the action they want included in the string.</summary>
+        public string ToString(ToStringSelect toStringSelect)
+        {
+            string actionName = (toStringSelect == ToStringSelect.JustMesg) ? Description : DescriptionWithDetails;
+
+            if (ActionState.Succeeded)
+                return "{0} Succeeded".CheckedFormat(actionName);
+            else if (ActionState.Failed)
+                return "{0} Failed: {1}".CheckedFormat(actionName, ActionState.ResultCode);
+            else
+                return "{0} {1}".CheckedFormat(actionName, ActionState.StateCode);
+        }
+
+        /// <summary>Gives the basic "name" of the action</summary>
+        public string Description { get; private set; }
+        /// <summary>Gives the basic "name" of the action with details (such as the content of parameters and/or of any NamedParamValues)</summary>
+        public string DescriptionWithDetails { get; private set; }
+        /// <summary>Gives the last seens IActionState for this action</summary>
+        public IActionState ActionState { get; private set; }
+
+        public static readonly IActionState EmptyActionState = new ActionStateCopy();
     }
 
 	/// <summary>
@@ -317,20 +446,33 @@ namespace MosaicLib.Modular.Part
         /// Defines the maximum number of Actions that can be invoked per iteration of the outer service loop (ie per call to PerformMainLoopService/WaitForSomethingToDo).
         /// <para/>Defaults to 1, setter will clamp the given value to be between 1 and 100.
         /// </summary>
-        public int MaxActionsToInvokePerServiceLoop { get { return maxActionsToInvokePerServiceLoop; } set { maxActionsToInvokePerServiceLoop = Math.Max(1, Math.Min(100, value)); } }
+        public int MaxActionsToInvokePerServiceLoop { get { return maxActionsToInvokePerServiceLoop; } set { maxActionsToInvokePerServiceLoop = value.Clip(1, 100); } }
         private int maxActionsToInvokePerServiceLoop = 1;
 
         /// <summary>
-        /// Defines this parts base state handling for the GoOnline and GoOffline actions.
+        /// Defines this part's base state handling for the GoOnline and GoOffline actions.
         /// </summary>
         protected GoOnlineAndGoOfflineHandling GoOnlineAndGoOfflineHandling { get; set; }
 
         /// <summary>
-        /// Returns true GoOnlineAndGoOfflineHandling has the indicated flag value(s) set in its current value
+        /// Returns true if the GoOnlineAndGoOfflineHandling property has the indicated flag value(s) set in its current value
         /// </summary>
         protected bool CheckFlag(GoOnlineAndGoOfflineHandling flag)
         {
             return ((GoOnlineAndGoOfflineHandling & flag) == flag);
+        }
+
+        /// <summary>
+        /// Defines this part's behavior option flag value(s).
+        /// </summary>
+        protected SimpleActivePartBehaviorOptions SimpleActivePartBehaviorOptions { get; set; }
+
+        /// <summary>
+        /// Returns true if property SimpleActivePartBehaviorOptions has the indicated flag value(s) set in its current value
+        /// </summary>
+        protected bool CheckFlag(SimpleActivePartBehaviorOptions flag)
+        {
+            return ((SimpleActivePartBehaviorOptions & flag) == flag);
         }
 
         #endregion
@@ -511,11 +653,11 @@ namespace MosaicLib.Modular.Part
 		}
 
         /// <summary>
-        /// Method creates a Service Action with the Param and NamedParamValues preconfigured with the given values.
+        /// Method creates a Service Action with the serviceName and NamedParamValues preconfigured with the given values.
         /// </summary>
-        public virtual IStringParamAction CreateServiceAction(string paramValue, INamedValueSet namedParamValues)
+        public virtual IStringParamAction CreateServiceAction(string serviceName, INamedValueSet namedParamValues)
         {
-            IStringParamAction action = new StringActionImpl(actionQ, paramValue, PerformServiceAction, "Service", ActionLoggingReference) as IStringParamAction;
+            IStringParamAction action = new StringActionImpl(actionQ, serviceName, PerformServiceAction, "Service", ActionLoggingReference) as IStringParamAction;
             action.NamedParamValues = namedParamValues;
 
             return action;
@@ -757,10 +899,18 @@ namespace MosaicLib.Modular.Part
 		{
             string actionName = (action != null) ? action.ToString() : null;
 
+            IActionInfo actionInfo = null;
+
+            if (CheckFlag(SimpleActivePartBehaviorOptions.PerformActionPublishesActionInfo) && action != null)
+                actionInfo = new ActionInfo(action); ;
+
             IDisposable busyFlag = null;
             try
             {
                 CurrentAction = action;
+
+                if (actionInfo != null)
+                    PublishActionInfo(actionInfo);
 
                 if (AutomaticallyIncAndDecBusyCountAroundActionInvoke)
                     busyFlag = CreateInternalBusyFlagHolderObject("Issuing next queued action", actionName);
@@ -770,11 +920,45 @@ namespace MosaicLib.Modular.Part
             }
             finally
             {
+                if (actionInfo != null)
+                    PublishActionInfo(new ActionInfo(actionInfo, action.ActionState));
+
                 Fcns.DisposeOfObject(ref busyFlag);
 
                 CurrentAction = null;
             }
 		}
+
+        private void SetupActionInfoPublisherIVAsIfNeeded()
+        {
+            if (actionInfoIVA == null)
+            {
+                ivi = PartBaseIVI ?? Values.Instance;
+
+                actionInfoIVA = ivi.GetValueAccessor<IActionInfo>("{0}.ActionInfo".CheckedFormat(PartID)).Set(EmptyActionInfo);
+                lastActionInfoIVA = ivi.GetValueAccessor<IActionInfo>("{0}.LastActionInfo".CheckedFormat(PartID)).Set(EmptyActionInfo);
+                actionInfoIVAArray = new IValueAccessor[] { actionInfoIVA, lastActionInfoIVA };
+            }
+        }
+
+        protected void PublishActionInfo(IActionInfo actionInfo)
+        {
+            SetupActionInfoPublisherIVAsIfNeeded();
+
+            if (!actionInfo.ActionState.IsComplete)
+            {
+                actionInfoIVA.Set(actionInfo);
+            }
+            else
+            {
+                lastActionInfoIVA.Value = actionInfoIVA.Value = actionInfo;
+                ivi.Set(actionInfoIVAArray, true);
+            }
+        }
+
+        private IValueAccessor<IActionInfo> actionInfoIVA, lastActionInfoIVA;
+        private IValueAccessor[] actionInfoIVAArray;
+        private IValuesInterconnection ivi;
 
         /// <summary>Returns the IProviderFacet for the current action that the Part's main service loop is currently in IssueAndInvokeAction on, or null if none.</summary>
         protected IProviderFacet CurrentAction { get; private set; }
@@ -790,6 +974,9 @@ namespace MosaicLib.Modular.Part
 
         /// <summary>Contains the ActionState that is used for the CurrentActionState when there is no CurrentAction.</summary>
         protected readonly IActionState EmptyActionState = new ActionStateCopy();
+
+        /// <summary>Contains an IActionInfo that is empty.</summary>
+        protected readonly IActionInfo EmptyActionInfo = new ActionInfo();
 
         /// <summary>Requests to cancel the CurrentAction if it is non null and its state IsPendingCompletion</summary>
         protected void RequestCancelCurrentAction()
@@ -830,7 +1017,7 @@ namespace MosaicLib.Modular.Part
 		#endregion
 
 		//-----------------------------------------------------------------
-		#region private and protected fields and related properties (includuing BaseState implementation)
+		#region private and protected fields and related properties
 
         /// <summary>Protected get/set field contains the default WaitTimeLimit for the Part's thread.  Generally used when calling WaitForSomethingToDo().  Setter clamps value to be between minWaitTimeLimit (0.0) and maxWaitTimeLimit (0.5) seconds</summary>
         protected TimeSpan WaitTimeLimit { get { return innerWaitTimeLimitStore; } set { innerWaitTimeLimitStore = ((value >= minWaitTimeLimit) ? ((value <= maxWaitTimeLimit) ? value : maxWaitTimeLimit) : minWaitTimeLimit); } }

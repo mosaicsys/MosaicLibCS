@@ -111,6 +111,29 @@ namespace MosaicLib.Utils
             return subArray;
         }
 
+
+        /// <summary>
+        /// Extension method version of string indexed get access that handles all out of range accesses by returning the default(char)
+        /// </summary>
+        public static char SafeAccess(this string fromStr, int getFromIndex)
+        {
+            if (fromStr == null || getFromIndex < 0 || getFromIndex > fromStr.Length)
+                return default(char);
+            else
+                return fromStr[getFromIndex];
+        }
+
+        /// <summary>
+        /// Extension method version of string indexed get access that handles all out of range accesses by returning the given default value
+        /// </summary>
+        public static char SafeAccess(this string fromStr, int getFromIndex, char defaultValue)
+        {
+            if (fromStr == null || getFromIndex < 0 || getFromIndex > fromStr.Length)
+                return defaultValue;
+            else
+                return fromStr[getFromIndex];
+        }
+
         /// <summary>
         /// Extension method version of Array element assignement.  Attempts to assign the given value into the given intoArray at the given putIndex location.
         /// Does nothing if the intoArray is not valid or does not have any such value.

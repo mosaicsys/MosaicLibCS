@@ -109,7 +109,7 @@ namespace MosaicLib.PartsLib.Common.E084
             enableAutoLoadUnloadIVA = IVI.GetValueAccessor("{0}.EnableAutoLoadUnload".CheckedFormat(PartID));
 
             string lpmPartBaseName = lpmSimPart.PartID;
-            lpmPodPlacementSensorValuesIVA = IVI.GetValueAccessor("{0}.PodPlacementSensorValue".CheckedFormat(lpmPartBaseName));
+            lpmPresentPlacedInputIVA = IVI.GetValueAccessor("{0}.PresentPlacedInput".CheckedFormat(lpmPartBaseName));
             ohtPassiveToActivePinsStateIVA = IVI.GetValueAccessor("{0}.E84.OHT.PassiveToActivePinsState".CheckedFormat(lpmPartBaseName));
             agvPassiveToActivePinsStateIVA = IVI.GetValueAccessor("{0}.E84.AGV.PassiveToActivePinsState".CheckedFormat(lpmPartBaseName));
             ohtActiveToPassivePinsStateIVA = IVI.GetValueAccessor("{0}.E84.OHT.ActiveToPassivePinsState".CheckedFormat(lpmPartBaseName));
@@ -136,12 +136,12 @@ namespace MosaicLib.PartsLib.Common.E084
         private IValueAccessor SelectedPassiveToActivePinsStateIVA { get { return (pioSelect == PIOSelect.OHT ? ohtPassiveToActivePinsStateIVA : agvPassiveToActivePinsStateIVA); } }
         private IValueAccessor SelectedActiveToPassivePinsStateIVA { get { return (pioSelect == PIOSelect.OHT ? ohtActiveToPassivePinsStateIVA : agvActiveToPassivePinsStateIVA); } }
 
-        private IValueAccessor lpmPodPlacementSensorValuesIVA;
+        private IValueAccessor lpmPresentPlacedInputIVA;
 
-        private PodSensorValues LPMPodPlacementSensorValues 
-        { 
-            get { return lpmPodPlacementSensorValuesIVA.Update().ValueContainer.GetValue<PodSensorValues>(false); }
-            set { lpmPodPlacementSensorValuesIVA.Set(new ValueContainer(value)); }
+        private PresentPlaced LPMPresentPlacedInput
+        {
+            get { return lpmPresentPlacedInputIVA.Update().ValueContainer.GetValue<PresentPlaced>(false); }
+            set { lpmPresentPlacedInputIVA.Set(new ValueContainer(value)); }
         }
 
         #endregion
@@ -523,15 +523,15 @@ namespace MosaicLib.PartsLib.Common.E084
 
             // passive to active pins are selectable.
 
-            if (!LPMPodPlacementSensorValues.DoesPlacedEqualPresent())
+            if (!LPMPresentPlacedInput.DoesPlacedEqualPresent())
             {
-                SetCurrentActivity(ActivitySelect.WaitForPinsReady, Utils.Fcns.CheckedFormat("{0} failed: Unexpected PodSensorValues [{1}]", currentActivity, LPMPodPlacementSensorValues));
+                SetCurrentActivity(ActivitySelect.WaitForPinsReady, Utils.Fcns.CheckedFormat("{0} failed: Unexpected PodSensorValues [{1}]", currentActivity, LPMPresentPlacedInput));
                 return;
             }
 
             // transfer start holdoff timer
 
-            if (LPMPodPlacementSensorValues.IsProperlyPlaced())
+            if (LPMPresentPlacedInput.IsProperlyPlaced())
             {
                 Log.Info.Emit("{0}: P2A is selectable and FOUP is placed, starting unload", currentActivity);
                 ServicePerformUnloadActivity();
@@ -594,11 +594,11 @@ namespace MosaicLib.PartsLib.Common.E084
             privateState.TransferProgressStr = "Loading:Placing Foup";
             PublishPrivateState();
 
-            LPMPodPlacementSensorValues = LPM.PodSensorValues.PresenceSensor;
+            LPMPresentPlacedInput = PresentPlaced.Present;
 
             if (!Spin(placementTransitionTime)) return;
 
-            LPMPodPlacementSensorValues = LPM.PodSensorValues.ProperyPlaced;
+            LPMPresentPlacedInput = PresentPlaced.Present | PresentPlaced.Placed;
 
             privateState.TransferProgressStr = "Loading:Wait L_REQ clear";
             PublishPrivateState();
@@ -677,11 +677,11 @@ namespace MosaicLib.PartsLib.Common.E084
             privateState.TransferProgressStr = "Unloading:Removing Foup";
             PublishPrivateState();
 
-            LPMPodPlacementSensorValues = LPM.PodSensorValues.PresenceSensor;
+            LPMPresentPlacedInput = PresentPlaced.Present;
 
             if (!Spin(placementTransitionTime)) return;
 
-            LPMPodPlacementSensorValues = LPM.PodSensorValues.None;
+            LPMPresentPlacedInput = PresentPlaced.None;
 
             privateState.TransferProgressStr = "Unloading:Wait U_REQ clear";
             PublishPrivateState();

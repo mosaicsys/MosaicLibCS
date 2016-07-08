@@ -39,14 +39,58 @@ namespace MosaicLib.PartsLib.Common.E099
 {
 	public interface ITagRWPart : IActivePartBase
     {
+        TagReaderType TagReaderType { get; }
+
 		IReadTagAction CreateReadTagAction();
         IReadTagAction CreateReadTagAction(int startPageIdx, int numPages, TagContentDecodeMode tagContentDecodeMode);
         IReadPagesAction CreateReadPagesAction(int startPageIdx, int numPages);
-        IBasicAction CreateWritePageAction(ITagPageContents [] pages);
+        /// <summary>
+        /// Action factory method.  The returned action, when run, causes each of the indicates pages to be written, one at a time,
+        /// until all writes are successful or one of them fails.  If the first failure was due to there being NoTagFound then the action's ActionState.NamedValues will contain a "NoTagDetected" value that has been set to true.
+        /// </summary>
+        IBasicAction CreateWritePagesAction(ITagPageContents [] pages);
     }
+
+    /// <summary>
+    /// This enumeration give information about the type of RFID reader/writer that this device offers
+    /// <para/>None, Reader, Writer, RFID, TIRIS,
+    /// </summary>
+    [Flags]
+    public enum TagReaderType : int
+    {
+        /// <summary>This device does not support any RFID access</summary>
+        None = 0x0000,
+
+        /// <summary>This device can be used to read tags, generally by reading a selected range of pages and concatinating their contents.</summary>
+        Reader = 0x0001,
+
+        /// <summary>This device can be used to write tag contents in pages.</summary>
+        Writer = 0x0002,
+
+        /// <summary>This device makes use of RFID communications with the Tag.</summary>
+        RFID = 0x0100,
+
+        /// <summary>This device is designed to work with TIRIS tags.</summary>
+        TIRIS = 0x0200,
+    }
+
 
     public interface IReadTagAction : Modular.Action.IClientFacetWithResult<string> {}
     public interface IReadPagesAction : Modular.Action.IClientFacetWithResult<ITagPageContents []> {}
+
+    public class ReadTagActionImpl : ActionImplBase<NullObj, string>, IReadTagAction
+    {
+        public ReadTagActionImpl(ActionQueue actionQ, ActionMethodDelegateActionArgStrResult<NullObj, string> methodDelegate, string mesg, ActionLogging actionLoggingReference)
+            : base(actionQ, null, false, methodDelegate, new ActionLogging(mesg, actionLoggingReference))
+        {}
+    }
+
+    public class ReadPagesActionImpl : ActionImplBase<NullObj, ITagPageContents []>, IReadPagesAction
+    {
+        public ReadPagesActionImpl(ActionQueue actionQ, ActionMethodDelegateActionArgStrResult<NullObj, ITagPageContents[]> methodDelegate, string mesg, ActionLogging actionLoggingReference)
+            : base(actionQ, null, false, methodDelegate, new ActionLogging(mesg, actionLoggingReference))
+        { }
+    }
 
     public interface ITagPageContents
     {
@@ -87,8 +131,12 @@ namespace MosaicLib.PartsLib.Common.E099
 	{
         /// <summary>Value to use when there is no Reader installed</summary>
 		None = 0,
+
         /// <summary>Hermos ASCII protocol device.</summary>
 		HermosASCII = 1,
+
+        /// <summary>Omron V640 family (mostly)ASCII protocol device.</summary>
+        OmronV640 = 2,
 	}
 
     /// <summary>
@@ -97,8 +145,23 @@ namespace MosaicLib.PartsLib.Common.E099
     /// </summary>
     public enum TagContentDecodeMode : int
     {
+        /// <summary>
+        /// Configured tag pages are required to contain Ascii characters and may include leading or trailing space or null characters.
+        /// Leading and trailing spaces and/or nulls will be removed before reporting the obtained TagID.
+        /// If the tag pages contains non-Ascii contents then the TagID read fails.
+        /// </summary>
         AutoTrimAscii = 0,
+
+        /// <summary>
+        /// Configured tag pages are required to contain Ascii characters and may include embedded whitespace.
+        /// Leading and Trailing spaces will be retained.  Trailing null characters will be removed.
+        /// If the tag pages contains non-Ascii contents then the TagID read fails.
+        /// </summary>
         Ascii,
+
+        /// <summary>
+        /// Configured tag pages will be obtained and returned without additional confirmation or trimming.
+        /// </summary>
         Binary,
     }
 
@@ -157,6 +220,7 @@ namespace MosaicLib.PartsLib.Common.E099
 
         public TagRWPartConfig()
         {
+            DefaultTagIDSize = 2;
         }
 
 		public TagRWPartConfig(TagRWPartConfig rhs)
@@ -230,6 +294,40 @@ namespace MosaicLib.PartsLib.Common.E099
                         return sb.ToString();
                     }
             }
+        }
+    }
+
+    public static partial class ExtensionMethods
+    {
+        public static bool IsSet(this TagReaderType value, TagReaderType test) { return value.Matches(test, test); }
+        public static bool Matches(this TagReaderType testValue, TagReaderType mask, TagReaderType expectedValue) { return ((testValue & mask) == expectedValue); }
+
+        public static string DecodePageDataAndVerifyTagID(this byte[] rawPageData, TagContentDecodeMode tagContentDecodeMode, out string tagIDOut)
+        {
+            tagIDOut = ByteArrayTranscoders.ByteStringTranscoder.Encode(rawPageData);
+
+            switch (tagContentDecodeMode)
+            {
+                case TagContentDecodeMode.AutoTrimAscii:
+                    tagIDOut = tagIDOut.Trim(' ', '\0');
+                    if (!tagIDOut.IsBasicAscii())
+                        return "read TagID contains non-Ascii contents";
+                    break;
+
+                case TagContentDecodeMode.Ascii:
+                    tagIDOut = tagIDOut.TrimEnd('\0');
+                    if (!tagIDOut.IsBasicAscii())
+                        return "read TagID contains non-Ascii contents";
+                    break;
+
+                case TagContentDecodeMode.Binary:
+                    break;
+
+                default:
+                    return "Unsupported TagContentDecodeMode:{0}".CheckedFormat(tagContentDecodeMode);
+            }
+
+            return string.Empty;
         }
     }
 }

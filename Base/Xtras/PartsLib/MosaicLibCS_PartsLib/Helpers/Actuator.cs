@@ -29,7 +29,7 @@ namespace MosaicLib.PartsLib.Helpers
     /// <summary>
     /// Defines the positions that the ActuatorBase can be in/moved to
     /// <para/>Valid targets: MoveToPos1, MoveToPos2, Inbetween, None
-    /// <para/>Other known states: AtPos1, AtPos2, MovingToPos1, MovingToPos2, Undefined (default), Fault
+    /// <para/>Other known states: AtPos1, AtPos2, MovingToPos1, MovingToPos2, Undefined (default, 0), Unknown, Fault
     /// </summary>
     [DataContract]
     public enum ActuatorPosition : int
@@ -39,6 +39,8 @@ namespace MosaicLib.PartsLib.Helpers
         [EnumMember]
         None,
         [EnumMember]
+        Unknown,
+        [EnumMember]
         AtPos1,
         [EnumMember]
         MovingToPos1,
@@ -47,7 +49,7 @@ namespace MosaicLib.PartsLib.Helpers
         [EnumMember]
         MovingToPos2,
         [EnumMember]
-        Inbetween,
+        InBetween,
         [EnumMember]
         Fault,
 
@@ -57,11 +59,64 @@ namespace MosaicLib.PartsLib.Helpers
         MoveToPos2 = AtPos2,
     }
 
+    public static partial class ExtensionMethods
+    {
+        /// <summary>Returns true if the given pos is AtPos1</summary>
+        public static bool IsAtPos1(this ActuatorPosition pos)  { return (pos == ActuatorPosition.AtPos1); }
+        /// <summary>Returns true if the given pos is AtPos2</summary>
+        public static bool IsAtPos2(this ActuatorPosition pos) { return (pos == ActuatorPosition.AtPos2); }
+        /// <summary>Returns true if the given pos is MovingToPos1 or MovingToPos2</summary>
+        public static bool IsInMotion(this ActuatorPosition pos) { return (pos == ActuatorPosition.MovingToPos1 || pos == ActuatorPosition.MovingToPos2); }
+        /// <summary>Returns true if the given targetPos is AtPos1, AtPos2, or None</summary>
+        public static bool IsTargetPositionValid(this ActuatorPosition targetPos) { return (targetPos == ActuatorPosition.AtPos1 || targetPos == ActuatorPosition.AtPos2 || targetPos == ActuatorPosition.None); }
+        /// <summary>Returns true if the given pos is AtPos1, AtPos2, MovingToPos1, MovingToPos2, or Inbetween</summary>
+        public static bool IsValid(this ActuatorPosition pos) { return (pos == ActuatorPosition.AtPos1 || pos == ActuatorPosition.AtPos2 || pos == ActuatorPosition.MovingToPos1 || pos == ActuatorPosition.MovingToPos2 || pos == ActuatorPosition.InBetween); }
+
+        /// <summary>
+        /// If the currentPos matches the AtPos1 then this method sets currentPos to the MovingToPos2, otherwise currentPos is not changed.
+        /// </summary>
+        public static ActuatorPosition StartMotionFromPos1ToPos2(this ActuatorPosition currentPos)
+        {
+            return currentPos == ActuatorPosition.AtPos1 ? ActuatorPosition.MoveToPos2 : currentPos;
+        }
+
+        /// <summary>
+        /// If the currentPos matches the AtPos2 then this method sets currentPos to MovingToPos1, otherwise currentPos is not changed.
+        /// </summary>
+        public static ActuatorPosition StartMotionFromPos2ToPos1(this ActuatorPosition currentPos)
+        {
+            return currentPos == ActuatorPosition.AtPos2 ? ActuatorPosition.MoveToPos1 : currentPos;
+        }
+
+        public static ActuatorPosition SetFrom(this ActuatorPosition ignoredValue, bool atPos1, bool atPos2)
+        {
+            if (atPos1 && !atPos2)
+                return ActuatorPosition.AtPos1;
+            else if (!atPos1 && atPos2)
+                return ActuatorPosition.AtPos2;
+            else if (!atPos1 && !atPos2)
+                return ActuatorPosition.InBetween;
+            else
+                return ActuatorPosition.Fault;
+        }
+    }
+
     [DataContract]
     public class ActuatorConfig
     {
-        public ActuatorConfig(string name, string pos1Name, string pos2Name, TimeSpan motionTime) : this(name, pos1Name, pos2Name, motionTime, motionTime, ActuatorPosition.AtPos1) { }
-        public ActuatorConfig(string name, string pos1Name, string pos2Name, TimeSpan motionTime, ActuatorPosition initialPos) : this(name, pos1Name, pos2Name, motionTime, motionTime, initialPos) { }
+        public ActuatorConfig() 
+        {
+            InitialPos = ActuatorPosition.Unknown;
+        }
+
+        public ActuatorConfig(string name, string pos1Name, string pos2Name, TimeSpan motionTime) 
+            : this(name, pos1Name, pos2Name, motionTime, motionTime, ActuatorPosition.AtPos1) 
+        { }
+
+        public ActuatorConfig(string name, string pos1Name, string pos2Name, TimeSpan motionTime, ActuatorPosition initialPos) 
+            : this(name, pos1Name, pos2Name, motionTime, motionTime, initialPos) 
+        { }
+
         public ActuatorConfig(string name, string pos1Name, string pos2Name, TimeSpan motion1To2Time, TimeSpan motion2To1Time, ActuatorPosition initialPos)
         {
             Name = name;
@@ -83,17 +138,17 @@ namespace MosaicLib.PartsLib.Helpers
         }
 
         [DataMember]
-        public string Name { get; protected set; }
+        public string Name { get; set; }
         [DataMember]
-        public string Pos1Name { get; protected set; }
+        public string Pos1Name { get; set; }
         [DataMember]
-        public string Pos2Name { get; protected set; }
+        public string Pos2Name { get; set; }
         [DataMember]
-        public TimeSpan Motion1To2Time { get; protected set; }
+        public TimeSpan Motion1To2Time { get; set; }
         [DataMember]
-        public TimeSpan Motion2To1Time { get; protected set; }
+        public TimeSpan Motion2To1Time { get; set; }
         [DataMember]
-        public ActuatorPosition InitialPos { get; protected set; }
+        public ActuatorPosition InitialPos { get; set; }
 
         public virtual string ToString(ActuatorPosition pos)
         {
@@ -105,7 +160,7 @@ namespace MosaicLib.PartsLib.Helpers
                 case ActuatorPosition.MovingToPos2: return "MovingTo" + Pos2Name;
                 case ActuatorPosition.Undefined:
                 case ActuatorPosition.None:
-                case ActuatorPosition.Inbetween:
+                case ActuatorPosition.InBetween:
                 case ActuatorPosition.Fault:
                 default:
                     return pos.ToString();
@@ -113,8 +168,29 @@ namespace MosaicLib.PartsLib.Helpers
         }
     }
 
+    public interface IActuatorState
+    {
+        ActuatorPosition TargetPos { get; }
+        string TargetPosStr { get; }
+
+        ActuatorPosition PosState { get; }
+        string PosStateStr { get; }
+
+        QpcTimeStamp TimeStamp { get; }
+
+        bool IsEqualTo(IActuatorState rhs);
+
+        double TimeInState { get; }
+
+        bool IsAtPos1 { get; }
+        bool IsAtPos2 { get; }
+        bool IsAtTarget { get; }
+        bool IsInMotion { get; }
+        bool IsValid { get; }
+    }
+
     [DataContract]
-    public class ActuatorState
+    public class ActuatorState : IActuatorState
     {
         public ActuatorState()
         {
@@ -125,7 +201,7 @@ namespace MosaicLib.PartsLib.Helpers
             TimeStamp = QpcTimeStamp.Now;
         }
 
-        public ActuatorState(ActuatorState rhs)
+        public ActuatorState(IActuatorState rhs)
         {
             TargetPos = rhs.TargetPos;
             TargetPosStr = rhs.TargetPosStr;
@@ -148,7 +224,16 @@ namespace MosaicLib.PartsLib.Helpers
 
         public QpcTimeStamp TimeStamp { get; set; }
 
-        public bool IsEqualTo(ActuatorState rhs)
+        [DataMember]
+        public double TimeInState { get { return TimeStamp.Age.TotalSeconds; } set { TimeStamp = QpcTimeStamp.Now + TimeSpan.FromSeconds(value); } }
+
+        public bool IsAtPos1 { get { return (IsAtTarget && PosState == ActuatorPosition.AtPos1); } }
+        public bool IsAtPos2 { get { return (IsAtTarget && PosState == ActuatorPosition.AtPos2); } }
+        public bool IsAtTarget { get { return (TargetPos == ActuatorPosition.None || TargetPos == PosState); } }
+        public bool IsInMotion { get { return (PosState == ActuatorPosition.MovingToPos1 || PosState == ActuatorPosition.MovingToPos2); } }
+        public bool IsValid { get { return (TargetPos.IsTargetPositionValid() && PosState.IsValid()); } }
+
+        public bool IsEqualTo(IActuatorState rhs)
         {
             return (rhs != null
                     && TargetPos == rhs.TargetPos
@@ -159,35 +244,18 @@ namespace MosaicLib.PartsLib.Helpers
                     );
         }
 
-        [DataMember]
-        public double TimeInState { get { return TimeStamp.Age.TotalSeconds; } set { TimeStamp = QpcTimeStamp.Now + TimeSpan.FromSeconds(value); } }
-
-        public bool IsAtPos1 { get { return (IsAtTarget && PosState == ActuatorPosition.AtPos1); } }
-        public bool IsAtPos2 { get { return (IsAtTarget && PosState == ActuatorPosition.AtPos2); } }
-        public bool IsAtTarget { get { return (TargetPos == ActuatorPosition.None || TargetPos == PosState); } }
-        public bool IsInMotion { get { return (PosState == ActuatorPosition.MovingToPos1 || PosState == ActuatorPosition.MovingToPos2); } }
-        public static bool IsTargetPositionValid(ActuatorPosition pos) { return pos.IsTargetPositionValid(); }
-        public static bool IsActuatorPositionValid(ActuatorPosition pos) { return pos.IsActuatorPositionValid(); }
-        public bool IsValid { get { return (IsTargetPositionValid(TargetPos) && IsActuatorPositionValid(PosState)); } }
-
         public override string ToString()
         {
             return PosStateStr;
         }
     }
 
-    public static partial class ExtensionMethods
-    {
-        public static bool IsTargetPositionValid(this ActuatorPosition pos) { return (pos == ActuatorPosition.AtPos1 || pos == ActuatorPosition.AtPos2 || pos == ActuatorPosition.None); }
-        public static bool IsActuatorPositionValid(this ActuatorPosition pos) { return (pos == ActuatorPosition.AtPos1 || pos == ActuatorPosition.AtPos2 || pos == ActuatorPosition.MovingToPos1 || pos == ActuatorPosition.MovingToPos2 || pos == ActuatorPosition.Inbetween); }
-    }
-
     public class ActuatorBase
     {
         public ActuatorBase(ActuatorConfig config, ActuatorState state) 
         {
-            Config = config;
-            PrivateState = state;
+            Config = new ActuatorConfig(config);
+            PrivateState = new ActuatorState(state);
 
             logger = new Logging.Logger(config.Name, Logging.LogGate.All);
 
@@ -231,7 +299,7 @@ namespace MosaicLib.PartsLib.Helpers
                     if (reset)
                         nextState = PrivateState.TargetPos;
                     else if (PrivateState.IsInMotion)
-                        nextState = ActuatorPosition.Inbetween;
+                        nextState = ActuatorPosition.InBetween;
                     break;  // do not change the current state
                 default:
                     nextState = PrivateState.TargetPos;

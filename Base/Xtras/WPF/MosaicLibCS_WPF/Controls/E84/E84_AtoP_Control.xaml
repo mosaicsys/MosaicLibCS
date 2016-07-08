@@ -1,0 +1,23 @@
+﻿<UserControl x:Class="MosaicLib.WPF.Controls.E84.E84_AtoP_Control"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             HorizontalContentAlignment="Left" VerticalContentAlignment="Top" mc:Ignorable="d" Height="182" Width="89">
+    <Grid>
+        <GroupBox Header="A -> P" HorizontalAlignment="Left" Margin="2,2,0,0" Name="groupBox3" VerticalAlignment="Top" Height="179" Width="86">
+            <Grid>
+                <StackPanel>
+                    <CheckBox Click="E084_AtoP_CheckBox_Clicked" Content="VALID" Height="16" Margin="1,2,0,0" Name="E84_VALID_CB" VerticalAlignment="Top" ToolTip="Pin=14, BitMask=$0001" />
+                    <CheckBox Click="E084_AtoP_CheckBox_Clicked" Content="CS__0" Height="16" Margin="1,2,0,0" Name="E84_CS0_CB" VerticalAlignment="Top" ToolTip="Pin=15, BitMask=$0002" />
+                    <CheckBox Click="E084_AtoP_CheckBox_Clicked" Content="CS__1" Height="16" Margin="1,2,0,0" Name="E84_CS1_CB" VerticalAlignment="Top" ToolTip="Pin=16, BitMask=$0004" />
+                    <CheckBox Click="E084_AtoP_CheckBox_Clicked" Content="TR__REQ" Height="16" Margin="1,2,0,0" Name="E84_TR_REQ_CB" VerticalAlignment="Top" ToolTip="Pin=18, BitMask=$0010" />
+                    <CheckBox Click="E084_AtoP_CheckBox_Clicked" Content="BUSY" Height="16" Margin="1,2,0,0" Name="E84_BUSY_CB" VerticalAlignment="Top" ToolTip="Pin=19, BitMask=$0020" />
+                    <CheckBox Click="E084_AtoP_CheckBox_Clicked" Content="COMPT" Height="16" Margin="1,2,0,0" Name="E84_COMPT_CB" VerticalAlignment="Top" ToolTip="Pin=20, BitMask=$0040" />
+                    <CheckBox Click="E084_AtoP_CheckBox_Clicked" Content="XferILock" Height="16" Margin="1,2,0,0" Name="E84_XferILock_CB" VerticalAlignment="Top" IsChecked="True" ToolTip="Pin=None, BitMask=$0800, This signal is set to true to indicate that external interlock logic is allowing a transfer to proceed.  This signal is set to false to signal that the transfer should be immediately aborted." />
+                </StackPanel>
+                <Label Content="$0800" Height="22" HorizontalAlignment="Center" Margin="0,0,0,6" Name="packedWordLabel" VerticalAlignment="Bottom" BorderBrush="Black" BorderThickness="1" Width="45" FontSize="12" Padding="3" />
+            </Grid>
+        </GroupBox>
+    </Grid>
+</UserControl>

@@ -622,8 +622,13 @@ namespace MosaicLib.Modular.Common
             {
                 if (TValueTypeType.IsEnum)
                 {
-                    // This covers both string and numeric representations of the enumeration as the string representation of a number can also be parsed as the enum.
-                    value = (TValueType) System.Enum.Parse(TValueTypeType, ValueAsObject.ToString(), false);
+                    if (!rethrow && IsNullOrEmpty)
+                        value = default(TValueType);
+                    else
+                    {
+                        // This covers both string and numeric representations of the enumeration as the string representation of a number can also be parsed as the enum.
+                        value = (TValueType)System.Enum.Parse(TValueTypeType, ValueAsObject.ToString().MapNullToEmpty(), false);
+                    }
                 }
                 else if (decodedValueType == cvt)
                 {
@@ -1657,6 +1662,9 @@ namespace MosaicLib.Modular.Common
         {
             if (rhs == null || Count != rhs.Count || IsReadOnly != rhs.IsReadOnly)
                 return false;
+
+            if (System.Object.ReferenceEquals(this, rhs))
+                return true;
 
             int setCount = Count;
             for (int index = 0; index < setCount; index++)

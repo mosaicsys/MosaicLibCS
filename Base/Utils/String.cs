@@ -667,7 +667,32 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        #region char extension methods
+        #region IsHex char/string related extension methods
+
+        /// <summary>
+        /// Returns true if the given string s is non-empty and each of its characters are valid hex digits
+        /// </summary>
+        public static bool IsHexNumber(this string s)
+        {
+            return s.IsHexNumber(true, true);
+        }
+
+        /// <summary>
+        /// Returns true if the given string s is non-empty and each of its characters are valid hex digits
+        /// </summary>
+        public static bool IsHexNumber(this string s, bool allowLowerCase, bool allowUpperCase)
+        {
+            if (s.IsNullOrEmpty())
+                return false;
+
+            foreach (char c in s)
+            {
+                if (!c.IsHexDigit(allowLowerCase, allowUpperCase))
+                    return false;
+            }
+
+            return true;
+        }
 
         /// <summary>
         /// Returns true if the indexed char in the given string s is a valid digit ('0'-'9') or is an upper or lower case leter from 'A' to 'F'
@@ -738,6 +763,22 @@ namespace MosaicLib.Utils
                 default:
                     return false;
             }
+        }
+
+        /// <summary>
+        /// Accepts an upper or lower case hex digit char c, and converts it to the corresponding digit value, which is then returned.
+        /// If the given char c is not a hex digit then the method returns -1.
+        /// </summary>
+        public static int HexDigitValue(this char c)
+        {
+            if (Char.IsDigit(c))
+                return c - '0';
+            else if (c >= 'A' && c <= 'F')
+                return 10 + c - 'A';
+            else if (c >= 'a' && c <= 'f')
+                return 10 + c - 'a';
+            else
+                return -1;
         }
 
         #endregion

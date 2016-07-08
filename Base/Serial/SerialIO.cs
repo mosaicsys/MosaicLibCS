@@ -58,12 +58,12 @@ namespace MosaicLib.SerialIO
 	/// <summary>
     /// This struct contains all of the information that is used to define the type and behavior of a SerialIO.Port.  
 	/// Valid SpecStr values:
-    ///	<para/>	&lt;ComPort port="com1" uartConfig="9600,n,8,1"/&gt;
-    ///	<para/>	&lt;ComPort port="\\.\com200"&gt;&lt;UartConfig baud="9600" DataBits="8" Mode="rs232-3wire" Parity="none" StopBits="1"/&gt;&lt;/ComPort&gt;
-    ///	<para/>	&lt;TcpClient addr="127.0.0.1" port="5002"/&gt;
-    ///	<para/>	&lt;TcpServer addr="127.0.0.1" port="8001"/&gt;		addr is optional - will use any if no address is provided
-    ///	<para/>	&lt;UdpClient addr="127.0.0.1" port="5005"/&gt;
-    ///	<para/>	&lt;UdpServer addr="127.0.0.1" port="5006"/&gt;		addr is optional - will use any if no address is provided
+    ///	<para/>	&lt;ComPort port='com1' uartConfig='9600,n,8,1'/&gt;
+    ///	<para/>	&lt;ComPort port='com200'&gt;&lt;UartConfig baud='9600' DataBits='8' Mode='rs232-3wire' Parity='none' StopBits='1'/&gt;&lt;/ComPort&gt;
+    ///	<para/>	&lt;TcpClient addr='127.0.0.1' port='5002'/&gt;
+    ///	<para/>	&lt;TcpServer addr='127.0.0.1' port='8001'/&gt;		addr is optional - will use any if no address is provided
+    ///	<para/>	&lt;UdpClient addr='127.0.0.1' port='5005'/&gt;
+    ///	<para/>	&lt;UdpServer addr='127.0.0.1' port='5006'/&gt;		addr is optional - will use any if no address is provided
     ///	<para/> &lt;NullPort/&gt;
     /// </summary>
     public struct PortConfig
