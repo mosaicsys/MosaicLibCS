@@ -344,7 +344,7 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
         /// <summary>Returns a print/log suitable string version of the state of this A2P pins state object</summary>
         public override string ToString()
 		{
-            return Utils.Fcns.CheckedFormat("{10}:${0:x}{1}{2}{3}{4}{5}{6}{7}{8}{9}"
+            return Utils.Fcns.CheckedFormat("{10}:${0:x2}{1}{2}{3}{4}{5}{6}{7}{8}{9}"
                                             , (UInt32) PackedWord
                                             , (VALID ? ",VALID" : "")
                                             , (CS_0 ? ",CS_0" : "")
@@ -515,7 +515,7 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
         /// <summary>Returns a print/log suitable string version of the state of this P2A pins state object</summary>
 		public override string ToString()
 		{
-            return Utils.Fcns.CheckedFormat("{9}:${0:x}{1}{2}{3}{4}{5}{6}{7}{8}"
+            return Utils.Fcns.CheckedFormat("{9}:${0:x2}{1}{2}{3}{4}{5}{6}{7}{8}"
                                             , (UInt32) PackedWord
                                             , (L_REQ ? ",L_REQ" : "")
                                             , (U_REQ ? ",U_REQ" : "")

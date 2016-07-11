@@ -185,6 +185,7 @@ namespace MosaicLib.PartsLib.Helpers
         bool IsAtPos1 { get; }
         bool IsAtPos2 { get; }
         bool IsAtTarget { get; }
+        bool IsTargetNone { get; }
         bool IsInMotion { get; }
         bool IsValid { get; }
     }
@@ -229,7 +230,8 @@ namespace MosaicLib.PartsLib.Helpers
 
         public bool IsAtPos1 { get { return (IsAtTarget && PosState == ActuatorPosition.AtPos1); } }
         public bool IsAtPos2 { get { return (IsAtTarget && PosState == ActuatorPosition.AtPos2); } }
-        public bool IsAtTarget { get { return (TargetPos == ActuatorPosition.None || TargetPos == PosState); } }
+        public bool IsAtTarget { get { return ((IsTargetNone && !IsInMotion) || (TargetPos == PosState)); } }
+        public bool IsTargetNone { get { return (TargetPos == ActuatorPosition.None); } }
         public bool IsInMotion { get { return (PosState == ActuatorPosition.MovingToPos1 || PosState == ActuatorPosition.MovingToPos2); } }
         public bool IsValid { get { return (TargetPos.IsTargetPositionValid() && PosState.IsValid()); } }
 

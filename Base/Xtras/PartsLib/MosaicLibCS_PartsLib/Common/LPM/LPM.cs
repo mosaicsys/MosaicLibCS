@@ -90,21 +90,28 @@ namespace MosaicLib.PartsLib.Common.LPM
 
         /// <summary>
         /// Action factory method.  When run, this action will cause this part to attempt to open the carrier that has been placed.
-        /// if requestMap is true and the device supports mapping for the current carrier type, then the carrier will be mapped as the door is being opened.
+        /// if requestMapIfSupported is true and the device supports mapping for the current carrier type, then the carrier will be mapped as the door is being opened.
+        /// if requestMapIfSupported is true and the device does not support mapping for the current carrier type, then the carrier will be opened and the map results will be set to empty with a non-empty map result code.
         /// <para/>Supported NamedParam values: Retry=true: indicates that the action is being used as part of an recovery action and should take additional steps to attempt to get the motion to succeed
+        /// <para/>if requestMapIfSupported is true then this action will set the MapResults NamedValue in ActionState.NamedValues to last published map result produced by this action.
         /// </summary>
-        IBasicAction Open(bool requestMap);
+        IBasicAction Open(bool requestMapIfSupported);
 
         /// <summary>
         /// Action factory method.  When run, this action will cause this part to attempt to close the carrier that has been placed.
-        /// if requestMap is true and the device supports mapping for the current carrier type, then the carrier will be mapped as the door is being closed.
+        /// if requestMapIfSupported is true and the device supports mapping for the current carrier type, then the carrier will be mapped as the door is being closed.
+        /// if requestMapIfSupported is true and the device does not support mapping for the current carrier type, then the carrier will be closed and the map results will be set to empty with a non-empty map result code.
         /// <para/>Supported NamedParam values: Retry=true: indicates that the action is being used as part of an recovery action and should take additional steps to attempt to get the motion to succeed
+        /// <para/>if requestMapIfSupported is true then this action will set the MapResults NamedValue in ActionState.NamedValues to last published map result produced by this action.
         /// </summary>
-        IBasicAction Close(bool requestMap);
+        IBasicAction Close(bool requestMapIfSupported);
 
         /// <summary>
         /// Action factory method.  When run, this action will cause this part to attempt to map the carrier that has been placed.
+        /// If the device does not support mapping then the action will fail.
+        /// If the device does not support mapping with the current carrier type then the action will succeeded and the map results will be set to empty with a non=empty map result code.
         /// <para/>Supported NamedParam values: Retry=true: indicates that the action is being used as part of an recovery action and should take additional steps to attempt to get the motion to succeed
+        /// <para/>This action will set the MapResults NamedValue in ActionState.NamedValues to last published map result produced by this action.
         /// </summary>
         IBasicAction Map();
 
@@ -272,6 +279,12 @@ namespace MosaicLib.PartsLib.Common.LPM
                     && ((PortDisplayContextInfo == null && rhs.PortDisplayContextInfo == null) || (PortDisplayContextInfo != null && PortDisplayContextInfo.IsEqualTo(rhs.PortDisplayContextInfo)))
                     );
         }
+
+        /// <summary>Supports debugging and logging.</summary>
+        public override string ToString()
+        {
+            return "Partial State: pod:{0} pos:{1} e84out:{2} e84in:{3} map:{4}".CheckedFormat(PodSensorValues, PositionState, E84OutputSetpoint, E84Inputs, MapResults);
+        }
     }
 
     #endregion
@@ -388,11 +401,14 @@ namespace MosaicLib.PartsLib.Common.LPM
         /// <summary>This device does not support any type of mapping.</summary>
         None = 0,
 
-        /// <summary>This device has a mapper that, at minimum, can be used to map while opening the Carrier, or after opening the Carrier.</summary>
-        HasMapper = 1,
+        /// <summary>This device has a mapper that can be used to map while opening the Carrier.</summary>
+        CanMapOnOpen = 1,
 
-        /// <summary>This device is able to map while closing the Carrier (generally by reversing the motions used to map while opening the Carrier).</summary>
-        CanMapOnClose = 2, 
+        /// <summary>This device has a mapper that can be used to map after opening the Carrier (generally by raising the door and mapping while lowering the door).</summary>
+        CanMapAfterOpen = 2,
+
+        /// <summary>This device has a mapper that can be used to map while closing the Carrier (generally by reversing the motions used to map while opening the Carrier).</summary>
+        CanMapOnClose = 4,
     }
 
     public class DeviceCapabilities : IDeviceCapabilities
@@ -431,6 +447,12 @@ namespace MosaicLib.PartsLib.Common.LPM
                     && HasE84 == rhs.HasE84
                     && MapperCapabilities == rhs.MapperCapabilities
                     );
+        }
+
+        /// <summary>Supports debugging and logging.</summary>
+        public override string ToString()
+        {
+            return "DeviceCapabilites IntegratedTagRdr:{0} HasE84:{1} Mapping:{2}".CheckedFormat(TagReaderType, (HasE84 ? "Yes": "No"),  MapperCapabilities);
         }
     }
 
@@ -506,6 +528,7 @@ namespace MosaicLib.PartsLib.Common.LPM
                     );
         }
 
+        /// <summary>Supports debugging and logging.</summary>
         public override string ToString()
         {
             if (IsEmpty)
@@ -580,7 +603,13 @@ namespace MosaicLib.PartsLib.Common.LPM
                     && PresentPlaced == rhs.PresentPlaced
                     && InfoPads == rhs.InfoPads
                     );
-        }    
+        }
+
+        /// <summary>Supports debugging and logging.</summary>
+        public override string ToString()
+        {
+            return "Sensors:{0} InfoPads:{1}".CheckedFormat(PresentPlaced, InfoPads);
+        }
     }
 
     /// <summary>Present/Placed related flag enum</summary>
@@ -665,7 +694,13 @@ namespace MosaicLib.PartsLib.Common.LPM
                     && CarrierType == rhs.CarrierType
                     && OCA == rhs.OCA
                     );
-        }    
+        }
+
+        /// <summary>Supports debugging and logging.</summary>
+        public override string ToString()
+        {
+            return "CarrierType:{0} OCA:{1}".CheckedFormat(CarrierType, OCA);
+        }
     }
 
     /// <summary>Flag enumeration that gives information about a Carrier including type (FOUP, FOSB, Cassette), Slots (25, 13, 26) and WaferSize (100, 125, 150, 200, 300, 450 mm)</summary>
@@ -768,34 +803,90 @@ namespace MosaicLib.PartsLib.Common.LPM
         /// <summary>This property returns true if the driver believes that the device is activly controlling its position.</summary>
         bool IsServoOn { get; }
 
-        bool DockMotionILockTripped { get; }
+        /// <summary>True if any aspect of the device's motion is blocked by a interlock input or internal interlock sensor, such as a anti-pinch sensor</summary>
+        bool MotionILockSensorIsTripped { get; }
+        /// <summary>True if the device offers a wafer protrusion sensor and it is currently tripped (beam broken).  This sensor may be activiated at any time, such as when a robot arm gets or puts material to a carrier slot.</summary>
         bool ProtrusionSensorIsTripped { get; }
 
-        string InMotionReason { get; }
-
-        bool IsInMotion { get; }
-
-        bool IsValid { get; }
-        bool IsClamped { get; }
-        bool IsUnclamped { get; }
-        bool IsDocked { get; }
-        bool IsUndocked { get; }
-        /// <summary>True if vacuum is enabled to the suction cups</summary>
-        bool IsVacEnabled { get; }
-        /// <summary>True if vacuum is disabled from the suction cups</summary>
-        bool IsVacDisabled { get; }
+        /// <summary>Door grip vacuum is sensed</summary>
         bool IsVacSensed { get; }
-        bool AreDoorKeysHorizontal { get; }
-        bool AreDoorKeysVertical { get; }
-        bool IsDoorOpen { get; }
-        bool IsDoorClosed { get; }
-        bool IsDoorDown { get; }
-        bool IsDoorUp { get; }
 
+        /// <summary>
+        /// Carrier is Open (detailed meaning is device specific).  
+        /// Generally this means that the carrier is present, the position is valid, the door is open and down.
+        /// </summary>
         bool IsCarrierOpen { get; }
+        /// <summary>
+        /// Carrier is Closed (detailed meaning is device specific).  
+        /// Generally this means that the carrier is present, the position is valid, the door is up, closed, latched and vacuum is released/disabled.
+        /// </summary>
         bool IsCarrierClosed { get; }
 
+        /// <summary>
+        /// Indicates that this object's contents are valid  (detailed meaning is device specific).
+        /// Generally this means that the ActuatorPosition values are all known, that the device indicates that the position is referenced and that the servo(s) are on.
+        /// </summary>
+        bool IsValid { get; }
+
+        /// <summary>
+        /// LPM position is safe to access (detailed meaning is device specific).  
+        /// Generally this means that the carrier is present, the position is valid, the door is open and down.
+        /// </summary>
+        bool IsSafeToAccess { get; }
+
+        /// <summary>Indicates the reason that the IsInMotion is true</summary>
+        string InMotionReason { get; }
+
+        /// <summary>Returns true when the driver (state publisher) believes that the device is, or may be, in motion</summary>
+        bool IsInMotion { get; }
+
+        /// <summary>The clamp actuator is in the clamped position (AtPos2)</summary>
+        bool IsClamped { get; }
+        /// <summary>The clamp actuator is in the unclamped position (AtPos1)</summary>
+        bool IsUnclamped { get; }
+        /// <summary>The dock actuator is in the docked position (AtPos2)</summary>
+        bool IsDocked { get; }
+        /// <summary>The dock actuator is in the undocked position (AtPos1)</summary>
+        bool IsUndocked { get; }
+        /// <summary>True if vacuum is enabled to the suction cups (AtPos2)</summary>
+        bool IsVacEnabled { get; }
+        /// <summary>True if vacuum is disabled from the suction cups (AtPos1)</summary>
+        bool IsVacDisabled { get; }
+        /// <summary>True if the door keys are in the horizontal position.  Any attached door has been unlatched from its carrier.  (AtPos2)</summary>
+        bool AreDoorKeysHorizontal { get; }
+        /// <summary>True if the door keys are in the vertical position.  Any attached door has been latched to its carrier.  (AtPos1)</summary>
+        bool AreDoorKeysVertical { get; }
+        /// <summary>True of the door open actuator is in the open position.  (AtPos2)</summary>
+        bool IsDoorOpen { get; }
+        /// <summary>True of the door open actuator is in the closed position.  (AtPos1)</summary>
+        bool IsDoorClosed { get; }
+        /// <summary>True of the door up/down actuator is in the down position.  (AtPos2)</summary>
+        bool IsDoorDown { get; }
+        /// <summary>True of the door up/down actuator is in the up position.  (AtPos1)</summary>
+        bool IsDoorUp { get; }
+
+        /// <summary>Generates and returns a PositionSummary value for the current position.</summary>
+        PositionSummary PositionSummary { get; }
+
+        /// <summary>Returns true if this object's contents are the same as the given rhs object's.</summary>
         bool IsEqualTo(IPositionState rhs);
+    }
+
+    /// <summary>
+    /// Represents the standard set of positions that a LPM part can physically be in.
+    /// </summary>
+    public enum PositionSummary
+    {
+        UndockedUnclamped,
+        Undocked,
+        UndockedClamped,        
+        DockedDoorLatched,      // or door not present
+        DockedDoorUnlatched,
+        DockedDoorOpen,
+        DockedCarrierOpen,
+        InMotion,
+        ServoOff,
+        Other,
     }
 
     public class PositionState : IPositionState
@@ -818,15 +909,19 @@ namespace MosaicLib.PartsLib.Common.LPM
             DoorDownState = rhs.DoorDownState;
             IsReferenced = rhs.IsReferenced;
             IsServoOn = rhs.IsServoOn;
-            DockMotionILockTripped = rhs.DockMotionILockTripped;
+            MotionILockSensorIsTripped = rhs.MotionILockSensorIsTripped;
             ProtrusionSensorIsTripped = rhs.ProtrusionSensorIsTripped;
-            InMotionReason = rhs.InMotionReason;
             IsVacSensed = rhs.IsVacSensed;
+            IsCarrierOpen = rhs.IsCarrierOpen;
+            IsCarrierClosed = rhs.IsCarrierClosed;
+            IsValid = rhs.IsValid;
+            IsSafeToAccess = rhs.IsSafeToAccess;
+            InMotionReason = rhs.InMotionReason;
             
             return this;
         }
 
-        public PositionState SetFrom(IActuatorStates actuatorStates)
+        public PositionState SetFrom(IActuatorStates actuatorStates, bool isValid = true)
         {
             ClampState = actuatorStates.ClampState.PosState;
             DockState = actuatorStates.DockState.PosState;
@@ -839,6 +934,8 @@ namespace MosaicLib.PartsLib.Common.LPM
 
             IsReferenced = statesValid;
             IsServoOn |= statesValid;
+
+            IsValid = isValid && statesValid && IsReferenced && IsServoOn;
 
             return this;
         }
@@ -856,17 +953,60 @@ namespace MosaicLib.PartsLib.Common.LPM
         /// <summary>Door Down == AtPos2, Door Up == AtPos1</summary>
         public ActuatorPosition DoorDownState { get; set; }
 
+        public bool AreAllActuatorPositionsValid { get { return (ClampState.IsValid() && DockState.IsValid() && VacState.IsValid() && DoorKeysState.IsValid() && DoorOpenState.IsValid() && DoorDownState.IsValid()); } }
+
         /// <summary>This property returns true if the device has been initialized/homed/referenced since we last started communicating with it</summary>
         public bool IsReferenced { get; set;  }
         /// <summary>This property returns true if the driver believes that the device is activly controlling its position.</summary>
         public bool IsServoOn { get; set; }
 
-        public bool DockMotionILockTripped { get; set; }
+        public bool MotionILockSensorIsTripped { get; set; }
         public bool ProtrusionSensorIsTripped { get; set; }
 
-        public string InMotionReason { get; set; }
-
         public bool IsVacSensed { get; set; }
+
+        public bool IsCarrierOpen { get; set; }
+        public bool IsCarrierClosed { get; set; }
+
+        public bool IsValid { get; set; }
+
+        public bool IsSafeToAccess { get; set; }
+
+        public string InMotionReason 
+        {
+            get
+            {
+                if (!inMotionReason.IsNullOrEmpty())
+                    return inMotionReason;
+                else if (ClampState == ActuatorPosition.MovingToPos2)
+                    return "Clamping";
+                else if (ClampState == ActuatorPosition.MovingToPos1)
+                    return "Unclamping";
+                else if (VacState == ActuatorPosition.MovingToPos2)
+                    return "Enabling Carrier Door Vacuum";
+                else if (VacState == ActuatorPosition.MovingToPos1)
+                    return "Releasing Carrier Door Vacuum";
+                else if (DoorKeysState == ActuatorPosition.MovingToPos2)
+                    return "Unlatching Carrier Door";
+                else if (DoorKeysState == ActuatorPosition.MovingToPos1)
+                    return "Latching Carrier Door";
+                else if (DoorOpenState == ActuatorPosition.MovingToPos2)
+                    return "Closing Carrier Door";
+                else if (DoorOpenState == ActuatorPosition.MovingToPos1)
+                    return "Opening Carrier Door";
+                else if (DoorDownState == ActuatorPosition.MovingToPos2)
+                    return "Moving Door Down";
+                else if (DoorDownState == ActuatorPosition.MovingToPos1)
+                    return "Moving Door Up";
+                else
+                    return string.Empty;
+            }
+            set
+            {
+                inMotionReason = value;
+            }
+        }
+        private string inMotionReason;
 
         public bool IsEqualTo(IPositionState rhs)
         {
@@ -879,33 +1019,18 @@ namespace MosaicLib.PartsLib.Common.LPM
                     && DoorDownState == rhs.DoorDownState
                     && IsReferenced == rhs.IsReferenced
                     && IsServoOn == rhs.IsServoOn
-                    && DockMotionILockTripped == rhs.DockMotionILockTripped
+                    && MotionILockSensorIsTripped == rhs.MotionILockSensorIsTripped
                     && ProtrusionSensorIsTripped == rhs.ProtrusionSensorIsTripped
                     && InMotionReason == rhs.InMotionReason
                     && IsVacSensed == rhs.IsVacSensed
+                    && IsCarrierOpen == rhs.IsCarrierOpen
+                    && IsCarrierClosed == rhs.IsCarrierClosed
+                    && IsValid == rhs.IsValid
+                    && IsSafeToAccess == rhs.IsSafeToAccess
                     );
         }
 
-        public virtual bool IsInMotion
-        {
-            get
-            {
-                return (ClampState.IsInMotion() || DockState.IsInMotion() || VacState.IsInMotion()
-                        || DoorKeysState.IsInMotion() || DoorOpenState.IsInMotion() || DoorDownState.IsInMotion()
-                        || !InMotionReason.IsNullOrEmpty());
-            }
-        }
-
-        public bool IsValid
-        {
-            get
-            {
-                return (ClampState.IsValid() && DockState.IsValid() && VacState.IsValid()
-                        && DoorKeysState.IsValid() && DoorOpenState.IsValid() && DoorDownState.IsValid()
-                        && IsReferenced && IsServoOn);
-            }
-        }
-
+        public bool IsInMotion { get { return !InMotionReason.IsNullOrEmpty(); } }
         public bool IsClamped { get { return ClampState.IsAtPos2(); } }
         public bool IsUnclamped { get { return ClampState.IsAtPos1(); } }
         public bool IsDocked { get { return DockState.IsAtPos2(); } }
@@ -921,8 +1046,48 @@ namespace MosaicLib.PartsLib.Common.LPM
         public bool IsDoorDown { get { return DoorDownState.IsAtPos2(); } }
         public bool IsDoorUp { get { return DoorDownState.IsAtPos1(); } }
 
-        public bool IsCarrierOpen { get { return IsValid && IsDoorOpen && IsDoorDown; } }
-        public bool IsCarrierClosed { get { return IsValid && IsDoorUp && IsDoorClosed && AreDoorKeysVertical && IsVacDisabled; } }
+        public PositionSummary PositionSummary
+        {
+            get 
+            {
+                if (IsInMotion)
+                    return PositionSummary.InMotion;
+                else if (IsUnclamped && IsUndocked && AreDoorKeysVertical && IsDoorClosed && IsDoorUp)
+                    return PositionSummary.UndockedUnclamped;
+                else if (IsClamped && IsUndocked && AreDoorKeysVertical && IsDoorClosed && IsDoorUp)
+                    return PositionSummary.UndockedClamped;
+                else if (IsClamped && IsDocked && AreDoorKeysVertical && IsDoorClosed && IsDoorUp)
+                    return PositionSummary.DockedDoorLatched;
+                else if (IsClamped && IsDocked && AreDoorKeysHorizontal && IsDoorClosed && IsDoorUp)
+                    return PositionSummary.DockedDoorUnlatched;
+                else if (IsClamped && IsDocked && IsDoorOpen && IsDoorUp)
+                    return PositionSummary.DockedDoorOpen;          // latch key position and use of vacuum depends on door actually being present - remove from rest of tests.
+                else if (IsClamped && IsDocked && IsDoorOpen && IsDoorDown)
+                    return PositionSummary.DockedCarrierOpen;
+                else if (!IsServoOn)
+                    return PositionSummary.ServoOff;
+                else
+                    return PositionSummary.Other;
+            }
+        }
+            
+        /// <summary>Supports debugging and logging.</summary>
+        public override string ToString()
+        {
+            PositionSummary posSummary = PositionSummary;
+
+            string motionILockStr = (MotionILockSensorIsTripped ? " MotILock" : "");
+            string wsoStr = (ProtrusionSensorIsTripped ? " WSO" : "");
+            string vacYN = ((IsVacEnabled && IsVacSensed) ? "Yes" : "No");
+
+            switch (posSummary)
+            {
+                default: return "{0} vac:{1}{2}{3}".CheckedFormat(posSummary, vacYN, motionILockStr, wsoStr);
+                case PositionSummary.InMotion: return "InMotion:{0} vac:{1}{2}{3}".CheckedFormat(InMotionReason, vacYN, motionILockStr, wsoStr);
+                case PositionSummary.ServoOff:
+                case PositionSummary.Other: return "{0} vac:{1}{2}{3}".CheckedFormat(posSummary, vacYN, motionILockStr, wsoStr);
+            }
+        }
     }
 
     public interface IActuatorStates
@@ -991,23 +1156,6 @@ namespace MosaicLib.PartsLib.Common.LPM
                     && DoorDownState.IsEqualTo(rhs.DoorDownState)
                     );
         }
-    }
-
-    #endregion
-
-    #region PositionsSummary
-
-    public enum PositionSummary
-    {
-        Unknown,
-        UndockedEmpty,
-        UndockedPresent,
-        UndockedPlaced,
-        UndockedClamped,
-        DockedDoorLocked,
-        DockedDoorUnlocked,
-        DockedDoorOpen,
-        DockedDoorDown,
     }
 
     #endregion
