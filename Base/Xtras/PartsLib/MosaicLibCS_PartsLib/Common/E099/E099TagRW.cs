@@ -39,16 +39,207 @@ namespace MosaicLib.PartsLib.Common.E099
 {
 	public interface ITagRWPart : IActivePartBase
     {
+        /// <summary>Returns the TagReaderType for this tag reader (tag r/w) part</summary>
         TagReaderType TagReaderType { get; }
 
-		IReadTagAction CreateReadTagAction();
+        /// <summary>
+        /// Action factory method.  When run, this action cases the part to read the default set of TagID pages and will validate and combine their
+        /// contents into a single TagID value which will be put into IReadTagAction's ResultValue property.  The resulting TagID and the corresponding
+        /// ITagPageContents array will also be saved in the corresponding fields of the ITagRWState that is published by this part.
+        /// </summary>
+        IReadTagAction CreateReadTagAction();
+
+        /// <summary>
+        /// Action factory method.  When run, this action cases the part to read the indicated range set of TagID pages and will validate and combine their
+        /// contents into a single TagID value, using the given tagContentDecodeMode.  The resulting TagID which will be put into IReadTagAction's ResultValue property.  
+        /// The resulting TagID and the corresponding ITagPageContents array will also be saved in the corresponding fields of the ITagRWState that is published by this part.
+        /// </summary>
         IReadTagAction CreateReadTagAction(int startPageIdx, int numPages, TagContentDecodeMode tagContentDecodeMode);
+
+        /// <summary>
+        /// Action factory method.  When run, this action cases the part to read the given number of pages starting at the given startPageIdx (0 based index).
+        /// The resulting ITagPageContents array is both saved in this action's ResultValue property and is published in the ITagRWState for this part.
+        /// </summary>
         IReadPagesAction CreateReadPagesAction(int startPageIdx, int numPages);
+
         /// <summary>
         /// Action factory method.  The returned action, when run, causes each of the indicates pages to be written, one at a time,
         /// until all writes are successful or one of them fails.  If the first failure was due to there being NoTagFound then the action's ActionState.NamedValues will contain a "NoTagDetected" value that has been set to true.
         /// </summary>
         IBasicAction CreateWritePagesAction(ITagPageContents [] pages);
+
+        /// <summary>ITagRWState state publisher.  This is also a notification object</summary>
+        INotificationObject<ITagRWState> StatePublisher { get; }
+    }
+
+    public interface ITagRWState
+    {
+        INamedValueSet NVS { get; }
+
+        /// <summary>Gives the result information from the current/last ReadTagID action</summary>
+        ITagActionInfo ReadTagIDActionInfo { get; }
+
+        /// <summary>Gives the result information from the current/last ReadPages action</summary>
+        ITagActionInfo ReadPagesActionInfo { get; }
+
+        /// <summary>Gives the result information from the current/last WritePages action</summary>
+        ITagActionInfo WritePagesActionInfo { get; }
+
+        /// <summary>Gives the result information from the current/last Read or Write action</summary>
+        ITagActionInfo CombinedActionInfo { get; }
+
+        IBaseState PartBaseState { get; }
+
+        bool IsEqualTo(ITagRWState rhs);
+    }
+
+    public class TagRWState : ITagRWState
+    {
+        public TagRWState()
+        {
+            PartBaseState = new Modular.Part.BaseState();
+
+            ReadTagIDActionInfo = new TagActionInfo();
+            ReadPagesActionInfo = new TagActionInfo();
+            WritePagesActionInfo = new TagActionInfo();
+            CombinedActionInfo = new TagActionInfo();
+        }
+
+        public TagRWState(ITagRWState rhs)
+        {
+            SetFrom(rhs);
+        }
+
+        public TagRWState SetFrom(ITagRWState rhs)
+        {
+            NVS = rhs.NVS.IsNullOrEmpty() ? null : new NamedValueSet(rhs.NVS);
+
+            ReadTagIDActionInfo = new TagActionInfo(rhs.ReadTagIDActionInfo);
+            ReadPagesActionInfo = new TagActionInfo(rhs.ReadPagesActionInfo);
+            WritePagesActionInfo = new TagActionInfo(rhs.WritePagesActionInfo);
+            CombinedActionInfo = new TagActionInfo(rhs.CombinedActionInfo);
+
+            PartBaseState = new BaseState(rhs.PartBaseState);
+
+            return this;
+        }
+
+        INamedValueSet ITagRWState.NVS { get { return nvs ?? NamedValueSet.Empty; } }
+
+        ITagActionInfo ITagRWState.ReadTagIDActionInfo { get { return ReadTagIDActionInfo; } }
+        ITagActionInfo ITagRWState.ReadPagesActionInfo { get { return ReadPagesActionInfo; } }
+        ITagActionInfo ITagRWState.WritePagesActionInfo { get { return WritePagesActionInfo; } }
+
+        IBaseState ITagRWState.PartBaseState { get { return PartBaseState; } }
+
+        public NamedValueSet NVS { get { return (nvs ?? (nvs = new NamedValueSet())); } set { nvs = value; } }
+        private NamedValueSet nvs = null;
+
+        public TagActionInfo ReadTagIDActionInfo { get; set; }
+        public TagActionInfo ReadPagesActionInfo { get; set; }
+        public TagActionInfo WritePagesActionInfo { get; set; }
+        public ITagActionInfo CombinedActionInfo { get; set; }
+        public BaseState PartBaseState { get; set; }
+
+        public bool IsEqualTo(ITagRWState rhs)
+        {
+            return (rhs != null
+                    && ((NVS.IsNullOrEmpty() && rhs.NVS.IsNullOrEmpty()) || NVS.IsEqualTo(rhs.NVS))
+                    && ReadTagIDActionInfo.IsEqualTo(rhs.ReadTagIDActionInfo)
+                    && ReadPagesActionInfo.IsEqualTo(rhs.ReadPagesActionInfo)
+                    && WritePagesActionInfo.IsEqualTo(rhs.WritePagesActionInfo)
+                    && CombinedActionInfo.IsEqualTo(rhs.CombinedActionInfo)
+                    && PartBaseState.IsEqualTo(rhs.PartBaseState)
+                    );
+        }
+
+        /// <summary>Supports debugging and logging.</summary>
+        public override string ToString()
+        {
+            if (!CombinedActionInfo.IsEmpty)
+                return "{0}".CheckedFormat(CombinedActionInfo);
+            else
+                return "{0}".CheckedFormat(PartBaseState);
+        }
+    }
+
+    public interface ITagActionInfo
+    {
+        IActionInfo ActionInfo { get; }
+        string TagID { get; }
+        ITagPageContents[] PageContentsArray { get; }
+
+        bool IsEqualTo(ITagActionInfo rhs);
+
+        bool IsEmpty { get; }
+
+        /// <summary>If the info contains a non-empty TagID then it is returned, otherwise this property returns contents based on the ActionInfo</summary>
+        string DisplayTextForTagID { get; }
+    }
+
+    public class TagActionInfo : ITagActionInfo
+    {
+        public IActionInfo ActionInfo { get; set; }
+        public string TagID { get; set; }
+        public ITagPageContents[] PageContentsArray { get; set; }
+
+        public TagActionInfo()
+        {
+            ActionInfo = Modular.Part.ActionInfo.EmptyActionInfo;
+            TagID = string.Empty;
+            PageContentsArray = emptyPageContentsArray;
+        }
+
+        public TagActionInfo(ITagActionInfo rhs)
+        {
+            SetFrom(rhs.ActionInfo, rhs.TagID, rhs.PageContentsArray);
+        }
+
+        public TagActionInfo SetFrom(IActionInfo actionInfo, string tagID, ITagPageContents[] pageArray)
+        {
+            ActionInfo = actionInfo ?? Modular.Part.ActionInfo.EmptyActionInfo;
+            TagID = tagID ?? string.Empty;
+            PageContentsArray = pageArray ?? emptyPageContentsArray;
+
+            return this;
+        }
+
+        public bool IsEqualTo(ITagActionInfo rhs)
+        {
+            return (Object.ReferenceEquals(ActionInfo, rhs.ActionInfo)
+                    && TagID == rhs.TagID
+                    && PageContentsArray.IsEqualTo(rhs.PageContentsArray)
+                    );
+        }
+
+        public bool IsEmpty { get { return ActionInfo.IsEmpty && TagID.IsNullOrEmpty() && PageContentsArray.IsNullOrEmpty(); } }
+
+        /// <summary>If the info contains a non-empty TagID then it is returned, otherwise this property returns contents based on the ActionInfo</summary>
+        public string DisplayTextForTagID 
+        {
+            get
+            {
+                if (!TagID.IsNullOrEmpty())
+                    return TagID;
+                else if (IsEmpty)
+                    return "[Empty]";
+                else if (PageContentsArray.IsNullOrEmpty())
+                    return "[{0}]".CheckedFormat(ActionInfo);
+                else
+                    return "[{0} {1}]".CheckedFormat(ActionInfo, String.Join(" ", PageContentsArray.Select(page => page.ToString()).ToArray()));
+            }
+        }
+
+        public override string ToString()
+        {
+            if (IsEmpty)
+                return "[Empty]";
+            else
+                return "{0} Tag:{1} Pages:{2}".CheckedFormat(ActionInfo, TagID, String.Join(" ", PageContentsArray.Select(page => page.ToString()).ToArray()));
+        }
+
+        private static readonly ITagPageContents[] emptyPageContentsArray = new ITagPageContents[0];
+        private static readonly IActionState emptyActionState = new ActionStateCopy();
     }
 
     /// <summary>
@@ -129,13 +320,16 @@ namespace MosaicLib.PartsLib.Common.E099
     /// </summary>
 	public enum DriverType : int
 	{
-        /// <summary>Value to use when there is no Reader installed</summary>
+        /// <summary>Value to use when there is no Reader installed (0)</summary>
 		None = 0,
 
-        /// <summary>Hermos ASCII protocol device.</summary>
+        /// <summary>Hermos ASCII protocol device. (1, same as BrooksASCII)</summary>
 		HermosASCII = 1,
 
-        /// <summary>Omron V640 family (mostly)ASCII protocol device.</summary>
+        /// <summary>Brooks ASCII protocol device. (1, same as HermosASCII)</summary>
+        BrooksASCII = 1,
+
+        /// <summary>Omron V640 family (mostly)ASCII protocol device. (2)</summary>
         OmronV640 = 2,
 	}
 

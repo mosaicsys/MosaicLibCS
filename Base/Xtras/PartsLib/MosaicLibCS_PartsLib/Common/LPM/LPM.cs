@@ -170,33 +170,30 @@ namespace MosaicLib.PartsLib.Common.LPM
 
         IPortDisplayContextInfo PortDisplayContextInfo { get; }
 
+        IBaseState PartBaseState { get; }
+
         bool IsEqualTo(ILPMState rhs);
     }
 
     public class LPMState : ILPMState
     {
         public LPMState()
-            : this(true)
-        { }
-
-        private LPMState(bool initialize)
         {
-            if (initialize)
-            {
-                DeviceCapabilities = new DeviceCapabilities();
-                PodSensorValues = new PodSensorValues();
-                DecodedPodInfo = new DecodedPodInfo();
-                PositionState = new PositionState();
+            DeviceCapabilities = new DeviceCapabilities();
+            PodSensorValues = new PodSensorValues();
+            DecodedPodInfo = new DecodedPodInfo();
+            PositionState = new PositionState();
 
-                DisplayStateSetpoint = new DisplayState();
-                DisplayState = new DisplayState();
-                ButtonSet = new ButtonSet();
+            DisplayStateSetpoint = new DisplayState();
+            DisplayState = new DisplayState();
+            ButtonSet = new ButtonSet();
 
-                E84OutputSetpoint = new PassiveToActivePinsState();
-                E84OutputReadback = new PassiveToActivePinsState();
-                E84Inputs = new ActiveToPassivePinsState();
-                MapResults = new MapResults();
-            }
+            E84OutputSetpoint = new PassiveToActivePinsState();
+            E84OutputReadback = new PassiveToActivePinsState();
+            E84Inputs = new ActiveToPassivePinsState();
+            MapResults = new MapResults();
+
+            PartBaseState = new BaseState();
         }
 
         public LPMState(ILPMState rhs)
@@ -222,6 +219,8 @@ namespace MosaicLib.PartsLib.Common.LPM
             E84Inputs = new ActiveToPassivePinsState(rhs.E84Inputs);
             MapResults = new MapResults(rhs.MapResults);
 
+            PartBaseState = new BaseState(rhs.PartBaseState);
+
             PortDisplayContextInfo = rhs.PortDisplayContextInfo;
             
             return this;
@@ -241,6 +240,7 @@ namespace MosaicLib.PartsLib.Common.LPM
         IActiveToPassivePinsState ILPMState.E84Inputs { get { return this.E84Inputs; } }
         IMapResults ILPMState.MapResults { get { return this.MapResults; } }
         IPortDisplayContextInfo ILPMState.PortDisplayContextInfo { get { return this.PortDisplayContextInfo; } }
+        IBaseState ILPMState.PartBaseState { get { return this.PartBaseState; } }
 
         public NamedValueSet NVS { get { return (nvs ?? (nvs = new NamedValueSet())); } set { nvs = value; } }
         private NamedValueSet nvs = null;
@@ -261,10 +261,12 @@ namespace MosaicLib.PartsLib.Common.LPM
 
         public IPortDisplayContextInfo PortDisplayContextInfo { get; set; }
 
+        public BaseState PartBaseState { get; set; }
+
         public bool IsEqualTo(ILPMState rhs)
         {
             return (rhs != null
-                    && NVS.IsEqualTo(rhs.NVS)
+                    && ((NVS.IsNullOrEmpty() && rhs.NVS.IsNullOrEmpty()) || NVS.IsEqualTo(rhs.NVS))
                     && DeviceCapabilities.IsEqualTo(rhs.DeviceCapabilities)
                     && PodSensorValues.IsEqualTo(rhs.PodSensorValues)
                     && DecodedPodInfo.IsEqualTo(rhs.DecodedPodInfo)
@@ -277,6 +279,7 @@ namespace MosaicLib.PartsLib.Common.LPM
                     && E84Inputs.IsEqualTo(rhs.E84Inputs)
                     && MapResults.IsEqualTo(rhs.MapResults)
                     && ((PortDisplayContextInfo == null && rhs.PortDisplayContextInfo == null) || (PortDisplayContextInfo != null && PortDisplayContextInfo.IsEqualTo(rhs.PortDisplayContextInfo)))
+                    && PartBaseState.IsEqualTo(rhs.PartBaseState)
                     );
         }
 
@@ -982,6 +985,10 @@ namespace MosaicLib.PartsLib.Common.LPM
                     return "Clamping";
                 else if (ClampState == ActuatorPosition.MovingToPos1)
                     return "Unclamping";
+                else if (DockState == ActuatorPosition.MovingToPos2)
+                    return "Docking";
+                else if (DockState == ActuatorPosition.MovingToPos1)
+                    return "Undocking";
                 else if (VacState == ActuatorPosition.MovingToPos2)
                     return "Enabling Carrier Door Vacuum";
                 else if (VacState == ActuatorPosition.MovingToPos1)
@@ -991,9 +998,9 @@ namespace MosaicLib.PartsLib.Common.LPM
                 else if (DoorKeysState == ActuatorPosition.MovingToPos1)
                     return "Latching Carrier Door";
                 else if (DoorOpenState == ActuatorPosition.MovingToPos2)
-                    return "Closing Carrier Door";
-                else if (DoorOpenState == ActuatorPosition.MovingToPos1)
                     return "Opening Carrier Door";
+                else if (DoorOpenState == ActuatorPosition.MovingToPos1)
+                    return "Closing Carrier Door";
                 else if (DoorDownState == ActuatorPosition.MovingToPos2)
                     return "Moving Door Down";
                 else if (DoorDownState == ActuatorPosition.MovingToPos1)

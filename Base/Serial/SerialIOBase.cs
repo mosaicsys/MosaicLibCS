@@ -731,7 +731,7 @@ namespace MosaicLib.SerialIO
 				CancelPendingActions(actionName + " Action invoked");
 
             // flush the sliding buffer first.
-            if (HasSlidingBuffer && (slidingPacketBuffer.BufferDataCount > 0))
+            if (HasSlidingBuffer && ((slidingPacketBuffer.BufferDataCount > 0) || slidingPacketBuffer.NumPacketsReady > 0))
             {
                 // first extract and record the set of flushed packets from the sliding buffer.
                 for (; ; )

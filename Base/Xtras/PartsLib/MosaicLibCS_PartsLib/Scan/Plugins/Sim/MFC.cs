@@ -27,13 +27,32 @@ using MosaicLib.Modular.Config.Attributes;
 using MosaicLib.Modular.Interconnect.Values.Attributes;
 using MosaicLib.Time;
 using MosaicLib.Modular.Interconnect.Values;
+using MosaicLib.Modular.Common;
+using MosaicLib.PartsLib.Scan.Plugin.Sim.Common;
 
 namespace MosaicLib.PartsLib.Scan.Plugin.Sim.MFC
 {
     /// <summary>
+    /// Nominal set of expected control modes that a digital MFC can be set to perform.
+    /// </summary>
+    public enum ControlMode
+    {
+        /// <summary>Requests that the MFC attempt to control to the setpoint normally.</summary>
+        Normal = 0,
+        /// <summary>Requests that the MFC close its valve as much as possible to produce the smallest possible flow.</summary>
+        Close,
+        /// <summary>Requests that the MFC open its valve as much as possible to produce the largest possible flow.</summary>
+        Open,
+        /// <summary>Requests that the MFC latch its valve in the current position.</summary>
+        Freeze,
+        /// <summary>Requests that the MFC follow the setpoint from an analog input.  The MFC simulator decides what to do.  Normally it treats this like Close</summary>
+        Analog,
+    }
+
+    /// <summary>
     /// This ScanEngine Plugin provides very basic simulated fucntionality of an MFC.
     /// <para/>Supports following channels:
-    /// <para/>Inputs:  FlowSetpointTarget, FlowSetpointTargetInPercentOfFS (last writer wins), ControlModeSetpoint (Close, Analog, Open, Freeze, Normal, Offline), IsOnline
+    /// <para/>Inputs:  FlowSetpointTarget, FlowSetpointTargetInPercentOfFS (last writer wins), ControlMode (Close, Analog, Open, Freeze, Normal, Offline), FaultInjection
     /// <para/>Outputs: TrackingFlowSetpoint, TrackingFlowSetpointInPercientOfFS, MeasuredFlowInPercentOfFS, MeasuredFlow, ValvePositionInPercent, TotalOpertingHours, TotalFlow
     /// <para/>Supports the following config keys
     /// <para/>FullScaleFlow (1000.0), FlowNoise (5.0), FullScaleResponsePeriodInSeconds (1.25)
@@ -94,40 +113,49 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.MFC
             double updatedTrackingSetpoint = ConfigValues.ApplySlewLimit(OutputValues.TrackingFlowSetpoint, setpointTarget, periodInSeconds);
             double trackingSetpointPercentFS = ConfigValues.ConvertToPercentOfFS(OutputValues.TrackingFlowSetpoint);
 
-            bool isOnline = ((InputValues.IsOnline == null || InputValues.IsOnline == true) && InputValues.ControlModeSetpoint != "Offline");
-            bool forceClosed = !isOnline || (InputValues.ControlModeSetpoint == "Close") || (InputValues.ControlModeSetpoint == "Analog");
-            bool forceOpen = isOnline && (InputValues.ControlModeSetpoint == "Open");
+            ControlMode controlMode = InputValues.ControlMode;
+            FaultInjection faultInjection = InputValues.FaultInjection;
 
-            if (!forceClosed && !forceOpen)
+            bool isOnline = !faultInjection.IsSet(FaultInjection.Offline);
+            bool forceClosed = faultInjection.IsSet(FaultInjection.ForceClose);
+            bool forceOpen = faultInjection.IsSet(FaultInjection.ForceOpen);
+            bool forceFreeze = faultInjection.IsSet(FaultInjection.ForceFreeze);
+            bool isForced = (forceClosed || forceOpen || forceClosed);
+
+            bool closeValve = (forceClosed || (!isForced && (controlMode == ControlMode.Close || controlMode == ControlMode.Analog)));
+            bool openValve = (forceOpen || (!isForced && controlMode == ControlMode.Open));
+            bool freezeValve = (forceFreeze || (!isForced && controlMode == ControlMode.Freeze));
+
+            if (!closeValve && !openValve && !freezeValve)
             {
                 if ((setpointTargetInPercentFS <= ConfigValues.SetpointThresholdForCloseInPercentOfFS) && (trackingSetpointPercentFS <= ConfigValues.SetpointThresholdForCloseInPercentOfFS))
-                    forceClosed = true;
+                    closeValve = true;
                 else if ((setpointTargetInPercentFS >= ConfigValues.SetpointThresholdForOpenInPercentOfFS) && (trackingSetpointPercentFS >= ConfigValues.SetpointThresholdForOpenInPercentOfFS))
-                    forceOpen = true;
+                    openValve = true;
             }
 
-            bool normal = (!forceClosed && !forceOpen && (InputValues.ControlModeSetpoint != "Freeze"));
+            OutputValues.IsDeviceOnline = isOnline;
 
-            if (forceClosed)
+            if (closeValve)
             {
                 OutputValues.TrackingFlowSetpointInPercentOfFS = trackingSetpointPercentFS = 0.0;
                 OutputValues.TrackingFlowSetpoint = ConfigValues.ConvertFromPercentToFlow(trackingSetpointPercentFS);
             }
-            else if (forceOpen)
+            else if (openValve)
             {
                 OutputValues.TrackingFlowSetpointInPercentOfFS = trackingSetpointPercentFS = 125.0;
                 OutputValues.TrackingFlowSetpoint = ConfigValues.ConvertFromPercentToFlow(trackingSetpointPercentFS);
             }
-            else if (normal)
+            else if (freezeValve)
+            {
+                // freeze the tracking setpoint (no more updates to the tracking setpoint).
+                trackingSetpointPercentFS = OutputValues.TrackingFlowSetpointInPercentOfFS;
+            }
+            else
             {
                 // early calculations do not need to be updated
                 OutputValues.TrackingFlowSetpoint = updatedTrackingSetpoint;
                 OutputValues.TrackingFlowSetpointInPercentOfFS = ConfigValues.ConvertToPercentOfFS(updatedTrackingSetpoint);
-            }
-            else
-            {
-                // freeze the tracking setpoint (no more updates to the tracking setpoint).
-                trackingSetpointPercentFS = OutputValues.TrackingFlowSetpointInPercentOfFS;
             }
 
             double flowNoise = (isOnline ? (ConfigValues.FlowNoise * GetNextRandomInMinus1ToPlus1Range()) : 0.0);
@@ -245,15 +273,47 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.MFC
     /// <summary>Used with <see cref="MFCSimScanEnginePlugin"/> as TInputValueSetType</summary>
     public class MFCSimPluginInputs
     {
-        [ValueSetItem]
-        public string ControlModeSetpoint { get; set; }
+        [ValueSetItem(Name="ControlMode")]
+        public ValueContainer ControlModeVC { get; set; }
 
-        [ValueSetItem]
-        public bool? IsOnline { get; set; }
+        public ControlMode ControlMode
+        {
+            get
+            {
+                if (!controlModeVC.IsEqualTo(ControlModeVC))
+                {
+                    controlModeVC = ControlModeVC;
+                    controlMode = faultInjectionVC.GetValue<ControlMode>(false);
+                }
+                return controlMode;
+            }
+        }
+
+        private ControlMode controlMode = ControlMode.Normal;
+        private ValueContainer controlModeVC = new ValueContainer();
+
+        [ValueSetItem(Name="FaultInjection")]
+        public ValueContainer FaultInjectionVC { get; set; }
+
+        public FaultInjection FaultInjection 
+        { 
+            get 
+            {
+                if (!faultInjectionVC.IsEqualTo(FaultInjectionVC))
+                {
+                    faultInjectionVC = FaultInjectionVC;
+                    faultInjection = faultInjectionVC.GetValue<FaultInjection>(false);
+                }
+                return faultInjection;
+            } 
+        }
+        private FaultInjection faultInjection = FaultInjection.None;
+        private ValueContainer faultInjectionVC = new ValueContainer();
 
         public MFCSimPluginInputs()
         {
-            IsOnline = true;
+            ControlModeVC = new ValueContainer(ControlMode.Normal);
+            FaultInjectionVC = new ValueContainer(Sim.Common.FaultInjection.None);
         }
     }
 
@@ -282,6 +342,9 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.MFC
 
         [ValueSetItem]
         public double TemperatureInDegC { get; set; }
+
+        [ValueSetItem]
+        public bool IsDeviceOnline { get; set; }
 
         /// <summary>
         /// Has same units as MeasuredFlow * time in units of minutes

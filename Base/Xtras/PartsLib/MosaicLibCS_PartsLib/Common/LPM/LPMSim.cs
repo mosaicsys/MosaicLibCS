@@ -164,11 +164,11 @@ namespace MosaicLib.PartsLib.Common.LPM.Sim
         {
             this.useFastMotion = fastMotion;
 
-            VacuumOffMotionTime = TimeSpan.FromSeconds(UseFastMotion ? 0.1 : 0.5);
-            VacuumOnMotionTime = TimeSpan.FromSeconds(UseFastMotion ? 0.1 : 0.25);
-            ClampMotionTime = TimeSpan.FromSeconds(UseFastMotion ? 0.1 : 0.5);
-            TBarMotionTime = TimeSpan.FromSeconds(UseFastMotion ? 0.25 : 0.75);
-            MidMotionTime = TimeSpan.FromSeconds(UseFastMotion ? 0.75 : 1.5);      // pivot, shuttle
+            VacuumOffMotionTime = TimeSpan.FromSeconds(UseFastMotion ? 0.333 : 0.75);
+            VacuumOnMotionTime = TimeSpan.FromSeconds(UseFastMotion ? 0.25 : 0.5);
+            ClampMotionTime = TimeSpan.FromSeconds(UseFastMotion ? 0.333 : 0.5);
+            TBarMotionTime = TimeSpan.FromSeconds(UseFastMotion ? 0.5 : 1.0);
+            MidMotionTime = TimeSpan.FromSeconds(UseFastMotion ? 1.0 : 2.0);      // pivot, shuttle
             LongMotionTime = TimeSpan.FromSeconds(UseFastMotion ? 1.0 : 3.0);      // door
 
             return this;

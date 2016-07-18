@@ -358,6 +358,9 @@ namespace MosaicLib.Modular.Action
         }
 
         #endregion
+
+        public static IActionState Empty { get { return empty; } }
+        private static readonly IActionState empty = new ActionStateImplBase();
     }
 
     /// <summary>

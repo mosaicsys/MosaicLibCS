@@ -200,8 +200,8 @@ namespace MosaicLib.PartsLib.Scan.ScanEngine
         public override void Setup(string scanEnginePartName)
         {
             configAdapter.Setup("{0}.{1}.".CheckedFormat(scanEnginePartName, Name), scanEnginePartName, Name);
-            inputAdapter.Setup("{0}.".CheckedFormat(Name), scanEnginePartName, Name);
-            outputAdapter.Setup("{0}.".CheckedFormat(Name), scanEnginePartName, Name);
+            inputAdapter.Setup("{0}.".CheckedFormat(Name), scanEnginePartName, Name).Set();
+            outputAdapter.Setup("{0}.".CheckedFormat(Name), scanEnginePartName, Name).Set();
         }
 
         public override void UpdateInputs()

@@ -107,6 +107,9 @@ namespace MosaicLib.Modular.Part
         /// <summary>Gives the last seens IActionState for this action</summary>
         IActionState ActionState { get; }
 
+        /// <summary>Reteurns true if this ActionInfo instance is empty</summary>
+        bool IsEmpty { get; }
+
         /// <summary>Custom variant of normal ToString method that gives caller access to which parts of the action they want included in the string.</summary>
         string ToString(ToStringSelect toStringSelect);
     }
@@ -121,8 +124,9 @@ namespace MosaicLib.Modular.Part
         /// </summary>
         public ActionInfo()
         {
-            Description = DescriptionWithDetails = string.Empty;
-            ActionState = EmptyActionState;
+            Description = string.Empty;
+            DescriptionWithDetails = string.Empty;
+            ActionState = ActionStateCopy.Empty;
         }
 
         /// <summary>
@@ -179,12 +183,25 @@ namespace MosaicLib.Modular.Part
             return ToString(ToStringSelect.MesgDetailAndState);
         }
 
+        /// <summary>Reteurns true if this ActionInfo instance is empty</summary>
+        public bool IsEmpty 
+        {
+            get
+            {
+                return (Description.IsNullOrEmpty() && DescriptionWithDetails.IsNullOrEmpty() && ActionState.IsEmpty());
+            }
+        }
+
         /// <summary>Custom variant of normal ToString method that gives caller access to which parts of the action they want included in the string.</summary>
         public string ToString(ToStringSelect toStringSelect)
         {
             string actionName = (toStringSelect == ToStringSelect.JustMesg) ? Description : DescriptionWithDetails;
 
-            if (ActionState.Succeeded)
+            if (IsEmpty)
+                return "[EmtpyActionState]";
+            else if (ActionState == null)
+                return "{0} [state is null]".CheckedFormat(actionName);
+            else if (ActionState.Succeeded)
                 return "{0} Succeeded".CheckedFormat(actionName);
             else if (ActionState.Failed)
                 return "{0} Failed: {1}".CheckedFormat(actionName, ActionState.ResultCode);
@@ -199,7 +216,9 @@ namespace MosaicLib.Modular.Part
         /// <summary>Gives the last seens IActionState for this action</summary>
         public IActionState ActionState { get; private set; }
 
-        public static readonly IActionState EmptyActionState = new ActionStateCopy();
+        private static readonly IActionInfo emptyActionInfo = new ActionInfo();
+
+        public static IActionInfo EmptyActionInfo { get { return emptyActionInfo; } }
     }
 
 	/// <summary>

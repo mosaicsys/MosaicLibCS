@@ -196,12 +196,12 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <summary>
         /// Returns true if this is a simple map, or false if it is not (such as for a Regular Expression)
         /// </summary>
-        public bool IsSimpleMap { get { return true; } }
+        public virtual bool IsSimpleMap { get { return true; } }
 
         /// <summary>
         /// Returns true if this map can be used to match and map the given from string.
         /// </summary>
-        public bool CanMap(string from)
+        public virtual bool CanMap(string from)
         {
             return (from == From);
         }
@@ -210,7 +210,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// If this map can convert the given from string then it assigns the converted value to the given output to parameter and returns true.
         /// If this map does not match the given from string or if the conversion fails then this method does not modify the to paramter and instead returns false.
         /// </summary>
-        public bool Map(string from, ref string to)
+        public virtual bool Map(string from, ref string to)
         {
             if (CanMap(from))
             {
@@ -240,12 +240,12 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <summary>
         /// Returns true if this is a simple map, or false if it is not.  (not in this case)
         /// </summary>
-        public new bool IsSimpleMap { get { return false; } }
+        public override bool IsSimpleMap { get { return false; } }
 
         /// <summary>
         /// Returns true if this map can be used to match and map the given from string.
         /// </summary>
-        public new bool CanMap(string from)
+        public override bool CanMap(string from)
         {
             return from.MapNullToEmpty().StartsWith(From);
         }
@@ -254,7 +254,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// If this map can convert the given from string then it assigns the converted value to the given output to parameter and returns true.
         /// If this map does not match the given from string or if the conversion fails then this method does not modify the to paramter and instead returns false.
         /// </summary>
-        public new bool Map(string from, ref string to)
+        public override bool Map(string from, ref string to)
         {
             if (from.MapNullToEmpty().StartsWith(From))
             {
@@ -293,12 +293,12 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <summary>
         /// Returns true if this is a simple map, or false if it is not (such as for a Regular Expression)
         /// </summary>
-        public new bool IsSimpleMap { get { return false; } }
+        public override bool IsSimpleMap { get { return false; } }
 
         /// <summary>
         /// Returns true if this map can be used to match and map the given from string.
         /// </summary>
-        public new bool CanMap(string from)
+        public override bool CanMap(string from)
         {
             try
             {
@@ -317,7 +317,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// If this map can convert the given from string then it assigns the converted value to the given output to parameter and returns true.
         /// If this map does not match the given from string or if the conversion fails then this method does not modify the to paramter and instead returns false.
         /// </summary>
-        public new bool Map(string from, ref string to)
+        public override bool Map(string from, ref string to)
         {
             try
             {

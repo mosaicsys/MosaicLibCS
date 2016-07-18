@@ -326,13 +326,39 @@ namespace MosaicLib.Modular.Action
 
     #endregion
 
-    #region IClientFacet ExtentionMethods
+    #region IActionState and IClientFacet ExtentionMethods
 
     /// <summary>
     /// common "namespace" class to define extension methods within.
     /// </summary>
     public static partial class ExtentionMethods
     {
+        /// <summary>
+        /// Returns true if the given actionState has the same contents as ActionStateImplBase.Empty.
+        /// </summary>
+        public static bool IsEmpty(this IActionState actionState)
+        {
+            return ActionStateImplBase.Empty.IsEqualTo(actionState);
+        }
+
+        /// <summary>
+        /// Returns true if the given actionState has the same contents as the given rhs.
+        /// </summary>
+        public static bool IsEqualTo(this IActionState actionState, IActionState rhs)
+        {
+            if (Object.ReferenceEquals(actionState, rhs) || (actionState == null && rhs == null))
+                return true;
+
+            if (actionState == null || rhs == null)
+                return false;
+
+            return (actionState.StateCode == rhs.StateCode
+                    && actionState.ResultCode == rhs.ResultCode
+                    && actionState.TimeStamp == rhs.TimeStamp
+                    && actionState.NamedValues.IsEqualTo(rhs.NamedValues)
+                    );
+        }
+
         /// <summary>Inline variant of action.Start that supports call chaining.  This method is only intended for use in cases where the action is already known to be ready to start (ie the start will not fail) as the result code from the underlying start call will be lost.</summary>
         public static TClientFacetType StartInline<TClientFacetType>(this TClientFacetType action) where TClientFacetType : IClientFacet
         {

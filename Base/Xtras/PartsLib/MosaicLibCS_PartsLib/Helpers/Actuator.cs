@@ -37,21 +37,21 @@ namespace MosaicLib.PartsLib.Helpers
         [EnumMember]
         Undefined = 0,
         [EnumMember]
-        None,
+        AtPos1 = 1,
         [EnumMember]
-        Unknown,
+        AtPos2 = 2,
         [EnumMember]
-        AtPos1,
+        MovingToPos1 = 3,
         [EnumMember]
-        MovingToPos1,
+        MovingToPos2 = 4,
         [EnumMember]
-        AtPos2,
+        InBetween = 5,
         [EnumMember]
-        MovingToPos2,
+        None = 6,
         [EnumMember]
-        InBetween,
+        Unknown = 7,
         [EnumMember]
-        Fault,
+        Fault = 8,
 
         [EnumMember]
         MoveToPos1 = AtPos1,
@@ -65,19 +65,22 @@ namespace MosaicLib.PartsLib.Helpers
         public static bool IsAtPos1(this ActuatorPosition pos)  { return (pos == ActuatorPosition.AtPos1); }
         /// <summary>Returns true if the given pos is AtPos2</summary>
         public static bool IsAtPos2(this ActuatorPosition pos) { return (pos == ActuatorPosition.AtPos2); }
+        /// <summary>Returns true if the given pos is AtPos2</summary>
+        public static bool IsInBetween(this ActuatorPosition pos) { return (pos == ActuatorPosition.InBetween); }
         /// <summary>Returns true if the given pos is MovingToPos1 or MovingToPos2</summary>
         public static bool IsInMotion(this ActuatorPosition pos) { return (pos == ActuatorPosition.MovingToPos1 || pos == ActuatorPosition.MovingToPos2); }
         /// <summary>Returns true if the given targetPos is AtPos1, AtPos2, or None</summary>
-        public static bool IsTargetPositionValid(this ActuatorPosition targetPos) { return (targetPos == ActuatorPosition.AtPos1 || targetPos == ActuatorPosition.AtPos2 || targetPos == ActuatorPosition.None); }
+        public static bool IsTargetPositionValid(this ActuatorPosition targetPos) { return (targetPos == ActuatorPosition.MoveToPos1|| targetPos == ActuatorPosition.MoveToPos2 || targetPos == ActuatorPosition.None); }
         /// <summary>Returns true if the given pos is AtPos1, AtPos2, MovingToPos1, MovingToPos2, or Inbetween</summary>
-        public static bool IsValid(this ActuatorPosition pos) { return (pos == ActuatorPosition.AtPos1 || pos == ActuatorPosition.AtPos2 || pos == ActuatorPosition.MovingToPos1 || pos == ActuatorPosition.MovingToPos2 || pos == ActuatorPosition.InBetween); }
+        public static bool IsValid(this ActuatorPosition pos) { return (pos.IsAtPos1() || pos.IsAtPos2() || pos.IsInBetween() || pos.IsInMotion()); }
 
         /// <summary>
         /// If the currentPos matches the AtPos1 then this method sets currentPos to the MovingToPos2, otherwise currentPos is not changed.
         /// </summary>
         public static ActuatorPosition StartMotionFromPos1ToPos2(this ActuatorPosition currentPos)
         {
-            return currentPos == ActuatorPosition.AtPos1 ? ActuatorPosition.MoveToPos2 : currentPos;
+            ActuatorPosition nextPos = (currentPos.IsAtPos1() ? ActuatorPosition.MovingToPos2 : currentPos);
+            return nextPos;
         }
 
         /// <summary>
@@ -85,7 +88,8 @@ namespace MosaicLib.PartsLib.Helpers
         /// </summary>
         public static ActuatorPosition StartMotionFromPos2ToPos1(this ActuatorPosition currentPos)
         {
-            return currentPos == ActuatorPosition.AtPos2 ? ActuatorPosition.MoveToPos1 : currentPos;
+            ActuatorPosition nextPos = (currentPos.IsAtPos2() ? ActuatorPosition.MovingToPos1 : currentPos);
+            return nextPos;
         }
 
         public static ActuatorPosition SetFrom(this ActuatorPosition ignoredValue, bool atPos1, bool atPos2)
