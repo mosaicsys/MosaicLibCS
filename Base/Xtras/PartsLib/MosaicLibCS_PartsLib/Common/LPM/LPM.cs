@@ -292,6 +292,37 @@ namespace MosaicLib.PartsLib.Common.LPM
 
     #endregion
 
+    #region MotionAction enum
+
+    /// <summary>
+    /// This enumeration gives a quick summary list of the individual actions that a LPM can be asked to perform.
+    /// It is being defined as a flag enum so that it can also be used as an interlock action enable mask.
+    /// </summary>
+    [Flags]
+    public enum MotionAction : int
+    {
+        /// <summary>default/placeholder value: 0x0000</summary>
+        None = 0x0000,
+        /// <summary>Initialize: 0x0001</summary>
+        Initialize = 0x0001,
+        /// <summary>Clamp: 0x0002</summary>
+        Clamp = 0x0002,
+        /// <summary>Unclamp: 0x0004</summary>
+        Unclamp = 0x0004,
+        /// <summary>Dock: 0x0008</summary>
+        Dock = 0x0008,
+        /// <summary>Undock: 0x0010</summary>
+        Undock = 0x0010,
+        /// <summary>Open: 0x0020</summary>
+        Open = 0x0020,
+        /// <summary>Close: 0x0040</summary>
+        Close = 0x0040,
+        /// <summary>Map: 0x0080</summary>
+        Map = 0x0080,
+    }
+
+    #endregion
+
     #region IPortDisplayContextInfo
 
     /// <summary>
@@ -811,8 +842,8 @@ namespace MosaicLib.PartsLib.Common.LPM
         /// <summary>True if the device offers a wafer protrusion sensor and it is currently tripped (beam broken).  This sensor may be activiated at any time, such as when a robot arm gets or puts material to a carrier slot.</summary>
         bool ProtrusionSensorIsTripped { get; }
 
-        /// <summary>Door grip vacuum is sensed</summary>
-        bool IsVacSensed { get; }
+        /// <summary>Carrier Door is detected (either by vacuum grip or by other means)</summary>
+        bool IsCarrierDoorDetected { get; }
 
         /// <summary>
         /// Carrier is Open (detailed meaning is device specific).  
@@ -914,7 +945,7 @@ namespace MosaicLib.PartsLib.Common.LPM
             IsServoOn = rhs.IsServoOn;
             MotionILockSensorIsTripped = rhs.MotionILockSensorIsTripped;
             ProtrusionSensorIsTripped = rhs.ProtrusionSensorIsTripped;
-            IsVacSensed = rhs.IsVacSensed;
+            IsCarrierDoorDetected = rhs.IsCarrierDoorDetected;
             IsCarrierOpen = rhs.IsCarrierOpen;
             IsCarrierClosed = rhs.IsCarrierClosed;
             IsValid = rhs.IsValid;
@@ -966,7 +997,7 @@ namespace MosaicLib.PartsLib.Common.LPM
         public bool MotionILockSensorIsTripped { get; set; }
         public bool ProtrusionSensorIsTripped { get; set; }
 
-        public bool IsVacSensed { get; set; }
+        public bool IsCarrierDoorDetected { get; set; }
 
         public bool IsCarrierOpen { get; set; }
         public bool IsCarrierClosed { get; set; }
@@ -1029,7 +1060,7 @@ namespace MosaicLib.PartsLib.Common.LPM
                     && MotionILockSensorIsTripped == rhs.MotionILockSensorIsTripped
                     && ProtrusionSensorIsTripped == rhs.ProtrusionSensorIsTripped
                     && InMotionReason == rhs.InMotionReason
-                    && IsVacSensed == rhs.IsVacSensed
+                    && IsCarrierDoorDetected == rhs.IsCarrierDoorDetected
                     && IsCarrierOpen == rhs.IsCarrierOpen
                     && IsCarrierClosed == rhs.IsCarrierClosed
                     && IsValid == rhs.IsValid
@@ -1085,7 +1116,7 @@ namespace MosaicLib.PartsLib.Common.LPM
 
             string motionILockStr = (MotionILockSensorIsTripped ? " MotILock" : "");
             string wsoStr = (ProtrusionSensorIsTripped ? " WSO" : "");
-            string vacYN = ((IsVacEnabled && IsVacSensed) ? "Yes" : "No");
+            string vacYN = ((IsVacEnabled && IsCarrierDoorDetected) ? "Yes" : "No");
 
             switch (posSummary)
             {
@@ -1437,6 +1468,15 @@ namespace MosaicLib.PartsLib.Common.LPM
 
     public static partial class ExtensionMethods
     {
+        public static bool IsClamp(this MotionAction value) { return value == MotionAction.Clamp; }
+        public static bool IsUnclamp(this MotionAction value) { return value == MotionAction.Unclamp; }
+        public static bool IsDock(this MotionAction value) { return value == MotionAction.Dock; }
+        public static bool IsUndock(this MotionAction value) { return value == MotionAction.Undock; }
+        public static bool IsOpen(this MotionAction value) { return value == MotionAction.Open; }
+        public static bool IsClose(this MotionAction value) { return value == MotionAction.Close; }
+        public static bool IsMap(this MotionAction value) { return value == MotionAction.Map; }
+        public static bool IsInitialize(this MotionAction value) { return value == MotionAction.Initialize; }
+
         public static bool IsNeitherPresentNorPlaced(this PresentPlaced value) { return (value == PresentPlaced.None); }
         public static bool IsPresent(this PresentPlaced value) { return value.IsSet(PresentPlaced.Present); }
         public static bool IsPlaced(this PresentPlaced value) { return value.IsSet(PresentPlaced.Placed); }
@@ -1444,11 +1484,13 @@ namespace MosaicLib.PartsLib.Common.LPM
         public static bool DoesPlacedEqualPresent(this PresentPlaced value) { return value.IsSet(PresentPlaced.Present) == value.IsSet(PresentPlaced.Placed); }
         public static bool IsPlacedOrPresent(this PresentPlaced value) { return value.IsSet(PresentPlaced.Present) || value.IsSet(PresentPlaced.Placed); }
 
+        public static bool IsSet(this MotionAction value, MotionAction test) { return value.Matches(test, test); }
         public static bool IsSet(this PresentPlaced value, PresentPlaced test) { return value.Matches(test, test); }
         public static bool IsSet(this InfoPads value, InfoPads test) { return value.Matches(test, test); }
         public static bool IsSet(this CarrierType value, CarrierType test) { return value.Matches(test, test); }
         public static bool IsSet(this OCA value, OCA test) { return value.Matches(test, test); }
 
+        public static bool Matches(this MotionAction testValue, MotionAction mask, MotionAction expectedValue) { return ((testValue & mask) == expectedValue); }
         public static bool Matches(this PresentPlaced testValue, PresentPlaced mask, PresentPlaced expectedValue) { return ((testValue & mask) == expectedValue); }
         public static bool Matches(this InfoPads testValue, InfoPads mask, InfoPads expectedValue) { return ((testValue & mask) == expectedValue); }
         public static bool Matches(this CarrierType testValue, CarrierType mask, CarrierType expectedValue) { return ((testValue & mask) == expectedValue); }

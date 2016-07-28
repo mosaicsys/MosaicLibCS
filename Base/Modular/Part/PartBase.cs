@@ -233,6 +233,14 @@ namespace MosaicLib.Modular.Part
     public static partial class ExtensionMethods
     {
         /// <summary>
+        /// Returns true if the given baseState is non-null and its UseState is IsOnline or its ConnState is Connected
+        /// </summary>
+        public static bool IsOnlineAndConnected(this IBaseState baseState)
+        {
+            return (baseState != null && baseState.IsOnline && baseState.IsConnected);
+        }
+
+        /// <summary>
         /// Returns true if the given baseState is non-null and its UseState is Initial or its ConnState is Initial
         /// </summary>
         public static bool IsUninitialized(this IBaseState baseState)

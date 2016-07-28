@@ -173,6 +173,8 @@ namespace MosaicLib.PartsLib.Common.E099
 
         bool IsEmpty { get; }
 
+        bool NoTagDetected { get; }
+
         /// <summary>If the info contains a non-empty TagID then it is returned, otherwise this property returns contents based on the ActionInfo</summary>
         string DisplayTextForTagID { get; }
     }
@@ -214,6 +216,8 @@ namespace MosaicLib.PartsLib.Common.E099
 
         public bool IsEmpty { get { return ActionInfo.IsEmpty && TagID.IsNullOrEmpty() && PageContentsArray.IsNullOrEmpty(); } }
 
+        public bool NoTagDetected { get { return ActionInfo.ActionState.NamedValues["NoTagDetected"].VC.GetValue<bool>(false); } }
+
         /// <summary>If the info contains a non-empty TagID then it is returned, otherwise this property returns contents based on the ActionInfo</summary>
         public string DisplayTextForTagID 
         {
@@ -223,6 +227,8 @@ namespace MosaicLib.PartsLib.Common.E099
                     return TagID;
                 else if (IsEmpty)
                     return "[Empty]";
+                else if (NoTagDetected)
+                    return "[No Tag Detected]";
                 else if (PageContentsArray.IsNullOrEmpty())
                     return "[{0}]".CheckedFormat(ActionInfo);
                 else
