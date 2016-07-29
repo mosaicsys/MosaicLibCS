@@ -60,8 +60,11 @@ namespace MosaicLib.PartsLib.Common.LPM.Sim
     public enum LPType : int
     {
         None = 0,
-        Fixload6,
+        Fixload6M,
         VisionLPM,
+        TDK_TAS300J1,
+
+        TAS300J1 = TDK_TAS300J1,    // support alternate name
     }
 
     public enum LPTagRWType : int
@@ -71,7 +74,6 @@ namespace MosaicLib.PartsLib.Common.LPM.Sim
         BrooksRFID,
         OmronV640,
     }
-
 
     public class LPMSimPartConfigBase
 	{
