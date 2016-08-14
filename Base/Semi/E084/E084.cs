@@ -23,6 +23,9 @@ using System;
 using System.Runtime.Serialization;
 using MosaicLib.Modular.Common;
 using MosaicLib.Utils;
+using MosaicLib.Modular.Config;
+using MosaicLib.Modular.Config.Attributes;
+using MosaicLib.Modular.Interconnect.Values.Attributes;
 
 namespace MosaicLib.Semi.E084       //! namespace within which to define information that is based on E084.  Current rev 0704
 {
@@ -56,10 +59,12 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
     [System.Flags]
 	public enum ActiveToPassivePinBits : uint
 	{
+        /// <summary>Defines the bit value when no pins are asserted</summary>
+        None = 0x0000,
         /// <summary>Defines the bit value when no pins are active</summary>
         NoActivePins = 0x0000,
         /// <summary>Defines the bit for the VALID signal.<para/>pin 14, 0x0001</summary>
-		VALID_pin14		= 0x0001,
+		VALID_pin14	= 0x0001,
         /// <summary>Defines the bit for the CS_0 signal.<para/>pin 15, 0x0002</summary>
         CS_0_pin15 = 0x0002,
         /// <summary>Defines the bit for the CS_1 signal.<para/>pin 16, 0x0004</summary>
@@ -98,6 +103,8 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
     [System.Flags]
 	public enum PassiveToActivePinBits : uint
 	{
+        /// <summary>Defines the bit value when no pins are asserted</summary>
+        None = 0x0000,
         /// <summary>Defines the bit value when no pins are active</summary>
         NoActivePins = 0x0000,
         /// <summary>Defines the bit for the L_REQ signal.<para/>pin 1, 0x0001</summary>
@@ -257,7 +264,6 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
         }
 
         /// <summary>Copy constructor</summary>
-        /// <param name="rhs">Defines the instance that this is constructed as a copy of.</param>
         public ActiveToPassivePinsState(IActiveToPassivePinsState rhs) 
             : this() 
         {
@@ -430,7 +436,6 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
         }
 
         /// <summary>Copy constructor</summary>
-        /// <param name="rhs">Defines the instance that this is constructed as a copy of.</param>
         public PassiveToActivePinsState(IPassiveToActivePinsState rhs) 
             : this() 
         {
@@ -584,34 +589,36 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
 	//-------------------------------------------------------------------
     #region E084 Timer related utility classes
 
-    /// <summary>This class is a pseudo base class that simply serves to define a set of constant default values for used in derived classes.</summary>
-    public class TimersCommon
-    {
-        ///<summary>Minimum expected time limit value for most timer values [1.0]</summary>
-	    public const double MinimumStandardTimerValue = 1.0;
-        ///<summary>Default time limit value for handshake type timers [2.0]</summary>
-	    public const double DefaultStandardTimerValue = 2.0;
-        ///<summary>Default time limit value used for TP3 and TP4 [60.0]</summary>
-	    public const double DefaultMotionTimerValue = 60.0;
-        ///<summary>Maximum expected time limit value for most timer values [999.0]</summary>
-	    public const double MaximumStandardTimerValue = 999.0;
-    }
-
     /// <summary>Defines the storage and use of the TA1, TA2, and TA3 timer values</summary>
     [DataContract(Namespace = Constants.E084NameSpace)]
-    public class ActiveTimers : TimersCommon
+    public class ActiveTimers
 	{
+        ///<summary>Default time limit value for handshake type timers TA1, TA2 and TA3 [2.0]</summary>
+        public const double DefaultHandshakeTimerValue = 2.0;
+
         ///<summary>VALID on to [L_REQ or U_REQ] on</summary>
         [DataMember]
-		double TA1 { get; set; }
+        [ConfigItem]
+        [ValueSetItem]
+        public double TA1 { get; set; }
 
         ///<summary>T_REQ on to READY on</summary>
         [DataMember]
-        double TA2 { get; set; }
+        [ConfigItem]
+        [ValueSetItem]
+        public double TA2 { get; set; }
 
         ///<summary>COMPT on to READY off</summary>
         [DataMember]
-        double TA3 { get; set; }
+        [ConfigItem]
+        [ValueSetItem]
+        public double TA3 { get; set; }
+
+        /// <summary>Debugging and Logging helper method</summary>
+        public override string ToString()
+        {
+            return "TA1:{0:f1} TA2:{1:f1} TA3:{2:f1}".CheckedFormat(TA1, TA2, TA3);
+        }
 
         /// <summary>
         /// Default Constructor:
@@ -619,18 +626,42 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
         /// </summary>
 		public ActiveTimers()
         {
-			TA1 = DefaultStandardTimerValue;
-			TA2 = DefaultStandardTimerValue;
-			TA3 = DefaultStandardTimerValue; 
+            SetFrom(null);
         }
 
         /// <summary>Copy constructor</summary>
-        /// <param name="rhs">Defines the instance that this is constructed as a copy of.</param>
         public ActiveTimers(ActiveTimers rhs) 
-        { 
-            TA1 = rhs.TA1; 
-            TA2 = rhs.TA2; 
-            TA3 = rhs.TA3; 
+        {
+            SetFrom(rhs);
+        }
+
+        /// <summary>Constructor and Copy constructor helper function</summary>
+        public ActiveTimers SetFrom(ActiveTimers rhs)
+        {
+            if (rhs != null)
+            {
+                TA1 = rhs.TA1;
+                TA2 = rhs.TA2;
+                TA3 = rhs.TA3;
+            }
+            else
+            {
+                TA1 = DefaultHandshakeTimerValue;
+                TA2 = DefaultHandshakeTimerValue;
+                TA3 = DefaultHandshakeTimerValue;
+            }
+
+            return this;
+        }
+
+        /// <summary>
+        /// Update this object's ConfigItem marked public properties from corresponingly named config keys (using the namePrefix)
+        /// </summary>
+        public ActiveTimers Setup(string namePrefix, Logging.IMesgEmitter issueEmitter, Logging.IMesgEmitter valueEmitter)
+        {
+            ConfigValueSetAdapter<ActiveTimers> adapter = new ConfigValueSetAdapter<ActiveTimers>() { ValueSet = this, SetupIssueEmitter = issueEmitter, UpdateIssueEmitter = issueEmitter, ValueNoteEmitter = valueEmitter }.Setup(namePrefix);
+
+            return this;
         }
 
         /// <summary>
@@ -653,56 +684,111 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
 
     /// <summary>Defines the storage and use of the TP1, TP2, TP3, TP4, TP5, and TP6 timer values</summary>
     [DataContract(Namespace = Constants.E084NameSpace)]
-    public class PassiveTimers : TimersCommon
-	{
+    public class PassiveTimers
+    {       
+        ///<summary>Minimum expected time limit value for most timer values [1.0]</summary>
+        public const double MinimumHandshakeTimerValue = 1.0;
+        ///<summary>Default time limit value for handshake type timers [2.0]</summary>
+        public const double DefaultHandshakeTimerValue = 2.0;
+        ///<summary>Default time limit value used for TP3 and TP4 [60.0]</summary>
+        public const double DefaultMotionTimerValue = 60.0;
+        ///<summary>Maximum expected time limit value for most timer values [999.0]</summary>
+        public const double MaximumTimerValue = 999.0;
+
         ///<summary>L_REQ or U_REQ on to TR_REQ on</summary>
         [DataMember]
-        double TP1 { get; set; }
+        [ConfigItem]
+        [ValueSetItem]
+        public double TP1 { get; set; }
 
         ///<summary>READY on to BUSY on</summary>
         [DataMember]
-        double TP2 { get; set; }
+        [ConfigItem]
+        [ValueSetItem]
+        public double TP2 { get; set; }
 
         ///<summary>BUSY on to carrier delivered or carrier removed</summary>
         [DataMember]
-        double TP3 { get; set; }
+        [ConfigItem]
+        [ValueSetItem]
+        public double TP3 { get; set; }
 
         ///<summary>L_REQ or U_REQ off to BUSY off</summary>
         [DataMember]
-        double TP4 { get; set; }
+        [ConfigItem]
+        [ValueSetItem]
+        public double TP4 { get; set; }
 
         ///<summary>READY off to VALID off</summary>
         [DataMember]
-        double TP5 { get; set; }
+        [ConfigItem]
+        [ValueSetItem]
+        public double TP5 { get; set; }
 
         ///<summary>VALID off to VALID on [CONT handoff]</summary>
+        ///<remarks>This timer is not normally used since continuous handoff is not supported on most OHT I300I tools</remarks>
         [DataMember]
-        double TP6 { get; set; }
+        [ConfigItem(IsOptional=true)]
+        [ValueSetItem(SilenceIssues=true)]
+        public double TP6 { get; set; }
+
+        /// <summary>Debugging and Logging helper method</summary>
+        public override string ToString()
+        {
+            if (TP6 == 0.0)
+                return "TP1:{0:f1} TP2:{1:f1} TP3:{2:f1} TP4:{2:f1} TP5:{2:f1}".CheckedFormat(TP1, TP2, TP3, TP4, TP5);
+            else
+                return "TP1:{0:f1} TP2:{1:f1} TP3:{2:f1} TP4:{2:f1} TP5:{2:f1} TP6:{2:f1}".CheckedFormat(TP1, TP2, TP3, TP4, TP5, TP3);
+        }
 
         /// <summary>
         /// Default constructor:
-        /// TP1 = 2.0, TP2 = 2.0, TP3 = 60.0, TP4 = 60.0, TP5 = 2.0, TP6 = 2.0
+        /// TP1 = 2.0, TP2 = 2.0, TP3 = 60.0, TP4 = 60.0, TP5 = 2.0, TP6 = 0.0
         /// </summary>
         public PassiveTimers()
         {
-			TP1 = DefaultStandardTimerValue;
-			TP2 = DefaultStandardTimerValue;
-			TP3 = DefaultMotionTimerValue;
-			TP4 = DefaultMotionTimerValue;
-			TP5 = DefaultStandardTimerValue;
-			TP6 = DefaultStandardTimerValue;
+            SetFrom(null);
         }
 
         /// <summary>Copy constructor</summary>
-        /// <param name="rhs">Defines the instance that this is constructed as a copy of.</param>
         public PassiveTimers(PassiveTimers rhs)
         {
-            TP1 = rhs.TP1; 
-            TP2 = rhs.TP2; 
-            TP3 = rhs.TP3; 
-            TP4 = rhs.TP4; 
-            TP5 = rhs.TP5; 
-            TP6 = rhs.TP6;
+            SetFrom(rhs);
+        }
+
+        /// <summary>Constructor and Copy constructor helper function</summary>
+        public PassiveTimers SetFrom(PassiveTimers rhs)
+        {
+            if (rhs != null)
+            {
+                TP1 = rhs.TP1;
+                TP2 = rhs.TP2;
+                TP3 = rhs.TP3;
+                TP4 = rhs.TP4;
+                TP5 = rhs.TP5;
+                TP6 = rhs.TP6;
+            }
+            else
+            {
+                TP1 = DefaultHandshakeTimerValue;
+                TP2 = DefaultHandshakeTimerValue;
+                TP3 = DefaultMotionTimerValue;
+                TP4 = DefaultMotionTimerValue;
+                TP5 = DefaultHandshakeTimerValue;
+                TP6 = 0.0;
+            }
+
+            return this;
+        }
+
+        /// <summary>
+        /// Update this object's ConfigItem marked public properties from corresponingly named config keys (using the namePrefix)
+        /// </summary>
+        public PassiveTimers Setup(string namePrefix, Logging.IMesgEmitter issueEmitter, Logging.IMesgEmitter valueEmitter)
+        {
+            ConfigValueSetAdapter<PassiveTimers> adapter = new ConfigValueSetAdapter<PassiveTimers>() { ValueSet = this, SetupIssueEmitter = issueEmitter, UpdateIssueEmitter = issueEmitter, ValueNoteEmitter = valueEmitter }.Setup(namePrefix);
+
+            return this;
         }
 
         /// <summary>
@@ -725,7 +811,7 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
 
     /// <summary>This class defines specific internal timer values that may be used within a relevant state machine engine.</summary>
     [DataContract(Namespace = Constants.E084NameSpace)]
-	public class DelayTimers : TimersCommon
+	public class DelayTimers
 	{
         /// <summary>Defines the minimum value that TD0 may normally be set to [0.1]</summary>
 	    public const double MinimumTD0Value = 0.1;
@@ -738,28 +824,62 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
 
         ///<summary>Active side minumum nominal delay between CS_x on and VALID on</summary>
         [DataMember]
+        [ConfigItem]
+        [ValueSetItem]
         public double TD0 { get; set; }
 
         ///<summary>Active side minimum delay between VALID off and VALID on (such as for CONT handoff)</summary>
         [DataMember]
+        [ConfigItem]
+        [ValueSetItem]
         public double TD1 { get; set; }
+
+        /// <summary>Debugging and Logging helper method</summary>
+        public override string ToString()
+        {
+            return "TD0:{0:f1} TD1:{1:f1}".CheckedFormat(TD0, TD1);
+        }
 
         /// <summary>
         /// Default constructor:
         /// TD0 = 0.1, TD1 = 1.0
         /// </summary>
 		public DelayTimers() 
-        { 
-            TD0 = DefaultTD0Value; 
-            TD1 = DefaultTD1Value; 
+        {
+            SetFrom(null);
         }
 
         /// <summary>Copy constructor</summary>
-        /// <param name="rhs">Defines the instance that this is constructed as a copy of.</param>
         public DelayTimers(DelayTimers rhs) 
-        { 
-            TD0 = rhs.TD0; 
-            TD1 = rhs.TD1; 
+        {
+            SetFrom(rhs);
+        }
+
+        /// <summary>Constructor and Copy constructor helper function</summary>
+        public DelayTimers SetFrom(DelayTimers rhs)
+        {
+            if (rhs != null)
+            {
+                TD0 = rhs.TD0;
+                TD1 = rhs.TD1;
+            }
+            else
+            {
+                TD0 = DefaultTD0Value;
+                TD1 = DefaultTD1Value;
+            }
+
+            return this;
+        }
+
+        /// <summary>
+        /// Update this object's ConfigItem marked public properties from corresponingly named config keys (using the namePrefix)
+        /// </summary>
+        public DelayTimers Setup(string namePrefix, Logging.IMesgEmitter issueEmitter, Logging.IMesgEmitter valueEmitter)
+        {
+            ConfigValueSetAdapter<DelayTimers> adapter = new ConfigValueSetAdapter<DelayTimers>() { ValueSet = this, SetupIssueEmitter = issueEmitter, UpdateIssueEmitter = issueEmitter, ValueNoteEmitter = valueEmitter }.Setup(namePrefix);
+
+            return this;
         }
 
         /// <summary>

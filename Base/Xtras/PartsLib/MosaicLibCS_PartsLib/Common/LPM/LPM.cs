@@ -36,6 +36,7 @@ using MosaicLib.Modular.Config.Attributes;
 using MosaicLib.Modular.Interconnect.Values;
 using MosaicLib.Modular.Interconnect.Values.Attributes;
 using MosaicLib.Modular.Common;
+using System.Text;
 
 namespace MosaicLib.PartsLib.Common.LPM
 {
@@ -123,12 +124,7 @@ namespace MosaicLib.PartsLib.Common.LPM
         /// <summary>
         /// Action factory method.  When run, this action will cause this part to explicitly run all normally used status commands, and then update and publish all related state information (if needed).
         /// </summary>
-        IBasicAction Sync();
-
-        /// <summary>
-        /// Action factory method.  When run, this action will cause this part to update the E84OutputSetpoint from the given value, run the commands needed to update the device's copy of this and to verify that it was successfully applied to the E84 outputs (subject to masking contraints on HO and ES per any light curtain interlock information)
-        /// </summary>
-        IBasicAction SetE84OutputSetpoint(IPassiveToActivePinsState setpoint);
+        IBasicAction Sync(SyncFlags syncFlags = SyncFlags.Inputs | SyncFlags.Outputs | SyncFlags.E84);
 
         /// <summary>
         /// Action factory method.  When run, if the given decodedPodInfo is non-null, this action will cause this part replace its internally determined decodedPodInfo with the copy of the given value, publish the change, and apply the given value to configure how future motion actions are performed.
@@ -139,10 +135,26 @@ namespace MosaicLib.PartsLib.Common.LPM
         /// <summary>
         /// Action factory method.  When run, this action will replace any previously provided IPortDisplayContextInfo publisher with the given value.
         /// </summary>
-        IBasicAction SetPortDisplayContextInfoPublisher(INotificationObject<IPortDisplayContextInfo> publisher);
+        IBasicAction SetPortUseContextInfoPublisher(INotificationObject<IPortUsageContextInfo> publisher);
 
         /// <summary>ILPMState state publisher.  This is also a notification object</summary>
         INotificationObject<ILPMState> StatePublisher { get; }
+    }
+
+    /// <summary>
+    /// SyncFlags are used to inform the Sync action of any specific features that the client would like synced.  These may be combined bitwise
+    /// </summary>
+    [Flags]
+    public enum SyncFlags : int
+    {
+        /// <summary>Normal Sync simply verifies that the driver has been able to publish whatever the last state it may have observed was.  This type of sync does not necessarily run any commands to the target device.</summary>
+        Quick = 0x0000,
+        /// <summary>Input Sync makes certain to refresh and publish all scanned inputs before continuing</summary>
+        Inputs = 0x0001,
+        /// <summary>Output Sync updates all outputs (e84, lamp and/or buttons as needed).</summary>
+        Outputs = 0x0002,
+        /// <summary>E84 Sync re-reads the E84 inputs, iterates on the E84 state machine once and updates the E84 outputs (if needed).</summary>
+        E84 = 0x0004,
     }
 
     #endregion
@@ -162,13 +174,11 @@ namespace MosaicLib.PartsLib.Common.LPM
         IDisplayState DisplayState { get; }
         IButtonSet ButtonSet { get; }
 
-        IPassiveToActivePinsState E84OutputSetpoint { get; }
-        IPassiveToActivePinsState E84OutputReadback { get; }
-        IActiveToPassivePinsState E84Inputs { get; }
+        IE84State E84State { get; }
 
         IMapResults MapResults { get; }
 
-        IPortDisplayContextInfo PortDisplayContextInfo { get; }
+        IPortUsageContextInfo PortUsageContextInfo { get; }
 
         IBaseState PartBaseState { get; }
 
@@ -188,12 +198,13 @@ namespace MosaicLib.PartsLib.Common.LPM
             DisplayState = new DisplayState();
             ButtonSet = new ButtonSet();
 
-            E84OutputSetpoint = new PassiveToActivePinsState();
-            E84OutputReadback = new PassiveToActivePinsState();
-            E84Inputs = new ActiveToPassivePinsState();
+            E84State = new E84State();
+
             MapResults = new MapResults();
 
             PartBaseState = new BaseState();
+
+            PortUsageContextInfo = new PortUsageContextInfo();
         }
 
         public LPMState(ILPMState rhs)
@@ -214,14 +225,13 @@ namespace MosaicLib.PartsLib.Common.LPM
             DisplayState = new DisplayState(rhs.DisplayState);
             ButtonSet = new ButtonSet(rhs.ButtonSet);
 
-            E84OutputSetpoint = new PassiveToActivePinsState(rhs.E84OutputSetpoint);
-            E84OutputReadback = new PassiveToActivePinsState(rhs.E84OutputReadback);
-            E84Inputs = new ActiveToPassivePinsState(rhs.E84Inputs);
+            E84State = new E84State(rhs.E84State);
+
             MapResults = new MapResults(rhs.MapResults);
 
             PartBaseState = new BaseState(rhs.PartBaseState);
 
-            PortDisplayContextInfo = rhs.PortDisplayContextInfo;
+            PortUsageContextInfo = new PortUsageContextInfo(rhs.PortUsageContextInfo);
             
             return this;
         }
@@ -235,11 +245,9 @@ namespace MosaicLib.PartsLib.Common.LPM
         IDisplayState ILPMState.DisplayStateSetpoint { get { return this.DisplayStateSetpoint; } }
         IDisplayState ILPMState.DisplayState { get { return this.DisplayState; } }
         IButtonSet ILPMState.ButtonSet { get { return this.ButtonSet; } }
-        IPassiveToActivePinsState ILPMState.E84OutputSetpoint { get { return this.E84OutputSetpoint; } }
-        IPassiveToActivePinsState ILPMState.E84OutputReadback { get { return this.E84OutputReadback; } }
-        IActiveToPassivePinsState ILPMState.E84Inputs { get { return this.E84Inputs; } }
+        IE84State ILPMState.E84State { get { return this.E84State; } }
         IMapResults ILPMState.MapResults { get { return this.MapResults; } }
-        IPortDisplayContextInfo ILPMState.PortDisplayContextInfo { get { return this.PortDisplayContextInfo; } }
+        IPortUsageContextInfo ILPMState.PortUsageContextInfo { get { return this.PortUsageContextInfo; } }
         IBaseState ILPMState.PartBaseState { get { return this.PartBaseState; } }
 
         public NamedValueSet NVS { get { return (nvs ?? (nvs = new NamedValueSet())); } set { nvs = value; } }
@@ -254,12 +262,11 @@ namespace MosaicLib.PartsLib.Common.LPM
         public DisplayState DisplayState { get; set; }
         public ButtonSet ButtonSet { get; set; }
 
-        public PassiveToActivePinsState E84OutputSetpoint { get; set; }
-        public PassiveToActivePinsState E84OutputReadback { get; set; }
-        public ActiveToPassivePinsState E84Inputs { get; set; }
+        public E84State E84State { get; set; }
+
         public MapResults MapResults { get; set; }
 
-        public IPortDisplayContextInfo PortDisplayContextInfo { get; set; }
+        public PortUsageContextInfo PortUsageContextInfo { get; set; }
 
         public BaseState PartBaseState { get; set; }
 
@@ -274,11 +281,9 @@ namespace MosaicLib.PartsLib.Common.LPM
                     && DisplayStateSetpoint.IsEqualTo(rhs.DisplayStateSetpoint)
                     && DisplayState.IsEqualTo(rhs.DisplayState)
                     && ButtonSet.IsEqualTo(rhs.ButtonSet)
-                    && E84OutputSetpoint.IsEqualTo(rhs.E84OutputSetpoint)
-                    && E84OutputReadback.IsEqualTo(rhs.E84OutputReadback)
-                    && E84Inputs.IsEqualTo(rhs.E84Inputs)
+                    && E84State.IsEqualTo(rhs.E84State)
                     && MapResults.IsEqualTo(rhs.MapResults)
-                    && ((PortDisplayContextInfo == null && rhs.PortDisplayContextInfo == null) || (PortDisplayContextInfo != null && PortDisplayContextInfo.IsEqualTo(rhs.PortDisplayContextInfo)))
+                    && ((PortUsageContextInfo == null && rhs.PortUsageContextInfo == null) || (PortUsageContextInfo != null && PortUsageContextInfo.IsEqualTo(rhs.PortUsageContextInfo)))
                     && PartBaseState.IsEqualTo(rhs.PartBaseState)
                     );
         }
@@ -286,7 +291,7 @@ namespace MosaicLib.PartsLib.Common.LPM
         /// <summary>Supports debugging and logging.</summary>
         public override string ToString()
         {
-            return "Partial State: pod:{0} pos:{1} e84out:{2} e84in:{3} map:{4}".CheckedFormat(PodSensorValues, PositionState, E84OutputSetpoint, E84Inputs, MapResults);
+            return "Partial State: pod:{0} pos:{1} e84:{2} map:{3}".CheckedFormat(PodSensorValues, PositionState, E84State, MapResults);
         }
     }
 
@@ -328,74 +333,130 @@ namespace MosaicLib.PartsLib.Common.LPM
     /// <summary>
     /// This interface defines the set of property values that may generally be used to drive a load port's lights from, depending on configuration.
     /// </summary>
-    public interface IPortDisplayContextInfo
+    public interface IPortUsageContextInfo
     {
-        bool Manual { get; }
-        bool Auto { get; }
+        Semi.E087.AMS AMS { get; }
+        Semi.E087.LTS LTS { get; }
+        Semi.E087.LRS LRS { get; }
+
+        bool Initializing { get; }
         bool Error { get; }
         bool Alarm { get; }
         bool Busy { get; }
         bool Loading { get; }
         bool Unloading { get; }
-        bool LTSIsReadyToLoad { get; }
-        bool LTSIsReadyToUnload { get; }
+        bool E84LoadInProgress { get; }
+        bool E84UnloadInProgress { get; }
+
+        bool APresentOrPlacementAlarmIsActive { get; }
+
         DisplayItemState.OnOffFlashState Button1State { get; }      // usually only button or load button
         DisplayItemState.OnOffFlashState Button2State { get; }      // usually unload button if they are separate
 
-        bool IsEqualTo(IPortDisplayContextInfo rhs);
+        bool IsEqualTo(IPortUsageContextInfo rhs);
     }
 
-    public class PortDisplayContextInfo : IPortDisplayContextInfo
+    public class PortUsageContextInfo : IPortUsageContextInfo
     {
-        public PortDisplayContextInfo()
+        public PortUsageContextInfo()
         { }
 
-        public PortDisplayContextInfo(IPortDisplayContextInfo rhs)
+        public PortUsageContextInfo(IPortUsageContextInfo rhs)
         {
             SetFrom(rhs);
         }
 
-        public PortDisplayContextInfo SetFrom(IPortDisplayContextInfo rhs)
+        public PortUsageContextInfo SetFrom(IPortUsageContextInfo rhs)
         {
-            Manual = rhs.Manual;
-            Auto = rhs.Auto;
+            AMS = rhs.AMS;
+            LTS = rhs.LTS;
+            LRS = rhs.LRS;
+
+            Initializing = rhs.Initializing;
             Error = rhs.Error;
             Alarm = rhs.Alarm;
             Busy = rhs.Busy;
             Loading = rhs.Loading;
             Unloading = rhs.Unloading;
-            LTSIsReadyToLoad = rhs.LTSIsReadyToLoad;
-            LTSIsReadyToUnload = rhs.LTSIsReadyToUnload;
+            E84LoadInProgress = rhs.E84LoadInProgress;
+            E84UnloadInProgress = rhs.E84UnloadInProgress;
+
+            APresentOrPlacementAlarmIsActive = rhs.APresentOrPlacementAlarmIsActive;
+
             Button1State = rhs.Button1State;
             Button2State = rhs.Button2State;
 
             return this;
         }
 
-        public bool Manual { get; set; }
-        public bool Auto { get; set; }
+        public Semi.E087.AMS AMS { get; set; }
+        public Semi.E087.LTS LTS { get; set; }
+        public Semi.E087.LRS LRS { get; set; }
+
+        public bool Initializing { get; set; }
         public bool Error { get; set; }
         public bool Alarm { get; set; }
         public bool Busy { get; set; }
         public bool Loading { get; set; }
         public bool Unloading { get; set; }
-        public bool LTSIsReadyToLoad { get; set; }
-        public bool LTSIsReadyToUnload { get; set; }
+        public bool E84LoadInProgress { get; set; }
+        public bool E84UnloadInProgress { get; set; }
+
+        public bool APresentOrPlacementAlarmIsActive { get; set; }
+
         public DisplayItemState.OnOffFlashState Button1State { get; set; }
         public DisplayItemState.OnOffFlashState Button2State { get; set; }
 
-        public bool IsEqualTo(IPortDisplayContextInfo rhs)
+        public override string ToString()
+        {
+            StringBuilder sb = new StringBuilder();
+
+            sb.CheckedAppendFormat("AMS:{0} LTS:{1} LRS:{2}", AMS, LTS, LRS);
+
+            if (Initializing)
+                sb.Append(" Initing");
+            if (Error)
+                sb.Append(" Err");
+            if (Alarm)
+                sb.Append(" Alarm");
+            if (Busy)
+                sb.Append(" Busy");
+            if (Loading)
+                sb.Append(" Loading");
+            if (Unloading)
+                sb.Append(" Unloading");
+            if (E84LoadInProgress)
+                sb.Append(" E84-Loading");
+            if (E84UnloadInProgress)
+                sb.Append(" E84-Unloading");
+
+            if (APresentOrPlacementAlarmIsActive)
+                sb.Append(" PPAlarm");
+
+            if (Button1State != DisplayItemState.OnOffFlashState.Off)
+                sb.CheckedAppendFormat(" Btn1:{0}", Button1State);
+
+            if (Button2State != DisplayItemState.OnOffFlashState.Off)
+                sb.CheckedAppendFormat(" Btn2:{0}", Button2State);
+
+            return sb.ToString();
+        }
+
+        public bool IsEqualTo(IPortUsageContextInfo rhs)
         {
             return (rhs != null
-                    && Manual == rhs.Manual
-                    && Auto == rhs.Auto
+                    && AMS == rhs.AMS
+                    && LTS == rhs.LTS
+                    && LRS == rhs.LRS
+                    && Initializing == rhs.Initializing
                     && Error == rhs.Error
                     && Alarm == rhs.Alarm
                     && Busy == rhs.Busy
                     && Loading == rhs.Loading
                     && Unloading == rhs.Unloading
-                    && LTSIsReadyToLoad == rhs.LTSIsReadyToLoad
-                    && LTSIsReadyToUnload == rhs.LTSIsReadyToUnload
+                    && E84LoadInProgress == rhs.E84LoadInProgress
+                    && E84UnloadInProgress == rhs.E84UnloadInProgress
+                    && APresentOrPlacementAlarmIsActive == rhs.APresentOrPlacementAlarmIsActive
                     && Button1State == rhs.Button1State
                     && Button2State == rhs.Button2State
                     );
@@ -1198,7 +1259,7 @@ namespace MosaicLib.PartsLib.Common.LPM
 
     #endregion
 
-    #region DisplayState
+    #region DisplayState, ButtonSet
 
     public interface IDisplayState
     {
@@ -1382,15 +1443,17 @@ namespace MosaicLib.PartsLib.Common.LPM
             SetFrom(rhs);
         }
 
-        public DisplayItemState SetFrom(IDisplayItemState rhs)
+        public DisplayItemState SetFrom(IDisplayItemState rhs, bool includeItemIdx = true, bool includeState = true)
         {
             IsButton = rhs.IsButton;
-            ItemIdx = rhs.ItemIdx;
+            if (includeItemIdx)
+                ItemIdx = rhs.ItemIdx;
             Text = rhs.Text;
             BorderColor = rhs.BorderColor;
             OffBackgroundColor = rhs.OffBackgroundColor;
             OnBackgroundColor = rhs.OnBackgroundColor;
-            State = rhs.State;
+            if (includeState)
+                State = rhs.State;
             LastLampCmdState = rhs.LastLampCmdState;
             IsInternal = rhs.IsInternal;
             FlashStateIsOn = rhs.FlashStateIsOn;
@@ -1459,6 +1522,103 @@ namespace MosaicLib.PartsLib.Common.LPM
                     && LastLampCmdState == rhs.LastLampCmdState
                     && FlashStateIsOn == rhs.FlashStateIsOn
                     );
+        }
+    }
+
+    #endregion
+
+    #region E84State
+
+    public interface IE84State
+    {
+        PartsLib.Common.E084.StateCode StateCode { get; }
+        string StateCodeReason { get; }
+
+        IPassiveToActivePinsState OutputSetpoint { get; }
+        IPassiveToActivePinsState OutputReadback { get; }
+        bool OutputSetpointPinsMatchesReadback { get; }
+        IActiveToPassivePinsState Inputs { get; }
+
+        bool IsEmpty { get; }
+
+        bool IsEqualTo(IE84State rhs);
+    }
+
+    public class E84State : IE84State
+    {        
+        public E84State() 
+        {
+            SetFrom(null);
+        }
+
+        public E84State(IE84State rhs)
+        {
+            SetFrom(rhs);
+        }
+
+        public E84State SetFrom(IE84State rhs)
+        {
+            if (rhs != null)
+            {
+                StateCode = rhs.StateCode;
+                StateCodeReason = rhs.StateCodeReason;
+                OutputSetpoint = new PassiveToActivePinsState(rhs.OutputSetpoint);
+                OutputReadback = new PassiveToActivePinsState(rhs.OutputReadback);
+                Inputs = new ActiveToPassivePinsState(rhs.Inputs);
+            }
+            else
+            {
+                StateCode = default(PartsLib.Common.E084.StateCode);
+                StateCodeReason = string.Empty;
+                OutputSetpoint = default(PassiveToActivePinsState);
+                OutputReadback = default(PassiveToActivePinsState);
+                Inputs = default(ActiveToPassivePinsState);
+            }
+
+            return this;
+        }
+
+        public E84State Clear()
+        {
+            return SetFrom(null);
+        }
+
+        public bool IsEmpty { get { return IsEqualTo(emptyE84State); } }
+
+        private readonly static IE84State emptyE84State = new E84State();
+
+        IPassiveToActivePinsState IE84State.OutputSetpoint { get { return this.OutputSetpoint; } }
+        IPassiveToActivePinsState IE84State.OutputReadback { get { return this.OutputReadback; } }
+        IActiveToPassivePinsState IE84State.Inputs { get { return this.Inputs; } }
+
+        public PartsLib.Common.E084.StateCode StateCode { get; set; }
+        public string StateCodeReason { get; set; }
+        public PassiveToActivePinsState OutputSetpoint { get; set; }
+        public PassiveToActivePinsState OutputReadback { get; set; }
+        public ActiveToPassivePinsState Inputs { get; set; }
+
+        public bool OutputSetpointPinsMatchesReadback { get { return (OutputSetpoint.PackedWord == OutputReadback.PackedWord); } }
+
+        public bool IsEqualTo(IE84State rhs)
+        {
+            return (rhs != null
+                    && StateCode == rhs.StateCode
+                    && StateCodeReason == rhs.StateCodeReason
+                    && OutputSetpoint.IsEqualTo(rhs.OutputSetpoint)
+                    && OutputReadback.IsEqualTo(rhs.OutputReadback)
+                    && Inputs.IsEqualTo(rhs.Inputs)
+                    );
+        }
+
+        /// <summary>Supports debugging and logging.</summary>
+        public override string ToString()
+        {
+            if (IsEmpty)
+                return "Empty";
+            else if (OutputSetpointPinsMatchesReadback)
+                return "state:{0} reason:'{1}' in:{2} out:{3} (match)".CheckedFormat(StateCode, StateCodeReason, Inputs, OutputSetpoint);
+            else
+                return "state:{0} reason:'{1}' in:{2} out:{3} (!= {4})".CheckedFormat(StateCode, StateCodeReason, Inputs, OutputSetpoint, OutputReadback);
         }
     }
 

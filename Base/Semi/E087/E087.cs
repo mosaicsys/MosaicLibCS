@@ -37,11 +37,10 @@ namespace MosaicLib.Semi.E087
 
     /// <summary>
     /// Load Port Transfer State (LTS)
+    /// <para/>OutOfService = 0, TransferBlocked = 1, ReadyToLoad = 2, ReadyToUnload = 3, InService = 4, TransferReady = 5, Undefined = -1
     /// </summary>
 	public enum LTS : int
 	{
-        /// <summary>-1: Local default value to use when there is no valid value.</summary>
-		Undefined = -1,
         /// <summary>0: The port has been placed out of service and cannot be used for carrier handoffs.</summary>
 		OutOfService = 0,
         /// <summary>1: Port cannot be used for carrier arrival or departure as the port, or the carrier that is currently there, is in use for some other purpose.</summary>
@@ -54,7 +53,9 @@ namespace MosaicLib.Semi.E087
 		InService = 4,
         /// <summary>5: this is a summary state (of 2 and 3)</summary>
 		TransferReady = 5,
-	}
+        /// <summary>-1: Local default value to use when there is no valid value.</summary>
+        Undefined = -1,
+    }
 
     /// <summary>
     /// LTS Transitions that match the enumerated valid LTS state transitions.
@@ -122,11 +123,10 @@ namespace MosaicLib.Semi.E087
 
     /// <summary>
     /// Carrier Object State Model (COSM): Carrier ID Status (CIDS)
+    /// <para/>IDNotRead = 0, WaitingForHost = 1, IDVerificationOk = 2, IDVerificationFailed = 3, Undefined = -1
     /// </summary>
 	public enum CIDS : int
 	{
-        /// <summary>-1: Local default value to use when there is no valid value.</summary>
-		Undefined = -1,
         /// <summary>0: CarrierID has not been read yet.</summary>
 		IDNotRead = 0,
         /// <summary>1: CarrierID read has been attempted, but value has not yet been verified by equipment or host.</summary>
@@ -135,15 +135,16 @@ namespace MosaicLib.Semi.E087
 		IDVerificationOk = 2,
         /// <summary>3: Carrier was canceled before CIDS reached IDVerificationOk state.</summary>
 		IDVerificationFailed = 3,
-	}
+        /// <summary>-1: Local default value to use when there is no valid value.</summary>
+        Undefined = -1,
+    }
 
     /// <summary>
     /// Carrier Object State Model (COSM): Carrier Slot Map Status (CSMS)
+    /// <para/>SlotMapNotRead = 0, WaitingForHost = 1, SlotMapVerificationOk = 2, SlotMapVerificationFailed = 3, Undefined = -1
     /// </summary>
 	public enum CSMS : int 
 	{
-        /// <summary>-1: Local default value to use when there is no valid value.</summary>
-		Undefined = -1,
         /// <summary>0: SlotMap has not been obtained yet.</summary>
 		SlotMapNotRead = 0,
         /// <summary>1: SlotMap has been obtained, but value has not yet been verified by equipment or host.</summary>
@@ -152,15 +153,16 @@ namespace MosaicLib.Semi.E087
 		SlotMapVerificationOk = 2,
         /// <summary>3: Carrier was canceled before CSMS reached SlotMapVerficationOk state.</summary>
 		SlotMapVerificationFailed = 3,
-	}
+        /// <summary>-1: Local default value to use when there is no valid value.</summary>
+        Undefined = -1,
+    }
 
     /// <summary>
     /// Carrier Object State Model (COSM): Carrier Accessing Status (CAS)
+    /// <para/>NotAccessed = 0, InAccess = 1, CarrierComplete = 2, CarrierStopped = 3, Undefined = -1
     /// </summary>
 	public enum CAS : int
 	{
-        /// <summary>-1: Local default value to use when there is no valid value.</summary>
-		Undefined = -1,
         /// <summary>0: Carrier has not been accessed.</summary>
 		NotAccessed = 0,
         /// <summary>1: Carrier has been accessed and it is not complete/stopped</summary>
@@ -169,7 +171,9 @@ namespace MosaicLib.Semi.E087
 		CarrierComplete = 2,
         /// <summary>3: Carrier use has been completed abnormally (jobs stopped/aborted, processing failed, ...)</summary>
 		CarrierStopped = 3,
-	}
+        /// <summary>-1: Local default value to use when there is no valid value.</summary>
+        Undefined = -1,
+    }
 
     /// <summary>
     /// COSM Transitions that match the enumerated valid combined CIDS, CSMS, and CAS state transitions.
@@ -227,16 +231,17 @@ namespace MosaicLib.Semi.E087
 
     /// <summary>
     /// Access Mode State (AMS)
+    /// <para/>Manual = 0, Automatic = 1, Undefined = -1, 
     /// </summary>
 	public enum AMS : int
 	{
-        /// <summary>-1: Local default value to use when there is no valid value.</summary>
-		Undefined = -1,
         /// <summary>0: Port is to be used for Manual handoff (by hand or using PGV)</summary>
 		Manual = 0,
         /// <summary>1: Port is to be used for Automatic handoff using E084 interactions with OHT or AGV type AMHS hardware</summary>
 		Automatic = 1,
-	}
+        /// <summary>-1: Local default value to use when there is no valid value.</summary>
+        Undefined = -1,
+    }
 
     /// <summary>
     /// AMS Transitions that match the enumerated valid AMS state transitions.
@@ -258,16 +263,17 @@ namespace MosaicLib.Semi.E087
 
     /// <summary>
     /// Load Port Reservation State Model (LRS)
+    /// <para/>NotReserved = 0, Reserved = 1, Undefined = -1
     /// </summary>
 	public enum LRS : int
 	{
-        /// <summary>-1: Local default value to use when there is no valid value.</summary>
-		Undefined = -1,
         /// <summary>0: The Port position has been reserved for later carrier arrival</summary>
 		NotReserved = 0,
         /// <summary>1: The Port position has not been reserved for later carrier arrival</summary>
 		Reserved = 1,
-	}
+        /// <summary>-1: Local default value to use when there is no valid value.</summary>
+        Undefined = -1,
+    }
 
     /// <summary>
     /// LRS Transitions that match the enumerated valid LRS state transitions.
@@ -289,16 +295,17 @@ namespace MosaicLib.Semi.E087
 
     /// <summary>
     /// Load Port/Carrier Association State Model (LCAS)
+    /// <para/>NotAssociated = 0, Associated = 1, Undefined = -1
     /// </summary>
 	public enum LCAS : int
 	{
-        /// <summary>-1: Local default value to use when there is no valid value.</summary>
-		Undefined = -1,
         /// <summary>0: Port is not associated with a carrier object</summary>
 		NotAssociated = 0,
         /// <summary>1: Port is associated with a carrier object</summary>
 		Associated = 1,
-	}
+        /// <summary>-1: Local default value to use when there is no valid value.</summary>
+        Undefined = -1,
+    }
 
     /// <summary>
     /// LCAS Transitions that match the enumerated valid LCAS state transitions.
@@ -322,29 +329,31 @@ namespace MosaicLib.Semi.E087
 
     /// <summary>
     /// Values that are generally used to define Carrier Hold Control behavior.
+    /// <para/>HostRelease = 1, EquipmentRelease = 2, Undefined = 0
     /// </summary>
 	public enum CarrierHoldControl : byte
 	{
-        /// <summary>0: Local default value to use when there is no valid value.</summary>
-		CarrierHoldControl_Undefined = 0,
         /// <summary>1: E87 Release command must be explicitly between CAS transitions to CarrierComplete or CarrierStopped and LTS transition to ReadyToUnload</summary>
-		CarrierHoldControl_HostRelease = 1,
+		HostRelease = 1,
         /// <summary>2: LTS transitions to ReadyToUnload directly after CAS transitions to CarrierComplete or CarrierStopped</summary>
-		CarrierHoldControl_EquipmentRelease = 2,
-	}
+		EquipmentRelease = 2,
+        /// <summary>0: Local default value to use when there is no valid value.</summary>
+        Undefined = 0,
+    }
 
     /// <summary>
     /// Values that are generally used to define Auto Unclamp Control behavior.
+    /// <para/>CarrierTriggeredUnclamp = 1, AMHSTriggeredUnclamp = 2, Undefined = 0
     /// </summary>
 	public enum AutoUnclampControl : byte
 	{
-        /// <summary>0: Local default value to use when there is no valid value.</summary>
-		AutoUnclampControl_Undefined = 0,
         /// <summary>1: unclamp on transition to CarrierComplete or CarrierStopped (or carrier canceled)</summary>
-		AutoUnclampControl_CarrierTriggeredUnclamp = 1,
+		CarrierTriggeredUnclamp = 1,
         /// <summary>2: unclamp during transfer start (from TRREQ to READY)</summary>
-		AutoUnclampControl_AMHSTriggeredUnclamp = 2,
-	}
+		AMHSTriggeredUnclamp = 2,
+        /// <summary>0: Local default value to use when there is no valid value.</summary>
+        Undefined = 0,
+    }
 
 	//-------------------------------------------------------------------
 	// Section 16: Services

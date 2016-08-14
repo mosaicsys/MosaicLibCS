@@ -19,12 +19,12 @@
  * limitations under the License.
  */
 
+using MosaicLib.Utils;
+using MosaicLib.Modular.Action;
+using MosaicLib.Modular.Part;
+
 namespace MosaicLib.Semi.E084.IOSupport
 {
-	using MosaicLib.Utils;
-    using MosaicLib.Modular.Action;
-    using MosaicLib.Modular.Part;
-
     #region PassiveToActive interface items
 
     /// <summary>Object contains the full set of information that defines the current state of an E084 Passive side IO interface.</summary>
@@ -44,6 +44,17 @@ namespace MosaicLib.Semi.E084.IOSupport
 
         /// <summary>True if the inputs are a valid representation of a recent pin state as reported by the actual hardware interface.</summary>
         public bool InputsAreValid { get; set; }
+
+        /// <summary>Returns true if the contents of this and the given rhs object are identical</summary>
+        public bool IsEqualTo(PassiveIOState rhs)
+        {
+            return (outputs.IsEqualTo(rhs.outputs)
+                    && outputsReadback.IsEqualTo(rhs.outputsReadback)
+                    && OutputIsPending == rhs.OutputIsPending
+                    && inputs.IsEqualTo(rhs.inputs)
+                    && InputsAreValid == rhs.InputsAreValid
+                    );
+        }
     }
 
     /// <summary>Interface defines a SetOutputsAction for a IE084PassiveIOSupport object</summary>
@@ -83,6 +94,17 @@ namespace MosaicLib.Semi.E084.IOSupport
 
         /// <summary>True if the inputs are a valid representation of a recent pin state as reported by the actual hardware interface.</summary>
         public bool InputsAreValid { get; set; }
+
+        /// <summary>Returns true if the contents of this and the given rhs object are identical</summary>
+        public bool IsEqualTo(ActiveIOState rhs)
+        {
+            return (outputs.IsEqualTo(rhs.outputs)
+                    && outputsReadback.IsEqualTo(rhs.outputsReadback)
+                    && OutputIsPending == rhs.OutputIsPending
+                    && inputs.IsEqualTo(rhs.inputs)
+                    && InputsAreValid == rhs.InputsAreValid
+                    );
+        }
     }
 
     /// <summary>Interface defines a SetOutputsAction for a IE084PassiveIOSupport object</summary>

@@ -186,7 +186,10 @@ namespace MosaicLib.Semi.E041
             return (alid == ANAlarmID.Lookup || alid == ANAlarmID.OptLookup);
         }
 
-        /// <summary>Returns true if the given signalState value indicates that the annunciator is signaling (it has been Posted and has not been Cleared)</summary>
+        /// <summary>
+        /// Returns true if the given signalState value indicates that the annunciator is signaling (it has been Posted and has not been Cleared)
+        /// <para/>aka the signal state is not Off
+        /// </summary>
         public static bool IsSignaling(this ANSignalState anSignalState)
         {
             return (anSignalState != ANSignalState.Off);
@@ -314,7 +317,10 @@ namespace MosaicLib.Semi.E041
         /// <summary>This gives he ANSignalState value that the annunciator currently has.</summary>
         ANSignalState ANSignalState { get; }
 
-        /// <summary>Returns true if the curent ANSignalState value IsSignaling</summary>
+        /// <summary>
+        /// Returns true if the curent ANSignalState value IsSignaling
+        /// <para/>(aka the signal state is not Off)
+        /// </summary>
         bool IsSignaling { get; }
 
         /// <summary>Gives the most recently given reason for the current state or condition</summary>
@@ -380,7 +386,10 @@ namespace MosaicLib.Semi.E041
         public ANSignalState ANSignalState { get { return anSignalState; } set { anSignalState = value; } }
         private volatile ANSignalState anSignalState;
 
-        /// <summary>Returns true if the curent ANSignalState value IsSignaling</summary>
+        /// <summary>
+        /// Returns true if the curent ANSignalState value IsSignaling
+        /// <para/>(aka the signal state is not Off)
+        /// </summary>
         public bool IsSignaling { get { return anSignalState.IsSignaling(); } }
 
         /// <summary>Gives the most recently given reason for the current state or condition</summary>
