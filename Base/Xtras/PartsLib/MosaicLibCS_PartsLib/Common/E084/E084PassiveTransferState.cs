@@ -316,8 +316,9 @@ namespace MosaicLib.PartsLib.Common.E084
         //  V1.1.10 2015-10-29: Added support for new permitAutoRecoveryInTransferAbortedByInterlockState config point (defaults to true).
         //  V1.1.11 2015-12-04: Added support for new permitAutoRecoveryIndexedByTPNum config points (6 elements default to true, 0:unused, 1:TP1, 2:TP2, 3:TP3, 4:TP4, 5:TP5)
         //  V2.0.0 2016-08-08: Created CS version from C++ version.
+        //  V2.0.1 2016-08-16: Version passing all basic tests.
 
-        public const string E084PassiveTransferStateMachineVersionStr = "V2.0.0 2016-08-08";
+        public const string E084PassiveTransferStateMachineVersionStr = "V2.0.1 2016-08-16";
 
         #endregion
 
@@ -1156,9 +1157,9 @@ namespace MosaicLib.PartsLib.Common.E084
 
             bool maintainTransferAborted = (!mPriv.pio1ActivePinsAreIdle 
                                             || !mPriv.pio2ActivePinsAreIdle 
-                                            || !mPriv.portUsageContextInfo.E84LoadInProgress
-                                            || !mPriv.portUsageContextInfo.E84UnloadInProgress
-                                            || !mPriv.portUsageContextInfo.Error
+                                            || mPriv.portUsageContextInfo.E84LoadInProgress
+                                            || mPriv.portUsageContextInfo.E84UnloadInProgress
+                                            || mPriv.portUsageContextInfo.Error
                                             );
 
             //--------------------------------------
