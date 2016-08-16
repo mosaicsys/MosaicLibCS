@@ -1398,6 +1398,7 @@ namespace MosaicLib.PartsLib.Common.LPM
         string OnBackgroundColor { get; }
         DisplayItemState.OnOffFlashState State { get; }
         bool IsInternal { get; }
+        bool IsInstalled { get; }
         DisplayItemState.OnOffFlashState LastLampCmdState { get; }
         bool FlashStateIsOn { get; }
         string CurrentBackgroundColor { get; }
@@ -1416,14 +1417,16 @@ namespace MosaicLib.PartsLib.Common.LPM
             Flash = 2,
         };
 
-        public DisplayItemState() : this("------", "Black", false) { }
-        public DisplayItemState(string text) : this(text, "Black", false) { }
+        public DisplayItemState() : this("------", "Black", false, false) { }
+        public DisplayItemState(string text) : this(text, "Black", false, !text.IsNullOrEmpty()) { }
         public DisplayItemState(string text, string colorFamily) : this(text, colorFamily, false) { }
-        public DisplayItemState(string text, string colorFamily, bool isInternal)
+        public DisplayItemState(string text, string colorFamily, bool isInternal) : this(text, colorFamily, isInternal, !text.IsNullOrEmpty() || !colorFamily.IsNullOrEmpty()) { }
+        public DisplayItemState(string text, string colorFamily, bool isInternal, bool isInstalled)
         {
             Text = text;
             State = OnOffFlashState.Off;
             IsInternal = isInternal;
+            IsInstalled = isInstalled;
 
             switch (colorFamily)
             {
@@ -1459,6 +1462,7 @@ namespace MosaicLib.PartsLib.Common.LPM
                 State = rhs.State;
             LastLampCmdState = rhs.LastLampCmdState;
             IsInternal = rhs.IsInternal;
+            IsInstalled = rhs.IsInstalled;
             FlashStateIsOn = rhs.FlashStateIsOn;
 
             return this;
@@ -1474,6 +1478,7 @@ namespace MosaicLib.PartsLib.Common.LPM
         public string OnBackgroundColor { get; set; }
         public OnOffFlashState State { get; set; }
         public bool IsInternal { get; set; }
+        public bool IsInstalled { get; set; }
 
         public OnOffFlashState LastLampCmdState { get; set; }
 
