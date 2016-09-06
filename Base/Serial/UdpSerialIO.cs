@@ -744,11 +744,22 @@ namespace MosaicLib.SerialIO
             activeWriteSocketArray = activeTableItemArray.Where(tableItem => tableItem.write).Select(tableItem => tableItem.socket).ToArray();
             activeErrorSocketArray = activeTableItemArray.Where(tableItem => tableItem.error).Select(tableItem => tableItem.socket).ToArray();
 
-            if (inactiveTableItemArray.IsNullOrEmpty())
-                Logger.Debug.Emit("Select table rebuilt.  Contains {0} active sockets", activeTableItemArray.Length);
-            else
-                Logger.Debug.Emit("Select table rebuilt.  Contains {0} active sockets and {1} inactive sockets", activeTableItemArray.Length, inactiveTableItemArray.Length);
+            int numActiveSockets = activeTableItemArray.Length;
+            int numInactiveSockets = inactiveTableItemArray.Length;
+
+            if (lastNumActiveSockets != numActiveSockets || lastNumInactiveSockets != numInactiveSockets)
+            {
+                if (inactiveTableItemArray.IsNullOrEmpty())
+                    Logger.Debug.Emit("Select table rebuilt.  Contains {0} active sockets", activeTableItemArray.Length);
+                else
+                    Logger.Debug.Emit("Select table rebuilt.  Contains {0} active sockets and {1} inactive sockets", activeTableItemArray.Length, inactiveTableItemArray.Length);
+
+                lastNumActiveSockets = numActiveSockets;
+                lastNumInactiveSockets = numInactiveSockets;
+            }
         }
+
+        private int lastNumActiveSockets = 0, lastNumInactiveSockets = 0;
 
         private static void SetTableItemTouchedFlags(Dictionary<Socket, TableItem> referenceTableItemDictionary, List<Socket> socketList)
         {

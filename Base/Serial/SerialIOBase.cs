@@ -279,6 +279,9 @@ namespace MosaicLib.SerialIO
 
 			SetBaseState(UseState.AttemptOnline, actionName + ".Start", true);
 
+            if (andInitialize || !BaseState.IsConnected)
+                Log.Debug.Emit("Initiating connection for spec [{0}]", PortConfig.SpecStr);
+
 			string rc = InnerPerformGoOnlineAction(actionName, andInitialize);
 
 			if (string.IsNullOrEmpty(rc) && InnerReadBytesAvailable != 0)

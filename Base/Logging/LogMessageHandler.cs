@@ -29,6 +29,7 @@ using System.Linq;
 using MosaicLib.Utils;
 using MosaicLib.Modular.Config;
 using MosaicLib.Modular.Config.Attributes;
+using MosaicLib.Time;
 
 namespace MosaicLib
 {
@@ -777,10 +778,13 @@ namespace MosaicLib
                 /// Helper method used to manage generation of the full set of header strings as the concatination of the given list and the delegate generated list,
                 ///  wrapping these messages in a corresponding set of LogMessages from the "header logger" and then consuming (logging) these messages using a caller provided
                 ///  message consuming delegate.
+                /// <para/>If baseHeaderLines contains a null and there is also a non-null delegateHeaderLines delegate then the results of evaluating the delegate will be
+                /// inserted in place of the null.  Otherwise the results of the delegate will be appended to the baseHeaderLines.
                 /// </summary>
                 protected void GenerateAndProduceHeaderLines(string[] baseHeaderLines, Func<string[]> headerLineDelegate, Action<Logging.LogMessage> headerLogMessageConsumer)
                 {
-                    string[] headerLines = (baseHeaderLines ?? emptyStringArray);
+                    List<string> headerLines = new List<string>(baseHeaderLines ?? emptyStringArray);
+
                     if (headerLineDelegate != null)
                     {
                         string[] delegateHeaderLines = null;
@@ -794,13 +798,25 @@ namespace MosaicLib
                             delegateHeaderLines = new[] { "HeaderLinesDelegate generated unexpected exception: {0} '{1}'".CheckedFormat(ex.GetType(), ex.Message) };
                         }
 
-                        headerLines = headerLines.Concat(delegateHeaderLines).ToArray();
+                        int firstNullIdx = -1;
+                        if (headerLines.Contains(null))
+                            firstNullIdx = headerLines.FindIndex(s => (s == null));
+
+                        if (firstNullIdx >= 0)
+                        {
+                            headerLines.RemoveAt(firstNullIdx);
+                            headerLines.InsertRange(firstNullIdx, delegateHeaderLines);
+                        }
+                        else
+                        {
+                            headerLines.AddRange(delegateHeaderLines);
+                        }
                     }
 
                     if (headerLoggerStub == null)
                         headerLoggerStub = new Logger("Header");
 
-                    foreach (Logging.LogMessage lm in headerLines.Select(mesg => headerLoggerStub.GetLogMessage(MesgType.Info, mesg, null).NoteEmitted()).ToArray())
+                    foreach (Logging.LogMessage lm in headerLines.Where(mesg => mesg != null).Select(mesg => headerLoggerStub.GetLogMessage(MesgType.Info, mesg, null).NoteEmitted()).ToArray())
                     {
                         headerLogMessageConsumer(lm);
                     }
@@ -1169,7 +1185,7 @@ namespace MosaicLib
 
 
         /// <summary>
-        /// This method is used to generate a basic set of fixed header lines for use with configurable log message handlers that support them.
+        /// This method may be used to generate a basic set of fixed header lines for use with configurable log message handlers that support them.
         /// The resulting array consisists of a pattern that looks like:
         /// <para/>================================================================================================================================
         /// <para/>Log file for 'logBaseName'
@@ -1180,19 +1196,55 @@ namespace MosaicLib
 
         public static string[] GenerateDefaultHeaderLines(string logBaseName)
         {
+            return GenerateDefaultHeaderLines(logBaseName, false);
+        }
+
+        /// <summary>
+        /// This method may be used to generate a basic set of fixed header lines for use with configurable log message handlers that support them.
+        /// The resulting array consisists of a pattern that looks like:
+        /// <para/>================================================================================================================================
+        /// <para/>Log file for 'logBaseName'
+        /// <para/>Main Assembly: 'MainAssemblyName'
+        /// <para/>Process name:'GetCurrentPerocess.ProcessName' id:GetCurrentPerocess.Id
+        /// <para/>[optional null]
+        /// <para/>================================================================================================================================
+        /// </summary>
+
+        public static string[] GenerateDefaultHeaderLines(string logBaseName, bool includeNullForDynamicLines)
+        {
+            appUptimeBaseTimeStamp = QpcTimeStamp.Now;
+
             System.Diagnostics.Process currentProcess = System.Diagnostics.Process.GetCurrentProcess();
             System.Reflection.Assembly mainAssy = System.Reflection.Assembly.GetEntryAssembly();
 
-            string[] defaultFileHeaderLines = new string[]
+            string [] deliniatorLineArray = new string [] { "================================================================================================================================" };
+
+            string[] defaultFileHeaderLines1 = new string[]
             {
-                "================================================================================================================================",
-                "Log file for '{0}'".CheckedFormat(logBaseName),
+                "Log file for '{0}'".CheckedFormat(logBaseName.MapNullOrEmptyTo(currentProcess.ProcessName)),
                 "Main Assembly: '{0}'".CheckedFormat(mainAssy),
                 "Process name:'{0}' id:{1}".CheckedFormat(currentProcess.ProcessName, currentProcess.Id),
-                "================================================================================================================================",
             };
 
-            return defaultFileHeaderLines;
+            if (!includeNullForDynamicLines)
+                return deliniatorLineArray.Concat(defaultFileHeaderLines1).Concat(deliniatorLineArray).ToArray();
+            else
+                return deliniatorLineArray.Concat(defaultFileHeaderLines1).Concat(new string [] {null}).Concat(deliniatorLineArray).ToArray();
+        }
+
+        static QpcTimeStamp appUptimeBaseTimeStamp = QpcTimeStamp.Now;
+
+        /// <summary>
+        /// This method may be used to generate the dynamic header lines, typically combined with the use of GenerateDefaultHeaderLines.
+        /// The resulting array looks like:
+        /// <para/>Uptime: 0.000 hours
+        /// </summary>
+        public static string [] GenerateDynamicHeaderLines()
+        {
+            return new string[]
+            {
+                "Uptime: {0:f3} hours".CheckedFormat(appUptimeBaseTimeStamp.Age.TotalHours)
+            };
         }
 
         #endregion
