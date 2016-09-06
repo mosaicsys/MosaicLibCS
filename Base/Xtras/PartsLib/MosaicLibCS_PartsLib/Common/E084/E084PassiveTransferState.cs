@@ -317,8 +317,9 @@ namespace MosaicLib.PartsLib.Common.E084
         //  V1.1.11 2015-12-04: Added support for new permitAutoRecoveryIndexedByTPNum config points (6 elements default to true, 0:unused, 1:TP1, 2:TP2, 3:TP3, 4:TP4, 5:TP5)
         //  V2.0.0 2016-08-08: Created CS version from C++ version.
         //  V2.0.1 2016-08-16: Version passing all basic tests.
+        //  V2.0.2 2016-09-06: Changed logging so that "Recovery Available" message can be logged at Info level rather than Warning level 
 
-        public const string E084PassiveTransferStateMachineVersionStr = "V2.0.1 2016-08-16";
+        public const string E084PassiveTransferStateMachineVersionStr = "V2.0.2 2016-09-06";
 
         #endregion
 
