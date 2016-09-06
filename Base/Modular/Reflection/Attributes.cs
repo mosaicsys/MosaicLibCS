@@ -149,42 +149,44 @@ namespace MosaicLib.Modular.Reflection
         /// <summary>
         /// Defines which public properties and/or fields are included in the ValueSet representation 
         /// As a flag enum, user may combine enum values using the or operator "|"
-        /// <para/>None = 0, IncludeExplicitPublicItems, IncludeAllPublicProperties, IncludeAllPublicFields, IncludeExplicitItems
+        /// <para/>None (0x00), IncludeExplicitPublicItems (0x01), IncludeAllPublicProperties (0x02), IncludeAllPublicFields (0x04), IncludeExplicitItems (0x08), IncludeInheritedItems(0x10)
         /// </summary>
         [Flags]
         public enum ItemSelection
         {
-            /// <summary>Set is empty (Default value)</summary>
+            /// <summary>Set is empty (Default value): 0x00</summary>
             None = 0x00,
-            /// <summary>Set items include all public fields or properties that carry an Attributes.Item attribute.</summary>
+            /// <summary>Set items include all public fields or properties that carry an Attributes.Item attribute.  0x01</summary>
             IncludeExplicitPublicItems = 0x01,
-            /// <summary>ValueSet items include all public properties.</summary>
+            /// <summary>ValueSet items include all public properties.  0x02</summary>
             IncludeAllPublicProperties = 0x02,
-            /// <summary>ValueSet items include all public fields.</summary>
+            /// <summary>ValueSet items include all public fields.  0x04</summary>
             IncludeAllPublicFields = 0x04,
-            /// <summary>items include all fields or properties that carry an Attrirbute.Item attribute.</summary>
+            /// <summary>items include all fields or properties that carry an Attrirbute.Item attribute.  0x08</summary>
             IncludeExplicitItems = 0x08,
             /// <summary>
             /// This value must be combined with other values.  
             /// When included it selects that inherited properties and fields should be considered in addition to declared ones.
             /// When not included (the default), only declared properties and fields are considered.
+            /// 0x10
             /// </summary>
             IncludeInheritedItems = 0x10,
         }
 
         /// <summary>
         /// Defines the access type that is supported by the included items in a class that marked as Attributes.Serializable.
+        /// <para/> None (0x00), Read (0x01), Write(0x02), ReadWrite (Read | Write)
         /// </summary>
         [Flags]
         public enum ItemAccess
         {
-            /// <summary>ValueSet is not accessible (Default value)</summary>
+            /// <summary>ValueSet is not accessible (Default value): 0x00</summary>
             None = 0x00,
-            /// <summary>ValueSet items can be read/serialized</summary>
+            /// <summary>ValueSet items can be read/serialized: 0x01</summary>
             Read = 0x01,
-            /// <summary>ValueSet items can be written/deserialized</summary>
+            /// <summary>ValueSet items can be written/deserialized: 0x02</summary>
             Write = 0x02,
-            /// <summary>ValueSet items can be read/serialized and can be written/deserialized</summary>
+            /// <summary>ValueSet items can be read/serialized and can be written/deserialized: (Read | Write) == 0x03</summary>
             ReadWrite = (Read | Write),
         }
 

@@ -19,12 +19,12 @@
  */
 //-------------------------------------------------------------------
 
+using System;
+using System.Text;
+using System.Collections.Generic;
+
 namespace MosaicLib.Utils
 {
-    using System;
-    using System.Text;
-    using System.Collections.Generic;
-
 	#region Dates
 
     /// <summary>
@@ -32,6 +32,24 @@ namespace MosaicLib.Utils
     /// </summary>
     public static class Dates
 	{
+        /// <summary>
+        /// This method converts the given dt DateTime into a double in units of seconds (UTC) since 00:00:00.000 Jan 1, 1601 (aka the FTime base offset).
+        /// </summary>
+        public static double GetUTCTimeSince1601(this DateTime dt)
+        {
+            return dt.ToFileTimeUtc() * 0.0000001;
+        }
+
+        /// <summary>
+        /// This method converts the given utcTimeSince1601 into a DateTime value.
+        /// </summary>
+        public static DateTime GetDateTimeFromUTCTimeSince1601(this double utcTimeSince1601)
+        {
+            long utcFTime = unchecked((long)(utcTimeSince1601 * 10000000.0));
+
+            return DateTime.FromFileTimeUtc(utcFTime);
+        }
+
 		// methods used to provide timestamps for LogMessages
 
 		/// <summary>Enum to define the supported formats for converting DataTime values to a string.</summary>

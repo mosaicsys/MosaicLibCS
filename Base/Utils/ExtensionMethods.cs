@@ -23,6 +23,8 @@ using System;
 using System.Text;
 using System.Collections.Generic;
 using System.Linq;
+using System.Diagnostics;
+using System.Reflection;
 
 namespace MosaicLib.Utils
 {
@@ -212,6 +214,14 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
+        /// Extension method sets all of the elements of the given array to their default value.  Has no effect if the array is null or is zero length.
+        /// </summary>
+        public static void Clear<ItemType>(this ItemType[] array, ItemType value)
+        {
+            array.SetAll(default(ItemType));
+        }
+
+        /// <summary>
         /// Extension method version of IList indexed get access that handles all out of range accesses by returning the given default value
         /// </summary>
         public static ItemType SafeAccess<ItemType>(this IList<ItemType> fromList, int getFromIndex, ItemType defaultValue)
@@ -249,7 +259,44 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        #region Math and number related extension methods
+        #region byte arrays as bit masks
+
+        /// <summary>
+        /// Extension method to support setting an indicated bitIdx to the given value using the given byteArray as a packed bit vector.
+        /// If the indicated bitIndex is outside of 0 to (byteArray.Length * 8 - 1) then the method will have no effect.
+        /// An empty byteArray is treated as if it has zero length.
+        /// <para/>Supports call chaining
+        /// </summary>
+        public static byte[] SetBit(this byte[] byteArray, int bitIndex, bool value)
+        {
+            int byteIdx = (bitIndex >> 3);
+            byte byteMask = unchecked((byte) (1 << (bitIndex & 0x007)));
+
+            if (byteArray != null && byteIdx >= 0 && byteIdx < byteArray.Length)
+            {
+                if (value)
+                    byteArray[byteIdx] |= byteMask;
+                else
+                    byteArray[byteIdx] &= unchecked((byte) ~byteMask);
+            }
+
+            return byteArray;
+        }
+
+        public static bool GetBit(this byte[] byteArray, int bitIndex)
+        {
+            int byteIdx = (bitIndex >> 3);
+            byte byteMask = unchecked((byte)(1 << (bitIndex & 0x007)));
+
+            if (byteArray != null && byteIdx >= 0 && byteIdx < byteArray.Length)
+                return ((byteArray[byteIdx] & byteMask) != 0);
+
+            return false;
+        }
+
+        #endregion
+
+        #region Math and number related extension methods (Ceiling, Floor, Round, Clip, IsInRange)
 
         /// <summary>Returns the Math.Ceiling of the given value</summary>
         public static double Ceiling(this double value)
@@ -348,6 +395,12 @@ namespace MosaicLib.Utils
             return value.IsInRange<double>(lowLimit, highLimit);
         }
 
+        /// <summary>Returns true if the given value is divisible by 2.</summary>
+        public static bool IsEven(this int value)
+        {
+            return ((value & 1) == 0);
+        }
+
         #endregion
     }
 
@@ -357,7 +410,7 @@ namespace MosaicLib.Utils
 
     /// <summary>
     /// Fcns class is essentially a namespace for series of static helper methods
-    /// <para/>inclues: DisposeOf... methods, CheckedFormat and other String related methods, array/list specific Equals methods, ...
+    /// <para/>includes: array/list specific Equals methods, ...
     /// </summary>
     public static partial class Fcns
     {
@@ -447,6 +500,19 @@ namespace MosaicLib.Utils
             else
                 return replaceDefaultWith;
         }
+
+        #endregion
+
+        #region CurrentStackFrame, CurrentMethod, CurrentMethodName helper "functions".
+
+        /// <summary>Creates and returns the callers current StackFrame</summary>
+        public static StackFrame CurrentStackFrame { get { return new System.Diagnostics.StackFrame(1); } }
+
+        /// <summary>Creates a StackFrame for the caller and returns the stack frame's current method.</summary>
+        public static MethodBase CurrentMethod { get { return new System.Diagnostics.StackFrame(1).GetMethod(); } }
+
+        /// <summary>Creates a StackFrame for the caller and returns the Name of the stack frame's current method.</summary>
+        public static string CurrentMethodName { get { return new System.Diagnostics.StackFrame(1).GetMethod().Name; } }
 
         #endregion
     }

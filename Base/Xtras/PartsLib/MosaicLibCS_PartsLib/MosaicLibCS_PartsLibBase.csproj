@@ -66,6 +66,9 @@
     <Compile Include="Scan\Plugins\Sim\Common.cs" />
     <Compile Include="Scan\ScanEngine\ScanEngine.cs" />
     <Compile Include="Scan\Plugins\Sim\MFC.cs" />
+    <Compile Include="Tools\MDRF\MDRFCommon.cs" />
+    <Compile Include="Tools\MDRF\MDRFWriter.cs" />
+    <Compile Include="Tools\MDRF\MDRFReader.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

@@ -436,23 +436,34 @@ namespace MosaicLib.Modular.Interconnect.Values
 
         /// <summary>Sets the corresponding interconnection table space entry's value from this accessors current ValueContainer contents.  This method supports call chaining.</summary>
         IValueAccessor Set();
+
         /// <summary>Sets ValueContainer to the given value and then Sets the corresponding interconnection table space entry's value from the given one.  This method supports call chaining.</summary>
         IValueAccessor Set(ValueContainer valueContainer);
+
         /// <summary>Converts valueAsObject to a ValueContainer and then calls Set(valueContainer) to set the access and the corresponding interconnect table entry from it.  This method supports call chaining.</summary>
         IValueAccessor Set(object valueAsObject);
+
         /// <summary>Checks if the current ValueContainer is different than the given one.  If the are not Equal then calls Set(valueContainer) to set the local and interconnect values from the given one.  This method supports call chaining.</summary>
         IValueAccessor SetIfDifferent(ValueContainer valueContainer);
+
         /// <summary>Converts valueAsObject to a ValueContainer and then calls SetIfDifferent(valueContainer) to set the access and the corresponding interconnect table entry from it if needed.  This method supports call chaining.</summary>
         IValueAccessor SetIfDifferent(object valueAsObject);
 
+        /// <summary>Resets this value accessor and the corresponding IVI table entry to be empty with sequence number zero.</summary>
+        IValueAccessor Reset();
+
         /// <summary>This property returns true if the ValueSeqNum is not the same as the CurrentSeqNum.</summary>
         bool IsUpdateNeeded { get; }
+
         /// <summary>This method updates the locally stored value and seqNum from the interconnection table space's corresponding table entry.  This method supports call chaining.</summary>
         IValueAccessor Update();
+
         /// <summary>Gives the current sequence number of the value that is currently in the interconnection table.  The value zero is only used when the table entry has never been assigned a value.</summary>
         UInt32 CurrentSeqNum { get; }
+
         /// <summary>Gives the sequence number of the value that was last Set to, or updated from, the interconnection table.  The accessor may be updated if this value is not equal to CurrentSeqNum.</summary>
         UInt32 ValueSeqNum { get; }
+
         /// <summary>True if the corresponding table entry has been explicitly set to a value and this object has been Updated from it.  This is a synonym for ((ValueSeqNum != 0) || IsSetPending)</summary>
         bool HasValueBeenSet { get; }
     }
@@ -600,17 +611,33 @@ namespace MosaicLib.Modular.Interconnect.Values
 
         /// <summary>Constructor.  Requires an instance name.</summary>
         public ValuesInterconnection(string name) 
-            : this(name, true)
-        {
-        }
+            : this(name, true, true)
+        { }
 
         /// <summary>Constructor.  Allows the caller to determine if/when this interconnection table will be added to the static Global dictionary mantained in this class (provided that the given name is neither null nor empty)</summary>
         public ValuesInterconnection(string name, bool registerSelfInDictionary)
+            : this(name, registerSelfInDictionary, true)
+        { }
+
+        /// <summary>
+        /// Constructor.  
+        /// Allows the caller to determine if/when this interconnection table will be added to the static Global dictionary mantained in this class (provided that the given name is neither null nor empty)
+        /// Allows caller to determine if this interconnection table's API needs to be thread safe.  
+        /// This instance will use a mutex for thread safety if either of the makeAPIThreadSafe or the registerSelfInDictionary parameters are true.  
+        /// Otherwise this instance will not make use of a mutex to enforce thread safety of its API and as such the client must either use only one thread or enforce non-renterant use on their own.
+        /// </summary>
+        public ValuesInterconnection(string name, bool registerSelfInDictionary, bool makeAPIThreadSafe)
         {
             Name = name;
 
             if (registerSelfInDictionary && !Name.IsNullOrEmpty())
                 Values.AddTable(this, false);
+
+            // assign the mutex to a new object (lock handle) or to null.  the mutex field is readonly so it can only be assigned in the constructor.
+            if (registerSelfInDictionary || makeAPIThreadSafe)
+                mutex = new object();
+            else
+                mutex = null;
         }
 
         #endregion
@@ -627,8 +654,8 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// </summary>
         public IEnumerable<IMapNameFromTo> MapNameFromToSet 
         {
-            get { lock (mutex) { return nameMappingSet.ToArray(); } }
-            set { lock (mutex) { InnerSetMappingArray(value); } }
+            get { using (var scopedLock = new ScopedLock(mutex)) { return nameMappingSet.ToArray(); } }
+            set { using (var scopedLock = new ScopedLock(mutex)) { InnerSetMappingArray(value); } }
         }
 
         /// <summary>
@@ -636,7 +663,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// </summary>
         public IValuesInterconnection AddRange(IEnumerable<IMapNameFromTo> addMapNameFromToSet)
         {
-            lock (mutex)
+            using (var scopedLock = new ScopedLock(mutex))
             {
                 InnerAddRange(addMapNameFromToSet);
             }
@@ -691,7 +718,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// </summary>
         public string [] GetValueNamesRange(int startIdx, int maxNumItems)
         {
-            lock (mutex)
+            using (var scopedLock = new ScopedLock(mutex))
             {
                 int numItems = Math.Max(0, tableItemNamesList.Count - startIdx);
                 if (numItems > maxNumItems && maxNumItems > 0)
@@ -720,9 +747,28 @@ namespace MosaicLib.Modular.Interconnect.Values
         {
             if (accessor != null)
             {
-                lock (mutex)
+                using (var scopedLock = new ScopedLock(mutex))
                 {
                     ((accessor as ValueAccessor) ?? emptyValueAccessor).InnerGuardedSetTableEntryFromValue();
+                    SynchrounousCustomPostSetTableEntryFromValueHandler(accessor);
+
+                    globalSeqNum = InnerGuardedIncrementSkipZero(globalSeqNum);
+                }
+
+                notificationList.Notify();
+            }
+        }
+
+        /// <summary>
+        /// This method is used internally by IValueAccessor instances to lock the table space and reset the corresponding table entry from the calling/given IValueAccessor instance.
+        /// </summary>
+        internal void Reset(IValueAccessor accessor)
+        {
+            if (accessor != null)
+            {
+                using (var scopedLock = new ScopedLock(mutex))
+                {
+                    ((accessor as ValueAccessor) ?? emptyValueAccessor).InnerGuardedResetTableEntry();
                     SynchrounousCustomPostSetTableEntryFromValueHandler(accessor);
 
                     globalSeqNum = InnerGuardedIncrementSkipZero(globalSeqNum);
@@ -780,7 +826,7 @@ namespace MosaicLib.Modular.Interconnect.Values
                     return;
             }
 
-            lock (mutex)
+            using (var scopedLock = new ScopedLock(mutex))
             {
                 for (int idx = 0; idx < numEntriesToSet; idx++)
                 {
@@ -812,7 +858,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         {
             if (accessor != null)
             {
-                lock (mutex)
+                using (var scopedLock = new ScopedLock(mutex))
                 {
                     ((accessor as ValueAccessor) ?? emptyValueAccessor).InnerGuardedUpdateValueFromTableEntry();
                 }
@@ -844,7 +890,7 @@ namespace MosaicLib.Modular.Interconnect.Values
             accessorArray = accessorArray ?? emptyValueAccessorArray;
             numEntriesToUpdate = Math.Min(numEntriesToUpdate, accessorArray.Length);
 
-            lock (mutex)
+            using (var scopedLock = new ScopedLock(mutex))
             {
                 for (int idx = 0; idx < numEntriesToUpdate; idx++)
                 {
@@ -892,7 +938,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         {
             ValueTableEntry tableEntry = null;
 
-            lock (mutex)
+            using (var scopedLock = new ScopedLock(mutex))
             {
                 name = InnerMapSanitizedName(name.Sanitize());
 
@@ -956,12 +1002,15 @@ namespace MosaicLib.Modular.Interconnect.Values
         #region private Table and table space related implementation fields
 
         /// <summary>
-        /// table space and dictionary mutex.  
+        /// table space and dictionary mutex (now optional - may be null for clients that do not need the API to be thread safe).  
         /// Note: this entity does not use reader/writer locks in expectation that methods used here are sufficiently fast so that there will not be
         /// a large amount of contention for the use of the table when performing activities here and based on the expectation that a simple mutex has a faster internal implementation
         /// than would be produced by using a reader writer lock, with its additional overhead in total number of interlocked operations even when there is little contention.  
         /// </summary>
-        private object mutex = new object();
+        /// <remarks>
+        /// Annottate this as readonly since the value is only assigned once in the constructor.  
+        /// </remarks>
+        private readonly object mutex;
 
         /// <summary>Basic list of the names of all of the items in the table</summary>
         private List<string> tableItemNamesList = new List<string>();
@@ -1042,6 +1091,15 @@ namespace MosaicLib.Modular.Interconnect.Values
                 seqNum = InnerGuardedIncrementSkipZero(seqNum);
             }
 
+            /// <summary>
+            /// Sets the contained ValueContainer to be empty and resets the SeqNum to zero
+            /// </summary>
+            public void Reset()
+            {
+                valueContainer.SetToEmpty();
+                seqNum = 0;
+            }
+
             /// <summary>Backing storeage for the SeqNum.  seqNum is defined to be volatile because it is observed without owning the table lock, even though it is only updated while owning the table lock.</summary>
             private volatile UInt32 seqNum = 0;
 
@@ -1114,9 +1172,18 @@ namespace MosaicLib.Modular.Interconnect.Values
             public IValueAccessor Set()
             {
                 if (InterconnectInstance != null)
-                {
                     InterconnectInstance.Set(this);
-                }
+
+                return this;
+            }
+
+            /// <summary>Resets this value accessor and the corresponding IVI table entry to be empty with sequence number zero.</summary>
+            public IValueAccessor Reset()
+            {
+                valueContainer.SetToEmpty();
+
+                if (InterconnectInstance != null)
+                    InterconnectInstance.Reset(this);
 
                 return this;
             }
@@ -1156,6 +1223,7 @@ namespace MosaicLib.Modular.Interconnect.Values
 
             /// <summary>This property returns true if the LastUpdateSeqNun is not the same as the CurrentSeqNum.</summary>
             public bool IsUpdateNeeded { get { return (ValueSeqNum != CurrentSeqNum); } }
+
             /// <summary>This method updates the locally stored value and seqNum from the interconnection table space's corresponding table entry.  This method supports call chaining.</summary>
             public IValueAccessor Update()
             {
@@ -1166,8 +1234,10 @@ namespace MosaicLib.Modular.Interconnect.Values
             }
             /// <summary>Gives the current sequence number of the value that is currently in the interconnection table.  The value zero is only used when the table entry has never been assigned a value.</summary>
             public UInt32 CurrentSeqNum { get { return ((TableEntry != null) ? TableEntry.SeqNum : 0); } }
+
             /// <summary>Gives the sequence number of the value that was last Set to, or updated from, the interconnection table.  The accessor may be updated if this value is not equal to CurrentSeqNum.</summary>
             public UInt32 ValueSeqNum { get; set; }
+
             /// <summary>True if the corresponding table entry has been explicitly set to a value and this object has been Updated from it.  This is a synonym for ((ValueSeqNum != 0) || IsSetPending)</summary>
             public bool HasValueBeenSet { get { return ((ValueSeqNum != 0) || IsSetPending); } }
 
@@ -1206,6 +1276,20 @@ namespace MosaicLib.Modular.Interconnect.Values
             {
                 if (TableEntry != null)
                     TableEntry.Set(ref valueContainer);
+
+                IsSetPending = false;
+
+                ValueSeqNum = CurrentSeqNum;
+            }
+
+            /// <summary>
+            /// Internal method used to Reset the TableEntry's value and seqNum.  Also updates the ValueSeqNum from the TableEntries SeqNum (via CurrentSeqNum).
+            /// <para/>This method may only be called from the ValueInterconnect internal logic while the current thread has exclusive access to the TableEntry in question.
+            /// </summary>
+            internal void InnerGuardedResetTableEntry()
+            {
+                if (TableEntry != null)
+                    TableEntry.Reset();
 
                 IsSetPending = false;
 
@@ -1320,7 +1404,7 @@ namespace MosaicLib.Modular.Interconnect.Values
 
     #endregion
 
-    #region ValueSetItemAttribute and ValueSetAdatper
+    #region ValueSetItemAttribute and ValueSetAdapter
 
     namespace Attributes
     {
@@ -2051,6 +2135,45 @@ namespace MosaicLib.Modular.Interconnect.Values
         }
 
         #endregion
+    }
+
+    #endregion
+
+    #region Related Extension Methods
+
+    public static partial class ExtensionMethods
+    {
+        /// <summary>
+        /// Checks each IVA in the given array and returns true if any such IVA's IsUpdateNeeded flag is set.
+        /// Returns false if no such IVA IsUpdateNeeded flag is set, or the array is null or empty.
+        /// </summary>
+        public static bool IsUpdateNeeded(this IValueAccessor[] ivaArray)
+        {
+            foreach (IValueAccessor iva in ivaArray ?? emptyIVAArray)
+            {
+                if (iva.IsUpdateNeeded)
+                    return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Checks each IVA in the given array and returns true if any such IVA's IsSetPending flag is set.
+        /// Returns false if no such IVA IsSetPending flag is set, or the array is null or empty.
+        /// </summary>
+        public static bool IsSetPending(this IValueAccessor[] ivaArray)
+        {
+            foreach (IValueAccessor iva in ivaArray ?? emptyIVAArray)
+            {
+                if (iva.IsSetPending)
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static readonly IValueAccessor[] emptyIVAArray = new IValueAccessor[0];
     }
 
     #endregion

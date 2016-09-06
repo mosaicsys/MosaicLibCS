@@ -1237,14 +1237,19 @@ namespace MosaicLib
         /// <summary>
         /// This method may be used to generate the dynamic header lines, typically combined with the use of GenerateDefaultHeaderLines.
         /// The resulting array looks like:
-        /// <para/>Uptime: 0.000 hours
+        /// <para/>Uptime: 1.001 hours [only included if time >= 0.001 hours]
         /// </summary>
         public static string [] GenerateDynamicHeaderLines()
         {
-            return new string[]
+            double appUptimeHours = appUptimeBaseTimeStamp.Age.TotalHours;
+            double roundedAppUptimeHours = appUptimeHours.Round(4, MidpointRounding.ToEven);
+
+            string [] dynamicHeaderLinesArray = new string[]
             {
-                "Uptime: {0:f3} hours".CheckedFormat(appUptimeBaseTimeStamp.Age.TotalHours)
-            };
+                ((appUptimeHours > 0.0005) ? "Uptime: {0:f3} hours".CheckedFormat(appUptimeHours) : null),
+            }.Where(s => s != null).ToArray();
+
+            return dynamicHeaderLinesArray;
         }
 
         #endregion

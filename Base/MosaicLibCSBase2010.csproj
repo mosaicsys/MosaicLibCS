@@ -89,6 +89,7 @@
     <Compile Include="Modular\Reflection\GetterSetterFactory.cs" />
     <Compile Include="MosaicLibCSBase.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Semi\E005\E005Data.cs" />
     <Compile Include="Serial\AutoEchoWrapper.cs" />
     <Compile Include="Serial\ComSerialIO.cs" />
     <Compile Include="Serial\SerialIO.cs" />

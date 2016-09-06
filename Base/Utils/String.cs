@@ -24,6 +24,7 @@ using System.Text;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.Serialization;
+using MosaicLib.Modular.Common;
 
 namespace MosaicLib.Utils
 {
@@ -128,6 +129,47 @@ namespace MosaicLib.Utils
                 return false;
 
             return true;
+        }
+
+        #endregion
+
+        #region IsByteSerializable
+
+        /// <summary>
+        /// Returns true if all of the characters in the given string s are byte serializable (integer values between 0 and 255).
+        /// Also returns true if the given string s is null.
+        /// </summary>
+        public static bool IsByteSerializable(this string s)
+        {
+            return IsByteSerializable(s, true);
+        }
+
+        /// <summary>
+        /// Returns true if all of the characters in the given string s are byte serializable (integer values between 0 and 255).
+        /// If the given string s is null then this method returns the valueForNull parameter instead.
+        /// </summary>
+        public static bool IsByteSerializable(this string s, bool valueForNull)
+        {
+            if (s == null)
+                return valueForNull;
+
+            int sLength = s.Length;
+            for (int idx = 0; idx < sLength; idx++)
+            {
+                char c = s[idx];
+                if (!c.IsByteSerializable())
+                    return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Returns true if the integer value of the given char c is safely convertable to an unsigned byte (0 .. 255)
+        /// </summary>
+        public static bool IsByteSerializable(this char c)
+        {
+            return (c >= 0 && c <= 255);
         }
 
         #endregion
@@ -435,7 +477,6 @@ namespace MosaicLib.Utils
 
 	#endregion
 
-    // Library is now being built under DotNet 3.5 (or later) so we can make use of extension methods.
     #region Extension Methods
 
     /// <summary>
@@ -575,22 +616,34 @@ namespace MosaicLib.Utils
 
         #region string and string array size estimate methods
 
-        /// <summary>Returns the estimated sizeof the contents of the given string in bytes, assuming that each character in the string will consume 2 bytes</summary>
+        /// <summary>Returns the estimated size of the contents of the given string in bytes, assuming that each character in the string will consume 2 bytes</summary>
         public static int EstimatedContentSizeInBytes(this String s)
         {
             return (s.MapNullToEmpty().Length * sizeof(char));
         }
 
-        /// <summary>Returns the estimated sizeof the contents of the given string array in bytes, assuming that each character in each string in the array will consume 2 bytes</summary>
+        /// <summary>Returns the estimated size of the contents of the given string array in bytes, assuming that each character in each string in the array will consume 2 bytes</summary>
         public static int EstimatedContentSizeInBytes(this String[] sArray)
         {
             return (sArray.Sum((s) => s.MapNullToEmpty().Length) * sizeof(char));
         }
 
-        /// <summary>Returns the estimated sizeof the contents of the given list of strings in bytes, assuming that each character in each string in the list will consume 2 bytes</summary>
+        /// <summary>Returns the estimated size of the contents of the given list of strings in bytes, assuming that each character in each string in the list will consume 2 bytes</summary>
         public static int EstimatedContentSizeInBytes(this IList<String> sList)
         {
             return (sList.Sum((s) => s.MapNullToEmpty().Length) * sizeof(char));
+        }
+
+        /// <summary>Returns the sum of the estimated size of the contents of the given list of ValueContainers in bytes</summary>
+        public static int EstimatedContentSizeInBytes(this IList<ValueContainer> vcList)
+        {
+            return (vcList.Sum((vc) => vc.EstimatedContentSizeInBytes));
+        }
+
+        /// <summary>Returns the sum of the estimated size of the contents of the given array of ValueContainers in bytes</summary>
+        public static int EstimatedContentSizeInBytes(this ValueContainer [] vcArray)
+        {
+            return (vcArray.Sum((vc) => vc.EstimatedContentSizeInBytes));
         }
 
         #endregion

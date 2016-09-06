@@ -25,9 +25,10 @@ using System.ServiceModel;
 using System.Runtime.Serialization;
 using System.Runtime.InteropServices;
 using System.Linq;
-using MosaicLib.Utils;
 using System.Collections;
 using System.Text;
+
+using MosaicLib.Utils;
 
 namespace MosaicLib.Modular.Common
 {
@@ -80,7 +81,7 @@ namespace MosaicLib.Modular.Common
             ValueAsObject = initialValueAsObject;
         }
 
-        /// <summary>A quick encoding on the field/union field in which the value has been placed.</summary>
+        /// <summary>A quick encoding on the field/union field in which the value has been placed.  (Type had been called ContainerValueType)</summary>
         public ContainerStorageType cvt;
 
         /// <summary>Reference to data types that are not supported by the Union</summary>
@@ -96,6 +97,9 @@ namespace MosaicLib.Modular.Common
             /// <summary>Boolean value in union</summary>
             [FieldOffset(0)]
             public System.Boolean b;
+            /// <summary>"Binary" Byte value in union</summary>
+            [FieldOffset(0)]
+            public System.Byte bi;
             /// <summary>SByte value in union</summary>
             [FieldOffset(0)]
             public System.SByte i8;
@@ -287,53 +291,54 @@ namespace MosaicLib.Modular.Common
         /// </summary>
         public ValueContainer DeepCopyFrom(ValueContainer rhs)
         {
-            if (rhs.IsNonNullObject)
+            switch (rhs.cvt)
             {
-                ValueContainer[] vcArray = rhs.o as ValueContainer[];
+                case ContainerStorageType.IListOfString:
+                    {
+                        cvt = ContainerStorageType.IListOfString;
+                        u = rhs.u;
 
-                if (vcArray != null)
-                {
-                    return new ValueContainer(vcArray.Select((item) => ValueContainer.Empty.DeepCopyFrom(item)).ToArray());
-                }
+                        IList<string> rhsILS = rhs.GetValue<IList<String>>(ContainerStorageType.IListOfString, false, false);
+
+                        if (rhsILS == null || rhsILS.IsReadOnly)
+                        {
+                            // if the rhs value is null, or is readonly then just assign it to this object and we are done
+                            o = rhsILS;
+                        }
+                        else
+                        {
+                            // otherwise create a full readonly copy of the given rhsILS and save that for later use
+                            o = new List<String>(rhsILS).AsReadOnly();
+                        }
+
+                        return this;
+                    }
+
+                case ContainerStorageType.IListOfVC:
+                    {
+                        cvt = ContainerStorageType.IListOfVC;
+                        u = rhs.u;
+
+                        IList<ValueContainer> rhsILVC = rhs.GetValue<IList<ValueContainer>>(ContainerStorageType.IListOfVC, false, false);
+
+                        if (rhsILVC == null || rhsILVC.IsReadOnly)
+                        {
+                            // if the rhs value is null, or is readonly then just assign it to this object and we are done
+                            o = rhsILVC;
+                        }
+                        else
+                        {
+                            // otherwise create a full readonly deep copy of the given rhsILVC and save that for later use
+                            o = new List<ValueContainer>(rhsILVC.Select(vc => ValueContainer.Empty.DeepCopyFrom(vc))).AsReadOnly();
+                        }
+
+                        return this;
+                    }
+
+                default:
+                    return CopyFrom(rhs);
             }
-            if (rhs.cvt != ContainerStorageType.IListOfString)
-                return CopyFrom(rhs);
-
-            // do this for all remainging paths through this code.
-            cvt = ContainerStorageType.IListOfString;
-            u = rhs.u;
-
-            IList<string> rhsILS = rhs.GetValue<IList<String>>(ContainerStorageType.IListOfString, false, false);
-            if (rhsILS == null)
-            {
-                o = null;
-                return this;
-            }
-
-            if (Object.ReferenceEquals(o, rhsILS))
-                return this;    // the two objects are already the same object - no more work to do.
-
-            // if rhsILS is already readonly then we simply save it and we are done.
-            if (rhsILS.IsReadOnly)
-            {
-                o = rhsILS;
-                return this;
-            }
-
-            // check if the current contents are already readonly and match the given rhsILS
-            IList<String> oaios = (o as IList<String>);
-            if (oaios != null && oaios.IsReadOnly && oaios.IsEqualTo(rhsILS))
-            {
-                // we do not need to copy or replace o since it has the desired contents
-                return this;
-            }
-
-            // finally we need to actually create a full readonly copy of the given rhsILS so that we can save the readonly copy in the value.
-            o = new List<String>(rhsILS).AsReadOnly();
-
-            return this;
         }
-
 
         /// <summary>
         /// Accepts a given type and attempts to generate an apporpriate ContainerStorageType (and isNullable) value as the best container storage type to use with the given Type.
@@ -363,10 +368,15 @@ namespace MosaicLib.Modular.Common
             else if (valueType == typeof(System.TimeSpan)) decodedValueType = ContainerStorageType.TimeSpan;
             else if (valueType == typeof(System.DateTime)) decodedValueType = ContainerStorageType.DateTime;
             else if (valueType == stringType) decodedValueType = ContainerStorageType.String;
-            else if (iListOfStringType.IsAssignableFrom(valueType))
+            else if (iListOfStringType.IsAssignableFrom(valueType) || valueType == stringArrayType)
             {
                 isNullable = false;
                 decodedValueType = ContainerStorageType.IListOfString;
+            }
+            else if (iListOfVCType.IsAssignableFrom(valueType) || valueType == vcArrayType)
+            {
+                isNullable = false;
+                decodedValueType = ContainerStorageType.IListOfVC;
             }
             else if (valueType.IsEnum)
             {
@@ -381,7 +391,10 @@ namespace MosaicLib.Modular.Common
         }
 
         private static readonly Type stringType = typeof(System.String);
+        private static readonly Type stringArrayType = typeof(System.String []);
+        private static readonly Type vcArrayType = typeof(ValueContainer[]);
         private static readonly Type iListOfStringType = typeof(IList<System.String>);
+        private static readonly Type iListOfVCType = typeof(IList<ValueContainer>);
 
         /// <summary>
         /// get/set property.
@@ -403,7 +416,9 @@ namespace MosaicLib.Modular.Common
                     case ContainerStorageType.Object: return o;
                     case ContainerStorageType.String: return o;
                     case ContainerStorageType.IListOfString: return o;
+                    case ContainerStorageType.IListOfVC: return o;
                     case ContainerStorageType.Boolean: return u.b;
+                    case ContainerStorageType.Binary: return u.bi;
                     case ContainerStorageType.SByte: return u.i8;
                     case ContainerStorageType.Int16: return u.i16;
                     case ContainerStorageType.Int32: return u.i32;
@@ -500,6 +515,7 @@ namespace MosaicLib.Modular.Common
                         case ContainerStorageType.Object: o = (System.Object)value; cvt = ContainerStorageType.Object; break;
                         case ContainerStorageType.String: o = ((value != null) ? ((System.Object) value).ToString() : null); break;
                         case ContainerStorageType.Boolean: u.b = (System.Boolean)System.Convert.ChangeType(value, typeof(System.Boolean)); break;
+                        case ContainerStorageType.Binary: u.bi = (System.Byte)System.Convert.ChangeType(value, typeof(System.Byte)); break;
                         case ContainerStorageType.SByte: u.i8 = (System.SByte)System.Convert.ChangeType(value, typeof(System.SByte)); break;
                         case ContainerStorageType.Int16: u.i16 = (System.Int16)System.Convert.ChangeType(value, typeof(System.Int16)); break;
                         case ContainerStorageType.Int32: u.i32 = (System.Int32)System.Convert.ChangeType(value, typeof(System.Int32)); break;
@@ -516,22 +532,21 @@ namespace MosaicLib.Modular.Common
                             {
                                 Object valueAsObject = (System.Object)value;
                                 String [] valueAsArrayOfStrings = (valueAsObject as String []);
+                                IList<String> oAsIListOfStrings = (o as IList<String>);
 
                                 if (valueAsObject == null)
                                 {
-                                    o = null;
+                                    o = emptyIListOfString;
                                 }
                                 else if (valueAsArrayOfStrings != null)
                                 {
-                                    IList<String> oailos = (o as IList<String>);
-                                    if (oailos == null || !oailos.IsReadOnly || !(oailos.IsEqualTo(valueAsArrayOfStrings)))
+                                    if (oAsIListOfStrings == null || !oAsIListOfStrings.IsReadOnly || !(oAsIListOfStrings.IsEqualTo(valueAsArrayOfStrings)))
                                         o = new List<String>(valueAsArrayOfStrings).AsReadOnly();
-                                    // else o already contains the same readonly List of string from the array - do not replace it
+                                    // else o already contains the same readonly List of string from the array - do not replace it - this optimization step is only done for this CST
                                 }
                                 else
                                 {
-                                    IList<String> valueAsIListOfStrings = ((IList<String>) valueAsObject);     // cast should not throw unless TValueType is not castable to IList<String>
-                                    IList<String> oAsIListOfStrings = (o as IList<String>);
+                                    IList<String> valueAsIListOfStrings = ((IList<String>) valueAsObject);     // cast should not throw unless TValueType is not castable to IList<String>.  Also should not be null since valueAsObject is not null.
 
                                     if (oAsIListOfStrings == null || !oAsIListOfStrings.IsReadOnly || !(oAsIListOfStrings.IsEqualTo(valueAsIListOfStrings)))
                                     {
@@ -543,7 +558,35 @@ namespace MosaicLib.Modular.Common
                                     // else o already contains the same readonly List of string contents as the given value.  no need to copy or change the existing contained value.
                                 }
                                 break;
-                            } 
+                            }
+                        case ContainerStorageType.IListOfVC:
+                            {
+                                Object valueAsObject = (System.Object)value;
+
+                                // first case - the given value is null
+
+                                ValueContainer[] valueAsArrayOfVCs = (valueAsObject as ValueContainer[]);
+
+                                if (valueAsObject == null)
+                                {
+                                    o = emptyIListOfVC;
+                                }
+                                else if (valueAsArrayOfVCs != null)
+                                {
+                                    // convert given array into a readonly list of deep copies of each of the given VCs
+                                    o = new List<ValueContainer>(valueAsArrayOfVCs.Select(vc => ValueContainer.Empty.DeepCopyFrom(vc))).AsReadOnly();
+                                }
+                                else
+                                {
+                                    IList<ValueContainer> valueAsILVC = ((IList<ValueContainer>)valueAsObject);     // cast should not throw unless TValueType is not castable to IList<VC>.  Also should not be null since valueAsObject is not null.
+
+                                    if (valueAsILVC.IsReadOnly)
+                                        o = valueAsILVC;        // if valueAsILVC is already readonly then we just keep that value as it has already been deep cloned
+                                    else
+                                        o = new List<ValueContainer>(valueAsILVC.Select(vc => ValueContainer.Empty.DeepCopyFrom(vc))).AsReadOnly();  // otherwise we need to generate a deep clone of the given list and save that new list (as readonly).
+                                }
+                                break;
+                            }
                     }
                 }
                 else
@@ -640,6 +683,7 @@ namespace MosaicLib.Modular.Common
                         case ContainerStorageType.Object: value = (TValueType)o; break;
                         case ContainerStorageType.String: value = (TValueType)o; break;
                         case ContainerStorageType.Boolean: value = (TValueType)((System.Object)u.b); break;
+                        case ContainerStorageType.Binary: value = (TValueType)((System.Object)u.bi); break;
                         case ContainerStorageType.SByte: value = (TValueType)((System.Object)u.i8); break;
                         case ContainerStorageType.Int16: value = (TValueType)((System.Object)u.i16); break;
                         case ContainerStorageType.Int32: value = (TValueType)((System.Object)u.i32); break;
@@ -654,12 +698,23 @@ namespace MosaicLib.Modular.Common
                         case ContainerStorageType.DateTime: value = (TValueType)((System.Object)u.DateTime); break;
                         case ContainerStorageType.IListOfString:
                             {
-                                if (typeof(TValueType).Equals(typeof(string[])) && o != null)
-                                    value = (TValueType)((System.Object)((o as IList<String>).ToArray()));      // special case for reading from an IListOfString to an String array.
+                                // IListOfString can be read as String [] or as IList<String>
+                                if ((TValueTypeType == stringArrayType))
+                                    value = (TValueType)((System.Object)((o as IList<String> ?? emptyIListOfString).ToArray()));      // special case for reading from an IListOfString to an String array.
                                 else
-                                    value = (TValueType)o;      // all other cases the TValueType should be castable from an IList<String>
+                                    value = (TValueType)((System.Object)(o as IList<String> ?? emptyIListOfString));      // all other cases the TValueType should be castable from an IList<String>
 
                                 break; 
+                            }
+                        case ContainerStorageType.IListOfVC:
+                            {
+                                // IListOfVC can be read as VC [] or as IList<VC>
+                                if ((TValueTypeType == vcArrayType))
+                                    value = (TValueType)((System.Object)((o as IList<ValueContainer> ?? emptyIListOfVC).ToArray()));      // special case for reading from an IListOfVC to an VC array.
+                                else
+                                    value = (TValueType)((System.Object)(o as IList<ValueContainer> ?? emptyIListOfVC));      // all other cases the TValueType should be castable from an IList<VC>
+
+                                break;
                             }
                     }
                 }
@@ -701,6 +756,7 @@ namespace MosaicLib.Modular.Common
                             switch (decodedValueType)
                             {
                                 case ContainerStorageType.Boolean: value = (TValueType)System.Convert.ChangeType(ss.ParseValue<System.Boolean>(false), typeof(System.Boolean)); conversionDone = ss.IsAtEnd; break;
+                                case ContainerStorageType.Binary: value = (TValueType)System.Convert.ChangeType(ss.ParseValue<System.Byte>(0), typeof(System.Byte)); conversionDone = ss.IsAtEnd; break;
                                 case ContainerStorageType.SByte: value = (TValueType)System.Convert.ChangeType(ss.ParseValue<System.SByte>(0), typeof(System.SByte)); conversionDone = ss.IsAtEnd; break;
                                 case ContainerStorageType.Int16: value = (TValueType)System.Convert.ChangeType(ss.ParseValue<System.Int16>(0), typeof(System.Int16)); conversionDone = ss.IsAtEnd; break;
                                 case ContainerStorageType.Int32: value = (TValueType)System.Convert.ChangeType(ss.ParseValue<System.Int32>(0), typeof(System.Int32)); conversionDone = ss.IsAtEnd; break;
@@ -823,6 +879,14 @@ namespace MosaicLib.Modular.Common
                 {
                     return defaultBasePerItemSizeInBytes + (o as IList<String>).EstimatedContentSizeInBytes();
                 }
+                else if (o is IList<ValueContainer>)
+                {
+                    return defaultBasePerItemSizeInBytes + (o as IList<ValueContainer>).EstimatedContentSizeInBytes();
+                }
+                else if (o is ValueContainer[])
+                {
+                    return defaultBasePerItemSizeInBytes + (o as ValueContainer []).EstimatedContentSizeInBytes();
+                }
                 else
                 {
                     return 0;
@@ -853,6 +917,8 @@ namespace MosaicLib.Modular.Common
 
             if (cvt == ContainerStorageType.IListOfString)
                 return (o as IList<String>).IsEqualTo(rhs.o as IList<String>);
+            else if (cvt == ContainerStorageType.IListOfVC)
+                return (o as IList<ValueContainer>).IsEqualTo(rhs.o as IList<ValueContainer>);
             else if (cvt.IsReferenceType())
                 return System.Object.Equals(o, rhs.o);
             else if (cvt.IsNone())
@@ -894,33 +960,12 @@ namespace MosaicLib.Modular.Common
                     return "[Null:{0}]".CheckedFormat(cvt);
             }
 
-            if (cvt == ContainerStorageType.Object && o != null)
-            {
-                if (o is INamedValueSet)
-                {
-                    return (o as INamedValueSet).ToStringSML();
-                }
-
-                if (o is INamedValue)
-                {
-                    return (o as INamedValue).ToStringSML();
-                }
-
-                if (o is ValueContainer[])
-                {
-                    ValueContainer[] vcArray = o as ValueContainer[] ?? emptyValueContainerArray;
-
-                    if (vcArray.Length > 0)
-                        return "[L {0}]".CheckedFormat(String.Join(" ", vcArray.Select((vc) => vc.ToStringSML()).ToArray()));
-                    else
-                        return "[L]";
-                }
-            }
-
             switch (cvt)
             {
                 case ContainerStorageType.Boolean:
                     return "[Bool {0}]".CheckedFormat(u.b);
+                case ContainerStorageType.Binary:
+                    return "[Bi {0}]".CheckedFormat(u.bi);
                 case ContainerStorageType.SByte:
                     return "[I1 {0}]".CheckedFormat(u.i8);
                 case ContainerStorageType.Int16:
@@ -930,10 +975,7 @@ namespace MosaicLib.Modular.Common
                 case ContainerStorageType.Int64:
                     return "[I8 {0}]".CheckedFormat(u.i64);
                 case ContainerStorageType.Byte:
-                    if (o == null)      // this is a special case.  the o field may be set to a flag value when serializing Binary values where the storage type overlaps with binary values.
-                        return "[U1 {0}]".CheckedFormat(u.u8);
-                    else
-                        return "[Bi 0x{0:x2}]".CheckedFormat(u.u8);
+                    return "[U1 {0}]".CheckedFormat(u.u8);
                 case ContainerStorageType.UInt16:
                     return "[U2 {0}]".CheckedFormat(u.u16);
                 case ContainerStorageType.UInt32:
@@ -967,14 +1009,39 @@ namespace MosaicLib.Modular.Common
                         else
                             return "[LS]";
                     }
-                case ContainerStorageType.Object:
-                    return "[{0} '{1}']".CheckedFormat(cvt, o);
-                default:
-                    return "[{0} '{1}']".CheckedFormat(cvt, ValueAsObject);
             }
+
+            if (o != null)
+            {
+                ValueContainer[] vcArray = (o as ValueContainer[]);
+                if (cvt == ContainerStorageType.IListOfVC || vcArray != null)
+                {
+                    vcArray = vcArray ?? (GetValue<IList<ValueContainer>>(false) ?? emptyIListOfVC).ToArray();
+
+                    if (vcArray.Length > 0)
+                        return "[L {0}]".CheckedFormat(String.Join(" ", vcArray.Select((vc) => vc.ToStringSML()).ToArray()));
+                    else
+                        return "[L]";
+                }
+
+                if (o is INamedValueSet)
+                {
+                    return (o as INamedValueSet).ToStringSML();
+                }
+
+                if (o is INamedValue)
+                {
+                    return (o as INamedValue).ToStringSML();
+                }
+            }
+
+            if (cvt == ContainerStorageType.Object)
+                return "[{0} '{1}']".CheckedFormat(cvt, o);
+            else
+                return "[{0} '{1}']".CheckedFormat(cvt, ValueAsObject);
         }
 
-        /// <summary>ToString variant that support SML like output format.</summary>
+        /// <summary>ToString variant that support SML like output format. (Currently the same as ToString)</summary>
         public string ToStringSML()
         {
             return ToString();
@@ -984,7 +1051,7 @@ namespace MosaicLib.Modular.Common
         private static readonly List<char> basicUnquotedStringExcludeList = new List<char>() { ' ', '\"', '[', ']' };
 
         private static readonly IList<String> emptyIListOfString = new List<String>().AsReadOnly();
-        private static readonly ValueContainer [] emptyValueContainerArray = new ValueContainer [0];
+        private static readonly IList<ValueContainer> emptyIListOfVC = new List<ValueContainer>().AsReadOnly();
     }
 
     /// <summary>
@@ -1001,31 +1068,35 @@ namespace MosaicLib.Modular.Common
         String,
         /// <summary>Use Object field as an IList{String} - usually contains a ReadOnlyCollection{String}</summary>
         IListOfString,
-        /// <summary>Use Union.Boolean field</summary>
+        /// <summary>Use Object field as an IList{ValueContainer} - usually contains a ReadOnlyCollection{ValueContainer}</summary>
+        IListOfVC,
+        /// <summary>Use Union.b field</summary>
         Boolean,
-        /// <summary>Use Union.SByte field (signed)</summary>
+        /// <summary>Use Union.vi field</summary>
+        Binary,
+        /// <summary>Use Union.i8 field (signed)</summary>
         SByte,
-        /// <summary>Use Union.Int16 field</summary>
+        /// <summary>Use Union.i16 field</summary>
         Int16,
-        /// <summary>Use Union.Int32 field</summary>
+        /// <summary>Use Union.i32 field</summary>
         Int32,
-        /// <summary>Use Union.Int64 field</summary>
+        /// <summary>Use Union.i64 field</summary>
         Int64,
-        /// <summary>Use Union.Byte field (unsigned)</summary>
+        /// <summary>Use Union.u8 field (unsigned)</summary>
         Byte,
-        /// <summary>Use Union.UInt16 field</summary>
+        /// <summary>Use Union.u16 field</summary>
         UInt16,
-        /// <summary>Use Union.UInt32 field</summary>
+        /// <summary>Use Union.u32 field</summary>
         UInt32,
-        /// <summary>Use Union.UInt64 field</summary>
+        /// <summary>Use Union.u64 field</summary>
         UInt64,
-        /// <summary>Use Union.Single field</summary>
+        /// <summary>Use Union.f32 field</summary>
         Single,
-        /// <summary>Use Union.Double field</summary>
+        /// <summary>Use Union.f64 field</summary>
         Double,
-        /// <summary>Uses Union.Int64 field to contain the TimeSpan's tick value</summary>
+        /// <summary>Uses Union.i64 field to contain the TimeSpan's tick value</summary>
         TimeSpan,
-        /// <summary>Use Union.Int64 field to contain the DateTime's serialized Binary value.</summary>
+        /// <summary>Use Union.i64 field to contain the DateTime's serialized Binary value.</summary>
         DateTime,
     }
 
@@ -1042,6 +1113,7 @@ namespace MosaicLib.Modular.Common
                 case ContainerStorageType.Object:
                 case ContainerStorageType.String:
                 case ContainerStorageType.IListOfString:
+                case ContainerStorageType.IListOfVC:
                     return true;
                 default:
                     return false;
@@ -1049,11 +1121,11 @@ namespace MosaicLib.Modular.Common
         }
 
         /// <summary>
-        /// Returns true if the given ContainerStorageType is a value type (aka it is not a reference type).
+        /// Returns true if the given ContainerStorageType is a value type (aka it is not a reference type and it is not None).
         /// </summary>
         public static bool IsValueType(this ContainerStorageType cst)
         {
-            return !cst.IsReferenceType();
+            return !cst.IsReferenceType() && !cst.IsNone();
         }
 
         /// <summary>
@@ -1085,6 +1157,7 @@ namespace MosaicLib.Modular.Common
                 case ContainerStorageType.Int64: 
                     return includeSigned;
                 case ContainerStorageType.Boolean:
+                case ContainerStorageType.Binary:
                 case ContainerStorageType.Byte:
                 case ContainerStorageType.UInt16:
                 case ContainerStorageType.UInt32:
@@ -1116,6 +1189,28 @@ namespace MosaicLib.Modular.Common
                 default:
                     return false;
             }
+        }
+
+        /// <summary>
+        /// Extension method version of static Utils.Fcns.Equals method for two lists of ValueContainers.
+        /// Returns true if both lists have the same length and each of lhs' ValueContainer contents are IsEqualTo the corresponding rhs'
+        /// </summary>
+        public static bool IsEqualTo(this IList<ValueContainer> lhs, IList<ValueContainer> rhs)
+        {
+            if (Object.ReferenceEquals(lhs, rhs))
+                return true;
+
+            if (lhs == null || rhs == null || lhs.Count != rhs.Count)
+                return false;
+
+            int count = lhs.Count;
+            for (int idx = 0; idx < count; idx++)
+            {
+                if (!lhs[idx].IsEqualTo(rhs[idx]))
+                    return false;
+            }
+
+            return true;
         }
     }
 
@@ -1225,6 +1320,9 @@ namespace MosaicLib.Modular.Common
         private bool? b { get { return ((vc.cvt == ContainerStorageType.Boolean) ? (bool?)vc.u.b : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.Boolean, u = new ValueContainer.Union() { b = value.GetValueOrDefault() } } : ValueContainer.Null); } }
 
         [DataMember(EmitDefaultValue = false, IsRequired = false)]
+        private Byte ? bi { get { return ((vc.cvt == ContainerStorageType.Binary) ? (Byte?)vc.u.bi : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.Binary, u = new ValueContainer.Union() { bi = value.GetValueOrDefault() } } : ValueContainer.Null); } }
+
+        [DataMember(EmitDefaultValue = false, IsRequired = false)]
         private Single? f32 { get { return ((vc.cvt == ContainerStorageType.Single) ? (Single?)vc.u.f32 : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.Single, u = new ValueContainer.Union() { f32 = value.GetValueOrDefault() } } : ValueContainer.Null); } }
 
         [DataMember(EmitDefaultValue = false, IsRequired = false)]
@@ -1265,18 +1363,24 @@ namespace MosaicLib.Modular.Common
         { 
             get 
             {
-                if (vc.cvt != ContainerStorageType.Object)
-                    return null;
+                if (vc.cvt == ContainerStorageType.IListOfVC)
+                {
+                    IList<ValueContainer> vcList = vc.o as IList<ValueContainer>;
 
-                ValueContainer [] vta = vc.o as ValueContainer[];
-                if (vta == null)
-                    return null;
+                    return (vcList != null) ? vcList.Select((vcItem) => new ValueContainerEnvelope() { VC = vcItem }).ToArray() : null;
+                }
+                else if (vc.cvt == ContainerStorageType.Object && vc.o != null)
+                {
+                    ValueContainer[] vcArray = vc.o as ValueContainer[];
 
-                return vta.Select((vcItem) => new ValueContainerEnvelope() { VC = vcItem }).ToArray();
+                    return (vcArray != null) ? vcArray.Select((vcItem) => new ValueContainerEnvelope() { VC = vcItem }).ToArray() : null;
+                }
+
+                return null;
             } 
             set 
             {
-                VC = new ValueContainer((value.Select((ve) => ve.VC)).ToArray());
+                VC = new ValueContainer(new List<ValueContainer>(value.Select((ve) => ve.VC)).AsReadOnly() as IList<ValueContainer>);
             } 
         }
 
@@ -1392,7 +1496,7 @@ namespace MosaicLib.Modular.Common
 
     #endregion
 
-    #region Named Values
+    #region Named Values (NamedValueSet, NamedValue)
 
     /// <summary>
     /// This class defines objects each of which act as a Set of NamedValues.  
@@ -1466,10 +1570,35 @@ namespace MosaicLib.Modular.Common
 
         /// <summary>
         /// Provide an alternate name for the SetValue method.  This allows the class to be used with a Dictionary style initializer to add values to the set.
+        /// <exception cref="System.NotSupportedException">thrown if the collection has been set to IsReadOnly</exception>
         /// </summary>
         public NamedValueSet Add(string name, object value)
         {
+            ThrowIfIsReadOnly("The Add method");
+
             return SetValue(name, value);
+        }
+
+        /// <summary>
+        /// Attemps to "Add" each of the non-null INamedValue items in the given range to this set.
+        /// Internally uses SetValue which replaces identically named values with the last given value.
+        /// Returns this object to support call chaining.
+        /// </summary>
+        /// <exception cref="System.NotSupportedException">thrown if the collection has been set to IsReadOnly</exception>
+        public NamedValueSet AddRange(IEnumerable<INamedValue> range)
+        {
+            ThrowIfIsReadOnly("The AddRange method");
+
+            if (range != null)
+            {
+                foreach (INamedValue nvItem in range)
+                {
+                    if (nvItem != null)
+                        SetValue(nvItem.Name, nvItem.VC);
+                }
+            }
+
+            return this;
         }
 
         /// <summary>
@@ -1877,6 +2006,8 @@ namespace MosaicLib.Modular.Common
 
         #endregion
 
+        #region ToString (variants), ToStringSML, and EstimatedContentSizeInBytes
+
         /// <summary>
         /// Provide local debug/logging assistance version of this method
         /// </summary>
@@ -1913,6 +2044,8 @@ namespace MosaicLib.Modular.Common
                 return totalApproximateSize;
             }
         }
+
+        #endregion
 
         #region Underlying storage and indexing fields
 
@@ -1980,7 +2113,6 @@ namespace MosaicLib.Modular.Common
         }
 
         #endregion
-
     }
 
     /// <summary>
@@ -2019,12 +2151,16 @@ namespace MosaicLib.Modular.Common
         public NamedValue(INamedValue rhs)
             : this(rhs.Name)
         {
-            vc = rhs.VC;
+            if (rhs.IsReadOnly)
+                vc = rhs.VC;
+            else
+                vc.DeepCopyFrom(rhs.VC);
+
             VCHasBeenSet = rhs.VCHasBeenSet;
         }
 
         /// <summary>
-        /// Copy constructor.  builds a copy  of the given rhs containing copy of Name and VC properties.
+        /// Copy constructor.  builds a copy of the given rhs containing copy of Name and VC properties.
         /// The IsReadOnly on resulting copy is set from asReadOnly.  
         /// In addition if asReadonly is true and the given rhs is not readonly and its contained value is an IListOfString and the copy's contained value is set to a expliclty
         /// copy of the given rhs.  This stop cannot be peformed for general contained values that have opaque Object values in them and it not required for String contents (already immutable)
@@ -2033,8 +2169,8 @@ namespace MosaicLib.Modular.Common
         public NamedValue(INamedValue rhs, bool asReadOnly)
             :this(rhs.Name)
         {
-            if (asReadOnly)
-                vc = new ValueContainer().DeepCopyFrom(rhs.VC);
+            if (asReadOnly && !rhs.IsReadOnly)
+                vc.DeepCopyFrom(rhs.VC);
             else
                 vc = rhs.VC;
 
@@ -2152,6 +2288,8 @@ namespace MosaicLib.Modular.Common
 
         #endregion
 
+        #region ToString (variants), ToStringSML, and EstimatedContentSizeInBytes
+
         /// <summary>
         /// Custom ToString variant that allows the caller to determine if the ro/rw postfix should be included on thie string result and if NV's with an empty VC should be treated like a keyword (by only returning the name)
         /// </summary>
@@ -2186,6 +2324,8 @@ namespace MosaicLib.Modular.Common
         {
             get { return (Name.Length * sizeof(char)) + VC.EstimatedContentSizeInBytes; }
         }
+
+        #endregion
     }
 
     #endregion
@@ -2311,9 +2451,9 @@ namespace MosaicLib.Modular.Common
         /// <para/>This method supports call chaining by returning the lhs after any modification have been made.
         /// </summary>
         /// <param name="lhs">Gives the object that the rhs NV items will be merged into</param>
-        /// <param name="rhs">Gives the object that contains the NV items that will be merged into the lhs and which may be used to update corresonding items in the lhs</param>
+        /// <param name="rhs">Gives the enumerable object that defines the NV items that will be merged into the lhs and which may be used to update corresonding items in the lhs</param>
         /// <param name="mergeBehavior">Defines the merge behavior that will be used for this merge when the rhs and lhs contain NV items with the same name but different values.  Defaults to NamedValueMergeBehavior.AddAndUpdate</param>
-        public static NamedValueSet MergeWith(this NamedValueSet lhs, INamedValueSet rhs, NamedValueMergeBehavior mergeBehavior)
+        public static NamedValueSet MergeWith(this NamedValueSet lhs, IEnumerable<INamedValue> rhs, NamedValueMergeBehavior mergeBehavior)
         {
             bool add = mergeBehavior.IsAddSelected();
             bool update = mergeBehavior.IsUpdateSelected();

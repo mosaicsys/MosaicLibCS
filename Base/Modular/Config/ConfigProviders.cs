@@ -133,7 +133,7 @@ namespace MosaicLib.Modular.Config
     /// <summary>
     /// This class provides an implementation for ConfigKeyProviders that can be implemented using a dictionary.
     /// </summary>
-    public class DictionaryConfigKeyProvider : ConfigKeyProviderBase
+    public class DictionaryConfigKeyProvider : ConfigKeyProviderBase, IEnumerable
     {
         /// <summary>Constructor</summary>
         public DictionaryConfigKeyProvider(string name, bool isFixed)
@@ -148,33 +148,75 @@ namespace MosaicLib.Modular.Config
         }
 
         /// <summary>
-        /// Dictionary construction helper method.  Populates the dictionary from the given array of name/value pairs, prefixing each given name
-        /// with the CommonKeyPrefix.
+        /// Dictionary construction helper method.  Adds the given set of name/value pairs to the dictionary, prefixing each given name with the CommonKeyPrefix.
         /// <para/>Method supports call chaining.
         /// </summary>
-        public DictionaryConfigKeyProvider ImportInitialValues(KeyValuePair<string, ValueContainer>[] nameValuePairArray)
+        public DictionaryConfigKeyProvider AddRange(IEnumerable<KeyValuePair<string, ValueContainer>> nameValuePairSource)
         {
             ConfigKeyAccessFlags flags = new ConfigKeyAccessFlags();
 
-            AddConfigKeyAccessArray(nameValuePairArray.Select((kvp) => new ConfigKeyAccessImpl(KeyPrefix + kvp.Key, flags, null, this) { ValueContainer = kvp.Value, KeyMetaData = ProviderMetaData}).ToArray());
+            return AddRange(nameValuePairSource.Select((kvp) => new ConfigKeyAccessImpl(KeyPrefix + kvp.Key, flags, null, this) { ValueContainer = kvp.Value, KeyMetaData = ProviderMetaData}));
+        }
+
+        /// <summary>
+        /// Dictionary construction helper method.  Adds the given name/vc ValueContainer pair to the dictionary, prefixing the name with the CommonKeyPrefix.
+        /// <para/>Method supports call chaining.
+        /// </summary>
+        public DictionaryConfigKeyProvider Add(string name, ValueContainer vc)
+        {
+            ConfigKeyAccessFlags flags = new ConfigKeyAccessFlags();
+
+            return Add(new ConfigKeyAccessImpl(KeyPrefix + name, flags, null, this) { ValueContainer = vc, KeyMetaData = ProviderMetaData });
+        }
+
+        /// <summary>
+        /// Dictionary construction helper method.  Adds the given name/value pair to the dictionary, prefixing the name with the CommonKeyPrefix.
+        /// <para/>Method supports call chaining.
+        /// </summary>
+        public DictionaryConfigKeyProvider Add(string name, object value)
+        {
+            ConfigKeyAccessFlags flags = new ConfigKeyAccessFlags();
+
+            return Add(new ConfigKeyAccessImpl(KeyPrefix + name, flags, null, this) { ValueContainer = new ValueContainer(value), KeyMetaData = ProviderMetaData });
+        }
+
+        /// <summary>
+        /// Implementation method used to add a set of generated ConfigKeyAccessImpl objects to the dictionary.  Used by AddRange and/or derived types.
+        /// </summary>
+        protected DictionaryConfigKeyProvider AddRange(IEnumerable<ConfigKeyAccessImpl> ckaiSource)
+        {
+            foreach (var ckai in ckaiSource)
+            {
+                Add(ckai);
+            }
 
             return this;
         }
 
         /// <summary>
-        /// implementation method used to add a set of generated ConfigKeyAccessImpl objects to the dictionary.  Used by ImportInitialValues and/or derived types.
+        /// Implementation method used to add a generated ConfigKeyAccessImpl objects to the dictionary.  Used by AddRange and/or derived types.
         /// </summary>
-        protected void AddConfigKeyAccessArray(ConfigKeyAccessImpl[] ckaiArray)
+        protected DictionaryConfigKeyProvider Add(ConfigKeyAccessImpl ckai)
         {
-            foreach (var ckai in ckaiArray)
+            keyItemDictionary[ckai.Key] = new Item()
             {
-                keyItemDictionary[ckai.Key] = new Item()
-                {
-                    key = ckai.Key,
-                    initialContainedValue = ckai.ValueContainer,
-                    ckai = ckai,
-                };
-            }
+                key = ckai.Key,
+                initialContainedValue = ckai.ValueContainer,
+                ckai = ckai,
+            };
+
+            return this;
+        }
+
+        [Obsolete("Use of this method has been depricated.  Please replace its use with the corresponding AddRange method (2016-08-25)")]
+        public DictionaryConfigKeyProvider ImportInitialValues(KeyValuePair<string, ValueContainer>[] nameValuePairArray)
+        {
+            return AddRange(nameValuePairArray);
+        }
+
+        [Obsolete("Use of this method has been depricated.  Please replace its use with the corresponding AddRange method (2016-08-25)")]
+        protected void AddConfigKeyAccessArray(IEnumerable<ConfigKeyAccessImpl> ckaiSource)
+        {
         }
 
         /// <summary>
@@ -190,6 +232,11 @@ namespace MosaicLib.Modular.Config
             public ConfigKeyAccessImpl ckai;
             /// <summary>The last comment string given to this key if the dictionary is not fixed.</summary>
             public string comment;
+        }
+
+        IEnumerator IEnumerable.GetEnumerator()
+        {
+            return keyItemDictionary.GetEnumerator();
         }
 
         /// <summary>
@@ -353,7 +400,7 @@ namespace MosaicLib.Modular.Config
                     mainArgs = unusedArgsList.ToArray();
                 }
 
-                ImportInitialValues(generatedKeyValuePairList.ToArray());
+                AddRange(generatedKeyValuePairList.ToArray());
             }
         }
 
@@ -402,7 +449,7 @@ namespace MosaicLib.Modular.Config
                 }
             }
 
-            ImportInitialValues(generatedKeyValuePairList.ToArray());
+            AddRange(generatedKeyValuePairList.ToArray());
         }
     }
 
@@ -449,7 +496,7 @@ namespace MosaicLib.Modular.Config
                 }
             }
 
-            ImportInitialValues(generatedKeyValueDictionary.ToArray());
+            AddRange(generatedKeyValueDictionary.ToArray());
         }
 
         private readonly string[] emptyKeyValuesArray = new string[0];
@@ -549,7 +596,7 @@ namespace MosaicLib.Modular.Config
                 }
             }
 
-            AddConfigKeyAccessArray(includeFilesKeysDictionary.Values.ToArray());
+            AddRange(includeFilesKeysDictionary.Values);
         }
     }
 
@@ -653,7 +700,7 @@ namespace MosaicLib.Modular.Config
                 }
             }
 
-            AddConfigKeyAccessArray(valueItemList.Select((vItem) => vItem.ckai).ToArray());
+            AddRange(valueItemList.Select((vItem) => vItem.ckai));
         }
 
         string givenFilePath = null;
@@ -791,7 +838,7 @@ namespace MosaicLib.Modular.Config
                 Logger.Error.Emit("Unable to successfully enumerate Registry keys and values under '{0}': {1}", RegistryRootPath, ex);
             }
 
-            AddConfigKeyAccessArray(valueItemList.Select((vItem) => vItem.ckai).ToArray());
+            AddRange(valueItemList.Select((vItem) => vItem.ckai));
         }
 
         ConfigKeyAccessFlags defaultAccessFlags = new ConfigKeyAccessFlags();

@@ -45,11 +45,20 @@ namespace MosaicLib.WPF.Common
         public static Logging.MesgType AppEventMesgType { get { return appEventMesgType; } set { appEventMesgType = value; } }
         private static Logging.MesgType appEventMesgType = Logging.MesgType.Signif;
 
+        /// <summary>
+        /// This method generates a useful default LogBaseName which is derived from the FullName of the calling assembly by taking the first portion up to the first ','
+        /// </summary>
+        public static string DefaultLogBaseName
+        {
+            get
+            {
+                return System.Reflection.Assembly.GetCallingAssembly().FullName.Split(',').SafeAccess(0);        // split off the "name" of the assembly from the other parts that make up its "full" name.
+            }
+        }
+
         public static void HandleOnStartup(StartupEventArgs e, ref Logging.Logger appLogger)
         {
-            string logBaseName = System.Reflection.Assembly.GetCallingAssembly().FullName.Split(',').SafeAccess(0);        // split off the "name" of the assembly from the other parts that make up its "full" name.
-
-            HandleOnStartup(e, ref appLogger, logBaseName);
+            HandleOnStartup(e, ref appLogger, DefaultLogBaseName);
         }
 
         public enum FileRingLogMessageHandlerType
@@ -59,10 +68,20 @@ namespace MosaicLib.WPF.Common
             None,
         }
 
+        /// <summary>
+        /// Gives get/set access to the AppSetup's default main logger type.  Defaults to FileRingLogMessageHandlerType.TextFileRotationDirectoryLogMessageHandler.
+        /// This value will be used during HandleOnStartup to define which type of main logger the setup will use.
+        /// </summary>
         public static FileRingLogMessageHandlerType DefaultMainLoggerType { get { return defaultMainLoggerType; } set { defaultMainLoggerType = value; } }
         private static FileRingLogMessageHandlerType defaultMainLoggerType = FileRingLogMessageHandlerType.TextFileRotationDirectoryLogMessageHandler;
 
         public static void HandleOnStartup(StartupEventArgs e, ref Logging.Logger appLogger, string logBaseName)
+        {
+            string[] args = (e != null) ? e.Args : null;
+            HandleOnStartup(ref args, ref appLogger, logBaseName, (e != null));
+        }
+
+        public static void HandleOnStartup(ref string [] argsRef, ref Logging.Logger appLogger, string logBaseName, bool addWPFLMH)
         {
             System.Diagnostics.Process currentProcess = System.Diagnostics.Process.GetCurrentProcess();
             System.Threading.Thread currentThread = System.Threading.Thread.CurrentThread;
@@ -72,7 +91,10 @@ namespace MosaicLib.WPF.Common
             if (currentThread.Name.IsNullOrEmpty())
                 currentThread.Name = "{0}.Main".CheckedFormat(logBaseName);
 
-            MosaicLib.Modular.Config.Config.AddStandardProviders(e.Args);
+            MosaicLib.Modular.Config.IConfig config = MosaicLib.Modular.Config.Config.Instance;
+
+            if (argsRef != null && config.Providers.IsNullOrEmpty())
+                config.AddStandardProviders(ref argsRef);
 
             int ringQueueSize = 500;
             int traceQueueSize = 1000;
@@ -87,6 +109,7 @@ namespace MosaicLib.WPF.Common
                 nameUsesDateAndTime = true,
                 fileHeaderLines = Logging.GenerateDefaultHeaderLines(logBaseName, true),
                 fileHeaderLinesDelegate = Logging.GenerateDynamicHeaderLines,
+                logGate = Logging.LogGate.Debug,
             };
 
             Logging.Handlers.TextFileDateTreeLogMessageHandler.Config dateTreeDirConfig = new Logging.Handlers.TextFileDateTreeLogMessageHandler.Config(logBaseName.MapNullToEmpty() + "Log", @".\Logs")
@@ -94,6 +117,7 @@ namespace MosaicLib.WPF.Common
                 IncludeFileAndLine = false,
                 FileHeaderLines = Logging.GenerateDefaultHeaderLines(logBaseName, true),
                 FileHeaderLinesDelegate = Logging.GenerateDynamicHeaderLines,
+                LogGate = Logging.LogGate.Debug,
             };
 
             switch (mainLoggerType)
@@ -134,13 +158,13 @@ namespace MosaicLib.WPF.Common
                     break;
             }
 
-            Logging.ILogMessageHandler lmh = null; //  Logging.CreateDiagnosticTraceLogMessageHandler(Logging.LogGate.Debug);
-            Logging.ILogMessageHandler wpfLMH = MosaicLib.WPF.Logging.WpfLogMessageHandlerToolBase.Instance;
+            Logging.ILogMessageHandler diagnosticTraceLMH = null; //  Logging.CreateDiagnosticTraceLogMessageHandler(Logging.LogGate.Debug);
+            Logging.ILogMessageHandler wpfLMH = addWPFLMH ? MosaicLib.WPF.Logging.WpfLogMessageHandlerToolBase.Instance : null;
 
             if (mainLMH != null)
                 Logging.AddLogMessageHandlerToDefaultDistributionGroup(mainLMH);
-            if (lmh != null)
-                Logging.AddLogMessageHandlerToDefaultDistributionGroup(lmh);
+            if (diagnosticTraceLMH != null)
+                Logging.AddLogMessageHandlerToDefaultDistributionGroup(diagnosticTraceLMH);
 
             // how to change wpfLMH logging level after construction
             if (wpfLMH != null)

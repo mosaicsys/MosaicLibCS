@@ -414,8 +414,9 @@ namespace MosaicLib.Time
 
         /// <summary>
         /// Get property returns true if the timer's TriggerInterval has elapsed since the last occurance.  
-        /// Uses GetIsTriggered method internally.  If timer is configured to AutoReset, the timer will automatically reset to expire after 
+        /// If timer is configured to AutoReset, the timer will automatically reset to expire after 
         /// the TriggerInterval has elapsed from the most recent occurance.
+        /// <para/>Internally this is the same as calling GetIsTriggered(QpcTimeStamp.Now);
         /// </summary>
         public bool IsTriggered { get { return GetIsTriggered(QpcTimeStamp.Now); } }
 
