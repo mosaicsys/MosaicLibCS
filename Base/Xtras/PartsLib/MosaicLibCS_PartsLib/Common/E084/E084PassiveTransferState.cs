@@ -317,9 +317,10 @@ namespace MosaicLib.PartsLib.Common.E084
         //  V1.1.11 2015-12-04: Added support for new permitAutoRecoveryIndexedByTPNum config points (6 elements default to true, 0:unused, 1:TP1, 2:TP2, 3:TP3, 4:TP4, 5:TP5)
         //  V2.0.0 2016-08-08: Created CS version from C++ version.
         //  V2.0.1 2016-08-16: Version passing all basic tests.
-        //  V2.0.2 2016-09-06: Changed logging so that "Recovery Available" message can be logged at Info level rather than Warning level 
+        //  V2.0.2 2016-09-06: Changed logging so that "Recovery Available" message can be logged at Info level rather than Warning level
+        //  V2.0.3 2016-09-11: Source cleanup to resolve and remove remaining Todo elements (mainly remaining vestiges of old C++ field naming conventions)
 
-        public const string E084PassiveTransferStateMachineVersionStr = "V2.0.2 2016-09-06";
+        public const string E084PassiveTransferStateMachineVersionStr = "V2.0.3 2016-09-11";
 
         #endregion
 
@@ -331,9 +332,9 @@ namespace MosaicLib.PartsLib.Common.E084
             SetupConfig(initConfig, notifyOnConfigChange);
             this.anManager = anManager ?? Semi.E041.ANManagerPart.Instance;
 
-            if (anManager != null && !mConfig.PIOFailureAlarmName.IsNullOrEmpty())
+            if (anManager != null && !config.PIOFailureAlarmName.IsNullOrEmpty())
             {
-                pioFailureANSource = anManager.RegisterANSource(PartID, new ANSpec() { ANName = mConfig.PIOFailureAlarmName, ANType = ANType.Error, ALID = ANAlarmID.OptLookup, Comment = "PIO failure alarm" });
+                pioFailureANSource = anManager.RegisterANSource(PartID, new ANSpec() { ANName = config.PIOFailureAlarmName, ANType = ANType.Error, ALID = ANAlarmID.OptLookup, Comment = "PIO failure alarm" });
             }
 
             SetState(StateCode.Initial, "Constructor");
@@ -353,8 +354,6 @@ namespace MosaicLib.PartsLib.Common.E084
         #region Configuration, SetupConfig, ReleaseConfig, ServiceConfig
 
         #region ConfigTimes, Config classes
-
-        /// Todo: fix case of properties in items below (capital camel case)
 
         /// <summary>
         /// This class extends the E084 PassiveTimers
@@ -457,7 +456,6 @@ namespace MosaicLib.PartsLib.Common.E084
             public override int GetHashCode() { return base.GetHashCode(); }
         }
 
-        ///Todo: rename all following properties to raise case of first letter.
         /// <summary>
         /// This class defines all of the parameters that are used to statically and dynamically configure this E084 state machine.
         /// </summary>
@@ -645,18 +643,17 @@ namespace MosaicLib.PartsLib.Common.E084
 
         #endregion
 
-        ///Todo:  remove the leading m
-        private Config mConfig;
+        private Config config;
         private ConfigValueSetAdapter<Config> configAdapter;
         private ConfigValueSetAdapter<ConfigTimes> configTimesAdapter;
         private INotifyable notifyOnConfigChange = null;
 
         private void SetupConfig(Config initialConfig, INotifyable notifyOnConfigChange)
         {
-            mConfig = new Config(initialConfig);
+            config = new Config(initialConfig);
 
-            configAdapter = new ConfigValueSetAdapter<Config>() { ValueSet = mConfig, SetupIssueEmitter = Log.Debug, UpdateIssueEmitter = Log.Debug, ValueNoteEmitter = Log.Trace }.Setup("{0}.".CheckedFormat(PartID));
-            configTimesAdapter = new ConfigValueSetAdapter<ConfigTimes>() { ValueSet = mConfig.Times, SetupIssueEmitter = Log.Debug, UpdateIssueEmitter = Log.Debug, ValueNoteEmitter = Log.Trace }.Setup("{0}.".CheckedFormat(PartID));
+            configAdapter = new ConfigValueSetAdapter<Config>() { ValueSet = config, SetupIssueEmitter = Log.Debug, UpdateIssueEmitter = Log.Debug, ValueNoteEmitter = Log.Trace }.Setup("{0}.".CheckedFormat(PartID));
+            configTimesAdapter = new ConfigValueSetAdapter<ConfigTimes>() { ValueSet = config.Times, SetupIssueEmitter = Log.Debug, UpdateIssueEmitter = Log.Debug, ValueNoteEmitter = Log.Trace }.Setup("{0}.".CheckedFormat(PartID));
 
             if (notifyOnConfigChange != null)
             {
@@ -716,10 +713,10 @@ namespace MosaicLib.PartsLib.Common.E084
         /// </summary>
         public void UpdateE84State(LPMState lpmState, bool updateOutputSetpoints = true)
         {
-            lpmState.E84State.StateCode = mPriv.stateCode;
-            lpmState.E84State.StateCodeReason = mPriv.stateCodeReason;
+            lpmState.E84State.StateCode = priv.stateCode;
+            lpmState.E84State.StateCodeReason = priv.stateCodeReason;
             if (updateOutputSetpoints)
-                lpmState.E84State.OutputSetpoint = new Semi.E084.PassiveToActivePinsState() { IFaceName = "E84sm", PackedWord = mPriv.pio1OutputPins };
+                lpmState.E84State.OutputSetpoint = new Semi.E084.PassiveToActivePinsState() { IFaceName = "E84sm", PackedWord = priv.pio1OutputPins };
         }
 
         /// <summary>
@@ -743,32 +740,31 @@ namespace MosaicLib.PartsLib.Common.E084
 
         private void ServiceStateAndUpdateOutputs()
         {
-            StateCode preServiceState = mPriv.stateCode;
+            StateCode preServiceState = priv.stateCode;
 
-            /// Todo: confirm if this is a valid comment.
-            ServiceState();		// ??? valid comment? cause state to transition to NotAvail_PortNotInService
+            ServiceState();
 
-            if (preServiceState == mPriv.stateCode)
-                UpdateOutputs(mPriv.stateCode);
+            if (preServiceState == priv.stateCode)
+                UpdateOutputs(priv.stateCode);
         }
 
         private void ServiceState()
         {
             QpcTimeStamp tsNow = QpcTimeStamp.Now;
 
-            mPriv.timeInState = (tsNow - mPriv.stateCodeTime).TotalSeconds;
-            mPriv.activePIOOutputPinsElapsedTime = (tsNow - mPriv.activePIOOutputPinsTimeStamp).TotalSeconds;
+            priv.timeInState = (tsNow - priv.stateCodeTime).TotalSeconds;
+            priv.activePIOOutputPinsElapsedTime = (tsNow - priv.activePIOOutputPinsTimeStamp).TotalSeconds;
 
-            if (mPriv.podSensorValues.PresentPlaced.DoesPlacedEqualPresent())		// keep advancing the last confirmed time for pod transition timeout detection during transfers
-                mPriv.lastConfirmedPPStateTime = tsNow;
+            if (priv.podSensorValues.PresentPlaced.DoesPlacedEqualPresent())		// keep advancing the last confirmed time for pod transition timeout detection during transfers
+                priv.lastConfirmedPPStateTime = tsNow;
 
             // update outputs any time the lcInterlockTripped state changes
             bool lcInterlockTripped = IsLCInterlockTripped();
 
-            if (lcInterlockTripped != mPriv.lastLCInterlockTripped)
+            if (lcInterlockTripped != priv.lastLCInterlockTripped)
             {
-                mPriv.lastLCInterlockTripped = lcInterlockTripped;
-                UpdateOutputs(mPriv.stateCode);
+                priv.lastLCInterlockTripped = lcInterlockTripped;
+                UpdateOutputs(priv.stateCode);
             }
 
             if (HandleFaultStatesAndConditions(tsNow))
@@ -794,52 +790,50 @@ namespace MosaicLib.PartsLib.Common.E084
         {
             eventsToProcess = EventsToProcess.None;
 
-            bool amsChanged = (mPriv.portUsageContextInfo.AMS != lpmState.PortUsageContextInfo.AMS);
-            bool ltsChanged = (mPriv.portUsageContextInfo.LTS != lpmState.PortUsageContextInfo.LTS);
-            bool portContextInfoChanged = !mPriv.portUsageContextInfo.IsEqualTo(lpmState.PortUsageContextInfo);
-            bool podLocChanged = (mPriv.lpmPositionState.IsUnclamped != lpmState.PositionState.IsUnclamped
-                                    || mPriv.lpmPositionState.IsUndocked != lpmState.PositionState.IsUndocked);
+            bool amsChanged = (priv.portUsageContextInfo.AMS != lpmState.PortUsageContextInfo.AMS);
+            bool ltsChanged = (priv.portUsageContextInfo.LTS != lpmState.PortUsageContextInfo.LTS);
+            bool portContextInfoChanged = !priv.portUsageContextInfo.IsEqualTo(lpmState.PortUsageContextInfo);
+            bool podLocChanged = (priv.lpmPositionState.IsUnclamped != lpmState.PositionState.IsUnclamped
+                                    || priv.lpmPositionState.IsUndocked != lpmState.PositionState.IsUndocked);
 
             if (portContextInfoChanged)
             {
                 // detect portContextInfo triggered events to process
-                if (!mPriv.portUsageContextInfo.Initializing && lpmState.PortUsageContextInfo.Initializing)
+                if (!priv.portUsageContextInfo.Initializing && lpmState.PortUsageContextInfo.Initializing)
                     eventsToProcess |= EventsToProcess.InitializeStarted;
-                else if (mPriv.portUsageContextInfo.Initializing && !lpmState.PortUsageContextInfo.Initializing)
+                else if (priv.portUsageContextInfo.Initializing && !lpmState.PortUsageContextInfo.Initializing)
                     eventsToProcess |= (lpmState.PortUsageContextInfo.Error ? EventsToProcess.InitializeFailed : EventsToProcess.InitializeSucceeded);
 
-                /// Todo: detect other trigger cases here:  E84LoadStart, E84Unload start, ...
-
-                Log.Debug.Emit("Port Context Info changed to '{0}' [from:{1}]", lpmState.PortUsageContextInfo, mPriv.portUsageContextInfo);
-                mPriv.portUsageContextInfo.SetFrom(lpmState.PortUsageContextInfo);
+                Log.Debug.Emit("Port Context Info changed to '{0}' [from:{1}]", lpmState.PortUsageContextInfo, priv.portUsageContextInfo);
+                priv.portUsageContextInfo.SetFrom(lpmState.PortUsageContextInfo);
             }
 
-            if (mPriv.portUsageContextInfo.APresentOrPlacementAlarmIsActive || mPriv.lastPresentOrPlacementAlarmIsActiveTime.IsZero)
-                mPriv.lastPresentOrPlacementAlarmIsActiveTime.SetToNow();
+            if (priv.portUsageContextInfo.APresentOrPlacementAlarmIsActive || priv.lastPresentOrPlacementAlarmIsActiveTime.IsZero)
+                priv.lastPresentOrPlacementAlarmIsActiveTime.SetToNow();
 
-            if (!mPriv.podSensorValues.IsEqualTo(lpmState.PodSensorValues))
+            if (!priv.podSensorValues.IsEqualTo(lpmState.PodSensorValues))
             {
-                Log.Debug.Emit("Pod Sensor Values changed to '{0}' [from:{1}]", lpmState.PodSensorValues, mPriv.podSensorValues);
-                mPriv.podSensorValues.SetFrom(lpmState.PodSensorValues);
+                Log.Debug.Emit("Pod Sensor Values changed to '{0}' [from:{1}]", lpmState.PodSensorValues, priv.podSensorValues);
+                priv.podSensorValues.SetFrom(lpmState.PodSensorValues);
             }
 
-            if (!mPriv.lpmPositionState.IsEqualTo(lpmState.PositionState))
+            if (!priv.lpmPositionState.IsEqualTo(lpmState.PositionState))
             {
-                Log.Trace.Emit("LPM Position State changed to '{0}' [from:{1}]", lpmState.PositionState, mPriv.lpmPositionState);
-                mPriv.lpmPositionState.SetFrom(lpmState.PositionState);
+                Log.Trace.Emit("LPM Position State changed to '{0}' [from:{1}]", lpmState.PositionState, priv.lpmPositionState);
+                priv.lpmPositionState.SetFrom(lpmState.PositionState);
             }
 
             if (ltsChanged)
             {
-                Log.Info.Emit("PortTransferState is now '{0}'", mPriv.portUsageContextInfo.LTS);
+                Log.Info.Emit("PortTransferState is now '{0}'", priv.portUsageContextInfo.LTS);
 
-                if (!mPriv.portUsageContextInfo.LTS.IsInService())
+                if (!priv.portUsageContextInfo.LTS.IsInService())
                 {
-                    if (mPriv.stateCode.IsSelected())
+                    if (priv.stateCode.IsSelected())
                         SetState(StateCode.Fault_TransferAborted, "Port was taken out of service while PIO Select is active.");
-                    else if (mPriv.stateCode.IsLoading())
+                    else if (priv.stateCode.IsLoading())
                         SetState(StateCode.Fault_TransferAborted, "Port was taken out of service during active Load transfer.");
-                    else if (mPriv.stateCode.IsUnloading())
+                    else if (priv.stateCode.IsUnloading())
                         SetState(StateCode.Fault_TransferAborted, "Port was taken out of service during active Unload transfer.");
                     else
                         ServiceStateAndUpdateOutputs();// cause state to transition to NotAvail_PortNotInService
@@ -848,13 +842,13 @@ namespace MosaicLib.PartsLib.Common.E084
 
             if (amsChanged)
             {
-                Log.Info.Emit("PortAccessMode is now '{0}'", mPriv.portUsageContextInfo.AMS);
+                Log.Info.Emit("PortAccessMode is now '{0}'", priv.portUsageContextInfo.AMS);
 
-                if (mPriv.portUsageContextInfo.AMS != Semi.E087.AMS.Automatic)
+                if (priv.portUsageContextInfo.AMS != Semi.E087.AMS.Automatic)
                 {
-                    if (mPriv.stateCode.IsLoading())
+                    if (priv.stateCode.IsLoading())
                         SetState(StateCode.Fault_TransferAborted, "Port set to manual mode during active Load transfer.");
-                    else if (mPriv.stateCode.IsUnloading())
+                    else if (priv.stateCode.IsUnloading())
                         SetState(StateCode.Fault_TransferAborted, "Port set to manual mode during active Unload transfer.");
                     else
                         ServiceStateAndUpdateOutputs();		// this may cause the state to be changed to NotAvail_PortNotInAutoMode
@@ -863,7 +857,7 @@ namespace MosaicLib.PartsLib.Common.E084
 
             if (podLocChanged)
             {
-                Log.Info.Emit("LPM pod location undocked:{0} unclamped:{1}", mPriv.lpmPositionState.IsUndocked.MapToInt(), mPriv.lpmPositionState.IsUnclamped.MapToInt());
+                Log.Info.Emit("LPM pod location undocked:{0} unclamped:{1}", priv.lpmPositionState.IsUndocked.MapToInt(), priv.lpmPositionState.IsUnclamped.MapToInt());
             }
 
             {
@@ -876,11 +870,11 @@ namespace MosaicLib.PartsLib.Common.E084
                     InputsAreValid = (lpmState.E84State.Inputs != null),
                 };
 
-                bool pio1StateChanged = !mPriv.lastPIO1State.IsEqualTo(pio1State);
+                bool pio1StateChanged = !priv.lastPIO1State.IsEqualTo(pio1State);
 
                 if (pio1StateChanged)
                 {
-                    mPriv.pio1InputState = pio1State.inputs;
+                    priv.pio1InputState = pio1State.inputs;
 
                     if (!pio1State.OutputIsPending)
                     {
@@ -900,18 +894,18 @@ namespace MosaicLib.PartsLib.Common.E084
                     }
                 }
 
-                bool pio1InputPinsAreIdle = mPriv.pio1InputState.IsIdle;
+                bool pio1InputPinsAreIdle = priv.pio1InputState.IsIdle;
                 if (!pio1InputPinsAreIdle)
-                    mPriv.pio1ActivePinsAreIdle = false;
-                else if (mPriv.activePIO == PIOActiveSelect.PIO1 || DoesCurrentStatePermitPinsIdleReset())
-                    mPriv.pio1ActivePinsAreIdle = true;
+                    priv.pio1ActivePinsAreIdle = false;
+                else if (priv.activePIO == PIOActiveSelect.PIO1 || DoesCurrentStatePermitPinsIdleReset())
+                    priv.pio1ActivePinsAreIdle = true;
 
-                mPriv.lastPIO1State = pio1State;
+                priv.lastPIO1State = pio1State;
             }
 
             // PIO2 would use the same pattern as PIO1 if ILPMState supported 2 PIO interfaces - preserving form of C++ logic that supported dual PIO interfaces even though that code cannot currently be fully tested.
             {
-                mPriv.pio2ActivePinsAreIdle = true;
+                priv.pio2ActivePinsAreIdle = true;
             }
         }
 
@@ -924,11 +918,11 @@ namespace MosaicLib.PartsLib.Common.E084
                     Log.Info.Emit("Port Initialize Started");
 
                     // initialize is starting - update things
-                    if (mPriv.stateCode.IsSelected())
+                    if (priv.stateCode.IsSelected())
                         SetState(StateCode.Fault_TransferAborted, "Port was taken out of service (init) while PIO Select is active.");
-                    else if (mPriv.stateCode.IsLoading())
+                    else if (priv.stateCode.IsLoading())
                         SetState(StateCode.Fault_TransferAborted, "Port was taken out of service (init) during active Load transfer.");
-                    else if (mPriv.stateCode.IsUnloading())
+                    else if (priv.stateCode.IsUnloading())
                         SetState(StateCode.Fault_TransferAborted, "Port was taken out of service (init) during active Unload transfer.");
                     else
                         ServiceStateAndUpdateOutputs();// cause state to transition to NotAvail_PortIsInitializing
@@ -937,8 +931,8 @@ namespace MosaicLib.PartsLib.Common.E084
                 {
                     Log.Info.Emit("Port Initialize Complete");
 
-                    mPriv.portHasBeenInitialized = true;
-                    mPriv.lastPortInitializeSucceeded = true;
+                    priv.portHasBeenInitialized = true;
+                    priv.lastPortInitializeSucceeded = true;
 
                     // attempt to return to the correct inactive state., clear pioFailure alarm is we are no longer in a faulted state
                     string reason = "PDO Initialize is complete";
@@ -950,10 +944,10 @@ namespace MosaicLib.PartsLib.Common.E084
                     if (pioFailureANSource != null)
                     {
                         IANState pioFailureANState = pioFailureANSource.ANState;
-                        if (!mPriv.stateCode.IsFaulted() && pioFailureANState.IsSignaling)
+                        if (!priv.stateCode.IsFaulted() && pioFailureANState.IsSignaling)
                         {
                             string mesg = "PDO Initialize complete";
-                            Log.Info.Emit("PIOFailure alarm cleared after {0}, E84 state:{0}", mesg, mPriv.stateCode);
+                            Log.Info.Emit("PIOFailure alarm cleared after {0}, E84 state:{0}", mesg, priv.stateCode);
                             pioFailureANSource.Clear(mesg);
                         }
                     }
@@ -962,7 +956,7 @@ namespace MosaicLib.PartsLib.Common.E084
                 {
                     Log.Info.Emit("Port Initialize Failed");
 
-                    mPriv.lastPortInitializeSucceeded = false;
+                    priv.lastPortInitializeSucceeded = false;
 
                     string reason = string.Empty;
 
@@ -1001,9 +995,8 @@ namespace MosaicLib.PartsLib.Common.E084
 
             public Semi.E084.ActiveToPassivePinsState pio1InputState;
             public Semi.E084.ActiveToPassivePinsState pio2InputState;
-            ///Todo: rename to match case for properties (or remove)
-            public Semi.E084.ActiveToPassivePinBits pio1InputPinBits { get { return pio1InputState.PackedWord; } }
-            public Semi.E084.ActiveToPassivePinBits pio2InputPinBits { get { return pio2InputState.PackedWord; } }
+            public Semi.E084.ActiveToPassivePinBits Pio1InputPinBits { get { return pio1InputState.PackedWord; } }
+            public Semi.E084.ActiveToPassivePinBits Pio2InputPinBits { get { return pio2InputState.PackedWord; } }
 
             public Semi.E084.IOSupport.PassiveIOState lastPIO1State;
             public Semi.E084.IOSupport.PassiveIOState lastPIO2State;
@@ -1015,14 +1008,9 @@ namespace MosaicLib.PartsLib.Common.E084
             public Semi.E084.PassiveToActivePinBits pio2OutputPins;
 
             public bool pioFailureAcknowledgeAvailable;
-
-            ///Todo: remove the following two items (once the code has been refactored)
-            //public bool transferStartAck;
-            //public bool transferCompleteAck;
         }
 
-        ///Todo:  remove the leading m (et. al.)
-        private Priv mPriv = new Priv()
+        private Priv priv = new Priv()
         {
             portUsageContextInfo = new PortUsageContextInfo(),
             podSensorValues = new PodSensorValues(),
@@ -1050,14 +1038,14 @@ namespace MosaicLib.PartsLib.Common.E084
             //--------------------------------------
             // we do not do any fault checking until the port has been initialized the first time.
 
-            if (!mPriv.portHasBeenInitialized)
+            if (!priv.portHasBeenInitialized)
                 return false;
 
             //--------------------------------------
             // determine assertIoNotInstalled and act on it immediately as appropriate:
             //	the conditions that cause this transition always take priority
 
-            bool assertIoNotInstalled = (!mConfig.HwInstalled && mPriv.portUsageContextInfo.AMS == AMS.Automatic);
+            bool assertIoNotInstalled = (!config.HwInstalled && priv.portUsageContextInfo.AMS == AMS.Automatic);
 
             if (assertIoNotInstalled)
             {
@@ -1070,42 +1058,42 @@ namespace MosaicLib.PartsLib.Common.E084
             // determine assertIoFailure and act on it immediately as appropriate:
             //	the conditions that cause transition to the Fault_IOFailure state always take priority
 
-            double ioTimeoutPeriod = mConfig.Times.OutputReadbackMatchTimeout;
+            double ioTimeoutPeriod = config.Times.OutputReadbackMatchTimeout;
             bool ioTimeoutEnabled = (ioTimeoutPeriod != 0.0);
 
             bool pio1OutputMismatch = ioTimeoutEnabled
-                                    && (mPriv.lastPIO1State.outputs.PackedWord != mPriv.lastPIO1State.outputsReadback.PackedWord);
+                                    && (priv.lastPIO1State.outputs.PackedWord != priv.lastPIO1State.outputsReadback.PackedWord);
             bool pio2OutputMismatch = ioTimeoutEnabled
-                                    && (mPriv.lastPIO2State.outputs.PackedWord != mPriv.lastPIO2State.outputsReadback.PackedWord)
-                                    && mConfig.PIO2InterfacePresent;
+                                    && (priv.lastPIO2State.outputs.PackedWord != priv.lastPIO2State.outputsReadback.PackedWord)
+                                    && config.PIO2InterfacePresent;
 
             // reset the last output match timestamp every time both outputs match or throughout PDO initialize periods
-            if (!pio1OutputMismatch && !pio2OutputMismatch || mPriv.portUsageContextInfo.Initializing)
-                mPriv.lastOutputMatchTime = tsNow;
+            if (!pio1OutputMismatch && !pio2OutputMismatch || priv.portUsageContextInfo.Initializing)
+                priv.lastOutputMatchTime = tsNow;
 
-            double outputMismatchElapsedTime = (tsNow - mPriv.lastOutputMatchTime).TotalSeconds;
+            double outputMismatchElapsedTime = (tsNow - priv.lastOutputMatchTime).TotalSeconds;
 
             bool mismatchExceedsTimeLimit = (pio1OutputMismatch || pio2OutputMismatch)
-                                            && mPriv.timeInState >= ioTimeoutPeriod
-                                            && mPriv.activePIOOutputPinsElapsedTime >= ioTimeoutPeriod
+                                            && priv.timeInState >= ioTimeoutPeriod
+                                            && priv.activePIOOutputPinsElapsedTime >= ioTimeoutPeriod
                                             && outputMismatchElapsedTime >= ioTimeoutPeriod
                                             ;
 
             bool assertIoFailure = (pio1OutputMismatch || pio2OutputMismatch)
-                                    && (mismatchExceedsTimeLimit || mPriv.stateCode == StateCode.Fault_IOFailure)		// once in the Fault_IOFailure state, ignore the timers until the root cause is resolved.
-                                    && mPriv.portUsageContextInfo.LTS.IsInService()
-                                    && !mPriv.portUsageContextInfo.Initializing							// output mismatch is ignored during initialize periods.
+                                    && (mismatchExceedsTimeLimit || priv.stateCode == StateCode.Fault_IOFailure)		// once in the Fault_IOFailure state, ignore the timers until the root cause is resolved.
+                                    && priv.portUsageContextInfo.LTS.IsInService()
+                                    && !priv.portUsageContextInfo.Initializing							// output mismatch is ignored during initialize periods.
                                     ;
 
             if (assertIoFailure)
             {
                 // only produce a reason if we are not already in the required state
-                if (mPriv.stateCode != StateCode.Fault_IOFailure || mPriv.pioFailureAcknowledgeAvailable)
+                if (priv.stateCode != StateCode.Fault_IOFailure || priv.pioFailureAcknowledgeAvailable)
                 {
                     if (pio1OutputMismatch)
-                        reason = "PIO1 Output Failure (sp:{0} != rb:{1})".CheckedFormat(mPriv.lastPIO1State.outputs, mPriv.lastPIO1State.outputsReadback);
+                        reason = "PIO1 Output Failure (sp:{0} != rb:{1})".CheckedFormat(priv.lastPIO1State.outputs, priv.lastPIO1State.outputsReadback);
                     else if (pio2OutputMismatch)
-                        reason = "PIO2 Output Failure (sp:{0} != rb:{1})".CheckedFormat(mPriv.lastPIO2State.outputs, mPriv.lastPIO2State.outputsReadback);
+                        reason = "PIO2 Output Failure (sp:{0} != rb:{1})".CheckedFormat(priv.lastPIO2State.outputs, priv.lastPIO2State.outputsReadback);
                     else
                         reason = "Unknown IOFailure condition detected";
 
@@ -1117,10 +1105,10 @@ namespace MosaicLib.PartsLib.Common.E084
 
             //--------------------------------------
             // check for and handle light curtain interlock conditions while either interface is Selected
-            bool pio1LightCurtainInterlockTripped = (mConfig.LightCurtainInterlockInstalled && ((mPriv.pio1InputPinBits & LC_ILOCK) == 0));
-            bool pio2LightCurtainInterlockTripped = (mConfig.LightCurtainInterlockInstalled && mConfig.PIO2InterfacePresent && ((mPriv.pio2InputPinBits & LC_ILOCK) == 0));
+            bool pio1LightCurtainInterlockTripped = (config.LightCurtainInterlockInstalled && ((priv.Pio1InputPinBits & LC_ILOCK) == 0));
+            bool pio2LightCurtainInterlockTripped = (config.LightCurtainInterlockInstalled && config.PIO2InterfacePresent && ((priv.Pio2InputPinBits & LC_ILOCK) == 0));
 
-            if (mPriv.stateCode.IsSelected() || mPriv.stateCode.IsLoading() || mPriv.stateCode.IsUnloading())
+            if (priv.stateCode.IsSelected() || priv.stateCode.IsLoading() || priv.stateCode.IsUnloading())
             {
                 if (pio1LightCurtainInterlockTripped)
                 {
@@ -1137,13 +1125,13 @@ namespace MosaicLib.PartsLib.Common.E084
             //--------------------------------------
             // determin maintainInvalidSelect
 
-            bool pio1ValidActive = ((mPriv.pio1InputPinBits & VALID) != 0);
-            bool pio1cs0Active = ((mPriv.pio1InputPinBits & CS_0) != 0);
-            bool pio1cs1Active = ((mPriv.pio1InputPinBits & CS_1) != 0);
+            bool pio1ValidActive = ((priv.Pio1InputPinBits & VALID) != 0);
+            bool pio1cs0Active = ((priv.Pio1InputPinBits & CS_0) != 0);
+            bool pio1cs1Active = ((priv.Pio1InputPinBits & CS_1) != 0);
 
-            bool pio2ValidActive = mConfig.PIO2InterfacePresent && ((mPriv.pio2InputPinBits & VALID) != 0);
-            bool pio2cs0Active = mConfig.PIO2InterfacePresent && ((mPriv.pio2InputPinBits & CS_0) != 0);
-            bool pio2cs1Active = mConfig.PIO2InterfacePresent && ((mPriv.pio2InputPinBits & CS_1) != 0);
+            bool pio2ValidActive = config.PIO2InterfacePresent && ((priv.Pio2InputPinBits & VALID) != 0);
+            bool pio2cs0Active = config.PIO2InterfacePresent && ((priv.Pio2InputPinBits & CS_0) != 0);
+            bool pio2cs1Active = config.PIO2InterfacePresent && ((priv.Pio2InputPinBits & CS_1) != 0);
 
             bool maintainInvalidSelect = (pio1ValidActive || pio1cs0Active || pio1cs1Active)		// only relevant when we are already in the corresponding fault state
                                         || (pio2ValidActive || pio2cs0Active || pio2cs1Active);
@@ -1151,23 +1139,23 @@ namespace MosaicLib.PartsLib.Common.E084
             //--------------------------------------
             // determin maintainInvalidActivePins
 
-            bool maintainInvalidActivePins = (!mPriv.pio1ActivePinsAreIdle || !mPriv.pio2ActivePinsAreIdle);
+            bool maintainInvalidActivePins = (!priv.pio1ActivePinsAreIdle || !priv.pio2ActivePinsAreIdle);
 
             //--------------------------------------
             // determin maintainTransferAborted
 
-            bool maintainTransferAborted = (!mPriv.pio1ActivePinsAreIdle 
-                                            || !mPriv.pio2ActivePinsAreIdle 
-                                            || mPriv.portUsageContextInfo.E84LoadInProgress
-                                            || mPriv.portUsageContextInfo.E84UnloadInProgress
-                                            || mPriv.portUsageContextInfo.Error
+            bool maintainTransferAborted = (!priv.pio1ActivePinsAreIdle 
+                                            || !priv.pio2ActivePinsAreIdle 
+                                            || priv.portUsageContextInfo.E84LoadInProgress
+                                            || priv.portUsageContextInfo.E84UnloadInProgress
+                                            || priv.portUsageContextInfo.Error
                                             );
 
             //--------------------------------------
             // determin maintainTimeoutState
 
-            bool maintainTimeoutState = (!mPriv.pio1ActivePinsAreIdle 
-                                            || !mPriv.pio2ActivePinsAreIdle
+            bool maintainTimeoutState = (!priv.pio1ActivePinsAreIdle 
+                                            || !priv.pio2ActivePinsAreIdle
                                             );
 
             //--------------------------------------
@@ -1176,7 +1164,7 @@ namespace MosaicLib.PartsLib.Common.E084
 
             bool maintainCurrentState = false;
 
-            switch (mPriv.stateCode)
+            switch (priv.stateCode)
             {
                 case StateCode.Fault_InvalidSelect: maintainCurrentState = maintainInvalidSelect; break;
                 case StateCode.Fault_InvalidActivePins: maintainCurrentState = maintainInvalidActivePins; break;
@@ -1188,8 +1176,8 @@ namespace MosaicLib.PartsLib.Common.E084
                 case StateCode.Fault_TP4_Timeout:
                 case StateCode.Fault_TP5_Timeout:
                 case StateCode.Fault_TP6_Timeout: maintainCurrentState = maintainTimeoutState; break;
-                case StateCode.Fault_PodTransitionTimeout: maintainCurrentState = (maintainTimeoutState || !mPriv.podSensorValues.PresentPlaced.DoesPlacedEqualPresent()); break;
-                case StateCode.Fault_UnexpectedPodPlacement: maintainCurrentState = (maintainTimeoutState || !mPriv.podSensorValues.PresentPlaced.DoesPlacedEqualPresent()); break;
+                case StateCode.Fault_PodTransitionTimeout: maintainCurrentState = (maintainTimeoutState || !priv.podSensorValues.PresentPlaced.DoesPlacedEqualPresent()); break;
+                case StateCode.Fault_UnexpectedPodPlacement: maintainCurrentState = (maintainTimeoutState || !priv.podSensorValues.PresentPlaced.DoesPlacedEqualPresent()); break;
                 default: break;
             }
 
@@ -1197,7 +1185,7 @@ namespace MosaicLib.PartsLib.Common.E084
             //	was ever lost.  In that case we depend on the assert rules to reassert a fault
             //	condition if needed.
 
-            if (maintainCurrentState && !mPriv.pioFailureAcknowledgeAvailable)
+            if (maintainCurrentState && !priv.pioFailureAcknowledgeAvailable)
             {
                 return true;
             }
@@ -1221,17 +1209,17 @@ namespace MosaicLib.PartsLib.Common.E084
             bool pio1SelectedWhenPIO2WasAlreadyActive = false;
             bool pio2SelectedWhenPIO1WasAlreadyActive = false;
 
-            if (mPriv.stateCode.IsNotAvailable())
+            if (priv.stateCode.IsNotAvailable())
             {
                 pio1SelectedWhilePortNotAvailable = pio1Selected;
                 pio2SelectedWhilePortNotAvailable = pio2Selected;
             }
 
-            if (mPriv.activePIO == PIOActiveSelect.PIO1)
+            if (priv.activePIO == PIOActiveSelect.PIO1)
             {
                 pio2SelectedWhenPIO1WasAlreadyActive = pio2Selected;
             }
-            else if (mPriv.activePIO == PIOActiveSelect.PIO2)
+            else if (priv.activePIO == PIOActiveSelect.PIO2)
             {
                 pio1SelectedWhenPIO2WasAlreadyActive = pio1Selected;
             }
@@ -1265,12 +1253,12 @@ namespace MosaicLib.PartsLib.Common.E084
             //--------------------------------------
             // determin and implement invalid pod placement transition timeout
 
-            double podPlacementTimeSinceLastConfirmed = (tsNow - mPriv.lastConfirmedPPStateTime).TotalSeconds;
+            double podPlacementTimeSinceLastConfirmed = (tsNow - priv.lastConfirmedPPStateTime).TotalSeconds;
 
-            if (!mPriv.podSensorValues.PresentPlaced.DoesPlacedEqualPresent()
-                && (mPriv.stateCode.IsLoading() || mPriv.stateCode.IsUnloading())
-                && mConfig.Times.PodPlacementTransitionTimeout > 0
-                && podPlacementTimeSinceLastConfirmed > mConfig.Times.PodPlacementTransitionTimeout
+            if (!priv.podSensorValues.PresentPlaced.DoesPlacedEqualPresent()
+                && (priv.stateCode.IsLoading() || priv.stateCode.IsUnloading())
+                && config.Times.PodPlacementTransitionTimeout > 0
+                && podPlacementTimeSinceLastConfirmed > config.Times.PodPlacementTransitionTimeout
                 && podPlacementTimeSinceLastConfirmed > 1.0
                 )
             {
@@ -1281,8 +1269,8 @@ namespace MosaicLib.PartsLib.Common.E084
 
                 reason = "PodPlacementTransitionTimeout: placement transition has used {0:f2} sec, limit:{1:f2} sec, state:'{2}'".CheckedFormat(
                             podPlacementTimeSinceLastConfirmed,
-                            mConfig.Times.PodPlacementTransitionTimeout,
-                            mPriv.podSensorValues.PresentPlaced);
+                            config.Times.PodPlacementTransitionTimeout,
+                            priv.podSensorValues.PresentPlaced);
 
                 SetState(StateCode.Fault_PodTransitionTimeout, reason);
 
@@ -1292,18 +1280,18 @@ namespace MosaicLib.PartsLib.Common.E084
             //--------------------------------------
             // detect conditions for Fault_UnexpectedPodPlacement and transition there when appropriate
 
-            if (mConfig.EnableUnexpectedPodPlacementFault)
+            if (config.EnableUnexpectedPodPlacementFault)
             {
                 // the following switch is an opt in for states that can detect and react to unexpected pod placement conditions
-                switch (mPriv.stateCode)
+                switch (priv.stateCode)
                 {
                     case StateCode.Selected:
                     case StateCode.SelectedAndLoadable:
                     case StateCode.RequestStartLoad:
                     case StateCode.ReadyToStartLoad:
-                        if (!mPriv.podSensorValues.PresentPlaced.IsNeitherPresentNorPlaced() || mPriv.portUsageContextInfo.APresentOrPlacementAlarmIsActive)
+                        if (!priv.podSensorValues.PresentPlaced.IsNeitherPresentNorPlaced() || priv.portUsageContextInfo.APresentOrPlacementAlarmIsActive)
                         {
-                            reason = "Unexpected PodPlacement state '{0}'{1} detected".CheckedFormat(mPriv.podSensorValues.PresentPlaced, (mPriv.portUsageContextInfo.APresentOrPlacementAlarmIsActive ? " PPAlarm" : ""));
+                            reason = "Unexpected PodPlacement state '{0}'{1} detected".CheckedFormat(priv.podSensorValues.PresentPlaced, (priv.portUsageContextInfo.APresentOrPlacementAlarmIsActive ? " PPAlarm" : ""));
                             SetState(StateCode.Fault_UnexpectedPodPlacement, reason);
 
                             return true;
@@ -1312,9 +1300,9 @@ namespace MosaicLib.PartsLib.Common.E084
                     case StateCode.SelectedAndUnloadable:
                     case StateCode.RequestStartUnload:
                     case StateCode.ReadyToStartUnload:
-                        if (!mPriv.podSensorValues.PresentPlaced.IsProperlyPlaced() || mPriv.portUsageContextInfo.APresentOrPlacementAlarmIsActive)
+                        if (!priv.podSensorValues.PresentPlaced.IsProperlyPlaced() || priv.portUsageContextInfo.APresentOrPlacementAlarmIsActive)
                         {
-                            reason = "Unexpected PodPlacement state '{0}'{1} detected".CheckedFormat(mPriv.podSensorValues.PresentPlaced, (mPriv.portUsageContextInfo.APresentOrPlacementAlarmIsActive ? " PPAlarm" : ""));
+                            reason = "Unexpected PodPlacement state '{0}'{1} detected".CheckedFormat(priv.podSensorValues.PresentPlaced, (priv.portUsageContextInfo.APresentOrPlacementAlarmIsActive ? " PPAlarm" : ""));
                             SetState(StateCode.Fault_UnexpectedPodPlacement, reason);
 
                             return true;
@@ -1330,7 +1318,7 @@ namespace MosaicLib.PartsLib.Common.E084
 
             bool assertInvalidActivePins = false;
 
-            if (mPriv.stateCode.IsFaulted())
+            if (priv.stateCode.IsFaulted())
             {
                 // the only pin transitions that are tracked in fault states is to require that
                 //	all active pins are idle.
@@ -1339,9 +1327,9 @@ namespace MosaicLib.PartsLib.Common.E084
 
                 if (assertInvalidActivePins)
                 {
-                    if (!mPriv.pio1ActivePinsAreIdle)
+                    if (!priv.pio1ActivePinsAreIdle)
                         reason = "PIO1 Active pins are not Idle";
-                    else if (!mPriv.pio2ActivePinsAreIdle)
+                    else if (!priv.pio2ActivePinsAreIdle)
                         reason = "PIO2 Active pins are not Idle";
                     else
                         reason = "Unknown InvalidActivePin condition detected";
@@ -1352,47 +1340,47 @@ namespace MosaicLib.PartsLib.Common.E084
                 // For all non fault states we test and enforce that all active side pin state changes are considered valid
                 //	for the current state.  This includes testing both PIO1 and PIO2 based on which is selected at any given time.
 
-                Semi.E084.ActiveToPassivePinBits ignorePins = GetE084IgnoreActivePinsByState(mPriv.stateCode);
-                Semi.E084.ActiveToPassivePinBits deltaPins = GetE084ActiveChangablePinsByState(mPriv.stateCode);
-                Semi.E084.ActiveToPassivePinBits expectPins = GetE084ActiveExpectedPinsByState(mPriv.stateCode);
+                Semi.E084.ActiveToPassivePinBits ignorePins = GetE084IgnoreActivePinsByState(priv.stateCode);
+                Semi.E084.ActiveToPassivePinBits deltaPins = GetE084ActiveChangablePinsByState(priv.stateCode);
+                Semi.E084.ActiveToPassivePinBits expectPins = GetE084ActiveExpectedPinsByState(priv.stateCode);
                 Semi.E084.ActiveToPassivePinBits checkPins = ~(deltaPins | ignorePins);
                 Semi.E084.ActiveToPassivePinBits matchValue = checkPins & expectPins;
                 Semi.E084.ActiveToPassivePinBits checkPins2 = (CS_0 | CS_1);
                 Semi.E084.ActiveToPassivePinBits matchValue2 = Semi.E084.ActiveToPassivePinBits.None;
 
-                switch (mPriv.activePIO)
+                switch (priv.activePIO)
                 {
                     case PIOActiveSelect.Neither:
-                        if ((mPriv.pio1InputPinBits & checkPins) != matchValue)
+                        if ((priv.Pio1InputPinBits & checkPins) != matchValue)
                         {
                             assertInvalidActivePins = true;
                             reason = "UnexpectedPIO1ActivePinStateChange_NoSel";
                         }
-                        else if (mConfig.PIO2InterfacePresent && (mPriv.pio2InputPinBits & checkPins) != matchValue)
+                        else if (config.PIO2InterfacePresent && (priv.Pio2InputPinBits & checkPins) != matchValue)
                         {
                             assertInvalidActivePins = true;
                             reason = "UnexpectedPIO2ActivePinStateChange_NoSel";
                         }
                         break;
                     case PIOActiveSelect.PIO1:
-                        if ((mPriv.pio1InputPinBits & checkPins) != matchValue)
+                        if ((priv.Pio1InputPinBits & checkPins) != matchValue)
                         {
                             assertInvalidActivePins = true;
                             reason = "UnexpectedPIO1ActivePinStateChange";
                         }
-                        else if (mConfig.PIO2InterfacePresent && (mPriv.pio2InputPinBits & checkPins2) != matchValue2)
+                        else if (config.PIO2InterfacePresent && (priv.Pio2InputPinBits & checkPins2) != matchValue2)
                         {
                             assertInvalidActivePins = true;
                             reason = "UnexpectedPIO2ActivePinStateChangeWhilePIO1InUse";
                         }
                         break;
                     case PIOActiveSelect.PIO2:
-                        if ((mPriv.pio2InputPinBits & checkPins) != matchValue)
+                        if ((priv.Pio2InputPinBits & checkPins) != matchValue)
                         {
                             assertInvalidActivePins = true;
                             reason = "UnexpectedPIO2ActivePinStateChange";
                         }
-                        else if ((mPriv.pio1InputPinBits & checkPins2) != matchValue2)
+                        else if ((priv.Pio1InputPinBits & checkPins2) != matchValue2)
                         {
                             assertInvalidActivePins = true;
                             reason = "UnexpectedPIO1ActivePinStateChangeWhilePIO2InUse";
@@ -1413,7 +1401,7 @@ namespace MosaicLib.PartsLib.Common.E084
 
             bool mustBeLoading = false, mustBeUnloading = false, mayBeLoading = false, mayBeUnloading = false;
 
-            switch (mPriv.stateCode)
+            switch (priv.stateCode)
             {
                 case StateCode.RequestStartLoad: mayBeLoading = true; break;
                 case StateCode.ReadyToStartLoad: mustBeLoading = true; break;
@@ -1434,17 +1422,17 @@ namespace MosaicLib.PartsLib.Common.E084
                 default: break;
             }
 
-            if (mPriv.stateCode.IsFaulted() || mPriv.stateCode.IsNotAvailable())
+            if (priv.stateCode.IsFaulted() || priv.stateCode.IsNotAvailable())
             {
                 // nothing to do here
             }
-            else if (mPriv.portUsageContextInfo.E84LoadInProgress && !(mayBeLoading || mustBeLoading))
+            else if (priv.portUsageContextInfo.E84LoadInProgress && !(mayBeLoading || mustBeLoading))
                 SetState(StateCode.Fault_TransferAborted, "External E84LoadInProgress asserted unexpectedly");
-            else if (!mPriv.portUsageContextInfo.E84LoadInProgress && mustBeLoading)
+            else if (!priv.portUsageContextInfo.E84LoadInProgress && mustBeLoading)
                 SetState(StateCode.Fault_TransferAborted, "External E84LoadInProgress cleared unexpectedly");
-            else if (mPriv.portUsageContextInfo.E84UnloadInProgress && !(mayBeUnloading || mustBeUnloading))
+            else if (priv.portUsageContextInfo.E84UnloadInProgress && !(mayBeUnloading || mustBeUnloading))
                 SetState(StateCode.Fault_TransferAborted, "External E84UnloadInProgress asserted unexpectedly");
-            else if (!mPriv.portUsageContextInfo.E84UnloadInProgress && mustBeUnloading)
+            else if (!priv.portUsageContextInfo.E84UnloadInProgress && mustBeUnloading)
                 SetState(StateCode.Fault_TransferAborted, "External E84UnloadInProgress cleared unexpectedly");
 
             //--------------------------------------
@@ -1461,29 +1449,29 @@ namespace MosaicLib.PartsLib.Common.E084
             //--------------------------------------
             // we do not do any fault checking until the port has been initialized the first time.
 
-            if (!mPriv.portHasBeenInitialized)
+            if (!priv.portHasBeenInitialized)
                 return false;
 
             //--------------------------------------
             // implement fault state alarm recovery logic
             //	NOTE: at this point there are no faults that need to be maintained or asserted
 
-            if (mPriv.stateCode.IsFaulted())
+            if (priv.stateCode.IsFaulted())
             {
                 bool blockAutoRecoveryInThisState = false;
 
-                switch (mPriv.stateCode)
+                switch (priv.stateCode)
                 {
-                    case StateCode.Fault_TransferAbortedByInterlock: blockAutoRecoveryInThisState = !mConfig.PermitAutoRecoveryInTransferAbortedByInterlockState; break;
-                    case StateCode.Fault_TP1_Timeout: blockAutoRecoveryInThisState = !mConfig.PermitAutoRecoveryInTP1; break;
-                    case StateCode.Fault_TP2_Timeout: blockAutoRecoveryInThisState = !mConfig.PermitAutoRecoveryInTP2; break;
-                    case StateCode.Fault_TP3_Timeout: blockAutoRecoveryInThisState = !mConfig.PermitAutoRecoveryInTP3; break;
-                    case StateCode.Fault_TP4_Timeout: blockAutoRecoveryInThisState = !mConfig.PermitAutoRecoveryInTP4; break;
-                    case StateCode.Fault_TP5_Timeout: blockAutoRecoveryInThisState = !mConfig.PermitAutoRecoveryInTP5; break;
+                    case StateCode.Fault_TransferAbortedByInterlock: blockAutoRecoveryInThisState = !config.PermitAutoRecoveryInTransferAbortedByInterlockState; break;
+                    case StateCode.Fault_TP1_Timeout: blockAutoRecoveryInThisState = !config.PermitAutoRecoveryInTP1; break;
+                    case StateCode.Fault_TP2_Timeout: blockAutoRecoveryInThisState = !config.PermitAutoRecoveryInTP2; break;
+                    case StateCode.Fault_TP3_Timeout: blockAutoRecoveryInThisState = !config.PermitAutoRecoveryInTP3; break;
+                    case StateCode.Fault_TP4_Timeout: blockAutoRecoveryInThisState = !config.PermitAutoRecoveryInTP4; break;
+                    case StateCode.Fault_TP5_Timeout: blockAutoRecoveryInThisState = !config.PermitAutoRecoveryInTP5; break;
                     default: break;
                 }
 
-                if (mConfig.EnableAutoRecovery && !blockAutoRecoveryInThisState)
+                if (config.EnableAutoRecovery && !blockAutoRecoveryInThisState)
                 {
                     reason = "AutoRecovery Activated: Fault condition(s) have been resolved";
 
@@ -1491,11 +1479,11 @@ namespace MosaicLib.PartsLib.Common.E084
 
                     SetState(recoveredState, reason);
                 }
-                else if (!mPriv.pioFailureAcknowledgeAvailable)
+                else if (!priv.pioFailureAcknowledgeAvailable)
                 {
-                    mPriv.pioFailureAcknowledgeAvailable = true;
+                    priv.pioFailureAcknowledgeAvailable = true;
 
-                    SetState(mPriv.stateCode, "Recovery Available: Fault condition(s) have been resolved", autoClearPIOFailureRecovery: false, logFaultAsWarning: false);
+                    SetState(priv.stateCode, "Recovery Available: Fault condition(s) have been resolved", autoClearPIOFailureRecovery: false, logFaultAsWarning: false);
                 }
 
                 if (pioFailureANSource != null)
@@ -1508,7 +1496,6 @@ namespace MosaicLib.PartsLib.Common.E084
                         reason = "PIOFailureAlarm has been Acknowledged";
 
                         pioFailureANSource.NoteActionCompleted(reason);
-                        ///Todo: confirm that SetState will clear the alarm (if needed)
 
                         StateCode recoveredState = GetCurrentInactiveState(ref reason);
 
@@ -1516,7 +1503,7 @@ namespace MosaicLib.PartsLib.Common.E084
                     }
                 }
 
-                if (mPriv.portUsageContextInfo.Initializing)
+                if (priv.portUsageContextInfo.Initializing)
                 {
                     reason = "PDO is initializing";
 
@@ -1524,9 +1511,9 @@ namespace MosaicLib.PartsLib.Common.E084
 
                     SetState(recoveredState, reason);		// this will clear the alarm for auto clear cases.
 
-                    if (!mPriv.stateCode.IsFaulted() && pioFailureANSource != null && pioFailureANSource.ANState.IsSignaling)
+                    if (!priv.stateCode.IsFaulted() && pioFailureANSource != null && pioFailureANSource.ANState.IsSignaling)
                     {
-                        Log.Info.Emit("PIOFailure alarm cleared during PDO Initialize complete, from E84 state:{0}", mPriv.stateCode);
+                        Log.Info.Emit("PIOFailure alarm cleared during PDO Initialize complete, from E84 state:{0}", priv.stateCode);
                         pioFailureANSource.Clear(reason);
                     }
                 }
@@ -1543,9 +1530,9 @@ namespace MosaicLib.PartsLib.Common.E084
             //	and state is not IsNotAvailable (NotAvail_...)
             //	and state is not Initial then leave the method without making any additional changes.
 
-            if (!mPriv.stateCode.IsAvailable()
-                && !mPriv.stateCode.IsNotAvailable()
-                && mPriv.stateCode != StateCode.Initial)
+            if (!priv.stateCode.IsAvailable()
+                && !priv.stateCode.IsNotAvailable()
+                && priv.stateCode != StateCode.Initial)
             {
                 return false;
             }
@@ -1556,7 +1543,7 @@ namespace MosaicLib.PartsLib.Common.E084
             string reason = String.Empty;       // just take the reason from the current inactive state's reason.
             StateCode newInactiveState = GetCurrentInactiveState(ref reason);
 
-            if (mPriv.stateCode != newInactiveState)
+            if (priv.stateCode != newInactiveState)
             {
                 SetState(newInactiveState, reason);
                 return true;
@@ -1569,12 +1556,12 @@ namespace MosaicLib.PartsLib.Common.E084
             Semi.E084.ActiveToPassivePinBits ignorePins = GetE084IgnoreActivePinsByState(StateCode.Selected);
             Semi.E084.ActiveToPassivePinBits nextStateActivePinBits = GetE084ActiveExpectedPinsByState(StateCode.Selected) & ~ignorePins;
 
-            if ((mPriv.pio1InputPinBits & ~ignorePins) == nextStateActivePinBits)
+            if ((priv.Pio1InputPinBits & ~ignorePins) == nextStateActivePinBits)
             {
                 SetState(StateCode.Selected, "PIO1StartingSelectHandshake");
                 return false;	// allow caller service loop to advance to next item in service loop (allow dispatch to Selected sub state in one pass rather than 2
             }
-            else if (mConfig.PIO2InterfacePresent && (mPriv.pio2InputPinBits & ~ignorePins) == (nextStateActivePinBits & ~ignorePins))
+            else if (config.PIO2InterfacePresent && (priv.Pio2InputPinBits & ~ignorePins) == (nextStateActivePinBits & ~ignorePins))
             {
                 SetState(StateCode.Selected, "PIO2StartingSelectHandshake");
                 return false;	// allow caller service loop to advance to next item in service loop (allow dispatch to Selected sub state in one pass rather than 2
@@ -1600,24 +1587,24 @@ namespace MosaicLib.PartsLib.Common.E084
             bool activePinBitsAreIdle = false;
             bool passiveOutputPinsMatchReabacks = false;
 
-            switch (mPriv.activePIO)
+            switch (priv.activePIO)
             {
                 default:
                 case PIOActiveSelect.Neither:
                     break;
                 case PIOActiveSelect.PIO1:
-                    activePinBitsNow = mPriv.pio1InputPinBits;
-                    activePinBitsAreIdle = mPriv.pio1ActivePinsAreIdle;
-                    passiveOutputPinsMatchReabacks = (mPriv.pio1OutputPins == mPriv.lastPIO1State.outputsReadback.PackedWord);
+                    activePinBitsNow = priv.Pio1InputPinBits;
+                    activePinBitsAreIdle = priv.pio1ActivePinsAreIdle;
+                    passiveOutputPinsMatchReabacks = (priv.pio1OutputPins == priv.lastPIO1State.outputsReadback.PackedWord);
                     break;
                 case PIOActiveSelect.PIO2:
-                    activePinBitsNow = mPriv.pio2InputPinBits;
-                    activePinBitsAreIdle = mPriv.pio2ActivePinsAreIdle;
-                    passiveOutputPinsMatchReabacks = (mPriv.pio2OutputPins == mPriv.lastPIO2State.outputsReadback.PackedWord);
+                    activePinBitsNow = priv.Pio2InputPinBits;
+                    activePinBitsAreIdle = priv.pio2ActivePinsAreIdle;
+                    passiveOutputPinsMatchReabacks = (priv.pio2OutputPins == priv.lastPIO2State.outputsReadback.PackedWord);
                     break;
             }
 
-            switch (mPriv.stateCode)
+            switch (priv.stateCode)
             {
                 case StateCode.Selected:
                     stateCode = GetCurrentInactiveState(ref reason);
@@ -1626,12 +1613,12 @@ namespace MosaicLib.PartsLib.Common.E084
                         nextState1 = StateCode.Fault_TransferAborted;
                         transitionReason1 = "SelectAborted:" + reason;
                     }
-                    else if (mPriv.portUsageContextInfo.LTS == LTS.ReadyToLoad)
+                    else if (priv.portUsageContextInfo.LTS == LTS.ReadyToLoad)
                     {
                         nextState1 = StateCode.SelectedAndLoadable;
                         transitionReason1 = "SelectedAndReadyToLoad";
                     }
-                    else if (mPriv.portUsageContextInfo.LTS == LTS.ReadyToUnload)
+                    else if (priv.portUsageContextInfo.LTS == LTS.ReadyToUnload)
                     {
                         nextState1 = StateCode.SelectedAndUnloadable;
                         transitionReason1 = "SelectedAndReadyToUnload";
@@ -1656,10 +1643,10 @@ namespace MosaicLib.PartsLib.Common.E084
                     break;
 
                 case StateCode.RequestStartLoad:        // TR_REQ has been asserted with L_REQ on
-                    if (mPriv.portUsageContextInfo.E84LoadInProgress)
+                    if (priv.portUsageContextInfo.E84LoadInProgress)
                     {
                         // confirm that the load port is undocked and unclamped - it should not have been R2L without already being in this position.
-                        if (mPriv.lpmPositionState.IsUndocked && mPriv.lpmPositionState.IsUnclamped)
+                        if (priv.lpmPositionState.IsUndocked && priv.lpmPositionState.IsUnclamped)
                         {
                             nextState1 = StateCode.ReadyToStartLoad;
                             transitionReason1 = "TR_REQ,ReadyToLoad";
@@ -1678,7 +1665,7 @@ namespace MosaicLib.PartsLib.Common.E084
                     transitionReason2 = "LoadStartAborted:-VALID,-CS_0,-TR_REQ";
                     break;
                 case StateCode.Loading:
-                    if (mPriv.podSensorValues.PresentPlaced.IsProperlyPlaced())
+                    if (priv.podSensorValues.PresentPlaced.IsProperlyPlaced())
                     {
                         nextState1 = StateCode.LoadingAndPodPresent;
                         transitionReason1 = "PodIsProperlyPlaced";
@@ -1697,7 +1684,7 @@ namespace MosaicLib.PartsLib.Common.E084
                     transitionReason1 = "-COMPT,-VALID,-CS_0";
                     break;
                 case StateCode.LoadCompleted:
-                    if (activePinBitsAreIdle && !mPriv.portUsageContextInfo.E84LoadInProgress)
+                    if (activePinBitsAreIdle && !priv.portUsageContextInfo.E84LoadInProgress)
                     {
                         nextState1 = StateCode.Available;					// will be replaced with CurrentInactiveState
                         transitionReason1 = "LoadHandshakeCompletedAndAcknowledgedByPort";
@@ -1705,7 +1692,7 @@ namespace MosaicLib.PartsLib.Common.E084
                     break;
 
                 case StateCode.RequestStartUnload:        // TR_REQ has been asserted with U_REQ on.  Wait for E84UnloadInProgress and undocked and unclamped
-                    if (mPriv.portUsageContextInfo.E84UnloadInProgress && mPriv.lpmPositionState.IsUndocked && mPriv.lpmPositionState.IsUnclamped)
+                    if (priv.portUsageContextInfo.E84UnloadInProgress && priv.lpmPositionState.IsUndocked && priv.lpmPositionState.IsUnclamped)
                     {
                         nextState1 = StateCode.ReadyToStartUnload;
                         transitionReason1 = "TR_REQ,ReadyToUnload";
@@ -1718,7 +1705,7 @@ namespace MosaicLib.PartsLib.Common.E084
                     transitionReason2 = "UnloadStartAborted:-VALID,-CS_0,-TR_REQ";
                     break;
                 case StateCode.Unloading:
-                    if (mPriv.podSensorValues.PresentPlaced.IsNeitherPresentNorPlaced())
+                    if (priv.podSensorValues.PresentPlaced.IsNeitherPresentNorPlaced())
                     {
                         nextState1 = StateCode.UnloadingAndPodRemoved;
                         transitionReason1 = "PodIsNeitherPresentNorPlaced";
@@ -1737,7 +1724,7 @@ namespace MosaicLib.PartsLib.Common.E084
                     transitionReason1 = "-COMPT,-VALID,-CS_0";
                     break;
                 case StateCode.UnloadCompleted:
-                    if (activePinBitsAreIdle && !mPriv.portUsageContextInfo.E84UnloadInProgress)
+                    if (activePinBitsAreIdle && !priv.portUsageContextInfo.E84UnloadInProgress)
                     {
                         nextState1 = StateCode.Available;					// will be replaced with CurrentInactiveState
                         transitionReason1 = "UnloadHandshakeCompletedAndAcknowledgedByPort";
@@ -1766,13 +1753,13 @@ namespace MosaicLib.PartsLib.Common.E084
             //	correct ones for one of the nextExpectedStates and no other unexpected pins
             //	changed states then take the transition.
 
-            if (mPriv.activePIO == PIOActiveSelect.Neither)
+            if (priv.activePIO == PIOActiveSelect.Neither)
                 return false;
 
             if (nextExpectedState1 == StateCode.Available)
                 nextExpectedState1 = GetCurrentInactiveState(ref transitionReason1);
 
-            Semi.E084.ActiveToPassivePinBits changableActivePinBits = GetE084ActiveChangablePinsByState(mPriv.stateCode);
+            Semi.E084.ActiveToPassivePinBits changableActivePinBits = GetE084ActiveChangablePinsByState(priv.stateCode);
             bool isCONTchangeable = ((changableActivePinBits & CONT) != 0);
 
             if (nextExpectedState1 != StateCode.Initial)
@@ -1817,14 +1804,14 @@ namespace MosaicLib.PartsLib.Common.E084
             double timeLimit = 0.0;
             StateCode timeoutTargetState = StateCode.Initial;
 
-            switch (mPriv.stateCode)
+            switch (priv.stateCode)
             {
                 // TP1 timeout states
                 case StateCode.SelectedAndLoadable:
                 case StateCode.SelectedAndUnloadable:
                     timeoutName = "TP1";
                     timeoutTargetState = StateCode.Fault_TP1_Timeout;
-                    timeLimit = mConfig.Times.TP1;
+                    timeLimit = config.Times.TP1;
                     break;
 
                 //  T2 timeout states
@@ -1832,7 +1819,7 @@ namespace MosaicLib.PartsLib.Common.E084
                 case StateCode.ReadyToStartUnload:
                     timeoutName = "TP2";
                     timeoutTargetState = StateCode.Fault_TP2_Timeout;
-                    timeLimit = mConfig.Times.TP2;
+                    timeLimit = config.Times.TP2;
                     break;
 
                 // TP3 timeout states
@@ -1840,7 +1827,7 @@ namespace MosaicLib.PartsLib.Common.E084
                 case StateCode.Unloading:
                     timeoutName = "TP3";
                     timeoutTargetState = StateCode.Fault_TP3_Timeout;
-                    timeLimit = mConfig.Times.TP3;
+                    timeLimit = config.Times.TP3;
                     break;
 
                 // TP4 timeout states
@@ -1848,7 +1835,7 @@ namespace MosaicLib.PartsLib.Common.E084
                 case StateCode.UnloadingAndPodRemoved:
                     timeoutName = "TP4";
                     timeoutTargetState = StateCode.Fault_TP4_Timeout;
-                    timeLimit = mConfig.Times.TP4;
+                    timeLimit = config.Times.TP4;
                     break;
 
                 // TP5 timeout states
@@ -1856,21 +1843,21 @@ namespace MosaicLib.PartsLib.Common.E084
                 case StateCode.UnloadTransferDoneWaitReleased:
                     timeoutName = "TP5";
                     timeoutTargetState = StateCode.Fault_TP5_Timeout;
-                    timeLimit = mConfig.Times.TP5;
+                    timeLimit = config.Times.TP5;
                     break;
 
                 // TP6 timeout states
                 case StateCode.AvailableContinuous:
                     timeoutName = "TP6";
                     timeoutTargetState = StateCode.Fault_TP6_Timeout;
-                    timeLimit = mConfig.Times.TP6;
+                    timeLimit = config.Times.TP6;
                     break;
 
                 default:
                     return false;
             }
 
-            if (mPriv.timeInState > timeLimit)
+            if (priv.timeInState > timeLimit)
             {
                 SetState(timeoutTargetState, "{0} Timeout detected (timer={1:f2})".CheckedFormat(timeoutName, timeLimit));
                 return true;
@@ -1889,18 +1876,18 @@ namespace MosaicLib.PartsLib.Common.E084
             //	states that cause changes in the activePIO selection indication.
 
             if (newStateCode.IsNotAvailable())
-                mPriv.activePIO = PIOActiveSelect.Neither;
+                priv.activePIO = PIOActiveSelect.Neither;
             else if (newStateCode.IsAvailable(false))
-                mPriv.activePIO = PIOActiveSelect.Neither;
+                priv.activePIO = PIOActiveSelect.Neither;
             else if (newStateCode == StateCode.Selected)
             {
-                if (mPriv.pio2ActivePinsAreIdle && !mPriv.pio1ActivePinsAreIdle)
-                    mPriv.activePIO = PIOActiveSelect.PIO1;
-                else if (mConfig.PIO2InterfacePresent && !mPriv.pio2ActivePinsAreIdle && mPriv.pio1ActivePinsAreIdle)
-                    mPriv.activePIO = PIOActiveSelect.PIO2;
+                if (priv.pio2ActivePinsAreIdle && !priv.pio1ActivePinsAreIdle)
+                    priv.activePIO = PIOActiveSelect.PIO1;
+                else if (config.PIO2InterfacePresent && !priv.pio2ActivePinsAreIdle && priv.pio1ActivePinsAreIdle)
+                    priv.activePIO = PIOActiveSelect.PIO2;
                 else
                 {
-                    mPriv.activePIO = PIOActiveSelect.Neither;
+                    priv.activePIO = PIOActiveSelect.Neither;
                     newStateCode = StateCode.Fault_InvalidSelect;
                     reason = "{0}:Select pio determination failed".CheckedFormat(reason);
                 }
@@ -1908,14 +1895,14 @@ namespace MosaicLib.PartsLib.Common.E084
 
             UpdateOutputs(newStateCode);
 
-            if (mPriv.stateCode != newStateCode || (!reason.IsNullOrEmpty() && mPriv.stateCodeReason != reason))
+            if (priv.stateCode != newStateCode || (!reason.IsNullOrEmpty() && priv.stateCodeReason != reason))
             {
-                StateCode prevState = mPriv.stateCode;
+                StateCode prevState = priv.stateCode;
 
-                mPriv.stateCode = newStateCode;
-                mPriv.stateCodeTime = QpcTimeStamp.Now;
-                mPriv.stateCodeReason = reason;
-                mPriv.stateCodeContinuousBit = GetContinuousBit();
+                priv.stateCode = newStateCode;
+                priv.stateCodeTime = QpcTimeStamp.Now;
+                priv.stateCodeReason = reason;
+                priv.stateCodeContinuousBit = GetContinuousBit();
 
                 Logging.IMesgEmitter emitter = (newStateCode.IsFaulted() && logFaultAsWarning) ? Log.Warning : Log.Info;
 
@@ -1923,15 +1910,15 @@ namespace MosaicLib.PartsLib.Common.E084
             }
 
             // check if the alarm needs to be posted or cleared (based on the target StateCode)
-            bool pioIsFaulted = mPriv.stateCode.IsFaulted();
+            bool pioIsFaulted = priv.stateCode.IsFaulted();
 
             if (autoClearPIOFailureRecovery)
-                mPriv.pioFailureAcknowledgeAvailable = false;		// this may only be set while remaining in a single state.
+                priv.pioFailureAcknowledgeAvailable = false;		// this may only be set while remaining in a single state.
 
             if (pioFailureANSource != null)
             {
                 if (pioIsFaulted)
-                    pioFailureANSource.Post(new NamedValueSet() { { "Ack", mPriv.pioFailureAcknowledgeAvailable } }, reason);
+                    pioFailureANSource.Post(new NamedValueSet() { { "Ack", priv.pioFailureAcknowledgeAvailable } }, reason);
                 else
                     pioFailureANSource.Clear(reason);
             }
@@ -1944,36 +1931,36 @@ namespace MosaicLib.PartsLib.Common.E084
 
             Semi.E084.PassiveToActivePinBits statePinBits = GetE084PassiveOutputPackedWordByState(state);
 
-            if (mPriv.activePIOOutputPins != statePinBits)
+            if (priv.activePIOOutputPins != statePinBits)
             {
-                mPriv.activePIOOutputPins = statePinBits;
-                mPriv.activePIOOutputPinsTimeStamp = QpcTimeStamp.Now;
-                mPriv.activePIOOutputPinsElapsedTime = 0.0;
+                priv.activePIOOutputPins = statePinBits;
+                priv.activePIOOutputPinsTimeStamp = QpcTimeStamp.Now;
+                priv.activePIOOutputPinsElapsedTime = 0.0;
             }
 
-            switch (mPriv.activePIO)
+            switch (priv.activePIO)
             {
                 case PIOActiveSelect.Neither:
-                    mPriv.pio2OutputPins = mPriv.activePIOOutputPins;
-                    mPriv.pio1OutputPins = mPriv.activePIOOutputPins;
-                    mPriv.pio2StateCode = state;
-                    mPriv.pio1StateCode = state;
+                    priv.pio2OutputPins = priv.activePIOOutputPins;
+                    priv.pio1OutputPins = priv.activePIOOutputPins;
+                    priv.pio2StateCode = state;
+                    priv.pio1StateCode = state;
                     break;
 
                 case PIOActiveSelect.PIO1:
-                    mPriv.pio1OutputPins = mPriv.activePIOOutputPins;
-                    mPriv.pio1StateCode = state;
+                    priv.pio1OutputPins = priv.activePIOOutputPins;
+                    priv.pio1StateCode = state;
 
-                    mPriv.pio2StateCode = (mPriv.pio2ActivePinsAreIdle ? StateCode.NotAvail_TransferBlocked : StateCode.Fault_InvalidActivePins);
-                    mPriv.pio2OutputPins = GetE084PassiveOutputPackedWordByState(mPriv.pio2StateCode);
+                    priv.pio2StateCode = (priv.pio2ActivePinsAreIdle ? StateCode.NotAvail_TransferBlocked : StateCode.Fault_InvalidActivePins);
+                    priv.pio2OutputPins = GetE084PassiveOutputPackedWordByState(priv.pio2StateCode);
                     break;
 
                 case PIOActiveSelect.PIO2:
-                    mPriv.pio2OutputPins = mPriv.activePIOOutputPins;
-                    mPriv.pio2StateCode = state;
+                    priv.pio2OutputPins = priv.activePIOOutputPins;
+                    priv.pio2StateCode = state;
 
-                    mPriv.pio1StateCode = (mPriv.pio1ActivePinsAreIdle ? StateCode.NotAvail_TransferBlocked : StateCode.Fault_InvalidActivePins);
-                    mPriv.pio1OutputPins = GetE084PassiveOutputPackedWordByState(mPriv.pio1StateCode);
+                    priv.pio1StateCode = (priv.pio1ActivePinsAreIdle ? StateCode.NotAvail_TransferBlocked : StateCode.Fault_InvalidActivePins);
+                    priv.pio1OutputPins = GetE084PassiveOutputPackedWordByState(priv.pio1StateCode);
                     break;
             }
         }
@@ -1986,17 +1973,17 @@ namespace MosaicLib.PartsLib.Common.E084
         {
             Semi.E084.ActiveToPassivePinBits continuousBit = Semi.E084.ActiveToPassivePinBits.None;
 
-            switch (mPriv.activePIO)
+            switch (priv.activePIO)
             {
                 case PIOActiveSelect.Neither:
                     break;
 
                 case PIOActiveSelect.PIO1:
-                    continuousBit = (mPriv.pio1InputPinBits & CONT);
+                    continuousBit = (priv.Pio1InputPinBits & CONT);
                     break;
 
                 case PIOActiveSelect.PIO2:
-                    continuousBit = (mPriv.pio2InputPinBits & CONT);
+                    continuousBit = (priv.Pio2InputPinBits & CONT);
                     break;
             }
 
@@ -2005,70 +1992,70 @@ namespace MosaicLib.PartsLib.Common.E084
 
         bool DoesCurrentStatePermitPinsIdleReset()
         {
-            return mPriv.stateCode.IsFaulted();
+            return priv.stateCode.IsFaulted();
         }
 
         StateCode GetCurrentInactiveState(ref string reason)
         {
-            StateCode idleStateCode = ((mPriv.stateCodeContinuousBit != 0) ? StateCode.AvailableContinuous : StateCode.Available);
+            StateCode idleStateCode = ((priv.stateCodeContinuousBit != 0) ? StateCode.AvailableContinuous : StateCode.Available);
 
             StateCode inactiveState = StateCode.Initial;
             string stateReason = string.Empty;
 
-            if (mPriv.portUsageContextInfo.Initializing)
+            if (priv.portUsageContextInfo.Initializing)
             {
                 inactiveState = StateCode.NotAvail_PortIsInitializing;
                 stateReason = "Port is being initialized";
             }
-            else if (!mPriv.portHasBeenInitialized)
+            else if (!priv.portHasBeenInitialized)
             {
                 inactiveState = StateCode.NotAvail_PortNotInit;
                 stateReason = "Port has not been initialized";
             }
-            else if (!mPriv.lastPortInitializeSucceeded)
+            else if (!priv.lastPortInitializeSucceeded)
             {
                 inactiveState = StateCode.NotAvail_PortNotInit;
                 stateReason = "Last port initialize failed";
             }
-            else if (mPriv.portUsageContextInfo.Error)
+            else if (priv.portUsageContextInfo.Error)
             {
                 inactiveState = StateCode.NotAvail_PortNotInit;
                 stateReason = "Port must be initialized (Context.Error)";
             }
-            else if (mPriv.portUsageContextInfo.Alarm)
+            else if (priv.portUsageContextInfo.Alarm)
             {
                 inactiveState = StateCode.NotAvail_PortNotInit;
                 stateReason = "Port must be initialized (Context.Alarm)";
             }
-            else if (!mPriv.lpmPositionState.IsReferenced)
+            else if (!priv.lpmPositionState.IsReferenced)
             {
                 inactiveState = StateCode.NotAvail_PortNotInit;
                 stateReason = "Port must be initialized (NotReferenced)";
             }
-            else if (!mPriv.lpmPositionState.IsServoOn)
+            else if (!priv.lpmPositionState.IsServoOn)
             {
                 inactiveState = StateCode.NotAvail_PortNotInit;
                 stateReason = "Port must be initialized (ServoIsNotOn)";
             }
-            else if (!mConfig.HwInstalled)
+            else if (!config.HwInstalled)
             {
                 inactiveState = StateCode.NotAvail_HardwareNotInstalled;
                 stateReason = "E84 hardware is not installed";
             }
-            else if (!mPriv.portUsageContextInfo.LTS.IsInService())
+            else if (!priv.portUsageContextInfo.LTS.IsInService())
             {
                 inactiveState = StateCode.NotAvail_PortNotInService;
                 stateReason = "Port is not In Service";
             }
-            else if (mPriv.portUsageContextInfo.AMS != AMS.Automatic)
+            else if (priv.portUsageContextInfo.AMS != AMS.Automatic)
             {
                 inactiveState = StateCode.NotAvail_PortNotInAutoMode;
                 stateReason = "Port mode is not Automatic";
             }
             else if (IsLCInterlockTripped())
             {
-                bool pio1LightCurtainInterlockTripped = ((mPriv.pio1InputPinBits & LC_ILOCK) == 0);
-                bool pio2LightCurtainInterlockTripped = mConfig.PIO2InterfacePresent && ((mPriv.pio2InputPinBits & LC_ILOCK) == 0);
+                bool pio1LightCurtainInterlockTripped = ((priv.Pio1InputPinBits & LC_ILOCK) == 0);
+                bool pio2LightCurtainInterlockTripped = config.PIO2InterfacePresent && ((priv.Pio2InputPinBits & LC_ILOCK) == 0);
 
                 inactiveState = StateCode.NotAvail_LightCurtainIlockTripped;
                 stateReason = "Light Curtain Interlock is tripped";
@@ -2079,21 +2066,21 @@ namespace MosaicLib.PartsLib.Common.E084
                 else if (pio1LightCurtainInterlockTripped && pio2LightCurtainInterlockTripped)
                     stateReason = " (PIO1,2)";
             }
-            else if (mPriv.portUsageContextInfo.LTS == LTS.TransferBlocked)
+            else if (priv.portUsageContextInfo.LTS == LTS.TransferBlocked)
             {
                 inactiveState = StateCode.NotAvail_TransferBlocked;
                 stateReason = "Port transfer state is Blocked";
             }
-            else if (mPriv.portUsageContextInfo.APresentOrPlacementAlarmIsActive)
+            else if (priv.portUsageContextInfo.APresentOrPlacementAlarmIsActive)
             {
                 inactiveState = StateCode.NotAvail_PodPlacementFault;
                 stateReason = "Pod Placement Handler Alarm is active";
             }
-            else if (mPriv.stateCode == StateCode.NotAvail_PodPlacementFault)
+            else if (priv.stateCode == StateCode.NotAvail_PodPlacementFault)
             {
-                double timeInPPState = (QpcTimeStamp.Now - mPriv.lastPresentOrPlacementAlarmIsActiveTime).TotalSeconds;
+                double timeInPPState = (QpcTimeStamp.Now - priv.lastPresentOrPlacementAlarmIsActiveTime).TotalSeconds;
 
-                if (mPriv.podSensorValues.PresentPlaced.DoesPlacedEqualPresent() && timeInPPState < mConfig.Times.PostPPFaultHoldoff)
+                if (priv.podSensorValues.PresentPlaced.DoesPlacedEqualPresent() && timeInPPState < config.Times.PostPPFaultHoldoff)
                 {
                     inactiveState = StateCode.NotAvail_PodPlacementFault;
                     stateReason = "In Post Pod Placement Alarm holdoff period";
@@ -2104,9 +2091,9 @@ namespace MosaicLib.PartsLib.Common.E084
             {
                 inactiveState = idleStateCode;
 
-                if (mPriv.stateCode != inactiveState)
+                if (priv.stateCode != inactiveState)
                 {
-                    if (mPriv.stateCode.IsAvailable())
+                    if (priv.stateCode.IsAvailable())
                         stateReason = "CONT signal changed";
                     else
                         stateReason = "Port is available to be selected";
@@ -2126,10 +2113,10 @@ namespace MosaicLib.PartsLib.Common.E084
 
         bool IsLCInterlockTripped()
         {
-            bool pio1LightCurtainInterlockTripped = ((mPriv.pio1InputPinBits & LC_ILOCK) == 0);
-            bool pio2LightCurtainInterlockTripped = mConfig.PIO2InterfacePresent && ((mPriv.pio2InputPinBits & LC_ILOCK) == 0);
+            bool pio1LightCurtainInterlockTripped = ((priv.Pio1InputPinBits & LC_ILOCK) == 0);
+            bool pio2LightCurtainInterlockTripped = config.PIO2InterfacePresent && ((priv.Pio2InputPinBits & LC_ILOCK) == 0);
 
-            bool LCInterlockTripped = (mConfig.LightCurtainInterlockInstalled && (pio1LightCurtainInterlockTripped || pio2LightCurtainInterlockTripped));
+            bool LCInterlockTripped = (config.LightCurtainInterlockInstalled && (pio1LightCurtainInterlockTripped || pio2LightCurtainInterlockTripped));
 
             return LCInterlockTripped;
         }
@@ -2162,13 +2149,13 @@ namespace MosaicLib.PartsLib.Common.E084
             const Semi.E084.PassiveToActivePinBits noPins = Semi.E084.PassiveToActivePinBits.None;
             Semi.E084.PassiveToActivePinBits pinBits = Semi.E084.PassiveToActivePinBits.None;
 
-            Semi.E084.PassiveToActivePinBits esByHwInstalled = (mConfig.HwInstalled ? ES : noPins);
-            Semi.E084.PassiveToActivePinBits faultStatePinsBaseBits = (mConfig.HoldPassiveOutputsDuringFault ? mPriv.activePIOOutputPins : noPins)
+            Semi.E084.PassiveToActivePinBits esByHwInstalled = (config.HwInstalled ? ES : noPins);
+            Semi.E084.PassiveToActivePinBits faultStatePinsBaseBits = (config.HoldPassiveOutputsDuringFault ? priv.activePIOOutputPins : noPins)
                                                                         & ~HO_AVBL
                                                                         & ~ES;
 
             // if port is initializing then we do not hold the outputs
-            if (mPriv.portUsageContextInfo.Initializing)
+            if (priv.portUsageContextInfo.Initializing)
                 faultStatePinsBaseBits = noPins;
 
             // determine if there are any bits that we must clear due to light curtain interlock
@@ -2176,14 +2163,14 @@ namespace MosaicLib.PartsLib.Common.E084
 
             if (IsLCInterlockTripped())
             {
-                if (mConfig.LCIlockClearsHO)
+                if (config.LCIlockClearsHO)
                     clearPinBits = clearPinBits | HO_AVBL;
-                if (mConfig.LCIlockClearsES)
+                if (config.LCIlockClearsES)
                     clearPinBits = clearPinBits | ES;
             }
 
             // true for clearESInTransferAbortedByInterlockState selects noPins being active.  false for clearESInTransferAbortedByInterlockState selects ES being active.
-            Semi.E084.PassiveToActivePinBits xferAbortedByILockES = (mConfig.ClearESInTransferAbortedByInterlockState ? noPins : ES);
+            Semi.E084.PassiveToActivePinBits xferAbortedByILockES = (config.ClearESInTransferAbortedByInterlockState ? noPins : ES);
 
             // convert any given StateCode value into the corresponding output pattern that
             //	should be output on the selected PIO pins while in that state.
@@ -2320,7 +2307,7 @@ namespace MosaicLib.PartsLib.Common.E084
         Semi.E084.ActiveToPassivePinBits GetE084ActiveExpectedPinsByState(StateCode stateCode)
         {
             const Semi.E084.ActiveToPassivePinBits noPins = Semi.E084.ActiveToPassivePinBits.None;
-            Semi.E084.ActiveToPassivePinBits latchedCONT = mPriv.stateCodeContinuousBit;
+            Semi.E084.ActiveToPassivePinBits latchedCONT = priv.stateCodeContinuousBit;
 
             Semi.E084.ActiveToPassivePinBits pinBits = noPins;
 
@@ -2377,7 +2364,7 @@ namespace MosaicLib.PartsLib.Common.E084
                 default: pinBits = noPins; break;
             }
 
-            if (mConfig.LightCurtainInterlockInstalled)
+            if (config.LightCurtainInterlockInstalled)
                 pinBits |= LC_ILOCK;		// we expect LC_ILOCK to remain set in this case
 
             return pinBits;
@@ -2388,7 +2375,7 @@ namespace MosaicLib.PartsLib.Common.E084
             Semi.E084.ActiveToPassivePinBits pinBits = Semi.E084.ActiveToPassivePinBits.None;
             const Semi.E084.ActiveToPassivePinBits noPins = Semi.E084.ActiveToPassivePinBits.None;
             Semi.E084.ActiveToPassivePinBits inactiveIgnorePins = LC_ILOCK;
-            Semi.E084.ActiveToPassivePinBits activeIgnorePins = (mConfig.LightCurtainInterlockInstalled ? noPins : LC_ILOCK);
+            Semi.E084.ActiveToPassivePinBits activeIgnorePins = (config.LightCurtainInterlockInstalled ? noPins : LC_ILOCK);
 
             switch (stateCode)
             {

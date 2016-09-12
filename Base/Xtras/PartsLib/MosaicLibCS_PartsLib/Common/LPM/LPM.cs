@@ -911,7 +911,7 @@ namespace MosaicLib.PartsLib.Common.LPM
 
         /// <summary>
         /// Carrier is Open (detailed meaning is device specific).  
-        /// Generally this means that the carrier is present, the position is valid, the door is open and down.
+        /// Generally this means that the carrier is present, the position is valid, docked, and the door is open and down.
         /// </summary>
         bool IsCarrierOpen { get; }
         /// <summary>
@@ -928,12 +928,15 @@ namespace MosaicLib.PartsLib.Common.LPM
 
         /// <summary>
         /// LPM position is safe to access (detailed meaning is device specific).  
-        /// Generally this means that the carrier is present, the position is valid, the door is open and down.
+        /// Generally this means that the carrier is present, the position is valid, docked, and the door is open and down.
         /// </summary>
         bool IsSafeToAccess { get; }
 
         /// <summary>Indicates the reason that the IsInMotion is true</summary>
         string InMotionReason { get; }
+
+        /// <summary>Part of internal logic for reporting when LPM position is in motion (or is about to or just was) because of some higher level ongoing action</summary>
+        string ExplicitInMotionReason { get; }
 
         /// <summary>Returns true when the driver (state publisher) believes that the device is, or may be, in motion</summary>
         bool IsInMotion { get; }
@@ -1014,7 +1017,7 @@ namespace MosaicLib.PartsLib.Common.LPM
             IsCarrierClosed = rhs.IsCarrierClosed;
             IsValid = rhs.IsValid;
             IsSafeToAccess = rhs.IsSafeToAccess;
-            InMotionReason = rhs.InMotionReason;
+            ExplicitInMotionReason = rhs.ExplicitInMotionReason;
             
             return this;
         }
@@ -1074,41 +1077,58 @@ namespace MosaicLib.PartsLib.Common.LPM
         {
             get
             {
-                if (!inMotionReason.IsNullOrEmpty())
-                    return inMotionReason;
-                else if (ClampState == ActuatorPosition.MovingToPos2)
-                    return "Clamping";
+                string localInMotionReason = string.Empty;
+
+                if (ClampState == ActuatorPosition.MovingToPos2)
+                    localInMotionReason = "Clamping";
                 else if (ClampState == ActuatorPosition.MovingToPos1)
-                    return "Unclamping";
+                    localInMotionReason = "Unclamping";
                 else if (DockState == ActuatorPosition.MovingToPos2)
-                    return "Docking";
+                    localInMotionReason = "Docking";
                 else if (DockState == ActuatorPosition.MovingToPos1)
-                    return "Undocking";
+                    localInMotionReason = "Undocking";
                 else if (VacState == ActuatorPosition.MovingToPos2)
-                    return "Enabling Carrier Door Vacuum";
+                    localInMotionReason = "Enabling Carrier Door Vacuum";
                 else if (VacState == ActuatorPosition.MovingToPos1)
-                    return "Releasing Carrier Door Vacuum";
+                    localInMotionReason = "Releasing Carrier Door Vacuum";
                 else if (DoorKeysState == ActuatorPosition.MovingToPos2)
-                    return "Unlatching Carrier Door";
+                    localInMotionReason = "Unlatching Carrier Door";
                 else if (DoorKeysState == ActuatorPosition.MovingToPos1)
-                    return "Latching Carrier Door";
+                    localInMotionReason = "Latching Carrier Door";
                 else if (DoorOpenState == ActuatorPosition.MovingToPos2)
-                    return "Opening Carrier Door";
+                    localInMotionReason = "Opening Carrier Door";
                 else if (DoorOpenState == ActuatorPosition.MovingToPos1)
-                    return "Closing Carrier Door";
+                    localInMotionReason = "Closing Carrier Door";
                 else if (DoorDownState == ActuatorPosition.MovingToPos2)
-                    return "Moving Door Down";
+                    localInMotionReason = "Moving Door Down";
                 else if (DoorDownState == ActuatorPosition.MovingToPos1)
-                    return "Moving Door Up";
+                    localInMotionReason = "Moving Door Up";
                 else
-                    return string.Empty;
-            }
-            set
-            {
-                inMotionReason = value;
+                    return ExplicitInMotionReason;
+
+                if (ExplicitInMotionReason.IsNullOrEmpty())
+                    return localInMotionReason;
+
+                return "{0} [{1}]".CheckedFormat(ExplicitInMotionReason, localInMotionReason);
             }
         }
-        private string inMotionReason;
+
+        /// <summary>
+        /// Setter also clears IsSafeToAccess if given value is neither null nor empty
+        /// </summary>
+        public string ExplicitInMotionReason
+        {
+            get { return explicitInMotionReason ?? string.Empty; }
+            set
+            {
+                explicitInMotionReason = value;
+
+                if (!explicitInMotionReason.IsNullOrEmpty())
+                    IsSafeToAccess = false;
+            }
+        }
+
+        private string explicitInMotionReason;
 
         public bool IsEqualTo(IPositionState rhs)
         {
@@ -1123,7 +1143,7 @@ namespace MosaicLib.PartsLib.Common.LPM
                     && IsServoOn == rhs.IsServoOn
                     && MotionILockSensorIsTripped == rhs.MotionILockSensorIsTripped
                     && ProtrusionSensorIsTripped == rhs.ProtrusionSensorIsTripped
-                    && InMotionReason == rhs.InMotionReason
+                    && ExplicitInMotionReason == rhs.ExplicitInMotionReason
                     && IsCarrierDoorDetected == rhs.IsCarrierDoorDetected
                     && IsCarrierOpen == rhs.IsCarrierOpen
                     && IsCarrierClosed == rhs.IsCarrierClosed
@@ -1375,15 +1395,18 @@ namespace MosaicLib.PartsLib.Common.LPM
         public bool IsEqualTo(IButtonSet rhs)
         {
             return (rhs != null 
-                    && Button1 == rhs.Button1 && Button2 == rhs.Button2
-                    && Button1ChangeCount == rhs.Button1ChangeCount && Button2ChangeCount == rhs.Button2ChangeCount);
+                    && Button1 == rhs.Button1 
+                    && Button2 == rhs.Button2
+                    && Button1ChangeCount == rhs.Button1ChangeCount 
+                    && Button2ChangeCount == rhs.Button2ChangeCount
+                    );
         }
 
         public override string ToString()
         {
-            string[] buttonsDown = { (Button1 ? "1" : string.Empty), (Button2 ? "2" : string.Empty) };
+            string[] buttonsDown = { (Button1 ? "B1" : string.Empty), (Button2 ? "B2" : string.Empty) };
 
-            return "{0} {1} {2}".CheckedFormat(string.Join(" ", buttonsDown.Where(s => !s.IsNullOrEmpty()).ToArray()).MapNullOrEmptyTo("None"), Button1ChangeCount, Button2ChangeCount);
+            return "{0} chgCounts: {1} {2}".CheckedFormat(string.Join(" ", buttonsDown.Where(s => !s.IsNullOrEmpty()).ToArray()).MapNullOrEmptyTo("None"), Button1ChangeCount, Button2ChangeCount);
         }
     }
 

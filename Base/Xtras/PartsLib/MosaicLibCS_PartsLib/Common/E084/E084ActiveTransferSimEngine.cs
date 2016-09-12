@@ -53,6 +53,8 @@ namespace MosaicLib.PartsLib.Common.E084
     {
         public string StateStr { get; set; }
         public bool IsReady { get; set; }
+        public bool IsReadyToLoad { get; set; }
+        public bool IsReadyToUnload { get; set; }
         public bool IsCycling { get; set; }
         public string TransferProgressStr { get; set; }
         public UInt64 TransferCount { get; set; }
@@ -61,6 +63,8 @@ namespace MosaicLib.PartsLib.Common.E084
         {
             StateStr = rhs.StateStr;
             IsReady = rhs.IsReady;
+            IsReadyToLoad = rhs.IsReadyToLoad;
+            IsReadyToUnload = rhs.IsReadyToUnload;
             IsCycling = rhs.IsCycling;
             TransferProgressStr = rhs.TransferProgressStr;
             TransferCount = rhs.TransferCount;
@@ -80,6 +84,8 @@ namespace MosaicLib.PartsLib.Common.E084
 
             return (StateStr == rhs.StateStr
                     && IsReady == rhs.IsReady
+                    && IsReadyToLoad == rhs.IsReadyToLoad
+                    && IsReadyToUnload == rhs.IsReadyToUnload
                     && IsCycling == rhs.IsCycling
                     && TransferProgressStr == rhs.TransferProgressStr
                     && TransferCount == rhs.TransferCount);
@@ -106,7 +112,8 @@ namespace MosaicLib.PartsLib.Common.E084
 
             instantActionQ = new MosaicLib.Modular.Action.ActionQueue(PartID + ".iq", true, 10);
 
-            enableAutoLoadUnloadIVA = IVI.GetValueAccessor("{0}.EnableAutoLoadUnload".CheckedFormat(PartID));
+            enableAutoLoadIVA = IVI.GetValueAccessor("{0}.EnableAutoLoad".CheckedFormat(PartID));
+            enableAutoUnloadIVA = IVI.GetValueAccessor("{0}.EnableAutoUnload".CheckedFormat(PartID));
 
             string lpmPartBaseName = lpmSimPart.PartID;
             lpmPresentPlacedInputIVA = IVI.GetValueAccessor("{0}.PresentPlacedInput".CheckedFormat(lpmPartBaseName));
@@ -126,7 +133,8 @@ namespace MosaicLib.PartsLib.Common.E084
         private PIOSelect pioSelect = PIOSelect.OHT;
         private IValuesInterconnection IVI { get; set; }
 
-        private IValueAccessor enableAutoLoadUnloadIVA;
+        private IValueAccessor enableAutoLoadIVA;
+        private IValueAccessor enableAutoUnloadIVA;
 
         private IValueAccessor ohtPassiveToActivePinsStateIVA;
         private IValueAccessor agvPassiveToActivePinsStateIVA;
@@ -208,7 +216,6 @@ namespace MosaicLib.PartsLib.Common.E084
             Ready,
             PerformLoad,
             PerformUnload,
-            AutoLoadAndUnload,
         }
 
         ActivitySelect currentActivity = ActivitySelect.Offline;
@@ -218,6 +225,24 @@ namespace MosaicLib.PartsLib.Common.E084
         private bool IsActive { get { return (currentActivity != ActivitySelect.Offline && currentActivity != ActivitySelect.Ready); } }
         private bool IsReady { get { return (currentActivity == ActivitySelect.Ready); } }
 
+        void UpdateReadyToLoadAndUnload(bool forceUpdate, bool publishIfNeeded)
+        {
+            PresentPlaced presentPlacedInput = lpmPresentPlacedInputIVA.Update().ValueContainer.GetValue<PresentPlaced>(false);
+
+            if (lastPresentPlacedInput != presentPlacedInput || forceUpdate)
+            {
+                privateState.IsReadyToLoad = privateState.IsReady && presentPlacedInput.IsNeitherPresentNorPlaced();
+                privateState.IsReadyToUnload = privateState.IsReady && presentPlacedInput.IsProperlyPlaced();
+
+                lastPresentPlacedInput = presentPlacedInput;
+
+                if (publishIfNeeded)
+                    PublishPrivateState();
+            }
+        }
+
+        PresentPlaced lastPresentPlacedInput = PresentPlaced.None;
+
         void SetCurrentActivity(ActivitySelect activity, string reason)
         {
             ActivitySelect entryActivity = currentActivity;
@@ -226,22 +251,20 @@ namespace MosaicLib.PartsLib.Common.E084
             currentActivity = activity;
 
             privateState.StateStr = (Utils.Fcns.CheckedFormat("{0} [{1}]", activity, reason));
-            privateState.IsCycling = (currentActivity == ActivitySelect.AutoLoadAndUnload);
+            privateState.IsCycling = (enableAutoLoadIVA.Update().ValueContainer.GetValue<bool>(false) && enableAutoUnloadIVA.Update().ValueContainer.GetValue<bool>(false));
             privateState.IsReady = (currentActivity == ActivitySelect.Ready);
+            UpdateReadyToLoadAndUnload(true, false);
 
             if (entryActivity != currentActivity)
             {
                 privateState.TransferProgressStr = String.Empty;
-                if (activity == ActivitySelect.AutoLoadAndUnload)
+                if (!privateState.IsCycling)
                     privateState.TransferCount = 0;
             }
 
             bool busy = false;
             switch (currentActivity)
             {
-                case ActivitySelect.AutoLoadAndUnload:
-                    busy = !String.IsNullOrEmpty(privateState.TransferProgressStr);
-                    break;
                 case ActivitySelect.PerformLoad:
                 case ActivitySelect.PerformUnload:
                 case ActivitySelect.Reset:
@@ -358,26 +381,6 @@ namespace MosaicLib.PartsLib.Common.E084
         {
             Spin();
 
-            // service requests for auto load unload
-            if (enableAutoLoadUnloadIVA.IsUpdateNeeded)
-            {
-                if (enableAutoLoadUnloadIVA.Update().ValueContainer.GetValue<bool>(false))
-                {
-                    if (IsReady)
-                        nextActivitySelect = ActivitySelect.AutoLoadAndUnload;
-                    else
-                    {
-                        Log.Error.Emit("EnableAutoLoadUnload({0}) can not be handled, engine is not ready [{1}]", enableAutoLoadUnloadIVA.ValueContainer, currentActivity);
-                        enableAutoLoadUnloadIVA.Set(false);
-                    }
-                }
-                else
-                {
-                    if (currentActivity == ActivitySelect.AutoLoadAndUnload)
-                        nextActivitySelect = ActivitySelect.Ready;
-                }
-            }
-
             // service current activity
             switch (currentActivity)
             {
@@ -404,9 +407,6 @@ namespace MosaicLib.PartsLib.Common.E084
                 case ActivitySelect.PerformUnload:
                     ServicePerformUnloadActivity();
                     break;
-                case ActivitySelect.AutoLoadAndUnload:
-                    ServicePerformAutoLoadAndUnloadActivity();
-                    break;
             }
         }
 
@@ -427,8 +427,13 @@ namespace MosaicLib.PartsLib.Common.E084
         {
             using (var eeLog = new Logging.EnterExitTrace(Log))
             {
-                if (enableAutoLoadUnloadIVA.Update().ValueContainer.GetValue<bool>(false))
-                    enableAutoLoadUnloadIVA.Set(false);
+                // clear the enable auto load and enable auto unload values
+
+                if (enableAutoLoadIVA.Update().ValueContainer.GetValue<bool>(false))
+                    enableAutoLoadIVA.Set(false);
+
+                if (enableAutoUnloadIVA.Update().ValueContainer.GetValue<bool>(false))
+                    enableAutoUnloadIVA.Set(false);
 
                 IValueAccessor a2pPinsStateIVA = SelectedActiveToPassivePinsStateIVA;
                 IValueAccessor p2aPinsStateIVA = SelectedPassiveToActivePinsStateIVA;
@@ -504,56 +509,43 @@ namespace MosaicLib.PartsLib.Common.E084
                 SetCurrentActivity(ActivitySelect.WaitForPinsReady, Utils.Fcns.CheckedFormat("P2A pins are no longer selectable [{0}]", p2aPinsState));
                 return;
             }
-        }
 
-        void ServicePerformAutoLoadAndUnloadActivity()
-        {
-            IValueAccessor p2aPinsStateIVA = SelectedPassiveToActivePinsStateIVA;
+            // interface is idle and is selectable.  detect auto trigger conditions and automatically request next transition accordingly.
 
-            IPassiveToActivePinsState p2aPinsState = new PassiveToActivePinsState(p2aPinsStateIVA.Update().ValueContainer);
+            UpdateReadyToLoadAndUnload(false, true);
 
-            // first keep waiting until passive to active pins are seletable
-            if (!p2aPinsState.IsSelectable)
+            if (nextActivitySelect == ActivitySelect.None)
             {
-                if (!p2aPinsState.IsIdle)
-                    SetCurrentActivity(ActivitySelect.WaitForPinsReady, Utils.Fcns.CheckedFormat("{0} failed: p2a pins are no longer idle [{1}]", currentActivity, p2aPinsState));
+                PresentPlaced presentPlacedInput = lpmPresentPlacedInputIVA.Update().ValueContainer.GetValue<PresentPlaced>(false);
 
-                return;
-            }
-
-            // passive to active pins are selectable.
-
-            if (!LPMPresentPlacedInput.DoesPlacedEqualPresent())
-            {
-                SetCurrentActivity(ActivitySelect.WaitForPinsReady, Utils.Fcns.CheckedFormat("{0} failed: Unexpected PodSensorValues [{1}]", currentActivity, LPMPresentPlacedInput));
-                return;
-            }
-
-            // transfer start holdoff timer
-
-            if (LPMPresentPlacedInput.IsProperlyPlaced())
-            {
-                Log.Info.Emit("{0}: P2A is selectable and FOUP is placed, starting unload", currentActivity);
-                ServicePerformUnloadActivity();
-
-                if (currentActivity == ActivitySelect.AutoLoadAndUnload)
-                    Spin(TimeSpan.FromSeconds(5.0));
+                if (presentPlacedInput.IsNeitherPresentNorPlaced() && enableAutoLoadIVA.Update().ValueContainer.GetValue<bool>(false))
+                {
+                    if (loadUnloadStartHoldoffTimer.StartIfNeeded().IsTriggered)
+                    {
+                        nextActivitySelect = ActivitySelect.PerformLoad;
+                        loadUnloadStartHoldoffTimer.Stop();
+                    }
+                }
+                else if (presentPlacedInput.IsProperlyPlaced() && enableAutoUnloadIVA.Update().ValueContainer.GetValue<bool>(false))
+                {
+                    if (loadUnloadStartHoldoffTimer.StartIfNeeded().IsTriggered)
+                    {
+                        nextActivitySelect = ActivitySelect.PerformUnload;
+                        loadUnloadStartHoldoffTimer.Stop();
+                    }
+                }
+                else
+                {
+                    loadUnloadStartHoldoffTimer.StopIfNeeded();
+                }
             }
             else
             {
-                Log.Info.Emit("{0}: P2A is selectable and port is empty, starting load", currentActivity);
-                ServicePeformLoadActivity();
-
-                if (currentActivity == ActivitySelect.AutoLoadAndUnload)
-                    Spin(TimeSpan.FromSeconds(5.0));
-            }
-
-            if (nextActivitySelect == ActivitySelect.Ready)
-            {
-                SetCurrentActivity(ActivitySelect.Ready, "Cycling stopped normally");
-                nextActivitySelect = ActivitySelect.None;
+                loadUnloadStartHoldoffTimer.StopIfNeeded();
             }
         }
+
+        QpcTimer loadUnloadStartHoldoffTimer = new QpcTimer() { TriggerIntervalInSec = 2.0, AutoReset = false };
 
         void ServicePeformLoadActivity()
         {
@@ -787,7 +779,6 @@ namespace MosaicLib.PartsLib.Common.E084
 
             switch (currentActivity)
             {
-                case ActivitySelect.AutoLoadAndUnload:
                 case ActivitySelect.PerformLoad:
                 case ActivitySelect.PerformUnload:
                     if (abortCurrentActivityReason != null)

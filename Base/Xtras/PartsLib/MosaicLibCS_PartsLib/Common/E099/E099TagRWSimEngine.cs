@@ -46,11 +46,10 @@ namespace MosaicLib.PartsLib.Common.E099.Sim
         ITagRWSimEngineState State { get; }
         INotificationObject<ITagRWSimEngineState> StateNotifier { get; }
 
-        void AttachToLP(LPM.Sim.ILPMSimPart lpmSimPart);
-
         IReadPagesAction CreateReadPagesAction(int startPageIdx, int numPages);
         IBasicAction CreateWritePagesAction(ITagPageContents [] pages);
         IBasicAction CreateIncrementCounterAction();
+        IBasicAction CreateNoteCarrierHasBeenRemovedAction();
     }
 
     public interface IReadPagesAction : Modular.Action.IClientFacetWithResult<ITagPageContents []> {}
@@ -339,17 +338,10 @@ namespace MosaicLib.PartsLib.Common.E099.Sim
         /// Constructor for use wihtout an lpmSimPart.  Caller provides full part name and object does not look for carrier removed events.
         /// </summary>
         public E099TagRWSimEngine(string partID)
-            :this(partID, null, null)
+            :this(partID, null)
         { }
 
-        /// <summary>
-        /// Constructor for use with an lpmSimPart.  PartID = lpmSimPart.PartID + ".E99Sim",  object automatically increments count on carrier removed events.
-        /// </summary>
-        public E099TagRWSimEngine(LPM.Sim.ILPMSimPart lpmSimPart)
-            : this(lpmSimPart.PartID + ".E99Sim", lpmSimPart, null)
-        { }
-
-        protected E099TagRWSimEngine(string partID, LPM.Sim.ILPMSimPart lpmSimPart, IValuesInterconnection ivi)
+        protected E099TagRWSimEngine(string partID, IValuesInterconnection ivi)
             : base(partID)
         {
             ActionLoggingConfig = Modular.Action.ActionLoggingConfig.Info_Error_Trace_Trace;    // redefine the log levels for actions 
@@ -366,27 +358,7 @@ namespace MosaicLib.PartsLib.Common.E099.Sim
 
             InitializePrivateState();
 
-            if (lpmSimPart != null)
-                AttachToLP(lpmSimPart);
-
             PublishBaseState("Constructor.Complete");
-        }
-
-        public void AttachToLP(LPM.Sim.ILPMSimPart lpmSimPart)
-        {
-            LpmSimPart = lpmSimPart;
-
-            string lpmPartID = lpmSimPart.PartID;
-
-            lpmSimPart.BaseStateNotifier.NotificationList.AddItem(this);
-            AddExplicitDisposeAction(() => { lpmSimPart.BaseStateNotifier.NotificationList.RemoveItem(this); });
-
-            lpmSimPart.TagRWSimEngine = this;
-            AddExplicitDisposeAction(() => { lpmSimPart.TagRWSimEngine = null; });
-
-            IValuesInterconnection ivi = IVI ?? Values.Instance;
-
-            presentPlacedIVA = ivi.GetValueAccessor<PresentPlaced>("{0}.PresentPlacedValue".CheckedFormat(lpmPartID));
         }
 
         private IValuesInterconnection IVI { get; set; }
@@ -444,31 +416,8 @@ namespace MosaicLib.PartsLib.Common.E099.Sim
 
         #region Internal implementation
 
-        public LPM.Sim.ILPMSimPart LpmSimPart { get; private set; }
-
-        IValueAccessor<PresentPlaced> presentPlacedIVA = null;
-        PresentPlaced? lastLPMSimConfirmedPPState = null;
-
         protected override void PerformMainLoopService()
         {
-            // track the LPMSim pod presance state and detect and handle each time that the carrier has been removed.  
-            // Typically this increments the count
-
-            if (presentPlacedIVA != null && presentPlacedIVA.IsUpdateNeeded)
-            {
-                PresentPlaced presentPlacedValue = presentPlacedIVA.Update().Value;
-
-                if (lastLPMSimConfirmedPPState == null || presentPlacedValue != lastLPMSimConfirmedPPState.GetValueOrDefault())
-                {
-                    bool lastHasValue = lastLPMSimConfirmedPPState.HasValue;
-                    if (lastHasValue && lastLPMSimConfirmedPPState.GetValueOrDefault().IsProperlyPlaced() && presentPlacedValue.IsNeitherPresentNorPlaced())
-                        CarrierHasBeenRemoved();
-
-                    if (presentPlacedValue.DoesPlacedEqualPresent())
-                        lastLPMSimConfirmedPPState = presentPlacedValue;
-                }
-            }
-
             if (configAccessAdapter.IsUpdateNeeded)
             {
                 configAccessAdapter.Update();
@@ -668,6 +617,16 @@ namespace MosaicLib.PartsLib.Common.E099.Sim
             return String.Empty;
         }
 
+        public IBasicAction CreateNoteCarrierHasBeenRemovedAction()
+        {
+            return new BasicActionImpl(actionQ, PerformNoteCarrierHasBeenRemovedAction, "NoteCarrierHasBeenRemoved", ActionLoggingReference);
+        }
+
+        protected string PerformNoteCarrierHasBeenRemovedAction()
+        {
+            CarrierHasBeenRemoved();
+            return string.Empty;
+        }
 
         #endregion
     }

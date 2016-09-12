@@ -68,8 +68,24 @@ namespace MosaicLib.PartsLib.Common.E099
         /// </summary>
         IBasicAction CreateWritePagesAction(ITagPageContents [] pages);
 
+        /// <summary>
+        /// Action factory method.  The returned action, when run, causes each of the indicated results to be cleared.  
+        /// This is typically used after a Carrier has departed in order to clear the ReadTag results.
+        /// </summary>
+        IBasicAction CreateClearResultsAction(ClearResultsSelect clearResultsSelect);
+
         /// <summary>ITagRWState state publisher.  This is also a notification object</summary>
         INotificationObject<ITagRWState> StatePublisher { get; }
+    }
+
+    [Flags]
+    public enum ClearResultsSelect : int
+    {
+        None = 0x00,
+        ReadTag = 0x01,
+        ReadPages = 0x02,
+        WritePages = 0x04,
+        All = (ReadTag | ReadPages | WritePages),
     }
 
     public interface ITagRWState
@@ -85,7 +101,7 @@ namespace MosaicLib.PartsLib.Common.E099
         /// <summary>Gives the result information from the current/last WritePages action</summary>
         ITagActionInfo WritePagesActionInfo { get; }
 
-        /// <summary>Gives the result information from the current/last Read or Write action</summary>
+        /// <summary>Gives the result information from the current/last action (ReadTag, ReadPages, WritePages)</summary>
         ITagActionInfo CombinedActionInfo { get; }
 
         IBaseState PartBaseState { get; }
