@@ -390,6 +390,18 @@ namespace MosaicLib.Time
         }
 
         /// <summary>
+        /// If the timer is not already Stopped, this method Stops the timer.
+        /// If the timer is already Stopped, this method has no effect.
+        /// </summary>
+        public QpcTimer StopIfNeeded()
+        {
+            if (Started)
+                Stop();
+
+            return this;
+        }
+
+        /// <summary>
         /// Internal method: starts the timer to trigger after the TriggerInterval has elpased from the given starting timestamp.
         /// </summary>
         private QpcTimer Start(QpcTimeStamp now)

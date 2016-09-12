@@ -225,8 +225,9 @@ namespace MosaicLib.Modular.Action
 
 	#endregion
 
-	//-------------------------------------------------
-	#region IActionState Implementation
+    //-------------------------------------------------
+
+    #region IActionState Implementation
 
     /// <summary>
     /// This class is the basic class that implements an IActionState
@@ -422,7 +423,7 @@ namespace MosaicLib.Modular.Action
         private NamedValueSet DC_NamedValues 
         {
             get { return base.namedValues; }
-            set {  base.namedValues = value.MakeReadOnly(); } 
+            set { base.namedValues = ((value != null) ? value.MakeReadOnly() : null); } 
         }
 
         /// <summary>Returns the approximate size of the contents in bytes.</summary>
@@ -434,7 +435,6 @@ namespace MosaicLib.Modular.Action
 
     ///<summary>
 	/// Define a class that contains the information necessary to determine the progress and success of a specfic Action.
-	/// The object is a struct 
 	///</summary>
 	public class ActionStateImpl : ActionStateImplBase
 	{
