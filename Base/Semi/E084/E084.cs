@@ -134,7 +134,7 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
 	
 	///<summary>Interface used to define and access ActiveToPassivePins state.</summary>
     ///<remarks>ActiveToPassive pins use 0 Vdc (pin 24) and 24 Vdc (pin 23) [references provided by Passive side]</remarks>
-	public interface IActiveToPassivePinsState
+	public interface IActiveToPassivePinsState : IEquatable<IActiveToPassivePinsState>
 	{
         /// <summary>Provides get/set access to the low level interface/port name that is relevant for this state object.  May be set to String.Empty or to null</summary>
         string IFaceName { get; set; }
@@ -188,7 +188,7 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
 
     ///<summary>Interface used to define and access PassiveToActivePins state.</summary>
     ///<remarks>PassiveToActivePins use SIGNAL_COM (pin25) and SIGNAL_24V (pin 22) [references provided by Active side]</remarks>
-    public interface IPassiveToActivePinsState
+    public interface IPassiveToActivePinsState : IEquatable<IPassiveToActivePinsState>
 	{
         /// <summary>Provides get/set access to the low level interface/port name that is relevant for this state object.  May be set to String.Empty or to null</summary>
         string IFaceName { get; set; }
@@ -291,6 +291,14 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
         public bool IsEqualTo(IActiveToPassivePinsState rhs)
         {
             return (rhs != null && IFaceName == rhs.IFaceName && PackedWord == rhs.PackedWord);
+        }
+
+        /// <summary>
+        /// Returns true if this object has the same contents as the given other
+        /// </summary>
+        public bool Equals(IActiveToPassivePinsState other)
+        {
+            return IsEqualTo(other);
         }
 
         /// <summary>
@@ -463,6 +471,14 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
         public bool IsEqualTo(IPassiveToActivePinsState rhs)
         {
             return (rhs != null && IFaceName == rhs.IFaceName && PackedWord == rhs.PackedWord);
+        }
+
+        /// <summary>
+        /// Returns true if this object has the same contents as the given other
+        /// </summary>
+        public bool Equals(IPassiveToActivePinsState other)
+        {
+            return IsEqualTo(other);
         }
 
         /// <summary>

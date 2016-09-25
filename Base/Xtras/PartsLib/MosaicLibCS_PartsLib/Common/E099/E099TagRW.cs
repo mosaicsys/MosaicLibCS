@@ -88,7 +88,7 @@ namespace MosaicLib.PartsLib.Common.E099
         All = (ReadTag | ReadPages | WritePages),
     }
 
-    public interface ITagRWState
+    public interface ITagRWState : IEquatable<ITagRWState>
     {
         INamedValueSet NVS { get; }
 
@@ -169,6 +169,11 @@ namespace MosaicLib.PartsLib.Common.E099
                     );
         }
 
+        public bool Equals(ITagRWState other)
+        {
+            return IsEqualTo(other);
+        }
+
         /// <summary>Supports debugging and logging.</summary>
         public override string ToString()
         {
@@ -179,7 +184,7 @@ namespace MosaicLib.PartsLib.Common.E099
         }
     }
 
-    public interface ITagActionInfo
+    public interface ITagActionInfo : IEquatable<ITagActionInfo>
     {
         IActionInfo ActionInfo { get; }
         string TagID { get; }
@@ -228,6 +233,11 @@ namespace MosaicLib.PartsLib.Common.E099
                     && TagID == rhs.TagID
                     && PageContentsArray.IsEqualTo(rhs.PageContentsArray)
                     );
+        }
+
+        public bool Equals(ITagActionInfo other)
+        {
+            return IsEqualTo(other);
         }
 
         public bool IsEmpty { get { return ActionInfo.IsEmpty && TagID.IsNullOrEmpty() && PageContentsArray.IsNullOrEmpty(); } }

@@ -402,6 +402,51 @@ namespace MosaicLib.Utils
         }
 
         #endregion
+
+        #region Enum extension methods (IsSet, IsMatch)
+
+        /// <summary>
+        /// Returns true if the given value contains the given test pattern (by bit mask test).  Eqivilant to value.IsMatch(test, test)
+        /// <para/>This extension method is intended for use with Flag enumerations.  Use with types that are not derived from System.Enum will simply return false;
+        /// </summary>
+        public static bool IsSet<TEnumType>(this TEnumType value, TEnumType test) where TEnumType : struct
+        {
+            return value.IsMatch(test, test);
+        }
+
+        /// <summary>
+        /// Returns true if the given value bit anded with the given mask is equal to the given match:  return ((value &amp; mask) == match).
+        /// <para/>This extension method is intended for use with Flag enumerations.  Use with types that are not derived from System.Enum will simply return false;
+        /// </summary>
+        public static bool IsAnySet<TEnumType>(this TEnumType value, TEnumType mask)
+        {
+            return !value.IsMatch(mask, default(TEnumType));
+        }
+
+        /// <summary>
+        /// Returns true if the given value bit anded with the given mask is equal to the given match:  return ((value &amp; mask) == match).
+        /// <para/>This extension method is intended for use with Flag enumerations.  Use with types that are not derived from System.Enum will simply return false;
+        /// </summary>
+        public static bool IsMatch<TEnumType>(this TEnumType value, TEnumType mask, TEnumType match)
+        {
+            try
+            {
+                if (!(value is System.Enum))
+                    return false;
+
+                int valueI = (int)System.Convert.ChangeType(value, typeof(int));
+                int maskI = (int)System.Convert.ChangeType(mask, typeof(int));
+                int matchI = (int)System.Convert.ChangeType(match, typeof(int));
+
+                return ((valueI & maskI) == matchI);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        #endregion
     }
 
     #endregion

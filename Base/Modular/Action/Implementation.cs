@@ -358,6 +358,26 @@ namespace MosaicLib.Modular.Action
             get { return namedValues ?? Common.NamedValueSet.Empty; }
         }
 
+        /// <summary>
+        /// IEquatable{IActionState} Equals implementation.  
+        /// Returns true of the contents of this IActionState are "equal" to the contents of the other IActionState.
+        /// Checks StateCode, ResultCode, TimeStamp and NamedValues for equality
+        /// </summary>
+        public bool Equals(IActionState rhs)
+        {
+            if (Object.ReferenceEquals(this, rhs))
+                return true;
+
+            if (rhs == null)
+                return false;
+
+            return (StateCode == rhs.StateCode
+                    && ResultCode == rhs.ResultCode
+                    && TimeStamp == rhs.TimeStamp
+                    && NamedValues.IsEqualTo(rhs.NamedValues)
+                    );
+        }
+
         #endregion
 
         public static IActionState Empty { get { return empty; } }

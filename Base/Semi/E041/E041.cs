@@ -306,7 +306,7 @@ namespace MosaicLib.Semi.E041
     #region IANState, ANState
 
     /// <summary>The interface to object(s) that can represent the current state of an Annunciator.</summary>
-    public interface IANState
+    public interface IANState : IEquatable<IANState>
     {
         /// <summary>Gives the ANSpec for this annunciator.</summary>
         IANSpec ANSpec { get; }
@@ -439,6 +439,12 @@ namespace MosaicLib.Semi.E041
                     && ActionAbortRequested == rhs.ActionAbortRequested
                     && ALID == rhs.ALID
                     );
+        }
+
+        /// <summary>Returns true if this ANState has the same contents as the given other IANState</summary>
+        public bool Equals(IANState other)
+        {
+            return IsEqualTo(other);
         }
 
         /// <summary>Debugging and logging helper method</summary>

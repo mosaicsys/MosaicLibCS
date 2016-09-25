@@ -164,7 +164,7 @@ namespace MosaicLib.PartsLib.Common.LPM
 
     #region LPMState
 
-    public interface ILPMState
+    public interface ILPMState : IEquatable<ILPMState>
     {
         INamedValueSet NVS { get; }
 
@@ -291,6 +291,11 @@ namespace MosaicLib.PartsLib.Common.LPM
                     );
         }
 
+        public bool Equals(ILPMState other)
+        { 
+            return IsEqualTo(other); 
+        }
+
         /// <summary>Supports debugging and logging.</summary>
         public override string ToString()
         {
@@ -336,7 +341,7 @@ namespace MosaicLib.PartsLib.Common.LPM
     /// <summary>
     /// This interface defines the set of property values that may generally be used to drive a load port's lights from, depending on configuration.
     /// </summary>
-    public interface IPortUsageContextInfo
+    public interface IPortUsageContextInfo : IEquatable<IPortUsageContextInfo>
     {
         Semi.E087.AMS AMS { get; }
         Semi.E087.LTS LTS { get; }
@@ -464,6 +469,11 @@ namespace MosaicLib.PartsLib.Common.LPM
                     && Button2State == rhs.Button2State
                     );
         }
+
+        public bool Equals(IPortUsageContextInfo other)
+        {
+            return IsEqualTo(other);
+        }
     }
 
     #endregion
@@ -474,7 +484,7 @@ namespace MosaicLib.PartsLib.Common.LPM
     /// This interface provides the client with dynamically updated information about the capabilites of the device that the driver is currently connected to (or was last connected to).
     /// <para/>Please note that additional capabilites may be indicated by using the INamedValueSet related capabiliites at the ILPMState level.
     /// </summary>
-    public interface IDeviceCapabilities
+    public interface IDeviceCapabilities : IEquatable<IDeviceCapabilities>
     {
         /// <summary>This value indicates what form of CarrierID/Tag Reader capabilities this device supports, if any.</summary>
         E099.TagReaderType TagReaderType { get; }
@@ -547,6 +557,12 @@ namespace MosaicLib.PartsLib.Common.LPM
                     );
         }
 
+        /// <summary>Returns true if this object has the same contents as the given other one.</summary>
+        public bool Equals(IDeviceCapabilities other)
+        {
+            return IsEqualTo(other);
+        }
+
         /// <summary>Supports debugging and logging.</summary>
         public override string ToString()
         {
@@ -561,7 +577,7 @@ namespace MosaicLib.PartsLib.Common.LPM
     /// <summary>
     /// This interface defines the publisheable results from 
     /// </summary>
-    public interface IMapResults
+    public interface IMapResults : IEquatable<IMapResults>
     {
         /// <summary>This is true whenever ResultCode has been set to null.  This is the state produced when a prior map result has been cleared by the start of some corresonding action</summary>
         bool IsEmpty { get; }
@@ -626,6 +642,11 @@ namespace MosaicLib.PartsLib.Common.LPM
                     );
         }
 
+        public bool Equals(IMapResults other)
+        {
+            return IsEqualTo(other);
+        }
+
         /// <summary>Supports debugging and logging.</summary>
         public override string ToString()
         {
@@ -642,7 +663,7 @@ namespace MosaicLib.PartsLib.Common.LPM
 
     #region IPodSensorValues, PodSensorValues, related enums
 
-    public interface IPodSensorValues
+    public interface IPodSensorValues : IEquatable<IPodSensorValues>
     {
         PresentPlaced PresentPlaced { get; }
         bool PresenceSensor { get; }
@@ -703,6 +724,11 @@ namespace MosaicLib.PartsLib.Common.LPM
                     );
         }
 
+        public bool Equals(IPodSensorValues other)
+        {
+            return IsEqualTo(other);
+        }
+
         /// <summary>Supports debugging and logging.</summary>
         public override string ToString()
         {
@@ -755,7 +781,7 @@ namespace MosaicLib.PartsLib.Common.LPM
 
     #region IDecodedPodInfo, DecodedPodInfo, related enums
 
-    public interface IDecodedPodInfo
+    public interface IDecodedPodInfo : IEquatable<IDecodedPodInfo>
     {
         CarrierType CarrierType { get; }
 
@@ -792,6 +818,11 @@ namespace MosaicLib.PartsLib.Common.LPM
                     && CarrierType == rhs.CarrierType
                     && OCA == rhs.OCA
                     );
+        }
+
+        public bool Equals(IDecodedPodInfo other)
+        {
+            return IsEqualTo(other);
         }
 
         /// <summary>Supports debugging and logging.</summary>
@@ -881,7 +912,7 @@ namespace MosaicLib.PartsLib.Common.LPM
 
     #region IPositionState, PositionState, IActuatorStates, ActuatorStates
 
-    public interface IPositionState
+    public interface IPositionState : IEquatable<IPositionState>
     {
         /// <summary>Clamped == AtPos2, Unclamped == AtPos1</summary>
         ActuatorPosition ClampState { get; }
@@ -1152,6 +1183,11 @@ namespace MosaicLib.PartsLib.Common.LPM
                     );
         }
 
+        public bool Equals(IPositionState other)
+        {
+            return IsEqualTo(other);
+        }
+
         public bool IsInMotion { get { return !InMotionReason.IsNullOrEmpty(); } }
         public bool IsClamped { get { return ClampState.IsAtPos2(); } }
         public bool IsUnclamped { get { return ClampState.IsAtPos1(); } }
@@ -1212,7 +1248,7 @@ namespace MosaicLib.PartsLib.Common.LPM
         }
     }
 
-    public interface IActuatorStates
+    public interface IActuatorStates : IEquatable<IActuatorStates>
     {
         IActuatorState ClampState { get; }
         IActuatorState DockState { get; }
@@ -1278,13 +1314,18 @@ namespace MosaicLib.PartsLib.Common.LPM
                     && DoorDownState.IsEqualTo(rhs.DoorDownState)
                     );
         }
+
+        public bool Equals(IActuatorStates other)
+        {
+            return IsEqualTo(other);
+        }
     }
 
     #endregion
 
     #region DisplayState, ButtonSet
 
-    public interface IDisplayState
+    public interface IDisplayState : IEquatable<IDisplayState>
     {
         IDisplayItemState[] ButtonItemArray { get; }
         IDisplayItemState[] PanelItemArray { get; }
@@ -1336,6 +1377,11 @@ namespace MosaicLib.PartsLib.Common.LPM
                     );
         }
 
+        public bool Equals(IDisplayState other)
+        {
+            return IsEqualTo(other);
+        }
+
         public void ServiceFlashing(bool flashState)
         {
             foreach (DisplayItemState item in PanelItemArray)
@@ -1345,7 +1391,7 @@ namespace MosaicLib.PartsLib.Common.LPM
         }
     }
 
-    public interface IButtonSet
+    public interface IButtonSet : IEquatable<IButtonSet>
     {
         bool Button1 { get; }
         bool Button2 { get; }
@@ -1402,6 +1448,11 @@ namespace MosaicLib.PartsLib.Common.LPM
                     );
         }
 
+        public bool Equals(IButtonSet other)
+        {
+            return IsEqualTo(other);
+        }
+
         public override string ToString()
         {
             string[] buttonsDown = { (Button1 ? "B1" : string.Empty), (Button2 ? "B2" : string.Empty) };
@@ -1410,7 +1461,7 @@ namespace MosaicLib.PartsLib.Common.LPM
         }
     }
 
-    public interface IDisplayItemState
+    public interface IDisplayItemState : IEquatable<IDisplayItemState>
     {
         bool IsButton { get; }
         int ItemIdx { get; }
@@ -1554,13 +1605,18 @@ namespace MosaicLib.PartsLib.Common.LPM
                     && FlashStateIsOn == rhs.FlashStateIsOn
                     );
         }
+
+        public bool Equals(IDisplayItemState other)
+        {
+            return IsEqualTo(other);
+        }
     }
 
     #endregion
 
     #region E84State
 
-    public interface IE84State
+    public interface IE84State : IEquatable<IE84State>
     {
         PartsLib.Common.E084.StateCode StateCode { get; }
         string StateCodeReason { get; }
@@ -1639,6 +1695,11 @@ namespace MosaicLib.PartsLib.Common.LPM
                     && OutputReadback.IsEqualTo(rhs.OutputReadback)
                     && Inputs.IsEqualTo(rhs.Inputs)
                     );
+        }
+
+        public bool Equals(IE84State other)
+        {
+            return IsEqualTo(other);
         }
 
         /// <summary>Supports debugging and logging.</summary>

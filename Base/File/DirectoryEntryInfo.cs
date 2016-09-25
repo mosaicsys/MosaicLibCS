@@ -64,7 +64,10 @@ namespace MosaicLib.File
         /// <summary>
         /// Default constructor for an entry based on a file system object at the given path.
         /// </summary>
-		public DirectoryEntryInfo(string path) { Path = path; }
+		public DirectoryEntryInfo(string path) 
+        { 
+            Path = path;    // NOTE: Path setter does all of the work to setup this object's contents
+        }
 
         /// <summary>
         /// Refreshes contained FileSystemInfo from stored path
@@ -108,7 +111,7 @@ namespace MosaicLib.File
 
         /// <summary>Returns the FileSystemInfo property as a FileInfo (null if the item is not a File)</summary>
         public FileInfo FileInfo { get { return fsiItem as FileInfo; } }
-        /// <summary>Returns the FileSystemInfo property as a DirectoryInfo (nul if the item is not a Directory)</summary>
+        /// <summary>Returns the FileSystemInfo property as a DirectoryInfo (null if the item is not a Directory)</summary>
         public DirectoryInfo DirectoryInfo { get { return fsiItem as DirectoryInfo; } }
         /// <summary>Returns true if the path or the FileSystemInfo are null or empty</summary>
         public bool IsEmpty { get { return (string.IsNullOrEmpty(Path) || FileSystemInfo == null); } }

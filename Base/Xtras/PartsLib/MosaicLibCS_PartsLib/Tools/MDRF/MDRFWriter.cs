@@ -49,12 +49,13 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
         /// <remarks>
         /// Version history:
         /// 1.0.0 (2016-09-01) : First CR version.
+        /// 1.0.1 (2016-09-24) : API extensions to improve usability, modified RecordGroups to trigger write of file index any time RecordGroups does a writeall.
         /// </remarks>
         public static readonly LibraryInfo LibInfo = new LibraryInfo()
         {
             Type = "Mosaic Data Recording File (MDRF)",
             Name = "Mosaic Data Recording Engine (MDRE) CS API",
-            Version = "1.0.0 (2016-09-01)",
+            Version = "1.0.1 (2016-09-24)",
         };
     }
 
@@ -64,15 +65,68 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
     public interface IMDRFWriter : IPartBase
     {
-	    string RecordGroups(bool writeAll = false);
+        string RecordGroups(bool writeAll = false, DateTimeStampPair dtPair = null);
 
-        string RecordOccurrence(OccurrenceInfo occurrenceInfo, object dataValue);
-        string RecordOccurrence(OccurrenceInfo occurrenceInfo, ValueContainer dataVC);
+        string RecordOccurrence(OccurrenceInfo occurrenceInfo, object dataValue, DateTimeStampPair dtPair = null);
+        string RecordOccurrence(OccurrenceInfo occurrenceInfo, ValueContainer dataVC, DateTimeStampPair dtPair = null);
 
-        void Flush();
+        string Flush(FlushFlags flushFlags = FlushFlags.All, DateTimeStampPair dtPair = null);
 
 	    int GetCurrentFileSize();
-	    int CloseCurrentFile(string reason);
+
+        FileInfo CurrentFileInfo { get; }
+        FileInfo LastFileInfo { get; }
+
+        int CloseCurrentFile(string reason, DateTimeStampPair dtPair = null);
+    }
+
+    /// <summary>
+    /// Flags that are used with the IMDRFWriter Flush method to configure/select what specific actions it should perform.
+    /// <para/>None (0x00), File (0x01), Index (0x02), All (File | Index)
+    /// </summary>
+    [Flags]
+    	public enum FlushFlags
+	{
+        /// <summary>Placeholder value, not intended for external use (0x00)</summary>
+        None = 0x00,
+        /// <summary>Requests that the flush operation flush file buffers that are used by the writer (0x01)</summary>
+        File = 0x01,
+        /// <summary>Requests that the flush operation update/write the file index (0x02)</summary>
+        Index = 0x02,
+        /// <summary>Selects that all flush actions be performed (File | Index)</summary>
+        All = (FlushFlags.File | FlushFlags.Index),
+	}
+
+    /// <summary>
+    /// Defines the set of public information that may be obtained about a recording file including the full file path, 
+    /// the file's seqNum (current count of files created by the tool) the file size and an indicator of whether it is currently active (open).
+    /// </summary>
+    public struct FileInfo : IEquatable<FileInfo>
+    {
+        /// <summary>Gives the full file path for the this file</summary>
+        public string FilePath { get; internal set; }
+        /// <summary>Gives the count of the number of files that the source writter has created</summary>
+        public int SeqNum { get; internal set; }
+        /// <summary>Gives the total size of the current file</summary>
+        public int FileSize { get; internal set; }
+        /// <summary>Is true if the file was active (open) when this information was obtained</summary>
+        public bool IsActive { get; internal set; }
+
+        /// <summary>Returns true if this FileInfo has the same contents as the given other FileInfo</summary>
+        public bool Equals(FileInfo other)
+        {
+            return (FilePath == other.FilePath
+                    && SeqNum == other.SeqNum
+                    && FileSize == other.FileSize
+                    && IsActive == other.IsActive
+                    );
+        }
+
+        /// <summary>Debugging and logging helper method</summary>
+        public override string ToString()
+        {
+            return "'{0}' seqNum:{1} size:{2}{3}".CheckedFormat(FilePath, SeqNum, FileSize, IsActive ? " [active]" : string.Empty);
+        }
     }
 
     public class GroupInfo : MetaDataCommonInfo
@@ -231,9 +285,9 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
         #region IMDRFWriter implementation methods
 
-        public string RecordGroups(bool writeAll = false)
+        public string RecordGroups(bool writeAll = false, DateTimeStampPair dtPair = null)
         {
-            DateTimeStampPair dtPair = new DateTimeStampPair(fileReferenceDTPair, setup);
+            dtPair = (dtPair ?? DateTimeStampPair.Now).UpdateFileDeltas(fileReferenceDTPair);
 
             string ec = ActiviateFile(dtPair);
 
@@ -254,7 +308,10 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
             }
 
             if (writeAll)
+            {
                 lastWriteAllTimeStamp = tsNow;
+                writeFileIndexNow = true;
+            }
 
             foreach (GroupTracker groupTracker in groupTrackerArray)
             {
@@ -304,7 +361,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
                         }
 
                         if (ec.IsNullOrEmpty())
-                            ec = WriteDataBlock();
+                            ec = WriteDataBlock(dtPair);
 
                         if (ec.IsNullOrEmpty())
                             groupTracker.NoteWritten();
@@ -318,22 +375,25 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
                 }
             }
 
+            if (ec.IsNullOrEmpty())
+                ServicePendingWrites(dtPair);
+
             if (!ec.IsNullOrEmpty())
             {
                 droppedCounts.IncrementDataGroup();
-                RecordError(ec);
-                CloseFile();
+                RecordError(ec, dtPair);
+                CloseFile(dtPair);
             }
 
             return ec;
         }
 
-        public string RecordOccurrence(OccurrenceInfo occurrenceInfo, object dataValue)
+        public string RecordOccurrence(OccurrenceInfo occurrenceInfo, object dataValue, DateTimeStampPair dtPair = null)
         {
-            return RecordOccurrence(occurrenceInfo, new ValueContainer(dataValue));
+            return RecordOccurrence(occurrenceInfo, new ValueContainer(dataValue), dtPair);
         }
 
-        public string RecordOccurrence(OccurrenceInfo occurrenceInfo, ValueContainer dataVC)
+        public string RecordOccurrence(OccurrenceInfo occurrenceInfo, ValueContainer dataVC, DateTimeStampPair dtPair = null)
         {
             if (occurrenceInfo == null)
                 return "{0} failed:  occurrenceInfo parameter cannot be null".CheckedFormat(CurrentMethodName);
@@ -343,15 +403,15 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
             if (occurrenceTracker == null)
             {
                 if (occurrenceInfo.OccurrenceID == 0)
-                    return RecordError("{0} failed: no tracker found for occurrence {1} (probably was not registered)".CheckedFormat(CurrentMethodName, occurrenceInfo));
+                    return RecordError("{0} failed: no tracker found for occurrence {1} (probably was not registered)".CheckedFormat(CurrentMethodName, occurrenceInfo), dtPair);
                 else
-                    return RecordError("{0} failed: no tracker found for occurrence {1}".CheckedFormat(CurrentMethodName, occurrenceInfo));
+                    return RecordError("{0} failed: no tracker found for occurrence {1}".CheckedFormat(CurrentMethodName, occurrenceInfo), dtPair);
             }
 
             if (occurrenceTracker.ifc != ItemFormatCode.None && occurrenceTracker.inferredCST != dataVC.cvt)
-                return RecordError("{0} failed on {1}: data {2} is not compatible with required ifc:{3}".CheckedFormat(CurrentMethodName, occurrenceInfo, dataVC, occurrenceTracker.ifc));
+                return RecordError("{0} failed on {1}: data {2} is not compatible with required ifc:{3}".CheckedFormat(CurrentMethodName, occurrenceInfo, dataVC, occurrenceTracker.ifc), dtPair);
 
-            DateTimeStampPair dtPair = new DateTimeStampPair(fileReferenceDTPair, setup);
+            dtPair = (dtPair ?? DateTimeStampPair.Now).UpdateFileDeltas(fileReferenceDTPair);
 
             string ec = ActiviateFile(dtPair);
 
@@ -359,50 +419,65 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
             {
                 StartOccurrenceDataBlock(occurrenceTracker, dtPair);
                 dataBlockBuffer.payloadDataList.AppendWithIH(dataVC);
-                ec = WriteDataBlock();
+                ec = WriteDataBlock(dtPair);
             }
 
             if (!ec.IsNullOrEmpty())
-                RecordError(ec);
+                RecordError(ec, dtPair);
 
             return ec;
         }
 
-        public void Flush()
+        public string Flush(FlushFlags flushFlags, DateTimeStampPair dtPair = null)
         {
-            if (IsFileOpen)
-            {
-                try
-                {
-                    fs.Flush();
-                }
-                catch (System.Exception ex)
-                {
-                    RecordError("{0} failed: '{1}' {2} {3}".CheckedFormat(CurrentMethodName, filePath, ex.GetType(), ex.Message));
+            string ec = string.Empty;
 
-                    CloseFile();
-                }
+            if (!IsFileOpen)
+                ec = "{0} failed: File is not open".CheckedFormat(CurrentMethodName);
+
+            dtPair = (dtPair ?? DateTimeStampPair.Now).UpdateFileDeltas(fileReferenceDTPair);
+
+            try
+            {
+                if (ec.IsNullOrEmpty() && flushFlags.IsSet(FlushFlags.Index))
+                    ec = UpdateAndWriteFileIndex(doFlush: false, dtPair: dtPair);
+
+                if (ec.IsNullOrEmpty() && flushFlags.IsSet(FlushFlags.File))
+                    fs.Flush();
             }
+            catch (System.Exception ex)
+            {
+                ec = RecordError("{0} failed: {1} {2} {3}".CheckedFormat(CurrentMethodName, currentFileInfo, ex.GetType(), ex.Message), dtPair);
+
+                CloseFile(dtPair);
+            }
+
+            return ec;
         }
 
         public int GetCurrentFileSize()
         {
-            return (IsFileOpen ? currentFileLength : lastFileLength);
+            return (IsFileOpen ? CurrentFileInfo : LastFileInfo).FileSize;
         }
 
-        public int CloseCurrentFile(string reason)
+        public FileInfo CurrentFileInfo { get { return currentFileInfo; } }
+        public FileInfo LastFileInfo { get { return lastFileInfo; } }
+
+        public int CloseCurrentFile(string reason, DateTimeStampPair dtPair = null)
         {
-            if (IsFileOpen)
-                RecordMessage("{0} reason:{1}".CheckedFormat(CurrentMethodName, reason.MapNullOrEmptyTo("[NoReasonGiven]")));
-
-            ServicePendingWrites();
+            dtPair = (dtPair ?? DateTimeStampPair.Now).UpdateFileDeltas(fileReferenceDTPair);
 
             if (IsFileOpen)
-                WriteFileEndBlockAndCloseFile();
+                RecordMessage("{0} reason:{1}".CheckedFormat(CurrentMethodName, reason.MapNullOrEmptyTo("[NoReasonGiven]")), dtPair);
+
+            ServicePendingWrites(dtPair);
+
+            if (IsFileOpen)
+                WriteFileEndBlockAndCloseFile(dtPair);
 
             allowImmediateReopen = true;
 
-            return lastFileLength;
+            return LastFileInfo.FileSize;
         }
 
         #endregion
@@ -411,13 +486,13 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
         #region RecordError, RecordMessage
 
-        string RecordError(string errorMesg)
+        string RecordError(string errorMesg, DateTimeStampPair dtPair)
         {
             if (!errorMesg.IsNullOrEmpty())
             {
                 Log.Debug.Emit("{0}: {1}", CurrentMethodName, errorMesg);
 
-                MessageItem mesgItem = new MessageItem() { mesg = errorMesg, blockTypeID = FixedBlockTypeID.ErrorV1, dtPair = new DateTimeStampPair() };
+                MessageItem mesgItem = new MessageItem() { mesg = errorMesg, blockTypeID = FixedBlockTypeID.ErrorV1, dtPair = dtPair ?? DateTimeStampPair.Now };
 
                 if (errorQueueCount < MessageItem.maxQueueSize)
                 {
@@ -435,13 +510,13 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
             return errorMesg;
         }
 
-        string RecordMessage(string mesg)
+        string RecordMessage(string mesg, DateTimeStampPair dtPair)
         {
             if (!mesg.IsNullOrEmpty())
             {
                 Log.Debug.Emit("{0}: {1}", CurrentMethodName, mesg);
 
-                MessageItem mesgItem = new MessageItem() { mesg = mesg, blockTypeID = FixedBlockTypeID.MessageV1, dtPair = new DateTimeStampPair() };
+                MessageItem mesgItem = new MessageItem() { mesg = mesg, blockTypeID = FixedBlockTypeID.MessageV1, dtPair = dtPair ?? DateTimeStampPair.Now };
 
                 if (mesgQueueCount < MessageItem.maxQueueSize)
                 {
@@ -471,13 +546,13 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
             {
                 QpcTimeStamp tsNow = dtPair.qpcTimeStamp;
 
-                if (currentFileLength >= setup.NominalMaxFileSize)
+                if (currentFileInfo.FileSize >= setup.NominalMaxFileSize)
                 {
-                    CloseCurrentFile("size limit {0} bytes reached: '{1}' is {2} bytes and {3:f3} hours)".CheckedFormat(setup.NominalMaxFileSize, filePath, currentFileLength, fileDeltaTimeSpan.TotalHours));
+                    CloseCurrentFile("size limit {0} bytes reached: '{1}' is {2} bytes and {3:f3} hours)".CheckedFormat(setup.NominalMaxFileSize, currentFileInfo.FilePath, currentFileInfo.FileSize, fileDeltaTimeSpan.TotalHours));
                 }
                 else if (fileDeltaTimeSpan > setup.MaxFileRecordingPeriod)
                 {
-                    CloseCurrentFile("age limit {0:f3} hours reached: '{1}' is {2} bytes and {3:f3} hours (>= {3:f3})".CheckedFormat(setup.MaxFileRecordingPeriod.TotalHours, filePath, currentFileLength, fileDeltaTimeSpan.TotalHours));
+                    CloseCurrentFile("age limit {0:f3} hours reached: '{1}' is {2} bytes and {3:f3} hours (>= {3:f3})".CheckedFormat(setup.MaxFileRecordingPeriod.TotalHours, currentFileInfo.FilePath, currentFileInfo.FileSize, fileDeltaTimeSpan.TotalHours));
                 }
                 else if (dstRecheckTimer.GetIsTriggered(tsNow))
                 {
@@ -486,7 +561,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
                     if (fileReferenceIsDST != TimeZoneInfo.Local.IsDaylightSavingTime(dtNow)
                         || fileReferenceUTCOffset != TimeZoneInfo.Local.GetUtcOffset(dtNow))
                     {
-                        CloseCurrentFile("DST and/or timezone have changed since file was opened: '{0}' is {1} bytes and {2:f3} hours".CheckedFormat(filePath, currentFileLength, fileDeltaTimeSpan.TotalHours));
+                        CloseCurrentFile("DST and/or timezone have changed since file was opened: '{0}' is {1} bytes and {2:f3} hours".CheckedFormat(currentFileInfo.FilePath, currentFileInfo.FileSize, fileDeltaTimeSpan.TotalHours));
                     }
                 }
             }
@@ -529,14 +604,17 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
             // zero out other file access information prior to creating new file.
             currentFileDeltaTimeStamp = 0.0;
 
-            currentFileLength = 0;
+            currentFileInfo.IsActive = false;
+            currentFileInfo.FileSize = 0;
+            currentFileInfo.SeqNum = seqNumGen.IncrementSkipZero();
+
             offsetToStartOfFileIndexPayload = 0;
             lastWriteAllTimeStamp = QpcTimeStamp.Zero;
             
             // generate the file name
             string dateTimePart = Dates.CvtToString(fileReferenceDTPair.dateTime, Dates.DateTimeFormat.ShortWithMSec);
             string fileName = "{0}_{1}.mdrf".CheckedFormat(setup.FileNamePrefix, dateTimePart);
-            filePath = System.IO.Path.Combine(setup.DirPath, fileName);
+            currentFileInfo.FilePath = System.IO.Path.Combine(setup.DirPath, fileName);
             
             // attempt to create/open the file
             string ec = string.Empty;
@@ -545,11 +623,11 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
             {
                 int useBufferSize = setup.MaxDataBlockSize.Clip(1024, 65536);
 
-                fs = new FileStream(filePath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.Read, useBufferSize, FileOptions.None);
+                fs = new FileStream(currentFileInfo.FilePath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.Read, useBufferSize, FileOptions.None);
             }
             catch (System.Exception ex)
             {
-                string mesg = "{0} failed: '{1}' {2} {3}".CheckedFormat(CurrentMethodName, filePath, ex.GetType(), ex.Message);
+                string mesg = "{0} failed: {1} {2} {3}".CheckedFormat(CurrentMethodName, currentFileInfo, ex.GetType(), ex.Message);
 
                 ec = mesg;
             }
@@ -595,12 +673,12 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
                 // append the client provided NVItemSet
                 dataBlockBuffer.payloadDataList.AppendWithIH(setup.ClientNVS.MapNullToEmpty());
 
-                ec = WriteDataBlock();
+                ec = WriteDataBlock(dtPair);
             }
 
             	// write file index - because this is the first write, it also defines where the file index block is in the file.
             if (ec.IsNullOrEmpty())
-                ec = UpdateAndWriteFileIndex();
+                ec = UpdateAndWriteFileIndex(doFlush: false, dtPair: dtPair);
 
          	// generate DateTime block immediately after index
             if (ec.IsNullOrEmpty())
@@ -624,22 +702,29 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
                     if (dataBlockBuffer.payloadDataList.Count >= triggerNewBlockAfterSize)
                     {
-                        if (!(ec = WriteDataBlock()).IsNullOrEmpty())
+                        if (!(ec = WriteDataBlock(dtPair)).IsNullOrEmpty())
                             break;
                         startNewBlock = true;
                     }
                 }
 
                 if (ec.IsNullOrEmpty() && dataBlockBuffer.payloadDataList.Count > 0)
-                    ec = WriteDataBlock();
+                    ec = WriteDataBlock(dtPair);
             }
 
             // service pending writes to record any messages or errors into the file (if it is still open)
             if (ec.IsNullOrEmpty())
-                ec = ServicePendingWrites();
+                ec = ServicePendingWrites(dtPair);
+
+            // finaly flush the file
+            if (ec.IsNullOrEmpty())
+                ec = Flush(FlushFlags.File);
+
+            if (ec.IsNullOrEmpty())
+                currentFileInfo.IsActive = true;
 
             if (!ec.IsNullOrEmpty())
-                return RecordError(ec);
+                return RecordError(ec, dtPair);
 
             // clear the dropped counters after all messages have been emitted successfully
             droppedCounts = new DroppedCounts();
@@ -649,10 +734,13 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
         bool IsFileOpen { get { return fs != null; } }
 
-        void CloseFile()
+        void CloseFile(DateTimeStampPair dtPair)
         {
             if (fs != null)
             {
+                currentFileInfo.IsActive = false;
+                lastFileInfo = currentFileInfo;
+
                 try
                 {
                     fs.Close();
@@ -660,7 +748,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
                 }
                 catch (System.Exception ex)
                 {
-                    Log.Debug.Emit(RecordError("{0} failed: '{1}' {2} {3}".CheckedFormat(CurrentMethodName, filePath, ex.GetType(), ex.Message)));
+                    Log.Debug.Emit(RecordError("{0} failed: {1} {2} {3}".CheckedFormat(CurrentMethodName, currentFileInfo, ex.GetType(), ex.Message), dtPair));
                     fs = null;
                 }
             }
@@ -686,27 +774,23 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
             dataBlockBuffer.payloadDataList.AppendWithIH(dateTimeBlockNVSet);
 
-            string ec = WriteDataBlock();
+            string ec = WriteDataBlock(dtPair);
 
             return ec;
         }
 
-        string WriteFileEndBlockAndCloseFile()
+        string WriteFileEndBlockAndCloseFile(DateTimeStampPair dtPair)
         {
-            DateTimeStampPair dtPair = new DateTimeStampPair(fileReferenceDTPair, setup);
-
             StartDataBlock(FixedBlockTypeID.FileEndV1, dtPair, FileIndexRowFlagBits.None);
 
-            string ec = WriteDataBlock();
+            string ec = WriteDataBlock(dtPair);
 
             if (ec.IsNullOrEmpty())
-                ec = UpdateAndWriteFileIndex();
+                ec = UpdateAndWriteFileIndex(doFlush: false, dtPair: dtPair);
             else
-                UpdateAndWriteFileIndex();
+                UpdateAndWriteFileIndex(doFlush: false, dtPair: dtPair);
 
-            lastFileLength = currentFileLength;
-
-            CloseFile();
+            CloseFile(dtPair);
 
             return ec;
         }
@@ -734,7 +818,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
                 dataBlockBuffer.payloadDataList.Add(unchecked((byte) groupBlockFlagBits));
         }
 
-        string ServicePendingWrites()
+        string ServicePendingWrites(DateTimeStampPair dtPair)
         {
             string ec = string.Empty;
 
@@ -794,7 +878,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
                     {
                         OccurrenceTracker oTracker = (writeItem.blockTypeID == FixedBlockTypeID.ErrorV1) ? errorOccurrenceTracker : mesgOccurrenceTracker;
 
-                        writeItem.dtPair.UpdateFileDeltas(fileReferenceDTPair, setup);
+                        writeItem.dtPair.UpdateFileDeltas(fileReferenceDTPair);
 
                         StartOccurrenceDataBlock(oTracker, writeItem.dtPair);
 
@@ -802,7 +886,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
                         dataBlockBuffer.payloadDataList.AppendRaw(writeItem.dtPair.utcTimeSince1601.CastToU8());
                         dataBlockBuffer.payloadDataList.AppendWithIH(new ValueContainer(writeItem.mesg));
 
-                        ec = WriteDataBlock();
+                        ec = WriteDataBlock(dtPair);
                     }
                 }
             }
@@ -818,19 +902,19 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
             if (writeFileIndexNow && IsFileOpen)
             {
-                ec = UpdateAndWriteFileIndex();
+                ec = UpdateAndWriteFileIndex(doFlush: true, dtPair: dtPair);
             }
 
             return ec;
         }
 
-        string UpdateAndWriteFileIndex()
+        string UpdateAndWriteFileIndex(bool doFlush, DateTimeStampPair dtPair)
         {
             if (!IsFileOpen)
-                return RecordError("Cannot {0}: no file is open".CheckedFormat(CurrentMethodName));
+                return RecordError("Cannot {0}: no file is open".CheckedFormat(CurrentMethodName), dtPair);
 
-            if (currentFileLength == 0)
-                return RecordError("Cannot {0}: file is empty (file start block has not been written yet)".CheckedFormat(CurrentMethodName));
+            if (currentFileInfo.FileSize == 0)
+                return RecordError("Cannot {0}: file is empty (file start block has not been written yet)".CheckedFormat(CurrentMethodName), dtPair);
 
             bool thisIsFirstWrite = (offsetToStartOfFileIndexPayload == 0);
 
@@ -845,7 +929,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
                 dataBlockBuffer.GenerateHeader(overridePayloadCount: fileIndexData.fileIndexDataBuffer.Length);        // override the payload count with the length we will write
 
-                offsetToStartOfFileIndexPayload = (currentFileLength + dataBlockBuffer.generatedHeaderList.Count);
+                offsetToStartOfFileIndexPayload = (currentFileInfo.FileSize + dataBlockBuffer.generatedHeaderList.Count);
             }
 
             try
@@ -858,17 +942,18 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
                 fs.Write(fileIndexData.fileIndexDataBuffer, 0, fileIndexData.fileIndexDataBuffer.Length);
 
                 if (!thisIsFirstWrite)
-                    fs.Seek(currentFileLength, SeekOrigin.Begin);
+                    fs.Seek(currentFileInfo.FileSize, SeekOrigin.Begin);
                 else
-                    currentFileLength = offsetToStartOfFileIndexPayload + fileIndexData.fileIndexDataBuffer.Length;
+                    currentFileInfo.FileSize = offsetToStartOfFileIndexPayload + fileIndexData.fileIndexDataBuffer.Length;
 
-                fs.Flush();
+                if (doFlush)
+                    fs.Flush();
             }
             catch (System.Exception ex)
             {
-                CloseFile();
+                CloseFile(dtPair);
 
-                return RecordError("{0} failed: '{1}' {2} {3}".CheckedFormat(CurrentMethodName, filePath, ex.GetType(), ex.Message));
+                return RecordError("{0} failed: {1} {2} {3}".CheckedFormat(CurrentMethodName, currentFileInfo, ex.GetType(), ex.Message), dtPair);
             }
 
             lastFileIndexWriteTimeStamp = QpcTimeStamp.Now;
@@ -878,10 +963,10 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
             return string.Empty;
         }
 
-        string WriteDataBlock()
+        string WriteDataBlock(DateTimeStampPair dtPair)
         {
             if (!IsFileOpen)
-                return RecordError("Cannot {0}: no file is open".CheckedFormat(CurrentMethodName));
+                return RecordError("Cannot {0}: no file is open".CheckedFormat(CurrentMethodName), dtPair);
 
             try
             {
@@ -899,7 +984,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
                     fs.Write(timeStampUpdateDBB.generatedHeaderList.ToArray(), 0, tsuHeaderCount);
                     fs.Write(timeStampUpdateDBB.payloadDataList.ToArray(), 0, tsuPayloadCount);
 
-                    currentFileLength += tsuHeaderCount + tsuPayloadCount;
+                    currentFileInfo.FileSize += tsuHeaderCount + tsuPayloadCount;
 
                     // only update the currentFileDeltaTimeStampI8 after the corresponding block has been written.
                     currentFileDeltaTimeStamp = dataBlockBuffer.dtPair.fileDeltaTimeStamp;
@@ -909,7 +994,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
                 dataBlockBuffer.GenerateHeader();
 
                 // update the file index with the current record and mark that it eventually needs to be written
-                int fileOffsetToStartOfThisBlock = currentFileLength;
+                int fileOffsetToStartOfThisBlock = currentFileInfo.FileSize;
 
                 fileIndexData.RecordWriteDataBlock(dataBlockBuffer, setup, fileOffsetToStartOfThisBlock);
 
@@ -923,16 +1008,16 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
                     if (dbbPayloadCount > 0)
                         fs.Write(dataBlockBuffer.payloadDataList.ToArray(), 0, dbbPayloadCount);
 
-                    currentFileLength += dbbHheaderCount + dbbPayloadCount;
+                    currentFileInfo.FileSize += dbbHheaderCount + dbbPayloadCount;
                 }
 
                 dataBlockBuffer.Clear();
             }
             catch (System.Exception ex)
             {
-                CloseFile();
+                CloseFile(dtPair);
 
-                return RecordError("{0} failed: '{1}' {2} {3}".CheckedFormat(CurrentMethodName, filePath, ex.GetType(), ex.Message));
+                return RecordError("{0} failed: {1} {2} {3}".CheckedFormat(CurrentMethodName, currentFileInfo, ex.GetType(), ex.Message), dtPair);
             }
 
             return string.Empty;
@@ -1455,7 +1540,8 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
         SetupInfo setupOrig;
         SetupInfo setup;
 
-        string filePath;
+        AtomicInt32 seqNumGen = new AtomicInt32();
+
         System.IO.FileStream fs;
         DateTimeStampPair fileReferenceDTPair = null;
         bool fileReferenceIsDST;
@@ -1464,8 +1550,8 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
         double currentFileDeltaTimeStamp;
 
-        int currentFileLength;
-        int lastFileLength;
+        FileInfo currentFileInfo = new FileInfo();
+        FileInfo lastFileInfo = new FileInfo();
 
         FileIndexData fileIndexData;
         int offsetToStartOfFileIndexPayload;

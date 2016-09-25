@@ -364,7 +364,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
 
     /// <summary>Set Identity container class (immutable once constructed/deserialized).  Inclues a Name and UUID.  Serializable.</summary>
     [DataContract(Namespace = Constants.ModularInterconnectNameSpace)]
-    public class SetID
+    public class SetID : IEquatable<SetID>
     {
         /// <summary>Name only constructor.  UUID is generated automatically.</summary>
         public SetID(string name)
@@ -395,6 +395,12 @@ namespace MosaicLib.Modular.Interconnect.Sets
                     && Name == rhs.Name
                     && UUID == rhs.UUID
                     );
+        }
+
+        /// <summary>Returns true if this and the given other SetID have the same Name and UUID</summary>
+        public bool Equals(SetID other)
+        {
+            return IsEqualTo(other);
         }
 
         /// <summary>Support object.Equals override for use in testing</summary>
@@ -430,7 +436,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
     /// SeqNumDelta simply gives Last minus First.
     /// </summary>
     [DataContract(Namespace = Constants.ModularInterconnectNameSpace)]
-    public struct SeqNumRangeInfo
+    public struct SeqNumRangeInfo : IEquatable<SeqNumRangeInfo>
     {
         /// <summary>
         /// Gives the item sequence number of the first element in the set (when non-empty) or of the previously first element of the set (if the set is empty).  
@@ -458,6 +464,12 @@ namespace MosaicLib.Modular.Interconnect.Sets
                     && Last == rhs.Last
                     && Count == rhs.Count
                     );
+        }
+
+        /// <summary>Returns true if the given other has the same contents as this object has.</summary>
+        public bool Equals(SeqNumRangeInfo other)
+        {
+            return IsEqualTo(other);
         }
 
         /// <summary>Support object.Equals override for use in testing</summary>

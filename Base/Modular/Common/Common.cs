@@ -67,7 +67,7 @@ namespace MosaicLib.Modular.Common
     /// so-as to avoid the need to box and unbox the values so they can be passed as objects which would be expected to increase the GC load significantly and posses the added
     /// risk of forcing lots of high generation GC activity since these values are intended to be shared between threads.
     /// </summary>
-    public struct ValueContainer
+    public struct ValueContainer : IEquatable<ValueContainer>
     {
         /// <summary>
         /// Custom value constructor.  Constructs the object and then assigns its initial value as ValueAsObject = given initialValueAsObject.
@@ -927,6 +927,12 @@ namespace MosaicLib.Modular.Common
                 return u.IsEqualTo(rhs.u);
         }
 
+        /// <summary>IEquatable{ValueContainer} Equals implementation.  Returns true if the contents of this ValueContainer are "equal" to the contents of the other ValueContainer.</summary>
+        public bool Equals(ValueContainer other)
+        {
+            return IsEqualTo(other);
+        }
+
         /// <summary>Support Equality testing for boxed versions.</summary>
         public override bool Equals(object rhsAsObject)
         {
@@ -1413,7 +1419,7 @@ namespace MosaicLib.Modular.Common
     /// <summary>
     /// This is the read-only interface to a NamedValueSet
     /// </summary>
-    public interface INamedValueSet : IEnumerable<INamedValue>
+    public interface INamedValueSet : IEnumerable<INamedValue>, IEquatable<INamedValueSet>
     {
         /// <summary>Returns true if the set contains a NamedValue for the given name (after sanitization)</summary>
         bool Contains(string name);
@@ -1468,7 +1474,7 @@ namespace MosaicLib.Modular.Common
     /// <summary>
     /// This is the read-only interface to a NamedValue
     /// </summary>
-    public interface INamedValue
+    public interface INamedValue : IEquatable<INamedValue>
     {
         /// <summary>This property gives the caller access to the name of the named value</summary>
         string Name { get; }
@@ -1803,6 +1809,12 @@ namespace MosaicLib.Modular.Common
             }
 
             return true;
+        }
+
+        /// <summary>Returns true if the this INamedValueSet has the same contents, in the same order, as the given other NVS.</summary>
+        public bool Equals(INamedValueSet other)
+        {
+            return IsEqualTo(other);
         }
 
         /// <summary>
@@ -2228,7 +2240,7 @@ namespace MosaicLib.Modular.Common
         #region Equality support
 
         /// <summary>
-        /// Returns true if the given rhs has the same Name, VC contents and IsReadOnly value as the current object.
+        /// Returns true if the given rhs has the same Name, VC contents and IsReadOnly value as this object.
         /// </summary>
         public bool IsEqualTo(INamedValue rhs)
         {
@@ -2237,6 +2249,14 @@ namespace MosaicLib.Modular.Common
                     && VC.IsEqualTo(rhs.VC) 
                     && IsReadOnly == rhs.IsReadOnly
                     );
+        }
+
+        /// <summary>
+        /// Returns true if the given other NV has the same Name, VC contents and IsReadOnly value as this object.
+        /// </summary>
+        public bool Equals(INamedValue other)
+        {
+            return IsEqualTo(other);
         }
 
         /// <summary>Support object level Equality testing versions.</summary>

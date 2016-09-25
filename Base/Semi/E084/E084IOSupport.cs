@@ -19,6 +19,8 @@
  * limitations under the License.
  */
 
+using System;
+
 using MosaicLib.Utils;
 using MosaicLib.Modular.Action;
 using MosaicLib.Modular.Part;
@@ -28,7 +30,7 @@ namespace MosaicLib.Semi.E084.IOSupport
     #region PassiveToActive interface items
 
     /// <summary>Object contains the full set of information that defines the current state of an E084 Passive side IO interface.</summary>
-    public struct PassiveIOState
+    public struct PassiveIOState : IEquatable<PassiveIOState>
     {
         /// <summary>PassiveToActivePinsState setpoint</summary>
         public PassiveToActivePinsState outputs;
@@ -55,6 +57,12 @@ namespace MosaicLib.Semi.E084.IOSupport
                     && InputsAreValid == rhs.InputsAreValid
                     );
         }
+
+        /// <summary>Returns true if the contents of this and the given other object are identical</summary>
+        public bool Equals(PassiveIOState other)
+        {
+            return IsEqualTo(other);
+        }
     }
 
     /// <summary>Interface defines a SetOutputsAction for a IE084PassiveIOSupport object</summary>
@@ -78,7 +86,7 @@ namespace MosaicLib.Semi.E084.IOSupport
     #region ActiveToPassive interface items
 
     /// <summary>Object contains the full set of information that defines the current state of an E084 Passive side IO interface.</summary>
-    public struct ActiveIOState
+    public struct ActiveIOState : IEquatable<ActiveIOState>
     {
         /// <summary>ActiveToPassivePinsState setpoint</summary>
         public ActiveToPassivePinsState outputs;
@@ -104,6 +112,12 @@ namespace MosaicLib.Semi.E084.IOSupport
                     && inputs.IsEqualTo(rhs.inputs)
                     && InputsAreValid == rhs.InputsAreValid
                     );
+        }
+
+        /// <summary>Returns true if the contents of this and the given other object are identical</summary>
+        public bool Equals(ActiveIOState other)
+        {
+            return IsEqualTo(other);
         }
     }
 

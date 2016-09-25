@@ -172,7 +172,7 @@ namespace MosaicLib.PartsLib.Helpers
         }
     }
 
-    public interface IActuatorState
+    public interface IActuatorState : IEquatable<IActuatorState>
     {
         ActuatorPosition TargetPos { get; }
         string TargetPosStr { get; }
@@ -248,6 +248,11 @@ namespace MosaicLib.PartsLib.Helpers
                     && PosStateStr == rhs.PosStateStr
                     && TimeStamp == rhs.TimeStamp
                     );
+        }
+
+        public bool Equals(IActuatorState other)
+        {
+            return IsEqualTo(other);
         }
 
         public override string ToString()

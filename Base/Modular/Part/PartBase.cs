@@ -162,7 +162,7 @@ namespace MosaicLib.Modular.Part
 	/// (properties) or in what order.  To obtain new values for the results of invoking such methods, the client must explicitly request a new IBaseState object
 	/// whic will then contain the more current results.
 	/// </remarks>
-	public interface IBaseState
+	public interface IBaseState : IEquatable<IBaseState>
 	{
 		/// <summary>return true if the part is simulated</summary>
 		bool IsSimulated { get; }
@@ -511,6 +511,12 @@ namespace MosaicLib.Modular.Part
                 && Reason == rhs.Reason
                 && TimeStamp == rhs.TimeStamp
                 );
+        }
+
+        /// <summary>Returns true if the given other is non-null and if the contents of this and the given other IBaseState are equal to each other.</summary>
+        public bool Equals(IBaseState other)
+        {
+            return IsEqualTo(other);
         }
 
 		#endregion

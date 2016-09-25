@@ -229,34 +229,68 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
         public double fileDeltaTimeStamp;
 
         /// <summary>
-        /// "Default" constructor.  
-        /// Optionally sets both qpcTimeStamp and dateTime to thier corresponding versions of Now.
-        /// Sets utcTime to the double version of DateTime as a utc Windows FTime.
-        /// Does not calculate any of the fileDelta derived values.
+        /// "Default" constructor.  Sets contents to default values (zero)
         /// </summary>
-        public DateTimeStampPair(bool setToNow = true) 
+        public DateTimeStampPair() 
+        { }
+
+        /// <summary>
+        /// Copy constructor.  If the given value other is null then this constructor sets the current value to Zero
+        /// </summary>
+        public DateTimeStampPair(DateTimeStampPair other)
         {
-            if (setToNow)
-            {
-                qpcTimeStamp = QpcTimeStamp.Now;
-                dateTime = DateTime.Now;
-                utcTimeSince1601 = dateTime.GetUTCTimeSince1601();
-            }
+            SetFrom(other);
+        }
+
+
+        /// <summary>
+        /// Returns a DateTimeStampPair with its contents initialized to reflect the current DateTime/QpcTimeStamp (Now)
+        /// </summary>
+        public static DateTimeStampPair Now
+        {
+            get { return new DateTimeStampPair().SetToNow(); }
         }
 
         /// <summary>
-        /// Standard constructor.  Sets qpcTimeStamp and dateTime to their corresponding versions of Now.
-        /// Sets utcTime to the double version of DateTime as a utc Windows FTime.
-        /// Then, if the fileRefererenceDTPair and setupInfo are non-null, it sets all of the fileDelta
-        /// values from the difference between the recorded time(stamp) values and their corresponding values
-        /// from the given fileReferenceDTPair.  I8 versions of these are scaled using the I8 to/from seconds
-        /// scaling defined in the setupInfo.
+        /// Returns a DateTimeStampPair with its contents initialized to Zero
         /// </summary>
-        public DateTimeStampPair(DateTimeStampPair fileReferenceDTPair, SetupInfo setupInfo)
-            : this(setToNow: true)
+        public static DateTimeStampPair Zero
         {
-            UpdateFileDeltas(fileReferenceDTPair, setupInfo);
+            get { return new DateTimeStampPair(); }
         }
+
+        /// <summary>
+        /// Sets the current object's values from DateTime/QpcTimeStamp Now.  Sets the fileDeltaTimeStamp to 0.0.
+        /// <para/>Supports call chaining
+        /// </summary>
+        public DateTimeStampPair SetToNow()
+        {
+            qpcTimeStamp = QpcTimeStamp.Now;
+            dateTime = DateTime.Now;
+            utcTimeSince1601 = dateTime.GetUTCTimeSince1601();
+            fileDeltaTimeStamp = 0.0;
+
+            return this;
+        }
+
+        /// <summary>
+        /// Copy constructor helper method.  Sets the contents of this object to match the given other object, or to Zero if the other object is null
+        /// <para/>Supports call chaining
+        /// </summary>
+        public DateTimeStampPair SetFrom(DateTimeStampPair other)
+        {
+            if (other == null)
+                other = internalZero;
+
+            qpcTimeStamp = other.qpcTimeStamp;
+            dateTime = other.dateTime;
+            utcTimeSince1601 = other.utcTimeSince1601;
+            fileDeltaTimeStamp = other.fileDeltaTimeStamp;
+
+            return this;
+        }
+
+        private static readonly DateTimeStampPair internalZero = new DateTimeStampPair();
 
         /// <summary>
         /// If the fileRefererenceDTPair and setupInfo are non-null, it sets all of the fileDelta
@@ -265,9 +299,9 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
         /// scaling defined in the setupInfo.
         /// Otherwise does nothing.
         /// </summary>
-        public DateTimeStampPair UpdateFileDeltas(DateTimeStampPair fileReferenceDTPair, SetupInfo setupInfo)
+        internal DateTimeStampPair UpdateFileDeltas(DateTimeStampPair fileReferenceDTPair)
         {
-            if (fileReferenceDTPair != null && setupInfo != null)
+            if (fileReferenceDTPair != null)
                 fileDeltaTimeStamp = (qpcTimeStamp.Time - fileReferenceDTPair.qpcTimeStamp.Time);
 
             return this;
@@ -447,6 +481,14 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
                         && LastBlockDeltaTimeStamp == 0
                         ); 
             } 
+        }
+
+        public override string ToString()
+        {
+            if (IsEmpty)
+                return "[Empty]";
+
+            return "Offset:{0} Bits:{1} URBits:${2:X8} 1stDTS:{3:f6} lastDTS:{4:f6} 1stDT:{5:yyyyMMdd_HHmmssfff}".CheckedFormat(FileOffsetToStartOfFirstBlock, FileIndexRowFlagBits, FileIndexUserRowFlagBits, FirstBlockDeltaTimeStamp, LastBlockDeltaTimeStamp, FirstBlockDateTime);
         }
     }
 

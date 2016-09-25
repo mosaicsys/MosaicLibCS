@@ -38,6 +38,7 @@ using MosaicLib.Modular.Interconnect.Values;
 
 using MosaicLib.PartsLib.Tools.MDRF.Common;
 using MosaicLib.Semi.E005.Data;
+using MosaicLib.File;
 
 namespace MosaicLib.PartsLib.Tools.MDRF.Reader
 {
@@ -51,6 +52,12 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
         public double LastFileDeltaTimeStamp { get; set; }
         public double NominalMinimumGroupAndTimeStampUpdateInterval { get; set; }
 
+        public Func<IOccurrenceInfo, bool> OccurrenceFilterDelegate { get { return occurrenceFilterDelegate; } set { occurrenceFilterDelegate = value ?? defaultOccurrenceFilter; } }
+        public Func<IGroupInfo, bool> GroupFilterDelegate { get { return groupFilterDelegate; } set { groupFilterDelegate = value ?? defaultGroupFilter; } }
+
+        private Func<IOccurrenceInfo, bool> occurrenceFilterDelegate = defaultOccurrenceFilter;
+        private Func<IGroupInfo, bool> groupFilterDelegate = defaultGroupFilter;
+
         public ReadAndProcessFilterSpec()
         {
             PCEMask = ProcessContentEvent.All;
@@ -58,6 +65,9 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
             LastFileDeltaTimeStamp = Double.PositiveInfinity;
             NominalMinimumGroupAndTimeStampUpdateInterval = 0.0;
         }
+
+        private static readonly Func<IOccurrenceInfo, bool> defaultOccurrenceFilter = (IOccurrenceInfo oi) => true;
+        private static readonly Func<IGroupInfo, bool> defaultGroupFilter = (IGroupInfo gi) => true;
     }
 
     [Flags]
@@ -75,8 +85,11 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
         Group = 0x1000,
         EmptyGroup = 0x2000,
         PartialGroup = 0x4000,
+        /// <summary>Indicates that the corresponding groups data block payload indicates that this is the start of a full group update (writeall).  NOTE: this event is only included if the filterSpec includes the first defined group.</summary>
         StartOfFullGroup = 0x8000,
-        All = (ReadingStart | ReadingEnd | RowStart | RowEnd | NewTimeStamp | Occurrence | Message | Error | Group | EmptyGroup | PartialGroup | StartOfFullGroup),
+        GroupSetStart = 0x10000,
+        GroupSetEnd = 0x20000,
+        All = (ReadingStart | ReadingEnd | RowStart | RowEnd | NewTimeStamp | Occurrence | Message | Error | Group | EmptyGroup | PartialGroup | StartOfFullGroup | GroupSetStart | GroupSetEnd),
     }
 
     public class ProcessContentEventData
@@ -90,6 +103,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
         public IGroupInfo GroupInfo { get; internal set; }
         public ValueContainer VC { get; internal set; }
 
+        /// <summary>Setter also asigns FileDeltaTimeStamp from blocks delta timestamp if the given value is not null</summary>
         public DataBlockBuffer DataBlockBuffer 
         {
             get { return dataBlockBuffer; }
@@ -149,7 +163,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
 
             try
             {
-                fs = new FileStream(FilePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+                fs = new FileStream(FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
                 FileLength = (Int32)fs.Length;
 
                 ResultCode = ReadHeaderBlocks();
@@ -212,6 +226,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
             if (fileHeaderDbb.FixedBlockTypeID != FixedBlockTypeID.FileHeaderV1)
                 return "ReadFileAndHeader failed: unexpected 1st block {0}".CheckedFormat(fileHeaderDbb.FixedBlockTypeID);
 
+            fileIndexBlockStartOffset = fileScanOffset;
             DataBlockBuffer fileIndexDbb = ReadDataBlockAndHandleTimeStampUpdates(ref fileScanOffset);
 
             if (!fileIndexDbb.IsValid)
@@ -285,77 +300,80 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
             }
 
             // attempt to decode the FileIndexInfo
-            {
-                int decodeIndex = 0;
-                UInt32 numRows = 0, rowSizeDivisor = 0;
-
-                if (!Utils.Data.Pack(fileIndexDbb.payloadDataArray, decodeIndex + 0, out numRows)
-                    || !Utils.Data.Pack(fileIndexDbb.payloadDataArray, decodeIndex + 4, out rowSizeDivisor))
-                {
-                    ec = ec.MapNullOrEmptyTo("ReadFileAndHeader failed:  Could not extract file index from {0}".CheckedFormat(fileIndexDbb.FixedBlockTypeID));
-                }
-
-                FileIndexInfo = new Common.FileIndexInfo((Int32)numRows)
-                {
-                    RowSizeDivisor = (Int32)rowSizeDivisor,
-                };
-
-                decodeIndex += FileIndexInfo.SerializedSize;
-
-                UInt32 fileOffsetU4 = 0;                // 0..3
-                UInt32 blockTotalLengthU4 = 0;          // 4..7
-                UInt32 blockTypeID32U4 = 0;             // 8..11
-                UInt64 blockDeltaTimeStampU8 = 0;       // 12..19
-
-                if (!Utils.Data.Pack(fileIndexDbb.payloadDataArray, decodeIndex + 0, out fileOffsetU4)
-                    || !Utils.Data.Pack(fileIndexDbb.payloadDataArray, decodeIndex + 4, out blockTotalLengthU4)
-                    || !Utils.Data.Pack(fileIndexDbb.payloadDataArray, decodeIndex + 8, out blockTypeID32U4)
-                    || !Utils.Data.Pack(fileIndexDbb.payloadDataArray, decodeIndex + 12, out blockDeltaTimeStampU8)
-                    )
-                {
-                    ec = ec.MapNullOrEmptyTo("ReadFileAndHeader failed:  Could not extract last file block info from {0}".CheckedFormat(fileIndexDbb.FixedBlockTypeID));
-                }
-
-                FileIndexLastBlockInfoBase lastBlockInfo = FileIndexInfo.LastBlockInfo;
-                lastBlockInfo.FileOffsetToStartOfBlock = unchecked((Int32)fileOffsetU4);
-                lastBlockInfo.BlockTotalLength = unchecked((Int32)blockTotalLengthU4);
-                lastBlockInfo.BlockTypeID32 = unchecked((Int32)blockTypeID32U4);
-                lastBlockInfo.BlockDeltaTimeStamp = blockDeltaTimeStampU8.CastToF8();
-
-                decodeIndex += FileIndexLastBlockInfoBase.SerializedSize;
-
-                foreach (FileIndexRowBase fileIndexRow in FileIndexInfo.FileIndexRowArray)
-                {
-                    UInt32 fileIndexRowFlagBitsU4 = 0;          // 0..3
-                    UInt32 fileOffsetOfFirstBlockU4 = 0;        // 4..7
-                    UInt64 fileIndexUserRowFlagBitsU4 = 0;      // 8..15
-                    UInt64 firstBlockUtcTimeSince1601U8 = 0;    // 16..23
-                    UInt64 firstBlockDeltaTimeStampU8 = 0;      // 24..31
-                    UInt64 lastBlockDeltaTimeStampU8 = 0;       // 32..39
-
-                    if (!Utils.Data.Pack(fileIndexDbb.payloadDataArray, decodeIndex + 0, out fileIndexRowFlagBitsU4)
-                        || !Utils.Data.Pack(fileIndexDbb.payloadDataArray, decodeIndex + 4, out fileOffsetOfFirstBlockU4)
-                        || !Utils.Data.Pack(fileIndexDbb.payloadDataArray, decodeIndex + 8, out fileIndexUserRowFlagBitsU4)
-                        || !Utils.Data.Pack(fileIndexDbb.payloadDataArray, decodeIndex + 16, out firstBlockUtcTimeSince1601U8)
-                        || !Utils.Data.Pack(fileIndexDbb.payloadDataArray, decodeIndex + 24, out firstBlockDeltaTimeStampU8)
-                        || !Utils.Data.Pack(fileIndexDbb.payloadDataArray, decodeIndex + 32, out lastBlockDeltaTimeStampU8)
-                        )
-                    {
-                        ec = ec.MapNullOrEmptyTo("ReadFileAndHeader failed:  Could not extract file index row from {0}".CheckedFormat(fileIndexDbb.FixedBlockTypeID));
-                    }
-
-                    fileIndexRow.FileIndexRowFlagBitsU4 = fileIndexRowFlagBitsU4;
-                    fileIndexRow.FileOffsetToStartOfFirstBlock = unchecked((Int32)fileOffsetOfFirstBlockU4);
-                    fileIndexRow.FileIndexUserRowFlagBits = fileIndexUserRowFlagBitsU4;
-                    fileIndexRow.FirstBlockUtcTimeSince1601 = firstBlockUtcTimeSince1601U8.CastToF8();
-                    fileIndexRow.FirstBlockDeltaTimeStamp = firstBlockDeltaTimeStampU8.CastToF8();
-                    fileIndexRow.LastBlockDeltaTimeStamp = lastBlockDeltaTimeStampU8.CastToF8();
-
-                    decodeIndex += FileIndexRowBase.SerializedSize;
-                }
-            }
+            AttemptToDecodeFileIndexDbbAndGenerateFileIndexInfo(fileIndexDbb, ref ec);
 
             return ec;
+        }
+
+        private void AttemptToDecodeFileIndexDbbAndGenerateFileIndexInfo(DataBlockBuffer fileIndexDbb, ref string ec)
+        {
+            int decodeIndex = 0;
+            UInt32 numRows = 0, rowSizeDivisor = 0;
+
+            if (!Utils.Data.Pack(fileIndexDbb.payloadDataArray, decodeIndex + 0, out numRows)
+                || !Utils.Data.Pack(fileIndexDbb.payloadDataArray, decodeIndex + 4, out rowSizeDivisor))
+            {
+                ec = ec.MapNullOrEmptyTo("ReadFileAndHeader failed:  Could not extract file index from {0}".CheckedFormat(fileIndexDbb.FixedBlockTypeID));
+            }
+
+            FileIndexInfo = new Common.FileIndexInfo((Int32)numRows)
+            {
+                RowSizeDivisor = (Int32)rowSizeDivisor,
+            };
+
+            decodeIndex += FileIndexInfo.SerializedSize;
+
+            UInt32 fileOffsetU4 = 0;                // 0..3
+            UInt32 blockTotalLengthU4 = 0;          // 4..7
+            UInt32 blockTypeID32U4 = 0;             // 8..11
+            UInt64 blockDeltaTimeStampU8 = 0;       // 12..19
+
+            if (!Utils.Data.Pack(fileIndexDbb.payloadDataArray, decodeIndex + 0, out fileOffsetU4)
+                || !Utils.Data.Pack(fileIndexDbb.payloadDataArray, decodeIndex + 4, out blockTotalLengthU4)
+                || !Utils.Data.Pack(fileIndexDbb.payloadDataArray, decodeIndex + 8, out blockTypeID32U4)
+                || !Utils.Data.Pack(fileIndexDbb.payloadDataArray, decodeIndex + 12, out blockDeltaTimeStampU8)
+                )
+            {
+                ec = ec.MapNullOrEmptyTo("ReadFileAndHeader failed:  Could not extract last file block info from {0}".CheckedFormat(fileIndexDbb.FixedBlockTypeID));
+            }
+
+            FileIndexLastBlockInfoBase lastBlockInfo = FileIndexInfo.LastBlockInfo;
+            lastBlockInfo.FileOffsetToStartOfBlock = unchecked((Int32)fileOffsetU4);
+            lastBlockInfo.BlockTotalLength = unchecked((Int32)blockTotalLengthU4);
+            lastBlockInfo.BlockTypeID32 = unchecked((Int32)blockTypeID32U4);
+            lastBlockInfo.BlockDeltaTimeStamp = blockDeltaTimeStampU8.CastToF8();
+
+            decodeIndex += FileIndexLastBlockInfoBase.SerializedSize;
+
+            foreach (FileIndexRowBase fileIndexRow in FileIndexInfo.FileIndexRowArray)
+            {
+                UInt32 fileIndexRowFlagBitsU4 = 0;          // 0..3
+                UInt32 fileOffsetOfFirstBlockU4 = 0;        // 4..7
+                UInt64 fileIndexUserRowFlagBitsU4 = 0;      // 8..15
+                UInt64 firstBlockUtcTimeSince1601U8 = 0;    // 16..23
+                UInt64 firstBlockDeltaTimeStampU8 = 0;      // 24..31
+                UInt64 lastBlockDeltaTimeStampU8 = 0;       // 32..39
+
+                if (!Utils.Data.Pack(fileIndexDbb.payloadDataArray, decodeIndex + 0, out fileIndexRowFlagBitsU4)
+                    || !Utils.Data.Pack(fileIndexDbb.payloadDataArray, decodeIndex + 4, out fileOffsetOfFirstBlockU4)
+                    || !Utils.Data.Pack(fileIndexDbb.payloadDataArray, decodeIndex + 8, out fileIndexUserRowFlagBitsU4)
+                    || !Utils.Data.Pack(fileIndexDbb.payloadDataArray, decodeIndex + 16, out firstBlockUtcTimeSince1601U8)
+                    || !Utils.Data.Pack(fileIndexDbb.payloadDataArray, decodeIndex + 24, out firstBlockDeltaTimeStampU8)
+                    || !Utils.Data.Pack(fileIndexDbb.payloadDataArray, decodeIndex + 32, out lastBlockDeltaTimeStampU8)
+                    )
+                {
+                    ec = ec.MapNullOrEmptyTo("ReadFileAndHeader failed:  Could not extract file index row from {0}".CheckedFormat(fileIndexDbb.FixedBlockTypeID));
+                }
+
+                fileIndexRow.FileIndexRowFlagBitsU4 = fileIndexRowFlagBitsU4;
+                fileIndexRow.FileOffsetToStartOfFirstBlock = unchecked((Int32)fileOffsetOfFirstBlockU4);
+                fileIndexRow.FileIndexUserRowFlagBits = fileIndexUserRowFlagBitsU4;
+                fileIndexRow.FirstBlockUtcTimeSince1601 = firstBlockUtcTimeSince1601U8.CastToF8();
+                fileIndexRow.FirstBlockDeltaTimeStamp = firstBlockDeltaTimeStampU8.CastToF8();
+                fileIndexRow.LastBlockDeltaTimeStamp = lastBlockDeltaTimeStampU8.CastToF8();
+
+                decodeIndex += FileIndexRowBase.SerializedSize;
+            }
         }
 
         private string ReadMetaDataBlocks()
@@ -525,7 +543,23 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
 
         #endregion
 
-        #region Content reading interface
+        #region Content reading interface (ReadAndProcessContents, ReloadFileIndexInfo)
+
+        public string ReloadFileIndexInfo()
+        {
+            string ec = string.Empty;
+            int fileScanOffset = fileIndexBlockStartOffset;
+
+            DataBlockBuffer fileIndexDbb = ReadDataBlockAndHandleTimeStampUpdates(ref fileScanOffset);
+
+            if (!fileIndexDbb.IsValid)
+                ec = fileIndexDbb.resultCode;
+
+            if (ec.IsNullOrEmpty())
+                AttemptToDecodeFileIndexDbbAndGenerateFileIndexInfo(fileIndexDbb, ref ec);
+
+            return ec;
+        }
 
         public void ReadAndProcessContents(ReadAndProcessFilterSpec filterSpec)
         {
@@ -614,9 +648,32 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
 
         private static IValueAccessor[] emptyIVAArray = new IValueAccessor[0];
 
+        private ProcessContentEvent lastEventPCE = ProcessContentEvent.None;
+        private FixedBlockTypeID lastBlockTypeID = FixedBlockTypeID.None;
+
         private void SignalEventIfEnabled(ReadAndProcessFilterSpec filterSpec, ProcessContentEventData eventData)
         {
-            if ((eventData.PCE & filterSpec.PCEMask) != ProcessContentEvent.None && filterSpec.EventHandlerDelegate != null)
+            ProcessContentEvent pce = eventData.PCE;
+
+            if (!pce.IsAnySet(ProcessContentEvent.RowStart | ProcessContentEvent.RowEnd))
+            {
+                // detect if we need to generate a GroupSetStart or GroupSetEnd event before emitting the current one...  RowStart and RowEnd events are ignored in relation to this work
+
+                bool lastWasGroupOrGroupSetStart = (lastEventPCE.IsSet(ProcessContentEvent.Group) || lastEventPCE == ProcessContentEvent.GroupSetStart);
+                bool currentIsGroupOrGroupSetStart = (pce.IsSet(ProcessContentEvent.Group) || pce == ProcessContentEvent.GroupSetStart);
+                if (lastWasGroupOrGroupSetStart && !currentIsGroupOrGroupSetStart && ProcessContentEvent.GroupSetEnd.IsAnySet(filterSpec.PCEMask))
+                {
+                    filterSpec.EventHandlerDelegate(this, new ProcessContentEventData() { PCE = ProcessContentEvent.GroupSetEnd, FileDeltaTimeStamp = currentBlockDeltaTimeStamp });
+                }
+                else if (!lastWasGroupOrGroupSetStart && currentIsGroupOrGroupSetStart && ProcessContentEvent.GroupSetStart.IsAnySet(filterSpec.PCEMask))
+                {
+                    filterSpec.EventHandlerDelegate(this, new ProcessContentEventData() { PCE = ProcessContentEvent.GroupSetStart, GroupInfo = eventData.GroupInfo, SeqNum = eventData.SeqNum, DataBlockBuffer = eventData.DataBlockBuffer, FileDeltaTimeStamp = eventData.FileDeltaTimeStamp });
+                }
+
+                lastEventPCE = pce;
+            }
+
+            if (pce.IsAnySet(filterSpec.PCEMask) && filterSpec.EventHandlerDelegate != null)
                 filterSpec.EventHandlerDelegate(this, eventData);
         }
 
@@ -651,20 +708,23 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                     {
                         IOccurrenceInfo oi = mdci as IOccurrenceInfo;
 
-                        if (oi != null && dbb.fileDeltaTimeStamp >= filterSpec.FirstFileDeltaTimeStamp)
+                        if (oi != null && dbb.fileDeltaTimeStamp >= filterSpec.FirstFileDeltaTimeStamp && filterSpec.OccurrenceFilterDelegate(oi) && filterSpec.PCEMask.IsAnySet(ProcessContentEvent.Occurrence))
                             ProcessOccurrenceBlock(oi, dbb, filterSpec);
                     }
-                    return;
+                    break;
                 case MDItemType.Group:
                     {
                         IGroupInfo gi = mdci as IGroupInfo;
 
-                        ProcessGroupBlock(gi, dbb, filterSpec);
+                        if (gi != null && filterSpec.GroupFilterDelegate(gi) && filterSpec.PCEMask.IsAnySet(ProcessContentEvent.Group | ProcessContentEvent.EmptyGroup | ProcessContentEvent.PartialGroup | ProcessContentEvent.StartOfFullGroup | ProcessContentEvent.GroupSetStart | ProcessContentEvent.GroupSetEnd))
+                            ProcessGroupBlock(gi, dbb, filterSpec);
                     }
-                    return;
+                    break;
                 default:
-                    return;
+                    break;
             }
+
+            lastBlockTypeID = dbb.FixedBlockTypeID;
         }
 
         private void ProcessMessageOrErrorBlock(DataBlockBuffer dbb, ReadAndProcessFilterSpec filterSpec)
@@ -1075,6 +1135,8 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
         private FileStream fs;
         private int fileScanOffset = 0;
         private double currentBlockDeltaTimeStamp = 0;
+
+        private int fileIndexBlockStartOffset = 0;
 
         private static readonly SetupInfo emptySetupInfo = new SetupInfo();
         private static readonly FileIndexInfo emptyFileIndexInfo = new FileIndexInfo();

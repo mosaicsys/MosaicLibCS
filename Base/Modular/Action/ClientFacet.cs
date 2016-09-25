@@ -165,7 +165,7 @@ namespace MosaicLib.Modular.Action
 	///make summary inquires about the state code and result code string.
 	///</summary>
 	
-	public interface IActionState
+	public interface IActionState : IEquatable<IActionState>
 	{
 		/// <summary>The last reported state code for from the Action</summary>
 		ActionStateCode StateCode { get; }
@@ -352,11 +352,7 @@ namespace MosaicLib.Modular.Action
             if (actionState == null || rhs == null)
                 return false;
 
-            return (actionState.StateCode == rhs.StateCode
-                    && actionState.ResultCode == rhs.ResultCode
-                    && actionState.TimeStamp == rhs.TimeStamp
-                    && actionState.NamedValues.IsEqualTo(rhs.NamedValues)
-                    );
+            return actionState.Equals(rhs);
         }
 
         /// <summary>Inline variant of action.Start that supports call chaining.  This method is only intended for use in cases where the action is already known to be ready to start (ie the start will not fail) as the result code from the underlying start call will be lost.</summary>
