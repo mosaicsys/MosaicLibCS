@@ -37,6 +37,9 @@ namespace MosaicLib.WPF.Common
 {
     using MosaicLib;        // apparently this makes MosaicLib get searched before MosaicLib.WPF.Logging for resolving symbols here.
 
+    /// <summary>
+    /// Static helper methods with methods that can be used to handle OnStartup, OnDeactivated and OnExit events (using correspondingly named HandleYYY methods)
+    /// </summary>
     public static partial class AppSetup
     {
         /// <summary>
@@ -56,6 +59,12 @@ namespace MosaicLib.WPF.Common
             }
         }
 
+        /// <summary>
+        /// Basic HandleOnStartup method signature.  Uses DefaultLogBaseName for the logBaseName parameter.
+        /// Program's command line arguments will be obtained from the given StartupEventArgs value.  These will be used with the (optional) initial setup of Modular.Config.
+        /// appLogger will be assigned to a new logger (this is expected to be used by the client in calls to later HandleYYY methods).
+        /// <para/>See the description of the full HandleOnStartup method variant for more details.
+        /// </summary>
         public static void HandleOnStartup(StartupEventArgs e, ref Logging.Logger appLogger)
         {
             HandleOnStartup(e, ref appLogger, DefaultLogBaseName);
@@ -75,13 +84,26 @@ namespace MosaicLib.WPF.Common
         public static FileRingLogMessageHandlerType DefaultMainLoggerType { get { return defaultMainLoggerType; } set { defaultMainLoggerType = value; } }
         private static FileRingLogMessageHandlerType defaultMainLoggerType = FileRingLogMessageHandlerType.TextFileRotationDirectoryLogMessageHandler;
 
+        /// <summary>
+        /// Basic HandleOnStartup method signature.  Caller provides logBaseName.  
+        /// Program's command line arguments will be obtained from the given StartupEventArgs value.  These will be used with the (optional) initial setup of Modular.Config.
+        /// appLogger will be assigned to a new logger (this is expected to be used by the client in calls to later HandleYYY methods).
+        /// <para/>See the description of the full HandleOnStartup method variant for more details.
+        /// </summary>
         public static void HandleOnStartup(StartupEventArgs e, ref Logging.Logger appLogger, string logBaseName)
         {
             string[] args = (e != null) ? e.Args : null;
             HandleOnStartup(ref args, ref appLogger, logBaseName, (e != null));
         }
 
-        public static void HandleOnStartup(ref string [] argsRef, ref Logging.Logger appLogger, string logBaseName, bool addWPFLMH)
+        /// <summary>
+        /// Full HandleOnStartup method signature.
+        /// argsRef line arguments string array will be used with the (optional) initial setup of Modular.Config.  This array will be replaced with one that has the consumed parameters removed from it.
+        /// appLogger will be assigned to a new logger (this is expected to be used by the client in calls to later HandleYYY methods).
+        /// logBaseName is used to define the name of the logger instances and will appear in the resulting output log file file names.
+        /// When addWPFLMH is passed as true then this method will also add an instance of the WpfLogMessageHandlerToolBase to the default log distribution group.
+        /// </summary>
+        public static void HandleOnStartup(ref string[] argsRef, ref Logging.Logger appLogger, string logBaseName, bool addWPFLMH)
         {
             System.Diagnostics.Process currentProcess = System.Diagnostics.Process.GetCurrentProcess();
             System.Threading.Thread currentThread = System.Threading.Thread.CurrentThread;
@@ -192,6 +214,9 @@ namespace MosaicLib.WPF.Common
             valuesListEmitter.EmittedItemList.ForEach((item) => appLoggerCopy.Debug.Emit(item.MesgStr));
         }
 
+        /// <summary>
+        /// Logs a message to indicate that the app was Deactivated using the AppEventMesgType message type (which defaults to MesgType.Signif)
+        /// </summary>
         public static void HandleOnDeactivated(Logging.ILogger appLogger)
         {
             Logging.LogMessage lm = appLogger.GetLogMessage(AppEventMesgType, "App Deactivated", appLogger.GetStackFrame(0));
@@ -200,6 +225,10 @@ namespace MosaicLib.WPF.Common
             appLogger.EmitLogMessage(ref lm);
         }
 
+        /// <summary>
+        /// Logs a message to indicate that the app is Stopping using the AppEventMesgType message type (which defaults to MesgType.Signif)
+        /// Then runs Logging.ShutdownLogging().
+        /// </summary>
         public static void HandleOnExit(Logging.ILogger appLogger)
         {
             Logging.LogMessage lm = appLogger.GetLogMessage(AppEventMesgType, "App Stopping", appLogger.GetStackFrame(0));

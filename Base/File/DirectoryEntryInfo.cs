@@ -21,13 +21,16 @@
  */
 //-------------------------------------------------------------------
 
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.IO;
+
+using MosaicLib;
+using MosaicLib.Utils;
+
 namespace MosaicLib.File
 {
-	using System;
-	using System.Collections;
-	using System.Collections.Generic;
-	using System.IO;
-
 	//-------------------------------------------------------------------
 	#region DirectoryEntryInfo
 
@@ -79,8 +82,10 @@ namespace MosaicLib.File
                 FileSystemInfo.Refresh();
                 timeStamp.SetToNow();
             }
-            else if (!string.IsNullOrEmpty(path))
+            else if (!path.IsNullOrEmpty())
+            {
                 Path = path;		// trigger a full rescan
+            }
 		}
 
         /// <summary>Resets path and stored information to the empty state</summary>
@@ -114,7 +119,7 @@ namespace MosaicLib.File
         /// <summary>Returns the FileSystemInfo property as a DirectoryInfo (null if the item is not a Directory)</summary>
         public DirectoryInfo DirectoryInfo { get { return fsiItem as DirectoryInfo; } }
         /// <summary>Returns true if the path or the FileSystemInfo are null or empty</summary>
-        public bool IsEmpty { get { return (string.IsNullOrEmpty(Path) || FileSystemInfo == null); } }
+        public bool IsEmpty { get { return (Path.IsNullOrEmpty() || FileSystemInfo == null); } }
         /// <summary>Returns true if the FileSystemInfo is a File</summary>
         public bool IsFile { get { return (fsiItem is FileInfo); } }
         /// <summary>Returns true if the FileSystemInfo is a Directory</summary>
@@ -210,6 +215,20 @@ namespace MosaicLib.File
                     return DateTime.Now;
                 }
             }
+        }
+
+        public override string ToString()
+        {
+            if (path.IsNullOrEmpty())
+                return "[empty]";
+            else if (FileSystemInfo == null)
+                return "path:'{0}' FSInfo:empty".CheckedFormat(path);
+            else if (IsFile)
+                return "File:'{0}'{1} FInfo:{2}".CheckedFormat(path, Exists ? "" : " -Exists", FileInfo);
+            else if (IsDirectory)
+                return "Directory:'{0}'{1} DInfo:{2}".CheckedFormat(path, Exists ? "" : " -Exists", DirectoryInfo);
+            else
+                return "Unknown:'{0}' FSInfo:{1}".CheckedFormat(path, FileSystemInfo);
         }
 
 		#endregion

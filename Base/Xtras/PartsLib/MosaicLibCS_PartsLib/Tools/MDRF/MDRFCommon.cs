@@ -362,6 +362,12 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
 
         public TLastBlockInfoType LastBlockInfo { get; internal set; }
 
+        /// <summary>Returns true if the last block's block type is the expected FileEnd block type</summary>
+        public bool FileWasProperlyClosed
+        {
+            get { return (LastBlockInfo != null && LastBlockInfo.FixedBlockTypeID == FixedBlockTypeID.FileEndV1); }
+        }
+
         public TRowType[] FileIndexRowArray { get; internal set; }
 
         #region Constructors
@@ -453,6 +459,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
         public FileIndexRowFlagBits FileIndexRowFlagBits { get { return unchecked((FileIndexRowFlagBits)FileIndexRowFlagBitsU4); } }
         public bool ContainsStartOfFullGroup { get { return ((FileIndexRowFlagBits & FileIndexRowFlagBits.ContainsStartOfFullGroup) != Common.FileIndexRowFlagBits.None); } }
 
+        /// <summary>Gives the UTC DateTime for the row's indicated FirstBlockUtcTimeSince1601</summary>
         public DateTime FirstBlockDateTime { get { return FirstBlockUtcTimeSince1601.GetDateTimeFromUTCTimeSince1601(); } }
 
         internal static int SerializedSize { get { return 40; } }

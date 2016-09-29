@@ -368,12 +368,12 @@ namespace MosaicLib.Modular.Common
             else if (valueType == typeof(System.TimeSpan)) decodedValueType = ContainerStorageType.TimeSpan;
             else if (valueType == typeof(System.DateTime)) decodedValueType = ContainerStorageType.DateTime;
             else if (valueType == stringType) decodedValueType = ContainerStorageType.String;
-            else if (iListOfStringType.IsAssignableFrom(valueType) || valueType == stringArrayType)
+            else if (iListOfStringType.IsAssignableFrom(valueType) || valueType == stringArrayType || stringEnumerableType.IsAssignableFrom(valueType))
             {
                 isNullable = false;
                 decodedValueType = ContainerStorageType.IListOfString;
             }
-            else if (iListOfVCType.IsAssignableFrom(valueType) || valueType == vcArrayType)
+            else if (iListOfVCType.IsAssignableFrom(valueType) || valueType == vcArrayType || vcEnumerableType.IsAssignableFrom(valueType))
             {
                 isNullable = false;
                 decodedValueType = ContainerStorageType.IListOfVC;
@@ -392,9 +392,11 @@ namespace MosaicLib.Modular.Common
 
         private static readonly Type stringType = typeof(System.String);
         private static readonly Type stringArrayType = typeof(System.String []);
+        private static readonly Type stringEnumerableType = typeof(IEnumerable<string>);
         private static readonly Type vcArrayType = typeof(ValueContainer[]);
         private static readonly Type iListOfStringType = typeof(IList<System.String>);
         private static readonly Type iListOfVCType = typeof(IList<ValueContainer>);
+        private static readonly Type vcEnumerableType = typeof(IEnumerable<ValueContainer>);
 
         /// <summary>
         /// get/set property.
@@ -536,6 +538,7 @@ namespace MosaicLib.Modular.Common
 
                                 if (valueAsObject == null)
                                 {
+                                    // first case - the given value is null
                                     o = emptyIListOfString;
                                 }
                                 else if (valueAsArrayOfStrings != null)
@@ -546,29 +549,50 @@ namespace MosaicLib.Modular.Common
                                 }
                                 else
                                 {
-                                    IList<String> valueAsIListOfStrings = ((IList<String>) valueAsObject);     // cast should not throw unless TValueType is not castable to IList<String>.  Also should not be null since valueAsObject is not null.
+                                    IList<String> valueAsIListOfStrings = (valueAsObject as IList<String>);
+                                    IEnumerable<string> valueAsStringEnumerable = (valueAsIListOfStrings == null) ? (valueAsObject as IEnumerable<string>) : null;
+                                    // cast should not throw unless TValueType is not castable to IList<String>.  Also should not be null since valueAsObject is not null.
 
-                                    if (oAsIListOfStrings == null || !oAsIListOfStrings.IsReadOnly || !(oAsIListOfStrings.IsEqualTo(valueAsIListOfStrings)))
+                                    if (valueAsIListOfStrings != null)
                                     {
-                                        if (valueAsIListOfStrings == null || valueAsIListOfStrings.IsReadOnly)
-                                            o = valueAsIListOfStrings;
-                                        else
-                                            o = new List<String>(valueAsIListOfStrings).AsReadOnly();
+                                        if (oAsIListOfStrings == null || !oAsIListOfStrings.IsReadOnly || !(oAsIListOfStrings.IsEqualTo(valueAsIListOfStrings)))
+                                        {
+                                            if (valueAsIListOfStrings == null || valueAsIListOfStrings.IsReadOnly)
+                                                o = valueAsIListOfStrings;
+                                            else
+                                                o = new List<String>(valueAsIListOfStrings).AsReadOnly();
+                                        }
+                                        // else o already contains the same readonly List of string contents as the given value.  no need to copy or change the existing contained value.
                                     }
-                                    // else o already contains the same readonly List of string contents as the given value.  no need to copy or change the existing contained value.
+                                    else if (valueAsStringEnumerable != null)
+                                    {
+                                        List<string> valueAsListOfStrings = new List<string>(valueAsStringEnumerable);
+
+                                        if (oAsIListOfStrings == null || !oAsIListOfStrings.IsReadOnly || !(oAsIListOfStrings.IsEqualTo(valueAsListOfStrings)))
+                                        {
+                                            o = valueAsListOfStrings.AsReadOnly();
+                                        }
+                                        // else o already contains the same readonly List of string contents as the given value.  no need to copy or change the existing contained value.
+                                    }
+                                    else
+                                    {
+                                        // else this is an unrecognized case.  This setter does not support the given object type.  Use a fallback
+                                        cvt = ContainerStorageType.Object;
+                                        o = value;
+                                    }
                                 }
-                                break;
                             }
+                            break;
+
                         case ContainerStorageType.IListOfVC:
                             {
                                 Object valueAsObject = (System.Object)value;
-
-                                // first case - the given value is null
 
                                 ValueContainer[] valueAsArrayOfVCs = (valueAsObject as ValueContainer[]);
 
                                 if (valueAsObject == null)
                                 {
+                                    // first case - the given value is null
                                     o = emptyIListOfVC;
                                 }
                                 else if (valueAsArrayOfVCs != null)
@@ -578,15 +602,30 @@ namespace MosaicLib.Modular.Common
                                 }
                                 else
                                 {
-                                    IList<ValueContainer> valueAsILVC = ((IList<ValueContainer>)valueAsObject);     // cast should not throw unless TValueType is not castable to IList<VC>.  Also should not be null since valueAsObject is not null.
+                                    IList<ValueContainer> valueAsILVC = (valueAsObject as IList<ValueContainer>);
+                                    IEnumerable<ValueContainer> valueAsVCEnumerable = (valueAsILVC == null) ? (valueAsObject as IEnumerable<ValueContainer>) : null;
 
-                                    if (valueAsILVC.IsReadOnly)
-                                        o = valueAsILVC;        // if valueAsILVC is already readonly then we just keep that value as it has already been deep cloned
+                                    if (valueAsILVC != null)
+                                    {
+                                        if (valueAsILVC.IsReadOnly)
+                                            o = valueAsILVC;        // if valueAsILVC is already readonly then we just keep that value as it has already been deep cloned
+                                        else
+                                            o = new List<ValueContainer>(valueAsILVC.Select(vc => ValueContainer.Empty.DeepCopyFrom(vc))).AsReadOnly();  // otherwise we need to generate a deep clone of the given list and save that new list (as readonly).
+                                    }
+                                    else if (valueAsVCEnumerable != null)
+                                    {
+                                        // convert given enumerable into a readonly list of deep copies of each of the given VCs
+                                        o = new List<ValueContainer>(valueAsVCEnumerable.Select(vc => ValueContainer.Empty.DeepCopyFrom(vc))).AsReadOnly();
+                                    }
                                     else
-                                        o = new List<ValueContainer>(valueAsILVC.Select(vc => ValueContainer.Empty.DeepCopyFrom(vc))).AsReadOnly();  // otherwise we need to generate a deep clone of the given list and save that new list (as readonly).
+                                    {
+                                        // else this is an unrecognized case.  This setter does not support the given object type.  Use a fallback
+                                        cvt = ContainerStorageType.Object;
+                                        o = value;
+                                    }
                                 }
-                                break;
                             }
+                            break;
                     }
                 }
                 else

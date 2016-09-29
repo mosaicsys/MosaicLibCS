@@ -50,7 +50,13 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
         public ProcessContentEvent PCEMask { get; set; }
         public double FirstFileDeltaTimeStamp { get; set; }
         public double LastFileDeltaTimeStamp { get; set; }
+        public DateTime FirstDateTime { get; set; }
+        public DateTime LastDateTime { get; set; }
         public double NominalMinimumGroupAndTimeStampUpdateInterval { get; set; }
+        /// <summary>When non-zero this mask will be used to skip reading contents from rows that do not have any of the indicated user row flag bits set</summary>
+        public UInt64 FileIndexUserRowFlagBitsMask { get; set; }
+        /// <summary>When true, this flag will cause the reader to rewind the starting file delta time stamp to the next oldest row that includes the start of a full group.  These will be processed but will not generate events.</summary>
+        public bool AutoRewindToPriorFullGroupRow { get; set; }
 
         public Func<IOccurrenceInfo, bool> OccurrenceFilterDelegate { get { return occurrenceFilterDelegate; } set { occurrenceFilterDelegate = value ?? defaultOccurrenceFilter; } }
         public Func<IGroupInfo, bool> GroupFilterDelegate { get { return groupFilterDelegate; } set { groupFilterDelegate = value ?? defaultGroupFilter; } }
@@ -60,14 +66,127 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
 
         public ReadAndProcessFilterSpec()
         {
-            PCEMask = ProcessContentEvent.All;
-            FirstFileDeltaTimeStamp = Double.NegativeInfinity;
-            LastFileDeltaTimeStamp = Double.PositiveInfinity;
-            NominalMinimumGroupAndTimeStampUpdateInterval = 0.0;
+            SetFrom(null);
+        }
+
+        public ReadAndProcessFilterSpec(ReadAndProcessFilterSpec other)
+        {
+            SetFrom(other);
+        }
+
+        public ReadAndProcessFilterSpec SetFrom(ReadAndProcessFilterSpec other)
+        {
+            if (other == null)
+            {
+                EventHandlerDelegate = null;
+                PCEMask = ProcessContentEvent.All;
+                FirstFileDeltaTimeStamp = Double.NegativeInfinity;
+                LastFileDeltaTimeStamp = Double.PositiveInfinity;
+                FirstDateTime = DateTime.MinValue;
+                LastDateTime = DateTime.MaxValue;
+                NominalMinimumGroupAndTimeStampUpdateInterval = 0.0;
+                FileIndexUserRowFlagBitsMask = 0;
+                AutoRewindToPriorFullGroupRow = false;
+                OccurrenceFilterDelegate = null;
+                GroupFilterDelegate = null;
+            }
+            else
+            {
+                EventHandlerDelegate = other.EventHandlerDelegate;
+                PCEMask = other.PCEMask;
+                FirstFileDeltaTimeStamp = other.FirstFileDeltaTimeStamp;
+                LastFileDeltaTimeStamp = other.LastFileDeltaTimeStamp;
+                FirstDateTime = other.FirstDateTime;
+                LastDateTime = other.LastDateTime;
+                NominalMinimumGroupAndTimeStampUpdateInterval = other.NominalMinimumGroupAndTimeStampUpdateInterval;
+                FileIndexUserRowFlagBitsMask = other.FileIndexUserRowFlagBitsMask;
+                AutoRewindToPriorFullGroupRow = other.AutoRewindToPriorFullGroupRow;
+                OccurrenceFilterDelegate = other.OccurrenceFilterDelegate;
+                GroupFilterDelegate = other.GroupFilterDelegate;
+            }
+
+            return this;
         }
 
         private static readonly Func<IOccurrenceInfo, bool> defaultOccurrenceFilter = (IOccurrenceInfo oi) => true;
         private static readonly Func<IGroupInfo, bool> defaultGroupFilter = (IGroupInfo gi) => true;
+
+        internal ReadAndProcessFilterSpec SetupFiltering(DateTimeInfo dateTimeInfo, FileIndexInfo fileIndexInfo, ref int firstRowIndex, ref int lastRowIndex)
+        {
+            bool deltaTSAreDefaults = (FirstFileDeltaTimeStamp == Double.NegativeInfinity && LastFileDeltaTimeStamp == Double.PositiveInfinity);
+            bool dateTimesAreDefaults = (FirstDateTime == DateTime.MinValue && LastDateTime == DateTime.MaxValue);
+            bool fileWasProperlyClosed = fileIndexInfo.FileWasProperlyClosed;
+
+            // make first adjustment of firstRowIndex and lastRowIndex
+
+            {
+                while (firstRowIndex < lastRowIndex)
+                {
+                    // test next row
+                    FileIndexRowBase nextFirb = fileIndexInfo.FileIndexRowArray.SafeAccess(firstRowIndex + 1);
+
+                    if (nextFirb == null)
+                        break;
+                    else if (!deltaTSAreDefaults && FirstFileDeltaTimeStamp >= nextFirb.FirstBlockDeltaTimeStamp)
+                        firstRowIndex++;
+                    else if (!dateTimesAreDefaults && FirstDateTime >= nextFirb.FirstBlockDateTime)
+                        firstRowIndex++;
+                    else
+                        break;
+                }
+
+                if (fileWasProperlyClosed)
+                {
+                    // if file was properly closed then find the last row index that is not empty
+                    for (lastRowIndex = firstRowIndex; ; lastRowIndex++)
+                    {
+                        FileIndexRowBase firb = fileIndexInfo.FileIndexRowArray.SafeAccess(lastRowIndex);
+
+                        if (firb != null && !firb.IsEmpty)
+                            lastRowIndex++;
+                        else
+                            break;
+                    }
+
+                    // now rewind as needed so that the row starts at or before the indicated constraints
+                    while (lastRowIndex > firstRowIndex)
+                    {
+                        // test next to last row
+                        FileIndexRowBase lastFirb = fileIndexInfo.FileIndexRowArray.SafeAccess(lastRowIndex - 1);
+
+                        if (lastFirb == null)
+                            break;
+                        else if (!deltaTSAreDefaults && LastFileDeltaTimeStamp < lastFirb.FirstBlockDeltaTimeStamp)
+                            lastRowIndex--;
+                        else if (!dateTimesAreDefaults && LastDateTime < lastFirb.FirstBlockDateTime)
+                            lastRowIndex--;
+                        else
+                            break;
+                    }
+                }
+                // else if the file was not properly closed then we cannot trust that the index or the last row information is actually valid
+            }
+
+            if (firstRowIndex > 0 && AutoRewindToPriorFullGroupRow)
+            {
+                // rewind to first prior row that has its ContainsStartOfFullGroup bit set, or until we get back to the front of the file)
+                while (firstRowIndex > 0)
+                {
+                    FileIndexRowBase firb = fileIndexInfo.FileIndexRowArray.SafeAccess(firstRowIndex);
+                    if (firb == null || !firb.FileIndexRowFlagBits.IsSet(FileIndexRowFlagBits.ContainsStartOfFullGroup))
+                        firstRowIndex--;
+                }
+            }
+
+            if (deltaTSAreDefaults)
+            {
+                FirstFileDeltaTimeStamp = 0.0;
+                if (fileWasProperlyClosed)
+                    LastFileDeltaTimeStamp = fileIndexInfo.LastBlockInfo.BlockDeltaTimeStamp;
+            }
+
+            return this;
+        }
     }
 
     [Flags]
@@ -94,12 +213,16 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
 
     public class ProcessContentEventData
     {
+        public MDRFFileReader Reader { get; internal set; }
         public ProcessContentEvent PCE { get; internal set; }
+        public string FilePath { get; internal set; }
         public UInt64 SeqNum { get; internal set; }
+        /// <summary>This DateTime is generated from the FileDeltaTimeStamp (which is recorded) by inference using the DateTime values recorded in the current row, and the next row (if it is present).  Due to the relative sample timing and the use of interpolation, individual DateTime values may not be strictly monotonic in relation to the underlying delta timestamp values.</summary>
+        public DateTime UTCDateTime { get; internal set; }
         public double FileDeltaTimeStamp { get; internal set; }
         public FileIndexRowBase Row { get; internal set; }
         public IMessageInfo MessageInfo { get; internal set; }
-        public IOccurrenceInfo OccurrentInfo { get; internal set; }
+        public IOccurrenceInfo OccurrenceInfo { get; internal set; }
         public IGroupInfo GroupInfo { get; internal set; }
         public ValueContainer VC { get; internal set; }
 
@@ -110,6 +233,29 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
             internal set { dataBlockBuffer = value; if (value != null) { FileDeltaTimeStamp = value.fileDeltaTimeStamp; } }
         }
         private DataBlockBuffer dataBlockBuffer;
+
+        public ProcessContentEventData()
+        { }
+
+        public ProcessContentEventData(ProcessContentEventData other)
+        {
+            Reader = other.Reader;
+            PCE = other.PCE;
+            FilePath = other.FilePath;
+            SeqNum = other.SeqNum;
+            UTCDateTime = other.UTCDateTime;
+            FileDeltaTimeStamp = other.FileDeltaTimeStamp;
+            Row = other.Row;
+            MessageInfo = other.MessageInfo;
+            OccurrenceInfo = other.OccurrenceInfo;
+            GroupInfo = other.GroupInfo;
+            VC = other.VC;
+        }
+
+        public override string ToString()
+        {
+            return "pce:{0} dt:{1:yyyyMMdd_HHmmss.fff} deltaT:{2:f6} seq:{3} vc:{4}".CheckedFormat(PCE, UTCDateTime.ToLocalTime(), FileDeltaTimeStamp, SeqNum, VC);
+        }
     }
 
     public class DataBlockBuffer
@@ -561,31 +707,26 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
             return ec;
         }
 
+        private int rowIndex = 0;
+        private FileIndexRowBase scanRow = null;
+        private FileIndexRowBase nextScanRow = null;
+
         public void ReadAndProcessContents(ReadAndProcessFilterSpec filterSpec)
         {
+            int firstRowIndex = 0, lastRowIndex = FileIndexInfo.NumRows;
+
+            filterSpec = new ReadAndProcessFilterSpec(filterSpec).SetupFiltering(DateTimeInfo, FileIndexInfo, ref firstRowIndex, ref lastRowIndex);      // replace our copy with a clone so that the caller can re-use their copy and we can change ours.  Then call Setup on it to adjust things
+
             ResetIVAs();
 
-            lastDbbTimeStamp = filterSpec.FirstFileDeltaTimeStamp;
+            lastDbbTimeStamp = Double.NegativeInfinity;
             lastGroupOrTSUpdateEventTimeStamp = Double.NegativeInfinity;
 
-            SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = ProcessContentEvent.ReadingStart, FileDeltaTimeStamp = lastDbbTimeStamp });
+            SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = ProcessContentEvent.ReadingStart });
 
-            SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = ProcessContentEvent.NewTimeStamp, FileDeltaTimeStamp = lastDbbTimeStamp });
-
-            int firstRowIndex = 0;
-            if (FileIndexInfo.FindRowForDeltaTimeStamp(filterSpec.FirstFileDeltaTimeStamp, out firstRowIndex))
-            {
-                for (; firstRowIndex > 0; firstRowIndex -= 1)
-                {
-                    FileIndexRowBase row = FileIndexInfo.FileIndexRowArray.SafeAccess(firstRowIndex);
-                    if (row.ContainsStartOfFullGroup)
-                        break;
-                }
-            }
-
-            int rowIndex = firstRowIndex;
-            FileIndexRowBase scanRow = FileIndexInfo.FileIndexRowArray.SafeAccess(rowIndex);
-            FileIndexRowBase nextScanRow = FileIndexInfo.FileIndexRowArray.SafeAccess(rowIndex + 1);
+            rowIndex = firstRowIndex;
+            scanRow = FileIndexInfo.FileIndexRowArray.SafeAccess(rowIndex);
+            nextScanRow = FileIndexInfo.FileIndexRowArray.SafeAccess(rowIndex + 1);
 
             SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = ProcessContentEvent.RowStart, Row = scanRow, FileDeltaTimeStamp = scanRow.FirstBlockDeltaTimeStamp });
 
@@ -624,15 +765,42 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
 
                 if (nextScanRow != null && !nextScanRow.IsEmpty && fileScanOffset >= nextScanRow.FileOffsetToStartOfFirstBlock)
                 {
-                    SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = ProcessContentEvent.RowEnd, Row = scanRow, FileDeltaTimeStamp = scanRow.LastBlockDeltaTimeStamp });
-                    scanRow = nextScanRow;
-                    SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = ProcessContentEvent.RowStart, Row = scanRow, FileDeltaTimeStamp = scanRow.FirstBlockDeltaTimeStamp });
+                    if (rowIndex >= lastRowIndex)
+                        break;
 
-                    nextScanRow = FileIndexInfo.FileIndexRowArray.SafeAccess(++rowIndex);
+                    SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = ProcessContentEvent.RowEnd, Row = scanRow, FileDeltaTimeStamp = scanRow.LastBlockDeltaTimeStamp });
+
+                    for (;;)
+                    {
+                        scanRow = nextScanRow;
+                        rowIndex++;
+                        nextScanRow = FileIndexInfo.FileIndexRowArray.SafeAccess(rowIndex);
+
+                        if (fileScanOffset < scanRow.FileOffsetToStartOfFirstBlock)
+                            fileScanOffset = scanRow.FileOffsetToStartOfFirstBlock;
+
+                        // if the user is not using a FileIndexUserRowFlagBitsMask then we are done advancing.
+                        if (filterSpec.FileIndexUserRowFlagBitsMask == 0)
+                            break;
+
+                        // if the current row is null or empty or the next row is null or empty then we cannot move forward more at this point
+                        if (scanRow == null || scanRow.IsEmpty || nextScanRow == null || nextScanRow.IsEmpty)
+                            break;
+
+                        // finally if the current row (which is neither null nor empty) has any of the masked bits set then we want to process this row.
+                        if ((scanRow.FileIndexUserRowFlagBits & filterSpec.FileIndexUserRowFlagBitsMask) != 0)
+                            break;
+                    }
+
+                    if (scanRow == null)
+                        break;
+
+                    SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = ProcessContentEvent.RowStart, Row = scanRow, FileDeltaTimeStamp = scanRow.FirstBlockDeltaTimeStamp });
                 }
             }
 
-            SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = ProcessContentEvent.RowEnd, Row = scanRow, FileDeltaTimeStamp = scanRow.LastBlockDeltaTimeStamp });
+            if (scanRow != null)
+                SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = ProcessContentEvent.RowEnd, Row = scanRow, FileDeltaTimeStamp = scanRow.LastBlockDeltaTimeStamp });
 
             SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = ProcessContentEvent.ReadingEnd, FileDeltaTimeStamp = lastDbbTimeStamp });
         }
@@ -653,6 +821,36 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
 
         private void SignalEventIfEnabled(ReadAndProcessFilterSpec filterSpec, ProcessContentEventData eventData)
         {
+            eventData.Reader = this;
+            eventData.FilePath = FilePath;
+
+            if (eventData.Row == null)
+                eventData.Row = scanRow;
+
+            // generate the DateTime value
+            if (scanRow == null || scanRow.IsEmpty || eventData.FileDeltaTimeStamp < scanRow.FirstBlockDeltaTimeStamp)
+            {
+                // There is no current row (or it is empty, or the current delta timestamp comes from before the current row): interpolate from the first DateTime stamp in the file
+                eventData.UTCDateTime = DateTimeInfo.UTCDateTime + TimeSpan.FromSeconds(Math.Max(0.0, eventData.FileDeltaTimeStamp));
+            }
+            else if (nextScanRow == null || nextScanRow.IsEmpty)
+            {
+                // There is no next row (or it is empty): interpolate from the first DateTime stamp in the current row
+                eventData.UTCDateTime = scanRow.FirstBlockDateTime + TimeSpan.FromSeconds(eventData.FileDeltaTimeStamp - scanRow.FirstBlockDeltaTimeStamp);
+            }
+            else if (eventData.FileDeltaTimeStamp >= nextScanRow.FirstBlockDeltaTimeStamp || scanRow.FirstBlockDeltaTimeStamp >= nextScanRow.FirstBlockDeltaTimeStamp)
+            {
+                // The delta timestamp is beyond the beginning of the next row: interpolate from the first DateTime stamp in the next row
+                eventData.UTCDateTime = nextScanRow.FirstBlockDateTime + TimeSpan.FromSeconds(eventData.FileDeltaTimeStamp - nextScanRow.FirstBlockDeltaTimeStamp);
+            }
+            else
+            {
+                // the delta timestamp is between the current row and the next row.  use time interpolation between them
+                double denominator = (nextScanRow.FirstBlockDeltaTimeStamp - scanRow.FirstBlockDeltaTimeStamp);
+                double unitSpan = (denominator > 0.0 ? ((eventData.FileDeltaTimeStamp - scanRow.FirstBlockDeltaTimeStamp) / denominator) : 0.0);
+                eventData.UTCDateTime = scanRow.FirstBlockDateTime + TimeSpan.FromSeconds((nextScanRow.FirstBlockDateTime - scanRow.FirstBlockDateTime).TotalSeconds * unitSpan);
+            }
+
             ProcessContentEvent pce = eventData.PCE;
 
             if (!pce.IsAnySet(ProcessContentEvent.RowStart | ProcessContentEvent.RowEnd))
@@ -663,11 +861,11 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                 bool currentIsGroupOrGroupSetStart = (pce.IsSet(ProcessContentEvent.Group) || pce == ProcessContentEvent.GroupSetStart);
                 if (lastWasGroupOrGroupSetStart && !currentIsGroupOrGroupSetStart && ProcessContentEvent.GroupSetEnd.IsAnySet(filterSpec.PCEMask))
                 {
-                    filterSpec.EventHandlerDelegate(this, new ProcessContentEventData() { PCE = ProcessContentEvent.GroupSetEnd, FileDeltaTimeStamp = currentBlockDeltaTimeStamp });
+                    filterSpec.EventHandlerDelegate(this, new ProcessContentEventData(eventData) { PCE = ProcessContentEvent.GroupSetEnd });
                 }
                 else if (!lastWasGroupOrGroupSetStart && currentIsGroupOrGroupSetStart && ProcessContentEvent.GroupSetStart.IsAnySet(filterSpec.PCEMask))
                 {
-                    filterSpec.EventHandlerDelegate(this, new ProcessContentEventData() { PCE = ProcessContentEvent.GroupSetStart, GroupInfo = eventData.GroupInfo, SeqNum = eventData.SeqNum, DataBlockBuffer = eventData.DataBlockBuffer, FileDeltaTimeStamp = eventData.FileDeltaTimeStamp });
+                    filterSpec.EventHandlerDelegate(this, new ProcessContentEventData(eventData) { PCE = ProcessContentEvent.GroupSetStart });
                 }
 
                 lastEventPCE = pce;
@@ -774,7 +972,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
             if (!dbb.IsValid)
                 return;
 
-            SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = ProcessContentEvent.Occurrence, OccurrentInfo = oi, SeqNum = seqNumU8, VC = occurrenceVC, DataBlockBuffer = dbb });
+            SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = ProcessContentEvent.Occurrence, OccurrenceInfo = oi, SeqNum = seqNumU8, VC = occurrenceVC, DataBlockBuffer = dbb });
         }
 
         private void ProcessGroupBlock(IGroupInfo gi, DataBlockBuffer dbb, ReadAndProcessFilterSpec filterSpec)

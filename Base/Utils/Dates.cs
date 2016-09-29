@@ -41,7 +41,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// This method converts the given utcTimeSince1601 into a DateTime value.
+        /// This method converts the given utcTimeSince1601 into a UTC DateTime value.
         /// </summary>
         public static DateTime GetDateTimeFromUTCTimeSince1601(this double utcTimeSince1601)
         {
