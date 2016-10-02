@@ -125,7 +125,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                     // test next row
                     FileIndexRowBase nextFirb = fileIndexInfo.FileIndexRowArray.SafeAccess(firstRowIndex + 1);
 
-                    if (nextFirb == null)
+                    if (nextFirb == null || nextFirb.IsEmpty)
                         break;
                     else if (!deltaTSAreDefaults && FirstFileDeltaTimeStamp >= nextFirb.FirstBlockDeltaTimeStamp)
                         firstRowIndex++;
@@ -198,6 +198,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
         RowStart = 0x0004,
         RowEnd = 0x0008,
         NewTimeStamp = 0x0010,
+        FileLengthChanged = 0x0020,
         Occurrence = 0x0100,
         Message = 0x0200,
         Error = 0x0400,
@@ -208,7 +209,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
         StartOfFullGroup = 0x8000,
         GroupSetStart = 0x10000,
         GroupSetEnd = 0x20000,
-        All = (ReadingStart | ReadingEnd | RowStart | RowEnd | NewTimeStamp | Occurrence | Message | Error | Group | EmptyGroup | PartialGroup | StartOfFullGroup | GroupSetStart | GroupSetEnd),
+        All = (ReadingStart | ReadingEnd | RowStart | RowEnd | NewTimeStamp | FileLengthChanged | Occurrence | Message | Error | Group | EmptyGroup | PartialGroup | StartOfFullGroup | GroupSetStart | GroupSetEnd),
     }
 
     public class ProcessContentEventData
@@ -310,7 +311,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
             try
             {
                 fs = new FileStream(FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-                FileLength = (Int32)fs.Length;
+                UpdateFileLength();
 
                 ResultCode = ReadHeaderBlocks();
 
@@ -336,7 +337,6 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
         public IValuesInterconnection IVI { get; private set; }
 
         public bool IsFileOpen { get { return (fs != null); } }
-        public int FileLength { get; private set; }
         public string ResultCode { get; private set; }
 
         public string HostName { get; private set; }
@@ -355,6 +355,20 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
         public IDictionary<string, IGroupPointInfo> GroupPointInfoDictionary { get; private set; }
         public IDictionary<string, IOccurrenceInfo> OccurrenceInfoDictionary { get; private set; }
         public IDictionary<int, IMetaDataCommonInfo> FileIDToMDCommonDictinoary { get; private set; }
+
+        public int FileLength { get; private set; }
+
+        public void UpdateFileLength()
+        {
+            try
+            {
+                FileLength = unchecked((int)((fs != null) ? fs.Length : 0));
+            }
+            catch
+            {
+                FileLength = 0;
+            }
+        }
 
         #endregion
 
@@ -710,6 +724,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
         private int rowIndex = 0;
         private FileIndexRowBase scanRow = null;
         private FileIndexRowBase nextScanRow = null;
+        private int lastReadAndProcessFileLength = 0;
 
         public void ReadAndProcessContents(ReadAndProcessFilterSpec filterSpec)
         {
@@ -723,6 +738,19 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
             lastGroupOrTSUpdateEventTimeStamp = Double.NegativeInfinity;
 
             SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = ProcessContentEvent.ReadingStart });
+
+            UpdateFileLength();
+
+            if (lastReadAndProcessFileLength == 0)
+                lastReadAndProcessFileLength = FileLength;
+            else if (lastReadAndProcessFileLength != FileLength)
+            {
+                ReloadFileIndexInfo();
+
+                lastReadAndProcessFileLength = FileLength;
+
+                SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = ProcessContentEvent.FileLengthChanged });
+            }
 
             rowIndex = firstRowIndex;
             scanRow = FileIndexInfo.FileIndexRowArray.SafeAccess(rowIndex);
@@ -1236,24 +1264,37 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
 
         #region FileByteArrayCache and RequestThatCacheContains
 
+        private const int defaultCacheSize = 65534;
+        private const int cacheSizeRounding = 16384;
+        private const int cacheSizeRoundingMinusOne = cacheSizeRounding - 1;
+        private const int minNominalCacheFileReadBoundary = 16384;
+        private const int minNominalCacheFileReadBoundaryMinusOne = minNominalCacheFileReadBoundary - 1;
+
+        /// <summary>
+        /// class manages a byte array that is used to cache read conents from the file and to optimize re-use of such data
+        /// </summary>
         private class FileByteArrayCache
         {
-            public byte[] byteArray = new byte[65536];
-            public int fileStartOffset;
+            public byte[] byteArray;
+            public int bufferStartOffsetInFile;
             public int contentLen;
 
-            public FileByteArrayCache(int byteArraySize = 65536)
+            public FileByteArrayCache(int byteArraySize = defaultCacheSize)
             {
-                byteArraySize = (byteArraySize + 16383) & ~16383;     // round size up the neartest multiple of 16k
+                byteArraySize = (byteArraySize + cacheSizeRoundingMinusOne) & ~cacheSizeRoundingMinusOne;     // round size up the neartest multiple of cacheSizeRounding
 
                 byteArray = new byte[byteArraySize];
+                bufferStartOffsetInFile = 0;
+                contentLen = 0;
             }
 
+            /// <summary>Returns true if the given byte offset is currently present in the loaded cache contents</summary>
             public bool ContainsByte(int testFileStartOffset)
             {
-                return testFileStartOffset.IsInRange(fileStartOffset, fileStartOffset + contentLen - 1);
+                return (contentLen > 0) && testFileStartOffset.IsInRange(bufferStartOffsetInFile, bufferStartOffsetInFile + contentLen - 1);
             }
 
+            /// <summary>Returns true if both the first byte and the last byte of the given range are present in the cache.  If testLen is zero then only the first byte needs to be present</summary>
             public bool ContainsRange(int testFileStartOffset, int testLen)
             {
                 return ContainsByte(testFileStartOffset) && ((testLen <= 0) || ContainsByte(testFileStartOffset + testLen - 1));
@@ -1261,53 +1302,67 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
         }
 
         private FileByteArrayCache cache = new FileByteArrayCache();
-        private const int minNominalFileReadBoundary = 16384;
-        private const int minNominalFileReadBoundaryMinusOne = minNominalFileReadBoundary - 1;
 
+        /// <summary>
+        /// This method is responsible for attempting to enlarge the cache as needed and to pull the desired region of the file into the cache so that its contents may be directly accessed by the client.
+        /// This method attempts to optimize the cached acccess in the following ways:
+        /// First when the cache already containst requested data this method gives the offset to the start of the requested data in the cache and immediately returns success.
+        /// Next (some data must be read from the file) the cache determine how much its prior contents can be retained (if any) and it shifts that portion of the array down to beginning of the cache as appropriate.
+        /// Then it reads in the remaining required bytes, generates the offset to the start point in cache and returns.
+        /// At all times, the cache attempts to keep the contents aligned on minNominalCacheFileReadBoundary boundaries.
+        /// </summary>
         private string RequestThatCacheContains(int startOffsetInFile, int numBytes, out int startOffsetInCacheByteArray)
         {
-            // if the cache is not large enough for this requested block then we reset the cache by creating another, larger one
-            if (numBytes > cache.byteArray.Length)
-                cache = new FileByteArrayCache(numBytes);
-
             // if the cache already contains all of the requested bytes then compute the start offset in the cache buffer and return success.
             if (cache.ContainsRange(startOffsetInFile, numBytes))
             {
-                startOffsetInCacheByteArray = startOffsetInFile - cache.fileStartOffset;
+                startOffsetInCacheByteArray = startOffsetInFile - cache.bufferStartOffsetInFile;
                 return string.Empty;
             }
 
-            // we are going to need to read something from the file.  If there are blocks of data in the cache that do not need to be read again then shift them over.
+            // we are going to need to read something from the file.  
+            // first determine the desired cache start offset (requested start offset rounded down to nearest boundary) and the required loaded cache size (length sufficient for desired offset + desired number of bytes rounded up to nearest boundary)
+
             // Note: this logic only supports shifting in the normal read direction.  This logic is not optimized for frequent random (or worse reverse) access order for these files.
 
-            int desiredCacheStartOffset = startOffsetInFile & ~minNominalFileReadBoundaryMinusOne;
-            int desiredCacheEndOffset = (startOffsetInFile + numBytes - 1 + minNominalFileReadBoundaryMinusOne) & ~minNominalFileReadBoundaryMinusOne;
-            int desiredCacheCount = desiredCacheEndOffset - desiredCacheStartOffset + 1;
+            int desiredCacheStartOffset = startOffsetInFile & ~minNominalCacheFileReadBoundaryMinusOne;     // round down
+            int desiredCacheEndAfterOffset = ((startOffsetInFile + numBytes) + minNominalCacheFileReadBoundaryMinusOne) & ~minNominalCacheFileReadBoundaryMinusOne; // round up
+            int desiredCacheCount = desiredCacheEndAfterOffset - desiredCacheStartOffset;
 
-            // if the newly desired cache offset is beyond the current one and the cache still contains at least one byte at the the newly desire offset
-            // then shift the portion that we already read down and make it the new start offset.
-            if ((desiredCacheStartOffset > cache.fileStartOffset) && cache.ContainsByte(desiredCacheStartOffset))
+            // if the cache is not large enough for this requested block after boundary alignment then we reset the cache by creating another, larger one
+            if (desiredCacheCount > cache.byteArray.Length)
             {
-                int shiftDistance = (desiredCacheStartOffset - cache.fileStartOffset);
-                int shiftByteCount = (cache.contentLen - shiftDistance);
-
-                if (shiftDistance > 0 && shiftByteCount > 0)
+                // enlarging the cache also clears it and thus triggers a full read.
+                cache = new FileByteArrayCache(desiredCacheCount);
+            }
+            else
+            {
+                // if the newly desired cache offset is beyond the current one and the cache still contains at least one byte at the the newly desire offset
+                // then shift the portion that we already read down and make it the new start offset.
+                if ((desiredCacheStartOffset > cache.bufferStartOffsetInFile) && cache.ContainsByte(desiredCacheStartOffset))
                 {
-                    Array.Copy(cache.byteArray, shiftDistance, cache.byteArray, 0, shiftByteCount);
-                    cache.fileStartOffset = desiredCacheStartOffset;
-                    cache.contentLen = shiftByteCount;
+                    int shiftDistance = (desiredCacheStartOffset - cache.bufferStartOffsetInFile);
+                    int shiftByteCount = (cache.contentLen - shiftDistance);
+
+                    if (shiftDistance > 0 && shiftByteCount > 0)
+                    {
+                        Array.Copy(cache.byteArray, shiftDistance, cache.byteArray, 0, shiftByteCount);
+                        cache.bufferStartOffsetInFile = desiredCacheStartOffset;
+                        cache.contentLen = shiftByteCount;
+                    }
+                }
+
+                // if the above logic did not move the cache's start offset to match the desired one then we clear the cache.  This will trigger a full read.
+                if (cache.bufferStartOffsetInFile != desiredCacheStartOffset)
+                {
+                    cache.bufferStartOffsetInFile = desiredCacheStartOffset;
+                    cache.contentLen = 0;
                 }
             }
 
-            // if the above logic did not move the cache's start offset to match the desired one then we clear the cache.  This will trigger a full read.
-            if (cache.fileStartOffset != desiredCacheStartOffset)
-            {
-                cache.fileStartOffset = desiredCacheStartOffset;
-                cache.contentLen = 0;
-            }
-            startOffsetInCacheByteArray = startOffsetInFile - cache.fileStartOffset;
+            startOffsetInCacheByteArray = startOffsetInFile - cache.bufferStartOffsetInFile;
 
-            int readStartOffset = cache.fileStartOffset + cache.contentLen;
+            int readStartOffset = cache.bufferStartOffsetInFile + cache.contentLen;
             int countToRead = Math.Min(desiredCacheCount - cache.contentLen, FileLength - readStartOffset);
 
             try

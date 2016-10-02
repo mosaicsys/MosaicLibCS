@@ -50,12 +50,13 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
         /// Version history:
         /// 1.0.0 (2016-09-01) : First CR version.
         /// 1.0.1 (2016-09-24) : API extensions to improve usability, modified RecordGroups to trigger write of file index any time RecordGroups does a writeall.
+        /// 1.0.2 (2016-10-02) : Changed default Flush flags to All (from File)
         /// </remarks>
         public static readonly LibraryInfo LibInfo = new LibraryInfo()
         {
             Type = "Mosaic Data Recording File (MDRF)",
             Name = "Mosaic Data Recording Engine (MDRE) CS API",
-            Version = "1.0.1 (2016-09-24)",
+            Version = "1.0.2 (2016-10-02)",
         };
     }
 
@@ -428,7 +429,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
             return ec;
         }
 
-        public string Flush(FlushFlags flushFlags, DateTimeStampPair dtPair = null)
+        public string Flush(FlushFlags flushFlags = FlushFlags.All, DateTimeStampPair dtPair = null)
         {
             string ec = string.Empty;
 
