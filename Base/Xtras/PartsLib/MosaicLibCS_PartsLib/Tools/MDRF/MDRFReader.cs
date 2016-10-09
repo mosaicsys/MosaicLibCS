@@ -173,8 +173,10 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                 while (firstRowIndex > 0)
                 {
                     FileIndexRowBase firb = fileIndexInfo.FileIndexRowArray.SafeAccess(firstRowIndex);
-                    if (firb == null || !firb.FileIndexRowFlagBits.IsSet(FileIndexRowFlagBits.ContainsStartOfFullGroup))
-                        firstRowIndex--;
+                    if (firb != null && firb.FileIndexRowFlagBits.IsSet(FileIndexRowFlagBits.ContainsStartOfFullGroup))
+                        break;
+
+                    firstRowIndex--;
                 }
             }
 
