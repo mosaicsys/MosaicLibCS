@@ -394,7 +394,7 @@ namespace MosaicLib.PartsLib.Scan.ScanEngine
                     plugin.UpdateOutputs();
                 }
             }
-            catch (System.ExecutionEngineException ex)
+            catch (System.Exception ex)
             {
                 if (currentPlugin != null)
                 {

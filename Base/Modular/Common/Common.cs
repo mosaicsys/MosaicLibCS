@@ -2564,4 +2564,285 @@ namespace MosaicLib.Modular.Common
     }
 
     #endregion
+
+    #region name mapping: IMapNameFromTo, MapNameFromTo, RegexMapNameFromTo and MapNameFromToList
+
+    /// <summary>
+    /// Interface for objects/classes that are used to support name mapping.
+    /// </summary>
+    public interface IMapNameFromTo
+    {
+        /// <summary>Gives the From string (name, prefix, regex) for the mapping</summary>
+        string From { get; }
+
+        /// <summary>Gives the To string (name, prefix, regex) for the mapping</summary>
+        string To { get; }
+
+        /// <summary>
+        /// Returns true if this is a simple map, or false if it is not (such as for a Regular Expression)
+        /// </summary>
+        bool IsSimpleMap { get; }
+
+        /// <summary>
+        /// Returns true if this map can be used to match and map the given from string.
+        /// </summary>
+        bool CanMap(string from);
+
+        /// <summary>
+        /// If this map can convert the given from string then it assigns the converted value to the given output to parameter and returns true.
+        /// If this map does not match the given from string or if the conversion fails then this method does not modify the to paramter and instead returns false.
+        /// </summary>
+        bool Map(string from, ref string to);
+    }
+
+    /// <summary>
+    /// Immutable item instance class for mapping names from one value to another.  
+    /// Generally used with MapNamesFromToList when interacting with values interconnect's MapNameFromToSet and related AddRange method
+    /// <para/>This class supports use with DataContract serialization and deserialization.
+    /// </summary>
+    [DataContract(Namespace = Constants.ModularCommonNameSpace)]
+    public class MapNameFromTo : IMapNameFromTo
+    {
+        /// <summary>
+        /// Basic constructor used to set the instance's From and To property values to the given ones.
+        /// </summary>
+        public MapNameFromTo(string from, string to)
+        {
+            From = from;
+            To = to;
+        }
+
+        /// <summary>Gives the from name for the mapping (the name that will be replaced with the To name).</summary>
+        [DataMember]
+        public string From { get; private set; }
+
+        /// <summary>Gives the to name for the mapping (the name that will actually be used to access the table).</summary>
+        [DataMember]
+        public string To { get; private set; }
+
+        /// <summary>Debugging and logging assistance method</summary>
+        public override string ToString()
+        {
+            return "'{0}'=>'{1}'".CheckedFormat(From, To);
+        }
+
+        /// <summary>
+        /// Returns true if this is a simple map, or false if it is not (such as for a Regular Expression)
+        /// </summary>
+        public virtual bool IsSimpleMap { get { return true; } }
+
+        /// <summary>
+        /// Returns true if this map can be used to match and map the given from string.
+        /// </summary>
+        public virtual bool CanMap(string from)
+        {
+            return (from == From);
+        }
+
+        /// <summary>
+        /// If this map can convert the given from string then it assigns the converted value to the given output to parameter and returns true.
+        /// If this map does not match the given from string or if the conversion fails then this method does not modify the to paramter and instead returns false.
+        /// </summary>
+        public virtual bool Map(string from, ref string to)
+        {
+            if (CanMap(from))
+            {
+                to = To;
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Immutable item instance class for use of common prefix replacement based mapping of names from one value to another.  
+    /// Generally used with MapNamesFromToList when interacting with values interconnect's MapNameFromToSet and related AddRange method
+    /// <para/>This class supports use with DataContract serialization and deserialization.
+    /// </summary>
+    [DataContract(Namespace = Constants.ModularCommonNameSpace)]
+    public class MapNamePrefixFromTo : MapNameFromTo
+    {
+        /// <summary>
+        /// Basic constructor used to set the instance's From (prefix) and To (prefix) property values to the given ones.
+        /// </summary>
+        public MapNamePrefixFromTo(string fromPrefix, string toPrefix)
+            : base(fromPrefix, toPrefix)
+        {
+        }
+
+        /// <summary>
+        /// Returns true if this is a simple map, or false if it is not.  (not in this case)
+        /// </summary>
+        public override bool IsSimpleMap { get { return false; } }
+
+        /// <summary>
+        /// Returns true if this map can be used to match and map the given from string.
+        /// </summary>
+        public override bool CanMap(string from)
+        {
+            return from.MapNullToEmpty().StartsWith(From);
+        }
+
+        /// <summary>
+        /// If this map can convert the given from string then it assigns the converted value to the given output to parameter and returns true.
+        /// If this map does not match the given from string or if the conversion fails then this method does not modify the to paramter and instead returns false.
+        /// </summary>
+        public override bool Map(string from, ref string to)
+        {
+            if (from.MapNullToEmpty().StartsWith(From))
+            {
+                to = "{0}{1}".CheckedFormat(To, from.Substring(From.Length));
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Immutable item instance class for use of Regular expressions <seealso cref="System.Text.RegularExpressions.Regex"/> for mapping names from one value to another.  
+    /// Generally used with MapNamesFromToList when interacting with values interconnect's MapNameFromToSet and related AddRange method
+    /// <para/>This class supports use with DataContract serialization and deserialization.
+    /// </summary>
+    [DataContract(Namespace = Constants.ModularCommonNameSpace)]
+    public class RegexMapNameFromTo : MapNameFromTo
+    {
+        /// <summary>
+        /// Basic constructor used to set the instance's From (regex expression) and To (regex expression) property values to the given ones.
+        /// </summary>
+        public RegexMapNameFromTo(string from, string to)
+            : base(from, to)
+        {
+            UpdateRegex();
+        }
+
+        System.Text.RegularExpressions.Regex regexFrom = null;
+
+        void UpdateRegex()
+        {
+            if (regexFrom == null)
+                regexFrom = new System.Text.RegularExpressions.Regex(From);
+        }
+
+        /// <summary>
+        /// Returns true if this is a simple map, or false if it is not (such as for a Regular Expression)
+        /// </summary>
+        public override bool IsSimpleMap { get { return false; } }
+
+        /// <summary>
+        /// Returns true if this map can be used to match and map the given from string.
+        /// </summary>
+        public override bool CanMap(string from)
+        {
+            try
+            {
+                UpdateRegex();
+
+                System.Text.RegularExpressions.Match match = regexFrom.Match(from);
+                return match.Success;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// If this map can convert the given from string then it assigns the converted value to the given output to parameter and returns true.
+        /// If this map does not match the given from string or if the conversion fails then this method does not modify the to paramter and instead returns false.
+        /// </summary>
+        public override bool Map(string from, ref string to)
+        {
+            try
+            {
+                UpdateRegex();
+
+                System.Text.RegularExpressions.Match match = regexFrom.Match(from);
+                if (match != null && match.Success)
+                {
+                    to = match.Result(To);
+                    return true;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+            catch
+            {
+                return false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// MapNameFromTo basic Collection class for mapping sets of names from one value to another.  
+    /// Generally used when interacting with values interconnect's MapNameFromToSet and related AddRange method.
+    /// <para/>This class supports use with DataContract serialization and deserialization.
+    /// </summary>
+    [CollectionDataContract(ItemName = "Map", Namespace = Constants.ModularCommonNameSpace)]
+    [KnownType(typeof(MapNameFromTo))]
+    [KnownType(typeof(RegexMapNameFromTo))]
+    public class MapNameFromToList : List<IMapNameFromTo>, IMapNameFromTo
+    {
+        /// <summary>Constructs an empty list.</summary>
+        public MapNameFromToList() { }
+
+        /// <summary>Constructs a list containing the elements from the given rhs enumerable source.</summary>
+        public MapNameFromToList(IEnumerable<IMapNameFromTo> rhs) : base(rhs) { }
+
+        /// <summary>Helper method allows use with nested braces initialization (as with Dictionary)</summary>
+        public MapNameFromToList Add(string from, string to)
+        {
+            Add(new MapNameFromTo(from, to));
+            return this;
+        }
+
+        /// <summary>Debugging and logging assistance method</summary>
+        public override string ToString()
+        {
+            return "MapNameFromToList({0})".CheckedFormat(string.Join(",", this.Select((item) => item.ToString()).ToArray()));
+        }
+
+        /// <summary>Returns the empty string (From is not supported by this type)</summary>
+        public string From { get { return string.Empty; } }
+
+        /// <summary>Returns the empty string (To is not supported by this type)</summary>
+        public string To { get { return string.Empty; } }
+
+        /// <summary>
+        /// Returns true if this is a simple map, or false if it is not (such as for a Regular Expression)
+        /// </summary>
+        public bool IsSimpleMap { get { return this.All(map => map.IsSimpleMap); } }
+
+        /// <summary>
+        /// Returns true if at least one of the maps in this list can be used to match and map the given from string.
+        /// </summary>
+        public bool CanMap(string from)
+        {
+            return this.Any(mapFromTo => mapFromTo.CanMap(from));
+        }
+
+        /// <summary>
+        /// If this list of maps can convert the given from string then the first successful match is used to assign the converted value to the given output to parameter and this method returns true.
+        /// If this list maps does not find a match for the given from string then this method does not modify the to paramter and instead returns false.
+        /// </summary>
+        public bool Map(string from, ref string to)
+        {
+            foreach (IMapNameFromTo map in this)
+            {
+                if (map.Map(from, ref to))
+                    return true;
+            }
+
+            return false;
+        }
+    }
+
+    #endregion
 }
