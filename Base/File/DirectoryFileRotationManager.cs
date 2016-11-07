@@ -998,25 +998,59 @@ namespace MosaicLib.File
             if (activeFileInfo == null)	// if we could not cast the entry's FSI to a FileInfo entry then advance is needed
                 return true;
 
+            return IsFileAdvanceNeeded(advanceRules, activeFileInfo.Length, activeFileInfo.CreationTime, DateTime.Now);
+        }
+
+        /// <summary>Returns true if the client should stop using the current file and should start using a new file in the directory</summary>
+        public static bool IsFileAdvanceNeeded(this Logging.FileRotationLoggingConfig.AdvanceRules advanceRules, long activeFileLength, DateTime activeFileCreationTime, DateTime now)
+        {
             // check for size limit reached
-            bool sizeLimitReached = (activeFileInfo.Length > advanceRules.fileSizeLimit
+            bool sizeLimitReached = (activeFileLength > advanceRules.fileSizeLimit
                                      && advanceRules.fileSizeLimit > 0);
 
             if (sizeLimitReached)
                 return true;
 
             // then check for age limit reached
-            bool ageLimitReached = false;
-
             if (advanceRules.fileAgeLimitInSec > 0.0)
             {
-                double fileAgeInSec = (DateTime.Now - activeFileInfo.CreationTime).TotalSeconds;
+                double fileAgeInSec = (now - activeFileCreationTime).TotalSeconds;
 
-                ageLimitReached = (fileAgeInSec > advanceRules.fileAgeLimitInSec);
+                bool ageLimitReached = (fileAgeInSec > advanceRules.fileAgeLimitInSec);
+
+                if (ageLimitReached)
+                    return true;
             }
 
-            if (ageLimitReached)
-                return true;
+            // check if the advance on time boundary boundary has been crossed
+            if (advanceRules.advanceOnTimeBoundary != Logging.AdvanceOnTimeBoundary.None)
+            {
+                switch (advanceRules.advanceOnTimeBoundary)
+                {
+                    case Logging.AdvanceOnTimeBoundary.Hourly:
+                        if (activeFileCreationTime.Hour != now.Hour)
+                            return true;
+                        break;
+                    case Logging.AdvanceOnTimeBoundary.Daily:
+                        if (activeFileCreationTime.DayOfYear != now.DayOfYear)
+                            return true;
+                        break;
+                    case Logging.AdvanceOnTimeBoundary.EachMonday:
+                        if (activeFileCreationTime.DayOfYear != now.DayOfYear && now.DayOfWeek == DayOfWeek.Monday)
+                            return true;
+                        break;
+                    case Logging.AdvanceOnTimeBoundary.EachSunday:
+                        if (activeFileCreationTime.DayOfYear != now.DayOfYear && now.DayOfWeek == DayOfWeek.Sunday)
+                            return true;
+                        break;
+                    case Logging.AdvanceOnTimeBoundary.Monthly:
+                        if (activeFileCreationTime.Month != now.Month)
+                            return true;
+                        break;
+                    default:
+                        break;
+                }
+            }
 
             // neither limit reached
             return false;

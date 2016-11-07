@@ -147,8 +147,8 @@ namespace MosaicLib.Utils
         /// <summary>Defines the default Logging.MesgType used for logging asserts into log distribution (either directly or via QueuedLogger.  defaults to Logging.MesgType.Error</summary>
         public static Logging.MesgType DefaultAssertLoggingMesgType = Logging.MesgType.Error;
 
-        /// <summary>Set this field to true if you would like non-log only assertions (such as DebugBreakpoint) to take a debug breakpoint.  defaults to false</summary>
-        public static bool EnableAssertDebugBreakpoints = false;
+        /// <summary>Set this property to true if you would like non-log only assertions (such as DebugBreakpoint) to take a debug breakpoint.  defaults to false</summary>
+        public static bool EnableAssertDebugBreakpoints { get; set; }
 
 		#endregion
 

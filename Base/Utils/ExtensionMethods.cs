@@ -23,6 +23,8 @@ using System;
 using System.Text;
 using System.Collections.Generic;
 using System.Linq;
+using System.Diagnostics;
+using System.Reflection;
 
 namespace MosaicLib.Utils
 {
@@ -357,7 +359,7 @@ namespace MosaicLib.Utils
 
     /// <summary>
     /// Fcns class is essentially a namespace for series of static helper methods
-    /// <para/>inclues: DisposeOf... methods, CheckedFormat and other String related methods, array/list specific Equals methods, ...
+    /// <para/>includes: array/list specific Equals methods, ...
     /// </summary>
     public static partial class Fcns
     {
@@ -447,6 +449,19 @@ namespace MosaicLib.Utils
             else
                 return replaceDefaultWith;
         }
+
+        #endregion
+
+        #region CurrentStackFrame, CurrentMethod, CurrentMethodName helper "functions".
+
+        /// <summary>Creates and returns the callers current StackFrame</summary>
+        public static StackFrame CurrentStackFrame { get { return new System.Diagnostics.StackFrame(1); } }
+
+        /// <summary>Creates a StackFrame for the caller and returns the stack frame's current method.</summary>
+        public static MethodBase CurrentMethod { get { return new System.Diagnostics.StackFrame(1).GetMethod(); } }
+
+        /// <summary>Creates a StackFrame for the caller and returns the Name of the stack frame's current method.</summary>
+        public static string CurrentMethodName { get { return new System.Diagnostics.StackFrame(1).GetMethod().Name; } }
 
         #endregion
     }

@@ -336,6 +336,18 @@ namespace MosaicLib.Modular.Config
     public interface IConfigKeyGetSet
     {
         /// <summary>
+        /// Gets/Sets the entire set of name mappings as an enumeration.  
+        /// This set of mappings is used by GetConfigKeyAccess to support mapping from the given key to an alternate key on a case by case basis.  
+        /// This mapping table may be used to allow two (or more) entities to end up using the same key accesd even if they do not know about each other in advance.
+        /// </summary>
+        IEnumerable<Modular.Common.IMapNameFromTo> MapNameFromToSet { get; set; }
+
+        /// <summary>
+        /// Adds the given set of IMapNameFromTo items to the current mapping MapNameFromToSet.
+        /// </summary>
+        IConfigKeyGetSet AddRange(IEnumerable<Modular.Common.IMapNameFromTo> addMapNameFromToSet);
+
+        /// <summary>
         /// SearchForKeys allows the caller to "explore" the key space and find sets of known keys based on the given MatchRuleSet contents.  
         /// If matchRuleSet is passed as MatchRuleSet.All then all keys will be returned.
         /// The array returned is contains the union of the corresponding sorted arrays returned by each provider.
@@ -821,6 +833,30 @@ namespace MosaicLib.Modular.Config
         #region IConfigKeyGetSet implementation
 
         /// <summary>
+        /// Gets/Sets the entire set of name mappings as an enumeration.  
+        /// This set of mappings is used by GetConfigKeyAccess to support mapping from the given key to an alternate key on a case by case basis.  
+        /// This mapping table may be used to allow two (or more) entities to end up using the same key accesd even if they do not know about each other in advance.
+        /// </summary>
+        public IEnumerable<Modular.Common.IMapNameFromTo> MapNameFromToSet 
+        {
+            get { lock (mutex) { return nameMappingSet.ToArray(); } }
+            set { lock (mutex) { InnerSetMappingArray(value); } }
+        }
+
+        /// <summary>
+        /// Adds the given set of IMapNameFromTo items to the current mapping MapNameFromToSet.
+        /// </summary>
+        public IConfigKeyGetSet AddRange(IEnumerable<Modular.Common.IMapNameFromTo> addMapNameFromToSet)
+        {
+            lock (mutex)
+            {
+                InnerAddRange(addMapNameFromToSet);
+            }
+
+            return this;
+        }
+
+        /// <summary>
         /// SearchForKeys allows the caller to "explore" the key space and find sets of known keys based on the given MatchRuleSet contents.  
         /// If matchRuleSet is passed as MatchRuleSet.All then all keys will be returned.
         /// The array returned is contains the union of the corresponding sorted arrays returned by each provider.
@@ -875,7 +911,55 @@ namespace MosaicLib.Modular.Config
 
         #endregion
 
-        #region internal methods used to implement Get and Update behavior
+        #region Inner methods (name mapping: InnerSetMappingArray, InnerMapSanitizedName, InnerResetNameMapping, InnerAddRange1
+
+        private MapNameFromToList nameMappingSet = new MapNameFromToList();
+        private volatile Dictionary<string, string> nameMappingDictionary = new Dictionary<string, string>();
+
+        protected void InnerSetMappingArray(IEnumerable<Modular.Common.IMapNameFromTo> nameMappingSet)
+        {
+            InnerResetNameMapping();
+            InnerAddRange(nameMappingSet);
+        }
+
+        protected string InnerMapSanitizedName(string name)
+        {
+            Dictionary<string, string> nmp = nameMappingDictionary;
+
+            string mappedName = null;
+
+            if (nmp.TryGetValue(name, out mappedName) && mappedName != null)
+                return mappedName;
+
+            if (nameMappingSet.Map(name, ref mappedName) && mappedName != null)
+                return mappedName;
+
+            return name;
+        }
+
+        protected void InnerResetNameMapping()
+        {
+            nameMappingSet = new Modular.Common.MapNameFromToList();
+            nameMappingDictionary = new Dictionary<string, string>();
+        }
+
+        private void InnerAddRange(IEnumerable<Modular.Common.IMapNameFromTo> addMapNameFromToSet)
+        {
+            foreach (Modular.Common.IMapNameFromTo mapItem in addMapNameFromToSet ?? emptyMapFromToArray)
+            {
+                nameMappingSet.Add(mapItem);
+                if (mapItem.IsSimpleMap)
+                    nameMappingDictionary[mapItem.From.Sanitize()] = mapItem.To.Sanitize();
+                else if (mapItem is Modular.Common.MapNameFromToList)
+                    InnerAddRange(mapItem as IEnumerable<Modular.Common.IMapNameFromTo>);
+            }
+        }
+
+        private Modular.Common.IMapNameFromTo[] emptyMapFromToArray = new Common.IMapNameFromTo[0];
+
+        #endregion
+
+        #region internal methods used to implement Get and Update behavior (TryGetConfigKeyAccess, TryUpdateConfigKeyAccess)
 
         /// <summary>
         /// This abstract method must be implemented by a derived implementation object in order to actually read config key values.
@@ -888,7 +972,9 @@ namespace MosaicLib.Modular.Config
 
             keyAccessSpec = keyAccessSpec ?? emptyKeyAccessSpec;
             ConfigKeyAccessFlags flags = keyAccessSpec.Flags;
-            string key = keyAccessSpec.Key;
+
+            string mappedKey = InnerMapSanitizedName(keyAccessSpec.Key);
+            IConfigKeyAccessSpec mappedKeyAccessSpec = ((mappedKey == keyAccessSpec.Key) ? keyAccessSpec : new ConfigKeyAccessSpec(keyAccessSpec) { Key = mappedKey });
 
             using (var eeTrace = new Logging.EnterExitTrace(TraceEmitter, methodName))
             {
@@ -898,7 +984,7 @@ namespace MosaicLib.Modular.Config
                 lock (mutex)
                 {
                     // if the client is asking for a ReadOnlyOnce key and we have already seen this key as a read only once key then return a clone of the previously seen version.
-                    if (flags.ReadOnlyOnce && readOnlyOnceKeyDictionary.TryGetValue(key ?? String.Empty, out icka) && icka != null)
+                    if (flags.ReadOnlyOnce && readOnlyOnceKeyDictionary.TryGetValue(mappedKey ?? String.Empty, out icka) && icka != null)
                     {
                         if (!flags.SilenceLogging)
                             Trace.Trace.Emit("{0}: Using clone of prior instance:{1} [ROO]", methodName, icka.ToString(ToStringDetailLevel.Full));
@@ -907,7 +993,7 @@ namespace MosaicLib.Modular.Config
                     }
 
                     // if this key has been seen before then return a clone of the previously seen one.
-                    if (icka == null && allSeenKeysDictionary.TryGetValue(key ?? String.Empty, out icka) && icka != null)
+                    if (icka == null && allSeenKeysDictionary.TryGetValue(mappedKey ?? String.Empty, out icka) && icka != null)
                     {
                         if (!flags.SilenceLogging)
                             Trace.Trace.Emit("{0}: Starting with clone of prior instance:{1}", methodName, icka.ToString(ToStringDetailLevel.Full));
@@ -917,11 +1003,12 @@ namespace MosaicLib.Modular.Config
                         tryUpdate = !icka.ValueIsFixed;     // if we find an old key that does not have a fixed value then attempt to update the new key in case the persisted value has changed since the key was first seen.
                     }
 
+                    // now existing IConfigKeyAccess was found.  Search through the providers to see which one (if any) can provide an accessor for this (mapped) key.
                     if (icka == null)
                     {
                         foreach (IConfigKeyProvider provider in lockedProviderList.Array)
                         {
-                            icka = provider.GetConfigKeyAccess(keyAccessSpec);
+                            icka = provider.GetConfigKeyAccess(mappedKeyAccessSpec);
 
                             if (icka != null)
                             {
@@ -934,15 +1021,15 @@ namespace MosaicLib.Modular.Config
 
                         if (icka != null)
                         {
-                            allSeenKeysDictionary[key] = icka;
+                            allSeenKeysDictionary[mappedKey] = icka;
                             if (icka.Flags.ReadOnlyOnce)
-                                readOnlyOnceKeyDictionary[key] = icka;
+                                readOnlyOnceKeyDictionary[mappedKey] = icka;
 
                             icka = new ConfigKeyAccessImpl(icka, this) { Flags = flags };
                         }
                         else
                         {
-                            icka = new ConfigKeyAccessImpl(key, flags, this, null) { ProviderFlags = new ConfigKeyProviderFlags() { KeyWasNotFound = true } };
+                            icka = new ConfigKeyAccessImpl(mappedKey, flags, this, null) { ProviderFlags = new ConfigKeyProviderFlags() { KeyWasNotFound = true } };
 
                             if (!flags.SilenceIssues && !flags.IsOptional)
                                 Trace.Trace.Emit("{0}: {1}", methodName, icka.ResultCode);
