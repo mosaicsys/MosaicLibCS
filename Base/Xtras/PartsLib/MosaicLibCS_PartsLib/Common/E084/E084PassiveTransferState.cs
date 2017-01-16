@@ -1,10 +1,11 @@
 //-------------------------------------------------------------------
 /*! @file E084PassiveTransferState.cs
- * @brief This file defines the E084 passive transfer state machine (et. al.).
+ *  @brief This file defines the E084 passive transfer state machine (et. al.).
  *
- * Copyright (c) Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2016 Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2006 Mosaic Systems Inc., All rights reserved. (C++ library version(s) E084PassiveTransferState.cpp and E084PassiveTransferState.h)
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2016 Mosaic Systems Inc.
+ * Copyright (c) 2006 Mosaic Systems Inc.  (C++ library version(s) E084PassiveTransferState.cpp and E084PassiveTransferState.h)
+ * All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -596,6 +597,7 @@ namespace MosaicLib.PartsLib.Common.E084
             /// <summary>
             /// Update this object's ConfigItem marked public properties from corresponingly named config keys (using the namePrefix)
             /// </summary>
+            [Obsolete("This method should no longer be used.  E084PassiveTransferStateMachine's constructor does this directly and subscribes for changes which this method does not do.  (2016-12-03)")]
             public Config Setup(string namePrefix, Logging.IMesgEmitter issueEmitter, Logging.IMesgEmitter valueEmitter)
             {
                 Times.Setup("{0}Times.".CheckedFormat(namePrefix), issueEmitter, valueEmitter);
@@ -653,7 +655,7 @@ namespace MosaicLib.PartsLib.Common.E084
             config = new Config(initialConfig);
 
             configAdapter = new ConfigValueSetAdapter<Config>() { ValueSet = config, SetupIssueEmitter = Log.Debug, UpdateIssueEmitter = Log.Debug, ValueNoteEmitter = Log.Trace }.Setup("{0}.".CheckedFormat(PartID));
-            configTimesAdapter = new ConfigValueSetAdapter<ConfigTimes>() { ValueSet = config.Times, SetupIssueEmitter = Log.Debug, UpdateIssueEmitter = Log.Debug, ValueNoteEmitter = Log.Trace }.Setup("{0}.".CheckedFormat(PartID));
+            configTimesAdapter = new ConfigValueSetAdapter<ConfigTimes>() { ValueSet = config.Times, SetupIssueEmitter = Log.Debug, UpdateIssueEmitter = Log.Debug, ValueNoteEmitter = Log.Trace }.Setup("{0}.Times.".CheckedFormat(PartID));
 
             if (notifyOnConfigChange != null)
             {

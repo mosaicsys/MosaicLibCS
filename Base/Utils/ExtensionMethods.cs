@@ -2,8 +2,9 @@
 /*! @file ExtensionMethods.cs
  *  @brief This file contains a number of extension methods
  * 
- * Copyright (c) Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2013 Mosaic Systems Inc., All rights reserved
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2013 Mosaic Systems Inc.
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +18,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
 
 using System;
 using System.Text;
@@ -25,6 +25,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Diagnostics;
 using System.Reflection;
+using System.Collections;
+using MosaicLib.Modular.Common;
 
 namespace MosaicLib.Utils
 {
@@ -168,7 +170,7 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        #region Other Array and IList related extension methods
+        #region Other Array, IList, IEnumerable related extension methods
 
         /// <summary>
         /// Extension method returns true if the given array is null or its Length is zero.
@@ -187,6 +189,14 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
+        /// Extension method returns true if the given IEnumerable is null or empty (initial MoveNext returns false).
+        /// </summary>
+        public static bool IsNullOrEmpty(this IEnumerable ien)
+        {
+            return ((ien == null) || (ien.GetEnumerator().MoveNext() == false));
+        }
+
+        /// <summary>
         /// Extension method returns true if given array is null or empty (Length == 0)
         /// </summary>
         public static bool IsEmpty<ItemType>(this ItemType[] array)
@@ -200,6 +210,30 @@ namespace MosaicLib.Utils
         public static bool IsEmpty<ItemType>(this IList<ItemType> list)
         {
             return (list == null || list.Count == 0);
+        }
+
+        /// <summary>
+        /// Extension method returns true if given IEnumerable is null or empty (initial MoveNext returns false)
+        /// </summary>
+        public static bool IsEmpty(this IEnumerable ien)
+        {
+            return (ien == null || (ien.GetEnumerator().MoveNext() == false));
+        }
+
+        /// <summary>
+        /// Extension method returns the Length from the given array or zero if the given array is null
+        /// </summary>
+        public static int SafeLength<ItemType>(this ItemType[] array)
+        {
+            return (array != null ? array.Length : 0);
+        }
+
+        /// <summary>
+        /// Extension method returns the Coutn from the given list or zero if the given list is null
+        /// </summary>
+        public static int SafeCount<ItemType>(this IList<ItemType> list)
+        {
+            return (list != null ? list.Count : 0);
         }
 
         /// <summary>
@@ -403,7 +437,7 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        #region Enum extension methods (IsSet, IsMatch)
+        #region Enum extension methods (IsSet, IsAnySet, IsMatch, Set, Clear)
 
         /// <summary>
         /// Returns true if the given value contains the given test pattern (by bit mask test).  Eqivilant to value.IsMatch(test, test)
@@ -446,7 +480,120 @@ namespace MosaicLib.Utils
             }
         }
 
+        /// <summary>
+        /// For Enum derived TEnumType types, this method accepts the given startingValue and pattern and returns startingValue &amp; ~pattern.
+        /// </summary>
+        public static TEnumType Clear<TEnumType>(this TEnumType startingValue, TEnumType pattern) where TEnumType : struct
+        {
+            return Set(startingValue, pattern, setPattern: false);
+        }
+
+        /// <summary>
+        /// For Enum derived TEnumType types, this method accepts the given startingValue and pattern and returns either startingValue | pattern (setPattern: true) or startingValue &amp; ~pattern (setPattern: false) depending on the given value of setPattern.
+        /// </summary>
+        public static TEnumType Set<TEnumType>(this TEnumType startingValue, TEnumType pattern, bool setPattern = true) where TEnumType : struct
+        {
+            try
+            {
+                if (!(startingValue is System.Enum))
+                    return default(TEnumType);
+
+                int valueI = (int)System.Convert.ChangeType(startingValue, typeof(int));
+                int patternI = (int)System.Convert.ChangeType(pattern, typeof(int));
+
+                if (setPattern)
+                    valueI |= patternI;
+                else
+                    valueI &= ~patternI;
+
+                return (TEnumType) ((System.Object) valueI);
+            }
+            catch
+            {
+                return default(TEnumType);
+            }
+        }
+
         #endregion
+
+        #region Exception related methods (ToString)
+
+        /// <summary>
+        /// Exception formatting helper extension method.  Accepts a given System.Exception and a ExceptionFormat parameter
+        /// and returns a string describing the exception according to the desired format.
+        /// </summary>
+        public static string ToString(this System.Exception ex, ExceptionFormat exceptionFormat)
+        {
+            try
+            {
+                if (ex == null)
+                    return "Null Exception";
+
+                if (exceptionFormat == ExceptionFormat.Default)
+                    return string.Format("{0}", ex);
+
+                StringBuilder sb = new StringBuilder("Exception");
+
+                if (exceptionFormat.IsSet(ExceptionFormat.IncludeType))
+                    sb.AppendFormat(" Type:{0}", ex.GetType());
+
+                if (exceptionFormat.IsSet(ExceptionFormat.IncludeSource) && !ex.Source.IsNullOrEmpty())
+                    sb.AppendFormat(" Src:{0}", ex.Source);
+
+                if (exceptionFormat.IsSet(ExceptionFormat.IncludeMessage) && !ex.Message.IsNullOrEmpty())
+                    sb.AppendFormat(" Mesg:[{0}]", ex.Message.GenerateEscapedVersion(boxEscapeCharsList));
+
+                if (exceptionFormat.IsSet(ExceptionFormat.IncludeMessage) && !ex.Data.IsNullOrEmpty())
+                {
+                    NamedValueSet nvs = new NamedValueSet().AddRange(ex.Data);
+                    sb.AppendFormat(" Data:{0}", nvs.ToString(includeROorRW: false, treatNameWithEmptyVCAsKeyword: false));
+                }
+
+                if (exceptionFormat.IsSet(ExceptionFormat.IncludeStackTrace) && !ex.StackTrace.IsNullOrEmpty())
+                    sb.AppendFormat(" Stack:[{0}]", ex.StackTrace.Trim().GenerateEscapedVersion(boxEscapeCharsList));
+
+                return sb.ToString();
+            }
+            catch
+            {
+                return "Internal: System.Exception.ToString(fmt) threw unexpected exception";
+            }
+        }
+
+        private static readonly IList<char> boxEscapeCharsList = new List<char>() { '[', ']' }.AsReadOnly();
+
+        #endregion
+    }
+
+    /// <summary>
+    /// Flag Enumeration used with System.Exception ToString extension method above.  Defines the string contents to be included from the exception.
+    /// <para/>Default (0), TypeAndMessage (5), Full (31), AllButStackTrace (15), IncludeType (1), IncludeSource (2), IncludeMessage (4), IncludeData (8), IncludeStackTrace (16)
+    /// </summary>
+    [Flags]
+    public enum ExceptionFormat : int
+    {
+        /// <summary>Use basic System.Exception.ToString method (0)</summary>
+        Default = 0,
+
+        /// <summary>IncludeType | IncludeMessage (5)</summary>
+        TypeAndMessage = (IncludeType | IncludeMessage),
+
+        /// <summary>IncludeType | IncludeSource | IncludeMessage | IncludeData | IncludeStackTrace (31)</summary>
+        Full = (IncludeType | IncludeSource | IncludeMessage | IncludeData | IncludeStackTrace),
+
+        /// <summary>IncludeType | IncludeSource | IncludeMessage | IncludeData (15)</summary>
+        AllButStackTrace = (IncludeType | IncludeSource | IncludeMessage | IncludeData),
+
+        /// <summary>Includes Type: field (1)</summary>
+        IncludeType = 1,
+        /// <summary>Includes Src: field (2)</summary>
+        IncludeSource = 2,
+        /// <summary>Includes Mesg:[] field (4)</summary>
+        IncludeMessage = 4,
+        /// <summary>Includes Data:[] field (8)</summary>
+        IncludeData = 8,
+        /// <summary>Includes Stack:[] field (16)</summary>
+        IncludeStackTrace = 16,
     }
 
     #endregion
@@ -548,7 +695,7 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        #region CurrentStackFrame, CurrentMethod, CurrentMethodName helper "functions".
+        #region CurrentStackFrame, CurrentMethod, CurrentMethodName helper "functions (getters)".
 
         /// <summary>Creates and returns the callers current StackFrame</summary>
         public static StackFrame CurrentStackFrame { get { return new System.Diagnostics.StackFrame(1); } }

@@ -2,8 +2,9 @@
 /*! @file Interconnect/WCF.cs
  *  @brief Defines a service, a client, and related classes, that are used to allow WCF connections to provide remote access to Interconnect Values and Parts.
  * 
- * Copyright (c) Mosaic Systems Inc.,  All rights reserved.
- * Copyright (c) 2015 Mosaic Systems Inc., All rights reserved.
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2015 Mosaic Systems Inc.
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +18,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
 
 using System;
 using System.Collections.Generic;
@@ -97,7 +97,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
         #region Non-Serialized parts (primarily for Service to identify the Client Connection on which this parameter was recieved).
 
         /// <summary>
-        /// This non-serialized property is used by the Servier side to record and track the client instances on which each Server side push call is handled.
+        /// This non-serialized property is used by the Server side to record and track the client instances on which each Server side push call is handled.
         /// </summary>
         public IInterconnectPropagationSessionCommonAPI ClientCallbackInstance { get; set; }
 
@@ -205,7 +205,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
         #region Non-Serialized parts (primarily for Service to identify the Client Connection on which each PushParameter was recieved).
 
         /// <summary>
-        /// This non-serialized property is used by the Servier side to record and track the client instances on which each Server side push call is handled.
+        /// This non-serialized property is used by the Server side to record and track the client instances on which each Server side push call is handled.
         /// </summary>
         public IInterconnectPropagationSessionCommonAPI ClientCallbackInstance { get; set; }
 
@@ -700,7 +700,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
             }
             catch (System.Exception ex)
             {
-                Log.Debug.Emit("ServiceHost close failed unexpectedly: {0}", ex);
+                Log.Debug.Emit("ServiceHost close failed unexpectedly: {0}", ex.ToString(ExceptionFormat.Full));
             }
 
             serviceHost = null;

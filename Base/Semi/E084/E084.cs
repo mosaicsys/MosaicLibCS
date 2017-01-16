@@ -2,9 +2,10 @@
 /*! @file E084.cs
  *  @brief This file provides common definitions that relate to the use of the Semi standard E084 interface.
  *
- * Copyright (c) Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2010 Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2006 Mosaic Systems Inc., All rights reserved. (C++ library version)
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2010 Mosaic Systems Inc.
+ * Copyright (c) 2006 Mosaic Systems Inc.  (C++ library version)
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,11 +22,12 @@
 
 using System;
 using System.Runtime.Serialization;
+
 using MosaicLib.Modular.Common;
-using MosaicLib.Utils;
 using MosaicLib.Modular.Config;
 using MosaicLib.Modular.Config.Attributes;
 using MosaicLib.Modular.Interconnect.Values.Attributes;
+using MosaicLib.Utils;
 
 namespace MosaicLib.Semi.E084       //! namespace within which to define information that is based on E084.  Current rev 0704
 {
@@ -752,9 +754,9 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
         public override string ToString()
         {
             if (TP6 == 0.0)
-                return "TP1:{0:f1} TP2:{1:f1} TP3:{2:f1} TP4:{2:f1} TP5:{2:f1}".CheckedFormat(TP1, TP2, TP3, TP4, TP5);
+                return "TP1:{0:f1} TP2:{1:f1} TP3:{2:f1} TP4:{3:f1} TP5:{4:f1}".CheckedFormat(TP1, TP2, TP3, TP4, TP5);
             else
-                return "TP1:{0:f1} TP2:{1:f1} TP3:{2:f1} TP4:{2:f1} TP5:{2:f1} TP6:{2:f1}".CheckedFormat(TP1, TP2, TP3, TP4, TP5, TP3);
+                return "TP1:{0:f1} TP2:{1:f1} TP3:{2:f1} TP4:{3:f1} TP5:{4:f1} TP6:{5:f1}".CheckedFormat(TP1, TP2, TP3, TP4, TP5, TP6);
         }
 
         /// <summary>

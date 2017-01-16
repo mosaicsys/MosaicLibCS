@@ -2,8 +2,9 @@
 /*! @file ScanEngine.cs
  *  @brief This file defines the basic interface and base Part for the scan engine pattern being created here
  * 
- * Copyright (c) Mosaic Systems Inc.  All rights reserved.
- * Copyright (c) 2015 Mosaic Systems Inc.  All rights reserved.
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2015 Mosaic Systems Inc.
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -398,12 +399,14 @@ namespace MosaicLib.PartsLib.Scan.ScanEngine
             {
                 if (currentPlugin != null)
                 {
-                    Log.Error.Emit("Plugin '{0}' being disabled after it generated unexpected exception: {1}", currentPlugin.Name, ex);
                     pluginList.Remove(currentPlugin);
+
+                    Log.Error.Emit("Plugin '{0}' removed after it generated unexpected exception: {1}", currentPlugin.Name, ex.ToString(ExceptionFormat.TypeAndMessage));
+                    Log.Debug.Emit(ex.ToString(ExceptionFormat.Full));
                 }
                 else
                 {
-                    Log.Debug.Emit("Encountered unexpected exception in main loop (no current plugin): {0}", ex);
+                    Log.Debug.Emit("Encountered unexpected exception in main loop (no current plugin): {0}", ex.ToString(ExceptionFormat.Full));
                 }
             }
         }

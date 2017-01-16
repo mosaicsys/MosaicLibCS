@@ -1,10 +1,11 @@
 //-------------------------------------------------------------------
 /*! @file SimpleActivePart.cs
- * @brief This file contains the templatized definition of a base class that can be used to build many types of active parts.  This functionality is part of the Modular.Part namespace in this library.
+ *  @brief This file contains the templatized definition of a base class that can be used to build many types of active parts.  This functionality is part of the Modular.Part namespace in this library.
  * 
- * Copyright (c) Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2008 Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2006 Mosaic Systems Inc., All rights reserved. (C++ library version)
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2008 Mosaic Systems Inc.
+ * Copyright (c) 2006 Mosaic Systems Inc.  (C++ library version)
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +19,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
 
 using System;
 using MosaicLib.Utils;
@@ -34,6 +34,7 @@ namespace MosaicLib.Modular.Part
 
     /// <summary>
     /// Defines the logic that a SimpleActivePart uses for clearing the threadWakeupNotifier object that is used in WaitForSomethingToDo calls.
+    /// <para/>ExplicitlyResetNotifierAtStartOfEachLoop (0, default value), AutoResetIsUsedToResetNotifier, AutoResetIsUsedToResetNotifierWhenNoActionsHaveBeenPerformed
     /// </summary>
     public enum ThreadWakeupNotifierResetHandling : int
     {
@@ -49,12 +50,14 @@ namespace MosaicLib.Modular.Part
 
     /// <summary>
     /// This enumeration defines the behaviors/handling that the SimpleActivePartBase class can now implement for base class level GoOnline and GoOffline actions.
+    /// <para/>None (0), BasePerformMethodsSucceed, GoOnlineUpdatesBaseUseState, GoOfflineUpdatesBaseUseState, All,
+    /// <para/>Note: The SimpleActivePartBase part expicitly initializes its GoOnlineAndGoOfflineHandling to GoOnlineAndGoOfflineHandling.All by default.
     /// </summary>
     [Flags]
     public enum GoOnlineAndGoOfflineHandling : int
     {    
         /// <summary>
-        /// Selects basic (default) handling.  Base UseState is not automatically updated and base Peform methods return not implemented result code.
+        /// Selects basic handling.  Base UseState is not automatically updated and base Peform methods return not implemented result code.
         /// </summary>
         None = 0,
 
@@ -69,13 +72,20 @@ namespace MosaicLib.Modular.Part
         GoOnlineUpdatesBaseUseState = 2,
 
         /// <summary>
-        /// Selects that exeuction of the GoOffline action sets Base UseState to Offline before calling the normal PerformGoOffline method.
+        /// Selects that execution of the GoOffline action sets Base UseState to Offline before calling the normal PerformGoOffline method.
         /// </summary>
         GoOfflineUpdatesBaseUseState = 4,
+
+        /// <summary>
+        /// Selects that execution of GoOnline and GoOffline actions using base class will succeed and will automatically update the BaseUseState.
+        /// <para/>(BasePerformMethodsSucceed | GoOnlineUpdatesBaseUseState | GoOfflineUpdatesBaseUseState)
+        /// </summary>
+        All = (BasePerformMethodsSucceed | GoOnlineUpdatesBaseUseState | GoOfflineUpdatesBaseUseState),
     }
 
     /// <summary>
-    /// This enumeration is used to define 
+    /// This enumeration is used to define obtional behaviors for the overall part.
+    /// <para/>None (0), PerformActionPublishesActionInfo
     /// </summary>
     [Flags]
     public enum SimpleActivePartBehaviorOptions
@@ -415,11 +425,11 @@ namespace MosaicLib.Modular.Part
 
 			actionLoggingReference = new ActionLogging(Log, ActionLoggingConfig.Info_Error_Debug_Debug);
 
-            GoOnlineAndGoOfflineHandling = (GoOnlineAndGoOfflineHandling.BasePerformMethodsSucceed | GoOnlineAndGoOfflineHandling.GoOnlineUpdatesBaseUseState | GoOnlineAndGoOfflineHandling.GoOfflineUpdatesBaseUseState);
+            GoOnlineAndGoOfflineHandling = GoOnlineAndGoOfflineHandling.None;
 
             Interconnect.Parts.Parts.Instance.RegisterPart(this);
 		}
-	
+
         /// <summary>
         /// Protected sealed implementation for DisposableBase.Dispose(DisposeType) abstract method.
         /// During an explicit dispose this will Stop the part and then it will invoke the DisposeCallPassdown to 
@@ -469,7 +479,8 @@ namespace MosaicLib.Modular.Part
         private int maxActionsToInvokePerServiceLoop = 1;
 
         /// <summary>
-        /// Defines this part's base state handling for the GoOnline and GoOffline actions.
+        /// Defines this part's base state handling for the GoOnline and GoOffline actions.  Each derived class should update this value as desired.
+        /// <para/>Defaults to GoOnlineAndGoOfflineHandling.None to preserve behavior in prior library versions.
         /// </summary>
         protected GoOnlineAndGoOfflineHandling GoOnlineAndGoOfflineHandling { get; set; }
 
@@ -642,7 +653,7 @@ namespace MosaicLib.Modular.Part
 		{
 			StartPartIfNeeded();
 
-			ActionMethodDelegateActionArgStrResult<bool, NullObj> method  = PerformGoOnlineAction;
+			ActionMethodDelegateActionArgStrResult<bool, NullObj> method  = OuterPerformGoOnlineAction;
             IBoolParamAction action = new BoolActionImpl(actionQ, andInitialize, method, "GoOnline", ActionLoggingReference);
 			return action;
 		}
@@ -652,7 +663,7 @@ namespace MosaicLib.Modular.Part
         /// </summary>
 		public virtual IBasicAction CreateGoOfflineAction()
 		{
-			ActionMethodDelegateActionArgStrResult<NullObj, NullObj> method  = PerformGoOfflineAction;
+			ActionMethodDelegateActionArgStrResult<NullObj, NullObj> method  = OuterPerformGoOfflineAction;
 			IBasicAction action = new BasicActionImpl(actionQ, method, "GoOffline", ActionLoggingReference);
 			return action;
 		}
@@ -754,7 +765,7 @@ namespace MosaicLib.Modular.Part
             }
 		}
 
-        private string OuterPerformGoOfflineAction(IProviderActionBase<bool, NullObj> action)
+        private string OuterPerformGoOfflineAction(IProviderActionBase<NullObj, NullObj> action)
         {
             string description = action.ToString(ToStringSelect.MesgAndDetail);
 
@@ -858,10 +869,9 @@ namespace MosaicLib.Modular.Part
                     // disable the queue so that clients will not block indefinitely after this part's main thread has stopped processing actions.
                     actionQ.QueueEnable = false;
 
-                    string methodName = new System.Diagnostics.StackFrame().GetMethod().Name;
-                    Log.Debug.Emit("{0} failed with unexpected exception: {1}", methodName, ex);
+                    Log.Debug.Emit("{0} failed with unexpected {1}", Fcns.CurrentMethodName, ex.ToString(ExceptionFormat.Full));
 
-                    entryExitTrace.ExtraMessage = "Caught unexpected exception: {0} '{1}'".CheckedFormat(ex.GetType(), ex.Message);
+                    entryExitTrace.ExtraMessage = "Caught unexpected {0}".CheckedFormat(ex.ToString(ExceptionFormat.TypeAndMessage));
                 }
 
                 if (entryExitTrace.ExtraMessage.IsNullOrEmpty())

@@ -1,10 +1,11 @@
 //-------------------------------------------------------------------
 /*! @file TextFileDateTreeLogMessagehandler.cs
- * @brief This file defines the LogMessageHandler implementation class that is responsible for implementing a form of log file ring 
+ *  @brief This file defines the LogMessageHandler implementation class that is responsible for implementing a form of log file ring 
  *        based on creation of a date tree of text files with integrated pruning.
  * 
- * Copyright (c) Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2016 Mosaic Systems Inc., All rights reserved
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2016 Mosaic Systems Inc.
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +19,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
 
 using System;
 using System.Collections.Generic;
@@ -212,16 +212,16 @@ namespace MosaicLib
                 /// Constructor - <see cref="FileRotationLoggingConfig"/> parameter defines all initial values for the configuration and operation of this LMH.
                 /// </summary>
                 public TextFileDateTreeLogMessageHandler(Config configIn) 
-					: base(configIn.Name, configIn.LogGate, configIn.IncludeFileAndLine, false)
+					: base(configIn.Name, configIn.LogGate, recordSourceStackFrame: configIn.IncludeFileAndLine)
 				{
                     config = new Config(configIn);
                     
                     // replace the default LogMessageHandlerLogger with a normal QueuedLogger.  This is for use by all levels of this LMH type.
                     //  this allows generated messages to be inserted into and handled by the entire distribution system rather than just by this LMH instance.
-					logger = new QueuedLogger(Name, LogGate, config.IncludeFileAndLine);
+					logger = new QueuedLogger(Name, LogGate);
 
                     string pruneMgrName = "{0}.PruneMgr".CheckedFormat(config.Name);
-                    Logging.ILogger pruneLogger = new QueuedLogger(pruneMgrName, LogGate, config.IncludeFileAndLine);
+                    Logging.ILogger pruneLogger = new QueuedLogger(pruneMgrName, LogGate);
 
                     Dictionary<string, Logging.IMesgEmitter> pruneMgrEmitterDictionary = new Dictionary<string, IMesgEmitter>()
                     {
@@ -285,10 +285,6 @@ namespace MosaicLib
 
 					CompleteFileAccess();
 				}
-
-                /// <summary>Query method that may be used to tell if message delivery for a given message is still in progress on this handler.</summary>
-                /// <remarks>This LMH type does not queue messages internally.  As such the returned value is always false.</remarks>
-                public override bool IsMessageDeliveryInProgress(int testMesgSeqNum) { return false; }
 
                 /// <summary>Once called, this method only returns after the handler has made a reasonable effort to verify that all outsanding, pending messages, visible at the time of the call, have been full processed before the call returns.</summary>
                 public override void Flush()
@@ -367,8 +363,6 @@ namespace MosaicLib
                 /// <returns>True if the setup operation was successfull</returns>
                 protected bool Setup()
                 {
-                    string methodName = new System.Diagnostics.StackFrame().GetMethod().Name;
-                    
                     lastSetupAttemptTime.SetToNow();
 
                     bool success = false;
@@ -404,7 +398,7 @@ namespace MosaicLib
                     }
                     else
                     {
-                        logger.Error.Emit("{0} failed: {1}", methodName, setupFaultCode);
+                        logger.Error.Emit("{0} failed: {1}", Fcns.CurrentMethodName, setupFaultCode);
                         return false;
                     }
                 }
@@ -512,11 +506,9 @@ namespace MosaicLib
 
                     if (ActiveFileDirEntryInfo != null)
                     {
-                        string methodName = new System.Diagnostics.StackFrame().GetMethod().Name;
-
                         double fileAgeInHours = ActiveFileDirEntryInfo.CreationAge.TotalHours;
 
-                        logger.Debug.Emit("{0}: prior file:'{1}' size:{2} age:{3} hours", methodName, ActiveFileDirEntryInfo.Name, ActiveFileDirEntryInfo.Length, fileAgeInHours.ToString("f3"));
+                        logger.Debug.Emit("{0}: prior file:'{1}' size:{2} age:{3} hours", Fcns.CurrentMethodName, ActiveFileDirEntryInfo.Name, ActiveFileDirEntryInfo.Length, fileAgeInHours.ToString("f3"));
                     }
 
                     GenerateNextActiveFile();
@@ -532,7 +524,6 @@ namespace MosaicLib
                 /// </summary>
                 protected void GenerateNextActiveFile()
                 {
-                    string methodName = new System.Diagnostics.StackFrame().GetMethod().Name;
                     string formatStr = string.Empty;
                     string dateTreeStr = string.Empty;
                     string middleStr = string.Empty;
@@ -568,16 +559,16 @@ namespace MosaicLib
                         double fileAgeInHours = fileEntryInfo.CreationAge.TotalHours;
                         Int64 fileSize = fileEntryInfo.Length;
 
-                        logger.Trace.Emit("{0}: Attempting to delete prior file:'{1}' size:{2} age:{3} hours", methodName, fileEntryInfo.Name, fileSize, fileAgeInHours.ToString("f3"));
+                        logger.Trace.Emit("{0}: Attempting to delete prior file:'{1}' size:{2} age:{3} hours", Fcns.CurrentMethodName, fileEntryInfo.Name, fileSize, fileAgeInHours.ToString("f3"));
 
                         try
                         {
                             fileEntryFSI.Delete();
-                            logger.Debug.Emit("{0}: Deleted prior file:'{1}' size:{2} age:{3} hours", methodName, fileEntryInfo.Name, fileSize, fileAgeInHours.ToString("f3"));
+                            logger.Debug.Emit("{0}: Deleted prior file:'{1}' size:{2} age:{3} hours", Fcns.CurrentMethodName, fileEntryInfo.Name, fileSize, fileAgeInHours.ToString("f3"));
                         }
                         catch (System.Exception ex)
                         {
-                            logger.Error.Emit("{0}: failed to delete prior file:'{1}', error:'{2}'", methodName, fileEntryInfo.Name, ex.Message);
+                            logger.Error.Emit("{0}: failed to delete prior file:'{1}', error:'{2}'", Fcns.CurrentMethodName, fileEntryInfo.Name, ex.Message);
                             return;
                         }
                     }

@@ -1,10 +1,11 @@
 //-------------------------------------------------------------------
 /*! @file PartBase.cs
- * @brief This file contains common definitions, interface and base classes that are used to define the common characteristics of Parts in this library.
+ *  @brief This file contains common definitions, interface and base classes that are used to define the common characteristics of Parts in this library.
  * 
- * Copyright (c) Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2008 Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2006 Mosaic Systems Inc., All rights reserved. (C++ library version)
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2008 Mosaic Systems Inc.
+ * Copyright (c) 2006 Mosaic Systems Inc.  (C++ library version)
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +19,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
+
 using System;
 using MosaicLib.Utils;
 using MosaicLib.Time;
@@ -98,17 +99,15 @@ namespace MosaicLib.Modular.Part
 	#endregion
 
     //-----------------------------------------------------------------
-    #region static class for static query methods on UseState and ConnState enum values (used by BaseState)
+    #region static class for static query (extension) methods on UseState and ConnState enum values (used by BaseState)
 
     /// <summary>
     /// Static utility method class used in relation to UseState and ConnState enums
     /// </summary>
     public static class BaseStateFcns
     {
-        //------------------------------------
-
         /// <summary>Returns true if the given UseState value is any of the Online states.</summary>
-        public static bool IsOnline(UseState useState)
+        public static bool IsOnline(this UseState useState, bool acceptAttemptOnline = false)
         {
             switch (useState)
             {
@@ -117,31 +116,33 @@ namespace MosaicLib.Modular.Part
                 case UseState.OnlineBusy:
                 case UseState.OnlineFailure:
                     return true;
+                case UseState.AttemptOnline:
+                    return acceptAttemptOnline;
                 default:
                     return false;
             }
         }
 
         /// <summary>Returns true if the given UseState value is any of the Busy states (OnlineBusy and AttemptOnline)</summary>
-        public static bool IsBusy(UseState useState)
+        public static bool IsBusy(this UseState useState)
         {
             return (useState == UseState.OnlineBusy || useState == UseState.AttemptOnline);
         }
 
         /// <summary>Returns true if the given ConnState value is any of the states that represent an active connection attempt being in progress (Conneting, WaitingForConnect)</summary>
-        public static bool IsConnecting(ConnState connState)
+        public static bool IsConnecting(this ConnState connState)
         {
             return (connState == ConnState.Connecting || connState == ConnState.WaitingForConnect);
         }
 
         /// <summary>Returns true if the given ConnState value is any of the connected states (Connected)</summary>
-        public static bool IsConnected(ConnState connState)
+        public static bool IsConnected(this ConnState connState)
         {
             return (connState == ConnState.Connected);
         }
 
         /// <summary>Returns true if the given ConnState value is IsConnected or is IsConnecting</summary>
-        public static bool IsConnectedOrConnecting(ConnState connState)
+        public static bool IsConnectedOrConnecting(this ConnState connState)
         {
             return (IsConnected(connState) || IsConnecting(connState));
         }
@@ -187,6 +188,9 @@ namespace MosaicLib.Modular.Part
 
 		/// <summary>summary property reports true if the UseState is in an Online state</summary>
 		bool IsOnline { get; }
+
+        /// <summary>summary property reports true if the UseState is in an Online or AttemptOnline states</summary>
+        bool IsOnlineOrAttemptOnline { get; }
 
         /// <summary>summary property reports true if the UseState indicates that the device is busy.  Details of functionality depends on internal part behavior.</summary>
 		bool IsBusy { get; }
@@ -485,16 +489,20 @@ namespace MosaicLib.Modular.Part
         public QpcTimeStamp TimeStamp { get { return timeStamp; } }
 
         /// <summary>summary property reports true if the UseState is in an Online state</summary>
-        public bool IsOnline { get { return BaseStateFcns.IsOnline(UseState); } }
+        public bool IsOnline { get { return UseState.IsOnline(); } }
+
+        /// <summary>summary property reports true if the UseState is in an Online or AttemptOnline states</summary>
+        public bool IsOnlineOrAttemptOnline { get { return UseState.IsOnline(acceptAttemptOnline: true); } }
+
         /// <summary>summary property reports true if the UseState indicates that the device is busy.  Details of functionality depends on internal part behavior.</summary>
-        public bool IsBusy { get { return BaseStateFcns.IsBusy(UseState); } }
+        public bool IsBusy { get { return UseState.IsBusy(); } }
 
         /// <summary>summary property reports true if the ConnState indicates that the part is in the process of making a connection.</summary>
-        public bool IsConnecting { get { return BaseStateFcns.IsConnecting(ConnState); } }
+        public bool IsConnecting { get { return ConnState.IsConnecting(); } }
         /// <summary>summary property reports true if the ConnState indicates that the part's connection (if any) is connected.</summary>
-        public bool IsConnected { get { return BaseStateFcns.IsConnected(ConnState); } }
+        public bool IsConnected { get { return ConnState.IsConnected(); } }
         /// <summary>summary property reports true if the ConnState indicates that the part's connection is connected or is making a connection</summary>
-        public bool IsConnectedOrConnecting { get { return (BaseStateFcns.IsConnectedOrConnecting(ConnState)); } }
+        public bool IsConnectedOrConnecting { get { return (ConnState.IsConnectedOrConnecting()); } }
 
         /// <summary>returns true if either the UseState or the ConnState are not at their Undefined value.  Typically this means that the part has not be started or that it has not generated its initial value.</summary>
         public bool IsDefined { get { return (UseState != UseState.Undefined || ConnState != ConnState.Undefined); } }

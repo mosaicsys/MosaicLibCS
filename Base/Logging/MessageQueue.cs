@@ -1,10 +1,11 @@
 //-------------------------------------------------------------------
 /*! @file MessageQueue.cs
- * @brief This file defines and implements the MessageQueue class.
+ *  @brief This file defines and implements the MessageQueue class.
  * 
- * Copyright (c) Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2008 Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2007 Mosaic Systems Inc., All rights reserved. (C++ library version)
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2008 Mosaic Systems Inc.
+ * Copyright (c) 2007 Mosaic Systems Inc.  (C++ library version)
+ * All rights reserved. 
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +19,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
 
 using System;
 using System.Collections.Generic;
@@ -76,13 +76,8 @@ namespace MosaicLib
 			private class MQLogger : LoggerBase
 			{
 				protected MessageQueue mq = null;
-				public MQLogger(string name, MessageQueue mq) : base(name, string.Empty, LogGate.All, false) { this.mq = mq; }
+				public MQLogger(string name, MessageQueue mq) : base(name, string.Empty, LogGate.All, traceLoggerCtor: false, allowUseOfModularConfig: false) { this.mq = mq; }
 				protected override string ClassName { get { return "MessageQueueLogger"; } }
-
-				public override LogMessage GetLogMessage(MesgType mesgType, string mesg, System.Diagnostics.StackFrame sourceStackFrame, bool allocatedFromDist) 
-                { 
-                    return base.GetLogMessage(mesgType, mesg, sourceStackFrame, false); 
-                }
 
 				public override void EmitLogMessage(ref LogMessage lm)
 				{

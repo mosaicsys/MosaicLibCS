@@ -1,24 +1,24 @@
 //-------------------------------------------------------------------
 /*! @file E005.cs
-	@brief This file provides common definitions that relate to the use of the E005 interface.
-
-	Copyright (c) Mosaic Systems Inc.,  All rights reserved.
-	Copyright (c) 2015 Mosaic Systems Inc.,  All rights reserved.
-	Copyright (c) 2006 Mosaic Systems Inc.,  All rights reserved.  (C++ library version)
-
-	Licensed under the Apache License, Version 2.0 (the "License");
-	you may not use this file except in compliance with the License.
-	You may obtain a copy of the License at
-
-	     http://www.apache.org/licenses/LICENSE-2.0
-
-	Unless required by applicable law or agreed to in writing, software
-	distributed under the License is distributed on an "AS IS" BASIS,
-	WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-	See the License for the specific language governing permissions and
-	limitations under the License.
+ *  @brief This file provides common definitions that relate to the use of the E005 interface.
+ *
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2015 Mosaic Systems Inc.
+ * Copyright (c) 2006 Mosaic Systems Inc.  (C++ library version)
+ * All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
-//-------------------------------------------------------------------
 
 using System.Runtime.Serialization;
 
@@ -65,7 +65,11 @@ namespace MosaicLib.Semi.E005
         [EnumMember]
         BeginCustomRegion = 64,
 
-        /// <summary>This is not an indication of any form of failure.  It is simply used to inform the user/decision authority of some occurrence and optionally request/prompt the user/decision authority to provide some input.  These generally do not have an associated ALID. (100)</summary>
+        /// <summary>
+        /// This is not an indication of any form of failure.  
+        /// It is simply used to inform the user/decision authority of some occurrence and optionally request/prompt the user/decision authority to provide some input.  
+        /// These generally do not have an associated ALID. (100)
+        /// </summary>
         [EnumMember]
         E041_Attention = 100,
 

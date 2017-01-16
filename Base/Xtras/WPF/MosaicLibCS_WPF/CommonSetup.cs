@@ -2,8 +2,9 @@
 /*! @file CommonSetup.cs
  *  @brief
  * 
- * Copyright (c) Mosaic Systems Inc.  All rights reserved.
- * Copyright (c) 2015 Mosaic Systems Inc.  All rights reserved.
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2015 Mosaic Systems Inc.
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -109,6 +110,7 @@ namespace MosaicLib.WPF.Common
             System.Threading.Thread currentThread = System.Threading.Thread.CurrentThread;
             System.Reflection.Assembly currentExecAssy = System.Reflection.Assembly.GetExecutingAssembly();
             System.Reflection.Assembly mainAssy = System.Reflection.Assembly.GetEntryAssembly();
+            System.Reflection.Assembly callerAssy = new System.Diagnostics.StackFrame(1).GetMethod().Module.Assembly;
 
             if (currentThread.Name.IsNullOrEmpty())
                 currentThread.Name = "{0}.Main".CheckedFormat(logBaseName);
@@ -129,7 +131,7 @@ namespace MosaicLib.WPF.Common
             {
                 mesgQueueSize = ringQueueSize,
                 nameUsesDateAndTime = true,
-                fileHeaderLines = Logging.GenerateDefaultHeaderLines(logBaseName, true),
+                fileHeaderLines = Logging.GenerateDefaultHeaderLines(logBaseName, includeNullForDynamicLines: true, hostingAssembly: callerAssy),
                 fileHeaderLinesDelegate = Logging.GenerateDynamicHeaderLines,
                 logGate = Logging.LogGate.Debug,
             };
@@ -137,7 +139,7 @@ namespace MosaicLib.WPF.Common
             Logging.Handlers.TextFileDateTreeLogMessageHandler.Config dateTreeDirConfig = new Logging.Handlers.TextFileDateTreeLogMessageHandler.Config(logBaseName.MapNullToEmpty() + "Log", @".\Logs")
             {
                 IncludeFileAndLine = false,
-                FileHeaderLines = Logging.GenerateDefaultHeaderLines(logBaseName, true),
+                FileHeaderLines = Logging.GenerateDefaultHeaderLines(logBaseName, includeNullForDynamicLines: true, hostingAssembly: callerAssy),
                 FileHeaderLinesDelegate = Logging.GenerateDynamicHeaderLines,
                 LogGate = Logging.LogGate.Debug,
             };
@@ -161,7 +163,7 @@ namespace MosaicLib.WPF.Common
                 mesgQueueSize = traceQueueSize,
                 nameUsesDateAndTime = false,     // will use 4 digit file names.  Limit of 100 files total
                 includeThreadInfo = true,
-                fileHeaderLines = Logging.GenerateDefaultHeaderLines("{0} Trace Output".CheckedFormat(logBaseName), true),
+                fileHeaderLines = Logging.GenerateDefaultHeaderLines("{0} Trace Output".CheckedFormat(logBaseName), includeNullForDynamicLines: true, hostingAssembly: callerAssy),
                 fileHeaderLinesDelegate = Logging.GenerateDynamicHeaderLines,
             }.UpdateFromModularConfig("Config.Logging.TraceRing.", issueListEmitter, valuesListEmitter);
 
@@ -204,7 +206,7 @@ namespace MosaicLib.WPF.Common
             Logging.MapLoggersToDistributionGroup(Logging.LoggerNameMatchType.Regex, @"(\.Data|\.Trace)", traceLoggingGroupName);
 
             appLogger = new Logging.Logger("AppLogger");
-            Logging.LogMessage lm = appLogger.GetLogMessage(AppEventMesgType, "App Starting", appLogger.GetStackFrame(0));
+            Logging.LogMessage lm = appLogger.GetLogMessage(AppEventMesgType, "App Starting");
             lm.NamedValueSet = new NamedValueSet() { { "AppEvent", "OnStartup" } };
             appLogger.EmitLogMessage(ref lm);
 
@@ -219,7 +221,7 @@ namespace MosaicLib.WPF.Common
         /// </summary>
         public static void HandleOnDeactivated(Logging.ILogger appLogger)
         {
-            Logging.LogMessage lm = appLogger.GetLogMessage(AppEventMesgType, "App Deactivated", appLogger.GetStackFrame(0));
+            Logging.LogMessage lm = appLogger.GetLogMessage(AppEventMesgType, "App Deactivated");
             lm.NamedValueSet = new NamedValueSet() { { "AppEvent", "OnDeactivated" } };
 
             appLogger.EmitLogMessage(ref lm);
@@ -231,7 +233,7 @@ namespace MosaicLib.WPF.Common
         /// </summary>
         public static void HandleOnExit(Logging.ILogger appLogger)
         {
-            Logging.LogMessage lm = appLogger.GetLogMessage(AppEventMesgType, "App Stopping", appLogger.GetStackFrame(0));
+            Logging.LogMessage lm = appLogger.GetLogMessage(AppEventMesgType, "App Stopping");
             lm.NamedValueSet = new NamedValueSet() { { "AppEvent", "OnExit" } };
             appLogger.EmitLogMessage(ref lm);
 

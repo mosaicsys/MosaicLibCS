@@ -2,8 +2,9 @@
 /*! @file Disposable.cs
  *  @brief This file defines the DisposableBase class that may be used to help implement a well structured IDisposable pattern in derived classes.
  * 
- * Copyright (c) Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2008 Mosaic Systems Inc., All rights reserved
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2008 Mosaic Systems Inc.
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,13 +18,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
+
+using System;
+using System.Collections.Generic;
 
 namespace MosaicLib.Utils
 {
-	using System;
-    using System.Collections.Generic;
-
     //-------------------------------------------------------------------
     #region Helper functions and classes
 

@@ -1,25 +1,24 @@
 //-------------------------------------------------------------------
 /*! @file E041.cs
-	@brief This file provides definitions related to the use of an
-	Annunciator concept that is generally based on the E041 Semi standard.
-
-	Copyright (c) Mosaic Systems Inc.,  All rights reserved.
-	Copyright (c) 2015 Mosaic Systems Inc.,  All rights reserved.
-	Copyright (c) 2006 Mosaic Systems Inc.,  All rights reserved.  (C++ library version)
-
-	Licensed under the Apache License, Version 2.0 (the "License");
-	you may not use this file except in compliance with the License.
-	You may obtain a copy of the License at
-
-	     http://www.apache.org/licenses/LICENSE-2.0
-
-	Unless required by applicable law or agreed to in writing, software
-	distributed under the License is distributed on an "AS IS" BASIS,
-	WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-	See the License for the specific language governing permissions and
-	limitations under the License.
+ *	@brief This file provides definitions related to the use of an Annunciator concept that is generally based on the E041 Semi standard.
+ *
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2015 Mosaic Systems Inc.
+ * Copyright (c) 2006 Mosaic Systems Inc.  (C++ library version)
+ * All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
-//-------------------------------------------------------------------
 
 using System;
 using System.Collections.Generic;
@@ -93,7 +92,11 @@ namespace MosaicLib.Semi.E041
     [DataContract(Namespace = MosaicLib.Constants.SemiNameSpace)]
     public enum ANType : int
 	{
-        /// <summary>This is not an indication of any form of failure.  It is simply used to inform the user/decision authority of some occurrence and optionally request/prompt the user/decision authority to provide some input.  These generally do not have an associated ALID. (100)</summary>
+        /// <summary>
+        /// This is not an indication of any form of failure.  
+        /// It is simply used to inform the user/decision authority of some occurrence and optionally request/prompt the user/decision authority to provide some input.  
+        /// These generally do not have an associated ALID. (100)
+        /// </summary>
         [EnumMember]
         Attention = E005.ALCD.E041_Attention,
 
@@ -105,7 +108,11 @@ namespace MosaicLib.Semi.E041
         [EnumMember]
         Error = E005.ALCD.E041_Error,
 
-        /// <summary>Under E041 Alarm annunciators are used simply to report exception conditions but they do not offer or support specific (recovery) action invocation by the decision authority.  As such Alarm annunciators cannot be used with speicific (recovery) actions.  Please <see cref="IANCondition"/> for use pattern interface that is intended to be used with these ANTypes.</summary>
+        /// <summary>
+        /// Under E041 Alarm annunciators are used simply to report exception conditions but they do not offer or support specific (recovery) action invocation by the decision authority.  
+        /// As such Alarm annunciators cannot be used with speicific (recovery) actions.  
+        /// Please <see cref="IANCondition"/> for use pattern interface that is intended to be used with these ANTypes.
+        /// </summary>
         [EnumMember]
         Alarm = E005.ALCD.E041_Alarm,
     }
@@ -156,6 +163,7 @@ namespace MosaicLib.Semi.E041
 
     /// <summary>
     /// This is a hybrd enum.  Some of its valid values have well defined enumerations, while most of its valid values result from casting other Int32 values to this type.
+    /// <para/>None (0), Lookup (-1), OptLookup(-2)
     /// </summary>
     [DataContract(Namespace = MosaicLib.Constants.SemiNameSpace)]
     public enum ANAlarmID : int
@@ -163,15 +171,45 @@ namespace MosaicLib.Semi.E041
         /// <summary>Use this value when no AlarmID is known or desired</summary>
         [EnumMember]
         None = 0,
+
         /// <summary>Use a value between 1 and this value for known AlarmIDs</summary>
         [EnumMember]
         MaxValue = Int32.MaxValue,
+
         /// <summary>Use this value as a specification placeholder to indicate that the ALID needs to be looked up from the name of the annunciator</summary>
         [EnumMember]
         Lookup = -1,
+
         /// <summary>Use this value as a specification placeholder to indicate that the ALID can be looked up from the name of the annunciator but that no error should be produced if no matching ALID is found.</summary>
         [EnumMember]
         OptLookup = -2,
+    }
+
+    /// <summary>
+    /// Defines the current state of the ALID lookup process for a given IANSource
+    /// </summary>
+    [DataContract(Namespace = MosaicLib.Constants.SemiNameSpace)]
+    public enum ALIDLookupState : int
+    {
+        /// <summary>Client defined the ALID as ANAlarmID.None</summary>
+        [EnumMember]
+        None = 0,
+
+        /// <summary>Client defined the ALID as an explicit value</summary>
+        [EnumMember]
+        Defined = 1,
+
+        /// <summary>IANManager has found an ALID to use with this source</summary>
+        [EnumMember]
+        Found = 2,
+
+        /// <summary>IANManager did not find an ALID to use with this source</summary>
+        [EnumMember]
+        NotFound = 3,
+
+        /// <summary>Client requested ALID lookup but the IANManager has not been given a non-null IE30ALIDHandlerFacet to use.</summary>
+        [EnumMember]
+        Pending = 4,
     }
 
     #endregion
@@ -184,6 +222,18 @@ namespace MosaicLib.Semi.E041
         public static bool IsLookup(this ANAlarmID alid) 
         {
             return (alid == ANAlarmID.Lookup || alid == ANAlarmID.OptLookup);
+        }
+
+        /// <summary>Returns true if the given alid value is ANAlarmID.None</summary>
+        public static bool IsNone(this ANAlarmID alid)
+        {
+            return (alid == ANAlarmID.None);
+        }
+
+        /// <summary>Returns true if the given alid value has been explicitly provided by the client (i.e. it is neither None, Lookup, nor OptLookup)</summary>
+        public static bool IsDefined(this ANAlarmID alid)
+        {
+            return (!alid.IsLookup() && !alid.IsNone());
         }
 
         /// <summary>
@@ -245,7 +295,11 @@ namespace MosaicLib.Semi.E041
         /// <summary>Returns the non-zero sequence number that the ANManagerPart assigned to this spec during Registration.  Will be zero for client created spec objects.</summary>
         Int32 SpecID { get; }
 
-        /// <summary>Gives the ALID associated with this annunciator (if any).  Generally the ANSpec sets this to ALID_None, ALID_Lookup, or ALID_OptLookup to indicate if and where the actual ALID should come from.</summary>
+        /// <summary>
+        /// Defaults to ALID_None.  When explicitly set to a possitive integer value this defines the ALID that the client would like to use with this annunciator.  
+        /// When set to ALID_Lookup or ALID_OptLookup this requests that the IANManager attempt to find the ALID from the (possibly later) provided IE30ALIDHandlerFacet.  
+        /// For ALID_Lookup the IANManager will emit an error message if no ALID was found for this ANName after the IE30ALIDHandlerFacet has been provided.
+        /// </summary>
         ANAlarmID ALID { get; }
 
         /// <summary>Returns true if this object's ALID is any value other than ALID_None, ALID_Lookup, or ALID_OptLookup</summary>
@@ -271,11 +325,15 @@ namespace MosaicLib.Semi.E041
         /// <summary>Returns the non-zero sequence number that the ANManagerPart assigned to this spec during Registration.  Will be zero for client created and serialized spec objects.</summary>
         public Int32 SpecID { get; internal set; }
 
-        /// <summary>Gives the ALID associated with this annunciator (if any).  Generally the ANSpec sets this to ALID_None, ALID_Lookup, or ALID_OptLookup to indicate if and where the actual ALID should come from.</summary>
+        /// <summary>
+        /// Defaults to ALID_None.  When explicitly set to a possitive integer value this defines the ALID that the client would like to use with this annunciator.  
+        /// When set to ALID_Lookup or ALID_OptLookup this requests that the IANManager attempt to find the ALID from the (possibly later) provided IE30ALIDHandlerFacet.  
+        /// For ALID_Lookup the IANManager will emit an error message if no ALID was found for this ANName after the IE30ALIDHandlerFacet has been provided.
+        /// </summary>
         public ANAlarmID ALID { get; set; }
 
-        /// <summary>Returns true if this object's ALID is any value other than ALID_None, ALID_Lookup, or ALID_OptLookup</summary>
-        public bool HasALID { get { return ((ALID != ANAlarmID.None) && (ALID != ANAlarmID.Lookup) && (ALID != ANAlarmID.OptLookup));} }
+        /// <summary>Returns true if this object's ALID was explicitly defined by the client (i.e. it is neither None, Lookup, nor OptLookup</summary>
+        public bool HasALID { get { return ALID.IsDefined(); } }
 
         /// <summary>Default constructor</summary>
         public ANSpec() { }
@@ -344,6 +402,9 @@ namespace MosaicLib.Semi.E041
         /// <summary>Gives the ALID associated with this Annunciator (for looked up ANAlarmID values, this value may differ from the value in the ANSpec)</summary>
         ANAlarmID ALID { get; }
 
+        /// <summary>Gives the state of any Lookup operation that is required or is in progress for this AN source.</summary>
+        ALIDLookupState ALIDLookupState { get; }
+
         /// <summary>Returns true if this IANState has the same contents as the given rhs</summary>
         bool IsEqualTo(IANState rhs);
     }
@@ -356,21 +417,22 @@ namespace MosaicLib.Semi.E041
         public ANState() {}
 
         /// <summary>Copy constructor</summary>
-        public ANState(IANState rhs)
+        public ANState(IANState other)
         {
-            ANState rhsAsANState = rhs as ANState;
+            ANState rhsAsANState = other as ANState;
             bool rhsIsANState = (rhsAsANState != null);
 
-            ANSpec = rhs.ANSpec;
-            anName = (rhsIsANState ? rhsAsANState.anName : rhs.ANName);
-            ANSignalState = rhs.ANSignalState;
-            Reason = rhs.Reason;
-            TimeStamp = rhs.TimeStamp;
-            actionList = (rhsIsANState ? rhsAsANState.actionList : rhs.ActionList);
-            selectedActionName = (rhsIsANState ? rhsAsANState.selectedActionName : rhs.SelectedActionName); ;
-            activeActionName = (rhsIsANState ? rhsAsANState.activeActionName : rhs.ActiveActionName); ;
-            ActionAbortRequested = rhs.ActionAbortRequested;
-            ALID = rhs.ALID;
+            ANSpec = other.ANSpec;
+            anName = (rhsIsANState ? rhsAsANState.anName : other.ANName);
+            ANSignalState = other.ANSignalState;
+            Reason = other.Reason;
+            TimeStamp = other.TimeStamp;
+            actionList = (rhsIsANState ? rhsAsANState.actionList : other.ActionList);
+            selectedActionName = (rhsIsANState ? rhsAsANState.selectedActionName : other.SelectedActionName); ;
+            activeActionName = (rhsIsANState ? rhsAsANState.activeActionName : other.ActiveActionName); ;
+            ActionAbortRequested = other.ActionAbortRequested;
+            ALID = other.ALID;
+            ALIDLookupState = other.ALIDLookupState;
         }
 
         /// <summary>Gives the ANSpec for this annunciator</summary>
@@ -424,20 +486,25 @@ namespace MosaicLib.Semi.E041
         [DataMember(Order = 100)]
         public ANAlarmID ALID { get; set; }
 
-        /// <summary>Returns true if this ANState has the same contents as the given rhs</summary>
-        public bool IsEqualTo(IANState rhs)
+        /// <summary>Gives the state of any Lookup operation that is required or is in progress for this AN source.</summary>
+        [DataMember(Order = 110)]
+        public ALIDLookupState ALIDLookupState { get; set; }
+
+        /// <summary>Returns true if this ANState has the same contents as the given other IANState</summary>
+        public bool IsEqualTo(IANState other)
         {
-            return (rhs != null
-                    && Object.ReferenceEquals(ANSpec, rhs.ANSpec)
-                    && ANName == rhs.ANName
-                    && ANSignalState == rhs.ANSignalState
-                    && Reason == rhs.Reason
-                    && TimeStamp == rhs.TimeStamp
-                    && ActionList.IsEqualTo(rhs.ActionList)
-                    && SelectedActionName == rhs.SelectedActionName
-                    && ActiveActionName == rhs.ActiveActionName
-                    && ActionAbortRequested == rhs.ActionAbortRequested
-                    && ALID == rhs.ALID
+            return (other != null
+                    && Object.ReferenceEquals(ANSpec, other.ANSpec)
+                    && ANName == other.ANName
+                    && ANSignalState == other.ANSignalState
+                    && Reason == other.Reason
+                    && TimeStamp == other.TimeStamp
+                    && ActionList.IsEqualTo(other.ActionList)
+                    && SelectedActionName == other.SelectedActionName
+                    && ActiveActionName == other.ActiveActionName
+                    && ActionAbortRequested == other.ActionAbortRequested
+                    && ALID == other.ALID
+                    && ALIDLookupState == other.ALIDLookupState
                     );
         }
 
@@ -516,7 +583,7 @@ namespace MosaicLib.Semi.E041
         void Clear(string reason);
 
         /// <summary>
-        /// This method dispatches between calling Set(reason) and Clear(reason) based on the given alarmState value.
+        /// This method dispatches between calling Set(reason) and Clear(reason) based on the given conditionState value.
         /// </summary>
         void Service(bool conditionState, string reason);
 
@@ -632,6 +699,7 @@ namespace MosaicLib.Semi.E041
     {
         /// <summary>
         /// Asks this E30ALIDHandler to get/create the ALID for the given ANSpec.
+        /// <para/>Method returns non-zero integer value when given anSpec was found or zero when given anSpec was not found.
         /// </summary>
         int GetALIDFromANSpec(IANSpec anSpec);
 
@@ -666,24 +734,63 @@ namespace MosaicLib.Semi.E041
         /// <summary>
         /// Constructor.  partID is required.  e30ALIDHandlerFacet may be null
         /// </summary>
-        public ANManagerPart(string partID, IE30ALIDHandlerFacet e30ALIDHandlerFacet, IValuesInterconnection ivi) 
+        public ANManagerPart(string partID, IE30ALIDHandlerFacet e30ALIDHandlerFacet = null, IValuesInterconnection ivi = null) 
             : base(partID)
         {
             ActionLoggingConfig = MosaicLib.Modular.Action.ActionLoggingConfig.Debug_Debug_Trace_Trace;
 
             SetupConfig();
 
-            E30ALIDHandlerFacet = e30ALIDHandlerFacet;
-            IVI = ivi;
+            this.e30ALIDHandlerFacet = e30ALIDHandlerFacet;
+            IVI = ivi ?? Values.Instance;
         }
 
-        private IE30ALIDHandlerFacet E30ALIDHandlerFacet { get; set; }
         private IValuesInterconnection IVI { get; set; }
 
         private IReferenceSet<ANState> anStateCurrentActiveSet;
         private IReferenceSet<ANState> anStateRecentlyClearedSet;
         private IReferenceSet<ANState> anStateHistorySet;
 
+        #endregion
+
+        #region E30ALIDHandlerFacet
+
+        /// <summary>
+        /// Normally the part is passed the desired e30ALIDHandlerFacet to use.  
+        /// However after the part has been started, the client may use this setter to provide the desired e30ALIDHandlerFacet to be used hereafter.
+        /// <para/>Note: this method will throw an InvalidOperationExecption if the client attempts to change a previously provided handler facet instance.
+        /// <para/>Note also: The use of this method will start the part if the part has not already been started.
+        /// </summary>
+        /// <exception cref="System.InvalidOperationException">This exception will be thrown if the client attempts to change a previously provided E30ALIDHandlerFacet instance</exception>
+        public IE30ALIDHandlerFacet E30ALIDHandlerFacet
+        {
+            private get { return e30ALIDHandlerFacet; }
+            set
+            {
+                ActionMethodDelegateStrResult setE30ALIDHandlerFacetDelegate = () =>
+                {
+                    if (e30ALIDHandlerFacet == null)
+                    {
+                        e30ALIDHandlerFacet = value;
+                        serviceE30ALIDHandlerFacetLookupNow |= (value != null);
+                        return string.Empty;
+                    }
+                    else if (Object.ReferenceEquals(e30ALIDHandlerFacet, value))
+                        return string.Empty;
+                    else
+                        return "E30ALIDHandlerFacet has already been set to a non-null value.  It cannot be changed again";
+                };
+
+                StartPartIfNeeded();
+                IClientFacet action = new BasicActionImpl(actionQ, setE30ALIDHandlerFacetDelegate, "E30ALIDHandlerFacet setter", ActionLoggingReference).RunInline();
+
+                if (!action.ActionState.Succeeded)
+                    throw new System.InvalidOperationException(action.ActionState.ResultCode);
+            }
+        }
+        private volatile IE30ALIDHandlerFacet e30ALIDHandlerFacet = null;
+        private bool serviceE30ALIDHandlerFacetLookupNow = false;
+        
         #endregion
 
         #region Configuration
@@ -793,7 +900,7 @@ namespace MosaicLib.Semi.E041
         /// <remarks>As with CreateGoOnlineAction(bool andInitialize), this method also starts the target part if it has not already been started</remarks>
         public IANSource RegisterANSource(string sourceObjectID, IANSpec anSpec)
         {
-            string methodName = "{0}({1}, {2})".CheckedFormat(new System.Diagnostics.StackFrame().GetMethod().Name, sourceObjectID, anSpec);
+            string methodName = "{0}({1}, {2})".CheckedFormat(Fcns.CurrentMethodName, sourceObjectID, anSpec);
 
             if (anSpec.ANType == ANType.Alarm)
                 throw new ANRegistrationException("{0} is not valid: ANType {1} is not compatible with this useage interface type".CheckedFormat(methodName, anSpec.ANType));
@@ -824,7 +931,7 @@ namespace MosaicLib.Semi.E041
         /// <remarks>As with CreateGoOnlineAction(bool andInitialize), this method also starts the target part if it has not already been started</remarks>
         public IANOccurrence RegisterANOccurrenceSource(string sourceObjectID, IANSpec anSpec)
         {
-            string methodName = "{0}({1}, {2})".CheckedFormat(new System.Diagnostics.StackFrame().GetMethod().Name, sourceObjectID, anSpec);
+            string methodName = "{0}({1}, {2})".CheckedFormat(Fcns.CurrentMethodName, sourceObjectID, anSpec);
 
             if (anSpec.ANType == ANType.Alarm)
                 throw new ANRegistrationException("{0} is not valid: ANType {1} is not compatible with this useage interface type".CheckedFormat(methodName, anSpec.ANType));
@@ -855,7 +962,7 @@ namespace MosaicLib.Semi.E041
         /// <remarks>As with CreateGoOnlineAction(bool andInitialize), this method also starts the target part if it has not already been started</remarks>
         public IANCondition RegisterANConditionSource(string sourceObjectID, IANSpec anSpec)
         {
-            string methodName = "{0}({1}, {2})".CheckedFormat(new System.Diagnostics.StackFrame().GetMethod().Name, sourceObjectID, anSpec);
+            string methodName = "{0}({1}, {2})".CheckedFormat(Fcns.CurrentMethodName, sourceObjectID, anSpec);
 
             if (anSpec.ANType == ANType.Error)
                 throw new ANRegistrationException("{0} is not valid: ANType {1} is not compatible with this useage interface type".CheckedFormat(methodName, anSpec.ANType));
@@ -885,7 +992,7 @@ namespace MosaicLib.Semi.E041
         /// </summary>
         public ISequencedObjectSource<IANState, Int32> GetANStatePublisher(string anName)
         {
-            string methodName = "{0}({1})".CheckedFormat(new System.Diagnostics.StackFrame().GetMethod().Name, anName);
+            string methodName = "{0}({1})".CheckedFormat(Fcns.CurrentMethodName, anName);
 
             ISequencedObjectSource<IANState, Int32> anStatePublisher = null;
 
@@ -944,6 +1051,8 @@ namespace MosaicLib.Semi.E041
         private List<ANSourceImpl> anSourceServiceList = new List<ANSourceImpl>();
         private ANSourceImpl [] anSourceServiceArray = null;
 
+        private List<ANSourceTracking> pendingLookupANSourceTrackingList = new List<ANSourceTracking>();
+
         private ANSourceTracking FindANSourceTrackingByName(string anName, bool createIfNeeded)
         {
             int foundIndex = 0;
@@ -976,26 +1085,32 @@ namespace MosaicLib.Semi.E041
                     throw new ANRegistrationException("Registration failed: {0} has already been registered by {1}".CheckedFormat(anName, anSourceTracking.anSourceImpl.SourceObjectID));
                 }
 
-                immutableanStatePublicationDelegate = immutableanStatePublicationDelegate ?? AsyncAcceptANStateUpdate;
-
-                // setup the new source and return it.
+                // setup the new source, add a new tracking object for it, and return it.
 
                 anSpecCopy.SpecID = anSpecSeqNumGenerator.Increment();
                 anSpecCopy.ParentTableIndex = anSourceTracking.listIndex;
 
                 anSpecList.Add(anSpecCopy);
 
-                if (E30ALIDHandlerFacet != null && anSpecCopy.ALID.IsLookup())
-                    anSpecCopy.ALID = unchecked((ANAlarmID) E30ALIDHandlerFacet.GetALIDFromANSpec(anSpecCopy));
+                ANAlarmID foundALID = ANAlarmID.None;
+                ALIDLookupState foundALIDLookupState = ALIDLookupState.None;
+
+                if (anSpecCopy.ALID.IsLookup())
+                {
+                    if (E30ALIDHandlerFacet != null)
+                        InnerLookupALIDAndLogIfNotFound(anSpecCopy, out foundALID, out foundALIDLookupState);
+                    else
+                        foundALIDLookupState = ALIDLookupState.Pending;
+                }
 
                 ANSourceImpl anSourceImpl = new ANSourceImpl() 
                     { 
-                        ParentPart = this, 
-                        ManagersImmutableANStatePublicationDelegate = immutableanStatePublicationDelegate,
+                        ParentPart = this,
+                        ManagersImmutableANStatePublicationDelegate = (immutableANStatePublicationDelegate ?? (immutableANStatePublicationDelegate = AsyncAcceptANStateUpdate)),
                         ANSpec = anSpecCopy, 
                         SourceObjectID = sourceObjectID, 
                         AcceptAlarmReasonChangeAfterTimeSpan = Config.AcceptAlarmReasonChangeAfterTimeSpan,
-                    }.Setup();
+                    }.Setup(foundALID, foundALIDLookupState);
 
                 anSourceTracking.anSpec = anSpecCopy;
                 anSourceTracking.anSourceImpl = anSourceImpl;
@@ -1015,12 +1130,15 @@ namespace MosaicLib.Semi.E041
                 // set and publish the initialANState
                 anSourceTracking.Publish(anSourceTracking.initialANState = new ANState(anSourceImpl.InitialANState));
 
+                if (foundALIDLookupState == ALIDLookupState.Pending)
+                    pendingLookupANSourceTrackingList.Add(anSourceTracking);
+
                 return string.Empty;
             }
             catch (System.Exception caughtEx)
             {
                 ex = caughtEx;
-                return "Caught exception type:{0}, mesg:'{1}'".CheckedFormat(ex.GetType(), ex.Message);
+                return "Caught {0}".CheckedFormat(ex.ToString(ExceptionFormat.TypeAndMessage));
             }
         }
 
@@ -1144,6 +1262,56 @@ namespace MosaicLib.Semi.E041
 
         #endregion
 
+        #region ServiceALIDLookups, ServiceALIDLookup, InnerLookupALIDAndLogIfNotFound methods.
+
+        private void ServiceALIDLookups()
+        {
+            if (!serviceE30ALIDHandlerFacetLookupNow || E30ALIDHandlerFacet == null)
+                return;
+
+            serviceE30ALIDHandlerFacetLookupNow = false;
+
+            foreach (ANSourceTracking anSourceTracking in pendingLookupANSourceTrackingList)
+                ServiceALIDLookup(anSourceTracking);
+
+            pendingLookupANSourceTrackingList.Clear();
+        }
+
+        private void ServiceALIDLookup(ANSourceTracking anSourceTracking)
+        {
+            ANAlarmID foundALID;
+            ALIDLookupState foundALIDLookupState;
+
+            InnerLookupALIDAndLogIfNotFound(anSourceTracking.anSpec, out foundALID, out foundALIDLookupState);
+
+            anSourceTracking.anSourceImpl.HandleALIDLookupResult(foundALID, foundALIDLookupState);
+        }
+
+        private void InnerLookupALIDAndLogIfNotFound(IANSpec anSpec, out ANAlarmID foundALID, out ALIDLookupState foundALIDLookupState)
+        {
+            int foundALIDValue = E30ALIDHandlerFacet.GetALIDFromANSpec(anSpec);
+
+            if (foundALIDValue != 0)
+            {
+                foundALID = unchecked((ANAlarmID)foundALIDValue);
+                foundALIDLookupState = ALIDLookupState.Found;
+                Log.Trace.Emit("ALID {0} found for ANSpec '{1}'", foundALID, anSpec);
+            }
+            else
+            {
+                foundALID = ANAlarmID.None;
+                foundALIDLookupState = ALIDLookupState.NotFound;
+
+                if (anSpec.ALID == ANAlarmID.Lookup)
+                    Log.Error.Emit("Expected ALID was not found for ANSpec '{0}'", anSpec);
+                else
+                    Log.Debug.Emit("Optional ALID was not found for ANSpec '{0}'", anSpec);
+            }
+        }
+
+
+        #endregion
+
         #region IANSource implementation object (ANSouceImpl) and private helper methods
 
         /// <summary>
@@ -1201,14 +1369,31 @@ namespace MosaicLib.Semi.E041
 
             public IANState InitialANState { get; private set; }
 
-            public ANSourceImpl Setup()
+            public ANSourceImpl Setup(ANAlarmID initialFoundALID, ALIDLookupState initialALIDLookupState)
             {
                 lock (mutex)
                 {
-                    ANState = new ANState() { ANSpec = ANSpec, ALID = ANSpec.ALID };
+                    ANState = new ANState() { ANSpec = ANSpec };
 
                     Logger = new Logging.Logger("AN." + ANSpec.ANName);
                     SetSignalStateEmitter = Logger.Debug;
+
+                    if (ANSpec.ALID.IsNone())
+                    {
+                        ANState.ALID = ANSpec.ALID;
+                        ANState.ALIDLookupState = ALIDLookupState.None;
+                    }
+                    else if (ANSpec.ALID.IsLookup())
+                    {
+                        ANState.ALID = initialFoundALID;
+                        ANState.ALIDLookupState = initialALIDLookupState;
+                    }
+                    else
+                    {
+                        // it has been explicitly defined by the client
+                        ANState.ALID = ANSpec.ALID;
+                        ANState.ALIDLookupState = ALIDLookupState.Defined;
+                    }
 
                     SetSignalState(ANSignalState.Off, "Source has been setup", true);
 
@@ -1220,13 +1405,25 @@ namespace MosaicLib.Semi.E041
 
             #endregion
 
-            #region fields and properties that are used by the parent part to track and service the source
+            #region fields and properties that are used by the parent part to track and service this anSource
 
             public void Service()
             {
                 lock (mutex)
                 {
                     InnerServiceAcknowledgeActionSelected();
+                }
+            }
+
+
+            public void HandleALIDLookupResult(ANAlarmID finalALID, ALIDLookupState finalALIDLookupState)
+            {
+                lock (mutex)
+                {
+                    ANState.ALID = finalALID;
+                    ANState.ALIDLookupState = finalALIDLookupState;
+
+                    CloneAndPublishANStateToManager();
                 }
             }
 
@@ -1303,7 +1500,7 @@ namespace MosaicLib.Semi.E041
             ANState ANState { get; set; }
             IANState LastSourceGeneratedState { get; set; }
 
-            /// <summary>Gives the client access to the state publisher object that the manager creates in order to publish anState chagnes after it has processed them.</summary>
+            /// <summary>Gives the client access to the state publisher object that the manager creates in order to publish anState changes after it has processed them.</summary>
             ISequencedObjectSource<IANState, Int32> IANSourceBase.ANStatePublisher { get { return ManagersANStatePublisher; } }
 
             static INamedValueSet ClearEnabledActionsIfNeeded(INamedValueSet fromNVS)
@@ -1380,7 +1577,7 @@ namespace MosaicLib.Semi.E041
             {
                 lock (mutex)
                 {
-                    string methodName = "{0}({1}, {2})".CheckedFormat(new System.Diagnostics.StackFrame().GetMethod().Name, actionName, reason);
+                    string methodName = "{0}({1}, {2})".CheckedFormat(Fcns.CurrentMethodName, actionName, reason);
 
                     if (actionName.IsNullOrEmpty())
                     {
@@ -1411,7 +1608,7 @@ namespace MosaicLib.Semi.E041
             {
                 lock (mutex)
                 {
-                    string methodName = "{0}({1})".CheckedFormat(new System.Diagnostics.StackFrame().GetMethod().Name, reason);
+                    string methodName = "{0}({1})".CheckedFormat(Fcns.CurrentMethodName, reason);
 
                     if (!ANState.ANSignalState.IsActionActive())
                         Logger.Debug.Emit("Unexpected use of {0}: current state {1} does not indicate that an action is active", methodName, ANState.ANSignalState);
@@ -1434,7 +1631,7 @@ namespace MosaicLib.Semi.E041
             {
                 lock (mutex)
                 {
-                    string methodName = "{0}({1})".CheckedFormat(new System.Diagnostics.StackFrame().GetMethod().Name, reason);
+                    string methodName = "{0}({1})".CheckedFormat(Fcns.CurrentMethodName, reason);
 
                     if (!ANState.ANSignalState.IsActionActive())
                         Logger.Debug.Emit("Unexpected use of {0}: current state {1} does not indicate that an action is active", methodName, ANState.ANSignalState);
@@ -1452,7 +1649,7 @@ namespace MosaicLib.Semi.E041
             {
                 lock (mutex)
                 {
-                    string methodName = "{0}({1})".CheckedFormat(new System.Diagnostics.StackFrame().GetMethod().Name, reason);
+                    string methodName = "{0}({1})".CheckedFormat(Fcns.CurrentMethodName, reason);
 
                     if (!ANState.ANSignalState.IsActionActive())
                         Logger.Debug.Emit("Unexpected use of {0}: current state {1} does not indicate that an action is active", methodName, ANState.ANSignalState);
@@ -1589,9 +1786,7 @@ namespace MosaicLib.Semi.E041
                         SetSignalStateEmitter.Emit("Initial state id {0}, '{1}' {2}{3}", anSignalState, reason, ANState.ActionList.ToString(false, true), actionStr);
                     }
 
-                    ANState immutableANStateCopy = new ANState(ANState);
-                    ManagersImmutableANStatePublicationDelegate(immutableANStateCopy);
-                    LastSourceGeneratedState = immutableANStateCopy;
+                    CloneAndPublishANStateToManager();
                 }
 
                 string currentSelectedActionName = ANState.SelectedActionName;
@@ -1608,6 +1803,13 @@ namespace MosaicLib.Semi.E041
                     ANState.ActionAbortRequested = false;
                     Logger.Debug.Emit("State change to '{0}' has discarded an un-handled ActionAbortRequest", anSignalState);
                 }
+            }
+
+            private void CloneAndPublishANStateToManager()
+            {
+                ANState immutableANStateCopy = new ANState(ANState);
+                ManagersImmutableANStatePublicationDelegate(immutableANStateCopy);
+                LastSourceGeneratedState = immutableANStateCopy;
             }
 
             #endregion
@@ -1653,7 +1855,7 @@ namespace MosaicLib.Semi.E041
 
         #endregion
 
-        #region 
+        #region MainThreadFcn
 
         /// <summary>
         /// override the MainThreadFcn so that we can use it to create the Set objects that can be iterated by this part (without owning the lock)
@@ -1691,6 +1893,8 @@ namespace MosaicLib.Semi.E041
         protected override void PerformMainLoopService()
         {
             ServiceConfig();
+
+            ServiceALIDLookups();
 
             // if the anSourceServiceList has changed since the last service call then rebuild it from the current contents of the list.
             if (anSourceServiceArray == null)
@@ -1732,7 +1936,7 @@ namespace MosaicLib.Semi.E041
         /// <summary>
         /// Retained copy of the AsyncAcceptANStateUpdate method as a delegate that is then shared by all ANSourceImpl objects.
         /// </summary>
-        private ImmutableANStatePublicationDelegate immutableanStatePublicationDelegate;
+        private ImmutableANStatePublicationDelegate immutableANStatePublicationDelegate;
 
         /// <summary>
         /// This method is used to accept asynchronous calls to pass newly updated anState values back into this AnnunciatorManagerPart.
@@ -1783,8 +1987,6 @@ namespace MosaicLib.Semi.E041
 
                     if (anSourceTracking != null && anSourceTracking.anSourceImpl != null)
                     {
-                        InternalANSpec internalANSpec = anSourceTracking.anSpec;
-
                         /// process the items from the ANState queue...
 
                         ANState lastServicedANState = anSourceTracking.lastServicedANState ?? anSourceTracking.initialANState;
@@ -1796,6 +1998,7 @@ namespace MosaicLib.Semi.E041
                         {
                             bool signalingStateHasJustBeenCleared = lastServicedANState.IsSignaling && !anState.IsSignaling;
                             bool signalingStateHasJustBeenSet = !lastServicedANState.IsSignaling && anState.IsSignaling;
+                            bool signalingStateIsSetAndLookupJustCompleted = anState.IsSignaling && lastServicedANState.ALIDLookupState == ALIDLookupState.Pending && anState.ALIDLookupState == ALIDLookupState.Found; 
 
                             // set and publish the lastServicedANState
                             anSourceTracking.Publish(anSourceTracking.lastServicedANState = anState);
@@ -1816,12 +2019,12 @@ namespace MosaicLib.Semi.E041
                                 anStateCurrentActiveSet.RemoveAll((an) => (an.ANName == anState.ANName));
                             }
 
-                            if (internalANSpec.HasALID && E30ALIDHandlerFacet != null)
+                            if ((anState.ALIDLookupState == ALIDLookupState.Defined || anState.ALIDLookupState == ALIDLookupState.Found) && (E30ALIDHandlerFacet != null))
                             {
-                                if (signalingStateHasJustBeenSet)
-                                    E30ALIDHandlerFacet.NoteALIDValueChanged((int)internalANSpec.ALID, true, anState.Reason);
+                                if (signalingStateHasJustBeenSet || signalingStateIsSetAndLookupJustCompleted)
+                                    E30ALIDHandlerFacet.NoteALIDValueChanged((int)anState.ALID, true, anState.Reason);
                                 else if (signalingStateHasJustBeenCleared)
-                                    E30ALIDHandlerFacet.NoteALIDValueChanged((int)internalANSpec.ALID, false, anState.Reason);
+                                    E30ALIDHandlerFacet.NoteALIDValueChanged((int)anState.ALID, false, anState.Reason);
                             }
                         }
                         else
@@ -1856,7 +2059,7 @@ namespace MosaicLib.Semi.E041
 
         #endregion
 
-        #region other PerformMainLoopServce support methods
+        #region other PerformMainLoopServce support methods: ProcessAutoAcknowledgeSelections, PredicateIsANStateAckable
 
         long anStateCurrentActiveSetSeqNum = 0;
         int numAckableWaitingItems = 0;
@@ -1952,7 +2155,7 @@ namespace MosaicLib.Semi.E041
     }
 
     /// <summary>
-    /// This exception class may be thrown by the various Register ANSource method in casses where they finds that the anSpec they has been given is not valid or produces a redundant registration attempt.
+    /// This exception class may be thrown by the various Register ANSource method in casses where they finds that the anSpec they have been given is not valid or produces a redundant registration attempt.
     /// </summary>
     public class ANRegistrationException : System.Exception
     {

@@ -2,8 +2,9 @@
 /*! @file LPM.cs
  *  @brief This file contains common interfaces, class and struct definitions that are used in implementing, using, and displaying LPM Parts and their state.
  * 
- * Copyright (c) Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2016 Mosaic Systems Inc., All rights reserved
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2016 Mosaic Systems Inc.
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.

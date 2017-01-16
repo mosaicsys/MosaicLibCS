@@ -2,9 +2,10 @@
 /*! @file Assert.cs
  *  @brief This file provides a small set of class and related definitions for classes and methods that are useful in constructing assert style operations with programmatically defined behavior.
  * 
- * Copyright (c) Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2008 Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2007 Mosaic Systems Inc., All rights reserved. (C++ library version)
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2008 Mosaic Systems Inc.
+ * Copyright (c) 2007 Mosaic Systems Inc.  (C++ library version)
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +19,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
 
 using System;
 using System.Runtime.InteropServices;
@@ -150,6 +150,9 @@ namespace MosaicLib.Utils
         /// <summary>Set this property to true if you would like non-log only assertions (such as DebugBreakpoint) to take a debug breakpoint.  defaults to false</summary>
         public static bool EnableAssertDebugBreakpoints { get; set; }
 
+        /// <summary>Set this property to true if you would like Asserts to generate BasicFallbackLogging output.  defaults to false</summary>
+        public static bool EnableBasicFallbackLogging { get; set; }
+
 		#endregion
 
 		#region Private methods
@@ -166,7 +169,8 @@ namespace MosaicLib.Utils
 
             if (assertType != AssertType.Log)
             {
-                Logging.BasicFallbackLogging.LogError(logStr);
+                if (EnableBasicFallbackLogging)
+                    Logging.BasicFallbackLogging.LogError(logStr);
 
                 if (queuedAssertLogger == null)       // in an MT world we might create a few of these simultaneously.  This is not a problem as the distribution engine supports such a construct so locking is not required here in order to get valid behavior.
                     queuedAssertLogger = new Logging.QueuedLogger("MosaicLib.Utils.Assert");

@@ -1,10 +1,11 @@
 //-------------------------------------------------------------------
 /*! @file E084IOSupport.cs
- * @brief This file defines the E084IOSupport interfaces and structures.
+ *  @brief This file defines the E084IOSupport interfaces and structures.
  *
- * Copyright (c) Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2010 Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2006 Mosaic Systems Inc., All rights reserved. (C++ library version(s) Iface_E084PassiveIO.h and Iface_E084ActiveIO.h)
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2010 Mosaic Systems Inc.
+ * Copyright (c) 2006 Mosaic Systems Inc.  (C++ library version(s) Iface_E084PassiveIO.h and Iface_E084ActiveIO.h)
+ * All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.

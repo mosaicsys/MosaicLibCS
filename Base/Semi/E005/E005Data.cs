@@ -1,23 +1,23 @@
 //-------------------------------------------------------------------
 /*! @file E005Data.cs
-    @brief This files defines small set of classes and interfaces that are used with Semi standard data objects under the E005 standard (SECS-II)
-   
-    Copyright (c) Mosaic Systems Inc.,  All rights reserved
-    Copyright (c) 2008 Mosaic Systems Inc.,  All rights reserved
-
-	Licensed under the Apache License, Version 2.0 (the "License");
-	you may not use this file except in compliance with the License.
-	You may obtain a copy of the License at
-
-	     http://www.apache.org/licenses/LICENSE-2.0
-
-	Unless required by applicable law or agreed to in writing, software
-	distributed under the License is distributed on an "AS IS" BASIS,
-	WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-	See the License for the specific language governing permissions and
-	limitations under the License.
+ *  @brief This files defines small set of classes and interfaces that are used with Semi standard data objects under the E005 standard (SECS-II)
+ *
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2008 Mosaic Systems Inc.
+ * All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * 
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
-//-------------------------------------------------------------------
 
 using System;
 using System.Collections.Generic;
@@ -225,10 +225,7 @@ namespace MosaicLib.Semi.E005.Data
             catch (System.Exception ex)
             {
                 if (throwOnException)
-                {
-                    string methodName = new System.Diagnostics.StackFrame().GetMethod().Name;
-                    throw new ConvertValueException("{0} failed on '{1}'".CheckedFormat(methodName, vc), ex);
-                }
+                    throw new ConvertValueException("{0} failed on '{1}'".CheckedFormat(Fcns.CurrentMethodName, vc), ex);
 
                 return new byte[0];
             }
@@ -245,10 +242,7 @@ namespace MosaicLib.Semi.E005.Data
             catch (System.Exception ex)
             {
                 if (throwOnException)
-                {
-                    string methodName = new System.Diagnostics.StackFrame().GetMethod().Name;
-                    throw new ConvertValueException("{0} failed on '{1}'".CheckedFormat(methodName, vc), ex);
-                }
+                    throw new ConvertValueException("{0} failed on '{1}'".CheckedFormat(Fcns.CurrentMethodName, vc), ex);
 
                 return ValueContainer.Empty;
             }
@@ -271,10 +265,7 @@ namespace MosaicLib.Semi.E005.Data
             catch (System.Exception ex)
             {
                 if (throwOnException)
-                {
-                    string methodName = new System.Diagnostics.StackFrame().GetMethod().Name;
-                    throw new ConvertValueException("{0} failed on '{1}'".CheckedFormat(methodName, nvs), ex);
-                }
+                    throw new ConvertValueException("{0} failed on '{1}'".CheckedFormat(Fcns.CurrentMethodName, nvs), ex);
 
                 return emptyByteArray;
             }
@@ -295,18 +286,16 @@ namespace MosaicLib.Semi.E005.Data
 
                 if (!ec.IsNullOrEmpty())
                 {
-                    string methodName = new System.Diagnostics.StackFrame().GetMethod().Name;
                     string byteArrayInHex = MosaicLib.Utils.ByteArrayTranscoders.HexStringTranscoder.Encode(byteArray);
-                    exToThrow = new ConvertValueException("{0} failed on '{1}': {2}".CheckedFormat(methodName, byteArrayInHex, ec), null);
+                    exToThrow = new ConvertValueException("{0} failed on '{1}': {2}".CheckedFormat(Fcns.CurrentMethodName, byteArrayInHex, ec), null);
                 }
             }
             catch (System.Exception ex)
             {
                 if (throwOnException)
                 {
-                    string methodName = new System.Diagnostics.StackFrame().GetMethod().Name;
                     string byteArrayInHex = MosaicLib.Utils.ByteArrayTranscoders.HexStringTranscoder.Encode(byteArray);
-                    exToThrow = new ConvertValueException("{0} failed on '{1}'".CheckedFormat(methodName, byteArrayInHex), ex);
+                    exToThrow = new ConvertValueException("{0} failed on '{1}'".CheckedFormat(Fcns.CurrentMethodName, byteArrayInHex), ex);
                 }
             }
 
@@ -536,11 +525,7 @@ namespace MosaicLib.Semi.E005.Data
                 case ContainerStorageType.UInt64: byteArrayBuilder.AppendRaw(vc.u.u64); return;
                 case ContainerStorageType.Single: byteArrayBuilder.AppendRaw(vc.u.f32); return;
                 case ContainerStorageType.Double: byteArrayBuilder.AppendRaw(vc.u.f64); return;
-                default:
-                    {
-                        string methodName = new System.Diagnostics.StackFrame().GetMethod().Name;
-                        throw new ConvertValueException("{0} cannot be used directly with {1}".CheckedFormat(methodName, vc), null);
-                    }
+                default: throw new ConvertValueException("{0} cannot be used directly with {1}".CheckedFormat(Fcns.CurrentMethodName, vc), null);
             }
         }
 
@@ -664,10 +649,9 @@ namespace MosaicLib.Semi.E005.Data
 
             if (!ec.IsNullOrEmpty())
             {
-                string methodName = new System.Diagnostics.StackFrame().GetMethod().Name;
                 string byteArrayInHex = MosaicLib.Utils.ByteArrayTranscoders.HexStringTranscoder.Encode(byteArray);
 
-                throw new ConvertValueException("{0} failed on '{1}': {2}".CheckedFormat(methodName, byteArrayInHex, ec), null);
+                throw new ConvertValueException("{0} failed on '{1}': {2}".CheckedFormat(Fcns.CurrentMethodName, byteArrayInHex, ec), null);
             }
 
             return vc;
@@ -793,7 +777,8 @@ namespace MosaicLib.Semi.E005.Data
                             vcList.Add(DecodeE005Data(byteArray, ref startIndex, ref ec));
                         }
 
-                        /// Todo: reconfirm that we should not recognize and automatically convert IListOfVC into IListOfString.
+                        // NOTE: after the following line, the vc will contain an array of ValueContainers.  Calling vc.GetValue<string []>(true) will convert this to an array of strings automatically.
+                        // As such this code does not need to be concerned with detecting and destinguishing between list of strings and lists of values (superset of list of strings)
 
                         vc.SetFromObject(vcList);
                     }

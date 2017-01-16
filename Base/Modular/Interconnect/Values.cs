@@ -2,8 +2,9 @@
 /*! @file Interconnect/Values.cs
  *  @brief Defines a set of classes that are used to supported interconnecting value adapters.
  * 
- * Copyright (c) Mosaic Systems Inc.,  All rights reserved.
- * Copyright (c) 2015 Mosaic Systems Inc., All rights reserved.
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2015 Mosaic Systems Inc.
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,17 +18,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
 
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using System.Linq;
-using MosaicLib.Utils;
-using MosaicLib.Modular.Common;
-using MosaicLib.Modular.Reflection.Attributes;
+using System.Reflection;
 using System.Runtime.Serialization;
 using System.Text.RegularExpressions;
+
+using MosaicLib.Modular.Common;
+using MosaicLib.Modular.Reflection.Attributes;
+using MosaicLib.Utils;
 
 // Modular.Interconnect is the general namespace for tools that help interconnect Modular Parts without requiring that that have pre-existing knowledge of each-other's classes.
 // This file contains the definitions for the underlying Modular.Interconnect.Values portion of Modular.Interconnect.
@@ -91,7 +92,12 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// </summary>
         string [] GetValueNamesRange(int startIdx, int maxNumItems);
 
-        /// <summary>Provides a property that returns the current total number of named values in this values interconnect table space</summary>
+        /// <summary>
+        /// Provides a property that returns the current total number of named values in this values interconnect table space.
+        /// This property is implemented so that it can be efficiently, and frequently checked, to detect the addition of new value names to the table.
+        /// <para/>Please note:  this value is updated after items have actually been added to the table.  
+        /// As such, it is possible that this value will be smaller than the ValueNamesArray length for a brief period of time while another thread is adding a new value accessor.
+        /// </summary>
         int ValueNamesArrayLength { get; }
 
         /// <summary>
@@ -102,6 +108,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// </summary>
         /// <param name="accessorArray">Gives an array of items.  Only non-null items will be Set.</param>
         /// <param name="optimize">When false all accessors will have their current value pushed into the corresonding table entries.  When true, only accessors that have their IsSetPending property true will have their value pushed in to the corresponding table entries</param>
+        /// <remarks>This signature is being retained for backward comptability</remarks>
         void Set(IValueAccessor[] accessorArray, bool optimize);
 
         /// <summary>
@@ -111,17 +118,9 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <para/>This method is specifically intended for use by ValueSetAdapter instances.
         /// </summary>
         /// <param name="accessorArray">Gives an array of items.  Only non-null items will be Set.</param>
-        /// <param name="numEntriesToSet">Limits how much of the array will be used.  Maximum index of itesm that are looked at will be &lt; this value.</param>
+        /// <param name="numEntriesToSet">Limits how much of the array will be used.  Maximum index of itesm that are looked at will be &lt; this value.  When negative value is passed, this parameter's value will be replaced with accessorArray.Length</param>
         /// <param name="optimize">When false all accessors will have their current value pushed into the corresonding table entries.  When true, only accessors that have their IsSetPending property true will have their value pushed in to the corresponding table entries</param>
-        void Set(IValueAccessor[] accessorArray, int numEntriesToSet, bool optimize);
-
-        /// <summary>
-        /// This method is used to Update a set/array of IValueAccessor instances from the corresponding set of interconnection table entry values.  
-        /// This arrayed update operation is performed atomically across all of the table entries referred to by the non-null adapters in the array.
-        /// <para/>This method is specifically intended for use by ValueSetAdapter instances.
-        /// </summary>
-        /// <param name="accessorArray">Gives an array of items.  Only non-null items will be Updated.</param>
-        void Update(IValueAccessor[] accessorArray);
+        void Set(IValueAccessor[] accessorArray, int numEntriesToSet = -1, bool optimize = true);
 
         /// <summary>
         /// This method is used to Update a set/array of IValueAccessor instances from the corresponding set of interconnection table entry values.  
@@ -129,8 +128,8 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <para/>This method is specifically intended for use by Custom update scanner instances.
         /// </summary>
         /// <param name="accessorArray">Gives an array of items.  Only non-null items will be Updated.</param>
-        /// <param name="numEntriesToUpdate">Limits how much of the array will be used.  Maximum index of itesm that are looked at will be &lt; this value.</param>
-        void Update(IValueAccessor[] accessorArray, int numEntriesToUpdate);
+        /// <param name="numEntriesToUpdate">Limits how much of the array will be used.  Maximum index of itesm that are looked at will be &lt; this value.  When negative value is passed, this parameter's value will be replaced with accessorArray.Length</param>
+        void Update(IValueAccessor[] accessorArray, int numEntriesToUpdate = -1);
 
         /// <summary>Provides an IBasicNotificationList instance that will be Notified after each Set operation has been completed.</summary>
         IBasicNotificationList NotificationList { get; }
@@ -138,76 +137,6 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <summary>Proides a sequence number that counts the total number of table-wide Set operations that have been performed.</summary>
         UInt32 GlobalSeqNum { get; }
     }
-
-    #endregion
-
-    #region Note: name mapping related types have been moved to Modular.Common.  The types defined here are now obsolete and should be replaced with the corresponding ones under Common (2016-10-29)
-
-    [Obsolete("This type has been moved to Modular.Common.  Please replace use of this type with use of the corresponding one under Common (2016-10-29)")]
-    public interface IMapNameFromTo : Modular.Common.IMapNameFromTo
-    { }
-
-    /// <summary>
-    /// Immutable item instance class for mapping names from one value to another.  
-    /// Generally used with MapNamesFromToList when interacting with values interconnect's MapNameFromToSet and related AddRange method
-    /// <para/>This class supports use with DataContract serialization and deserialization.
-    /// </summary>
-    [Obsolete("This type has been moved to Modular.Common.  Please replace use of this type with use of the corresponding one under Common (2016-10-29)")]
-    [DataContract(Namespace = Constants.ModularInterconnectNameSpace)]
-    public class MapNameFromTo : Modular.Common.MapNameFromTo
-    {
-        /// <summary>
-        /// Basic constructor used to set the instance's From and To property values to the given ones.
-        /// </summary>
-        public MapNameFromTo(string from, string to) : base(from, to) { }
-    }
-
-    /// <summary>
-    /// Immutable item instance class for use of common prefix replacement based mapping of names from one value to another.  
-    /// Generally used with MapNamesFromToList when interacting with values interconnect's MapNameFromToSet and related AddRange method
-    /// <para/>This class supports use with DataContract serialization and deserialization.
-    /// </summary>
-    [Obsolete("This type has been moved to Modular.Common.  Please replace use of this type with use of the corresponding one under Common (2016-10-29)")]
-    [DataContract(Namespace = Constants.ModularInterconnectNameSpace)]
-    public class MapNamePrefixFromTo : Modular.Common.MapNamePrefixFromTo
-    {
-        /// <summary>
-        /// Basic constructor used to set the instance's From (prefix) and To (prefix) property values to the given ones.
-        /// </summary>
-        public MapNamePrefixFromTo(string fromPrefix, string toPrefix)
-            : base(fromPrefix, toPrefix)
-        {
-        }
-    }
-
-    /// <summary>
-    /// Immutable item instance class for use of Regular expressions <seealso cref="System.Text.RegularExpressions.Regex"/> for mapping names from one value to another.  
-    /// Generally used with MapNamesFromToList when interacting with values interconnect's MapNameFromToSet and related AddRange method
-    /// <para/>This class supports use with DataContract serialization and deserialization.
-    /// </summary>
-    [Obsolete("This type has been moved to Modular.Common.  Please replace use of this type with use of the corresponding one under Common (2016-10-29)")]
-    [DataContract(Namespace = Constants.ModularInterconnectNameSpace)]
-    public class RegexMapNameFromTo : Modular.Common.RegexMapNameFromTo
-    {
-        /// <summary>
-        /// Basic constructor used to set the instance's From (regex expression) and To (regex expression) property values to the given ones.
-        /// </summary>
-        public RegexMapNameFromTo(string from, string to)
-            : base(from, to)
-        { }
-    }
-
-    /// <summary>
-    /// MapNameFromTo basic Collection class for mapping sets of names from one value to another.  
-    /// Generally used when interacting with values interconnect's MapNameFromToSet and related AddRange method.
-    /// <para/>This class supports use with DataContract serialization and deserialization.
-    /// </summary>
-    [CollectionDataContract(ItemName = "Map", Namespace = Constants.ModularInterconnectNameSpace)]
-    [KnownType(typeof(MapNameFromTo))]
-    [KnownType(typeof(RegexMapNameFromTo))]
-    [Obsolete("This type has been moved to Modular.Common.  Please replace use of this type with use of the corresponding one under Common (2016-10-29)")]
-    public class MapNameFromToList : Modular.Common.MapNameFromToList
-    { }
 
     #endregion
 
@@ -242,7 +171,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         object ValueAsObject { get; set; }
 
         /// <summary>This property is set whenever the ValueContainer is changed and is cleared whenver the update has been delievered to the ValueInterconnection instance or when Update is called.</summary>
-        bool IsSetPending { get; }
+        bool IsSetPending { get; set; }
 
         /// <summary>Sets the corresponding interconnection table space entry's value from this accessors current ValueContainer contents.  This method supports call chaining.</summary>
         IValueAccessor Set();
@@ -419,16 +348,6 @@ namespace MosaicLib.Modular.Interconnect.Values
     {
         #region construction
 
-        /// <summary>Constructor.  Requires an instance name.</summary>
-        public ValuesInterconnection(string name) 
-            : this(name, true, true)
-        { }
-
-        /// <summary>Constructor.  Allows the caller to determine if/when this interconnection table will be added to the static Global dictionary mantained in this class (provided that the given name is neither null nor empty)</summary>
-        public ValuesInterconnection(string name, bool registerSelfInDictionary)
-            : this(name, registerSelfInDictionary, true)
-        { }
-
         /// <summary>
         /// Constructor.  
         /// Allows the caller to determine if/when this interconnection table will be added to the static Global dictionary mantained in this class (provided that the given name is neither null nor empty)
@@ -436,7 +355,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// This instance will use a mutex for thread safety if either of the makeAPIThreadSafe or the registerSelfInDictionary parameters are true.  
         /// Otherwise this instance will not make use of a mutex to enforce thread safety of its API and as such the client must either use only one thread or enforce non-renterant use on their own.
         /// </summary>
-        public ValuesInterconnection(string name, bool registerSelfInDictionary, bool makeAPIThreadSafe)
+        public ValuesInterconnection(string name, bool registerSelfInDictionary = true, bool makeAPIThreadSafe = true)
         {
             Name = name;
 
@@ -488,11 +407,11 @@ namespace MosaicLib.Modular.Interconnect.Values
         public IValueAccessor GetValueAccessor(string name)
         {
             if (String.IsNullOrEmpty(name))
-                return new ValueAccessor(null, null);
+                return new ValueAccessorImpl(null, null);
 
             ValueTableEntry tableEntry = InnerGetValueTableEntry(name);
 
-            IValueAccessor adapter = new ValueAccessor(this, tableEntry);
+            IValueAccessor adapter = new ValueAccessorImpl(this, tableEntry);
 
             return adapter.Update();
         }
@@ -504,11 +423,11 @@ namespace MosaicLib.Modular.Interconnect.Values
         public IValueAccessor<TValueType> GetValueAccessor<TValueType>(string name)
         {
             if (String.IsNullOrEmpty(name))
-                return new ValueAccessor<TValueType>(null, null);
+                return new ValueAccessorImpl<TValueType>(null, null);
 
             ValueTableEntry tableEntry = InnerGetValueTableEntry(name);
 
-            IValueAccessor<TValueType> adapter = new ValueAccessor<TValueType>(this, tableEntry);
+            IValueAccessor<TValueType> adapter = new ValueAccessorImpl<TValueType>(this, tableEntry);
 
             return adapter.Update();
         }
@@ -545,8 +464,9 @@ namespace MosaicLib.Modular.Interconnect.Values
 
         /// <summary>
         /// Provides a property that returns the current total number of named values in this values interconnect table space.
-        /// <para/>Please note:  this value is updated after items have actually been added to the array.  
-        /// It is possible that this value will be smaller than the ValueNamesArray length for a brief period of time while another thread is adding a new value accessor.
+        /// This property is implemented so that it can be efficiently, and frequently checked, to detect the addition of new value names to the table.
+        /// <para/>Please note:  this value is updated after items have actually been added to the table.  
+        /// As such, it is possible that this value will be smaller than the ValueNamesArray length for a brief period of time while another thread is adding a new value accessor.
         /// </summary>
         public int ValueNamesArrayLength { get { return volatileTableItemNamesListCount; } }
 
@@ -559,7 +479,7 @@ namespace MosaicLib.Modular.Interconnect.Values
             {
                 using (var scopedLock = new ScopedLock(mutex))
                 {
-                    ((accessor as ValueAccessor) ?? emptyValueAccessor).InnerGuardedSetTableEntryFromValue();
+                    ((accessor as ValueAccessorImpl) ?? emptyValueAccessor).InnerGuardedSetTableEntryFromValue();
                     SynchrounousCustomPostSetTableEntryFromValueHandler(accessor);
 
                     globalSeqNum = InnerGuardedIncrementSkipZero(globalSeqNum);
@@ -578,7 +498,7 @@ namespace MosaicLib.Modular.Interconnect.Values
             {
                 using (var scopedLock = new ScopedLock(mutex))
                 {
-                    ((accessor as ValueAccessor) ?? emptyValueAccessor).InnerGuardedResetTableEntry();
+                    ((accessor as ValueAccessorImpl) ?? emptyValueAccessor).InnerGuardedResetTableEntry();
                     SynchrounousCustomPostSetTableEntryFromValueHandler(accessor);
 
                     globalSeqNum = InnerGuardedIncrementSkipZero(globalSeqNum);
@@ -596,11 +516,10 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// </summary>
         /// <param name="accessorArray">Gives an array of items.  Only non-null items will be Set.</param>
         /// <param name="optimize">When false all accessors will have their current value pushed into the corresonding table entries.  When true, only accessors that have their IsSetPending property true will have their value pushed in to the corresponding table entries</param>
+        /// <remarks>This signature is being retained for backward comptability</remarks>
         public void Set(IValueAccessor[] accessorArray, bool optimize)
         {
-            accessorArray = accessorArray ?? emptyValueAccessorArray;
-
-            Set(accessorArray, accessorArray.Length, optimize);
+            Set(accessorArray, -1, optimize);
         }
 
         /// <summary>
@@ -610,12 +529,15 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <para/>This method is specifically intended for use by ValueSetAdapter instances.
         /// </summary>
         /// <param name="accessorArray">Gives an array of items.  Only non-null items will be Set.</param>
-        /// <param name="numEntriesToSet">Limits how much of the array will be used.  Maximum index of itesm that are looked at will be &lt; this value.</param>
+        /// <param name="numEntriesToSet">Limits how much of the array will be used.  Maximum index of itesm that are looked at will be &lt; this value.  When negative value is passed, this parameter's value will be replaced with accessorArray.Length</param>
         /// <param name="optimize">When false all accessors will have their current value pushed into the corresonding table entries.  When true, only accessors that have their IsSetPending property true will have their value pushed in to the corresponding table entries</param>
-        public void Set(IValueAccessor[] accessorArray, int numEntriesToSet, bool optimize)
+        public void Set(IValueAccessor[] accessorArray, int numEntriesToSet = -1, bool optimize = true)
         {
             accessorArray = accessorArray ?? emptyValueAccessorArray;
-            numEntriesToSet = Math.Min(numEntriesToSet, accessorArray.Length);
+
+            int accessorArrayLength = accessorArray.Length;
+            if (numEntriesToSet < 0 || numEntriesToSet > accessorArrayLength)
+                numEntriesToSet = accessorArrayLength;
 
             int numEntriesSet = 0;
 
@@ -641,10 +563,11 @@ namespace MosaicLib.Modular.Interconnect.Values
                 for (int idx = 0; idx < numEntriesToSet; idx++)
                 {
                     IValueAccessor accessor = accessorArray[idx];
+                    ValueAccessorImpl valueAccessor = ((accessor as ValueAccessorImpl) ?? emptyValueAccessor);
 
-                    if (accessor != null && (!optimize || accessor.IsSetPending))
+                    if (accessor != null && (accessor.IsSetPending || !optimize) && valueAccessor.InterconnectInstance == this)
                     {
-                        ((accessor as ValueAccessor) ?? emptyValueAccessor).InnerGuardedSetTableEntryFromValue();
+                        valueAccessor.InnerGuardedSetTableEntryFromValue();
 
                         SynchrounousCustomPostSetTableEntryFromValueHandler(accessor);
 
@@ -664,28 +587,18 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <summary>
         /// This method is used internally by IValueAccessor instances to lock the table space and update the accessor's copy of the value and sequence number from the corresponding table entry.
         /// </summary>
-        internal void Update(IValueAccessor accessor)
+        /// <remarks>We do not need to verify that this IVI instance is the correct one since this method is only called by the ValueAccessorImpl objects created by this instance.</remarks>
+        protected void Update(IValueAccessor accessor)
         {
             if (accessor != null)
             {
+                ValueAccessorImpl valueAccessor = ((accessor as ValueAccessorImpl) ?? emptyValueAccessor);
+
                 using (var scopedLock = new ScopedLock(mutex))
                 {
-                    ((accessor as ValueAccessor) ?? emptyValueAccessor).InnerGuardedUpdateValueFromTableEntry();
+                    valueAccessor.InnerGuardedUpdateValueFromTableEntry();
                 }
             }
-        }
-
-        /// <summary>
-        /// This method is used to Update a set/array of IValueAccessor instances from the corresponding set of interconnection table entry values.  
-        /// This arrayed update operation is performed atomically across all of the table entries refereed to by the non-null adapters in the array.
-        /// <para/>This method is specifically intended for use by ValueSetAdapter instances.
-        /// </summary>
-        /// <param name="accessorArray">Gives an array of items.  Only non-null items will be Updated.</param>
-        public void Update(IValueAccessor[] accessorArray)
-        {
-            accessorArray = accessorArray ?? emptyValueAccessorArray;
-
-            Update(accessorArray, accessorArray.Length);
         }
 
         /// <summary>
@@ -694,23 +607,27 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <para/>This method is specifically intended for use by Custom update scanner instances.
         /// </summary>
         /// <param name="accessorArray">Gives an array of items.  Only non-null items will be Updated.</param>
-        /// <param name="numEntriesToUpdate">Limits how much of the array will be used.  Maximum index of items that are looked at will be &lt; this value.</param>
-        public void Update(IValueAccessor[] accessorArray, int numEntriesToUpdate)
+        /// <param name="numEntriesToUpdate">Limits how much of the array will be used.  Maximum index of itesm that are looked at will be &lt; this value.  When negative value is passed, this parameter's value will be replaced with accessorArray.Length</param>
+        public void Update(IValueAccessor[] accessorArray, int numEntriesToUpdate = -1)
         {
             accessorArray = accessorArray ?? emptyValueAccessorArray;
-            numEntriesToUpdate = Math.Min(numEntriesToUpdate, accessorArray.Length);
+
+            int accessorArrayLength = accessorArray.Length;
+            if (numEntriesToUpdate < 0 || numEntriesToUpdate > accessorArrayLength)
+                numEntriesToUpdate = accessorArrayLength;
 
             using (var scopedLock = new ScopedLock(mutex))
             {
                 for (int idx = 0; idx < numEntriesToUpdate; idx++)
                 {
                     IValueAccessor accessor = accessorArray[idx];
+                    ValueAccessorImpl valueAccessor = ((accessor as ValueAccessorImpl) ?? emptyValueAccessor);
 
-                    ((accessor as ValueAccessor) ?? emptyValueAccessor).InnerGuardedUpdateValueFromTableEntry();
+                    if (valueAccessor.InterconnectInstance == this)
+                        valueAccessor.InnerGuardedUpdateValueFromTableEntry();
                 }
             }
         }
-
 
         /// <summary>Provides an IBasicNotificationList instance that will be Notified after each Set operation has been completed.</summary>
         public IBasicNotificationList NotificationList { get { return notificationList; } }
@@ -841,7 +758,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <summary>empty array of accessor objects to avoid needing to do null pointer checks in foreach iterators.</summary>
         private static readonly IValueAccessor[] emptyValueAccessorArray = new IValueAccessor[0];
         /// <summary>empty ValueAccessor to simplify safe invocation of down-casted method using ?? operator.</summary>
-        private static readonly ValueAccessor emptyValueAccessor = new ValueAccessor(null, null);
+        private static readonly ValueAccessorImpl emptyValueAccessor = new ValueAccessorImpl(null, null);
 
         /// <summary>Backing store for NotificationList</summary>
         private BasicNotificationList notificationList = new BasicNotificationList();
@@ -928,17 +845,18 @@ namespace MosaicLib.Modular.Interconnect.Values
         }
 
         /// <summary>Implementation class for the IValueAccessor interface.  Provides pure ValueAsObject based use of the Value Interconnection instance that created this object</summary>
-        private class ValueAccessor : IValueAccessor
+        private class ValueAccessorImpl : IValueAccessor
         {
             /// <summary>Internal constructor.  Requires parent ValuesIterconnection instance and ValueTableEntry instance to which this accessor is attached.</summary>
-            internal ValueAccessor(ValuesInterconnection interconnectInstance, ValueTableEntry tableEntry)
+            internal ValueAccessorImpl(ValuesInterconnection interconnectInstance, ValueTableEntry tableEntry)
             {
                 InterconnectInstance = interconnectInstance;
                 TableEntry = tableEntry;
             }
 
             /// <summary>Retains the ValuesInterconnection instance to which this accessor belongs, or null if there is none.</summary>
-            private ValuesInterconnection InterconnectInstance { get; set; }
+            internal ValuesInterconnection InterconnectInstance { get; private set; }
+
             /// <summary>Retains the ValueTableEntry to which this accessor is attached, or null if there is none.</summary>
             private ValueTableEntry TableEntry { get; set; }
 
@@ -970,18 +888,12 @@ namespace MosaicLib.Modular.Interconnect.Values
             /// </summary>
             public object ValueAsObject 
             { 
-                get 
-                { 
-                    return valueContainer.ValueAsObject; 
-                } 
-                set 
-                {
-                    ValueContainer = new ValueContainer().SetFromObject(value);
-                } 
+                get { return valueContainer.ValueAsObject; } 
+                set { ValueContainer = new ValueContainer(value); } 
             }
 
             /// <summary>This property is set whenever the ValueContainer is changed and is cleared whenver the update has been delievered to the ValueInterconnection instance or when Update is called.</summary>
-            public bool IsSetPending { get; protected set; }
+            public bool IsSetPending { get; set; }
 
             /// <summary>Sets the corresponding interconnection table space entry's value from the current ValueAsObject value.  This method supports call chaining.</summary>
             public IValueAccessor Set()
@@ -1113,18 +1025,20 @@ namespace MosaicLib.Modular.Interconnect.Values
 
             public override string ToString()
             {
-                if (!IsUpdateNeeded)
-                    return "Accessor '{0}'@{1} {2} [vSeq:{3}]".CheckedFormat(Name, ID, ValueContainer, ValueSeqNum);
-                else
+                if (IsSetPending)
+                    return "Accessor '{0}'@{1} {2} [SetPending vSeq:{3} current:{4}]".CheckedFormat(Name, ID, ValueContainer, ValueSeqNum, CurrentSeqNum);
+                else if (IsUpdateNeeded)
                     return "Accessor '{0}'@{1} {2} [UpdateNeeded vSeq:{3} current:{4}]".CheckedFormat(Name, ID, ValueContainer, ValueSeqNum, CurrentSeqNum);
+                else
+                    return "Accessor '{0}'@{1} {2} [vSeq:{3}]".CheckedFormat(Name, ID, ValueContainer, ValueSeqNum);
             }
         }
 
         /// <summary>Implementation class for the IValueAccessor{TValueType} interface to provide type converted access to an Interconnection table space value.  Extends the ValueAccessor class.</summary>
-        private class ValueAccessor<TValueType> : ValueAccessor, IValueAccessor<TValueType>
+        private class ValueAccessorImpl<TValueType> : ValueAccessorImpl, IValueAccessor<TValueType>
         {
             /// <summary>Internal constructor.  Requires parent ValuesIterconnection instance and ValueTableEntry instance to which this accessor is attached.</summary>
-            internal ValueAccessor(ValuesInterconnection interconnectInstance, ValueTableEntry tableEntry)
+            internal ValueAccessorImpl(ValuesInterconnection interconnectInstance, ValueTableEntry tableEntry)
                 : base(interconnectInstance, tableEntry)
             {
                 typeOfTValueType = typeof(TValueType);
@@ -1234,23 +1148,11 @@ namespace MosaicLib.Modular.Interconnect.Values
         {
             /// <summary>
             /// Default constructor.
-            /// <para/>Name = null, NameAdjust = NameAdjust.Prefix0, SilenceIssues = false
+            /// <para/>Name = null, NameAdjust = NameAdjust.Prefix0, SilenceIssues = false, StorageType = ContainerStorageType.None
             /// </summary>
             public ValueSetItemAttribute() 
                 : base()
-            {
-                StorageType = ContainerStorageType.None;
-            }
-
-            /// <summary>
-            /// When an item is marked to SilenceIssues, no issue messages will be emitted if the value cannot be accessed.  Value messages will still be emitted.
-            /// </summary>
-            public bool SilenceIssues { get; set; }
-
-            /// <summary>
-            /// When this property is set to be any value other than None (its default), the value marshalling will attempt to cast the member value to/from this cotnainer type when setting/getting container contents.
-            /// </summary>
-            public ContainerStorageType StorageType { get; set; }
+            { }
         }
     }
 
@@ -1331,7 +1233,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         #region Ctor
 
         /// <summary>
-        /// Default constructor.  Assigns adapter to use default Config.Instance IConfig service instance.  
+        /// Default constructor.  Assigns adapter to use default Values.Instance IValuesInterconnection instance.  
         /// For use with Property Initializers and the Setup method to define and setup the adapter instance for use.
         /// Setup method is used to generate final derived item names and to bind and make the initial update to the ValueSet contents.
         /// Setup method may also specify/override the config instance that is to be used.
@@ -1343,7 +1245,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         }
 
         /// <summary>
-        /// Config instance constructor.  Assigns adapter to use given configInstance IConfig service instance.  This may be overridden during the Setup call.
+        /// Config instance constructor.  Assigns adapter to use given IValuesInterconnection valueInterconnect service instance.  This may be overridden during the Setup call.
         /// For use with Property Initializers and the Setup method to define and setup the adapter instance for use.
         /// <para/>Please Note: the Setup method must be called before the adapter can be used.  
         /// </summary>
@@ -1444,12 +1346,12 @@ namespace MosaicLib.Modular.Interconnect.Values
 
                 GenerateMemberToFromValueAccessFuncs(itemAccessSetupInfo);
 
-                Logging.IMesgEmitter slectedIssueEmitter = IssueEmitter;
+                Logging.IMesgEmitter selectedIssueEmitter = IssueEmitter;
 
                 if (itemAccessSetupInfo.MemberFromValueAccessAction == null || itemAccessSetupInfo.MemberToValueAccessAction == null)
                 {
                     if (!itemAttribute.SilenceIssues)
-                        slectedIssueEmitter.Emit("Member/Value '{0}'/'{1}' is not usable: no valid accessor delegate could be generated for its ValueSet type:'{3}'", memberName, fullValueName, itemInfo.ItemType, TValueSetTypeStr);
+                        selectedIssueEmitter.Emit("Member/Value '{0}'/'{1}' is not usable: no valid accessor delegate could be generated for its ValueSet type:'{3}'", memberName, fullValueName, itemInfo.ItemType, TValueSetTypeStr);
 
                     continue;
                 }
@@ -1894,11 +1796,11 @@ namespace MosaicLib.Modular.Interconnect.Values
             /// </summary>
             public bool ItemIsValueContainer { get; set; }
 
-            /// <summary>delegate that is used to set a specific member's value from a given config key's value object's stored value.</summary>
+            /// <summary>delegate that is used to set a specific member's value from a given IValueAccessor's value.</summary>
             /// <remarks>this item will be null for static items and for items that failed to be setup correctly.</remarks>
             public Action<TValueSet, Logging.IMesgEmitter, Logging.IMesgEmitter> MemberToValueAccessAction { get; set; }
 
-            /// <summary>delegate that is used to set a specific member's value from a given config key's value object's stored value.</summary>
+            /// <summary>delegate that is used to set a specific member's value from a given IValueAccessor's value.</summary>
             /// <remarks>this item will be null for static items and for items that failed to be setup correctly.</remarks>
             public Action<TValueSet, Logging.IMesgEmitter, Logging.IMesgEmitter> MemberFromValueAccessAction { get; set; }
 

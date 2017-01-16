@@ -2,8 +2,9 @@
 /*! @file MosaicLibCSBase.cs
  *  @brief This file contains definitions that are shared by various subparts of the MosaicLib namespace
  * 
- * Copyright (c) Mosaic Systems Inc.  All rights reserved
- * Copyright (c) 2008 Mosaic Systems Inc.  All rights reserved
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2008 Mosaic Systems Inc.
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,16 +18,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
+
+using System;
+using System.Collections.Generic;
+
+using System.ServiceModel;
+using System.Runtime.Serialization;
 
 namespace MosaicLib
 {
-    using System;
-    using System.Collections.Generic;
-
-    using System.ServiceModel;
-    using System.Runtime.Serialization;
-
     /// <summary>
     /// Defines a series of constants for this library, including common namespace urn's used within the project.
     /// </summary>
@@ -60,13 +60,16 @@ namespace MosaicLib
         public const string ConfigNameSpace = ModularNameSpace + ".Config";
 
         /// <summary>urn://mosaicsys.com/NS/MLib.Semi</summary>
-        public const string SemiNameSpace = MosaicLib.Constants.MosaicLibNameSpaceRoot + ".Semi";
+        public const string SemiNameSpace = MosaicLibNameSpaceRoot + ".Semi";
 
         /// <summary>urn://mosaicsys.com/NS/MLib.Semi.E005</summary>
-        public const string E005NameSpace = MosaicLib.Constants.SemiNameSpace + ".E005";
+        public const string E005NameSpace = SemiNameSpace + ".E005";
 
         /// <summary>urn://mosaicsys.com/NS/MLib.Semi.E004</summary>
         public const string E084NameSpace = SemiNameSpace + ".E084";
+
+        /// <summary>urn://mosaicsys.com/NS/MLib.Semi.E087</summary>
+        public const string E087NameSpace = SemiNameSpace + ".E087";
     }
 }
 

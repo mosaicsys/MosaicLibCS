@@ -1,10 +1,11 @@
 //-------------------------------------------------------------------
 /*! @file ModbusClient.cs
- * @brief This file defines Modbus helper definitiions and classes that are specific to Modbus Clients
+ *  @brief This file defines Modbus helper definitiions and classes that are specific to Modbus Clients
  * 
- * Copyright (c) Mosaic Systems Inc.  All rights reserved
- * Copyright (c) 2011 Mosaic Systems Inc.  All rights reserved
- * Copyright (c) 2010 Mosaic Systems Inc.  All rights reserved (prior C++ library version)
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2011 Mosaic Systems Inc.
+ * Copyright (c) 2010 Mosaic Systems Inc.  (prior C++ library version)
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +19,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
 
 using System;
 using System.Collections.Generic;

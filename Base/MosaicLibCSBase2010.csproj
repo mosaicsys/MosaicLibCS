@@ -10,12 +10,13 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>MosaicLib</RootNamespace>
     <AssemblyName>MosaicLibCSBase</AssemblyName>
-    <TargetFrameworkVersion>v3.5</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <FileUpgradeFlags>
     </FileUpgradeFlags>
     <OldToolsVersion>3.5</OldToolsVersion>
     <UpgradeBackupLocation />
+    <TargetFrameworkProfile />
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|AnyCPU'">
     <DebugSymbols>true</DebugSymbols>
@@ -76,8 +77,10 @@
     <Compile Include="Modular\Action\Queue.cs" />
     <Compile Include="Modular\Common\Common.cs" />
     <Compile Include="Modular\Config\Config.cs" />
+    <Compile Include="Modular\Config\ConfigIVIBridge.cs" />
     <Compile Include="Modular\Config\ConfigProviders.cs" />
     <Compile Include="Modular\Config\ConfigValueSetAdapter.cs" />
+    <Compile Include="Modular\Interconnect\IVIBridge.cs" />
     <Compile Include="Modular\Interconnect\Parts.cs" />
     <Compile Include="Modular\Interconnect\Values.cs" />
     <Compile Include="Modular\Interconnect\WCF.cs" />

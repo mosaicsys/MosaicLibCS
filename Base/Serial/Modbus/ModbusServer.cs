@@ -1,10 +1,11 @@
 //-------------------------------------------------------------------
 /*! @file ModbusServer.cs
- * @brief This file defines Modbus helper definitiions and classes that are specific to Modbus Servers
+ *  @brief This file defines Modbus helper definitiions and classes that are specific to Modbus Servers
  * 
- * Copyright (c) Mosaic Systems Inc.  All rights reserved
- * Copyright (c) 2013 Mosaic Systems Inc.  All rights reserved
- * Copyright (c) 2010 Mosaic Systems Inc.  All rights reserved (portions of prior C++ library version)
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2013 Mosaic Systems Inc.
+ * Copyright (c) 2010 Mosaic Systems Inc.  (portions of prior C++ library version)
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +19,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
 
 using System;
 using System.Collections.Generic;
@@ -262,7 +262,8 @@ namespace MosaicLib.SerialIO.Modbus.Server
             }
             catch (System.Exception ex)
             {
-                Issue.Emitter.Emit("Modbus Servier '{0}' threw unexpected exception: fc:{1} ex:{2}", fcServer.Name, requestAdu.FCInfo.FC, ex);
+                Issue.Emitter.Emit("Modbus Server '{0}' threw unexpected exception: fc:{1} {2}", fcServer.Name, requestAdu.FCInfo.FC, ex.ToString(ExceptionFormat.TypeAndMessage));
+                Debug.Emitter.Emit(ex.ToString(ExceptionFormat.Full));
                 exceptionCode = ExceptionCode.SlaveDeviceFailure;
             }
 

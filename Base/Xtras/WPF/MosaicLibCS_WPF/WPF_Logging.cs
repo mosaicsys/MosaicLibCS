@@ -2,8 +2,9 @@
 /*! @file WPF_Logging.cs
  *  @brief 
  * 
- * Copyright (c) Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2011 Mosaic Systems Inc., All rights reserved
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2011 Mosaic Systems Inc.
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -262,7 +263,7 @@ namespace MosaicLib.WPF.Logging
 
         public WpfLogMessageHandlerToolBase() : this("WpfLMH", Logging.LogGate.All, 10000) { }
         public WpfLogMessageHandlerToolBase(string name, Logging.LogGate defaultCollectionGate, int maxMessagesToKeep)
-            : base(name, defaultCollectionGate, false, false)
+            : base(name, defaultCollectionGate, recordSourceStackFrame: false)
         {
             rawLogMesgArray = new RawLogMesgArray(maxMessagesToKeep);
         }
@@ -352,22 +353,6 @@ namespace MosaicLib.WPF.Logging
             NoteMessagesAdded();
         }
 
-        public override bool IsMessageDeliveryInProgress(int testMesgSeqNum)
-        {
-            // this handler does not support any form of synchronized flush.  We return that message delivery is not in progress regardless of the given testMesgSeqNum value.
-            return false;
-        }
-
-        public override void Flush()
-        {
-            // Flush has no effect in this message handler
-        }
-
-        public override void Shutdown()
-        {
-            // Shutdown has no effect in this message handler (except that we will probably not get any more messages...)
-        }
-
         #endregion
 
         #region Methods and properties used to inform LogMessageObservableCollection list about possible change
@@ -415,7 +400,7 @@ namespace MosaicLib.WPF.Logging
                     if (object.ReferenceEquals(currentSC, lmocSC))
                         lmoc.Update();
                     else
-                        lmocSC.Send(lmoc.Update, null); // syncronous cross thread invoke: only returs after the update is complete
+                        lmocSC.Send(lmoc.Update, null); // syncronous cross thread invoke: only returns after the update is complete
                 }
             }
         }

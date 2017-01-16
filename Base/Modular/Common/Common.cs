@@ -2,8 +2,9 @@
 /*! @file Common.cs
  *  @brief This file defines common definitions that are used by Modular pattern implementations
  * 
- * Copyright (c) Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2008 Mosaic Systems Inc., All rights reserved
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2008 Mosaic Systems Inc.
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,17 +18,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
 
 using System;
 using System.Collections.Generic;
 using System.ServiceModel;
 using System.Runtime.Serialization;
+using System.Runtime.Serialization.Formatters.Binary;
 using System.Runtime.InteropServices;
 using System.Linq;
 using System.Collections;
 using System.Text;
 
+using MosaicLib.Modular.Reflection.Attributes;
 using MosaicLib.Utils;
 
 namespace MosaicLib.Modular.Common
@@ -679,9 +681,9 @@ namespace MosaicLib.Modular.Common
         /// If this transfer/conversion is not used or is not successful then this method returns default(TValueType).  
         /// If rethrow is true and the method encounters any excpetions then it will rethrow the exception.
         /// </summary>
-        public TValueType GetValue<TValueType>(ContainerStorageType decodedValueType, bool isNullable, bool rethrow)
+        public TValueType GetValue<TValueType>(ContainerStorageType decodedValueType, bool valueTypeIsNullable, bool rethrow)
         {
-            return GetValue<TValueType>(decodedValueType, isNullable, rethrow, true);
+            return GetValue<TValueType>(decodedValueType, valueTypeIsNullable, rethrow, true);
         }
 
         /// <summary>
@@ -693,7 +695,7 @@ namespace MosaicLib.Modular.Common
         /// If this transfer/conversion is not used or is not successful then this method returns default(TValueType).  
         /// If rethrow is true and the method encounters any excpetions then it will rethrow the exception.
         /// </summary>
-        public TValueType GetValue<TValueType>(ContainerStorageType decodedValueType, bool isNullable, bool rethrow, bool allowTypeChangeAttempt)
+        public TValueType GetValue<TValueType>(ContainerStorageType decodedValueType, bool valueTypeIsNullable, bool rethrow, bool allowTypeChangeAttempt)
         {
             Type TValueTypeType = typeof(TValueType);
             TValueType value;
@@ -738,7 +740,7 @@ namespace MosaicLib.Modular.Common
                         case ContainerStorageType.IListOfString:
                             {
                                 // IListOfString can be read as String [] or as IList<String>
-                                if ((TValueTypeType == stringArrayType))
+                                if (TValueTypeType == stringArrayType)
                                     value = (TValueType)((System.Object)((o as IList<String> ?? emptyIListOfString).ToArray()));      // special case for reading from an IListOfString to an String array.
                                 else
                                     value = (TValueType)((System.Object)(o as IList<String> ?? emptyIListOfString));      // all other cases the TValueType should be castable from an IList<String>
@@ -748,7 +750,7 @@ namespace MosaicLib.Modular.Common
                         case ContainerStorageType.IListOfVC:
                             {
                                 // IListOfVC can be read as VC [] or as IList<VC>
-                                if ((TValueTypeType == vcArrayType))
+                                if (TValueTypeType == vcArrayType)
                                     value = (TValueType)((System.Object)((o as IList<ValueContainer> ?? emptyIListOfVC).ToArray()));      // special case for reading from an IListOfVC to an VC array.
                                 else
                                     value = (TValueType)((System.Object)(o as IList<ValueContainer> ?? emptyIListOfVC));      // all other cases the TValueType should be castable from an IList<VC>
@@ -762,12 +764,12 @@ namespace MosaicLib.Modular.Common
                     // support a direct conversion attempt from floating point value to TimeSpan by interpresting the floating value as seconds.
                     value = (TValueType)((System.Object) TimeSpan.FromSeconds((cvt == ContainerStorageType.Double) ? u.f64 : u.f32));
                 }
-                else if (decodedValueType.IsValueType() && !isNullable && !rethrow && IsNullOrEmpty)
+                else if (decodedValueType.IsValueType() && !valueTypeIsNullable && !rethrow && IsNullOrEmpty)
                 {
                     // support direct assignment of an empty or null container to a value type with rethrow = false by without any attempt to actually perform the conversion (it will fail).
                     value = default(TValueType);
                 }
-                else if (isNullable && (IsNullOrEmpty || (allowTypeChangeAttempt && cvt == ContainerStorageType.String && (o as string).IsNullOrEmpty())))
+                else if (valueTypeIsNullable && (IsNullOrEmpty || (allowTypeChangeAttempt && cvt == ContainerStorageType.String && (o as string).IsNullOrEmpty())))
                 {
                     // we can always assign a null/empty container to a nullable type by setting the type to its default (aka null).
                     // also allows simple conversion of any null or empty string to a nullable type using the same assignement to default (aka null).
@@ -837,6 +839,30 @@ namespace MosaicLib.Modular.Common
                                     }
                                 default: break;
                             }
+                        }
+                    }
+
+                    if (!conversionDone)
+                    {
+                        if (decodedValueType == ContainerStorageType.IListOfString && cvt == ContainerStorageType.IListOfVC)
+                        {
+                            IList<ValueContainer> oAsIsListOfVC = o as IList<ValueContainer> ?? emptyIListOfVC;
+                            if (TValueTypeType == stringArrayType)
+                                value = (TValueType)((System.Object) (oAsIsListOfVC.Select(vcItem => vcItem.ValueAsObject.ToString()).ToArray()));
+                            else
+                                value = (TValueType)((System.Object) new List<string>(oAsIsListOfVC.Select(vcItem => vcItem.ValueAsObject.ToString())).AsReadOnly());
+
+                            conversionDone = true;
+                        }
+                        else if (decodedValueType == ContainerStorageType.IListOfVC && cvt == ContainerStorageType.IListOfString)
+                        {
+                            IList<string> oAsIsListOfString = o as IList<string> ?? emptyIListOfString;
+                            if (TValueTypeType == vcArrayType)
+                                value = (TValueType)((System.Object)(oAsIsListOfString.Select(str => new ValueContainer(str)).ToArray()));
+                            else
+                                value = (TValueType)((System.Object)new List<ValueContainer>(oAsIsListOfString.Select(str => new ValueContainer(str))).AsReadOnly());
+
+                            conversionDone = true;
                         }
                     }
 
@@ -1285,6 +1311,8 @@ namespace MosaicLib.Modular.Common
     /// creating the deserialized version of an object and thus the fields are all set to the default(type) values without regard to any coded constructor behavior.
     /// </remarks>
     [DataContract(Name = "VC", Namespace = Constants.ModularNameSpace)]
+    [KnownType(typeof(NamedValueSet))]
+    [KnownType(typeof(NamedValue))]
     public class ValueContainerEnvelope
     {
         /// <summary>Default constructor.  By default the contained value will read as Empty until it has been explicitly set to some other value.</summary>
@@ -1293,23 +1321,15 @@ namespace MosaicLib.Modular.Common
         #region ValueContainer storage and construction default state handling that is compatible with reality of DataContract deserialization
 
         /// <summary>
-        /// For serialized objects this property is initialized to the vc value given to the CreateEnvelopeFor method.
-        /// For deserialized objects this property is intialized by the type specific DataMember in the envelope serializtion class
-        /// The getter returns ValueContainer.None
+        /// Gives the ValueContainer that this evenelope is being used to serialize from and/or has been deserialized to.
         /// </summary>
         public ValueContainer VC 
         { 
-            get 
-            {
-                if (vcPropertySetterHasBeenUsed)
-                    return vc;
-                else
-                    return ValueContainer.Empty;
-            }
+            get { return vc; }
             set 
             { 
-                vc = value; 
-                vcPropertySetterHasBeenUsed = true; 
+                vc = value;
+                onSerializingCanBeSkipped = false; 
             } 
         }
 
@@ -1319,47 +1339,159 @@ namespace MosaicLib.Modular.Common
         private ValueContainer vc;
 
         /// <summary>
-        /// Boolean to indicate if the backing store as been set through the VC property.  
-        /// This property allows the base class to determine if the VC should read as Empty (since it has not been set).
+        /// Boolean to indicate if the backing store as been set through the VC property since the last time the contents were serialized.
+        /// Each time the VC property is directly assigned, internally during deserialization or externally by a client, this value is set to false.
+        /// Each time this object is being serialized via the OnSerializing method, this property will be set to true and any immediately next OnSerializing call will skip the related internal work.
         /// </summary>
-        private bool vcPropertySetterHasBeenUsed;
+        private bool onSerializingCanBeSkipped = false;
 
         #endregion
 
         #region serialization helper properties each as optional DataMembers
 
+        [OnSerializing]
+        void OnSerializing(StreamingContext sc)
+        {
+            if (!onSerializingCanBeSkipped)
+            {
+                ClearDecodedProperties();
+
+                ContainerStorageType useCST = vc.cvt;
+                if (useCST == ContainerStorageType.Object && vc.o != null)
+                {
+                    if ((vc.o is string []) || (vc.o is IList<string>))
+                        useCST = ContainerStorageType.IListOfString;
+                    else if ((vc.o is ValueContainer[]) || (vc.o is IList<ValueContainer>))
+                        useCST = ContainerStorageType.IListOfVC;
+                }
+
+                switch (useCST)
+                {
+                    case ContainerStorageType.Object:
+                        if (vc.o != null)
+                        {
+                            if (vc.o is INamedValue)
+                                nviGetValue = (vc.o as INamedValue).ConvertToReadOnly() ?? NamedValue.Empty;
+                            else if (vc.o is INamedValueSet)
+                                nvsGetValue = (vc.o as INamedValueSet).ConvertToReadOnly() ?? NamedValueSet.Empty;
+                            else
+                            {
+                                try
+                                {
+                                    // NOTE: this use of the System.Runtime.Serialization.Formatters.Binary.BinaryFormatter is intended as a safe and capable fallback serializer for use with otherwise serializable objects.
+                                    //  This approach is being used so that such objects can be serialized, stored, retreived and transferred between processes without requiring the configuration of any custom, class and/or assembly specific,
+                                    //  serializer(s).  The use this BinaryFormatter based serialization is known to produce serialized output with significant storage overhead and with only moderate overall performance.
+
+                                    IFormatter formatter = new BinaryFormatter();
+                                    using (System.IO.MemoryStream ms = new System.IO.MemoryStream())
+                                    {
+                                        formatter.Serialize(ms, vc.o);
+
+                                        binSerObjGetValue = ms.GetBuffer();
+                                    }
+                                }
+                                catch
+                                {
+                                    oGetValue = vc.o;
+                                }
+                            }
+                        }
+                        else
+                        {
+                            nullGetValue = true;
+                        }
+
+                        break;
+                    case ContainerStorageType.String: 
+                        sGetValue = vc.o as string; 
+                        break;
+                    case ContainerStorageType.IListOfString: 
+                        slGetValue = new Details.sl(vc.GetValue<IEnumerable<string>>(ContainerStorageType.IListOfString, false, false)); 
+                        break;
+                    case ContainerStorageType.IListOfVC: 
+                        vcaGetValue = vc.GetValue<IEnumerable<ValueContainer>>(ContainerStorageType.IListOfVC, false, false).Select(vcItem => new ValueContainerEnvelope() { VC = vcItem }).ToArray(); 
+                        break;
+                }
+
+                onSerializingCanBeSkipped = true;
+            }
+        }
+
+        [OnDeserializing]
+        void OnDeserializing(StreamingContext sc)
+        {
+            if (vc.cvt != ContainerStorageType.None || onSerializingCanBeSkipped)
+                VC = ValueContainer.Empty;
+        }
+
+        void ClearDecodedProperties()
+        {
+            nullGetValue = false;
+            oGetValue = null;
+            nviGetValue = null;
+            nvsGetValue = null;
+            binSerObjGetValue = null;
+            sGetValue = null;
+            slGetValue = null;
+            vcaGetValue = null;
+        }
+
+        private bool nullGetValue;
+        private object oGetValue;
+        private NamedValue nviGetValue;
+        private NamedValueSet nvsGetValue;
+        private byte[] binSerObjGetValue;
+        private string sGetValue;
+        private Details.sl slGetValue;
+        private ValueContainerEnvelope[] vcaGetValue;
+
         // expectation is that exactly one property/element will produce a non-default value and this will define both the ContainerStorageType and the value for the deserializer to produce.
         // if no listed property produces a non-default value then the envelope will be empty and the deserializer will produce the default (empty) contained value.
 
         [DataMember(EmitDefaultValue = false, IsRequired = false)]
-        private bool Null { get { return vc.IsNullObject; } set { if (value) VC = ValueContainer.Null; }}
+        private bool Null { get { return nullGetValue; } set { if (value) VC = new ValueContainer() { cvt = ContainerStorageType.Object, o = null }; } }
 
         [DataMember(EmitDefaultValue = false, IsRequired = false)]
-        private object o 
-        { 
-            get 
-            {
-                if (vc.cvt != ContainerStorageType.Object || vc.IsNull)
-                    return null;
+        private object o { get { return oGetValue; } set { VC = new ValueContainer() { cvt = ContainerStorageType.Object, o = value }; } }
 
-                ValueContainer[] vta = vc.o as ValueContainer[];
-
-                if (vta != null)
-                    return null;
-
-                return vc.o;
-            } 
+        // NOTE: this use of the System.Runtime.Serialization.Formatters.Binary.BinaryFormatter is intended as a safe and capable fallback serializer for use with otherwise serializable objects.
+        //  This approach is being used so that such objects can be serialized, stored, retreived and transferred between processes without requiring the configuration of any custom, class and/or assembly specific,
+        //  serializer(s).  The use this BinaryFormatter based serialization is known to produce serialized output with significant storage overhead and with only moderate overall performance.
+        [DataMember(EmitDefaultValue = false, IsRequired = false)]
+        private byte [] binSerObj 
+        {
+            get { return binSerObjGetValue; } 
             set 
-            { 
-                VC = new ValueContainer() { cvt = ContainerStorageType.Object, o = value }; 
+            {
+                try
+                {
+                    IFormatter formatter = new BinaryFormatter();
+                    using (System.IO.MemoryStream ms = new System.IO.MemoryStream(value))
+                    {
+                        VC = new ValueContainer(formatter.Deserialize(ms));
+                    }
+                }
+                catch (System.Exception ex)
+                {
+                    VC = new ValueContainer("{0} assign failed: {1}".CheckedFormat(Fcns.CurrentMethodName, ex.ToString(ExceptionFormat.Full)));
+                }
             } 
         }
 
         [DataMember(EmitDefaultValue = false, IsRequired = false)]
-        private String s { get { return (vc.cvt == ContainerStorageType.String ? (vc.o as String) : null); } set { VC = new ValueContainer() { cvt = ContainerStorageType.String, o = value }; } }
+        private NamedValue nvi { get { return nviGetValue; } set { VC = new ValueContainer(value.ConvertToReadOnly()); } }
+
+        [DataMember(EmitDefaultValue = false, IsRequired = false)]
+        private NamedValueSet nvs { get { return nvsGetValue; } set { VC = new ValueContainer(value.ConvertToReadOnly()); } }
+
+        [DataMember(EmitDefaultValue = false, IsRequired = false)]
+        private string s { get { return sGetValue; } set { VC = new ValueContainer() { cvt = ContainerStorageType.String, o = value }; } }
 
         [DataMember(EmitDefaultValue = false, IsRequired = false)]
         private Details.sl sl { get { return ((vc.cvt == ContainerStorageType.IListOfString) ? new Details.sl(vc.o as IList<String>) : null); } set { VC = new ValueContainer() { cvt = ContainerStorageType.IListOfString, o = value.AsReadOnly() }; } }
+
+        [DataMember(EmitDefaultValue = false, IsRequired = false)]
+        private ValueContainerEnvelope[] vca { get { return vcaGetValue; } set { VC = new ValueContainer(new List<ValueContainer>(value.Select((ve) => ve.VC)).AsReadOnly() as IList<ValueContainer>); } }
 
         [DataMember(EmitDefaultValue = false, IsRequired = false)]
         private bool? b { get { return ((vc.cvt == ContainerStorageType.Boolean) ? (bool?)vc.u.b : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.Boolean, u = new ValueContainer.Union() { b = value.GetValueOrDefault() } } : ValueContainer.Null); } }
@@ -1403,32 +1535,6 @@ namespace MosaicLib.Modular.Common
         [DataMember(EmitDefaultValue = false, IsRequired = false)]
         private DateTime? dt { get { return ((vc.cvt == ContainerStorageType.DateTime) ? (DateTime?)vc.u.DateTime : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.DateTime, u = new ValueContainer.Union() { DateTime = value.GetValueOrDefault() } } : ValueContainer.Null); } }
 
-        [DataMember(EmitDefaultValue = false, IsRequired = false)]
-        private ValueContainerEnvelope [] vca 
-        { 
-            get 
-            {
-                if (vc.cvt == ContainerStorageType.IListOfVC)
-                {
-                    IList<ValueContainer> vcList = vc.o as IList<ValueContainer>;
-
-                    return (vcList != null) ? vcList.Select((vcItem) => new ValueContainerEnvelope() { VC = vcItem }).ToArray() : null;
-                }
-                else if (vc.cvt == ContainerStorageType.Object && vc.o != null)
-                {
-                    ValueContainer[] vcArray = vc.o as ValueContainer[];
-
-                    return (vcArray != null) ? vcArray.Select((vcItem) => new ValueContainerEnvelope() { VC = vcItem }).ToArray() : null;
-                }
-
-                return null;
-            } 
-            set 
-            {
-                VC = new ValueContainer(new List<ValueContainer>(value.Select((ve) => ve.VC)).AsReadOnly() as IList<ValueContainer>);
-            } 
-        }
-
         #endregion
 
         /// <summary>Override ToString for logging and debugging.</summary>
@@ -1447,7 +1553,9 @@ namespace MosaicLib.Modular.Common
             /// <summary>Internal - no documentation provided</summary>
             public sl() { }
             /// <summary>Internal - no documentation provided</summary>
-            public sl(IList<String> es) : base(es) { }
+            public sl(IEnumerable<string> strings) : base(strings ?? emptyIListOfString) { }
+
+            private static readonly IList<string> emptyIListOfString = new List<string>().AsReadOnly();
         }
     }
 
@@ -1457,57 +1565,138 @@ namespace MosaicLib.Modular.Common
 
     /// <summary>
     /// This is the read-only interface to a NamedValueSet
+    /// <para/>Warning: in order to preserve backward compatibility with the prior INamedValueSet behavior, and due to the limitations in the implementation of the new sub-set related behavior, 
+    /// the IEnumerable interface has not generally been extended to support implicit access to the sub-sets.  Specific methods defined below (string indexed getter for example) have been
+    /// extended to make implict use of TraversalType.EntireTree.  The caller should assume that TraversalType.TopLevelOnly will be used unless the method explicitly supports specification of
+    /// the TraversalType or the method comments indicate otherwise.
     /// </summary>
     public interface INamedValueSet : IEnumerable<INamedValue>, IEquatable<INamedValueSet>
     {
-        /// <summary>Returns true if the set contains a NamedValue for the given name (after sanitization)</summary>
-        bool Contains(string name);
+        /// <summary>Returns true if this set, or any of its sub-sets when requested, contains a NamedValue for the given name (after sanitization).</summary>
+        bool Contains(string name, TraversalType searchTraversalType = TraversalType.EntireTree);
 
         /// <summary>
-        /// If a NamedValue exists in the set for the given name (after sanitization), then this method returns the ValueContainer (VC) from that NamedValue.
+        /// If a INamedValue exists for the given name (after sanitization), in this set, or its sub-sets when requested, then this method returns it.
+        /// Otherwise this method returns NamedValue.Empty
+        /// </summary>
+        INamedValue GetNamedValue(string name, TraversalType searchTraversalType = TraversalType.EntireTree);
+
+        /// <summary>
+        /// If a INamedValue exists for the given name (after sanitization), in this set, or its sub-sets when requested, then this method returns the ValueContainer (VC) from that INamedValue.
         /// Otherwise this method returns ValueContainer.Empty.
         /// </summary>
-        ValueContainer GetValue(string name);
+        ValueContainer GetValue(string name, TraversalType searchTraversalType = TraversalType.EntireTree);
 
         /// <summary>
-        /// Gets the number of NamedValues that are currently in the set.
+        /// Gets the number of NamedValues that are currently in this set.
+        /// <para/>implicitly uses TraverseType.TopLevelOnly
         /// </summary>
         int Count { get; }
 
         /// <summary>
-        /// String indexed property.  Returns the INamedValue from the set if it is found from the given name (after sanitization).  
+        /// String indexed property.  Returns the INamedValue from the set if it is found from the given name (after sanitization).
         /// Otherwise returns a new empty INamedValue using the given name (set contents are not changed by this).
+        /// <para/>implicitly uses TraverseType.EntireTree
         /// </summary>
         INamedValue this[string name] { get; }
 
         /// <summary>
+        /// String indexed property.  Returns the INamedValue from the set if it is found from the given name (after sanitization).  
+        /// Supports searchTraversalType configuration.
+        /// Otherwise returns a new empty INamedValue using the given name (set contents are not changed by this).
+        /// </summary>
+        INamedValue this[string name, TraversalType searchTraversalType] { get; }
+
+        /// <summary>
         /// If a NamedValue exists in the set for the given name (after sanitization), then this method returns the index into the set (in enumerable order) for the corresponding NamedValue.
         /// Otherwise this method returns -1.
+        /// <para/>implicitly uses TraverseType.TopLevelOnly
         /// </summary>
         int IndexOf(string name);
 
         /// <summary>
-        /// indexed property.  Returns the indexed INamedValue from the set (if the given index is valid).  
+        /// indexed property.  Returns the indexed INamedValue from the set (if the given index is valid).
+        /// <para/>implicitly uses TraverseType.TopLevelOnly
         /// </summary>
         /// <exception cref="System.ArgumentOutOfRangeException">thrown if given index is less than 0 or it is greater than or equal to the set's Count</exception>
         INamedValue this[int index] { get; }
 
-        /// <summary>This property returns true if the collection has been set to be read only.</summary>
+        /// <summary>
+        /// This property returns true if the collection has been set to be read only.
+        /// <para/>implicitly uses TraverseType.TopLevelOnly (SubSets are always retained and used as read-only sets)
+        /// </summary>
         bool IsReadOnly { get; }
 
         /// <summary>Returns true if the this INamedValueSet has the same contents, in the same order, as the given rhs.</summary>
-        bool IsEqualTo(INamedValueSet rhs);
+        bool IsEqualTo(INamedValueSet rhs, TraversalType searchTraversalType = TraversalType.EntireTree);
 
         /// <summary>Custom ToString variant that allows the caller to determine if the ro/rw postfix should be included on thie string result, and to determine if NamedValues with empty VCs should be treated as a keyword.</summary>
-        string ToString(bool includeROorRW, bool treatNameWithEmptyVCAsKeyword);
+        string ToString(bool includeROorRW = true, bool treatNameWithEmptyVCAsKeyword = true, TraversalType traversalType = TraversalType.EntireTree);
 
         /// <summary>ToString variant that support SML like output format.</summary>
-        string ToStringSML();
+        string ToStringSML(TraversalType traversalType = TraversalType.EntireTree);
+
+        /// <summary>
+        /// Returns the approximate size of the contents in bytes. 
+        /// <para/>implicitly uses TraverseType.EntireTree
+        /// </summary>
+        int EstimatedContentSizeInBytes { get; }
 
         /// <summary>
         /// Returns the approximate size of the contents in bytes. 
         /// </summary>
-        int EstimatedContentSizeInBytes { get; }
+        int GetEstimatedContentSizeInBytes(TraversalType traversalType = TraversalType.EntireTree);
+
+        /// <summary>
+        /// Returns an IEnumerable{INamedValueSet} that can be used to iterate through the set of read-only NV sub-sets that are referenced by this set.
+        /// </summary>
+        IEnumerable<INamedValueSet> SubSets { get; }
+
+        /// <summary>
+        /// Returns an IEnumerable{INamedValue} that can be used to iterate through the collection, possibly including the INamedValues in the sub-sets.
+        /// </summary>
+        IEnumerable<INamedValue> GetEnumerable(TraversalType traversalType = TraversalType.Flatten);
+
+        /// <summary>
+        /// Explicitly request that this NVS build and retain the Dictionary it uses to find NamedValue items given a name.
+        /// This method may be safely used even with IsReadOnly sets.
+        /// <para/>Support call chaining
+        /// </summary>
+        INamedValueSet BuildDictionary();
+    }
+
+    /// <summary>
+    /// Defines the search type traversal that may be used with specific INamedValueSet methods/properties to control how to search/traverse when the set has a non-empty tree of sub-sets.
+    /// <para/>EntireTree, TopLevelOnly, Flatten
+    /// </summary>
+    public enum TraversalType : int
+    {
+        /// <summary>Specifies that the entire tree shall be traversed</summary>
+        EntireTree = 0,
+
+        /// <summary>Specifies that only the NamedValues in the top level set shall be traversed</summary>
+        TopLevelOnly,
+
+        /// <summary>
+        /// Specifies that the entire tree shall be traversed.
+        /// When used with copy construction and ToString this choice will cause the contents of the sub-trees to be merged into the top level and to filter out repeat names by accepting only the first one found in each such case.
+        /// </summary>
+        Flatten,
+    }
+
+    /// <summary>TraversalType related extension methods</summary>
+    public static partial class ExtensionMethods
+    {
+        /// <summary>
+        /// Returns true if the given traversalType indicates that the entire tree should be traversed.  
+        /// <para/>True for TraversalType.EntireTree and TraversalType.Flatten
+        /// </summary>
+        public static bool CoverEntireTree(this TraversalType traversalType) { return (traversalType == TraversalType.EntireTree || traversalType == TraversalType.Flatten); }
+
+        /// <summary>
+        /// Returns true if the given traversalType indicates that only the top level of the tree should be traversed
+        /// </summary>
+        public static bool CoverTopLevelOnly(this TraversalType traversalType) { return (traversalType == TraversalType.TopLevelOnly); }
     }
 
     /// <summary>
@@ -1535,6 +1724,9 @@ namespace MosaicLib.Modular.Common
         /// </summary>
         int EstimatedContentSizeInBytes { get; }
 
+        /// <summary>Custom ToString variant: when true useDoubleEqualsForRW causes the result to be of the form name==value if the given INamedValue is not Read Only, when true treatNameWithEmptyVAAsKeyword omits the =value if the INamedValue.VC.IsEmpty.</summary>
+        string ToString(bool useDoubleEqualsForRW, bool treatNameWithEmptyVCAsKeyword);
+
         /// <summary>ToString variant that support SML like output format.</summary>
         string ToStringSML();
     }
@@ -1548,6 +1740,10 @@ namespace MosaicLib.Modular.Common
     /// This Set is internally represented by a List and may also be indexed using a Dictionary 
     /// This object includes a CollectionDataContractAttribute so that it may be serialized as part of other DataContract objects.  Supporting this attribute
     /// is based on the standard Add method signature and the support of the ICollection{NamedValue} interface.
+    /// <para/>Warning: in order to preserve backward compatibility with the prior INamedValueSet behavior, and due to the limitations in the implementation of the new sub-set related behavior, 
+    /// the IEnumerable interface has not generally been extended to support implicit access to the sub-sets.  Specific methods defined below (string indexed getter for example) have been
+    /// extended to make implict use of TraversalType.EntireTree.  The caller should assume that TraversalType.TopLevelOnly will be used unless the method explicitly supports specification of
+    /// the TraversalType or the method comments indicate otherwise.
     /// </summary>
     /// <remarks>
     /// Note: in order to support use of Dictionary type indexing on the name, all Names are santized by replacing null with String.Empty
@@ -1565,23 +1761,16 @@ namespace MosaicLib.Modular.Common
 
         /// <summary>Returns a readonly empty NamedValueSet</summary>
         public static NamedValueSet Empty { get { return empty; } }
-        private static readonly NamedValueSet empty = new NamedValueSet() { IsReadOnly = true };
+        private static readonly NamedValueSet empty = new NamedValueSet(null, asReadOnly: true);
 
         #endregion
 
         #region Contructors
 
-        /// <summary>Default constructor.  Creates an empty writable NamedValueSet</summary>
-        public NamedValueSet() 
-        { }
-
         /// <summary>
-        /// Copy constructor from IEnumerable{NamedValues}.  
-        /// Creates a new NamedValueList as a set of copies of the given list of NamedValues.  Treats the null rhs as an empty set.
-        /// Produces a fully read/write set even if copying from a fully readonly rhs or copying from an rhs that includes readonly NamedValue items.
+        /// Explicit default constructor.  Required by certain usage patterns (data contract collection serialization for example)
         /// </summary>
-        public NamedValueSet(IEnumerable<INamedValue> rhsSet) 
-            : this(rhsSet, false) 
+        public NamedValueSet()
         { }
 
         /// <summary>
@@ -1589,29 +1778,59 @@ namespace MosaicLib.Modular.Common
         /// Creates a new NamedValueList from the given list of NamedValues by cloning each of them.  Treats the null rhs as an empty set.
         /// if asReadOnly is false then this produces a fully read/write set even if copying from a fully readonly rhs or copying from an rhs that includes readonly NamedValue items.
         /// if asReadonly is true then this produces a fully IsReadOnly set which can reference any already readonly items from the given rhs set.
+        /// <para/>By default (when using all default constructors) this method creates an empty, writable set with no sub-sets.
         /// </summary>
-        public NamedValueSet(IEnumerable<INamedValue> rhsSet, bool asReadOnly)
+        public NamedValueSet(IEnumerable<INamedValue> rhsSet, bool asReadOnly = false, IEnumerable<INamedValueSet> subSets = null)
         {
-            if (rhsSet != null)
-            {
-                if (!asReadOnly)
-                {
-                    foreach (NamedValue rhsItem in rhsSet)
-                        list.Add(new NamedValue(rhsItem));
-                }
-                else
-                {
-                    foreach (NamedValue rhsItem in rhsSet)
-                        list.Add(rhsItem.ConvertToReadOnly());
+            SetFrom(rhsSet, subSets, asReadOnly);
+        }
 
-                    isReadOnly = true;      // we do not need to iterate through the contents again as we just filled it with readonly items.
-                }
-            }
+        ///<summary>
+        /// Copy constructor from INamedValueSet with explicit TraversalType specification which can be used to perform top level only copy, entire tree copy, or a flatten copy
+        ///</summary>
+        public NamedValueSet(INamedValueSet rhs, TraversalType copyTraversalType)
+        {
+            SetFrom(rhs, copyTraversalType);
         }
 
         #endregion
 
-        #region Locally defined helper utility methods and properties
+        #region Constructor helper methods (SetFrom variants
+
+        public NamedValueSet SetFrom(INamedValueSet rhs, TraversalType copyTraversalType)
+        {
+            if (rhs == null)
+                return this;
+
+            switch (copyTraversalType)
+            {
+                default:
+                case TraversalType.EntireTree:
+                    return SetFrom(rhs.GetEnumerable(TraversalType.TopLevelOnly), rhs.SubSets, rhs.IsReadOnly);
+
+                case TraversalType.Flatten:
+                case TraversalType.TopLevelOnly:
+                    return SetFrom(rhs.GetEnumerable(copyTraversalType), null, rhs.IsReadOnly);
+            }
+        }
+
+        public NamedValueSet SetFrom(IEnumerable<INamedValue> rhsSet, IEnumerable<INamedValueSet> subSets = null, bool asReadOnly = false)
+        {
+            ThrowIfIsReadOnly("The SetFrom method");
+
+            InnerAddRange(rhsSet, asReadOnly: asReadOnly);
+
+            SubSets = subSets;
+
+            if (asReadOnly)
+                isReadOnly = true;      // we do not need to iterate through the contents again as we just filled it with readonly items.
+
+            return this;
+        }
+
+        #endregion
+
+        #region Locally defined helper utility methods and properties (Add, AddRange variants)
 
         /// <summary>
         /// Provide an alternate name for the SetValue method.  This allows the class to be used with a Dictionary style initializer to add values to the set.
@@ -1634,26 +1853,57 @@ namespace MosaicLib.Modular.Common
         {
             ThrowIfIsReadOnly("The AddRange method");
 
-            if (range != null)
-            {
-                foreach (INamedValue nvItem in range)
-                {
-                    if (nvItem != null)
-                        SetValue(nvItem.Name, nvItem.VC);
-                }
-            }
+            InnerAddRange(range, false);
 
             return this;
         }
 
-        /// <summary>
-        /// Explicit ValueContainer getter.  Returns the ValueContainer contained in the named NamedValue.  Returns ValueContainer.Empty if the given name is not found in this list.
-        /// </summary>
-        public ValueContainer GetValue(string name)
+        private void InnerAddRange(IEnumerable<INamedValue> range, bool asReadOnly)
         {
-            NamedValue nv = AttemptToFindItemInList(name.Sanitize(), true);
+            if (range != null)
+            {
+                if (!asReadOnly)
+                {
+                    foreach (INamedValue nvItem in range)
+                    {
+                        if (nvItem != null)
+                            SetValue(nvItem.Name, nvItem.VC);
+                    }
+                }
+                else
+                {
+                    foreach (INamedValue nvItem in range)
+                    {
+                        if (nvItem != null)
+                            list.Add(nvItem.ConvertToReadOnly());
+                    }
+                }
+            }
+        }
 
-            return ((nv != null) ? nv.VC : ValueContainer.Empty);
+        /// <summary>
+        /// If a INamedValue exists for the given name (after sanitization), in this set, or its sub-sets when requested, then this method returns it.
+        /// Otherwise this method returns NamedValue.Empty
+        /// </summary>
+        public INamedValue GetNamedValue(string name, TraversalType searchTraversalType = TraversalType.EntireTree)
+        {
+            name = name.Sanitize();
+
+            INamedValue nv = AttemptToFindItemInList(name, true);
+
+            if (nv == null && searchTraversalType.CoverEntireTree() && !subSetsArray.IsNullOrEmpty())
+                nv = subSetsArray.Select(nvs => nvs.GetNamedValue(name, searchTraversalType)).FirstOrDefault(item => !item.IsNullOrEmpty());
+
+            return nv ?? NamedValue.Empty;
+        }
+
+        /// <summary>
+        /// If a INamedValue exists for the given name (after sanitization), in this set, or its sub-sets when requested, then this method returns the ValueContainer (VC) from that INamedValue.
+        /// Otherwise this method returns ValueContainer.Empty.
+        /// </summary>
+        public ValueContainer GetValue(string name, TraversalType searchTraversalType = TraversalType.EntireTree)
+        {
+            return GetNamedValue(name, searchTraversalType).VC;
         }
 
         /// <summary>
@@ -1748,6 +1998,7 @@ namespace MosaicLib.Modular.Common
         /// get/set string indexed operator give caller access to a NamedValue for the given indexed name.
         /// getter returns the indicated NamedValue, if found in this list, or returns an empty readonly NamedValue if the given name was not found in the list (returned value is not added to the list in this case)
         /// setter requires that the given value is non-null and that its Name is equal to the string index given to the setter (see exceptions below).  Once accepted, this setter sets the indicated NamedValue to contain the ValueContainer from the given value NamedValue, or the setter adds the given NamedValue to the list if it was not already present in the list.
+        /// <para/>getter implicitly uses TraverseType.EntireTree, setter implicitly uses TraverseType.TopLevelOnly
         /// </summary>
         /// <param name="name">Gives the name index to get or set a NamedValue from/to</param>
         /// <returns>The indicated NamedValue or an empty NamedValue with the given name if the name was not found in this list</returns>
@@ -1757,15 +2008,20 @@ namespace MosaicLib.Modular.Common
         {
             get
             {
-                string sanitizedName = name.Sanitize();
+                INamedValue iNv = GetNamedValue(name, TraversalType.EntireTree);
+                NamedValue nv = iNv as NamedValue;
 
-                NamedValue nv = AttemptToFindItemInList(sanitizedName, true);
+                if (nv != null)
+                    return nv;
 
-                return nv ?? NamedValue.Empty;
+                if (iNv != null)
+                    return new NamedValue(iNv, asReadOnly: true);       // if this object is changed it will not actually modify the contents of the set.
+
+                return NamedValue.Empty;
             }
             set
             {
-                ThrowIfIsReadOnly("The String indexed setter property");
+                ThrowIfIsReadOnly("The String indexed property setter");
 
                 if (value == null)
                     throw new System.ArgumentNullException("value");
@@ -1798,17 +2054,14 @@ namespace MosaicLib.Modular.Common
 
         #region INamedValueSet (leftovers - most of the other members and properties are found in other regions of this class)
 
-        /// <summary>Returns true if the set contains a NamedValue for the given name (after sanitization)</summary>
-        public bool Contains(string name)
+        /// <summary>Returns true if this set, or any of its sub-sets, contains a NamedValue for the given name (after sanitization).</summary>
+        public bool Contains(string name, TraversalType searchTraversalType = TraversalType.EntireTree)
         {
             string sanitizedName = name.Sanitize();
 
-            return (AttemptToFindItemIndexInList(sanitizedName, true) >= 0);
-        }
-
-        INamedValue INamedValueSet.this[string name]
-        {
-            get { return this[name]; }
+            return ((AttemptToFindItemIndexInList(sanitizedName, true) >= 0)
+                    || (searchTraversalType.CoverEntireTree() && (subSetsArray ?? emptySubSetsArray).Any(subSet => subSet.Contains(name, searchTraversalType)))
+                    );
         }
 
         /// <summary>
@@ -1831,14 +2084,39 @@ namespace MosaicLib.Modular.Common
             get { return this[index]; } 
         }
 
-        /// <summary>Returns true if the this INamedValueSet has the same contents, in the same order, as the given rhs.</summary>
-        public bool IsEqualTo(INamedValueSet rhs)
+        /// <summary>
+        /// String indexed property.  Returns the INamedValue from the set if it is found from the given name (after sanitization).
+        /// Otherwise returns a new empty INamedValue using the given name (set contents are not changed by this).
+        /// <para/>implicitly uses TraverseType.EntireTree
+        /// </summary>
+        INamedValue INamedValueSet.this[string name]
         {
-            if (rhs == null || Count != rhs.Count || IsReadOnly != rhs.IsReadOnly)
-                return false;
+            get
+            {
+                return GetNamedValue(name, TraversalType.EntireTree);
+            }
+        }
 
+        /// <summary>
+        /// String indexed property.  Returns the INamedValue from the set if it is found from the given name (after sanitization).  Supports searchType configuration
+        /// Otherwise returns a new empty INamedValue using the given name (set contents are not changed by this).
+        /// </summary>
+        INamedValue INamedValueSet.this[string name, TraversalType searchTraversalType] 
+        {
+            get
+            {
+                return GetNamedValue(name, searchTraversalType);
+            }
+        }
+
+        /// <summary>Returns true if the this INamedValueSet has the same contents, in the same order, as the given rhs.</summary>
+        public bool IsEqualTo(INamedValueSet rhs, TraversalType searchTraversalType = TraversalType.EntireTree)
+        {
             if (System.Object.ReferenceEquals(this, rhs))
                 return true;
+
+            if (rhs == null || Count != rhs.Count || IsReadOnly != rhs.IsReadOnly)
+                return false;
 
             int setCount = Count;
             for (int index = 0; index < setCount; index++)
@@ -1847,22 +2125,53 @@ namespace MosaicLib.Modular.Common
                     return false;
             }
 
+            if (searchTraversalType.CoverEntireTree())
+            {
+                INamedValueSet[] thisSubSetsArray = (subSetsArray ?? emptySubSetsArray);
+                INamedValueSet[] rhsSubSetsArray = (rhs.SubSets.ToArray() ?? emptySubSetsArray);
+
+                int thisSubSetsArrayLength = thisSubSetsArray.Length; 
+
+                if (thisSubSetsArrayLength != rhsSubSetsArray.Length)
+                    return false;
+
+                for (int idx = 0; idx < thisSubSetsArrayLength; idx++)
+                {
+                    if (!thisSubSetsArray[idx].IsEqualTo(rhsSubSetsArray[idx], searchTraversalType))
+                        return false;
+                }
+            }
+
             return true;
         }
 
-        /// <summary>Returns true if the this INamedValueSet has the same contents, in the same order, as the given other NVS.</summary>
+        /// <summary>
+        /// Returns true if the this INamedValueSet has the same contents, in the same order, as the given other NVS.
+        /// <para/>implicitly uses TraverseType.EntireTree
+        /// </summary>
         public bool Equals(INamedValueSet other)
         {
-            return IsEqualTo(other);
+            return IsEqualTo(other, TraversalType.EntireTree);
         }
 
         /// <summary>
         /// This method is required to support the fact that INamedValueSet implements IEnumerable{INamedValue} and the standard enumerators already implemented by the underling SortedList
         /// cannot be directly casted to this interface.
+        /// <para/>TraverseType.EntireTree is implicit
         /// </summary>
         IEnumerator<INamedValue> IEnumerable<INamedValue>.GetEnumerator()
         {
-            return list.Select((nv) => nv as INamedValue).GetEnumerator();
+            return GetEnumerable(TraversalType.EntireTree).GetEnumerator();
+        }
+
+        /// <summary>
+        /// Explicitly request that this NVS build and retain the Dictionary it uses to find NamedValue items given a name.
+        /// This method may be safely used even with IsReadOnly sets.
+        /// <para/>Support call chaining
+        /// </summary>
+        INamedValueSet INamedValueSet.BuildDictionary()
+        {
+            return this.BuildDictionary();
         }
 
         #endregion
@@ -1870,7 +2179,8 @@ namespace MosaicLib.Modular.Common
         #region CollectionDataContract support and related ICollection<NamedValue>, IEnumerable<INamedValue>
 
         /// <summary>
-        /// Gets the number of NamedValues that are currently in the set.
+        /// Gets the number of NamedValues that are currently in this set.
+        /// <para/>implicitly uses TraverseType.TopLevelOnly
         /// </summary>
         public int Count
         {
@@ -1878,7 +2188,7 @@ namespace MosaicLib.Modular.Common
         }
 
         /// <summary>
-        /// Returns true if the set contains the given NamedValue instance.
+        /// Returns true if this set contains the given NamedValue instance.
         /// </summary>
         /// <remarks>This is essentially a useless method.  It is provied to that the class can implement ICollection{INamedValue}</remarks>
         public bool Contains(NamedValue nv)
@@ -1960,6 +2270,7 @@ namespace MosaicLib.Modular.Common
 
             nameToIndexDictionary = null;
             list.Clear();
+            subSetsArray = null;
 
             return this;
         }
@@ -2002,6 +2313,7 @@ namespace MosaicLib.Modular.Common
         /// getter returns true if the collection has been set to be read only.
         /// if setter is given true then it sets the collection to be read only and sets all of the contained NamedValues to read only.
         /// setter only accepts being given false if the collection has not already been set to read only.
+        /// <para/>implicitly uses TraverseType.TopLevelOnly (SubSets are always retained and used as read-only sets)
         /// </summary>
         /// <exception cref="System.NotSupportedException">thrown if the setter is given false and collection has already been set to IsReadOnly</exception>
         public bool IsReadOnly
@@ -2064,37 +2376,148 @@ namespace MosaicLib.Modular.Common
         /// </summary>
         public override string ToString()
         {
-            return ToString(true, false);
+            return ToString(true, false, TraversalType.Flatten);
         }
 
         /// <summary>Custom ToString variant that allows the caller to determine if the ro/rw postfix should be included on thie string result and if each NV with an empty VC should be treated like a keyword.</summary>
-        public string ToString(bool includeROorRW, bool treatNameWithEmptyVCAsKeyword)
+        public string ToString(bool includeROorRW, bool treatNameWithEmptyVCAsKeyword, TraversalType traversalType = TraversalType.EntireTree)
         {
-            return "[{0}]{1}".CheckedFormat(String.Join(",", list.Select((nv) => nv.ToString(includeROorRW, treatNameWithEmptyVCAsKeyword)).ToArray()), (includeROorRW ? (IsReadOnly ? "ro" : "rw") : String.Empty));
+            StringBuilder sb = new StringBuilder("[");
+
+            switch (traversalType)
+            {
+                case TraversalType.EntireTree:
+                    if (!subSetsArray.IsNullOrEmpty())
+                    {
+                        var e1 = GetEnumerable(TraversalType.TopLevelOnly).Select(iNv => iNv.ToString(includeROorRW, treatNameWithEmptyVCAsKeyword));
+                        var e2 = new string[] { "SubSets {0}".CheckedFormat(String.Join(",", subSetsArray.Select(invs => invs.ToString(false, treatNameWithEmptyVCAsKeyword, traversalType)).ToArray())) };
+                        sb.Append(String.Join(",", e1.Concat(e2).ToArray()));
+                    }
+                    else
+                    {
+                        sb.Append(String.Join(",", GetEnumerable(TraversalType.TopLevelOnly).Select(iNv => iNv.ToString(includeROorRW, treatNameWithEmptyVCAsKeyword)).ToArray()));
+                    }
+                    break;
+
+                default:
+                case TraversalType.Flatten:
+                case TraversalType.TopLevelOnly:
+                    sb.Append(String.Join(",", GetEnumerable(traversalType).Select(iNv => iNv.ToString(includeROorRW, treatNameWithEmptyVCAsKeyword)).ToArray()));
+                    break;
+            }
+
+            sb.Append("]");
+
+            if (includeROorRW)
+                sb.Append(IsReadOnly ? "ro" : "rw");
+
+            return sb.ToString();
         }
 
         /// <summary>ToString variant that support SML like output format.</summary>
-        public string ToStringSML()
+        public string ToStringSML(TraversalType traversalType = TraversalType.EntireTree)
         {
-            return "[L {0}]".CheckedFormat(String.Join(" ", list.Select((nv) => nv.ToStringSML()).ToArray()));
+            StringBuilder sb = new StringBuilder("[L ");
+
+            switch (traversalType)
+            {
+                case TraversalType.EntireTree:
+                    sb.Append(String.Join(" ", GetEnumerable(traversalType).Select((nv) => nv.ToStringSML()).ToArray()));
+                    if (!subSetsArray.IsNullOrEmpty())
+                        sb.CheckedAppendFormat("[L-SubSets {0}]", String.Join(" ", subSetsArray.Select(invs => invs.ToStringSML(traversalType).ToArray())));
+                    break;
+
+                default:
+                case TraversalType.Flatten:
+                case TraversalType.TopLevelOnly:
+                    sb.Append(String.Join(" ", GetEnumerable(traversalType).Select((nv) => nv.ToStringSML()).ToArray()));
+                    break;
+            }
+
+            sb.Append("]");
+
+            return sb.ToString();
         }
 
-        /// <summary>Returns the approximate size of the contents in bytes.</summary>
+        /// <summary>
+        /// Returns the approximate size of the contents in bytes.
+        /// </summary>
         public int EstimatedContentSizeInBytes
         {
             get 
             {
-                int numItems = Count;
-                int totalApproximateSize = 0;
-
-                for (int idx = 0; idx < numItems; idx++)
-                {
-                    totalApproximateSize += list[idx].EstimatedContentSizeInBytes;
-                }
-
-                return totalApproximateSize;
+                return GetEstimatedContentSizeInBytes(TraversalType.EntireTree);
             }
         }
+
+        /// <summary>
+        /// Returns the approximate size of the contents in bytes. 
+        /// </summary>
+        public int GetEstimatedContentSizeInBytes(TraversalType traversalType = TraversalType.EntireTree)
+        {
+            int totalApproximateSize = GetEnumerable(traversalType).Sum(inv => inv.EstimatedContentSizeInBytes);
+            return totalApproximateSize;
+        }
+
+
+        #endregion
+
+        #region Tree Structure support
+
+        /// <summary>
+        /// Returns an IEnumerable{INamedValue} that can be used to iterate through the collection, possibly including the INamedValues in the sub-sets.
+        /// </summary>
+        public IEnumerable<INamedValue> GetEnumerable(TraversalType traversalType = TraversalType.Flatten)
+        {
+            switch (traversalType)
+            {
+                default:
+                case TraversalType.EntireTree:
+                    return list.Concat((subSetsArray ?? emptySubSetsArray).SelectMany(subSet => subSet.GetEnumerable(traversalType)));
+                case TraversalType.Flatten:
+                    return list.Concat((subSetsArray ?? emptySubSetsArray).SelectMany(subSet => subSet.GetEnumerable(traversalType))).Distinct(compareINVNamesEqualityComparer);
+                case TraversalType.TopLevelOnly:
+                    return list;
+            }
+        }
+
+        /// <summary>
+        /// private class used to support use of Linq.Distinct to filter out redundant sub-set nv items when using TraverseType.Flatten.
+        /// </summary>
+        private class CompareINVNamesEqualityComparer : IEqualityComparer<INamedValue>
+        {
+            public bool Equals(INamedValue x, INamedValue y)
+            {
+                if (x == y)
+                    return true;
+                if (x == null || y == null)
+                    return false;
+                return (x.Name == y.Name);
+            }
+
+            public int GetHashCode(INamedValue obj)
+            {
+                return ((obj != null) ? obj.Name.GetHashCode() : 0);
+            }
+        }
+        private static readonly IEqualityComparer<INamedValue> compareINVNamesEqualityComparer = new CompareINVNamesEqualityComparer();
+
+        /// <summary>
+        /// Returns an enumerator that can be used to obtain the next level of NV sub-sets that are referenced by this set.
+        /// </summary>
+        public IEnumerable<INamedValueSet> SubSets 
+        { 
+            get { return subSetsArray ?? emptySubSetsArray; } 
+            set 
+            {
+                ThrowIfIsReadOnly("The SubSets property setter");
+
+                subSetsArray = ((value == null) ? null : value.Where(invs => !invs.IsNullOrEmpty()).Select(invs => invs.ConvertToReadOnly()).ToArray());
+            } 
+        }
+
+        private INamedValueSet [] subSetsArray = null;
+        private static readonly INamedValueSet[] emptySubSetsArray = new INamedValueSet[0];
 
         #endregion
 
@@ -2119,7 +2542,7 @@ namespace MosaicLib.Modular.Common
         private int AttemptToFindItemIndexInList(string sanitizedName, bool createDictionaryIfNeeded)
         {
             if (nameToIndexDictionary == null && Count >= minElementsToUseDicationary && createDictionaryIfNeeded)
-                GenerateDicationary();
+                BuildDictionary();
 
             if (nameToIndexDictionary != null)
             {
@@ -2150,9 +2573,11 @@ namespace MosaicLib.Modular.Common
         const int minElementsToUseDicationary = 10;
 
         /// <summary>
-        /// Generates a Dictionary that can be used to index from a given sanitized name to the index of the corresponding NamedValue in the list.
+        /// Explicitly request that this NVS build and retain the Dictionary it uses to find NamedValue items given a name.
+        /// This method may be safely used even with IsReadOnly sets.
+        /// <para/>Support call chaining
         /// </summary>
-        private void GenerateDicationary()
+        public NamedValueSet BuildDictionary()
         {
             Dictionary<string, int> d = new Dictionary<string, int>();
 
@@ -2161,6 +2586,8 @@ namespace MosaicLib.Modular.Common
                 d[list[idx].Name] = idx;
 
             nameToIndexDictionary = d;
+
+            return this;
         }
 
         #endregion
@@ -2185,29 +2612,16 @@ namespace MosaicLib.Modular.Common
         /// <summary>Constructor - builds NamedValue with the given name.  VC defaults to ValueContainer.Empty</summary>
         public NamedValue(string name) 
         {
-            Name = name;
+            Name = name ?? string.Empty;
         }
 
         /// <summary>Helper Constructor - builds NamedValue with the given name and object value.  VC is constructed to contain the given object value</summary>
-        public NamedValue(string name, object value)
+        public NamedValue(string name, object value, bool asReadOnly = false)
         {
-            Name = name;
+            Name = name ?? string.Empty;
             VC = new ValueContainer(value);
-        }
 
-        /// <summary>
-        /// Copy constructor.  builds a copy of the given rhs using its Name and a copy of its VC.
-        /// The results of this copy operation are read/write even if the given rhs is readonly.
-        /// </summary>
-        public NamedValue(INamedValue rhs)
-            : this(rhs.Name)
-        {
-            if (rhs.IsReadOnly)
-                vc = rhs.VC;
-            else
-                vc.DeepCopyFrom(rhs.VC);
-
-            VCHasBeenSet = rhs.VCHasBeenSet;
+            isReadOnly = asReadOnly;
         }
 
         /// <summary>
@@ -2217,15 +2631,20 @@ namespace MosaicLib.Modular.Common
         /// copy of the given rhs.  This stop cannot be peformed for general contained values that have opaque Object values in them and it not required for String contents (already immutable)
         /// and for all other value content types which do not naturaly share references.
         /// </summary>
-        public NamedValue(INamedValue rhs, bool asReadOnly)
-            :this(rhs.Name)
+        public NamedValue(INamedValue rhs = null, bool asReadOnly = false)
         {
+            bool rhsIsNotNull = (rhs != null);
+
+            Name = (rhsIsNotNull && rhs.Name != null) ? rhs.Name : string.Empty;
+
+            if (!rhsIsNotNull)
+            {}
             if (asReadOnly && !rhs.IsReadOnly)
                 vc.DeepCopyFrom(rhs.VC);
             else
                 vc = rhs.VC;
 
-            VCHasBeenSet = rhs.VCHasBeenSet;
+            VCHasBeenSet = (rhsIsNotNull && rhs.VCHasBeenSet);
             isReadOnly = asReadOnly;
         }
 
@@ -2389,7 +2808,7 @@ namespace MosaicLib.Modular.Common
 
     #endregion
 
-    #region NamedValue related extension methods
+    #region NamedValue and NamedValueSet related extension methods
 
     /// <summary>Standard extension methods wrapper class/namespace</summary>
     public static partial class ExtensionMethods
@@ -2415,9 +2834,9 @@ namespace MosaicLib.Modular.Common
 
             // special case where we downcast readonly NamedValueSets (passed as INamedValueSets) so that we do not need to copy them after they are already readonly.
             if (iNvSet.IsReadOnly && (iNvSet is NamedValueSet))
-                return iNvSet as NamedValueSet;
+                return (iNvSet as NamedValueSet);
 
-            return new NamedValueSet(iNvSet, true);
+            return new NamedValueSet(iNvSet.GetEnumerable(TraversalType.TopLevelOnly), true, iNvSet.SubSets);
         }
 
         /// <summary>
@@ -2428,35 +2847,35 @@ namespace MosaicLib.Modular.Common
         public static NamedValue ConvertToReadOnly(this INamedValue iNv)
         {
             if (iNv.IsReadOnly && (iNv is NamedValue))
-                return iNv as NamedValue;
+                return (iNv as NamedValue);
 
             return new NamedValue(iNv, true);
         }
 
         /// <summary>
-        /// Converts the given NamedValueSet nvSet to a read/write NamedValueSet by cloning if needed.
+        /// Converts the given INamedValueSet iNvSet to a read/write NamedValueSet by cloning if needed.
         /// If the given nvSet value is not null and it is !IsReadonly then return the given value.
         /// Otherwise this method constructs and returns a new readwrite NamedValueSet copy the given nvSet.
         /// </summary>
-        public static NamedValueSet ConvertToWriteable(this NamedValueSet nvSet)
+        public static NamedValueSet ConvertToWriteable(this INamedValueSet iNvSet)
         {
-            if (nvSet != null && !nvSet.IsReadOnly)
-                return nvSet;
+            if (iNvSet != null && !iNvSet.IsReadOnly && (iNvSet is NamedValueSet))
+                return (iNvSet as NamedValueSet);
 
-            return new NamedValueSet(nvSet, false);
+            return new NamedValueSet(iNvSet.GetEnumerable(TraversalType.TopLevelOnly), false, iNvSet.SubSets);
         }
 
         /// <summary>
-        /// Converts the given NamedValue nv to a read/write NamedValue by cloning if needed.
+        /// Converts the given INamedValue iNv to a read/write NamedValue by cloning if needed.
         /// If the given nv !IsReadonly then this method returns it unchanged.
         /// Otherwise this method constructs and returns a new readonly NamedValue copy of the given nv.
         /// </summary>
-        public static NamedValue ConvertToWriteable(this NamedValue nv)
+        public static NamedValue ConvertToWriteable(this INamedValue iNv)
         {
-            if (!nv.IsReadOnly)
-                return nv;
+            if (iNv != null && !iNv.IsReadOnly && (iNv is NamedValue))
+                return (iNv as NamedValue);
 
-            return new NamedValue(nv, false);
+            return new NamedValue(iNv, false);
         }
 
         /// <summary>
@@ -2464,7 +2883,7 @@ namespace MosaicLib.Modular.Common
         /// </summary>
         public static bool IsNullOrEmpty(this INamedValueSet iNvSet)
         {
-            return (iNvSet == null || iNvSet.Count == 0);
+            return (iNvSet == null || (iNvSet.Count == 0 && iNvSet.SubSets.IsNullOrEmpty()));
         }
 
         /// <summary>
@@ -2480,8 +2899,7 @@ namespace MosaicLib.Modular.Common
         /// </summary>
         public static INamedValueSet MapEmptyToNull(this INamedValueSet iNvSet)
         {
-            bool isEmptySet = (iNvSet != null && iNvSet.Count == 0);
-            return (isEmptySet ? null : iNvSet);
+            return (iNvSet.IsNullOrEmpty() ? null : iNvSet);
         }
 
         /// <summary>
@@ -2544,8 +2962,39 @@ namespace MosaicLib.Modular.Common
         {
             return ((mergeBehavior & NamedValueMergeBehavior.UpdateExistingItems) != NamedValueMergeBehavior.None);
         }
+
+        /// <summary>
+        /// Attemps to "Add" the contents of each of the given KeyValuePair items to this set.
+        /// Returns this object to support call chaining.
+        /// </summary>
+        /// <exception cref="System.NotSupportedException">thrown if the collection has been set to IsReadOnly</exception>
+        public static NamedValueSet AddRange<TElementType>(this NamedValueSet nvs, IEnumerable<KeyValuePair<string, TElementType>> kvpSet)
+        {
+            nvs.AddRange(kvpSet.Select(kvp => new NamedValue(kvp.Key, kvp.Value)));
+
+            return nvs;
+        }
+
+
+        /// <summary>
+        /// Attemps to "Add" the contents of each of the given dictionary's DictionaryItem items to this set.
+        /// Returns this object to support call chaining.
+        /// </summary>
+        /// <exception cref="System.NotSupportedException">thrown if the collection has been set to IsReadOnly</exception>
+        public static NamedValueSet AddRange(this NamedValueSet nvs, IDictionary dictionary)
+        {
+            nvs.AddRange(from DictionaryEntry entry in dictionary select new NamedValue(entry.Key as string, entry.Value));
+
+            return nvs;
+        }
+
+
     }
 
+    /// <summary>
+    /// This Flag enumeration is used to help specify the caller's specific desired behavior when "merging" two or more INamedValueSet objects.
+    /// <para/>None (0), AddNewItems (1), UpdateExistingItems(2), and combinations of these.
+    /// </summary>
     [Flags]
     public enum NamedValueMergeBehavior
     {
@@ -2593,6 +3042,17 @@ namespace MosaicLib.Modular.Common
         /// If this map does not match the given from string or if the conversion fails then this method does not modify the to paramter and instead returns false.
         /// </summary>
         bool Map(string from, ref string to);
+
+        /// <summary>
+        /// Returns true if this map can be used to match and map the given from string in the direction that inverts the normal map direction.
+        /// </summary>
+        bool CanInverseMap(string from);
+
+        /// <summary>
+        /// If this map can convert the given from string in the inverse/reverse direction then it assigns the converted value to the given output to parameter and returns true.
+        /// If this map does not match the given from string or if the inverse conversion fails then this method does not modify the to paramter and instead returns false.
+        /// </summary>
+        bool MapInverse(string from, ref string to);
     }
 
     /// <summary>
@@ -2645,15 +3105,89 @@ namespace MosaicLib.Modular.Common
         /// </summary>
         public virtual bool Map(string from, ref string to)
         {
-            if (CanMap(from))
-            {
-                to = To;
-                return true;
-            }
-            else
-            {
+            if (!CanMap(from))
                 return false;
-            }
+
+            to = To;
+            return true;
+        }
+
+        /// <summary>
+        /// Returns true if this map can be used to match and map the given from string in the direction that inverts the normal map direction.
+        /// </summary>
+        public virtual bool CanInverseMap(string from)
+        {
+            return (from == To);
+        }
+
+        /// <summary>
+        /// If this map can convert the given from string in the inverse/reverse direction then it assigns the converted value to the given output to parameter and returns true.
+        /// If this map does not match the given from string or if the inverse conversion fails then this method does not modify the to paramter and instead returns false.
+        /// </summary>
+        public virtual bool MapInverse(string from, ref string to)
+        {
+            if (!CanInverseMap(from))
+                return false;
+
+            to = From;
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Immutable item instance class which can be used to accept (match) any Map but which implements a noop transform function (from gets to)
+    /// </summary>
+    public class MapNameAcceptAll : MapNameFromTo
+    {
+        /// <summary>
+        /// Default constructor
+        /// </summary>
+        public MapNameAcceptAll()
+            : base(string.Empty, string.Empty)
+        { }
+
+        public override string ToString()
+        {
+            return "AcceptAll";
+        }
+
+        /// <summary>
+        /// This is not a simple map as it can map anything to itself
+        /// </summary>
+        public override bool IsSimpleMap { get { return false; } }
+
+        /// <summary>
+        /// This can map any string
+        /// </summary>
+        public override bool CanMap(string from)
+        {
+            return true;
+        }
+
+        /// <summary>
+        /// This maps any string to itself
+        /// </summary>
+        public override bool Map(string from, ref string to)
+        {
+            to = from;
+            return true;
+        }
+
+        /// <summary>
+        /// This can inverse map any string
+        /// </summary>
+        public override bool CanInverseMap(string from)
+        {
+            return true;
+        }
+
+        /// <summary>
+        /// This inverse maps any string to itself
+        /// </summary>
+        public override bool MapInverse(string from, ref string to)
+        {
+            to = from;
+            return true;
         }
     }
 
@@ -2670,8 +3204,7 @@ namespace MosaicLib.Modular.Common
         /// </summary>
         public MapNamePrefixFromTo(string fromPrefix, string toPrefix)
             : base(fromPrefix, toPrefix)
-        {
-        }
+        { }
 
         /// <summary>
         /// Returns true if this is a simple map, or false if it is not.  (not in this case)
@@ -2692,16 +3225,34 @@ namespace MosaicLib.Modular.Common
         /// </summary>
         public override bool Map(string from, ref string to)
         {
-            if (from.MapNullToEmpty().StartsWith(From))
-            {
-                to = "{0}{1}".CheckedFormat(To, from.Substring(From.Length));
-                return true;
-            }
-            else
-            {
+            if (!from.MapNullToEmpty().StartsWith(From))
                 return false;
-            }
+
+            to = "{0}{1}".CheckedFormat(To, from.Substring(From.Length));
+            return true;
         }
+
+        /// <summary>
+        /// Returns true if this map can be used to match and map the given from string in the direction that inverts the normal map direction.
+        /// </summary>
+        public override bool CanInverseMap(string from)
+        {
+            return from.MapNullToEmpty().StartsWith(To);
+        }
+
+        /// <summary>
+        /// If this map can convert the given from string in the inverse/reverse direction then it assigns the converted value to the given output to parameter and returns true.
+        /// If this map does not match the given from string or if the inverse conversion fails then this method does not modify the to paramter and instead returns false.
+        /// </summary>
+        public override bool MapInverse(string from, ref string to)
+        {
+            if (!from.MapNullToEmpty().StartsWith(To))
+                return false;
+
+            to = "{0}{1}".CheckedFormat(From, from.Substring(To.Length));
+            return true;
+        }
+
     }
 
     /// <summary>
@@ -2778,6 +3329,15 @@ namespace MosaicLib.Modular.Common
                 return false;
             }
         }
+
+        /// <summary>
+        /// Returns true if this map can be used to match and map the given from string in the direction that inverts the normal map direction.
+        /// <para/>Regex maps do not currently support inverse mapping.
+        /// </summary>
+        public override bool CanInverseMap(string from) 
+        { 
+            return false; 
+        }
     }
 
     /// <summary>
@@ -2842,6 +3402,312 @@ namespace MosaicLib.Modular.Common
 
             return false;
         }
+
+        /// <summary>
+        /// Returns true if this map can be used to match and map the given from string in the direction that inverts the normal map direction.
+        /// </summary>
+        public bool CanInverseMap(string from)
+        {
+            return this.Any(mapFromTo => mapFromTo.CanInverseMap(from));
+        }
+
+        /// <summary>
+        /// If this map can convert the given from string in the inverse/reverse direction then it assigns the converted value to the given output to parameter and returns true.
+        /// If this map does not match the given from string or if the inverse conversion fails then this method does not modify the to paramter and instead returns false.
+        /// </summary>
+        public bool MapInverse(string from, ref string to)
+        {
+            foreach (IMapNameFromTo map in this)
+            {
+                if (map.MapInverse(from, ref to))
+                    return true;
+            }
+
+            return false;
+        }
+    }
+
+    #endregion
+
+    #region NamedValueSetItemAttribute, INamedValueSetAdapter, NamedValueSetAdapter
+
+    namespace Attributes
+    {
+        /// <summary>
+        /// This attribute is used to annotate public get/set properties and fields in a class in order that the class can be used as the ValueSet for
+        /// a NamedValueSetAdapter adapter.  Each such property or field in the ValueSet class specifies a specific property and value source that 
+        /// will receive the values from Update calls and which is used as the value source for Set calls on the Adapter.
+        /// <para/>Name = null, NameAdjust = NameAdjust.Prefix0, SilenceIssues = false
+        /// </summary>
+        [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field, AllowMultiple = false)]
+        public class NamedValueSetItemAttribute : AnnotatedItemAttributeBase
+        {
+            /// <summary>
+            /// Default constructor.
+            /// <para/>Name = null, NameAdjust = NameAdjust.Prefix0, SilenceIssues = false, StorageType = ContainerStorageType.None
+            /// </summary>
+            public NamedValueSetItemAttribute()
+                : base()
+            { }
+        }
+    }
+
+    /// <summary>
+    /// ValueSet type agnostic interface for public methods in actual NamedValueSetAdapter implementation class
+    /// </summary>
+    public interface INamedValueSetAdapter
+    {
+        /// <summary>Defines the emitter used to emit Setup, Set, and Update related errors.  Defaults to the null emitter.</summary>
+        Logging.IMesgEmitter IssueEmitter { get; set; }
+
+        /// <summary>Defines the emitter used to emit Update related changes in config point values.  Defaults to the null emitter.</summary>
+        Logging.IMesgEmitter ValueNoteEmitter { get; set; }
+
+        /// <summary>
+        /// This method determines the set of full Parameter Names from the ValueSet's annotated items.
+        /// In most cases the client will immediately call Set or Update to transfer the values from or to the ValueSet.
+        /// <para/>Supports call chaining.
+        /// </summary>
+        /// <param name="baseNames">
+        /// Gives a list of 1 or more base names that are prepended to specific sub-sets of the list of item names based on each item's NameAdjust attribute property value.
+        /// </param>
+        INamedValueSetAdapter Setup(params string[] baseNames);
+
+        /// <summary>
+        /// Processes the given nvs and extracts and assigns values to each of the adapters annotated ValueSet members from the correspondingly named values in the given nvs.
+        /// <para/>The merge parameter determines if (false) all annotated items are set (even if they are no included in the given nvs), or if (true) only the items that are explicitly included in the given nvs are set.
+        /// <para/>Supports call chaining.
+        /// </summary>
+        INamedValueSetAdapter Set(INamedValueSet nvs, bool merge = false);
+
+        /// <summary>
+        /// Generates and returns an INamedValueSet with named values for each of the identified items in the adapter's ValueSet.
+        /// <para/>If requested using the optional asReadOnly parameter, the returned nvs will be set to be read-only.
+        /// </summary>
+        INamedValueSet Get(bool asReadOnly = false);
+    }
+
+    /// <summary>
+    /// This adapter class provides a client with a ValueSet style tool that supports getting and setting sets of values to/from INamedValueSet instances.
+    /// </summary>
+    /// <typeparam name="TValueSet">
+    /// Specifies the class type on which this adapter will operate.  
+    /// Adapter harvests the list of <see cref="MosaicLib.Modular.Common.Attributes.NamedValueSetItemAttribute"/> annotated public member items from this type.
+    /// </typeparam>
+    /// <remarks>
+    /// The primary methods/properties used on this adapter are: Construction, ValueSet, Setup, Set, Get
+    /// </remarks>
+    public class NamedValueSetAdapter<TValueSet> : DisposableBase, INamedValueSetAdapter where TValueSet : class
+    {
+        #region Ctor
+
+        /// <summary>
+        /// Config instance constructor.  Assigns adapter to use given configInstance IConfig service instance.  This may be overridden during the Setup call.
+        /// For use with Property Initializers and the Setup method to define and setup the adapter instance for use.
+        /// <para/>Please Note: the Setup method must be called before the adapter can be used.  
+        /// </summary>
+        public NamedValueSetAdapter()
+        {
+            valueSetItemInfoList = AnnotatedClassItemAccessHelper<Attributes.NamedValueSetItemAttribute>.ExtractItemInfoAccessListFrom(typeof(TValueSet), ItemSelection.IncludeExplicitPublicItems | ItemSelection.IncludeInheritedItems);
+            NumItems = valueSetItemInfoList.Count;
+
+            itemAccessSetupInfoArray = new ItemAccessSetupInfo[NumItems];
+        }
+
+        #endregion
+
+        #region public methods and properies
+
+        /// <summary>
+        /// Contains the ValueSet object that is used as the value source for Set calls and receives updated values during Update.
+        /// </summary>
+        public TValueSet ValueSet { get; set; }
+
+        /// <summary>Defines the emitter used to emit Setup, Set, and Update related errors.  Defaults to the null emitter.</summary>
+        public Logging.IMesgEmitter IssueEmitter { get { return FixupEmitterRef(ref issueEmitter); } set { issueEmitter = value; } }
+
+        /// <summary>Defines the emitter used to emit Update related changes in config point values.  Defaults to the null emitter.</summary>
+        public Logging.IMesgEmitter ValueNoteEmitter { get { return FixupEmitterRef(ref valueNoteEmitter); } set { valueNoteEmitter = value; } }
+
+        /// <summary>
+        /// This method determines the set of full Parameter Names from the ValueSet's annotated items.
+        /// In most cases the client will immediately call Set or Update to transfer the values from or to the ValueSet.
+        /// <para/>Supports call chaining.
+        /// </summary>
+        /// <param name="baseNames">
+        /// Gives a list of 1 or more base names that are prepended to specific sub-sets of the list of item names based on each item's NameAdjust attribute property value.
+        /// </param>
+        public NamedValueSetAdapter<TValueSet> Setup(params string[] baseNames)
+        {
+            if (ValueSet == null)
+                throw new System.NullReferenceException("ValueSet property must be non-null before Setup can be called");
+
+            // setup all of the static information
+
+            for (int idx = 0; idx < NumItems; idx++)
+            {
+                ItemInfo<Attributes.NamedValueSetItemAttribute> itemInfo = valueSetItemInfoList[idx];
+                Attributes.NamedValueSetItemAttribute itemAttribute = itemInfo.ItemAttribute;
+
+                string memberName = itemInfo.MemberInfo.Name;
+                string itemName = (!string.IsNullOrEmpty(itemAttribute.Name) ? itemAttribute.Name : itemInfo.MemberInfo.Name);
+                string nvsItemName = itemInfo.GenerateFullName(baseNames);
+
+                if (!itemInfo.CanGetValue || !itemInfo.CanSetValue)
+                {
+                    if (!itemAttribute.SilenceIssues)
+                        IssueEmitter.Emit("Member/Value '{0}'/'{1}' is not usable: Member must provide public getter and setter, in ValueSet type '{2}'", memberName, nvsItemName, TValueSetTypeStr);
+                    continue;
+                }
+
+                ItemAccessSetupInfo itemAccessSetupInfo = new ItemAccessSetupInfo()
+                {
+                    NVSItemName = nvsItemName,
+                    ItemInfo = itemInfo,
+                    MemberToValueFunc = itemInfo.GenerateGetMemberToVCFunc<TValueSet>(),
+                    MemberFromValueAction = itemInfo.GenerateSetMemberFromVCAction<TValueSet>(forceRethrowFlag: false),
+                };
+
+                Logging.IMesgEmitter selectedIssueEmitter = IssueEmitter;
+
+                if (itemAccessSetupInfo.MemberToValueFunc == null || itemAccessSetupInfo.MemberFromValueAction == null)
+                {
+                    if (!itemAttribute.SilenceIssues)
+                        selectedIssueEmitter.Emit("Member/Value '{0}'/'{1}' is not usable: no valid accessor delegate could be generated for its ValueSet type:'{3}'", memberName, nvsItemName, itemInfo.ItemType, TValueSetTypeStr);
+
+                    continue;
+                }
+
+                itemAccessSetupInfoArray[idx] = itemAccessSetupInfo;
+            }
+
+            return this;
+        }
+
+        /// <summary>
+        /// Transfer the values from the ValueSet's annotated members to the corresponding set of IValueAccessors and then tell the IValueInterconnect instance
+        /// to Set all of the IValueAccessors.
+        /// <para/>The merge parameter determines if (false) all annotated items are set (even if they are no included in the given nvs), or if (true) only the items that are explicitly included in the given nvs are set.
+        /// <para/>Supports call chaining.
+        /// </summary>
+        public NamedValueSetAdapter<TValueSet> Set(INamedValueSet nvs, bool merge = false)
+        {
+            if (ValueSet == null)
+            {
+                IssueEmitter.Emit("ValueSet property must be non-null before Set can be called");
+                return this;
+            }
+
+            foreach (ItemAccessSetupInfo iasi in itemAccessSetupInfoArray)
+            {
+                INamedValue inv = nvs[iasi.NVSItemName];
+                if (iasi != null && iasi.MemberFromValueAction != null && (!merge || !inv.IsNullOrEmpty()))
+                {
+                    iasi.MemberFromValueAction(ValueSet, inv.VC, IssueEmitter, ValueNoteEmitter, false);
+                }
+            }
+
+            return this;
+        }
+
+        /// <summary>
+        /// Requests the IValueInterconnect instance to update all of the adapter's IValueAccessor objects and then transfers the updated values
+        /// from those accessor objects to the corresponding annotated ValueSet members.
+        /// <para/>Supports call chaining.
+        /// </summary>
+        public INamedValueSet Get(bool asReadOnly = false)
+        {
+            if (ValueSet == null)
+                throw new System.NullReferenceException("ValueSet property must be non-null before Update can be called");
+
+            NamedValueSet nvs = new NamedValueSet();
+
+            foreach (ItemAccessSetupInfo iasi in itemAccessSetupInfoArray)
+            {
+                if (iasi != null && iasi.MemberFromValueAction != null)
+                    nvs.SetValue(iasi.NVSItemName, iasi.MemberToValueFunc(ValueSet, IssueEmitter, ValueNoteEmitter, false));
+            }
+
+            if (asReadOnly)
+                nvs.IsReadOnly = true;
+
+            return nvs;
+        }
+
+        #endregion
+
+        #region private fields, properties
+
+        Type TValueSetType = typeof(TValueSet);
+        string TValueSetTypeStr = typeof(TValueSet).Name;
+
+        List<ItemInfo<Attributes.NamedValueSetItemAttribute>> valueSetItemInfoList = null;       // gets built by the AnnotatedClassItemAccessHelper.
+        int NumItems { get; set; }
+
+        /// <summary>
+        /// Internal class used to capture the key specific setup information for a given annotated property in the ValueSet.
+        /// </summary>
+        private class ItemAccessSetupInfo
+        {
+            /// <summary>
+            /// Retains access to the ItemInfo for the corresponding item in the value set
+            /// </summary>
+            public ItemInfo<Attributes.NamedValueSetItemAttribute> ItemInfo { get; set; }
+
+            /// <summary>
+            /// Returns the ItemAttribute from the contained ItemInfo
+            /// </summary>
+            public Attributes.NamedValueSetItemAttribute ItemAttribute { get { return ItemInfo.ItemAttribute; } }
+
+            /// <summary>
+            /// Returns the symbol name of the Property or Field to which this item is attached.
+            /// </summary>
+            public string MemberName { get { return ItemInfo.MemberInfo.Name; } }
+
+            /// <summary>
+            /// Gives the item name to use for this item in corresponding NamedValueSet instances.
+            /// </summary>
+            public string NVSItemName { get; set; }
+
+            /// <summary>delegate that is used to set a specific member's value from a given config key's value object's stored value.</summary>
+            /// <remarks>this item will be null for static items and for items that failed to be setup correctly.</remarks>
+            public AnnotatedClassItemAccessHelper.GetMemberAsVCFunctionDelegate<TValueSet> MemberToValueFunc { get; set; }
+
+            /// <summary>delegate that is used to set a specific member's value from a given config key's value object's stored value.</summary>
+            /// <remarks>this item will be null for static items and for items that failed to be setup correctly.</remarks>
+            public AnnotatedClassItemAccessHelper.SetMemberFromVCActionDelegate<TValueSet> MemberFromValueAction { get; set; }
+        }
+
+        /// <remarks>Non-null elements in this array correspond to fully vetted gettable and settable ValueSet items.</remarks>
+        ItemAccessSetupInfo[] itemAccessSetupInfoArray = null;
+
+        #endregion
+
+        #region message emitter glue
+
+        private Logging.IMesgEmitter issueEmitter = null, valueNoteEmitter = null;
+        private Logging.IMesgEmitter FixupEmitterRef(ref Logging.IMesgEmitter emitterRef)
+        {
+            if (emitterRef == null)
+                emitterRef = Logging.NullEmitter;
+            return emitterRef;
+        }
+
+        #endregion
+
+        #region INamedValueSetAdapter explicit implementation methods
+
+        INamedValueSetAdapter INamedValueSetAdapter.Setup(params string[] baseNames)
+        {
+            return Setup(baseNames);
+        }
+
+        INamedValueSetAdapter INamedValueSetAdapter.Set(INamedValueSet nvs, bool merge)
+        {
+            return Set(nvs, merge: merge);
+        }
+
+        #endregion
     }
 
     #endregion

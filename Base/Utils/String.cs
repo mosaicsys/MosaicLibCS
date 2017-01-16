@@ -2,8 +2,9 @@
 /*! @file String.cs
  *  @brief This file contains a number of string related helper methods
  * 
- * Copyright (c) Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2008 Mosaic Systems Inc., All rights reserved
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2008 Mosaic Systems Inc.
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,13 +18,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
 
 using System;
-using System.Text;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Runtime.Serialization;
+using System.Text;
+
 using MosaicLib.Modular.Common;
 
 namespace MosaicLib.Utils
@@ -120,7 +122,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Returns true if the given char c's value is between 32 and 127.  If otherExcludeCharsList is not null then the method returns false if the given char c is included in the given otherExcludeCharsList.
         /// </summary>
-        public static bool IsBasicAscii(this char c, List<char> otherExcludeCharsList)
+        public static bool IsBasicAscii(this char c, IList<char> otherExcludeCharsList)
         {
             if (c < 32 || c > 127)
                 return false;
@@ -224,7 +226,7 @@ namespace MosaicLib.Utils
         /// Also generates escaped version of any other characters that are explicitly includes in the given extraEscapeCharList
         /// (typically '\"' or '\'')
         /// </summary>
-        public static string GenerateEscapedVersion(this string s, List<char> extraEscapeCharList)
+        public static string GenerateEscapedVersion(this string s, IList<char> extraEscapeCharList)
         {
             s = s.MapNullToEmpty();
 
@@ -284,17 +286,9 @@ namespace MosaicLib.Utils
             {
                 return System.String.Format(fmt, arg0);
             }
-            catch (System.FormatException ex)
-            {
-                return System.String.Format("Format1('{0}') threw FormatException '{1}'", fmt, ex.Message);
-            }
-            catch (System.ArgumentNullException ex)
-            {
-                return System.String.Format("Format1('{0}') threw ArgumentNullException '{1}'", fmt, ex.Message);
-            }
             catch (System.Exception ex)
             {
-                return System.String.Format("Format1('{0}') threw Exception '{1}'", fmt, ex.Message);
+                return System.String.Format("Format1('{0}') threw {1}", fmt, ex.ToString(ExceptionFormat.TypeAndMessage));
             }
 		}
 
@@ -316,17 +310,9 @@ namespace MosaicLib.Utils
 			{
 				return System.String.Format(fmt, arg0, arg1);
 			}
-			catch (System.FormatException ex)
-			{
-				return System.String.Format("Format2('{0}') threw FormatException '{1}'", fmt, ex.Message);
-			}
-			catch (System.ArgumentNullException ex)
-			{
-				return System.String.Format("Format2('{0}') threw ArgumentNullException '{1}'", fmt, ex.Message);
-			}
             catch (System.Exception ex)
             {
-                return System.String.Format("Format2('{0}') threw Exception '{1}'", fmt, ex.Message);
+                return System.String.Format("Format2('{0}') threw {1}", fmt, ex.ToString(ExceptionFormat.TypeAndMessage));
             }
         }
 
@@ -349,17 +335,9 @@ namespace MosaicLib.Utils
 			{
 				return System.String.Format(fmt, arg0, arg1, arg2);
 			}
-			catch (System.FormatException ex)
-			{
-				return System.String.Format("Format3('{0}') threw FormatException '{1}'", fmt, ex.Message);
-			}
-			catch (System.ArgumentNullException ex)
-			{
-				return System.String.Format("Format3('{0}') threw ArgumentNullException '{1}'", fmt, ex.Message);
-			}
             catch (System.Exception ex)
             {
-                return System.String.Format("Format3('{0}') threw Exception '{1}'", fmt, ex.Message);
+                return System.String.Format("Format3('{0}') threw {1}", fmt, ex.ToString(ExceptionFormat.TypeAndMessage));
             }
         }
 
@@ -380,17 +358,9 @@ namespace MosaicLib.Utils
 			{
 				return System.String.Format(fmt, args);
 			}
-			catch (System.FormatException ex)
-			{
-				return System.String.Format("FormatN('{0}') threw FormatException '{1}'", fmt, ex.Message);
-			}
-			catch (System.ArgumentNullException ex)
-			{
-				return System.String.Format("FormatN('{0}') threw ArgumentNullException '{1}'", fmt, ex.Message);
-			}
             catch (System.Exception ex)
             {
-                return System.String.Format("FormatN('{0}') threw Exception '{1}'", fmt, ex.Message);
+                return System.String.Format("FormatN('{0}') threw {1}", fmt, ex.ToString(ExceptionFormat.TypeAndMessage));
             }
         }
 
@@ -414,17 +384,9 @@ namespace MosaicLib.Utils
             {
                 return System.String.Format(provider, fmt, args);
             }
-            catch (System.FormatException ex)
-            {
-                return System.String.Format(provider, "FormatPN('{0}') threw FormatException '{1}'", fmt, ex.Message);
-            }
-            catch (System.ArgumentNullException ex)
-            {
-                return System.String.Format(provider, "FormatPN('{0}') threw ArgumentNullException '{1}'", fmt, ex.Message);
-            }
             catch (System.Exception ex)
             {
-                return System.String.Format(provider, "FormatPN('{0}') threw Exception '{1}'", fmt, ex.Message);
+                return System.String.Format(provider, "FormatPN('{0}') threw {1}", fmt, ex.ToString(ExceptionFormat.TypeAndMessage));
             }
         }
 
@@ -484,7 +446,7 @@ namespace MosaicLib.Utils
     /// </summary>
     public static partial class ExtensionMethods
     {
-        #region static System.Text.StringBuilder extension methods
+        #region static System.Text.StringBuilder extension methods (Reset)
 
         /// <summary>Extension method that allows a StringBuilder contents to be cleared.</summary>
         public static StringBuilder Reset(this StringBuilder sb)
@@ -504,17 +466,9 @@ namespace MosaicLib.Utils
             {
                 sb.AppendFormat(fmt, arg0);
             }
-            catch (System.FormatException ex)
-            {
-                sb.AppendFormat("Format1('{0}') threw FormatException '{1}'", fmt, ex.Message);
-            }
-            catch (System.ArgumentNullException ex)
-            {
-                sb.AppendFormat("Format1('{0}') threw ArgumentNullException '{1}'", fmt, ex.Message);
-            }
             catch (System.Exception ex)
             {
-                sb.AppendFormat("Format1('{0}') threw Exception '{1}'", fmt, ex.Message);
+                sb.AppendFormat("Format1('{0}') threw {1}", fmt, ex.ToString(ExceptionFormat.TypeAndMessage));
             }
 
             return sb;
@@ -527,17 +481,9 @@ namespace MosaicLib.Utils
             {
                 sb.AppendFormat(fmt, arg0, arg1);
             }
-            catch (System.FormatException ex)
-            {
-                sb.AppendFormat("Format2('{0}') threw FormatException '{1}'", fmt, ex.Message);
-            }
-            catch (System.ArgumentNullException ex)
-            {
-                sb.AppendFormat("Format2('{0}') threw ArgumentNullException '{1}'", fmt, ex.Message);
-            }
             catch (System.Exception ex)
             {
-                sb.AppendFormat("Format2('{0}') threw Exception '{1}'", fmt, ex.Message);
+                sb.AppendFormat("Format2('{0}') threw {1}", fmt, ex.ToString(ExceptionFormat.TypeAndMessage));
             }
 
             return sb;
@@ -550,17 +496,9 @@ namespace MosaicLib.Utils
             {
                 sb.AppendFormat(fmt, arg0, arg1, arg2);
             }
-            catch (System.FormatException ex)
-            {
-                sb.AppendFormat("Format3('{0}') threw FormatException '{1}'", fmt, ex.Message);
-            }
-            catch (System.ArgumentNullException ex)
-            {
-                sb.AppendFormat("Format3('{0}') threw ArgumentNullException '{1}'", fmt, ex.Message);
-            }
             catch (System.Exception ex)
             {
-                sb.AppendFormat("Format3('{0}') threw Exception '{1}'", fmt, ex.Message);
+                sb.AppendFormat("Format3('{0}') threw {1}", fmt, ex.ToString(ExceptionFormat.TypeAndMessage));
             }
 
             return sb;
@@ -573,17 +511,9 @@ namespace MosaicLib.Utils
             {
                 sb.AppendFormat(fmt, args);
             }
-            catch (System.FormatException ex)
-            {
-                sb.AppendFormat("FormatN('{0}') threw FormatException '{1}'", fmt, ex.Message);
-            }
-            catch (System.ArgumentNullException ex)
-            {
-                sb.AppendFormat("FormatN('{0}') threw ArgumentNullException '{1}'", fmt, ex.Message);
-            }
             catch (System.Exception ex)
             {
-                sb.AppendFormat("FormatN('{0}') threw Exception '{1}'", fmt, ex.Message);
+                sb.AppendFormat("FormatN('{0}') threw {1}", fmt, ex.ToString(ExceptionFormat.TypeAndMessage));
             }
 
             return sb;
@@ -596,20 +526,140 @@ namespace MosaicLib.Utils
             {
                 sb.AppendFormat(provider, fmt, args);
             }
-            catch (System.FormatException ex)
-            {
-                sb.AppendFormat("FormatPN('{0}') threw FormatException '{1}'", fmt, ex.Message);
-            }
-            catch (System.ArgumentNullException ex)
-            {
-                sb.AppendFormat("FormatPN('{0}') threw ArgumentNullException '{1}'", fmt, ex.Message);
-            }
             catch (System.Exception ex)
             {
-                sb.AppendFormat("FormatPN('{0}') threw Exception '{1}'", fmt, ex.Message);
+                sb.AppendFormat("FormatPN('{0}') threw {1}", fmt, ex.ToString(ExceptionFormat.TypeAndMessage));
             }
 
             return sb;
+        }
+
+        #endregion
+
+        #region static System.IO.StreamWriter.CheckedWrite extension methods
+
+        /// <summary>Invokes System.IO.StreamWriter.Write with the given args within a try/catch pattern.</summary>
+        public static StreamWriter CheckedWrite(this StreamWriter sw, string fmt, object arg0)
+        {
+            try
+            {
+                sw.Write(fmt, arg0);
+            }
+            catch (System.Exception ex)
+            {
+                sw.Write("Format1('{0}') threw {1}", fmt, ex.ToString(ExceptionFormat.TypeAndMessage));
+            }
+
+            return sw;
+        }
+
+        /// <summary>Invokes System.IO.StreamWriter.Write with the given args within a try/catch pattern.</summary>
+        public static StreamWriter CheckedWrite(this StreamWriter sw, string fmt, object arg0, object arg1)
+        {
+            try
+            {
+                sw.Write(fmt, arg0, arg1);
+            }
+            catch (System.Exception ex)
+            {
+                sw.Write("Format2('{0}') threw {1}", fmt, ex.ToString(ExceptionFormat.TypeAndMessage));
+            }
+
+            return sw;
+        }
+
+        /// <summary>Invokes System.IO.StreamWriter.Write with the given args within a try/catch pattern.</summary>
+        public static StreamWriter CheckedWrite(this StreamWriter sw, string fmt, object arg0, object arg1, object arg2)
+        {
+            try
+            {
+                sw.Write(fmt, arg0, arg1, arg2);
+            }
+            catch (System.Exception ex)
+            {
+                sw.Write("Format3('{0}') threw {1}", fmt, ex.ToString(ExceptionFormat.TypeAndMessage));
+            }
+
+            return sw;
+        }
+
+        /// <summary>Invokes System.IO.StreamWriter.Write with the given args within a try/catch pattern.</summary>
+        public static StreamWriter CheckedWrite(this StreamWriter sw, string fmt, params object[] args)
+        {
+            try
+            {
+                sw.Write(fmt, args);
+            }
+            catch (System.Exception ex)
+            {
+                sw.Write("FormatN('{0}') threw {1}", fmt, ex.ToString(ExceptionFormat.TypeAndMessage));
+            }
+
+            return sw;
+        }
+
+        #endregion
+
+        #region static System.IO.StreamWriter.CheckedWriteLine extension methods
+
+        /// <summary>Invokes System.IO.StreamWriteLiner.WriteLine with the given args within a try/catch pattern.</summary>
+        public static StreamWriter CheckedWriteLine(this StreamWriter sw, string fmt, object arg0)
+        {
+            try
+            {
+                sw.WriteLine(fmt, arg0);
+            }
+            catch (System.Exception ex)
+            {
+                sw.WriteLine("Format1('{0}') threw {1}", fmt, ex.ToString(ExceptionFormat.TypeAndMessage));
+            }
+
+            return sw;
+        }
+
+        /// <summary>Invokes System.IO.StreamWriteLiner.WriteLine with the given args within a try/catch pattern.</summary>
+        public static StreamWriter CheckedWriteLine(this StreamWriter sw, string fmt, object arg0, object arg1)
+        {
+            try
+            {
+                sw.WriteLine(fmt, arg0, arg1);
+            }
+            catch (System.Exception ex)
+            {
+                sw.WriteLine("Format2('{0}') threw {1}", fmt, ex.ToString(ExceptionFormat.TypeAndMessage));
+            }
+
+            return sw;
+        }
+
+        /// <summary>Invokes System.IO.StreamWriteLiner.WriteLine with the given args within a try/catch pattern.</summary>
+        public static StreamWriter CheckedWriteLine(this StreamWriter sw, string fmt, object arg0, object arg1, object arg2)
+        {
+            try
+            {
+                sw.WriteLine(fmt, arg0, arg1, arg2);
+            }
+            catch (System.Exception ex)
+            {
+                sw.WriteLine("Format3('{0}') threw {1}", fmt, ex.ToString(ExceptionFormat.TypeAndMessage));
+            }
+
+            return sw;
+        }
+
+        /// <summary>Invokes System.IO.StreamWriteLiner.WriteLine with the given args within a try/catch pattern.</summary>
+        public static StreamWriter CheckedWriteLine(this StreamWriter sw, string fmt, params object[] args)
+        {
+            try
+            {
+                sw.WriteLine(fmt, args);
+            }
+            catch (System.Exception ex)
+            {
+                sw.WriteLine("FormatN('{0}') threw {1}", fmt, ex.ToString(ExceptionFormat.TypeAndMessage));
+            }
+
+            return sw;
         }
 
         #endregion
@@ -844,7 +894,8 @@ namespace MosaicLib.Utils
     namespace StringMatching
     {
         /// <summary>
-        /// This is a list (set) of Rule objects that supports deep cloneing.  This set is expected to be used with the MatchesAny extension method
+        /// This is a list (set) of Rule objects that supports deep cloneing.  
+        /// <para/>This set is expected to be used with the MatchesAny extension method which supports unified use with normal, empty, or null sets
         /// </summary>
         [CollectionDataContract(Namespace = Constants.UtilsNameSpace)]
         public class MatchRuleSet : List<MatchRule>
@@ -852,9 +903,23 @@ namespace MosaicLib.Utils
             /// <summary>Default constructor</summary>
             public MatchRuleSet() { }
             /// <summary>constructor starting with an externally provided set of rules</summary>
-            public MatchRuleSet(IEnumerable<MatchRule> rules) : base(rules) { }
+            public MatchRuleSet(IEnumerable<MatchRule> rules) : base(rules ?? emptyMatchRuleArray) { }
             /// <summary>copy constructor - makes a deep clone of the given rhs value.</summary>
             public MatchRuleSet(MatchRuleSet rhs) : base(rhs.Select((r) => new MatchRule(r))) { }
+
+            private static readonly MatchRule[] emptyMatchRuleArray = new MatchRule[0];
+
+            /// <summary>
+            /// Shorthand constructor, constructs this MatchRuleSet to contain a single MatchRule of the indicated matchType
+            /// </summary>
+            public MatchRuleSet(MatchType matchType, string ruleString = null)
+                : base(1)
+            {
+                if (matchType == MatchType.Any && ruleString == null)
+                    Add(MatchRule.Any);
+                else
+                    Add(new MatchRule(matchType, ruleString));
+            }
 
             /// <summary>Debugging and Logging helper method</summary>
             public override string ToString()
@@ -867,15 +932,31 @@ namespace MosaicLib.Utils
             /// </summary>
             public static MatchRuleSet Any
             {
-                get { return new MatchRuleSet() { new MatchRule(MatchType.Any, null) }; }
+                get { return new MatchRuleSet() { MatchRule.Any }; }
             }
 
             /// <summary>
-            /// Returns true if this MatchRuleSet contains an Any match rule (and will thus match anything).
+            /// Getter constructs and returns a MatchRuleSet that contains a single MatchType.None MatchRule.
+            /// </summary>
+            public static MatchRuleSet None
+            {
+                get { return new MatchRuleSet() { MatchRule.None }; }
+            }
+
+            /// <summary>
+            /// Returns true if this MatchRuleSet contains an Any match rule (and will thus match anything), or this MatchRuleSet IsEmpty
             /// </summary>
             public bool IsAny 
             { 
-                get { return this.Any((rule) => rule.MatchType == MatchType.Any); } 
+                get { return this.Any(rule => rule.IsAny) || this.IsEmpty(); } 
+            }
+
+            /// <summary>
+            /// Returns true if this MatchRuleSet is composed of one or more None match rules.
+            /// </summary>
+            public bool IsNone
+            {
+                get { return ((this.Count >= 1) && this.All(rule => rule.IsNone)); }
             }
 
             /// <summary>
@@ -894,6 +975,14 @@ namespace MosaicLib.Utils
         public static partial class ExtensionMethods
         {
             /// <summary>
+            /// Returns true if the given set is null or it IsAny (it contains at least one MatchRule.IsAny element (MatchType == MatchType.Any))
+            /// </summary>
+            public static bool IsNullOrAny(this MatchRuleSet set)
+            {
+                return (set == null || set.IsAny);
+            }
+
+            /// <summary>
             /// Creates and returns a clone (deep copy) of the given set if the set is non-null or returns null if the given set is null.
             /// </summary>
             public static MatchRuleSet Clone(this MatchRuleSet set)
@@ -906,46 +995,60 @@ namespace MosaicLib.Utils
 
             /// <summary>
             /// Resturns true if the given testString Matches any rule in the given set's list of MatchRule objects.
-            /// If the given set is null or it is empty then the method returns false.
+            /// If the given set is null or empty then the method returns valueToUseWhenSetIsNullOrEmpty (which defaults to true).
             /// </summary>
-            public static bool MatchesAny(this MatchRuleSet set, String testString)
+            public static bool MatchesAny(this MatchRuleSet set, String testString, bool valueToUseWhenSetIsNullOrEmpty = true)
             {
-                return set.MatchesAny(testString, false);
-            }
+                if (set.IsNullOrEmpty())
+                    return valueToUseWhenSetIsNullOrEmpty;
 
-            /// <summary>
-            /// Resturns true if the given testString Matches any rule in the given set's list of MatchRule objects.
-            /// If the given set is null or empty then the method returns valueToUseWhenSetIsNullOrEmpty.
-            /// </summary>
-            public static bool MatchesAny(this MatchRuleSet set, String testString, bool valueToUseWhenSetIsNullOrEmpty)
-            {
-                if (set != null && set.Count != 0)
+                foreach (MatchRule rule in set)
                 {
-                    foreach (MatchRule rule in set)
-                    {
-                        if (rule.Matches(testString))
-                            return true;
-                    }
+                    if (rule.Matches(testString))
+                        return true;
                 }
-                return valueToUseWhenSetIsNullOrEmpty;
+
+                return false;
             }
         }
 
         /// <summary>
         /// Simple container/implementation object for a single rule (MatchType and RuleString) used to determine if a string matches a given rule.
         /// <para/>This object is immutable in that none of its public or protected portions allow its contents to be changed.
-        /// <para/>This object is not re-enterant (not thread safe) when using MatchType.Regex.
         /// </summary>
         [DataContract(Namespace = Constants.UtilsNameSpace)]
         public class MatchRule
         {
+            /// <summary>
+            /// Getter constructs and returns a MatchRule with its MatchType set to MatchType.Any.
+            /// </summary>
+            public static MatchRule Any { get { return matchRuleAny; } }
+
+            /// <summary>
+            /// Getter constructs and returns a MatchRule with its MatchType set to MatchType.Any.
+            /// </summary>
+            public static MatchRule None { get { return matchRuleNone; } }
+
+            private static readonly MatchRule matchRuleAny = new MatchRule(MatchType.Any);
+            private static readonly MatchRule matchRuleNone = new MatchRule(MatchType.None);
+
+            /// <summary>
+            /// Returns true if this MatchRule's MatchType is Any (and will thus match anything).
+            /// </summary>
+            public bool IsAny { get { return (MatchType == MatchType.Any); } }
+
+            /// <summary>
+            /// Returns true if this MatchRule's MatchType is None (and will thus match nothing).
+            /// </summary>
+            public bool IsNone { get { return (MatchType == MatchType.None); } }
+
             /// <summary>
             /// Constructor.  Caller provides matchType and ruleString.  
             /// If matchType is MatchType.Regex then ruleString is used to construct a <see cref="System.Text.RegularExpressions.Regex"/> object which may throw a System.ArguementExecption
             /// if the given ruleString is not a valid Regular Expression string.
             /// </summary>
             /// <exception cref="System.ArgumentException">Thrown if MatchType is Regex and the given ruleString is not a valid regular expression.</exception>
-            public MatchRule(MatchType matchType, String ruleString)
+            public MatchRule(MatchType matchType = MatchType.None, String ruleString = null)
             {
                 MatchType = matchType;
                 RuleString = ruleString ?? String.Empty;
@@ -1016,7 +1119,10 @@ namespace MosaicLib.Utils
             }
         }
 
-        /// <summary>Enum defines the different means that a RuleString can be used to determine if a given test string is to be included in a given set, or not.</summary>
+        /// <summary>
+        /// Enum defines the different means that a RuleString can be used to determine if a given test string is to be included in a given set, or not.
+        /// <para/>None (0), Any, Prefix, Suffix, Contains, Regex, Exact
+        /// </summary>
         [DataContract(Namespace = Constants.UtilsNameSpace)]
         public enum MatchType : int
         {

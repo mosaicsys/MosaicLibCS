@@ -1,10 +1,11 @@
 //-------------------------------------------------------------------
 /*! @file UdpSerialIO.cs
- * @brief This file defines the SerialIO related classes that are used for Udp based ports (UdpClientPort and UdpServerPort)
+ *  @brief This file defines the SerialIO related classes that are used for Udp based ports (UdpClientPort and UdpServerPort)
  * 
- * Copyright (c) Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2008 Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2002 Mosaic Systems Inc., All rights reserved. (C++ library version)
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2008 Mosaic Systems Inc.
+ * Copyright (c) 2002 Mosaic Systems Inc.  (C++ library version)
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +19,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
 
 using System;
 using System.Collections.Generic;
@@ -468,14 +468,12 @@ namespace MosaicLib.SerialIO
         {
             TableItem tableItem = new TableItem() { Socket = s, read = read, write = write, error = error, notifyTarget = notifyTarget };
 
-            if (!tableItem.IsUsable)
+            string notUsableReason = tableItem.NotUsableReason;
+            if (!notUsableReason.IsNullOrEmpty())
             {
-                string notUsableReason = tableItem.NotUsableReason;
                 tableItem.LastLoggedNotUsableReason = notUsableReason;
 
-                string methodName = new System.Diagnostics.StackFrame().GetMethod().Name;
-
-                Logger.Debug.Emit("{0} given unusable socket {1} : {2}", methodName, tableItem.shAsInt64, notUsableReason);
+                Logger.Debug.Emit("{0} given unusable socket {1} : {2}", Fcns.CurrentMethodName, tableItem.shAsInt64, notUsableReason);
             }
 
             lock (userTableMutex)
@@ -496,13 +494,20 @@ namespace MosaicLib.SerialIO
         /// </summary>
         public void RemoveSocketFromList(Socket s)
         {
+            TableItem removedTableItem = null;
+
             lock (userTableMutex)
             {
-                if (userTableDictionary.ContainsKey(s))
+                if (userTableDictionary.TryGetValue(s, out removedTableItem))
                     userTableDictionary.Remove(s);
 
                 rebuildTablesFromUserTable = true;
             }
+
+            if (removedTableItem != null)
+                Logger.Debug.Emit("{0} removed socket {1}", Fcns.CurrentMethodName, removedTableItem.shAsInt64);
+            else
+                Logger.Debug.Emit("{0} could not find requested socket {1}", Fcns.CurrentMethodName, s.HandleAsInt64());
 
             threadWaitEventNotifier.Notify();
         }
@@ -557,7 +562,7 @@ namespace MosaicLib.SerialIO
                 set 
                 { 
                     socket = value;
-                    shAsInt64 = ((socket != null && socket.Handle != null) ? socket.Handle.ToInt64() : -1);
+                    shAsInt64 = socket.HandleAsInt64();
                 } 
             }
             public Socket socket { get; private set; }
@@ -570,17 +575,6 @@ namespace MosaicLib.SerialIO
             public bool touched;
 
             public TableItem() { }
-
-            /// <summary>
-            /// Returns true if the socket is usable and false if it is not.  See NotUsableReason for more details.
-            /// </summary>
-            public bool IsUsable
-            {
-                get
-                {
-                    return NotUsableReason.IsNullOrEmpty();
-                }
-            }
 
             /// <summary>
             /// Returns empty string if the socket is usable and non-empty description of the reason if the socket is not usable
@@ -774,6 +768,17 @@ namespace MosaicLib.SerialIO
 
                 socketList.Clear();
             }
+        }
+    }
+
+    public static partial class ExtensionMethods
+    {
+        /// <summary>
+        /// Extension method that will accept a socket and will return the ToInt64 from its Handle or -1 if the socket or its Handle are null
+        /// </summary>
+        public static Int64 HandleAsInt64(this Socket socket)
+        {
+            return  ((socket != null && socket.Handle != null) ? socket.Handle.ToInt64() : -1);
         }
     }
 

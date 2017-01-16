@@ -2,9 +2,10 @@
 /*! @file Pooling.cs
  *  @brief This file defines the MosaicLib.Utils.Pooling namespace which provides a set of utility definitions and classes that are useful for implementing reference counted and pooled objects.
  * 
- * Copyright (c) Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2008 Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2006 Mosaic Systems Inc., All rights reserved. (C++ library version embodied in PoolIface.h and PoolImpl.h)
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2008 Mosaic Systems Inc.
+ * Copyright (c) 2006 Mosaic Systems Inc.  (C++ library version embodied in PoolIface.h and PoolImpl.h)
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,13 +19,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
+
+using System;
+using System.Collections.Generic;
 
 namespace MosaicLib.Utils.Pooling
 {
-	using System;
-	using System.Collections.Generic;
-
     #region Very basic FreeList object for single threaded use
 
     /// <summary>

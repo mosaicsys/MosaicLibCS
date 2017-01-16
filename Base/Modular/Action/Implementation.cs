@@ -1,10 +1,11 @@
 //-------------------------------------------------------------------
 /*! @file Implementation.cs
- * @brief This file contains the definitions and classes that are used to define the internal Action Implementation objects for the Modular Action portions of this library.
+ *  @brief This file contains the definitions and classes that are used to define the internal Action Implementation objects for the Modular Action portions of this library.
  * 
- * Copyright (c) Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2008 Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2006 Mosaic Systems Inc., All rights reserved. (C++ library version)
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2008 Mosaic Systems Inc.
+ * Copyright (c) 2006 Mosaic Systems Inc.  (C++ library version)
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,9 +19,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
 
-//-------------------------------------------------
 using System;
 using MosaicLib.Utils;
 using MosaicLib.Time;
@@ -35,6 +34,7 @@ namespace MosaicLib.Modular.Action
     /// <summary>
     /// This class defines the Logging.MesgType's for each of the standard classes of log messaages that Action objects emit during normal use.
     /// These include Done, Error, State and Update events.
+    /// <para/>Commonly used static values: Signif_Error_Debug_Debug, Info_Error_Debug_Debug, Info_Error_Trace_Trace, Info_Info_Trace_Trace, Debug_Debug_Trace_Trace, Trace_Trace_Trace_Trace, None_None_None_None
     /// </summary>
     public class ActionLoggingConfig
     {
@@ -1125,7 +1125,7 @@ namespace MosaicLib.Modular.Action
                 }
                 catch (System.Exception ex)
                 {
-                    resultCode = Utils.Fcns.CheckedFormat("Internal: Method invoke threw unexpected exception: [{0}]", ex);
+                    resultCode = Utils.Fcns.CheckedFormat("Internal: Method invoke threw unexpected {0}", ex.ToString(ExceptionFormat.Full));
                 }
 
 				ias = ActionState;

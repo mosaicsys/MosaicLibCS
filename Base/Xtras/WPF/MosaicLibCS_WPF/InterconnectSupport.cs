@@ -2,8 +2,9 @@
 /*! @file InterconnectSupport.cs
  *  @brief This file provides classes that support use of Interconnect related services under WPF
  * 
- * Copyright (c) Mosaic Systems Inc., All rights reserved.
- * Copyright (c) 2015 Mosaic Systems Inc., All rights reserved.
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2015 Mosaic Systems Inc.
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.

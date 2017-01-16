@@ -1,10 +1,11 @@
 //-------------------------------------------------------------------
 /*! @file ClientFacet.cs
- * @brief This file contains the definitions and classes that are used to define the Client side, or facet, of the Modular Action concept which is implemented in this library.
+ *  @brief This file contains the definitions and classes that are used to define the Client side, or facet, of the Modular Action concept which is implemented in this library.
  * 
- * Copyright (c) Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2008 Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2006 Mosaic Systems Inc., All rights reserved. (C++ library version)
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2008 Mosaic Systems Inc.
+ * Copyright (c) 2006 Mosaic Systems Inc. (C++ library version)
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +19,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
 
 //-------------------------------------------------
  //@page MosaicLib_ModularActionsPage Modular Actions
