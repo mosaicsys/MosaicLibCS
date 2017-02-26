@@ -35,6 +35,7 @@ using LPM = MosaicLib.PartsLib.Common.LPM;
 using MosaicLib.Modular.Interconnect.Values.Attributes;
 using MosaicLib.Modular.Interconnect.Values;
 using MosaicLib.Modular.Config;
+using MosaicLib.Modular.Config.Attributes;
 using MosaicLib.Modular.Common;
 
 namespace MosaicLib.PartsLib.Common.E084
@@ -122,7 +123,53 @@ namespace MosaicLib.PartsLib.Common.E084
             ohtActiveToPassivePinsStateIVA = IVI.GetValueAccessor("{0}.E84.OHT.ActiveToPassivePinsState".CheckedFormat(lpmPartBaseName));
             agvActiveToPassivePinsStateIVA = IVI.GetValueAccessor("{0}.E84.AGV.ActiveToPassivePinsState".CheckedFormat(lpmPartBaseName));
 
+            SetupConfig();
+
             PublishBaseState("Constructor.Complete");
+        }
+
+        #endregion
+
+        #region config
+
+        public class ConfigValues
+        {
+            [ConfigItem]
+            public TimeSpan LoadUnloadStartHoldoff = TimeSpan.FromSeconds(2.0);
+
+            [ConfigItem]
+            public TimeSpan LoweringTime = TimeSpan.FromSeconds(2.0);
+
+            [ConfigItem]
+            public TimeSpan LoadPlacementTransitionTime = TimeSpan.FromSeconds(0.5);
+
+            [ConfigItem]
+            public TimeSpan UnloadPlacementTransitionTime = TimeSpan.FromSeconds(0.5);
+
+            [ConfigItem]
+            public TimeSpan RaisingTime = TimeSpan.FromSeconds(2.0);
+
+            [ConfigItem]
+            public TimeSpan LoadDeselectDelay = TimeSpan.FromSeconds(1.25);     // long enough to help detect issues with concurrent clamping, short enough to prevent tripping TP5 when set to 2 seconds.
+
+            [ConfigItem]
+            public TimeSpan UnloadDeselectDelay = TimeSpan.FromSeconds(0.1);
+        }
+
+        ConfigValues configValues = new ConfigValues();
+        ConfigValueSetAdapter<ConfigValues> configAdapter;
+
+        void SetupConfig()
+        {
+            configAdapter = new ConfigValueSetAdapter<ConfigValues>() { ValueSet = configValues, SetupIssueEmitter = Log.Debug, UpdateIssueEmitter = Log.Debug, ValueNoteEmitter = Log.Debug }.Setup("{0}.".CheckedFormat(PartID));
+            configAdapter.UpdateNotificationList.AddItem(this);
+            AddExplicitDisposeAction(() => configAdapter.UpdateNotificationList.RemoveItem(this));
+        }
+
+        void ServiceConfig()
+        {
+            if (configAdapter.IsUpdateNeeded)
+                configAdapter.Update();
         }
 
         #endregion
@@ -520,7 +567,7 @@ namespace MosaicLib.PartsLib.Common.E084
 
                 if (presentPlacedInput.IsNeitherPresentNorPlaced() && enableAutoLoadIVA.Update().ValueContainer.GetValue<bool>(false))
                 {
-                    if (loadUnloadStartHoldoffTimer.StartIfNeeded().IsTriggered)
+                    if (loadUnloadStartHoldoffTimer.StartIfNeeded(configValues.LoadUnloadStartHoldoff).IsTriggered)
                     {
                         nextActivitySelect = ActivitySelect.PerformLoad;
                         loadUnloadStartHoldoffTimer.Stop();
@@ -528,7 +575,7 @@ namespace MosaicLib.PartsLib.Common.E084
                 }
                 else if (presentPlacedInput.IsProperlyPlaced() && enableAutoUnloadIVA.Update().ValueContainer.GetValue<bool>(false))
                 {
-                    if (loadUnloadStartHoldoffTimer.StartIfNeeded().IsTriggered)
+                    if (loadUnloadStartHoldoffTimer.StartIfNeeded(configValues.LoadUnloadStartHoldoff).IsTriggered)
                     {
                         nextActivitySelect = ActivitySelect.PerformUnload;
                         loadUnloadStartHoldoffTimer.Stop();
@@ -545,17 +592,12 @@ namespace MosaicLib.PartsLib.Common.E084
             }
         }
 
-        QpcTimer loadUnloadStartHoldoffTimer = new QpcTimer() { TriggerIntervalInSec = 2.0, AutoReset = false };
+        QpcTimer loadUnloadStartHoldoffTimer = new QpcTimer() { AutoReset = false };
 
         void ServicePeformLoadActivity()
         {
             PassiveToActivePinBits p2aPinBits = PassiveToActivePinBits.ES_pin8 | PassiveToActivePinBits.HO_AVBL_pin7;
             PassiveToActivePinBits nextP2APinBits = p2aPinBits;
-
-            TimeSpan loweringTime = TimeSpan.FromSeconds(2.0);
-            TimeSpan placementTransitionTime = TimeSpan.FromSeconds(0.5);
-            TimeSpan raisingTime = TimeSpan.FromSeconds(2.0);
-            TimeSpan deselectDelay = TimeSpan.FromSeconds(0.5);
 
             privateState.TransferCount++;
             privateState.TransferProgressStr = "Loading:Select for L_REQ";
@@ -581,14 +623,14 @@ namespace MosaicLib.PartsLib.Common.E084
             privateState.TransferProgressStr = "Loading:Sim Lowering";
             PublishPrivateState();
 
-            if (!Spin(loweringTime)) return;
+            if (!Spin(configValues.LoweringTime)) return;
 
             privateState.TransferProgressStr = "Loading:Placing Foup";
             PublishPrivateState();
 
             LPMPresentPlacedInput = PresentPlaced.Present;
 
-            if (!Spin(placementTransitionTime)) return;
+            if (!Spin(configValues.LoadPlacementTransitionTime)) return;
 
             LPMPresentPlacedInput = PresentPlaced.Present | PresentPlaced.Placed;
 
@@ -601,7 +643,7 @@ namespace MosaicLib.PartsLib.Common.E084
             privateState.TransferProgressStr = "Loading:Sim Raising";
             PublishPrivateState();
 
-            if (!Spin(raisingTime)) return;
+            if (!Spin(configValues.RaisingTime)) return;
 
             privateState.TransferProgressStr = "Loading:Go COMPT";
             PublishPrivateState();
@@ -617,7 +659,7 @@ namespace MosaicLib.PartsLib.Common.E084
             privateState.TransferProgressStr = "Loading:Deselecting";
             PublishPrivateState();
 
-            if (!Spin(deselectDelay)) return;
+            if (!Spin(configValues.LoadDeselectDelay)) return;
 
             SetA2PPins(new ActiveToPassivePinsState(idleA2PPins));
 
@@ -634,11 +676,6 @@ namespace MosaicLib.PartsLib.Common.E084
         {
             PassiveToActivePinBits p2aPinBits = PassiveToActivePinBits.ES_pin8 | PassiveToActivePinBits.HO_AVBL_pin7;
             PassiveToActivePinBits nextP2APinBits = p2aPinBits;
-
-            TimeSpan loweringTime = TimeSpan.FromSeconds(2.0);
-            TimeSpan placementTransitionTime = TimeSpan.FromSeconds(0.5);
-            TimeSpan raisingTime = TimeSpan.FromSeconds(2.0);
-            TimeSpan deselectDelay = TimeSpan.FromSeconds(0.1);
 
             privateState.TransferCount++;
             privateState.TransferProgressStr = "Unloading:Select for U_REQ";
@@ -664,14 +701,14 @@ namespace MosaicLib.PartsLib.Common.E084
             privateState.TransferProgressStr = "Unloading:Sim Lowering";
             PublishPrivateState();
 
-            if (!Spin(loweringTime)) return;
+            if (!Spin(configValues.LoweringTime)) return;
 
             privateState.TransferProgressStr = "Unloading:Removing Foup";
             PublishPrivateState();
 
             LPMPresentPlacedInput = PresentPlaced.Present;
 
-            if (!Spin(placementTransitionTime)) return;
+            if (!Spin(configValues.UnloadPlacementTransitionTime)) return;
 
             LPMPresentPlacedInput = PresentPlaced.None;
 
@@ -684,7 +721,7 @@ namespace MosaicLib.PartsLib.Common.E084
             privateState.TransferProgressStr = "Unloading:Sim Raising";
             PublishPrivateState();
 
-            if (!Spin(raisingTime)) return;
+            if (!Spin(configValues.RaisingTime)) return;
 
             privateState.TransferProgressStr = "Unloading:Go COMPT";
             PublishPrivateState();
@@ -700,7 +737,7 @@ namespace MosaicLib.PartsLib.Common.E084
             privateState.TransferProgressStr = "Unloading:Deselecting";
             PublishPrivateState();
 
-            if (!Spin(deselectDelay)) return;
+            if (!Spin(configValues.UnloadDeselectDelay)) return;
 
             SetA2PPins(new ActiveToPassivePinsState(idleA2PPins));
 
@@ -774,6 +811,7 @@ namespace MosaicLib.PartsLib.Common.E084
             WaitForSomethingToDo(TimeSpan.FromSeconds(0.02));
 
             ServiceInstantActionQueue();
+            ServiceConfig();
 
             ActivitySelect abortToActivity = (nextActivitySelect == ActivitySelect.Reset) ? nextActivitySelect : ActivitySelect.WaitForPinsReady; 
 

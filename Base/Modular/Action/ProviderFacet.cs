@@ -20,10 +20,13 @@
  * limitations under the License.
  */
 
+using System;
+
+using MosaicLib.Utils;
+using MosaicLib.Time;
+
 namespace MosaicLib.Modular.Action
 {
-	//-------------------------------------------------
-
 	/// <summary>
 	/// This interface defines the common Provider side portions of the Action implementation object.
 	/// The methods defined in this interface are used by the Action Queue and by generic provider base classes.
@@ -67,7 +70,50 @@ namespace MosaicLib.Modular.Action
         string ToString(ToStringSelect select);
     }
 
-	//-------------------------------------------------
+    /// <summary>
+    /// common "namespace" class to define extension methods within.
+    /// </summary>
+    public static partial class ExtensionMethods
+    {
+        /// <summary>
+        /// Run the given action to completion.  Returns the given action to support call chaining.  
+        /// Optional parameters support constrained total wait timeLimit, use provided spinPeriod, parentAction (to monitor for cancel requests) and spinDelegate
+        /// spinPeriod will use 0.10 seconds if a non-default (zero) value is not provided.
+        /// </summary>
+        /// <remarks>
+        /// Currently this method uses a spin timer and repeatedly calls the given action's time limit based WaitUntilComplete method.  
+        /// This means that the method will have settable latency (based on the provided spinPeriod) in reacting to a cancelation request and reflecting it into the action being run here.
+        /// </remarks>
+        public static TClientFacetType RunInline<TClientFacetType>(this TClientFacetType action, TimeSpan timeLimit = default(TimeSpan), TimeSpan spinPeriod = default(TimeSpan), IProviderFacet parentAction = null, System.Action spinDelegate = null) 
+            where TClientFacetType : IClientFacet
+        {
+            spinPeriod = spinPeriod.MapDefaultTo(TimeSpan.FromSeconds(0.10));
+            bool haveSpinDelegate = spinDelegate != null;
+            bool haveTimeLimit = (timeLimit != default(TimeSpan));
+            bool haveParentAction = (parentAction != null);
+
+            QpcTimer waitTimeLimitTimer = default(QpcTimer);
+            if (haveTimeLimit)
+                waitTimeLimitTimer = new QpcTimer() { TriggerInterval = timeLimit, Started = true };
+
+            for (; ; )
+            {
+                if (action.WaitUntilComplete(spinPeriod))
+                    break;
+
+                if (haveSpinDelegate)
+                    spinDelegate();
+
+                if (haveParentAction && parentAction.IsCancelRequestActive && !action.IsCancelRequestActive)
+                    action.RequestCancel();
+
+                if (haveTimeLimit && waitTimeLimitTimer.IsTriggered)
+                    break;
+            }
+
+            return action;
+        }
+    }
 }
 
 //-------------------------------------------------

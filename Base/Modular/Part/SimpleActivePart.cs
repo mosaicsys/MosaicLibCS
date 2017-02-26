@@ -77,10 +77,15 @@ namespace MosaicLib.Modular.Part
         GoOfflineUpdatesBaseUseState = 4,
 
         /// <summary>
-        /// Selects that execution of GoOnline and GoOffline actions using base class will succeed and will automatically update the BaseUseState.
-        /// <para/>(BasePerformMethodsSucceed | GoOnlineUpdatesBaseUseState | GoOfflineUpdatesBaseUseState)
+        /// Selects that when GoOnline fails, the resulting UseState is set to AttemptOnlineFailed.  (Default behavior is to set the UseState to Online)
         /// </summary>
-        All = (BasePerformMethodsSucceed | GoOnlineUpdatesBaseUseState | GoOfflineUpdatesBaseUseState),
+        GoOnlineFailureSetsUseStateToAttemptOnlineFailed = 8,
+
+        /// <summary>
+        /// Selects that execution of GoOnline and GoOffline actions using base class will succeed and will automatically update the BaseUseState.
+        /// <para/>(BasePerformMethodsSucceed | GoOnlineUpdatesBaseUseState | GoOfflineUpdatesBaseUseState | GoOnlineFailureSetsUseStateToAttemptOnlineFailed)
+        /// </summary>
+        All = (BasePerformMethodsSucceed | GoOnlineUpdatesBaseUseState | GoOfflineUpdatesBaseUseState | GoOnlineFailureSetsUseStateToAttemptOnlineFailed),
     }
 
     /// <summary>
@@ -231,6 +236,172 @@ namespace MosaicLib.Modular.Part
         public static IActionInfo EmptyActionInfo { get { return emptyActionInfo; } }
     }
 
+    /// <summary>
+    /// This structure contains all of the "settings" values that are used by SimpleActivePartBase's implementation.
+    /// This structure is typically used by derived objects to comparmentalize and simplify how they configure their 
+    /// base class.  This will also allow this object to provide a variety of static preconfigured settings values.
+    /// It is also expected to simplify addition of new settings in the future
+    /// </summary>
+    public struct SimpleActivePartBaseSettings
+    {
+        /// <summary>
+        /// When this property is set to true, the BaseState will automatically transition between Busy and Idle when Actions implementations are invoked and return.  
+        /// When it is false the derived object will be entirely responsible for causing the component to transition between the Busy and Idle states.  
+        /// <para/>Defaults to false
+        /// </summary>
+        public bool AutomaticallyIncAndDecBusyCountAroundActionInvoke { get; set; }
+
+        /// <summary>
+        /// Defines the logic that this SimpleActivePart is using for clearing the threadWakeupNotifier object that is used in WaitForSomethingToDo calls.
+        /// <para/>Defaults to ThreadWakeupNotifierResetHandling.ExplicitlyResetNotifierAtStartOfEachLoop
+        /// </summary>
+        public ThreadWakeupNotifierResetHandling ThreadWakeupNotifierResetHandling { get; set; }
+
+        /// <summary>
+        /// Defines the maximum number of Actions that can be invoked per iteration of the outer service loop (ie per call to PerformMainLoopService/WaitForSomethingToDo).
+        /// <para/>Default value is 1 (applied during SetupForUse), setter will Clip the given value to be between 1 and 100.
+        /// </summary>
+        public int MaxActionsToInvokePerServiceLoop { get { return maxActionsToInvokePerServiceLoop; } set { maxActionsToInvokePerServiceLoop = value.Clip(1, 100); } }
+        private int maxActionsToInvokePerServiceLoop;
+
+        /// <summary>
+        /// Defines this part's base state handling for the GoOnline and GoOffline actions.  Each derived class should update this value as desired.
+        /// <para/>Defaults to GoOnlineAndGoOfflineHandling.None for backwards compatibility.
+        /// </summary>
+        public GoOnlineAndGoOfflineHandling GoOnlineAndGoOfflineHandling { get; set; }
+
+        /// <summary>
+        /// Defines this part's behavior option flag value(s).
+        /// <para/>Default to SimpleActivePartBehaviorOptions.None for backwards compatibility.
+        /// </summary>
+        public SimpleActivePartBehaviorOptions SimpleActivePartBehaviorOptions { get; set; }
+
+        /// <summary>
+        /// Contains the default WaitTimeLimit for the Part's thread.  Generally used when calling WaitForSomethingToDo().  Setter clamps value to be between minWaitTimeLimit (0.0) and maxWaitTimeLimit (0.5) seconds
+        /// <para/>This will be set to 0.10 seconds in SetupForUse if no explicit value has been provided earlier.
+        /// </summary>
+        public TimeSpan WaitTimeLimit { get { return waitTimeLimit; } set { waitTimeLimit = value.Clip(minWaitTimeLimit, maxWaitTimeLimit); waitTimeLimitHasBeenSet = true; } }
+        private TimeSpan waitTimeLimit;
+        private bool waitTimeLimitHasBeenSet;
+
+        /// <summary>Defines the maximum value that the WaitTimeLimit property can be set to.  0.5 seconds.</summary>
+        public static readonly TimeSpan maxWaitTimeLimit = TimeSpan.FromSeconds(0.5);
+
+        /// <summary>Defines the minimum value that the WaitTimeLimit property can be set to.  0.0 seconds.</summary>
+        public static readonly TimeSpan minWaitTimeLimit = TimeSpan.FromSeconds(0.0);
+
+        /// <summary>
+        /// Contains SimplePartBaseSettings that will be used by the SimplePartBase class
+        /// </summary>
+        public SimplePartBaseSettings SimplePartBaseSettings { get { return simplePartBaseSettings; } set { simplePartBaseSettings = value; } }
+        internal SimplePartBaseSettings simplePartBaseSettings;
+
+        /// <summary>
+        /// This method is called during Settings assignment.  It applies any required settings changes of struct default values.
+        /// <para/>if MaxActionsToInvokePerServiceLoop is zero, it will be set to 1.
+        /// <para/>if WaitTimeLimit property has not been explicitly set, it will be set to 0.1 seconds
+        /// </summary>
+        public SimpleActivePartBaseSettings SetupForUse()
+        {
+            if (maxActionsToInvokePerServiceLoop == 0)
+                maxActionsToInvokePerServiceLoop = 1;
+
+            if (!waitTimeLimitHasBeenSet)
+                WaitTimeLimit = TimeSpan.FromSeconds(0.1);
+
+            simplePartBaseSettings.SetupForUse();
+
+            return this;
+        }
+
+        /// <summary>
+        /// returns a constructor default SimpleActivePartBaseSettings value.
+        /// </summary>
+        public static SimpleActivePartBaseSettings DefaultVersion0 { get { return new SimpleActivePartBaseSettings(); } }
+
+        /// <summary>
+        /// returns te first non-constructor default SimpleActivePartBaseSettings value (established under MosaicLibCS 0.1.6.0):
+        /// <para/>AutomaticallyIncAndDecBusyCountAroundActionInvoke = true,
+        /// <para/>GoOnlineAndGoOfflineHandling = GoOnlineAndGoOfflineHandling.All,
+        /// <para/>SimpleActivePartBehaviorOptions = SimpleActivePartBehaviorOptions.PerformActionPublishesActionInfo,
+        /// <para/>SimplePartBaseSettings = SimplePartBaseSettings.DefaultVersion1 (SimplePartBaseBehavior = SimplePartBaseBehavior.All (TreatPartAsBusyWhenQueueIsNotEmpty | TreatPartAsBusyWhenInternalPartBusyCountIsNonZero)),
+        /// </summary>
+        public static SimpleActivePartBaseSettings DefaultVersion1 
+        { 
+            get 
+            { 
+                return new SimpleActivePartBaseSettings() 
+                { 
+                    AutomaticallyIncAndDecBusyCountAroundActionInvoke = true,
+                    GoOnlineAndGoOfflineHandling = GoOnlineAndGoOfflineHandling.All,
+                    SimpleActivePartBehaviorOptions = SimpleActivePartBehaviorOptions.PerformActionPublishesActionInfo,
+                    SimplePartBaseSettings = SimplePartBaseSettings.DefaultVersion1,
+                }; 
+            } 
+        }
+    }
+
+    /// <summary>Standard extension methods wrapper class/namespace</summary>
+    public static partial class ExtensionMethods
+    {
+        /// <summary>
+        /// Returns true if the given GoOnlineAndGoOfflineHandling value has the indicated flag set (present)
+        /// </summary>
+        public static bool CheckFlag(this SimpleActivePartBaseSettings settings, GoOnlineAndGoOfflineHandling checkFlag)
+        {
+            return ((settings.GoOnlineAndGoOfflineHandling & checkFlag) == checkFlag);
+        }
+
+        /// <summary>
+        /// Returns true if the given SimpleActivePartBehaviorOptions value has the indicated flag value(s) set (present)
+        /// </summary>
+        public static bool CheckFlag(this SimpleActivePartBaseSettings settings, SimpleActivePartBehaviorOptions checkFlag)
+        {
+            return ((settings.SimpleActivePartBehaviorOptions & checkFlag) == checkFlag);
+        }
+
+        /// <summary>
+        /// SimpleActivePartBaseSettings content builder helper extension method.
+        /// </summary>
+        public static SimpleActivePartBaseSettings Build(this SimpleActivePartBaseSettings settings, 
+                                                         bool ? automaticallyIncAndDecBusyCountAroundActionInvoke = null,
+                                                         int ? maxActionsToInvokePerServiceLoop = null,
+                                                         GoOnlineAndGoOfflineHandling? goOnlineAndOfflineHandling = null,
+                                                         SimpleActivePartBehaviorOptions? simpleActivePartBehaviorOptions = null,
+                                                         TimeSpan? waitTimeLimit = null,
+                                                         SimplePartBaseSettings? simplePartBaseSettings = null, 
+                                                         IValuesInterconnection partBaseIVI = null,
+                                                         bool setBaseStatePublicationValueNameToNull = false
+                                                         )
+        {
+            if (automaticallyIncAndDecBusyCountAroundActionInvoke.HasValue)
+                settings.AutomaticallyIncAndDecBusyCountAroundActionInvoke = automaticallyIncAndDecBusyCountAroundActionInvoke.Value;
+
+            if (maxActionsToInvokePerServiceLoop.HasValue)
+                settings.MaxActionsToInvokePerServiceLoop = maxActionsToInvokePerServiceLoop.Value;
+
+            if (goOnlineAndOfflineHandling.HasValue)
+                settings.GoOnlineAndGoOfflineHandling = goOnlineAndOfflineHandling.Value;
+
+            if (simpleActivePartBehaviorOptions.HasValue)
+                settings.SimpleActivePartBehaviorOptions = simpleActivePartBehaviorOptions.Value;
+
+            if (waitTimeLimit.HasValue)
+                settings.WaitTimeLimit = waitTimeLimit.Value;
+
+            if (simplePartBaseSettings.HasValue)
+                settings.SimplePartBaseSettings = simplePartBaseSettings.Value;
+
+            if (partBaseIVI != null)
+                settings.simplePartBaseSettings.PartBaseIVI = partBaseIVI;
+
+            if (setBaseStatePublicationValueNameToNull)
+                settings.simplePartBaseSettings.BaseStatePublicationValueName = null;
+
+            return settings;
+        }
+    }
+
 	/// <summary>
 	/// This abstract class is the standard base class to be used by most types of Active Parts.  
 	/// It derives from SimplePartBase, and implements IActivePartBase and INotifyable.
@@ -257,8 +428,8 @@ namespace MosaicLib.Modular.Part
 	/// </remarks>
 	public abstract class SimpleActivePartBase : SimplePartBase, IActivePartBase, INotifyable
 	{
-		//-----------------------------------------------------------------
-		#region sub classes
+        //-----------------------------------------------------------------
+        #region sub classes (BasicActionImpl, ParamActionImplBase, BoolActionImpl, StringActionImpl)
 
         /// <summary>Normal Implementation object for IBaseAction type Actions.  Derives from ActionImplBase{NullObj, NullObj}.</summary>
 		public class BasicActionImpl : ActionImplBase<NullObj, NullObj>, IBasicAction
@@ -347,71 +518,66 @@ namespace MosaicLib.Modular.Part
 
         /// <summary>
         /// Constructor variant: caller provides PartID.
-        /// PartType will be automatically derived from the class name of the derived type
+        /// PartType will be automatically derived from the class name of the derived type (aka the name of the caller's DeclaringType) 
         /// <para/>PartID: use given value, PartType: use declaring class name (by reflection), WaitTimeLimit: 0.1 sec, enableQueue:true, queueSize:10
         /// </summary>
         /// <param name="partID">Gives the PartID/Name that the part will report and use.</param>
-        public SimpleActivePartBase(string partID) 
-            : this(partID, new System.Diagnostics.StackFrame(1).GetMethod().DeclaringType.ToString(), TimeSpan.FromSeconds(0.1), true, 10) 
+        /// <param name="initialSettings">Defines the initial set of settings that the part will use.  If this value is null then the part uses default settings with WaitTimeLimit set to 0.1 seconds.</param>
+        /// <param name="enableQueue">Set to true for the parts ActionQueue to be enabled even before the part has been started.  Set to false to prevent actions from being started until this part has been started and has enabled its queue.</param>
+        /// <param name="queueSize">Defines the maximum number of pending actions that may be placed in the queue before further attempts to start new actions will be blocked and will fail.</param>
+        public SimpleActivePartBase(string partID, SimpleActivePartBaseSettings? initialSettings = null, bool enableQueue = true, int queueSize = 10)
+            : this(partID, new System.Diagnostics.StackFrame(1).GetMethod().DeclaringType.ToString(), initialSettings: initialSettings, enableQueue: enableQueue, queueSize: queueSize) 
         {}
 
         /// <summary>
-        /// Constructor variant: caller provides PartID and nominal Service loop WaitTimeLimit
-        /// PartType will be automatically derived from the class name of the derived type
-        /// <para/>PartID: use given value, PartType: use declaring class name (by reflection), WaitTimeLimit: use given value, enableQueue:true, queueSize:10
-        /// </summary>
-        /// <param name="partID">Gives the PartID/Name that the part will report and use.</param>
-        /// <param name="waitTimeLimit">Defines the nominal maximum period that the part's outer main thread loop will wait for the next notify occurrance.  Sets the default "spin" rate for the part.</param>
-        public SimpleActivePartBase(string partID, TimeSpan waitTimeLimit) 
-            : this(partID, new System.Diagnostics.StackFrame(1).GetMethod().DeclaringType.ToString(), waitTimeLimit, true, 10) 
-        {}
-
-        /// <summary>
-        /// Constructor variant: caller provides PartID, nominal Service loop WaitTimeLimit, initial queue enable, and maximum queue size.
-        /// PartType will be automatically derived from the class name of the derived type
+        /// Constructor variant: caller provides PartID, nominal Service loop WaitTimeLimit.
+        /// PartType will be automatically derived from the class name of the derived type (aka the name of the caller's DeclaringType) 
+        /// queueSize and initial value for queue enable are optional (default to 10 and true)
         /// <para/>PartID: use given value, PartType: use declaring class name (by reflection), WaitTimeLimit: use given value, enableQueue:use given value, queueSize:use given value
         /// </summary>
         /// <param name="partID">Gives the PartID/Name that the part will report and use.</param>
         /// <param name="waitTimeLimit">Defines the nominal maximum period that the part's outer main thread loop will wait for the next notify occurrance.  Sets the default "spin" rate for the part.</param>
         /// <param name="enableQueue">Set to true for the parts ActionQueue to be enabled even before the part has been started.  Set to false to prevent actions from being started until this part has been started and has enabled its queue.</param>
         /// <param name="queueSize">Defines the maximum number of pending actions that may be placed in the queue before further attempts to start new actions will be blocked and will fail.</param>
-        public SimpleActivePartBase(string partID, TimeSpan waitTimeLimit, bool enableQueue, int queueSize)
+        public SimpleActivePartBase(string partID, TimeSpan waitTimeLimit, bool enableQueue = true, int queueSize = 10)
             : this(partID, new System.Diagnostics.StackFrame(1).GetMethod().DeclaringType.ToString(), waitTimeLimit, enableQueue, queueSize)
         {}
 
         /// <summary>
-        /// Constructor variant: caller provides PartID and PartType
-        /// <para/>PartID: use given value, PartType: use given value, WaitTimeLimit: 0.1 sec, enableQueue:true, queueSize:10
+        /// Constructor variant: caller provides PartID, PartType, nominal Service loop WaitTimeLimit.
+        /// queueSize and initial value for queue enable are optional (default to 10 and true)
         /// </summary>
-        /// <param name="partID">Gives the PartID/Name that the part will report and use.</param>
-        /// <param name="partType">Gives the PartType that this part will report</param>
-        public SimpleActivePartBase(string partID, string partType) 
-            : this(partID, partType, TimeSpan.FromSeconds(0.1), true, 10) 
-        {}
-
-        /// <summary>
-        /// Constructor variant: caller provides PartID, PartType and nominal Service loop WaitTimeLimit
-        /// <para/>PartID: use given value, PartType: use given value, WaitTimeLimit: use given value, enableQueue:true, queueSize:10
-        /// </summary>
-        /// <param name="partID">Gives the PartID/Name that the part will report and use.</param>
-        /// <param name="partType">Gives the PartType that this part will report</param>
-        /// <param name="waitTimeLimit">Defines the nominal maximum period that the part's outer main thread loop will wait for the next notify occurrance.  Sets the default "spin" rate for the part.</param>
-        public SimpleActivePartBase(string partID, string partType, TimeSpan waitTimeLimit) 
-            : this(partID, partType, waitTimeLimit, true, 10) 
-        {}
-
-        /// <summary>Constructor variant: caller provides PartID, PartType, nominal Service loop WaitTimeLimit, initial queue enable, and maximum queue size.</summary>
         /// <param name="partID">Gives the PartID/Name that the part will report and use.</param>
         /// <param name="partType">Gives the PartType that this part will report</param>
         /// <param name="waitTimeLimit">Defines the nominal maximum period that the part's outer main thread loop will wait for the next notify occurrance.  Sets the default "spin" rate for the part.</param>
         /// <param name="enableQueue">Set to true for the parts ActionQueue to be enabled even before the part has been started.  Set to false to prevent actions from being started until this part has been started and has enabled its queue.</param>
         /// <param name="queueSize">Defines the maximum number of pending actions that may be placed in the queue before further attempts to start new actions will be blocked and will fail.</param>
-        public SimpleActivePartBase(string partID, string partType, TimeSpan waitTimeLimit, bool enableQueue, int queueSize)
-            : base(partID, partType)
-		{
-            TreatPartAsBusyWhenInternalPartBusyCountIsNonZero = true;       // allow derived objects to default to be able to use CreateInternalBusyFlagHolderObject
+        public SimpleActivePartBase(string partID, string partType, TimeSpan waitTimeLimit, bool enableQueue = true, int queueSize = 10)
+            : this(partID, partType, enableQueue : enableQueue, queueSize : queueSize,
+                    initialSettings: new SimpleActivePartBaseSettings() 
+                        { 
+                            WaitTimeLimit = waitTimeLimit, 
+                            SimplePartBaseSettings = new SimplePartBaseSettings() { SimplePartBaseBehavior = SimplePartBaseBehavior.TreatPartAsBusyWhenInternalPartBusyCountIsNonZero } 
+                        }
+                    )
+        { }
 
-            this.waitTimeLimit = waitTimeLimit;
+        /// <summary>
+        /// Constructor variant: caller provides PartID, PartType, nominal Service loop WaitTimeLimit.
+        /// queueSize and initial value for queue enable are optional (default to 10 and true)
+        /// </summary>
+        /// <param name="partID">Gives the PartID/Name that the part will report and use.</param>
+        /// <param name="partType">Gives the PartType that this part will report</param>
+        /// <param name="initialSettings">Defines the initial set of settings that the part will use.  If this value is null then the part uses default settings with WaitTimeLimit set to 0.1 seconds.</param>
+        /// <param name="enableQueue">Set to true for the parts ActionQueue to be enabled even before the part has been started.  Set to false to prevent actions from being started until this part has been started and has enabled its queue.</param>
+        /// <param name="queueSize">Defines the maximum number of pending actions that may be placed in the queue before further attempts to start new actions will be blocked and will fail.</param>
+        public SimpleActivePartBase(string partID, string partType, SimpleActivePartBaseSettings ? initialSettings = null, bool enableQueue = true, int queueSize = 10)
+            : base(partID, partType, initialSettings: (initialSettings.HasValue ? ((SimplePartBaseSettings ?) initialSettings.Value.SimplePartBaseSettings) : null))
+        {
+            if (initialSettings != null)
+                settings = initialSettings.GetValueOrDefault();
+
+            settings = settings.SetupForUse();
 
 			actionQ = new ActionQueue(partID + ".q", enableQueue, queueSize);
 
@@ -424,8 +590,6 @@ namespace MosaicLib.Modular.Part
                 });
 
 			actionLoggingReference = new ActionLogging(Log, ActionLoggingConfig.Info_Error_Debug_Debug);
-
-            GoOnlineAndGoOfflineHandling = GoOnlineAndGoOfflineHandling.None;
 
             Interconnect.Parts.Parts.Instance.RegisterPart(this);
 		}
@@ -462,48 +626,60 @@ namespace MosaicLib.Modular.Part
         #region Operational Settings
 
         /// <summary>
-        /// When this property is set to true, the BaseState will automatically transition between Busy and Idle when Actions implementations are invoked and return.  
-        /// When it is false the derived object will be entirely responsible for causing the component to transition between the Busy and Idle states.  This value
-        /// defaults to True.
+        /// Settings property gives derived objects access to all of the base class "settings" as a single set.
+        /// The use of this property will apply the SetupForUse method to the given value and then replace the use of prior seperate settings values in the SimpleActivePartBase class with the updated given value.
         /// </summary>
-        public bool AutomaticallyIncAndDecBusyCountAroundActionInvoke { get; set; }
-
-        /// <summary>Defines the logic that this SimpleActivePart is using for clearing the threadWakeupNotifier object that is used in WaitForSomethingToDo calls.</summary>
-        public ThreadWakeupNotifierResetHandling ThreadWakeupNotifierResetHandling { get; set; }
-
-        /// <summary>
-        /// Defines the maximum number of Actions that can be invoked per iteration of the outer service loop (ie per call to PerformMainLoopService/WaitForSomethingToDo).
-        /// <para/>Defaults to 1, setter will clamp the given value to be between 1 and 100.
-        /// </summary>
-        public int MaxActionsToInvokePerServiceLoop { get { return maxActionsToInvokePerServiceLoop; } set { maxActionsToInvokePerServiceLoop = value.Clip(1, 100); } }
-        private int maxActionsToInvokePerServiceLoop = 1;
-
-        /// <summary>
-        /// Defines this part's base state handling for the GoOnline and GoOffline actions.  Each derived class should update this value as desired.
-        /// <para/>Defaults to GoOnlineAndGoOfflineHandling.None to preserve behavior in prior library versions.
-        /// </summary>
-        protected GoOnlineAndGoOfflineHandling GoOnlineAndGoOfflineHandling { get; set; }
-
-        /// <summary>
-        /// Returns true if the GoOnlineAndGoOfflineHandling property has the indicated flag value(s) set in its current value
-        /// </summary>
-        protected bool CheckFlag(GoOnlineAndGoOfflineHandling flag)
-        {
-            return ((GoOnlineAndGoOfflineHandling & flag) == flag);
+        public new SimpleActivePartBaseSettings Settings 
+        { 
+            get { return settings; }
+            protected set 
+            { 
+                settings = value.SetupForUse(); 
+                base.Settings = settings.SimplePartBaseSettings; 
+            } 
         }
 
         /// <summary>
-        /// Defines this part's behavior option flag value(s).
+        /// This protected Settings field gives derived objects direct read/write access to the SimpleActivePartSettings storage that is used by the part.  
+        /// This may be useful in cases where the derived part wants to be able to make incremental changes to the current Settings without using the standard value object property pattern for incremental changes.
+        /// <para/>WARNING: if a derived part replaces the settings using this method, then it must use the SetupForUse settings method on the new value before assigning it to this field.
         /// </summary>
-        protected SimpleActivePartBehaviorOptions SimpleActivePartBehaviorOptions { get; set; }
+        protected new SimpleActivePartBaseSettings settings = new SimpleActivePartBaseSettings();
+
+        [Obsolete("Please replace the use of this property with the corresponding one in the part's Settings (2017-01-20)")]
+        public bool AutomaticallyIncAndDecBusyCountAroundActionInvoke  { get { return settings.AutomaticallyIncAndDecBusyCountAroundActionInvoke; } protected set { settings.AutomaticallyIncAndDecBusyCountAroundActionInvoke = value; } }
+
+        [Obsolete("Please replace the use of this property with the corresponding one in the part's Settings (2017-01-20)")]
+        public ThreadWakeupNotifierResetHandling ThreadWakeupNotifierResetHandling { get { return settings.ThreadWakeupNotifierResetHandling; } protected set { settings.ThreadWakeupNotifierResetHandling = value; } }
+
+        [Obsolete("Please replace the use of this property with the corresponding one in the part's Settings (2017-01-20)")]
+        public int MaxActionsToInvokePerServiceLoop { get { return settings.MaxActionsToInvokePerServiceLoop; } set { settings.MaxActionsToInvokePerServiceLoop = value.Clip(1, 100); } }
+
+        [Obsolete("Please replace the use of this property with the corresponding one in the part's Settings (2017-01-20)")]
+        protected GoOnlineAndGoOfflineHandling GoOnlineAndGoOfflineHandling { get { return settings.GoOnlineAndGoOfflineHandling; } set { settings.GoOnlineAndGoOfflineHandling = value; } }
+
+        [Obsolete("Please replace the use of this method with the corresponding extension method on the matching part's Settings property (2017-01-20)")]
+        protected bool CheckFlag(GoOnlineAndGoOfflineHandling checkFlag) { return settings.CheckFlag(checkFlag); }
+
+        [Obsolete("Please replace the use of this property with the corresponding one in the part's Settings (2017-01-20)")]
+        protected SimpleActivePartBehaviorOptions SimpleActivePartBehaviorOptions { get { return settings.SimpleActivePartBehaviorOptions; } set { settings.SimpleActivePartBehaviorOptions = value; } }
 
         /// <summary>
         /// Returns true if property SimpleActivePartBehaviorOptions has the indicated flag value(s) set in its current value
         /// </summary>
-        protected bool CheckFlag(SimpleActivePartBehaviorOptions flag)
-        {
-            return ((SimpleActivePartBehaviorOptions & flag) == flag);
-        }
+        [Obsolete("Please replace the use of this method with the corresponding extension method on the matching part's Settings property (2017-01-20)")]
+        protected bool CheckFlag(SimpleActivePartBehaviorOptions checkFlag) { return settings.CheckFlag(checkFlag); }
+
+        [Obsolete("Please replace the use of this property with use of the corresponding one in the part's Settings (2017-01-20)")]
+        protected TimeSpan WaitTimeLimit { get { return settings.WaitTimeLimit; } set { settings.WaitTimeLimit = value; } }
+
+        [Obsolete("Please replace the use of this property with the corresponding one in the part's Settings (2017-01-20)")]
+        protected TimeSpan waitTimeLimit { get { return settings.WaitTimeLimit; } set { settings.WaitTimeLimit = value; } }
+
+        [Obsolete("Please replace the use of this property with the corresponding one in the part's Settings (2017-01-20)")]
+        protected static TimeSpan maxWaitTimeLimit { get { return SimpleActivePartBaseSettings.maxWaitTimeLimit; } }
+        [Obsolete("Please replace the use of this property with the corresponding one in the part's Settings (2017-01-20)")]
+        protected static TimeSpan minWaitTimeLimit { get { return SimpleActivePartBaseSettings.minWaitTimeLimit; } }
 
         #endregion
 
@@ -720,7 +896,7 @@ namespace MosaicLib.Modular.Part
         private string OuterPerformGoOnlineAction(IProviderActionBase<bool, NullObj> action)
         {
             string description = action.ToString(ToStringSelect.MesgAndDetail);
-            bool setBaseUseState = CheckFlag(GoOnlineAndGoOfflineHandling.GoOnlineUpdatesBaseUseState);
+            bool setBaseUseState = settings.CheckFlag(GoOnlineAndGoOfflineHandling.GoOnlineUpdatesBaseUseState);
 
             if (setBaseUseState)
             {
@@ -733,10 +909,15 @@ namespace MosaicLib.Modular.Part
             {
                 if (result == string.Empty || action.ActionState.Succeeded)
                     SetBaseState(UseState.Online, "{0} Completed".CheckedFormat(description), true);
-                else if (result != null)
-                    SetBaseState(UseState.Online, "{0} Failed: {1}".CheckedFormat(description, result), true);
-                else if (action.ActionState.Failed)
-                    SetBaseState(UseState.Online, "{0} Failed: {1}".CheckedFormat(description, action.ActionState.ResultCode), true);
+                else 
+                {
+                    UseState nextUseState = settings.CheckFlag(GoOnlineAndGoOfflineHandling.GoOnlineFailureSetsUseStateToAttemptOnlineFailed) ? UseState.AttemptOnlineFailed : UseState.Online;
+
+                    if (result != null)
+                        SetBaseState(nextUseState, "{0} Failed: {1}".CheckedFormat(description, result), true);
+                    else if (action.ActionState.Failed)
+                        SetBaseState(nextUseState, "{0} Failed: {1}".CheckedFormat(description, action.ActionState.ResultCode), true);
+                }
             }
 
             return result;
@@ -751,7 +932,7 @@ namespace MosaicLib.Modular.Part
 		/// <summary>Stub method provides default GoOnlineAction.  Fails if BasePerformMethodsSucceed flag is not set in GoOnlineAndGoOfflineHandling property value.</summary>
 		protected virtual string PerformGoOnlineAction(bool andInitialize)
 		{
-            if (CheckFlag(Part.GoOnlineAndGoOfflineHandling.BasePerformMethodsSucceed))
+            if (settings.CheckFlag(GoOnlineAndGoOfflineHandling.BasePerformMethodsSucceed))
             {
                 return string.Empty;
             }
@@ -769,7 +950,7 @@ namespace MosaicLib.Modular.Part
         {
             string description = action.ToString(ToStringSelect.MesgAndDetail);
 
-            if (CheckFlag(GoOnlineAndGoOfflineHandling.GoOfflineUpdatesBaseUseState))
+            if (settings.CheckFlag(GoOnlineAndGoOfflineHandling.GoOfflineUpdatesBaseUseState))
                 SetBaseState(UseState.Offline, "{0} Started".CheckedFormat(description), true);
 
             string result = PerformGoOfflineAction(action);
@@ -786,7 +967,7 @@ namespace MosaicLib.Modular.Part
         /// <summary>Stub method provides default GoOfflineAction.  Fails if BasePerformMethodsSucceed flag is not set in GoOnlineAndGoOfflineHandling property value.</summary>
         protected virtual string PerformGoOfflineAction()
 		{
-            if (CheckFlag(Part.GoOnlineAndGoOfflineHandling.BasePerformMethodsSucceed))
+            if (settings.CheckFlag(Part.GoOnlineAndGoOfflineHandling.BasePerformMethodsSucceed))
             {
                 return string.Empty;
             }
@@ -833,7 +1014,7 @@ namespace MosaicLib.Modular.Part
 
                     while (actionQ.QueueEnable)
                     {
-                        if (ThreadWakeupNotifierResetHandling == ThreadWakeupNotifierResetHandling.ExplicitlyResetNotifierAtStartOfEachLoop)
+                        if (settings.ThreadWakeupNotifierResetHandling == ThreadWakeupNotifierResetHandling.ExplicitlyResetNotifierAtStartOfEachLoop)
                         {
                             // Reset the thread notification signal state so that we will only signal
                             //	if a new notification has occurred since we started this loop.  We do not want to prevent the loop from sleeping because of somthing that
@@ -851,14 +1032,14 @@ namespace MosaicLib.Modular.Part
                                 didActionCount++;
                             else
                                 break;
-                        } while (didActionCount < MaxActionsToInvokePerServiceLoop);
+                        } while (didActionCount < settings.MaxActionsToInvokePerServiceLoop);
 
                         if (didActionCount == 0)
                         {
                             // no action was performed - call WaitForSomethingToDo to slow the background spin loop rate to the rate determined by the WaitTimeLimit property.
                             WaitForSomethingToDo();
                         }
-                        else if (ThreadWakeupNotifierResetHandling == ThreadWakeupNotifierResetHandling.AutoResetIsUsedToResetNotifier)
+                        else if (settings.ThreadWakeupNotifierResetHandling == ThreadWakeupNotifierResetHandling.AutoResetIsUsedToResetNotifier)
                         {
                             WaitForSomethingToDo(TimeSpan.Zero);
                         }
@@ -930,7 +1111,7 @@ namespace MosaicLib.Modular.Part
 
             IActionInfo actionInfo = null;
 
-            if (CheckFlag(SimpleActivePartBehaviorOptions.PerformActionPublishesActionInfo) && action != null)
+            if (settings.CheckFlag(SimpleActivePartBehaviorOptions.PerformActionPublishesActionInfo) && action != null)
                 actionInfo = new ActionInfo(action); ;
 
             IDisposable busyFlag = null;
@@ -941,7 +1122,7 @@ namespace MosaicLib.Modular.Part
                 if (actionInfo != null)
                     PublishActionInfo(actionInfo);
 
-                if (AutomaticallyIncAndDecBusyCountAroundActionInvoke)
+                if (settings.AutomaticallyIncAndDecBusyCountAroundActionInvoke)
                     busyFlag = CreateInternalBusyFlagHolderObject("Issuing next queued action", actionName);
 
                 if (action != null)
@@ -962,7 +1143,7 @@ namespace MosaicLib.Modular.Part
         {
             if (actionInfoIVA == null)
             {
-                ivi = PartBaseIVI ?? Values.Instance;
+                ivi = base.settings.PartBaseIVI ?? Values.Instance;
 
                 actionInfoIVA = ivi.GetValueAccessor<IActionInfo>("{0}.ActionInfo".CheckedFormat(PartID)).Set(EmptyActionInfo);
                 lastActionInfoIVA = ivi.GetValueAccessor<IActionInfo>("{0}.LastActionInfo".CheckedFormat(PartID)).Set(EmptyActionInfo);
@@ -1020,25 +1201,25 @@ namespace MosaicLib.Modular.Part
         /// </summary>
 		protected bool WaitForSomethingToDo()
 		{
-			return WaitForSomethingToDo(threadWakeupNotifier, waitTimeLimit);
+			return WaitForSomethingToDo(threadWakeupNotifier, settings.WaitTimeLimit);
 		}
 
         /// <summary>
         /// Waits for threadWakeupNotifier to be signaled or given waitTimeLimit to elapse.
         /// <para/>True if the object was signaled or false if the timeout caused flow to return to the caller.
         /// </summary>
-        protected bool WaitForSomethingToDo(TimeSpan waitTimeLimit)
+        protected bool WaitForSomethingToDo(TimeSpan useWaitTimeLimit)
 		{
-			return WaitForSomethingToDo(threadWakeupNotifier, waitTimeLimit);
+			return WaitForSomethingToDo(threadWakeupNotifier, useWaitTimeLimit);
 		}
 
         /// <summary>
         /// Most generic version of WaitForSomethingToDo.  caller provides IWaitable object and waitTimeLimit.
         /// <para/>True if the object was signaled or false if the timeout caused flow to return to the caller.
         /// </summary>
-        protected virtual bool WaitForSomethingToDo(Utils.IWaitable waitable, TimeSpan waitTimeLimit)
+        protected virtual bool WaitForSomethingToDo(Utils.IWaitable waitable, TimeSpan useWaitTimeLimit)
 		{
-            bool signaled = waitable.Wait(waitTimeLimit);
+            bool signaled = waitable.Wait(useWaitTimeLimit);
 
             return signaled;
 		}
@@ -1047,19 +1228,6 @@ namespace MosaicLib.Modular.Part
 
 		//-----------------------------------------------------------------
 		#region private and protected fields and related properties
-
-        /// <summary>Protected get/set field contains the default WaitTimeLimit for the Part's thread.  Generally used when calling WaitForSomethingToDo().  Setter clamps value to be between minWaitTimeLimit (0.0) and maxWaitTimeLimit (0.5) seconds</summary>
-        protected TimeSpan WaitTimeLimit { get { return innerWaitTimeLimitStore; } set { innerWaitTimeLimitStore = ((value >= minWaitTimeLimit) ? ((value <= maxWaitTimeLimit) ? value : maxWaitTimeLimit) : minWaitTimeLimit); } }
-
-        /// <summary>Protected readonly field contains the default waitTimeLimit for the Part's thread.  Generally used when calling WaitForSomethingToDo().</summary>
-        protected TimeSpan waitTimeLimit { get { return innerWaitTimeLimitStore; } private set { innerWaitTimeLimitStore = value; } }
-
-        /// <summary>Defines the maximum value that the WaitTimeLimit property can be set to.  0.5 seconds.</summary>
-        protected static readonly TimeSpan maxWaitTimeLimit = TimeSpan.FromSeconds(0.5);
-        /// <summary>Defines the minimum value that the WaitTimeLimit property can be set to.  0.0 seconds.</summary>
-        protected static readonly TimeSpan minWaitTimeLimit = TimeSpan.FromSeconds(0.0);
-        /// <summary>Internal backing storage for the waitTimeLimit and WaitTimeLimit properties</summary>
-        private TimeSpan innerWaitTimeLimitStore;
 
         /// <summary>Protected readonly WaitEventNotifier used by the Part's main thread as part of the WaitForSomethingToDo pattern.</summary>
         protected readonly WaitEventNotifier threadWakeupNotifier = new WaitEventNotifier(WaitEventNotifier.Behavior.WakeOne);
@@ -1097,11 +1265,9 @@ namespace MosaicLib.Modular.Part
 
 	#endregion
 
-    #region IClientFacet ExtentionMethods
+    #region IClientFacet ExtentionMethods (StartPartInline, StopPartInline, RunGoOnlineActionInline, RunGoOfflineActionInline)
 
-    /// <summary>
-    /// common "namespace" class to define extension methods within.
-    /// </summary>
+    /// <summary>Standard extension methods wrapper class/namespace</summary>
     public static partial class ExtentionMethods
     {
         /// <summary>Calls StartPart on the given part.  Returns the given part to support call chaining.</summary>
@@ -1124,6 +1290,14 @@ namespace MosaicLib.Modular.Part
         public static TPartType RunGoOnlineActionInline<TPartType>(this TPartType part, bool andInitialize) where TPartType : IActivePartBase
         {
             part.CreateGoOnlineAction(andInitialize).RunInline();
+
+            return part;
+        }
+
+        /// <summary>Creates and runs a GoOffline action on the given part.  Returns the given part to support call chaining.</summary>
+        public static TPartType RunGoOfflineActionInline<TPartType>(this TPartType part) where TPartType : IActivePartBase
+        {
+            part.CreateGoOfflineAction().RunInline();
 
             return part;
         }

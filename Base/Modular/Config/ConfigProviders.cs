@@ -151,10 +151,10 @@ namespace MosaicLib.Modular.Config
     public class DictionaryConfigKeyProvider : ConfigKeyProviderBase, IEnumerable
     {
         /// <summary>Constructor</summary>
-        public DictionaryConfigKeyProvider(string name, bool isFixed = true, INamedValueSet metaData = null, bool keysMayBeAddedUsingSetValue = false) 
+        public DictionaryConfigKeyProvider(string name, bool isFixed = true, INamedValueSet metaData = null, bool keysMayBeAddedUsingEnsureExistsOption = false) 
             : base(name, metaData)
         {
-            BaseFlags = new ConfigKeyProviderFlags() { IsFixed = isFixed, KeysMayBeAddedUsingEnsureExistsOption = keysMayBeAddedUsingSetValue };
+            BaseFlags = new ConfigKeyProviderFlags() { IsFixed = isFixed, KeysMayBeAddedUsingEnsureExistsOption = keysMayBeAddedUsingEnsureExistsOption };
         }
 
         #region AddRange and Add methods for KVP, explicit Name & Value 
@@ -174,7 +174,7 @@ namespace MosaicLib.Modular.Config
         /// Dictionary construction helper method.  Adds the given name/vc ValueContainer pair to the dictionary, prefixing the name with the CommonKeyPrefix.
         /// <para/>Method supports call chaining.
         /// </summary>
-        public DictionaryConfigKeyProvider Add(string name, ValueContainer vc)
+        public DictionaryConfigKeyProvider Add(string name, ValueContainer vc = default(ValueContainer))
         {
             ConfigKeyAccessFlags flags = new ConfigKeyAccessFlags();
 
@@ -649,7 +649,7 @@ namespace MosaicLib.Modular.Config
         /// and isReadWrite to indicate if the INI file is writable or not (ie if all of the keys should be IsFixed).
         /// </summary>
         public IniFileConfigKeyProvider(string name, string filePath, string keyPrefix = "", bool isReadWrite = false, INamedValueSet metaData = null, IEnumerable<string> ensureSectionsExist = null)
-            : base(name, !isReadWrite, metaData, keysMayBeAddedUsingSetValue : isReadWrite)
+            : base(name, !isReadWrite, metaData, keysMayBeAddedUsingEnsureExistsOption : isReadWrite)
         {
             if (isReadWrite)
                 BaseFlags = new ConfigKeyProviderFlags(BaseFlags) { MayBeChanged = true, IsPersisted = true };
@@ -918,21 +918,38 @@ namespace MosaicLib.Modular.Config
 
     #endregion
 
-    #region PersistentXmlTextFileRingProvider
+    #region PersistentXmlTextFileRingProvider, PersistentSerializedTextFileRingProviderBase
 
     /// <summary>
     /// Provides a type of DicationaryConfigKeyProvier obtained by using a DataContractPersistentXmlTextFileRingStorageAdapter based on the ConfigKeyStore file format.
     /// Normally this provider is used for read/write behavior and is most easily used to support EnsureExists usage patterns and/or moderate to high write rate usages
     /// with the same file IO failure handling that is provided through the use of the PeristentObjectFileRing.
     /// </summary>
-    public class PersistentXmlTextFileRingProvider : DictionaryConfigKeyProvider
+    public class PersistentXmlTextFileRingProviderBase : PersistentSerializedTextFileRingProviderBase
     {
         /// <summary>
         /// Constructor: Accepts provider name, filePath to ini file to read/write, keyPrefix to prefix on all contained keys, 
         /// and isReadWrite to indicate if the INI file is writable or not (ie if all of the keys should be IsFixed).
         /// </summary>
-        public PersistentXmlTextFileRingProvider(string name, PersistentObjectFileRingConfig ringConfig, string keyPrefix = "", bool isReadWrite = true, INamedValueSet metaData = null)
-            : base(name, !isReadWrite, metaData, keysMayBeAddedUsingSetValue: isReadWrite)
+        public PersistentXmlTextFileRingProviderBase(string name, PersistentObjectFileRingConfig ringConfig, string keyPrefix = "", bool isReadWrite = true, INamedValueSet metaData = null, bool sortKeysOnSave = false)
+            : base(name, ringConfig, new DataContractPersistentXmlTextFileRingStorageAdapter<ConfigKeyStore>(name, ringConfig) { Object = new ConfigKeyStore() }, keyPrefix: keyPrefix, isReadWrite: isReadWrite, metaData: metaData, keysMayBeAddedUsingEnsureExistsOption: isReadWrite, sortKeysOnSave: sortKeysOnSave)
+        { }
+    }
+
+
+    /// <summary>
+    /// Provides a type of DicationaryConfigKeyProvier obtained by using a DataContractPersistentXmlTextFileRingStorageAdapter based on the ConfigKeyStore file format.
+    /// Normally this provider is used for read/write behavior and is most easily used to support EnsureExists usage patterns and/or moderate to high write rate usages
+    /// with the same file IO failure handling that is provided through the use of the PeristentObjectFileRing.
+    /// </summary>
+    public class PersistentSerializedTextFileRingProviderBase : DictionaryConfigKeyProvider
+    {
+        /// <summary>
+        /// Constructor: Accepts provider name, filePath to ini file to read/write, keyPrefix to prefix on all contained keys, 
+        /// and isReadWrite to indicate if the INI file is writable or not (ie if all of the keys should be IsFixed).
+        /// </summary>
+        public PersistentSerializedTextFileRingProviderBase(string name, PersistentObjectFileRingConfig ringConfig, IPersistentStorage<ConfigKeyStore> ringAdapter, string keyPrefix = "", bool isReadWrite = true, bool keysMayBeAddedUsingEnsureExistsOption = true, INamedValueSet metaData = null, bool sortKeysOnSave = false)
+            : base(name, !isReadWrite, metaData, keysMayBeAddedUsingEnsureExistsOption: isReadWrite)
         {
             if (isReadWrite)
                 BaseFlags = new ConfigKeyProviderFlags(BaseFlags) { MayBeChanged = true, IsPersisted = true };
@@ -940,8 +957,9 @@ namespace MosaicLib.Modular.Config
             ConfigKeyAccessFlags defaultAccessFlags = new ConfigKeyAccessFlags();
 
             KeyPrefix = keyPrefix = keyPrefix.MapNullToEmpty();
+            SortKeysOnSave = sortKeysOnSave;
 
-            ringAdapter = new DataContractPersistentXmlTextFileRingStorageAdapter<ConfigKeyStore>(Name, ringConfig) { Object = new ConfigKeyStore() };
+            this.ringAdapter = ringAdapter;
 
             string activity = "Initial";
             try
@@ -984,15 +1002,33 @@ namespace MosaicLib.Modular.Config
             AddRange(persistKeyTrackerList.Select(pkt => pkt.ckai));
         }
 
-        DataContractPersistentXmlTextFileRingStorageAdapter<ConfigKeyStore> ringAdapter;
+        IPersistentStorage<ConfigKeyStore> ringAdapter;
         ConfigKeyStore configKeyStore;
         List<PersistKeyTracker> persistKeyTrackerList = new List<PersistKeyTracker>();
+        bool regenerateConfigKeyStoreKeySetOnNextSave = false;
+        public bool SortKeysOnSave { get; private set; }
+
+        private void RegenerateConfigKeyStoreKeySetIfNeeded()
+        {
+            if (!regenerateConfigKeyStoreKeySetOnNextSave)
+                return;
+
+            if (SortKeysOnSave)
+                configKeyStore.KeySet = new KeySet(persistKeyTrackerList.Select(tracker => tracker.fileKeyItem).OrderBy(keyItem => keyItem.Key));
+
+            regenerateConfigKeyStoreKeySetOnNextSave = false;
+        }
 
         protected class PersistKeyTracker
         {
             public KeyItem fileKeyItem;
             public DictionaryKeyItem dictionaryKeyItem;
             public ConfigKeyAccessImpl ckai;
+
+            public override string ToString()
+            {
+                return dictionaryKeyItem.ToString();
+            }
         }
 
         protected override string VerifyAndNoteItemAdded(DictionaryKeyItem item)
@@ -1011,6 +1047,8 @@ namespace MosaicLib.Modular.Config
 
             persistKeyTrackerList.Add(pkt);
             configKeyStore.Dictionary[pkt.fileKeyItem.Key] = pkt.fileKeyItem;
+
+            regenerateConfigKeyStoreKeySetOnNextSave = true;
 
             return string.Empty;
         }
@@ -1033,6 +1071,8 @@ namespace MosaicLib.Modular.Config
             try
             {
                 // Save it to the next item in the ring
+                RegenerateConfigKeyStoreKeySetIfNeeded();
+
                 ringAdapter.Save();
 
                 Logger.Debug.Emit("Updated contents of File '{0}'", ringAdapter.LastObjectFilePath);
@@ -1065,7 +1105,7 @@ namespace MosaicLib.Modular.Config
         /// and isReadWrite to indicate if the INI file is writable or not (ie if all of the keys should be IsFixed).
         /// </summary>
         public RegistryKeyTreeProvider(string name, string registryRootPath, string keyPrefix, bool isReadWrite, INamedValueSet metaData = null)
-            : base(name, !isReadWrite, metaData, keysMayBeAddedUsingSetValue : false)
+            : base(name, !isReadWrite, metaData, keysMayBeAddedUsingEnsureExistsOption : false)
         {
             if (isReadWrite)
             {

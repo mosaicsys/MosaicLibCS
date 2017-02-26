@@ -75,17 +75,9 @@ namespace MosaicLib.Utils
         #region static String Ascii predicate method(s)
 
         /// <summary>
-        /// Returns true if all of the characters in this string have char values from 32 to 127, or the string is null or empty
-        /// </summary>
-        public static bool IsBasicAscii(this string s)
-        {
-            return IsBasicAscii(s, true);
-        }
-
-        /// <summary>
         /// Returns true if all of the characters in this string have char values from 32 to 127, or the string is empty.  valueForNull is returned if the given string is null.
         /// </summary>
-        public static bool IsBasicAscii(this string s, bool valueForNull)
+        public static bool IsBasicAscii(this string s, bool valueForNull = true)
         {
             return s.IsBasicAscii(null, valueForNull);
         }
@@ -103,7 +95,7 @@ namespace MosaicLib.Utils
         /// If otherExcludeCharsList is not null then the method returns false if any character in s is also included in the given otherExcludeCharsList.
         /// valueForNull is returned if the given string is null.
         /// </summary>
-        public static bool IsBasicAscii(this string s, List<char> otherExcludeCharsList, bool valueForNull)
+        public static bool IsBasicAscii(this string s, IList<char> otherExcludeCharsList, bool valueForNull = true)
         {
             if (s == null)
                 return valueForNull;
@@ -204,7 +196,7 @@ namespace MosaicLib.Utils
             return s.GenerateEscapedVersion(loggingForceEscapeCharList);
         }
 
-        private static readonly List<char> loggingForceEscapeCharList = new List<char>() { '\\' };
+        private static readonly IList<char> loggingForceEscapeCharList = new List<char>() { '\\' }.AsReadOnly();
 
         /// <summary>
         /// Generate and return a escaped version of given string s that is suitable for inserting in-between single or double quotes.
@@ -218,7 +210,21 @@ namespace MosaicLib.Utils
             return s.GenerateEscapedVersion(quotesForceEscapeCharList);
         }
 
-        private static readonly List<char> quotesForceEscapeCharList = new List<char>() { '\'', '\"', '\\' };
+        private static readonly IList<char> quotesForceEscapeCharList = new List<char>() { '\'', '\"', '\\' }.AsReadOnly();
+
+        /// <summary>
+        /// Generate and return a Square Bracket escaped version of given string s.
+        /// By default this escapes all non-printable characters and also escapes the escape charater and the open and close square bracket characters ('[' and ']')
+        /// </summary>
+        public static string GenerateSquareBracketEscapedVersion(this string s)
+        {
+            if (s.IsBasicAscii(squareBracketForceEscapeCharList, true))
+                return s ?? string.Empty;
+
+            return s.GenerateEscapedVersion(squareBracketForceEscapeCharList);
+        }
+
+        private static readonly List<char> squareBracketForceEscapeCharList = new List<char>() { '[', ']' };
 
 
         /// <summary>

@@ -20,6 +20,7 @@
  */
 
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -344,7 +345,7 @@ namespace MosaicLib.Modular.Interconnect.Values
     /// atomically consistent updates to the table and accessors.  The use of the array versions of Set and Update allow this atomicity to span across updates from and sets to arbitrary sets of
     /// named value table entries.
     /// </summary>
-    public class ValuesInterconnection : IValuesInterconnection
+    public class ValuesInterconnection : IValuesInterconnection, IEnumerable
     {
         #region construction
 
@@ -367,6 +368,14 @@ namespace MosaicLib.Modular.Interconnect.Values
                 mutex = new object();
             else
                 mutex = null;
+        }
+
+        IEnumerator IEnumerable.GetEnumerator()
+        {
+            using (var scopedLock = new ScopedLock(mutex))
+            {
+                return tableEntryDictionary.Values.ToArray().GetEnumerator();
+            }
         }
 
         #endregion
@@ -840,7 +849,7 @@ namespace MosaicLib.Modular.Interconnect.Values
             /// </summary>
             public override string ToString()
             {
-                return "{0:d4}:{1} seqNum:{2} {3}".CheckedFormat(ID, Name, SeqNum, ValueContainer);
+                return "VTE: {0:d4}:{1} seqNum:{2} {3}".CheckedFormat(ID, Name, SeqNum, ValueContainer);
             }
         }
 
@@ -1184,11 +1193,11 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <para/>If a non-null valueInterconnect instnace is given then it will be used otherwise this method will use any previously defined IValueInterconnect instance or the Values.Instance singleton.
         /// <para/>Supports call chaining.
         /// </summary>
-        /// <param name="valueInterconnect">Allows the caller to (re)specifiy the IValueInterconnect instance that is to be used henceforth by this adapter</param>
+        /// <param name="ivi">Allows the caller to (re)specifiy the IValueInterconnect instance that is to be used henceforth by this adapter</param>
         /// <param name="baseNames">
         /// Gives a list of 1 or more base names that are prepended to specific sub-sets of the list of item names based on each item's NameAdjust attribute property value.
         /// </param>
-        IValueSetAdapter Setup(IValuesInterconnection valueInterconnect, params string[] baseNames);
+        IValueSetAdapter Setup(IValuesInterconnection ivi, params string[] baseNames);
 
         /// <summary>
         /// Transfer the values from the ValueSet's annotated members to the corresponding set of IValueAccessors and then tell the IValueInterconnect instance
@@ -1216,67 +1225,100 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <para/>Supports call chaining.
         /// </summary>
         IValueSetAdapter Update();
+
+        /// <summary>
+        /// Gives the caller access to the set of IValueAccessors that have been created by this adatper and which are used to interact with the corresponding IVI
+        /// <para/>This array will be empty until Setup as been successfully invoked.
+        /// </summary>
+        IValueAccessor [] IVAArray { get; }
+
+        /// <summary>
+        /// Gives the caller access to the number of items (IVAs) that this adapter is using.
+        /// </summary>
+        int NumItems { get; }
     }
 
     /// <summary>
-    ///  This adapter class provides a client with a ValueSet style tool that supports getting and setting sets of values in a IValueInterconnect instance.
+    /// This adapter group class provides a client with an object that can be used to efficiently manage operations on sets of ValueSetAdapaters including
+    /// group wide Setup, IssueEmitter and ValueNoteEmitter assignment, OptimizeSets assignement, Set, IsUpdateNeeded and Update.
+    /// The primary purpose of this class is to support generation of a single array of IValueAccessor objects as the agregate of the set of such arrays from each of the ValueSetAdapterBase instances in this group.
+    /// This allows the group to be used to perform IVI updates to or from the group as a single atomic set and optimizes the number of IVI round trip calls by using the larger array of all of the IValueAccessors all at once.
+    /// <para/>Please note that the expected semantics of this use of this group are intentionally ambigious.  
+    /// This object is intended to support use with externally provided ValueSetAdapterBase objects either before they have been Setup, or after they have been setup.
+    /// This object may also be used to perform common setup steps to them by assigning this objects corresponding IValueSetAdapter property setters, each of which applies to all of the ValueSetAdapterBase instances in the group.
     /// </summary>
-    /// <typeparam name="TValueSet">
-    /// Specifies the class type on which this adapter will operate.  
-    /// Adapter harvests the list of <see cref="MosaicLib.Modular.Interconnect.Values.Attributes.ValueSetItemAttribute"/> annotated public member items from this type.
-    /// </typeparam>
-    /// <remarks>
-    /// The primary methods/properties used on this adapter are: Construction, ValueSet, Setup, Set, Update, IsUpdateNeeded
-    /// </remarks>
-    public class ValueSetAdapter<TValueSet> : DisposableBase, IValueSetAdapter where TValueSet : class
+    public class ValueSetAdapterGroup : IValueSetAdapter
     {
-        #region Ctor
+        /// <summary>
+        /// Constructor.  May be used with collection initializer (via implicit use of Add and AddRange methods)
+        /// </summary>
+        public ValueSetAdapterGroup() { }
 
         /// <summary>
-        /// Default constructor.  Assigns adapter to use default Values.Instance IValuesInterconnection instance.  
-        /// For use with Property Initializers and the Setup method to define and setup the adapter instance for use.
-        /// Setup method is used to generate final derived item names and to bind and make the initial update to the ValueSet contents.
-        /// Setup method may also specify/override the config instance that is to be used.
-        /// <para/>Please Note: the Setup method must be called before the adapter can be used.  
+        /// Adds the given ValueSetAdapterBase object to this group.
         /// </summary>
-        public ValueSetAdapter()
-            : this(null)
+        public ValueSetAdapterGroup Add(ValueSetAdapterBase vsab)
         {
+            vsabList.Add(vsab);
+            rebuildNeeded = true;
+            return this;
         }
 
         /// <summary>
-        /// Config instance constructor.  Assigns adapter to use given IValuesInterconnection valueInterconnect service instance.  This may be overridden during the Setup call.
-        /// For use with Property Initializers and the Setup method to define and setup the adapter instance for use.
-        /// <para/>Please Note: the Setup method must be called before the adapter can be used.  
+        /// Adds the given enumerable set of ValueSetAdapterBase objects to this group
         /// </summary>
-        public ValueSetAdapter(IValuesInterconnection valueInterconnect)
+        public ValueSetAdapterGroup AddRange(IEnumerable<ValueSetAdapterBase> vsabSet)
         {
-            ValueInterconnect = valueInterconnect;
-
-            valueSetItemInfoList = AnnotatedClassItemAccessHelper<Attributes.ValueSetItemAttribute>.ExtractItemInfoAccessListFrom(typeof(TValueSet), ItemSelection.IncludeExplicitPublicItems | ItemSelection.IncludeInheritedItems);
-            NumItems = valueSetItemInfoList.Count;
-
-            itemAccessSetupInfoArray = new ItemAccessSetupInfo[NumItems];
-            valueAccessorArray = new IValueAccessor[NumItems];
-
-            OptimizeSets = true;
+            vsabList.AddRange(vsabSet);
+            rebuildNeeded = true;
+            return this;
         }
 
-        #endregion
+        List<ValueSetAdapterBase> vsabList = new List<ValueSetAdapterBase>();
+        ValueSetAdapterBase[] vsabArray = new ValueSetAdapterBase[0];
+        bool rebuildNeeded = false;
+        IValueAccessor [] ivaArray = null;
 
-        #region public methods and properies
+        private void RebuildArraysIfNeeded()
+        {
+            if (!rebuildNeeded)
+                return;
+
+            vsabArray = vsabList.ToArray();
+            ivaArray = vsabArray.SelectMany(ivsa => ivsa.IVAArray).ToArray();
+
+            rebuildNeeded = false;
+        }
+
+        private Logging.IMesgEmitter issueEmitter = null, valueNotEmitter = null;
+        private bool optimizeSets = true;
 
         /// <summary>
-        /// Contains the ValueSet object that is used as the value source for Set calls and receives updated values during Update.
+        /// Gives the caller get/set access to the IValuesInterconnection instance that will be used by all of the ValueSetAdapterBase instances in this group.
+        /// This may also be implicitly assigned using the appropriate version of the Setup method
         /// </summary>
-        public TValueSet ValueSet { get; set; }
+        public IValuesInterconnection IVI 
+        {
+            get { return _ivi; }
+            set { _ivi = value ?? Values.Instance; foreach (var vsab in vsabList) vsab.IVI = _ivi; } 
+        }
+        private IValuesInterconnection _ivi = null;
+
+        /// <summary>
+        /// Returns an array of the ValueSetAdapterBase instances that have been added to this group, as an array of IValueSetAdapters
+        /// </summary>
+        public IValueSetAdapter[] ToArray()
+        {
+            RebuildArraysIfNeeded();
+
+            return vsabArray;
+        }
 
         /// <summary>Defines the emitter used to emit Setup, Set, and Update related errors.  Defaults to the null emitter.</summary>
-        public Logging.IMesgEmitter IssueEmitter { get { return FixupEmitterRef(ref issueEmitter); } set { issueEmitter = value; } }
-        /// <summary>Defines the emitter used to emit Update related changes in config point values.  Defaults to the null emitter.</summary>
-        public Logging.IMesgEmitter ValueNoteEmitter { get { return FixupEmitterRef(ref valueNoteEmitter); } set { valueNoteEmitter = value; } }
+        public Logging.IMesgEmitter IssueEmitter { get { return issueEmitter; } set { issueEmitter = value; foreach (var vsab in vsabList) vsab.IssueEmitter = value; } }
 
-        private IValuesInterconnection ValueInterconnect{ get; set; }        // delay making default ConfigInstance assignment until Setup method.
+        /// <summary>Defines the emitter used to emit Update related changes in config point values.  Defaults to the null emitter.</summary>
+        public Logging.IMesgEmitter ValueNoteEmitter { get { return valueNotEmitter; } set { valueNotEmitter = value; foreach (var vsab in vsabList) vsab.ValueNoteEmitter = value; } }
 
         /// <summary>
         /// This method determines the set of full Parameter Names from the ValueSet's annotated items, and creates a set of IValueAccessor objects for them.
@@ -1287,7 +1329,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <param name="baseNames">
         /// Gives a list of 1 or more base names that are prepended to specific sub-sets of the list of item names based on each item's NameAdjust attribute property value.
         /// </param>
-        public ValueSetAdapter<TValueSet> Setup(params string[] baseNames)
+        public IValueSetAdapter Setup(params string[] baseNames)
         {
             return Setup(null, baseNames);
         }
@@ -1298,18 +1340,225 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <para/>If a non-null valueInterconnect instnace is given then it will be used otherwise this method will use any previously defined IValueInterconnect instance or the Values.Instance singleton.
         /// <para/>Supports call chaining.
         /// </summary>
-        /// <param name="valueInterconnect">Allows the caller to (re)specifiy the IValueInterconnect instance that is to be used henceforth by this adapter</param>
+        /// <param name="ivi">Allows the caller to (re)specifiy the IValueInterconnect instance that is to be used henceforth by this adapter</param>
         /// <param name="baseNames">
         /// Gives a list of 1 or more base names that are prepended to specific sub-sets of the list of item names based on each item's NameAdjust attribute property value.
         /// </param>
-        public ValueSetAdapter<TValueSet> Setup(IValuesInterconnection valueInterconnect, params string[] baseNames)
+        public IValueSetAdapter Setup(IValuesInterconnection ivi, params string[] baseNames)
         {
-            if (valueInterconnect != null || ValueInterconnect == null)
-                ValueInterconnect = valueInterconnect ?? Values.Instance;
+            if (IVI == null || ivi != null)
+                IVI = ivi;
 
-            if (ValueSet == null)
-                throw new System.NullReferenceException("ValueSet property must be non-null before Setup can be called");
+            foreach (var vsab in vsabList)
+                vsab.Setup(IVI, baseNames);
 
+            RebuildArraysIfNeeded();
+
+            return this;
+        }
+
+        /// <summary>
+        /// Transfer the values from the ValueSet's annotated members to the corresponding set of IValueAccessors and then tell the IValueInterconnect instance
+        /// to Set all of the IValueAccessors.
+        /// <para/>Supports call chaining.
+        /// </summary>
+        public IValueSetAdapter Set()
+        {
+            RebuildArraysIfNeeded();
+
+            foreach (var ivsa in vsabArray)
+                ivsa.InnerTransferValuesToIVAs();
+
+            IVI.Set(ivaArray, optimize: OptimizeSets);
+
+            return this;
+        }
+
+        /// <summary>
+        /// This property determines if the Set method uses ValueContainer equality testing to determine which IValueAccessor objects to actually write to the table.
+        /// When this property is true (the default), equality testing will be used to prevent updating table entires for IValueAccessors that do not have a set pending (due to change in container value).
+        /// When this property is false, all value table entries will be Set, without regard to whether their value might have changed.
+        /// </summary>
+        public bool OptimizeSets { get { return optimizeSets; } set { optimizeSets = value; foreach (var vsab in vsabList) vsab.OptimizeSets = value; } }
+
+        /// <summary>
+        /// Returns true if any of the IValueAccessors to which this adapter is attached indicate that there is a pending update 
+        /// (because the accessed value has been set elsewhere so there may be a new value to update that accessor from).
+        /// </summary>
+        public bool IsUpdateNeeded
+        {
+            get
+            {
+                RebuildArraysIfNeeded(); 
+
+                foreach (IValueAccessor iva in ivaArray)
+                {
+                    if (iva.IsUpdateNeeded)
+                        return true;
+                }
+
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Requests the IValueInterconnect instance to update all of the adapter's IValueAccessor objects and then transfers the updated values
+        /// from those accessor objects to the corresponding annotated ValueSet members.
+        /// <para/>Supports call chaining.
+        /// </summary>
+        public IValueSetAdapter Update()
+        {
+            RebuildArraysIfNeeded();
+
+            IVI.Update(ivaArray);
+
+            foreach (var vsab in vsabArray)
+                vsab.InnerTransferValuesFromIVAs();
+
+            return this;
+        }
+
+        /// <summary>
+        /// Gives the caller access to the set of IValueAccessors that have been created by this adatper and which are used to interact with the corresponding IVI
+        /// <para/>This array will be empty until Setup as been successfully invoked.
+        /// </summary>
+        public IValueAccessor[] IVAArray
+        {
+            get { RebuildArraysIfNeeded(); return ivaArray; }
+        }
+
+        /// <summary>
+        /// Gives the caller access to the number of items (IVAs) that this adapter is using.
+        /// </summary>
+        public int NumItems
+        {
+            get { RebuildArraysIfNeeded(); return vsabArray.Sum(ivsa => ivsa.NumItems); }
+        }
+    }
+
+    /// <summary>
+    /// This adapter class provides a client with a ValueSet style tool that supports getting and setting sets of values in a IValueInterconnect instance.
+    /// </summary>
+    /// <typeparam name="TValueSet">
+    /// Specifies the class type on which this adapter will operate.  
+    /// Adapter harvests the list of <see cref="MosaicLib.Modular.Interconnect.Values.Attributes.ValueSetItemAttribute"/> annotated public member items from this type.
+    /// </typeparam>
+    /// <remarks>
+    /// The primary methods/properties used on this adapter are: Construction, ValueSet, Setup, Set, Update, IsUpdateNeeded
+    /// </remarks>
+    public class ValueSetAdapter<TValueSet> : ValueSetAdapterBase
+        where TValueSet : class
+    {
+        #region Constructors
+
+        /// <summary>
+        /// Default constructor.  Assigns adapter to use default Values.Instance IValuesInterconnection instance.  
+        /// For use with Property Initializers and the Setup method to define and setup the adapter instance for use.
+        /// Setup method is used to generate final derived item names and to bind and make the initial update to the ValueSet contents.
+        /// Setup method may also specify/override the config instance that is to be used.
+        /// <para/>Please Note: the Setup method must be called before the adapter can be used.  
+        /// </summary>
+        public ValueSetAdapter()
+            : this(null)
+        { }
+
+        /// <summary>
+        /// Config instance constructor.  Assigns adapter to use given IValuesInterconnection valueInterconnect service instance.  This may be overridden during the Setup call.
+        /// For use with Property Initializers and the Setup method to define and setup the adapter instance for use.
+        /// <para/>Please Note: the Setup method must be called before the adapter can be used.  
+        /// </summary>
+        public ValueSetAdapter(IValuesInterconnection ivi)
+            : base(typeof(TValueSet), ivi)
+        {
+            itemAccessSetupInfoArray = new ItemAccessSetupInfo<TValueSet>[NumItems];
+        }
+
+        #endregion
+
+        #region IValueSetAdapter and IValueSetAdapter<TValueSet> implementation methods
+
+        /// <summary>
+        /// Contains the ValueSet object that is used as the value source for Set calls and receives updated values during Update.
+        /// </summary>
+        public TValueSet ValueSet { get; set; }
+
+        /// <summary>
+        /// This method determines the set of full Parameter Names from the ValueSet's annotated items, and creates a set of IValueAccessor objects for them.
+        /// In most cases the client will immediately call Set or Update to transfer the values from or to the ValueSet.
+        /// <para/>Will use previously defined IValueInterconnect instance or the Values.Instance singleton.
+        /// <para/>Supports call chaining.
+        /// </summary>
+        /// <param name="baseNames">
+        /// Gives a list of 1 or more base names that are prepended to specific sub-sets of the list of item names based on each item's NameAdjust attribute property value.
+        /// </param>
+        public new ValueSetAdapter<TValueSet> Setup(params string[] baseNames)
+        {
+            base.Setup(baseNames);
+
+            return this;
+        }
+
+        /// <summary>
+        /// This method determines the set of full Parameter Names from the ValueSet's annotated items, and creates a set of IValueAccessor objects for them.
+        /// In most cases the client will immediately call Set or Update to transfer the values from or to the ValueSet.
+        /// <para/>If a non-null valueInterconnect instnace is given then it will be used otherwise this method will use any previously defined IValueInterconnect instance or the Values.Instance singleton.
+        /// <para/>Supports call chaining.
+        /// </summary>
+        /// <param name="ivi">Allows the caller to (re)specifiy the IValueInterconnect instance that is to be used henceforth by this adapter</param>
+        /// <param name="baseNames">
+        /// Gives a list of 1 or more base names that are prepended to specific sub-sets of the list of item names based on each item's NameAdjust attribute property value.
+        /// </param>
+        public new ValueSetAdapter<TValueSet> Setup(IValuesInterconnection ivi, params string[] baseNames)
+        {
+            base.Setup(ivi, baseNames);
+
+            return this;
+        }
+
+        /// <summary>
+        /// Sets this objects ValueSet to the given valueSet and then calls the parameterless Set method.
+        /// <para/>Supports call chaining.
+        /// </summary>
+        public ValueSetAdapter<TValueSet> Set(TValueSet valueSet)
+        {
+            ValueSet = valueSet;
+
+            return Set();
+        }
+
+        /// <summary>
+        /// Transfer the values from the ValueSet's annotated members to the corresponding set of IValueAccessors and then tell the IValueInterconnect instance
+        /// to Set all of the IValueAccessors.
+        /// <para/>Supports call chaining.
+        /// </summary>
+        public new ValueSetAdapter<TValueSet> Set()
+        {
+            base.Set();
+
+            return this;
+        }
+
+        /// <summary>
+        /// Requests the IValueInterconnect instance to update all of the adapter's IValueAccessor objects and then transfers the updated values
+        /// from those accessor objects to the corresponding annotated ValueSet members.
+        /// <para/>Supports call chaining.
+        /// </summary>
+        public new ValueSetAdapter<TValueSet> Update()
+        {
+            base.Update();
+
+            return this;
+        }
+
+        #endregion
+
+        #region ValueSetAdatperBase implementation methods
+
+        /// <summary>
+        /// internal implementation method.  Performs all of the type specific setup (and some non-type specific setup) required to support annotated ValueSet access.
+        /// </summary>
+        internal override void InnerSetup(params string[] baseNames)
+        {
             // setup all of the static information
 
             for (int idx = 0; idx < NumItems; idx++)
@@ -1325,10 +1574,11 @@ namespace MosaicLib.Modular.Interconnect.Values
                 {
                     if (!itemAttribute.SilenceIssues)
                         IssueEmitter.Emit("Member/Value '{0}'/'{1}' is not usable: Member must provide public getter and setter, in ValueSet type '{2}'", memberName, fullValueName, TValueSetTypeStr);
+
                     continue;
                 }
 
-                IValueAccessor valueAccessor = ValueInterconnect.GetValueAccessor(fullValueName);
+                IValueAccessor valueAccessor = IVI.GetValueAccessor(fullValueName);
 
                 ContainerStorageType useStorageType;
                 bool isNullable = false;
@@ -1336,19 +1586,19 @@ namespace MosaicLib.Modular.Interconnect.Values
                 if (!itemAttribute.StorageType.IsNone())
                     useStorageType = itemAttribute.StorageType;
 
-                ItemAccessSetupInfo itemAccessSetupInfo = new ItemAccessSetupInfo()
+                ItemAccessSetupInfo<TValueSet> itemAccessSetupInfo = new ItemAccessSetupInfo<TValueSet>()
                 {
-                    ValueAccessor = valueAccessor,
+                    IVA = valueAccessor,
                     ItemInfo = itemInfo,
                     UseStorageType = useStorageType,
                     ItemIsValueContainer = (itemInfo.ItemType == typeof(ValueContainer)),
                 };
 
-                GenerateMemberToFromValueAccessFuncs(itemAccessSetupInfo);
+                itemAccessSetupInfo.GenerateMemberToFromValueAccessFuncs();
 
                 Logging.IMesgEmitter selectedIssueEmitter = IssueEmitter;
 
-                if (itemAccessSetupInfo.MemberFromValueAccessAction == null || itemAccessSetupInfo.MemberToValueAccessAction == null)
+                if (itemAccessSetupInfo.MemberFromIVAAction == null || itemAccessSetupInfo.MemberToIVAAction == null)
                 {
                     if (!itemAttribute.SilenceIssues)
                         selectedIssueEmitter.Emit("Member/Value '{0}'/'{1}' is not usable: no valid accessor delegate could be generated for its ValueSet type:'{3}'", memberName, fullValueName, itemInfo.ItemType, TValueSetTypeStr);
@@ -1357,8 +1607,128 @@ namespace MosaicLib.Modular.Interconnect.Values
                 }
 
                 itemAccessSetupInfoArray[idx] = itemAccessSetupInfo;
-                valueAccessorArray[idx] = valueAccessor;
+                IVAArray[idx] = valueAccessor;
             }
+        }
+
+        internal override bool IsValueSetValid { get { return (ValueSet != null); } }
+
+        internal override void InnerTransferValuesToIVAs()
+        {
+            foreach (var iasi in itemAccessSetupInfoArray)
+            {
+                if (iasi.MemberFromIVAAction != null)
+                    iasi.MemberToIVAAction(ValueSet, IssueEmitter, ValueNoteEmitter);
+            }
+        }
+
+        internal override void InnerTransferValuesFromIVAs()
+        {
+            foreach (var iasi in itemAccessSetupInfoArray)
+            {
+                if (iasi.MemberFromIVAAction != null)
+                    iasi.MemberFromIVAAction(ValueSet, IssueEmitter, ValueNoteEmitter);
+            }
+        }
+
+        #endregion
+
+        #region itemAccessSetupInfoArray
+
+        /// <remarks>Non-null elements in this array correspond to fully vetted gettable and settable ValueSet items.</remarks>
+        ItemAccessSetupInfo<TValueSet>[] itemAccessSetupInfoArray = null;
+
+        #endregion
+    }
+
+    /// <summary>
+    /// Base class for generaic ValueSetAdapter class used to support common pattern enforcement and to allow use of ValueSetAdapterGroup which applies to a set of ValueSetAdatperBase derived objects.
+    /// All of the non-TValueSet type implementation and portions of the TValueSet type specific implementation are implemented at this level.
+    /// </summary>
+    public abstract class ValueSetAdapterBase : IValueSetAdapter
+    {
+        #region Construction
+
+        /// <summary>
+        /// If the given value of ivi is non-null, sets the IVI to it
+        /// </summary>
+        protected ValueSetAdapterBase(Type tValueSetType, IValuesInterconnection ivi = null)
+        {
+            if (ivi != null)
+                IVI = ivi;
+
+            TValueSetType = tValueSetType;
+            TValueSetTypeStr = TValueSetType.Name;
+
+            valueSetItemInfoList = AnnotatedClassItemAccessHelper<Attributes.ValueSetItemAttribute>.ExtractItemInfoAccessListFrom(tValueSetType, ItemSelection.IncludeExplicitPublicItems | ItemSelection.IncludeInheritedItems);
+            NumItems = valueSetItemInfoList.Count;
+
+            IVAArray = new IValueAccessor[NumItems];
+
+            OptimizeSets = true;
+        }
+
+        #endregion
+
+        #region TValueSetType, TValueSetTypeStr
+
+        public Type TValueSetType { get; private set; }
+        public string TValueSetTypeStr { get; private set; }
+
+        #endregion
+
+        #region friend properties
+
+        /// <summary>
+        /// IVI is now settable by "friend" classes to support group wide assignment
+        /// </summary>
+        internal IValuesInterconnection IVI { get { return _ivi; } set { _ivi = value ?? Values.Instance; _iviHasBeenAssigned = true; } }        // delay making default ConfigInstance assignment until Setup method.
+        private IValuesInterconnection _ivi;
+        protected bool _iviHasBeenAssigned = false;
+
+        #endregion
+
+        #region IValueSetAdapter implementation
+
+        /// <summary>Defines the emitter used to emit Setup, Set, and Update related errors.  Defaults to the null emitter.</summary>
+        public Logging.IMesgEmitter IssueEmitter { get { return FixupEmitterRef(ref issueEmitter); } set { issueEmitter = value; } }
+
+        /// <summary>Defines the emitter used to emit Update related changes in config point values.  Defaults to the null emitter.</summary>
+        public Logging.IMesgEmitter ValueNoteEmitter { get { return FixupEmitterRef(ref valueNoteEmitter); } set { valueNoteEmitter = value; } }
+
+        /// <summary>
+        /// This method determines the set of full Parameter Names from the ValueSet's annotated items, and creates a set of IValueAccessor objects for them.
+        /// In most cases the client will immediately call Set or Update to transfer the values from or to the ValueSet.
+        /// <para/>Will use previously defined IValueInterconnect instance or the Values.Instance singleton.
+        /// <para/>Supports call chaining.
+        /// </summary>
+        /// <param name="baseNames">
+        /// Gives a list of 1 or more base names that are prepended to specific sub-sets of the list of item names based on each item's NameAdjust attribute property value.
+        /// </param>
+        public IValueSetAdapter Setup(params string[] baseNames)
+        {
+            return Setup(null, baseNames);
+        }
+
+        /// <summary>
+        /// This method determines the set of full Parameter Names from the ValueSet's annotated items, and creates a set of IValueAccessor objects for them.
+        /// In most cases the client will immediately call Set or Update to transfer the values from or to the ValueSet.
+        /// <para/>If a non-null valueInterconnect instnace is given then it will be used otherwise this method will use any previously defined IValueInterconnect instance or the Values.Instance singleton.
+        /// <para/>Supports call chaining.
+        /// </summary>
+        /// <param name="ivi">Allows the caller to (re)specifiy the IValueInterconnect instance that is to be used henceforth by this adapter</param>
+        /// <param name="baseNames">
+        /// Gives a list of 1 or more base names that are prepended to specific sub-sets of the list of item names based on each item's NameAdjust attribute property value.
+        /// </param>
+        public IValueSetAdapter Setup(IValuesInterconnection ivi, params string[] baseNames)
+        {
+            if (ivi != null || IVI == null)
+                IVI = ivi;
+
+            if (!IsValueSetValid)
+                throw new System.NullReferenceException("ValueSet property must be Valid (non-null) before Setup can be called");
+
+            InnerSetup(baseNames);
 
             return this;
         }
@@ -1368,23 +1738,17 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// to Set all of the IValueAccessors.
         /// <para/>Supports call chaining.
         /// </summary>
-        public ValueSetAdapter<TValueSet> Set()
+        public IValueSetAdapter Set()
         {
-            if (ValueSet == null)
+            if (!IsValueSetValid)
             {
-                IssueEmitter.Emit("ValueSet property must be non-null before Set can be called");
+                IssueEmitter.Emit("ValueSet property must be Valid (non-null) before Set can be called");
                 return this;
             }
 
-            foreach (ItemAccessSetupInfo iasi in itemAccessSetupInfoArray)
-            {
-                if (iasi != null && iasi.MemberFromValueAccessAction != null)
-                {
-                    iasi.MemberToValueAccessAction(ValueSet, IssueEmitter, ValueNoteEmitter);
-                }
-            }
+            InnerTransferValuesToIVAs();
 
-            ValueInterconnect.Set(valueAccessorArray, NumItems, optimizeSets);
+            IVI.Set(IVAArray, NumItems, optimize: OptimizeSets);
 
             return this;
         }
@@ -1395,7 +1759,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// When this property is false, all value table entries will be Set, without regard to whether their value might have changed.
         /// </summary>
         public bool OptimizeSets { get { return optimizeSets; } set { optimizeSets = value; } }
-        private bool optimizeSets = false;
+        protected bool optimizeSets = false;
 
         /// <summary>
         /// Returns true if any of the IValueAccessors to which this adapter is attached indicate that there is a pending update 
@@ -1405,7 +1769,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         {
             get
             {
-                foreach (IValueAccessor iva in valueAccessorArray)
+                foreach (IValueAccessor iva in IVAArray)
                 {
                     if (iva.IsUpdateNeeded)
                         return true;
@@ -1415,356 +1779,57 @@ namespace MosaicLib.Modular.Interconnect.Values
             }
         }
 
-
         /// <summary>
         /// Requests the IValueInterconnect instance to update all of the adapter's IValueAccessor objects and then transfers the updated values
         /// from those accessor objects to the corresponding annotated ValueSet members.
         /// <para/>Supports call chaining.
         /// </summary>
-        public ValueSetAdapter<TValueSet> Update()
+        public IValueSetAdapter Update()
         {
-            if (ValueSet == null)
-                throw new System.NullReferenceException("ValueSet property must be non-null before Update can be called");
+            if (!IsValueSetValid)
+                throw new System.NullReferenceException("ValueSet property must be Valid (non-null) before Update can be called");
 
-            ValueInterconnect.Update(valueAccessorArray, NumItems);
+            IVI.Update(IVAArray, NumItems);
 
-            foreach (ItemAccessSetupInfo iasi in itemAccessSetupInfoArray)
-            {
-                if (iasi != null && iasi.MemberFromValueAccessAction != null)
-                {
-                    iasi.MemberFromValueAccessAction(ValueSet, IssueEmitter, ValueNoteEmitter);
-                }
-            }
+            InnerTransferValuesFromIVAs();
 
             return this;
         }
 
-        private bool optimizeUpdates = false;
+        /// <summary>
+        /// Gives the caller access to the set of IValueAccessors that have been created by this adatper and which are used to interact with the corresponding IVI
+        /// <para/>This array will be empty until Setup as been successfully invoked.
+        /// </summary>
+        public IValueAccessor[] IVAArray { get; protected set; }
+
+        /// <summary>
+        /// Gives the caller access to the number of items (IVAs) that this adapter is using.
+        /// </summary>
+        public int NumItems { get; private set; }
 
         #endregion
 
-        #region private methods
+        #region abstract methods to be implemented by a derived class
 
-        void GenerateMemberToFromValueAccessFuncs(ItemAccessSetupInfo itemAccessSetupInfo)
-        {
-            ItemInfo<Attributes.ValueSetItemAttribute> itemInfo = itemAccessSetupInfo.ItemInfo;
-            ContainerStorageType useStorageType = itemAccessSetupInfo.UseStorageType;
+        internal abstract void InnerSetup(params string[] baseNames);
 
-            Action<TValueSet, IValueAccessor> innerBoundGetter = null;
-            Action<TValueSet, IValueAccessor> innerBoundSetter = null;
-
-            // we only support the legal data types for config key's values here
-            if (itemInfo.ItemType == typeof(bool))
-            {
-                Action<TValueSet, bool> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, bool>(itemInfo);
-                Func<TValueSet, bool> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, bool>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<bool>(pfGetter(valueSetObj), useStorageType, false); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<bool>(useStorageType, false, true)); };
-            }
-            else if (itemInfo.ItemType == typeof(sbyte))
-            {
-                Action<TValueSet, sbyte> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, sbyte>(itemInfo);
-                Func<TValueSet, sbyte> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, sbyte>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<sbyte>(pfGetter(valueSetObj), useStorageType, false); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<sbyte>(useStorageType, false, true)); };
-            }
-            else if (itemInfo.ItemType == typeof(short))
-            {
-                Action<TValueSet, short> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, short>(itemInfo);
-                Func<TValueSet, short> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, short>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<short>(pfGetter(valueSetObj), useStorageType, false); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<short>(useStorageType, false, true)); };
-            }
-            else if (itemInfo.ItemType == typeof(int))
-            {
-                Action<TValueSet, int> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, int>(itemInfo);
-                Func<TValueSet, int> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, int>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<int>(pfGetter(valueSetObj), useStorageType, false); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<int>(useStorageType, false, true)); };
-            }
-            else if (itemInfo.ItemType == typeof(long))
-            {
-                Action<TValueSet, long> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, long>(itemInfo);
-                Func<TValueSet, long> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, long>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<long>(pfGetter(valueSetObj), useStorageType, false); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<long>(useStorageType, false, true)); };
-            }
-            else if (itemInfo.ItemType == typeof(byte))
-            {
-                Action<TValueSet, byte> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, byte>(itemInfo);
-                Func<TValueSet, byte> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, byte>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<byte>(pfGetter(valueSetObj), useStorageType, false); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<byte>(useStorageType, false, true)); };
-            }
-            else if (itemInfo.ItemType == typeof(ushort))
-            {
-                Action<TValueSet, ushort> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, ushort>(itemInfo);
-                Func<TValueSet, ushort> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, ushort>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<ushort>(pfGetter(valueSetObj), useStorageType, false); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<ushort>(useStorageType, false, true)); };
-            }
-            else if (itemInfo.ItemType == typeof(uint))
-            {
-                Action<TValueSet, uint> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, uint>(itemInfo);
-                Func<TValueSet, uint> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, uint>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<uint>(pfGetter(valueSetObj), useStorageType, false); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<uint>(useStorageType, false, true)); };
-            }
-            else if (itemInfo.ItemType == typeof(ulong))
-            {
-                Action<TValueSet, ulong> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, ulong>(itemInfo);
-                Func<TValueSet, ulong> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, ulong>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<ulong>(pfGetter(valueSetObj), useStorageType, false); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<ulong>(useStorageType, false, true)); };
-            }
-            else if (itemInfo.ItemType == typeof(float))
-            {
-                Action<TValueSet, float> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, float>(itemInfo);
-                Func<TValueSet, float> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, float>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<float>(pfGetter(valueSetObj), useStorageType, false); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<float>(useStorageType, false, true)); };
-            }
-            else if (itemInfo.ItemType == typeof(double))
-            {
-                Action<TValueSet, double> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, double>(itemInfo);
-                Func<TValueSet, double> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, double>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<double>(pfGetter(valueSetObj), useStorageType, false); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<double>(useStorageType, false, true)); };
-            }
-            else if (itemInfo.ItemType == typeof(bool?))
-            {
-                Action<TValueSet, bool?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, bool?>(itemInfo);
-                Func<TValueSet, bool?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, bool?>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<bool?>(pfGetter(valueSetObj), useStorageType, true); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<bool?>(useStorageType, true, true)); };
-            }
-            else if (itemInfo.ItemType == typeof(sbyte?))
-            {
-                Action<TValueSet, sbyte?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, sbyte?>(itemInfo);
-                Func<TValueSet, sbyte?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, sbyte?>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<sbyte?>(pfGetter(valueSetObj), ContainerStorageType.SByte, true); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<sbyte?>(ContainerStorageType.SByte, true, true)); };
-            }
-            else if (itemInfo.ItemType == typeof(short?))
-            {
-                Action<TValueSet, short?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, short?>(itemInfo);
-                Func<TValueSet, short?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, short?>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<short?>(pfGetter(valueSetObj), useStorageType, true); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<short?>(useStorageType, true, true)); };
-            }
-            else if (itemInfo.ItemType == typeof(int?))
-            {
-                Action<TValueSet, int?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, int?>(itemInfo);
-                Func<TValueSet, int?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, int?>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<int?>(pfGetter(valueSetObj), useStorageType, true); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<int?>(useStorageType, true, true)); };
-            }
-            else if (itemInfo.ItemType == typeof(long?))
-            {
-                Action<TValueSet, long?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, long?>(itemInfo);
-                Func<TValueSet, long?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, long?>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<long?>(pfGetter(valueSetObj), useStorageType, true); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<long?>(useStorageType, true, true)); };
-            }
-            else if (itemInfo.ItemType == typeof(byte?))
-            {
-                Action<TValueSet, byte?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, byte?>(itemInfo);
-                Func<TValueSet, byte?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, byte?>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<byte?>(pfGetter(valueSetObj), useStorageType, true); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<byte?>(useStorageType, true, true)); };
-            }
-            else if (itemInfo.ItemType == typeof(ushort?))
-            {
-                Action<TValueSet, ushort?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, ushort?>(itemInfo);
-                Func<TValueSet, ushort?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, ushort?>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<ushort?>(pfGetter(valueSetObj), useStorageType, true); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<ushort?>(useStorageType, true, true)); };
-            }
-            else if (itemInfo.ItemType == typeof(uint?))
-            {
-                Action<TValueSet, uint?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, uint?>(itemInfo);
-                Func<TValueSet, uint?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, uint?>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<uint?>(pfGetter(valueSetObj), useStorageType, true); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<uint?>(useStorageType, true, true)); };
-            }
-            else if (itemInfo.ItemType == typeof(ulong?))
-            {
-                Action<TValueSet, ulong?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, ulong?>(itemInfo);
-                Func<TValueSet, ulong?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, ulong?>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<ulong?>(pfGetter(valueSetObj), useStorageType, true); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<ulong?>(useStorageType, true, true)); };
-            }
-            else if (itemInfo.ItemType == typeof(float?))
-            {
-                Action<TValueSet, float?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, float?>(itemInfo);
-                Func<TValueSet, float?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, float?>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<float?>(pfGetter(valueSetObj), useStorageType, true); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<float?>(useStorageType, true, true)); };
-            }
-            else if (itemInfo.ItemType == typeof(double?))
-            {
-                Action<TValueSet, double?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, double?>(itemInfo);
-                Func<TValueSet, double?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, double?>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<double?>(pfGetter(valueSetObj), useStorageType, true); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<double?>(useStorageType, true, true)); };
-            }
-            else if (itemInfo.ItemType == typeof(string))
-            {
-                Action<TValueSet, string> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, string>(itemInfo);
-                Func<TValueSet, string> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, string>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<string>(pfGetter(valueSetObj), useStorageType, false); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<string>(useStorageType, false, true)); };
-            }
-            else if (itemInfo.ItemType == typeof(object))
-            {
-                Action<TValueSet, object> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, object>(itemInfo);
-                Func<TValueSet, object> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, object>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<object>(pfGetter(valueSetObj), useStorageType, false); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer.GetValue<object>(useStorageType, false, true)); };
-            }
-            else if (itemInfo.ItemType == typeof(string[]))
-            {
-                Action<TValueSet, string []> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, string []>(itemInfo);
-                Func<TValueSet, string []> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, string []>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = new ValueContainer().SetValue<IList<String>>(new List<string>(pfGetter(valueSetObj)), useStorageType, false); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { IList<string> ils = iva.ValueContainer.GetValue<IList<String>>(useStorageType, false, true); pfSetter(valueSetObj, (ils != null ? ils.ToArray() : null)); };
-            }
-            else if (itemInfo.ItemType == typeof(ValueContainer))
-            {
-                Action<TValueSet, ValueContainer> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TValueSet, ValueContainer>(itemInfo);
-                Func<TValueSet, ValueContainer> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TValueSet, ValueContainer>(itemInfo);
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { iva.ValueContainer = pfGetter(valueSetObj); };
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva) { pfSetter(valueSetObj, iva.ValueContainer); };
-            }
-            else if (itemInfo.ItemType.IsEnum)
-            {
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva)
-                {
-                    object parsedValueAsObject = null;
-
-                    object valueAsObject = iva.ValueContainer.ValueAsObject;
-                    bool valueIsString = iva.ValueContainer.cvt.IsString() || (valueAsObject is String);
-                    bool valueIsInt = iva.ValueContainer.cvt.IsInteger(true, false);
-
-                    if (valueIsString)
-                    {
-                        string valueAsStr = valueAsObject as string;
-                        parsedValueAsObject = System.Enum.Parse(itemInfo.ItemType, valueAsStr);
-                    }
-                    else if (valueIsInt)
-                    {
-                        parsedValueAsObject = System.Enum.ToObject(itemInfo.ItemType, iva.ValueContainer.GetValue<Int64>(true));
-                    }
-                    else
-                    {
-                        // this is less efficient but might work in special cases (such as when the valueAsObject is really a boxed version of the desired type already casted as an object).
-                        parsedValueAsObject = System.Convert.ChangeType(valueAsObject, itemInfo.ItemType);
-                    }
-
-                    if (itemInfo.IsProperty)
-                        itemInfo.PropertyInfo.SetValue(valueSetObj, parsedValueAsObject, null);
-                    else
-                        itemInfo.FieldInfo.SetValue(valueSetObj, parsedValueAsObject);
-                };
-
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva)
-                {
-                    if (itemInfo.IsProperty)
-                        iva.ValueContainer = new ValueContainer().SetValue<object>(itemInfo.PropertyInfo.GetValue(valueSetObj, emptyObjectArray), useStorageType, false);
-                    else
-                        iva.ValueContainer = new ValueContainer().SetValue<object>(itemInfo.FieldInfo.GetValue(valueSetObj), useStorageType, false);
-                };
-            }
-            else
-            {
-                // when none of the above special cases match itemType then fallback to using ValueAsObject and reflection based property/field getters and setters.
-                innerBoundSetter = delegate(TValueSet valueSetObj, IValueAccessor iva)
-                {
-                    // this is less efficient but will work
-                    object valueAsObject = iva.ValueContainer.ValueAsObject;
-
-                    if (itemInfo.IsProperty)
-                        itemInfo.PropertyInfo.SetValue(valueSetObj, valueAsObject, null);
-                    else
-                        itemInfo.FieldInfo.SetValue(valueSetObj, valueAsObject);
-                };
-
-                innerBoundGetter = delegate(TValueSet valueSetObj, IValueAccessor iva)
-                {
-                    if (itemInfo.IsProperty)
-                        iva.ValueContainer = new ValueContainer(itemInfo.PropertyInfo.GetValue(valueSetObj, emptyObjectArray));
-                    else
-                        iva.ValueContainer = new ValueContainer(itemInfo.FieldInfo.GetValue(valueSetObj));
-                };
-            }
- 
-            if (innerBoundSetter != null)
-            {
-                itemAccessSetupInfo.MemberFromValueAccessAction = delegate(TValueSet valueSetObj, Logging.IMesgEmitter updateIssueEmitter, Logging.IMesgEmitter valueUpdateEmitter)
-                {
-                    IValueAccessor valueAccessor = itemAccessSetupInfo.ValueAccessor;
-
-                    try
-                    {
-                        if (!optimizeUpdates || itemAccessSetupInfo.LastTransferedValueSeqNum != valueAccessor.ValueSeqNum)
-                        {
-                            innerBoundSetter(valueSetObj, valueAccessor);
-                            itemAccessSetupInfo.LastTransferedValueSeqNum = valueAccessor.ValueSeqNum;
-                        }
-
-                        if (valueUpdateEmitter.IsEnabled)
-                            valueUpdateEmitter.Emit("Member:'{0}' transfered from Name:'{1}' value:'{2}' [type:'{3}']", itemAccessSetupInfo.MemberName, itemAccessSetupInfo.ValueName, valueAccessor.ValueContainer, TValueSetTypeStr);
-                    }
-                    catch (System.Exception ex)
-                    {
-                        if (!itemInfo.ItemAttribute.SilenceIssues)
-                            updateIssueEmitter.Emit("Member:'{0}' transfer from Name:'{1}' in type '{2}' could not be performed: {3}", itemAccessSetupInfo.MemberName, itemAccessSetupInfo.ValueName, TValueSetTypeStr, ex);
-                    }
-                };
-            }
-
-            if (innerBoundGetter != null)
-            {
-                itemAccessSetupInfo.MemberToValueAccessAction = delegate(TValueSet valueSetObj, Logging.IMesgEmitter updateIssueEmitter, Logging.IMesgEmitter valueUpdateEmitter)
-                {
-                    IValueAccessor valueAccessor = itemAccessSetupInfo.ValueAccessor;
-
-                    try
-                    {
-                        innerBoundGetter(valueSetObj, valueAccessor);
-                        itemAccessSetupInfo.LastTransferedValueSeqNum = 0;      // trigger that next update needs to retransfer the value.
-
-                        if (valueUpdateEmitter.IsEnabled)
-                            valueUpdateEmitter.Emit("Member:'{0}' transfered to Name:'{1}' value:'{2}' [type:'{3}']", itemAccessSetupInfo.MemberName, itemAccessSetupInfo.ValueName, valueAccessor.ValueContainer, TValueSetTypeStr);
-                    }
-                    catch (System.Exception ex)
-                    {
-                        if (!itemInfo.ItemAttribute.SilenceIssues)
-                            updateIssueEmitter.Emit("Member'{0}' tranfer to Name:'{1}' in type '{2}' could not be performed: {3}", itemAccessSetupInfo.MemberName, itemAccessSetupInfo.ValueName, TValueSetTypeStr, ex);
-                    }
-                };
-            }
-        }
-
-        private static readonly object[] emptyObjectArray = new object[0];
+        internal abstract bool IsValueSetValid { get; }
+        internal abstract void InnerTransferValuesFromIVAs();
+        internal abstract void InnerTransferValuesToIVAs();
 
         #endregion
 
-        #region private fields, properties
+        #region protected implememtation definitions and methods
 
-        Type TValueSetType = typeof(TValueSet);
-        string TValueSetTypeStr = typeof(TValueSet).Name;
-
-        List<ItemInfo<Attributes.ValueSetItemAttribute>> valueSetItemInfoList = null;       // gets built by the AnnotatedClassItemAccessHelper.
-        int NumItems { get; set; }
+        protected List<ItemInfo<Attributes.ValueSetItemAttribute>> valueSetItemInfoList = null;       // gets built by the AnnotatedClassItemAccessHelper.
 
         /// <summary>
         /// Internal class used to capture the key specific setup information for a given annotated property in the ValueSet.
         /// </summary>
-        private class ItemAccessSetupInfo
+        protected class ItemAccessSetupInfo<TValueSet>
         {
             /// <summary>The value's corresponding IValueAccessor object.</summary>
-            public IValueAccessor ValueAccessor { get; set; }
+            public IValueAccessor IVA { get; set; }
 
             /// <summary>
             /// Retains access to the ItemInfo for the corresponding item in the value set
@@ -1784,7 +1849,7 @@ namespace MosaicLib.Modular.Interconnect.Values
             /// <summary>
             /// Returns the full Name of the value that the value accessor is attached to.
             /// </summary>
-            public string ValueName { get { return ((ValueAccessor != null) ? ValueAccessor.Name : String.Empty); } }
+            public string ValueName { get { return ((IVA != null) ? IVA.Name : String.Empty); } }
 
             /// <summary>
             /// Gives the storage type that will be used with any container associated with this item
@@ -1796,30 +1861,91 @@ namespace MosaicLib.Modular.Interconnect.Values
             /// </summary>
             public bool ItemIsValueContainer { get; set; }
 
-            /// <summary>delegate that is used to set a specific member's value from a given IValueAccessor's value.</summary>
-            /// <remarks>this item will be null for static items and for items that failed to be setup correctly.</remarks>
-            public Action<TValueSet, Logging.IMesgEmitter, Logging.IMesgEmitter> MemberToValueAccessAction { get; set; }
-
-            /// <summary>delegate that is used to set a specific member's value from a given IValueAccessor's value.</summary>
-            /// <remarks>this item will be null for static items and for items that failed to be setup correctly.</remarks>
-            public Action<TValueSet, Logging.IMesgEmitter, Logging.IMesgEmitter> MemberFromValueAccessAction { get; set; }
-
             /// <summary>
             /// Carries the ValueSeqNum at the end of the last inbound or outbound transfer.  Allows Update to skip transfering values repeatedly.
             /// </summary>
             public UInt32 LastTransferedValueSeqNum { get; set; }
+
+            /// <summary>delegate that is used to set a specific member's value from a given IValueAccessor's value.</summary>
+            /// <remarks>this item will be null for static items and for items that failed to be setup correctly.</remarks>
+            public Action<TValueSet, Logging.IMesgEmitter, Logging.IMesgEmitter> MemberToIVAAction { get; set; }
+
+            /// <summary>delegate that is used to set a specific member's value from a given IValueAccessor's value.</summary>
+            /// <remarks>this item will be null for static items and for items that failed to be setup correctly.</remarks>
+            public Action<TValueSet, Logging.IMesgEmitter, Logging.IMesgEmitter> MemberFromIVAAction { get; set; }
+
+            /// <summary>
+            /// Generates the MemberToValueAccessAction and the MemberFromValueAccessAction for this ItemAccessSetupInfo instance.
+            /// </summary>
+            public void GenerateMemberToFromValueAccessFuncs()
+            {
+                ItemInfo<Attributes.ValueSetItemAttribute> itemInfo = ItemInfo;
+                ContainerStorageType useStorageType = UseStorageType;
+
+                AnnotatedClassItemAccessHelper.SetMemberFromVCActionDelegate<TValueSet> setMemberFromVCFunction = itemInfo.GenerateSetMemberFromVCAction<TValueSet>();
+                AnnotatedClassItemAccessHelper.GetMemberAsVCFunctionDelegate<TValueSet> getMemberAsVCFunction = itemInfo.GenerateGetMemberToVCFunc<TValueSet>();
+                
+                string TValueSetTypeStr = typeof(TValueSet).Name;
+
+                if (setMemberFromVCFunction != null)
+                {
+                    MemberFromIVAAction = delegate(TValueSet valueSetObj, Logging.IMesgEmitter updateIssueEmitter, Logging.IMesgEmitter valueUpdateEmitter)
+                    {
+                        try
+                        {
+                            if (!OptimizeUpdates || LastTransferedValueSeqNum != IVA.ValueSeqNum)
+                            {
+                                setMemberFromVCFunction(valueSetObj, IVA.ValueContainer, null, null, true);
+                                LastTransferedValueSeqNum = IVA.ValueSeqNum;
+                            }
+
+                            if (valueUpdateEmitter.IsEnabled)
+                                valueUpdateEmitter.Emit("Member:'{0}' transfered from Name:'{1}' value:'{2}' [type:'{3}']", MemberName, ValueName, IVA.ValueContainer, TValueSetTypeStr);
+                        }
+                        catch (System.Exception ex)
+                        {
+                            if (!itemInfo.ItemAttribute.SilenceIssues)
+                                updateIssueEmitter.Emit("Member:'{0}' transfer from Name:'{1}' in type '{2}' could not be performed: {3}", MemberName, ValueName, TValueSetTypeStr, ex);
+                        }
+                    };
+                }
+
+                if (getMemberAsVCFunction != null)
+                {
+                    MemberToIVAAction = delegate(TValueSet valueSetObj, Logging.IMesgEmitter updateIssueEmitter, Logging.IMesgEmitter valueUpdateEmitter)
+                    {
+                        try
+                        {
+                            IVA.ValueContainer = getMemberAsVCFunction(valueSetObj, null, null, true);
+                            LastTransferedValueSeqNum = 0;      // trigger that next update needs to retransfer the value.
+
+                            if (IVA.IsSetPending && valueUpdateEmitter.IsEnabled)
+                                valueUpdateEmitter.Emit("Member:'{0}' transfered to Name:'{1}' value:'{2}' [type:'{3}']", MemberName, ValueName, IVA.ValueContainer, TValueSetTypeStr);
+                        }
+                        catch (System.Exception ex)
+                        {
+                            if (!itemInfo.ItemAttribute.SilenceIssues)
+                                updateIssueEmitter.Emit("Member'{0}' tranfer to Name:'{1}' in type '{2}' could not be performed: {3}", MemberName, ValueName, TValueSetTypeStr, ex);
+                        }
+                    };
+                }
+            }
+
+            private static readonly object[] emptyObjectArray = new object[0];
+
+            /// <summary>
+            /// Flag used to determine if Update operations are optimized for this item
+            /// <para/>defaults to false
+            /// </summary>
+            public bool OptimizeUpdates { get; set; }
         }
-
-        /// <remarks>Non-null elements in this array correspond to fully vetted gettable and settable ValueSet items.</remarks>
-        ItemAccessSetupInfo[] itemAccessSetupInfoArray = null;
-
-        IValueAccessor [] valueAccessorArray = null;
 
         #endregion
 
         #region message emitter glue
 
         private Logging.IMesgEmitter issueEmitter = null, valueNoteEmitter = null;
+
         private Logging.IMesgEmitter FixupEmitterRef(ref Logging.IMesgEmitter emitterRef)
         {
             if (emitterRef == null)
@@ -1828,31 +1954,8 @@ namespace MosaicLib.Modular.Interconnect.Values
         }
 
         #endregion
-
-        #region IValueSetAdapter explicit implementation methods
-
-        IValueSetAdapter IValueSetAdapter.Setup(params string[] baseNames)
-        {
-            return Setup(baseNames);
-        }
-
-        IValueSetAdapter IValueSetAdapter.Setup(IValuesInterconnection valueInterconnect, params string[] baseNames)
-        {
-            return Setup(valueInterconnect, baseNames);
-        }
-
-        IValueSetAdapter IValueSetAdapter.Set()
-        {
-            return Set();
-        }
-
-        IValueSetAdapter IValueSetAdapter.Update()
-        {
-            return Update();
-        }
-
-        #endregion
     }
+
 
     #endregion
 

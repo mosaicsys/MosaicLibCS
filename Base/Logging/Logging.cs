@@ -148,10 +148,10 @@ namespace MosaicLib
         }
 
         /// <summary>Returns mesgType.ToString()</summary>
-		public static string ConvertToString(MesgType mesgType) { return mesgType.ToString(); }
+		public static string ConvertToString(this MesgType mesgType) { return mesgType.ToString(); }
 
         /// <summary>Returns 3 character version of mesgType.ToString()</summary>
-        public static string ConvertToFixedWidthString(MesgType mesgType)
+        public static string ConvertToFixedWidthString(this MesgType mesgType)
 		{
 			switch (mesgType)
 			{
@@ -177,6 +177,22 @@ namespace MosaicLib
 					return "UNKNOWN";
 			}
 		}
+
+        /// <summary>
+        /// Convert extension method that can be used to convert a System.Diagnostics.TraceLevel to a MesgType
+        /// </summary>
+        public static MesgType ConvertToMesgType(this System.Diagnostics.TraceLevel traceLevel, MesgType verboseLevel = MesgType.Debug, MesgType defaultLevel = MesgType.Error)
+        {
+            switch (traceLevel)
+            {
+                case System.Diagnostics.TraceLevel.Off: return MesgType.None;
+                case System.Diagnostics.TraceLevel.Error: return MesgType.Error;
+                case System.Diagnostics.TraceLevel.Warning: return MesgType.Warning;
+                case System.Diagnostics.TraceLevel.Info: return MesgType.Info;
+                case System.Diagnostics.TraceLevel.Verbose: return verboseLevel;
+                default: return defaultLevel;
+            }
+        }
 
 		#endregion
 

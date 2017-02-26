@@ -357,9 +357,22 @@ namespace MosaicLib.Modular.Reflection
         {
             #region GenerateGetMemberToVCFunc, GenerateSetMemberFromVCAction, GetMemberAsVCFunctionDelegate, SetMemberFromVCActionDelegate
 
+            /// <summary>
+            /// Delegate signature for methods generated here that are used to Get from a previously indicated member and return its value in a ValueContainer.  
+            /// The provided issue emitter will be used to record any issues and the provided value update emitter will be used to report assigned values.
+            /// </summary>
             public delegate ValueContainer GetMemberAsVCFunctionDelegate<TAnnotatedClass>(TAnnotatedClass instance, Logging.IMesgEmitter updateIssueEmitter, Logging.IMesgEmitter valueUpdateEmitter, bool rethrow);
+
+            /// <summary>
+            /// Delegate signature for methods generated here that are used to Set a preivsouly indicated member from the value contained in the given ValueContainer (if possible).
+            /// The provided issue emitter will be used to record any issues and the provided value update emitter will be used to report assigned values.
+            /// </summary>
             public delegate void SetMemberFromVCActionDelegate<TAnnotatedClass>(TAnnotatedClass instance, ValueContainer vc, Logging.IMesgEmitter updateIssueEmitter, Logging.IMesgEmitter valueUpdateEmitter, bool rethrow);
 
+            /// <summary>
+            /// Extension method that will generate a GetMemberAsVCFunctionDelegate method for the member specified by this itemInfo.  
+            /// Supports bool, sbyte, short, int, long, byte, ushort, uint, ulong, float, double, nullables of these, string, object, string [], ValueContainer, IList{string}, IList{ValueContainer} and enumeration types.
+            /// </summary>
             public static GetMemberAsVCFunctionDelegate<TAnnotatedClass> GenerateGetMemberToVCFunc<TAnnotatedClass>(this ItemInfo itemInfo)
             {
                 IAnnotatedItemAttribute itemAttribute = itemInfo.IAnnotatedItemAttribute;
@@ -538,14 +551,14 @@ namespace MosaicLib.Modular.Reflection
                     {
                         ValueContainer vc = vcGetter(annotatedInstance);
 
-                        if (valueUpdateEmitter.IsEnabled)
+                        if (valueUpdateEmitter != null && valueUpdateEmitter.IsEnabled)
                             valueUpdateEmitter.Emit("Got value '{0}' from DerivedName:'{1}' [type:'{2}']", vc, itemInfo.DerivedName, itemInfo.ItemType);
 
                         return vc;
                     }
                     catch (System.Exception ex)
                     {
-                        if (!silenceIssues)
+                        if (!silenceIssues && updateIssueEmitter != null && updateIssueEmitter.IsEnabled)
                             updateIssueEmitter.Emit("Unable to get value from DerivedName:'{0}' [type:'{1}']: {2}", itemInfo.DerivedName, itemInfo.ItemType, ex);
 
                         if (rethrow)
@@ -558,6 +571,10 @@ namespace MosaicLib.Modular.Reflection
                 return memberToVCDelegate;
             }
 
+            /// <summary>
+            /// Extension method that will generate a SetMemberFromVCFunctionDelegate method for the member specified by this itemInfo.  
+            /// Supports bool, sbyte, short, int, long, byte, ushort, uint, ulong, float, double, nullables of these, string, object, string [], ValueContainer, IList{string}, IList{ValueContainer} and enumeration types.
+            /// </summary>
             public static SetMemberFromVCActionDelegate<TAnnotatedClass> GenerateSetMemberFromVCAction<TAnnotatedClass>(this ItemInfo itemInfo, bool forceRethrowFlag = true)
             {
                 IAnnotatedItemAttribute itemAttribute = itemInfo.IAnnotatedItemAttribute;
@@ -710,7 +727,7 @@ namespace MosaicLib.Modular.Reflection
                     Action<TAnnotatedClass, ValueContainer> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, ValueContainer>(itemInfo);
                     vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc); };
                 }
-                else if (typeof(System.Enum).IsAssignableFrom(itemInfo.ItemType))
+                else if (itemInfo.ItemType.IsEnum)
                 {
                     vcSetter = (annotatedInstance, vc, rethrow) =>
                     {
@@ -753,12 +770,12 @@ namespace MosaicLib.Modular.Reflection
                     {
                         vcSetter(annotatedInstance, vc, rethrow);
 
-                        if (valueUpdateEmitter.IsEnabled)
+                        if (valueUpdateEmitter != null && valueUpdateEmitter.IsEnabled)
                             valueUpdateEmitter.Emit("Set value '{0}' to DerivedName:'{1}' [type:'{2}']", vc, itemInfo.DerivedName, itemInfo.ItemType);
                     }
                     catch (System.Exception ex)
                     {
-                        if (!silenceIssues)
+                        if (!silenceIssues && updateIssueEmitter != null && valueUpdateEmitter.IsEnabled)
                             updateIssueEmitter.Emit("Unable to set value '{0}' to DerivedName:'{1}' [type:'{2}']: {3}", vc, itemInfo.DerivedName, itemInfo.ItemType, ex);
 
                         if (rethrow)

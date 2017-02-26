@@ -21,79 +21,125 @@
  */
 
 using System;
-using MosaicLib.Utils;
-using MosaicLib.Time;
-using MosaicLib.Modular.Action;
-using MosaicLib.Modular.Common;
 using System.Diagnostics;
 using System.Reflection;
-using MosaicLib.Modular.Interconnect.Values;
+using System.Runtime.Serialization;
 using System.Text;
+
+using MosaicLib.Modular.Action;
+using MosaicLib.Modular.Common;
+using MosaicLib.Modular.Interconnect.Values;
+using MosaicLib.Time;
+using MosaicLib.Utils;
 
 namespace MosaicLib.Modular.Part
 {
     //-----------------------------------------------------------------
     #region enums UseState and ConnState
 
-	/// <summary>Generic summary state for current usability of a part</summary>
-	/// <remarks>
-	/// This enum provides a set of state codes that are helpfull in determining if a Part is usable and if not, then why, particularly whether the part is online or not.
-	/// All Parts support a UseState but they may only use the specific subset of the defined state codes that are relevant for that part and its capabilities.
-	/// </remarks>
+	/// <summary>
+    /// Generic summary state for current usability of a part
+    /// <para/>This enum provides a set of state codes that are helpfull in determining if a Part is usable and if not, then why, particularly whether the part is online or not.
+    /// All Parts support a UseState but they may only use the specific subset of the defined state codes that are relevant for that part and its capabilities.
+    /// <para/>Undefined (0), Initial, AttemptOnline, OnlineUninitialized, Online, OnlineBusy, OnlineFailure, Offline, AttemptOnlineFailed, FailedToOffline, Shutdown
+    /// </summary>
+    [DataContract(Namespace=Constants.ModularNameSpace)]
 	public enum UseState
 	{
-		/// <summary>no valid value has been given or UseState is not supported by this part</summary>
+		/// <summary>no valid value has been given or UseState is not supported by this part (0)</summary>
+        [EnumMember]
 		Undefined = 0,
-		/// <summary>part has not been started</summary>
-		Initial,
-		/// <summary>part is attempting to go online (either automatically after start of by request)</summary>
-		AttemptOnline,
-		/// <summary>part is online but it requires initialization before it can be used normally.</summary>
-		OnlineUnintialized,
-		/// <summary>part is online</summary>
-		Online,
-		/// <summary>part is online and is performing some action</summary>
-		OnlineBusy,
-		/// <summary>part is online but is not functioning correctly.  May include cases where a GoOnline action partially succeeded.</summary>
-		OnlineFailure,
-		/// <summary>part was explicitly told to go offline</summary>
-		Offline,
-		/// <summary>part failed its attempt to go online</summary>
-		AttemptOnlineFailed,
-		/// <summary>part had an urecoverable error (or exception recovery) that forced it to the offline state - may try to AttemptOnline depending on configuration</summary>
-		FailedToOffline,
-		/// <summary>part has been shutdown prior to application exit.</summary>
-		Shutdown,
+		
+        /// <summary>part has not been started (1)</summary>
+        [EnumMember]
+        Initial = 1,
+		
+        /// <summary>part is attempting to go online (either automatically after start of by request) (2)</summary>
+        [EnumMember]
+        AttemptOnline = 2,
+		
+        /// <summary>part is online but it requires initialization before it can be used normally. (3)</summary>
+        [EnumMember]
+        OnlineUnintialized = 3,
+		
+        /// <summary>part is online (4)</summary>
+        [EnumMember]
+        Online = 4,
+		
+        /// <summary>part is online and is performing some action (5)</summary>
+        [EnumMember]
+        OnlineBusy = 5,
+		
+        /// <summary>part is online but is not functioning correctly.  May include cases where a GoOnline action partially succeeded. (6)</summary>
+        [EnumMember]
+        OnlineFailure = 6,
+		
+        /// <summary>part was explicitly told to go offline (7)</summary>
+        [EnumMember]
+        Offline = 7,
+		
+        /// <summary>part failed its attempt to go online (8)</summary>
+        [EnumMember]
+        AttemptOnlineFailed = 8,
+		
+        /// <summary>part had an urecoverable error (or exception recovery) that forced it to the offline state - may try to AttemptOnline depending on configuration (9)</summary>
+        [EnumMember]
+        FailedToOffline = 9,
+
+        /// <summary>part has been shutdown prior to application exit. (10)</summary>
+        [EnumMember]
+        Shutdown = 10,
 	}
 
-	/// <summary>Generic summary state for current connection state of part for parts that support a single connection.</summary>
-	/// <remarks>
-	/// This enum defines a set of state codes that are helpfull in determining if a Part is connected to some related entity (or not), especially when the Part
-	/// either implements the connection itself or depends on such a connection for it correct operation.  All parts support a ConnState but they may only use a 
-	/// specific subset of the defined state codes that are relevant for that part and its specific operation.
-	/// </remarks>
-	public enum ConnState
+	/// <summary>
+    /// Generic summary state for current connection state of part for parts that support a single connection.
+    /// <para/>This enum defines a set of state codes that are helpfull in determining if a Part is connected to some related entity (or not), especially when the Part
+    /// either implements the connection itself or depends on such a connection for it correct operation.  All parts support a ConnState but they may only use a 
+    /// specific subset of the defined state codes that are relevant for that part and its specific operation.
+    /// <para/>Undefined (0), Initial, NotApplicable, Connecting, ConnectionFailed, ConnectFailed, Disconnected, DisconnectedByOtherEnd
+    /// </summary>
+    [DataContract(Namespace = Constants.ModularNameSpace)]
+    public enum ConnState
 	{
-		/// <summary>no valid value has been given or ConnState is not supported by this part</summary>
-		Undefined = 0,
-		/// <summary>Either stays here until device has been put online explicitly or attempts autoOnline if appropriate</summary>
-		Initial,
-		/// <summary>this part does not (directly) support any known connection</summary>
-		NotApplicable,
-		/// <summary>the part is connecting (has initiated a connection but the connection is not complete and has not failed)</summary>
-		Connecting,
-		/// <summary>the part is waiting for another party to try to connect</summary>
-		WaitingForConnect,
-		/// <summary>Connection to remote device is believed to be available and/or operating correctly</summary>
-		Connected,
-        /// <summary>Connection to remote device is not available (rejected or failed while in use).  State supports automatic reconnection attempt</summary>
-		ConnectionFailed,
-		/// <summary>Attempt to connect failed.  State supports automatic reconnection attempt</summary>
-		ConnectFailed,
-		/// <summary>Connection has been explicitly stopped</summary>
-		Disconnected,
-        /// <summary>Connection has been explicitly stopped by the other end</summary>
-        DisconnectedByOtherEnd,
+		/// <summary>no valid value has been given or ConnState is not supported by this part (0)</summary>
+        [EnumMember]
+        Undefined = 0,
+
+        /// <summary>Either stays here until device has been put online explicitly or attempts autoOnline if appropriate (1)</summary>
+        [EnumMember]
+        Initial = 1,
+
+        /// <summary>this part does not (directly) support any known connection (2)</summary>
+        [EnumMember]
+        NotApplicable = 2,
+
+        /// <summary>the part is connecting (has initiated a connection but the connection is not complete and has not failed) (3)</summary>
+        [EnumMember]
+        Connecting = 3,
+
+        /// <summary>the part is waiting for another party to try to connect (4)</summary>
+        [EnumMember]
+        WaitingForConnect = 4,
+
+        /// <summary>Connection to remote device is believed to be available and/or operating correctly (5)</summary>
+        [EnumMember]
+        Connected = 5,
+
+        /// <summary>Connection to remote device is not available (rejected or failed while in use).  State supports automatic reconnection attempt (6)</summary>
+        [EnumMember]
+        ConnectionFailed = 6,
+
+        /// <summary>Attempt to connect failed.  State supports automatic reconnection attempt (7)</summary>
+        [EnumMember]
+        ConnectFailed = 7,
+
+        /// <summary>Connection has been explicitly stopped (8)</summary>
+        [EnumMember]
+        Disconnected = 8,
+
+        /// <summary>Connection has been explicitly stopped by the other end (9)</summary>
+        [EnumMember]
+        DisconnectedByOtherEnd = 9,
     }
 
 	#endregion
@@ -234,6 +280,7 @@ namespace MosaicLib.Modular.Part
 
     #region extension methods
 
+    /// <summary>Standard extension methods wrapper class/namespace</summary>
     public static partial class ExtensionMethods
     {
         /// <summary>
@@ -338,8 +385,10 @@ namespace MosaicLib.Modular.Part
 
         /// <summary>Returns true if the part has been successfully started with StartPart.</summary>
         bool HasBeenStarted { get; }
+
         /// <summary>Returns true if the part has been stopped with StopPart or if its primary action Q has been disabled.</summary>
         bool HasBeenStopped { get; }
+
         /// <summary>Returns true if the part HasBeenStarted and not it HasBeenStopped</summary>
         bool IsRunning { get; }
 
@@ -409,18 +458,18 @@ namespace MosaicLib.Modular.Part
         /// </summary>
         /// <param name="partID">This gives the name that the part will carry</param>
         /// <param name="partType">This gives the type that the part will carry</param>
-		protected PartBaseBase(string partID, string partType) 
-		{
+		protected PartBaseBase(string partID, string partType)
+        {
             if (!partID.IsNullOrEmpty())
                 PartID = partID;
             else
-    			PartID = "[DefaultPartID:${0:x4}]".CheckedFormat(partIDSeqNumGenerator.Increment());
+                PartID = "[DefaultPartID:${0:x4}]".CheckedFormat(partIDSeqNumGenerator.Increment());
 
             if (!partType.IsNullOrEmpty())
                 PartType = partType;
             else
                 PartType = this.GetType().ToString();
-		}
+        }
 
         private static AtomicInt64 partIDSeqNumGenerator = new AtomicInt64();
 
@@ -440,10 +489,15 @@ namespace MosaicLib.Modular.Part
         /// <summary>Creates a StackFrame for the caller and returns the Name of the stack frame's current method.</summary>
         public static string CurrentMethodName { get { return new System.Diagnostics.StackFrame(1).GetMethod().Name; } }
 
+        /// <summary>Creates a StackFrame for the caller and returns the Name of the current methods DeclaringType</summary>
+        public static string CurrentClassName { get { return new System.Diagnostics.StackFrame(1).GetMethod().DeclaringType.ToString(); } }
+
         /// <summary>Protected utility method.  Returns the result of calling <code>Utils.EC.FmtWin32EC(PartID, win32EC);</code></summary>
 		protected string FmtWin32EC(int win32EC) { return Utils.EC.FmtWin32EC(PartID, win32EC); }
+
         /// <summary>Protected utility method.  Returns the result of calling <code>Utils.EC.FmtStdEC(PartID, errorStr);</code></summary>
         protected string FmtStdEC(string errorStr) { return Utils.EC.FmtStdEC(PartID, errorStr); }
+
         /// <summary>Protected utility method.  Returns the result of calling <code>Utils.EC.FmtStdEC(PartID, errorCode, errorStr);</code></summary>
         protected string FmtStdEC(int errorCode, string errorStr) { return Utils.EC.FmtStdEC(PartID, errorCode, errorStr); }
 
@@ -459,12 +513,13 @@ namespace MosaicLib.Modular.Part
 	/// This struct is used by most types of Part as a storage container for the part's base state.  This struct also implements the IBaseState interface
 	/// and may be used with some other storage container to service the part's BaseState property.
 	/// </summary>
+    [DataContract(Namespace=Constants.ModularNameSpace)]
 	public struct BaseState : IBaseState
 	{
 		#region private fields
 
 		private UseState useState;
-		private ConnState connState;
+        private ConnState connState;
         private string actionName;
         private QpcTimeStamp timeStamp;
         private string reason;
@@ -474,17 +529,29 @@ namespace MosaicLib.Modular.Part
 		#region IBaseState interface
 
         /// <summary>return true if the part is simulated</summary>
+        [DataMember(Order = 100, EmitDefaultValue = false, IsRequired = false)]
         public bool IsSimulated { get; private set; }
+
         /// <summary>return true if the part is a primary part.  secondary parts are parts that provide secondary functional facade on a common underlying part but where the secondary facade should not be used to manage the part's online/offline state or to start or stop it.</summary>
+        [DataMember(Order = 200, EmitDefaultValue = false, IsRequired = false)]
         public bool IsPrimaryPart { get; private set; } // true if this part represents the master interface to a part which supports multiple interfaces
+
         /// <summary>reports the UseState of the part at the time the client obtained this state object</summary>
+        [DataMember(Order = 300)]
         public UseState UseState { get { return useState; } set { useState = value; timeStamp.SetToNow(); } }
+
         /// <summary>reports the ConnState of the part at the time the client obtained this state object</summary>
+        [DataMember(Order = 400)]
         public ConnState ConnState { get { return connState; } set { connState = value; timeStamp.SetToNow(); } }
+
         /// <summary>reports the, possibly empty, name of any action that part is currently performing</summary>
+        [DataMember(Order = 500)]
         public string ActionName { get { return actionName.MapNullToEmpty(); } set { actionName = value; timeStamp.SetToNow(); } }
+
         /// <summary>reports the, possibly empty, reported reason for the last BaseState change.</summary>
+        [DataMember(Order = 600)]
         public string Reason { get { return reason.MapNullToEmpty(); } set { reason = value; timeStamp.SetToNow(); } }
+
         /// <summary>reports the timestamp at which the new contents or state object was generated.</summary>
         public QpcTimeStamp TimeStamp { get { return timeStamp; } }
 
@@ -662,10 +729,151 @@ namespace MosaicLib.Modular.Part
 		#endregion
     }
 
+    public static partial class ExtensionMethods
+    {
+        public static bool Equals(this IBaseState thisIBS, IBaseState other, bool compareTimeStamps = true)
+        {
+            if (Object.ReferenceEquals(thisIBS, other))
+                return true;
+
+            if (thisIBS == null || other == null)
+                return false;
+
+            if (thisIBS.Equals(other))
+                return true;
+
+            if (compareTimeStamps)
+                return false;
+
+            return (thisIBS.IsSimulated == other.IsSimulated
+                && thisIBS.IsPrimaryPart == other.IsPrimaryPart
+                && thisIBS.UseState == other.UseState
+                && thisIBS.ConnState == other.ConnState
+                && thisIBS.ActionName == other.ActionName
+                && thisIBS.Reason == other.Reason
+                // && thisIBS.TimeStamp == rhs.TimeStamp
+                );
+        }
+    }
+
 	#endregion
 
     //-----------------------------------------------------------------
-    #region SimplePartBase
+    #region SimplePartBaseBehavior, SimplePartBaseSettings, and SimplePartBase
+
+    [Flags]
+    public enum SimplePartBaseBehavior : int
+    {
+        None = 0,
+
+        /// <summary>When present, this flag indicates that the part should be busy whenever any action queue is non-empty</summary>
+        TreatPartAsBusyWhenQueueIsNotEmpty = 1,
+
+        /// <summary>When present, this flag indicates that the part should be busy whenever its internal part busy counter is non-zero</summary>
+        TreatPartAsBusyWhenInternalPartBusyCountIsNonZero = 2,
+
+        /// <summary>(TreatPartAsBusyWhenQueueIsNotEmpty | TreatPartAsBusyWhenInternalPartBusyCountIsNonZero)</summary>
+        All = (TreatPartAsBusyWhenQueueIsNotEmpty | TreatPartAsBusyWhenInternalPartBusyCountIsNonZero),
+    }
+
+    /// <summary>
+    /// This structure contains all of the "settings" values that are used by SimplePartBase's implementation.
+    /// This structure is typically used by derived objects to comparmentalize and simplify how they configure their 
+    /// base class.  This will also allow this object to provide a variety of static preconfigured settings values.
+    /// It is also expected to simplify addition of new settings in the future
+    /// </summary>
+    public struct SimplePartBaseSettings
+    {
+        /// <summary>Defines the behavior characteristics that will be enabled for a part</summary>
+        public SimplePartBaseBehavior SimplePartBaseBehavior { get; set; }
+
+        /// <summary>
+        /// Set this to be non-null to enable BaseState publication via IVA.  
+        /// When this is set to the empty string, the IVA name will be derived from the PartID as [PartID].BaseState
+        /// When this is neither null nor empty then the IVA name will be the given string value.
+        /// <para/>Defaults to string.Empty to enable publication using the default name.
+        /// </summary>
+        public string BaseStatePublicationValueName { get { return baseStatePublicationValueName; } set { baseStatePublicationValueName = value; baseStatePublicationValueNameHasBeenSet = true; } }
+
+        private string baseStatePublicationValueName;
+        private bool baseStatePublicationValueNameHasBeenSet;
+
+        /// <summary>
+        /// Defines the IValuesInterconnection instance that will be used by this PartBase class when creating base class level IValueAccessor objects.
+        /// When null (the default value) the part will use the default Modular.Interconnect.Values.Values.Instance.
+        /// <para/>publically settable (for use in initializers), getter is protected.
+        /// </summary>
+        public IValuesInterconnection PartBaseIVI { get; set; }
+
+        /// <summary>
+        /// This method is called during Settings assignment.  It applies any required settings changes of struct default values.
+        /// <para/>if the BaseStatePublicationValueName property has not been explicitly set, it will be set to string.Empty.
+        /// </summary>
+        public SimplePartBaseSettings SetupForUse()
+        {
+            if (!baseStatePublicationValueNameHasBeenSet)
+                baseStatePublicationValueName = string.Empty;
+
+            return this;
+        }
+
+        /// <summary>
+        /// returns a constructor default SimpleParstBaseSettings value.
+        /// </summary>
+        public static SimplePartBaseSettings DefaultVersion0 { get { return new SimplePartBaseSettings(); } }
+
+        /// <summary>
+        /// returns te first non-constructor default SimpleParstBaseSettings value (established under MosaicLibCS 0.1.6.0):
+        /// <para/>SimplePartBaseBehavior = SimplePartBaseBehavior.All (TreatPartAsBusyWhenQueueIsNotEmpty | TreatPartAsBusyWhenInternalPartBusyCountIsNonZero),
+        /// </summary>
+        public static SimplePartBaseSettings DefaultVersion1 
+        { 
+            get 
+            { 
+                return new SimplePartBaseSettings() 
+                { 
+                    SimplePartBaseBehavior = SimplePartBaseBehavior.All 
+                }; 
+            } 
+        }
+    }
+
+    /// <summary>Standard extension methods wrapper class/namespace</summary>
+    public static partial class ExtensionMethods
+    {
+        /// <summary>
+        /// Returns true if the given SimplePartBaseBehavior value has the indicated flag set (present)
+        /// </summary>
+        public static bool CheckFlag(this SimplePartBaseSettings settings, SimplePartBaseBehavior checkFlag)
+        {
+            return ((settings.SimplePartBaseBehavior & checkFlag) == checkFlag);
+        }
+
+        /// <summary>
+        /// SimplePartBaseSettings content builder helper extension method.
+        /// </summary>
+        public static SimplePartBaseSettings Build(this SimplePartBaseSettings settings, 
+                                                    SimplePartBaseBehavior? simplePartBaseBehavior = null, 
+                                                    string baseStatePublicationValueName = null, 
+                                                    bool setBaseStatePublicationValueNameToNull = false, 
+                                                    IValuesInterconnection partBaseIVI = null)
+        {
+            if (simplePartBaseBehavior.HasValue)
+                settings.SimplePartBaseBehavior = simplePartBaseBehavior.Value;
+
+            if (baseStatePublicationValueName != null)
+                settings.BaseStatePublicationValueName = baseStatePublicationValueName;
+
+            if (setBaseStatePublicationValueNameToNull)
+                settings.BaseStatePublicationValueName = null;
+
+            if (partBaseIVI != null)
+                settings.PartBaseIVI = partBaseIVI;
+
+            return settings;
+        }
+    }
+
 
     /// <summary>
     /// This class is a utility base class for objects that implement the IPartBase interface.  
@@ -681,28 +889,31 @@ namespace MosaicLib.Modular.Part
 
         /// <summary>Protected constructor: derived class specifies only the PartID, PartType will be automatically derived from the class name of the derived type.</summary>
         /// <param name="partID">Gives the PartID/Name that the part will report and use.</param>
-        protected SimplePartBase(string partID) : this(partID, new System.Diagnostics.StackFrame(1).GetMethod().DeclaringType.ToString()) { }
-
-        /// <summary>Protected constructor: derived class specifies the PartID and PartType to be used</summary>
-        /// <param name="partID">Gives the PartID/Name that the part will report and use.</param>
-        /// <param name="partType">Gives the PartType that this part will report</param>
-        protected SimplePartBase(string partID, string partType) : this(partID, partType, new Logging.Logger(partID)) { }
+        /// <param name="basicLogger">Optionally gives the <see cref="Logging.IBasicLogger"/> instance that the part shall use for logging.  Part will use new Logging.Logger(partID) if this is null.</param>
+        /// <param name="initialSettings">Optionally gives the SimplePartBaseSettings that will be used to configure this part's behavior.  Part will use default values if this is null.</param>
+        protected SimplePartBase(string partID, Logging.IBasicLogger basicLogger = null, SimplePartBaseSettings? initialSettings = null) 
+            : this(partID, new System.Diagnostics.StackFrame(1).GetMethod().DeclaringType.ToString(), basicLogger: basicLogger, initialSettings: initialSettings) 
+        { }
 
         /// <summary>Protected constructor: derived class specifies the PartID, PartType, and IBasicLogger instance to be used</summary>
         /// <param name="partID">Gives the PartID/Name that the part will report and use.</param>
         /// <param name="partType">Gives the PartType that this part will report</param>
-        /// <param name="basicLogger">Gives the <see cref="Logging.IBasicLogger"/>instance that the part shall use for logging.</param>
-        protected SimplePartBase(string partID, string partType, Logging.IBasicLogger basicLogger)
+        /// <param name="basicLogger">Optionally gives the <see cref="Logging.IBasicLogger"/> instance that the part shall use for logging.  Part will use new Logging.Logger(partID) if this is null.</param>
+        /// <param name="initialSettings">Optionally gives the SimplePartBaseSettings that will be used to configure this part's behavior.  Part will use default values if this is null.</param>
+        protected SimplePartBase(string partID, string partType, Logging.IBasicLogger basicLogger = null, SimplePartBaseSettings? initialSettings = null)
             : base(partID, partType)
         {
-            Log = basicLogger;
+            Log = basicLogger ?? new Logging.Logger(partID);
 
             BaseStatePublishedNotificationList = new EventHandlerNotificationList<IBaseState>(this);
             BaseStateChangeEmitter = Log.Emitter(Logging.MesgType.Trace);
 
             publishedBaseState.Object = PrivateBaseState;
 
-            BaseStatePublicationValueName = string.Empty;
+            if (initialSettings != null)
+                settings = initialSettings.GetValueOrDefault();
+
+            settings = settings.SetupForUse();
         }
 
         #endregion
@@ -711,8 +922,6 @@ namespace MosaicLib.Modular.Part
 
         /// <summary>public property that may be used to obtain a copy of the most recently generated IBaseState for this part.</summary>
         public override IBaseState BaseState { get { return publishedBaseState.VolatileObject; } }      // base class defines this as abstract - use VolatileObject since IBaseState will always be handling boxed copies.
-
-
 
         /// <summary>public property that may be used to gain access to the INotificationObject that is used to manage publication and notification of this part's BaseState.</summary>
         public override INotificationObject<IBaseState> BaseStateNotifier { get { return publishedBaseState; } }    // base class defines this as abstract
@@ -727,6 +936,37 @@ namespace MosaicLib.Modular.Part
         /// <summary>Gives derived objects access to the Logger.ILogger created by this SimpleActivePartBase during construction.</summary>
         /// <remarks>Derived classes are allowed to replace the Log logger with some other instance.</remarks>
         protected Logging.IBasicLogger Log { get; set; }
+
+        #endregion
+
+        #region Operational Settings (and related properties)
+
+        public SimplePartBaseSettings SimplePartBaseSettings { get; protected set; }
+
+        /// <summary>
+        /// Settings property gives derived objects access to all of the base class "settings" as a single set.
+        /// The use of this property will apply the SetupForUse method to the given value and then replace the use of prior seperate settings values in the SimpleActivePartBase class with the updated given value.
+        /// </summary>
+        public SimplePartBaseSettings Settings { get { return settings; } protected set { settings = value.SetupForUse(); } }
+
+        /// <summary>
+        /// This protected Settings field gives derived objects direct read/write access to the SimplePartBaseSettings storage that is used by the part.  
+        /// This may be useful in cases where the derived part wants to be able to make incremental changes to the current Settings without using the standard value object property pattern for incremental changes.
+        /// <para/>WARNING: if a derived part replaces the settings using this method, then it must use the SetupForUse settings method on the new value before assigning it to this field.
+        /// </summary>
+        protected SimplePartBaseSettings settings = new SimplePartBaseSettings();
+
+        [Obsolete("Please replace the use of this property with the corresponding one in the part's Settings (2017-01-21)")]
+        protected bool TreatPartAsBusyWhenQueueIsNotEmpty { get { return settings.CheckFlag(SimplePartBaseBehavior.TreatPartAsBusyWhenQueueIsNotEmpty); } set { settings.SimplePartBaseBehavior = settings.SimplePartBaseBehavior.Set(SimplePartBaseBehavior.TreatPartAsBusyWhenQueueIsNotEmpty, value); } }
+
+        [Obsolete("Please replace the use of this property with the corresponding one in the part's Settings (2017-01-21)")]
+        protected bool TreatPartAsBusyWhenInternalPartBusyCountIsNonZero { get { return settings.CheckFlag(SimplePartBaseBehavior.TreatPartAsBusyWhenInternalPartBusyCountIsNonZero); } set { settings.SimplePartBaseBehavior = settings.SimplePartBaseBehavior.Set(SimplePartBaseBehavior.TreatPartAsBusyWhenInternalPartBusyCountIsNonZero, value); } }
+
+        [Obsolete("Please replace the use of this property with the corresponding one in the part's Settings (2017-01-21)")]
+        protected string BaseStatePublicationValueName { get { return settings.BaseStatePublicationValueName; } set { settings.BaseStatePublicationValueName = value; } }
+
+        [Obsolete("Please replace the use of this property with the corresponding one in the part's Settings (2017-01-21)")]
+        public IValuesInterconnection PartBaseIVI { protected get { return settings.PartBaseIVI; } set { settings.PartBaseIVI = value; } }
 
         #endregion
 
@@ -745,43 +985,23 @@ namespace MosaicLib.Modular.Part
 
         /// <summary>private field which is the interlocked notificatino ref object that is used to publish boxed BaseState values using the IBaseState interface.</summary>
         private InterlockedNotificationRefObject<IBaseState> publishedBaseState = new InterlockedNotificationRefObject<IBaseState>();
-        
-        /// <summary>protected EventHandlerNotificationList{IBaseState} that may also be used to signal publication of new BaseState values</summary>
-        protected Utils.EventHandlerNotificationList<IBaseState> BaseStatePublishedNotificationList = null;
 
-        /// <summary>If this property is set to true, the part should indicate that it is busy whenever any action queue is non-empty.</summary>
-        protected bool TreatPartAsBusyWhenQueueIsNotEmpty { get; set; }
         /// <summary>Internal proprty that must be overridden by derived class to allow PublishBaseState to observe if any action queue is non-empty.</summary>
         protected virtual bool AreAllActionQueuesEmpty { get { return true; } }
 
-        /// <summary>If this property is set to true, the part should indicate that it is busy whenever its internal part busy counter is non-zero</summary>
-        protected bool TreatPartAsBusyWhenInternalPartBusyCountIsNonZero { get; set; }
-
-        /// <summary>
-        /// Set this to be non-null to enable BaseState publication via IVA.  
-        /// When this is set to the empty string, the IVA name will be derived from the PartID as [PartID].BaseState
-        /// When this is neither null nor empty then the IVA name will be the given string value.
-        /// <para/>Defaults to string.Empty to enable publication using the default name.
-        /// </summary>
-        protected string BaseStatePublicationValueName { get; set; }
-
-        /// <summary>
-        /// Defines the IValuesInterconnection instance that will be used by this PartBase class when creating base class level IValueAccessor objects.
-        /// When null (the default value) the part will use the default Modular.Interconnect.Values.Values.Instance.
-        /// <para/>publically settable (for use in initializers), getter is protected.
-        /// </summary>
-        public IValuesInterconnection PartBaseIVI { protected get; set; }
+        /// <summary>protected EventHandlerNotificationList{IBaseState} that may also be used to signal publication of new BaseState values</summary>
+        protected Utils.EventHandlerNotificationList<IBaseState> BaseStatePublishedNotificationList = null;
 
         private IValueAccessor baseStatePublisherIVA = null;
 
         private void SetupBaseStatePublisherIVAIfNeeded()
         {
-            if (baseStatePublisherIVA == null && BaseStatePublicationValueName != null)
+            if (baseStatePublisherIVA == null && settings.BaseStatePublicationValueName != null)
             {
-                if (BaseStatePublicationValueName.IsNullOrEmpty())
-                    BaseStatePublicationValueName = "{0}.BaseState".CheckedFormat(PartID);
+                if (settings.BaseStatePublicationValueName.IsNullOrEmpty())
+                    settings.BaseStatePublicationValueName = "{0}.BaseState".CheckedFormat(PartID);
 
-                baseStatePublisherIVA = (PartBaseIVI ?? Values.Instance).GetValueAccessor(BaseStatePublicationValueName);
+                baseStatePublisherIVA = (settings.PartBaseIVI ?? Values.Instance).GetValueAccessor(settings.BaseStatePublicationValueName);
             }
         }
 
@@ -797,8 +1017,8 @@ namespace MosaicLib.Modular.Part
 
             BaseState baseStateCopy = PrivateBaseState;
 
-            bool pushPartToBusyState = (TreatPartAsBusyWhenQueueIsNotEmpty && !AreAllActionQueuesEmpty)
-                                     || (TreatPartAsBusyWhenInternalPartBusyCountIsNonZero && internalPartBusyCounter.VolatileValue != 0)
+            bool pushPartToBusyState = (settings.CheckFlag(SimplePartBaseBehavior.TreatPartAsBusyWhenQueueIsNotEmpty) && !AreAllActionQueuesEmpty)
+                                     || (settings.CheckFlag(SimplePartBaseBehavior.TreatPartAsBusyWhenInternalPartBusyCountIsNonZero) && internalPartBusyCounter.VolatileValue != 0)
                                      ;
 
             if (pushPartToBusyState && baseStateCopy.UseState == UseState.Online)      // map idle state to busy state
@@ -864,21 +1084,15 @@ namespace MosaicLib.Modular.Part
         /// <summary>
         /// Increments the internal part busy counter and Creates an internal busy flag holder object which is returned.  When the returned object is explicitly disposed it will decrement the internal part busy flag automatically.
         /// Caller is responsible for following an object dispose pattern that will cause the returned object to be disposed of at the correct time.
-        /// </summary>
-        protected IDisposable CreateInternalBusyFlagHolderObject() { return CreateInternalBusyFlagHolderObject(null, null); }
-
-        /// <summary>
-        /// Increments the internal part busy counter and Creates an internal busy flag holder object which is returned.  When the returned object is explicitly disposed it will decrement the internal part busy flag automatically.
-        /// Caller is responsible for following an object dispose pattern that will cause the returned object to be disposed of at the correct time.
         /// This variant uses a reason of "StartBusy:" + flagName when first incrementing the busy flag and "EndBusy:" + flagName when the returned object is disposed and the counter is decremented.
         /// </summary>
-        protected IDisposable CreateInternalBusyFlagHolderObject(string flagName, string startingActionName)
+        protected IDisposable CreateInternalBusyFlagHolderObject(string flagName = null, string startingActionName = null)
         {
-            bool haveActionName = !string.IsNullOrEmpty(startingActionName);
-            bool publish = !string.IsNullOrEmpty(flagName) || haveActionName;
+            bool haveActionName = !startingActionName.IsNullOrEmpty();
+            bool publish = !flagName.IsNullOrEmpty() || haveActionName;
 
-            string startReason = (!publish ? null : (!haveActionName ?  ("StartBusy:" + flagName) : Utils.Fcns.CheckedFormat("Starting:{0} FlagName:{1}", startingActionName, flagName)));
-            string endReason = (!publish ? null : (!haveActionName ?  ("EndBusy:" + flagName) : Utils.Fcns.CheckedFormat("Ending:{0} FlagName:{1}", startingActionName, flagName)));
+            string startReason = (!publish ? null : (haveActionName ? "Starting:{0} FlagName:{1}" : "StartBusy:{1}").CheckedFormat(startingActionName, flagName));
+            string endReason = (!publish ? null : (haveActionName ? "Ending:{0} FlagName:{1}" : "EndBusy:{1}").CheckedFormat(startingActionName, flagName));
 
             IncrementInternalPartBusyCounter(startReason, startingActionName);
 

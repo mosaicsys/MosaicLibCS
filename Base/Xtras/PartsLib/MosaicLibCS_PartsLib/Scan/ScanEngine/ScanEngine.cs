@@ -53,18 +53,21 @@ namespace MosaicLib.PartsLib.Scan.ScanEngine
         /// <summary>
         /// Copy constructor.
         /// </summary>
-        public ScanEnginePartConfig(ScanEnginePartConfig rhs)
+        public ScanEnginePartConfig(ScanEnginePartConfig other)
         {
-            Name = rhs.Name;
-            Installed = rhs.Installed;
-            NominalRateInHz = rhs.NominalRateInHz;
-            pluginsToAddList = rhs.pluginsToAddList;        // no need to clone: it is already readonly.
+            Name = other.Name;
+            IVI = other.IVI;
+            Installed = other.Installed;
+            NominalRateInHz = other.NominalRateInHz;
+            pluginsToAddList = other.pluginsToAddList;        // no need to clone: it is already readonly.
         }
 
         /// <summary>
         /// SimEngine part Name (aka PartID).  Also used as a default prefix for any config keys that are used to Setup this object and related plugin config keys.
         /// </summary>
         public string Name { get; set; }
+
+        public IValuesInterconnection IVI { get; set; }
 
         [ConfigItem(ReadOnlyOnce = true, IsOptional = true)]
         public bool Installed { get; set; }
@@ -295,13 +298,11 @@ namespace MosaicLib.PartsLib.Scan.ScanEngine
         #region Construction
 
         public ScanEnginePart(ScanEnginePartConfig config)
-            : base(config.Name)
+            : base(config.Name, initialSettings: SimpleActivePartBaseSettings.DefaultVersion0.Build(waitTimeLimit: config.NominalServicePeriod, partBaseIVI: config.IVI))
         {
             ActionLoggingConfig = Modular.Action.ActionLoggingConfig.Debug_Debug_Trace_Trace;    // redefine the log levels for actions
 
             Config = new ScanEnginePartConfig(config);
-
-            WaitTimeLimit = Config.NominalServicePeriod;
 
             PrivateBaseState.SetSimulated(false, true);
 

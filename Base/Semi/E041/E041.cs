@@ -281,7 +281,7 @@ namespace MosaicLib.Semi.E041
     #region IANSpec, ANSpec
 
     /// <summary>Interface to an Annunciator Spec object (this interface is read only)</summary>
-    public interface IANSpec
+    public interface IANSpec : IEquatable<IANSpec>
     {
         /// <summary>Gives the Name of the Annunciator</summary>
         string ANName { get; }
@@ -357,7 +357,39 @@ namespace MosaicLib.Semi.E041
             else
                 return "ANSpec: {0} {1} ALID:{2}".CheckedFormat(ANName, ANType, ALID);
         }
-	}
+
+        /// <summary>
+        /// Returns true if the given other is non-null and its contents match the contents of this object.
+        /// </summary>
+        public bool Equals(IANSpec other)
+        {
+            return (other != null
+                    && ANName == other.ANName
+                    && Comment == other.Comment
+                    && ANType == other.ANType
+                    && SpecID == other.SpecID
+                    && ALID == other.ALID);
+        }
+
+        /// <summary>
+        /// overrides object.Equals (for unit tests, et. al.).  Maps to use corresponding IEquatable interface method.
+        /// </summary>
+        public override bool Equals(object obj)
+        {
+            if (obj is IANSpec)
+                return Equals(obj as IANSpec);
+            else
+                return false;
+        }
+
+        /// <summary>
+        /// provided to avoid build warning
+        /// </summary>
+        public override int GetHashCode()
+        {
+            return base.GetHashCode();
+        }
+    }
 
     #endregion
 
@@ -521,6 +553,26 @@ namespace MosaicLib.Semi.E041
 
             return "ANState {0} {1} {2} sel:{3}{4} alid:{5} reason:'{6}'".CheckedFormat(anSpecStr, ANSignalState, ActionList.ToString(false, true), SelectedActionName.MapNullOrEmptyTo("[None]"), ActionAbortRequested ? " AbortReq" : string.Empty, ALID, Reason);
         }
+
+        /// <summary>
+        /// overrides object.Equals (for unit tests, et. al.).  Maps to use corresponding IEquatable interface method.
+        /// </summary>
+        public override bool Equals(object obj)
+        {
+            if (obj is IANState)
+                return IsEqualTo(obj as IANState);
+            else
+                return false;
+        }
+
+        /// <summary>
+        /// provided to avoid build warning
+        /// </summary>
+        public override int GetHashCode()
+        {
+            return base.GetHashCode();
+        }
+
     }
 
     #endregion

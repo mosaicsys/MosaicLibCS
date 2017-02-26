@@ -24,11 +24,13 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Collections.ObjectModel;
-using System.Runtime.Serialization;
-using System.Linq;
-using MosaicLib.Utils;
-using MosaicLib.Modular.Common;
 using System.ComponentModel;
+using System.Linq;
+using System.Runtime.Serialization;
+
+using MosaicLib.Modular.Common;
+using MosaicLib.Modular.Common.CustomSerialization;
+using MosaicLib.Utils;
 
 // Modular.Interconnect is the general namespace for tools that help interconnect Modular Parts without requiring that that have pre-existing knowledge of each-other's classes and instances.
 // This file contains the definitions for the underlying Modular.Interconnect.Sets namespace which is one of the areas of functionality that helps in this regard.
@@ -576,13 +578,16 @@ namespace MosaicLib.Modular.Interconnect.Sets
 
         /// <summary>True if the ITrackingSet that generated this delta had been reset at the start of its corresponding update cycle.</summary>
         bool ClearSetAtStart { get; }
+        
         /// <summary>Returns true if this ISetDelta includes deserialized added objects.</summary>
         bool HasObjects { get; }
+        
         /// <summary>Returns true if this ISetDetla includes serailized representations of the added objects.</summary>
         bool HasSerializedObjects { get; }
 
         /// <summary>Returns a sequence of ISetDeltaRemoveRangeItem objects that represent the set items to remove when applying this delta</summary>
         IEnumerable<ISetDeltaRemoveRangeItem> RemoveRangeItems { get; }
+
         /// <summary>Returns a sequence of ISetDeltaAddContiguousRangeItem objects that represent the set of items to append to this set when applying this delta.</summary>
         IEnumerable<ISetDeltaAddContiguousRangeItem> AddRangeItems { get; }
     }
@@ -592,8 +597,10 @@ namespace MosaicLib.Modular.Interconnect.Sets
     {
         /// <summary>Gives the item SeqNum of the first item in the contiguous range that is to be removed when processing this range.</summary>
         Int64 RangeStartSeqNum { get; }
+
         /// <summary>Gives the index into the source set of the first item in this contiguous range just before it was removed from the source set..</summary>
         Int32 RangeStartIndex { get; }
+        
         /// <summary>Gives the count of the number of items in this range that are to be removed</summary>
         Int32 Count { get; }
     }
@@ -603,10 +610,13 @@ namespace MosaicLib.Modular.Interconnect.Sets
     {
         /// <summary>Gives the item SeqNum of the first item in this contiguous range to be added to the set when processing this range</summary>
         Int64 RangeStartSeqNum { get; }
+        
         /// <summary>Gives the index in the source set of the first item in this contiguous range at which to add this range of items</summary>
         Int32 RangeStartIndex { get; }
+        
         /// <summary>Gives the, possibly null or empty, sequence of deserialized objects that are to be added when processing this range</summary>
         IEnumerable<object> RangeObjects { get; }
+        
         /// <summary>Gives the, possibly null or empty, sequence of string representations of the corresponding objects.  At present these make use of JSON DataContract serialization.</summary>
         IEnumerable<string> RangeSerializedObjects { get; }
     }

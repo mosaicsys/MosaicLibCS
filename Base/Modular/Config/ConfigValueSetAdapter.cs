@@ -22,6 +22,7 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Linq;
 
 using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Config.Attributes;
@@ -60,8 +61,30 @@ namespace MosaicLib.Modular.Config
             public ConfigKeyAccessFlags AccessFlags { get { return accessFlags; } set { accessFlags = value; } }
             private ConfigKeyAccessFlags accessFlags = new ConfigKeyAccessFlags();
 
-            public NamedValueSet MetaData { get { return metaData; } set { metaData = value; } }
-            private NamedValueSet metaData = null;
+            /// <summary>
+            /// gives C# client access to the NamedValueSet that contains some of the values that are setable here.
+            /// </summary>
+            public INamedValueSet MetaData
+            {
+                get
+                {
+                    if (metaData == null)
+                    {
+                        NamedValueSet nvs = new NamedValueSet() { { "AccessFlags", AccessFlags } };
+                        if (ensureExistsHasBeenSet)
+                            nvs.Add("EnsureExists", EnsureExists);
+                        if (defaultProviderNameHasBeenSet)
+                            nvs.Add("DefaultProviderName", DefaultProviderName);
+                        if (additionalKeywordsHasBeenSet)
+                            nvs.AddRange(AdditionalKeywords.Select(keyword => new NamedValue(keyword)));
+
+                        metaData = nvs.ConvertToReadOnly();
+                    }
+
+                    return metaData;
+                }
+            }
+            private INamedValueSet metaData = null;
 
             /// <summary>
             /// This property is true when the config key's value will follow the MayBeChanged update behavior.
@@ -86,13 +109,27 @@ namespace MosaicLib.Modular.Config
             /// <summary>
             /// Set this property to true to attempt to create a config key in the default provider, or in any provider that supports this feature, if the key was not already found.
             /// </summary>
-            public bool EnsureExists { get { return (MetaData ?? NamedValueSet.Empty)["EnsureExists"].VC.GetValue<bool>(false); } set { MetaData = MetaData.ConvertToWriteable(); MetaData.SetValue("EnsureExists", value); } }
+            public bool EnsureExists { get { return ensureExists; } set { ensureExists = value; ensureExistsHasBeenSet = true; metaData = null; } }
+            private bool ensureExists = false;
+            private bool ensureExistsHasBeenSet = false;
 
             /// <summary>
             /// This property may be used to request that the key be obtained from the named provider before searching other providers for the same name.  
             /// In addition when using the EnsureExists feature, the provider named here will be asked to create the requested config key before consulting other providers.
             /// </summary>
-            public string DefaultProviderName { get { return (MetaData ?? NamedValueSet.Empty)["DefaultProviderName"].VC.GetValue<string>(false).MapNullToEmpty(); } set { MetaData = MetaData.ConvertToWriteable(); MetaData.SetValue("DefaultProviderName", value); } }
+            public string DefaultProviderName { get { return defaultProviderName.MapNullToEmpty(); } set { defaultProviderName = value; defaultProviderNameHasBeenSet = true; metaData = null; } }
+            private string defaultProviderName = null;
+            private bool defaultProviderNameHasBeenSet = false;
+
+            /// <summary>
+            /// Allows the caller to specify a set of additional keywords to be included in the NamedValueSet that will be produced when using the MetaData property.
+            /// </summary>
+            public string[] AdditionalKeywords { get { return (additionalKeywords ?? emptyStringArray); } set { additionalKeywords = value; additionalKeywordsHasBeenSet = true; metaData = null; } }
+            private string [] additionalKeywords = null;
+            private bool additionalKeywordsHasBeenSet = false;
+
+            private static readonly string[] emptyStringArray = new string[0];
+
         }
     }
 
@@ -223,7 +260,7 @@ namespace MosaicLib.Modular.Config
                 ConfigKeyAccessFlags customAccessFlags = new ConfigKeyAccessFlags(itemAttribute.AccessFlags) { SilenceIssues = true };
                 INamedValueSet keyMetaData = itemAttribute.MetaData.MapEmptyToNull();
 
-                if (keyMetaData == null)
+                if (keyMetaData.IsNullOrEmpty())
                     keyMetaData = DefaultKeyMetaData;
                 else if (!DefaultKeyMetaData.IsNullOrEmpty())
                     keyMetaData = keyMetaData.ConvertToWriteable().MergeWith(DefaultKeyMetaData, NamedValueMergeBehavior.AddNewItems);
@@ -289,7 +326,7 @@ namespace MosaicLib.Modular.Config
         {
             get 
             {
-                return (isUpdateNeeded || (!lastUpdateConfigChangeSeqNums.Equals(ConfigInstance.SeqNums))); 
+                return (isUpdateNeeded || (ConfigInstance != null && !lastUpdateConfigChangeSeqNums.Equals(ConfigInstance.SeqNums))); 
             }
             internal set 
             { 
@@ -313,18 +350,18 @@ namespace MosaicLib.Modular.Config
         /// The relevant ValueSet item values will be updated by this method based on the dynamic config key's value updates that have been received since 
         /// the last call to Setup or Update.
         /// </summary>
-        public void Update()
+        public ConfigValueSetAdapter<TConfigValueSet> Update()
         {
-            Update(false, UpdateIssueEmitter, ValueNoteEmitter);
+            return Update(false, UpdateIssueEmitter, ValueNoteEmitter);
         }
 
-        private void Update(bool isFirstUpdate, Logging.IMesgEmitter updateIssueEmitter, Logging.IMesgEmitter valueNoteEmitter)
+        private ConfigValueSetAdapter<TConfigValueSet> Update(bool isFirstUpdate, Logging.IMesgEmitter updateIssueEmitter, Logging.IMesgEmitter valueNoteEmitter)
         {
             if (ValueSet == null)
                 throw new System.NullReferenceException("ValueSet property must be non-null before Update can be called");
 
             if (!IsUpdateNeeded && !isFirstUpdate)
-                return;
+                return this;
 
             IsUpdateNeeded = false;
             lastUpdateConfigChangeSeqNums = ConfigInstance.SeqNums;
@@ -348,6 +385,19 @@ namespace MosaicLib.Modular.Config
                     else if (!keyAccess.Flags.SilenceLogging)
                         ValueNoteEmitter.Emit("Member/Key '{0}'/'{1}' in type '{2}' was not changed: there is no member update delegate", keySetupInfo.FullItemName, keyAccess.Key, tConfigValueSetTypeStr);
                 }
+            }
+
+            return this;
+        }
+
+        /// <summary>
+        /// Gives the caller access to the set of IConfigKeyAccess items that this adapter has generated and uses to support its operation
+        /// </summary>
+        public IConfigKeyAccess[] ICKAArray
+        {
+            get 
+            { 
+                return keySetupInfoArray.Where(item => item != null).Select(item => item.KeyAccess).ToArray(); 
             }
         }
 

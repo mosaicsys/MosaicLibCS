@@ -348,13 +348,16 @@ namespace MosaicLib.Modular.Config
         /// <summary>This sequence number counts the number of times that a key has been added to a provider due to the use of the EnsureExists attribute.</summary>
         public Int32 EnsureExistsSeqNum { get; set; }
 
+        /// <summary>This sequence number counts the number of times that a key has been found or created.</summary>
+        public Int32 KeyAddedSeqNum { get; set; }
+
         /// <summary>This sequence number counts the number of times that an existing config key's meta-data values have been changed by merging (adding new keys) with previously defined values.</summary>
         public Int32 KeyMetaDataChangeSeqNum { get; set; }
 
         /// <summary>Implements IEquatable interface.  Indicates whether the current object is equal to another object of the same type.</summary>
         public bool Equals(ConfigSubscriptionSeqNums other)
         {
-            return (ChangeSeqNum == other.ChangeSeqNum && EnsureExistsSeqNum == other.EnsureExistsSeqNum && KeyMetaDataChangeSeqNum == other.KeyMetaDataChangeSeqNum);
+            return (ChangeSeqNum == other.ChangeSeqNum && EnsureExistsSeqNum == other.EnsureExistsSeqNum && KeyAddedSeqNum == other.KeyAddedSeqNum && KeyMetaDataChangeSeqNum == other.KeyMetaDataChangeSeqNum);
         }
     }
 
@@ -808,7 +811,7 @@ namespace MosaicLib.Modular.Config
     /// Provides common Logger and Trace logger.  
     /// Provides implementation methods/properties for most of the IConfigSubscription interface and for most of the IConfigKeyGetSet interface.
 	/// </summary>
-	public class ConfigBase : IConfig, IConfigInternal
+	public class ConfigBase : IConfig, IConfigInternal, IEnumerable
     {
         #region Construction and loggers
 
@@ -836,6 +839,14 @@ namespace MosaicLib.Modular.Config
         /// Base Trace logger to be used by this and implementation classes.  Generally used to report non-setup related activity for non-Silent keys (value updates, repeated value gets).
         /// </summary>
         protected Logging.ILogger Trace { get; private set; }
+
+        IEnumerator IEnumerable.GetEnumerator()
+        {
+            lock (mutex)
+            {
+                return allKnownKeysDictionary.Values.ToArray().GetEnumerator();
+            }
+        }
 
         #endregion
 
@@ -904,6 +915,7 @@ namespace MosaicLib.Modular.Config
                 { 
                     ChangeSeqNum = changeSeqNum.VolatileValue, 
                     EnsureExistsSeqNum = ensureExistsSeqNum.VolatileValue, 
+                    KeyAddedSeqNum = keyAddedSeqNum.VolatileValue,
                     KeyMetaDataChangeSeqNum = keyMetaDataChangeSeqNum.VolatileValue 
                 }; 
             } 
@@ -915,13 +927,14 @@ namespace MosaicLib.Modular.Config
         private BasicNotificationList changeNotificationList = new BasicNotificationList();
         private AtomicInt32 changeSeqNum = new AtomicInt32();
         private AtomicInt32 ensureExistsSeqNum = new AtomicInt32();
+        private AtomicInt32 keyAddedSeqNum = new AtomicInt32();
         private AtomicInt32 keyMetaDataChangeSeqNum = new AtomicInt32();
 
         /// <summary>
         /// Method used to bump the relevant change sequence number value(s) and Notify the items on the ChangeNotificationList.
         /// <para/>This method now also updates the ReadOnceConfigKeyHasBeenChangedSinceItWasRead flag
         /// </summary>
-        protected void NotifyClientsOfChange(bool change = false, bool ensureExists = false, bool keyMetaDataChange = false)
+        protected void NotifyClientsOfChange(bool change = false, bool ensureExists = false, bool keyAdded = false, bool keyMetaDataChange = false)
         {
             int readOnceKeysThatHaveChangedCount = 0;
 
@@ -947,6 +960,9 @@ namespace MosaicLib.Modular.Config
 
             if (ensureExists)
                 ensureExistsSeqNum.IncrementSkipZero();
+
+            if (keyAdded)
+                keyAddedSeqNum.IncrementSkipZero();
 
             if (keyMetaDataChange)
                 keyMetaDataChangeSeqNum.IncrementSkipZero();
@@ -1193,6 +1209,8 @@ namespace MosaicLib.Modular.Config
                             allKnownKeysDictionary[mappedKey] = ckaiRoot;
                             if (ickaFromProvider.Flags.ReadOnlyOnce)
                                 readOnlyOnceKeyDictionary[mappedKey] = ckaiRoot;
+
+                            NotifyClientsOfChange(keyAdded: true);
                         }
                     }
                 }

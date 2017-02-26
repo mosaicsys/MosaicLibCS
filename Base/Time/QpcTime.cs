@@ -296,14 +296,19 @@ namespace MosaicLib.Time
         {
             /// <summary>Struct default constructor default value - all zeros - no listed behaviors are selected.</summary>
             None = 0x0000,
+         
             /// <summary>Selects that the AutoReset behavior shall be used</summary>
             AutoReset = 0x0001,
+
             /// <summary>Selects that the ElapsedTime properties will report zero when the timer is stopped.  Otherwise they report large elapsed times (now - zero)</summary>
             ElapsedTimeIsZeroWhenStopped = 0x0002,
+
             /// <summary>Selects that the IsTriggered and GetIsTriggered functions/properties will allow the timer to run if when the TriggerInterval is zero.  default is that they will not.</summary>
             ZeroTriggerIntervalRunsTimer = 0x0004,
-            /// <summary>Selects that both ElapsedTimeIsZeroWhenStopped and ZeroTriggerIntervaleRunsTimer will be enabled.</summary>
+
+            /// <summary>Selects that both ElapsedTimeIsZeroWhenStopped and ZeroTriggerIntervaleRunsTimer will be enabled.<para/>This default value must be selected explicitly when desired</summary>
             NewDefault = (Behavior.ElapsedTimeIsZeroWhenStopped | Behavior.ZeroTriggerIntervalRunsTimer),
+
             /// <summary>Selects that AutoReset, ElapsedTimeIsZeroWhenStopped, and ZeroTriggerIntervaleRunsTimer will be enabled.</summary>
             NewAutoReset = (Behavior.AutoReset | Behavior.ElapsedTimeIsZeroWhenStopped | Behavior.ZeroTriggerIntervalRunsTimer),
         }
@@ -390,6 +395,18 @@ namespace MosaicLib.Time
         }
 
         /// <summary>
+        /// If the timer is not already Started or if the given newTriggerInterval does not match the current TriggerInterval value, this method Starts the timer to run from now, using the current newTriggerInterval.
+        /// If the timer is already Started, this method has no effect.
+        /// </summary>
+        public QpcTimer StartIfNeeded(TimeSpan newTriggerInterval)
+        {
+            if (!Started || TriggerInterval != newTriggerInterval)
+                Start(newTriggerInterval);
+
+            return this;
+        }
+
+        /// <summary>
         /// If the timer is not already Stopped, this method Stops the timer.
         /// If the timer is already Stopped, this method has no effect.
         /// </summary>
@@ -428,6 +445,8 @@ namespace MosaicLib.Time
         /// Get property returns true if the timer's TriggerInterval has elapsed since the last occurance.  
         /// If timer is configured to AutoReset, the timer will automatically reset to expire after 
         /// the TriggerInterval has elapsed from the most recent occurance.
+        /// <para/>This property returns false if the timer is not running (either by being explicitly Started or by having the TriggerInterval be zero with the non-default ZeroTriggerIntervalRunsTimer behavior selected).
+        /// non-AutoReset timers will continue to return true once they have triggered until some other action is taken to change, reset or start the timer.
         /// <para/>Internally this is the same as calling GetIsTriggered(QpcTimeStamp.Now);
         /// </summary>
         public bool IsTriggered { get { return GetIsTriggered(QpcTimeStamp.Now); } }
@@ -437,12 +456,10 @@ namespace MosaicLib.Time
         /// If the timer has elapsed and the timer is configured to AutoReset, method will add the TriggerInterval to the last occurance to the timestamp 
         /// of the current occurance (even if now is after that occurance).  Then if this newly advanced timer has already expired then the method Reset's 
         /// the timer to occur at TimerInterval from the given now value.
+        /// <para/>This method returns false if the timer is not running (either by being explicitly Started or by having the TriggerInterval be zero with the non-default ZeroTriggerIntervalRunsTimer behavior selected).
+        /// non-AutoReset timers will continue to return true once they have triggered until some other action is taken to change, reset or start the timer.
         /// </summary>
         /// <param name="now">Caller provided QpcTimeStamp value that defines when the timer is evaluated against and provides the base time for a Reset style advance when appropriate.</param>
-        /// <remarks>
-        /// Method always returns false if the timer has not been started either during construction or by setting the TriggerInterval.
-        /// non-AutoReset timers will continue to return true once they have triggered until some other action is taken to change, reset or start the timer.
-        /// </remarks>
 		public bool GetIsTriggered(QpcTimeStamp now)
 		{
             bool isTimerRunning, isTimerTriggered;

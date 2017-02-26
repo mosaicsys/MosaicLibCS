@@ -26,6 +26,7 @@ using System.Linq;
 using System.Diagnostics;
 using System.Reflection;
 using System.Collections;
+
 using MosaicLib.Modular.Common;
 
 namespace MosaicLib.Utils
@@ -258,7 +259,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method version of IList indexed get access that handles all out of range accesses by returning the given default value
         /// </summary>
-        public static ItemType SafeAccess<ItemType>(this IList<ItemType> fromList, int getFromIndex, ItemType defaultValue)
+        public static ItemType SafeAccess<ItemType>(this IList<ItemType> fromList, int getFromIndex, ItemType defaultValue = default(ItemType))
         {
             if (fromList == null || getFromIndex < 0 || getFromIndex >= fromList.Count)
                 return defaultValue;
@@ -468,11 +469,43 @@ namespace MosaicLib.Utils
                 if (!(value is System.Enum))
                     return false;
 
-                int valueI = (int)System.Convert.ChangeType(value, typeof(int));
-                int maskI = (int)System.Convert.ChangeType(mask, typeof(int));
-                int matchI = (int)System.Convert.ChangeType(match, typeof(int));
+                System.Enum startingValueAsEnum = value as System.Enum;
+                TypeCode typeCode = startingValueAsEnum.GetTypeCode();
+                switch (typeCode)
+                {
+                    case TypeCode.Int64:
+                    case TypeCode.UInt64:
+                        ulong valueU8 = (ulong)System.Convert.ChangeType(value, typeof(ulong));
+                        ulong maskU8 = (ulong)System.Convert.ChangeType(mask, typeof(ulong));
+                        ulong matchU8 = (ulong)System.Convert.ChangeType(match, typeof(ulong));
 
-                return ((valueI & maskI) == matchI);
+                        return ((valueU8 & maskU8) == matchU8);
+
+                    default:
+                    case TypeCode.Int32:
+                    case TypeCode.UInt32:
+                        uint valueU4 = (uint)System.Convert.ChangeType(value, typeof(uint));
+                        uint maskU4 = (uint)System.Convert.ChangeType(mask, typeof(uint));
+                        uint matchU4 = (uint)System.Convert.ChangeType(match, typeof(uint));
+
+                        return ((valueU4 & maskU4) == matchU4);
+
+                    case TypeCode.Int16:
+                    case TypeCode.UInt16:
+                        ushort valueU2 = (ushort)System.Convert.ChangeType(value, typeof(ushort));
+                        ushort maskU2 = (ushort)System.Convert.ChangeType(mask, typeof(ushort));
+                        ushort matchU2 = (ushort)System.Convert.ChangeType(match, typeof(ushort));
+
+                        return ((valueU2 & maskU2) == matchU2);
+
+                    case TypeCode.SByte:
+                    case TypeCode.Byte:
+                        byte valueU1 = (byte)System.Convert.ChangeType(value, typeof(byte));
+                        byte maskU1 = (byte)System.Convert.ChangeType(mask, typeof(byte));
+                        byte matchU1 = (byte)System.Convert.ChangeType(match, typeof(byte));
+
+                        return ((valueU1 & maskU1) == matchU1);
+                }
             }
             catch
             {
@@ -498,15 +531,99 @@ namespace MosaicLib.Utils
                 if (!(startingValue is System.Enum))
                     return default(TEnumType);
 
-                int valueI = (int)System.Convert.ChangeType(startingValue, typeof(int));
-                int patternI = (int)System.Convert.ChangeType(pattern, typeof(int));
+                System.Enum startingValueAsEnum = startingValue as System.Enum;
+                TypeCode typeCode = startingValueAsEnum.GetTypeCode();
+                switch (typeCode)
+                {
+                    case TypeCode.Int64:
+                        long valueI8 = (long)System.Convert.ChangeType(startingValue, typeof(long));
+                        long patternI8 = (long)System.Convert.ChangeType(pattern, typeof(long));
 
-                if (setPattern)
-                    valueI |= patternI;
-                else
-                    valueI &= ~patternI;
+                        if (setPattern)
+                            valueI8 |= patternI8;
+                        else
+                            valueI8 &= ~patternI8;
 
-                return (TEnumType) ((System.Object) valueI);
+                        return (TEnumType)System.Enum.ToObject(typeof(TEnumType), valueI8);
+
+                    case TypeCode.UInt64:
+                        ulong valueU8 = (ulong)System.Convert.ChangeType(startingValue, typeof(ulong));
+                        ulong patternU8 = (ulong)System.Convert.ChangeType(pattern, typeof(ulong));
+
+                        if (setPattern)
+                            valueU8 |= patternU8;
+                        else
+                            valueU8 &= ~patternU8;
+
+                        return (TEnumType)System.Enum.ToObject(typeof(TEnumType), valueU8);
+
+                    default:
+                    case TypeCode.Int32:
+                        int valueI4 = (int)System.Convert.ChangeType(startingValue, typeof(int));
+                        int patternI4 = (int)System.Convert.ChangeType(pattern, typeof(int));
+
+                        if (setPattern)
+                            valueI4 |= patternI4;
+                        else
+                            valueI4 &= ~patternI4;
+
+                        return (TEnumType)System.Enum.ToObject(typeof(TEnumType), valueI4);
+
+                    case TypeCode.UInt32:
+                        uint valueU4 = (uint)System.Convert.ChangeType(startingValue, typeof(uint));
+                        uint patternU4 = (uint)System.Convert.ChangeType(pattern, typeof(uint));
+
+                        if (setPattern)
+                            valueU4 |= patternU4;
+                        else
+                            valueU4 &= ~patternU4;
+
+                        return (TEnumType)System.Enum.ToObject(typeof(TEnumType), valueU4);
+
+                    case TypeCode.Int16:
+                        short valueI2 = (short)System.Convert.ChangeType(startingValue, typeof(short));
+                        short patternI2 = (short)System.Convert.ChangeType(pattern, typeof(short));
+
+                        if (setPattern)
+                            valueI2 |= patternI2;
+                        else
+                            valueI2 &= (short)~patternI2;
+
+                        return (TEnumType)System.Enum.ToObject(typeof(TEnumType), valueI2);
+
+                    case TypeCode.UInt16:
+                        ushort valueU2 = (ushort)System.Convert.ChangeType(startingValue, typeof(ushort));
+                        ushort patternU2 = (ushort)System.Convert.ChangeType(pattern, typeof(ushort));
+
+                        if (setPattern)
+                            valueU2 |= patternU2;
+                        else
+                            valueU2 &= (ushort) ~patternU2;
+
+                        return (TEnumType)System.Enum.ToObject(typeof(TEnumType), valueU2);
+
+                    case TypeCode.SByte:
+                        sbyte valueI1 = (sbyte)System.Convert.ChangeType(startingValue, typeof(sbyte));
+                        sbyte patternI1 = (sbyte)System.Convert.ChangeType(pattern, typeof(sbyte));
+
+                        if (setPattern)
+                            valueI1 |= patternI1;
+                        else
+                            valueI1 &= (sbyte)~patternI1;
+
+                        return (TEnumType)System.Enum.ToObject(typeof(TEnumType), valueI1);
+
+                    case TypeCode.Byte:
+                        byte valueU1 = (byte)System.Convert.ChangeType(startingValue, typeof(byte));
+                        byte patternU1 = (byte)System.Convert.ChangeType(pattern, typeof(byte));
+
+                        if (setPattern)
+                            valueU1 |= patternU1;
+                        else
+                            valueU1 &= (byte) ~patternU1;
+
+                        return (TEnumType)System.Enum.ToObject(typeof(TEnumType), valueU1);
+                }
             }
             catch
             {
@@ -705,6 +822,9 @@ namespace MosaicLib.Utils
 
         /// <summary>Creates a StackFrame for the caller and returns the Name of the stack frame's current method.</summary>
         public static string CurrentMethodName { get { return new System.Diagnostics.StackFrame(1).GetMethod().Name; } }
+
+        /// <summary>Creates a StackFrame for the caller and returns the Name of the current methods DeclaringType</summary>
+        public static string CurrentClassName { get { return new System.Diagnostics.StackFrame(1).GetMethod().DeclaringType.ToString();  } }
 
         #endregion
     }

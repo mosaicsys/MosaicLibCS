@@ -106,12 +106,7 @@ namespace MosaicLib.File
             /// <summary>Constructor - sets default values of some properties</summary>
 			public Config() 
 			{
-                DirPath = String.Empty;
-                PruneRules = new PruneRules() { TreeNumFilesLimit = ConfigPruneNumFilesMaxValue, TreeNumItemsLimit = 0, TreeTotalSizeLimit = 0, FileAgeLimit = TimeSpan.Zero };
-				CreateDirectoryIfNeeded = true;
-				PruneMode = PruneMode.PruneFiles;
-				MaxInitialAutoCleanupIterations = 100;
-				MaxEntriesToDeletePerIteration = 100;
+                SetFrom(null);
 			}
 
             /// <summary>Copy constructor</summary>
@@ -121,16 +116,28 @@ namespace MosaicLib.File
             }
 
             /// <summary>
-            /// Copy constructor helper method
+            /// Copy constructor helper method.  Sets this instace from the given other instance, or sets this instance to default values if the other instance is given as null
             /// </summary>
-            public void SetFrom(Config rhs)
+            public void SetFrom(Config other)
             {
-                DirPath = rhs.DirPath;
-                PruneRules = new PruneRules(rhs.PruneRules);
-                CreateDirectoryIfNeeded = rhs.CreateDirectoryIfNeeded;
-                PruneMode = rhs.PruneMode;
-                MaxInitialAutoCleanupIterations = rhs.MaxInitialAutoCleanupIterations;
-                MaxEntriesToDeletePerIteration = rhs.MaxEntriesToDeletePerIteration;
+                if (other == null)
+                {
+                    DirPath = String.Empty;
+                    PruneRules = new PruneRules() { TreeNumFilesLimit = ConfigPruneNumFilesMaxValue, TreeNumItemsLimit = 0, TreeTotalSizeLimit = 0, FileAgeLimit = TimeSpan.Zero };
+                    CreateDirectoryIfNeeded = true;
+                    PruneMode = PruneMode.PruneFiles;
+                    MaxInitialAutoCleanupIterations = 100;
+                    MaxEntriesToDeletePerIteration = 100;
+                }
+                else
+                {
+                    DirPath = other.DirPath;
+                    PruneRules = new PruneRules(other.PruneRules);
+                    CreateDirectoryIfNeeded = other.CreateDirectoryIfNeeded;
+                    PruneMode = other.PruneMode;
+                    MaxInitialAutoCleanupIterations = other.MaxInitialAutoCleanupIterations;
+                    MaxEntriesToDeletePerIteration = other.MaxEntriesToDeletePerIteration;
+                }
             }
 		};
 
@@ -180,13 +187,8 @@ namespace MosaicLib.File
 
         #region Constructors
 
-        /// <summary>Basic constructor.  objIDStr is used to initialize the ObjID base class.  Uses standard Logger based logging</summary>
-        public DirectoryTreePruningManager(string objIDStr) 
-            : this(objIDStr, (Dictionary<string, Logging.IMesgEmitter>) null) 
-        { }
-
         /// <summary>Basic constructor.  objIDStr is used to initialize the ObjID base class.  emitterDictionary defines source for emitters or null to use standard Logger.</summary>
-        public DirectoryTreePruningManager(string objIDStr, IDictionary<string, Logging.IMesgEmitter> emitterDictionary)
+        public DirectoryTreePruningManager(string objIDStr, IDictionary<string, Logging.IMesgEmitter> emitterDictionary = null)
             : base(0, objIDStr)
         {
             EmitterDictionary = emitterDictionary;
@@ -194,13 +196,8 @@ namespace MosaicLib.File
             Clear();
         }
 
-        /// <summary>Full constructor.  objIDStr is used to initialize the ObjID base class, config is used to trigger a Setup operation.  Uses standard Logger based logging</summary>
-        public DirectoryTreePruningManager(string objIDStr, Config config) 
-            : this(objIDStr, config, null) 
-        { }
-
         /// <summary>Full constructor.  objIDStr is used to initialize the ObjID base class, config is used to trigger a Setup operation.  emitterDictionary defines source for emitters or null to use standard Logger.</summary>
-        public DirectoryTreePruningManager(string objIDStr, Config config, IDictionary<string, Logging.IMesgEmitter> emitterDictionary)
+        public DirectoryTreePruningManager(string objIDStr, Config config, IDictionary<string, Logging.IMesgEmitter> emitterDictionary = null)
             : this(objIDStr, emitterDictionary)
         {
             EmitterDictionary = emitterDictionary;

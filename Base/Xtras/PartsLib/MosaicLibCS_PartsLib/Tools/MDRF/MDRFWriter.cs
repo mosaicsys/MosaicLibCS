@@ -20,12 +20,14 @@
  */
 
 using System;
-using System.IO;
+using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 
+using MosaicLib.File;
 using MosaicLib.Modular;
 using MosaicLib.Modular.Action;
 using MosaicLib.Modular.Common;
@@ -34,11 +36,11 @@ using MosaicLib.Modular.Config.Attributes;
 using MosaicLib.Modular.Interconnect.Values;
 using MosaicLib.Modular.Part;
 using MosaicLib.Utils;
+using MosaicLib.Utils.StringMatching;
 using MosaicLib.Time;
 
 using MosaicLib.PartsLib.Tools.MDRF.Common;
 using MosaicLib.Semi.E005.Data;
-using System.Collections;
 
 namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 {
@@ -1582,6 +1584,243 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
         int mesgQueueCount;
 
         DroppedCounts droppedCounts = new DroppedCounts();
+
+        #endregion
+    }
+
+    #endregion
+
+    #region MDRFRecordingEngine
+
+    /// <summary>
+    /// Defines the client usable behavior of an MDRFRecordingEngine instance.  
+    /// This defines the PartID to use and a number of other characteristics including:
+    /// the NominalScanPeriod to use, 
+    /// the IVI from which to get values,
+    /// an optional GroupDefinitionSet that may be used to define what IVI items shall be included and what group each one shall be placed in,
+    /// the SetupInfo to be used with the internal IMDRFWriter instance, 
+    /// and the PruningConfig that may be used to define how the pruning engine is used to automatically remove old files as new ones are generated.
+    /// </summary>
+    public class MDRFRecordingEngineConfig
+    {
+        public MDRFRecordingEngineConfig(string partID)
+        {
+            PartID = partID;
+            NominalScanPeriod = TimeSpan.FromSeconds(0.1);
+            NominalPruningInterval = TimeSpan.FromSeconds(10.0);
+        }
+
+        public MDRFRecordingEngineConfig(MDRFRecordingEngineConfig other)
+        {
+            PartID = other.PartID;
+
+            SetupInfo = new SetupInfo(other.SetupInfo);     // will be mapped to default values if the other is null)
+            NominalScanPeriod = other.NominalScanPeriod;
+
+            ScanPeriodScheduleArray = new List<TimeSpan>(other.ScanPeriodScheduleArray ?? emptyTimeSpanArray).ToArray();
+
+            SourceIVI = other.SourceIVI ?? Values.Instance;
+
+            if (other.GroupDefinitionSet != null)
+                GroupDefinitionSet = other.GroupDefinitionSet.Select(otherTuple => Tuple.Create(otherTuple.Item1, new Utils.StringMatching.MatchRuleSet(otherTuple.Item2))).ToArray();
+
+            if (other.PruningConfig != null)
+            {
+                PruningConfig = new DirectoryTreePruningManager.Config(other.PruningConfig)
+                {
+                    DirPath = SetupInfo.DirPath,
+                };
+            }
+
+            NominalPruningInterval = other.NominalPruningInterval;
+        }
+
+        public string PartID { get; private set; }
+
+        public TimeSpan NominalScanPeriod { get; set; }
+
+        public TimeSpan [] ScanPeriodScheduleArray { get; set; }
+
+        public IValuesInterconnection SourceIVI { get; set; }
+
+        public IEnumerable<Tuple<string, Utils.StringMatching.MatchRuleSet>> GroupDefinitionSet { get; set; }
+
+        public SetupInfo SetupInfo { get; set; }
+
+        public DirectoryTreePruningManager.Config PruningConfig { get; set; }
+
+        public TimeSpan NominalPruningInterval { get; set; }
+
+        private static readonly TimeSpan[] emptyTimeSpanArray = new TimeSpan[0];
+    }
+
+    /// <summary>
+    /// This class defines a part that can be used to implement standard MDRF recording scenarios.
+    /// </summary>
+    public class MDRFRecordingEngine : SimpleActivePartBase
+    {
+        #region Construction (et. al.)
+
+        public MDRFRecordingEngine(MDRFRecordingEngineConfig config)
+            : base(config.PartID)
+        {
+            Config = new MDRFRecordingEngineConfig(config);
+
+            settings = SimpleActivePartBaseSettings.DefaultVersion1;
+            settings.WaitTimeLimit = TimeSpan.FromSeconds(0.01);
+
+            AddExplicitDisposeAction(() => Fcns.DisposeOfObject(ref mdrfWriter));
+        }
+
+        public MDRFRecordingEngineConfig Config { get; private set; }
+
+        #endregion
+
+        #region private fields (et. al.)
+
+        IMDRFWriter mdrfWriter = null;
+        QpcTimer mdrfWriterServiceTimer;
+
+        DirectoryTreePruningManager pruningManager = null;
+        QpcTimer pruningServiceTimer;
+
+        #endregion
+
+        #region local actions
+
+        /// <summary>
+        /// This method may be used by a client to select a new scheduled scan period using the given scanPeriodScheduleSelection value (converted to an Int32)
+        /// </summary>
+        public void SelectScanPeriodSchedule<TScheduleIndex>(TScheduleIndex scanPeriodScheduleSelection)
+            where TScheduleIndex : struct
+        {
+            try
+            {
+                volatileScanPeriodScheduleIndex = (int) System.Convert.ChangeType(scanPeriodScheduleSelection, typeof(int));
+            }
+            catch
+            {
+                volatileScanPeriodScheduleIndex = 0;
+            }
+
+            this.Notify();
+        }
+
+        volatile int volatileScanPeriodScheduleIndex = 0;
+        int currentScanPeriodScheduleIndex = 0;
+
+        #endregion
+
+        #region SimpleActivePartBase overrides (PerformGoOnlineAction, PerformGoOfflineAction, MainThreadFcn, PerformMainLoopService)
+
+        protected override string PerformGoOnlineAction(bool andInitialize)
+        {
+            if (Config.PruningConfig != null && pruningManager == null)
+            {
+                pruningManager = new DirectoryTreePruningManager("{0}.pm".CheckedFormat(PartID), Config.PruningConfig);
+                pruningServiceTimer = new QpcTimer() { TriggerInterval = Config.NominalPruningInterval, AutoReset = true, Started = true };
+            }
+
+            if (mdrfWriter == null)
+            {
+                List<UInt64> availableUserFlagRowBitsList = new List<UInt64>(Enumerable.Range(0, 63).Select(bitIdx => (1UL << bitIdx)));
+
+                List<string> ivaNamesList = new List<string>(Config.SourceIVI.ValueNamesArray);
+
+                List<GroupInfo> groupInfoList = new List<GroupInfo>();
+                OccurrenceInfo [] occurrenceInfoArray = new OccurrenceInfo [0];
+
+                if (Config.GroupDefinitionSet.IsNullOrEmpty())
+                {
+                    IValueAccessor[] ivaArray = ivaNamesList.Select(name => Config.SourceIVI.GetValueAccessor(name)).ToArray();
+                    groupInfoList.Add(new GroupInfo() 
+                                        { 
+                                            Name = "Default", 
+                                            UsePointIVAsForTouched = true, 
+                                            FileIndexUserRowFlagBits = availableUserFlagRowBitsList.SafeAccess(0),
+                                            GroupPointInfoArray = ivaArray.Select(iva => new GroupPointInfo() { Name = iva.Name, ValueSourceIVA = iva, ValueSourceIVAFactoryIVI = Config.SourceIVI }).ToArray() 
+                                        });
+                    availableUserFlagRowBitsList.RemoveAt(0);
+                }
+                else
+                {
+                    foreach (var tuple in Config.GroupDefinitionSet)
+                    {
+                        string[] matchedIVANamesArray = ivaNamesList.Where(ivaName => tuple.Item2.MatchesAny(ivaName)).ToArray();
+
+                        foreach (string matchedIVAName in matchedIVANamesArray)
+                            ivaNamesList.Remove(matchedIVAName);
+
+                        IValueAccessor[] ivaArray = matchedIVANamesArray.Select(name => Config.SourceIVI.GetValueAccessor(name)).ToArray();
+
+                        groupInfoList.Add(new GroupInfo() 
+                                        { 
+                                            Name = tuple.Item1, 
+                                            UsePointIVAsForTouched = true,
+                                            FileIndexUserRowFlagBits = availableUserFlagRowBitsList.SafeAccess(0),
+                                            GroupPointInfoArray = ivaArray.Select(iva => new GroupPointInfo() { Name = iva.Name, ValueSourceIVA = iva, ValueSourceIVAFactoryIVI = Config.SourceIVI }).ToArray() 
+                                        });
+                        availableUserFlagRowBitsList.RemoveAt(0);
+                    }
+                }
+
+                mdrfWriter = new MDRFWriter("{0}.mw".CheckedFormat(PartID), Config.SetupInfo, groupInfoList.ToArray(), occurrenceInfoArray);
+                mdrfWriterServiceTimer = new QpcTimer() { TriggerInterval = Config.NominalScanPeriod, AutoReset = true, Started = true };
+            }
+
+            return string.Empty;
+        }
+
+        protected override string PerformGoOfflineAction()
+        {
+            PerformMainLoopService(forceServiceWriter: true, forceServicePruning: true);
+
+            Fcns.DisposeOfObject(ref mdrfWriter);
+
+            return string.Empty;
+        }
+
+        protected override void MainThreadFcn()
+        {
+            base.MainThreadFcn();
+
+            PerformGoOfflineAction();
+        }
+
+        protected override void PerformMainLoopService()
+        {
+            int capturedScanPeriodScheduleIndex = volatileScanPeriodScheduleIndex;
+            bool scanPeriodScheduleChange = (capturedScanPeriodScheduleIndex != currentScanPeriodScheduleIndex);
+
+            if (scanPeriodScheduleChange)
+            {
+                currentScanPeriodScheduleIndex = capturedScanPeriodScheduleIndex;
+                TimeSpan scanPeriod = Config.ScanPeriodScheduleArray.SafeAccess(currentScanPeriodScheduleIndex, defaultValue: Config.NominalScanPeriod);
+
+                mdrfWriterServiceTimer.Start(scanPeriod);
+                
+                PerformMainLoopService(forceServiceWriter: true);
+
+                Log.Debug.Emit("Scan Period changed to index:{0} period:{1:f3} sec", currentScanPeriodScheduleIndex, scanPeriod.TotalSeconds);
+            }
+            else
+            {
+                PerformMainLoopService(forceServiceWriter: false, forceServicePruning: false);
+            }
+        }
+
+        private void PerformMainLoopService(bool forceServiceWriter = false, bool forceServicePruning = false)
+        {
+            if (mdrfWriter != null && (mdrfWriterServiceTimer.IsTriggered || forceServiceWriter))
+            {
+                mdrfWriter.RecordGroups(writeAll: forceServiceWriter);
+            }
+
+            if (pruningManager != null && (pruningServiceTimer.IsTriggered || forceServicePruning))
+            {
+                pruningManager.Service();
+            }
+        }
 
         #endregion
     }

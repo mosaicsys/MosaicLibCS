@@ -56,6 +56,8 @@ namespace MosaicLib.Modular.Interconnect.Values
 
         public TimeSpan MinSyncInterval { get; set; }
 
+        public IValuesInterconnection PartBaseIVI { get; set; }
+
         public IValuesInterconnection IVI1 { get; set; }
         public IValuesInterconnection IVI2 { get; set; }
 
@@ -84,6 +86,7 @@ namespace MosaicLib.Modular.Interconnect.Values
             IssueLogMesgType = other.IssueLogMesgType;
             ValueUpdateTraceLogMesgType = other.ValueUpdateTraceLogMesgType;
 
+            PartBaseIVI = other.PartBaseIVI ?? Modular.Interconnect.Values.Values.Instance;
             IVI1 = other.IVI1 ?? Modular.Interconnect.Values.Values.Instance;
             IVI2 = other.IVI2 ?? Modular.Interconnect.Values.Values.Instance;
 
@@ -126,22 +129,19 @@ namespace MosaicLib.Modular.Interconnect.Values
         #region Construction and related fields/properties
 
         public IVIBridge(IVIBridgeConfig config)
-            : base(config.PartID)
+            : base(config.PartID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion1.Build(waitTimeLimit: TimeSpan.FromSeconds((config.MinSyncInterval != TimeSpan.Zero) ? 0.05 : 0.2), partBaseIVI: config.PartBaseIVI))
         {
             BridgeConfig = new IVIBridgeConfig(config);
 
             useNominalSyncHoldoffTimer = (BridgeConfig.MinSyncInterval != TimeSpan.Zero);
             if (useNominalSyncHoldoffTimer)
                 nominalSyncHoldoffTimer.TriggerInterval = BridgeConfig.MinSyncInterval;
-            WaitTimeLimit = TimeSpan.FromSeconds(useNominalSyncHoldoffTimer ? 0.05 : 0.2);
 
             IssueEmitter = Log.Emitter(BridgeConfig.IssueLogMesgType);
             ValueTraceEmitter = Log.Emitter(BridgeConfig.ValueUpdateTraceLogMesgType);
 
             IVI1 = BridgeConfig.IVI1;   // BridgeConfig Copy constructor converts passed nulls to singleton instance
             IVI2 = BridgeConfig.IVI2;   // BridgeConfig Copy constructor converts passed nulls to singleton instance
-
-            GoOnlineAndGoOfflineHandling = GoOnlineAndGoOfflineHandling.All;
 
             IVI1.NotificationList.AddItem(this);
             IVI2.NotificationList.AddItem(this);

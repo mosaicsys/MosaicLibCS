@@ -56,6 +56,8 @@ namespace MosaicLib.Modular.Config
 
         public TimeSpan MinSyncInterval { get; set; }
 
+        public IValuesInterconnection PartBaseIVI { get; set; }
+
         public IValuesInterconnection IVI { get; set; }
         public IConfig Config { get; set; }
 
@@ -91,6 +93,7 @@ namespace MosaicLib.Modular.Config
             UseEnsureExists = other.UseEnsureExists;
             DefaultConfigKeyProviderName = other.DefaultConfigKeyProviderName;
 
+            PartBaseIVI = other.PartBaseIVI ?? other.IVI ?? Modular.Interconnect.Values.Values.Instance;
             IVI = other.IVI ?? Modular.Interconnect.Values.Values.Instance;
             Config = other.Config ?? Modular.Config.Config.Instance;
 
@@ -122,22 +125,19 @@ namespace MosaicLib.Modular.Config
         #region Construction and related fields/properties
 
         public ConfigIVIBridge(ConfigIVIBridgeConfig config)
-            : base(config.PartID)
+            : base(config.PartID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion1.Build(waitTimeLimit: TimeSpan.FromSeconds((config.MinSyncInterval != TimeSpan.Zero) ? 0.05: 0.2), partBaseIVI : config.PartBaseIVI))
         {
             BridgeConfig = new ConfigIVIBridgeConfig(config);
 
             useNominalSyncHoldoffTimer = (BridgeConfig.MinSyncInterval != TimeSpan.Zero);
             if (useNominalSyncHoldoffTimer)
                 nominalSyncHoldoffTimer.TriggerInterval = BridgeConfig.MinSyncInterval;
-            WaitTimeLimit = TimeSpan.FromSeconds(useNominalSyncHoldoffTimer ? 0.05 : 0.2);
 
             IssueEmitter = Log.Emitter(BridgeConfig.IssueLogMesgType);
             ValueTraceEmitter = Log.Emitter(BridgeConfig.ValueUpdateTraceLogMesgType);
 
             IVI = BridgeConfig.IVI;         // BridgeConfig Copy constructor converts passed nulls to singleton instance
             Config = BridgeConfig.Config;   // BridgeConfig Copy constructor converts passed nulls to singleton instance
-
-            GoOnlineAndGoOfflineHandling = GoOnlineAndGoOfflineHandling.All;
 
             IVI.NotificationList.AddItem(this);
             Config.ChangeNotificationList.AddItem(this);
@@ -261,7 +261,7 @@ namespace MosaicLib.Modular.Config
             // service CKA table addition:
             ConfigSubscriptionSeqNums configSeqNum = Config.SeqNums;
 
-            if (lastConfigSeqNums.EnsureExistsSeqNum != configSeqNum.EnsureExistsSeqNum)
+            if (lastConfigSeqNums.KeyAddedSeqNum != configSeqNum.KeyAddedSeqNum || lastConfigSeqNums.EnsureExistsSeqNum != configSeqNum.EnsureExistsSeqNum)
             {
                 string[] configKeyNamesArray = Config.SearchForKeys();   // find all of the current keys
 

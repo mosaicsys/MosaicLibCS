@@ -134,24 +134,24 @@ namespace MosaicLib.Modular.Action
     [DataContract(Namespace=Constants.ModularActionNameSpace)]
 	public enum ActionStateCode : int
 	{
-		/// <summary>default ctor value for structs</summary>
+		/// <summary>default ctor value for structs (0)</summary>
         [EnumMember]
 		Initial = 0,
-		/// <summary>state after valid creation by a provider</summary>
+		/// <summary>state after valid creation by a provider (1)</summary>
         [EnumMember]
-        Ready,
-		/// <summary>this state covers the operation from once the Start method has committed to enqueueing the operation until it is marked as having been issued.</summary>
+        Ready = 1,
+		/// <summary>this state covers the operation from once the Start method has committed to enqueueing the operation until it is marked as having been issued. (2)</summary>
         [EnumMember]
-        Started,
-		/// <summary>provider has accepted this operation and is performing it</summary>
+        Started = 2,
+		/// <summary>provider has accepted this operation and is performing it (3)</summary>
         [EnumMember]
-        Issued,
-		/// <summary>operation has been completed (successfully or not).</summary>
+        Issued = 3,
+		/// <summary>operation has been completed (successfully or not). (4)</summary>
         [EnumMember]
-        Complete,
-		/// <summary>should never be in this state - cannot be Started or used</summary>
+        Complete = 4,
+		/// <summary>should never be in this state - cannot be Started or used (5)</summary>
         [EnumMember]
-        Invalid,
+        Invalid = 5,
 	};
 
 	#endregion
@@ -215,7 +215,7 @@ namespace MosaicLib.Modular.Action
 	/// <summary>
     /// Basic Client Facet interface.  
     /// Allows client to Start, Wait For Completion, Run, Request Cancel and access the Action's ActionState.  
-    /// Also allows client to register a notification item with the notification list.
+    /// Also allows client to register a notification item Action's NotifyOnComplete and/or NotifyOnUpdate notification lists.
     /// </summary>
 	public interface IClientFacet
 	{

@@ -21,20 +21,22 @@
 
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using System.Linq;
-using System.ServiceModel;
+using System.Reflection;
 using System.Runtime.Serialization;
-using MosaicLib.Utils;
-using MosaicLib.Modular.Common;
-using MosaicLib.Modular.Part;
-using MosaicLib.Modular.Interconnect.Values;
-using MosaicLib.Utils.StringMatching;
-using MosaicLib.Utils.Pooling;
-using MosaicLib.Time;
-using MosaicLib.Modular.Action;
+using System.ServiceModel;
 using System.ServiceModel.Description;
 using System.ServiceModel.Channels;
+
+using MosaicLib.Modular.Action;
+using MosaicLib.Modular.Common;
+using MosaicLib.Modular.Interconnect.Sets;
+using MosaicLib.Modular.Interconnect.Values;
+using MosaicLib.Modular.Part;
+using MosaicLib.Time;
+using MosaicLib.Utils;
+using MosaicLib.Utils.StringMatching;
+using MosaicLib.Utils.Pooling;
 
 // Modular.Interconnect is the general namespace for tools that help interconnect Modular Parts without requiring that that have pre-existing knowledge of each-other's classes.
 // This file contains the definitions for the underlying Modular.Interconnect.WCF namespace.
@@ -82,14 +84,14 @@ namespace MosaicLib.Modular.Interconnect.WCF
         public string ClientName { get; set; }
 
         /// <summary>Passes the name of the interconnect table that the client would like to connect to.  Use null/empty to connect to the default table.</summary>
-        [DataMember(Order = 10)]
+        [DataMember(Order = 10, EmitDefaultValue = false, IsRequired = false)]
         public string InterconnectTableName { get; set; }
 
         /// <summary>
         /// The set of rules for what server side names shall be propagated to the client using this session.  
         /// If this parameter is passed as null then it will be replaced with and interpreted as MatchRuleSet.Any
         /// </summary>
-        [DataMember(Order = 20)]
+        [DataMember(Order = 20, EmitDefaultValue = false, IsRequired = false)]
         public MatchRuleSet NameMatchRuleSet { get; set; }
 
         #endregion
@@ -400,6 +402,19 @@ namespace MosaicLib.Modular.Interconnect.WCF
 
     #endregion
 
+    #region ISubscribeToSet
+
+    public interface ISubscribeToSet
+    {
+        /// <summary>
+        /// Requests the client to subscribe to a given set from the connected ServerServicePart.  
+        /// The returned value is a set (a hidden tracking set) that is maintained by the ClientServicePart and which the client can track with their own TrackingSet(s)
+        /// </summary>
+        IClientFacetWithResult<ITrackingSet<TSetItemType>> SubscribeToSet<TSetItemType>(string setName = null, string setUUID = null);
+    }
+
+    #endregion
+
     #region Server (ServerServiceConfig and ServerServicePart)
 
     /// <summary>
@@ -459,11 +474,10 @@ namespace MosaicLib.Modular.Interconnect.WCF
     {
         #region Construction
 
-        public ServerServicePart(ServerServiceConfig config) 
-            : base(config.PartID) 
+        public ServerServicePart(ServerServiceConfig config)
+            : base(config.PartID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion0.Build(waitTimeLimit: TimeSpan.FromSeconds(0.01)))   // max spin rate is 100 Hz
         {
             Config = config.MakeCopyOfThis();
-            WaitTimeLimit = TimeSpan.FromSeconds(0.01);
 
             serverMethodHandler = new InterconnectPropagationSessionClientAPIHandler() 
             { 
@@ -475,7 +489,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
 
         private ServerServiceConfig Config { get; set; }
 
-        private InterconnectPropagationSessionClientAPIHandler serverMethodHandler;      // initizlied in the constructor
+        private InterconnectPropagationSessionClientAPIHandler serverMethodHandler;      // initialized in the constructor
 
         #endregion
 
@@ -1039,23 +1053,37 @@ namespace MosaicLib.Modular.Interconnect.WCF
     /// <summary>
     /// This is the Part that is used to implement the Client end of a Interconnect WCF Service.
     /// </summary>
-    public class ClientServicePart : SimpleActivePartBase
+    public class ClientServicePart : SimpleActivePartBase //, ISubscribeToSet
     {
         /// <summary>
         /// Constructor.  Caller must provide a ClientServiceConfig that will be cloned by this part to record its operational settings.
         /// Then it determines the IVI that it will be linked to, from the given LocalIVI or from the LocalValueTableName if the local IVI was not given.
         /// </summary>
         public ClientServicePart(ClientServiceConfig config)
-            : base(config.PartID) 
+            : base(config.PartID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion0.Build(waitTimeLimit: TimeSpan.FromSeconds(0.01)))  // max spin rate is 100 Hz
         {
             Config = config.MakeCopyOfThis();
 
             IVI = Config.LocalIVI ?? Interconnect.Values.Values.GetTable(Config.LocalValueTableName, true);
 
-            WaitTimeLimit = TimeSpan.FromSeconds(0.01);     // max spin rate is 100 Hz
-
             clientCallbackHandler = new InterconnectPropagationSessionClientCallbackHandler() { PushParameterHandler = AsynchConsumePushParameter };
         }
+
+        #region ISubscribeToSet implementation.
+
+        /// <summary>
+        /// Requests the client to subscribe to a given set from the connected ServerServicePart.  
+        /// The returned value is a set (a hidden tracking set) that is maintained by the ClientServicePart and which the client can track with their own TrackingSet(s)
+        /// </summary>
+        //ITrackableSet SubscribeToSetByName(string setName);
+
+        /// <summary>
+        /// Requests the client to subscribe to a given set from the connected ServerServicePart.  
+        /// The returned value is a set (a hidden tracking set) that is maintained by the ClientServicePart and which the client can track with their own TrackingSet(s)
+        /// </summary>
+        //ITrackableSet SubscribeToSetByUUID(string setUUID);
+
+        #endregion
 
         private ClientServiceConfig Config { get; set; }
 
@@ -1540,6 +1568,55 @@ namespace MosaicLib.Modular.Interconnect.WCF
 
         /// <summary>Defines the nominal amount of time that this helper puts between adjacent efforts to scan the local IVA's for updates that need to be propagated.</summary>
         public TimeSpan NominalOutgoingIVIScanInterval { get; set; }
+
+        #endregion
+
+        #region Set subscription support.
+
+        public enum SetHandlerState
+        {
+            Local = 0,
+            WaitingToSendSubscriptionRequest,
+            WaitingForSubscriptionResponse,
+            Subscribed,
+        }
+
+        public class SetHandler
+        {
+            public SetID SetID { get; set; }
+            public Type SetItemType { get; set; }
+            public SetHandlerState State { get; set; }
+            public ITrackingSet TrackingSet { get; set; }
+        }
+
+        public SetHandler CreateClientSetHandler<TSetItemType>(string setName = null, string setUUID = null)
+        {
+            SetHandler setHandler = null;
+
+            if (!setUUID.IsNullOrEmpty() && toClientSetDictionaryByUUID.TryGetValue(setUUID, out setHandler))
+                return setHandler;
+
+            if (!setName.IsNullOrEmpty() && toClientSetDictionaryByName.TryGetValue(setName, out setHandler))
+                return setHandler;
+
+            if (setName.IsNullOrEmpty() && setUUID.IsNullOrEmpty())
+                return idleSetHandler;
+
+            setHandler.SetID = new SetID(name: setName, uuid: setUUID);
+            setHandler.SetItemType = typeof(TSetItemType);
+            setHandler.State = SetHandlerState.WaitingToSendSubscriptionRequest;
+
+            return setHandler;
+        }
+
+        public Dictionary<string, SetHandler> toClientSetDictionaryByName = new Dictionary<string, SetHandler>();
+        public Dictionary<string, SetHandler> toClientSetDictionaryByUUID = new Dictionary<string, SetHandler>();
+        public List<SetHandler> clientSetList = new List<SetHandler>();
+        // public List<SetHandler> 
+
+        public List<SetHandler> fromSetList = new List<SetHandler>();
+
+        private static readonly SetHandler idleSetHandler = new SetHandler() { SetID = new SetID(name: "", uuid: ""), TrackingSet = new TrackingSet<object>(new ReferenceSet<object>(new SetID(""), 1, false)) };
 
         #endregion
 

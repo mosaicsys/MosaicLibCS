@@ -24,9 +24,11 @@ using System.Collections.Generic;
 using System.ServiceModel;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Formatters.Binary;
+using System.Runtime.Serialization.Json;
 using System.Runtime.InteropServices;
 using System.Linq;
 using System.Collections;
+using System.Reflection;
 using System.Text;
 
 using MosaicLib.Modular.Reflection.Attributes;
@@ -652,11 +654,11 @@ namespace MosaicLib.Modular.Common
         /// If the contained value type matches this decoded ContainerStorageType then this method simply transfers the value from the corresponding storage field to the value.
         /// Otherwise the method uses the System.Convert.ChangeType method to attempt to convert the contained value into the desired TValueType type.
         /// If this transfer or conversion is successful then this method returns the transfered/converted value.  If this transfer/conversion is not
-        /// successful then this method returns default(TValueType).
+        /// successful then this method returns the given defaultValue (which defaults to default(TValueType)).
         /// <para/>Note: because this method must decode the type information on each call, it may be less efficient to use this method than to use the version where the
         /// caller explicitly uses DecodeType method combined with the more complete GetValue method.
         /// </summary>
-        public TValueType GetValue<TValueType>(bool rethrow)
+        public TValueType GetValue<TValueType>(bool rethrow, TValueType defaultValue = default(TValueType))
         {
             Type t = typeof(TValueType);
             ContainerStorageType valueCVT;
@@ -664,7 +666,7 @@ namespace MosaicLib.Modular.Common
 
             DecodeType(t, out valueCVT, out valueTypeIsNullable);
 
-            return GetValue<TValueType>(valueCVT, valueTypeIsNullable, rethrow);
+            return GetValue<TValueType>(valueCVT, valueTypeIsNullable, rethrow, defaultValue: defaultValue);
         }
 
         /// <summary>
@@ -678,12 +680,12 @@ namespace MosaicLib.Modular.Common
         /// If the contained value type matches the decodedValueType then this method simply transfers the value from the corresponding storage field to the value.
         /// Otherwise if isNullable is false then the method uses the System.Convert.ChangeType method to attempt to convert the contained value into the desired TValueType type.
         /// If this transfer or conversion used and is successful then this method and returns the transfered/converted value.  
-        /// If this transfer/conversion is not used or is not successful then this method returns default(TValueType).  
+        /// If this transfer/conversion is not used or is not successful then this method returns the given defaultValue (which defaults to default(TValueType)).
         /// If rethrow is true and the method encounters any excpetions then it will rethrow the exception.
         /// </summary>
-        public TValueType GetValue<TValueType>(ContainerStorageType decodedValueType, bool valueTypeIsNullable, bool rethrow)
+        public TValueType GetValue<TValueType>(ContainerStorageType decodedValueType, bool valueTypeIsNullable, bool rethrow, TValueType defaultValue = default(TValueType))
         {
-            return GetValue<TValueType>(decodedValueType, valueTypeIsNullable, rethrow, true);
+            return GetValue<TValueType>(decodedValueType, valueTypeIsNullable, rethrow, true, defaultValue: defaultValue);
         }
 
         /// <summary>
@@ -692,10 +694,10 @@ namespace MosaicLib.Modular.Common
         /// If the contained value type matches the decodedValueType then this method simply transfers the value from the corresponding storage field to the value.
         /// Otherwise if allowTypeChangeAttempt is true and isNullable is false then the method uses the System.Convert.ChangeType method to attempt to convert the contained value into the desired TValueType type.
         /// If this transfer or conversion used and is successful then this method and returns the transfered/converted value.  
-        /// If this transfer/conversion is not used or is not successful then this method returns default(TValueType).  
+        /// If this transfer/conversion is not used or is not successful then this method returns the given defaultValue (which defaults to default(TValueType)).  
         /// If rethrow is true and the method encounters any excpetions then it will rethrow the exception.
         /// </summary>
-        public TValueType GetValue<TValueType>(ContainerStorageType decodedValueType, bool valueTypeIsNullable, bool rethrow, bool allowTypeChangeAttempt)
+        public TValueType GetValue<TValueType>(ContainerStorageType decodedValueType, bool valueTypeIsNullable, bool rethrow, bool allowTypeChangeAttempt, TValueType defaultValue = default(TValueType))
         {
             Type TValueTypeType = typeof(TValueType);
             TValueType value;
@@ -707,7 +709,7 @@ namespace MosaicLib.Modular.Common
                 if (TValueTypeType.IsEnum)
                 {
                     if (!rethrow && IsNullOrEmpty)
-                        value = default(TValueType);
+                        value = defaultValue;
                     else
                     {
                         // This covers both string and numeric representations of the enumeration as the string representation of a number can also be parsed as the enum.
@@ -719,7 +721,7 @@ namespace MosaicLib.Modular.Common
                     // no conversion is required.  The stored type already mataches what the client is asking for.
                     switch (cvt)
                     {
-                        case ContainerStorageType.None: value = default(TValueType); break;
+                        case ContainerStorageType.None: value = defaultValue; break;
                         default:
                         case ContainerStorageType.Object: value = (TValueType)o; break;
                         case ContainerStorageType.String: value = (TValueType)o; break;
@@ -767,17 +769,17 @@ namespace MosaicLib.Modular.Common
                 else if (decodedValueType.IsValueType() && !valueTypeIsNullable && !rethrow && IsNullOrEmpty)
                 {
                     // support direct assignment of an empty or null container to a value type with rethrow = false by without any attempt to actually perform the conversion (it will fail).
-                    value = default(TValueType);
+                    value = defaultValue;
                 }
                 else if (valueTypeIsNullable && (IsNullOrEmpty || (allowTypeChangeAttempt && cvt == ContainerStorageType.String && (o as string).IsNullOrEmpty())))
                 {
                     // we can always assign a null/empty container to a nullable type by setting the type to its default (aka null).
                     // also allows simple conversion of any null or empty string to a nullable type using the same assignement to default (aka null).
-                    value = default(TValueType);
+                    value = defaultValue;
                 }
                 else if (allowTypeChangeAttempt)
                 {
-                    value = default(TValueType);
+                    value = defaultValue;
                     System.Object valueAsObject = ValueAsObject;
 
                     bool conversionDone = false;
@@ -809,31 +811,16 @@ namespace MosaicLib.Modular.Common
                                 case ContainerStorageType.Single: value = (TValueType)System.Convert.ChangeType(ss.ParseValue<System.Single>(0.0f), typeof(System.Single)); conversionDone = ss.IsAtEnd; break;
                                 case ContainerStorageType.Double: value = (TValueType)System.Convert.ChangeType(ss.ParseValue<System.Double>(0.0f), typeof(System.Double)); conversionDone = ss.IsAtEnd; break;
                                 case ContainerStorageType.TimeSpan:
-                                    // first attempt to parse the string as a double.  If that is completely successful then save it as a TimeSpan using FromSeconds.
                                     {
-                                        StringScanner ssd = new StringScanner(ss);
-                                        double d = 0.0;
-                                        if (ssd.ParseValue(out d) && ssd.IsAtEnd)
-                                        {
-                                            value = (TValueType)((System.Object)TimeSpan.FromSeconds(d));
-                                            conversionDone = true;
-                                            break;
-                                        }
-                                    }
-                                    // next attempt to extract a single token (to next whitespace) and parse that as a TimeSpan using its TryParse method.  
-                                    // If that token was the entire input and it could be successfully parsed to a TimeSpan then the conversion is done.
-                                    {
-                                        string token = ss.ExtractToken();
                                         TimeSpan ts;
-                                        conversionDone = TimeSpan.TryParse(token, out ts) && ss.IsAtEnd;
+                                        conversionDone = ss.ParseValue(out ts) && ss.IsAtEnd;
                                         value = (TValueType)((System.Object)ts);
                                         break;
                                     }
                                 case ContainerStorageType.DateTime:
                                     {
-                                        string token = ss.ExtractToken();
                                         DateTime dt;
-                                        conversionDone = DateTime.TryParse(token, out dt) && ss.IsAtEnd;
+                                        conversionDone = ss.ParseValue(out dt) && ss.IsAtEnd;
                                         value = (TValueType)((System.Object)dt);
                                         break;
                                     }
@@ -873,7 +860,7 @@ namespace MosaicLib.Modular.Common
                 }
                 else
                 {
-                    value = default(TValueType);
+                    value = defaultValue;
                     bool valueIsIntendedToBeNull = (cvt.IsReferenceType() && o == null);
                     if (!valueIsIntendedToBeNull)
                         LastGetValueException = new ValueContainerGetValueException("Unable to get {0} as type '{1}': No known conversion exists".CheckedFormat(this, typeof(TValueType)), null);
@@ -881,7 +868,7 @@ namespace MosaicLib.Modular.Common
             }
             catch (System.Exception ex)
             {
-                value = default(TValueType);
+                value = defaultValue;
                 LastGetValueException = new ValueContainerGetValueException("Unable to get {0} as type '{1}': {2}".CheckedFormat(this, typeof(TValueType), ex.Message), ex);
             }
 
@@ -897,15 +884,15 @@ namespace MosaicLib.Modular.Common
         /// If the contained value type matches the decodedValueType then this method simply transfers the value from the corresponding storage field to the value.
         /// Otherwise the method uses the System.Convert.ChangeType method to attempt to convert the contained value into the desired TValueType type.
         /// If this transfer or conversion is successful then this method and assigns the transfered/converted value and returns true.  
-        /// If this transfer/conversion is not successful then this method assigns default(TValueType) and returns false.  
+        /// If this transfer/conversion is not successful then this method assigns the given defaultValue (which defaults to default(TValueType)) and returns false.  
         /// If rethrow is true and the method encounters any excpetions then it will rethrow the exception.
         /// </summary>
-        public bool TryGetValue<TValueType>(out TValueType result, ContainerStorageType decodedValueType, bool isNullable, bool rethrow)
+        public bool TryGetValue<TValueType>(out TValueType result, ContainerStorageType decodedValueType, bool isNullable, bool rethrow, TValueType defaultValue = default(TValueType))
         {
-            result = default(TValueType);
+            result = defaultValue;
             try
             {
-                result = GetValue<TValueType>(decodedValueType, isNullable, rethrow);
+                result = GetValue<TValueType>(decodedValueType, isNullable, rethrow, defaultValue: defaultValue);
                 return (LastGetValueException == null);
             }
             catch (System.Exception ex)
@@ -1311,9 +1298,7 @@ namespace MosaicLib.Modular.Common
     /// creating the deserialized version of an object and thus the fields are all set to the default(type) values without regard to any coded constructor behavior.
     /// </remarks>
     [DataContract(Name = "VC", Namespace = Constants.ModularNameSpace)]
-    [KnownType(typeof(NamedValueSet))]
-    [KnownType(typeof(NamedValue))]
-    public class ValueContainerEnvelope
+    public class ValueContainerEnvelope : IEquatable<ValueContainerEnvelope>
     {
         /// <summary>Default constructor.  By default the contained value will read as Empty until it has been explicitly set to some other value.</summary>
         public ValueContainerEnvelope() { }
@@ -1344,6 +1329,28 @@ namespace MosaicLib.Modular.Common
         /// Each time this object is being serialized via the OnSerializing method, this property will be set to true and any immediately next OnSerializing call will skip the related internal work.
         /// </summary>
         private bool onSerializingCanBeSkipped = false;
+
+        #endregion
+
+        #region Equality testing
+
+        public bool Equals(ValueContainerEnvelope other)
+        {
+            return (other != null && VC.Equals(other.VC));
+        }
+
+        public override bool Equals(object other)
+        {
+            if (other is ValueContainerEnvelope)
+                return Equals(other as ValueContainerEnvelope);
+            else
+                return false;
+        }
+
+        public override int GetHashCode()
+        {
+            return base.GetHashCode();
+        }
 
         #endregion
 
@@ -1378,17 +1385,11 @@ namespace MosaicLib.Modular.Common
                             {
                                 try
                                 {
-                                    // NOTE: this use of the System.Runtime.Serialization.Formatters.Binary.BinaryFormatter is intended as a safe and capable fallback serializer for use with otherwise serializable objects.
-                                    //  This approach is being used so that such objects can be serialized, stored, retreived and transferred between processes without requiring the configuration of any custom, class and/or assembly specific,
-                                    //  serializer(s).  The use this BinaryFormatter based serialization is known to produce serialized output with significant storage overhead and with only moderate overall performance.
-
-                                    IFormatter formatter = new BinaryFormatter();
-                                    using (System.IO.MemoryStream ms = new System.IO.MemoryStream())
-                                    {
-                                        formatter.Serialize(ms, vc.o);
-
-                                        binSerObjGetValue = ms.GetBuffer();
-                                    }
+                                    CustomSerialization.ITypeSerializerItem tsi = CustomSerialization.CustomSerialization.Instance.GetCustomTypeSerializerItemFor(vc.o.GetType());
+                                    if (tsi != null)
+                                        tavcGetValue = tsi.Serialize(vc.o);
+                                    else
+                                        oGetValue = vc.o;
                                 }
                                 catch
                                 {
@@ -1424,15 +1425,23 @@ namespace MosaicLib.Modular.Common
                 VC = ValueContainer.Empty;
         }
 
+        //[OnSerialized]
+        //void OnSerialized(StreamingContext sc)
+        //{ }
+
+        //[OnDeserialized]
+        //void OnDeserialized(StreamingContext sc)
+        //{ }
+
         void ClearDecodedProperties()
         {
             nullGetValue = false;
             oGetValue = null;
             nviGetValue = null;
             nvsGetValue = null;
-            binSerObjGetValue = null;
             sGetValue = null;
             slGetValue = null;
+            tavcGetValue = null;
             vcaGetValue = null;
         }
 
@@ -1440,9 +1449,9 @@ namespace MosaicLib.Modular.Common
         private object oGetValue;
         private NamedValue nviGetValue;
         private NamedValueSet nvsGetValue;
-        private byte[] binSerObjGetValue;
         private string sGetValue;
         private Details.sl slGetValue;
+        private CustomSerialization.TypeAndValueCarrier tavcGetValue;
         private ValueContainerEnvelope[] vcaGetValue;
 
         // expectation is that exactly one property/element will produce a non-default value and this will define both the ContainerStorageType and the value for the deserializer to produce.
@@ -1453,30 +1462,6 @@ namespace MosaicLib.Modular.Common
 
         [DataMember(EmitDefaultValue = false, IsRequired = false)]
         private object o { get { return oGetValue; } set { VC = new ValueContainer() { cvt = ContainerStorageType.Object, o = value }; } }
-
-        // NOTE: this use of the System.Runtime.Serialization.Formatters.Binary.BinaryFormatter is intended as a safe and capable fallback serializer for use with otherwise serializable objects.
-        //  This approach is being used so that such objects can be serialized, stored, retreived and transferred between processes without requiring the configuration of any custom, class and/or assembly specific,
-        //  serializer(s).  The use this BinaryFormatter based serialization is known to produce serialized output with significant storage overhead and with only moderate overall performance.
-        [DataMember(EmitDefaultValue = false, IsRequired = false)]
-        private byte [] binSerObj 
-        {
-            get { return binSerObjGetValue; } 
-            set 
-            {
-                try
-                {
-                    IFormatter formatter = new BinaryFormatter();
-                    using (System.IO.MemoryStream ms = new System.IO.MemoryStream(value))
-                    {
-                        VC = new ValueContainer(formatter.Deserialize(ms));
-                    }
-                }
-                catch (System.Exception ex)
-                {
-                    VC = new ValueContainer("{0} assign failed: {1}".CheckedFormat(Fcns.CurrentMethodName, ex.ToString(ExceptionFormat.Full)));
-                }
-            } 
-        }
 
         [DataMember(EmitDefaultValue = false, IsRequired = false)]
         private NamedValue nvi { get { return nviGetValue; } set { VC = new ValueContainer(value.ConvertToReadOnly()); } }
@@ -1489,6 +1474,24 @@ namespace MosaicLib.Modular.Common
 
         [DataMember(EmitDefaultValue = false, IsRequired = false)]
         private Details.sl sl { get { return ((vc.cvt == ContainerStorageType.IListOfString) ? new Details.sl(vc.o as IList<String>) : null); } set { VC = new ValueContainer() { cvt = ContainerStorageType.IListOfString, o = value.AsReadOnly() }; } }
+
+        [DataMember(EmitDefaultValue = false, IsRequired = false)]
+        private CustomSerialization.TypeAndValueCarrier tavc 
+        { 
+            get { return tavcGetValue; } 
+            set 
+            {
+                try
+                {
+                    CustomSerialization.ITypeSerializerItem tsi = CustomSerialization.CustomSerialization.Instance.GetCustomTypeSerializerItemFor(value);
+                    VC = new ValueContainer(tsi.Deserialize(value));
+                }
+                catch (System.Exception ex)
+                {
+                    VC = new ValueContainer("{0} assign from tavc '{1}' failed: {2}".CheckedFormat(Fcns.CurrentMethodName, value, ex.ToString(ExceptionFormat.Full)));
+                }
+            } 
+        }
 
         [DataMember(EmitDefaultValue = false, IsRequired = false)]
         private ValueContainerEnvelope[] vca { get { return vcaGetValue; } set { VC = new ValueContainer(new List<ValueContainer>(value.Select((ve) => ve.VC)).AsReadOnly() as IList<ValueContainer>); } }
@@ -1551,11 +1554,505 @@ namespace MosaicLib.Modular.Common
         internal class sl : List<String>
         {
             /// <summary>Internal - no documentation provided</summary>
-            public sl() { }
+            public sl() 
+            { }
+
             /// <summary>Internal - no documentation provided</summary>
-            public sl(IEnumerable<string> strings) : base(strings ?? emptyIListOfString) { }
+            public sl(IEnumerable<string> strings) 
+                : base(strings ?? emptyIListOfString) 
+            { }
 
             private static readonly IList<string> emptyIListOfString = new List<string>().AsReadOnly();
+        }
+    }
+
+    #endregion
+
+    #region CustomSerialization namespace and related types
+
+    namespace CustomSerialization
+    {
+        #region TypeAndValueCarrier
+
+        /// <summary>
+        /// This is the class used to carry a serialized type and value when using CustomSerialization.
+        /// Deserialization requires that there is a suitable (matching) generic or type specific deserializer that has (already) been registered with the
+        /// appropriate CustomSerialization instance (usually the singleton).
+        /// <para/>This class implements immutable behavior.
+        /// </summary>
+        [DataContract(Namespace = Constants.ModularNameSpace)]
+        public class TypeAndValueCarrier
+        {
+            /// <summary>
+            /// Required constructor - allows the caller to construct an immutable instance with any/all properties initialized to any correspondingly given parameter values.
+            /// </summary>
+            public TypeAndValueCarrier(string typeStr = null, string assemblyFileName = null, string factoryName = null, string valueStr = null, byte [] valueByteArray = null) 
+            {
+                TypeStr = typeStr;
+                AssemblyFileName = assemblyFileName;
+                FactoryName = factoryName;
+                ValueStr = valueStr;
+                ValueByteArray = valueByteArray;
+            }
+
+            /// <summary>
+            /// Carries a text description of the deserialized type
+            /// </summary>
+            [DataMember(Order = 10, Name = "tyStr", EmitDefaultValue = false, IsRequired = false)]
+            public string TypeStr { get; private set; }
+
+            /// <summary>
+            /// Carries a text description of the deserialized type
+            /// </summary>
+            [DataMember(Order = 11, Name = "afn", EmitDefaultValue = false, IsRequired = false)]
+            public string AssemblyFileName { get; private set; }
+
+            /// <summary>
+            /// Carries a name of the factory object that was used to generate this serialization
+            /// </summary>
+            [DataMember(Order = 20, Name = "fName", EmitDefaultValue = false, IsRequired = false)]
+            public string FactoryName { get { return factoryName.MapNullOrEmptyTo(null); } private set { factoryName = value; } }
+            private string factoryName;
+
+            /// <summary>
+            /// Carries the value serialized as a string.
+            /// </summary>
+            [DataMember(Order = 100, Name = "vStr", EmitDefaultValue = false, IsRequired = false)]
+            public string ValueStr { get; private set; }
+
+            /// <summary>
+            /// Carries the value serialized as a byte array (usually from the BinaryFormatter).
+            /// </summary>
+            [DataMember(Order = 200, Name = "vBa", EmitDefaultValue = false, IsRequired = false)]
+            public byte[] ValueByteArray { get; private set; }
+
+            /// <summary>
+            /// Debugging and logging helper method
+            /// </summary>
+            public override string ToString()
+            {
+                StringBuilder sb = new StringBuilder();
+
+                sb.CheckedAppendFormat("tyStr:{0} afn:{1} fName:{2}", TypeStr, AssemblyFileName, FactoryName);
+
+                if (ValueStr != null)
+                    sb.CheckedAppendFormat(" vStr:[{0}]", ValueStr.GenerateSquareBracketEscapedVersion());
+
+                if (ValueByteArray != null)
+                    sb.CheckedAppendFormat(" vBa:[{0}]", ByteArrayTranscoders.HexStringTranscoder.Encode(ValueByteArray));
+
+                if (ValueStr == null && ValueByteArray == null)
+                    sb.CheckedAppendFormat(" noValue");
+
+                return sb.ToString();
+            }
+        }
+
+        #endregion
+
+        /// <summary>
+        /// This interface defines the publically usable information for a custom type serializer.
+        /// Under CustomSerialization objects which implement this interface are created by one of the registered or fallback factories
+        /// which can be used to Serialize and Deserialize the indicated type using Serialize and Deserialize methods defined here.
+        /// <para/>NOTE: instances of this type must support re-enterant use of the Serialize and Deserialize methods as this object may be shared and used by many clients concurrently.
+        /// </summary>
+        public interface ITypeSerializerItem
+        {
+            /// <summary>Gives the Type instance of the type that this serializer is intended to be used with.  May be null.</summary>
+            Type TargetType { get; }
+
+            /// <summary>Gives the "name" of a Type that this serializer is intended to be used with.  May be null, empty or may be an arbitrary string that is only intended for use with a specific factory instance.</summary>
+            string TargetTypeStr { get; }
+
+            /// <summary>Gives the file name of the Assemly that this type came from.  May be null.</summary>
+            string AssemblyFileName { get; }
+
+            /// <summary>Gives the name of the factory instance that produced this serializer item.  May be null, or empty.</summary>
+            string FactoryName { get; }
+
+            /// <summary>
+            /// This method is used by clients to generate a TypeAndValueCarrier for the given object.  
+            /// If the given object is not supported, or cannot otherwise be serialized using this item then the method must throw a CustomSerializerException that describes the issue encountered.
+            /// <para/>NOTE: this method must support re-enterant use as this object may be shared and used by many clients concurrently.
+            /// </summary>
+            TypeAndValueCarrier Serialize(object valueObject);
+
+            /// <summary>
+            /// This method is used by clients to generate an object from the carried ValueStr or ValueByteArray contents from the given TypeAndValueCarrier.  
+            /// This method may also use the included TypeStr information in this process if needed.  
+            /// If no valid deserialized object can be created from the carried ValueStr and/or ValueByteArray then the method must throw a CustomSerializerException that describes the issue encountered.
+            /// <para/>NOTE: this method must support re-enterant use as this object may be shared and used by many clients concurrently.
+            /// </summary>
+            object Deserialize(TypeAndValueCarrier valueCarrier);
+        }
+
+        /// <summary>
+        /// Exception that is generally used with issues encountered during CustomSerialization use.
+        /// </summary>
+        public class CustomSerializerException : System.Exception
+        {
+            /// <summary>
+            /// Constructor.
+            /// </summary>
+            public CustomSerializerException(string message = null, System.Exception innerException = null)
+                : base(message, innerException)
+            { }
+        }
+
+        /// <summary>
+        /// This interface defines the public interface that must be supported by any ITypeSerializerItem factory so that it can be used with a CustomSerializer instance.
+        /// </summary>
+        public interface ITypeSerializerItemFactory
+        {
+            /// <summary>Gives the "name" of this factory instance.  May be null, or empty.  If non-empty this will used during deserialization to re-order deserializer searching if a matching factory name is found.</summary>
+            string FactoryName { get; }
+
+            /// <summary>
+            /// This method attempts to generate and return an ITypeSerializerItem that can be used to serialize the given type.  If this factory does not support serializing the given type it must return null.
+            /// </summary>
+            ITypeSerializerItem AttemptToGenerateSerializationSpecItemFor(Type targetType, string targetTypeStr, string assemblyFileName);
+
+            /// <summary>
+            /// This method attempts to generate and return an ITypeSerializerItem that can be used to deserialize TypeAndValueCarrier objects that contain the given targetTypeStr value.
+            /// </summary>
+            ITypeSerializerItem AttemptToGenerateSerializationSpecItemFor(string targetTypeStr, string assemblyFileName);
+        }
+
+        /// <summary>
+        /// This inteface defines the public API that must be implemented by object that can be used for CustomSerialization.  
+        /// Normally the client simply makes use of the default CustomSerialization.Instance instance which automatically constructs a CustomSerialization instance for this purpose.
+        /// If the application would like to replace this instance with one of another type then it may provide an instance of another class that implements this interface for use in place of a default instance.
+        /// </summary>
+        public interface ICustomSerialization
+        {
+            /// <summary>Defines the ITypeSerializerItemFactory instance that should always be used last to attempt to generate ITypeSerializerItems for types that no other factory accepts.</summary>
+            ITypeSerializerItemFactory FallbackFactory { get; set; }
+
+            /// <summary>Adds the given ITypeSerializerItemFactory instance onto the end of the set of available ITypeSerializerItemFactory objects</summary>
+            CustomSerialization Add(ITypeSerializerItemFactory typeSerializerItemFactory);
+
+            /// <summary>Adds the given set of ITypeSerializerItemFactory instances onto the end of the set of available ITypeSerializerItemFactory objects</summary>
+            CustomSerialization AddRange(IEnumerable<ITypeSerializerItemFactory> typeSerializerItemFactorySet);
+
+            /// <summary>Used by clients to obtain an ITypeSerializerItem for the given targetType.  Optional factoryName may be used to attempt to obtain a type serializer from that factory first, provided that no other type serializer has already been generated for this type.</summary>
+            ITypeSerializerItem GetCustomTypeSerializerItemFor(Type targetType, string factoryName = null);
+
+            /// <summary>Used by clients to obtain an ITypeSerializerItem for the given targetTypeStr.  Optional factoryName may be used to attempt to obtain a type serializer from that factory first, provided that no other type serializer has already been generated for this typeStr</summary>
+            ITypeSerializerItem GetCustomTypeSerializerItemFor(string targetTypeStr, string assemblyFileName = null, string factoryName = null);
+
+            /// <summary>Used by clients to obtain an ITypeSerializerItem for the type (and factoryName) contained in the TypeAndValueCarrier instance.</summary>
+            ITypeSerializerItem GetCustomTypeSerializerItemFor(TypeAndValueCarrier typeAndValueCarrier);
+        }
+
+        /// <summary>
+        /// This is a hybrid class that is used to compartmentailize the CustomSerialization logic.
+        /// It contains a settable (AutoConstructIfNeeded) singleton Instance property.
+        /// It defines instance methods to register ISpecItemFactory objects using Add and AddRange methods and using the FallbackFactory setter
+        /// it provides instance methods that attempt to use the various application provided ITypeSerializerItemFactory, combined with its internal BinaryFormatter version to 
+        /// generate ITypeSerializerItem objects that are used to actually perform serialization and deserialization in client code.
+        /// </summary>
+        public class CustomSerialization : ICustomSerialization
+        {
+            #region Singleton Instance (et. al.)
+
+            public static ICustomSerialization Instance { get { return singletonInstanceHelper.Instance; } set { singletonInstanceHelper.Instance = value; } }
+            private static SingletonHelperBase<ICustomSerialization> singletonInstanceHelper = new SingletonHelperBase<ICustomSerialization>(SingletonInstanceBehavior.AutoConstructIfNeeded, () => new CustomSerialization());
+
+            #endregion
+
+            #region ICustomSerialization
+
+            ITypeSerializerItemFactory ICustomSerialization.FallbackFactory 
+            { 
+                get { lock (mutex) { return fallbackFactory; } } 
+                set { lock (mutex) { fallbackFactory = value; useFactoryItemArray = null; } } 
+            }
+            ITypeSerializerItemFactory fallbackFactory = null;
+
+            CustomSerialization ICustomSerialization.Add(ITypeSerializerItemFactory typeSerializerItemFactory)
+            {
+                lock (mutex)
+                {
+                    factoryItemList.Add(typeSerializerItemFactory);
+                    useFactoryItemArray = null;
+                }
+
+                return this;
+            }
+
+            CustomSerialization ICustomSerialization.AddRange(IEnumerable<ITypeSerializerItemFactory> typeSerializerItemFactorySet)
+            {
+                lock (mutex)
+                {
+                    factoryItemList.AddRange(typeSerializerItemFactorySet);
+                    useFactoryItemArray = null;
+                }
+
+                return this;
+            }
+
+            ITypeSerializerItem ICustomSerialization.GetCustomTypeSerializerItemFor(Type targetType, string factoryName) 
+            {
+                ITypeSerializerItem tsi = null;
+                lock (mutex)
+                {
+                    if (typeToSpecItemDictionary.TryGetValue(targetType, out tsi) && tsi != null)
+                        return tsi;
+
+                    string targetTypeStr = targetType.ToString();
+                    string assemblyFileName = targetType.Assembly.GetName().Name;
+
+                    if (tsi == null)
+                    {
+                        UpdateFactoryItemArrayIfNeeded();
+
+                        ITypeSerializerItemFactory namedFactory = null;
+                        if (!factoryName.IsNullOrEmpty() && factoryNameToFactoryDictionary.TryGetValue(factoryName, out namedFactory) && namedFactory != null)
+                            tsi = namedFactory.AttemptToGenerateSerializationSpecItemFor(targetType, targetTypeStr, assemblyFileName);
+                    }
+
+                    if (tsi == null)
+                        tsi = useFactoryItemArray.Select(factory => factory.AttemptToGenerateSerializationSpecItemFor(targetType, targetTypeStr, assemblyFileName)).FirstOrDefault(factory => factory != null);
+
+                    if (tsi != null)
+                        typeToSpecItemDictionary[targetType] = tsi;
+                    else
+                        throw new CustomSerializerException("could not create TypeSerializerItem for type:'{0}' factory:'{1}'".CheckedFormat(targetType, factoryName));
+
+                    return tsi;
+                }
+            }
+
+            Dictionary<string, Type> typeNameToTypeDictionary = new Dictionary<string, Type>();
+
+            ITypeSerializerItem ICustomSerialization.GetCustomTypeSerializerItemFor(string targetTypeStr, string assemblyFileName, string factoryName) 
+            {
+                ITypeSerializerItem tsi = null;
+
+                lock (mutex)
+                {
+                    if (typeStrToSpecItemDictionary.TryGetValue(targetTypeStr, out tsi) && tsi != null)
+                        return tsi;
+
+                    if (tsi == null)
+                    {
+                        try
+                        {
+                            Type foundType = null;
+                            if (!typeNameToTypeDictionary.TryGetValue(targetTypeStr, out foundType))
+                            {
+                                Assembly [] currentAssemblies = AppDomain.CurrentDomain.GetAssemblies();
+
+                                // if we can find an assembly with the same name as the original serializing type came from then try to find the type in that assembly first.
+                                Assembly tryFirstAssembly = currentAssemblies.FirstOrDefault(assembly => assembly.GetName().Name == assemblyFileName);
+
+                                if (tryFirstAssembly != null)
+                                    foundType = tryFirstAssembly.GetType(targetTypeStr);
+
+                                // if the type could not be found there (the indicated assembly is not currently loaded) then ask every assembly in the current app domain to parse the targetTypeStr.
+                                // Take the first one that produces a type or null
+                                if (foundType == null)
+                                    foundType = currentAssemblies.Where(assembly => assembly != tryFirstAssembly).Select(assembly => assembly.GetType(targetTypeStr)).FirstOrDefault(t => t != null);
+
+                                // save the foundType, even if null, in the dictionary so that we will not need to repeatedly look for the type the hard way.
+                                typeNameToTypeDictionary[targetTypeStr] = foundType;
+                            }
+
+                            if (foundType != null)
+                            {
+                                ICustomSerialization me = this;
+                                tsi = me.GetCustomTypeSerializerItemFor(foundType, factoryName);
+                            }
+                        }
+                        catch
+                        { }
+                    }
+
+                    if (tsi == null)
+                    {
+                        UpdateFactoryItemArrayIfNeeded();
+
+                        ITypeSerializerItemFactory namedFactory = null;
+                        if (!factoryName.IsNullOrEmpty() && factoryNameToFactoryDictionary.TryGetValue(factoryName, out namedFactory) && namedFactory != null)
+                            tsi = namedFactory.AttemptToGenerateSerializationSpecItemFor(targetTypeStr, assemblyFileName);
+                    }
+
+                    if (tsi == null)
+                        tsi = useFactoryItemArray.Select(factory => factory.AttemptToGenerateSerializationSpecItemFor(targetTypeStr, assemblyFileName)).FirstOrDefault(factory => factory != null);
+
+                    if (tsi != null)
+                        typeStrToSpecItemDictionary[targetTypeStr] = tsi;
+                    else
+                        throw new CustomSerializerException("could not create TypeSerializerItem for typeStr:'{0}' factory:'{1}'".CheckedFormat(targetTypeStr, factoryName));
+
+                    return tsi;
+                }
+            }
+
+            ITypeSerializerItem ICustomSerialization.GetCustomTypeSerializerItemFor(TypeAndValueCarrier typeAndValueCarrier) 
+            {
+                ICustomSerialization me = this;
+
+                return me.GetCustomTypeSerializerItemFor(typeAndValueCarrier.TypeStr, typeAndValueCarrier.AssemblyFileName, typeAndValueCarrier.FactoryName);
+            }
+
+            #endregion
+
+            #region private fields and other internals
+
+            private object mutex = new object();
+
+            private List<ITypeSerializerItemFactory> factoryItemList = new List<ITypeSerializerItemFactory>();
+
+            private ITypeSerializerItemFactory[] useFactoryItemArray = null;
+            private static ITypeSerializerItemFactory jsonDCSerializerFactory = new JsonDataContractFallbackItemFactory() { FactoryName = "FallbackJsonDC" };
+            private static ITypeSerializerItemFactory binarySerializerFactory = new BinaryFormatterFallbackItemFactory() { FactoryName = "FallbackBinaryFormatter" };
+
+            private Dictionary<string, ITypeSerializerItemFactory> factoryNameToFactoryDictionary = new Dictionary<string, ITypeSerializerItemFactory>();
+            private Dictionary<string, ITypeSerializerItem> typeStrToSpecItemDictionary = new Dictionary<string, ITypeSerializerItem>();
+            private Dictionary<Type, ITypeSerializerItem> typeToSpecItemDictionary = new Dictionary<Type, ITypeSerializerItem>();
+
+            private void UpdateFactoryItemArrayIfNeeded()
+            {
+                if (useFactoryItemArray == null)
+                {
+                    useFactoryItemArray = factoryItemList.Concat(new[] { fallbackFactory }).Concat(new[] { jsonDCSerializerFactory, binarySerializerFactory }).Where(factory => factory != null).ToArray();
+
+                    factoryNameToFactoryDictionary.Clear();
+
+                    foreach (var factory in useFactoryItemArray.Where(factory => !factory.FactoryName.IsNullOrEmpty()))
+                    {
+                        if (!factoryNameToFactoryDictionary.ContainsKey(factory.FactoryName))
+                            factoryNameToFactoryDictionary.Add(factory.FactoryName, factory);
+                    }
+                }
+            }
+
+            #endregion
+
+            #region fallback Json Data Contract serializer implementation classes for use here
+
+            private class JsonDataContractFallbackItemFactory : ITypeSerializerItemFactory
+            {
+                public string FactoryName { get; set; }
+
+                public ITypeSerializerItem AttemptToGenerateSerializationSpecItemFor(Type targetType, string targetTypeStr, string assemblyFileName)
+                {
+                    if (!targetType.GetCustomAttributes(typeof(DataContractAttribute), false).IsNullOrEmpty())
+                        return new JsonDataContractTypeSerializerItem(targetType: targetType, targetTypeStr: targetTypeStr, assemblyFileName: assemblyFileName, factoryName: FactoryName);
+                    else
+                        return null;
+                }
+
+                public ITypeSerializerItem AttemptToGenerateSerializationSpecItemFor(string targetTypeStr, string assemblyFileName)
+                {
+                    // note: this serializer does not support this factory method.  In all cases the TypeAndValueContainer should be convertable to a targetType or this serializer cannot be used.
+                    return null;
+                }
+            }
+
+            private class JsonDataContractTypeSerializerItem : TypeSerializerItemBase
+            {
+                public JsonDataContractTypeSerializerItem(Type targetType = null, string targetTypeStr = null, string assemblyFileName = null, string factoryName = null)
+                    : base(targetType: targetType, targetTypeStr: targetTypeStr, assemblyFileName: assemblyFileName, factoryName: factoryName)
+                { }
+
+                public override TypeAndValueCarrier Serialize(object valueObject)
+                {
+                    DataContractJsonSerializer dcjs = new DataContractJsonSerializer(TargetType);
+
+                    IFormatter formatter = new BinaryFormatter();
+                    using (System.IO.MemoryStream ms = new System.IO.MemoryStream())
+                    {
+                        dcjs.WriteObject(ms, valueObject);
+
+                        return new TypeAndValueCarrier(typeStr: TargetTypeStr, assemblyFileName: AssemblyFileName, factoryName: FactoryName, valueStr: ByteArrayTranscoders.ByteStringTranscoder.Encode(ms.ToArray()));
+                    }
+                }
+
+                public override object Deserialize(TypeAndValueCarrier valueCarrier)
+                {
+                    DataContractJsonSerializer dcjs = new DataContractJsonSerializer(TargetType);
+
+                    using (System.IO.MemoryStream ms = new System.IO.MemoryStream(ByteArrayTranscoders.ByteStringTranscoder.Decode(valueCarrier.ValueStr)))
+                    {
+                        return dcjs.ReadObject(ms);
+                    }
+                }
+            }
+            #endregion
+
+            #region fallback BinaryFormatter implementation classes for use here
+
+            private class BinaryFormatterFallbackItemFactory : ITypeSerializerItemFactory
+            {
+                public string FactoryName { get; set; }
+
+                public ITypeSerializerItem AttemptToGenerateSerializationSpecItemFor(Type targetType, string targetTypeStr, string assemblyFileName)
+                {
+                    return new BinaryFormatterTypeSerializerItem(targetType: targetType, targetTypeStr: targetTypeStr, assemblyFileName: assemblyFileName, factoryName: FactoryName);
+                }
+
+                public ITypeSerializerItem AttemptToGenerateSerializationSpecItemFor(string targetTypeStr, string assemblyFileName)
+                {
+                    return new BinaryFormatterTypeSerializerItem(targetTypeStr: targetTypeStr, assemblyFileName: assemblyFileName, factoryName: FactoryName);
+                }
+            }
+
+            private class BinaryFormatterTypeSerializerItem : TypeSerializerItemBase
+            {
+                public BinaryFormatterTypeSerializerItem(Type targetType = null, string targetTypeStr = null, string assemblyFileName = null, string factoryName = null)
+                    : base(targetType: targetType, targetTypeStr: targetTypeStr, assemblyFileName: assemblyFileName, factoryName: factoryName)
+                { }
+
+                public override TypeAndValueCarrier Serialize(object valueObject)
+                {
+                    IFormatter formatter = new BinaryFormatter();
+                    using (System.IO.MemoryStream ms = new System.IO.MemoryStream())
+                    {
+                        formatter.Serialize(ms, valueObject);
+
+                        return new TypeAndValueCarrier(typeStr: TargetTypeStr, assemblyFileName: AssemblyFileName, factoryName: FactoryName, valueByteArray: ms.GetBuffer());
+                    }
+                }
+
+                public override object Deserialize(TypeAndValueCarrier valueCarrier)
+                {
+                    IFormatter formatter = new BinaryFormatter();
+                    using (System.IO.MemoryStream ms = new System.IO.MemoryStream(valueCarrier.ValueByteArray))
+                    {
+                        return formatter.Deserialize(ms);
+                    }
+                }
+            }
+
+            #endregion
+        }
+
+        /// <summary>
+        /// This class provides an abstract base class implementation of the ITypeSerializerItem interface.
+        /// Under CustomSerialization objects which implement this interface are created by one of the registered or fallback factories
+        /// which can be used to Serialize and Deserialize the indicated type using Serialize and Deserialize methods defined here.
+        /// <para/>NOTE: instances of this type must support re-enterant use of the Serialize and Deserialize methods as this object may be shared and
+        /// used by many clients concurrently.
+        /// </summary>
+        public abstract class TypeSerializerItemBase : ITypeSerializerItem
+        {
+            public TypeSerializerItemBase(Type targetType = null, string targetTypeStr = null, string assemblyFileName = null, string factoryName = null)
+            {
+                TargetType = targetType ?? typeof(System.Object);
+                TargetTypeStr = targetTypeStr;
+                AssemblyFileName = assemblyFileName;
+                FactoryName = factoryName;
+            }
+
+            public Type TargetType { get; private set; }
+            public string TargetTypeStr { get; private set; }
+            public string AssemblyFileName { get; private set; }
+            public string FactoryName { get; private set; }
+
+            public abstract TypeAndValueCarrier Serialize(object valueObject);
+            public abstract object Deserialize(TypeAndValueCarrier valueCarrier);
         }
     }
 
@@ -1572,7 +2069,7 @@ namespace MosaicLib.Modular.Common
     /// </summary>
     public interface INamedValueSet : IEnumerable<INamedValue>, IEquatable<INamedValueSet>
     {
-        /// <summary>Returns true if this set, or any of its sub-sets when requested, contains a NamedValue for the given name (after sanitization).</summary>
+        /// <summary>Returns true if this set, or any of its sub-sets when requested, contains a NamedValue for the given name (after sanitization).  This method is often use to test for the presence of keyword NV items.</summary>
         bool Contains(string name, TraversalType searchTraversalType = TraversalType.EntireTree);
 
         /// <summary>
@@ -1795,7 +2292,7 @@ namespace MosaicLib.Modular.Common
 
         #endregion
 
-        #region Constructor helper methods (SetFrom variants
+        #region Constructor helper methods (SetFrom variants)
 
         public NamedValueSet SetFrom(INamedValueSet rhs, TraversalType copyTraversalType)
         {
@@ -1833,14 +2330,37 @@ namespace MosaicLib.Modular.Common
         #region Locally defined helper utility methods and properties (Add, AddRange variants)
 
         /// <summary>
+        /// This allows the class to be used with a Dictionary style initializer to add keywords to the set.
+        /// <exception cref="System.NotSupportedException">thrown if the collection has been set to IsReadOnly</exception>
+        /// </summary>
+        public NamedValueSet Add(string keyword)
+        {
+            ThrowIfIsReadOnly("The Add(keyword) method");
+
+            return SetValue(new NamedValue(keyword));       // note: SetValue is used here so that if the client attempts to add the same keyword two or more times it will not fail
+        }
+
+        /// <summary>
+        /// Provide an alternate name for the SetValue method.  This allows the class to be used with a Dictionary style initializer to add ValueContainer values to the set.
+        /// When the ValueContainer vc is given as empty (the default) then the method effectively adds a keyword to this set.
+        /// <exception cref="System.NotSupportedException">thrown if the collection has been set to IsReadOnly</exception>
+        /// </summary>
+        public NamedValueSet Add(string name, ValueContainer vc)
+        {
+            ThrowIfIsReadOnly("The Add(name, vc) method");
+
+            return SetValue(name, vc);// note: SetValue is used here so that if the client attempts to add the same name two or more times the value will be set to the last provided value
+        }
+
+        /// <summary>
         /// Provide an alternate name for the SetValue method.  This allows the class to be used with a Dictionary style initializer to add values to the set.
         /// <exception cref="System.NotSupportedException">thrown if the collection has been set to IsReadOnly</exception>
         /// </summary>
         public NamedValueSet Add(string name, object value)
         {
-            ThrowIfIsReadOnly("The Add method");
+            ThrowIfIsReadOnly("The Add(name, value) method");
 
-            return SetValue(name, value);
+            return SetValue(name, value);// note: SetValue is used here so that if the client attempts to add the same name two or more times the value will be set to the last provided value
         }
 
         /// <summary>
@@ -1907,50 +2427,59 @@ namespace MosaicLib.Modular.Common
         }
 
         /// <summary>
-        /// Explicit ValueContainer setter.  Updates the desired NamedValue to contain the given vc value, or adds a new NamedValue, initialized from the given name and vc value, to the list if it was not already present.
+        /// Updates the desired NamedValue to contain the given vc value, or adds a new NamedValue, initialized from the given name and vc value, to the list if it was not already present.
         /// </summary>
         /// <exception cref="System.NotSupportedException">thrown if the collection has been set to IsReadOnly</exception>
         public NamedValueSet SetValue(string name, ValueContainer vc)
         {
+            return SetValue(new NamedValue(name, vc));
+        }
+
+        /// <summary>
+        /// Updates the desired NamedValue to contain the given object value or adds a new NamedValue, initialized from the given name and object value, to the list if it was not already present.
+        /// In either case the given object value will be assigned into a ValueContainer automatically using this signature.
+        /// </summary>
+        /// <exception cref="System.NotSupportedException">thrown if the collection has been set to IsReadOnly</exception>
+        public NamedValueSet SetValue(string name, object value)
+        {
+            return SetValue(new NamedValue(name, value));
+        }
+
+        /// <summary>
+        /// Explicit ValueContainer setter.  Updates the desired NamedValue to contain the given vc value (if it was not read only), replaces it with the given nv it is present as is readonly, or adds the given NamedValue to the list if it was not already present.
+        /// <para/>NOTE: in the case where this method adds the given nv to the set or replaces the NamedValue (because it is read only) the set will directly reference the given nv object)
+        /// </summary>
+        /// <exception cref="System.NotSupportedException">thrown if the collection has been set to IsReadOnly</exception>
+        public NamedValueSet SetValue(NamedValue nv)
+        {
             ThrowIfIsReadOnly("The SetValue method");
 
-            string sanitizedName = name.Sanitize();
-            int index = AttemptToFindItemIndexInList(sanitizedName, true);
+            int index = AttemptToFindItemIndexInList(nv.Name, true);
 
             if (index >= 0)
             {
                 // we found a matching NamedValue in the list
 
-                NamedValue nv = list[index];
-                if (!nv.IsReadOnly)
+                NamedValue listNV = list[index];
+                if (!listNV.IsReadOnly)
                 {
                     // update the value for the NamedValue item that is already in the set
-                    nv.VC = vc;
+                    listNV.VC = nv.VC;
                 }
                 else
                 {
                     // replace the NamedValue with a new one with the same name and the new value (dictionary does not need to be reset)
-                    list[index] = new NamedValue(sanitizedName) { VC = vc };
+                    list[index] = nv;
                 }
             }
             else
             {
                 // name is not already in the set - make a new NamedValue with the given santized name and vc value and add it to the list.
                 nameToIndexDictionary = null;
-                list.Add(new NamedValue(sanitizedName) { VC = vc });
+                list.Add(nv);
             }
-            
-            return this;
-        }
 
-        /// <summary>
-        /// Explicit ValueContainer setter.  Updates the desired NamedValue to contain the given object value or adds a new NamedValue, initialized from the given name and object value, to the list if it was not already present.
-        /// In either case the given object value will be assigned into a ValueContainer automatically using this signature.
-        /// </summary>
-        /// <exception cref="System.NotSupportedException">thrown if the collection has been set to IsReadOnly</exception>
-        public NamedValueSet SetValue(string name, object value)
-        {
-            return SetValue(name, new ValueContainer(value));
+            return this;
         }
 
         /// <summary>
@@ -2223,7 +2752,7 @@ namespace MosaicLib.Modular.Common
         /// <exception cref="System.ArgumentException">thrown if an element with the same sanitized item.Name already exists in this set.</exception>
         public void Add(NamedValue item)
         {
-            ThrowIfIsReadOnly("The Add method");
+            ThrowIfIsReadOnly("The Add(item) method");
 
             if (item == null)
                 throw new System.ArgumentNullException("item");
@@ -2609,10 +3138,23 @@ namespace MosaicLib.Modular.Common
 
         #region Constructors
 
-        /// <summary>Constructor - builds NamedValue with the given name.  VC defaults to ValueContainer.Empty</summary>
-        public NamedValue(string name) 
+        /// <summary>Default Constructor, for use with deserialization</summary>
+        public NamedValue()
+        {}
+
+        /// <summary>Constructor - builds NamedValue with the given name.  VC defaults to ValueContainer.Empty (and has not been set).  This constructor may thus be used to create keyword entries for use in a NamedValueSet</summary>
+        public NamedValue(string name)
         {
             Name = name ?? string.Empty;
+        }
+
+        /// <summary>Constructor - builds NamedValue with the given name and vc ValueContainter value.</summary>
+        public NamedValue(string name, ValueContainer vc, bool asReadOnly = false) 
+        {
+            Name = name ?? string.Empty;
+            VC = vc;
+
+            isReadOnly = asReadOnly;
         }
 
         /// <summary>Helper Constructor - builds NamedValue with the given name and object value.  VC is constructed to contain the given object value</summary>

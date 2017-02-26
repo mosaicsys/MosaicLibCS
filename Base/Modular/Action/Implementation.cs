@@ -363,25 +363,73 @@ namespace MosaicLib.Modular.Action
         /// Returns true of the contents of this IActionState are "equal" to the contents of the other IActionState.
         /// Checks StateCode, ResultCode, TimeStamp and NamedValues for equality
         /// </summary>
-        public bool Equals(IActionState rhs)
+        public bool Equals(IActionState other)
         {
-            if (Object.ReferenceEquals(this, rhs))
+            if (Object.ReferenceEquals(this, other))
                 return true;
 
-            if (rhs == null)
+            if (other == null)
                 return false;
 
-            return (StateCode == rhs.StateCode
-                    && ResultCode == rhs.ResultCode
-                    && TimeStamp == rhs.TimeStamp
-                    && NamedValues.IsEqualTo(rhs.NamedValues)
+            return (StateCode == other.StateCode
+                    && ResultCode == other.ResultCode
+                    && TimeStamp == other.TimeStamp
+                    && NamedValues.IsEqualTo(other.NamedValues)
                     );
+        }
+
+        #endregion
+
+        #region object.Equals overrides
+
+        /// <summary>
+        /// Returns true if the given other object is an IActionState and this action state is IEquatable.Equals to the given other IActionState
+        /// </summary>
+        public override bool Equals(object other)
+        {
+            if (other is IActionState)
+                return Equals(other as IActionState);
+            else
+                return false;
+        }
+
+        /// <summary>
+        /// Passthough override method include to prevent warnings due to custom Equals implementation
+        /// </summary>
+        public override int GetHashCode()
+        {
+            return base.GetHashCode();
         }
 
         #endregion
 
         public static IActionState Empty { get { return empty; } }
         private static readonly IActionState empty = new ActionStateImplBase();
+    }
+
+    public static partial class ExtensionMethods
+    {
+        public static bool Equals(this IActionState thisIAS, IActionState other, bool compareTimeStamps = true)
+        {
+            if (Object.ReferenceEquals(thisIAS, other))
+                return true;
+
+            if (thisIAS == null || other == null)
+                return false;
+
+            if (thisIAS.Equals(other))
+                return true;
+
+            if (compareTimeStamps)
+                return false;
+
+            return (thisIAS.StateCode == other.StateCode
+                    && thisIAS.ResultCode == other.ResultCode
+                    // && thisIAS.TimeStamp == other.TimeStamp
+                    && thisIAS.NamedValues.IsEqualTo(other.NamedValues)
+                    );
+
+        }
     }
 
     /// <summary>
