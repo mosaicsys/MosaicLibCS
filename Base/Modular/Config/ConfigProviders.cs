@@ -925,13 +925,13 @@ namespace MosaicLib.Modular.Config
     /// Normally this provider is used for read/write behavior and is most easily used to support EnsureExists usage patterns and/or moderate to high write rate usages
     /// with the same file IO failure handling that is provided through the use of the PeristentObjectFileRing.
     /// </summary>
-    public class PersistentXmlTextFileRingProviderBase : PersistentSerializedTextFileRingProviderBase
+    public class PersistentXmlTextFileRingProvider : PersistentSerializedTextFileRingProviderBase
     {
         /// <summary>
         /// Constructor: Accepts provider name, filePath to ini file to read/write, keyPrefix to prefix on all contained keys, 
         /// and isReadWrite to indicate if the INI file is writable or not (ie if all of the keys should be IsFixed).
         /// </summary>
-        public PersistentXmlTextFileRingProviderBase(string name, PersistentObjectFileRingConfig ringConfig, string keyPrefix = "", bool isReadWrite = true, INamedValueSet metaData = null, bool sortKeysOnSave = false)
+        public PersistentXmlTextFileRingProvider(string name, PersistentObjectFileRingConfig ringConfig, string keyPrefix = "", bool isReadWrite = true, INamedValueSet metaData = null, bool sortKeysOnSave = false)
             : base(name, ringConfig, new DataContractPersistentXmlTextFileRingStorageAdapter<ConfigKeyStore>(name, ringConfig) { Object = new ConfigKeyStore() }, keyPrefix: keyPrefix, isReadWrite: isReadWrite, metaData: metaData, keysMayBeAddedUsingEnsureExistsOption: isReadWrite, sortKeysOnSave: sortKeysOnSave)
         { }
     }
