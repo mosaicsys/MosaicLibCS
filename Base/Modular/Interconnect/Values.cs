@@ -1557,7 +1557,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <summary>
         /// internal implementation method.  Performs all of the type specific setup (and some non-type specific setup) required to support annotated ValueSet access.
         /// </summary>
-        internal override void InnerSetup(params string[] baseNames)
+        internal override void InnerSetup(bool mustSupportUpdate, bool mustSupportSet, params string[] baseNames)
         {
             // setup all of the static information
 
@@ -1570,10 +1570,18 @@ namespace MosaicLib.Modular.Interconnect.Values
                 string itemName = (!string.IsNullOrEmpty(itemAttribute.Name) ? itemAttribute.Name : itemInfo.MemberInfo.Name);
                 string fullValueName = itemInfo.GenerateFullName(baseNames);
 
-                if (!itemInfo.CanGetValue || !itemInfo.CanSetValue)
+                if (!itemInfo.CanGetValue && mustSupportUpdate)
                 {
                     if (!itemAttribute.SilenceIssues)
-                        IssueEmitter.Emit("Member/Value '{0}'/'{1}' is not usable: Member must provide public getter and setter, in ValueSet type '{2}'", memberName, fullValueName, TValueSetTypeStr);
+                        IssueEmitter.Emit("Member/Value '{0}'/'{1}' is not usable: Member must provide public getter, in ValueSet type '{2}'", memberName, fullValueName, TValueSetTypeStr);
+
+                    continue;
+                }
+
+                if (!itemInfo.CanSetValue && mustSupportSet)
+                {
+                    if (!itemAttribute.SilenceIssues)
+                        IssueEmitter.Emit("Member/Value '{0}'/'{1}' is not usable: Member must provide public setter, in ValueSet type '{2}'", memberName, fullValueName, TValueSetTypeStr);
 
                     continue;
                 }
@@ -1598,7 +1606,7 @@ namespace MosaicLib.Modular.Interconnect.Values
 
                 Logging.IMesgEmitter selectedIssueEmitter = IssueEmitter;
 
-                if (itemAccessSetupInfo.MemberFromIVAAction == null || itemAccessSetupInfo.MemberToIVAAction == null)
+                if ((itemInfo.CanGetValue && itemAccessSetupInfo.MemberFromIVAAction == null) || (itemInfo.CanSetValue && itemAccessSetupInfo.MemberToIVAAction == null))
                 {
                     if (!itemAttribute.SilenceIssues)
                         selectedIssueEmitter.Emit("Member/Value '{0}'/'{1}' is not usable: no valid accessor delegate could be generated for its ValueSet type:'{3}'", memberName, fullValueName, itemInfo.ItemType, TValueSetTypeStr);
@@ -1657,6 +1665,9 @@ namespace MosaicLib.Modular.Interconnect.Values
             if (ivi != null)
                 IVI = ivi;
 
+            MustSupportSet = true;
+            MustSupportUpdate = true;
+
             TValueSetType = tValueSetType;
             TValueSetTypeStr = TValueSetType.Name;
 
@@ -1696,6 +1707,10 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <summary>Defines the emitter used to emit Update related changes in config point values.  Defaults to the null emitter.</summary>
         public Logging.IMesgEmitter ValueNoteEmitter { get { return FixupEmitterRef(ref valueNoteEmitter); } set { valueNoteEmitter = value; } }
 
+        public bool MustSupportSet { get; set; }
+        public bool MustSupportUpdate { get; set; }
+
+
         /// <summary>
         /// This method determines the set of full Parameter Names from the ValueSet's annotated items, and creates a set of IValueAccessor objects for them.
         /// In most cases the client will immediately call Set or Update to transfer the values from or to the ValueSet.
@@ -1728,7 +1743,7 @@ namespace MosaicLib.Modular.Interconnect.Values
             if (!IsValueSetValid)
                 throw new System.NullReferenceException("ValueSet property must be Valid (non-null) before Setup can be called");
 
-            InnerSetup(baseNames);
+            InnerSetup(MustSupportUpdate, MustSupportSet, baseNames);
 
             return this;
         }
@@ -1811,7 +1826,7 @@ namespace MosaicLib.Modular.Interconnect.Values
 
         #region abstract methods to be implemented by a derived class
 
-        internal abstract void InnerSetup(params string[] baseNames);
+        internal abstract void InnerSetup(bool mustSupportUpdate, bool mustSupportSet, params string[] baseNames);
 
         internal abstract bool IsValueSetValid { get; }
         internal abstract void InnerTransferValuesFromIVAs();

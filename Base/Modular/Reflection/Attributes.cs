@@ -372,9 +372,13 @@ namespace MosaicLib.Modular.Reflection
             /// <summary>
             /// Extension method that will generate a GetMemberAsVCFunctionDelegate method for the member specified by this itemInfo.  
             /// Supports bool, sbyte, short, int, long, byte, ushort, uint, ulong, float, double, nullables of these, string, object, string [], ValueContainer, IList{string}, IList{ValueContainer} and enumeration types.
+            /// This method will return null if the given itemInfo indicates that it is not gettable (CanGetValue property givens false)
             /// </summary>
             public static GetMemberAsVCFunctionDelegate<TAnnotatedClass> GenerateGetMemberToVCFunc<TAnnotatedClass>(this ItemInfo itemInfo)
             {
+                if (!itemInfo.CanGetValue)
+                    return null;
+
                 IAnnotatedItemAttribute itemAttribute = itemInfo.IAnnotatedItemAttribute;
                 ContainerStorageType useStorageType = ContainerStorageType.None;
                 bool isNullable = false;
@@ -574,9 +578,13 @@ namespace MosaicLib.Modular.Reflection
             /// <summary>
             /// Extension method that will generate a SetMemberFromVCFunctionDelegate method for the member specified by this itemInfo.  
             /// Supports bool, sbyte, short, int, long, byte, ushort, uint, ulong, float, double, nullables of these, string, object, string [], ValueContainer, IList{string}, IList{ValueContainer} and enumeration types.
+            /// This method will return null if the given itemInfo indicates that it is not settable (CanSetValue property givens false)
             /// </summary>
             public static SetMemberFromVCActionDelegate<TAnnotatedClass> GenerateSetMemberFromVCAction<TAnnotatedClass>(this ItemInfo itemInfo, bool forceRethrowFlag = true)
             {
+                if (!itemInfo.CanSetValue)
+                    return null;
+
                 IAnnotatedItemAttribute itemAttribute = itemInfo.IAnnotatedItemAttribute;
                 Action<TAnnotatedClass, ValueContainer, bool> vcSetter = null;
 

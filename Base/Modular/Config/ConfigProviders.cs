@@ -1000,6 +1000,17 @@ namespace MosaicLib.Modular.Config
             }
 
             AddRange(persistKeyTrackerList.Select(pkt => pkt.ckai));
+
+            foreach (var pkt in persistKeyTrackerList)
+            {
+                if (pkt.dictionaryKeyItem == null)
+                {
+                    DictionaryKeyItem dki = null;
+
+                    if (keyItemDictionary.TryGetValue(pkt.ckai.Key, out dki))
+                        pkt.dictionaryKeyItem = dki;
+                }
+            }
         }
 
         IPersistentStorage<ConfigKeyStore> ringAdapter;

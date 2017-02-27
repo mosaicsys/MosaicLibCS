@@ -4053,6 +4053,8 @@ namespace MosaicLib.Modular.Common
             valueSetItemInfoList = AnnotatedClassItemAccessHelper<Attributes.NamedValueSetItemAttribute>.ExtractItemInfoAccessListFrom(typeof(TValueSet), ItemSelection.IncludeExplicitPublicItems | ItemSelection.IncludeInheritedItems);
             NumItems = valueSetItemInfoList.Count;
 
+            MustSupportGet = MustSupportSet = true;
+
             itemAccessSetupInfoArray = new ItemAccessSetupInfo[NumItems];
         }
 
@@ -4070,6 +4072,9 @@ namespace MosaicLib.Modular.Common
 
         /// <summary>Defines the emitter used to emit Update related changes in config point values.  Defaults to the null emitter.</summary>
         public Logging.IMesgEmitter ValueNoteEmitter { get { return FixupEmitterRef(ref valueNoteEmitter); } set { valueNoteEmitter = value; } }
+
+        public bool MustSupportSet { get; set; }
+        public bool MustSupportGet { get; set; }
 
         /// <summary>
         /// This method determines the set of full Parameter Names from the ValueSet's annotated items.
@@ -4095,10 +4100,17 @@ namespace MosaicLib.Modular.Common
                 string itemName = (!string.IsNullOrEmpty(itemAttribute.Name) ? itemAttribute.Name : itemInfo.MemberInfo.Name);
                 string nvsItemName = itemInfo.GenerateFullName(baseNames);
 
-                if (!itemInfo.CanGetValue || !itemInfo.CanSetValue)
+                if (MustSupportGet && !itemInfo.CanGetValue)
                 {
                     if (!itemAttribute.SilenceIssues)
-                        IssueEmitter.Emit("Member/Value '{0}'/'{1}' is not usable: Member must provide public getter and setter, in ValueSet type '{2}'", memberName, nvsItemName, TValueSetTypeStr);
+                        IssueEmitter.Emit("Member/Value '{0}'/'{1}' is not usable: Member must provide public getter, in ValueSet type '{2}'", memberName, nvsItemName, TValueSetTypeStr);
+                    continue;
+                }
+
+                if (MustSupportSet && !itemInfo.CanSetValue)
+                {
+                    if (!itemAttribute.SilenceIssues)
+                        IssueEmitter.Emit("Member/Value '{0}'/'{1}' is not usable: Member must provide public setter, in ValueSet type '{2}'", memberName, nvsItemName, TValueSetTypeStr);
                     continue;
                 }
 
@@ -4112,7 +4124,7 @@ namespace MosaicLib.Modular.Common
 
                 Logging.IMesgEmitter selectedIssueEmitter = IssueEmitter;
 
-                if (itemAccessSetupInfo.MemberToValueFunc == null || itemAccessSetupInfo.MemberFromValueAction == null)
+                if ((itemInfo.CanGetValue && itemAccessSetupInfo.MemberToValueFunc == null) || (itemInfo.CanSetValue && itemAccessSetupInfo.MemberFromValueAction == null))
                 {
                     if (!itemAttribute.SilenceIssues)
                         selectedIssueEmitter.Emit("Member/Value '{0}'/'{1}' is not usable: no valid accessor delegate could be generated for its ValueSet type:'{3}'", memberName, nvsItemName, itemInfo.ItemType, TValueSetTypeStr);

@@ -279,17 +279,19 @@ namespace MosaicLib.Modular.Config
 
                 keySetupInfo.UpdateMemberFromKeyAccessAction = GenerateUpdateMemberFromKeyAccessAction(keySetupInfo);
 
-                Logging.IMesgEmitter selectedIssueEmitter = SetupIssueEmitter;
-
-                if (keyAccess.Flags.IsOptional && selectedIssueEmitter.IsEnabled)
-                    selectedIssueEmitter = ValueNoteEmitter;
-
                 if (!keyAccess.IsUsable)
                 {
                     if (!itemAttribute.SilenceIssues)
                     {
-                        selectedIssueEmitter.Emit("Member/Key '{0}'/'{1}' is not usable: {2}", memberName, keyAccess.Key, keyAccess.ResultCode);
-                        anySetupIssues = true;
+                        if (keyAccess.Flags.IsOptional)
+                        {
+                            ValueNoteEmitter.Emit("Optional Member/Key '{0}'/'{1}' is not usable: {2}", memberName, keyAccess.Key, keyAccess.ResultCode);
+                        }
+                        else
+                        {
+                            SetupIssueEmitter.Emit("Member/Key '{0}'/'{1}' is not usable: {2}", memberName, keyAccess.Key, keyAccess.ResultCode);
+                            anySetupIssues = true;
+                        }
                     }
                     continue;
                 }
@@ -297,7 +299,7 @@ namespace MosaicLib.Modular.Config
                 {
                     if (!itemAttribute.SilenceIssues)
                     {
-                        selectedIssueEmitter.Emit("Member/Key '{0}'/'{1}' is not usable: no valid accessor delegate could be generated for its ValueSet type:'{3}'", memberName, fullKeyName, itemInfo.ItemType, tConfigValueSetTypeStr);
+                        SetupIssueEmitter.Emit("Member/Key '{0}'/'{1}' is not usable: no valid accessor delegate could be generated for its ValueSet type:'{3}'", memberName, fullKeyName, itemInfo.ItemType, tConfigValueSetTypeStr);
                         anySetupIssues = true;
                     }
                     continue;
