@@ -39,7 +39,7 @@ namespace MosaicLib.WPF.Interconnect
     #region WPFValueAccessor and DataContext helper
 
     /// <summary>
-    /// This class is used by with the WPFValueInterconnectAdapter to provide a simple connection between an IValueInterconnect and WPF using Bindable objects.
+    /// This class is used by with the WPFValueInterconnectAdapter to provide a simple connection between an IValuesInterconnection and WPF using Bindable objects.
     /// WPFValueInterconnectAdapter provides a means to find a WPFValueAccessor for a given named value and handles servicing of the set of WPFValueAccessors
     /// that WPF has found from the adapter (called the active set).
     /// This object provides a set of dependency properties: ValueAsObject, ValueAsDouble and ValueAsBoolean, which may be used directly in the screen code.

@@ -794,7 +794,7 @@ namespace MosaicLib.PartsLib.Common.E084
 
             bool amsChanged = (priv.portUsageContextInfo.AMS != lpmState.PortUsageContextInfo.AMS);
             bool ltsChanged = (priv.portUsageContextInfo.LTS != lpmState.PortUsageContextInfo.LTS);
-            bool portContextInfoChanged = !priv.portUsageContextInfo.IsEqualTo(lpmState.PortUsageContextInfo);
+            bool portContextInfoChanged = !priv.portUsageContextInfo.Equals(lpmState.PortUsageContextInfo);
             bool podLocChanged = (priv.lpmPositionState.IsUnclamped != lpmState.PositionState.IsUnclamped
                                     || priv.lpmPositionState.IsUndocked != lpmState.PositionState.IsUndocked);
 
@@ -813,13 +813,13 @@ namespace MosaicLib.PartsLib.Common.E084
             if (priv.portUsageContextInfo.APresentOrPlacementAlarmIsActive || priv.lastPresentOrPlacementAlarmIsActiveTime.IsZero)
                 priv.lastPresentOrPlacementAlarmIsActiveTime.SetToNow();
 
-            if (!priv.podSensorValues.IsEqualTo(lpmState.PodSensorValues))
+            if (!priv.podSensorValues.Equals(lpmState.PodSensorValues))
             {
                 Log.Debug.Emit("Pod Sensor Values changed to '{0}' [from:{1}]", lpmState.PodSensorValues, priv.podSensorValues);
                 priv.podSensorValues.SetFrom(lpmState.PodSensorValues);
             }
 
-            if (!priv.lpmPositionState.IsEqualTo(lpmState.PositionState))
+            if (!priv.lpmPositionState.Equals(lpmState.PositionState))
             {
                 Log.Trace.Emit("LPM Position State changed to '{0}' [from:{1}]", lpmState.PositionState, priv.lpmPositionState);
                 priv.lpmPositionState.SetFrom(lpmState.PositionState);
@@ -872,7 +872,7 @@ namespace MosaicLib.PartsLib.Common.E084
                     InputsAreValid = (lpmState.E84State.Inputs != null),
                 };
 
-                bool pio1StateChanged = !priv.lastPIO1State.IsEqualTo(pio1State);
+                bool pio1StateChanged = !priv.lastPIO1State.Equals(pio1State);
 
                 if (pio1StateChanged)
                 {

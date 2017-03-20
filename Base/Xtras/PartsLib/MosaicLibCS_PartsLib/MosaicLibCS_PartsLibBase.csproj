@@ -60,11 +60,13 @@
     <Compile Include="Common\LPM\LPMSim.cs" />
     <Compile Include="Common\MassFlow\MassFlow.cs" />
     <Compile Include="Common\Motion\Motion.cs" />
+    <Compile Include="Common\Physics\Physics.cs" />
     <Compile Include="Common\Protocols\HART\HARTBusMaster.cs" />
     <Compile Include="Common\Protocols\HART\HARTProtocol.cs" />
     <Compile Include="Helpers\Actuator.cs" />
     <Compile Include="Helpers\EventRateTool.cs" />
     <Compile Include="Scan\Plugins\Sim\Common.cs" />
+    <Compile Include="Scan\Plugins\Sim\FlowModel.cs" />
     <Compile Include="Scan\ScanEngine\ScanEngine.cs" />
     <Compile Include="Scan\Plugins\Sim\MFC.cs" />
     <Compile Include="Tools\MDRF\MDRFCommon.cs" />

@@ -1141,7 +1141,7 @@ namespace MosaicLib.Utils
             }
             else
             {
-                success = success && IsValidTokenEndChar(localScan.Char, equalsUndelimitedValueTokenType);
+                success = success && (localScan.IsAtEnd || IsValidTokenEndChar(localScan.Char, equalsUndelimitedValueTokenType));
                 if (success)
                     localScan.SkipOverWhiteSpace();
             }

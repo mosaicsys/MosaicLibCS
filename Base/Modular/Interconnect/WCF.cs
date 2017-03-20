@@ -2184,7 +2184,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
 
             if (workingCount > 0)
             {
-                IVI.Update(workingIVAArray, workingCount);
+                IVI.Update(workingIVAArray, numEntriesToUpdate: workingCount);
 
                 for (int idx = 0; idx < workingCount; idx++)
                 {

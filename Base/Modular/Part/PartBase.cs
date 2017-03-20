@@ -254,6 +254,7 @@ namespace MosaicLib.Modular.Part
         bool IsDefined { get; }
 
         /// <summary>Returns true if the given rhs is non-null and if the contents of this and the given rhs IBaseState are equal to each other.</summary>
+        [Obsolete("Please replace with the use of the corresponding IEquateable<>.Equals method (2017-03-10)")]
         bool IsEqualTo(IBaseState rhs);
 	}
 
@@ -574,24 +575,24 @@ namespace MosaicLib.Modular.Part
         /// <summary>returns true if either the UseState or the ConnState are not at their Undefined value.  Typically this means that the part has not be started or that it has not generated its initial value.</summary>
         public bool IsDefined { get { return (UseState != UseState.Undefined || ConnState != ConnState.Undefined); } }
 
-        /// <summary>Returns true if the given rhs is non-null and if the contents of this and the given rhs IBaseState are equal to each other.</summary>
-        public bool IsEqualTo(IBaseState rhs)
+        /// <summary>Returns true if the given other IBaseState is non-null and if the contents of this and the given other IBaseState are equal to each other.</summary>
+        public bool Equals(IBaseState other)
         {
-            return (rhs != null
-                && IsSimulated == rhs.IsSimulated
-                && IsPrimaryPart == rhs.IsPrimaryPart
-                && UseState == rhs.UseState
-                && ConnState == rhs.ConnState
-                && ActionName == rhs.ActionName
-                && Reason == rhs.Reason
-                && TimeStamp == rhs.TimeStamp
+            return (other != null
+                && IsSimulated == other.IsSimulated
+                && IsPrimaryPart == other.IsPrimaryPart
+                && UseState == other.UseState
+                && ConnState == other.ConnState
+                && ActionName == other.ActionName
+                && Reason == other.Reason
+                && TimeStamp == other.TimeStamp
                 );
         }
 
-        /// <summary>Returns true if the given other is non-null and if the contents of this and the given other IBaseState are equal to each other.</summary>
-        public bool Equals(IBaseState other)
+        [Obsolete("Please replace with the use of the corresponding IEquateable<>.Equals method (2017-03-10)")]
+        public bool IsEqualTo(IBaseState other)
         {
-            return IsEqualTo(other);
+            return Equals(other);
         }
 
 		#endregion

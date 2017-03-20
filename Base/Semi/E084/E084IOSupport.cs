@@ -49,20 +49,20 @@ namespace MosaicLib.Semi.E084.IOSupport
         public bool InputsAreValid { get; set; }
 
         /// <summary>Returns true if the contents of this and the given rhs object are identical</summary>
-        public bool IsEqualTo(PassiveIOState rhs)
+        public bool Equals(PassiveIOState rhs)
         {
-            return (outputs.IsEqualTo(rhs.outputs)
-                    && outputsReadback.IsEqualTo(rhs.outputsReadback)
+            return (outputs.Equals(rhs.outputs)
+                    && outputsReadback.Equals(rhs.outputsReadback)
                     && OutputIsPending == rhs.OutputIsPending
-                    && inputs.IsEqualTo(rhs.inputs)
+                    && inputs.Equals(rhs.inputs)
                     && InputsAreValid == rhs.InputsAreValid
                     );
         }
 
-        /// <summary>Returns true if the contents of this and the given other object are identical</summary>
-        public bool Equals(PassiveIOState other)
+        [Obsolete("Please replace with the use of the corresponding IEquateable<>.Equals method (2017-03-10)")]
+        public bool IsEqualTo(PassiveIOState rhs)
         {
-            return IsEqualTo(other);
+            return Equals(rhs);
         }
     }
 
@@ -105,20 +105,20 @@ namespace MosaicLib.Semi.E084.IOSupport
         public bool InputsAreValid { get; set; }
 
         /// <summary>Returns true if the contents of this and the given rhs object are identical</summary>
-        public bool IsEqualTo(ActiveIOState rhs)
+        public bool Equals(ActiveIOState rhs)
         {
-            return (outputs.IsEqualTo(rhs.outputs)
-                    && outputsReadback.IsEqualTo(rhs.outputsReadback)
+            return (outputs.Equals(rhs.outputs)
+                    && outputsReadback.Equals(rhs.outputsReadback)
                     && OutputIsPending == rhs.OutputIsPending
-                    && inputs.IsEqualTo(rhs.inputs)
+                    && inputs.Equals(rhs.inputs)
                     && InputsAreValid == rhs.InputsAreValid
                     );
         }
 
-        /// <summary>Returns true if the contents of this and the given other object are identical</summary>
-        public bool Equals(ActiveIOState other)
+        [Obsolete("Please replace with the use of the corresponding IEquateable<>.Equals method (2017-03-10)")]
+        public bool IsEqualTo(ActiveIOState rhs)
         {
-            return IsEqualTo(other);
+            return Equals(rhs);
         }
     }
 

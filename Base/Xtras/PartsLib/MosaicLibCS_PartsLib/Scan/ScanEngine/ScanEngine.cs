@@ -56,7 +56,10 @@ namespace MosaicLib.PartsLib.Scan.ScanEngine
         public ScanEnginePartConfig(ScanEnginePartConfig other)
         {
             Name = other.Name;
-            IVI = other.IVI;
+            IConfig = other.IConfig ?? Config.Instance;
+            IValuesInterconnection fallbackIVI = other.PartBaseIVI ?? other.PlugInsIVI ?? Values.Instance;
+            PartBaseIVI = other.PartBaseIVI ?? fallbackIVI;
+            PlugInsIVI = other.PlugInsIVI ?? fallbackIVI;
             Installed = other.Installed;
             NominalRateInHz = other.NominalRateInHz;
             pluginsToAddList = other.pluginsToAddList;        // no need to clone: it is already readonly.
@@ -67,7 +70,9 @@ namespace MosaicLib.PartsLib.Scan.ScanEngine
         /// </summary>
         public string Name { get; set; }
 
-        public IValuesInterconnection IVI { get; set; }
+        public IConfig IConfig { get; set; }
+        public IValuesInterconnection PartBaseIVI { get; set; }
+        public IValuesInterconnection PlugInsIVI { get; set; }
 
         [ConfigItem(ReadOnlyOnce = true, IsOptional = true)]
         public bool Installed { get; set; }
@@ -129,7 +134,7 @@ namespace MosaicLib.PartsLib.Scan.ScanEngine
         /// naming of config key's that it depends on and for naming of all interconnections that it depends on such as named values.
         /// <para/>Current expectation is that config keys will be found under {engineName}.{pluginName}. while named values will only be prefixed with {pluginName}.
         /// </summary>
-        void Setup(string scanEnginePartName);
+        void Setup(string scanEnginePartName, IConfig pluginsIConfig, IValuesInterconnection pluginsIVI);
 
         /// <summary>
         /// This method is called by the engine any time it is told to GoOnline with the initialize flag set.
@@ -153,7 +158,7 @@ namespace MosaicLib.PartsLib.Scan.ScanEngine
         /// This method is passed a dynamically calculated measuredServiceInterval value that gives the plugin a reasonable approximation of the actual interval that
         /// is elapsing between calls to this Service method.
         /// </summary>
-        void Service(TimeSpan measuredServiceInterval, QpcTimeStamp timestampNow);
+        void Service(TimeSpan measuredServiceInterval, QpcTimeStamp timeStampNow);
 
         /// <summary>
         /// The engine's scan is divided into phases where the third phase is to call all of the plugin's UpdateOutput methods.  This method is expected to simply
@@ -201,11 +206,11 @@ namespace MosaicLib.PartsLib.Scan.ScanEngine
         private ValueSetAdapter<TInputValueSetType> inputAdapter = new ValueSetAdapter<TInputValueSetType>() { ValueSet = new TInputValueSetType() };
         private ValueSetAdapter<TOutputValueSetType> outputAdapter = new ValueSetAdapter<TOutputValueSetType>() { ValueSet = new TOutputValueSetType() };
 
-        public override void Setup(string scanEnginePartName)
+        public override void Setup(string scanEnginePartName, IConfig pluginsIConfig, IValuesInterconnection pluginsIVI)
         {
-            configAdapter.Setup("{0}.{1}.".CheckedFormat(scanEnginePartName, Name), scanEnginePartName, Name);
-            inputAdapter.Setup("{0}.".CheckedFormat(Name), scanEnginePartName, Name).Set();
-            outputAdapter.Setup("{0}.".CheckedFormat(Name), scanEnginePartName, Name).Set();
+            configAdapter.Setup(pluginsIConfig, "{0}.{1}.".CheckedFormat(scanEnginePartName, Name), scanEnginePartName, Name);
+            inputAdapter.Setup(pluginsIVI, "{0}.".CheckedFormat(Name), scanEnginePartName, Name).Set();
+            outputAdapter.Setup(pluginsIVI, "{0}.".CheckedFormat(Name), scanEnginePartName, Name).Set();
         }
 
         public override void UpdateInputs()
@@ -241,7 +246,7 @@ namespace MosaicLib.PartsLib.Scan.ScanEngine
 
         #region IScanEnginePlugin
 
-        public abstract void Setup(string scanEnginePartName);
+        public abstract void Setup(string scanEnginePartName, IConfig pluginsIConfig, IValuesInterconnection pluginsIVI);
 
         public virtual string PerformInitialize() 
         {
@@ -261,7 +266,7 @@ namespace MosaicLib.PartsLib.Scan.ScanEngine
 
         public abstract void UpdateInputs();
 
-        public abstract void Service(TimeSpan measuredServiceInterval, QpcTimeStamp timestampNow);
+        public abstract void Service(TimeSpan measuredServiceInterval, QpcTimeStamp timeStampNow);
 
         public abstract void UpdateOutputs();
 
@@ -298,7 +303,7 @@ namespace MosaicLib.PartsLib.Scan.ScanEngine
         #region Construction
 
         public ScanEnginePart(ScanEnginePartConfig config)
-            : base(config.Name, initialSettings: SimpleActivePartBaseSettings.DefaultVersion0.Build(waitTimeLimit: config.NominalServicePeriod, partBaseIVI: config.IVI))
+            : base(config.Name, initialSettings: SimpleActivePartBaseSettings.DefaultVersion0.Build(waitTimeLimit: config.NominalServicePeriod, partBaseIVI: config.PartBaseIVI))
         {
             ActionLoggingConfig = Modular.Action.ActionLoggingConfig.Debug_Debug_Trace_Trace;    // redefine the log levels for actions
 
@@ -342,7 +347,7 @@ namespace MosaicLib.PartsLib.Scan.ScanEngine
                 {
                     pluginName = plugin.Name;
 
-                    plugin.Setup(PartID);
+                    plugin.Setup(PartID, Config.IConfig, Config.PlugInsIVI);
 
                     Log.Debug.Emit("Added plugin '{0}'", plugin.Name);
 

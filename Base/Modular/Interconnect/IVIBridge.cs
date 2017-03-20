@@ -311,7 +311,7 @@ namespace MosaicLib.Modular.Interconnect.Values
 
                 if (isAnySetPending)
                 {
-                    IVI2.Set(iva2Array, optimize: true);
+                    IVI2.Set(iva2Array, numEntriesToSet: iva2ArrayLength, optimize: true);
 
                     ValueTraceEmitter.Emit("Propagation of pending iva1 values to iva2 is complete");
                 }
@@ -388,7 +388,7 @@ namespace MosaicLib.Modular.Interconnect.Values
 
                 if (isAnySetPending)
                 {
-                    IVI1.Set(iva1Array, optimize: true);
+                    IVI1.Set(iva1Array, numEntriesToSet: iva2ArrayLength, optimize: true);
 
                     ValueTraceEmitter.Emit("Propagation of pending iva2 values to iva1 is complete");
                 }
@@ -404,6 +404,8 @@ namespace MosaicLib.Modular.Interconnect.Values
                 syncItemArray = syncItemList.ToArray();
                 iva1Array = syncItemArray.Select(syncItem => syncItem.iva1).ToArray();
                 iva2Array = syncItemArray.Select(syncItem => syncItem.iva2).ToArray();
+                iva1ArrayLength = iva1Array.Length;
+                iva2ArrayLength = iva2Array.Length;
                 syncItemArrayUpdated = true;
             }
 
@@ -417,6 +419,7 @@ namespace MosaicLib.Modular.Interconnect.Values
             syncItemList.Add(syncItem);
             syncItemArray = null;
             iva1Array = null;
+            iva1ArrayLength = 0;
 
             // add syncItem to both maps using both original names and found names, in case target is using name mapping and has applied it to this name.
             iva1NameToSyncItemDictionary[iva1LookupName] = syncItem;
@@ -426,6 +429,8 @@ namespace MosaicLib.Modular.Interconnect.Values
 
             iva1Array = null;
             iva2Array = null;
+            iva1ArrayLength = 0;
+            iva2ArrayLength = 0;
 
             if (iva1.HasValueBeenSet)
             {
@@ -469,6 +474,8 @@ namespace MosaicLib.Modular.Interconnect.Values
         private SyncItem[] syncItemArray = null;
         private IValueAccessor[] iva1Array = null;
         private IValueAccessor[] iva2Array = null;
+        private int iva1ArrayLength = 0;
+        private int iva2ArrayLength = 0;
 
         #endregion
     }

@@ -1142,7 +1142,7 @@ namespace MosaicLib.Modular.Interconnect.Values
 
     #endregion
 
-    #region ValueSetItemAttribute and ValueSetAdapter
+    #region ValueSetItemAttribute, ValueSetAdapaterGroup, ValueSetAdapter, ValueSetAdapterBase
 
     namespace Attributes
     {
@@ -1179,7 +1179,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <summary>
         /// This method determines the set of full Parameter Names from the ValueSet's annotated items, and creates a set of IValueAccessor objects for them.
         /// In most cases the client will immediately call Set or Update to transfer the values from or to the ValueSet.
-        /// <para/>Will use previously defined IValueInterconnect instance or the Values.Instance singleton.
+        /// <para/>Will use previously defined IValuesInterconnection instance or the Values.Instance singleton.
         /// <para/>Supports call chaining.
         /// </summary>
         /// <param name="baseNames">
@@ -1190,17 +1190,17 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <summary>
         /// This method determines the set of full Parameter Names from the ValueSet's annotated items, and creates a set of IValueAccessor objects for them.
         /// In most cases the client will immediately call Set or Update to transfer the values from or to the ValueSet.
-        /// <para/>If a non-null valueInterconnect instnace is given then it will be used otherwise this method will use any previously defined IValueInterconnect instance or the Values.Instance singleton.
+        /// <para/>If a non-null valueInterconnect instance is given then it will be used otherwise this method will use any previously defined IValuesInterconnection instance or the Values.Instance singleton.
         /// <para/>Supports call chaining.
         /// </summary>
-        /// <param name="ivi">Allows the caller to (re)specifiy the IValueInterconnect instance that is to be used henceforth by this adapter</param>
+        /// <param name="ivi">Allows the caller to (re)specifiy the IValuesInterconnection instance that is to be used henceforth by this adapter</param>
         /// <param name="baseNames">
         /// Gives a list of 1 or more base names that are prepended to specific sub-sets of the list of item names based on each item's NameAdjust attribute property value.
         /// </param>
         IValueSetAdapter Setup(IValuesInterconnection ivi, params string[] baseNames);
 
         /// <summary>
-        /// Transfer the values from the ValueSet's annotated members to the corresponding set of IValueAccessors and then tell the IValueInterconnect instance
+        /// Transfer the values from the ValueSet's annotated members to the corresponding set of IValueAccessors and then tell the IValuesInterconnection instance
         /// to Set all of the IValueAccessors.
         /// <para/>Supports call chaining.
         /// </summary>
@@ -1220,7 +1220,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         bool IsUpdateNeeded { get; }
 
         /// <summary>
-        /// Requests the IValueInterconnect instance to update all of the adapter's IValueAccessor objects and then transfers the updated values
+        /// Requests the IValuesInterconnection instance to update all of the adapter's IValueAccessor objects and then transfers the updated values
         /// from those accessor objects to the corresponding annotated ValueSet members.
         /// <para/>Supports call chaining.
         /// </summary>
@@ -1278,6 +1278,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         ValueSetAdapterBase[] vsabArray = new ValueSetAdapterBase[0];
         bool rebuildNeeded = false;
         IValueAccessor [] ivaArray = null;
+        int ivaArrayLength = 0;
 
         private void RebuildArraysIfNeeded()
         {
@@ -1286,6 +1287,7 @@ namespace MosaicLib.Modular.Interconnect.Values
 
             vsabArray = vsabList.ToArray();
             ivaArray = vsabArray.SelectMany(ivsa => ivsa.IVAArray).ToArray();
+            ivaArrayLength = ivaArray.Length;
 
             rebuildNeeded = false;
         }
@@ -1323,7 +1325,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <summary>
         /// This method determines the set of full Parameter Names from the ValueSet's annotated items, and creates a set of IValueAccessor objects for them.
         /// In most cases the client will immediately call Set or Update to transfer the values from or to the ValueSet.
-        /// <para/>Will use previously defined IValueInterconnect instance or the Values.Instance singleton.
+        /// <para/>Will use previously defined IValuesInterconnection instance or the Values.Instance singleton.
         /// <para/>Supports call chaining.
         /// </summary>
         /// <param name="baseNames">
@@ -1337,10 +1339,10 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <summary>
         /// This method determines the set of full Parameter Names from the ValueSet's annotated items, and creates a set of IValueAccessor objects for them.
         /// In most cases the client will immediately call Set or Update to transfer the values from or to the ValueSet.
-        /// <para/>If a non-null valueInterconnect instnace is given then it will be used otherwise this method will use any previously defined IValueInterconnect instance or the Values.Instance singleton.
+        /// <para/>If a non-null valueInterconnect instance is given then it will be used otherwise this method will use any previously defined IValuesInterconnection instance or the Values.Instance singleton.
         /// <para/>Supports call chaining.
         /// </summary>
-        /// <param name="ivi">Allows the caller to (re)specifiy the IValueInterconnect instance that is to be used henceforth by this adapter</param>
+        /// <param name="ivi">Allows the caller to (re)specifiy the IValuesInterconnection instance that is to be used henceforth by this adapter</param>
         /// <param name="baseNames">
         /// Gives a list of 1 or more base names that are prepended to specific sub-sets of the list of item names based on each item's NameAdjust attribute property value.
         /// </param>
@@ -1358,7 +1360,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         }
 
         /// <summary>
-        /// Transfer the values from the ValueSet's annotated members to the corresponding set of IValueAccessors and then tell the IValueInterconnect instance
+        /// Transfer the values from the ValueSet's annotated members to the corresponding set of IValueAccessors and then tell the IValuesInterconnection instance
         /// to Set all of the IValueAccessors.
         /// <para/>Supports call chaining.
         /// </summary>
@@ -1369,7 +1371,7 @@ namespace MosaicLib.Modular.Interconnect.Values
             foreach (var ivsa in vsabArray)
                 ivsa.InnerTransferValuesToIVAs();
 
-            IVI.Set(ivaArray, optimize: OptimizeSets);
+            IVI.Set(ivaArray, numEntriesToSet: ivaArrayLength, optimize: OptimizeSets);
 
             return this;
         }
@@ -1402,7 +1404,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         }
 
         /// <summary>
-        /// Requests the IValueInterconnect instance to update all of the adapter's IValueAccessor objects and then transfers the updated values
+        /// Requests the IValuesInterconnection instance to update all of the adapter's IValueAccessor objects and then transfers the updated values
         /// from those accessor objects to the corresponding annotated ValueSet members.
         /// <para/>Supports call chaining.
         /// </summary>
@@ -1410,7 +1412,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         {
             RebuildArraysIfNeeded();
 
-            IVI.Update(ivaArray);
+            IVI.Update(ivaArray, numEntriesToUpdate: ivaArrayLength);
 
             foreach (var vsab in vsabArray)
                 vsab.InnerTransferValuesFromIVAs();
@@ -1437,7 +1439,7 @@ namespace MosaicLib.Modular.Interconnect.Values
     }
 
     /// <summary>
-    /// This adapter class provides a client with a ValueSet style tool that supports getting and setting sets of values in a IValueInterconnect instance.
+    /// This adapter class provides a client with a ValueSet style tool that supports getting and setting sets of values in a IValuesInterconnection instance.
     /// </summary>
     /// <typeparam name="TValueSet">
     /// Specifies the class type on which this adapter will operate.  
@@ -1485,7 +1487,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <summary>
         /// This method determines the set of full Parameter Names from the ValueSet's annotated items, and creates a set of IValueAccessor objects for them.
         /// In most cases the client will immediately call Set or Update to transfer the values from or to the ValueSet.
-        /// <para/>Will use previously defined IValueInterconnect instance or the Values.Instance singleton.
+        /// <para/>Will use previously defined IValuesInterconnection instance or the Values.Instance singleton.
         /// <para/>Supports call chaining.
         /// </summary>
         /// <param name="baseNames">
@@ -1501,10 +1503,10 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <summary>
         /// This method determines the set of full Parameter Names from the ValueSet's annotated items, and creates a set of IValueAccessor objects for them.
         /// In most cases the client will immediately call Set or Update to transfer the values from or to the ValueSet.
-        /// <para/>If a non-null valueInterconnect instnace is given then it will be used otherwise this method will use any previously defined IValueInterconnect instance or the Values.Instance singleton.
+        /// <para/>If a non-null valueInterconnect instance is given then it will be used otherwise this method will use any previously defined IValuesInterconnection instance or the Values.Instance singleton.
         /// <para/>Supports call chaining.
         /// </summary>
-        /// <param name="ivi">Allows the caller to (re)specifiy the IValueInterconnect instance that is to be used henceforth by this adapter</param>
+        /// <param name="ivi">Allows the caller to (re)specifiy the IValuesInterconnection instance that is to be used henceforth by this adapter</param>
         /// <param name="baseNames">
         /// Gives a list of 1 or more base names that are prepended to specific sub-sets of the list of item names based on each item's NameAdjust attribute property value.
         /// </param>
@@ -1527,7 +1529,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         }
 
         /// <summary>
-        /// Transfer the values from the ValueSet's annotated members to the corresponding set of IValueAccessors and then tell the IValueInterconnect instance
+        /// Transfer the values from the ValueSet's annotated members to the corresponding set of IValueAccessors and then tell the IValuesInterconnection instance
         /// to Set all of the IValueAccessors.
         /// <para/>Supports call chaining.
         /// </summary>
@@ -1539,7 +1541,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         }
 
         /// <summary>
-        /// Requests the IValueInterconnect instance to update all of the adapter's IValueAccessor objects and then transfers the updated values
+        /// Requests the IValuesInterconnection instance to update all of the adapter's IValueAccessor objects and then transfers the updated values
         /// from those accessor objects to the corresponding annotated ValueSet members.
         /// <para/>Supports call chaining.
         /// </summary>
@@ -1557,7 +1559,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <summary>
         /// internal implementation method.  Performs all of the type specific setup (and some non-type specific setup) required to support annotated ValueSet access.
         /// </summary>
-        internal override void InnerSetup(bool mustSupportUpdate, bool mustSupportSet, params string[] baseNames)
+        internal override void InnerSetup(params string[] baseNames)
         {
             // setup all of the static information
 
@@ -1570,18 +1572,18 @@ namespace MosaicLib.Modular.Interconnect.Values
                 string itemName = (!string.IsNullOrEmpty(itemAttribute.Name) ? itemAttribute.Name : itemInfo.MemberInfo.Name);
                 string fullValueName = itemInfo.GenerateFullName(baseNames);
 
-                if (!itemInfo.CanGetValue && mustSupportUpdate)
+                if (!itemInfo.CanSetValue && MustSupportUpdate)
                 {
                     if (!itemAttribute.SilenceIssues)
-                        IssueEmitter.Emit("Member/Value '{0}'/'{1}' is not usable: Member must provide public getter, in ValueSet type '{2}'", memberName, fullValueName, TValueSetTypeStr);
+                        IssueEmitter.Emit("Member/Value '{0}'/'{1}' is not usable: Member must provide public setter to support Update, in ValueSet type '{2}'", memberName, fullValueName, TValueSetTypeStr);
 
                     continue;
                 }
 
-                if (!itemInfo.CanSetValue && mustSupportSet)
+                if (!itemInfo.CanGetValue && MustSupportSet)
                 {
                     if (!itemAttribute.SilenceIssues)
-                        IssueEmitter.Emit("Member/Value '{0}'/'{1}' is not usable: Member must provide public setter, in ValueSet type '{2}'", memberName, fullValueName, TValueSetTypeStr);
+                        IssueEmitter.Emit("Member/Value '{0}'/'{1}' is not usable: Member must provide public getter to support Set, in ValueSet type '{2}'", memberName, fullValueName, TValueSetTypeStr);
 
                     continue;
                 }
@@ -1602,11 +1604,12 @@ namespace MosaicLib.Modular.Interconnect.Values
                     ItemIsValueContainer = (itemInfo.ItemType == typeof(ValueContainer)),
                 };
 
-                itemAccessSetupInfo.GenerateMemberToFromValueAccessFuncs();
+                itemAccessSetupInfo.GenerateMemberToFromValueAccessFuncs(ItemAccess);
 
                 Logging.IMesgEmitter selectedIssueEmitter = IssueEmitter;
 
-                if ((itemInfo.CanGetValue && itemAccessSetupInfo.MemberFromIVAAction == null) || (itemInfo.CanSetValue && itemAccessSetupInfo.MemberToIVAAction == null))
+                if ((MustSupportSet && ItemAccess.UseGetter() && itemInfo.CanGetValue && itemAccessSetupInfo.MemberToIVAAction == null) 
+                    || (MustSupportUpdate && ItemAccess.UseSetter() && itemInfo.CanSetValue && itemAccessSetupInfo.MemberFromIVAAction == null))
                 {
                     if (!itemAttribute.SilenceIssues)
                         selectedIssueEmitter.Emit("Member/Value '{0}'/'{1}' is not usable: no valid accessor delegate could be generated for its ValueSet type:'{3}'", memberName, fullValueName, itemInfo.ItemType, TValueSetTypeStr);
@@ -1625,7 +1628,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         {
             foreach (var iasi in itemAccessSetupInfoArray)
             {
-                if (iasi.MemberFromIVAAction != null)
+                if (iasi.MemberToIVAAction != null)
                     iasi.MemberToIVAAction(ValueSet, IssueEmitter, ValueNoteEmitter);
             }
         }
@@ -1707,14 +1710,32 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <summary>Defines the emitter used to emit Update related changes in config point values.  Defaults to the null emitter.</summary>
         public Logging.IMesgEmitter ValueNoteEmitter { get { return FixupEmitterRef(ref valueNoteEmitter); } set { valueNoteEmitter = value; } }
 
+        /// <summary>When true (the default), TValueSet class is expected to provide public getters for all annotated properties</summary>
         public bool MustSupportSet { get; set; }
+
+        /// <summary>When true (the default), TValueSet class is expected to provide public setters for all annotated properties</summary>
         public bool MustSupportUpdate { get; set; }
+
+        /// <summary>This property helps define the set of behaviors that this adapter shall perform.  It defaults to ItemAccess.Normal (Get and Set).  Setting it to any other value will also clear the corresponding MustSupport flag(s)</summary>
+        public ItemAccess ItemAccess
+        {
+            get { return _itemAccess; }
+            set
+            {
+                _itemAccess = value;
+                if (!_itemAccess.IsSet(ItemAccess.UseGetterIfPresent))
+                    MustSupportSet = false;
+                if (!_itemAccess.IsSet(ItemAccess.UseSetterIfPresent))
+                    MustSupportUpdate = false;
+            }
+        }
+        private ItemAccess _itemAccess = ItemAccess.Normal;
 
 
         /// <summary>
         /// This method determines the set of full Parameter Names from the ValueSet's annotated items, and creates a set of IValueAccessor objects for them.
         /// In most cases the client will immediately call Set or Update to transfer the values from or to the ValueSet.
-        /// <para/>Will use previously defined IValueInterconnect instance or the Values.Instance singleton.
+        /// <para/>Will use previously defined IValuesInterconnection instance or the Values.Instance singleton.
         /// <para/>Supports call chaining.
         /// </summary>
         /// <param name="baseNames">
@@ -1728,10 +1749,10 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <summary>
         /// This method determines the set of full Parameter Names from the ValueSet's annotated items, and creates a set of IValueAccessor objects for them.
         /// In most cases the client will immediately call Set or Update to transfer the values from or to the ValueSet.
-        /// <para/>If a non-null valueInterconnect instnace is given then it will be used otherwise this method will use any previously defined IValueInterconnect instance or the Values.Instance singleton.
+        /// <para/>If a non-null valueInterconnect instance is given then it will be used otherwise this method will use any previously defined IValuesInterconnection instance or the Values.Instance singleton.
         /// <para/>Supports call chaining.
         /// </summary>
-        /// <param name="ivi">Allows the caller to (re)specifiy the IValueInterconnect instance that is to be used henceforth by this adapter</param>
+        /// <param name="ivi">Allows the caller to (re)specifiy the IValuesInterconnection instance that is to be used henceforth by this adapter</param>
         /// <param name="baseNames">
         /// Gives a list of 1 or more base names that are prepended to specific sub-sets of the list of item names based on each item's NameAdjust attribute property value.
         /// </param>
@@ -1743,13 +1764,13 @@ namespace MosaicLib.Modular.Interconnect.Values
             if (!IsValueSetValid)
                 throw new System.NullReferenceException("ValueSet property must be Valid (non-null) before Setup can be called");
 
-            InnerSetup(MustSupportUpdate, MustSupportSet, baseNames);
+            InnerSetup(baseNames);
 
             return this;
         }
 
         /// <summary>
-        /// Transfer the values from the ValueSet's annotated members to the corresponding set of IValueAccessors and then tell the IValueInterconnect instance
+        /// Transfer the values from the ValueSet's annotated members to the corresponding set of IValueAccessors and then tell the IValuesInterconnection instance
         /// to Set all of the IValueAccessors.
         /// <para/>Supports call chaining.
         /// </summary>
@@ -1780,22 +1801,10 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// Returns true if any of the IValueAccessors to which this adapter is attached indicate that there is a pending update 
         /// (because the accessed value has been set elsewhere so there may be a new value to update that accessor from).
         /// </summary>
-        public bool IsUpdateNeeded
-        {
-            get
-            {
-                foreach (IValueAccessor iva in IVAArray)
-                {
-                    if (iva.IsUpdateNeeded)
-                        return true;
-                }
-
-                return false;
-            }
-        }
+        public bool IsUpdateNeeded { get { return IVAArray.IsUpdateNeeded(); } }
 
         /// <summary>
-        /// Requests the IValueInterconnect instance to update all of the adapter's IValueAccessor objects and then transfers the updated values
+        /// Requests the IValuesInterconnection instance to update all of the adapter's IValueAccessor objects and then transfers the updated values
         /// from those accessor objects to the corresponding annotated ValueSet members.
         /// <para/>Supports call chaining.
         /// </summary>
@@ -1804,7 +1813,7 @@ namespace MosaicLib.Modular.Interconnect.Values
             if (!IsValueSetValid)
                 throw new System.NullReferenceException("ValueSet property must be Valid (non-null) before Update can be called");
 
-            IVI.Update(IVAArray, NumItems);
+            IVI.Update(IVAArray, numEntriesToUpdate: NumItems);
 
             InnerTransferValuesFromIVAs();
 
@@ -1826,7 +1835,7 @@ namespace MosaicLib.Modular.Interconnect.Values
 
         #region abstract methods to be implemented by a derived class
 
-        internal abstract void InnerSetup(bool mustSupportUpdate, bool mustSupportSet, params string[] baseNames);
+        internal abstract void InnerSetup(params string[] baseNames);
 
         internal abstract bool IsValueSetValid { get; }
         internal abstract void InnerTransferValuesFromIVAs();
@@ -1892,15 +1901,35 @@ namespace MosaicLib.Modular.Interconnect.Values
             /// <summary>
             /// Generates the MemberToValueAccessAction and the MemberFromValueAccessAction for this ItemAccessSetupInfo instance.
             /// </summary>
-            public void GenerateMemberToFromValueAccessFuncs()
+            public void GenerateMemberToFromValueAccessFuncs(ItemAccess adapterItemAccess)
             {
                 ItemInfo<Attributes.ValueSetItemAttribute> itemInfo = ItemInfo;
                 ContainerStorageType useStorageType = UseStorageType;
 
-                AnnotatedClassItemAccessHelper.SetMemberFromVCActionDelegate<TValueSet> setMemberFromVCFunction = itemInfo.GenerateSetMemberFromVCAction<TValueSet>();
-                AnnotatedClassItemAccessHelper.GetMemberAsVCFunctionDelegate<TValueSet> getMemberAsVCFunction = itemInfo.GenerateGetMemberToVCFunc<TValueSet>();
+                AnnotatedClassItemAccessHelper.GetMemberAsVCFunctionDelegate<TValueSet> getMemberAsVCFunction = (adapterItemAccess.UseGetter() ? itemInfo.GenerateGetMemberToVCFunc<TValueSet>() : null);
+                AnnotatedClassItemAccessHelper.SetMemberFromVCActionDelegate<TValueSet> setMemberFromVCFunction = (adapterItemAccess.UseSetter() ? itemInfo.GenerateSetMemberFromVCAction<TValueSet>() : null);
                 
                 string TValueSetTypeStr = typeof(TValueSet).Name;
+
+                if (getMemberAsVCFunction != null)
+                {
+                    MemberToIVAAction = delegate(TValueSet valueSetObj, Logging.IMesgEmitter updateIssueEmitter, Logging.IMesgEmitter valueUpdateEmitter)
+                    {
+                        try
+                        {
+                            IVA.ValueContainer = getMemberAsVCFunction(valueSetObj, null, null, true);
+                            LastTransferedValueSeqNum = 0;      // trigger that next update needs to retransfer the value.
+
+                            if (IVA.IsSetPending && valueUpdateEmitter.IsEnabled)
+                                valueUpdateEmitter.Emit("Member:'{0}' transfered to Name:'{1}' value:'{2}' [type:'{3}']", MemberName, ValueName, IVA.ValueContainer, TValueSetTypeStr);
+                        }
+                        catch (System.Exception ex)
+                        {
+                            if (!itemInfo.ItemAttribute.SilenceIssues)
+                                updateIssueEmitter.Emit("Member'{0}' tranfer to Name:'{1}' in type '{2}' could not be performed: {3}", MemberName, ValueName, TValueSetTypeStr, ex);
+                        }
+                    };
+                }
 
                 if (setMemberFromVCFunction != null)
                 {
@@ -1921,26 +1950,6 @@ namespace MosaicLib.Modular.Interconnect.Values
                         {
                             if (!itemInfo.ItemAttribute.SilenceIssues)
                                 updateIssueEmitter.Emit("Member:'{0}' transfer from Name:'{1}' in type '{2}' could not be performed: {3}", MemberName, ValueName, TValueSetTypeStr, ex);
-                        }
-                    };
-                }
-
-                if (getMemberAsVCFunction != null)
-                {
-                    MemberToIVAAction = delegate(TValueSet valueSetObj, Logging.IMesgEmitter updateIssueEmitter, Logging.IMesgEmitter valueUpdateEmitter)
-                    {
-                        try
-                        {
-                            IVA.ValueContainer = getMemberAsVCFunction(valueSetObj, null, null, true);
-                            LastTransferedValueSeqNum = 0;      // trigger that next update needs to retransfer the value.
-
-                            if (IVA.IsSetPending && valueUpdateEmitter.IsEnabled)
-                                valueUpdateEmitter.Emit("Member:'{0}' transfered to Name:'{1}' value:'{2}' [type:'{3}']", MemberName, ValueName, IVA.ValueContainer, TValueSetTypeStr);
-                        }
-                        catch (System.Exception ex)
-                        {
-                            if (!itemInfo.ItemAttribute.SilenceIssues)
-                                updateIssueEmitter.Emit("Member'{0}' tranfer to Name:'{1}' in type '{2}' could not be performed: {3}", MemberName, ValueName, TValueSetTypeStr, ex);
                         }
                     };
                 }
@@ -1974,19 +1983,282 @@ namespace MosaicLib.Modular.Interconnect.Values
 
     #endregion
 
-    #region Related Extension Methods
+    #region DelegateValueSetAdapter
+
+    /// <summary>
+    /// This is a type of IValueSetAdapter that is to connect a set of IValueAccessors to a given set of Gettable and/or Settable DelegateItemSpecs
+    /// </summary>
+    public class DelegateValueSetAdapter : IValueSetAdapter
+    {
+        #region Constructors
+
+        /// <summary>
+        /// Basic constructor.  Assigns adapter to use given IValuesInterconnection valueInterconnect service instance.  This may be overridden during the Setup call.
+        /// For use with Property Initializers and the Setup method to define and setup the adapter instance for use.
+        /// <para/>Please Note: the Setup method must be called before the adapter can be used.  
+        /// </summary>
+        public DelegateValueSetAdapter(IValuesInterconnection ivi = null)
+        {
+            if (ivi != null)
+                IVI = ivi;
+        }
+
+        protected IValuesInterconnection IVI { get; set; }
+
+        #endregion
+
+        #region delegate set building
+
+        /// <summary>
+        /// This method is used to add an DelegateItemSpec to the adapter.  These calls must all be completed before Setup is called.
+        /// </summary>
+        public DelegateValueSetAdapter Add<TValueSet>(DelegateItemSpec<TValueSet> itemSpec)
+        {
+            addedItemList.Add(new DelegateIVAItem<TValueSet>(itemSpec));
+            return this;
+        }
+
+        List<IDelegateIVAItem> addedItemList = new List<IDelegateIVAItem>();
+
+        #endregion
+
+        #region IValueSetAdapter implementation
+
+        /// <summary>Defines the emitter used to emit Setup, Set, and Update related errors.  Defaults to the null emitter.</summary>
+        public Logging.IMesgEmitter IssueEmitter { get { return FixupEmitterRef(ref issueEmitter); } set { issueEmitter = value; } }
+
+        /// <summary>Defines the emitter used to emit Update related changes in config point values.  Defaults to the null emitter.</summary>
+        public Logging.IMesgEmitter ValueNoteEmitter { get { return FixupEmitterRef(ref valueNoteEmitter); } set { valueNoteEmitter = value; } }
+
+        /// <summary>this flag determines if the adapter emits ValueNoteEmitter messages when the transferred value is equal to the last transferred value (defaults to false)(</summary>
+        public bool EmitValueNoteNoChangeMessages { get; set; }
+
+        /// <summary>
+        /// This method determines the set of full IVA Names from the added DelegateItemSpec items, and creates a set of IVA objects for them.
+        /// In most cases the client will immediately call Set or Update to transfer the values from or to the created IVAs.
+        /// <para/>Will use previously defined IValuesInterconnection instance or the Values.Instance singleton.
+        /// <para/>Supports call chaining.
+        /// </summary>
+        /// <param name="baseNames">
+        /// Gives a list of 1 or more base names that are prepended to specific sub-sets of the list of item names based on each item's NameAdjust attribute property value.
+        /// </param>
+        public IValueSetAdapter Setup(params string[] baseNames)
+        {
+            return Setup(null, baseNames);
+        }
+
+        /// <summary>
+        /// This method determines the set of full IVA Names from the added DelegateItemSpec items, and creates a set of IVA objects for them.
+        /// In most cases the client will immediately call Set or Update to transfer the values from or to the created IVAs.
+        /// <para/>If a non-null ivi instance is given then it will be used otherwise this method will use any previously defined IValuesInterconnection instance or the Values.Instance singleton.
+        /// <para/>Supports call chaining.
+        /// </summary>
+        /// <param name="ivi">Allows the caller to (re)specifiy the IValuesInterconnection instance that is to be used henceforth by this adapter</param>
+        /// <param name="baseNames">
+        /// Gives a list of 1 or more base names that are prepended to specific sub-sets of the list of item names based on each item's NameAdjust attribute property value.
+        /// </param>
+        public IValueSetAdapter Setup(IValuesInterconnection ivi, params string[] baseNames)
+        {
+            if (ivi != null || IVI == null)
+                IVI = ivi;
+
+            NumItems = addedItemList.Count;
+            foreach (var item in addedItemList)
+            {
+                item.IssueEmitter = IssueEmitter;
+                item.ValueNoteEmitter = ValueNoteEmitter;
+                item.EmitValueNoteNoChangeMessages = EmitValueNoteNoChangeMessages;
+                item.IVA = IVI.GetValueAccessor(item.NameAdjust.GenerateFullName(item.Name, memberName: null, paramsStrArray: baseNames));
+            }
+
+            setSpecificDelegateIVAItemArray = addedItemList.Where(item => item.HasValueSetterDelegate).ToArray();
+            setSpecificIvaArray = setSpecificDelegateIVAItemArray.Select(item => item.IVA).ToArray();
+            setSpecificIvaArrayLength = setSpecificIvaArray.Length;
+
+            updateSpecificDelegateIVAItemArray = addedItemList.Where(item => item.HasValueGetterDelegate).ToArray();
+            updateSpecificIvaArray = updateSpecificDelegateIVAItemArray.Select(item => item.IVA).ToArray();
+            updateSpecificIvaArrayLength = updateSpecificIvaArray.Length;
+
+            return this;
+        }
+
+        IDelegateIVAItem[] setSpecificDelegateIVAItemArray;
+        IDelegateIVAItem[] updateSpecificDelegateIVAItemArray;
+
+        IValueAccessor[] setSpecificIvaArray;
+        IValueAccessor[] updateSpecificIvaArray;
+        int setSpecificIvaArrayLength;
+        int updateSpecificIvaArrayLength;
+
+        /// <summary>
+        /// Transfer the values from the getter delegates to the corresponding set of IValueAccessors and then tell the IValuesInterconnection instance
+        /// to Set all of the IValueAccessors.
+        /// <para/>Supports call chaining.
+        /// </summary>
+        public IValueSetAdapter Set()
+        {
+            foreach (var delegateItem in setSpecificDelegateIVAItemArray)
+                delegateItem.TransferFromDelegateToIVAValueContainer();
+
+            IVI.Set(setSpecificIvaArray, numEntriesToSet: setSpecificIvaArrayLength, optimize: OptimizeSets);
+
+            return this;
+        }
+
+        /// <summary>
+        /// This property determines if the Set method uses ValueContainer equality testing to determine which IValueAccessor objects to actually write to the table.
+        /// When this property is true (the default), equality testing will be used to prevent updating table entires for IValueAccessors that do not have a set pending (due to change in container value).
+        /// When this property is false, all value table entries will be Set, without regard to whether their value might have changed.
+        /// </summary>
+        public bool OptimizeSets { get { return optimizeSets; } set { optimizeSets = value; } }
+        protected bool optimizeSets = true;
+
+        /// <summary>
+        /// Returns true if any of the Update specific IValueAccessors to which this adapter is attached indicate IsUpdateNeeded
+        /// (because the accessed value has been set elsewhere so there may be a new value to update that accessor from).
+        /// </summary>
+        public bool IsUpdateNeeded { get { return updateSpecificIvaArray.IsUpdateNeeded(); } }
+
+        /// <summary>
+        /// Requests the IValuesInterconnection instance to update all of the adapter's IValueAccessor objects and then transfers the updated values
+        /// from those accessor objects to the corresponding setter delegates.
+        /// <para/>Supports call chaining.
+        /// </summary>
+        public IValueSetAdapter Update()
+        {
+            IVI.Update(updateSpecificIvaArray, numEntriesToUpdate: updateSpecificIvaArrayLength);
+
+            foreach (var delegateItem in updateSpecificDelegateIVAItemArray)
+                delegateItem.TransferFromIVAValueContainerToDelegate();
+
+            return this;
+        }
+
+        /// <summary>
+        /// Gives the caller access to the set of IValueAccessors that have been created by this adatper and which are used to interact with the corresponding IVI
+        /// <para/>This array will be empty until Setup as been successfully invoked.
+        /// </summary>
+        public IValueAccessor[] IVAArray { get; protected set; }
+
+        /// <summary>
+        /// Gives the caller access to the number of items (IVAs) that this adapter is using.
+        /// </summary>
+        public int NumItems { get; protected set; }
+
+        #endregion
+
+        #region IDelegateIVAItem and DelegateIVAItem
+
+        public interface IDelegateIVAItem
+        {
+            string Name { get; }
+            NameAdjust NameAdjust { get; }
+            bool HasValueSetterDelegate { get; }
+            bool HasValueGetterDelegate { get; }
+            IValueAccessor IVA { get; set; }
+            Logging.IMesgEmitter IssueEmitter { get; set; }
+            Logging.IMesgEmitter ValueNoteEmitter { get; set; }
+            bool EmitValueNoteNoChangeMessages { get; set; }
+            void TransferFromDelegateToIVAValueContainer();
+            void TransferFromIVAValueContainerToDelegate();
+        }
+
+        protected class DelegateIVAItem<TValueType> : DelegateItemSpec<TValueType>, IDelegateIVAItem
+        {
+            public DelegateIVAItem(DelegateItemSpec<TValueType> createFrom) 
+                : base(createFrom)
+            {
+                ValueContainer.DecodeType(typeof(TValueType), out decodedCST, out decodedIsNullable);
+            }
+
+            private ContainerStorageType decodedCST;
+            private bool decodedIsNullable;
+
+            public bool HasValueGetterDelegate { get { return (SetterDelegate != null); } }
+            public bool HasValueSetterDelegate { get { return (GetterDelegate != null); } }
+
+            public Logging.IMesgEmitter IssueEmitter { get; set; }
+            public Logging.IMesgEmitter ValueNoteEmitter { get; set; }
+            public bool EmitValueNoteNoChangeMessages { get; set; }
+            public IValueAccessor IVA { get; set; }
+
+            private ValueContainer lastTransferredVC;
+            public void TransferFromDelegateToIVAValueContainer()
+            {
+                try
+                {
+                    ValueContainer entryVC = lastTransferredVC;
+
+                    IVA.ValueContainer = lastTransferredVC.SetValue<TValueType>(GetterDelegate(), decodedCST, decodedIsNullable);
+
+                    if (ValueNoteEmitter != null && ValueNoteEmitter.IsEnabled)
+                    {
+                        if (!entryVC.Equals(lastTransferredVC))
+                            ValueNoteEmitter.Emit("Set IVA '{0}' value to {1} [from {2}]", IVA.Name, lastTransferredVC, entryVC);
+                        else if (EmitValueNoteNoChangeMessages)
+                            ValueNoteEmitter.Emit("IVA '{0}' value not changed [from {1}]", IVA.Name, entryVC);
+                    }
+                }
+                catch (System.Exception ex)
+                {
+                    (IssueEmitter ?? Logging.NullEmitter).Emit("{0} failed on IVA {1}: {2}", Fcns.CurrentMethodName, IVA, ex.ToString(ExceptionFormat.TypeAndMessage));
+                    IVA.ValueContainer = ValueContainer.Empty;
+                }
+            }
+
+            public void TransferFromIVAValueContainerToDelegate()
+            {
+                try
+                {
+                    ValueContainer entryVC = lastTransferredVC;
+                    SetterDelegate((lastTransferredVC = IVA.ValueContainer).GetValue<TValueType>(decodedCST, decodedIsNullable, true));
+
+                    if (ValueNoteEmitter != null && ValueNoteEmitter.IsEnabled)
+                    {
+                        if (!entryVC.Equals(lastTransferredVC))
+                            ValueNoteEmitter.Emit("Set delegate value from IVA '{0}' to {1} [from {2}]", IVA.Name, lastTransferredVC, entryVC);
+                        else if (EmitValueNoteNoChangeMessages)
+                            ValueNoteEmitter.Emit("Delegate value from IVA '{0}' not changed [from {1}]", IVA.Name, entryVC);
+                    }
+                }
+                catch (System.Exception ex)
+                {
+                    (IssueEmitter ?? Logging.NullEmitter).Emit("{0} failed on IVA {1}: {2}", Fcns.CurrentMethodName, IVA, ex.ToString(ExceptionFormat.TypeAndMessage));
+                }
+            }
+        }
+
+        #endregion
+
+        #region message emitter glue
+
+        private Logging.IMesgEmitter issueEmitter = null, valueNoteEmitter = null;
+
+        private Logging.IMesgEmitter FixupEmitterRef(ref Logging.IMesgEmitter emitterRef)
+        {
+            if (emitterRef == null)
+                emitterRef = Logging.NullEmitter;
+            return emitterRef;
+        }
+
+        #endregion
+    }
+
+    #endregion
+
+    #region Related Extension Methods: IsUpdatedNeeded and IsSetPending for a IValueAccessor arrays
 
     public static partial class ExtensionMethods
     {
         /// <summary>
-        /// Checks each IVA in the given array and returns true if any such IVA's IsUpdateNeeded flag is set.
+        /// Checks each IVA in the given array and returns true if any such non-null IVA's IsUpdateNeeded flag is set.
         /// Returns false if no such IVA IsUpdateNeeded flag is set, or the array is null or empty.
         /// </summary>
         public static bool IsUpdateNeeded(this IValueAccessor[] ivaArray)
         {
             foreach (IValueAccessor iva in ivaArray ?? emptyIVAArray)
             {
-                if (iva.IsUpdateNeeded)
+                if (iva != null && iva.IsUpdateNeeded)
                     return true;
             }
 
@@ -1994,14 +2266,14 @@ namespace MosaicLib.Modular.Interconnect.Values
         }
 
         /// <summary>
-        /// Checks each IVA in the given array and returns true if any such IVA's IsSetPending flag is set.
+        /// Checks each IVA in the given array and returns true if any such non-null IVA's IsSetPending flag is set.
         /// Returns false if no such IVA IsSetPending flag is set, or the array is null or empty.
         /// </summary>
         public static bool IsSetPending(this IValueAccessor[] ivaArray)
         {
             foreach (IValueAccessor iva in ivaArray ?? emptyIVAArray)
             {
-                if (iva.IsSetPending)
+                if (iva != null && iva.IsSetPending)
                     return true;
             }
 

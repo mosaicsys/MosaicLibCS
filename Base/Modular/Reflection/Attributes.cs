@@ -61,6 +61,12 @@ namespace MosaicLib.Modular.Reflection
             ContainerStorageType StorageType { get; }
 
             /// <summary>
+            /// Used to control the access for this item.  Combine this with UseGetter and UseSetter extension methods.
+            /// Default value is ItemAccess.Normal (selects both UseSetterIfPresent and UseGetterIfPresent)
+            /// </summary>
+            ItemAccess ItemAccess { get; }
+
+            /// <summary>
             /// Generates a full derived name from the given memberInfo's Name, the Name property, the NameAdjust property and the given paramsStrArray contents
             /// </summary>
             string GenerateFullName(MemberInfo memberInfo, params string[] paramsStrArray);
@@ -116,6 +122,13 @@ namespace MosaicLib.Modular.Reflection
             public ContainerStorageType StorageType { get; set; }
 
             /// <summary>
+            /// Used to control the access for this item.  Combine this with UseGetter and UseSetter extension methods.
+            /// Default value is ItemAccess.Normal (selects both UseSetterIfPresent and UseGetterIfPresent)
+            /// </summary>
+            public ItemAccess ItemAccess { get { return _itemAccess; } set { _itemAccess = value; } }
+            private ItemAccess _itemAccess = ItemAccess.Normal;
+
+            /// <summary>
             /// Generates a derived name from the given memberInfo's Name, the Name property, the NameAdjust property and the given paramsStrArray contents
             /// </summary>
             public string GenerateFullName(MemberInfo memberInfo, params string[] paramsStrArray)
@@ -128,25 +141,7 @@ namespace MosaicLib.Modular.Reflection
             /// </summary>
             public string GenerateFullName(string memberName, params string[] paramsStrArray)
             {
-                string inferredName = Name ?? memberName ?? String.Empty;
-
-                switch (NameAdjust)
-                {
-                    case NameAdjust.None: return inferredName;
-                    case NameAdjust.Format: return (Name ?? String.Empty).CheckedFormat(paramsStrArray);
-                    case Attributes.NameAdjust.FormatWithMemberName:
-                        {
-                            List<string> paramsStrList = new List<string>();
-                            paramsStrList.Add(memberName);
-                            paramsStrList.AddRange(paramsStrArray);
-                            return (Name ?? String.Empty).CheckedFormat(paramsStrList.ToArray());
-                        }
-                    case NameAdjust.Prefix0: return paramsStrArray.SafeAccess(0, String.Empty) + inferredName;
-                    case NameAdjust.Prefix1: return paramsStrArray.SafeAccess(1, String.Empty) + inferredName;
-                    case NameAdjust.Prefix2: return paramsStrArray.SafeAccess(2, String.Empty) + inferredName;
-                    case NameAdjust.Prefix3: return paramsStrArray.SafeAccess(3, String.Empty) + inferredName;
-                    default: return String.Empty;
-                }
+                return NameAdjust.GenerateFullName(Name, memberName, paramsStrArray);
             }
         }
 
@@ -200,6 +195,44 @@ namespace MosaicLib.Modular.Reflection
             FormatWithMemberName = 6,
         };
 
+        public static partial class ExtensionMethods
+        {
+            /// <summary>
+            /// Generates a derived Name from the given nameAdjust value, itemName, memberName, and the given paramsStrArray contents to be used as potential Prefix values or string format parameters.
+            /// <para/>This method generally has the following behavior:
+            /// <para/>inferredName = itemName ?? memberName ?? String.Empty
+            /// <para/>NameAdjust.None: return inferredName
+            /// <para/>NameAdjust.Format: return itemName.CheckedFormat(paramsStrArray)
+            /// <para/>NameAdjust.FormatWithMemberName: return itemName.CheckedFormat(memberName, paramStrArray)
+            /// <para/>NameAdjust.Prefix0: return paramsStrArray[0] + inferredName
+            /// <para/>NameAdjust.Prefix1: return paramsStrArray[1] + inferredName
+            /// <para/>NameAdjust.Prefix2: return paramsStrArray[2] + inferredName
+            /// <para/>NameAdjust.Prefix3: return paramsStrArray[3] + inferredName
+            /// </summary>
+            public static string GenerateFullName(this NameAdjust nameAdjust, string itemName, string memberName, params string[] paramsStrArray)
+            {
+                string inferredName = itemName ?? memberName ?? string.Empty;
+
+                switch (nameAdjust)
+                {
+                    case NameAdjust.None: return inferredName;
+                    case NameAdjust.Format: return (itemName ?? string.Empty).CheckedFormat(paramsStrArray);
+                    case Attributes.NameAdjust.FormatWithMemberName:
+                        {
+                            List<string> paramsStrList = new List<string>();
+                            paramsStrList.Add(memberName ?? string.Empty);
+                            paramsStrList.AddRange(paramsStrArray);
+                            return (itemName ?? string.Empty).CheckedFormat(paramsStrList.ToArray());
+                        }
+                    case NameAdjust.Prefix0: return paramsStrArray.SafeAccess(0, string.Empty) + inferredName;
+                    case NameAdjust.Prefix1: return paramsStrArray.SafeAccess(1, string.Empty) + inferredName;
+                    case NameAdjust.Prefix2: return paramsStrArray.SafeAccess(2, string.Empty) + inferredName;
+                    case NameAdjust.Prefix3: return paramsStrArray.SafeAccess(3, string.Empty) + inferredName;
+                    default: return string.Empty;
+                }
+            }
+        }
+
         /// <summary>
         /// Defines which public properties and/or fields are included in the ValueSet representation 
         /// As a flag enum, user may combine enum values using the or operator "|"
@@ -228,21 +261,60 @@ namespace MosaicLib.Modular.Reflection
         }
 
         /// <summary>
-        /// Defines the access type that is supported by the included items in a class that marked as Attributes.Serializable.
-        /// <para/> None (0x00), Read (0x01), Write(0x02), ReadWrite (Read | Write)
+        /// Defines the access type that is supported by the associated item(s)
+        /// <para/>None (0x00), UseGetterIfPresent (0x01), UseSetterIfPresent (0x02), Normal (0x03), GetOnly (0x01), SetOnly (0x02)
+        /// <para/>None (0x00), Read (0x01), Write(0x02), ReadWrite (Read | Write)
         /// </summary>
         [Flags]
-        public enum ItemAccess
+        public enum ItemAccess : int
         {
-            /// <summary>ValueSet is not accessible (Default value): 0x00</summary>
+            /// <summary>item is not accessible: 0x00</summary>
             None = 0x00,
-            /// <summary>ValueSet items can be read/serialized: 0x01</summary>
+
+            /// <summary>allow adapter to attempt to get from this item: 0x01</summary>
+            UseGetterIfPresent = 0x01,
+
+            /// <summary>allow adapter to attempt to get from this item: 0x02</summary>
+            UseSetterIfPresent = 0x02,
+
+            /// <summary>adapter can use this item normally (UseGetterIfPresent | UseSetterIfPresent) == 0x03</summary>
+            Normal = (UseGetterIfPresent | UseSetterIfPresent),
+
+            /// <summary>adapter can get from this item but cannot set it (UseGetterIfPresent) == 0x01</summary>
+            GetOnly = UseGetterIfPresent,
+
+            /// <summary>adapter can set this item but cannot get it (UseSetterIfPresent) == 0x02</summary>
+            SetOnly = UseSetterIfPresent,
+
+            /// <summary>item can be read/serialized: 0x01</summary>
             Read = 0x01,
+
             /// <summary>ValueSet items can be written/deserialized: 0x02</summary>
             Write = 0x02,
+
             /// <summary>ValueSet items can be read/serialized and can be written/deserialized: (Read | Write) == 0x03</summary>
             ReadWrite = (Read | Write),
         }
+
+        public static partial class ExtensionMethods
+        {
+            /// <summary>
+            /// Returns true if ItemAccess.UseGetterIfPresent is in the given itemAccess value
+            /// </summary>
+            public static bool UseGetter(this ItemAccess itemAccess)
+            {
+                return itemAccess.IsSet(ItemAccess.UseGetterIfPresent);
+            }
+
+            /// <summary>
+            /// Returns true if ItemAccess.UseSetterIfPresent is in the given itemAccess value
+            /// </summary>
+            public static bool UseSetter(this ItemAccess itemAccess)
+            {
+                return itemAccess.IsSet(ItemAccess.UseSetterIfPresent);
+            }
+        }
+
 
         #endregion
 
@@ -281,15 +353,34 @@ namespace MosaicLib.Modular.Reflection
 
             /// <summary>Returns true if the selected item is a property</summary>
             public bool IsProperty { get { return (PropertyInfo != null); } }
+
             /// <summary>Returns true if the selected item is a field</summary>
             public bool IsField { get { return (FieldInfo != null); } }
+
             /// <summary>Returns the PropertyInfo or FieldInfo as a MemberInfo (for access to common sub-properties such as Name</summary>
             public MemberInfo MemberInfo { get { return (IsProperty ? PropertyInfo as MemberInfo : FieldInfo as MemberInfo); } }
 
-            /// <summary>True if the item can get the member value.  True for all fields and for properties that CanRead.</summary>
-            public bool CanGetValue { get { return (IsField || (IsProperty && PropertyInfo.CanRead)); } }
-            /// <summary>True if the item can set the member value.  True for all fields and for properties that CanWrite.</summary>
-            public bool CanSetValue { get { return (IsField || (IsProperty && PropertyInfo.CanWrite)); } }
+            /// <summary>True if the item can get the member value and the item's IAnnotatedItemAttribute.ItemAccess permits use of the getter.  True for all fields and for properties that CanRead.</summary>
+            public bool CanGetValue 
+            { 
+                get 
+                {
+                    ItemAccess itemAccess = (IAnnotatedItemAttribute != null ? IAnnotatedItemAttribute.ItemAccess : ItemAccess.Normal);
+
+                    return (itemAccess.UseGetter() && (IsField || (IsProperty && PropertyInfo.CanRead))); 
+                } 
+            }
+
+            /// <summary>True if the item can set the member value and the item's IAnnotatedItemAttribute.ItemAccess permits use of the setter.  True for all fields and for properties that CanWrite.</summary>
+            public bool CanSetValue 
+            { 
+                get 
+                {
+                    ItemAccess itemAccess = (IAnnotatedItemAttribute != null ? IAnnotatedItemAttribute.ItemAccess : ItemAccess.Normal);
+
+                    return (itemAccess.UseSetter() && (IsField || (IsProperty && PropertyInfo.CanWrite))); 
+                } 
+            }
 
             /// <summary>Generate string version of this Item Info for debugging and logging purposes.</summary>
             public override string ToString()

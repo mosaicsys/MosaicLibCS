@@ -23,6 +23,7 @@ using System;
 
 namespace MosaicLib.PartsLib.Common.MassFlow
 {
+    [Obsolete("This enum has been moved to MosaicLib.PartsLib.Common.Physics.UnitsOfMeasure (2017-03-11)")]
     public enum MassFlowUnits
     {
         Undefined = 0,
@@ -32,6 +33,7 @@ namespace MosaicLib.PartsLib.Common.MassFlow
         slm,
     }
 
+    [Obsolete("This enum has been moved to MosaicLib.PartsLib.Common.Physics.UnitsOfMeasure (2017-03-11)")]
     public enum PressureUnits
     {
         Undefined = 0,
@@ -43,8 +45,10 @@ namespace MosaicLib.PartsLib.Common.MassFlow
         MilliTorr,
         Pascals,
         Kilopascals,
+        Atmospheres,
     }
 
+    [Obsolete("This enum has been moved to MosaicLib.PartsLib.Common.Physics.UnitsOfMeasure (2017-03-11)")]
     public enum TemperatureUnits
     {
         Undefined = 0,
@@ -52,27 +56,6 @@ namespace MosaicLib.PartsLib.Common.MassFlow
         DegC,
         DegK,
         DegF,
-    }
-
-    [Obsolete("This interface has not been implemented and may eventually be removed (2015-05-08)")]
-    public interface IMassFlowValue
-    {
-        double Value { get; }
-        MassFlowUnits Units { get; }
-    }
-
-    [Obsolete("This interface has not been implemented and may eventually be removed (2015-05-08)")]
-    public interface IPressureValue
-    {
-        double Value { get; }
-        PressureUnits Units { get; }
-    }
-
-    [Obsolete("This interface has not been implemented and may eventually be removed (2015-05-08)")]
-    public interface ITemperatureValue
-    {
-        double Value { get; }
-        TemperatureUnits Units { get; }
     }
 
     /// <summary>
@@ -98,6 +81,7 @@ namespace MosaicLib.PartsLib.Common.MassFlow
         /// <summary>
         /// Returns true if the given value is Undefined or None
         /// </summary>
+        [Obsolete("This extension method has been moved to MosaicLib.PartsLib.Common.Physics.UnitsOfMeasure (2017-03-11)")]
         public static bool IsUndefinedOrNone(this MassFlowUnits value)
         {
             return (value == MassFlowUnits.Undefined || value == MassFlowUnits.None);
@@ -106,6 +90,7 @@ namespace MosaicLib.PartsLib.Common.MassFlow
         /// <summary>
         /// Returns true if the given value is Undefined or None
         /// </summary>
+        [Obsolete("This extension method has been moved to MosaicLib.PartsLib.Common.Physics.UnitsOfMeasure (2017-03-11)")]
         public static bool IsUndefinedOrNone(this PressureUnits value)
         {
             return (value == PressureUnits.Undefined || value == PressureUnits.None);
@@ -114,6 +99,7 @@ namespace MosaicLib.PartsLib.Common.MassFlow
         /// <summary>
         /// Returns true if the given value is Undefined or None
         /// </summary>
+        [Obsolete("This extension method has been moved to MosaicLib.PartsLib.Common.Physics.UnitsOfMeasure (2017-03-11)")]
         public static bool IsUndefinedOrNone(this TemperatureUnits value)
         {
             return (value == TemperatureUnits.Undefined || value == TemperatureUnits.None);

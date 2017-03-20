@@ -37,7 +37,7 @@ using MosaicLib.Modular.Action;
 
 namespace MosaicLib.PartsLib.Common.E099
 {
-	public interface ITagRWPart : IActivePartBase
+    public interface ITagRWPart : IActivePartBase
     {
         /// <summary>Returns the TagReaderType for this tag reader (tag r/w) part</summary>
         TagReaderType TagReaderType { get; }
@@ -66,7 +66,7 @@ namespace MosaicLib.PartsLib.Common.E099
         /// Action factory method.  The returned action, when run, causes each of the indicates pages to be written, one at a time,
         /// until all writes are successful or one of them fails.  If the first failure was due to there being NoTagFound then the action's ActionState.NamedValues will contain a "NoTagDetected" value that has been set to true.
         /// </summary>
-        IBasicAction CreateWritePagesAction(ITagPageContents [] pages);
+        IBasicAction CreateWritePagesAction(ITagPageContents[] pages);
 
         /// <summary>
         /// Action factory method.  The returned action, when run, causes each of the indicated results to be cleared.  
@@ -106,6 +106,7 @@ namespace MosaicLib.PartsLib.Common.E099
 
         IBaseState PartBaseState { get; }
 
+        [Obsolete("Please replace with the use of the corresponding IEquateable<>.Equals method (2017-03-10)")]
         bool IsEqualTo(ITagRWState rhs);
     }
 
@@ -157,21 +158,22 @@ namespace MosaicLib.PartsLib.Common.E099
         public ITagActionInfo CombinedActionInfo { get; set; }
         public BaseState PartBaseState { get; set; }
 
-        public bool IsEqualTo(ITagRWState rhs)
+        public bool Equals(ITagRWState other)
         {
-            return (rhs != null
-                    && ((NVS.IsNullOrEmpty() && rhs.NVS.IsNullOrEmpty()) || NVS.IsEqualTo(rhs.NVS))
-                    && ReadTagIDActionInfo.IsEqualTo(rhs.ReadTagIDActionInfo)
-                    && ReadPagesActionInfo.IsEqualTo(rhs.ReadPagesActionInfo)
-                    && WritePagesActionInfo.IsEqualTo(rhs.WritePagesActionInfo)
-                    && CombinedActionInfo.IsEqualTo(rhs.CombinedActionInfo)
-                    && PartBaseState.IsEqualTo(rhs.PartBaseState)
+            return (other != null
+                    && ((NVS.IsNullOrEmpty() && other.NVS.IsNullOrEmpty()) || NVS.IsEqualTo(other.NVS))
+                    && ReadTagIDActionInfo.Equals(other.ReadTagIDActionInfo)
+                    && ReadPagesActionInfo.Equals(other.ReadPagesActionInfo)
+                    && WritePagesActionInfo.Equals(other.WritePagesActionInfo)
+                    && CombinedActionInfo.Equals(other.CombinedActionInfo)
+                    && PartBaseState.Equals(other.PartBaseState)
                     );
         }
 
-        public bool Equals(ITagRWState other)
+        [Obsolete("Please replace with the use of the corresponding IEquateable<>.Equals method (2017-03-10)")]
+        public bool IsEqualTo(ITagRWState other)
         {
-            return IsEqualTo(other);
+            return Equals(other);
         }
 
         /// <summary>Supports debugging and logging.</summary>
@@ -190,6 +192,7 @@ namespace MosaicLib.PartsLib.Common.E099
         string TagID { get; }
         ITagPageContents[] PageContentsArray { get; }
 
+        [Obsolete("Please replace with the use of the corresponding IEquateable<>.Equals method (2017-03-10)")]
         bool IsEqualTo(ITagActionInfo rhs);
 
         bool IsEmpty { get; }
@@ -227,17 +230,18 @@ namespace MosaicLib.PartsLib.Common.E099
             return this;
         }
 
-        public bool IsEqualTo(ITagActionInfo rhs)
+        public bool Equals(ITagActionInfo other)
         {
-            return (Object.ReferenceEquals(ActionInfo, rhs.ActionInfo)
-                    && TagID == rhs.TagID
-                    && PageContentsArray.IsEqualTo(rhs.PageContentsArray)
+            return (Object.ReferenceEquals(ActionInfo, other.ActionInfo)
+                    && TagID == other.TagID
+                    && PageContentsArray.IsEqualTo(other.PageContentsArray)
                     );
         }
 
-        public bool Equals(ITagActionInfo other)
+        [Obsolete("Please replace with the use of the corresponding IEquateable<>.Equals method (2017-03-10)")]
+        public bool IsEqualTo(ITagActionInfo other)
         {
-            return IsEqualTo(other);
+            return Equals(other);
         }
 
         public bool IsEmpty { get { return ActionInfo.IsEmpty && TagID.IsNullOrEmpty() && PageContentsArray.IsNullOrEmpty(); } }
@@ -245,7 +249,7 @@ namespace MosaicLib.PartsLib.Common.E099
         public bool NoTagDetected { get { return ActionInfo.ActionState.NamedValues["NoTagDetected"].VC.GetValue<bool>(false); } }
 
         /// <summary>If the info contains a non-empty TagID then it is returned, otherwise this property returns contents based on the ActionInfo</summary>
-        public string DisplayTextForTagID 
+        public string DisplayTextForTagID
         {
             get
             {
@@ -298,17 +302,17 @@ namespace MosaicLib.PartsLib.Common.E099
     }
 
 
-    public interface IReadTagAction : Modular.Action.IClientFacetWithResult<string> {}
-    public interface IReadPagesAction : Modular.Action.IClientFacetWithResult<ITagPageContents []> {}
+    public interface IReadTagAction : Modular.Action.IClientFacetWithResult<string> { }
+    public interface IReadPagesAction : Modular.Action.IClientFacetWithResult<ITagPageContents[]> { }
 
     public class ReadTagActionImpl : ActionImplBase<NullObj, string>, IReadTagAction
     {
         public ReadTagActionImpl(ActionQueue actionQ, ActionMethodDelegateActionArgStrResult<NullObj, string> methodDelegate, string mesg, ActionLogging actionLoggingReference)
             : base(actionQ, null, false, methodDelegate, new ActionLogging(mesg, actionLoggingReference))
-        {}
+        { }
     }
 
-    public class ReadPagesActionImpl : ActionImplBase<NullObj, ITagPageContents []>, IReadPagesAction
+    public class ReadPagesActionImpl : ActionImplBase<NullObj, ITagPageContents[]>, IReadPagesAction
     {
         public ReadPagesActionImpl(ActionQueue actionQ, ActionMethodDelegateActionArgStrResult<NullObj, ITagPageContents[]> methodDelegate, string mesg, ActionLogging actionLoggingReference)
             : base(actionQ, null, false, methodDelegate, new ActionLogging(mesg, actionLoggingReference))
@@ -318,7 +322,7 @@ namespace MosaicLib.PartsLib.Common.E099
     public interface ITagPageContents
     {
         int PageIndex { get; }
-        byte [] ByteArray { get; }
+        byte[] ByteArray { get; }
 
         bool Equals(object rhsAsObject);
 
@@ -346,24 +350,24 @@ namespace MosaicLib.PartsLib.Common.E099
         /// <summary>Devices that follow the TI HDX transponder (used to be called TIRIS) with related signaling, protocol, and operation.</summary>
         TIRIS = 1,
     }
-	
+
     /// <summary>
     /// Defines the type of driver to use for this tag reader
     /// </summary>
-	public enum DriverType : int
-	{
+    public enum DriverType : int
+    {
         /// <summary>Value to use when there is no Reader installed (0)</summary>
-		None = 0,
+        None = 0,
 
         /// <summary>Hermos ASCII protocol device. (1, same as BrooksASCII)</summary>
-		HermosASCII = 1,
+        HermosASCII = 1,
 
         /// <summary>Brooks ASCII protocol device. (1, same as HermosASCII)</summary>
         BrooksASCII = 1,
 
         /// <summary>Omron V640 family (mostly)ASCII protocol device. (2)</summary>
         OmronV640 = 2,
-	}
+    }
 
     /// <summary>
     /// Defines the TagContent decode mode to use.
@@ -391,55 +395,55 @@ namespace MosaicLib.PartsLib.Common.E099
         Binary,
     }
 
-	public class TagRWPartConfig
-	{
-		public string PartID { get; set; }
+    public class TagRWPartConfig
+    {
+        public string PartID { get; set; }
 
-		public DriverType DriverType 
-		{ 
-			get { return driverType; } 
-			set
-			{
-				driverType = value;
-				switch (ReaderType)
-				{
-					case ReaderType.TIRIS:
+        public DriverType DriverType
+        {
+            get { return driverType; }
+            set
+            {
+                driverType = value;
+                switch (ReaderType)
+                {
+                    case ReaderType.TIRIS:
                         PageDataSize = 8;
                         NumPages = 17;
-						break;
-					default:
-						break;
-				}
-			}
-		}
-		private DriverType driverType = DriverType.None;
-		
-		public ReaderType ReaderType 
-		{ 
-			get 
-			{
-				switch (DriverType)
-				{
-					case DriverType.None: return ReaderType.None;
-					case DriverType.HermosASCII: return ReaderType.TIRIS;
-					default: return ReaderType.Unknown;
-				}
-			}
-		}
+                        break;
+                    default:
+                        break;
+                }
+            }
+        }
+        private DriverType driverType = DriverType.None;
+
+        public ReaderType ReaderType
+        {
+            get
+            {
+                switch (DriverType)
+                {
+                    case DriverType.None: return ReaderType.None;
+                    case DriverType.HermosASCII: return ReaderType.TIRIS;
+                    default: return ReaderType.Unknown;
+                }
+            }
+        }
 
         [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
         public int NumPages { get; set; }
 
         [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
         public int PageDataSize { get; set; }
-		
-		///<summary>In bytes</summary>
-		[ConfigItem(IsOptional=true)]
-		public int DefaultTagIDStartOffset { get; set; }
 
-		///<summary>In bytes</summary>
-        [ConfigItem(IsOptional=true)]
-		public int DefaultTagIDSize	{ get; set; }
+        ///<summary>In bytes</summary>
+        [ConfigItem(IsOptional = true)]
+        public int DefaultTagIDStartOffset { get; set; }
+
+        ///<summary>In bytes</summary>
+        [ConfigItem(IsOptional = true)]
+        public int DefaultTagIDSize { get; set; }
 
         [ConfigItem(IsOptional = true)]
         public TagContentDecodeMode DefaultTagDecodeMode { get; set; }
@@ -449,17 +453,17 @@ namespace MosaicLib.PartsLib.Common.E099
             DefaultTagIDSize = 2;
         }
 
-		public TagRWPartConfig(TagRWPartConfig rhs)
-		{
-			PartID = rhs.PartID;
-			DriverType = rhs.DriverType;
+        public TagRWPartConfig(TagRWPartConfig rhs)
+        {
+            PartID = rhs.PartID;
+            DriverType = rhs.DriverType;
             NumPages = rhs.NumPages;
             PageDataSize = rhs.PageDataSize;
             DefaultTagIDStartOffset = rhs.DefaultTagIDStartOffset;
             DefaultTagIDSize = rhs.DefaultTagIDSize;
             DefaultTagDecodeMode = rhs.DefaultTagDecodeMode;
-		}
-	}
+        }
+    }
 
     public class TagPageContents : ITagPageContents
     {

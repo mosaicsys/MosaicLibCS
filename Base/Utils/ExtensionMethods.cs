@@ -83,21 +83,10 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method version of Array indexed get access that handles all out of range accesses by returning the given default value
         /// </summary>
-        public static ItemType SafeAccess<ItemType>(this ItemType[] fromArray, int getFromIndex, ItemType defaultValue)
+        public static ItemType SafeAccess<ItemType>(this ItemType[] fromArray, int getFromIndex, ItemType defaultValue = default(ItemType))
         {
             if (fromArray == null || getFromIndex < 0 || getFromIndex >= fromArray.Length)
                 return defaultValue;
-            else
-                return fromArray[getFromIndex];
-        }
-
-        /// <summary>
-        /// Extension method version of Array indexed get access that handles all out of range accesses by returning the default(<typeparam name="ItemType"/>)
-        /// </summary>
-        public static ItemType SafeAccess<ItemType>(this ItemType[] fromArray, int getFromIndex)
-        {
-            if (fromArray == null || getFromIndex < 0 || getFromIndex >= fromArray.Length)
-                return default(ItemType);
             else
                 return fromArray[getFromIndex];
         }
@@ -115,7 +104,6 @@ namespace MosaicLib.Utils
 
             return subArray;
         }
-
 
         /// <summary>
         /// Extension method version of string indexed get access that handles all out of range accesses by returning the default(char)
@@ -167,6 +155,17 @@ namespace MosaicLib.Utils
             }
 
             return intoArray;
+        }
+
+        /// <summary>
+        /// Extension method version of Array that returns the last item of the array or the given defaultValue if the array is null or it is empty
+        /// </summary>
+        public static ItemType SafeLast<ItemType>(this ItemType[] fromArray, ItemType defaultValue = default(ItemType))
+        {
+            if (fromArray == null || fromArray.Length <= 0)
+                return defaultValue;
+            else
+                return fromArray[fromArray.Length - 1];
         }
 
         #endregion
@@ -292,6 +291,35 @@ namespace MosaicLib.Utils
             return new ItemType[0];
         }
 
+        /// <summary>
+        /// Extension method to "safely" take (remove) and return the first element of the given list.  Returns defaultValue if the list is empty
+        /// </summary>
+        public static ItemType SafeTakeFirst<ItemType>(this IList<ItemType> itemList, ItemType defaultValue = default(ItemType))
+        {
+            if (itemList.Count <= 0)
+                return defaultValue;
+
+            ItemType item = itemList[0];
+            itemList.RemoveAt(0);
+
+            return item;
+        }
+
+        /// <summary>
+        /// Extension method to "safely" take (remove) and return the last element of the given list.  Returns defaultValue if the list is empty
+        /// </summary>
+        public static ItemType SafeTakeLast<ItemType>(this IList<ItemType> itemList, ItemType defaultValue = default(ItemType))
+        {
+            if (itemList.Count <= 0)
+                return defaultValue;
+
+            int takeFromIdx = (itemList.Count - 1);
+            ItemType item = itemList[takeFromIdx];
+            itemList.RemoveAt(takeFromIdx);
+
+            return item;
+        }
+
         #endregion
 
         #region byte arrays as bit masks
@@ -358,7 +386,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>Returns the Math.Round of the given value using the given number of digits and the given MidpointRounding mode</summary>
-        public static double Round(this double value, int digits, MidpointRounding mode)
+        public static double Round(this double value, int digits, MidpointRounding mode = MidpointRounding.ToEven)
         {
             return Math.Round(value, digits, mode);
         }
@@ -680,6 +708,28 @@ namespace MosaicLib.Utils
         private static readonly IList<char> boxEscapeCharsList = new List<char>() { '[', ']' }.AsReadOnly();
 
         #endregion
+
+        #region TimeSpan related (double.FromSeconds, double.FromMilliseconds)
+
+        /// <summary>
+        /// Variant of TimeSpan.FromSeconds that does not round the timeSpanInSeconds to the nearest msec.
+        /// This extension method converts to TimeSpan using FromTicks and TimeSpan.TicksPerSecond
+        /// </summary>
+        public static TimeSpan FromSeconds(this double timeSpanInSeconds)
+        {
+            return TimeSpan.FromTicks(unchecked((long)(TimeSpan.TicksPerSecond * timeSpanInSeconds)));
+        }
+
+        /// <summary>
+        /// Variant of TimeSpan.FromSeconds that does not round the timeSpanInSeconds to the nearest msec.
+        /// This extension method converts to TimeSpan using FromTicks and TimeSpan.TicksPerMillisecond
+        /// </summary>
+        public static TimeSpan FromMilliseconds(this double timeSpanInMilliseconds)
+        {
+            return TimeSpan.FromTicks(unchecked((long)(TimeSpan.TicksPerMillisecond * timeSpanInMilliseconds)));
+        }
+
+        #endregion
     }
 
     /// <summary>
@@ -812,7 +862,7 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        #region CurrentStackFrame, CurrentMethod, CurrentMethodName helper "functions (getters)".
+        #region CurrentStackFrame, CurrentMethod, CurrentMethodName, CurrentClassName helper "functions (getters)".
 
         /// <summary>Creates and returns the callers current StackFrame</summary>
         public static StackFrame CurrentStackFrame { get { return new System.Diagnostics.StackFrame(1); } }
@@ -824,7 +874,11 @@ namespace MosaicLib.Utils
         public static string CurrentMethodName { get { return new System.Diagnostics.StackFrame(1).GetMethod().Name; } }
 
         /// <summary>Creates a StackFrame for the caller and returns the Name of the current methods DeclaringType</summary>
-        public static string CurrentClassName { get { return new System.Diagnostics.StackFrame(1).GetMethod().DeclaringType.ToString();  } }
+        public static string CurrentClassName { get { return new System.Diagnostics.StackFrame(1).GetMethod().DeclaringType.ToString(); } }
+
+        /// <summary>Creates a StackFrame for the caller and returns the Leaf Name of the current methods DeclaringType (The token at the end of any sequence of dot seperated tokens)</summary>
+        public static string CurrentClassLeafName { get { return (new System.Diagnostics.StackFrame(1).GetMethod().DeclaringType.ToString()).Split('.').SafeLast(); } }
+
 
         #endregion
     }

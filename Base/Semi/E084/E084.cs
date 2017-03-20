@@ -182,9 +182,7 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
 		///<remarks>This signal is NOT part of the E084 standard and is not included in the 25 pin connector.</remarks>
 		bool XferILock { get; }
 
-        /// <summary>
-        /// Returns true if this object has the same contents as the given rhs
-        /// </summary>
+        [Obsolete("Please replace with the use of the corresponding IEquateable<>.Equals method (2017-03-10)")]
         bool IsEqualTo(IActiveToPassivePinsState rhs);
     }
 
@@ -229,9 +227,7 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
 		///<remarks>NOTE: This signal is active (current flowing) when motion is permitted.</remarks>
 		bool ES { get; }
 
-        /// <summary>
-        /// Returns true if this object has the same contents as the given rhs
-        /// </summary>
+        [Obsolete("Please replace with the use of the corresponding IEquateable<>.Equals method (2017-03-10)")]
         bool IsEqualTo(IPassiveToActivePinsState rhs);
     }
 	
@@ -288,19 +284,17 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
         }
 
         /// <summary>
-        /// Returns true if this object has the same contents as the given rhs
-        /// </summary>
-        public bool IsEqualTo(IActiveToPassivePinsState rhs)
-        {
-            return (rhs != null && IFaceName == rhs.IFaceName && PackedWord == rhs.PackedWord);
-        }
-
-        /// <summary>
         /// Returns true if this object has the same contents as the given other
         /// </summary>
         public bool Equals(IActiveToPassivePinsState other)
         {
-            return IsEqualTo(other);
+            return (other != null && IFaceName == other.IFaceName && PackedWord == other.PackedWord);
+        }
+
+        [Obsolete("Please replace with the use of the corresponding IEquateable<>.Equals method (2017-03-10)")]
+        public bool IsEqualTo(IActiveToPassivePinsState rhs)
+        {
+            return Equals(rhs);
         }
 
         /// <summary>
@@ -310,7 +304,7 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
         /// <returns>true if both objects contain the same values, false if rhsAsObject is null, is not of this type or has different contents</returns>
         public override bool Equals(object rhsAsObject)
 		{
-            return IsEqualTo(rhsAsObject as IActiveToPassivePinsState);
+            return Equals(rhsAsObject as IActiveToPassivePinsState);
 		}
 
         /// <summary>
@@ -468,19 +462,17 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
         }
 
         /// <summary>
-        /// Returns true if this object has the same contents as the given rhs
-        /// </summary>
-        public bool IsEqualTo(IPassiveToActivePinsState rhs)
-        {
-            return (rhs != null && IFaceName == rhs.IFaceName && PackedWord == rhs.PackedWord);
-        }
-
-        /// <summary>
         /// Returns true if this object has the same contents as the given other
         /// </summary>
         public bool Equals(IPassiveToActivePinsState other)
         {
-            return IsEqualTo(other);
+            return (other != null && IFaceName == other.IFaceName && PackedWord == other.PackedWord);
+        }
+
+        [Obsolete("Please replace with the use of the corresponding IEquateable<>.Equals method (2017-03-10)")]
+        public bool IsEqualTo(IPassiveToActivePinsState rhs)
+        {
+            return Equals(rhs);
         }
 
         /// <summary>
@@ -490,7 +482,7 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
         /// <returns>true if both objects contain the same values, false if rhsAsObject is null, is not of this type or has different contents</returns>
         public override bool Equals(object rhsAsObject)
 		{
-            return IsEqualTo(rhsAsObject as IPassiveToActivePinsState);
+            return Equals(rhsAsObject as IPassiveToActivePinsState);
 		}
 
         /// <summary>

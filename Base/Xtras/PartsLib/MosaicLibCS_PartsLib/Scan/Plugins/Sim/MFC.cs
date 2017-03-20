@@ -20,15 +20,19 @@
  */
 
 using System;
+
 using MosaicLib;
-using MosaicLib.Utils;
-using MosaicLib.PartsLib.Common.MassFlow;
-using MosaicLib.Modular.Config.Attributes;
-using MosaicLib.Modular.Interconnect.Values.Attributes;
-using MosaicLib.Time;
-using MosaicLib.Modular.Interconnect.Values;
 using MosaicLib.Modular.Common;
+using MosaicLib.Modular.Config;
+using MosaicLib.Modular.Config.Attributes;
+using MosaicLib.Modular.Interconnect.Values;
+using MosaicLib.Modular.Interconnect.Values.Attributes;
+using MosaicLib.PartsLib.Common.MassFlow;
 using MosaicLib.PartsLib.Scan.Plugin.Sim.Common;
+using MosaicLib.Time;
+using MosaicLib.Utils;
+
+using Units = MosaicLib.PartsLib.Common.Physics.UnitsOfMeasure;
 
 namespace MosaicLib.PartsLib.Scan.Plugin.Sim.MFC
 {
@@ -67,11 +71,11 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.MFC
                 ConfigValues.FullScaleFlow = 1.0;
         }
 
-        public override void Setup(string scanEnginePartName)
+        public override void Setup(string scanEnginePartName, IConfig pluginsIConfig, IValuesInterconnection pluginsIVI)
         {
-            base.Setup(scanEnginePartName);
+            base.Setup(scanEnginePartName, pluginsIConfig, pluginsIVI);
 
-            IValuesInterconnection ivi = Values.Instance;
+            IValuesInterconnection ivi = pluginsIVI;
 
             // Create "write once" iva's to indicate the mfc's flow units and full scale flow value.
             ivi.GetValueAccessor("{0}.FlowUnits".CheckedFormat(Name)).Set(ConfigValues.FlowUnits);
@@ -193,7 +197,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.MFC
         /// </summary>
         public MFCSimPluginConfig()
         {
-            FlowUnits = MassFlowUnits.sccm;
+            FlowUnits = Units.VolumetricFlowUnits.sccm;
             FullScaleFlow = 1000.0;
             FlowNoise = 5.0;
             NominalTemperatureInDegC = 27.0;
@@ -205,7 +209,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.MFC
 
         /// <summary>Gives the full scale flow for this MFC in user units.  Normally has units of sccm</summary>
         [ConfigItem]
-        public MassFlowUnits FlowUnits { get; set; }
+        public Units.VolumetricFlowUnits FlowUnits { get; set; }
 
         /// <summary>Gives the full scale flow for this MFC in user units.  Normally has units of sccm</summary>
         [ConfigItem]

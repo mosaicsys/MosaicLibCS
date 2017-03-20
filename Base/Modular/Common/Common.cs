@@ -3032,7 +3032,8 @@ namespace MosaicLib.Modular.Common
         private static readonly IEqualityComparer<INamedValue> compareINVNamesEqualityComparer = new CompareINVNamesEqualityComparer();
 
         /// <summary>
-        /// Returns an enumerator that can be used to obtain the next level of NV sub-sets that are referenced by this set.
+        /// Getter returns an enumerator that can be used to obtain the next level of NV sub-sets that are referenced by this set.
+        /// <para/>Setter may be used to define the set of sub-set INamedValueSet objects that will be used under this nvs.
         /// </summary>
         public IEnumerable<INamedValueSet> SubSets 
         { 
@@ -4073,8 +4074,26 @@ namespace MosaicLib.Modular.Common
         /// <summary>Defines the emitter used to emit Update related changes in config point values.  Defaults to the null emitter.</summary>
         public Logging.IMesgEmitter ValueNoteEmitter { get { return FixupEmitterRef(ref valueNoteEmitter); } set { valueNoteEmitter = value; } }
 
+        /// <summary>When true (the default), TValueSet class is expected to provide public setters for all annotated properties</summary>
         public bool MustSupportSet { get; set; }
+
+        /// <summary>When true (the default), TValueSet class is expected to provide public getters for all annotated properties</summary>
         public bool MustSupportGet { get; set; }
+
+        /// <summary>This property helps define the set of behaviors that this adapter shall perform.  It defaults to ItemAccess.Normal (Get and Set).  Setting it to any other value will also clear the corresponding MustSupport flag(s)</summary>
+        public ItemAccess ItemAccess
+        {
+            get { return _itemAccess; }
+            set
+            {
+                _itemAccess = value;
+                if (!_itemAccess.IsSet(ItemAccess.UseGetterIfPresent))
+                    MustSupportGet = false;
+                if (!_itemAccess.IsSet(ItemAccess.UseSetterIfPresent))
+                    MustSupportSet = false;
+            }
+        }
+        private ItemAccess _itemAccess = ItemAccess.Normal;
 
         /// <summary>
         /// This method determines the set of full Parameter Names from the ValueSet's annotated items.
@@ -4118,13 +4137,14 @@ namespace MosaicLib.Modular.Common
                 {
                     NVSItemName = nvsItemName,
                     ItemInfo = itemInfo,
-                    MemberToValueFunc = itemInfo.GenerateGetMemberToVCFunc<TValueSet>(),
-                    MemberFromValueAction = itemInfo.GenerateSetMemberFromVCAction<TValueSet>(forceRethrowFlag: false),
+                    MemberToValueFunc = ItemAccess.UseGetter() ? itemInfo.GenerateGetMemberToVCFunc<TValueSet>() : null,
+                    MemberFromValueAction = ItemAccess.UseSetter() ? itemInfo.GenerateSetMemberFromVCAction<TValueSet>(forceRethrowFlag: false) : null,
                 };
 
                 Logging.IMesgEmitter selectedIssueEmitter = IssueEmitter;
 
-                if ((itemInfo.CanGetValue && itemAccessSetupInfo.MemberToValueFunc == null) || (itemInfo.CanSetValue && itemAccessSetupInfo.MemberFromValueAction == null))
+                if ((MustSupportGet && ItemAccess.UseGetter() && itemInfo.CanGetValue && itemAccessSetupInfo.MemberToValueFunc == null) 
+                    || (MustSupportSet && ItemAccess.UseSetter() && itemInfo.CanSetValue && itemAccessSetupInfo.MemberFromValueAction == null))
                 {
                     if (!itemAttribute.SilenceIssues)
                         selectedIssueEmitter.Emit("Member/Value '{0}'/'{1}' is not usable: no valid accessor delegate could be generated for its ValueSet type:'{3}'", memberName, nvsItemName, itemInfo.ItemType, TValueSetTypeStr);
@@ -4139,7 +4159,7 @@ namespace MosaicLib.Modular.Common
         }
 
         /// <summary>
-        /// Transfer the values from the ValueSet's annotated members to the corresponding set of IValueAccessors and then tell the IValueInterconnect instance
+        /// Transfer the values from the ValueSet's annotated members to the corresponding set of IValueAccessors and then tell the IValuesInterconnection instance
         /// to Set all of the IValueAccessors.
         /// <para/>The merge parameter determines if (false) all annotated items are set (even if they are no included in the given nvs), or if (true) only the items that are explicitly included in the given nvs are set.
         /// <para/>Supports call chaining.
@@ -4165,7 +4185,7 @@ namespace MosaicLib.Modular.Common
         }
 
         /// <summary>
-        /// Requests the IValueInterconnect instance to update all of the adapter's IValueAccessor objects and then transfers the updated values
+        /// Requests the IValuesInterconnection instance to update all of the adapter's IValueAccessor objects and then transfers the updated values
         /// from those accessor objects to the corresponding annotated ValueSet members.
         /// <para/>Supports call chaining.
         /// </summary>
@@ -4178,7 +4198,7 @@ namespace MosaicLib.Modular.Common
 
             foreach (ItemAccessSetupInfo iasi in itemAccessSetupInfoArray)
             {
-                if (iasi != null && iasi.MemberFromValueAction != null)
+                if (iasi != null && iasi.MemberToValueFunc != null)
                     nvs.SetValue(iasi.NVSItemName, iasi.MemberToValueFunc(ValueSet, IssueEmitter, ValueNoteEmitter, false));
             }
 
@@ -4262,6 +4282,51 @@ namespace MosaicLib.Modular.Common
         }
 
         #endregion
+    }
+
+    #endregion
+
+    #region DelegateItemSpec
+
+    /// <summary>
+    /// This class is used by client code to define the relationship between a named item and optinal getter and/or setter delegates.
+    /// <para/>Supports all TValueTypes that are supported by ValueContainer
+    /// </summary>
+    public class DelegateItemSpec<TValueType>
+    {
+        /// <summary>
+        /// Constructor.  Requires name.  Accepts nameAdjust, getterDelegate, and setterDelegate.
+        /// </summary>
+        public DelegateItemSpec(string name, NameAdjust nameAdjust = NameAdjust.Prefix0, Func<TValueType> getterDelegate = null, Action<TValueType> setterDelegate = null)
+        {
+            Name = name;
+            NameAdjust = nameAdjust;
+            GetterDelegate = getterDelegate;
+            SetterDelegate = setterDelegate;
+        }
+
+        /// <summary>
+        /// Internal copy constructor
+        /// </summary>
+        internal DelegateItemSpec(DelegateItemSpec<TValueType> other)
+        {
+            Name = other.Name;
+            NameAdjust = other.NameAdjust;
+            GetterDelegate = other.GetterDelegate;
+            SetterDelegate = other.SetterDelegate;
+        }
+
+        /// <summary>Gives the item's "Name" this is generally used during a Setup method and is combined with the associated NameAdjust, and any strings that are given to Setup to produce an full name used with Modular.Interconnect.Values and/or Modular.Config</summary>
+        public string Name { get; private set; }
+
+        /// <summary>Gives the NameAdjust to be used with this item.  Defaults to Prefix0 when not expicitly set in the constructor.  May be set directly or using a property initializer.</summary>
+        public NameAdjust NameAdjust { get; set; }
+
+        /// <summary>Optional delegate used to produce each new TValueType value for transfer.  Defaults to null when not explicitly set in the constructor.  May be set directly or using a property initializer.</summary>
+        public Func<TValueType> GetterDelegate { get; set; }
+
+        /// <summary>Optional delegate used to consume each newly transferred TValueType value.  Defaults to null when not explicitly set in the constructor.  May be set directly or using a property initializer.</summary>
+        public Action<TValueType> SetterDelegate { get; set; }
     }
 
     #endregion

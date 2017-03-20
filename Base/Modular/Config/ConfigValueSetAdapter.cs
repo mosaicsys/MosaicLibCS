@@ -41,22 +41,21 @@ namespace MosaicLib.Modular.Config
         /// This attribute is used to annotate public settable properties and fields in a class in order that the class can be used as the ConfigValueSet for
         /// a ConfigValueSetAdapter adapter.  Each settable property or field in the ConfigValueSet class specifies a specific property and value source that 
 		/// will receive the initial value and possibly later updates for config key's value that use normal update behavior.
-        /// <para/>Name = null, NameAdjust = NameAdjust.Prefix0, UpdateNormally = true (ReadOnlyOnce = false), IsOptional = false, SilenceIssues = false
+        /// <para/>Name = null, NameAdjust = NameAdjust.Prefix0, UpdateNormally = false (ReadOnlyOnce = true), IsOptional = false, SilenceIssues = false
         /// </summary>
         [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field, AllowMultiple = false)]
         public class ConfigItemAttribute : AnnotatedItemAttributeBase
         {
             /// <summary>
             /// Default constructor.
-            /// <para/>Name = null, NameAdjust = NameAdjust.Prefix0, UpdateNormally = true (ReadOnlyOnce = false), IsOptional = false, SilenceIssues = false
+            /// <para/>Name = null, NameAdjust = NameAdjust.Prefix0, UpdateNormally = false (ReadOnlyOnce = true), IsOptional = false, SilenceIssues = false
             /// </summary>
             public ConfigItemAttribute() 
                 : base()
-            {
-            }
+            { }
 
             /// <summary>
-            /// This property defines the config key's value update behavior that is used for the identified config key's value as Normal or ReadOnlyOnce
+            /// This property defines the config key's value update behavior that is used for the identified config key's value as Normal or ReadOnlyOnce (default)
             /// </summary>
             public ConfigKeyAccessFlags AccessFlags { get { return accessFlags; } set { accessFlags = value; } }
             private ConfigKeyAccessFlags accessFlags = new ConfigKeyAccessFlags();
@@ -71,12 +70,19 @@ namespace MosaicLib.Modular.Config
                     if (metaData == null)
                     {
                         NamedValueSet nvs = new NamedValueSet() { { "AccessFlags", AccessFlags } };
+
                         if (ensureExistsHasBeenSet)
                             nvs.Add("EnsureExists", EnsureExists);
+
                         if (defaultProviderNameHasBeenSet)
                             nvs.Add("DefaultProviderName", DefaultProviderName);
+
                         if (additionalKeywordsHasBeenSet)
                             nvs.AddRange(AdditionalKeywords.Select(keyword => new NamedValue(keyword)));
+
+                        INamedValueSet mergeWithNVS = GetDerivedTypeMetaDataToMerge();
+                        if (!mergeWithNVS.IsNullOrEmpty())
+                            nvs.SubSets = new INamedValueSet[] { mergeWithNVS };
 
                         metaData = nvs.ConvertToReadOnly();
                     }
@@ -87,22 +93,28 @@ namespace MosaicLib.Modular.Config
             private INamedValueSet metaData = null;
 
             /// <summary>
-            /// This property is true when the config key's value will follow the MayBeChanged update behavior.
+            /// Derived types may override this method implementation to allow them merge the returned meta-data into the per key meta-data that will be used with the key access objects generated here from this attribute.
+            /// <para/>Please note that this method should always return an INVS instance that has already been converted to be ReadOnly so that later layers where this is also done will not generate an excessive number of clones of the original one returned here.
+            /// </summary>
+            protected virtual INamedValueSet GetDerivedTypeMetaDataToMerge() { return null; }
+
+            /// <summary>
+            /// This property is true when the config key's value will follow the MayBeChanged update behavior.  (defaults to false)
             /// </summary>
             public bool UpdateNormally { get { return accessFlags.MayBeChanged; } set { accessFlags.MayBeChanged = value; } }
 
             /// <summary>
-            /// This property is true when the config key's value will follow the ReadOnlyOnce update behavior.  This may be used as a shorthand for the ValueUpdateBehavior property.
+            /// This property is true when the config key's value will follow the ReadOnlyOnce update behavior.  This may be used as a shorthand for the ValueUpdateBehavior property.  (defaults to true)
             /// </summary>
             public bool ReadOnlyOnce { get { return accessFlags.ReadOnlyOnce; } set { accessFlags.ReadOnlyOnce = value; } }
 
             /// <summary>
-            /// When an item is marked as optional, no error messages will be generated if the config key is not found during setup.
+            /// When an item is marked as optional, no error messages will be generated if the config key is not found during setup.  (defaults to false)
             /// </summary>
             public bool IsOptional { get { return accessFlags.IsOptional; } set { accessFlags.IsOptional = value; } }
 
             /// <summary>
-            /// When an item is marked to SilenceLogging, neither Issue nor Value messages will be emitted in relation to attempts to access this key.
+            /// When an item is marked to SilenceLogging, neither Issue nor Value messages will be emitted in relation to attempts to access this key.  (defaults to false)
             /// </summary>
             public bool SilenceLogging { get { return accessFlags.SilenceLogging; } set { accessFlags.SilenceLogging = value; } }
 

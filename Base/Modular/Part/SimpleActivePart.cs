@@ -1148,6 +1148,7 @@ namespace MosaicLib.Modular.Part
                 actionInfoIVA = ivi.GetValueAccessor<IActionInfo>("{0}.ActionInfo".CheckedFormat(PartID)).Set(EmptyActionInfo);
                 lastActionInfoIVA = ivi.GetValueAccessor<IActionInfo>("{0}.LastActionInfo".CheckedFormat(PartID)).Set(EmptyActionInfo);
                 actionInfoIVAArray = new IValueAccessor[] { actionInfoIVA, lastActionInfoIVA };
+                actionInfoIVAArrayLength = actionInfoIVAArray.Length;
             }
         }
 
@@ -1162,12 +1163,13 @@ namespace MosaicLib.Modular.Part
             else
             {
                 lastActionInfoIVA.Value = actionInfoIVA.Value = actionInfo;
-                ivi.Set(actionInfoIVAArray, true);
+                ivi.Set(actionInfoIVAArray, numEntriesToSet: actionInfoIVAArrayLength, optimize: true);
             }
         }
 
         private IValueAccessor<IActionInfo> actionInfoIVA, lastActionInfoIVA;
         private IValueAccessor[] actionInfoIVAArray;
+        private int actionInfoIVAArrayLength;
         private IValuesInterconnection ivi;
 
         /// <summary>Returns the IProviderFacet for the current action that the Part's main service loop is currently in IssueAndInvokeAction on, or null if none.</summary>

@@ -1381,9 +1381,15 @@ namespace MosaicLib.Utils
         TObjectType ReadObject(System.IO.Stream readStream);
 
         /// <summary>
+        /// Attempts to use the contained DataContractSerializer to read the deserialize the corresponding object from the given TextReader.
+        /// </summary>
+        /// <param name="tr">Acts as the source of the text from which the DataContractSerializer is to deserialize the object.</param>
+        TObjectType ReadObject(System.IO.TextReader tr);
+
+        /// <summary>
         /// Attempts to use an underlying DataContractSerializer to read the deserialize the corresponding object from the given string.
         /// </summary>
-        /// <param name="s">Contains the text from which the DataCongtractSerializer is to deserialize the object.</param>
+        /// <param name="s">Contains the text from which the DataContractSerializer is to deserialize the object.</param>
         TObjectType ReadObject(String s);
 
         /// <summary>
@@ -1412,7 +1418,7 @@ namespace MosaicLib.Utils
         /// Serializes the given object by calling WriteObject on the underlying DataContractSerializer to serialize and write the object into a String
         /// </summary>
         /// <param name="obj">Gives the object that is to be serialized</param>
-        /// <returns>A string containing the serialized representation of the given object as serialized by the contained DataContracxtSerialzier</returns>
+        /// <returns>A string containing the serialized representation of the given object as serialized by the contained DataContractSerializer</returns>
         string ConvertObjectToString(TObjectType obj);
     }
 
@@ -1429,16 +1435,38 @@ namespace MosaicLib.Utils
         , IDataContractAdapter<TObjectType>
     {
         /// <summary>
+        /// Gets or sets the contained System.Text.Encoding property to determine what character encoding will be used during appropriate serialization and deserialization operations.
+        /// </summary>
+        /// <returns>The text encoding to use. The default is Encoding.ASCII</returns>
+        public virtual System.Text.Encoding Encoding { get { return _encoding; } set { _encoding = value; } }
+        private System.Text.Encoding _encoding = System.Text.Encoding.ASCII;
+
+        /// <summary>
         /// Attempts to use an underlying DataContractSerializer to read the deserialize the corresponding object from the given stream using its ReadObject method.  
         /// Returns the object if the read was successful.
         /// </summary>
         public abstract TObjectType ReadObject(Stream readStream);
 
         /// <summary>
+        /// When overriden in a derived class, this method attempts to use the contained DataContractSerializer to read the deserialize the corresponding object from the given TextReader.
+        /// <para/>The default implementation provided here will throw a System.NotImplementedException on any attempted use.
+        /// </summary>
+        /// <param name="tr">Acts as the source of the text from which the DataContractSerializer is to deserialize the object.</param>
+        /// <exception cref="System.NotImplementedException">The default implementation provided here will throw a System.NotImplementedException on any attempted use.</exception>
+        public virtual TObjectType ReadObject(System.IO.TextReader tr)
+        {
+            throw new System.NotImplementedException("ReadObject(TextReader) is not supported for the {0} class".CheckedFormat(Fcns.CurrentClassName));
+        }
+
+        /// <summary>
         /// Attempts to use an underlying DataContractSerializer to read the deserialize the corresponding object from the given string.
         /// </summary>
-        /// <param name="s">Contains the text from which the DataCongtractSerializer is to deserialize the object.</param>
-        public abstract TObjectType ReadObject(string s);
+        /// <param name="s">Contains the text from which the DataContractSerializer is to deserialize the object.</param>
+        public virtual TObjectType ReadObject(string s)
+        {
+            using (System.IO.StringReader sr = new StringReader(s))
+                return ReadObject(sr);
+        }
 
         /// <summary>
         /// Attempts to open the given path as an serialized text file and read/deserialize the given object from it using an underlying DataContractSerializer
@@ -1496,7 +1524,7 @@ namespace MosaicLib.Utils
         /// Serializes the given object by calling WriteObject on the underlying DataContractSerializer to serialize and write the object into a String
         /// </summary>
         /// <param name="obj">Gives the object that is to be serialized</param>
-        /// <returns>A string containing the serialized representation of the given object as serialized by the contained DataContracxtSerialzier</returns>
+        /// <returns>A string containing the serialized representation of the given object as serialized by the contained DataContractSerializer</returns>
         public abstract string ConvertObjectToString(TObjectType obj);
     }
 
@@ -1545,14 +1573,23 @@ namespace MosaicLib.Utils
         /// <param name="encoding">Defines the XmlWritterSettings.Encoding that will be used.</param>
         public DataContractXmlAdapter(System.Text.Encoding encoding)
         {
-            xws.ConformanceLevel = System.Xml.ConformanceLevel.Document;
-            xws.OmitXmlDeclaration = false;
-            xws.Encoding = encoding;
-            xws.Indent = true;
-            xws.CloseOutput = false;     // this class will explicitly close the underlying stream
+            base.Encoding = encoding;
 
-            xrs.ConformanceLevel = System.Xml.ConformanceLevel.Auto;
-            xrs.CloseInput = false;
+            xws = new System.Xml.XmlWriterSettings()
+            {
+                ConformanceLevel = System.Xml.ConformanceLevel.Document,
+                OmitXmlDeclaration = false,
+                Encoding = encoding,
+                Indent = true,
+                CloseOutput = false,    // this class will explicitly close the underlying stream
+            };
+
+            xrs = new System.Xml.XmlReaderSettings()
+            {
+                ConformanceLevel = System.Xml.ConformanceLevel.Auto,
+                CloseInput = false,     // this class will explicitly close any underlying stream
+            };
+
             VerifyObjectName = true;
         }
 
@@ -1589,7 +1626,7 @@ namespace MosaicLib.Utils
         /// Gets or sets the contained XmlWritterSettings.Encoding property to determine what character encoding will be used.
         /// </summary>
         /// <returns>The text encoding to use. The default is Encoding.ASCII</returns>
-        public System.Text.Encoding Encoding { get { return xws.Encoding; } set { xws.Encoding = value; } }
+        public override System.Text.Encoding Encoding { get { return xws.Encoding; } set { xws.Encoding = base.Encoding = value; } }
 
         /// <summary>
         /// Gets or sets the contained XmlWritterSettings.Indent property to determine if generated Xml text will be wrapped and indented.
@@ -1660,10 +1697,10 @@ namespace MosaicLib.Utils
         public bool VerifyObjectName { get; set; }
 
         /// <summary>Settings used when serializing an object to Xml</summary>
-        protected System.Xml.XmlWriterSettings xws = new System.Xml.XmlWriterSettings();
+        protected System.Xml.XmlWriterSettings xws;
 
         /// <summary>Settings used when deserializing an object from Xml</summary>
-        protected System.Xml.XmlReaderSettings xrs = new System.Xml.XmlReaderSettings();
+        protected System.Xml.XmlReaderSettings xrs;
 
         /// <summary>The DataContractSerializer instance that is used by this adapter.</summary>
         DataContractSerializer dcs = new DataContractSerializer(typeof(TObjectType));
@@ -1675,23 +1712,20 @@ namespace MosaicLib.Utils
         /// <exception cref="System.Runtime.Serialization.SerializationException">The VerifyObjectName Property is set to true, and the element name and namespace do not correspond to the values set in the constructor.</exception>
         public override TObjectType ReadObject(System.IO.Stream readStream)
         {
-            using (System.Xml.XmlReader xr = System.Xml.XmlReader.Create(readStream, xrs))
-            {
-                return (TObjectType) dcs.ReadObject(xr, VerifyObjectName);
-            }
+            using (System.IO.TextReader tr = new System.IO.StreamReader(readStream, Encoding))
+                return ReadObject(tr);
         }
 
         /// <summary>
-        /// Attempts to use the contained DataContractSerializer to read the deserialize the corresponding object from the given string.
+        /// Attempts to use the contained DataContractSerializer to read the deserialize the corresponding object from the given TextReader.
         /// </summary>
-        /// <param name="s">Contains the text from which the DataCongtractSerializer is to deserialize the object.</param>
+        /// <param name="tr">Acts as the source for the text from which the DataContractSerializer is to deserialize the object.</param>
         /// <exception cref="System.Runtime.Serialization.SerializationException">The VerifyObjectName Property is set to true, and the element name and namespace do not correspond to the values set in the constructor.</exception>
-        public override TObjectType ReadObject(String s)
+        public override TObjectType ReadObject(System.IO.TextReader tr)
         {
-            using (System.IO.StringReader sr = new System.IO.StringReader(s))
-            using (System.Xml.XmlReader xr = System.Xml.XmlReader.Create(sr, xrs))
+            using (System.Xml.XmlReader xr = System.Xml.XmlReader.Create(tr, xrs))
             {
-                return (TObjectType) dcs.ReadObject(xr, VerifyObjectName);
+                return (TObjectType)dcs.ReadObject(xr, VerifyObjectName);
             }
         }
 
@@ -1720,13 +1754,13 @@ namespace MosaicLib.Utils
         /// using a reusable StringBuilder and a temporary XmlWriter.
         /// </summary>
         /// <param name="obj">Gives the object that is to be serialized</param>
-        /// <returns>A string containing the ASCII Xml representation of the given object as serialized by the contained DataContracxtSerialzier</returns>
+        /// <returns>A string containing the ASCII Xml representation of the given object as serialized by the contained DataContractSerializer</returns>
         public override string ConvertObjectToString(TObjectType obj)
         {
             if (sb == null)
                 sb = new System.Text.StringBuilder();
             else
-                sb.Length = 0;
+                sb.Clear();
 
             using (System.Xml.XmlWriter xw = System.Xml.XmlWriter.Create(sb, xws))
             {
@@ -1744,7 +1778,7 @@ namespace MosaicLib.Utils
 
     /// <summary>
     /// This adapter class encapsulates a small set of standard use patterns for transcribing between DataContract objects 
-    /// and the corresponding Xml strings and files.  This object contains and makes use of a DataContractSerializer to
+    /// and the corresponding JSON format strings and files.  This object contains and makes use of a DataContractJsonSerializer to
     /// implement that actual Serialization and Deserialization behavior.
     /// </summary>
     /// <typeparam name="TObjectType">
@@ -1758,7 +1792,7 @@ namespace MosaicLib.Utils
         DataContractJsonSerializer dcjs = new DataContractJsonSerializer(typeof(TObjectType));
 
         /// <summary>
-        /// Attempts to use the contained DataContractSerializer to read the deserialize the corresponding object from the given stream using its ReadObject method.  
+        /// Attempts to use the contained DataContractJsonSerializer to read the deserialize the corresponding object from the given stream using its ReadObject method.  
         /// Returns the object if the read was successful.
         /// </summary>
         /// <exception cref="System.Runtime.Serialization.SerializationException">The VerifyObjectName Property is set to true, and the element name and namespace do not correspond to the values set in the constructor.</exception>
@@ -1768,9 +1802,9 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Attempts to use the contained DataContractSerializer to read the deserialize the corresponding object from the given string.
+        /// Attempts to use the contained DataContractJsonSerializer to read the deserialize the corresponding object from the given string.
         /// </summary>
-        /// <param name="s">Contains the text from which the DataCongtractSerializer is to deserialize the object.</param>
+        /// <param name="s">Contains the text from which the DataContractJsonSerializer is to deserialize the object.</param>
         /// <exception cref="System.Runtime.Serialization.SerializationException">The VerifyObjectName Property is set to true, and the element name and namespace do not correspond to the values set in the constructor.</exception>
         public override TObjectType ReadObject(String s)
         {
@@ -1782,7 +1816,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Serializes the given object by calling WriteObject on the contained DataContractSerializer and passing it the given writeStream.
+        /// Serializes the given object by calling WriteObject on the contained DataContractJsonSerializer and passing it the given writeStream.
         /// </summary>
         /// <param name="obj">Gives the object that is to be serialized</param>
         /// <param name="writeStream">Gives the stream on which the serialized data is to be written.</param>
@@ -1795,10 +1829,10 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Serializes the given object by calling WriteObject on the contained DataContractSerializer to serialize and write the object into a String
+        /// Serializes the given object by calling WriteObject on the contained DataContractJsonSerializer to serialize and write the object into a String
         /// </summary>
         /// <param name="obj">Gives the object that is to be serialized</param>
-        /// <returns>A string containing the serialized representation of the given object as serialized by the contained DataContracxtSerialzier</returns>
+        /// <returns>A string containing the serialized representation of the given object as serialized by the contained DataContractJsonSerializer</returns>
         public override string ConvertObjectToString(TObjectType obj)
         {
             if (writeMemoryStream == null)
@@ -1829,6 +1863,7 @@ namespace MosaicLib.Utils
 
         private MemoryStream writeMemoryStream = null;
     }
+
     #endregion
 
     //-------------------------------------------------

@@ -186,6 +186,7 @@ namespace MosaicLib.PartsLib.Common.LPM
 
         IBaseState PartBaseState { get; }
 
+        [Obsolete("Please replace with the use of the corresponding IEquateable<>.Equals method (2017-03-10)")]
         bool IsEqualTo(ILPMState rhs);
     }
 
@@ -274,27 +275,28 @@ namespace MosaicLib.PartsLib.Common.LPM
 
         public BaseState PartBaseState { get; set; }
 
-        public bool IsEqualTo(ILPMState rhs)
+        public bool Equals(ILPMState other)
         {
-            return (rhs != null
-                    && ((NVS.IsNullOrEmpty() && rhs.NVS.IsNullOrEmpty()) || NVS.IsEqualTo(rhs.NVS))
-                    && DeviceCapabilities.IsEqualTo(rhs.DeviceCapabilities)
-                    && PodSensorValues.IsEqualTo(rhs.PodSensorValues)
-                    && DecodedPodInfo.IsEqualTo(rhs.DecodedPodInfo)
-                    && PositionState.IsEqualTo(rhs.PositionState)
-                    && DisplayStateSetpoint.IsEqualTo(rhs.DisplayStateSetpoint)
-                    && DisplayState.IsEqualTo(rhs.DisplayState)
-                    && ButtonSet.IsEqualTo(rhs.ButtonSet)
-                    && E84State.IsEqualTo(rhs.E84State)
-                    && MapResults.IsEqualTo(rhs.MapResults)
-                    && ((PortUsageContextInfo == null && rhs.PortUsageContextInfo == null) || (PortUsageContextInfo != null && PortUsageContextInfo.IsEqualTo(rhs.PortUsageContextInfo)))
-                    && PartBaseState.IsEqualTo(rhs.PartBaseState)
+            return (other != null
+                    && ((NVS.IsNullOrEmpty() && other.NVS.IsNullOrEmpty()) || NVS.IsEqualTo(other.NVS))
+                    && DeviceCapabilities.Equals(other.DeviceCapabilities)
+                    && PodSensorValues.Equals(other.PodSensorValues)
+                    && DecodedPodInfo.Equals(other.DecodedPodInfo)
+                    && PositionState.Equals(other.PositionState)
+                    && DisplayStateSetpoint.Equals(other.DisplayStateSetpoint)
+                    && DisplayState.Equals(other.DisplayState)
+                    && ButtonSet.Equals(other.ButtonSet)
+                    && E84State.Equals(other.E84State)
+                    && MapResults.Equals(other.MapResults)
+                    && ((PortUsageContextInfo == null && other.PortUsageContextInfo == null) || (PortUsageContextInfo != null && PortUsageContextInfo.Equals(other.PortUsageContextInfo)))
+                    && PartBaseState.Equals(other.PartBaseState)
                     );
         }
 
-        public bool Equals(ILPMState other)
-        { 
-            return IsEqualTo(other); 
+        [Obsolete("Please replace with the use of the corresponding IEquateable<>.Equals method (2017-03-10)")]
+        public bool IsEqualTo(ILPMState rhs)
+        {
+            return Equals(rhs);
         }
 
         /// <summary>Supports debugging and logging.</summary>
@@ -362,6 +364,7 @@ namespace MosaicLib.PartsLib.Common.LPM
         DisplayItemState.OnOffFlashState Button1State { get; }      // usually only button or load button
         DisplayItemState.OnOffFlashState Button2State { get; }      // usually unload button if they are separate
 
+        [Obsolete("Please replace with the use of the corresponding IEquateable<>.Equals method (2017-03-10)")]
         bool IsEqualTo(IPortUsageContextInfo rhs);
     }
 
@@ -451,29 +454,30 @@ namespace MosaicLib.PartsLib.Common.LPM
             return sb.ToString();
         }
 
-        public bool IsEqualTo(IPortUsageContextInfo rhs)
+        public bool Equals(IPortUsageContextInfo other)
         {
-            return (rhs != null
-                    && AMS == rhs.AMS
-                    && LTS == rhs.LTS
-                    && LRS == rhs.LRS
-                    && Initializing == rhs.Initializing
-                    && Error == rhs.Error
-                    && Alarm == rhs.Alarm
-                    && Busy == rhs.Busy
-                    && Loading == rhs.Loading
-                    && Unloading == rhs.Unloading
-                    && E84LoadInProgress == rhs.E84LoadInProgress
-                    && E84UnloadInProgress == rhs.E84UnloadInProgress
-                    && APresentOrPlacementAlarmIsActive == rhs.APresentOrPlacementAlarmIsActive
-                    && Button1State == rhs.Button1State
-                    && Button2State == rhs.Button2State
+            return (other != null
+                    && AMS == other.AMS
+                    && LTS == other.LTS
+                    && LRS == other.LRS
+                    && Initializing == other.Initializing
+                    && Error == other.Error
+                    && Alarm == other.Alarm
+                    && Busy == other.Busy
+                    && Loading == other.Loading
+                    && Unloading == other.Unloading
+                    && E84LoadInProgress == other.E84LoadInProgress
+                    && E84UnloadInProgress == other.E84UnloadInProgress
+                    && APresentOrPlacementAlarmIsActive == other.APresentOrPlacementAlarmIsActive
+                    && Button1State == other.Button1State
+                    && Button2State == other.Button2State
                     );
         }
 
-        public bool Equals(IPortUsageContextInfo other)
+        [Obsolete("Please replace with the use of the corresponding IEquateable<>.Equals method (2017-03-10)")]
+        public bool IsEqualTo(IPortUsageContextInfo rhs)
         {
-            return IsEqualTo(other);
+            return Equals(rhs);
         }
     }
 
@@ -496,7 +500,7 @@ namespace MosaicLib.PartsLib.Common.LPM
         /// <summary>This value indicates what mapping capabilities this device offers.</summary>
         MapperCapabilities MapperCapabilities { get; }
 
-        /// <summary>Returns true if this object has the same contents as the given rhs one.</summary>
+        [Obsolete("Please replace with the use of the corresponding IEquateable<>.Equals method (2017-03-10)")]
         bool IsEqualTo(IDeviceCapabilities rhs);
     }
 
@@ -549,19 +553,19 @@ namespace MosaicLib.PartsLib.Common.LPM
         public MapperCapabilities MapperCapabilities { get; set; }
 
         /// <summary>Returns true if this object has the same contents as the given rhs one.</summary>
-        public bool IsEqualTo(IDeviceCapabilities rhs)
+        public bool Equals(IDeviceCapabilities other)
         {
-            return (rhs != null
-                    && TagReaderType == rhs.TagReaderType
-                    && HasE84 == rhs.HasE84
-                    && MapperCapabilities == rhs.MapperCapabilities
+            return (other != null
+                    && TagReaderType == other.TagReaderType
+                    && HasE84 == other.HasE84
+                    && MapperCapabilities == other.MapperCapabilities
                     );
         }
 
-        /// <summary>Returns true if this object has the same contents as the given other one.</summary>
-        public bool Equals(IDeviceCapabilities other)
+        [Obsolete("Please replace with the use of the corresponding IEquateable<>.Equals method (2017-03-10)")]
+        public bool IsEqualTo(IDeviceCapabilities rhs)
         {
-            return IsEqualTo(other);
+            return Equals(rhs);
         }
 
         /// <summary>Supports debugging and logging.</summary>
@@ -590,6 +594,7 @@ namespace MosaicLib.PartsLib.Common.LPM
         SlotState[] SlotMap { get; }
         string ResultCode { get; }
 
+        [Obsolete("Please replace with the use of the corresponding IEquateable<>.Equals method (2017-03-10)")]
         bool IsEqualTo(IMapResults rhs);
     }
 
@@ -635,17 +640,18 @@ namespace MosaicLib.PartsLib.Common.LPM
 
         public string ResultCode { get; set; }
 
-        public bool IsEqualTo(IMapResults rhs)
+        public bool Equals(IMapResults other)
         {
-            return (rhs != null
-                    && SlotMap.IsEqualTo(rhs.SlotMap)
-                    && ResultCode == rhs.ResultCode
+            return (other != null
+                    && SlotMap.IsEqualTo(other.SlotMap)
+                    && ResultCode == other.ResultCode
                     );
         }
 
-        public bool Equals(IMapResults other)
+        [Obsolete("Please replace with the use of the corresponding IEquateable<>.Equals method (2017-03-10)")]
+        public bool IsEqualTo(IMapResults rhs)
         {
-            return IsEqualTo(other);
+            return Equals(rhs);
         }
 
         /// <summary>Supports debugging and logging.</summary>
@@ -681,6 +687,7 @@ namespace MosaicLib.PartsLib.Common.LPM
         bool InfoPad_C { get; }
         bool InfoPad_D { get; }
 
+        [Obsolete("Please replace with the use of the corresponding IEquateable<>.Equals method (2017-03-10)")]
         bool IsEqualTo(IPodSensorValues rhs);
     }
 
@@ -717,17 +724,18 @@ namespace MosaicLib.PartsLib.Common.LPM
         public bool InfoPad_C { get { return InfoPads.IsSet(InfoPads.C); } }
         public bool InfoPad_D { get { return InfoPads.IsSet(InfoPads.D); } }
 
-        public bool IsEqualTo(IPodSensorValues rhs)
+        public bool Equals(IPodSensorValues other)
         {
-            return (rhs != null
-                    && PresentPlaced == rhs.PresentPlaced
-                    && InfoPads == rhs.InfoPads
+            return (other != null
+                    && PresentPlaced == other.PresentPlaced
+                    && InfoPads == other.InfoPads
                     );
         }
 
-        public bool Equals(IPodSensorValues other)
+        [Obsolete("Please replace with the use of the corresponding IEquateable<>.Equals method (2017-03-10)")]
+        public bool IsEqualTo(IPodSensorValues rhs)
         {
-            return IsEqualTo(other);
+            return Equals(rhs);
         }
 
         /// <summary>Supports debugging and logging.</summary>
@@ -788,6 +796,7 @@ namespace MosaicLib.PartsLib.Common.LPM
 
         OCA OCA { get; }
 
+        [Obsolete("Please replace with the use of the corresponding IEquateable<>.Equals method (2017-03-10)")]
         bool IsEqualTo(IDecodedPodInfo rhs);
     }
 
@@ -813,17 +822,18 @@ namespace MosaicLib.PartsLib.Common.LPM
 
         public OCA OCA { get; set; }
 
-        public bool IsEqualTo(IDecodedPodInfo rhs)
+        public bool Equals(IDecodedPodInfo other)
         {
-            return (rhs != null
-                    && CarrierType == rhs.CarrierType
-                    && OCA == rhs.OCA
+            return (other != null
+                    && CarrierType == other.CarrierType
+                    && OCA == other.OCA
                     );
         }
 
-        public bool Equals(IDecodedPodInfo other)
+        [Obsolete("Please replace with the use of the corresponding IEquateable<>.Equals method (2017-03-10)")]
+        public bool IsEqualTo(IDecodedPodInfo rhs)
         {
-            return IsEqualTo(other);
+            return Equals(rhs);
         }
 
         /// <summary>Supports debugging and logging.</summary>
@@ -1001,7 +1011,7 @@ namespace MosaicLib.PartsLib.Common.LPM
         /// <summary>Generates and returns a PositionSummary value for the current position.</summary>
         PositionSummary PositionSummary { get; }
 
-        /// <summary>Returns true if this object's contents are the same as the given rhs object's.</summary>
+        [Obsolete("Please replace with the use of the corresponding IEquateable<>.Equals method (2017-03-10)")]
         bool IsEqualTo(IPositionState rhs);
     }
 
@@ -1162,31 +1172,32 @@ namespace MosaicLib.PartsLib.Common.LPM
 
         private string explicitInMotionReason;
 
-        public bool IsEqualTo(IPositionState rhs)
+        public bool Equals(IPositionState other)
         {
-            return (rhs != null
-                    && ClampState == rhs.ClampState
-                    && DockState == rhs.DockState
-                    && VacState == rhs.VacState
-                    && DoorKeysState == rhs.DoorKeysState
-                    && DoorOpenState == rhs.DoorOpenState
-                    && DoorDownState == rhs.DoorDownState
-                    && IsReferenced == rhs.IsReferenced
-                    && IsServoOn == rhs.IsServoOn
-                    && MotionILockSensorIsTripped == rhs.MotionILockSensorIsTripped
-                    && ProtrusionSensorIsTripped == rhs.ProtrusionSensorIsTripped
-                    && ExplicitInMotionReason == rhs.ExplicitInMotionReason
-                    && IsCarrierDoorDetected == rhs.IsCarrierDoorDetected
-                    && IsCarrierOpen == rhs.IsCarrierOpen
-                    && IsCarrierClosed == rhs.IsCarrierClosed
-                    && IsValid == rhs.IsValid
-                    && IsSafeToAccess == rhs.IsSafeToAccess
+            return (other != null
+                    && ClampState == other.ClampState
+                    && DockState == other.DockState
+                    && VacState == other.VacState
+                    && DoorKeysState == other.DoorKeysState
+                    && DoorOpenState == other.DoorOpenState
+                    && DoorDownState == other.DoorDownState
+                    && IsReferenced == other.IsReferenced
+                    && IsServoOn == other.IsServoOn
+                    && MotionILockSensorIsTripped == other.MotionILockSensorIsTripped
+                    && ProtrusionSensorIsTripped == other.ProtrusionSensorIsTripped
+                    && ExplicitInMotionReason == other.ExplicitInMotionReason
+                    && IsCarrierDoorDetected == other.IsCarrierDoorDetected
+                    && IsCarrierOpen == other.IsCarrierOpen
+                    && IsCarrierClosed == other.IsCarrierClosed
+                    && IsValid == other.IsValid
+                    && IsSafeToAccess == other.IsSafeToAccess
                     );
         }
 
-        public bool Equals(IPositionState other)
+        [Obsolete("Please replace with the use of the corresponding IEquateable<>.Equals method (2017-03-10)")]
+        public bool IsEqualTo(IPositionState rhs)
         {
-            return IsEqualTo(other);
+            return Equals(rhs);
         }
 
         public bool IsInMotion { get { return !InMotionReason.IsNullOrEmpty(); } }
@@ -1258,6 +1269,7 @@ namespace MosaicLib.PartsLib.Common.LPM
         IActuatorState DoorOpenState { get; }
         IActuatorState DoorDownState { get; }
 
+        [Obsolete("Please replace with the use of the corresponding IEquateable<>.Equals method (2017-03-10)")]
         bool IsEqualTo(IActuatorStates rhs);
     }
 
@@ -1290,35 +1302,29 @@ namespace MosaicLib.PartsLib.Common.LPM
             return this;
         }
 
-        public ActuatorState ClampState { get; set; }
-        public ActuatorState DockState { get; set; }
-        public ActuatorState VacState { get; set; }
-        public ActuatorState DoorKeysState { get; set; }
-        public ActuatorState DoorOpenState { get; set; }
-        public ActuatorState DoorDownState { get; set; }
-
-        IActuatorState IActuatorStates.ClampState { get { return this.ClampState; } }
-        IActuatorState IActuatorStates.DockState { get { return this.DockState; } }
-        IActuatorState IActuatorStates.VacState { get { return this.VacState; } }
-        IActuatorState IActuatorStates.DoorKeysState { get { return this.DoorKeysState; } }
-        IActuatorState IActuatorStates.DoorOpenState { get { return this.DoorOpenState; } }
-        IActuatorState IActuatorStates.DoorDownState { get { return this.DoorDownState; } }
-
-        public bool IsEqualTo(IActuatorStates rhs)
-        {
-            return (rhs != null
-                    && ClampState.IsEqualTo(rhs.ClampState)
-                    && DockState.IsEqualTo(rhs.DockState)
-                    && VacState.IsEqualTo(rhs.VacState)
-                    && DoorKeysState.IsEqualTo(rhs.DoorKeysState)
-                    && DoorOpenState.IsEqualTo(rhs.DoorOpenState)
-                    && DoorDownState.IsEqualTo(rhs.DoorDownState)
-                    );
-        }
+        public IActuatorState ClampState { get; set; }
+        public IActuatorState DockState { get; set; }
+        public IActuatorState VacState { get; set; }
+        public IActuatorState DoorKeysState { get; set; }
+        public IActuatorState DoorOpenState { get; set; }
+        public IActuatorState DoorDownState { get; set; }
 
         public bool Equals(IActuatorStates other)
         {
-            return IsEqualTo(other);
+            return (other != null
+                    && ClampState.Equals(other.ClampState)
+                    && DockState.Equals(other.DockState)
+                    && VacState.Equals(other.VacState)
+                    && DoorKeysState.Equals(other.DoorKeysState)
+                    && DoorOpenState.Equals(other.DoorOpenState)
+                    && DoorDownState.Equals(other.DoorDownState)
+                    );
+        }
+
+        [Obsolete("Please replace with the use of the corresponding IEquateable<>.Equals method (2017-03-10)")]
+        public bool IsEqualTo(IActuatorStates rhs)
+        {
+            return Equals(rhs);
         }
     }
 
@@ -1371,16 +1377,18 @@ namespace MosaicLib.PartsLib.Common.LPM
         IDisplayItemState[] IDisplayState.PanelItemArray { get { return this.PanelItemArray; } }
         IDisplayItemState[] IDisplayState.AllItemArray { get { return this.AllItemArray; } }
 
-        public bool IsEqualTo(IDisplayState rhs)
+        public bool Equals(IDisplayState other)
         {
-            return (rhs != null
-                    && AllItemArray.IsEqualTo(rhs.AllItemArray)
+            return (other != null
+                    && AllItemArray.IsEqualTo(other.AllItemArray)
                     );
         }
 
-        public bool Equals(IDisplayState other)
+
+        [Obsolete("Please replace with the use of the corresponding IEquateable<>.Equals method (2017-03-10)")]
+        public bool IsEqualTo(IDisplayState rhs)
         {
-            return IsEqualTo(other);
+            return Equals(rhs);
         }
 
         public void ServiceFlashing(bool flashState)
@@ -1400,6 +1408,7 @@ namespace MosaicLib.PartsLib.Common.LPM
         int Button1ChangeCount { get; }
         int Button2ChangeCount { get; }
 
+        [Obsolete("Please replace with the use of the corresponding IEquateable<>.Equals method (2017-03-10)")]
         bool IsEqualTo(IButtonSet rhs);
     }
 
@@ -1439,19 +1448,20 @@ namespace MosaicLib.PartsLib.Common.LPM
             }
         }
 
-        public bool IsEqualTo(IButtonSet rhs)
+        public bool Equals(IButtonSet other)
         {
-            return (rhs != null 
-                    && Button1 == rhs.Button1 
-                    && Button2 == rhs.Button2
-                    && Button1ChangeCount == rhs.Button1ChangeCount 
-                    && Button2ChangeCount == rhs.Button2ChangeCount
+            return (other != null 
+                    && Button1 == other.Button1 
+                    && Button2 == other.Button2
+                    && Button1ChangeCount == other.Button1ChangeCount 
+                    && Button2ChangeCount == other.Button2ChangeCount
                     );
         }
 
-        public bool Equals(IButtonSet other)
+        [Obsolete("Please replace with the use of the corresponding IEquateable<>.Equals method (2017-03-10)")]
+        public bool IsEqualTo(IButtonSet rhs)
         {
-            return IsEqualTo(other);
+            return Equals(rhs);
         }
 
         public override string ToString()
@@ -1578,7 +1588,7 @@ namespace MosaicLib.PartsLib.Common.LPM
 
         public override bool Equals(object obj)
         {
-            return IsEqualTo(obj as IDisplayItemState);
+            return Equals(obj as IDisplayItemState);
         }
 
         public override int GetHashCode()
@@ -1591,25 +1601,26 @@ namespace MosaicLib.PartsLib.Common.LPM
             return "{0} {1} {2}".CheckedFormat(Text, State, CurrentBackgroundColor);
         }
 
-        public bool IsEqualTo(IDisplayItemState rhs)
+        public bool Equals(IDisplayItemState other)
         {
-            return (rhs != null
-                    && IsButton == rhs.IsButton
-                    && ItemIdx == rhs.ItemIdx
-                    && Text == rhs.Text
-                    && BorderColor == rhs.BorderColor
-                    && OffBackgroundColor == rhs.OffBackgroundColor
-                    && OnBackgroundColor == rhs.OnBackgroundColor
-                    && State == rhs.State
-                    && IsInternal == rhs.IsInternal
-                    && LastLampCmdState == rhs.LastLampCmdState
-                    && FlashStateIsOn == rhs.FlashStateIsOn
+            return (other != null
+                    && IsButton == other.IsButton
+                    && ItemIdx == other.ItemIdx
+                    && Text == other.Text
+                    && BorderColor == other.BorderColor
+                    && OffBackgroundColor == other.OffBackgroundColor
+                    && OnBackgroundColor == other.OnBackgroundColor
+                    && State == other.State
+                    && IsInternal == other.IsInternal
+                    && LastLampCmdState == other.LastLampCmdState
+                    && FlashStateIsOn == other.FlashStateIsOn
                     );
         }
 
-        public bool Equals(IDisplayItemState other)
+        [Obsolete("Please replace with the use of the corresponding IEquateable<>.Equals method (2017-03-10)")]
+        public bool IsEqualTo(IDisplayItemState rhs)
         {
-            return IsEqualTo(other);
+            return Equals(rhs);
         }
     }
 
@@ -1629,6 +1640,7 @@ namespace MosaicLib.PartsLib.Common.LPM
 
         bool IsEmpty { get; }
 
+        [Obsolete("Please replace with the use of the corresponding IEquateable<>.Equals method (2017-03-10)")]
         bool IsEqualTo(IE84State rhs);
     }
 
@@ -1671,7 +1683,7 @@ namespace MosaicLib.PartsLib.Common.LPM
             return SetFrom(null);
         }
 
-        public bool IsEmpty { get { return IsEqualTo(emptyE84State); } }
+        public bool IsEmpty { get { return Equals(emptyE84State); } }
 
         private readonly static IE84State emptyE84State = new E84State();
 
@@ -1687,20 +1699,21 @@ namespace MosaicLib.PartsLib.Common.LPM
 
         public bool OutputSetpointPinsMatchesReadback { get { return (OutputSetpoint.PackedWord == OutputReadback.PackedWord); } }
 
-        public bool IsEqualTo(IE84State rhs)
+        public bool Equals(IE84State other)
         {
-            return (rhs != null
-                    && StateCode == rhs.StateCode
-                    && StateCodeReason == rhs.StateCodeReason
-                    && OutputSetpoint.IsEqualTo(rhs.OutputSetpoint)
-                    && OutputReadback.IsEqualTo(rhs.OutputReadback)
-                    && Inputs.IsEqualTo(rhs.Inputs)
+            return (other != null
+                    && StateCode == other.StateCode
+                    && StateCodeReason == other.StateCodeReason
+                    && OutputSetpoint.Equals(other.OutputSetpoint)
+                    && OutputReadback.Equals(other.OutputReadback)
+                    && Inputs.Equals(other.Inputs)
                     );
         }
 
-        public bool Equals(IE84State other)
+        [Obsolete("Please replace with the use of the corresponding IEquateable<>.Equals method (2017-03-10)")]
+        public bool IsEqualTo(IE84State rhs)
         {
-            return IsEqualTo(other);
+            return Equals(rhs);
         }
 
         /// <summary>Supports debugging and logging.</summary>

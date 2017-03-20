@@ -115,8 +115,6 @@ namespace MosaicLib.Time
 		/// <summary>Storage for the actual time stamp value.</summary>
 		private double qpcTime;						// value defaults to zero
 
-		private static QpcTimeStamp zeroTime = new QpcTimeStamp(0.0);		// default constructor sets its qpcTime to zero.
-
 		/// <summary>Constructor for use with an explicitly provied double qpc time stamp value.</summary>
 		/// <param name="time">the double QPC time value to retain as the time stamp</param>
 		public QpcTimeStamp(double time) { qpcTime = time; }
@@ -126,7 +124,7 @@ namespace MosaicLib.Time
 		public QpcTimeStamp(QpcTimeStamp rhs) { qpcTime = rhs.qpcTime; }
 
 		/// <summary>Static method to return the constant Zero timestamp value.</summary>
-		public static QpcTimeStamp Zero { get { return zeroTime; } }
+		public static QpcTimeStamp Zero { get { return default(QpcTimeStamp); } }
 
 		/// <summary>Static method to return the current QPC counter value in a new QPCTimeStamp</summary>
 		public static QpcTimeStamp Now { get { return new QpcTimeStamp(Qpc.TimeNow); } }
@@ -156,7 +154,7 @@ namespace MosaicLib.Time
 		public QpcTimeStamp Substract(double rhs) { Time -= rhs; return this; }
 
 		/// <summary>returns the TimeSpan for the difference between the lhs timestamp and the rhs timestamp (lhs - rhs)</summary>
-		public static TimeSpan operator -(QpcTimeStamp lhs, QpcTimeStamp rhs) { return TimeSpan.FromSeconds(lhs.Time - rhs.Time); }
+		public static TimeSpan operator -(QpcTimeStamp lhs, QpcTimeStamp rhs) { return (lhs.Time - rhs.Time).FromSeconds(); }
 
 		/// <summary>returns a new QpcTimeStamp value with the timestamp set to the lhs timestamp value decreased by the given rhs TimeSpan</summary>
 		public static QpcTimeStamp operator -(QpcTimeStamp lhs, double rhs) { return new QpcTimeStamp(lhs.Time - rhs); }
@@ -241,14 +239,14 @@ namespace MosaicLib.Time
         /// <summary>Defines timer based on given interval and autoReset flag</summary>
         /// <param name="triggerInterval">TimeSpan value that defines the interval length</param>
         /// <param name="autoReset">boolean value that determines if the timer resets itself on reported experation of the timer or if it requires the client to explicitly restart it using the Reset method.</param>
-        public QpcTimer(TimeSpan triggerInterval, bool autoReset) 
-            : this(triggerInterval.TotalSeconds, autoReset) 
+        public QpcTimer(TimeSpan triggerInterval, bool autoReset = false)
+            : this(triggerInterval.TotalSeconds, autoReset: autoReset) 
         { }
 
         /// <summary>Defines timer based on given interval and autoReset flag</summary>
         /// <param name="triggerIntervalInSec">double value that defines the timer interval in units of seconds.</param>
         /// <param name="autoReset">boolean value that determines if the timer resets itself on reported experation of the timer or if it requires the client to explicitly restart it using the Reset method.</param>
-        public QpcTimer(double triggerIntervalInSec, bool autoReset)
+        public QpcTimer(double triggerIntervalInSec, bool autoReset = false)
             : this()
 		{
             lastTriggerTimeStamp = QpcTimeStamp.Zero;           // essentially calls Stop();
@@ -270,7 +268,7 @@ namespace MosaicLib.Time
         /// Property can be used to get or set the TriggerInterval as a TimeSpan value.  
         /// Setting this interval implicitly resets the timer to expire after the interval has elpased since the since the last occurance (if it has already been started).
         /// </summary>
-        public TimeSpan TriggerInterval { get { return TimeSpan.FromSeconds(TriggerIntervalInSec); } set { TriggerIntervalInSec = value.TotalSeconds; } }
+        public TimeSpan TriggerInterval { get { return TriggerIntervalInSec.FromSeconds(); } set { TriggerIntervalInSec = value.TotalSeconds; } }
 
         /// <summary>
         /// Indicates that the timer has been set to use autoReset behavior.  Setter allows autoReset behavior to be enabled or disabled, typically as part of the construction time property initializer list.
@@ -290,21 +288,26 @@ namespace MosaicLib.Time
             }
         }
 
-        /// <summary>This enum defines the various behaviors that a QpcTimer can be configured to use.</summary>
+        /// <summary>
+        /// This enum defines the various behaviors that a QpcTimer can be configured to use.
+        /// <para/>None (0x00), AutoReset (0x01), ElapsedTimeIsZeroWhenStopped (0x02), ZeroTriggerIntervalRunsTimer (0x04)
+        /// <para/>NewDefault = (Behavior.ElapsedTimeIsZeroWhenStopped | Behavior.ZeroTriggerIntervalRunsTimer)
+        /// <para/>NewAutoReset = (Behavior.AutoReset | Behavior.ElapsedTimeIsZeroWhenStopped | Behavior.ZeroTriggerIntervalRunsTimer)
+        /// </summary>
         [Flags]
-        public enum Behavior
+        public enum Behavior : int
         {
             /// <summary>Struct default constructor default value - all zeros - no listed behaviors are selected.</summary>
-            None = 0x0000,
+            None = 0x00,
          
             /// <summary>Selects that the AutoReset behavior shall be used</summary>
-            AutoReset = 0x0001,
+            AutoReset = 0x01,
 
             /// <summary>Selects that the ElapsedTime properties will report zero when the timer is stopped.  Otherwise they report large elapsed times (now - zero)</summary>
-            ElapsedTimeIsZeroWhenStopped = 0x0002,
+            ElapsedTimeIsZeroWhenStopped = 0x02,
 
             /// <summary>Selects that the IsTriggered and GetIsTriggered functions/properties will allow the timer to run if when the TriggerInterval is zero.  default is that they will not.</summary>
-            ZeroTriggerIntervalRunsTimer = 0x0004,
+            ZeroTriggerIntervalRunsTimer = 0x04,
 
             /// <summary>Selects that both ElapsedTimeIsZeroWhenStopped and ZeroTriggerIntervaleRunsTimer will be enabled.<para/>This default value must be selected explicitly when desired</summary>
             NewDefault = (Behavior.ElapsedTimeIsZeroWhenStopped | Behavior.ZeroTriggerIntervalRunsTimer),
