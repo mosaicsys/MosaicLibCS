@@ -275,10 +275,7 @@ namespace MosaicLib.Time
         /// </summary>
         public bool AutoReset
         {
-            get
-            {
-                return (SelectedBehavior & Behavior.AutoReset) != Behavior.None;
-            }
+            get { return (SelectedBehavior & Behavior.AutoReset) != Behavior.None; }
             set
             {
                 if (value)
@@ -290,29 +287,32 @@ namespace MosaicLib.Time
 
         /// <summary>
         /// This enum defines the various behaviors that a QpcTimer can be configured to use.
-        /// <para/>None (0x00), AutoReset (0x01), ElapsedTimeIsZeroWhenStopped (0x02), ZeroTriggerIntervalRunsTimer (0x04)
+        /// <para/>None (0x00), AutoReset (0x01), ElapsedTimeIsZeroWhenStopped (0x02), ZeroTriggerIntervalRunsTimer (0x04), IntervalMeasurementTimer (0x08)
         /// <para/>NewDefault = (Behavior.ElapsedTimeIsZeroWhenStopped | Behavior.ZeroTriggerIntervalRunsTimer)
         /// <para/>NewAutoReset = (Behavior.AutoReset | Behavior.ElapsedTimeIsZeroWhenStopped | Behavior.ZeroTriggerIntervalRunsTimer)
         /// </summary>
         [Flags]
         public enum Behavior : int
         {
-            /// <summary>Struct default constructor default value - all zeros - no listed behaviors are selected.</summary>
+            /// <summary>Struct default constructor default value - all zeros - no listed behaviors are selected. [0x00]</summary>
             None = 0x00,
          
-            /// <summary>Selects that the AutoReset behavior shall be used</summary>
+            /// <summary>Selects that the AutoReset behavior shall be used [0x01]</summary>
             AutoReset = 0x01,
 
-            /// <summary>Selects that the ElapsedTime properties will report zero when the timer is stopped.  Otherwise they report large elapsed times (now - zero)</summary>
+            /// <summary>Selects that the ElapsedTime properties will report zero when the timer is stopped.  Otherwise they report large elapsed times (now - zero) [0x02]</summary>
             ElapsedTimeIsZeroWhenStopped = 0x02,
 
-            /// <summary>Selects that the IsTriggered and GetIsTriggered functions/properties will allow the timer to run if when the TriggerInterval is zero.  default is that they will not.</summary>
+            /// <summary>Selects that the IsTriggered and GetIsTriggered functions/properties will allow the timer to run if when the TriggerInterval is zero.  default is that they will not. [0x04]</summary>
             ZeroTriggerIntervalRunsTimer = 0x04,
 
-            /// <summary>Selects that both ElapsedTimeIsZeroWhenStopped and ZeroTriggerIntervaleRunsTimer will be enabled.<para/>This default value must be selected explicitly when desired</summary>
+            /// <summary>When this behavior is selected the timer will never trigger and each time the ElapsedTimer is obtained the timer will reset itself. [0x08]</summary>
+            IntervalMeasurementTimer = 0x08,
+
+            /// <summary>Selects that both ElapsedTimeIsZeroWhenStopped and ZeroTriggerIntervaleRunsTimer will be enabled.<para/>This default value must be selected explicitly when desired [0x06]</summary>
             NewDefault = (Behavior.ElapsedTimeIsZeroWhenStopped | Behavior.ZeroTriggerIntervalRunsTimer),
 
-            /// <summary>Selects that AutoReset, ElapsedTimeIsZeroWhenStopped, and ZeroTriggerIntervaleRunsTimer will be enabled.</summary>
+            /// <summary>Selects that AutoReset, ElapsedTimeIsZeroWhenStopped, and ZeroTriggerIntervaleRunsTimer will be enabled. [0x07]</summary>
             NewAutoReset = (Behavior.AutoReset | Behavior.ElapsedTimeIsZeroWhenStopped | Behavior.ZeroTriggerIntervalRunsTimer),
         }
 
@@ -326,6 +326,10 @@ namespace MosaicLib.Time
 
         /// <summary>Indicates that Timer may trigger even when TriggerInterval is zero</summary>
         public bool ZeroTriggerIntervalRunsTimer { get { return ((SelectedBehavior & Behavior.ZeroTriggerIntervalRunsTimer) != Behavior.None); } }
+
+        /// <summary>Returns true if the SelectedBehavior has the IntervalMeasurementTimer option selected</summary>
+        public bool IsIntervalMeasurementTimer { get { return (SelectedBehavior & Behavior.IntervalMeasurementTimer) != Behavior.None; } }
+
 
         /// <summary>
         /// Method is used to reset the timer to occur after TriggerInterval has elpased from now.  This is a synonym for Start().
@@ -346,17 +350,14 @@ namespace MosaicLib.Time
 		}
 
         /// <summary>
-        /// Getter returns true if the timer has been started.
+        /// Getter returns true if the timer has been started (i.e. !lastTriggerTimeStamp.IsZero).  
         /// Setter starts the timer if assigned to true or stops the timer if assigned to false.
         /// NOTE: use of the setter for this property puts the QpcTimer in the new behavior where 
         /// ElapsedTime is forced to zero when the timer is stopped and where the TriggerInterval of zero will not block the timer from triggering (negative values still do)
         /// </summary>
         public bool Started
         {
-            get 
-            { 
-                return !lastTriggerTimeStamp.IsZero; 
-            }
+            get { return !lastTriggerTimeStamp.IsZero; }
 
             set 
             {
@@ -498,33 +499,40 @@ namespace MosaicLib.Time
         private void InnerGetIsTriggered(QpcTimeStamp now, out bool isTimerRunning, out bool isTimerTriggered)
         {
             isTimerRunning = (Started && (triggerIntervalInSec > 0.0) || (triggerIntervalInSec == 0.0 && ZeroTriggerIntervalRunsTimer));
-            isTimerTriggered = isTimerRunning && (now > nextTriggerTimeStamp);
+            isTimerTriggered = isTimerRunning && (now > nextTriggerTimeStamp) && !IsIntervalMeasurementTimer;
         }
 
         /// <summary>
         /// Gives  the ElapsedTimeInSeconds since the timer was last started or expired.
+        /// <para/>If the IntervalMeasurmentTimer behavior is selected and the timer is running then the use of this property getter will also Reset the timer
         /// </summary>
         public double ElapsedTimeInSeconds { get { return GetElapsedTime(QpcTimeStamp.Now).TotalSeconds; } }
 
         /// <summary>
         /// Gives the ElapsedTime since the timer was last started or expired as a TimeSpan.
+        /// <para/>If the IntervalMeasurmentTimer behavior is selected and the timer is running then the use of this property getter will also Reset the timer
         /// </summary>
         public TimeSpan ElapsedTime { get { return GetElapsedTime(QpcTimeStamp.Now); } }
 
         /// <summary>
         /// Gives the value of the ElapsedTime property at the time that the timer last transitioned to triggered or was stopped.  This value is set to TimeSpan.Zero when the timer is started.
+        /// <para/>If the IntervalMeasurmentTimer behavior is selected and the timer is running then the use of this property getter will also Reset the timer
         /// </summary>
         public TimeSpan ElapsedTimeAtLastTrigger { get; private set; }
 
         /// <summary>
         /// Gives the Elapsed Time between the given now value and the time that the timer last expired as a TimeSpan value.
+        /// <para/>If the IntervalMeasurmentTimer behavior is selected and the timer is running then the use of this method will also Reset the timer
         /// </summary>
         public TimeSpan GetElapsedTime(QpcTimeStamp now)
         {
-            if (!lastTriggerTimeStamp.IsZero || !ElapsedTimeIsZeroWhenStopped)
-                return (now - lastTriggerTimeStamp);
-            else
-                return TimeSpan.Zero;
+            bool started = Started;
+            TimeSpan result = (started || !ElapsedTimeIsZeroWhenStopped) ? (now - lastTriggerTimeStamp) : TimeSpan.Zero;
+
+            if (IsIntervalMeasurementTimer && started)
+                Reset();
+
+            return result;
         }
 
         /// <summary>

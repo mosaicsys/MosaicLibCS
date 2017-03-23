@@ -26,11 +26,12 @@ using System.Collections.Generic;
 using MosaicLib.Utils;
 using MosaicLib.Time;
 using MosaicLib.Modular;
-using MosaicLib.Modular.Part;
+using MosaicLib.Modular.Action;
 using MosaicLib.Modular.Config;
 using MosaicLib.Modular.Config.Attributes;
 using MosaicLib.Modular.Interconnect.Values;
 using MosaicLib.Modular.Interconnect.Values.Attributes;
+using MosaicLib.Modular.Part;
 
 namespace MosaicLib.PartsLib.Scan.ScanEngine
 {
@@ -62,7 +63,8 @@ namespace MosaicLib.PartsLib.Scan.ScanEngine
             PlugInsIVI = other.PlugInsIVI ?? fallbackIVI;
             Installed = other.Installed;
             NominalRateInHz = other.NominalRateInHz;
-            pluginsToAddList = other.pluginsToAddList;        // no need to clone: it is already readonly.
+            _pluginsToAddList = other._pluginsToAddList;        // no need to clone: it is already readonly.
+            _pluginsToAddSet = other._pluginsToAddSet;
         }
 
         /// <summary>
@@ -86,8 +88,11 @@ namespace MosaicLib.PartsLib.Scan.ScanEngine
             set { double period = value.TotalSeconds; NominalRateInHz = (period > 0.0 ? 1.0/period : 0.0); }
         }
 
-        public IList<IScanEnginePlugin> PluginsToAddList { get { return pluginsToAddList; } set { pluginsToAddList = new List<IScanEnginePlugin>(value).AsReadOnly(); } }
-        private IList<IScanEnginePlugin> pluginsToAddList;
+        public IList<IScanEnginePlugin> PluginsToAddList { get { return _pluginsToAddList; } set { _pluginsToAddList = new List<IScanEnginePlugin>(value).AsReadOnly(); } }
+        private IList<IScanEnginePlugin> _pluginsToAddList;
+
+        public IEnumerable<IScanEnginePlugin> PluginsToAddSet { get { return _pluginsToAddSet ?? _pluginsToAddList ?? emptyPluginArray; } set { _pluginsToAddSet = value; } }
+        private IEnumerable<IScanEnginePlugin> _pluginsToAddSet = null;
 
         /// <summary>
         /// Uses Modular.Config to Setup portions of this instance.  Requires and issueEmitter and a valueEmitter to use (use null or Logging.NullEmitter to surpress output).
@@ -104,6 +109,8 @@ namespace MosaicLib.PartsLib.Scan.ScanEngine
 
             return this;
         }
+
+        public static readonly IScanEnginePlugin[] emptyPluginArray = new IScanEnginePlugin[0];
     }
 
     #endregion
@@ -289,7 +296,7 @@ namespace MosaicLib.PartsLib.Scan.ScanEngine
 
     #endregion
 
-    #region ScanEnginePart
+    #region ScanEnginePart, IScanEnginePart
 
     /// <summary>
     /// SimpleActivePart used to implement the pluggable Scan Engine.  
@@ -311,55 +318,38 @@ namespace MosaicLib.PartsLib.Scan.ScanEngine
 
             PrivateBaseState.SetSimulated(false, true);
 
-            PerformAddPlugins(Config.PluginsToAddList.ToArray());
+            scanEngineHelper = new ScanEngineHelper(config);
         }
 
         protected ScanEnginePartConfig Config { get; private set; }
+        private ScanEngineHelper scanEngineHelper;
 
         #endregion
 
-        #region public API
+        #region Add and AddRange methods
 
         public ScanEnginePart Add(IScanEnginePlugin plugin)
         {
             return Add(new[] { plugin });
         }
 
-        public ScanEnginePart Add(IScanEnginePlugin [] pluginArray)
+        public ScanEnginePart Add(params IScanEnginePlugin[] pluginParamsArray)
+        {
+            return AddRange(pluginParamsArray);
+        }
+
+        public ScanEnginePart AddRange(IEnumerable<IScanEnginePlugin> pluginSet)
         {
             StartPartIfNeeded();
 
+            IScanEnginePlugin[] pluginArray = pluginSet.ToArray();
+
             string pluginNames = String.Join(",", pluginArray.Select((p) => p.Name).ToArray());
-            IBasicAction action = new BasicActionImpl(actionQ, () => PerformAddPlugins(pluginArray), "Add Plugins: {0}".CheckedFormat(pluginNames), ActionLoggingReference);
+            IBasicAction action = new BasicActionImpl(actionQ, () => { scanEngineHelper.AddRange(pluginArray); return string.Empty; }, "Add Plugins: {0}".CheckedFormat(pluginNames), ActionLoggingReference);
 
             action.Run();
 
             return this;
-        }
-
-        string PerformAddPlugins(IScanEnginePlugin[] pluginArray)
-        {
-            foreach (IScanEnginePlugin plugin in pluginArray)
-            {
-                string pluginName = String.Empty;
-
-                try
-                {
-                    pluginName = plugin.Name;
-
-                    plugin.Setup(PartID, Config.IConfig, Config.PlugInsIVI);
-
-                    Log.Debug.Emit("Added plugin '{0}'", plugin.Name);
-
-                    pluginList.Add(plugin);
-                }
-                catch (System.Exception ex)
-                {
-                    Log.Error.Emit("Add plugin '{0}' failed: {1}", plugin, ex);
-                }
-            }
-
-            return String.Empty;
         }
 
         #endregion
@@ -374,28 +364,104 @@ namespace MosaicLib.PartsLib.Scan.ScanEngine
 
         protected override void PerformMainLoopService() 
         {
-            QpcTimeStamp scanStartTime = QpcTimeStamp.Now;
-            TrackServiceInterval(scanStartTime);
+            scanEngineHelper.Service();
+        }
+
+        #endregion
+    }
+
+    #endregion
+
+    #region ScanEngineHelper
+
+    /// <summary>
+    /// Helper class used to implement the pluggable Scan Engine.  
+    /// This helper is generally used for scan interval based logic, calculations, modeling, etc. for PLC sytle logic, and simulation.
+    /// This helper is given a set of one or more plugin objects that provide its actual externally visible functionality.
+    /// Internally this part implements a simple Service method that consists of the following phases: UpdateInputs, Service (calculate), UpdateOutputs.
+    /// The client is required to implement whatever the desired logic is so that Service method is called on the expected interval.
+    /// </summary>
+    public class ScanEngineHelper
+    {
+        public ScanEngineHelper(ScanEnginePartConfig config)
+        {
+            Config = new ScanEnginePartConfig(config);
+            Logger = new Logging.Logger(Name);
+
+            AddRange(Config.PluginsToAddSet);
+        }
+
+        protected ScanEnginePartConfig Config { get; private set; }
+        public Logging.ILogger Logger { get; private set; }
+
+        public string Name { get { return Config.Name; } }
+
+        public ScanEngineHelper Add(IScanEnginePlugin plugin)
+        {
+            return AddRange(new[] { plugin });
+        }
+
+        public ScanEngineHelper Add(params IScanEnginePlugin[] pluginArray)
+        {
+            return AddRange(pluginArray);
+        }
+
+        public ScanEngineHelper AddRange(IEnumerable<IScanEnginePlugin> pluginSet)
+        {
+            pluginSet = null;
+
+            foreach (IScanEnginePlugin plugin in pluginSet ?? emptyPluginArray)
+            {
+                string pluginName = String.Empty;
+
+                try
+                {
+                    pluginName = plugin.Name;
+
+                    plugin.Setup(Name, Config.IConfig, Config.PlugInsIVI);
+
+                    Logger.Debug.Emit("Added plugin '{0}'", plugin.Name);
+
+                    pluginList.Add(plugin);
+                }
+                catch (System.Exception ex)
+                {
+                    Logger.Error.Emit("Add plugin '{0}' failed: {1}", plugin, ex);
+                }
+            }
+
+            return this;
+        }
+
+        public void Service()
+        {
+            Service(Config.NominalServicePeriod, QpcTimeStamp.Now);
+        }
+
+        public void Service(TimeSpan measuredServiceInterval, QpcTimeStamp timeStampNow)
+        {
+            if (pluginArray == null)
+                pluginArray = pluginList.ToArray();
 
             IScanEnginePlugin currentPlugin = null;
             try
             {
                 // UpdateInputs
-                foreach (IScanEnginePlugin plugin in pluginList)
+                foreach (IScanEnginePlugin plugin in pluginArray)
                 {
                     currentPlugin = plugin;
                     plugin.UpdateInputs();
                 }
 
                 // Service
-                foreach (IScanEnginePlugin plugin in pluginList)
+                foreach (IScanEnginePlugin plugin in pluginArray)
                 {
                     currentPlugin = plugin;
-                    plugin.Service(Config.NominalServicePeriod, scanStartTime);
+                    plugin.Service(measuredServiceInterval, timeStampNow);
                 }
 
                 // UpdateOutputs
-                foreach (IScanEnginePlugin plugin in pluginList)
+                foreach (IScanEnginePlugin plugin in pluginArray)
                 {
                     currentPlugin = plugin;
                     plugin.UpdateOutputs();
@@ -406,30 +472,23 @@ namespace MosaicLib.PartsLib.Scan.ScanEngine
                 if (currentPlugin != null)
                 {
                     pluginList.Remove(currentPlugin);
+                    pluginArray = null;
 
-                    Log.Error.Emit("Plugin '{0}' removed after it generated unexpected exception: {1}", currentPlugin.Name, ex.ToString(ExceptionFormat.TypeAndMessage));
-                    Log.Debug.Emit(ex.ToString(ExceptionFormat.Full));
+                    Logger.Error.Emit("Plugin '{0}' removed after it generated unexpected exception: {1}", currentPlugin.Name, ex.ToString(ExceptionFormat.TypeAndMessage));
+                    Logger.Debug.Emit(ex.ToString(ExceptionFormat.Full));
                 }
                 else
                 {
-                    Log.Debug.Emit("Encountered unexpected exception in main loop (no current plugin): {0}", ex.ToString(ExceptionFormat.Full));
+                    Logger.Debug.Emit("Encountered unexpected exception in main loop (no current plugin): {0}", ex.ToString(ExceptionFormat.Full));
                 }
             }
         }
 
-        #endregion
-
-        #region state calculation and publication
-
-        void TrackServiceInterval(QpcTimeStamp scanStartTime)
-        {
-        }
-
-        #endregion
-
         #region plugins
 
-        protected List<IScanEnginePlugin> pluginList = new List<IScanEnginePlugin>();
+        private List<IScanEnginePlugin> pluginList = new List<IScanEnginePlugin>();
+        private IScanEnginePlugin [] pluginArray;
+        public static readonly IScanEnginePlugin[] emptyPluginArray = new IScanEnginePlugin[0];
 
         #endregion
     }

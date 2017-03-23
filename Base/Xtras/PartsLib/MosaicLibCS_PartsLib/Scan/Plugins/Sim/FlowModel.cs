@@ -45,7 +45,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
     {
         #region Pipe
 
-        public class Pipe : NodePairBase
+        public class Pipe : FlowModel.NodePairBase
         {
             public Pipe(string name)
                 : base(name, Fcns.CurrentClassLeafName)
@@ -65,7 +65,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             public override double EffectiveAreaM2 { get { return Math.Sin(EffectivePercentOpen * 0.01 * Math.PI * 0.5) * base.EffectiveAreaM2; } }
         }
 
-        public class Valve : NodePairBase
+        public class Valve : FlowModel.NodePairBase
         {
             public Valve(string name, ValveConfig valveConfig)
                 : this(name, valveConfig, Fcns.CurrentClassLeafName)
@@ -174,7 +174,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                 ValveRequest valveRequest = (valveRequestIn ?? lastExplicitValveRequest).GetValueOrDefault(ValveRequest.None);
                 double positionInPercent = (positionInPercentIn ?? lastExplicitPositionRequestInPercent).GetValueOrDefault(0.0);
 
-                if (valveRequestOverride != Components.ValveRequest.None)
+                if (valveRequestOverride != ValveRequest.None)
                 {
                     valveRequest = valveRequestOverride;
                     positionInPercent = forcePositionInPercent;
@@ -207,6 +207,9 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                     lastExplicitPositionRequestInPercent = positionInPercentIn;
                     lastExplicitValveRequest = null;
                 }
+
+                actuator.Service(TimeSpan.Zero);
+                actuatorState = actuator.State;
             }
 
             public static ValveRequest ConvertPositionToValveRequest(double positionInPercent)
@@ -302,7 +305,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
         /// A bistableValve is a type of pressure triggered two position valve.
         /// It has two states: State1 and State2 and always defaults to being in State1 
         /// </summary>
-        public class BistableValve : NodePairBase
+        public class BistableValve : FlowModel.NodePairBase
         {
             public BistableValve(string name, BistableValveConfig valveConfig)
                 : this(name, valveConfig, Fcns.CurrentClassLeafName)
@@ -455,13 +458,13 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
 
         #region Gauge, GaugeConfig
 
-        public class Gauge : ComponentBase
+        public class Gauge : FlowModel.ComponentBase
         {
             public Gauge(string name, GaugeConfig config, Chamber chamber)
-                : this(name, config, chamber.Node)
+                : this(name, config, chamber.EffectiveNode)
             { }
 
-            public Gauge(string name, GaugeConfig config, Node observesNode)
+            public Gauge(string name, GaugeConfig config, FlowModel.Node observesNode)
                 : base(name, Fcns.CurrentClassLeafName)
             {
                 ObservesNode = observesNode;
@@ -472,7 +475,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             }
 
             /// <summary>Shows the Node that this Gauge is reporting on (from which the gauge gets the flow or pressure)</summary>
-            public Node ObservesNode { get; private set; }
+            public FlowModel.Node ObservesNode { get; private set; }
 
             /// <summary>Set to a clone of the value given to the constructor.  Cloned instance, to which the client has access using this reference propery, Contains all of the settings that are used by this Gauge instance.</summary>
             public GaugeConfig Config { get; private set; }
@@ -632,7 +635,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
 
         public class GaugeConfig
         {
-            public GaugeConfig(GaugeType gaugeType = Components.GaugeType.Pressure)
+            public GaugeConfig(GaugeType gaugeType = GaugeType.Pressure)
             {
                 GaugeType = gaugeType;
                 GaugeBehavior = GaugeBehavior.None;
@@ -641,13 +644,13 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
 
                 switch (GaugeType)
                 {
-                    case Components.GaugeType.Pressure:
+                    case GaugeType.Pressure:
                         minimumValueInStdUnits = 0.0;
                         maximumValueInStdUnits = double.PositiveInfinity;
                         differentialReferenceValueInStdUnits = Physics.UnitsOfMeasure.Constants.StdAtmInKPa;
                         break;
 
-                    case Components.GaugeType.VolumetricFlow:
+                    case GaugeType.VolumetricFlow:
                         minimumValueInStdUnits = double.NegativeInfinity;
                         maximumValueInStdUnits = double.PositiveInfinity;
                         differentialReferenceValueInStdUnits = 0.0;
@@ -753,7 +756,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
 
         #region Controller, ControllerConfig
 
-        public class Controller : ComponentBase
+        public class Controller : FlowModel.ComponentBase
         {
             public Controller(string name, ControllerConfig controllerConfig)
                 : base(name, Fcns.CurrentClassLeafName)
@@ -829,20 +832,21 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             bool antiWindupTriggered;
             double lastEffectiveControlSetpoint;
             double lastControlError;
+            ControlMode effectiveControlMode;
 
             public override void Service(ServicePhases servicePhase, TimeSpan measuredServiceInterval, QpcTimeStamp timestampNow)
             {
                 base.Service(servicePhase, measuredServiceInterval, timestampNow);
 
                 bool isForced = (forcedControlMode != ControlMode.None);
-                ControlMode effectiveControlMode = isForced ? forcedControlMode : ControlMode;
+                effectiveControlMode = isForced ? forcedControlMode : ControlMode;
                 
                 effectiveControlSetpoint = isForced ? forcedControlSetpoint : ControlSetpoint;
                 controlReadback = ControlReadback;
 
                 ControlError = effectiveControlSetpoint - controlReadback;
 
-                bool isControlModeNormal = (effectiveControlMode == Components.ControlMode.Normal);
+                bool isControlModeNormal = (effectiveControlMode == ControlMode.Normal);
 
                 useForwardOutputPortionInPercent = (effectiveControlSetpoint * Config.OneOverFullScaleControlValue * Config.ForwardGainInPercentPerFS).Clip(-Config.ForwardRangeInPercent, Config.ForwardRangeInPercent);
 
@@ -897,6 +901,11 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
 
                 lastEffectiveControlSetpoint = effectiveControlSetpoint;
                 lastControlError = ControlError;
+            }
+
+            public override string ToString()
+            {
+                return "{0} {1} out:{2} %".CheckedFormat(base.ToString(), effectiveControlMode, ControlOutput);
             }
         }
 
@@ -987,7 +996,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
 
         #region Pump, PumpConfig
 
-        public class Pump : NodePairBase
+        public class Pump : FlowModel.NodePairBase
         {
             public Pump(string name, PumpConfig config)
                 : base(name, Fcns.CurrentClassLeafName)
@@ -1087,6 +1096,13 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
 
                 double volumetricFlowOutOfEnd2InSCMS = 0.0;
 
+                bool isTurboPump = Config.PumpBehavior.IsSet(PumpBehavior.TurboPump);
+
+                bool nextDisableBondingConnectionBetweenChambers = isTurboPump ? !pumpIsEffectivelyOff : true;      // bonding is disabled for pumps types other than turbo pumps and for turbo pumps when they are not effectively off.
+
+                if (DisableBondingConnectionBetweenChambers != nextDisableBondingConnectionBetweenChambers)
+                    DisableBondingConnectionBetweenChambers = nextDisableBondingConnectionBetweenChambers;
+
                 if (!pumpIsEffectivelyOff)
                 {
                     effectiveBestBasePressureInKPa = Config.nominalMinimumPressureInKPa;
@@ -1125,6 +1141,11 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
 
                 End1.VolumetricFlowOutOfNodeInSCMS = -volumetricFlowOutOfEnd2InSCMS;
                 End2.VolumetricFlowOutOfNodeInSCMS = volumetricFlowOutOfEnd2InSCMS;
+            }
+
+            public override string ToString()
+            {
+                return "{0} {1}".CheckedFormat(base.ToString(), speedActuatorState);
             }
         }
 
@@ -1281,380 +1302,700 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
 
         #region Chamber
 
-        public class Chamber : ComponentBase
+        public class Chamber : FlowModel.ComponentBase
         {
             public Chamber(string name)
-                : base(name, Fcns.CurrentClassLeafName)
+                : this(name, Fcns.CurrentClassLeafName)
+            { }
+
+            public Chamber(string name, string toStringComponentTypeStr)
+                : base(name, toStringComponentTypeStr)
             {
-                Node = new Node(name, chamber: this);
+                OriginalNode = new FlowModel.Node(name, chamber: this);
             }
 
             public override void UpdateFlows()
             {
                 // the chamber's node volumetric flow is the sum of the flows out of all of the other nodes that the chamber attaches to with the sign changed to account for the change in direction.
-                Node.VolumetricFlowOutOfNodeInSCMS = -Node.ConnectedToNodeArray.Sum(node => node.VolumetricFlowOutOfNodeInSCMS);
+                EffectiveNode.VolumetricFlowOutOfNodeInSCMS = -OriginalNode.ConnectedToNodeArray.Sum(node => node.VolumetricFlowOutOfNodeInSCMS);
             }
 
+            /// <summary>
+            /// Getter returns the spherically equivilant volume of the spherical volume of RadiusInM.
+            /// Setter sets the RadiusInM to the radius of a sphere with the given volume.
+            /// </summary>
             public override double VolumeInM3
             {
                 get
                 {
                     double radiusM = RadiusInM;
-                    return (4.0 / 3.0 * Math.PI * radiusM * radiusM * radiusM);
+                    return (((Math.PI * 4.0) / 3.0) * radiusM * radiusM * radiusM);
+                }
+                set
+                {
+                    RadiusInM = Math.Pow((value * (3.0 / 4.0 * Math.PI)), 1.0/3.0);
                 }
             }
 
             /// <summary>Returns true if this chamber is a pressure source chamber (RadiusMM is zero)</summary>
-            public bool IsSource { get { return RadiusInM == 0.0; } }
+            public virtual bool IsSource { get { return RadiusInM == 0.0; } }
 
-            /// <summary>Proxy get/set property for Node.PressureInKPa</summary>
-            public double PressureInKPa { get { return Node.PressureInKPa; } set { Node.PressureInKPa = value; } }
+            /// <summary>Proxy get/set property for OriginalNode.PressureUnits</summary>
+            public PressureUnits PressureUnits { get { return OriginalNode.PressureUnits; } set { OriginalNode.PressureUnits = value; } }
 
-            public Node Node { get; private set; }
+            /// <summary>Proxy get/set property for OriginalNode.Pressure</summary>
+            public double Pressure { get { return OriginalNode.PressureUnits.ConvertFromKPA(EffectiveNode.PressureInKPa); } set { EffectiveNode.PressureInKPa = OriginalNode.PressureUnits.ConvertToKPa(value); } }
+
+            /// <summary>Proxy get/set property for EffectiveNode.PressureInKPa</summary>
+            public virtual double PressureInKPa { get { return EffectiveNode.PressureInKPa; } set { EffectiveNode.PressureInKPa = value; } }
+
+            /// <summary>Proxy get only poperty gives access to OriginalNode.TemperatureUnits</summary>
+            public TemperatureUnits TemperatureUnits { get { return OriginalNode.TemperatureUnits; } }
+
+            /// <summary>Proxy get only poperty gives access to OriginalNode.Temperature</summary>
+            public double Temperature { get { return OriginalNode.Temperature; } }
+
+            /// <summary>Proxy get only poperty gives access to OriginalNode.TemperatureInDegK</summary>
+            public double TemperatureInDegK { get { return OriginalNode.TemperatureInDegK; } }
+
+            public FlowModel.Node EffectiveNode { get { return effectiveNode ?? OriginalNode; } internal set { effectiveNode = value; } }
+            private FlowModel.Node effectiveNode;
+
+            public FlowModel.Node OriginalNode { get; private set; }
 
             public override string ToString()
             {
-                return "{0} p_kPa:{1:e3} f_scms:{2:e3}".CheckedFormat(base.ToString(), Node.PressureInKPa, Node.VolumetricFlowOutOfNodeInSCMS);
+                return "{0} p_kPa:{1:e3}{2} f_scms:{3:e3}".CheckedFormat(base.ToString(), EffectiveNode.PressureInKPa, IsSource ? " Src" : "", EffectiveNode.VolumetricFlowOutOfNodeInSCMS);
+            }
+        }
+
+        #endregion
+    }
+
+    #region FlowModelEvaluationMode, ServicePhases, RelaxationIterationResult, related ExtensionMethods
+
+    /// <summary>
+    /// FixedInterval (0 default), AutoAdjustInterval (1)
+    /// </summary>
+    public enum FlowModelEvaluationMode : int
+    {
+        FixedInterval = 0,
+        AutoAdjustInterval = 1,
+    }
+
+    [Flags]
+    public enum ServicePhases : int
+    {
+        None = 0x00,
+
+        BeforeRelaxation = 0x01,
+        AfterRelaxation = 0x02,
+        AtStartOfRelaxationInterval = 0x04,
+        AtEndOfRelaxationInterval = 0x08,
+
+        AfterSetup = 0x0100,
+        Manual = 0x0200,
+        FaultInjection = 0x0400,
+    }
+
+    public enum RelaxationIterationResult
+    {
+        None = 0,
+        Monotonic = 1,
+        Indeterminate = 2,
+        Reversed = 3,
+    }
+
+    public static partial class ExtensionMethods
+    {
+        public static bool IncludeInPhase(this ServicePhases componentValue, ServicePhases includeInPhase) { return ((componentValue & includeInPhase) != ServicePhases.None); }
+    }
+
+    #endregion
+
+    #region FlowModelConfig, FlowModel
+
+    public class FlowModelConfig
+    {
+        public FlowModelConfig()
+        {
+            NominalMinimumRelaxationInterval = TimeSpan.FromMilliseconds(1.0);
+            EvaluationMode = FlowModelEvaluationMode.FixedInterval;
+            BondingConnectionThresholdInPercentPressurePerMinimumInterval = 20.0;
+        }
+
+        public FlowModelConfig(FlowModelConfig other)
+        {
+            NominalMinimumRelaxationInterval = other.NominalMinimumRelaxationInterval;
+            EvaluationMode = other.EvaluationMode;
+            BondingConnectionThresholdInPercentPressurePerMinimumInterval = other.BondingConnectionThresholdInPercentPressurePerMinimumInterval;
+        }
+
+        /// <summary>Defines the nominal minimum relaxation interval that will be used by any corresponding FlowModel instance</summary>
+        public TimeSpan NominalMinimumRelaxationInterval { get; set; }
+
+        /// <summary>Defines the evaluation mode that will be used for relaxation iterations by any corresponding FlowModel instance.</summary>
+        public FlowModelEvaluationMode EvaluationMode { get; set; }
+
+        /// <summary>Defines the threshold that is used to tell if a NodePair is considered a bonding connection between chambers (or not)</summary>
+        public double BondingConnectionThresholdInPercentPressurePerMinimumInterval { get; set; }
+    }
+
+    /// <summary>
+    /// This ScanEngine plugin provides a modular toolkit for modeling flow and pressure in a range of "plumbing" configurations.  
+    /// Currently this model supports the basic components that can be used to build vacuum and other gas flow configurations.
+    /// Supported components include chambers, pipes, valves, gauges, controllers, and pumps.  
+    /// Many of these types also support fault injection related properties that can be used to selectively override the components behavior in specific manners.
+    /// Current flow and pressure modeling are very simplistic and are not expected to produce physically useful predictions.  Rather this plugin is primarily
+    /// intended to support a useful level of behavioral, "hand tweaked", modeling of physical devices with known properties to as to support software development 
+    /// and testing when hardware is not available.  It is expected that the client/user of this plugin will be reponsible for configuraing and adjusting the characteristics
+    /// and layout of the conceptual model so as to produce the behavior that the client so desires.
+    /// <para/>
+    /// <para/>Please note: This implementation is currently very preliminary and is expected to change in sigificant ways during future preview releases.
+    /// </summary>
+    public class FlowModel : ScanEngine.ScanEnginePluginBase
+    {
+        #region Construction
+
+        public FlowModel(string name, FlowModelConfig config)
+            : base(name)
+        {
+            Config = new FlowModelConfig(config);
+        }
+
+        private FlowModelConfig Config { get; set; }
+
+        #endregion
+
+        #region model building methods: Add, AddRange, Connect
+
+        public FlowModel Add(ComponentBase component) 
+        {
+            component.FlowModelConfig = Config;
+
+            componentList.Add(component);
+
+            return this;
+        }
+
+        public FlowModel Add(params ComponentBase[] componentSet)
+        {
+            AddRange(componentSet);
+
+            return this;
+        }
+
+        public FlowModel AddRange(IEnumerable<ComponentBase> componentSet)
+        {
+            foreach (var component in componentSet)
+                Add(component);
+
+            return this;
+        }
+
+        public FlowModel Add<TValueType>(DelegateItemSpec<TValueType> delegateItemSpec)
+        {
+            delegateValueSetAdapter.Add(delegateItemSpec);
+
+            return this;
+        }
+
+        public FlowModel Connect(Chamber chamber, params Node[] connectToNodesSet)
+        {
+            return Connect(chamber.EffectiveNode, connectToNodesSet);
+        }
+
+        public FlowModel Connect(Node node1, params Node[] connectToNodesSet)
+        {
+            return Connect(node1, connectToNodesSet as IEnumerable<Node>);
+        }
+
+        public FlowModel Connect(Node node1, IEnumerable<Node> connectToNodesSet)
+        {
+            foreach (var node2 in connectToNodesSet)
+                Connect(node1, node2);
+
+            return this;
+        }
+
+        public FlowModel Connect(Node node1, Node node2) 
+        {
+            Node node1AsNode = node1 as Node;
+
+            if (node1AsNode != null)
+                node1AsNode.ConnectTo(node2, connectBackAsWell: true);
+
+            return this;
+        }
+
+        #endregion
+
+        #region IScanEnginePlugIn implementation methods: Setup, UpdateInputs, Service, UpdateOutputs
+
+        private List<ComponentBase> componentList = new List<ComponentBase>();
+        private DelegateValueSetAdapter delegateValueSetAdapter = new DelegateValueSetAdapter() { OptimizeSets = true };
+
+        public override void Setup(string scanEnginePartName, IConfig pluginsIConfig, IValuesInterconnection pluginsIVI)
+        {
+            delegateValueSetAdapter.IssueEmitter = Logger.Debug;
+            delegateValueSetAdapter.ValueNoteEmitter = Logger.Trace;
+            delegateValueSetAdapter.EmitValueNoteNoChangeMessages = false;
+
+            delegateValueSetAdapter.Setup(pluginsIVI, scanEnginePartName).Set().Update();
+
+            List<ComponentBase> componentWorkingList = new List<ComponentBase>(componentList);
+
+            allChambersArray = componentWorkingList.Select(item => item as Chamber).Where(item => item != null).ToArray();
+            foreach (var item in allChambersArray)
+                componentWorkingList.Remove(item);
+
+            List<NodePairChain> nodePairChainList = new List<NodePairChain>();
+            List<NodePairBase> workingNodePairList = new List<NodePairBase>(componentWorkingList.Select(item => item as NodePairBase).Where(item => item != null));
+
+            foreach (var item in workingNodePairList)
+                componentWorkingList.Remove(item);
+
+            for (; ; )
+            {
+                NodePairBase[] chain = ExtractNextChain(workingNodePairList);
+                if (chain.IsNullOrEmpty())
+                    break;
+
+                foreach (var item in chain)
+                    workingNodePairList.Remove(item);
+
+                NodePairChain nodePairChain = new NodePairChain(chain, Config);
+                nodePairChainList.Add(nodePairChain);
+
+                componentList.Add(nodePairChain);
+            }
+
+            componentBaseArray = componentList.ToArray();
+            nodePairChainArray = nodePairChainList.ToArray();
+            nodePairArray = workingNodePairList.ToArray();
+            nodePairChainAndNodePairArray = nodePairChainArray.Concat(nodePairArray).ToArray();
+
+            foreach (var comp in componentBaseArray)
+                comp.Setup(scanEnginePartName, Name);
+
+            Node[] chamberNodes = allChambersArray.Select(item => item.EffectiveNode).ToArray();
+            Node[] nodePairsNodesArray = nodePairChainArray.Concat(nodePairArray).SelectMany(item => new[] { item.End1, item.End2 }).ToArray();
+
+            List<Node> mainNodesList = new List<Node>();
+            HashSet<Node> foundNodesSet = new HashSet<Node>();
+
+            foreach (var node in chamberNodes.Concat(nodePairsNodesArray))
+            {
+                if (!foundNodesSet.Contains(node))
+                {
+                    mainNodesList.Add(node);
+                    foundNodesSet.Add(node);
+                    foundNodesSet.UnionWith(node.ConnectedToNodeArray);
+                }
+            }
+
+            mainNodesArray = mainNodesList.Select(node => node as Node).Where(node => node != null).ToArray();
+            mainNodesArrayLength = mainNodesArray.Length;
+
+            nodeFlowsArray = new double [mainNodesArrayLength];
+            lastNodeFlowsArray = new double[mainNodesArrayLength];
+
+            // initialize newly connected node pressures
+            foreach (var node in mainNodesArray)
+                node.SetupInitialPressure();
+
+            ServiceComponents(ServicePhases.AfterSetup, TimeSpan.Zero, QpcTimeStamp.Now);
+        }
+
+        NodePairBase[] ExtractNextChain(List<NodePairBase> workingNodePairList)
+        {
+            NodePairBase chainHead = workingNodePairList.FirstOrDefault(item => 
+                ((item.End1.ConnectedToNodeArray.Length != 1 || item.End1.ConnectedToNodeArray.First().IsChamber) && item.End2.ConnectedToNodeArray.Length == 1 && item.End2.ConnectedToNodeArray.First().NodePair != null)
+                );
+
+            if (chainHead == null)
+                return null;
+
+            List<NodePairBase> chainList = new List<NodePairBase>();
+
+            for (; ; )
+            {
+                bool entryChainHeadIsLastInChain = (chainHead.End2.ConnectedToNodeArray.Length != 1 || chainHead.End2.ConnectedToNodeArray.First().NodePair == null);  // this node is attached to more than one End2 node pairs or it is not attached to another NodePair
+
+                chainList.Add(chainHead);
+
+                chainHead = chainHead.End2.ConnectedToNodeArray.First().NodePair;
+
+                if (chainHead == null || entryChainHeadIsLastInChain)
+                    break;
+            }
+
+            foreach (var item in chainList)
+                workingNodePairList.Remove(item);
+
+            return chainList.ToArray();
+        }
+
+        public override void UpdateInputs()
+        {
+            if (delegateValueSetAdapter.IsUpdateNeeded)
+                delegateValueSetAdapter.Update();
+        }
+
+        public override void Service(TimeSpan measuredServiceInterval, QpcTimeStamp timeStampNow)
+        {
+            ServiceComponents(ServicePhases.BeforeRelaxation, measuredServiceInterval, timeStampNow);
+
+            TimeSpan remainingTime = measuredServiceInterval;
+
+            do
+            {
+                ServiceComponents(ServicePhases.AtStartOfRelaxationInterval, measuredServiceInterval, timeStampNow);
+
+                Array.Copy(nodeFlowsArray, lastNodeFlowsArray, nodeFlowsArray.Length);
+
+                switch (Config.EvaluationMode)
+                {
+                    case FlowModelEvaluationMode.FixedInterval:
+                    default:
+                        {
+                            TimeSpan iterationDt = Config.NominalMinimumRelaxationInterval;
+                            bool isLastStep = (iterationDt > remainingTime);
+
+                            RelaxationIterationResult = PerformRelaxationIteration((isLastStep ? remainingTime : iterationDt), nodeFlowsArray, lastNodeFlowsArray);
+
+                            remainingTime = (remainingTime <= iterationDt ? TimeSpan.Zero : remainingTime - iterationDt);
+                        }
+                        break;
+                    case FlowModelEvaluationMode.AutoAdjustInterval:
+                        {
+                            TimeSpan iterationDt = ((nextDT != TimeSpan.Zero) ? nextDT : (nextDT = Config.NominalMinimumRelaxationInterval));
+                            bool isLastStep = (iterationDt > remainingTime);
+
+                            RelaxationIterationResult = PerformRelaxationIteration((isLastStep ? remainingTime : iterationDt), nodeFlowsArray, lastNodeFlowsArray);
+
+                            remainingTime = (remainingTime <= iterationDt ? TimeSpan.Zero : remainingTime - iterationDt);
+
+                            if (RelaxationIterationResult == RelaxationIterationResult.Reversed)
+                            {
+                                nextDT = TimeSpan.FromTicks(Math.Max((long) (nextDT.Ticks * 0.5), Config.NominalMinimumRelaxationInterval.Ticks));
+                            }
+                            else if (RelaxationIterationResult == RelaxationIterationResult.Monotonic && !isLastStep)
+                            {
+                                if (++monotonicCount >= 4)
+                                {
+                                    nextDT = TimeSpan.FromTicks((long) (nextDT.Ticks * 1.2));
+                                    monotonicCount = 0;
+                                }
+                            }
+                        }
+                        break;
+                }
+
+                ServiceComponents(ServicePhases.AtEndOfRelaxationInterval, measuredServiceInterval, timeStampNow);
+            } while (remainingTime > TimeSpan.Zero);
+
+            ServiceComponents(ServicePhases.AfterRelaxation, measuredServiceInterval, timeStampNow);
+        }
+
+        public override void UpdateOutputs()
+        {
+            delegateValueSetAdapter.Set();
+        }
+
+        private ComponentBase[] componentBaseArray;
+        private Chamber[] allChambersArray;
+        private Chamber[] singleChambersArray;
+        private ChamberSet [] chamberSetArray;
+        private Chamber[] chamberSetAndSingleChamberArray;
+        private NodePairChain[] nodePairChainArray;
+        private NodePairBase[] nodePairArray;
+        private NodePairBase[] nodePairChainAndNodePairArray;
+        private bool[] nodePairChainAndNodePairIsBondingConnectedArray;
+
+        private static readonly ChamberSet[] emptyChamberSetArray = new ChamberSet[0];
+
+        private Node[] mainNodesArray;
+        private int mainNodesArrayLength;
+        private double[] nodeFlowsArray;
+        private double[] lastNodeFlowsArray;
+
+        private Node[] serviceNodesArray;
+
+        #endregion
+
+        #region outer internals: ServiceComponents
+
+        private void ServiceComponents(ServicePhases servicePhase, TimeSpan measuredServiceInterval, QpcTimeStamp timeStampNow)
+        {
+            foreach (var comp in componentBaseArray)
+            {
+                if (comp.ServicePhases.IncludeInPhase(servicePhase))
+                    comp.Service(servicePhase, measuredServiceInterval, timeStampNow);
             }
         }
 
         #endregion
 
-        #region ComponentBase, ServicePhases, Node, NodePairBase, NodePairChain
+        #region inner internals: RelaxationIterationResult PerformRelaxationIteration, DetectAndApplyChamberSetChanges, CatagorizeFlowChange
 
-        public abstract class ComponentBase
+        TimeSpan nextDT = TimeSpan.Zero;
+        int monotonicCount = 0;
+
+        public RelaxationIterationResult RelaxationIterationResult { get; set; }
+
+        private RelaxationIterationResult PerformRelaxationIteration(TimeSpan dt, double[] nodeFlowsArray, double[] lastNodeFlowsArray)
         {
-            public ComponentBase(string name, string toStringComponentTypeStr)
+            RelaxationIterationResult result = RelaxationIterationResult.Monotonic;
+
+            foreach (var npItem in nodePairChainAndNodePairArray)
+                npItem.UpdateFlows();
+
+            DetectAndApplyChamberSetChanges();
+
+            foreach (var ch in chamberSetAndSingleChamberArray)
+                ch.UpdateFlows();
+
+            foreach (var node in serviceNodesArray)
+                node.UpdatePressure(dt);
+
+            foreach (var chSet in chamberSetArray)
+                chSet.DistributePressures();
+
+            foreach (var nodePairChain in nodePairChainArray)
+                nodePairChain.DistributePressures();
+
+            for (int nodeIdx = 0; nodeIdx < mainNodesArrayLength; nodeIdx++)
             {
-                Name = name;
-                ToStringComponentTypeStr = toStringComponentTypeStr;
-                ServicePhases = ServicePhases.BeforeRelaxation;
-                VolumeInM3 = 0.0;
+                var node = mainNodesArray[nodeIdx];
+
+                nodeFlowsArray[nodeIdx] = node.VolumetricFlowOutOfNodeInSCMS;
+
+                result = CatagorizeFlowChange(result, node.VolumetricFlowOutOfNodeInSCMS, lastNodeFlowsArray[nodeIdx]);
             }
 
-            public ServicePhases ServicePhases { get; protected set; }
+            return result;
+        }
 
-            internal FlowModelConfig FlowModelConfig { get; set; }
+        /// <summary>
+        /// This method only makes sense to perform after all of the node pairs have had their flows updated.
+        /// </summary>
+        private void DetectAndApplyChamberSetChanges()
+        {
+            bool areAnyGeneratedArraysNull = (singleChambersArray == null
+                                              || chamberSetArray == null
+                                              || chamberSetAndSingleChamberArray == null
+                                              || nodePairChainAndNodePairIsBondingConnectedArray == null
+                                              || serviceNodesArray == null
+                                              );
 
-            public virtual void Setup(string scanEnginePartName, string vacuumSimPartName)
-            { }
 
-            public virtual void Service(ServicePhases servicePhase, TimeSpan measuredServiceInterval, QpcTimeStamp timestampNow)
-            { }
+            bool rebuildChamberSetsNeeded = areAnyGeneratedArraysNull;
 
-            public virtual void UpdateFlows()
-            { }
-
-            public string Name { get; private set; }
-
-            public double RadiusInM { get; set; }
-            public double RadiusInMM { get { return RadiusInM * 1000.0; } set { RadiusInM = value * 0.001; } }
-
-            public virtual double VolumeInM3 { get; protected set; }
-
-            public string ToStringComponentTypeStr { get; private set; }
-
-            public override string ToString()
+            if (!rebuildChamberSetsNeeded)
             {
-                return "{0} '{1}' r_mm:{2:f1} v_m^3:{3:e3}".CheckedFormat(ToStringComponentTypeStr, Name, RadiusInMM, VolumeInM3);
-            }
-        }
-
-        [Flags]
-        public enum ServicePhases
-        {
-            None = 0x00,
-            BeforeRelaxation = 0x01,
-            DuringRelaxation = 0x02,
-            AfterRelaxation = 0x04,
-            AfterSetup = 0x08,
-            Manual = 0x10,
-            FaultInjection = 0x20,
-        }
-
-        public static partial class ExtensionMethods
-        {
-            public static bool IncludeInPhase(this ServicePhases componentValue, ServicePhases includeInPhase) { return ((componentValue & includeInPhase) != ServicePhases.None); }
-        }
-
-        public class Node
-        {
-            public Node(string name, Chamber chamber = null, NodePairBase nodePair = null, Node observesNode = null)
-            {
-                Name = name;
-
-                if (observesNode != null)
+                int num = nodePairChainAndNodePairIsBondingConnectedArray.Length;
+                for (int idx = 0; idx < num && !rebuildChamberSetsNeeded; idx++)
                 {
-                    chamber = chamber ?? observesNode.Chamber;
-                    nodePair =  nodePair ?? observesNode.NodePair;
+                    NodePairBase item = nodePairChainAndNodePairArray[idx];
+                    if (nodePairChainAndNodePairIsBondingConnectedArray[idx] != item.IsBondingConnectionBetweenChambers)
+                        rebuildChamberSetsNeeded = true;
                 }
-
-                Chamber = chamber;
-                NodePair = nodePair;
-                ObservesNode = observesNode;
-
-                TemperatureInDegC = 20.0;
-                PressureInKPa = Physics.Gasses.Air.StandardAtmPressureInKPa;
             }
+ 
+            if (!rebuildChamberSetsNeeded)
+                return;
 
-            public string Name { get; private set; }
-            public bool IsChamber { get { return (Chamber != null); } }
-            public bool IsSource { get { return (IsChamber && Chamber.IsSource); } }
-            public double TemperatureInDegC { get { return TemperatureUnits.DegC.ConvertFromDegK(TemperatureInDegK); } set { TemperatureInDegK = TemperatureUnits.DegC.ConvertToDegK(value); } }
-            public double TemperatureInDegK { get; set; }
+            nodePairChainAndNodePairIsBondingConnectedArray = nodePairChainAndNodePairArray.Select(item => item.IsBondingConnectionBetweenChambers).ToArray();
 
-            public virtual double EffectiveVolumeM3 
-            { 
-                get 
+            // clear effects of prior chamber bonding.
+            foreach (var singleCh in allChambersArray)
+                singleCh.EffectiveNode = null;
+
+            // first split the set of all chambers it the ones that are single and the ones that are bonded to some other chamber through a shared nodepair.
+
+            singleChambersArray = allChambersArray.Where(item => item.EffectiveNode.ConnectedToNodeArray.All(node => node.NodePair == null || !node.NodePair.IsBondingConnectionBetweenChambers)).ToArray();
+
+            if (singleChambersArray.Length != allChambersArray.Length)
+            {
+                List<Chamber> bondedChamberScanList = allChambersArray.Where(item => item.EffectiveNode.ConnectedToNodeArray.Any(node => node.IsPartOfBondingConnectionBetweenChambers)).ToList();
+
+                // now divide the bondedChamberScanList into ChamberSets of two or more bonded chambers using a bredth first search technique and accumulate the resulting chamber sets.
+
+                List<ChamberSet> chamberSetList = new List<ChamberSet>();
+
+                for (; ; )
                 {
-                    if (_effectiveVolumeM3 == 0.0)
+                    Chamber nextStartingCh = bondedChamberScanList.SafeTakeFirst();
+
+                    if (nextStartingCh == null)
+                        break;
+
+                    // build a list of this chamber and all of the chambers that are bonded to it (along with a list of the bonding connection NodePairBase objects) and then create a chamber set for it
+
+                    List<Chamber> breadthFirstSearchList = new List<Chamber>(new[] { nextStartingCh });
+                    List<Chamber> chamberSetContentBuildList = new List<Chamber>();
+                    List<NodePairBase> chamberSetInternalNodePairBuildList = new List<NodePairBase>();
+
+                    for (; ; )
                     {
-                        if (Chamber != null)
-                            _effectiveVolumeM3 = Chamber.VolumeInM3;
-                        else if (NodePair != null)
-                            _effectiveVolumeM3 = NodePair.VolumeInM3 * 0.5; 
+                        Chamber nexSearchCh = breadthFirstSearchList.SafeTakeFirst();
+                        if (nexSearchCh == null)
+                            break;
+
+                        chamberSetContentBuildList.Add(nexSearchCh);
+
+                        foreach (var bondingNodePair in nexSearchCh.EffectiveNode.ConnectedToNodeArray.Where(node => node.IsPartOfBondingConnectionBetweenChambers).Select(node => node.NodePair))
+                        {
+                            Chamber otherCh = bondingNodePair.OtherConnectedChamber(nexSearchCh);
+                            if (otherCh != null && !chamberSetContentBuildList.Contains(otherCh))
+                            {
+                                chamberSetInternalNodePairBuildList.Add(bondingNodePair);
+                                breadthFirstSearchList.Add(otherCh);
+                                bondedChamberScanList.Remove(otherCh);
+                            }
+                        }
                     }
 
-                    return _effectiveVolumeM3;
-                } 
-                set { _effectiveVolumeM3 = value; } 
-            }
-            double _effectiveVolumeM3 = 0.0;
-
-            public virtual double PressureInKPa { get; set; }
-            /// <summary>volumetric flow rate out of node in Standard cubic meters per second</summary>
-            public double VolumetricFlowOutOfNodeInSCMS { get; set; }
-            public Node[] ConnectedToNodeArray { get { return connectedToNodeArray ?? (connectedToNodeArray = connectedToNodeList.ToArray()); } }
-            public Chamber Chamber { get; private set; }
-            public NodePairBase NodePair { get; private set; }
-            public Node ObservesNode { get; private set; }
-
-            private List<Node> connectedToNodeList = new List<Node>();
-            private Node[] connectedToNodeArray = null;
-
-            public Node ConnectTo(Node otherNode, bool connectBackAsWell = true)
-            {
-                if (otherNode != null && (!IsChamber || !otherNode.IsChamber))
-                {
-                    connectedToNodeList.Add(otherNode);
-
-                    connectedToNodeArray = null;
-
-                    if (connectBackAsWell && otherNode != null)
-                        otherNode.ConnectTo(this, connectBackAsWell: false);
-                }
-                // otherwise otherNode is null or both nodes are chambers and we cannot directly connect chambers to each other....
-
-                return this;
-            }
-
-            public Node DisconnectFrom(Node otherNode, bool disconnectBackAsWell = true)
-            {
-                if (connectedToNodeList.Contains(otherNode))
-                {
-                    connectedToNodeList.Remove(otherNode);
-                    connectedToNodeArray = null;
-
-                    if (disconnectBackAsWell)
-                        otherNode.DisconnectFrom(this, disconnectBackAsWell: false);
+                    ChamberSet chamberSet = new ChamberSet(chamberSetContentBuildList.ToArray(), chamberSetInternalNodePairBuildList.ToArray());
+                    chamberSetList.Add(chamberSet);
                 }
 
-                return this;
+                chamberSetArray = chamberSetList.ToArray();
+                chamberSetAndSingleChamberArray = singleChambersArray.Concat(chamberSetArray).ToArray();
             }
-
-            public override string ToString()
+            else
             {
-                string connToStr = String.Join(",", ConnectedToNodeArray.Select(item => item.Name).ToArray());
-                if (IsChamber)
-                    return "Node {0} p_kPa:{1:e3} f_scms:{2:e3} c:{3}".CheckedFormat(Chamber, PressureInKPa, VolumetricFlowOutOfNodeInSCMS, connToStr);
-                else
-                    return "Node {0} p_kPa:{1:e3} f_scms:{2:e3} effV_m^3:{3:e3} c:{4}".CheckedFormat(Name, PressureInKPa, VolumetricFlowOutOfNodeInSCMS, EffectiveVolumeM3, connToStr);
+                chamberSetArray = emptyChamberSetArray;
+                chamberSetAndSingleChamberArray = singleChambersArray;
             }
 
-            public virtual void UpdatePressure(TimeSpan dt)
-            {
-                double updatedPressureInKPa = PressureInKPa;
-
-                if (!IsSource)
-                {
-                    double summedVolumeM3 = (EffectiveVolumeM3 + ConnectedToNodeArray.Sum(item => item.EffectiveVolumeM3));
-                    double summedVolumetricFlowOutOfNodeInSCMS = VolumetricFlowOutOfNodeInSCMS - (IsChamber ? 0.0 : ConnectedToNodeArray.Sum(item => item.VolumetricFlowOutOfNodeInSCMS));    // for chambers the flow has already been summed
-
-                    if (double.IsNaN(summedVolumeM3) || double.IsInfinity(summedVolumeM3) || summedVolumeM3 <= 0.0)
-                        throw new System.InvalidOperationException("summedVolumeM3");
-
-                    if (double.IsNaN(TemperatureInDegK) || double.IsInfinity(TemperatureInDegK) || TemperatureInDegK <= 0.0)
-                        throw new System.InvalidOperationException("TemperatureInDegK");
-
-                    double currentMoles = Physics.Gasses.IdealGasLaw.ToMoles(PressureInKPa, summedVolumeM3, TemperatureInDegK);
-
-                    double deltaVolumeOutOfNodeM3 = summedVolumetricFlowOutOfNodeInSCMS * dt.TotalSeconds;
-                    double deltaMolesOutOfNode = Physics.Gasses.IdealGasLaw.ToMoles(Physics.Gasses.Air.StandardAtmPressureInKPa, deltaVolumeOutOfNodeM3, TemperatureInDegK);
-
-                    double updatedMoles = Math.Max(0.0, currentMoles - deltaMolesOutOfNode);
-
-                    updatedPressureInKPa = Physics.Gasses.IdealGasLaw.ToPressureInKPa(updatedMoles, summedVolumeM3, TemperatureInDegK);
-
-                    double maxPressure = 10.0 * Physics.Gasses.Air.StandardAtmPressureInKPa;
-                    if (!updatedPressureInKPa.IsInRange(0.0, maxPressure))
-                        updatedPressureInKPa = updatedPressureInKPa.Clip(0.0, maxPressure, updatedPressureInKPa);
-
-                    // note: it is expected that the pressure may actually reach zero when the above delta calculation logic overshoots 
-                    if (double.IsNaN(updatedPressureInKPa) || double.IsInfinity(updatedPressureInKPa) || updatedPressureInKPa < 0.0)
-                        throw new System.InvalidOperationException("updatedPressureInKPa");
-                }
-
-                SetPressureAndDistributeToSubNodes(updatedPressureInKPa);
-            }
-
-            public virtual void SetupInitialPressure()
-            {
-                double sharedPressureInKPa = PressureInKPa;
-
-                if (!IsSource)
-                {
-                    IEnumerable<Components.Node> allNodeSet = new Components.Node[] { this }.Concat(ConnectedToNodeArray);
-                    double summedVolumeInM3 = allNodeSet.Sum(item => item.EffectiveVolumeM3);
-                    double summedNodeMoles = allNodeSet.Sum(item => Physics.Gasses.IdealGasLaw.ToMoles(item.PressureInKPa, item.EffectiveVolumeM3, item.TemperatureInDegK));
-
-                    if (summedNodeMoles > 0.0)
-                        sharedPressureInKPa = Physics.Gasses.IdealGasLaw.ToPressureInKPa(summedNodeMoles, summedVolumeInM3, TemperatureInDegK);
-                    else
-                        sharedPressureInKPa = PressureInKPa;
-                }
-
-                SetPressureAndDistributeToSubNodes(sharedPressureInKPa);
-            }
-
-            public void SetPressureAndDistributeToSubNodes(double pressureInKPa)
-            {
-                PressureInKPa = pressureInKPa;
-
-                foreach (var subNode in ConnectedToNodeArray)
-                    subNode.PressureInKPa = pressureInKPa;
-            }
+            // collect all of the ChamberSets effective nodes, combined with the single chamber's effective nodes, combined with all of the old main nodes that are not part of a chamber, not part of a bonding pair where are not connected to a chamber
+            serviceNodesArray = chamberSetArray.Select(item => item.EffectiveNode)
+                              .Concat(singleChambersArray.Select(item => item.OriginalNode))
+                              .Concat(mainNodesArray.Where(node => !node.IsChamber && !node.IsConnectedToChamber && !node.IsPartOfBondingConnectionBetweenChambers))
+                              .ToArray();
         }
 
-        public class NodePairBase : ComponentBase
+        private static RelaxationIterationResult CatagorizeFlowChange(RelaxationIterationResult result, double nodeFlow, double lastNodeFlow)
         {
-            public NodePairBase(string name, string toStringComponentTypeStr) 
-                : base(name, toStringComponentTypeStr) 
+            int nodeFlowSign = Math.Sign(nodeFlow);
+            int lastNodeFlowSign = Math.Sign(lastNodeFlow);
+
+            if (nodeFlowSign == lastNodeFlowSign || nodeFlowSign == 0 || lastNodeFlowSign == 0 || result == RelaxationIterationResult.Reversed)
+                return result;
+
+            double nodeFlowAbs = Math.Abs(nodeFlow);
+            double lastNodeFlowAbs = Math.Abs(lastNodeFlow);
+
+            double oneOverNormalizeBy = 1.0 / Math.Max(nodeFlowAbs, lastNodeFlowAbs);
+
+            nodeFlowAbs *= oneOverNormalizeBy;
+            lastNodeFlowAbs *= oneOverNormalizeBy;
+
+            if (nodeFlowAbs <= 0.01 || lastNodeFlowAbs <= 0.01)
+                return result;
+
+            if (nodeFlowAbs >= 0.25 && lastNodeFlowAbs >= 0.25)
+                return RelaxationIterationResult.Reversed;
+
+            return RelaxationIterationResult.Indeterminate;
+        }
+
+        #endregion
+
+        #region internal usage classes: ChamberSet, NodePairChain
+
+        public class ChamberSet : Chamber
+        {
+            public ChamberSet(Chamber[] chambersInSetArray, NodePairBase [] stiffConnectionsArray)
+                : base("ChSet-{0}".CheckedFormat(String.Join("-", chambersInSetArray.Select(item => item.Name).ToArray())), Fcns.CurrentClassLeafName) 
             {
-                End1 = new Node("{0}.End1".CheckedFormat(name), nodePair: this);
-                End2 = new Node("{0}.End2".CheckedFormat(name), nodePair: this);
-            }
+                ChambersInSetArray = chambersInSetArray;
+                FirstSourceChamberInSet = ChambersInSetArray.FirstOrDefault(item => item.IsSource);
+                BondingConnectionsArray = stiffConnectionsArray;
 
-            public override void UpdateFlows()
-            {
-                double pEnd1 = End1.PressureInKPa;
-                double pEnd2 = End2.PressureInKPa;
+                List<Node> externalNodeList = new List<Node>();
 
-                if (double.IsNaN(pEnd1) || double.IsInfinity(pEnd1))
-                    throw new System.InvalidOperationException("pEnd1");
-
-                if (double.IsNaN(pEnd2) || double.IsInfinity(pEnd2))
-                    throw new System.InvalidOperationException("pEnd2");
-
-                double pDiff = pEnd2 - pEnd1;       // we are calculating the flow out of End1 (and into End2) which occurs when p@End2 > p@End1
-                double pAvg = (pEnd1 + pEnd2) * 0.5;
-
-                double resistanceInKPaSecPerM3 = ResistanceInKPaSecPerM3;
-
-                if (double.IsNaN(resistanceInKPaSecPerM3) || resistanceInKPaSecPerM3 <= 0.0)
-                    throw new System.InvalidOperationException("resistance");
-
-                double flowRateM3PerSec = (double.IsInfinity(resistanceInKPaSecPerM3) ? 0.0 : pDiff / resistanceInKPaSecPerM3);
-
-                double volumetricFlowInSCMS = (pAvg / Physics.Gasses.Air.StandardAtmPressureInKPa) * flowRateM3PerSec;
-
-                End1.VolumetricFlowOutOfNodeInSCMS = volumetricFlowInSCMS;        // (pDiff = pEnd2 - pEnd1) above
-                End2.VolumetricFlowOutOfNodeInSCMS = -volumetricFlowInSCMS;
-
-                if (double.IsNaN(volumetricFlowInSCMS) || double.IsInfinity(volumetricFlowInSCMS))
-                    throw new System.InvalidOperationException("volumetricFlowInSCMS");
-
-                if (End1.IsChamber && End2.IsChamber)
+                foreach (Chamber ch in ChambersInSetArray)
                 {
-                    double end1ChamberVolumeInM3 = End1.Chamber.VolumeInM3;     // pressure reference chambers have zero volume
-                    double end2ChamberVolumeInM3 = End2.Chamber.VolumeInM3;     // pressure reference chambers have zero volume
-                    double testConnectedChamberVolumeInM3 = (end1ChamberVolumeInM3 > 0.0 && end2ChamberVolumeInM3 > 0.0 ? Math.Min(end1ChamberVolumeInM3, end2ChamberVolumeInM3) : Math.Max(end1ChamberVolumeInM3, end2ChamberVolumeInM3));
+                    foreach (Node node in ch.OriginalNode.ConnectedToNodeArray)
+                    {
+                        if (!node.IsPartOfBondingConnectionBetweenChambers)
+                            externalNodeList.Add(node);
+                    }
+                }
 
-                    double absIncrementalFlowM3PerMinInterval = Math.Abs(flowRateM3PerSec * FlowModelConfig.NominalMinimumRelaxationInterval.TotalSeconds);
+                _volumeInM3 = ChambersInSetArray.Sum(item => item.VolumeInM3) 
+                            + BondingConnectionsArray.Sum(item => item.VolumeInM3)
+                            + externalNodeList.Sum(item => item.EffectiveVolumeM3)
+                            ;
 
-                    IsStiffConnectionBetweenChambers = (absIncrementalFlowM3PerMinInterval >= testConnectedChamberVolumeInM3 * FlowModelConfig.StiffConnectionThresholdInPercentPressurePerMinimumInterval * 0.01);
+                double initialSetPressureInKPa = 0.0;
+
+                if (FirstSourceChamberInSet != null)
+                {
+                    initialSetPressureInKPa = FirstSourceChamberInSet.PressureInKPa;
                 }
                 else
                 {
-                    IsStiffConnectionBetweenChambers = false;
+                    double moles = ChambersInSetArray.Sum(item => Physics.Gasses.IdealGasLaw.ToMoles(item.PressureInKPa, item.VolumeInM3, item.TemperatureInDegK))
+                                + BondingConnectionsArray.Sum(item => Physics.Gasses.IdealGasLaw.ToMoles(item.End1.PressureInKPa, item.VolumeInM3, item.End1.TemperatureInDegK))
+                                + externalNodeList.Sum(item => Physics.Gasses.IdealGasLaw.ToMoles(item.PressureInKPa, item.EffectiveVolumeM3, item.TemperatureInDegK));
+
+                    initialSetPressureInKPa = Physics.Gasses.IdealGasLaw.ToPressureInKPa(moles, _volumeInM3, TemperatureInDegK);
                 }
+
+                EffectiveNode.PressureInKPa = initialSetPressureInKPa;
+
+                // need to determine the effective pressure of the newly combined nodes and 
+
+                EffectiveNode.ConnectedToNodeArray = externalNodeList.ToArray();
+
+                foreach (Chamber setMemberCh in ChambersInSetArray)
+                    setMemberCh.EffectiveNode = EffectiveNode;
+
+                DistributePressures();
             }
 
-            public bool IsStiffConnectionBetweenChambers { get; protected set; }
+            public Chamber[] ChambersInSetArray { get; protected set; }
+            public Chamber FirstSourceChamberInSet { get; protected set; }
+            public NodePairBase[] BondingConnectionsArray { get; protected set; }
 
-            public double LengthInM { get; set; }
-            public double LengthInMM { get { return LengthInM * 1000.0; } set { LengthInM = value * 0.001; } }
-            public double EffectiveAreaGain { get { return _effectiveAreaGain; } set { _effectiveAreaGain = value.Clip(0.0, 10.0, 1.0); } }
-            private double _effectiveAreaGain = 1.0;
-
-            public override double VolumeInM3 { get { return NominalAreaInM2 * LengthInM; } }
-
-            private double NominalAreaInM2 { get { return (Math.PI * RadiusInM * RadiusInM); } }
-            public virtual double EffectiveAreaM2 { get { return NominalAreaInM2 * _effectiveAreaGain; } }
-
-            public virtual double ResistanceInKPaSecPerM3
+            public void DistributePressures()
             {
-                get
+                double pressureInKPa = (FirstSourceChamberInSet != null) ? FirstSourceChamberInSet.PressureInKPa : PressureInKPa;
+
+                foreach (var ch in ChambersInSetArray.Where(item => !item.IsSource))
                 {
-                    double areaM2 = EffectiveAreaM2;  // mm^2 => m^2
-                    double lengthM = LengthInM; // mm => m
+                    ch.OriginalNode.SetPressureAndDistributeToSubNodes(pressureInKPa);
+                }
 
-                    if (double.IsNaN(lengthM) || double.IsInfinity(lengthM) || lengthM <= 0.0)
-                        throw new System.InvalidOperationException("lengthM");
-
-                    if (double.IsNaN(areaM2) || double.IsInfinity(areaM2))
-                        throw new System.InvalidOperationException("areaM2");
-
-                    /* Hagen–Poiseuille flow equation:
-                     * 
-                     * Q = (pi * R^4 * dP)/(8 * mu * L)
-                     * 
-                     *  - or -
-                     *  
-                     * dP = (8 * mu * L * Q) / (pi * R^4)
-                     * 
-                     * Q: flow rate in m^3/s
-                     * R: pipe radius in m
-                     * L: pipe length in m
-                     * mu: dynamic viscosity kPa*s
-                     * dP: pressure difference in kPa
-                     * 
-                     * Q = (m^4 * N/m^2)/(N/m^2 * s * m) = (N * m^2)/(N * s / m) = m ^ 3/s
-                     */
-
-                    // pi was moved from denominator to numerator because of change from radius^4 to area^2 (which now has pi^2 in it)
-                    double resistanceInKPaSecPerM3 = ((areaM2 > 0.0) ? ((Math.PI * 8.0 * Physics.Gasses.N2.ViscosityInKPaS * lengthM) / (areaM2 * areaM2)) : double.PositiveInfinity);
-
-                    if (double.IsNaN(resistanceInKPaSecPerM3) || resistanceInKPaSecPerM3 <= 0.0)
-                        throw new System.InvalidOperationException("resistance");
-
-                    return resistanceInKPaSecPerM3;
+                foreach (var nodePair in BondingConnectionsArray)
+                {
+                    nodePair.DistributePressures();
                 }
             }
 
-            public double InitialPressureInKPa { set { End1.PressureInKPa = End2.PressureInKPa = value; } }
+            /// <summary>
+            /// Getter returns the spherically equivilant volume of the spherical volume of RadiusInM.
+            /// Setter sets the RadiusInM to the radius of a sphere with the given volume.
+            /// </summary>
+            public override double VolumeInM3 { get { return _volumeInM3;} set {_volumeInM3 = value;}}
+            double _volumeInM3;
 
-            public Node End1 { get; protected set; }
-            public Node End2 { get; protected set; }
+            /// <summary>Returns true if this chamber is a pressure source chamber (RadiusMM is zero)</summary>
+            public override bool IsSource { get { return FirstSourceChamberInSet != null; } }
 
             public override string ToString()
             {
-                return "{0} p_kPa:{1:e3},{2:e3} f_scms:{3:e3}".CheckedFormat(base.ToString(), End1.PressureInKPa, End2.PressureInKPa, End1.VolumetricFlowOutOfNodeInSCMS);
+                return "{0} p_kPa:{1:e3} f_scms:{2:e3}".CheckedFormat(base.ToString(), EffectiveNode.PressureInKPa, EffectiveNode.VolumetricFlowOutOfNodeInSCMS);
             }
         }
 
         public class NodePairChain : NodePairBase
         {
-            public NodePairChain(NodePairBase [] nodePairChainArray, FlowModelConfig flowModelConfig)
+            public NodePairChain(NodePairBase[] nodePairChainArray, FlowModelConfig flowModelConfig)
                 : base("Chain-{0}".CheckedFormat(string.Join("-", nodePairChainArray.Select(item => item.Name).ToArray())), Fcns.CurrentClassLeafName)
             {
                 NodePairChainArray = nodePairChainArray;
@@ -1666,8 +2007,8 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                 innerEnd1 = nodePairChainArray.First().End1;
                 innerEnd2 = nodePairChainArray.Last().End2;
 
-                Components.Node[] entryEnd1ConnectedNodesArray = innerEnd1.ConnectedToNodeArray;
-                Components.Node[] entryEnd2ConnectedNodesArray = innerEnd2.ConnectedToNodeArray;
+                Node[] entryEnd1ConnectedNodesArray = innerEnd1.ConnectedToNodeArray;
+                Node[] entryEnd2ConnectedNodesArray = innerEnd2.ConnectedToNodeArray;
 
                 innerEnd1.DisconnectFrom(innerEnd1.ConnectedToNodeArray.First());
                 innerEnd2.DisconnectFrom(innerEnd2.ConnectedToNodeArray.First());
@@ -1690,7 +2031,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                 LengthInM = NodePairChainArray.Sum(item => item.LengthInM);
                 _volumeInM3 = NodePairChainArray.Sum(item => item.VolumeInM3);
 
-                ServicePhases = Components.ServicePhases.BeforeRelaxation;
+                ServicePhases = ServicePhases.BeforeRelaxation;
             }
 
             public override double VolumeInM3 { get { return _volumeInM3; } }
@@ -1792,7 +2133,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                 }
             }
 
-            public virtual void DistributePressures()
+            public override void DistributePressures()
             {
                 double end1PressureInKPa = End1.PressureInKPa;
                 double end2PressureInKPa = End2.PressureInKPa;
@@ -1839,451 +2180,395 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
         }
 
         #endregion
-    }
 
-    #region FlowModelConfig, FlowModel, FlowModelEvaluationMode
+        #region base and helper classes for components: ComponentBase, Node, NodePair
 
-    /// <summary>
-    /// FixedInterval (0 default), AutoAdjustInterval (1)
-    /// </summary>
-    public enum FlowModelEvaluationMode : int
-    {
-        FixedInterval = 0,
-        AutoAdjustInterval = 1,
-    }
-
-    public class FlowModelConfig
-    {
-        public FlowModelConfig()
+        public abstract class ComponentBase
         {
-            NominalMinimumRelaxationInterval = TimeSpan.FromMilliseconds(1.0);
-            EvaluationMode = FlowModelEvaluationMode.FixedInterval;
-            StiffConnectionThresholdInPercentPressurePerMinimumInterval = 20.0;
-        }
-
-        public FlowModelConfig(FlowModelConfig other)
-        {
-            NominalMinimumRelaxationInterval = other.NominalMinimumRelaxationInterval;
-            EvaluationMode = other.EvaluationMode;
-            StiffConnectionThresholdInPercentPressurePerMinimumInterval = other.StiffConnectionThresholdInPercentPressurePerMinimumInterval;
-        }
-
-        /// <summary>Defines the nominal minimum relaxation interval that will be used by any corresponding FlowModel instance</summary>
-        public TimeSpan NominalMinimumRelaxationInterval { get; set; }
-
-        /// <summary>Defines the evaluation mode that will be used for relaxation iterations by any corresponding FlowModel instance.</summary>
-        public FlowModelEvaluationMode EvaluationMode { get; set; }
-
-        /// <summary>Defines the threshold that is used to tell if a NodePair is considered Stiff (or not)</summary>
-        public double StiffConnectionThresholdInPercentPressurePerMinimumInterval { get; set; }
-    }
-
-    /// <summary>
-    /// This ScanEngine plugin provides a modular toolkit for modeling flow and pressure in a range of "plumbing" configurations.  
-    /// Currently this model supports the basic components that can be used to build vacuum and other gas flow configurations.
-    /// Supported components include chambers, pipes, valves, gauges, controllers, and pumps.  
-    /// Many of these types also support fault injection related properties that can be used to selectively override the components behavior in specific manners.
-    /// Current flow and pressure modeling are very simplistic and are not expected to produce physically useful predictions.  Rather this plugin is primarily
-    /// intended to support a useful level of behavioral, "hand tweaked", modeling of physical devices with known properties to as to support software development 
-    /// and testing when hardware is not available.  It is expected that the client/user of this plugin will be reponsible for configuraing and adjusting the characteristics
-    /// and layout of the conceptual model so as to produce the behavior that the client so desires.
-    /// <para/>
-    /// <para/>Please note: This implementation is currently very preliminary and is expected to change in sigificant ways during future preview releases.
-    /// </summary>
-    public class FlowModel : ScanEngine.ScanEnginePluginBase
-    {
-        public FlowModel(string name, FlowModelConfig config)
-            : base(name)
-        {
-            Config = new FlowModelConfig(config);
-        }
-
-        private FlowModelConfig Config { get; set; }
-
-        public FlowModel Add(Components.ComponentBase component) 
-        {
-            component.FlowModelConfig = Config;
-
-            componentList.Add(component);
-
-            return this;
-        }
-
-        public FlowModel Add(params Components.ComponentBase[] componentSet)
-        {
-            AddRange(componentSet);
-
-            return this;
-        }
-
-        public FlowModel AddRange(IEnumerable<Components.ComponentBase> componentSet)
-        {
-            foreach (var component in componentSet)
-                Add(component);
-
-            return this;
-        }
-
-        public FlowModel Add<TValueType>(DelegateItemSpec<TValueType> delegateItemSpec)
-        {
-            delegateValueSetAdapter.Add(delegateItemSpec);
-
-            return this;
-        }
-
-        public FlowModel Connect(Components.Node node1, IEnumerable<Components.Node> node2set)
-        {
-            foreach (var node2 in node2set)
-                Connect(node1, node2);
-
-            return this;
-        }
-
-        public FlowModel Connect(Components.Node node1, params Components.Node [] node2Set)
-        {
-            return Connect(node1, node2Set as IEnumerable<Components.Node>);
-        }
-
-        public FlowModel Connect(Components.Node node1, Components.Node node2) 
-        {
-            Components.Node node1AsNode = node1 as Components.Node;
-
-            if (node1AsNode != null)
-                node1AsNode.ConnectTo(node2, connectBackAsWell: true);
-
-            return this;
-        }
-
-        private List<Components.ComponentBase> componentList = new List<Components.ComponentBase>();
-        private DelegateValueSetAdapter delegateValueSetAdapter = new DelegateValueSetAdapter() { OptimizeSets = true };
-
-        public override void Setup(string scanEnginePartName, IConfig pluginsIConfig, IValuesInterconnection pluginsIVI)
-        {
-            delegateValueSetAdapter.IssueEmitter = Logger.Debug;
-            delegateValueSetAdapter.ValueNoteEmitter = Logger.Trace;
-            delegateValueSetAdapter.EmitValueNoteNoChangeMessages = false;
-
-            delegateValueSetAdapter.Setup(pluginsIVI, scanEnginePartName).Set().Update();
-
-            List<Components.ComponentBase> componentWorkingList = new List<Components.ComponentBase>(componentList);
-
-            chambersArray = componentWorkingList.Select(item => item as Components.Chamber).Where(item => item != null).ToArray();
-            foreach (var item in chambersArray)
-                componentWorkingList.Remove(item);
-
-            List<Components.NodePairChain> nodePairChainList = new List<Components.NodePairChain>();
-            List<Components.NodePairBase> workingNodePairList = new List<Components.NodePairBase>(componentWorkingList.Select(item => item as Components.NodePairBase).Where(item => item != null));
-
-            foreach (var item in workingNodePairList)
-                componentWorkingList.Remove(item);
-
-            for (; ; )
+            public ComponentBase(string name, string toStringComponentTypeStr)
             {
-                Components.NodePairBase[] chain = ExtractNextChain(workingNodePairList);
-                if (chain.IsNullOrEmpty())
-                    break;
-
-                foreach (var item in chain)
-                    workingNodePairList.Remove(item);
-
-                Components.NodePairChain nodePairChain = new Components.NodePairChain(chain, Config);
-                nodePairChainList.Add(nodePairChain);
-
-                componentList.Add(nodePairChain);
+                Name = name;
+                ToStringComponentTypeStr = toStringComponentTypeStr;
+                VolumeInM3 = 0.0;
             }
 
-            componentBaseArray = componentList.ToArray();
-            nodePairChainArray = nodePairChainList.ToArray();
-            nodePairArray = workingNodePairList.ToArray();
-            nodePairChainAndNodePairArray = nodePairChainArray.Concat(nodePairArray).ToArray();
+            public ServicePhases ServicePhases { get; protected set; }
 
-            foreach (var comp in componentBaseArray)
-                comp.Setup(scanEnginePartName, Name);
+            internal FlowModelConfig FlowModelConfig { get; set; }
 
-            Components.Node[] chamberNodes = chambersArray.Select(item => item.Node).ToArray();
-            Components.Node[] nodePairsNodesArray = nodePairChainArray.Concat(nodePairArray).SelectMany(item => new[] { item.End1, item.End2 }).ToArray();
+            public virtual void Setup(string scanEnginePartName, string vacuumSimPartName)
+            { }
 
-            List<Components.Node> mainNodesList = new List<Components.Node>();
-            HashSet<Components.Node> foundNodesSet = new HashSet<Components.Node>();
+            public virtual void Service(ServicePhases servicePhase, TimeSpan measuredServiceInterval, QpcTimeStamp timestampNow)
+            { }
 
-            foreach (var node in chamberNodes.Concat(nodePairsNodesArray))
+            public virtual void UpdateFlows()
+            { }
+
+            public string Name { get; protected set; }
+
+            public double RadiusInM { get; set; }
+            public double RadiusInMM { get { return RadiusInM * 1000.0; } set { RadiusInM = value * 0.001; } }
+
+            public virtual double VolumeInM3 { get; set; }
+            public double VolumeInMM3 { get { return VolumeInM3 * 1.0e9; } set { VolumeInM3 = value * 1.0e-9; } }
+
+            public string ToStringComponentTypeStr { get; private set; }
+
+            public override string ToString()
             {
-                if (!foundNodesSet.Contains(node))
+                return "{0} '{1}' r_mm:{2:f1} v_m^3:{3:e3}".CheckedFormat(ToStringComponentTypeStr, Name, RadiusInMM, VolumeInM3);
+            }
+        }
+
+        public class Node
+        {
+            public Node(string name, Chamber chamber = null, NodePairBase nodePair = null, Node observesNode = null)
+            {
+                Name = name;
+
+                if (observesNode != null)
                 {
-                    mainNodesList.Add(node);
-                    foundNodesSet.Add(node);
-                    foundNodesSet.UnionWith(node.ConnectedToNodeArray);
+                    chamber = chamber ?? observesNode.Chamber;
+                    nodePair = nodePair ?? observesNode.NodePair;
                 }
+
+                Chamber = chamber;
+                NodePair = nodePair;
+                ObservesNode = observesNode;
+
+                TemperatureUnits = TemperatureUnits.DegC;
+                Temperature = 20.0;
+                PressureInKPa = Physics.Gasses.Air.StandardAtmPressureInKPa;
+                PressureUnits = PressureUnits.kilopascals;
             }
 
-            mainNodesArray = mainNodesList.Select(node => node as Components.Node).Where(node => node != null).ToArray();
-            mainNodesArrayLength = mainNodesArray.Length;
+            public string Name { get; private set; }
+            public bool IsChamber { get { return (Chamber != null); } }
+            public bool IsSource { get { return (IsChamber && Chamber.IsSource); } }
 
-            nodeFlowsArray = new double [mainNodesArrayLength];
-            lastNodeFlowsArray = new double[mainNodesArrayLength];
+            /// <summary>If this node is connected to one other node and that node is a chamber then this property returns that chamber, otherwise it returns null</summary>
+            public Chamber ConnectedToChamber { get { return ((ConnectedToNodeArray.SafeLength() == 1) ? ConnectedToNodeArray[0].Chamber : null) ;} }
 
-            // initialize newly connected node pressures
-            foreach (var node in mainNodesArray)
-                node.SetupInitialPressure();
+            /// <summary>Returns true if the node is connected to a single chamber</summary>
+            public bool IsConnectedToChamber { get { return (ConnectedToChamber != null); } }
 
-            ServiceComponents(ServicePhases.AfterSetup, TimeSpan.Zero, QpcTimeStamp.Now);
-        }
+            public TemperatureUnits TemperatureUnits { get; set; }
+            public double Temperature { get { return TemperatureUnits.ConvertFromDegK(TemperatureInDegK); } set { TemperatureInDegK = TemperatureUnits.ConvertToDegK(value); } }
+            public double TemperatureInDegK { get; set; }
 
-        Components.NodePairBase[] ExtractNextChain(List<Components.NodePairBase> workingNodePairList)
-        {
-            Components.NodePairBase chainHead = workingNodePairList.FirstOrDefault(item => 
-                ((item.End1.ConnectedToNodeArray.Length != 1 || item.End1.ConnectedToNodeArray.First().IsChamber) && item.End2.ConnectedToNodeArray.Length == 1 && item.End2.ConnectedToNodeArray.First().NodePair != null)
-                );
-
-            if (chainHead == null)
-                return null;
-
-            List<Components.NodePairBase> chainList = new List<Components.NodePairBase>();
-
-            for (; ; )
+            public virtual double EffectiveVolumeM3
             {
-                bool entryChainHeadIsLastInChain = (chainHead.End2.ConnectedToNodeArray.Length != 1 || chainHead.End2.ConnectedToNodeArray.First().NodePair == null);  // this node is attached to more than one End2 node pairs or it is not attached to another NodePair
-
-                chainList.Add(chainHead);
-
-                chainHead = chainHead.End2.ConnectedToNodeArray.First().NodePair;
-
-                if (chainHead == null || entryChainHeadIsLastInChain)
-                    break;
-            }
-
-            foreach (var item in chainList)
-                workingNodePairList.Remove(item);
-
-            return chainList.ToArray();
-        }
-
-        private Components.ComponentBase[] componentBaseArray;
-        private Components.Chamber[] chambersArray;
-        private Components.NodePairChain[] nodePairChainArray;
-        private Components.NodePairBase [] nodePairArray;
-        private Components.NodePairBase[] nodePairChainAndNodePairArray;
-
-        private Components.Node[] mainNodesArray;
-        private int mainNodesArrayLength;
-        private double[] nodeFlowsArray;
-        private double[] lastNodeFlowsArray;
-
-        public override void UpdateInputs()
-        {
-            if (delegateValueSetAdapter.IsUpdateNeeded)
-                delegateValueSetAdapter.Update();
-        }
-
-        public override void Service(TimeSpan measuredServiceInterval, QpcTimeStamp timeStampNow)
-        {
-            ServiceComponents(ServicePhases.BeforeRelaxation, measuredServiceInterval, timeStampNow);
-
-            TimeSpan remainingTime = measuredServiceInterval;
-
-            do
-            {
-                ServiceComponents(ServicePhases.DuringRelaxation, measuredServiceInterval, timeStampNow);
-
-                Array.Copy(nodeFlowsArray, lastNodeFlowsArray, nodeFlowsArray.Length);
-
-                switch (Config.EvaluationMode)
+                get
                 {
-                    case FlowModelEvaluationMode.FixedInterval:
-                    default:
-                        {
-                            TimeSpan iterationDt = Config.NominalMinimumRelaxationInterval;
-                            bool isLastStep = (iterationDt > remainingTime);
+                    if (_effectiveVolumeM3 == 0.0)
+                    {
+                        if (Chamber != null)
+                            _effectiveVolumeM3 = Chamber.VolumeInM3;
+                        else if (NodePair != null)
+                            _effectiveVolumeM3 = NodePair.VolumeInM3 * 0.5;
+                    }
 
-                            RelaxationIterationResult = PerformRelaxationIteration((isLastStep ? remainingTime : iterationDt), nodeFlowsArray, lastNodeFlowsArray);
-
-                            remainingTime = (remainingTime <= iterationDt ? TimeSpan.Zero : remainingTime - iterationDt);
-                        }
-                        break;
-                    case FlowModelEvaluationMode.AutoAdjustInterval:
-                        {
-                            TimeSpan iterationDt = ((nextDT != TimeSpan.Zero) ? nextDT : (nextDT = Config.NominalMinimumRelaxationInterval));
-                            bool isLastStep = (iterationDt > remainingTime);
-
-                            RelaxationIterationResult = PerformRelaxationIteration((isLastStep ? remainingTime : iterationDt), nodeFlowsArray, lastNodeFlowsArray);
-
-                            remainingTime = (remainingTime <= iterationDt ? TimeSpan.Zero : remainingTime - iterationDt);
-
-                            if (RelaxationIterationResult == RelaxationIterationResult.Reversed)
-                            {
-                                nextDT = TimeSpan.FromTicks(Math.Max((long) (nextDT.Ticks * 0.5), Config.NominalMinimumRelaxationInterval.Ticks));
-                            }
-                            else if (RelaxationIterationResult == RelaxationIterationResult.Monotonic && !isLastStep)
-                            {
-                                if (++monotonicCount >= 4)
-                                {
-                                    nextDT = TimeSpan.FromTicks((long) (nextDT.Ticks * 1.2));
-                                    monotonicCount = 0;
-                                }
-                            }
-                        }
-                        break;
+                    return _effectiveVolumeM3;
                 }
-            } while (remainingTime > TimeSpan.Zero);
-
-            ServiceComponents(ServicePhases.AfterRelaxation, measuredServiceInterval, timeStampNow);
-        }
-
-        private void ServiceComponents(ServicePhases servicePhase, TimeSpan measuredServiceInterval, QpcTimeStamp timeStampNow)
-        {
-            foreach (var comp in componentBaseArray)
-            {
-                if (comp.ServicePhases.IncludeInPhase(servicePhase))
-                    comp.Service(servicePhase, measuredServiceInterval, timeStampNow);
+                set { _effectiveVolumeM3 = value; }
             }
-        }
+            double _effectiveVolumeM3 = 0.0;
 
-        TimeSpan nextDT = TimeSpan.Zero;
-        int monotonicCount = 0;
+            /// <summary>Defines the PressureUnits used with the Pressure property</summary>
+            public PressureUnits PressureUnits { get; set; }
 
-        public override void UpdateOutputs()
-        {
-            delegateValueSetAdapter.Set();
-        }
+            /// <summary>gets/sets the node pressure in configured PressureUnits.</summary>
+            public double Pressure { get { return PressureUnits.ConvertFromKPA(PressureInKPa); } set { PressureInKPa = PressureUnits.ConvertToKPa(value); } }
 
-        public RelaxationIterationResult RelaxationIterationResult { get; set; }
+            public double PressureInKPa { get; set; }
 
-        private RelaxationIterationResult PerformRelaxationIteration(TimeSpan dt, double[] nodeFlowsArray, double[] lastNodeFlowsArray)
-        {
-            RelaxationIterationResult result = RelaxationIterationResult.Monotonic;
+            /// <summary>volumetric flow rate out of node in Standard cubic meters per second</summary>
+            public double VolumetricFlowOutOfNodeInSCMS { get; set; }
 
-            foreach (var npItem in nodePairChainAndNodePairArray)
-                npItem.UpdateFlows();
+            /// <summary>Returns true if this Node is part of a NodePair and that nodePair IsPartOfBondingConnectionBetweenChambers</summary>
+            public bool IsPartOfBondingConnectionBetweenChambers { get { return (NodePair != null && NodePair.IsBondingConnectionBetweenChambers); } }
 
-            HandleChamberFlows();
-
-            foreach (var node in mainNodesArray)
-                node.UpdatePressure(dt);
-
-            foreach (var nodePairChain in nodePairChainArray)
-                nodePairChain.DistributePressures();
-
-            for (int nodeIdx = 0; nodeIdx < mainNodesArrayLength; nodeIdx++)
-            {
-                var node = mainNodesArray[nodeIdx];
-
-                nodeFlowsArray[nodeIdx] = node.VolumetricFlowOutOfNodeInSCMS;
-
-                result = CatagorizeFlowChange(result, node.VolumetricFlowOutOfNodeInSCMS, lastNodeFlowsArray[nodeIdx]);
+            public Node[] ConnectedToNodeArray 
+            { 
+                get { return connectedToNodeArray ?? (connectedToNodeArray = connectedToNodeList.ToArray()); }
+                internal set { connectedToNodeList.Clear(); connectedToNodeList.AddRange(value); connectedToNodeArray = value; }
             }
+            public Chamber Chamber { get; private set; }
+            public NodePairBase NodePair { get; private set; }
+            public Node ObservesNode { get; private set; }
 
-            return result;
-        }
+            List<Node> connectedToNodeList = new List<Node>();
+            Node[] connectedToNodeArray = null;
 
-        List<Chamber> chamberScanList = new List<Chamber>();
-        List<Chamber> stifflyConnectedChambersList = new List<Chamber>();
-        List<NodePairBase> stifflyConnectedNodePairList = new List<NodePairBase>();
-        List<Chamber> bredthFirstList = new List<Chamber>();
-
-        private void HandleChamberFlows()
-        {
-            chamberScanList.Clear();
-            chamberScanList.AddRange(chambersArray);
-
-            while (chamberScanList.Count > 0)
+            public Node ConnectTo(Node otherNode, bool connectBackAsWell = true)
             {
-                Chamber ch = chamberScanList.SafeTakeFirst();
-
-                if (!ch.Node.ConnectedToNodeArray.Any(node => node.NodePair != null && node.NodePair.IsStiffConnectionBetweenChambers))
+                if (otherNode != null && (!IsChamber || !otherNode.IsChamber))
                 {
-                    ch.UpdateFlows();
+                    connectedToNodeList.Add(otherNode);
+
+                    connectedToNodeArray = null;
+
+                    if (connectBackAsWell && otherNode != null)
+                        otherNode.ConnectTo(this, connectBackAsWell: false);
+                }
+                // otherwise otherNode is null or both nodes are chambers and we cannot directly connect chambers to each other....
+
+                return this;
+            }
+
+            public Node DisconnectFrom(Node otherNode, bool disconnectBackAsWell = true)
+            {
+                if (connectedToNodeList.Contains(otherNode))
+                {
+                    connectedToNodeList.Remove(otherNode);
+                    connectedToNodeArray = null;
+
+                    if (disconnectBackAsWell)
+                        otherNode.DisconnectFrom(this, disconnectBackAsWell: false);
+                }
+
+                return this;
+            }
+
+            public override string ToString()
+            {
+                string connToStr = String.Join(",", ConnectedToNodeArray.Select(item => item.Name).ToArray());
+                if (IsChamber)
+                    return "Node {0} p_kPa:{1:e3} f_scms:{2:e3} c:{3}".CheckedFormat(Chamber, PressureInKPa, VolumetricFlowOutOfNodeInSCMS, connToStr);
+                else
+                    return "Node {0} p_kPa:{1:e3} f_scms:{2:e3} effV_m^3:{3:e3} c:{4}".CheckedFormat(Name, PressureInKPa, VolumetricFlowOutOfNodeInSCMS, EffectiveVolumeM3, connToStr);
+            }
+
+            public virtual void UpdatePressure(TimeSpan dt)
+            {
+                double updatedPressureInKPa = PressureInKPa;
+
+                if (!IsSource)
+                {
+                    double summedVolumeM3 = (EffectiveVolumeM3 + ConnectedToNodeArray.Sum(item => item.EffectiveVolumeM3));
+                    double summedVolumetricFlowOutOfNodeInSCMS = VolumetricFlowOutOfNodeInSCMS - (IsChamber ? 0.0 : ConnectedToNodeArray.Sum(item => item.VolumetricFlowOutOfNodeInSCMS));    // for chambers the flow has already been summed
+
+                    if (double.IsNaN(summedVolumeM3) || double.IsInfinity(summedVolumeM3) || summedVolumeM3 <= 0.0)
+                        throw new System.InvalidOperationException("summedVolumeM3");
+
+                    if (double.IsNaN(TemperatureInDegK) || double.IsInfinity(TemperatureInDegK) || TemperatureInDegK <= 0.0)
+                        throw new System.InvalidOperationException("TemperatureInDegK");
+
+                    double currentMoles = Physics.Gasses.IdealGasLaw.ToMoles(PressureInKPa, summedVolumeM3, TemperatureInDegK);
+
+                    double deltaVolumeOutOfNodeM3 = summedVolumetricFlowOutOfNodeInSCMS * dt.TotalSeconds;
+                    double deltaMolesOutOfNode = Physics.Gasses.IdealGasLaw.ToMoles(Physics.Gasses.Air.StandardAtmPressureInKPa, deltaVolumeOutOfNodeM3, TemperatureInDegK);
+
+                    double updatedMoles = Math.Max(0.0, currentMoles - deltaMolesOutOfNode);
+
+                    updatedPressureInKPa = Physics.Gasses.IdealGasLaw.ToPressureInKPa(updatedMoles, summedVolumeM3, TemperatureInDegK);
+
+                    double maxPressure = 10.0 * Physics.Gasses.Air.StandardAtmPressureInKPa;
+                    if (!updatedPressureInKPa.IsInRange(0.0, maxPressure))
+                        updatedPressureInKPa = updatedPressureInKPa.Clip(0.0, maxPressure, updatedPressureInKPa);
+
+                    // note: it is expected that the pressure may actually reach zero when the above delta calculation logic overshoots 
+                    if (double.IsNaN(updatedPressureInKPa) || double.IsInfinity(updatedPressureInKPa) || updatedPressureInKPa < 0.0)
+                        throw new System.InvalidOperationException("updatedPressureInKPa");
+                }
+
+                SetPressureAndDistributeToSubNodes(updatedPressureInKPa);
+            }
+
+            public virtual void SetupInitialPressure()
+            {
+                double sharedPressureInKPa = PressureInKPa;
+
+                if (!IsSource)
+                {
+                    IEnumerable<Node> allNodeSet = new Node[] { this }.Concat(ConnectedToNodeArray);
+                    double summedVolumeInM3 = allNodeSet.Sum(item => item.EffectiveVolumeM3);
+                    double summedNodeMoles = allNodeSet.Sum(item => Physics.Gasses.IdealGasLaw.ToMoles(item.PressureInKPa, item.EffectiveVolumeM3, item.TemperatureInDegK));
+
+                    if (summedNodeMoles > 0.0)
+                        sharedPressureInKPa = Physics.Gasses.IdealGasLaw.ToPressureInKPa(summedNodeMoles, summedVolumeInM3, TemperatureInDegK);
+                    else
+                        sharedPressureInKPa = PressureInKPa;
+                }
+
+                SetPressureAndDistributeToSubNodes(sharedPressureInKPa);
+            }
+
+            public virtual void SetPressureAndDistributeToSubNodes(double pressureInKPa)
+            {
+                PressureInKPa = pressureInKPa;
+
+                foreach (var subNode in ConnectedToNodeArray)
+                    subNode.PressureInKPa = pressureInKPa;
+            }
+        }
+
+        public class NodePairBase : ComponentBase
+        {
+            public NodePairBase(string name, string toStringComponentTypeStr)
+                : base(name, toStringComponentTypeStr)
+            {
+                End1 = new Node("{0}.End1".CheckedFormat(name), nodePair: this);
+                End2 = new Node("{0}.End2".CheckedFormat(name), nodePair: this);
+            }
+
+            public override void UpdateFlows()
+            {
+                double pEnd1 = End1.PressureInKPa;
+                double pEnd2 = End2.PressureInKPa;
+
+                if (double.IsNaN(pEnd1) || double.IsInfinity(pEnd1))
+                    throw new System.InvalidOperationException("pEnd1");
+
+                if (double.IsNaN(pEnd2) || double.IsInfinity(pEnd2))
+                    throw new System.InvalidOperationException("pEnd2");
+
+                double pDiff = pEnd2 - pEnd1;       // we are calculating the flow out of End1 (and into End2) which occurs when p@End2 > p@End1
+                double pAvg = (pEnd1 + pEnd2) * 0.5;
+
+                double resistanceInKPaSecPerM3 = ResistanceInKPaSecPerM3;
+
+                if (double.IsNaN(resistanceInKPaSecPerM3) || resistanceInKPaSecPerM3 <= 0.0)
+                    throw new System.InvalidOperationException("resistance");
+
+                double flowRateM3PerSec = (double.IsInfinity(resistanceInKPaSecPerM3) ? 0.0 : pDiff / resistanceInKPaSecPerM3);
+
+                Chamber chEnd1 = End1.ConnectedToChamber;
+                Chamber chEnd2 = End2.ConnectedToChamber;
+
+                bool isBondingDetectionEnabled = (FlowModelConfig.BondingConnectionThresholdInPercentPressurePerMinimumInterval > 0.0);
+                bool nextIsBondingConnectionBetweenChambersValue = isBondingConnectionBetweenChambers;
+
+                if (chEnd1 != null && chEnd2 != null && isBondingDetectionEnabled)
+                {
+                    bool bothAreSources = chEnd1.IsSource && chEnd2.IsSource;
+
+                    double end1ChamberVolumeInM3 = chEnd1.VolumeInM3;     // pressure reference chambers have zero volume
+                    double end2ChamberVolumeInM3 = chEnd2.VolumeInM3;     // pressure reference chambers have zero volume
+                    double testConnectedChamberVolumeInM3 = (end1ChamberVolumeInM3 > 0.0 && end2ChamberVolumeInM3 > 0.0 ? Math.Min(end1ChamberVolumeInM3, end2ChamberVolumeInM3) : Math.Max(end1ChamberVolumeInM3, end2ChamberVolumeInM3));
+
+                    double absIncrementalFlowM3PerMinInterval = Math.Abs(flowRateM3PerSec * FlowModelConfig.NominalMinimumRelaxationInterval.TotalSeconds);
+
+                    if (!bothAreSources && absIncrementalFlowM3PerMinInterval > testConnectedChamberVolumeInM3 * FlowModelConfig.BondingConnectionThresholdInPercentPressurePerMinimumInterval * 0.01)
+                        nextIsBondingConnectionBetweenChambersValue = true;
+                    else if (isBondingConnectionBetweenChambers && resistanceInKPaSecPerM3 > lastResistanceInKPaSecPerM3)
+                        nextIsBondingConnectionBetweenChambersValue = false;        // once bonding is turned on then it will only be turned off if it is disabled or if the resistance increases.
+                    // else leave it in the current state.
                 }
                 else
                 {
-                    ExtractStifflyConnectedChambers(ch);
-
-                    Chamber firstSourceCh = stifflyConnectedChambersList.FirstOrDefault(item => item.IsSource);
-
-                    double updatedPressureInKPa = ch.PressureInKPa;
-                    if (firstSourceCh != null)
-                    {
-                        updatedPressureInKPa = firstSourceCh.PressureInKPa;
-                    }
-                    else
-                    {
-                        /// Todo: need to review the logic in SetupInitialPressure and possibly extract it for use in this case as well (this is a superset of the other case).  Alternately just copy and adapt it with appropriate comments.
-                        //Todo();
-                    }
-
-                    /// Todo: implement stiffly connected chamber and NodePairs enumeration and directly pressure relaxation through the set of 
-                    ch.UpdateFlows();
+                    nextIsBondingConnectionBetweenChambersValue = false;
                 }
+
+                if (isBondingConnectionBetweenChambers != nextIsBondingConnectionBetweenChambersValue)
+                    isBondingConnectionBetweenChambers = nextIsBondingConnectionBetweenChambersValue;
+
+                double volumetricFlowInSCMS = (!IsBondingConnectionBetweenChambers) ? ((pAvg / Physics.Gasses.Air.StandardAtmPressureInKPa) * flowRateM3PerSec) : 0.0;
+
+                End1.VolumetricFlowOutOfNodeInSCMS = volumetricFlowInSCMS;        // (pDiff = pEnd2 - pEnd1) above, or zero if this IsBondingConnectionBetweenChambers
+                End2.VolumetricFlowOutOfNodeInSCMS = -volumetricFlowInSCMS;
+
+                if (double.IsNaN(volumetricFlowInSCMS) || double.IsInfinity(volumetricFlowInSCMS))
+                    throw new System.InvalidOperationException("volumetricFlowInSCMS");
+
+                lastResistanceInKPaSecPerM3 = resistanceInKPaSecPerM3;
             }
-        }
 
-        private void ExtractStifflyConnectedChambers(Chamber rootCh)
-        {
-            stifflyConnectedChambersList.Clear();
-            stifflyConnectedChambersList.Add(rootCh);
+            public bool IsBondingConnectionBetweenChambers { get { return isBondingConnectionBetweenChambers && !DisableBondingConnectionBetweenChambers; } protected set { isBondingConnectionBetweenChambers = value; } }
+            private bool isBondingConnectionBetweenChambers;
+            private double lastResistanceInKPaSecPerM3;
+            protected bool DisableBondingConnectionBetweenChambers { get; set; }
 
-            stifflyConnectedNodePairList.Clear();
+            public double LengthInM { get; set; }
+            public double LengthInMM { get { return LengthInM * 1000.0; } set { LengthInM = value * 0.001; } }
+            public double EffectiveAreaGain { get { return _effectiveAreaGain; } set { _effectiveAreaGain = value.Clip(0.0, 10.0, 1.0); } }
+            private double _effectiveAreaGain = 1.0;
 
-            bredthFirstList.Clear();
-            bredthFirstList.Add(rootCh);
+            public override double VolumeInM3 { get { return NominalAreaInM2 * LengthInM; } }
 
-            for (; ; )
+            private double NominalAreaInM2 { get { return (Math.PI * RadiusInM * RadiusInM); } }
+            public virtual double EffectiveAreaM2 { get { return NominalAreaInM2 * _effectiveAreaGain; } }
+
+            public virtual double ResistanceInKPaSecPerM3
             {
-                Chamber scanCh = bredthFirstList.SafeTakeFirst();
-                if (scanCh == null)
-                    break;
-
-                foreach (var stiffNodePair in scanCh.Node.ConnectedToNodeArray.Select(node => node.NodePair).Where(nodePair => nodePair != null))
+                get
                 {
-                    Chamber otherChamber = (stiffNodePair.End1.Chamber == scanCh ? stiffNodePair.End2.Chamber : stiffNodePair.End1.Chamber);
+                    double areaM2 = EffectiveAreaM2;  // mm^2 => m^2
+                    double lengthM = LengthInM; // mm => m
 
-                    if (otherChamber != null && chamberScanList.Contains(otherChamber))
-                    {
-                        chamberScanList.Remove(otherChamber);
+                    if (double.IsNaN(lengthM) || double.IsInfinity(lengthM) || lengthM <= 0.0)
+                        throw new System.InvalidOperationException("lengthM");
 
-                        stifflyConnectedChambersList.Add(otherChamber);
-                        stifflyConnectedNodePairList.Add(stiffNodePair);
+                    if (double.IsNaN(areaM2) || double.IsInfinity(areaM2))
+                        throw new System.InvalidOperationException("areaM2");
 
-                        bredthFirstList.Add(otherChamber);
-                    }
+                    /* Hagen–Poiseuille flow equation:
+                     * 
+                     * Q = (pi * R^4 * dP)/(8 * mu * L)
+                     * 
+                     *  - or -
+                     *  
+                     * dP = (8 * mu * L * Q) / (pi * R^4)
+                     * 
+                     * Q: flow rate in m^3/s
+                     * R: pipe radius in m
+                     * L: pipe length in m
+                     * mu: dynamic viscosity kPa*s
+                     * dP: pressure difference in kPa
+                     * 
+                     * Q = (m^4 * N/m^2)/(N/m^2 * s * m) = (N * m^2)/(N * s / m) = m ^ 3/s
+                     */
+
+                    // pi was moved from denominator to numerator because of change from radius^4 to area^2 (which now has pi^2 in it)
+                    double resistanceInKPaSecPerM3 = ((areaM2 > 0.0) ? ((Math.PI * 8.0 * Physics.Gasses.N2.ViscosityInKPaS * lengthM) / (areaM2 * areaM2)) : double.PositiveInfinity);
+
+                    if (double.IsNaN(resistanceInKPaSecPerM3) || resistanceInKPaSecPerM3 <= 0.0)
+                        throw new System.InvalidOperationException("resistance");
+
+                    return resistanceInKPaSecPerM3;
                 }
             }
 
+            public virtual void DistributePressures()
+            { }
+
+            public double InitialPressureInKPa 
+            { 
+                set 
+                {
+                    End1.SetPressureAndDistributeToSubNodes(value);
+                    End2.SetPressureAndDistributeToSubNodes(value);
+
+                    DistributePressures();
+                } 
+            }
+
+            public Node End1 { get; protected set; }
+            public Node End2 { get; protected set; }
+
+            public override string ToString()
+            {
+                return "{0} p_kPa:{1:e3},{2:e3} f_scms:{3:e3}".CheckedFormat(base.ToString(), End1.PressureInKPa, End2.PressureInKPa, End1.VolumetricFlowOutOfNodeInSCMS);
+            }
+
+            /// <summary>
+            /// For node pairs that connect two chambers, this method accepts the given testCh and returns the chamber at the first end that is not same instance as the given testChamber instance.
+            /// This method will return null if this node pair does not connect the given chamber to another chamber.
+            /// </summary>
+            public Chamber OtherConnectedChamber(Chamber testChamber)
+            {
+                if (Object.ReferenceEquals(End1.ConnectedToChamber, testChamber))
+                    return End2.ConnectedToChamber;
+                else if (Object.ReferenceEquals(End2.ConnectedToChamber, testChamber))
+                    return End1.ConnectedToChamber;
+                else
+                    return null;
+            }
         }
 
-        private static RelaxationIterationResult CatagorizeFlowChange(RelaxationIterationResult result, double nodeFlow, double lastNodeFlow)
-        {
-            int nodeFlowSign = Math.Sign(nodeFlow);
-            int lastNodeFlowSign = Math.Sign(lastNodeFlow);
-
-            if (nodeFlowSign == lastNodeFlowSign || nodeFlowSign == 0 || lastNodeFlowSign == 0 || result == RelaxationIterationResult.Reversed)
-                return result;
-
-            double nodeFlowAbs = Math.Abs(nodeFlow);
-            double lastNodeFlowAbs = Math.Abs(lastNodeFlow);
-
-            double oneOverNormalizeBy = 1.0 / Math.Max(nodeFlowAbs, lastNodeFlowAbs);
-
-            nodeFlowAbs *= oneOverNormalizeBy;
-            lastNodeFlowAbs *= oneOverNormalizeBy;
-
-            if (nodeFlowAbs <= 0.01 || lastNodeFlowAbs <= 0.01)
-                return result;
-
-            if (nodeFlowAbs >= 0.25 && lastNodeFlowAbs >= 0.25)
-                return RelaxationIterationResult.Reversed;
-
-            return RelaxationIterationResult.Indeterminate;
-        }
+        #endregion
     }
-
-    public enum RelaxationIterationResult
-    {
-        None = 0,
-        Monotonic = 1,
-        Indeterminate = 2,
-        Reversed = 3,
-    }
-
 
     #endregion
 }

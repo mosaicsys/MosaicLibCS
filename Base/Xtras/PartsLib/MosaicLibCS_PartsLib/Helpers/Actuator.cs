@@ -358,7 +358,7 @@ namespace MosaicLib.PartsLib.Helpers
             else if (privateState.TargetPositionInPercent > privateState.PositionInPercent)
             {
                 double dtPercent = dt.TotalSeconds * motion1To2PercentPerSecond;
-                if (nextPositionInPercent + dtPercent > privateState.TargetPositionInPercent)
+                if (motion1To2IsInstant || nextPositionInPercent + dtPercent > privateState.TargetPositionInPercent)
                 {
                     nextPositionInPercent = privateState.TargetPositionInPercent;
                 }
@@ -371,7 +371,7 @@ namespace MosaicLib.PartsLib.Helpers
             else if (privateState.TargetPositionInPercent < privateState.PositionInPercent)
             {
                 double dtPercent = dt.TotalSeconds * motion2To1PercentPerSecond;
-                if (nextPositionInPercent - dtPercent < privateState.TargetPositionInPercent)
+                if (motion2To1IsInstant || nextPositionInPercent - dtPercent < privateState.TargetPositionInPercent)
                 {
                     nextPositionInPercent = privateState.TargetPositionInPercent;
                 }
@@ -483,12 +483,17 @@ namespace MosaicLib.PartsLib.Helpers
 
         protected void UpdateMotionRates()
         {
-            motion1To2PercentPerSecond = ((Motion1To2Time > TimeSpan.Zero) ? 100.0 / Motion1To2Time.TotalSeconds : 100.0);
-            motion2To1PercentPerSecond = ((Motion2To1Time > TimeSpan.Zero) ? 100.0 / Motion2To1Time.TotalSeconds : 100.0);
+            motion1To2IsInstant = (Motion1To2Time <= TimeSpan.Zero);
+            motion2To1IsInstant = (Motion2To1Time <= TimeSpan.Zero);
+
+            motion1To2PercentPerSecond = (!motion1To2IsInstant ? 100.0 / Motion1To2Time.TotalSeconds : 0.0);
+            motion2To1PercentPerSecond = (!motion2To1IsInstant ? 100.0 / Motion2To1Time.TotalSeconds : 0.0);
         }
 
         private double motion1To2PercentPerSecond;
         private double motion2To1PercentPerSecond;
+        private bool motion1To2IsInstant;
+        private bool motion2To1IsInstant;
 
         public IActuatorState State { get; protected set; }
 
