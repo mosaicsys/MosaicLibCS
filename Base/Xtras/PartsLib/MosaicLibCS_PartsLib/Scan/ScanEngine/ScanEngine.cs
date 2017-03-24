@@ -408,8 +408,6 @@ namespace MosaicLib.PartsLib.Scan.ScanEngine
 
         public ScanEngineHelper AddRange(IEnumerable<IScanEnginePlugin> pluginSet)
         {
-            pluginSet = null;
-
             foreach (IScanEnginePlugin plugin in pluginSet ?? emptyPluginArray)
             {
                 string pluginName = String.Empty;

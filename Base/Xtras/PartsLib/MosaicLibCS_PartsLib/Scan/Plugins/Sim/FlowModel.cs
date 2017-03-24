@@ -450,8 +450,8 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
 
             public TimeSpan DebouncePeriod { get; set; }
 
-            /// <summary>Atmospheric Pop Open Valve.  "Opens" if End1-End2 &gt; 10.0 torr, "Closes" if End1-End2 &lt; 1.0 torr.  PressureUnits = torr, DebouncePeriod = 0.2 seconds</summary>
-            public static BistableValveConfig AtmPopOpenValve { get { return new BistableValveConfig() { PressureUnits = PressureUnits.torr, State1PressureThreshold = 1.0, State1PercentOpen = 0.0, State2PressureThreshold = 10.0, State2PercentOpen = 100.0, DebouncePeriod = (0.2).FromSeconds() }; } }
+            /// <summary>Atmospheric Pop Open Valve.  "Opens" if End1-End2 &gt; 30.0 torr, "Closes" if End1-End2 &lt; 2.0 torr.  PressureUnits = torr, DebouncePeriod = 0.2 seconds</summary>
+            public static BistableValveConfig AtmPopOpenValve { get { return new BistableValveConfig() { PressureUnits = PressureUnits.torr, State1PressureThreshold = 2.0, State1PercentOpen = 0.0, State2PressureThreshold = 30.0, State2PercentOpen = 100.0, DebouncePeriod = (0.2).FromSeconds() }; } }
         }
         
         #endregion
