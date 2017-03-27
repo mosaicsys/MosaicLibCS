@@ -151,6 +151,12 @@ namespace MosaicLib.PartsLib.Common.Physics
 
             /// <summary>32.0 F when C is zero</summary>
             public const double DegFOffsetAtZeroDegC = 32.0;
+
+            /// <summary>Standard "room" temperature in DegC [20.0]</summary>
+            public const double StandardTemperatureInDegC = 20.0;
+
+            /// <summary>Standard "room" temperature in DegK [20.0 + 273.15]</summary>
+            public const double StandardTemperatureInDegK = 20.0 + DegKOffsetFromDegC;
         }
 
         public static partial class ExtensionMethods

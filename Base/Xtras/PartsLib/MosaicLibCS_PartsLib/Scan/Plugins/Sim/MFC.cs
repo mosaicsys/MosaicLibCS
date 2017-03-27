@@ -23,16 +23,14 @@ using System;
 
 using MosaicLib;
 using MosaicLib.Modular.Common;
-using MosaicLib.Modular.Config;
-using MosaicLib.Modular.Config.Attributes;
-using MosaicLib.Modular.Interconnect.Values;
-using MosaicLib.Modular.Interconnect.Values.Attributes;
-using MosaicLib.PartsLib.Common.MassFlow;
 using MosaicLib.PartsLib.Scan.Plugin.Sim.Common;
+using MosaicLib.PartsLib.Scan.ScanEngine;
 using MosaicLib.Time;
 using MosaicLib.Utils;
 
 using Units = MosaicLib.PartsLib.Common.Physics.UnitsOfMeasure;
+using MosaicLib.Modular.Config;
+using MosaicLib.Modular.Interconnect.Values;
 
 namespace MosaicLib.PartsLib.Scan.Plugin.Sim.MFC
 {
@@ -55,70 +53,108 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.MFC
 
     /// <summary>
     /// This ScanEngine Plugin provides very basic simulated fucntionality of an MFC.
-    /// <para/>Supports following channels:
-    /// <para/>Inputs:  FlowSetpointTarget, FlowSetpointTargetInPercentOfFS (last writer wins), ControlMode (Close, Analog, Open, Freeze, Normal, Offline), FaultInjection
-    /// <para/>Outputs: TrackingFlowSetpoint, TrackingFlowSetpointInPercientOfFS, MeasuredFlowInPercentOfFS, MeasuredFlow, ValvePositionInPercent, TotalOpertingHours, TotalFlow
-    /// <para/>Supports the following config keys
-    /// <para/>FullScaleFlow (1000.0), FlowNoise (5.0), FullScaleResponsePeriodInSeconds (1.25)
     /// </summary>
-    public class MFCSimScanEnginePlugin : ScanEngine.ScanEnginePluginBase<MFCSimPluginConfig, MFCSimPluginInputs, MFCSimPluginOutputs>
+    public class MFCSimScanEnginePlugin : ScanEnginePluginBase
     {
         public MFCSimScanEnginePlugin(string name) : this(name, null) { }
         public MFCSimScanEnginePlugin(string name, MFCSimPluginConfig config) 
-            : base(name, config) 
+            : base(name) 
         {
-            if (ConfigValues.FullScaleFlow <= 0.0)
-                ConfigValues.FullScaleFlow = 1.0;
+            Config = new MFCSimPluginConfig(config);
+
+            TrackFullScaleFlowChanges();
+
+            OutputValues = new MFCSimPluginOutputs();
         }
 
-        public override void Setup(string scanEnginePartName, IConfig pluginsIConfig, IValuesInterconnection pluginsIVI)
+        public MFCSimPluginConfig Config { get; protected set; }
+        public MFCSimPluginOutputs OutputValues { get; protected set; }
+
+        private void TrackFullScaleFlowChanges()
         {
-            base.Setup(scanEnginePartName, pluginsIConfig, pluginsIVI);
-
-            IValuesInterconnection ivi = pluginsIVI;
-
-            // Create "write once" iva's to indicate the mfc's flow units and full scale flow value.
-            ivi.GetValueAccessor("{0}.FlowUnits".CheckedFormat(Name)).Set(ConfigValues.FlowUnits);
-            ivi.GetValueAccessor("{0}.FullScaleFlow".CheckedFormat(Name)).Set(ConfigValues.FullScaleFlow);
-
-            flowSetpointTargetInputIVA = ivi.GetValueAccessor<double>("{0}.FlowSetpointTarget".CheckedFormat(Name)).Set(0.0);
-            flowSetpointTargetInputInPercentOfFSIVA = ivi.GetValueAccessor<double>("{0}.FlowSetpointTargetInPercentOfFS".CheckedFormat(Name)).Set(0.0);
-        }
-
-        protected MFCSimPluginConfig deviceConfig = new MFCSimPluginConfig();
-
-        protected IValueAccessor<double> flowSetpointTargetInputIVA;
-        protected IValueAccessor<double> flowSetpointTargetInputInPercentOfFSIVA;
-
-        public override void UpdateInputs()
-        {
-            base.UpdateInputs();
-
-            if (flowSetpointTargetInputIVA.IsUpdateNeeded)
+            if (fullScaleFlow != Config.FullScaleFlow)
             {
-                OutputValues.LastWrittenFlowSetpointTarget = flowSetpointTargetInputIVA.Update().Value;
-                flowSetpointTargetInputInPercentOfFSIVA.Set(ConfigValues.ConvertToPercentOfFS(OutputValues.LastWrittenFlowSetpointTarget));
-                Logger.Debug.Emit("Setpoint changed to {0:f3} [{1:f2} %]", OutputValues.LastWrittenFlowSetpointTarget, flowSetpointTargetInputInPercentOfFSIVA.Value);
-            }
-            else if (flowSetpointTargetInputInPercentOfFSIVA.IsUpdateNeeded)
-            {
-                OutputValues.LastWrittenFlowSetpointTarget = ConfigValues.ConvertFromPercentToFlow(flowSetpointTargetInputInPercentOfFSIVA.Update().Value);
-                flowSetpointTargetInputIVA.Set(OutputValues.LastWrittenFlowSetpointTarget);
-                Logger.Debug.Emit("Setpoint changed to {0:f2} % [{1:f2}]", flowSetpointTargetInputInPercentOfFSIVA.Value, OutputValues.LastWrittenFlowSetpointTarget);
+                fullScaleFlow = Config.FullScaleFlow;
+                if (fullScaleFlow > 0.0)
+                {
+                    fullScaleFlowToPercentOfFS = (100.0 / fullScaleFlow);
+                    percentOfFSToFullScaleFlow = (fullScaleFlow * 0.01);
+                }
+                else
+                {
+                    fullScaleFlowToPercentOfFS = 0.0;
+                    percentOfFSToFullScaleFlow = 0.0;
+                }
+
+                Logger.Debug.Emit("Full Scale Flow changed to {0:f1}", fullScaleFlow);
             }
         }
+
+        private double fullScaleFlow;
+        private double fullScaleFlowToPercentOfFS, percentOfFSToFullScaleFlow;
+
+        public double FlowSetpointTarget 
+        {
+            get { return flowSetpointTarget; }
+            set
+            {
+                if (flowSetpointTarget != value)
+                {
+                    flowSetpointTarget = value;
+                    flowSetpointTargetInPercentOfFS = value * fullScaleFlowToPercentOfFS;
+                    Logger.Debug.Emit("Setpoint changed to {0:f3} [{1:f2} %]", flowSetpointTarget, flowSetpointTargetInPercentOfFS);
+                }
+            }
+        }
+        public double FlowSetpointTargetInPercentOfFS
+        {
+            get { return flowSetpointTargetInPercentOfFS; }
+            set
+            {
+                if (flowSetpointTargetInPercentOfFS != value)
+                {
+                    flowSetpointTargetInPercentOfFS = value;
+                    flowSetpointTarget = value * percentOfFSToFullScaleFlow;
+                    Logger.Debug.Emit("Setpoint changed to {0:f2} % [{1:f2}]", flowSetpointTargetInPercentOfFS, flowSetpointTarget);
+                }
+            }
+        }
+
+        double flowSetpointTarget;
+        double flowSetpointTargetInPercentOfFS;
+
+        public ControlMode ControlMode { get; set; }
+
+        public string FaultInjectionStr
+        {
+            get { return _faultInjectionStr; }
+            set
+            {
+                value = value.MapNullToEmpty();
+                if (_faultInjectionStr != value)
+                {
+                    _faultInjectionStr = value;
+                    FaultInjection = Utils.Enum.TryParse(value, Common.FaultInjection.None);
+                }
+            }
+        }
+        private string _faultInjectionStr = string.Empty;
+
+        public FaultInjection FaultInjection { get; set; }
 
         public override void Service(TimeSpan measuredServiceInterval, QpcTimeStamp scanStartTime)
         {
             double periodInSeconds = measuredServiceInterval.TotalSeconds;
 
-            double setpointTarget = OutputValues.LastWrittenFlowSetpointTarget;
-            double setpointTargetInPercentFS = ConfigValues.ConvertToPercentOfFS(setpointTarget);
-            double updatedTrackingSetpoint = ConfigValues.ApplySlewLimit(OutputValues.TrackingFlowSetpoint, setpointTarget, periodInSeconds);
-            double trackingSetpointPercentFS = ConfigValues.ConvertToPercentOfFS(OutputValues.TrackingFlowSetpoint);
+            TrackFullScaleFlowChanges();
 
-            ControlMode controlMode = InputValues.ControlMode;
-            FaultInjection faultInjection = InputValues.FaultInjection;
+            double setpointTarget = flowSetpointTarget;
+            double setpointTargetInPercentFS = setpointTarget * fullScaleFlowToPercentOfFS;
+            double updatedTrackingSetpoint = Config.ApplySlewLimit(OutputValues.TrackingFlowSetpoint, setpointTarget, periodInSeconds);
+            double trackingSetpointPercentFS = OutputValues.TrackingFlowSetpoint * fullScaleFlowToPercentOfFS;
+
+            ControlMode controlMode = ControlMode;
+            FaultInjection faultInjection = FaultInjection;
 
             bool isOnline = !faultInjection.IsSet(FaultInjection.Offline);
             bool forceClosed = faultInjection.IsSet(FaultInjection.ForceClose);
@@ -132,9 +168,9 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.MFC
 
             if (!closeValve && !openValve && !freezeValve)
             {
-                if ((setpointTargetInPercentFS <= ConfigValues.SetpointThresholdForCloseInPercentOfFS) && (trackingSetpointPercentFS <= ConfigValues.SetpointThresholdForCloseInPercentOfFS))
+                if ((setpointTargetInPercentFS <= Config.SetpointThresholdForCloseInPercentOfFS) && (trackingSetpointPercentFS <= Config.SetpointThresholdForCloseInPercentOfFS))
                     closeValve = true;
-                else if ((setpointTargetInPercentFS >= ConfigValues.SetpointThresholdForOpenInPercentOfFS) && (trackingSetpointPercentFS >= ConfigValues.SetpointThresholdForOpenInPercentOfFS))
+                else if ((setpointTargetInPercentFS >= Config.SetpointThresholdForOpenInPercentOfFS) && (trackingSetpointPercentFS >= Config.SetpointThresholdForOpenInPercentOfFS))
                     openValve = true;
             }
 
@@ -143,12 +179,12 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.MFC
             if (closeValve)
             {
                 OutputValues.TrackingFlowSetpointInPercentOfFS = trackingSetpointPercentFS = 0.0;
-                OutputValues.TrackingFlowSetpoint = ConfigValues.ConvertFromPercentToFlow(trackingSetpointPercentFS);
+                OutputValues.TrackingFlowSetpoint = trackingSetpointPercentFS * percentOfFSToFullScaleFlow;
             }
             else if (openValve)
             {
                 OutputValues.TrackingFlowSetpointInPercentOfFS = trackingSetpointPercentFS = 125.0;
-                OutputValues.TrackingFlowSetpoint = ConfigValues.ConvertFromPercentToFlow(trackingSetpointPercentFS);
+                OutputValues.TrackingFlowSetpoint = trackingSetpointPercentFS * fullScaleFlowToPercentOfFS;
             }
             else if (freezeValve)
             {
@@ -159,19 +195,19 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.MFC
             {
                 // early calculations do not need to be updated
                 OutputValues.TrackingFlowSetpoint = updatedTrackingSetpoint;
-                OutputValues.TrackingFlowSetpointInPercentOfFS = ConfigValues.ConvertToPercentOfFS(updatedTrackingSetpoint);
+                OutputValues.TrackingFlowSetpointInPercentOfFS = updatedTrackingSetpoint * fullScaleFlowToPercentOfFS;
             }
 
-            double flowNoise = (isOnline ? (ConfigValues.FlowNoise * GetNextRandomInMinus1ToPlus1Range()) : 0.0);
-            double tempNoise = (isOnline ? (ConfigValues.TemperatureNoiseInDegC * GetNextRandomInMinus1ToPlus1Range()) : 0.0);
+            double flowNoise = (isOnline ? (Config.FlowNoise * Rng.GetNextRandomInMinus1ToPlus1Range()) : 0.0);
+            double tempNoise = (isOnline ? (Config.TemperatureNoiseInDegC * Rng.GetNextRandomInMinus1ToPlus1Range()) : 0.0);
 
             OutputValues.MeasuredFlow = OutputValues.TrackingFlowSetpoint + flowNoise;
-            OutputValues.MeasuredFlowInPercentOfFS = ConfigValues.ConvertToPercentOfFS(OutputValues.MeasuredFlow);
+            OutputValues.MeasuredFlowInPercentOfFS = OutputValues.MeasuredFlow * fullScaleFlowToPercentOfFS;
 
             OutputValues.TotalOperatingHours += measuredServiceInterval.TotalHours;
             OutputValues.TotalFlow += OutputValues.MeasuredFlow * measuredServiceInterval.TotalMinutes;
 
-            OutputValues.TemperatureInDegC = (ConfigValues.NominalTemperatureInDegC + tempNoise);
+            OutputValues.TemperatureInDegC = (Config.NominalTemperatureInDegC + tempNoise);
 
             if (forceClosed)
                 OutputValues.ValvePositionInPercent = 0.0;
@@ -186,7 +222,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.MFC
     /// Used with <see cref="MFCSimScanEnginePlugin"/> as TConfigValueSetType.  
     /// Defines the values that are used to configure how a specific MFCSimScanEnginePlugin behaves.
     /// </summary>
-    public class MFCSimPluginConfig : ICloneable
+    public class MFCSimPluginConfig
     {
         /// <summary>
         /// Default constructor.
@@ -202,62 +238,53 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.MFC
             FlowNoise = 5.0;
             NominalTemperatureInDegC = 27.0;
             TemperatureNoiseInDegC = 0.20;
-            FullScaleResponsePeriodInSeconds = 1.25;
+            FullScaleResponsePeriod = (1.25).FromSeconds();
             SetpointThresholdForCloseInPercentOfFS = 5.0;
             SetpointThresholdForOpenInPercentOfFS = 105.0;
         }
 
+        /// <summary>Copy constructor</summary>
+        public MFCSimPluginConfig(MFCSimPluginConfig other)
+        {
+            FlowUnits = other.FlowUnits;
+            FullScaleFlow = other.FullScaleFlow;
+            FlowNoise = other.FlowNoise;
+            NominalTemperatureInDegC = other.NominalTemperatureInDegC;
+            FullScaleResponsePeriod = other.FullScaleResponsePeriod;
+            SetpointThresholdForCloseInPercentOfFS = other.SetpointThresholdForCloseInPercentOfFS;
+            SetpointThresholdForOpenInPercentOfFS = other.SetpointThresholdForOpenInPercentOfFS;
+        }
+
         /// <summary>Gives the full scale flow for this MFC in user units.  Normally has units of sccm</summary>
-        [ConfigItem]
         public Units.VolumetricFlowUnits FlowUnits { get; set; }
 
         /// <summary>Gives the full scale flow for this MFC in user units.  Normally has units of sccm</summary>
-        [ConfigItem]
         public double FullScaleFlow { get; set; }
 
         /// <summary>Gives the flow noise that this MFC will exhibit in user units.  This is the half width of the +- range.  Total range of noise will be twice this value.</summary>
-        [ConfigItem]
         public double FlowNoise { get; set; }
 
         /// <summary>Gives the nominal device temperature in DegC</summary>
-        [ConfigItem]
         public double NominalTemperatureInDegC { get; set; }
 
         /// <summary>Gives the temperature noise in DegC</summary>
-        [ConfigItem]
         public double TemperatureNoiseInDegC { get; set; }
-
-        /// <summary>Gives the nominal period that this MFC takes to "ramp" its slew limited setpoint from 0% to 100% of full scale in units of seconds.</summary>
-        [ConfigItem]
-        public double FullScaleResponsePeriodInSeconds { get { return FullScaleResponsePeriod.TotalSeconds; } set { FullScaleResponsePeriod = TimeSpan.FromSeconds(value); } }
 
         /// <summary>Gives the nominal period that this MFC takes to "ramp" its slew limited setpoint from 0% to 100% as a TimeSpan.</summary>
         public TimeSpan FullScaleResponsePeriod { get; set; }
 
         /// <summary>Defines threshold setpoint value, as a percent of full scale flow, at or below which the MFC will act as if it has been asked to Open (requires both target and slew limited setpoint to be at this threshold)</summary>
-        [ConfigItem]
         public double SetpointThresholdForCloseInPercentOfFS { get; set; }
 
         /// <summary>Defines threshold setpoint value, as a percent of full scale flow, at or above which the MFC will act as if it has been asked to Open (requires both target and slew limited setpoint to be at this threshold)</summary>
-        [ConfigItem]
         public double SetpointThresholdForOpenInPercentOfFS { get; set; }
-
-        public double ConvertFromPercentToFlow(double valueInPercent)
-        {
-            return (valueInPercent * 0.01) * FullScaleFlow;
-        }
-
-        public double ConvertToPercentOfFS(double value)
-        {
-            return (value / FullScaleFlow) * 100.0;
-        }
 
         public double ApplySlewLimit(double lastSlewLimitedValue, double target, double periodInSeconds)
         {
-            if (FullScaleResponsePeriodInSeconds <= 0.0)
+            if (FullScaleResponsePeriod <= TimeSpan.Zero)
                 return target;
 
-            double maxSlew = periodInSeconds * FullScaleFlow / FullScaleResponsePeriodInSeconds;
+            double maxSlew = periodInSeconds * FullScaleFlow / FullScaleResponsePeriod.TotalSeconds;
 
             if (maxSlew >= Math.Abs(target - lastSlewLimitedValue))
                 return target;
@@ -267,93 +294,30 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.MFC
             else
                 return lastSlewLimitedValue - maxSlew;
         }
-
-        public object Clone()
-        {
-            return this.MemberwiseClone();
-        }
-    }
-
-    /// <summary>Used with <see cref="MFCSimScanEnginePlugin"/> as TInputValueSetType</summary>
-    public class MFCSimPluginInputs
-    {
-        [ValueSetItem(Name="ControlMode")]
-        public ValueContainer ControlModeVC { get; set; }
-
-        public ControlMode ControlMode
-        {
-            get
-            {
-                if (!controlModeVC.IsEqualTo(ControlModeVC))
-                {
-                    controlModeVC = ControlModeVC;
-                    controlMode = faultInjectionVC.GetValue<ControlMode>(false);
-                }
-                return controlMode;
-            }
-        }
-
-        private ControlMode controlMode = ControlMode.Normal;
-        private ValueContainer controlModeVC = new ValueContainer();
-
-        [ValueSetItem(Name="FaultInjection")]
-        public ValueContainer FaultInjectionVC { get; set; }
-
-        public FaultInjection FaultInjection 
-        { 
-            get 
-            {
-                if (!faultInjectionVC.IsEqualTo(FaultInjectionVC))
-                {
-                    faultInjectionVC = FaultInjectionVC;
-                    faultInjection = faultInjectionVC.GetValue<FaultInjection>(false);
-                }
-                return faultInjection;
-            } 
-        }
-        private FaultInjection faultInjection = FaultInjection.None;
-        private ValueContainer faultInjectionVC = new ValueContainer();
-
-        public MFCSimPluginInputs()
-        {
-            ControlModeVC = new ValueContainer(ControlMode.Normal);
-            FaultInjectionVC = new ValueContainer(Sim.Common.FaultInjection.None);
-        }
     }
 
     /// <summary>Used with <see cref="MFCSimScanEnginePlugin"/> as TOutputValueSetType</summary>
     public class MFCSimPluginOutputs
     {
-        public double LastWrittenFlowSetpointTarget { get; set; }
-
-        [ValueSetItem]
         public double TrackingFlowSetpoint { get; set; }
 
-        [ValueSetItem]
         public double TrackingFlowSetpointInPercentOfFS { get; set; }
 
-        [ValueSetItem]
         public double MeasuredFlowInPercentOfFS { get; set; }
 
-        [ValueSetItem]
         public double MeasuredFlow { get; set; }
 
-        [ValueSetItem]
         public double ValvePositionInPercent { get; set; }
 
-        [ValueSetItem]
         public double TotalOperatingHours { get; set; }
 
-        [ValueSetItem]
         public double TemperatureInDegC { get; set; }
 
-        [ValueSetItem]
         public bool IsDeviceOnline { get; set; }
 
         /// <summary>
         /// Has same units as MeasuredFlow * time in units of minutes
         /// </summary>
-        [ValueSetItem]
         public double TotalFlow { get; set; }
     }
 }

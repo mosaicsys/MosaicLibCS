@@ -730,6 +730,18 @@ namespace MosaicLib.Utils
         }
 
         #endregion
+
+        #region Random related (GetNextRandomInMinus1ToPlus1Range)
+
+        /// <summary>
+        /// Extension method for Random.  Returns the NextDouble number produced by the given Random rng source scaled and offset to fall in the range [-1.0 .. 1.0)
+        /// </summary>
+        public static double GetNextRandomInMinus1ToPlus1Range(this Random rng)
+        {
+            return (rng.NextDouble() * 2.0 - 1.0);
+        }
+
+        #endregion
     }
 
     /// <summary>

@@ -4306,7 +4306,7 @@ namespace MosaicLib.Modular.Common
         }
 
         /// <summary>
-        /// Internal copy constructor
+        /// Internal copy constructor - client code is not expected to make copies of instances this object type.
         /// </summary>
         internal DelegateItemSpec(DelegateItemSpec<TValueType> other)
         {
@@ -4327,6 +4327,28 @@ namespace MosaicLib.Modular.Common
 
         /// <summary>Optional delegate used to consume each newly transferred TValueType value.  Defaults to null when not explicitly set in the constructor.  May be set directly or using a property initializer.</summary>
         public Action<TValueType> SetterDelegate { get; set; }
+
+        /// <summary>Returns true if the GetterDelegate is non-null</summary>
+        public bool HasGetterDelegate { get { return (GetterDelegate != null); } }
+
+        /// <summary>Returns true if the SetterDelegate is non-null</summary>
+        public bool HasSetterDelegate { get { return (SetterDelegate != null); } }
+
+        /// <summary>Debugging and logging helper</summary>
+        public override string ToString()
+        {
+            string gsStr;
+            if (HasGetterDelegate && HasSetterDelegate)
+                gsStr = "Getter,Setter";
+            else if (HasGetterDelegate && !HasSetterDelegate)
+                gsStr = "Getter";
+            else if (!HasGetterDelegate && HasSetterDelegate)
+                gsStr = "Setter";
+            else
+                gsStr = "Neither-Invalid";
+
+            return "DIS Type:{0} Name:'{1}' NameAdj:{2} [{3}]".CheckedFormat(typeof(TValueType), Name, NameAdjust, gsStr);
+        }
     }
 
     #endregion

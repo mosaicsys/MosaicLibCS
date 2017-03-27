@@ -29,7 +29,24 @@ using System.IO;
 
 namespace MosaicLib.Utils
 {
-	//-------------------------------------------------
+    #region utility interfaces: ICopyable<TObjectType>
+
+    /// <summary>
+    /// This interface is used with generics so that they can make use of some type of copy construction in a generic manner
+    /// </summary>
+    public interface ICopyable<TObjectType>
+    {
+        /// <summary>
+        /// Requests the current object to make a copy of itself of the given type.  
+        /// If deepCopy is true then the copy shall be a deep copy otherwise it can be any type of copy the object defines.
+        /// In many cases this method will only produce deep copies.
+        /// </summary>
+        TObjectType MakeCopyOfThis(bool deepCopy = true);
+    }
+
+    #endregion
+
+    //-------------------------------------------------
 	#region Data Packing, Unpacking, Byte Order manipulations
 
 	/// <summary>

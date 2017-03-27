@@ -25,6 +25,7 @@ using System.Collections.Generic;
 
 using MosaicLib.Time;
 using MosaicLib.Utils;
+using MosaicLib.PartsLib.Scan.ScanEngine;
 
 namespace MosaicLib.PartsLib.Helpers
 {
@@ -169,13 +170,12 @@ namespace MosaicLib.PartsLib.Helpers
             InitialPos = ActuatorPosition.Unknown;
         }
 
-        public ActuatorConfig(string name, string pos1Name, string pos2Name, TimeSpan motionTime, ActuatorPosition initialPos = ActuatorPosition.AtPos1) 
-            : this(name, pos1Name, pos2Name, motionTime, motionTime, initialPos) 
+        public ActuatorConfig(string pos1Name, string pos2Name, TimeSpan motionTime, ActuatorPosition initialPos = ActuatorPosition.AtPos1) 
+            : this(pos1Name, pos2Name, motionTime, motionTime, initialPos) 
         { }
 
-        public ActuatorConfig(string name, string pos1Name, string pos2Name, TimeSpan motion1To2Time, TimeSpan motion2To1Time, ActuatorPosition initialPos = ActuatorPosition.AtPos1)
+        public ActuatorConfig(string pos1Name, string pos2Name, TimeSpan motion1To2Time, TimeSpan motion2To1Time, ActuatorPosition initialPos = ActuatorPosition.AtPos1)
         {
-            Name = name;
             Pos1Name = pos1Name;
             Pos2Name = pos2Name;
             Motion1To2Time = motion1To2Time;
@@ -185,7 +185,6 @@ namespace MosaicLib.PartsLib.Helpers
 
         public ActuatorConfig(ActuatorConfig other)
         {
-            Name = other.Name;
             Pos1Name = other.Pos1Name;
             Pos2Name = other.Pos2Name;
             Motion1To2Time = other.Motion1To2Time;
@@ -193,7 +192,6 @@ namespace MosaicLib.PartsLib.Helpers
             InitialPos = other.InitialPos;
         }
 
-        public string Name { get; set; }
         public string Pos1Name { get; set; }
         public string Pos2Name { get; set; }
         public TimeSpan Motion1To2Time { get; set; }
@@ -306,9 +304,13 @@ namespace MosaicLib.PartsLib.Helpers
         }
     }
 
+    /// <summary>
+    /// Base class for simple constant speed linear motion actuators with two end positions (ie pneumatic actuators, et. al.)
+    /// This class is used as the based for many other simulation and modeling elements that make use of >= 2 position linear motion elements.
+    /// </summary>
     public class ActuatorBase
     {
-        public ActuatorBase(ActuatorConfig config, IActuatorState initialState = null) 
+        public ActuatorBase(string name, ActuatorConfig config, IActuatorState initialState = null) 
         {
             Config = new ActuatorConfig(config);
 
@@ -316,7 +318,7 @@ namespace MosaicLib.PartsLib.Helpers
 
             privateState = new ActuatorState(initialState ?? Config.GetDefaultInitialActuatorState());
 
-            logger = new Logging.Logger(config.Name, Logging.LogGate.All);
+            logger = new Logging.Logger(name, Logging.LogGate.All);
 
             if (config.InitialPos.IsTargetPositionValid(allowInBetween: true))
             {
@@ -325,17 +327,23 @@ namespace MosaicLib.PartsLib.Helpers
                 privateState.TargetPosStr = privateState.PosStateStr = config.ToString(config.InitialPos);
             }
 
-            logger.Info.Emit("Initial state is:{0} [{1} {2:f0}%]", privateState.PosStateStr, privateState.PosState, privateState.PositionInPercent);
+            logger.Debug.Emit("Initial state is:{0} [{1} {2:f0}%]", privateState.PosStateStr, privateState.PosState, privateState.PositionInPercent);
 
             PublishState();
         }
 
-        QpcTimeStamp lastServiceTime = QpcTimeStamp.Now;
+        QpcTimeStamp lastServiceTime = QpcTimeStamp.Zero;
 
+        /// <summary>
+        /// QpcTimeStamp based service method.  
+        /// Subtracts given now from last given value of now to obtain the measured dt value and then 
+        /// calls the TimeSpan variant of Service using the measured dt value.
+        /// </summary>
         public void Service(QpcTimeStamp now, bool forcePublish = false, bool reset = false) 
         {
-            TimeSpan rawDT = now - lastServiceTime;
-            if (now > lastServiceTime)
+            bool lastServiceTimeIsZero = (lastServiceTime == QpcTimeStamp.Zero);
+            TimeSpan rawDT = (!lastServiceTimeIsZero) ? (now - lastServiceTime) : TimeSpan.Zero;
+            if (now > lastServiceTime || lastServiceTimeIsZero)
                 lastServiceTime = now;
 
             TimeSpan dt = rawDT.Clip(TimeSpan.Zero, TimeSpan.MaxValue);
@@ -343,6 +351,13 @@ namespace MosaicLib.PartsLib.Helpers
             Service(dt, forcePublish: forcePublish, reset: reset);
         }
 
+        /// <summary>
+        /// Basic service method.  
+        /// Advance any active motion and performs state changes based on configured behavior, 
+        /// most recent setpoint value and given value of measured elapsed time (dt).
+        /// publishes the resulting state if any change was made or if forcePublish is true.
+        /// <para/>The use of the optional reset parameter will force the actuator state directly to the target position/state.
+        /// </summary>
         public virtual void Service(TimeSpan dt, bool forcePublish = false, bool reset = false)
         {
             // first update the positionInPercent
@@ -408,7 +423,9 @@ namespace MosaicLib.PartsLib.Helpers
                 privateState.PosStateStr = Config.ToString(nextPosState);
                 privateState.PositionInPercent = nextPositionInPercent;
 
-                logger.Info.Emit("State changed to {0} [{1} {2:f0}%] from {3}, target:{4}", privateState.PosStateStr, privateState.PosState, privateState.PositionInPercent, entryStateStr, privateState.TargetPosStr);
+                string resetStr = (reset ? " [Reset]" : string.Empty);
+
+                logger.Debug.Emit("State changed to {0} [{1} {2:f0}%] from {3}, target:{4}{5}", privateState.PosStateStr, privateState.PosState, privateState.PositionInPercent, entryStateStr, privateState.TargetPosStr, resetStr);
 
                 forcePublish = true;
             }
@@ -437,12 +454,13 @@ namespace MosaicLib.PartsLib.Helpers
 
         public void SetTarget(double targetPositionInPercent, bool reset = false)
         {
-            targetPositionInPercent = targetPositionInPercent.Clip(0.0, 100.0, 0.0);
+            if (double.IsNaN(targetPositionInPercent))
+                targetPositionInPercent = 0.0;
 
-            if (targetPositionInPercent == 0.0)
-                SetTarget(ActuatorPosition.MoveToPos1, targetPositionInPercent, reset);
-            else if (targetPositionInPercent == 100.0)
-                SetTarget(ActuatorPosition.MoveToPos2, targetPositionInPercent, reset);
+            if (targetPositionInPercent <= 0.0)
+                SetTarget(ActuatorPosition.MoveToPos1, 0.0, reset);
+            else if (targetPositionInPercent >= 100.0)
+                SetTarget(ActuatorPosition.MoveToPos2, 100.0, reset);
             else 
                 SetTarget(ActuatorPosition.InBetween, targetPositionInPercent, reset);
         }
@@ -451,11 +469,21 @@ namespace MosaicLib.PartsLib.Helpers
         {
             if (privateState.TargetPos != targetPos || privateState.TargetPositionInPercent != targetPositionInPercent || reset)
             {
+                ActuatorPosition entryTargetPos = privateState.TargetPos;
+                double entryTargetPositionInPercent = privateState.TargetPositionInPercent;
+
                 privateState.TargetPos = targetPos;
                 privateState.TargetPosStr = Config.ToString(targetPos);
                 privateState.TargetPositionInPercent = targetPositionInPercent;
 
-                logger.Info.Emit("Target position changed to:{0} [{1} {2:f0}%]", privateState.TargetPosStr, privateState.TargetPos, privateState.TargetPositionInPercent);
+                string resetStr = (reset ? " Reset" : string.Empty);
+
+                if (entryTargetPos != targetPos || reset)
+                    logger.Debug.Emit("Target position changed to:{0} [{1} {2:f1}%{3}]", privateState.TargetPosStr, privateState.TargetPos, privateState.TargetPositionInPercent, resetStr);
+                else if (Math.Abs(targetPositionInPercent - entryTargetPositionInPercent) > 5.0)
+                    logger.Debug.Emit("Target position in percent changed to: {0:f1}% [{0} {1}]", privateState.TargetPositionInPercent, privateState.TargetPosStr, privateState.TargetPos);
+                else
+                    logger.Trace.Emit("Target position in percent changed to: {0:f3}% [{0} {1}]", privateState.TargetPositionInPercent, privateState.TargetPosStr, privateState.TargetPos);
 
                 Service(TimeSpan.Zero, forcePublish: true, reset: reset);
             }
@@ -477,6 +505,7 @@ namespace MosaicLib.PartsLib.Helpers
             State = new ActuatorState(privateState);
         }
 
+        public string Name { get; private set; }
         public ActuatorConfig Config { get; protected set; }
         public TimeSpan Motion1To2Time { get { return Config.Motion1To2Time; } set { Config.Motion1To2Time = value; UpdateMotionRates(); } }
         public TimeSpan Motion2To1Time { get { return Config.Motion2To1Time; } set { Config.Motion2To1Time = value; UpdateMotionRates(); } }
@@ -499,6 +528,32 @@ namespace MosaicLib.PartsLib.Helpers
 
         protected ActuatorState privateState;
         protected Logging.ILogger logger;
+    }
+
+    /// <summary>
+    /// This is a variant of the ActuatorBase class that can be used as a ScanEnginePlugin.
+    /// This plugin does not directly support any named IVAs but instead expects the user to the ScanEnginePart/ScanEngineHelper's DelegateValueSetAdapter interface
+    /// to support binding and adapting the plugin for its desired use.
+    /// </summary>
+    public class ActuatorPlugin : ActuatorBase, IScanEnginePlugin
+    {
+        public ActuatorPlugin(string name, ActuatorConfig config, IActuatorState initialState = null)
+            : base(name, config, initialState)
+        { }
+
+        public void Setup(string scanEnginePartName, Modular.Config.IConfig pluginsIConfig, Modular.Interconnect.Values.IValuesInterconnection pluginsIVI)
+        { }
+
+        public void UpdateInputs()
+        { }
+
+        public void Service(TimeSpan measuredServiceInterval, QpcTimeStamp timeStampNow)
+        {
+            base.Service(measuredServiceInterval);
+        }
+
+        public void UpdateOutputs()
+        { }
     }
 }
 

@@ -45,11 +45,18 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
     {
         #region Pipe
 
-        public class Pipe : FlowModel.NodePairBase
+        public class Pipe : FlowModel.NodePairBase<PipeConfig>
         {
-            public Pipe(string name)
-                : base(name, Fcns.CurrentClassLeafName)
+            public Pipe(string name, PipeConfig config)
+                : base(name, config, Fcns.CurrentClassLeafName)
             { }
+        }
+
+        public class PipeConfig : FlowModel.ComponentConfig, ICopyable<PipeConfig>
+        {
+            public PipeConfig() { }
+            public PipeConfig(PipeConfig other) : base(other) { }
+            PipeConfig ICopyable<PipeConfig>.MakeCopyOfThis(bool deepCopy) { return new PipeConfig(this); }
         }
 
         #endregion
@@ -65,24 +72,34 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             public override double EffectiveAreaM2 { get { return Math.Sin(EffectivePercentOpen * 0.01 * Math.PI * 0.5) * base.EffectiveAreaM2; } }
         }
 
-        public class Valve : FlowModel.NodePairBase
+        public class Valve : FlowModel.NodePairBase<ValveConfig>
         {
             public Valve(string name, ValveConfig valveConfig)
                 : this(name, valveConfig, Fcns.CurrentClassLeafName)
             { }
 
             public Valve(string name, ValveConfig valveConfig, string toStringComponentTypeStr)
-                : base(name, toStringComponentTypeStr)
+                : base(name, valveConfig, toStringComponentTypeStr)
             {
-                Config = new ValveConfig(valveConfig);
-                RadiusInM = Config.RadiusInMM * 0.001;
-                LengthInM = Config.LengthInMM * 0.001;
                 ServicePhases = ServicePhases.BeforeRelaxation | ServicePhases.AfterSetup;
 
-                actuator = new Helpers.ActuatorBase(new ActuatorConfig() { Name = "{0}.a".CheckedFormat(name), InitialPos = ActuatorPosition.AtPos1, Motion1To2Time = Config.TimeToOpen, Motion2To1Time = Config.TimeToClose, Pos1Name = "Closed", Pos2Name = "Opened" });
+                actuator = new Helpers.ActuatorBase(Name = "{0}.a".CheckedFormat(name), new ActuatorConfig() { InitialPos = ActuatorPosition.AtPos1, Motion1To2Time = Config.TimeToOpen, Motion2To1Time = Config.TimeToClose, Pos1Name = "Closed", Pos2Name = "Opened" });
 
-                if (Config.InitialValveRequest != ValveRequest.None)
-                    ValveRequest = Config.InitialValveRequest;
+                switch (Config.InitialValveRequest)
+                {
+                    case ValveRequest.Open:
+                    case ValveRequest.Close:
+                        SetValveRequest(Config.InitialValveRequest);
+                        break;
+                    case ValveRequest.InBetween:
+                        SetValveRequest(Config.InitialValveRequest, Config.InitialPercentOpenSetpoint);
+                        break;
+                    default:
+                    case ValveRequest.None:
+                        if (Config.InitialPercentOpenSetpoint != 0.0)
+                            PercentOpenSetpoint = Config.InitialPercentOpenSetpoint;
+                        break;
+                }
 
                 actuatorState = actuator.State;
             }
@@ -100,9 +117,10 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                 actuatorState = actuator.State;
             }
 
-            public ValveConfig Config { get; private set; }
             private ActuatorBase actuator;
             private IActuatorState actuatorState;
+
+            public IActuatorState ActuatorState { get { return actuatorState; } }
 
             public double PercentOpen { get { return actuatorState.PositionInPercent; } }
             public double PercentOpenSetpoint 
@@ -111,11 +129,24 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                 set { SetValveRequest(positionInPercentIn: value); }
             }
 
+            /// <summary>
+            /// This property is a variant of the PercentOpenSetpoint which as been modified to linearize the conductance rather than the open area (sqrt/square applied as appropriate)
+            /// Please note that the conductance varies with the square of the effective area.
+            /// </summary>
+            public double ConductanceLinearizedPercentOpenSetpoint
+            {
+                get { return Math.Pow(PercentOpenSetpoint * 0.01, 2.0) * 100.0; }
+                set { PercentOpenSetpoint = Math.Pow(value * 0.01, 0.5) * 100.0; }
+            }
+
             public double EffectivePercentOpen { get { return Math.Max(PercentOpen, Config.MinimumPercentOpen); } }
             public override double EffectiveAreaM2 { get { return EffectivePercentOpen * 0.01 * base.EffectiveAreaM2; } }
 
             public bool IsOpened { get { return actuatorState.IsAtPos2; } }
             public bool IsClosed { get { return actuatorState.IsAtPos1; } }
+
+            public bool IsOpening { get { return (actuatorState.PosState == ActuatorPosition.MovingToPos2); } }
+            public bool IsClosing { get { return (actuatorState.PosState == ActuatorPosition.MovingToPos1); } }
 
             public bool Open { get { return actuatorState.TargetPos.IsAtPos2(); } set { if (value) ValveRequest = ValveRequest.Open; } }
             public bool Close { get { return actuatorState.TargetPos.IsAtPos1(); } set { if (value) ValveRequest = ValveRequest.Close; } }
@@ -240,7 +271,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             Invalid = 4,
         }
 
-        public class ValveConfig
+        public class ValveConfig : FlowModel.ComponentConfig, ICopyable<ValveConfig>
         {
             /// <summary>
             /// Default constructor:
@@ -255,23 +286,23 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             /// Copy constructor used to build ValveConfig values and used to copy config for use by each individual valve instance (so that they do not share ValveConfig instances and/or side effects produced when changing ValveConfig contents after construction)
             /// </summary>
             public ValveConfig(ValveConfig other)
+                : base(other)
             {
-                RadiusInMM = other.RadiusInMM;
-                LengthInMM = other.LengthInMM;
                 InitialValveRequest = other.InitialValveRequest;
+                InitialPercentOpenSetpoint = other.InitialPercentOpenSetpoint;
                 TimeToOpen = other.TimeToOpen;
                 TimeToClose = other.TimeToClose;
                 DefaultInBetweenPositionInPercent = other.DefaultInBetweenPositionInPercent;
                 MinimumPercentOpen = other.MinimumPercentOpen;
             }
 
-            /// <summary>Used during construction of a valve to initialize its corresponding parameter</summary>
-            public double RadiusInMM { get; set; }
-            /// <summary>Used during construction of a valve to initialize its corresponding parameter</summary>
-            public double LengthInMM { get; set; }
+            ValveConfig ICopyable<ValveConfig>.MakeCopyOfThis(bool deepCopy) { return new ValveConfig(this); }
 
             /// <summary>Gives the initial ValueRequest value for the valve at construction time</summary>
             public ValveRequest InitialValveRequest { get; set; }
+
+            /// <summary>Gives the initial InitialPercentOpenSetpoint value for the valve at construction time.  This will be considered if InitialValveRequest is None or is InBetween</summary>
+            public double InitialPercentOpenSetpoint { get; set; }
 
             /// <summary>Defines the time required to move from fully closed to fully open.  Partial moves require proportionally less time</summary>
             public TimeSpan TimeToOpen { get; set; }
@@ -305,24 +336,21 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
         /// A bistableValve is a type of pressure triggered two position valve.
         /// It has two states: State1 and State2 and always defaults to being in State1 
         /// </summary>
-        public class BistableValve : FlowModel.NodePairBase
+        public class BistableValve : FlowModel.NodePairBase<BistableValveConfig>
         {
             public BistableValve(string name, BistableValveConfig valveConfig)
                 : this(name, valveConfig, Fcns.CurrentClassLeafName)
             { }
 
             public BistableValve(string name, BistableValveConfig valveConfig, string toStringComponentTypeStr)
-                : base(name, toStringComponentTypeStr)
+                : base(name, valveConfig, toStringComponentTypeStr)
             {
-                Config = new BistableValveConfig(valveConfig);
-                RadiusInM = Config.RadiusInMM * 0.001;
-                LengthInM = Config.LengthInMM * 0.001;
                 ServicePhases = ServicePhases.BeforeRelaxation | ServicePhases.AfterSetup;
 
                 ValvePosition = BistableValvePossition.State1;
-            }
 
-            public BistableValveConfig Config { get; private set; }
+                DisableBondingConnectionBetweenChambers = true;
+            }
 
             public BistableValvePossition ValvePosition { get; private set; }
 
@@ -389,7 +417,14 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
 
             public override string ToString()
             {
-                return "{0} {1} {2:f2} % Open".CheckedFormat(base.ToString(), ValvePosition, PercentOpenSetpoint);
+                string posnStr = null;
+
+                if (PercentOpenSetpoint == 100.0)
+                    posnStr = "[Open]";
+                else if (PercentOpenSetpoint == 0.0)
+                    posnStr = "[Closed]";
+
+                return "{0} {1} {2:f2} % {3}".CheckedFormat(base.ToString(), ValvePosition, PercentOpenSetpoint, posnStr ?? ValvePosition.ToString());
             }
         }
 
@@ -403,25 +438,17 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             State2 = 2,
         }
 
-        public class BistableValveConfig
+        public class BistableValveConfig : FlowModel.ComponentConfig, ICopyable<BistableValveConfig>
         {
-            /// <summary>
-            /// Default constructor:
-            /// <para/>PressureUnits = kPam
-            /// </summary>
             public BistableValveConfig()
-            {
-                PressureUnits = PressureUnits.kilopascals;
-            }
+            { }
 
             /// <summary>
             /// Copy constructor used to build BistableValveConfig values and used to copy config for use by each individual valve instance (so that they do not share BistableValveConfig instances and/or side effects produced when changing BistableValveConfig contents after construction)
             /// </summary>
             public BistableValveConfig(BistableValveConfig other)
+                : base(other)
             {
-                RadiusInMM = other.RadiusInMM;
-                LengthInMM = other.LengthInMM;
-                PressureUnits = other.PressureUnits;
                 state1PressureThresholdInKPa = other.state1PressureThresholdInKPa;
                 state2PressureThresholdInKPa = other.state2PressureThresholdInKPa;
                 State1PercentOpen = other.State1PercentOpen;
@@ -429,13 +456,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                 DebouncePeriod = other.DebouncePeriod;
             }
 
-            /// <summary>Used during construction of a valve to initialize its corresponding parameter</summary>
-            public double RadiusInMM { get; set; }
-            /// <summary>Used during construction of a valve to initialize its corresponding parameter</summary>
-            public double LengthInMM { get; set; }
-
-            /// <summary>Defines the pressure units used for the two threshold pressure values.  Defaults to kPa</summary>
-            public PressureUnits PressureUnits { get; set; }
+            BistableValveConfig ICopyable<BistableValveConfig>.MakeCopyOfThis(bool deepCopy) { return new BistableValveConfig(this); }
 
             /// <summary>Defines the threshold pressure for (End1 - End2) below which the state transitions to State 1</summary>
             public double State1PressureThreshold { get { return PressureUnits.ConvertFromKPA(state1PressureThresholdInKPa); } set { state1PressureThresholdInKPa = PressureUnits.ConvertToKPa(value); } }
@@ -458,17 +479,16 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
 
         #region Gauge, GaugeConfig
 
-        public class Gauge : FlowModel.ComponentBase
+        public class Gauge : FlowModel.ComponentBase<GaugeConfig>
         {
             public Gauge(string name, GaugeConfig config, Chamber chamber)
                 : this(name, config, chamber.EffectiveNode)
             { }
 
             public Gauge(string name, GaugeConfig config, FlowModel.Node observesNode)
-                : base(name, Fcns.CurrentClassLeafName)
+                : base(name, config, Fcns.CurrentClassLeafName)
             {
                 ObservesNode = observesNode;
-                Config = new GaugeConfig(config);
                 ServicePhases = ServicePhases.AfterRelaxation | ServicePhases.AfterSetup;
 
                 GaugeMode = Config.InitialGaugeMode.MapDefaultTo(GaugeMode.AllwaysOn);
@@ -476,9 +496,6 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
 
             /// <summary>Shows the Node that this Gauge is reporting on (from which the gauge gets the flow or pressure)</summary>
             public FlowModel.Node ObservesNode { get; private set; }
-
-            /// <summary>Set to a clone of the value given to the constructor.  Cloned instance, to which the client has access using this reference propery, Contains all of the settings that are used by this Gauge instance.</summary>
-            public GaugeConfig Config { get; private set; }
 
             /// <summary>Gives the most recently observed pressure value in client specified PressureUnits.  Will have noise added if NoiseLevelInPercent is above zero.</summary>
             public double Value { get { return Config.ConvertValueUOM(servicedValueStdUnits, outbound: true); } }
@@ -576,7 +593,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                 if (ReadingOutOfRange)
                     clippedValueInStdUnits = rawValueInStdUnits.Clip(Config.minimumValueInStdUnits, Config.maximumValueInStdUnits);
 
-                double rngValueM1P1 = ((rng.NextDouble() * 2.0) - 1.0);            // NextDouble gives back a value between 0.0 (inclusive) and 1.0 (inclusive).  This equasion converts that to -1.0 to +1.0
+                double rngValueM1P1 = rng.GetNextRandomInMinus1ToPlus1Range();
                 double rPercent = rngValueM1P1 * Config.noiseLevelInPercentOfCurrentValue;    // a number from -noiseLevelInPercent to +noiseLevelInPercent
                 double rGeometricNoiseGain = (100.0 + rPercent) * 0.01;            // a number from 1.0-rp  to 1.0+rp  rp is clipped to be no larger than 0.5
                 double clippedValueWithNoiseInStdUnits = clippedValueInStdUnits * rGeometricNoiseGain + (rngValueM1P1 * Config.NoiseLevelBase); // add in multaplicative noise and base noise 
@@ -633,14 +650,12 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             SensorFaultWhenGaugeForcedOff = 0x08,
         }
 
-        public class GaugeConfig
+        public class GaugeConfig : FlowModel.ComponentConfig, ICopyable<GaugeConfig>
         {
             public GaugeConfig(GaugeType gaugeType = GaugeType.Pressure)
             {
                 GaugeType = gaugeType;
                 GaugeBehavior = GaugeBehavior.None;
-                PressureUnits = PressureUnits.kilopascals;
-                VolumetricFlowUnits = VolumetricFlowUnits.sccm;
 
                 switch (GaugeType)
                 {
@@ -665,12 +680,11 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             }
 
             public GaugeConfig(GaugeConfig other)
+                : base(other)
             {
                 GaugeType = other.GaugeType;
                 GaugeBehavior = other.GaugeBehavior;
                 InitialGaugeMode = other.InitialGaugeMode;
-                PressureUnits = other.PressureUnits;
-                VolumetricFlowUnits = other.VolumetricFlowUnits;
 
                 differentialReferenceValueInStdUnits = other.differentialReferenceValueInStdUnits;
                 offValueInStdUnits = other.offValueInStdUnits;
@@ -684,6 +698,8 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                 NoiseLevelBase = other.NoiseLevelBase;
             }
 
+            GaugeConfig ICopyable<GaugeConfig>.MakeCopyOfThis(bool deepCopy) { return new GaugeConfig(this); }
+
             /// <summary>Shows the type of gauge that has been constructued (to measure Pressure or VolumetricFlow)</summary>
             public GaugeType GaugeType { get; private set; }
 
@@ -692,12 +708,6 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
 
             /// <summary>Defines the initial GaugeMode</summary>
             public GaugeMode InitialGaugeMode { get; set; }
-
-            /// <summary>Gives the PressureUnits that this gauge "reads" in (for pressure gauges)</summary>
-            public PressureUnits PressureUnits { get; set; }
-
-            /// <summary>Gives the VolumetricFlowUnits that this gauge "reads" in (for flow gauges)</summary>
-            public VolumetricFlowUnits VolumetricFlowUnits { get; set; }
 
             /// <summary>Gives the reference value that is substracted from current value to produce the DifferentialPressure value.</summary>
             public double DifferentialReferenceValue { get { return ConvertValueUOM(differentialReferenceValueInStdUnits, outbound: true); } set { differentialReferenceValueInStdUnits = ConvertValueUOM(value, inbound: true); } }
@@ -756,19 +766,22 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
 
         #region Controller, ControllerConfig
 
-        public class Controller : FlowModel.ComponentBase
+        public class Controller : FlowModel.ComponentBase<ControllerConfig>
         {
-            public Controller(string name, ControllerConfig controllerConfig)
-                : base(name, Fcns.CurrentClassLeafName)
+            public Controller(string name, ControllerConfig config)
+                : base(name, config, Fcns.CurrentClassLeafName)
             {
-                Config = new ControllerConfig(controllerConfig);
                 ServicePhases = ServicePhases.BeforeRelaxation | ServicePhases.AfterSetup;
 
                 if (Config.InitialControlMode != ControlMode.None)
                     ControlMode = Config.InitialControlMode;
+
+                setpointActuator = new ActuatorBase("{0}.spa".CheckedFormat(Name), new ActuatorConfig("Off", "Full", Config.FullScaleSetpointRampTime));
+                setpointActuatorState = setpointActuator.State;
             }
 
-            public ControllerConfig Config { get; private set; }
+            private ActuatorBase setpointActuator;
+            private IActuatorState setpointActuatorState;
 
             public double ControlReadback { get { return Config.FeedbackGauge.Value; } }
             public double ControlReadbackInPercentOfFS { get { return ControlReadback * Config.OneOverFullScaleControlValue * 100.0; } }
@@ -778,8 +791,8 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             public double ControlSetpoint { get; set; }
             public double ControlSetpointInPercentOfFS { get { return ControlSetpoint * Config.OneOverFullScaleControlValue * 100.0; } set { ControlSetpoint = value * 0.01 * Config.FullScaleControlValue; } }
 
-            //public double SlewControlSetpoint { get; private set; }
-            //public double SlewControlSetpointInPercentOfFS { get { return SlewControlSetpoint * Config.OneOverFullScaleControlValue * 100.0; } }
+            public double SlewLimitedEffectiveControlSetpoint { get { return SlewLimitedEffectiveControlSetpointInPercentOfFS * Config.FullScaleControlValue * 0.01; } }
+            public double SlewLimitedEffectiveControlSetpointInPercentOfFS { get { return setpointActuatorState.PositionInPercent; } }
 
             public double ControlOutputSetpoint { get; set; }
             public double ControlOutputSetpointInPercentOfFS { get { return ControlOutputSetpoint * Config.OneOverFullScaleControlValue * 100.0; } set { ControlOutputSetpoint = value * 0.01 * Config.FullScaleControlValue; } }
@@ -825,12 +838,13 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
 
             // state information from service loop
             double effectiveControlSetpoint;
+            double slewLimitedEffectiveControlSetpoint;
             double controlReadback;
             double useForwardOutputPortionInPercent;
             double useProportionalOutputPortionInPercent;
             double useIntegratorOutputPortionInPercent;
             bool antiWindupTriggered;
-            double lastEffectiveControlSetpoint;
+            double lastSlewLimitedEffectiveControlSetpoint;
             double lastControlError;
             ControlMode effectiveControlMode;
 
@@ -838,17 +852,29 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             {
                 base.Service(servicePhase, measuredServiceInterval, timestampNow);
 
+                if (setpointActuator.Motion1To2Time != Config.FullScaleSetpointRampTime)
+                    setpointActuator.Motion1To2Time = setpointActuator.Motion2To1Time = Config.FullScaleSetpointRampTime;
+
                 bool isForced = (forcedControlMode != ControlMode.None);
                 effectiveControlMode = isForced ? forcedControlMode : ControlMode;
                 
                 effectiveControlSetpoint = isForced ? forcedControlSetpoint : ControlSetpoint;
+
+                if (setpointActuatorState.TargetPositionInPercent != effectiveControlSetpoint)
+                    setpointActuator.SetTarget(effectiveControlSetpoint * Config.OneOverFullScaleControlValue * 100.0);
+
+                setpointActuator.Service(measuredServiceInterval);
+                setpointActuatorState = setpointActuator.State;
+
+                slewLimitedEffectiveControlSetpoint = SlewLimitedEffectiveControlSetpoint;
+
                 controlReadback = ControlReadback;
 
-                ControlError = effectiveControlSetpoint - controlReadback;
+                ControlError = slewLimitedEffectiveControlSetpoint - controlReadback;
 
                 bool isControlModeNormal = (effectiveControlMode == ControlMode.Normal);
 
-                useForwardOutputPortionInPercent = (effectiveControlSetpoint * Config.OneOverFullScaleControlValue * Config.ForwardGainInPercentPerFS).Clip(-Config.ForwardRangeInPercent, Config.ForwardRangeInPercent);
+                useForwardOutputPortionInPercent = (slewLimitedEffectiveControlSetpoint * Config.OneOverFullScaleControlValue * Config.ForwardGainInPercentPerFS).Clip(-Config.ForwardRangeInPercent, Config.ForwardRangeInPercent);
 
                 useProportionalOutputPortionInPercent = (ControlError * Config.OneOverFullScaleControlValue * Config.ProportionalGainInPercentPerFSError).Clip(-Config.ProportionalRangeInPercent, Config.ProportionalRangeInPercent);
 
@@ -858,12 +884,16 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                 double nextUnclippedIntegratorOutputPortionInPercent = (nextIntegratedError * Config.OneOverFullScaleControlValue * Config.IntegralGainInPercentPerFSErrorSec);
                 useIntegratorOutputPortionInPercent = nextUnclippedIntegratorOutputPortionInPercent;
 
-                antiWindupTriggered = Config.ControllerBehavior.IsSet(ControllerBehavior.AntiWindUp)
-                                    && ((ControlOutput <= 0.0 && integrationPeriodErrorIncrement < 0.0)
-                                        || (ControlOutput >= 100.0 && integrationPeriodErrorIncrement > 0.0)
-                                        || (Math.Abs(Config.ControlValve.PercentOpenSetpoint - Config.ControlValve.PercentOpen) >= 5.0)
-                                        || (effectiveControlSetpoint != lastEffectiveControlSetpoint)
-                                        );
+                bool antiWindUpSelected = Config.ControllerBehavior.IsSet(ControllerBehavior.AntiWindUp);
+                bool permitIntegrationWhileSlewing = Config.ControllerBehavior.IsSet(ControllerBehavior.PermitIntegrationWhileSlewing);
+
+                antiWindupTriggered = (antiWindUpSelected
+                                        && ((ControlOutput <= 0.0 && integrationPeriodErrorIncrement < 0.0)     // integrator would be attempting to further saturate the output below 0 %
+                                            || (ControlOutput >= 100.0 && integrationPeriodErrorIncrement > 0.0)    // integrator would be attempting to further saturate the output above 100 %
+                                            || (Math.Abs(Config.ControlValve.PercentOpenSetpoint - Config.ControlValve.PercentOpen) >= 10.0)  // the control valve is limiting the output setpoint effective rate of change
+                                      ))
+                                    || ((antiWindUpSelected && !permitIntegrationWhileSlewing) && (slewLimitedEffectiveControlSetpoint != lastSlewLimitedEffectiveControlSetpoint))
+                                    ;
 
                 if (isControlModeNormal)
                 {
@@ -886,20 +916,25 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                     IntegratedError = 0.0;
                 }
 
+                double controlOutput = ControlOutput;
+
                 switch (effectiveControlMode)
                 {
                     default: 
                     case ControlMode.None:
                     case ControlMode.Hold: break;
-                    case ControlMode.Normal: ControlOutput = (useForwardOutputPortionInPercent + useProportionalOutputPortionInPercent + useIntegratorOutputPortionInPercent); break;
-                    case ControlMode.Open: ControlOutput = 100.0; break;
-                    case ControlMode.Close: ControlOutput = 0.0; break;
-                    case ControlMode.Force: ControlOutput = isForced ? forcedOutputSetpoint : ControlOutputSetpoint; break;
+                    case ControlMode.Normal: controlOutput = (useForwardOutputPortionInPercent + useProportionalOutputPortionInPercent + useIntegratorOutputPortionInPercent); break;
+                    case ControlMode.Open: controlOutput = 100.0; break;
+                    case ControlMode.Close: controlOutput = 0.0; break;
+                    case ControlMode.Force: controlOutput = isForced ? forcedOutputSetpoint : ControlOutputSetpoint; break;
                 }
 
-                Config.ControlValve.PercentOpenSetpoint = ControlOutput.Clip(0.0, 100.0, 0.0);
+                if (!Config.ControllerBehavior.IsSet(ControllerBehavior.UseConductanceLinearizedPercentOpenSetpoint))
+                    Config.ControlValve.PercentOpenSetpoint = ControlOutput = controlOutput.Clip(Config.MinimumControlOutputInPercent, Config.MaximumControlOutputInPercent, 0.0);
+                else
+                    Config.ControlValve.ConductanceLinearizedPercentOpenSetpoint = ControlOutput = controlOutput.Clip(Config.MinimumControlOutputInPercent, Config.MaximumControlOutputInPercent, 0.0);
 
-                lastEffectiveControlSetpoint = effectiveControlSetpoint;
+                lastSlewLimitedEffectiveControlSetpoint = slewLimitedEffectiveControlSetpoint;
                 lastControlError = ControlError;
             }
 
@@ -938,14 +973,18 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
         {
             None = 0x01,
             AntiWindUp = 0x01,
+            PermitIntegrationWhileSlewing = 0x02,
+            UseConductanceLinearizedPercentOpenSetpoint = 0x04,
         }
 
-        public class ControllerConfig
+        public class ControllerConfig : FlowModel.ComponentConfig, ICopyable<ControllerConfig>
         {
             public ControllerConfig()
             {
-                ControllerBehavior = ControllerBehavior.AntiWindUp;
+                ControllerBehavior = ControllerBehavior.AntiWindUp | ControllerBehavior.PermitIntegrationWhileSlewing;
                 InitialControlMode = ControlMode.Normal;
+                MinimumControlOutputInPercent = 0.0;
+                MaximumControlOutputInPercent = 100.0;
                 ForwardRangeInPercent = 100.0;
                 ProportionalRangeInPercent = 100.0;
                 IntegralRangeInPercent = 100.0;
@@ -953,14 +992,18 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             }
 
             public ControllerConfig(ControllerConfig other)
+                : base(other)
             {
                 ControllerType = other.ControllerType;
                 FeedbackGauge = other.FeedbackGauge;
                 ControlValve = other.ControlValve;
                 ControllerBehavior = other.ControllerBehavior;
                 InitialControlMode = other.InitialControlMode;
-                FullScaleControlValue = other.FullScaleControlValue;
+                fullScaleControlValue = other.fullScaleControlValue;
                 OneOverFullScaleControlValue = (FullScaleControlValue != 0.0 ? 1.0 / FullScaleControlValue : 0.0);
+                FullScaleSetpointRampTime = other.FullScaleSetpointRampTime;
+                MinimumControlOutputInPercent = other.MinimumControlOutputInPercent;
+                MaximumControlOutputInPercent = other.MaximumControlOutputInPercent;
                 ForwardGainInPercentPerFS = other.ForwardGainInPercentPerFS;
                 ForwardRangeInPercent = other.ForwardRangeInPercent;
                 ProportionalGainInPercentPerFSError = other.ProportionalGainInPercentPerFSError;
@@ -970,6 +1013,8 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                 IntegralMaxEffectiveDT = other.IntegralMaxEffectiveDT;
             }
 
+            ControllerConfig ICopyable<ControllerConfig>.MakeCopyOfThis(bool deepCopy) { return new ControllerConfig(this); }
+
             public ControllerType ControllerType { get; set; }
             public Gauge FeedbackGauge { get; set; }
             public Valve ControlValve { get; set; }
@@ -978,8 +1023,17 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
 
             public ControlMode InitialControlMode { get; set; }
 
-            public double FullScaleControlValue { get; set; }
+            /// <summary>
+            /// If non-zero value is specified then the specified value is used for the controller, otherwise the given FeedbackGauge's configured MaximumValue is used.
+            /// </summary>
+            public double FullScaleControlValue { get { return fullScaleControlValue.MapDefaultTo(FeedbackGauge.Config.MaximumValue); } set { fullScaleControlValue = value; } }
+            private double fullScaleControlValue;
+
             public double OneOverFullScaleControlValue { get; private set; }
+            public TimeSpan FullScaleSetpointRampTime { get; set; }
+
+            public double MinimumControlOutputInPercent { get; set; }
+            public double MaximumControlOutputInPercent { get; set; }
 
             public double ForwardGainInPercentPerFS { get; set; }
             public double ForwardRangeInPercent { get; set; }
@@ -996,26 +1050,25 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
 
         #region Pump, PumpConfig
 
-        public class Pump : FlowModel.NodePairBase
+        public class Pump : FlowModel.NodePairBase<PumpConfig>
         {
             public Pump(string name, PumpConfig config)
-                : base(name, Fcns.CurrentClassLeafName)
+                : this(name, config, Fcns.CurrentClassLeafName)
+            { }
+
+            public Pump(string name, PumpConfig config, string toStringComponentTypeStr)
+                : base(name, config, toStringComponentTypeStr)
             {
-                Config = new PumpConfig(config);
                 ServicePhases = ServicePhases.BeforeRelaxation | ServicePhases.AfterSetup;
 
-                RadiusInMM = Config.RadiusInMM;
-                LengthInMM = Config.LengthInMM;
-
-                ActuatorConfig speedActConfig = new ActuatorConfig("{0}.spd", "Off", "FullSpeed", Config.TimeToSpinUp, Config.TimeToSpinDown);
-                speedActuator = new ActuatorBase(speedActConfig);
+                ActuatorConfig speedActConfig = new ActuatorConfig("Off", "FullSpeed", Config.TimeToSpinUp, Config.TimeToSpinDown);
+                speedActuator = new ActuatorBase("{0}.spd".CheckedFormat(Name), speedActConfig);
                 speedActuatorState = speedActuator.State;
 
                 if (Config.InitialPumpMode != PumpMode.None)
                     PumpMode = Config.InitialPumpMode;
             }
 
-            public PumpConfig Config { get; private set; }
             private ActuatorBase speedActuator;
             private IActuatorState speedActuatorState;
 
@@ -1033,6 +1086,16 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             public double SpeedInRPM { get { return speedActuatorState.PositionInPercent * Config.FullSpeedInRPM * 0.01; } }
             public double SpeedInPercentOfFS { get { return speedActuatorState.PositionInPercent; } }
 
+            public double PowerInWatts { get; private set; }
+
+            public bool IsOff { get { return speedActuatorState.IsAtPos1; } }
+            public bool IsAtFullSpeed { get { return speedActuatorState.IsAtPos2; } }
+            public bool IsAtLowSpeed { get { return (speedActuatorState.PositionInPercent == Config.LowSpeedInPercentOfFS); } }
+
+            public bool IsSpeedingUp { get { return (speedActuatorState.PosState == ActuatorPosition.MovingToPos2); } }
+            public bool IsSlowingDown { get { return (speedActuatorState.PosState == ActuatorPosition.MovingToPos1); } }
+
+            [Obsolete("Please change to using the IsOff, IsAtFullSpeed, IsAtLowSpeed and IsSpeedingUp and IsSlowingDown properties instead (2017-03-23)")]
             public bool IsAtSpeed { get { return speedActuatorState.IsAtTarget; } }
 
             public double EffectivePumpingSpeedLperS { get; protected set; }
@@ -1059,6 +1122,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             private string _faultInjection = string.Empty;
 
             private PumpMode forcedPumpMode = PumpMode.None;
+            bool pumpIsEffectivelyOff = false;
 
             public override void Service(ServicePhases servicePhase, TimeSpan measuredServiceInterval, QpcTimeStamp timestampNow)
             {
@@ -1083,9 +1147,16 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
 
                 speedActuator.Service(measuredServiceInterval);
                 speedActuatorState = speedActuator.State;
+
+                if (effectivePumpMode == Components.PumpMode.Off || pumpIsEffectivelyOff)
+                    PowerInWatts = 0.0;
+                else
+                    PowerInWatts = Config.PowerInWattsPerPercentOfFSSpeed * SpeedInPercentOfFS
+                                 + Config.powerInWassPerPressureDeltaInKPa * Math.Max(0.0, (End2.PressureInKPa - End1.PressureInKPa))
+                                 + Config.powerInWattsPerVolumetricFlowInSCMS * Math.Max(0.0, (End2.VolumetricFlowOutOfNodeInSCMS))
+                                 ;
             }
 
-            bool pumpIsEffectivelyOff;
             double effectiveBestBasePressureInKPa;
             double pumpingSpeedDerating;
             double inletDeltaPressureInKPa;
@@ -1165,21 +1236,17 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             TurboPump = 0x02,
         }
 
-        public class PumpConfig
+        public class PumpConfig : FlowModel.ComponentConfig, ICopyable<PumpConfig>
         {
             public PumpConfig()
-            {
-                PressureUnits = PressureUnits.kilopascals;
-            }
+            { }
 
             public PumpConfig(PumpConfig other)
+                : base(other)
             {
-                RadiusInMM = other.RadiusInMM;
-                LengthInMM = other.LengthInMM;
                 PumpBehavior = other.PumpBehavior;
                 InitialPumpMode = other.InitialPumpMode;
                 FullSpeedInRPM = other.FullSpeedInRPM;
-                PressureUnits = other.PressureUnits;
                 PumpingSpeedInLperS = other.PumpingSpeedInLperS;
                 MaximumCompressionRatio = other.MaximumCompressionRatio;
                 nominalMinimumPressureInKPa = other.nominalMinimumPressureInKPa;
@@ -1188,13 +1255,12 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                 TimeToSpinDown = other.TimeToSpinDown;
                 LowSpeedInPercentOfFS = other.LowSpeedInPercentOfFS;
                 EffectivelyOffThresholdInPercentOfFS = other.EffectivelyOffThresholdInPercentOfFS;
+                PowerInWattsPerPercentOfFSSpeed = other.PowerInWattsPerPercentOfFSSpeed;
+                powerInWassPerPressureDeltaInKPa = other.powerInWassPerPressureDeltaInKPa;
+                powerInWattsPerVolumetricFlowInSCMS = other.powerInWattsPerVolumetricFlowInSCMS;
             }
 
-            /// <summary>Used during construction of a pump to initialize its corresponding parameter</summary>
-            public double RadiusInMM { get; set; }
-
-            /// <summary>Used during construction of a pump to initialize its corresponding parameter</summary>
-            public double LengthInMM { get; set; }
+            PumpConfig ICopyable<PumpConfig>.MakeCopyOfThis(bool deepCopy) { return new PumpConfig(this); }
 
             /// <summary>Defines the desired pump behavior</summary>
             public PumpBehavior PumpBehavior { get; set; }
@@ -1204,9 +1270,6 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
 
             /// <summary>Defines the full scale speed for this pump</summary>
             public double FullSpeedInRPM { get; set; }
-
-            /// <summary>Defines the Pressure units of measure for other pressure values used in this object</summary>
-            public PressureUnits PressureUnits { get; set; }
 
             /// <summary>Defines the nominal pumping speed measured in l/s</summary>
             public double PumpingSpeedInLperS { get; set; }
@@ -1235,6 +1298,17 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             /// <summary>Defines the percentage of full speed that this pump must exceed before it will be treated like it is on for flow calculations.</summary>
             public double EffectivelyOffThresholdInPercentOfFS { get; set; }
 
+            /// <summary>Gives the power consumed by this pump in Watts per percent of full spin speed</summary>
+            public double PowerInWattsPerPercentOfFSSpeed { get; set; }
+
+            public double PowerInWattsPerPressureDelta { get { return PressureUnits.ConvertFromKPA(powerInWassPerPressureDeltaInKPa); } set { powerInWassPerPressureDeltaInKPa = PressureUnits.ConvertToKPa(value); } }
+
+            internal double powerInWassPerPressureDeltaInKPa;
+
+            public double PowerInWattsPerVolumetricFlow { get { return VolumetricFlowUnits.ConvertFromSCMS(powerInWattsPerVolumetricFlowInSCMS); } set { powerInWattsPerVolumetricFlowInSCMS = VolumetricFlowUnits.ConvertToSCMS(value); } }
+
+            internal double powerInWattsPerVolumetricFlowInSCMS;
+
             /// <summary>Uses constructor defaults and sets TimeToSpinUpAndDown to 3.0 seconds</summary>
             public static PumpConfig RoughingPump 
             { 
@@ -1242,6 +1316,8 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                 { 
                     return new PumpConfig() 
                     { 
+                        RadiusInMM = 20.0,
+                        LengthInMM = 500.0,
                         PumpBehavior = PumpBehavior.RoughingPump,
                         PressureUnits = PressureUnits.torr, 
                         PumpingSpeedInLperS = 3.0,
@@ -1250,7 +1326,11 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                         MaximallyEfficientPressure = 1.0e-1,
                         TimeToSpinUpAndDown = (3.0).FromSeconds(), 
                         FullSpeedInRPM = 1800.0, 
-                        LowSpeedInPercentOfFS = 50.0,  
+                        LowSpeedInPercentOfFS = 50.0,
+                        PowerInWattsPerPercentOfFSSpeed = 5.0,
+                        PowerInWattsPerPressureDelta = (500.0 / 760.0),
+                        VolumetricFlowUnits = VolumetricFlowUnits.slm,
+                        PowerInWattsPerVolumetricFlow = 100.0,
                     }; 
                 } 
             }
@@ -1262,6 +1342,8 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                 { 
                     return new PumpConfig() 
                     {
+                        RadiusInMM = 30.0,
+                        LengthInMM = 200.0,
                         PumpBehavior = PumpBehavior.TurboPump,
                         PressureUnits = PressureUnits.torr,
                         PumpingSpeedInLperS = 2.0,
@@ -1272,6 +1354,9 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                         FullSpeedInRPM = 30000.0, 
                         LowSpeedInPercentOfFS = 50.0,
                         EffectivelyOffThresholdInPercentOfFS = 10.0,
+                        PowerInWattsPerPercentOfFSSpeed = 2.0,
+                        VolumetricFlowUnits = VolumetricFlowUnits.slm,
+                        PowerInWattsPerVolumetricFlow = 100.0,
                     }; 
                 } 
             }
@@ -1283,6 +1368,8 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                 { 
                     return new PumpConfig() 
                     {
+                        RadiusInMM = 50.0,
+                        LengthInMM = 300.0,
                         PumpBehavior = PumpBehavior.TurboPump,
                         PressureUnits = PressureUnits.torr,
                         PumpingSpeedInLperS = 10.0,
@@ -1293,6 +1380,9 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                         FullSpeedInRPM = 45000, 
                         LowSpeedInPercentOfFS = 30.0,
                         EffectivelyOffThresholdInPercentOfFS = 10.0,
+                        PowerInWattsPerPercentOfFSSpeed = 5.0,
+                        VolumetricFlowUnits = VolumetricFlowUnits.slm,
+                        PowerInWattsPerVolumetricFlow = 100.0,
                     }; 
                 } 
             }
@@ -1302,16 +1392,17 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
 
         #region Chamber
 
-        public class Chamber : FlowModel.ComponentBase
+        public class Chamber : FlowModel.ComponentBase<ChamberConfig>
         {
-            public Chamber(string name)
-                : this(name, Fcns.CurrentClassLeafName)
+            public Chamber(string name, ChamberConfig config)
+                : this(name, config, Fcns.CurrentClassLeafName)
             { }
 
-            public Chamber(string name, string toStringComponentTypeStr)
-                : base(name, toStringComponentTypeStr)
+            public Chamber(string name, ChamberConfig config, string toStringComponentTypeStr)
+                : base(name, config, toStringComponentTypeStr)
             {
                 OriginalNode = new FlowModel.Node(name, chamber: this);
+                PressureInKPa = Config.InitialPressureInKPa;
             }
 
             public override void UpdateFlows()
@@ -1328,35 +1419,23 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             {
                 get
                 {
-                    double radiusM = RadiusInM;
+                    double radiusM = Config.RadiusInM;
                     return (((Math.PI * 4.0) / 3.0) * radiusM * radiusM * radiusM);
                 }
-                set
+                internal set
                 {
-                    RadiusInM = Math.Pow((value * (3.0 / 4.0 * Math.PI)), 1.0/3.0);
+                    Config.RadiusInM = Math.Pow((value * (3.0 / 4.0 * Math.PI)), 1.0 / 3.0);
                 }
             }
 
             /// <summary>Returns true if this chamber is a pressure source chamber (RadiusMM is zero)</summary>
-            public virtual bool IsSource { get { return RadiusInM == 0.0; } }
-
-            /// <summary>Proxy get/set property for OriginalNode.PressureUnits</summary>
-            public PressureUnits PressureUnits { get { return OriginalNode.PressureUnits; } set { OriginalNode.PressureUnits = value; } }
+            public virtual bool IsSource { get { return Config.IsSource; } }
 
             /// <summary>Proxy get/set property for OriginalNode.Pressure</summary>
             public double Pressure { get { return OriginalNode.PressureUnits.ConvertFromKPA(EffectiveNode.PressureInKPa); } set { EffectiveNode.PressureInKPa = OriginalNode.PressureUnits.ConvertToKPa(value); } }
 
             /// <summary>Proxy get/set property for EffectiveNode.PressureInKPa</summary>
             public virtual double PressureInKPa { get { return EffectiveNode.PressureInKPa; } set { EffectiveNode.PressureInKPa = value; } }
-
-            /// <summary>Proxy get only poperty gives access to OriginalNode.TemperatureUnits</summary>
-            public TemperatureUnits TemperatureUnits { get { return OriginalNode.TemperatureUnits; } }
-
-            /// <summary>Proxy get only poperty gives access to OriginalNode.Temperature</summary>
-            public double Temperature { get { return OriginalNode.Temperature; } }
-
-            /// <summary>Proxy get only poperty gives access to OriginalNode.TemperatureInDegK</summary>
-            public double TemperatureInDegK { get { return OriginalNode.TemperatureInDegK; } }
 
             public FlowModel.Node EffectiveNode { get { return effectiveNode ?? OriginalNode; } internal set { effectiveNode = value; } }
             private FlowModel.Node effectiveNode;
@@ -1367,6 +1446,23 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             {
                 return "{0} p_kPa:{1:e3}{2} f_scms:{3:e3}".CheckedFormat(base.ToString(), EffectiveNode.PressureInKPa, IsSource ? " Src" : "", EffectiveNode.VolumetricFlowOutOfNodeInSCMS);
             }
+        }
+
+        public class ChamberConfig : FlowModel.ComponentConfig, ICopyable<ChamberConfig>
+        {
+            public ChamberConfig() { }
+            public ChamberConfig(ChamberConfig other) : base(other) { }
+
+            ChamberConfig ICopyable<ChamberConfig>.MakeCopyOfThis(bool deepCopy) { return new ChamberConfig(this); }
+
+            /// <summary>Returns true if this chamber is a pressure source chamber (Radius is zero)</summary>
+            public bool IsSource { get { return (RadiusInM == 0.0); } }
+
+            /// <summary>Sets the chamber to be a fixed pressure source chamber (IsSource == true, RadiusInM == 0.0) and sets its InitialPressure to the given value</summary>
+            public double FixedSourcePressure { get { return PressureUnits.ConvertFromKPA(FixedSourcePressureInKPa); } set { FixedSourcePressureInKPa = PressureUnits.ConvertToKPa(value); } }
+
+            /// <summary>Sets the chamber to be a fixed pressure source chamber (IsSource == true, RadiusInM == 0.0) and sets its InitialPressureInKPa to the given value</summary>
+            public double FixedSourcePressureInKPa { get { return IsSource ? InitialPressureInKPa : 0.0; } set { InitialPressureInKPa = value; RadiusInM = 0.0; } }
         }
 
         #endregion
@@ -1469,23 +1565,25 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
 
         #region model building methods: Add, AddRange, Connect
 
-        public FlowModel Add(ComponentBase component) 
+        public FlowModel Add(IComponent component) 
         {
-            component.FlowModelConfig = Config;
+            IComponentForFlowModel icffm = component as IComponentForFlowModel;
+            if (icffm != null)
+                icffm.FlowModelConfig = Config;
 
             componentList.Add(component);
 
             return this;
         }
 
-        public FlowModel Add(params ComponentBase[] componentSet)
+        public FlowModel Add(params IComponent[] componentSet)
         {
             AddRange(componentSet);
 
             return this;
         }
 
-        public FlowModel AddRange(IEnumerable<ComponentBase> componentSet)
+        public FlowModel AddRange(IEnumerable<IComponent> componentSet)
         {
             foreach (var component in componentSet)
                 Add(component);
@@ -1532,7 +1630,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
 
         #region IScanEnginePlugIn implementation methods: Setup, UpdateInputs, Service, UpdateOutputs
 
-        private List<ComponentBase> componentList = new List<ComponentBase>();
+        private List<IComponent> componentList = new List<IComponent>();
         private DelegateValueSetAdapter delegateValueSetAdapter = new DelegateValueSetAdapter() { OptimizeSets = true };
 
         public override void Setup(string scanEnginePartName, IConfig pluginsIConfig, IValuesInterconnection pluginsIVI)
@@ -1543,21 +1641,21 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
 
             delegateValueSetAdapter.Setup(pluginsIVI, scanEnginePartName).Set().Update();
 
-            List<ComponentBase> componentWorkingList = new List<ComponentBase>(componentList);
+            List<IComponent> componentWorkingList = new List<IComponent>(componentList);
 
             allChambersArray = componentWorkingList.Select(item => item as Chamber).Where(item => item != null).ToArray();
             foreach (var item in allChambersArray)
                 componentWorkingList.Remove(item);
 
             List<NodePairChain> nodePairChainList = new List<NodePairChain>();
-            List<NodePairBase> workingNodePairList = new List<NodePairBase>(componentWorkingList.Select(item => item as NodePairBase).Where(item => item != null));
+            List<INodePair> workingNodePairList = new List<INodePair>(componentWorkingList.Select(item => item as INodePair).Where(item => item != null));
 
             foreach (var item in workingNodePairList)
                 componentWorkingList.Remove(item);
 
             for (; ; )
             {
-                NodePairBase[] chain = ExtractNextChain(workingNodePairList);
+                INodePair[] chain = ExtractNextChain(workingNodePairList);
                 if (chain.IsNullOrEmpty())
                     break;
 
@@ -1607,16 +1705,16 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             ServiceComponents(ServicePhases.AfterSetup, TimeSpan.Zero, QpcTimeStamp.Now);
         }
 
-        NodePairBase[] ExtractNextChain(List<NodePairBase> workingNodePairList)
+        INodePair[] ExtractNextChain(List<INodePair> workingNodePairList)
         {
-            NodePairBase chainHead = workingNodePairList.FirstOrDefault(item => 
+            INodePair chainHead = workingNodePairList.FirstOrDefault(item => 
                 ((item.End1.ConnectedToNodeArray.Length != 1 || item.End1.ConnectedToNodeArray.First().IsChamber) && item.End2.ConnectedToNodeArray.Length == 1 && item.End2.ConnectedToNodeArray.First().NodePair != null)
                 );
 
             if (chainHead == null)
                 return null;
 
-            List<NodePairBase> chainList = new List<NodePairBase>();
+            List<INodePair> chainList = new List<INodePair>();
 
             for (; ; )
             {
@@ -1678,7 +1776,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
 
                             if (RelaxationIterationResult == RelaxationIterationResult.Reversed)
                             {
-                                nextDT = TimeSpan.FromTicks(Math.Max((long) (nextDT.Ticks * 0.5), Config.NominalMinimumRelaxationInterval.Ticks));
+                                nextDT = TimeSpan.FromTicks(Math.Max((long)(nextDT.Ticks * 0.5), Config.NominalMinimumRelaxationInterval.Ticks));
                             }
                             else if (RelaxationIterationResult == RelaxationIterationResult.Monotonic && !isLastStep)
                             {
@@ -1703,14 +1801,14 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             delegateValueSetAdapter.Set();
         }
 
-        private ComponentBase[] componentBaseArray;
+        private IComponent[] componentBaseArray;
         private Chamber[] allChambersArray;
         private Chamber[] singleChambersArray;
         private ChamberSet [] chamberSetArray;
         private Chamber[] chamberSetAndSingleChamberArray;
         private NodePairChain[] nodePairChainArray;
-        private NodePairBase[] nodePairArray;
-        private NodePairBase[] nodePairChainAndNodePairArray;
+        private INodePair[] nodePairArray;
+        private INodePair[] nodePairChainAndNodePairArray;
         private bool[] nodePairChainAndNodePairIsBondingConnectedArray;
 
         private static readonly ChamberSet[] emptyChamberSetArray = new ChamberSet[0];
@@ -1797,7 +1895,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                 int num = nodePairChainAndNodePairIsBondingConnectedArray.Length;
                 for (int idx = 0; idx < num && !rebuildChamberSetsNeeded; idx++)
                 {
-                    NodePairBase item = nodePairChainAndNodePairArray[idx];
+                    INodePair item = nodePairChainAndNodePairArray[idx];
                     if (nodePairChainAndNodePairIsBondingConnectedArray[idx] != item.IsBondingConnectionBetweenChambers)
                         rebuildChamberSetsNeeded = true;
                 }
@@ -1835,7 +1933,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
 
                     List<Chamber> breadthFirstSearchList = new List<Chamber>(new[] { nextStartingCh });
                     List<Chamber> chamberSetContentBuildList = new List<Chamber>();
-                    List<NodePairBase> chamberSetInternalNodePairBuildList = new List<NodePairBase>();
+                    List<INodePair> chamberSetInternalNodePairBuildList = new List<INodePair>();
 
                     for (; ; )
                     {
@@ -1908,8 +2006,8 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
 
         public class ChamberSet : Chamber
         {
-            public ChamberSet(Chamber[] chambersInSetArray, NodePairBase [] stiffConnectionsArray)
-                : base("ChSet-{0}".CheckedFormat(String.Join("-", chambersInSetArray.Select(item => item.Name).ToArray())), Fcns.CurrentClassLeafName) 
+            public ChamberSet(Chamber[] chambersInSetArray, INodePair[] stiffConnectionsArray)
+                : base("ChSet-{0}".CheckedFormat(String.Join("-", chambersInSetArray.Select(item => item.Name).ToArray())), new ChamberConfig(chambersInSetArray[0].Config), Fcns.CurrentClassLeafName) 
             {
                 ChambersInSetArray = chambersInSetArray;
                 FirstSourceChamberInSet = ChambersInSetArray.FirstOrDefault(item => item.IsSource);
@@ -1940,7 +2038,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                 else
                 {
                     double moles = ChambersInSetArray.Sum(item => Physics.Gasses.IdealGasLaw.ToMoles(item.PressureInKPa, item.VolumeInM3, item.TemperatureInDegK))
-                                + BondingConnectionsArray.Sum(item => Physics.Gasses.IdealGasLaw.ToMoles(item.End1.PressureInKPa, item.VolumeInM3, item.End1.TemperatureInDegK))
+                                + BondingConnectionsArray.Sum(item => Physics.Gasses.IdealGasLaw.ToMoles(item.End1.PressureInKPa, item.VolumeInM3, item.TemperatureInDegK))
                                 + externalNodeList.Sum(item => Physics.Gasses.IdealGasLaw.ToMoles(item.PressureInKPa, item.EffectiveVolumeM3, item.TemperatureInDegK));
 
                     initialSetPressureInKPa = Physics.Gasses.IdealGasLaw.ToPressureInKPa(moles, _volumeInM3, TemperatureInDegK);
@@ -1960,7 +2058,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
 
             public Chamber[] ChambersInSetArray { get; protected set; }
             public Chamber FirstSourceChamberInSet { get; protected set; }
-            public NodePairBase[] BondingConnectionsArray { get; protected set; }
+            public INodePair[] BondingConnectionsArray { get; protected set; }
 
             public void DistributePressures()
             {
@@ -1981,7 +2079,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             /// Getter returns the spherically equivilant volume of the spherical volume of RadiusInM.
             /// Setter sets the RadiusInM to the radius of a sphere with the given volume.
             /// </summary>
-            public override double VolumeInM3 { get { return _volumeInM3;} set {_volumeInM3 = value;}}
+            public override double VolumeInM3 { get { return _volumeInM3;} internal set {_volumeInM3 = value;}}
             double _volumeInM3;
 
             /// <summary>Returns true if this chamber is a pressure source chamber (RadiusMM is zero)</summary>
@@ -1993,16 +2091,16 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             }
         }
 
-        public class NodePairChain : NodePairBase
+        public class NodePairChain : NodePairBase<ComponentConfig>
         {
-            public NodePairChain(NodePairBase[] nodePairChainArray, FlowModelConfig flowModelConfig)
-                : base("Chain-{0}".CheckedFormat(string.Join("-", nodePairChainArray.Select(item => item.Name).ToArray())), Fcns.CurrentClassLeafName)
+            public NodePairChain(INodePair[] nodePairChainArray, FlowModelConfig flowModelConfig)
+                : base("Chain-{0}".CheckedFormat(string.Join("-", nodePairChainArray.Select(item => item.Name).ToArray())), new ComponentConfig(nodePairChainArray[0].Config), Fcns.CurrentClassLeafName)
             {
                 NodePairChainArray = nodePairChainArray;
                 NodePairChainArrayLength = NodePairChainArray.Length;
                 nodePairResistanceArray = new double[NodePairChainArrayLength];
 
-                FlowModelConfig = flowModelConfig;
+                (this as IComponentForFlowModel).FlowModelConfig = flowModelConfig;
 
                 innerEnd1 = nodePairChainArray.First().End1;
                 innerEnd2 = nodePairChainArray.Last().End2;
@@ -2028,11 +2126,13 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                 End1.PressureInKPa = innerEnd1.PressureInKPa;
                 End2.PressureInKPa = innerEnd2.PressureInKPa;
 
-                LengthInM = NodePairChainArray.Sum(item => item.LengthInM);
+                Config.LengthInM = totalLengthInM = NodePairChainArray.Sum(item => item.Config.LengthInM);
                 _volumeInM3 = NodePairChainArray.Sum(item => item.VolumeInM3);
 
                 ServicePhases = ServicePhases.BeforeRelaxation;
             }
+
+            double totalLengthInM = 0.0;
 
             public override double VolumeInM3 { get { return _volumeInM3; } }
             private double _volumeInM3;
@@ -2042,14 +2142,13 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
 
             private Node innerEnd1, innerEnd2;
 
-            public NodePairBase[] NodePairChainArray { get; private set; }
+            public INodePair[] NodePairChainArray { get; private set; }
             public int NodePairChainArrayLength { get; private set; }
 
             public override void Service(ServicePhases servicePhase, TimeSpan measuredServiceInterval, QpcTimeStamp timestampNow)
             {
                 base.Service(servicePhase, measuredServiceInterval, timestampNow);
 
-                double totalLengthInM = 0.0;
                 _volumeInM3 = 0.0;
                 bool anyChange = false;
 
@@ -2058,7 +2157,6 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                     var item = NodePairChainArray[idx];
                     item.Service(servicePhase, measuredServiceInterval, timestampNow);
 
-                    totalLengthInM += item.LengthInM;
                     _volumeInM3 += item.VolumeInM3;
 
                     double itemResistance = item.ResistanceInKPaSecPerM3;
@@ -2069,14 +2167,12 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                     }
                 }
 
-                LengthInM = totalLengthInM;
-
                 if (anyChange)
                 {
                     totalResistanceInKPaSecPerM3 = nodePairResistanceArray.Sum();
 
-                    if (double.IsNaN(totalResistanceInKPaSecPerM3) || totalResistanceInKPaSecPerM3 <= 0.0)
-                        throw new System.InvalidOperationException("resistance");
+                    //if (double.IsNaN(totalResistanceInKPaSecPerM3) || totalResistanceInKPaSecPerM3 <= 0.0)
+                    //    throw new System.InvalidOperationException("resistance");
 
                     double end1EffectiveVolumeM3 = _volumeInM3 * 0.5;
                     double end2EffectiveVolumeM3 = _volumeInM3 * 0.5;
@@ -2183,18 +2279,57 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
 
         #region base and helper classes for components: ComponentBase, Node, NodePair
 
-        public abstract class ComponentBase
+        public interface IComponent
         {
-            public ComponentBase(string name, string toStringComponentTypeStr)
+            string Name { get; }
+            ComponentConfig Config { get; }
+
+            double VolumeInM3 { get; }
+            double VolumeInMM3 { get; }
+
+            double Temperature { get; }
+            double TemperatureInDegK { get; }
+
+            ServicePhases ServicePhases { get; }
+
+            void Setup(string scanEnginePartName, string vacuumSimPartName);
+            void Service(ServicePhases servicePhase, TimeSpan measuredServiceInterval, QpcTimeStamp timestampNow);
+            void UpdateFlows();
+        }
+
+        public interface IComponentForFlowModel
+        {
+            FlowModelConfig FlowModelConfig { set; }
+        }
+
+        public class ComponentBase<TConfigType> : IComponent, IComponentForFlowModel
+            where TConfigType : ComponentConfig, ICopyable<TConfigType>
+        {
+            public ComponentBase(string name, TConfigType config, string toStringComponentTypeStr)
             {
                 Name = name;
+                Config = config.MakeCopyOfThis();
                 ToStringComponentTypeStr = toStringComponentTypeStr;
-                VolumeInM3 = 0.0;
+                TemperatureInDegK = Physics.UnitsOfMeasure.Constants.StandardTemperatureInDegK;
             }
+
+            public string Name { get; protected set; }
+
+            public TConfigType Config { get; private set; }
+            ComponentConfig IComponent.Config { get { return Config; } }
+
+            public string ToStringComponentTypeStr { get; private set; }
+
+            public virtual double VolumeInM3 { get; internal set; }
+            public double VolumeInMM3 { get { return VolumeInM3 * 1.0e9; } set { VolumeInM3 = value * 1.0e-9; } }
+
+            public double Temperature { get { return Config.TemperatureUnits.ConvertFromDegK(TemperatureInDegK); } set { TemperatureInDegK = Config.TemperatureUnits.ConvertToDegK(value); } }
+            public double TemperatureInDegK { get; set; }
 
             public ServicePhases ServicePhases { get; protected set; }
 
-            internal FlowModelConfig FlowModelConfig { get; set; }
+            public FlowModelConfig FlowModelConfig { get; private set; }
+            FlowModelConfig IComponentForFlowModel.FlowModelConfig { set { FlowModelConfig = value; } }
 
             public virtual void Setup(string scanEnginePartName, string vacuumSimPartName)
             { }
@@ -2205,25 +2340,63 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             public virtual void UpdateFlows()
             { }
 
-            public string Name { get; protected set; }
-
-            public double RadiusInM { get; set; }
-            public double RadiusInMM { get { return RadiusInM * 1000.0; } set { RadiusInM = value * 0.001; } }
-
-            public virtual double VolumeInM3 { get; set; }
-            public double VolumeInMM3 { get { return VolumeInM3 * 1.0e9; } set { VolumeInM3 = value * 1.0e-9; } }
-
-            public string ToStringComponentTypeStr { get; private set; }
-
             public override string ToString()
             {
-                return "{0} '{1}' r_mm:{2:f1} v_m^3:{3:e3}".CheckedFormat(ToStringComponentTypeStr, Name, RadiusInMM, VolumeInM3);
+                if (VolumeInM3 > 0.0)
+                    return "{0} '{1}' r_mm:{2:f1} v_m^3:{3:e3}".CheckedFormat(ToStringComponentTypeStr, Name, Config.RadiusInMM, VolumeInM3);
+                else if (Config.RadiusInMM > 0.0)
+                    return "{0} '{1}' r_mm:{2:f1}".CheckedFormat(ToStringComponentTypeStr, Name, Config.RadiusInMM);
+                else
+                    return "{0} '{1}'".CheckedFormat(ToStringComponentTypeStr, Name);
             }
+        }
+
+        public class ComponentConfig : ICopyable<ComponentConfig>
+        {
+            public ComponentConfig()
+            {
+                PressureUnits = PressureUnits.kilopascals;
+                VolumetricFlowUnits = VolumetricFlowUnits.sccm;
+                TemperatureUnits = TemperatureUnits.DegC;
+            }
+
+            public ComponentConfig(ComponentConfig other)
+            {
+                PressureUnits = other.PressureUnits;
+                VolumetricFlowUnits = other.VolumetricFlowUnits;
+                TemperatureUnits = other.TemperatureUnits;
+                RadiusInM = other.RadiusInM;
+                LengthInM = other.LengthInM;
+                InitialPressureInKPa = other.InitialPressureInKPa;
+            }
+
+            ComponentConfig ICopyable<ComponentConfig>.MakeCopyOfThis(bool deepCopy) { return new ComponentConfig(this); }
+
+            /// <summary>Defines the pressure units used for pressure values.  Defaults to PressureUnits.kilopascals</summary>
+            public PressureUnits PressureUnits { get; set; }
+
+            /// <summary>Defines the volumetric flow units used for flow values.  Defaults to VolumetricFlowUnits.sccm</summary>
+            public VolumetricFlowUnits VolumetricFlowUnits { get; set; }
+
+            /// <summary>Defines the temperature units used for temperature values.  Defaults to TemperatureUnits.DegC</summary>
+            public TemperatureUnits TemperatureUnits { get; set; }
+
+            public virtual double RadiusInM { get; set; }
+            public double RadiusInMM { get { return RadiusInM * 1000.0; } set { RadiusInM = value * 0.001; } }
+
+            public virtual double LengthInM { get; set; }
+            public double LengthInMM { get { return LengthInM * 1000.0; } set { LengthInM = value * 0.001; } }
+
+            public double NominalAreaInM2 { get { return (Math.PI * RadiusInM * RadiusInM); } }
+            public double NominalVolumeInM3 { get { return NominalAreaInM2 * LengthInM; } }
+
+            public double InitialPressure { get { return PressureUnits.ConvertFromKPA(InitialPressureInKPa); } set { InitialPressureInKPa = PressureUnits.ConvertToKPa(value); } }
+            public double InitialPressureInKPa { get; set; }
         }
 
         public class Node
         {
-            public Node(string name, Chamber chamber = null, NodePairBase nodePair = null, Node observesNode = null)
+            public Node(string name, Chamber chamber = null, INodePair nodePair = null, Node observesNode = null)
             {
                 Name = name;
 
@@ -2237,13 +2410,18 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                 NodePair = nodePair;
                 ObservesNode = observesNode;
 
-                TemperatureUnits = TemperatureUnits.DegC;
-                Temperature = 20.0;
+                Component = (Chamber as IComponent) ?? NodePair ?? observesNode.Component;
+
+                Config = (Component != null) ? Component.Config : new ComponentConfig();
+
                 PressureInKPa = Physics.Gasses.Air.StandardAtmPressureInKPa;
-                PressureUnits = PressureUnits.kilopascals;
             }
 
             public string Name { get; private set; }
+
+            public IComponent Component { get; set; }
+            public ComponentConfig Config { get; set; }
+
             public bool IsChamber { get { return (Chamber != null); } }
             public bool IsSource { get { return (IsChamber && Chamber.IsSource); } }
 
@@ -2253,9 +2431,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             /// <summary>Returns true if the node is connected to a single chamber</summary>
             public bool IsConnectedToChamber { get { return (ConnectedToChamber != null); } }
 
-            public TemperatureUnits TemperatureUnits { get; set; }
-            public double Temperature { get { return TemperatureUnits.ConvertFromDegK(TemperatureInDegK); } set { TemperatureInDegK = TemperatureUnits.ConvertToDegK(value); } }
-            public double TemperatureInDegK { get; set; }
+            public double TemperatureInDegK { get { return (Component != null ? Component.TemperatureInDegK : Physics.UnitsOfMeasure.Constants.StandardTemperatureInDegK); } }
 
             public virtual double EffectiveVolumeM3
             {
@@ -2295,7 +2471,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                 internal set { connectedToNodeList.Clear(); connectedToNodeList.AddRange(value); connectedToNodeArray = value; }
             }
             public Chamber Chamber { get; private set; }
-            public NodePairBase NodePair { get; private set; }
+            public INodePair NodePair { get; private set; }
             public Node ObservesNode { get; private set; }
 
             List<Node> connectedToNodeList = new List<Node>();
@@ -2349,11 +2525,11 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                     double summedVolumeM3 = (EffectiveVolumeM3 + ConnectedToNodeArray.Sum(item => item.EffectiveVolumeM3));
                     double summedVolumetricFlowOutOfNodeInSCMS = VolumetricFlowOutOfNodeInSCMS - (IsChamber ? 0.0 : ConnectedToNodeArray.Sum(item => item.VolumetricFlowOutOfNodeInSCMS));    // for chambers the flow has already been summed
 
-                    if (double.IsNaN(summedVolumeM3) || double.IsInfinity(summedVolumeM3) || summedVolumeM3 <= 0.0)
-                        throw new System.InvalidOperationException("summedVolumeM3");
+                    //if (double.IsNaN(summedVolumeM3) || double.IsInfinity(summedVolumeM3) || summedVolumeM3 <= 0.0)
+                    //    throw new System.InvalidOperationException("summedVolumeM3");
 
-                    if (double.IsNaN(TemperatureInDegK) || double.IsInfinity(TemperatureInDegK) || TemperatureInDegK <= 0.0)
-                        throw new System.InvalidOperationException("TemperatureInDegK");
+                    //if (double.IsNaN(TemperatureInDegK) || double.IsInfinity(TemperatureInDegK) || TemperatureInDegK <= 0.0)
+                    //    throw new System.InvalidOperationException("TemperatureInDegK");
 
                     double currentMoles = Physics.Gasses.IdealGasLaw.ToMoles(PressureInKPa, summedVolumeM3, TemperatureInDegK);
 
@@ -2369,8 +2545,8 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                         updatedPressureInKPa = updatedPressureInKPa.Clip(0.0, maxPressure, updatedPressureInKPa);
 
                     // note: it is expected that the pressure may actually reach zero when the above delta calculation logic overshoots 
-                    if (double.IsNaN(updatedPressureInKPa) || double.IsInfinity(updatedPressureInKPa) || updatedPressureInKPa < 0.0)
-                        throw new System.InvalidOperationException("updatedPressureInKPa");
+                    //if (double.IsNaN(updatedPressureInKPa) || double.IsInfinity(updatedPressureInKPa) || updatedPressureInKPa < 0.0)
+                    //    throw new System.InvalidOperationException("updatedPressureInKPa");
                 }
 
                 SetPressureAndDistributeToSubNodes(updatedPressureInKPa);
@@ -2392,25 +2568,70 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                         sharedPressureInKPa = PressureInKPa;
                 }
 
-                SetPressureAndDistributeToSubNodes(sharedPressureInKPa);
+                if (IsChamber)
+                    SetPressureAndDistributeToSubNodes(sharedPressureInKPa);
             }
 
             public virtual void SetPressureAndDistributeToSubNodes(double pressureInKPa)
             {
-                PressureInKPa = pressureInKPa;
+                if (!IsChamber && ConnectedToNodeArray.Any(node => node.IsChamber))
+                    return; // do not attempt to distribute the pressure from a non-chamber into any connected chamber.
+
+                Node firstSourceChamberNode = ConnectedToNodeArray.FirstOrDefault(node => node.IsSource);
+
+                PressureInKPa = (firstSourceChamberNode != null) ? firstSourceChamberNode.PressureInKPa : pressureInKPa;
 
                 foreach (var subNode in ConnectedToNodeArray)
-                    subNode.PressureInKPa = pressureInKPa;
+                {
+                    if (!subNode.IsSource)
+                        subNode.PressureInKPa = pressureInKPa;
+                }
             }
         }
 
-        public class NodePairBase : ComponentBase
+        public interface INodePair : IComponent
         {
-            public NodePairBase(string name, string toStringComponentTypeStr)
-                : base(name, toStringComponentTypeStr)
+            new ComponentConfig Config { get; }
+
+            Node End1 { get; }
+            Node End2 { get; }
+
+            bool IsBondingConnectionBetweenChambers { get; }
+
+            double ResistanceInKPaSecPerM3 { get; }
+
+            void DistributePressures();
+
+            /// <summary>
+            /// For node pairs that connect two chambers, this method accepts the given testCh and returns the chamber at the first end that is not same instance as the given testChamber instance.
+            /// This method will return null if this node pair does not connect the given chamber to another chamber.
+            /// </summary>
+            Chamber OtherConnectedChamber(Chamber nexSearchCh);
+        }
+
+        public class NodePairBase<TConfigType> : ComponentBase<TConfigType>, INodePair
+            where TConfigType : ComponentConfig, ICopyable<TConfigType>
+        {
+            public NodePairBase(string name, TConfigType config, string toStringComponentTypeStr)
+                : base(name, config, toStringComponentTypeStr)
             {
                 End1 = new Node("{0}.End1".CheckedFormat(name), nodePair: this);
                 End2 = new Node("{0}.End2".CheckedFormat(name), nodePair: this);
+            }
+
+            ComponentConfig INodePair.Config { get { return Config; } }
+
+            public Node End1 { get; protected set; }
+            public Node End2 { get; protected set; }
+
+            public override void Setup(string scanEnginePartName, string vacuumSimPartName)
+            {
+                base.Setup(scanEnginePartName, vacuumSimPartName);
+
+                End1.SetPressureAndDistributeToSubNodes(Config.InitialPressureInKPa);
+                End2.SetPressureAndDistributeToSubNodes(Config.InitialPressureInKPa);
+
+                DistributePressures();
             }
 
             public override void UpdateFlows()
@@ -2418,19 +2639,19 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                 double pEnd1 = End1.PressureInKPa;
                 double pEnd2 = End2.PressureInKPa;
 
-                if (double.IsNaN(pEnd1) || double.IsInfinity(pEnd1))
-                    throw new System.InvalidOperationException("pEnd1");
+                //if (double.IsNaN(pEnd1) || double.IsInfinity(pEnd1))
+                //    throw new System.InvalidOperationException("pEnd1");
 
-                if (double.IsNaN(pEnd2) || double.IsInfinity(pEnd2))
-                    throw new System.InvalidOperationException("pEnd2");
+                //if (double.IsNaN(pEnd2) || double.IsInfinity(pEnd2))
+                //    throw new System.InvalidOperationException("pEnd2");
 
                 double pDiff = pEnd2 - pEnd1;       // we are calculating the flow out of End1 (and into End2) which occurs when p@End2 > p@End1
                 double pAvg = (pEnd1 + pEnd2) * 0.5;
 
                 double resistanceInKPaSecPerM3 = ResistanceInKPaSecPerM3;
 
-                if (double.IsNaN(resistanceInKPaSecPerM3) || resistanceInKPaSecPerM3 <= 0.0)
-                    throw new System.InvalidOperationException("resistance");
+                //if (double.IsNaN(resistanceInKPaSecPerM3) || resistanceInKPaSecPerM3 <= 0.0)
+                //    throw new System.InvalidOperationException("resistance");
 
                 double flowRateM3PerSec = (double.IsInfinity(resistanceInKPaSecPerM3) ? 0.0 : pDiff / resistanceInKPaSecPerM3);
 
@@ -2469,8 +2690,8 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                 End1.VolumetricFlowOutOfNodeInSCMS = volumetricFlowInSCMS;        // (pDiff = pEnd2 - pEnd1) above, or zero if this IsBondingConnectionBetweenChambers
                 End2.VolumetricFlowOutOfNodeInSCMS = -volumetricFlowInSCMS;
 
-                if (double.IsNaN(volumetricFlowInSCMS) || double.IsInfinity(volumetricFlowInSCMS))
-                    throw new System.InvalidOperationException("volumetricFlowInSCMS");
+                //if (double.IsNaN(volumetricFlowInSCMS) || double.IsInfinity(volumetricFlowInSCMS))
+                //    throw new System.InvalidOperationException("volumetricFlowInSCMS");
 
                 lastResistanceInKPaSecPerM3 = resistanceInKPaSecPerM3;
             }
@@ -2480,28 +2701,25 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             private double lastResistanceInKPaSecPerM3;
             protected bool DisableBondingConnectionBetweenChambers { get; set; }
 
-            public double LengthInM { get; set; }
-            public double LengthInMM { get { return LengthInM * 1000.0; } set { LengthInM = value * 0.001; } }
             public double EffectiveAreaGain { get { return _effectiveAreaGain; } set { _effectiveAreaGain = value.Clip(0.0, 10.0, 1.0); } }
             private double _effectiveAreaGain = 1.0;
 
-            public override double VolumeInM3 { get { return NominalAreaInM2 * LengthInM; } }
+            public override double VolumeInM3 { get { return Config.NominalVolumeInM3; } }
 
-            private double NominalAreaInM2 { get { return (Math.PI * RadiusInM * RadiusInM); } }
-            public virtual double EffectiveAreaM2 { get { return NominalAreaInM2 * _effectiveAreaGain; } }
+            public virtual double EffectiveAreaM2 { get { return Config.NominalAreaInM2 * _effectiveAreaGain; } }
 
             public virtual double ResistanceInKPaSecPerM3
             {
                 get
                 {
                     double areaM2 = EffectiveAreaM2;  // mm^2 => m^2
-                    double lengthM = LengthInM; // mm => m
+                    double lengthM = Config.LengthInM; // mm => m
 
-                    if (double.IsNaN(lengthM) || double.IsInfinity(lengthM) || lengthM <= 0.0)
-                        throw new System.InvalidOperationException("lengthM");
+                    //if (double.IsNaN(lengthM) || double.IsInfinity(lengthM) || lengthM <= 0.0)
+                    //    throw new System.InvalidOperationException("lengthM");
 
-                    if (double.IsNaN(areaM2) || double.IsInfinity(areaM2))
-                        throw new System.InvalidOperationException("areaM2");
+                    //if (double.IsNaN(areaM2) || double.IsInfinity(areaM2))
+                    //    throw new System.InvalidOperationException("areaM2");
 
                     /* Hagen–Poiseuille flow equation:
                      * 
@@ -2523,29 +2741,16 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                     // pi was moved from denominator to numerator because of change from radius^4 to area^2 (which now has pi^2 in it)
                     double resistanceInKPaSecPerM3 = ((areaM2 > 0.0) ? ((Math.PI * 8.0 * Physics.Gasses.N2.ViscosityInKPaS * lengthM) / (areaM2 * areaM2)) : double.PositiveInfinity);
 
-                    if (double.IsNaN(resistanceInKPaSecPerM3) || resistanceInKPaSecPerM3 <= 0.0)
-                        throw new System.InvalidOperationException("resistance");
+                    //if (double.IsNaN(resistanceInKPaSecPerM3) || resistanceInKPaSecPerM3 <= 0.0)
+                    //    throw new System.InvalidOperationException("resistance");
 
                     return resistanceInKPaSecPerM3;
                 }
             }
 
             public virtual void DistributePressures()
-            { }
-
-            public double InitialPressureInKPa 
-            { 
-                set 
-                {
-                    End1.SetPressureAndDistributeToSubNodes(value);
-                    End2.SetPressureAndDistributeToSubNodes(value);
-
-                    DistributePressures();
-                } 
+            {
             }
-
-            public Node End1 { get; protected set; }
-            public Node End2 { get; protected set; }
 
             public override string ToString()
             {
