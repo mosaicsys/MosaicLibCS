@@ -94,7 +94,7 @@ namespace MosaicLib.Utils
         /// <param name="dt">Specifies the DateTime value to convert</param>
         /// <param name="dtFormat">Specifies the desired format from the set of supported enum values.</param>
         /// <returns>The DateTime converted to a string based on the desired format.</returns>
-        public static string CvtToString(DateTime dt, DateTimeFormat dtFormat)
+        public static string CvtToString(this DateTime dt, DateTimeFormat dtFormat)
         {
             return CvtToString(ref dt, dtFormat);
         }

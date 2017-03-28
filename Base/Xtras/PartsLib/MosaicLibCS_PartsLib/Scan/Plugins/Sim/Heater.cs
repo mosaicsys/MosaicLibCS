@@ -47,6 +47,9 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.Heater
         {
             Config = new BasicHeaterSimScanEnginePluginConfig(config);
 
+            IsOnline = true;
+            IsContactorEnabled = true;
+
             OutputValues = new BasicHeaterSimScanEnginePluginOutputs();
             OutputValues.slewLimitedSetpoint = Config.AmbientTemp;
             OutputValues.currentPower = 0.0;
@@ -55,6 +58,9 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.Heater
         }
 
         public BasicHeaterSimScanEnginePluginConfig Config { get; protected set; }
+
+        public bool IsOnline { get; set; }
+        public bool IsContactorEnabled { get; set; }
 
         public double Setpoint { get; set; }
 
@@ -83,11 +89,14 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.Heater
 
             Common.FaultInjection faultInjection = FaultInjection;
 
-            bool isOnline = OutputValues.IsOnline = !((faultInjection & Common.FaultInjection.Offline) != default(Common.FaultInjection));
-            bool sensorFault = OutputValues.SensorFault = ((faultInjection & Common.FaultInjection.SensorFault) != default(Common.FaultInjection));
+            bool isOnline = OutputValues.IsOnline = IsOnline && !faultInjection.IsSet(Common.FaultInjection.Offline);
+            bool sensorFault = OutputValues.SensorFault = faultInjection.IsSet(Common.FaultInjection.SensorFault);
 
             double prevSlewLimitedSetpoint = OutputValues.slewLimitedSetpoint;
-            SlewRateLimitControl(ref OutputValues.slewLimitedSetpoint, Setpoint, Config.MaxHeatRampRatePerSec, Config.MaxCoolRampRatePerSec, measuredServiceIntervalInSec);
+            if (isOnline)
+                SlewRateLimitControl(ref OutputValues.slewLimitedSetpoint, Setpoint, Config.MaxHeatRampRatePerSec, Config.MaxCoolRampRatePerSec, measuredServiceIntervalInSec);
+            else if (OutputValues.slewLimitedSetpoint > OutputValues.Readback)
+                OutputValues.slewLimitedSetpoint = OutputValues.Readback;
 
             double setpointRatePerSec = ((measuredServiceIntervalInSec > 0.0) ? ((OutputValues.slewLimitedSetpoint - prevSlewLimitedSetpoint) / measuredServiceIntervalInSec) : 0.0);
 
@@ -101,7 +110,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.Heater
             double nominalRequiredLoadPower = (OutputValues.Readback + clippedSetpointLessIntrinsic - Config.AmbientTemp) * Config.ThermalLoadWattsPerDeg;
             double nominalRequiredRampPower = setpointRatePerSec * 1.0 / Config.ThermalMassDegPerSecPerWatt;
 
-            if (isOnline)
+            if (isOnline && IsContactorEnabled)
             {
                 SlewRateLimitControl(ref OutputValues.currentPower, nominalRequiredRampPower + nominalRequiredLoadPower, Config.PhysicalPowerRampLimitWattsPerSec, Config.PhysicalPowerRampLimitWattsPerSec, measuredServiceIntervalInSec);
                 OutputValues.currentPower = OutputValues.currentPower.Clip(0.0, Config.FullScalePowerWatts);

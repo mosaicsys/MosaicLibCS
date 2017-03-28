@@ -267,23 +267,23 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Extension method "safe" version of ToArray method.  If the given collection is non-null then this method returns the Linq ToArray method applied to the collection.
-        /// If the collection is null then this method creates and returns an empty array of the given ItemType.
+        /// Extension method "safe" version of ToArray method.  If the given collection/set is non-null then this method returns the Linq ToArray method applied to the collection.
+        /// If the collection/set is null then this method creates and returns an empty array of the given ItemType.
         /// </summary>
-        public static ItemType[] SafeToArray<ItemType>(this ICollection<ItemType> collection)
+        public static ItemType[] SafeToArray<ItemType>(this IEnumerable<ItemType> set)
         {
-            return SafeToArray(collection, null);
+            return SafeToArray(set, null);
         }
 
         /// <summary>
-        /// Extension method "safe" version of ToArray method.  If the given collection is non-null then this method returns the Linq ToArray method applied to the collection.
-        /// If the collection is null and the given fallbackArray is non-null then this method returns the fallbackArray.
-        /// If the collection and the fallbackArray values are null then this creates and returns an empty array of the given ItemType.
+        /// Extension method "safe" version of ToArray method.  If the given collection/set is non-null then this method returns the Linq ToArray method applied to the collection.
+        /// If the collection/set is null and the given fallbackArray is non-null then this method returns the fallbackArray.
+        /// If the collection/set and the fallbackArray values are null then this creates and returns an empty array of the given ItemType.
         /// </summary>
-        public static ItemType[] SafeToArray<ItemType>(this ICollection<ItemType> collection, ItemType[] fallbackArray)
+        public static ItemType[] SafeToArray<ItemType>(this IEnumerable<ItemType> set, ItemType[] fallbackArray)
         {
-            if (collection != null)
-                return collection.ToArray();
+            if (set != null)
+                return set.ToArray();
 
             if (fallbackArray != null)
                 return fallbackArray;
