@@ -542,7 +542,7 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        #region static System.IO.StreamWriter.CheckedWrite extension methods
+        #region static System.IO.StreamWriter CheckedWrite and CheckedWriteLine extension methods
 
         /// <summary>Invokes System.IO.StreamWriter.Write with the given args within a try/catch pattern.</summary>
         public static StreamWriter CheckedWrite(this StreamWriter sw, string fmt, object arg0)
@@ -604,10 +604,6 @@ namespace MosaicLib.Utils
             return sw;
         }
 
-        #endregion
-
-        #region static System.IO.StreamWriter.CheckedWriteLine extension methods
-
         /// <summary>Invokes System.IO.StreamWriteLiner.WriteLine with the given args within a try/catch pattern.</summary>
         public static StreamWriter CheckedWriteLine(this StreamWriter sw, string fmt, object arg0)
         {
@@ -623,7 +619,7 @@ namespace MosaicLib.Utils
             return sw;
         }
 
-        /// <summary>Invokes System.IO.StreamWriteLiner.WriteLine with the given args within a try/catch pattern.</summary>
+        /// <summary>Invokes System.IO.StreamWriter.WriteLine with the given args within a try/catch pattern.</summary>
         public static StreamWriter CheckedWriteLine(this StreamWriter sw, string fmt, object arg0, object arg1)
         {
             try
@@ -638,7 +634,7 @@ namespace MosaicLib.Utils
             return sw;
         }
 
-        /// <summary>Invokes System.IO.StreamWriteLiner.WriteLine with the given args within a try/catch pattern.</summary>
+        /// <summary>Invokes System.IO.StreamWriter.WriteLine with the given args within a try/catch pattern.</summary>
         public static StreamWriter CheckedWriteLine(this StreamWriter sw, string fmt, object arg0, object arg1, object arg2)
         {
             try
@@ -653,7 +649,7 @@ namespace MosaicLib.Utils
             return sw;
         }
 
-        /// <summary>Invokes System.IO.StreamWriteLiner.WriteLine with the given args within a try/catch pattern.</summary>
+        /// <summary>Invokes System.IO.StreamWriter.WriteLine with the given args within a try/catch pattern.</summary>
         public static StreamWriter CheckedWriteLine(this StreamWriter sw, string fmt, params object[] args)
         {
             try
@@ -888,6 +884,16 @@ namespace MosaicLib.Utils
                 return 10 + c - 'a';
             else
                 return -1;
+        }
+
+        #endregion
+
+        #region SafeToString
+
+        /// <summary>Extension method that returns ToString applied to the given object, or mapNullTo (defaults to "") if the given object is null.</summary>
+        public static string SafeToString(this object o, string mapNullTo = "")
+        {
+            return (o != null ? o.ToString() : mapNullTo);
         }
 
         #endregion

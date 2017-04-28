@@ -225,14 +225,14 @@ namespace MosaicLib.Time
 
 	#endregion
 
-	#region QpcTimer
+    #region QpcTimer
 
     /// <summary>
     /// The struct provides a form of restable Timer that is implemented using QpcTimeStamps.  
     /// This Timer provides the ability for a client to mark the start of an interval and to query the timer one some recuring basis to find out if the interval has elapsed since, or not.
     /// In addition the Timer allows the interval to automatically be restated when its completion is signaled.
     /// </summary>
-	public struct QpcTimer
+    public struct QpcTimer
     {
         #region Construction 
 
@@ -332,21 +332,26 @@ namespace MosaicLib.Time
 
 
         /// <summary>
-        /// Method is used to reset the timer to occur after TriggerInterval has elpased from now.  This is a synonym for Start().
+        /// Method is used to reset (and start) the timer.
+        /// If <paramref name="triggerImmediately"/> is false then this method will start the timer to trigger after TriggerInterval TimeSpan has elpased (from now).  (This is a synonym for Start).
+        /// If <paramref name="triggerImmediately"/> is true then this method will start the timmer to trigger immediately.
         /// </summary>
-        public QpcTimer Reset() 
+        public QpcTimer Reset(bool triggerImmediately = false) 
         {
-            return Start();
+            return Reset(QpcTimeStamp.Now, triggerImmediately: triggerImmediately);
         }
 
         /// <summary>
-        /// Method is used to reset the timer to occur after TriggerInterval has elpased from stated time called now.
-        /// This is a synonym for Start(now).
+        /// Method is used to reset (and start) the timer.
+        /// If <paramref name="triggerImmediately"/> is false then this method will start the timer to trigger after TriggerInterval TimeSpan has elpased (from now).  (This is a synonym for Start(now)).
+        /// If <paramref name="triggerImmediately"/> is true then this method will start the timmer to trigger immediately.
         /// </summary>
-        /// <param name="now">Caller provies the time stamp from which the interval is measured.</param>
-        public QpcTimer Reset(QpcTimeStamp now)
+        public QpcTimer Reset(QpcTimeStamp now, bool triggerImmediately = false)
 		{
-            return Start(now);
+            if (!triggerImmediately)
+                return Start(now);
+            else
+                return Start(now - TriggerInterval);
 		}
 
         /// <summary>

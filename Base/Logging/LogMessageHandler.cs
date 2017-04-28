@@ -104,68 +104,35 @@ namespace MosaicLib
         // the following methodes provide globally usable factory methods for creating different types of
         //	log message handler objects that may be used with the log distribution system.
 
-        /// <summary>Creates a ConsoleLogMessageHandler named "LMH.Console" with LogGate.All</summary>
-        public static ILogMessageHandler CreateConsoleLogMessageHandler() { return CreateConsoleLogMessageHandler("LMH.Console", LogGate.All); }
-        /// <summary>Creates a ConsoleLogMessageHandler named "LMH.Console" with given logGate</summary>
-        public static ILogMessageHandler CreateConsoleLogMessageHandler(LogGate logGate) { return CreateConsoleLogMessageHandler("LMH.Console", logGate); }
-        /// <summary>Creates a ConsoleLogMessageHandler with given name and LogGate.All</summary>
-        public static ILogMessageHandler CreateConsoleLogMessageHandler(string name) { return CreateConsoleLogMessageHandler(name, LogGate.All); }
-        /// <summary>Creates a ConsoleLogMessageHandler given name and logGate</summary>
-        public static ILogMessageHandler CreateConsoleLogMessageHandler(string name, LogGate logGate)
+        /// <summary>Creates a ConsoleLogMessageHandler given name (null maps to "LMH.Console") and logGate (null maps to LogGate.All).</summary>
+        public static ILogMessageHandler CreateConsoleLogMessageHandler(string name = null, LogGate? logGate = null, bool data = true, bool nvs = true)
         {
-            return new Handlers.ConsoleLogMesssageHandler(name, logGate, new Handlers.LineFormat(false, true, true, " "));
+            return new Handlers.ConsoleLogMesssageHandler(name ?? "LMH.Console", logGate ?? LogGate.All, new Handlers.LineFormat(date: false, qpc: true, source: true, tabStr: " ", data: data, nvs: nvs));
         }
 
-        /// <summary>Creates a SimpleFileLogMessageHandler to write to the given filePath, does not include files and line numbers, uses LogGate.All.  lmh name is "LMH." + filePath</summary>
-        public static ILogMessageHandler CreateSimpleFileLogMessageHandler(string filePath) { return CreateSimpleFileLogMessageHandler(filePath, false, LogGate.All); }
-        /// <summary>Creates a SimpleFileLogMessageHandler to write to the given filePath, does not include files and lines, uses given LogGate.  lmh name is "LMH." + filePath</summary>
-        public static ILogMessageHandler CreateSimpleFileLogMessageHandler(string filePath, LogGate logGate) { return CreateSimpleFileLogMessageHandler(filePath, false, logGate); }
-        /// <summary>Creates a SimpleFileLogMessageHandler to write to the given filePath, uses LogGate.All.  Optionally includes files and line numbers.  lmh name is "LMH." + filePath</summary>
-        public static ILogMessageHandler CreateSimpleFileLogMessageHandler(string filePath, bool includeFileAndLines) { return CreateSimpleFileLogMessageHandler(filePath, includeFileAndLines, LogGate.All); }
-        /// <summary>Creates a SimpleFileLogMessageHandler to write to the given filePath, and given LogGate value.  Optionally includes files and line numbers.  lmh name is "LMH." + filePath</summary>
-        public static ILogMessageHandler CreateSimpleFileLogMessageHandler(string filePath, bool includeFileAndLines, LogGate logGate)
+        /// <summary>Creates a SimpleFileLogMessageHandler to write to the given filePath, and given LogGate value (null is mapped to LogGate.All).  Optionally includes files and line numbers.  lmh name is "LMH." + filePath</summary>
+        public static ILogMessageHandler CreateSimpleFileLogMessageHandler(string filePath, bool includeFileAndLines = false, LogGate? logGate = null)
         {
-            return new Handlers.SimpleFileLogMessageHandler(filePath, includeFileAndLines, logGate);
+            return new Handlers.SimpleFileLogMessageHandler(filePath, includeFileAndLines, logGate ?? LogGate.All);
         }
 
-        /// <summary>Creates a Win32DebugLogMessageHandler named "LMH.Debug" with LogGate.All</summary>
+        /// <summary>Creates a Win32DebugLogMessageHandler given name (null maps to "LMH.Debug") and logGate (null maps to LogGate.All)</summary>
         /// <remarks>appName is used to prefix all messages that are sent to the debugger</remarks>
-        public static ILogMessageHandler CreateWin32DebugLogMessageHandler(string appName) { return CreateWin32DebugLogMessageHandler(appName, "LMH.Debug", LogGate.All); }
-        /// <summary>Creates a Win32DebugLogMessageHandler named "LMH.Debug" with given logGate</summary>
-        /// <remarks>appName is used to prefix all messages that are sent to the debugger</remarks>
-        public static ILogMessageHandler CreateWin32DebugLogMessageHandler(string appName, LogGate logGate) { return CreateWin32DebugLogMessageHandler(appName, "LMH.Debug", logGate); }
-        /// <summary>Creates a Win32DebugLogMessageHandler with given name and LogGate.All</summary>
-        /// <remarks>appName is used to prefix all messages that are sent to the debugger</remarks>
-        public static ILogMessageHandler CreateWin32DebugLogMessageHandler(string appName, string name) { return CreateWin32DebugLogMessageHandler(appName, name, LogGate.All); }
-        /// <summary>Creates a Win32DebugLogMessageHandler given name and logGate</summary>
-        /// <remarks>appName is used to prefix all messages that are sent to the debugger</remarks>
-        public static ILogMessageHandler CreateWin32DebugLogMessageHandler(string appName, string name, LogGate logGate)
+        public static ILogMessageHandler CreateWin32DebugLogMessageHandler(string appName, string name = null, LogGate? logGate = null)
         {
-            return new Handlers.Win32DebugLogMessageHandler(appName, name, logGate);
+            return new Handlers.Win32DebugLogMessageHandler(appName, name ?? "LMH.Debug", logGate ?? LogGate.All);
         }
 
-        /// <summary>Creates a DiagnosticTraceLogMessageHandler named "LMH.DiagnosticTrace" with LogGate.All</summary>
-        public static ILogMessageHandler CreateDiagnosticTraceLogMessageHandler() { return CreateDiagnosticTraceLogMessageHandler("LMH.DiagnosticTrace", LogGate.All); }
-        /// <summary>Creates a DiagnosticTraceLogMessageHandler named "LMH.DiagnosticTrace" with given logGate</summary>
-        public static ILogMessageHandler CreateDiagnosticTraceLogMessageHandler(LogGate logGate) { return CreateDiagnosticTraceLogMessageHandler("LMH.DiagnosticTrace", logGate); }
-        /// <summary>Creates a DiagnosticTraceLogMessageHandler with given name and with LogGate.All</summary>
-        public static ILogMessageHandler CreateDiagnosticTraceLogMessageHandler(string name) { return CreateDiagnosticTraceLogMessageHandler(name, LogGate.All); }
-        /// <summary>Creates a DiagnosticTraceLogMessageHandler given name and logGate</summary>
-        public static ILogMessageHandler CreateDiagnosticTraceLogMessageHandler(string name, LogGate logGate)
+        /// <summary>Creates a DiagnosticTraceLogMessageHandler given name (null maps to "LMH.DiagnosticTrace") and logGate (null maps to LogGate.All)</summary>
+        public static ILogMessageHandler CreateDiagnosticTraceLogMessageHandler(string name = null, LogGate ? logGate = null)
         {
-            return new Handlers.DiagnosticTraceLogMessageHandler(name, logGate, new Handlers.LineFormat(false, true, true, true, true, false, "", " "));
+            return new Handlers.DiagnosticTraceLogMessageHandler(name ?? "LMH.DiagnosticTrace", logGate ?? LogGate.All, new Handlers.LineFormat(date: false, qpc: true, level: true, source: true, data: false, fandl: false, endlStr: "", tabStr: " "));
         }
 
-        /// <summary>Creates a NullLogMessageHandler named "LMH.Null" with LogGate.All</summary>
-        public static ILogMessageHandler CreateNullLogMessageHandler() { return CreateNullLogMessageHandler("LMH.Null", LogGate.None); }
-        /// <summary>Creates a NullLogMessageHandler named "LMH.Null" with given logGate</summary>
-        public static ILogMessageHandler CreateNullLogMessageHandler(LogGate logGate) { return CreateNullLogMessageHandler("LMH.Null", logGate); }
-        /// <summary>Creates a NullLogMessageHandler with given name and with LogGate.All</summary>
-        public static ILogMessageHandler CreateNullLogMessageHandler(string name) { return CreateNullLogMessageHandler(name, LogGate.None); }
-        /// <summary>Creates a NullLogMessageHandler given name and logGate</summary>
-        public static ILogMessageHandler CreateNullLogMessageHandler(string name, LogGate logGate)
+        /// <summary>Creates a NullLogMessageHandler given name (null maps to "LMH.Null") and logGate (null maps to LogGate.None)</summary>
+        public static ILogMessageHandler CreateNullLogMessageHandler(string name = null, LogGate ? logGate = null)
         {
-            return new Handlers.NullLogMessageHandler(name, logGate, false);
+            return new Handlers.NullLogMessageHandler(name ?? "LMH.Null", logGate ?? LogGate.None, false);
         }
 
         //-------------------------------------------------------------------
@@ -173,10 +140,8 @@ namespace MosaicLib
         /// <summary>The standard default mesg queue size: 5000</summary>
         const int DefaultMesgQueueSize = 5000;
 
-        /// <summary>Creates a wrapper LMH that serves to Queue delivery of messages to the given targetLMH.  Uses DefaultMesgQueueSize</summary>
-        public static ILogMessageHandler CreateQueueLogMessageHandler(ILogMessageHandler targetLMH) { return CreateQueueLogMessageHandler(targetLMH, DefaultMesgQueueSize); }
         /// <summary>Creates a wrapper LMH that serves to Queue delivery of messages to the given targetLMH.  Uses given maxQueueSize</summary>
-        public static ILogMessageHandler CreateQueueLogMessageHandler(ILogMessageHandler targetLMH, int maxQueueSize)
+        public static ILogMessageHandler CreateQueueLogMessageHandler(ILogMessageHandler targetLMH, int maxQueueSize = DefaultMesgQueueSize)
         {
             return new Handlers.QueueLogMessageHandler(targetLMH, maxQueueSize);
         }
@@ -534,8 +499,8 @@ namespace MosaicLib
 
             //-------------------------------------------------------------------
 
-            static readonly string defaultEolStr = "\r\n";
-            static readonly string defaultTabStr = "\t";
+            const string defaultEolStr = "\r\n";
+            const string defaultTabStr = "\t";
 
             /// <summary>
             /// This class provides a simple type of line formatter and writer that is used with various types of
@@ -546,21 +511,32 @@ namespace MosaicLib
             public class LineFormat
             {
                 /// <summary>Constructor variant.  includes level, data and uses default EOL and Tab strings.</summary>
-                public LineFormat(bool date, bool qpc, bool source) : this(date, qpc, true, source, true, false, defaultEolStr, defaultTabStr) { }
+                public LineFormat(bool date, bool qpc, bool source) 
+                    : this(date, qpc, true, source, true, false, defaultEolStr, defaultTabStr) 
+                { }
+
                 /// <summary>Constructor variant.  includes level, data and uses default EOL string.</summary>
-                public LineFormat(bool date, bool qpc, bool source, string tabStr) : this(date, qpc, true, source, true, false, defaultEolStr, tabStr) { }
+                public LineFormat(bool date, bool qpc, bool source, string tabStr) 
+                    : this(date, qpc, true, source, true, false, defaultEolStr, tabStr) 
+                { }
+
                 /// <summary>Constructor variant.  includes data and uses default EOL and Tab strings.</summary>
-                public LineFormat(bool date, bool qpc, bool level, bool source, bool fandl) : this(date, qpc, level, source, true, fandl, defaultEolStr, defaultTabStr) { }
+                public LineFormat(bool date, bool qpc, bool level, bool source, bool fandl) 
+                    : this(date, qpc, level, source, true, fandl, defaultEolStr, defaultTabStr) 
+                { }
+
                 /// <summary>Full constructor.</summary>
                 /// <param name="date">Set to true to include the Date portion in formatted output lines</param>
                 /// <param name="qpc">Set to true to include the QPC timestamp portion in formatted output lines</param>
                 /// <param name="level">Set to true to include the MesgType/LogLevel portion in formatted output lines</param>
                 /// <param name="source">Set to true to include the Logger/Source Name portion in formatted output lines</param>
                 /// <param name="data">Set to true to include the base64 coded optional Data in formatted output lines</param>
-                /// <param name="fandl">Set to treu to include the file name and line number in formatted output lines</param>
+                /// <param name="fandl">Set to true to include the file name and line number in formatted output lines</param>
                 /// <param name="endlStr">Defines the end-of-line string that is used in formatted output lines</param>
                 /// <param name="tabStr">Defines the tab string that is used as a column seperator in output lines</param>
-                public LineFormat(bool date, bool qpc, bool level, bool source, bool data, bool fandl, string endlStr, string tabStr)
+                /// <param name="threadInfo">Set to true to include the thread information in the output lines</param>
+                /// <param name="nvs">Set to true to include message NamedValueSet information in the output lines</param>
+                public LineFormat(bool date = true, bool qpc = true, bool level = true, bool source = true, bool data = true, bool fandl = false, string endlStr = defaultEolStr, string tabStr = defaultTabStr, bool threadInfo = false, bool nvs = true)
                 {
                     this.date = date;
                     this.qpc = qpc;
@@ -570,8 +546,8 @@ namespace MosaicLib
                     this.fAndL = fandl;
                     this.endLStr = endlStr;
                     this.tabStr = tabStr;
-                    IncludeThreadInfo = false;
-                    IncludeNamedValueSet = true;
+                    IncludeThreadInfo = threadInfo;
+                    IncludeNamedValueSet = nvs;
                 }
 
                 /// <summary>Copy constructor</summary>
@@ -1272,7 +1248,7 @@ namespace MosaicLib
                     }
                 }
 
-                private object lmListMutex = new object();
+                private readonly object lmListMutex = new object();
                 private List<LogMessage> lmList = new List<LogMessage>();
                 private volatile int lmListVolatileCount = 0;
 
@@ -1335,7 +1311,9 @@ namespace MosaicLib
         /// <para/>Log file for 'logBaseName'
         /// <para/>Hosting Assembly: 'HostingAssemblyName (callerProvidedAssemblyName)'
         /// <para/>Main Assembly: 'MainAssemblyName'
-        /// <para/>Process name:'GetCurrentPerocess.ProcessName' id:GetCurrentPerocess.Id
+        /// <para/>Process name:'GetCurrentPerocess.ProcessName' id:GetCurrentProcess.Id 32bit
+        /// <para/>Machine:'machineName' os:'os name and version' 64bit Cores:'nunCores' PageSize:pageSize
+        /// <para/>User:'userName' {interactive|service}
         /// <para/>[optional null]
         /// <para/>================================================================================================================================
         /// </summary>
@@ -1354,7 +1332,9 @@ namespace MosaicLib
                 ((logBaseName != null) ? "Log file for '{0}'".CheckedFormat(logBaseName) : null),
                 ((hostingAssembly != null) ? "Hosting Assembly: '{0}'".CheckedFormat(hostingAssembly) : null),
                 ((mainAssembly != null && mainAssembly != hostingAssembly) ? "Main Assembly: '{0}'".CheckedFormat(mainAssembly) : null),
-                "Process name:'{0}' id:{1}".CheckedFormat(currentProcess.ProcessName, currentProcess.Id),
+                "Process name:'{0}' id:{1} {2}".CheckedFormat(currentProcess.ProcessName, currentProcess.Id, Environment.Is64BitProcess ? "64-bit" : "32-bit"),
+                "Machine:'{0}' os:'{1}'{2} Cores:{3} PageSize:{4}".CheckedFormat(Environment.MachineName, Environment.OSVersion, Environment.Is64BitOperatingSystem ? " 64-bit" : "", Environment.ProcessorCount, Environment.SystemPageSize),
+                "User:'{0}' {1}".CheckedFormat(Environment.UserName, Environment.UserInteractive ? "interactive" : "service"),
             }.Where(s => !s.IsNullOrEmpty()).ToArray();
 
             if (!includeNullForDynamicLines)

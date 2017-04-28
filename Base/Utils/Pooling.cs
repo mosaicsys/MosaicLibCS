@@ -285,7 +285,7 @@ namespace MosaicLib.Utils.Pooling
         private volatile bool poolIsEnabled = false;
 
         /// <summary>object used as mutex for access to freeObjectStack and freeObjectStackCapacity.</summary>
-        private object freeObjectStackMutex = new object();
+        private readonly object freeObjectStackMutex = new object();
 
         /// <summary>Stack of free objects that are currently in the pool.  Use of LIFO semantics is chosen to generally improve cache and virtual memory efficiency.</summary>
         private Stack<ObjectType> freeObjectStack = null;
@@ -581,7 +581,7 @@ namespace MosaicLib.Utils.Pooling
         private volatile bool poolIsEnabled = false;
 
         /// <summary>object used as mutex for access to freeObjectStack and freeObjectStackCapacity.</summary>
-        private object freeObjectStackMutex = new object();
+        private readonly object freeObjectStackMutex = new object();
 
         private int InitialCapacity { get; set; }
         private int InitialPoolSize { get; set; }

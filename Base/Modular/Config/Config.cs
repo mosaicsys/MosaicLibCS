@@ -865,7 +865,7 @@ namespace MosaicLib.Modular.Config
             {
                 lockedProviderList.Add(provider);
 
-                Trace.Info.Emit("Added provider:'{0}' base flags:{1}", provider.Name, provider.BaseFlags);
+                Logger.Debug.Emit("Added provider:'{0}' base flags:{1}", provider.Name, provider.BaseFlags);
             }
         }
 
@@ -951,7 +951,7 @@ namespace MosaicLib.Modular.Config
                 if (ReadOnceConfigKeyHasBeenChangedSinceItWasRead != newReadOnceConfigKeyHasBeenChangedSinceItWasReadValue)
                 {
                     ReadOnceConfigKeyHasBeenChangedSinceItWasRead = newReadOnceConfigKeyHasBeenChangedSinceItWasReadValue;
-                    Trace.Info.Emit("ReadOnceConfigKeyHasBeenChangedSinceItWasRead has been set to {0}", ReadOnceConfigKeyHasBeenChangedSinceItWasRead);
+                    Logger.Debug.Emit("ReadOnceConfigKeyHasBeenChangedSinceItWasRead has been set to {0}", ReadOnceConfigKeyHasBeenChangedSinceItWasRead);
                 }
             }
 

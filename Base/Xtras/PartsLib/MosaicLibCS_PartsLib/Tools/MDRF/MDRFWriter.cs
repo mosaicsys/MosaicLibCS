@@ -20,31 +20,27 @@
  */
 
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices;
-using System.Text;
 
 using MosaicLib.File;
-using MosaicLib.Modular;
 using MosaicLib.Modular.Action;
 using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Config;
 using MosaicLib.Modular.Config.Attributes;
 using MosaicLib.Modular.Interconnect.Values;
 using MosaicLib.Modular.Part;
-using MosaicLib.Utils;
-using MosaicLib.Utils.StringMatching;
-using MosaicLib.Time;
-
 using MosaicLib.PartsLib.Tools.MDRF.Common;
 using MosaicLib.Semi.E005.Data;
+using MosaicLib.Time;
+using MosaicLib.Utils;
+using MosaicLib.Utils.StringMatching;
+
 
 namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 {
-    #region Constants
+    #region Constants (especially LibInfo and related version information)
 
     public static partial class Constants
     {
@@ -53,12 +49,15 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
         /// 1.0.0 (2016-09-01) : First CR version.
         /// 1.0.1 (2016-09-24) : API extensions to improve usability, modified RecordGroups to trigger write of file index any time RecordGroups does a writeall.
         /// 1.0.2 (2016-10-02) : Changed default Flush flags to All (from File)
+        /// 1.0.3 (2017-04-01) : Added AdvanceOnDayBoundary option with 10 minute holdoff.  Changed default FileIndexNumRows to 2048 (from 1024).  Added optional enableAPILocking flat for MDRFWriter constructor to support MT use of public MDRFWriter api.  Added writeAll option to RecordOccurrence variants
+        /// 1.0.4 (2017-04-04) : IMDRFWriter API Usability improvements.  Support for post construction addition of groups and occurrences to MDRFWriter objects.  GroupInfo refactored to make use of GroupBehaviorOptions to specify desired options/behavior.  Replaced WriteFileAdvanceBehavior with WriteBehavior which covers a larger set of options.  Added MDRFLogMessageHandlerAdapter to support LogDistribution output to an mdrf file.  Corrected issue with serialized format of QPCTime parameter in generated DateTimeBlock.
+        /// 1.0.5 (2017-04-26) : MDRFWriter refactoring to move IVI/IVA logic so that each group defines the IVI used to create source IVAs (when enabled).  Refactored GroupBehaviorOptions members and added UseVCHasBeenSetForTouched flag to better support use in non-IVI cases.
         /// </remarks>
         public static readonly LibraryInfo LibInfo = new LibraryInfo()
         {
             Type = "Mosaic Data Recording File (MDRF)",
             Name = "Mosaic Data Recording Engine (MDRE) CS API",
-            Version = "1.0.2 (2016-10-02)",
+            Version = "1.0.5 (2017-04-26)",
         };
     }
 
@@ -68,17 +67,24 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
     public interface IMDRFWriter : IPartBase
     {
+        IMDRFWriter Add(params GroupInfo[] groupInfoParamsArray);
+        IMDRFWriter AddRange(IEnumerable<GroupInfo> groupInfoSet);
+        IMDRFWriter Add(params OccurrenceInfo[] occurrenceInfoParamsArray);
+        IMDRFWriter AddRange(IEnumerable<OccurrenceInfo> occurrenceInfoSet);
+
         string RecordGroups(bool writeAll = false, DateTimeStampPair dtPair = null);
 
-        string RecordOccurrence(OccurrenceInfo occurrenceInfo, object dataValue, DateTimeStampPair dtPair = null);
-        string RecordOccurrence(OccurrenceInfo occurrenceInfo, ValueContainer dataVC, DateTimeStampPair dtPair = null);
+        string RecordOccurrence(IOccurrenceInfo occurrenceInfo, object dataValue, DateTimeStampPair dtPair = null, bool writeAll = false, bool forceFlush = false);
+        string RecordOccurrence(IOccurrenceInfo occurrenceInfo, ValueContainer dataVC = default(ValueContainer), DateTimeStampPair dtPair = null, bool writeAll = false, bool forceFlush = false);
 
         string Flush(FlushFlags flushFlags = FlushFlags.All, DateTimeStampPair dtPair = null);
 
 	    int GetCurrentFileSize();
 
+        bool IsFileOpen { get; }
         FileInfo CurrentFileInfo { get; }
         FileInfo LastFileInfo { get; }
+        FileInfo? NextClosedFileInfo { get; }
 
         int CloseCurrentFile(string reason, DateTimeStampPair dtPair = null);
     }
@@ -92,10 +98,13 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 	{
         /// <summary>Placeholder value, not intended for external use (0x00)</summary>
         None = 0x00,
+
         /// <summary>Requests that the flush operation flush file buffers that are used by the writer (0x01)</summary>
         File = 0x01,
+
         /// <summary>Requests that the flush operation update/write the file index (0x02)</summary>
         Index = 0x02,
+
         /// <summary>Selects that all flush actions be performed (File | Index)</summary>
         All = (FlushFlags.File | FlushFlags.Index),
 	}
@@ -108,10 +117,13 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
     {
         /// <summary>Gives the full file path for the this file</summary>
         public string FilePath { get; internal set; }
+
         /// <summary>Gives the count of the number of files that the source writter has created</summary>
         public int SeqNum { get; internal set; }
+
         /// <summary>Gives the total size of the current file</summary>
         public int FileSize { get; internal set; }
+
         /// <summary>Is true if the file was active (open) when this information was obtained</summary>
         public bool IsActive { get; internal set; }
 
@@ -132,64 +144,144 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
         }
     }
 
+    /// <summary>
+    /// Available options for specifying/configuring the behavior for each group.
+    /// <para/>None (0x00), UseSourceIVAsForTouched (0x01), UseVCHasBeenSetForTouched (0x02), IncrSeqNumOnTouched (0x04)
+    /// </summary>
+    [Flags]
+    public enum GroupBehaviorOptions
+    {
+        /// <summary>Placeholder default value [0x00]</summary>
+        None = 0x00,
+        /// <summary>When requested, the group will be considered to have been touched if any of the IVAs from the associated sources indicate IsUpdateNeeded [0x01]</summary>
+        UseSourceIVAsForTouched = 0x01,
+        /// <summary>When requested, the group and sources will be considered to have been touched if (any of) the associated GroupPointInfo's VCHasBeenSet is true.  [0x02]</summary>
+        UseVCHasBeenSetForTouched = 0x02,
+        /// <summary>When requested, the group sequence number will only be incremented when the group has been marked as touched.  If this flag is not selected then the group sequence numbrer will be incremented any time the group is written.</summary>
+        IncrSeqNumOnTouched = 0x04,
+    }
+
     public class GroupInfo : MetaDataCommonInfo
     {
         public UInt64 FileIndexUserRowFlagBits { get; set; }
         public GroupPointInfo[] GroupPointInfoArray { get; set; }
-        public bool UsePointIVAsForTouched { get; set; }
+        public GroupBehaviorOptions GroupBehaviorOptions 
+        { 
+            get { return _groupBehaviorOptions; }
+            set
+            {
+                _groupBehaviorOptions = value;
+                UseSourceIVAsForTouched = value.IsSet(GroupBehaviorOptions.UseSourceIVAsForTouched);
+                UseVCHasBeenSetForTouched = value.IsSet(GroupBehaviorOptions.UseVCHasBeenSetForTouched);
+                IncrSeqNumOnTouched = value.IsSet(GroupBehaviorOptions.IncrSeqNumOnTouched);
+            }
+        }
+        public GroupBehaviorOptions _groupBehaviorOptions;
+
+        public bool UseSourceIVAsForTouched { get; private set; }
+        public bool UseVCHasBeenSetForTouched { get; private set; }
+        public bool IncrSeqNumOnTouched { get; private set; }
 
         public int GroupID { get { return ClientID; } set { ClientID = value; } }
         public bool Touched { get; set; }
+
+        public IValuesInterconnection IVI { get; set; }
+
+        public GroupInfo() { ItemType = MDItemType.Group; }
     }
 
+    /// <summary>
+    /// A GroupPointInfo defines the source of values for the items in a group.  This also called a Source in the MDRF nomenclature
+    /// </summary>
     public class GroupPointInfo : MetaDataCommonInfo
     {
         public ContainerStorageType ValueCST { get; set; }
-        public IValuesInterconnection ValueSourceIVAFactoryIVI { get; set; }
         public IValueAccessor ValueSourceIVA { get; set; }
 
-        public ValueContainer VC { get; set; }
+        public ValueContainer VC { get { return _vc; } set { _vc = value; VCHasBeenSet = true; } }
+        private ValueContainer _vc;
+        public bool VCHasBeenSet { get; set; }
         public bool VCIsUsable { get { return (ValueCST == ContainerStorageType.None || ValueCST == VC.cvt); } }
 
         public int GroupID { get; set; }
         public int SourceID { get { return ClientID; } set { ClientID = value; } }
+
+        public GroupPointInfo() { ItemType = MDItemType.Source; }
     }
 
-    public class OccurrenceInfo : MetaDataCommonInfo
+    public class OccurrenceInfo : MetaDataCommonInfo, IOccurrenceInfo
     {
         public UInt64 FileIndexUserRowFlagBits { get; set; }
         public ContainerStorageType ContentCST { get; set; }
         public bool IsHighPriority { get; set; }
 
         public int OccurrenceID { get { return ClientID; } set { ClientID = value; } }
+
+        public OccurrenceInfo() { ItemType = MDItemType.Occurrence; }
     }
 
-    public class MetaDataCommonInfo
+    public class MetaDataCommonInfo : IMetaDataCommonInfo
     {
+        public MDItemType ItemType { get; protected set; }
         public string Name { get; set; }
         public string Comment { get; set; }
         public NamedValueSet ClientNVS { get; set; }
+        INamedValueSet IMetaDataCommonInfo.ClientNVS { get { return ClientNVS; } }
+        public Semi.E005.Data.ItemFormatCode IFC { get; protected set; }
 
         public int ClientID { get; set; }
         public int FileID { get; set; }
 
         public override string ToString()
         {
-            return "name:'{0}' clientID:{1} fileID:{2}".CheckedFormat(Name, ClientID, FileID);
+            string nvsStr = (ClientNVS.IsNullOrEmpty() ? "" : " {0}".CheckedFormat(ClientNVS));
+            string commentStr = (Comment.IsNullOrEmpty() ? "" : " Comment:'{0}'".CheckedFormat(Comment));
+
+            return "{0} name:'{1}' clientID:{2} fileID:{3} ifc:{4}{5}{6}".CheckedFormat(ItemType, Name, ClientID, FileID, IFC, nvsStr, commentStr);
         }
     }
 
     /// <summary>
-    /// Additional bitfield enum that is used with SetupInfo.ClientNVS to specify additional options on when to write file should advance
-    /// <para/>AdvanceOnDayBoundary (0x01)
+    /// Additional bitfield enum that is used with SetupInfo.ClientNVS ("WriterBehavior") to specify additional options on when to write file should advance
+    /// <para/>None (0x00), AdvanceOnDayBoundary (0x01), WriteAllBeforeEveryOccurrence (0x02), FlushAfterEveryOccurrence (0x04), FlushAfterEveryGroupWrite (0x08), FlushAfterEveryMessage (0x10), FlushAfterAnything (0x1c)
     /// </summary>
     [Flags]
-    public enum WriteFileAdvanceBehavior : int
+    public enum WriterBehavior : int
     {
         /// <summary>
-        /// Requests advance to the next file when the day transitions to a new value (midnight).  The effects of this flag will be delayed until the file is at least 10 minutes old.
+        /// Placeholder default value [0x00]
+        /// </summary>
+        None = 0x00,
+
+        /// <summary>
+        /// Requests advance to the next file when the day transitions to a new value (midnight).  The effects of this flag will be delayed until the file is at least 10 minutes old. [0x01]
         /// </summary>
         AdvanceOnDayBoundary = 0x01,
+
+        /// <summary>
+        /// When this behavior option is selected, the RecordOccurrence method will always issue RecordGroups with the writeAll flag set to true. [0x02]
+        /// </summary>
+        WriteAllBeforeEveryOccurrence = 0x02,
+
+        /// <summary>
+        /// When this behavior option is selected, the RecordOccurrence method will always issue a Flush call before returning. [0x04]
+        /// </summary>
+        FlushAfterEveryOccurrence = 0x04,
+
+        /// <summary>
+        /// When this behavior option is selected, the RecordGroups method will always issue a Flush call before returning. [0x08]
+        /// </summary>
+        FlushAfterEveryGroupWrite = 0x08,
+
+        /// <summary>
+        /// When this behavior option is selected, the RecordError and RecordMessage methods will always issue a Flush call before returning. [0x10]
+        /// </summary>
+        FlushAfterEveryMessage = 0x10,
+
+        /// <summary>
+        /// FlushAfterAnything = (FlushAfterEveryOccurrence | FlushAfterEveryGroupWrite | FlushAfterEveryMessage) [0x1c]
+        /// </summary>
+        FlushAfterAnything = (FlushAfterEveryOccurrence | FlushAfterEveryGroupWrite | FlushAfterEveryMessage),
     }
 
     #endregion
@@ -198,81 +290,54 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
     public class MDRFWriter : SimplePartBase, IMDRFWriter
     {
-        #region Construction and Release
+        #region Construction, Release, call-chainable Add variants, and supporting fields
 
-        public MDRFWriter(string partID, SetupInfo setupInfo, GroupInfo [] groupInfoArray, OccurrenceInfo [] occurrenceInfoArray)
+        public MDRFWriter(string partID, SetupInfo setupInfo, GroupInfo [] groupInfoArray = null, OccurrenceInfo [] occurrenceInfoArray = null, bool enableAPILocking = false)
             : base(partID)
         {
+            mutex = enableAPILocking ? new object() : null;
+
             AddExplicitDisposeAction(Release);
 
+            // validate selected fields
+            SetupResultCode = string.Empty;
+
             if (setupInfo == null)
-                LastOpResultCode = LastOpResultCode.MapNullOrEmptyTo("{0} failed: given setupInfo cannot be null".CheckedFormat(CurrentMethodName));
+                SetupResultCode = SetupResultCode.MapNullOrEmptyTo("{0} failed: given setupInfo cannot be null".CheckedFormat(CurrentMethodName));
 
             setupOrig = setupInfo ?? defaultSetupInfo;
             setup = new SetupInfo(setupOrig).MapDefaultsTo(defaultSetupInfo).ClipValues();
 
-            writeFileAdvanceBehavior = setup.ClientNVS.MapNullToEmpty()["WriteFileAdvanceBehavior"].VC.GetValue<WriteFileAdvanceBehavior>(false);
+            writerBehavior = setup.ClientNVS.MapNullToEmpty()["WriterBehavior"].VC.GetValue<WriterBehavior>(false);
 
             dataBlockBuffer = new DataBlockBuffer(setup);
             fileIndexData = new FileIndexData(setup);
 
-            // create outermost occurance, group tracker, and source tracker arrays
-            occurrenceTrackerArray = (occurrenceInfoArray ?? emptyOccurrenceInfoArray).Select(occurrenceInfo => new OccurrenceTracker(occurrenceInfo)).ToArray();
-            groupTrackerArray = (groupInfoArray ?? emptyGroupInfoArray).Select(groupInfo => new GroupTracker(groupInfo, setup)).ToArray();
-            sourceTrackerArray = groupTrackerArray.SelectMany(groupTracker => groupTracker.sourceTrackerArray).ToArray();
-
-            // assign ids... fileIDs are unique accross the entire file.  itemIDs start at 1 for each item type.  Groups refer to sources by their itemIDs
-            int itemID = 1;
-            foreach (GroupTracker gt in groupTrackerArray)
+            if (!groupInfoArray.IsNullOrEmpty())
             {
-                gt.ClientID = itemID++;
-                gt.groupInfo.GroupID = gt.ClientID;
+                groupInfoList.AddRange(groupInfoArray);
+                groupOrOccurrenceInfoListModified = true;
             }
 
-            itemID = 1;
-            foreach (OccurrenceTracker ot in occurrenceTrackerArray)
+            if (!occurrenceInfoArray.IsNullOrEmpty())
             {
-                ot.ClientID = itemID++;
-                ot.occurrenceInfo.OccurrenceID = ot.ClientID;
+                occurrenceInfoList.AddRange(occurrenceInfoArray);
+                groupOrOccurrenceInfoListModified = true;
             }
 
-            itemID = 1;
-            foreach (SourceTracker st in sourceTrackerArray)
-            {
-                st.ClientID = itemID++;
-                st.groupPointInfo.SourceID = st.ClientID;
-                st.groupPointInfo.GroupID = st.groupTracker.groupInfo.GroupID;
-            }
-
-            // make a list of all of the items in the order we want to assign their FileIDs: groups, occurrences, sources - ideally all of the group and occurrence FileIDs will be <= 127
-            // the source FileIDs are used in the Group's ItemList named value
-            TrackerCommon[] allItemCommonArray = (groupTrackerArray as TrackerCommon[]).Concat(occurrenceTrackerArray as TrackerCommon[]).Concat(sourceTrackerArray as TrackerCommon[]).ToArray();
-
-            // assign all of the FileIDs
-            int fileID = unchecked((int) FixedBlockTypeID.FirstDynamicallyAssignedID);
-            foreach (TrackerCommon tc in allItemCommonArray)
-                tc.FileID = fileID++;
-
-            // then Setup all of the items so that they can generate their NVS contents
-            foreach (TrackerCommon tc in allItemCommonArray)
-                tc.Setup();
-
-            allMetaDataItemsArray = (sourceTrackerArray as TrackerCommon[]).Concat(groupTrackerArray as TrackerCommon[]).Concat(occurrenceTrackerArray as TrackerCommon[]).ToArray();
-
-            // validate selected fields
-            LastOpResultCode = string.Empty;
+            ReassignIDsAndBuildNewTrackersIfNeeded(forceRebuild: true);
 
             // create the directory if needed.
 
             if (setup.DirPath.IsNullOrEmpty())
-                LastOpResultCode = LastOpResultCode.MapNullOrEmptyTo("{0} failed: given DirPath cannot be null or empty".CheckedFormat(CurrentMethodName));
+                SetupResultCode = SetupResultCode.MapNullOrEmptyTo("{0} failed: given DirPath cannot be null or empty".CheckedFormat(CurrentMethodName));
             else
                 setup.DirPath = System.IO.Path.GetFullPath(setup.DirPath);
 
             if (!System.IO.Directory.Exists(setup.DirPath ?? string.Empty))
             {
                 if (!setup.CreateDirectoryIfNeeded)
-                    LastOpResultCode = LastOpResultCode.MapNullOrEmptyTo("{0} failed: given DirPath '{1}' was not found or is not a directory".CheckedFormat(CurrentMethodName, setupOrig.DirPath));
+                    SetupResultCode = SetupResultCode.MapNullOrEmptyTo("{0} failed: given DirPath '{1}' was not found or is not a directory".CheckedFormat(CurrentMethodName, setupOrig.DirPath));
                 else
                 {
                     try
@@ -281,7 +346,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
                     }
                     catch (System.Exception ex)
                     {
-                        LastOpResultCode = LastOpResultCode.MapNullOrEmptyTo("{0} failed: CreateDirectory '{1}': {2} {3}".CheckedFormat(CurrentMethodName, setup.DirPath, ex.GetType(), ex.Message));
+                        SetupResultCode = SetupResultCode.MapNullOrEmptyTo("{0} failed: CreateDirectory '{1}': {2} {3}".CheckedFormat(CurrentMethodName, setup.DirPath, ex.GetType(), ex.Message));
                     }
                 }
             }
@@ -289,175 +354,294 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
         public void Release()
         {
-            CloseCurrentFile("On Release");
+            using (var scopedLock = new ScopedLock(mutex))
+            {
+                CloseCurrentFile("On Release");
+            }
         }
 
-        public string LastOpResultCode { get; set; }
+        public MDRFWriter Add(GroupInfo groupInfo)
+        {
+            return Add(new [] { groupInfo });
+        }
 
-        private static readonly SetupInfo defaultSetupInfo = new SetupInfo();
-        private static readonly GroupInfo[] emptyGroupInfoArray = new GroupInfo[0];
-        private static readonly GroupPointInfo[] emptyPointGroupInfoArray = new GroupPointInfo[0];
-        private static readonly OccurrenceInfo[] emptyOccurrenceInfoArray = new OccurrenceInfo[0];
+        public MDRFWriter Add(params GroupInfo[] groupInfoParamsArray)
+        {
+            return AddRange(groupInfoParamsArray ?? emptyGroupInfoArray);
+        }
+
+        public MDRFWriter AddRange(IEnumerable<GroupInfo> groupInfoSet)
+        {
+            using (var scopedLock = new ScopedLock(mutex))
+            {
+                groupInfoList.AddRange(groupInfoSet.Where(gi => gi != null));
+                groupOrOccurrenceInfoListModified = true;
+            }
+
+            return this;
+        }
+
+        public MDRFWriter Add(OccurrenceInfo occurrenceInfo)
+        {
+            return Add(new [] { occurrenceInfo });
+        }
+
+        public MDRFWriter Add(params OccurrenceInfo[] occurrenceInfoParamsArray)
+        {
+            return AddRange(occurrenceInfoParamsArray ?? emptyOccurrenceInfoArray);
+        }
+
+        public MDRFWriter AddRange(IEnumerable<OccurrenceInfo> occurrenceInfoSet)
+        {
+            using (var scopedLock = new ScopedLock(mutex))
+            {
+                occurrenceInfoList.AddRange(occurrenceInfoSet.Where(oi => oi != null));
+                groupOrOccurrenceInfoListModified = true;
+            }
+
+            return this;
+        }
+
+        /// <summary>
+        /// This string returns the success/failure code for the set of setup steps that are performed during object construction.
+        /// </summary>
+        public string SetupResultCode { get; set; }
+
+        List<GroupInfo> groupInfoList = new List<GroupInfo>();
+        List<OccurrenceInfo> occurrenceInfoList = new List<OccurrenceInfo>();
+        bool groupOrOccurrenceInfoListModified = false;
+
+        static readonly SetupInfo defaultSetupInfo = new SetupInfo();
+        static readonly GroupInfo[] emptyGroupInfoArray = new GroupInfo[0];
+        static readonly GroupPointInfo[] emptyPointGroupInfoArray = new GroupPointInfo[0];
+        static readonly OccurrenceInfo[] emptyOccurrenceInfoArray = new OccurrenceInfo[0];
 
         #endregion
 
-        #region IMDRFWriter implementation methods
+        #region IMDRFWriter implementation methods (both interface specific methods and general public methods that support the interface)
+
+        IMDRFWriter IMDRFWriter.Add(params GroupInfo[] groupInfoParamsArray) { return AddRange(groupInfoParamsArray ?? emptyGroupInfoArray); }
+        IMDRFWriter IMDRFWriter.AddRange(IEnumerable<GroupInfo> groupInfoSet) { return AddRange(groupInfoSet); }
+        IMDRFWriter IMDRFWriter.Add(params OccurrenceInfo[] occurrenceInfoParamsArray) { return AddRange(occurrenceInfoParamsArray ?? emptyOccurrenceInfoArray); }
+        IMDRFWriter IMDRFWriter.AddRange(IEnumerable<OccurrenceInfo> occurrenceInfoSet) { return AddRange(occurrenceInfoSet); }
 
         public string RecordGroups(bool writeAll = false, DateTimeStampPair dtPair = null)
         {
-            dtPair = (dtPair ?? DateTimeStampPair.Now).UpdateFileDeltas(fileReferenceDTPair);
+            return RecordGroups(writeAll, dtPair, writerBehavior);
+        }
 
-            string ec = ActiviateFile(dtPair);
+        private string RecordGroups(bool writeAll, DateTimeStampPair dtPair, WriterBehavior writerBehaviorParam)
+        {
+            if (IsDisposed)
+                return "{0} has already been disposed".CheckedFormat(CurrentClassLeafName);
 
-            if (!ec.IsNullOrEmpty())
+            using (var scopedLock = new ScopedLock(mutex))
             {
-                droppedCounts.IncrementDataGroup();
-                return ec;
-            }
+                dtPair = (dtPair ?? DateTimeStampPair.Now).UpdateFileDeltas(fileReferenceDTPair);
 
-            QpcTimeStamp tsNow = dtPair.qpcTimeStamp;
+                string ec = ActiviateFile(dtPair);
 
-            // check if we need to do a writeAll
-            if (!writeAll)
-            {
-                // if this is the first call or the MinNominalWriteAllInterval has elapsed then make this a writeall call
-                if (lastWriteAllTimeStamp.IsZero || ((tsNow - lastWriteAllTimeStamp) >= setup.MinNominalWriteAllInterval))
-                    writeAll = true;
-            }
+                if (!ec.IsNullOrEmpty())
+                {
+                    droppedCounts.IncrementDataGroup();
+                    return ec;
+                }
 
-            if (writeAll)
-            {
-                lastWriteAllTimeStamp = tsNow;
-                writeFileIndexNow = true;
-            }
+                QpcTimeStamp tsNow = dtPair.qpcTimeStamp;
 
-            foreach (GroupTracker groupTracker in groupTrackerArray)
-            {
-                groupTracker.Service(writeAll);
-                groupTracker.numTouchedSources = 0; // clear numTouchedSources count at start of each service loop
-            }
+                // check if we need to do a writeAll
+                if (!writeAll)
+                {
+                    // if this is the first call or the MinNominalWriteAllInterval has elapsed then make this a writeall call
+                    if (lastWriteAllTimeStamp.IsZero || ((tsNow - lastWriteAllTimeStamp) >= setup.MinNominalWriteAllInterval))
+                        writeAll = true;
+                }
 
-            foreach (SourceTracker sourceTracker in sourceTrackerArray)
-                sourceTracker.Service();
-
-            // generate and write the group data blocks themselves
-            if (ec.IsNullOrEmpty())
-            {
-                FileIndexRowFlagBits firstBlockFlagBits = (writeAll ? FileIndexRowFlagBits.ContainsStartOfFullGroup : FileIndexRowFlagBits.None);
+                if (writeAll)
+                {
+                    lastWriteAllTimeStamp = tsNow;
+                    writeFileIndexNow = true;
+                }
 
                 foreach (GroupTracker groupTracker in groupTrackerArray)
                 {
-                    if (groupTracker.touched)
+                    groupTracker.numTouchedSources = 0; // clear numTouchedSources count at start of each service loop
+                    groupTracker.Service(writeAll);
+                }
+
+                // generate and write the group data blocks themselves
+                if (ec.IsNullOrEmpty())
+                {
+                    FileIndexRowFlagBits firstBlockFlagBits = (writeAll ? FileIndexRowFlagBits.ContainsStartOfFullGroup : FileIndexRowFlagBits.None);
+
+                    foreach (GroupTracker groupTracker in groupTrackerArray)
                     {
-                        if (groupTracker.WriteAsEmptyGroup)
+                        GroupInfo groupInfo = groupTracker.groupInfo;
+                        bool groupInfoWasTouched = (groupInfo != null && groupInfo.Touched);
+                        bool incrementGroupSeqNum = (groupInfoWasTouched || !groupInfo.IncrSeqNumOnTouched);
+
+                        if (groupTracker.touched)
                         {
-                            StartGroupDataBlock(groupTracker, dtPair, firstBlockFlagBits, GroupBlockFlagBits.IsEmptyGroup, preIncrementSeqNum: true);
-                        }
-                        else if (groupTracker.WriteAsSparseGroup)
-                        {
-                            // write group with updateMask (sparse group)
-                            StartGroupDataBlock(groupTracker, dtPair, firstBlockFlagBits, GroupBlockFlagBits.HasUpdateMask, preIncrementSeqNum: true);
-
-                            for (int sourceIdx = 0; sourceIdx < groupTracker.sourceTrackerArrayLength; sourceIdx++)
-                                groupTracker.updateMaskByteArray.SetBit(sourceIdx, groupTracker.sourceTrackerArray[sourceIdx].touched);
-
-                            dataBlockBuffer.payloadDataList.AddRange(groupTracker.updateMaskByteArray);
-
-                            foreach (SourceTracker sourceTracker in groupTracker.sourceTrackerArray)
+                            if (groupTracker.WriteAsEmptyGroup)
                             {
-                                if (sourceTracker.touched)
+                                StartGroupDataBlock(groupTracker, dtPair, firstBlockFlagBits, GroupBlockFlagBits.IsEmptyGroup, preIncrementSeqNum: incrementGroupSeqNum);
+                            }
+                            else if (groupTracker.WriteAsSparseGroup)
+                            {
+                                // write group with updateMask (sparse group)
+                                StartGroupDataBlock(groupTracker, dtPair, firstBlockFlagBits, GroupBlockFlagBits.HasUpdateMask, preIncrementSeqNum: incrementGroupSeqNum);
+
+                                for (int sourceIdx = 0; sourceIdx < groupTracker.sourceTrackerArrayLength; sourceIdx++)
+                                    groupTracker.updateMaskByteArray.SetBit(sourceIdx, groupTracker.sourceTrackerArray[sourceIdx].touched);
+
+                                dataBlockBuffer.payloadDataList.AddRange(groupTracker.updateMaskByteArray);
+
+                                foreach (SourceTracker sourceTracker in groupTracker.sourceTrackerArray)
+                                {
+                                    if (sourceTracker.touched)
+                                        sourceTracker.AppendValue(dataBlockBuffer.payloadDataList);
+                                }
+                            }
+                            else
+                            {
+                                // write as full group
+                                StartGroupDataBlock(groupTracker, dtPair, firstBlockFlagBits, GroupBlockFlagBits.None, preIncrementSeqNum: incrementGroupSeqNum);
+
+                                foreach (SourceTracker sourceTracker in groupTracker.sourceTrackerArray)
                                     sourceTracker.AppendValue(dataBlockBuffer.payloadDataList);
                             }
+
+                            if (ec.IsNullOrEmpty())
+                                ec = WriteDataBlock(dtPair);
+
+                            if (ec.IsNullOrEmpty())
+                                groupTracker.NoteWritten();
+
+                            firstBlockFlagBits = FileIndexRowFlagBits.None;
                         }
                         else
                         {
-                            // write as full group
-                            StartGroupDataBlock(groupTracker, dtPair, firstBlockFlagBits, GroupBlockFlagBits.None, preIncrementSeqNum: true);
-
-                            foreach (SourceTracker sourceTracker in groupTracker.sourceTrackerArray)
-                                sourceTracker.AppendValue(dataBlockBuffer.payloadDataList);
+                            // otherwise we do not write the group at all (see Service for details)
                         }
-
-                        if (ec.IsNullOrEmpty())
-                            ec = WriteDataBlock(dtPair);
-
-                        if (ec.IsNullOrEmpty())
-                            groupTracker.NoteWritten();
-
-                        firstBlockFlagBits = FileIndexRowFlagBits.None;
-                    }
-                    else 
-                    {
-                        // otherwise we do not write the group at all (see Service for details)
                     }
                 }
+
+                if (ec.IsNullOrEmpty())
+                    ec = ServicePendingWrites(dtPair);
+
+                if (ec.IsNullOrEmpty() && writerBehaviorParam.IsSet(WriterBehavior.FlushAfterEveryGroupWrite))
+                    ec = InnerFlush(FlushFlags.All, dtPair, false);
+
+                if (!ec.IsNullOrEmpty())
+                {
+                    droppedCounts.IncrementDataGroup();
+                    RecordError(ec, dtPair);
+                    CloseFile(dtPair);
+                }
+
+                return ec;
             }
-
-            if (ec.IsNullOrEmpty())
-                ServicePendingWrites(dtPair);
-
-            if (!ec.IsNullOrEmpty())
-            {
-                droppedCounts.IncrementDataGroup();
-                RecordError(ec, dtPair);
-                CloseFile(dtPair);
-            }
-
-            return ec;
         }
 
-        public string RecordOccurrence(OccurrenceInfo occurrenceInfo, object dataValue, DateTimeStampPair dtPair = null)
+        public string RecordOccurrence(IOccurrenceInfo occurrenceInfo, object dataValue, DateTimeStampPair dtPair = null, bool writeAll = false, bool forceFlush = false)
         {
-            return RecordOccurrence(occurrenceInfo, new ValueContainer(dataValue), dtPair);
+            return RecordOccurrence(occurrenceInfo, dataVC: new ValueContainer(dataValue), dtPair: dtPair, writeAll: writeAll, forceFlush: forceFlush);
         }
 
-        public string RecordOccurrence(OccurrenceInfo occurrenceInfo, ValueContainer dataVC, DateTimeStampPair dtPair = null)
+        public string RecordOccurrence(IOccurrenceInfo occurrenceInfo, ValueContainer dataVC = default(ValueContainer), DateTimeStampPair dtPair = null, bool writeAll = false, bool forceFlush = false)
         {
             if (occurrenceInfo == null)
                 return "{0} failed:  occurrenceInfo parameter cannot be null".CheckedFormat(CurrentMethodName);
 
-            OccurrenceTracker occurrenceTracker = occurrenceTrackerArray.SafeAccess(occurrenceInfo.OccurrenceID - 1);
+            if (IsDisposed)
+                return "{0} has already been disposed".CheckedFormat(CurrentClassLeafName);
 
-            if (occurrenceTracker == null)
+            using (var scopedLock = new ScopedLock(mutex))
             {
-                if (occurrenceInfo.OccurrenceID == 0)
-                    return RecordError("{0} failed: no tracker found for occurrence {1} (probably was not registered)".CheckedFormat(CurrentMethodName, occurrenceInfo), dtPair);
-                else
-                    return RecordError("{0} failed: no tracker found for occurrence {1}".CheckedFormat(CurrentMethodName, occurrenceInfo), dtPair);
+                ReassignIDsAndBuildNewTrackersIfNeeded(dtPair);
+
+                OccurrenceTracker occurrenceTracker = occurrenceTrackerArray.SafeAccess(occurrenceInfo.OccurrenceID - 1);
+
+                if (occurrenceTracker == null)
+                {
+                    if (occurrenceInfo.OccurrenceID == 0)
+                        return RecordError("{0} failed: no tracker found for occurrence {1} (probably was not registered)".CheckedFormat(CurrentMethodName, occurrenceInfo), dtPair);
+                    else
+                        return RecordError("{0} failed: no tracker found for occurrence {1}".CheckedFormat(CurrentMethodName, occurrenceInfo), dtPair);
+                }
+
+                if (occurrenceTracker.ifc != ItemFormatCode.None && occurrenceTracker.inferredCST != dataVC.cvt)
+                    return RecordError("{0} failed on {1}: data {2} is not compatible with required ifc:{3}".CheckedFormat(CurrentMethodName, occurrenceInfo, dataVC, occurrenceTracker.ifc), dtPair);
+
+                dtPair = (dtPair ?? DateTimeStampPair.Now).UpdateFileDeltas(fileReferenceDTPair);
+
+                writeAll |= writerBehavior.IsSet(WriterBehavior.WriteAllBeforeEveryOccurrence);
+
+                string ec = ActiviateFile(dtPair);
+
+                if (writeAll)
+                    RecordGroups(writeAll, dtPair, WriterBehavior.None);        // no "special" writer behaviors are selected when recursively using RecordGroups
+
+                if (ec.IsNullOrEmpty())
+                {
+                    StartOccurrenceDataBlock(occurrenceTracker, dtPair);
+                    dataBlockBuffer.payloadDataList.AppendWithIH(dataVC);
+                    ec = WriteDataBlock(dtPair);
+                }
+
+                if (ec.IsNullOrEmpty() && (forceFlush || writerBehavior.IsSet(WriterBehavior.FlushAfterEveryOccurrence)))
+                    ec = InnerFlush(FlushFlags.All, dtPair, false);
+
+                if (!ec.IsNullOrEmpty())
+                    RecordError(ec, dtPair);
+
+                return ec;
             }
-
-            if (occurrenceTracker.ifc != ItemFormatCode.None && occurrenceTracker.inferredCST != dataVC.cvt)
-                return RecordError("{0} failed on {1}: data {2} is not compatible with required ifc:{3}".CheckedFormat(CurrentMethodName, occurrenceInfo, dataVC, occurrenceTracker.ifc), dtPair);
-
-            dtPair = (dtPair ?? DateTimeStampPair.Now).UpdateFileDeltas(fileReferenceDTPair);
-
-            string ec = ActiviateFile(dtPair);
-
-            if (ec.IsNullOrEmpty())
-            {
-                StartOccurrenceDataBlock(occurrenceTracker, dtPair);
-                dataBlockBuffer.payloadDataList.AppendWithIH(dataVC);
-                ec = WriteDataBlock(dtPair);
-            }
-
-            if (!ec.IsNullOrEmpty())
-                RecordError(ec, dtPair);
-
-            return ec;
         }
 
         public string Flush(FlushFlags flushFlags = FlushFlags.All, DateTimeStampPair dtPair = null)
         {
+            if (IsDisposed)
+                return "{0} has already been disposed".CheckedFormat(CurrentClassLeafName);
+
+            using (var scopedLock = new ScopedLock(mutex))
+            {
+                string ec = string.Empty;
+
+                if (InnerIsFileOpen)
+                    dtPair = (dtPair ?? DateTimeStampPair.Now).UpdateFileDeltas(fileReferenceDTPair);
+                else
+                    ec = "{0} failed: File is not open".CheckedFormat(CurrentMethodName);
+
+                try
+                {
+                    if (ec.IsNullOrEmpty())
+                        ec = ServicePendingWrites(dtPair);
+
+                    if (ec.IsNullOrEmpty())
+                        ec = InnerFlush(flushFlags, dtPair, true);
+                }
+                catch (System.Exception ex)
+                {
+                    if (InnerIsFileOpen)
+                    {
+                        ec = RecordError("{0} failed: {1} {2} {3}".CheckedFormat(CurrentMethodName, currentFileInfo, ex.GetType(), ex.Message), dtPair);
+
+                        CloseFile(dtPair);
+                    }
+                }
+
+                return ec;
+            }
+        }
+
+        private string InnerFlush(FlushFlags flushFlags, DateTimeStampPair dtPair, bool rethrow)
+        {
             string ec = string.Empty;
-
-            if (!IsFileOpen)
-                ec = "{0} failed: File is not open".CheckedFormat(CurrentMethodName);
-
-            dtPair = (dtPair ?? DateTimeStampPair.Now).UpdateFileDeltas(fileReferenceDTPair);
 
             try
             {
-                if (ec.IsNullOrEmpty() && flushFlags.IsSet(FlushFlags.Index))
+                if (ec.IsNullOrEmpty() && fileIndexData.fileIndexChanged && flushFlags.IsSet(FlushFlags.Index))
                     ec = UpdateAndWriteFileIndex(doFlush: false, dtPair: dtPair);
 
                 if (ec.IsNullOrEmpty() && flushFlags.IsSet(FlushFlags.File))
@@ -465,6 +649,9 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
             }
             catch (System.Exception ex)
             {
+                if (rethrow)
+                    throw;
+
                 ec = RecordError("{0} failed: {1} {2} {3}".CheckedFormat(CurrentMethodName, currentFileInfo, ex.GetType(), ex.Message), dtPair);
 
                 CloseFile(dtPair);
@@ -475,27 +662,114 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
         public int GetCurrentFileSize()
         {
-            return (IsFileOpen ? CurrentFileInfo : LastFileInfo).FileSize;
+            if (IsDisposed)
+                return 0;
+
+            using (var scopedLock = new ScopedLock(mutex))
+            {
+                return (InnerIsFileOpen ? CurrentFileInfo : LastFileInfo).FileSize;
+            }
         }
 
-        public FileInfo CurrentFileInfo { get { return currentFileInfo; } }
-        public FileInfo LastFileInfo { get { return lastFileInfo; } }
+        public bool IsFileOpen
+        {
+            get
+            {
+                if (IsDisposed)
+                    return false;
+
+                using (var scopedLock = new ScopedLock(mutex))
+                {
+                    return currentFileInfo.IsActive && InnerIsFileOpen;
+                }
+            }
+        }
+
+        public FileInfo CurrentFileInfo
+        {
+            get
+            {
+                if (IsDisposed)
+                    return default(FileInfo);
+
+                using (var scopedLock = new ScopedLock(mutex)) 
+                { 
+                    return currentFileInfo; 
+                }
+            }
+        }
+
+        public FileInfo LastFileInfo
+        {
+            get
+            {
+                if (IsDisposed)
+                    return default(FileInfo);
+
+                using (var scopedLock = new ScopedLock(mutex)) 
+                { 
+                    return lastFileInfo; 
+                }
+            }
+        }
+
+        const int maxClosedFileListLength = 10;
+        volatile int volatileClosedFileListCount = 0;
+        List<FileInfo> closedFileList = new List<FileInfo>();
+
+        public FileInfo? NextClosedFileInfo
+        {
+            get
+            {
+                if (volatileClosedFileListCount <= 0)
+                    return null;
+
+                using (var scopedLock = new ScopedLock(mutex))
+                {
+                    if (closedFileList.Count <= 0)
+                        return null;
+
+                    FileInfo fileInfo = closedFileList[0];
+                    closedFileList.RemoveAt(0);
+                    volatileClosedFileListCount = closedFileList.Count;
+
+                    return fileInfo;
+                }
+            }
+        }
 
         public int CloseCurrentFile(string reason, DateTimeStampPair dtPair = null)
         {
-            dtPair = (dtPair ?? DateTimeStampPair.Now).UpdateFileDeltas(fileReferenceDTPair);
+            if (IsDisposed)
+                return 0;
 
-            if (IsFileOpen)
-                RecordMessage("{0} reason:{1}".CheckedFormat(CurrentMethodName, reason.MapNullOrEmptyTo("[NoReasonGiven]")), dtPair);
+            using (var scopedLock = new ScopedLock(mutex))
+            {
+                dtPair = (dtPair ?? DateTimeStampPair.Now).UpdateFileDeltas(fileReferenceDTPair);
 
-            ServicePendingWrites(dtPair);
+                if (InnerIsFileOpen)
+                    RecordMessage("{0} reason:{1}".CheckedFormat(CurrentMethodName, reason.MapNullOrEmptyTo("[NoReasonGiven]")), dtPair);
 
-            if (IsFileOpen)
-                WriteFileEndBlockAndCloseFile(dtPair);
+                ServicePendingWrites(dtPair);
 
-            allowImmediateReopen = true;
+                if (InnerIsFileOpen)
+                    WriteFileEndBlockAndCloseFile(dtPair);
 
-            return LastFileInfo.FileSize;
+                allowImmediateReopen = true;
+
+                while (closedFileList.Count >= maxClosedFileListLength)
+                {
+                    FileInfo droppingFileInfo = closedFileList[0];
+
+                    RecordMessage("Dropped old closedFileList item ['{0}' {1} bytes]".CheckedFormat(System.IO.Path.GetFileName(droppingFileInfo.FilePath), droppingFileInfo.FileSize), dtPair);
+                    closedFileList.RemoveAt(0);
+                    volatileClosedFileListCount = closedFileList.Count;
+                }
+
+                closedFileList.Add(LastFileInfo);
+
+                return LastFileInfo.FileSize;
+            }
         }
 
         #endregion
@@ -554,20 +828,78 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
         #endregion
 
+        void ReassignIDsAndBuildNewTrackersIfNeeded(DateTimeStampPair dtPair = null, bool forceRebuild = false)
+        {
+            if (groupOrOccurrenceInfoListModified || forceRebuild)
+            {
+                if (InnerIsFileOpen)
+                    CloseCurrentFile("GroupOrOccurrenceInfoListModified: Reassigning IDs and building new trackers", dtPair);
+
+                {
+                    // create outermost occurance, group tracker, and source tracker arrays
+                    occurrenceTrackerArray = (occurrenceInfoList).Select(occurrenceInfo => new OccurrenceTracker(occurrenceInfo)).ToArray();
+                    groupTrackerArray = (groupInfoList).Select(groupInfo => new GroupTracker(groupInfo, setup)).ToArray();
+                    sourceTrackerArray = groupTrackerArray.SelectMany(groupTracker => groupTracker.sourceTrackerArray).ToArray();
+
+                    // assign ids... fileIDs are unique accross the entire file.  itemIDs start at 1 for each item type.  Groups refer to sources by their itemIDs
+                    int itemID = 1;
+                    foreach (GroupTracker gt in groupTrackerArray)
+                    {
+                        gt.ClientID = itemID++;
+                        gt.groupInfo.GroupID = gt.ClientID;
+                    }
+
+                    itemID = 1;
+                    foreach (OccurrenceTracker ot in occurrenceTrackerArray)
+                    {
+                        ot.ClientID = itemID++;
+                        ot.occurrenceInfo.OccurrenceID = ot.ClientID;
+                    }
+
+                    itemID = 1;
+                    foreach (SourceTracker st in sourceTrackerArray)
+                    {
+                        st.ClientID = itemID++;
+                        st.groupPointInfo.SourceID = st.ClientID;
+                        st.groupPointInfo.GroupID = st.groupTracker.groupInfo.GroupID;
+                    }
+
+                    // make a list of all of the items in the order we want to assign their FileIDs: groups, occurrences, sources - ideally all of the group and occurrence FileIDs will be <= 127
+                    // the source FileIDs are used in the Group's ItemList named value
+                    TrackerCommon[] allItemCommonArray = (groupTrackerArray as TrackerCommon[]).Concat(occurrenceTrackerArray as TrackerCommon[]).Concat(sourceTrackerArray as TrackerCommon[]).ToArray();
+
+                    // assign all of the FileIDs
+                    int fileID = unchecked((int)FixedBlockTypeID.FirstDynamicallyAssignedID);
+                    foreach (TrackerCommon tc in allItemCommonArray)
+                        tc.FileID = fileID++;
+
+                    // then Setup all of the items so that they can generate their NVS contents
+                    foreach (TrackerCommon tc in allItemCommonArray)
+                        tc.Setup();
+
+                    allMetaDataItemsArray = (sourceTrackerArray as TrackerCommon[]).Concat(groupTrackerArray as TrackerCommon[]).Concat(occurrenceTrackerArray as TrackerCommon[]).ToArray();
+                }
+
+                groupOrOccurrenceInfoListModified = false;
+            }
+        }
+
         QpcTimer dstRecheckTimer = new QpcTimer() { TriggerIntervalInSec = 1.0, AutoReset = true }.StartIfNeeded();
 
         string ActiviateFile(DateTimeStampPair dtPair)
         {
+            ReassignIDsAndBuildNewTrackersIfNeeded(dtPair);
+
             TimeSpan fileDeltaTimeSpan = dtPair.fileDeltaTimeStamp.FromSeconds();
 
-            if (IsFileOpen)
+            if (InnerIsFileOpen)
             {
                 QpcTimeStamp tsNow = dtPair.qpcTimeStamp;
 
                 int dayOfYear = dtPair.dateTime.ToLocalTime().DayOfYear;
                 bool dayOfYearChanged = (dayOfYear != fileReferenceDayOfYear);
 
-                if (dayOfYearChanged && writeFileAdvanceBehavior.IsSet(WriteFileAdvanceBehavior.AdvanceOnDayBoundary) && fileDeltaTimeSpan.TotalMinutes > 10.0)
+                if (dayOfYearChanged && writerBehavior.IsSet(WriterBehavior.AdvanceOnDayBoundary) && fileDeltaTimeSpan.TotalMinutes > 10.0)
                 {
                     CloseCurrentFile("AdvanceOnDayBoundary triggered: '{0}' is {1} bytes and {2:f3} hours)".CheckedFormat(currentFileInfo.FilePath, currentFileInfo.FileSize, fileDeltaTimeSpan.TotalHours));
                 }
@@ -591,7 +923,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
                 }
             }
 
-            if (IsFileOpen)
+            if (InnerIsFileOpen)
                 return "";
 
             // capture the timestamp and the corresponding dateTime and related information
@@ -682,6 +1014,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 		        nvSet.SetValue("setup.I4Offset", setup.I4Offset);
 		        nvSet.SetValue("setup.I2Offset", setup.I2Offset);
 
+
                 try
                 {
                     string hostName = System.Net.Dns.GetHostName();
@@ -689,6 +1022,20 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
                 }
                 catch
                 { }
+
+                System.Diagnostics.Process currentProcess = Utils.ExtensionMethods.TryGet<System.Diagnostics.Process>(() => System.Diagnostics.Process.GetCurrentProcess());
+
+                nvSet.SetValue("CurrentProcess.ProcessName", Utils.ExtensionMethods.TryGet<string>(() => currentProcess.ProcessName));
+                nvSet.SetValue("CurrentProcess.Id",  Utils.ExtensionMethods.TryGet<int>(() => currentProcess.Id));
+                nvSet.SetValue("CurrentProcess.Affinity", Utils.ExtensionMethods.TryGet<long>(() => currentProcess.ProcessorAffinity.ToInt64()));
+                nvSet.SetValue("Environment.Is64BitProcess", Environment.Is64BitProcess);
+                nvSet.SetValue("Environment.MachineName", Environment.MachineName);
+                nvSet.SetValue("Environment.OSVersion", Environment.OSVersion.ToString());
+                nvSet.SetValue("Environment.Is64BitOperatingSystem", Environment.Is64BitOperatingSystem);
+                nvSet.SetValue("Environment.ProcessorCount", Environment.ProcessorCount);
+                nvSet.SetValue("Environment.SystemPageSize", Environment.SystemPageSize);
+                nvSet.SetValue("Environment.UserName", Environment.UserName);
+                nvSet.SetValue("Environment.UserInteractive", Environment.UserInteractive);
 
 		        // generate and write file header - note: the blockDeltaTimeStamp is zero on the file header data block by definitions
 		        StartDataBlock(FixedBlockTypeID.FileHeaderV1, dtPair, FileIndexRowFlagBits.ContainsHeaderOrMetaData);
@@ -744,7 +1091,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
             // finaly flush the file
             if (ec.IsNullOrEmpty())
-                ec = Flush(FlushFlags.File);
+                ec = InnerFlush(FlushFlags.File, dtPair, false);
 
             if (ec.IsNullOrEmpty())
                 currentFileInfo.IsActive = true;
@@ -758,7 +1105,16 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
             return "";
         }
 
-        bool IsFileOpen { get { return fs != null; } }
+        /// <summary>
+        /// Returns true if we have a non-null file stream (fs)
+        /// </summary>
+        bool InnerIsFileOpen 
+        { 
+            get 
+            { 
+                return fs != null; 
+            } 
+        }
 
         void CloseFile(DateTimeStampPair dtPair)
         {
@@ -790,7 +1146,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
             StartDataBlock(FixedBlockTypeID.DateTimeV1, dtPair, FileIndexRowFlagBits.ContainsDateTime);
 
             dateTimeBlockNVSet.SetValue("BlockDeltaTimeStamp", dtPair.fileDeltaTimeStamp);
-            dateTimeBlockNVSet.SetValue("QPCTime", dtPair.qpcTimeStamp);
+            dateTimeBlockNVSet.SetValue("QPCTime", dtPair.qpcTimeStamp.Time);
             dateTimeBlockNVSet.SetValue("UTCTimeSince1601", dtPair.utcTimeSince1601);      // aka FTime with time measured in seconds
             dateTimeBlockNVSet.SetValue("TimeZoneOffset", localTZ.BaseUtcOffset.TotalSeconds);
             dateTimeBlockNVSet.SetValue("DSTIsActive", isDST);
@@ -867,7 +1223,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
                     droppedCounts = new DroppedCounts();
                 }
 
-                if (!IsFileOpen)
+                if (!InnerIsFileOpen)
                     return "{0} failed: file is not open".CheckedFormat(CurrentMethodName);
 
                 {
@@ -913,6 +1269,9 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
                         dataBlockBuffer.payloadDataList.AppendWithIH(new ValueContainer(writeItem.mesg));
 
                         ec = WriteDataBlock(dtPair);
+
+                        if (ec.IsNullOrEmpty() && writerBehavior.IsSet(WriterBehavior.FlushAfterEveryMessage))
+                            ec = InnerFlush(FlushFlags.All, dtPair, false);
                     }
                 }
             }
@@ -926,7 +1285,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
                     writeFileIndexNow = true;
             }
 
-            if (writeFileIndexNow && IsFileOpen)
+            if (writeFileIndexNow && InnerIsFileOpen)
             {
                 ec = UpdateAndWriteFileIndex(doFlush: true, dtPair: dtPair);
             }
@@ -936,7 +1295,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
         string UpdateAndWriteFileIndex(bool doFlush, DateTimeStampPair dtPair)
         {
-            if (!IsFileOpen)
+            if (!InnerIsFileOpen)
                 return RecordError("Cannot {0}: no file is open".CheckedFormat(CurrentMethodName), dtPair);
 
             if (currentFileInfo.FileSize == 0)
@@ -991,7 +1350,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
         string WriteDataBlock(DateTimeStampPair dtPair)
         {
-            if (!IsFileOpen)
+            if (!InnerIsFileOpen)
                 return RecordError("Cannot {0}: no file is open".CheckedFormat(CurrentMethodName), dtPair);
 
             try
@@ -1084,7 +1443,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
         #endregion
 
-        #region Internals: classes, structs
+        #region Internals: MessageItem, FileIndexData, FileIndexRow, FileIndexLastBlockInfo, DataBlockBuffer, TrackerCommon, SourceTracker, GroupTracker, OccurrenceTracker, DroppedCounts
 
         class MessageItem
         {
@@ -1285,6 +1644,11 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
         class TrackerCommon
         {
+            public override string ToString()
+            {
+                return "Tracker {0} seqNum:{1}".CheckedFormat(mdci, seqNum);
+            }
+
             public string Name { get { return mdci.Name; } }
             public string Comment { get { return mdci.Comment; } }
             public MetaDataCommonInfo mdci;
@@ -1335,64 +1699,94 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
         class SourceTracker : TrackerCommon
         {
-            public GroupPointInfo groupPointInfo;
             public GroupTracker groupTracker;
             public SetupInfo setupInfo;
+            public GroupInfo groupInfo;
+            public GroupPointInfo groupPointInfo;
 
             public bool touched;
             public ValueContainer lastServicedValue;
+            public uint lastServicedIVASeqNum;
 
             public SourceTracker(GroupPointInfo gpi, GroupTracker gt) 
                 : base(MDItemType.Source, gpi)
             {
-                groupPointInfo = gpi;
                 groupTracker = gt;
                 setupInfo = gt.setupInfo;
+                groupInfo = gt.groupInfo;
+                groupPointInfo = gpi;
                 ifc = gpi.ValueCST.ConvertToItemFormatCode();
+
                 AddClientNVSItems();
 
-                if (gpi.ValueSourceIVA == null && gpi.ValueSourceIVAFactoryIVI != null)
+                if (gpi.ValueSourceIVA == null && gt.ivi != null)
                 {
-                    gpi.ValueSourceIVA = gpi.ValueSourceIVAFactoryIVI.GetValueAccessor(gpi.Name);
-                    gpi.VC = gpi.ValueSourceIVA.ValueContainer;
+                    gpi.ValueSourceIVA = gt.ivi.GetValueAccessor(gpi.Name);
+                    if (gpi.ValueSourceIVA.HasValueBeenSet)
+                        gpi.VC = gpi.ValueSourceIVA.ValueContainer;
+                    lastServicedIVASeqNum = gpi.ValueSourceIVA.ValueSeqNum;
                 }
+
+                lastServicedValue = gpi.VC;
+                touched = (gpi.VCHasBeenSet || !lastServicedValue.IsEmpty);
             }
 
-            public bool Service()
+            public void Service()
             {
                 // if we do not have an associated group tracker or the group is neither touched, to be written, nor flagged for write all) then there is no need to service this source further.
-                if (groupTracker == null || groupPointInfo == null || !(groupTracker.touched || groupTracker.writeAll))
-                    return false;
+                if (groupTracker == null || groupPointInfo == null)
+                    return;
 
                 IValueAccessor iva = groupPointInfo.ValueSourceIVA;
+
+                // if we are using iva based value sources and the groupTracker has not already been marked as touched or writeAll then we are done - no need to attempt to update the local value
+                if (iva != null && !(groupTracker.touched || groupTracker.writeAll))
+                    return;
+
                 if (iva != null)
                 {
-                    if (iva.IsUpdateNeeded)
+                    if (lastServicedIVASeqNum != iva.ValueSeqNum)
                     {
-                        groupPointInfo.VC = iva.Update().ValueContainer;
+                        groupPointInfo.VC = iva.ValueContainer;
                         lastServicedValue = groupPointInfo.VC;
                         if (!touched)
                             touched = true;
                     }
                 }
+                else if (groupInfo.UseSourceIVAsForTouched)
+                {
+                    if (groupPointInfo.VCHasBeenSet)
+                    {
+                        lastServicedValue = groupPointInfo.VC;
+                        touched = true;
+                    }
+                }
                 else
                 {
-                    bool different = groupPointInfo.VCIsUsable && (groupTracker.writeAll || !lastServicedValue.IsEqualTo(groupPointInfo.VC));
+                    bool different = groupPointInfo.VCIsUsable && (groupTracker.writeAll || !lastServicedValue.Equals(groupPointInfo.VC));
 
                     if (different)
-                        lastServicedValue.CopyFrom(groupPointInfo.VC);
+                        lastServicedValue = groupPointInfo.VC;
 
                     if (different && !touched)
                         touched = true;
                 }
 
                 if (touched)
+                {
                     groupTracker.numTouchedSources++;
-
-                return touched;
+                    if (!groupTracker.touched)
+                        groupTracker.touched = true;
+                }
             }
 
-            public void AppendValue(List<byte> byteArrayBuilder, bool clearTouched = true)
+            public void NoteWritten()
+            {
+                touched = false;
+                groupPointInfo.VCHasBeenSet = false;
+            }
+
+            public void AppendValue(List<byte> byteArrayBuilder)
             {
                 switch (ifc)
                 {
@@ -1439,9 +1833,6 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
                         byteArrayBuilder.AppendWithIH(lastServicedValue);
                         break;
                 }
-
-                if (touched && clearTouched)
-                    touched = false;
             }
         }
 
@@ -1457,13 +1848,17 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
             public bool touched;
             public int numTouchedSources;
 
+            /// <summary>True if writeAll or if numTouchedSources >= 80% of total number</summary>
             public bool WriteAsFullGroup { get { return writeAll || (numTouchedSources * oneOverSourceTrackerArrayLength >= 0.80); } }
+            /// <summary>True if !writeAll and numTouchedSources is zero</summary>
             public bool WriteAsEmptyGroup { get { return !writeAll && (numTouchedSources == 0); } }
+            /// <summary>True if numTouchedSources is not zero and !writeAll and !WriteAsFullGroup</summary>
             public bool WriteAsSparseGroup { get { return !(numTouchedSources == 0) && !WriteAsFullGroup; } }
 
             public byte [] updateMaskByteArray;
             public int updateMaskByteArraySize;
 
+            public IValuesInterconnection ivi;
             public IValueAccessor[] ivaArray;
 
             public GroupTracker(GroupInfo gi, SetupInfo si)
@@ -1473,6 +1868,10 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
                 setupInfo = si; 
                 AddClientNVSItems();
 
+                ivi = gi.IVI;
+                if (gi.UseSourceIVAsForTouched && ivi == null)
+                    ivi = Values.Instance;
+
                 sourceTrackerArray = (groupInfo.GroupPointInfoArray ?? emptyPointGroupInfoArray).Select(pointInfo => new SourceTracker(pointInfo, this)).ToArray();
                 sourceTrackerArrayLength = sourceTrackerArray.Length;
                 oneOverSourceTrackerArrayLength = (sourceTrackerArrayLength > 0 ? (1.0 / sourceTrackerArrayLength) : 0);
@@ -1480,7 +1879,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
                 updateMaskByteArraySize = ((sourceTrackerArrayLength + 7) >> 3);
                 updateMaskByteArray = new byte [updateMaskByteArraySize];
 
-                if (gi.UsePointIVAsForTouched)
+                if (gi.UseSourceIVAsForTouched)
                 {
                     ivaArray = gi.GroupPointInfoArray.Select(ptInfo => ptInfo.ValueSourceIVA).Where(iva => iva != null).ToArray();
                 }
@@ -1496,9 +1895,15 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
                         touched = true;
                     else if (groupInfo.Touched)
                         touched = true;
-                    else if (groupInfo.UsePointIVAsForTouched && ivaArray.IsUpdateNeeded())
+                    else if (groupInfo.UseSourceIVAsForTouched && ivaArray.IsUpdateNeeded())
+                    {
                         touched = true;
+                        ivi.Update(ivaArray);
+                    }
                 }
+
+                foreach (var st in sourceTrackerArray)
+                    st.Service();
             }
 
             public override void Setup()
@@ -1510,12 +1915,20 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
             }
 
             /// <summary>
-            /// Clears touched, writeAll flags, and numTouchedSources counter
+            /// Clears touched flag, writeAll flag, groupInfo.Touched flag, and calls each underlying SourceTracker's NoteWritten method.
             /// </summary>
             public void NoteWritten()
             {
                 touched = false;
                 writeAll = false;
+
+                if (groupInfo != null)
+                    groupInfo.Touched = false;
+
+                foreach (var st in this.sourceTrackerArray)
+                    st.NoteWritten();
+
+                numTouchedSources = 0;
             }
         }
 
@@ -1544,7 +1957,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
             }
         }
 
-        private struct DroppedCounts
+        struct DroppedCounts
         {
             public int error, message, occurrence, dataGroup, total;
 
@@ -1563,10 +1976,15 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
         #region Internals:  fields
 
+        /// <remarks>
+        /// Annotate this as readonly since the value is only assigned once in the constructor (to either new object() or null).
+        /// </remarks>
+        readonly object mutex;
+
         SetupInfo setupOrig;
         SetupInfo setup;
 
-        WriteFileAdvanceBehavior writeFileAdvanceBehavior;
+        WriterBehavior writerBehavior;
 
         AtomicInt32 seqNumGen = new AtomicInt32();
 
@@ -1623,9 +2041,10 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
         /// <summary>
         /// StringParamAction action factory method.
         /// The resulting action, when run, will record an occurrance containing the eventName and the given eventDataNVS.
-        /// If the given eventName matches one of the event names
+        /// The OccurrenceInfo used for this event is determined from the given eventName.  
+        /// If the eventName matches a name registered with a specific occurrance then that occurrence will be used, otherwise the DefaultRecordEventOccurrance will be used.
         /// </summary>
-        IStringParamAction RecordEvent(string eventName = null, INamedValueSet eventDataNVS = null);
+        IStringParamAction RecordEvent(string eventName = null, INamedValueSet eventDataNVS = null, bool writeAll = false);
     }
 
     /// <summary>
@@ -1734,11 +2153,13 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
         /// <summary>
         /// StringParamAction action factory method.
         /// The resulting action, when run, will record an occurrance containing the eventName and the given eventDataNVS.
-        /// If the given eventName matches one of the event names
+        /// The OccurrenceInfo used for this event is determined from the given eventName.  
+        /// If the eventName matches a name registered with a specific occurrance then that occurrence will be used, otherwise the DefaultRecordEventOccurrance will be used.
         /// </summary>
-        public IStringParamAction RecordEvent(string eventName = null, INamedValueSet eventDataNVS = null)
+        public IStringParamAction RecordEvent(string eventName = null, INamedValueSet eventDataNVS = null, bool writeAll = false)
         {
-            IStringParamAction action = new StringActionImpl(actionQ, eventName, PerformRecordEvent, "{0}({1})".CheckedFormat(CurrentMethodName, eventName), ActionLoggingReference);
+            ActionMethodDelegateActionArgStrResult<string, NullObj> performRecordEventDelegate = (actionProviderFacet) => PerformRecordEvent(actionProviderFacet, writeAll);
+            IStringParamAction action = new StringActionImpl(actionQ, eventName, performRecordEventDelegate, "{0}({1}{2})".CheckedFormat(CurrentMethodName, eventName, writeAll ? ",writeAll" : string.Empty), ActionLoggingReference);
 
             if (eventDataNVS != null)   
                 action.NamedParamValues = eventDataNVS;
@@ -1746,7 +2167,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
             return action;
         }
 
-        private string PerformRecordEvent(IProviderActionBase<string, NullObj> action)
+        private string PerformRecordEvent(IProviderActionBase<string, NullObj> action, bool writeAll)
         {
             string eventName = action.ParamValue;
             INamedValueSet eventDataNVS = action.NamedParamValues;
@@ -1761,7 +2182,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
             if (!eventNameToOccurrenceInfoDictionary.TryGetValue(eventName, out occurrenceInfo) || occurrenceInfo == null)
                 occurrenceInfo = defaultRecordEventOccurranceInfo;
 
-            return mdrfWriter.RecordOccurrence(occurrenceInfo, occurrenceDataNVS);
+            return mdrfWriter.RecordOccurrence(occurrenceInfo, occurrenceDataNVS, writeAll: writeAll);
         }
 
         OccurrenceInfo defaultRecordEventOccurranceInfo;
@@ -1814,9 +2235,10 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
                     groupInfoList.Add(new GroupInfo() 
                                         { 
                                             Name = "Default", 
-                                            UsePointIVAsForTouched = true, 
+                                            GroupBehaviorOptions = GroupBehaviorOptions.UseSourceIVAsForTouched, 
                                             FileIndexUserRowFlagBits = Config.AllocateUserRowFlagBitsForGroups ? availableUserFlagRowBitsList.SafeTakeFirst() : 0,
-                                            GroupPointInfoArray = ivaArray.Select(iva => new GroupPointInfo() { Name = iva.Name, ValueSourceIVA = iva, ValueSourceIVAFactoryIVI = Config.SourceIVI }).ToArray(),
+                                            IVI = Config.SourceIVI,
+                                            GroupPointInfoArray = ivaArray.Select(iva => new GroupPointInfo() { Name = iva.Name, ValueSourceIVA = iva }).ToArray(),
                                         });
                 }
                 else
@@ -1832,10 +2254,11 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
                         groupInfoList.Add(new GroupInfo() 
                                         { 
-                                            Name = tuple.Item1, 
-                                            UsePointIVAsForTouched = true,
+                                            Name = tuple.Item1,
+                                            GroupBehaviorOptions = GroupBehaviorOptions.UseSourceIVAsForTouched,
                                             FileIndexUserRowFlagBits = Config.AllocateUserRowFlagBitsForGroups ? availableUserFlagRowBitsList.SafeTakeFirst() : 0,
-                                            GroupPointInfoArray = ivaArray.Select(iva => new GroupPointInfo() { Name = iva.Name, ValueSourceIVA = iva, ValueSourceIVAFactoryIVI = Config.SourceIVI }).ToArray(),
+                                            IVI = Config.SourceIVI,
+                                            GroupPointInfoArray = ivaArray.Select(iva => new GroupPointInfo() { Name = iva.Name, ValueSourceIVA = iva }).ToArray(),
                                             ClientNVS = tuple.Item3.ConvertToReadOnly(),
                                         });
                     }
@@ -1928,11 +2351,187 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
             if (pruningManager != null && (pruningServiceTimer.IsTriggered || forceServicePruning))
             {
+                if (mdrfWriter != null)
+                {
+                    FileInfo? closedFileInfo = mdrfWriter.NextClosedFileInfo;
+                    if (closedFileInfo != null)
+                        pruningManager.NotePathAdded(closedFileInfo.GetValueOrDefault().FilePath);
+                }
+
                 pruningManager.Service();
             }
         }
 
         #endregion
+    }
+
+    #endregion
+
+    #region MDRFLogMessageHandlerAdapter, MesgTypeToIOccurrenceInfoMap
+
+    public class MDRFLogMessageHandlerAdapterConfig
+    {
+        public MDRFLogMessageHandlerAdapterConfig()
+        {
+            NormalMesgOccurrenceName = "Mesg";
+            NormalMesgUserFileIndexRowFlagBits = 0;
+            NormalMesgFlushesWriter = false;
+            SignificantMesgOccurrenceName = "SigMesg";
+            SignificantMesgTypeLogGate = Logging.LogGate.Signif;
+            SignificantMesgUserFileIndexRowFlagBits = 0;
+            SignificantMesgIsHighPriority = true;
+            SignificantMesgFlushesWriter = true;
+            FlushFlagstoUseAfterEachMessageBlock = FlushFlags.File;  
+        }
+
+        public MDRFLogMessageHandlerAdapterConfig(MDRFLogMessageHandlerAdapterConfig other)
+        {
+            NormalMesgOccurrenceName = other.NormalMesgOccurrenceName;
+            NormalMesgUserFileIndexRowFlagBits = other.NormalMesgUserFileIndexRowFlagBits;
+            NormalMesgFlushesWriter = other.NormalMesgFlushesWriter;
+            SignificantMesgOccurrenceName = other.SignificantMesgOccurrenceName;
+            SignificantMesgTypeLogGate = other.SignificantMesgTypeLogGate;
+            SignificantMesgUserFileIndexRowFlagBits = other.SignificantMesgUserFileIndexRowFlagBits;
+            SignificantMesgIsHighPriority = other.SignificantMesgIsHighPriority;
+            SignificantMesgFlushesWriter = other.SignificantMesgFlushesWriter;
+            FlushFlagstoUseAfterEachMessageBlock = other.FlushFlagstoUseAfterEachMessageBlock;
+            OnlyRecordMessagesIfFileIsAlreadyActive = other.OnlyRecordMessagesIfFileIsAlreadyActive;
+        }
+
+        [ConfigItem(IsOptional = true)]
+        public string NormalMesgOccurrenceName { get; set; }
+
+        [ConfigItem(IsOptional = true)]
+        public ulong NormalMesgUserFileIndexRowFlagBits { get; set; }
+
+        [ConfigItem(IsOptional = true)]
+        public bool NormalMesgFlushesWriter { get; set; }
+
+        [ConfigItem(IsOptional = true)]
+        public string SignificantMesgOccurrenceName { get; set; }
+
+        [ConfigItem(IsOptional = true)]
+        public Logging.LogGate SignificantMesgTypeLogGate { get; set; }
+
+        [ConfigItem(IsOptional = true)]
+        public ulong SignificantMesgUserFileIndexRowFlagBits { get; set; }
+
+        [ConfigItem(IsOptional = true)]
+        public bool SignificantMesgIsHighPriority { get; set; }
+
+        [ConfigItem(IsOptional = true)]
+        public bool SignificantMesgFlushesWriter { get; set; }
+
+        [ConfigItem(IsOptional = true)]
+        public FlushFlags FlushFlagstoUseAfterEachMessageBlock { get; set; }
+
+        [ConfigItem(IsOptional = true)]
+        public bool OnlyRecordMessagesIfFileIsAlreadyActive { get; set; }
+
+        public MDRFLogMessageHandlerAdapterConfig Setup(string prefixName = "Logging.LMH.MDRFLogMessageHandler.", IConfig config = null, Logging.IMesgEmitter issueEmitter = null, Logging.IMesgEmitter valueEmitter = null)
+        {
+            ConfigValueSetAdapter<MDRFLogMessageHandlerAdapterConfig> adapter = new ConfigValueSetAdapter<MDRFLogMessageHandlerAdapterConfig>() 
+            { 
+                ValueSet = this, 
+                SetupIssueEmitter = issueEmitter, 
+                UpdateIssueEmitter = issueEmitter, 
+                ValueNoteEmitter = valueEmitter 
+            }.Setup(prefixName);
+
+            return this;
+        }
+    }
+
+    public class MDRFLogMessageHandlerAdapter : MosaicLib.Logging.Handlers.SimpleLogMessageHandlerBase
+    {
+        public MDRFLogMessageHandlerAdapter(string name, Logging.LogGate logGate, IMDRFWriter mdrfWriter, MDRFLogMessageHandlerAdapterConfig config)
+            : base(name, logGate, recordSourceStackFrame: false)
+        {
+            this.mdrfWriter = mdrfWriter;
+            Config = new MDRFLogMessageHandlerAdapterConfig(config);
+
+            normalMesgOccurrenceInfo = new OccurrenceInfo() 
+            { 
+                Name = Config.NormalMesgOccurrenceName, 
+                Comment = "occurrence used for lmh messages that are not configured to be treated as 'significant'",
+                FileIndexUserRowFlagBits = Config.NormalMesgUserFileIndexRowFlagBits,
+            };
+            
+            significantOccurrenceInfo = new OccurrenceInfo() 
+            { 
+                Name = Config.SignificantMesgOccurrenceName,
+                Comment = "occurrence used for lmh messages that are configured to be treated as 'significant'",
+                FileIndexUserRowFlagBits = Config.SignificantMesgUserFileIndexRowFlagBits, 
+                IsHighPriority = Config.SignificantMesgIsHighPriority,
+            };
+
+            mdrfWriter.Add(normalMesgOccurrenceInfo, significantOccurrenceInfo);
+
+            // do not attempt to dispose of the mdrfWriter when this class stops using it.
+            AddExplicitDisposeAction(() => {mdrfWriter = null;});
+        }
+
+        IMDRFWriter mdrfWriter;
+        MDRFLogMessageHandlerAdapterConfig Config { get; set; }
+
+        OccurrenceInfo normalMesgOccurrenceInfo;
+        OccurrenceInfo significantOccurrenceInfo;
+
+        public override void HandleLogMessages(Logging.LogMessage[] lmArray)
+        {
+            int lmArrayLen = lmArray.SafeLength();
+
+            if (lmArrayLen == 1)
+                InnerInnerHandleLogMessage(lmArray[0]);
+            else
+            {
+                foreach (Logging.LogMessage lm in lmArray)
+                {
+                    if (IsMessageTypeEnabled(lm))
+                        InnerInnerHandleLogMessage(lm, blockFlush: true);
+                }
+
+                if (Config.FlushFlagstoUseAfterEachMessageBlock != FlushFlags.None && mdrfWriter != null && mdrfWriter.IsFileOpen)
+                    mdrfWriter.Flush(Config.FlushFlagstoUseAfterEachMessageBlock);
+            }
+
+
+            NoteMessagesHaveBeenDelivered();
+        }
+
+        protected override void InnerHandleLogMessage(Logging.LogMessage lm)
+        {
+            if (lm != null && IsMessageTypeEnabled(lm))
+                InnerInnerHandleLogMessage(lm);
+        }
+
+        private void InnerInnerHandleLogMessage(Logging.LogMessage lm, bool blockFlush = false, bool forceFlush = false)
+        {
+            if (lm == null || mdrfWriter == null || (Config.OnlyRecordMessagesIfFileIsAlreadyActive && !mdrfWriter.IsFileOpen))
+                return;
+
+            if (lm.NamedValueSet.Contains("noMDRF"))
+                return;
+
+            Logging.MesgType mesgType = lm.MesgType;
+            bool mesgTypeIsSignificant = Config.SignificantMesgTypeLogGate.IsTypeEnabled(mesgType);
+
+            IOccurrenceInfo occurrenceInfo = (mesgTypeIsSignificant ? significantOccurrenceInfo : normalMesgOccurrenceInfo);
+            forceFlush |= !blockFlush && (mesgTypeIsSignificant ? Config.SignificantMesgFlushesWriter : Config.NormalMesgFlushesWriter);
+
+            if (mdrfWriter != null && occurrenceInfo != null)
+            {
+                NamedValueSet mesgNVS = new NamedValueSet() { { "type", mesgType }, { "src", lm.LoggerName }, { "msg", lm.Mesg }};
+
+                if (!lm.Data.IsNullOrEmpty())
+                    mesgNVS.SetValue("data", lm.Data);
+
+                if (!lm.NamedValueSet.IsNullOrEmpty())
+                    mesgNVS.MergeWith(lm.NamedValueSet, NamedValueMergeBehavior.AddNewItems);
+
+                mdrfWriter.RecordOccurrence(occurrenceInfo, new ValueContainer(mesgNVS), forceFlush: forceFlush);
+            }
+        }
     }
 
     #endregion

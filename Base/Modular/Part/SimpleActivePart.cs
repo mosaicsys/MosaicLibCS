@@ -316,15 +316,17 @@ namespace MosaicLib.Modular.Part
 
         /// <summary>
         /// returns a constructor default SimpleActivePartBaseSettings value.
+        /// <para/>Please note: unless explicitly assigned by the client the default, unset, value of WaitTimeLimit will be replaced with 0.1 seconds by the Part when it uses this object's SetupForUse method.
         /// </summary>
         public static SimpleActivePartBaseSettings DefaultVersion0 { get { return new SimpleActivePartBaseSettings(); } }
 
         /// <summary>
-        /// returns te first non-constructor default SimpleActivePartBaseSettings value (established under MosaicLibCS 0.1.6.0):
+        /// returns the first non-constructor default SimpleActivePartBaseSettings value (established under MosaicLibCS 0.1.6.0):
         /// <para/>AutomaticallyIncAndDecBusyCountAroundActionInvoke = true,
         /// <para/>GoOnlineAndGoOfflineHandling = GoOnlineAndGoOfflineHandling.All,
         /// <para/>SimpleActivePartBehaviorOptions = SimpleActivePartBehaviorOptions.PerformActionPublishesActionInfo,
         /// <para/>SimplePartBaseSettings = SimplePartBaseSettings.DefaultVersion1 (SimplePartBaseBehavior = SimplePartBaseBehavior.All (TreatPartAsBusyWhenQueueIsNotEmpty | TreatPartAsBusyWhenInternalPartBusyCountIsNonZero)),
+        /// <para/>Please note: unless explicitly assigned by the client the default, unset, value of WaitTimeLimit will be replaced with 0.1 seconds by the Part when it uses this object's SetupForUse method.
         /// </summary>
         public static SimpleActivePartBaseSettings DefaultVersion1 
         { 
@@ -788,7 +790,7 @@ namespace MosaicLib.Modular.Part
         public virtual bool IsRunning { get { return (HasBeenStarted && !HasBeenStopped); } }
 
         /// <summary>static mutex object used to make certain that only one thread at a time runs each Part's StartIfNeeded pattern.</summary>
-		private static object startIfNeededMutex = new object();
+		private static readonly object startIfNeededMutex = new object();
 
         /// <summary>
         /// This method determines if the part has already been started and starts the part if not.
@@ -1289,7 +1291,7 @@ namespace MosaicLib.Modular.Part
         }
 
         /// <summary>Creates and runs a GoOnline(andInitialize) action on the given part.  Returns the given part to support call chaining.</summary>
-        public static TPartType RunGoOnlineActionInline<TPartType>(this TPartType part, bool andInitialize) where TPartType : IActivePartBase
+        public static TPartType RunGoOnlineActionInline<TPartType>(this TPartType part, bool andInitialize = true) where TPartType : IActivePartBase
         {
             part.CreateGoOnlineAction(andInitialize).RunInline();
 

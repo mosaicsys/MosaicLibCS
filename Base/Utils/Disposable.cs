@@ -60,12 +60,25 @@ namespace MosaicLib.Utils
         /// </summary>
 		/// <typeparam name="ObjType">Any type of ref object.  May be a type that is castable to IDisposable.</typeparam>
         /// <param name="obj">Gives the object that is to be disposed.</param>
-        public static void DisposeOfGivenObject<ObjType>(ObjType obj) where ObjType : class
+        public static void DisposeOfGivenObject<ObjType>(this ObjType obj) where ObjType : class
         {
             IDisposable d = obj as IDisposable;
 
             if (d != null)
                 d.Dispose();
+        }
+
+        /// <summary>
+        /// Helper function used to remove, and dispose of each IDisposable item, in a given list (using DisposeOfGivenObject).
+        /// <para/>Removes all items from the list even if not all of them are IDisposable.
+        /// </summary>
+        /// <typeparam name="ObjType">Any type of ref object.  May be a type that is castable to IDisposable.</typeparam>
+        public static void TakeAndDisposeOfGivenObjects<ObjType>(this IList<ObjType> objList) where ObjType : class
+        {
+            while (!objList.IsNullOrEmpty())
+            {
+                objList.SafeTakeFirst().DisposeOfGivenObject();
+            }
         }
     }
 

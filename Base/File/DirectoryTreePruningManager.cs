@@ -48,17 +48,17 @@ namespace MosaicLib.File
     /// <remarks>
     /// Principle capabilities that are provided by this class:
     ///
-	///		A) iterate through the directory on construction and retain list of all files in directory tree
-	///			including information on their size and age.
-	///		B) provide means to determine if old files/directories must be purned from the tree
-	///			so as to prevent the total number of files from exceeding the configured maximum.
-	///		C) on construction provide means to automatically clean (partially clean) the directory 
-	///			if its contents exceed the configured maximums.
-	///		D) provides means to allow the client to efficiently determine if cleanup is
-	///			needed and to perform the cleanup in an incremental fashion be deleting the oldest
-	///			files/directories when needed.
-	///		E) provide means to monitor the total number of managed files in the directory and
-	///			their total size.
+    ///		A) iterate through the directory on construction and retain list of all files in directory tree
+    ///			including information on their size and age.
+    ///		B) provide means to determine if old files/directories must be purned from the tree
+    ///			so as to prevent the total number of files from exceeding the configured maximum.
+    ///		C) on construction provide means to automatically clean (partially clean) the directory 
+    ///			if its contents exceed the configured maximums.
+    ///		D) provides means to allow the client to efficiently determine if cleanup is
+    ///			needed and to perform the cleanup in an incremental fashion be deleting the oldest
+    ///			files/directories when needed.
+    ///		E) provide means to monitor the total number of managed files in the directory and
+    ///			their total size.
     ///
     /// </remarks>
 
@@ -67,7 +67,7 @@ namespace MosaicLib.File
         #region Constants
 
         /// <summary>This defines the minimum number of files that a manager can be configured to keep in a directory tree.</summary>
-	    public const int ConfigPruneNumFilesMinValue = 2;
+        public const int ConfigPruneNumFilesMinValue = 2;
         /// <summary>This defines the maximum number of files that a manager can be configured to keep in a directory tree.</summary>
         /// <remarks>Value is choosen to aim for something on the order of 300 MBytes of memory to retain the tree.</remarks>
         public const int ConfigPruneNumFilesMaxValue = 1000000;
@@ -77,25 +77,25 @@ namespace MosaicLib.File
         #region Configuration related definitions
 
         /// <summary>Enum define the intended pruning behavior</summary>
-	    public enum PruneMode
-	    {
-             /// <summary>pruning is generally done file by file with directories that get emptied of files also getting removed when the last file or directory is removed from them.</summary>
-		    PruneFiles = 0,
+        public enum PruneMode
+        {
+            /// <summary>pruning is generally done file by file with directories that get emptied of files also getting removed when the last file or directory is removed from them.</summary>
+            PruneFiles = 0,
             /// <summary>purning is generally done by deleting all of the files in the directory that has the oldest file as a set (and the directory along with them).  If the directory contains more than maxEntriesToDeletePerIteration files then this mode behaves as a hybrid between directory and file mode.</summary>
-		    PruneDirectories,
-	    };
+            PruneDirectories,
+        };
 
         /// <summary>structure used to configure a DirectoryTreePruningManager</summary>
-		public class Config
-		{
+        public class Config
+        {
             /// <summary>information about the base directory whose contents will be managed</summary>
-			public String DirPath { get; set; }
+            public String DirPath { get; set; }
 
             /// <summary>Property that contains the PruneRules struct</summary>
             public PruneRules PruneRules { get; set; }
 
             /// <summary>If true then the manager will create the path to the configured root directory on startup (if possible).  Defaults to true.</summary>
-			public bool CreateDirectoryIfNeeded { get; set; }
+            public bool CreateDirectoryIfNeeded { get; set; }
             /// <summary>Defines the PrunMode that will be used by this manager.  Defaults to PruneMode.PruneFiles</summary>
             public PruneMode PruneMode { get; set; }
             /// <summary>Defines the maximum number of iterations of auto cleanup that will be used during setup.  Set to zero to disable inital cleanup.  Defaults to 100.</summary>
@@ -104,10 +104,10 @@ namespace MosaicLib.File
             public int MaxEntriesToDeletePerIteration { get; set; }
 
             /// <summary>Constructor - sets default values of some properties</summary>
-			public Config() 
-			{
+            public Config()
+            {
                 SetFrom(null);
-			}
+            }
 
             /// <summary>Copy constructor</summary>
             public Config(Config rhs)
@@ -139,7 +139,7 @@ namespace MosaicLib.File
                     MaxEntriesToDeletePerIteration = other.MaxEntriesToDeletePerIteration;
                 }
             }
-		};
+        };
 
         /// <summary>
         /// information about the rules for purging old files from the directory
@@ -147,7 +147,7 @@ namespace MosaicLib.File
         /// deleted.  (note that rules are only applied when client explicitly checks and invokes the
         /// cleanup method).
         /// </summary>
-        public struct PruneRules
+        public struct PruneRules : IEquatable<PruneRules>
         {
             /// <summary> the user stated maximum number of files or directories (or zero for no limit).  Must be 0 or be between 2 and 1000000</summary>
             public int TreeNumItemsLimit { get; set; }
@@ -159,7 +159,7 @@ namespace MosaicLib.File
             public TimeSpan FileAgeLimit { get; set; }
 
             /// <summary>Copy constructor</summary>
-            public PruneRules(PruneRules rhs) 
+            public PruneRules(PruneRules rhs)
                 : this()
             {
                 TreeNumItemsLimit = rhs.TreeNumItemsLimit;
@@ -181,6 +181,23 @@ namespace MosaicLib.File
                 TreeTotalSizeLimit = purgeRules.dirTotalSizeLimit;
                 TreeNumItemsLimit = 0;
             }
+
+            /// <summary>
+            /// Indicates whether the current PruneRules is equal to another object given PruneRules.
+            /// </summary>
+            public bool Equals(PruneRules other)
+            {
+                return (TreeNumItemsLimit == other.TreeNumItemsLimit
+                        && TreeNumFilesLimit == other.TreeNumFilesLimit
+                        && TreeTotalSizeLimit == other.TreeTotalSizeLimit
+                        && FileAgeLimit == other.FileAgeLimit
+                        );
+            }
+
+            /// <summary>
+            /// Returns true if this PruneRules is in its default (all zeros) state.  Generally this is used to indicate that the client does not wish to actually perform any pruning (since TotalNumFilesLimit cannot usefully be zero!)
+            /// </summary>
+            public bool IsEmpty { get { return this.Equals(default(PruneRules)); } }
         }
 
         #endregion
@@ -273,9 +290,9 @@ namespace MosaicLib.File
         #region public methods
 
         /// <summary>Get only property returns a clone of the last Config settings for which the object has been Setup, or null if the object has not been Setup yet.</summary>
-        public Config SetupConfig 
-        { 
-            get { return (config != null ? new Config(config) : null); } 
+        public Config SetupConfig
+        {
+            get { return (config != null ? new Config(config) : null); }
         }
 
         /// <summary>Setup the manager to use the given configuration.</summary>
@@ -295,16 +312,16 @@ namespace MosaicLib.File
         }
 
         /// <summary>returns true if configuration is valid and directory was found and scanned successfully</summary>
-		public bool IsDirectoryUsable { get { return (setupPerformed && string.IsNullOrEmpty(setupFaultCode)); } }
+        public bool IsDirectoryUsable { get { return (setupPerformed && string.IsNullOrEmpty(setupFaultCode)); } }
 
         /// <summary>Returns the string of the last fault code encountered by the manager.</summary>
-		public string SetupFaultCode { get { return setupFaultCode ?? String.Empty; } }
+        public string SetupFaultCode { get { return setupFaultCode ?? String.Empty; } }
 
         /// <summary>Returns true if the SetupFaultCode is not empty</summary>
         public bool DidSetupFail { get { return (SetupFaultCode.Length != 0); } }
 
         /// <summary>Service the manager - performs one iteration of cleanup if any cleanup is needed.</summary>
-		public bool Service() { return Service(true); }
+        public bool Service() { return Service(true); }
 
         /// <summary>Service the manager.  Pass true if service operation is permitted to delete files.</summary>
         public bool Service(bool cleanupIfNeeded)
@@ -325,16 +342,19 @@ namespace MosaicLib.File
             NotePathAdded(pathToAdd, Info.Emitter);
         }
 
-        /// <summary>Used to inform manager about the addition of another file or diretory which should be monitored by the manager (and which should eventually be pruned).</summary>
+        /// <summary>
+        /// Used to inform manager about the addition of another file or diretory which should be monitored by the manager (and which should eventually be pruned).
+        /// This method may also be used to inform the manager that the file contents might have changed.
+        /// </summary>
         public void NotePathAdded(string pathToAdd, Logging.IMesgEmitter issueEmitter)
         {
-            try 
+            try
             {
                 string fullPathToAdd = System.IO.Path.GetFullPath(pathToAdd);
-    			string workingRootPath = treeRootEntry.Path;
+                string workingRootPath = treeRootEntry.Path;
 
                 string relativePathPart = String.Empty;
-                string [] relativePathSegments = null;
+                string[] relativePathSegments = null;
 
                 if (fullPathToAdd.StartsWith(workingRootPath))
                 {
@@ -369,7 +389,7 @@ namespace MosaicLib.File
         public int TreeFileCount { get { Service(false); return treeRootEntry.TreeFileCount; } }
 
         /// <summary>returns true if there are one or more items in the tree that need to be deleted</summary>
-        public bool IsTreePruningNeeded 
+        public bool IsTreePruningNeeded
         {
             get
             {
@@ -437,31 +457,31 @@ namespace MosaicLib.File
         {
             int deletedItemCount = 0;		// actually the count of the number of items that we have attempted to delete
 
-			for (int idx = 0; idx < pruneItemList.Count; idx++)
-			{
-				DirectoryEntryInfo entryToDelete = pruneItemList[idx];
+            for (int idx = 0; idx < pruneItemList.Count; idx++)
+            {
+                DirectoryEntryInfo entryToDelete = pruneItemList[idx];
 
-				double ageInDays = entryToDelete.CreationAge.TotalDays;
+                double ageInDays = entryToDelete.CreationAge.TotalDays;
 
-				if (entryToDelete.IsFile)
-				{
+                if (entryToDelete.IsFile)
+                {
                     try
                     {
                         System.IO.File.Delete(entryToDelete.Path);
-        				deletedItemCount++;
+                        deletedItemCount++;
                         deleteEmitter.Emit("Pruned file:'{0}', size:{1}, age:{2:f3} days", entryToDelete.Path, entryToDelete.Length, ageInDays);
                     }
                     catch (System.Exception ex)
                     {
                         issueEmitter.Emit("Prune failed to delete file:'{0}', error:'{1}'", entryToDelete.Path, ex.Message);
                     }
-				}
+                }
                 else if (entryToDelete.IsDirectory)
                 {
                     try
                     {
                         System.IO.Directory.Delete(entryToDelete.Path);
-        				deletedItemCount++;
+                        deletedItemCount++;
                         deleteEmitter.Emit("Pruned directory:'{0}', size:{1}, age:{2:f3} days", entryToDelete.Path, entryToDelete.Length, ageInDays);
                     }
                     catch (System.Exception ex)
@@ -469,11 +489,11 @@ namespace MosaicLib.File
                         issueEmitter.Emit("Prune failed to delete directory:'{0}', error:'{1}'", entryToDelete.Path, ex.Message);
                     }
                 }
-				else
-				{
+                else
+                {
                     issueEmitter.Emit("Prune cannot delete unknown tree node at path:'{0}'", entryToDelete.Path);
-				}
-			}
+                }
+            }
 
             return deletedItemCount;
         }
@@ -486,7 +506,7 @@ namespace MosaicLib.File
         /// <remarks>Number of deletions is limited by config.maxEntriesToDeletePerIteration</remarks>
         public bool PerformIncrementalPrune()
         {
-			int deletedItemCount = 0;		// actually the count of the number of items that we have attempted to delete
+            int deletedItemCount = 0;		// actually the count of the number of items that we have attempted to delete
             bool incrementalPruneFailed = false;
 
             List<DirectoryEntryInfo> pruneItemList = new List<DirectoryEntryInfo>();
@@ -522,20 +542,20 @@ namespace MosaicLib.File
             }
 
             if (deletedItemCount > 0)
-			{
+            {
                 Info.Emitter.Emit("Incremental Prune deleted {0} items.  Directory state: path:'{1}' total files:{2}, items:{3}, size:{4:f3} Mb, Age:{5:f3} days"
-											, deletedItemCount
-											, treeRootEntry.Path
-											, treeRootEntry.TreeFileCount 
-											, treeRootEntry.TreeItemCount 
-											, (treeRootEntry.TreeContentsSize * (1.0 / (1024.0 * 1024.0)))
-											, treeRootEntry.TreeAge.TotalDays
+                                            , deletedItemCount
+                                            , treeRootEntry.Path
+                                            , treeRootEntry.TreeFileCount
+                                            , treeRootEntry.TreeItemCount
+                                            , (treeRootEntry.TreeContentsSize * (1.0 / (1024.0 * 1024.0)))
+                                            , treeRootEntry.TreeAge.TotalDays
                                             );
-			}
+            }
 
-			return (deletedItemCount != 0);
+            return (deletedItemCount != 0);
         }
-		
+
         #endregion
 
         #region private methods
@@ -543,12 +563,12 @@ namespace MosaicLib.File
         /// <summary>Resets the internal state of the manager so that it can be Setup again.</summary>
         private void Clear()
         {
-			setupPerformed = false;
-			setupFaultCode = "";
+            setupPerformed = false;
+            setupFaultCode = "";
 
             if (treeRootEntry == null)
                 treeRootEntry = new DirectoryTreeEntryNode();
-			treeRootEntry.Clear();
+            treeRootEntry.Clear();
 
             BlockPruningForPeriod(TimeSpan.Zero);
         }
@@ -563,14 +583,14 @@ namespace MosaicLib.File
         /// </summary>
         private void InnerSetup(Config configIn)
         {
-			// if needed, clear the prior state.
-			if (setupPerformed)
-				Clear();
+            // if needed, clear the prior state.
+            if (setupPerformed)
+                Clear();
 
-			try 
-			{
-			    // record the given configuration
-			    config = configIn;
+            try
+            {
+                // record the given configuration
+                config = configIn;
                 config.DirPath = System.IO.Path.GetFullPath(config.DirPath);
 
                 bool dirExists = System.IO.Directory.Exists(config.DirPath);
@@ -588,13 +608,13 @@ namespace MosaicLib.File
 
                 if (!DidSetupFail)
                 {
-				    // directory exists or has been created - now scan it and record each of the entries that are found therein
-				    treeRootEntry.SetPathAndGetInfo(config.DirPath);
+                    // directory exists or has been created - now scan it and record each of the entries that are found therein
+                    treeRootEntry.SetPathAndGetInfo(config.DirPath);
 
                     treeRootEntry.BuildTree(Issue.Emitter);
                     treeRootEntry.UpdateTree(Issue.Emitter);
                 }
-			}
+            }
             catch (System.Exception ex)
             {
                 SetFaultCode(Fcns.CheckedFormat("Setup Failure: {0}", ex));
@@ -602,14 +622,14 @@ namespace MosaicLib.File
 
             if (!DidSetupFail)
             {
-				if (config.PruneRules.TreeNumFilesLimit != 0 && config.PruneRules.TreeNumFilesLimit < ConfigPruneNumFilesMinValue)
-					SetFaultCode("Setup Failure: Config: PruneRules.TreeNumFilesLimit is too small");
-				else if (config.PruneRules.TreeNumFilesLimit != 0 && config.PruneRules.TreeNumFilesLimit > ConfigPruneNumFilesMaxValue)
-					SetFaultCode("Setup Failure: Config: PruneRules.TreeNumFilesLimit is too large");
-				else if (config.PruneRules.TreeTotalSizeLimit < 0)
-					SetFaultCode("Setup Failure: Config: PruneRules.TreeTotalSizeLimit is negative");
-				else if (config.PruneRules.FileAgeLimit.TotalDays < 0.0)
-					SetFaultCode("Setup Failure: Config: pruneRules.FileAgeLimitInDays is negative");
+                if (config.PruneRules.TreeNumFilesLimit != 0 && config.PruneRules.TreeNumFilesLimit < ConfigPruneNumFilesMinValue)
+                    SetFaultCode("Setup Failure: Config: PruneRules.TreeNumFilesLimit is too small");
+                else if (config.PruneRules.TreeNumFilesLimit != 0 && config.PruneRules.TreeNumFilesLimit > ConfigPruneNumFilesMaxValue)
+                    SetFaultCode("Setup Failure: Config: PruneRules.TreeNumFilesLimit is too large");
+                else if (config.PruneRules.TreeTotalSizeLimit < 0)
+                    SetFaultCode("Setup Failure: Config: PruneRules.TreeTotalSizeLimit is negative");
+                else if (config.PruneRules.FileAgeLimit.TotalDays < 0.0)
+                    SetFaultCode("Setup Failure: Config: pruneRules.FileAgeLimitInDays is negative");
             }
 
             if (!DidSetupFail && config.MaxInitialAutoCleanupIterations > 0)
@@ -623,10 +643,10 @@ namespace MosaicLib.File
             if (!DidSetupFail)
             {
                 Info.Emitter.Emit("Directory is usable: path:'{0}' total files:{1}, items:{2}, size:{3:f3} Mb, Age:{4:f3} days",
-                                config.DirPath, 
-                                treeRootEntry.TreeFileCount, 
-                                treeRootEntry.TreeItemCount, 
-                                (treeRootEntry.TreeContentsSize * (1.0 / (1024.0*1024.0))),
+                                config.DirPath,
+                                treeRootEntry.TreeFileCount,
+                                treeRootEntry.TreeItemCount,
+                                (treeRootEntry.TreeContentsSize * (1.0 / (1024.0 * 1024.0))),
                                 treeRootEntry.TreeAge.TotalDays
                                 );
             }
@@ -635,18 +655,18 @@ namespace MosaicLib.File
                 Issue.Emitter.Emit("Dirctory is not usable: path:'{0}' fault:'{1}'", config.DirPath, SetupFaultCode);
             }
 
-			setupPerformed = true;
+            setupPerformed = true;
         }
 
         /// <summary>If empty, this method Sets the fault code to the given value and logs</summary>
-		private void SetFaultCode(string faultCode)
-		{
-			if (string.IsNullOrEmpty(setupFaultCode))
-			{
-				setupFaultCode = faultCode;
+        private void SetFaultCode(string faultCode)
+        {
+            if (string.IsNullOrEmpty(setupFaultCode))
+            {
+                setupFaultCode = faultCode;
                 Issue.Emitter.Emit("FaultCode set to {0}", faultCode);
-			}
-		}
+            }
+        }
 
         #endregion
     }

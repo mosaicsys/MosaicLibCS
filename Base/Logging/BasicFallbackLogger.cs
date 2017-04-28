@@ -133,7 +133,7 @@ namespace MosaicLib
 			private static volatile bool useTraceOutput = true;
 			private static volatile bool useFileOutput = true;
 			private static string logFilePath = "BasicFallbackLog.txt";
-			private static object logFileMutex = new object();
+			private static readonly object logFileMutex = new object();
 			private static System.Text.Encoding stringEncoder = new System.Text.UTF8Encoding();
 		}
 	}

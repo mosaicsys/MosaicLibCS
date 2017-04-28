@@ -322,8 +322,8 @@ namespace MosaicLib.Semi.E005.Data
                     int nvListNumElements = 0;
                     ItemFormatCode nvIFC = DecodeE005ItemHeader(byteArray, ref startIndex, ref ec, out nvListNumElements);
 
-                    if (!nvIFC.IsList() || nvListNumElements != 2)
-                        ec = "sub-list {0} [IFC.{1}/{2}] must be a 2 element list".CheckedFormat(listIndex, nvIFC, nvListNumElements);
+                    if (!nvIFC.IsList() || (nvListNumElements != 2 && nvListNumElements != 1))
+                        ec = "sub-list {0} [IFC.{1}/{2}] must be a 1 or 2 element list".CheckedFormat(listIndex, nvIFC, nvListNumElements);
 
                     ValueContainer vcName = ValueContainer.Empty, vcValue = ValueContainer.Empty;
                     string name = string.Empty;
@@ -338,7 +338,8 @@ namespace MosaicLib.Semi.E005.Data
                     if (ec.IsNullOrEmpty() && name.IsNullOrEmpty())
                         ec = "in sub-list {0} could not obtain non-empty value name from {1}".CheckedFormat(listIndex, vcName);
 
-                    if (ec.IsNullOrEmpty())
+                    // leave the vcValue empty for 1 element lists.
+                    if (ec.IsNullOrEmpty() && (nvListNumElements == 2))
                         vcValue = DecodeE005Data(byteArray, ref startIndex, ref ec);
 
                     if (ec.IsNullOrEmpty())
@@ -376,21 +377,21 @@ namespace MosaicLib.Semi.E005.Data
                 case ContainerStorageType.Object:
                     if (vc.o != null)
                     {
-                        if (vc.o is INamedValue)
-                        {
-                            byteArrayBuilder.AppendWithIH((INamedValue)vc.o);
-                            return;
-                        }
-                        else if (vc.o is INamedValueSet)
-                        {
-                            byteArrayBuilder.AppendWithIH((INamedValueSet)vc.o);
-                            return;
-                        }
-                        else if (vc.o is ValueContainer[])
-                        {
-                            byteArrayBuilder.AppendWithIH(new List<ValueContainer>((ValueContainer[])vc.o));
-                            return;
-                        }
+                        if (vc.o is INamedValue) { byteArrayBuilder.AppendWithIH(vc.o as INamedValue); return; }
+                        else if (vc.o is INamedValueSet) { byteArrayBuilder.AppendWithIH(vc.o as INamedValueSet); return; }
+                        else if (vc.o is ValueContainer[]) { byteArrayBuilder.AppendWithIH(new List<ValueContainer>(vc.o as ValueContainer[] ?? emptyVCArray)); return; }
+                        else if (vc.o is string[]) { byteArrayBuilder.AppendWithIH(vc.GetValue<string[]>(true)); return; }
+                        else if (vc.o is bool[]) { byteArrayBuilder.AppendWithIH(ItemFormatCode.Bo, 1, vc.o as bool[]); return; }
+                        else if (vc.o is sbyte[]) { byteArrayBuilder.AppendWithIH(ItemFormatCode.I1, 1, vc.o as sbyte[]); return; }
+                        else if (vc.o is short[]) { byteArrayBuilder.AppendWithIH(ItemFormatCode.I2, 2, vc.o as short[]); return; }
+                        else if (vc.o is int[]) { byteArrayBuilder.AppendWithIH(ItemFormatCode.I4, 4, vc.o as int[]); return; }
+                        else if (vc.o is long[]) { byteArrayBuilder.AppendWithIH(ItemFormatCode.I8, 8, vc.o as long[]); return; }
+                        else if (vc.o is byte[]) { byteArrayBuilder.AppendWithIH(ItemFormatCode.U1, 1, vc.o as byte[]); return; }
+                        else if (vc.o is ushort[]) { byteArrayBuilder.AppendWithIH(ItemFormatCode.U2, 2, vc.o as ushort[]); return; }
+                        else if (vc.o is uint[]) { byteArrayBuilder.AppendWithIH(ItemFormatCode.U4, 4, vc.o as uint[]); return; }
+                        else if (vc.o is ulong[]) { byteArrayBuilder.AppendWithIH(ItemFormatCode.U8, 8, vc.o as ulong[]); return; }
+                        else if (vc.o is float[]) { byteArrayBuilder.AppendWithIH(ItemFormatCode.F4, 4, vc.o as float[]); return; }
+                        else if (vc.o is double[]) { byteArrayBuilder.AppendWithIH(ItemFormatCode.F8, 8, vc.o as double[]); return; }
                     }
 
                     break;
@@ -401,8 +402,13 @@ namespace MosaicLib.Semi.E005.Data
             byteArrayBuilder.AppendWithIH(vc.ToStringSML());     // fallback is always to handle it like a string
         }
 
+        public static readonly ValueContainer[] emptyVCArray = new ValueContainer[0];
+
+
         public static void AppendWithIH(this List<byte> byteArrayBuilder, INamedValueSet nvs)
         {
+            nvs = nvs ?? NamedValueSet.Empty;
+
             byteArrayBuilder.AppendIH(ItemFormatCode.L, nvs.Count);
 
             foreach (INamedValue nv in nvs)
@@ -413,14 +419,29 @@ namespace MosaicLib.Semi.E005.Data
 
         public static void AppendWithIH(this List<byte> byteArrayBuilder, INamedValue nv)
         {
-            byteArrayBuilder.AppendIH(ItemFormatCode.L, 2);
+            nv = nv ?? NamedValue.Empty;
 
-            byteArrayBuilder.AppendWithIH(nv.Name);
-            byteArrayBuilder.AppendWithIH(nv.VC);
+            if (!nv.VC.IsEmpty)
+            {
+                byteArrayBuilder.AppendIH(ItemFormatCode.L, 2);
+
+                byteArrayBuilder.AppendWithIH(nv.Name);
+                byteArrayBuilder.AppendWithIH(nv.VC);
+            }
+            else
+            {
+                byteArrayBuilder.AppendIH(ItemFormatCode.L, 1);
+
+                byteArrayBuilder.AppendWithIH(nv.Name);
+
+                // there is no representation in E005 data for an empty value.  As such we just do not include the value at all in this case
+            }
         }
 
-        public static void AppendWithIH(this List<byte> byteArrayBuilder, String s)
+        public static void AppendWithIH(this List<byte> byteArrayBuilder, string s)
         {
+            s = s ?? string.Empty;
+
             int sLen = s.MapNullToEmpty().Length;
 
             if (s.IsByteSerializable())
@@ -467,13 +488,18 @@ namespace MosaicLib.Semi.E005.Data
 
         internal static void AppendWithIH<TItemType>(this List<byte> byteArrayBuilder, ItemFormatCode ifc, int itemSizeInBytes, TItemType[] itemArray) where TItemType : struct
         {
-            int itemArrayLength = ((itemArray != null) ? itemArray.Length : 0);
+            int itemArrayLength = itemArray.SafeLength();
 
             byteArrayBuilder.AppendIH(ifc, itemArrayLength * itemSizeInBytes);
 
+            ContainerStorageType itemCST = ContainerStorageType.None;
+            bool isNullable = false;
+            ValueContainer.DecodeType(typeof(TItemType), out itemCST, out isNullable);
+            ValueContainer vc = ValueContainer.Empty;
+
             for (int idx = 0; idx < itemArrayLength; idx++)
             {
-                ValueContainer vc = new ValueContainer(itemArray[idx]);
+                vc.SetValue(itemArray[idx], itemCST, isNullable);
                 byteArrayBuilder.AppendContentBytes(vc);
             }
         }

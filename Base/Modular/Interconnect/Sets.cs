@@ -201,7 +201,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
 
         private Sets() { }
 
-        private object mutex = new object();
+        private readonly object mutex = new object();
         private Dictionary<string, ITrackableSet> uuidToSetDictionary = new Dictionary<string, ITrackableSet>();
         private Dictionary<string, List<ITrackableSet>> nameToListOfSetsDictionary = new Dictionary<string, List<ITrackableSet>>();
 
@@ -674,9 +674,10 @@ namespace MosaicLib.Modular.Interconnect.Sets
             Changeability = changability;
             UpdateState = updateState;
 
+            itemContainerListMutex = (createMutex ? new object() : null);
+
             if (createMutex)
             {
-                itemContainerListMutex = new object();
                 owningManagedThread = System.Threading.Thread.CurrentThread;
                 owningManagedThreadID = owningManagedThread.ManagedThreadId;
             }
@@ -728,8 +729,13 @@ namespace MosaicLib.Modular.Interconnect.Sets
         /// <summary>This field gives the actual storage object for the set of ItemContainers that contain the items that are currently in the set.</summary>
         internal List<ItemContainer> itemContainerList = new List<ItemContainer>();
 
-        /// <summary>When non-null, this field gives the mutex that is to be used when accessing or changing properties or contents of the set.</summary>
-        internal object itemContainerListMutex = null;
+        /// <summary>
+        /// When non-null, this field gives the mutex that is to be used when accessing or changing properties or contents of the set.
+        /// </summary>
+        /// <remarks>
+        /// Annotate this as readonly since the value is only assigned once in the constructor (to either new object() or null).
+        /// </remarks>
+        internal readonly object itemContainerListMutex;
 
         /// <summary>For sets that have a non-nll itemContainerListMutex, this records the Thread that currently "owns" the set (ie which has r/w access to it).</summary>
         internal System.Threading.Thread owningManagedThread = null;

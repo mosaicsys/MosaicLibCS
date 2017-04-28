@@ -481,6 +481,8 @@ namespace MosaicLib.Modular.Part
 
         #region More utility properties and methods
 
+        // Note: The following 5 CurrentYYY methods are copies of the corresponding global static methods under the MosaicLib.Utils.Fcns "namespace" static class
+
         /// <summary>Creates and returns the callers current StackFrame</summary>
         public static StackFrame CurrentStackFrame { get { return new System.Diagnostics.StackFrame(1); } }
 
@@ -492,6 +494,9 @@ namespace MosaicLib.Modular.Part
 
         /// <summary>Creates a StackFrame for the caller and returns the Name of the current methods DeclaringType</summary>
         public static string CurrentClassName { get { return new System.Diagnostics.StackFrame(1).GetMethod().DeclaringType.ToString(); } }
+
+        /// <summary>Creates a StackFrame for the caller and returns the Leaf Name of the current methods DeclaringType (The token at the end of any sequence of dot seperated tokens)</summary>
+        public static string CurrentClassLeafName { get { return (new System.Diagnostics.StackFrame(1).GetMethod().DeclaringType.ToString()).Split('.').SafeLast(); } }
 
         /// <summary>Protected utility method.  Returns the result of calling <code>Utils.EC.FmtWin32EC(PartID, win32EC);</code></summary>
 		protected string FmtWin32EC(int win32EC) { return Utils.EC.FmtWin32EC(PartID, win32EC); }

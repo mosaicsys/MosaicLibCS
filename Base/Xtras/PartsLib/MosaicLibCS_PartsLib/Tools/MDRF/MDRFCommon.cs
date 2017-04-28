@@ -25,17 +25,15 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-using MosaicLib.Utils;
-using MosaicLib.Time;
 using MosaicLib.Modular;
-using MosaicLib.Modular.Part;
+using MosaicLib.Modular.Action;
+using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Config;
 using MosaicLib.Modular.Config.Attributes;
-
-using MosaicLib.Modular.Common;
-using MosaicLib.Modular.Action;
 using MosaicLib.Modular.Interconnect.Values;
-using MosaicLib.Semi.E005.Data;
+using MosaicLib.Modular.Part;
+using MosaicLib.Time;
+using MosaicLib.Utils;
 
 namespace MosaicLib.PartsLib.Tools.MDRF.Common
 {
@@ -43,10 +41,17 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
 
     public class SetupInfo
     {
+        public override string ToString()
+        {
+            string nvsStr = (ClientNVS.IsNullOrEmpty() ? "" : " {0}".CheckedFormat(ClientNVS));
+            return "SetupInfo Client:'{0}' fnPrefix:'{1}' nomSize:{2} numRows:{3}{4}".CheckedFormat(ClientName, FileNamePrefix, NominalMaxFileSize, FileIndexNumRows, nvsStr);
+        }
+
         public NamedValueSet ClientNVS { get; set; }
 
         public string DirPath { get; set; }
         public string ClientName { get; set; }
+        /// <summary>This is combined with the current date to create each mdrf file name.  <para/><code>string fileName = "{0}_{1}.mdrf".CheckedFormat(setup.FileNamePrefix, dateTimePart);</code></summary>
         public string FileNamePrefix { get; set; }
         public bool CreateDirectoryIfNeeded { get; set; }
         public Int32 MaxDataBlockSize { get; set; }
@@ -75,7 +80,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
                 CreateDirectoryIfNeeded = true;
                 MaxDataBlockSize = 262144;
                 NominalMaxFileSize = 100 * 1024 * 1024;
-                FileIndexNumRows = 1024;
+                FileIndexNumRows = 2048;            // 51200 bytes per row.  42 seconds per row (assuming full file consumes one day)
                 MaxFileRecordingPeriod = TimeSpan.FromHours(24.0);
                 MinInterFileCreateHoldoffPeriod = TimeSpan.FromSeconds(15.0);
                 MinNominalFileIndexWriteInterval = TimeSpan.FromSeconds(60.0);
@@ -187,6 +192,13 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
             Type = string.Empty;
             Name = string.Empty;
             Version = string.Empty;
+        }
+
+        public override string ToString()
+        {
+            string nvsStr = (NVS.IsNullOrEmpty() ? "" : " {0}".CheckedFormat(NVS));
+
+            return "LibInfo Type:'{0}' Name:'{1}' Version:'{2}' {3}".CheckedFormat(Type, Name, Version, nvsStr);
         }
     }
 
@@ -330,6 +342,13 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
         where TRowType: FileIndexRowBase, new()
         where TLastBlockInfoType: FileIndexLastBlockInfoBase, new()
     {
+        public override string ToString()
+        {
+            int numNonEmptyRows = FileIndexRowArray.Where(row => row != null && !row.IsEmpty).Count();
+
+            return "FileIndex NumRows:{0} RowSizeDivisor:{1} NumNonEmptyRows:{2}{3}".CheckedFormat(NumRows, RowSizeDivisor, numNonEmptyRows, FileWasProperlyClosed ? "" : " [NotProperlyClosed]");
+        }
+
         #region NowRow, RowSizeDivisor, and NominalMaxFileSize
 
         public Int32 NumRows { get; internal set; }                 // 0..3
@@ -443,6 +462,26 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
         #endregion
 
         private static readonly TRowType[] emptyRowTypeArray = new TRowType[0];
+
+        /// <summary>
+        /// Helper method that is used to forward scan through the index to find and return the next non-empty row after the rowIndex passed in.
+        /// Modified the passed rowIndex by reference with the rowIndex of the returned row (or the length of the row array if no non-empty row was round).
+        /// Returns the found row or null if none was found.
+        /// </summary>
+        public TRowType FindNextNonEmptyFileIndexRow(ref int rowIndex)
+        {
+            TRowType row = null;
+            int fileIndexRowArrayLength = FileIndexRowArray.SafeLength();
+
+            for (; rowIndex < fileIndexRowArrayLength; rowIndex++)
+            {
+                row = FileIndexRowArray[rowIndex];
+                if (row != null && !row.IsEmpty)
+                    return (row);
+            }
+
+            return row;
+        }
     }
 
     public class FileIndexRowBase
@@ -539,15 +578,18 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
 
         IList<int> GroupPointFileIDList { get; }
         IList<IGroupPointInfo> GroupPointInfoList { get; }
+        IGroupPointInfo[] GroupPointInfoArray { get; }
         
         int GroupID { get; }
+
+        bool Touched { get; set; }
     }
 
     public interface IGroupPointInfo : IMetaDataCommonInfo
     {
         ContainerStorageType ValueCST { get; }
 
-        ValueContainer VC { get; }
+        ValueContainer VC { get; set; }
 
         int GroupID { get; }
         int SourceID { get; }
@@ -583,6 +625,14 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
             IFC = rhs.IFC;
             ClientNVS = rhs.ClientNVS;
         }
+
+        public override string ToString()
+        {
+            string nvsStr = (ClientNVS.IsNullOrEmpty() ? "" : " {0}".CheckedFormat(ClientNVS));
+            string commentStr = (Comment.IsNullOrEmpty() ? "" : " Comment:'{0}'".CheckedFormat(Comment));
+
+            return "{0} '{1}' FileID:{2} ClientID:{3} IFC:{4}{5}{6}".CheckedFormat(ItemType, Name, FileID, ClientID, IFC, nvsStr, commentStr);
+        }
     }
 
     public class GroupInfo : MetaDataCommonInfoBase, IGroupInfo
@@ -591,8 +641,11 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
 
         public IList<int> GroupPointFileIDList { get; internal set; }
         public IList<IGroupPointInfo> GroupPointInfoList { get; internal set; }
+        public IGroupPointInfo[] GroupPointInfoArray { get; internal set; }
 
         public int GroupID { get { return ClientID; } }
+
+        public bool Touched { get; set; }
 
         public GroupInfo() { }
         public GroupInfo(MetaDataCommonInfoBase rhs) : base(rhs) { }
@@ -602,7 +655,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
     {
         public ContainerStorageType ValueCST { get; internal set; }
 
-        public ValueContainer VC { get; internal set; }
+        public ValueContainer VC { get; set; }
 
         public int GroupID { get { return ClientID; } }
         public int SourceID { get; internal set; }
@@ -724,6 +777,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
 
     /// <summary>
     /// This enumeration defines a (small) set of flag bits and values that are used to decode and interpret the contents of Group data blocks.
+    /// <para/>None, HasUpdateMask (0x01), IsStartOfFullGroup (0x80), IsEmptyGroup (0x100 - not included in group blocks)
     /// </summary>
     [Flags]
     public enum GroupBlockFlagBits : int

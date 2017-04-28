@@ -28,7 +28,6 @@ namespace MosaicLib
 {
 	public static partial class Logging
 	{
-
 		public static partial class Handlers
 		{
             /// <summary>
@@ -44,7 +43,7 @@ namespace MosaicLib
                 /// </summary>
                 /// <param name="targetLMH">Gives the target LMH instance to which the queued messages will be delivered.</param>
                 /// <param name="maxQueueSize">Defines te maximum number of messages that can be held internally before messages are lost.</param>
-                public QueueLogMessageHandler(ILogMessageHandler targetLMH, int maxQueueSize)
+                public QueueLogMessageHandler(ILogMessageHandler targetLMH, int maxQueueSize = DefaultMesgQueueSize)
                     : this(targetLMH.Name + ".q", new[] { targetLMH }, maxQueueSize)
                 { }
 
@@ -55,7 +54,7 @@ namespace MosaicLib
                 /// <param name="targetLMHArray">Gives the set of LMH instance that are to be given the dequeued LogMessages.</param>
                 /// <param name="maxQueueSize">Defines te maximum number of messages that can be held internally before messages are lost.</param>
                 /// <param name="allowRecordSourceStackFrame">When this parameter is true then this LMH will record source stack frames if any of the given targetLMH items do.  Otherwise it will not record source stack frames.</param>
-                public QueueLogMessageHandler(string name, ILogMessageHandler[] targetLMHArray, int maxQueueSize, bool allowRecordSourceStackFrame = true)
+                public QueueLogMessageHandler(string name, ILogMessageHandler[] targetLMHArray, int maxQueueSize = DefaultMesgQueueSize, bool allowRecordSourceStackFrame = true)
                     : base(name, LogGate.None, recordSourceStackFrame: false)
                 {
                     targetLMHArray = targetLMHArray ?? emptyLMHArray;

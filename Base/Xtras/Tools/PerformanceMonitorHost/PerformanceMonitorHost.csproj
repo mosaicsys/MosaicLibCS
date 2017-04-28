@@ -5,11 +5,11 @@
     <Platform Condition=" '$(Platform)' == '' ">x86</Platform>
     <ProductVersion>8.0.30703</ProductVersion>
     <SchemaVersion>2.0</SchemaVersion>
-    <ProjectGuid>{D038D41F-2E63-4931-A6EE-16876C5DA5B3}</ProjectGuid>
+    <ProjectGuid>{03FFA146-8474-4D9E-AF2E-9B26283BAA97}</ProjectGuid>
     <OutputType>Exe</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>MosaicLib.Tools.ExtractMDRFtoCSV</RootNamespace>
-    <AssemblyName>ExtractMDRFtoCSV</AssemblyName>
+    <RootNamespace>MosaicLib.Tools.PerformanceMonitorHost</RootNamespace>
+    <AssemblyName>PerformanceMonitorHost</AssemblyName>
     <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
     <TargetFrameworkProfile>
     </TargetFrameworkProfile>
@@ -43,7 +43,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="ExtractMDRFtoCSV.cs" />
+    <Compile Include="PerformanceMonitorHost.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

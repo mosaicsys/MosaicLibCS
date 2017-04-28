@@ -96,7 +96,7 @@ namespace MosaicLib
 
 			volatile bool				queueIsEnabled = false;		//!< Also used to tell the back end when to exit
 
-			object						queueMutex = new object();
+			readonly object			    queueMutex = new object();
 
 			Utils.INotifyable			mesgEnqueuedNotify = new Utils.NullNotifier();
 

@@ -528,25 +528,32 @@ namespace MosaicLib.Modular.Config
 
             Dictionary<string, ValueContainer> generatedKeyValueDictionary = new Dictionary<string, ValueContainer>();
 
-            appSettings = System.Configuration.ConfigurationManager.AppSettings;
-
-            foreach (string key in appSettings.AllKeys)
+            try
             {
-                if (!generatedKeyValueDictionary.ContainsKey(key))
+                appSettings = System.Configuration.ConfigurationManager.AppSettings;
+
+                foreach (string key in appSettings.AllKeys)
                 {
-                    string[] valuesArray = appSettings.GetValues(key) ?? emptyKeyValuesArray;
-                    string firstValue = valuesArray.SafeAccess(0, String.Empty);
+                    if (!generatedKeyValueDictionary.ContainsKey(key))
+                    {
+                        string[] valuesArray = appSettings.GetValues(key) ?? emptyKeyValuesArray;
+                        string firstValue = valuesArray.SafeAccess(0, String.Empty);
 
-                    appSettingsDictionary[key] = valuesArray;
+                        appSettingsDictionary[key] = valuesArray;
 
-                    if (valuesArray.Length <= 1)
-                        generatedKeyValueDictionary[key] = new ValueContainer(firstValue);
-                    else
-                        generatedKeyValueDictionary[key] = new ValueContainer(valuesArray);     // will produce IListOfString content
+                        if (valuesArray.Length <= 1)
+                            generatedKeyValueDictionary[key] = new ValueContainer(firstValue);
+                        else
+                            generatedKeyValueDictionary[key] = new ValueContainer(valuesArray);     // will produce IListOfString content
+                    }
                 }
-            }
 
-            AddRange(generatedKeyValueDictionary.ToArray());
+                AddRange(generatedKeyValueDictionary.ToArray());
+            }
+            catch (System.Exception ex)
+            {
+                Logger.Error.Emit("Caught unexpected exception while attempting to process AppSettings into keys: {0}", ex.ToString(ExceptionFormat.TypeAndMessage));
+            }
         }
 
         private readonly string[] emptyKeyValuesArray = new string[0];

@@ -221,7 +221,7 @@ namespace MosaicLib
             LoggerSourceInfo distSourceID = null;				//!< sourceID for messages that originate in this distribution system.
 
             /// <summary>Mutex object for access to distribution system's internals.</summary>
-            Object distMutex = new Object();
+            private readonly object distMutex = new object();
             volatile bool shutdown = false;					//!< volatile to support testing outside of lock ownership.  changes are still done inside lock
 
             Utils.SequenceNumberInt mesgDistributionSeqGen = new MosaicLib.Utils.SequenceNumberInt(0, true);		// this is only used within the ownership of the mutex so it does not need to be interlocked
@@ -1605,10 +1605,11 @@ namespace MosaicLib
         /// <summary>This is the custom distribution group name that is used to indicate that mapping should be applied to it.  "LDG.Lookup"</summary>
         public static string LookupDistributionGroupName { get { return lookupDistributionGroupName; } }
 
-        /// <summary>Adds the given ILogMessageHandler to the indicated group</summary>
-        public static void AddLogMessageHandlerToDistributionGroup(string groupName, ILogMessageHandler logMessageHandler)
+        /// <summary>Adds the given ILogMessageHandler(s) to the indicated group</summary>
+        public static void AddLogMessageHandlerToDistributionGroup(string groupName, params ILogMessageHandler[] logMessageHandlerArray)
 		{
-            LogMessageDistribution.Instance.AddLogMessageHandlerToDistributionGroup(logMessageHandler, groupName);
+            foreach (var lmh in logMessageHandlerArray)
+                LogMessageDistribution.Instance.AddLogMessageHandlerToDistributionGroup(lmh, groupName);
 		}
 
         /// <summary>(re)Maps the selected loggers to the given group name.  Loggers must have initially placed themselves in the LookupDistributionGroupName group in order to support being mapped.</summary>
@@ -1659,10 +1660,10 @@ namespace MosaicLib
 
 		//-------------------------------------------------------------------
 
-        /// <summary>Adds the given ILogMessaeHandler to the default distribution group.</summary>
-        public static void AddLogMessageHandlerToDefaultDistributionGroup(ILogMessageHandler logMessageHandler)
+        /// <summary>Adds the given ILogMessaeHandler(s) to the default distribution group.</summary>
+        public static void AddLogMessageHandlerToDefaultDistributionGroup(params ILogMessageHandler [] logMessageHandlerArray)
 		{
-			AddLogMessageHandlerToDistributionGroup(DefaultDistributionGroupName, logMessageHandler);
+			AddLogMessageHandlerToDistributionGroup(DefaultDistributionGroupName, logMessageHandlerArray);
 		}
 
         /// <summary>Sets the group gate level for the default distribution group.</summary>

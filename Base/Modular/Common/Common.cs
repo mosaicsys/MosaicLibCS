@@ -1082,15 +1082,19 @@ namespace MosaicLib.Modular.Common
                         return "[L]";
                 }
 
-                if (o is INamedValueSet)
-                {
-                    return (o as INamedValueSet).ToStringSML();
-                }
-
-                if (o is INamedValue)
-                {
-                    return (o as INamedValue).ToStringSML();
-                }
+                if (o is INamedValueSet) { return (o as INamedValueSet).ToStringSML(); }
+                if (o is INamedValue) { return (o as INamedValue).ToStringSML(); }
+                if (o is bool[]) { return "[Bool_Array{0}]".CheckedFormat(String.Concat((o as bool[]).Select(v => " {0}".CheckedFormat(v)))); }
+                if (o is sbyte[]) { return "[I1_Array{0}]".CheckedFormat(String.Concat((o as sbyte[]).Select(v => " {0}".CheckedFormat((int)v)))); }
+                if (o is short[]) { return "[I2_Array{0}]".CheckedFormat(String.Concat((o as short[]).Select(v => " {0}".CheckedFormat(v)))); }
+                if (o is int[]) { return "[I4_Array{0}]".CheckedFormat(String.Concat((o as int[]).Select(v => " {0}".CheckedFormat(v)))); }
+                if (o is long[]) { return "[I8_Array{0}]".CheckedFormat(String.Concat((o as long[]).Select(v => " {0}".CheckedFormat(v)))); }
+                if (o is byte[]) { return "[U1_Array{0}]".CheckedFormat(String.Concat((o as byte[]).Select(v => " {0}".CheckedFormat((uint)v)))); }
+                if (o is ushort[]) { return "[U2_Array{0}]".CheckedFormat(String.Concat((o as ushort[]).Select(v => " {0}".CheckedFormat(v)))); }
+                if (o is uint[]) { return "[U4_Array{0}]".CheckedFormat(String.Concat((o as uint[]).Select(v => " {0}".CheckedFormat(v)))); }
+                if (o is ulong[]) { return "[U8_Array{0}]".CheckedFormat(String.Concat((o as ulong[]).Select(v => " {0}".CheckedFormat(v)))); }
+                if (o is float[]) { return "[F4_Array{0}]".CheckedFormat(String.Concat((o as float[]).Select(v => " {0}".CheckedFormat(v)))); }
+                if (o is double[]) { return "[F8_Array{0}]".CheckedFormat(String.Concat((o as double[]).Select(v => " {0}".CheckedFormat(v)))); }
             }
 
             if (cvt == ContainerStorageType.Object)
@@ -1114,7 +1118,7 @@ namespace MosaicLib.Modular.Common
 
     /// <summary>
     /// Enumeration that is used with the ValueContainer struct.
-    /// <para/>None (0 : default), Object, String, IListOfString, Boolean, SByte, Int16, Int32, Int64, Byte, UInt16, UInt32, UInt64, Single, Double, TimeSpan, DateTime
+    /// <para/>None (0 : default), Object, String, IListOfString, IListOfVC, Boolean, SByte, Int16, Int32, Int64, Byte, UInt16, UInt32, UInt64, Single, Double, TimeSpan, DateTime
     /// </summary>
     public enum ContainerStorageType : int
     {
@@ -1900,7 +1904,7 @@ namespace MosaicLib.Modular.Common
 
             #region private fields and other internals
 
-            private object mutex = new object();
+            private readonly object mutex = new object();
 
             private List<ITypeSerializerItemFactory> factoryItemList = new List<ITypeSerializerItemFactory>();
 

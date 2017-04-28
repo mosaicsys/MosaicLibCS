@@ -1403,7 +1403,7 @@ namespace MosaicLib.Semi.E041
         /// </summary>
         private class ANSourceImpl : IANSource, IANOccurrence, IANCondition, IANSourceBase
         {
-            private object mutex = new object();
+            private readonly object mutex = new object();
 
             #region fields and properties that are filled in/setup by the parent part
 
@@ -2008,7 +2008,7 @@ namespace MosaicLib.Semi.E041
 
         private Queue<ANState> anStateQueue = new Queue<ANState>();
         private volatile int anStateQueueCount;
-        private object anStateQueueMutex = new object();
+        private readonly object anStateQueueMutex = new object();
 
         List<ANState> anStateWorkingList = new List<ANState>();
 

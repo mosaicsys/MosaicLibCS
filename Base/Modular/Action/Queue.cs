@@ -63,7 +63,7 @@ namespace MosaicLib.Modular.Action
 
         private volatile bool queueEnabled = false;
 
-        private object queueMutex = new object();
+        private readonly object queueMutex = new object();
 
         private BasicNotificationList notifyOnEnqueueList = new BasicNotificationList();
 

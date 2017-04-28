@@ -241,7 +241,7 @@ namespace MosaicLib.Modular.Interconnect.Parts
         /// <summary>
         /// table space and dictionary mutex.  
         /// </summary>
-        private object mutex = new object();
+        private readonly object mutex = new object();
 
         /// <summary>This is the dictionary that is used to convert part ID's into the corresponding IActivePartBase registered for that name.</summary>
         private Dictionary<string, IActivePartBase> partIDDictionary = new Dictionary<string, IActivePartBase>();

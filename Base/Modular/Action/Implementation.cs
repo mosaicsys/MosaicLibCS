@@ -801,7 +801,7 @@ namespace MosaicLib.Modular.Action
 		private ActionQueue actionQ = null;
 		private FullActionMethodDelegate<ParamType, ResultType> method = null;
 		private ActionLogging logging;
-		private object actionStateMutex = new object();
+		private readonly object actionStateMutex = new object();
 		private ActionStateImpl actionState = new ActionStateImpl();
         private IActionState iActionState = null;
         private BasicNotificationList notifyOnComplete = new BasicNotificationList();

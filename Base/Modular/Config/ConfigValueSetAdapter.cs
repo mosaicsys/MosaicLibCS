@@ -168,24 +168,14 @@ namespace MosaicLib.Modular.Config
         #region Ctor
 
         /// <summary>
-        /// Default constructor.  Assigns adapter to use default Config.Instance IConfig service instance.  
-        /// For use with Property Initializers and the Setup method to define and setup the adapter instance for use.
-        /// Setup method is used to generate final derived item names and to bind and make the initial update to the ValueSet contents.
-        /// Setup method may also specify/override the config instance that is to be used.
-        /// <para/>Please Note: the Setup method must be called before the adapter can be used.  
-        /// </summary>
-        public ConfigValueSetAdapter()
-            : this(null)
-        { }
-
-        /// <summary>
-        /// Config instance constructor.  Assigns adapter to use given configInstance IConfig service instance.  This may be overriden during the Setup call.
+        /// Config instance constructor.  Assigns adapter to use given defaultConfigInstance IConfig service instance.  
+        /// During the later Setup call this value may be overwritten, and/or have null replaced with the fallback singleton instance.
         /// For use with Property Initializers and the Setup method to define and setup the adapter instance for use.
         /// <para/>Please Note: the Setup method must be called before the adapter can be used.  
         /// </summary>
-        public ConfigValueSetAdapter(IConfig configInstance)
+        public ConfigValueSetAdapter(IConfig defaultConfigInstance = null)
         {
-            ConfigInstance = configInstance;
+            ConfigInstance = defaultConfigInstance;
 
             configItemInfoList = AnnotatedClassItemAccessHelper<Attributes.ConfigItemAttribute>.ExtractItemInfoAccessListFrom(typeof(TConfigValueSet), ItemSelection.IncludeExplicitPublicItems | ItemSelection.IncludeInheritedItems);
             NumItems = configItemInfoList.Count;
@@ -217,7 +207,7 @@ namespace MosaicLib.Modular.Config
 
         ///<summary>
         ///After Setup has been performed, this property will contain the IConfig instance with which this adapter interacts.
-        ///This property will remain in its default state (null) until Setup has been performed.
+        ///This property may remain in its default state (null) until Setup has been performed.
         ///</summary>
         private IConfig ConfigInstance { get; set; }
 

@@ -183,7 +183,7 @@ namespace MosaicLib.Utils
             #region Private fields
 
             /// <summary>mutex used to guard/sequence access to the underlying list so that both changes and access to the list are performed atomically.</summary>
-            private object listMutex = new object();
+            private readonly object listMutex = new object();
             /// <summary>underlying reference list of delegates, access to this list must only be made while owning the corresponding mutex.</summary>
             private List<ObjectType> objectList = new List<ObjectType>();
             /// <summary>Single common empty array that is used as the array when the list is empty.</summary>
@@ -326,7 +326,7 @@ namespace MosaicLib.Utils
             }
 
             /// <summary>This is the mutex object that will be locked when accessing the backing queue.</summary>
-            private object mutex = new object();
+            private readonly object mutex = new object();
 
             /// <summary>This is the backing queue object on which this object is based.</summary>
             private Queue<ItemType> backingQueue = new Queue<ItemType>();
@@ -522,7 +522,7 @@ namespace MosaicLib.Utils
             }
 
             /// <summary>Mutex object used to guard access to the tokenList</summary>
-            private object tokenListMutex = new object();
+            private readonly object tokenListMutex = new object();
 
             /// <summary>The list of tokens that have been created and which have not been disposed.</summary>
             private List<Details.ISharedResourceTokenBase> tokenList = new List<Details.ISharedResourceTokenBase>();

@@ -908,7 +908,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Protected mutex object used during object creation as required within the CreateEmptyObjectIfNeeded static method.
         /// </summary>
-        protected static object objectCreationMutex = new object();
+        protected static readonly object objectCreationMutex = new object();
 
         /// <summary>
         /// Static helper method used to combine handle query, object creation and handle update into a single pass through method.  

@@ -42,7 +42,7 @@ namespace MosaicLib.Utils
 
         /// <summary>
         /// Extension method version of static Utils.Fcns.Equals method for two arrays
-        /// Returns true if both lists have the same length and contents (using Object.Equals).  Returns false if they do not.
+        /// Returns true if both arrays have the same length and contents (using Object.Equals).  Returns false if they do not.
         /// </summary>
         public static bool IsEqualTo<ItemType>(this ItemType[] lhs, ItemType[] rhs)
         {
@@ -78,7 +78,23 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        #region Array access extension methods
+        #region Array (and some IList) access extension methods
+
+        /// <summary>
+        /// Extension method accepts given array and testIndex and returns true if the array is non-null and the testIndex is >= 0 and less than the array's Length
+        /// </summary>
+        public static bool IsSafeIndex<ItemType>(this ItemType[] array, int testIndex)
+        {
+            return (array != null && testIndex >= 0 && testIndex < array.Length);
+        }
+
+        /// <summary>
+        /// Extension method accepts given list and testIndex and returns true if the list is non-null and the testIndex is >= 0 and less than the list's Count
+        /// </summary>
+        public static bool IsSafeIndex<ItemType>(this IList<ItemType> list, int testIndex)
+        {
+            return (list != null && testIndex >= 0 && testIndex < list.Count);
+        }
 
         /// <summary>
         /// Extension method version of Array indexed get access that handles all out of range accesses by returning the given default value
@@ -250,7 +266,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method sets all of the elements of the given array to their default value.  Has no effect if the array is null or is zero length.
         /// </summary>
-        public static void Clear<ItemType>(this ItemType[] array, ItemType value)
+        public static void Clear<ItemType>(this ItemType[] array)
         {
             array.SetAll(default(ItemType));
         }
@@ -318,6 +334,20 @@ namespace MosaicLib.Utils
             itemList.RemoveAt(takeFromIdx);
 
             return item;
+        }
+
+        /// <summary>
+        /// Extension method to make a copy of the given array (or make a new empty array if null is given)
+        /// </summary>
+        public static ItemType[] MakeCopyOf<ItemType>(this ItemType[] array)
+        {
+            int arrayLength = array.SafeLength();
+            ItemType[] resultArray = new ItemType[arrayLength];
+
+            if (array != null)
+                System.Array.Copy(array, resultArray, arrayLength);
+
+            return resultArray;
         }
 
         #endregion
@@ -709,7 +739,25 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        #region TimeSpan related (double.FromSeconds, double.FromMilliseconds)
+        #region TimeSpan related (double.FromDays, double.FromHours, double.FromSeconds, double.FromMilliseconds, IsZero)
+
+        /// <summary>
+        /// Variant of TimeSpan.FromDays that does not round the timeSpanInDays to the nearest msec.
+        /// This extension method converts to TimeSpan using FromTicks and TimeSpan.TicksPerDay
+        /// </summary>
+        public static TimeSpan FromDays(this double timeSpanInDays)
+        {
+            return TimeSpan.FromTicks(unchecked((long)(TimeSpan.TicksPerDay * timeSpanInDays)));
+        }
+
+        /// <summary>
+        /// Variant of TimeSpan.FromHours that does not round the timeSpanInHours to the nearest msec.
+        /// This extension method converts to TimeSpan using FromTicks and TimeSpan.TicksPerHour
+        /// </summary>
+        public static TimeSpan FromHours(this double timeSpanInHours)
+        {
+            return TimeSpan.FromTicks(unchecked((long)(TimeSpan.TicksPerHour * timeSpanInHours)));
+        }
 
         /// <summary>
         /// Variant of TimeSpan.FromSeconds that does not round the timeSpanInSeconds to the nearest msec.
@@ -729,6 +777,16 @@ namespace MosaicLib.Utils
             return TimeSpan.FromTicks(unchecked((long)(TimeSpan.TicksPerMillisecond * timeSpanInMilliseconds)));
         }
 
+
+
+        /// <summary>
+        /// Returns true if the given timeSpan value is equal to TimeSpan.Zero
+        /// </summary>
+        public static bool IsZero(this TimeSpan timeSpan)
+        {
+            return (timeSpan == TimeSpan.Zero);
+        }
+
         #endregion
 
         #region Random related (GetNextRandomInMinus1ToPlus1Range)
@@ -739,6 +797,46 @@ namespace MosaicLib.Utils
         public static double GetNextRandomInMinus1ToPlus1Range(this Random rng)
         {
             return (rng.NextDouble() * 2.0 - 1.0);
+        }
+
+        #endregion
+
+        #region TryGet extension method
+
+        /// <summary>
+        /// This extension method is invoked on a getter type of delegate (getterDelegate).  
+        /// It will attempt to perform the getterDelegate and returned the obtained value.
+        /// If any catchable exception is thrown while using the provided getterDelegate then this method will return the getFailedResult
+        /// which default to default(TValueType)
+        /// </summary>
+        /// <typeparam name="TValueType">This is the generic value type that is to be returned by the provided getterDelegate</typeparam>
+        public static TValueType TryGet<TValueType>(this Func<TValueType> getterDelegate, TValueType getFailedResult = default(TValueType))
+        {
+            try
+            {
+                return getterDelegate();
+            }
+            catch
+            {
+                return getFailedResult;
+            }
+        }
+
+        #endregion
+
+        #region Linq extensions (DoForEach)
+
+        /// <summary>
+        /// Simple DoForEach helper method for use with Linq.  Applies the given action to each of the {TSource} items in the given source set.
+        /// <para/>supports call chaining
+        /// </summary>
+        public static IEnumerable<TSource> DoForEach<TSource>(this IEnumerable<TSource> source, Action<TSource> action = null)
+        {
+            action = action ?? (ignoreItem => {});
+            foreach (TSource item in source)
+                action(item);
+
+            return source;
         }
 
         #endregion
@@ -874,7 +972,7 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        #region CurrentStackFrame, CurrentMethod, CurrentMethodName, CurrentClassName helper "functions (getters)".
+        #region CurrentStackFrame, CurrentMethod, CurrentMethodName, CurrentClassName, CurrentClassLeafName, CurrentProcessMainModuleShortName helper "functions (getters)".
 
         /// <summary>Creates and returns the callers current StackFrame</summary>
         public static StackFrame CurrentStackFrame { get { return new System.Diagnostics.StackFrame(1); } }
@@ -891,6 +989,25 @@ namespace MosaicLib.Utils
         /// <summary>Creates a StackFrame for the caller and returns the Leaf Name of the current methods DeclaringType (The token at the end of any sequence of dot seperated tokens)</summary>
         public static string CurrentClassLeafName { get { return (new System.Diagnostics.StackFrame(1).GetMethod().DeclaringType.ToString()).Split('.').SafeLast(); } }
 
+        /// <summary>
+        /// Attemts to obtain and return the filename (without extension) from the ModuleName of the Current Process's MainModule.
+        /// </summary>
+        public static string CurrentProcessMainModuleShortName 
+        { 
+            get 
+            {
+                try
+                {
+                    System.Diagnostics.Process currentProcess = System.Diagnostics.Process.GetCurrentProcess();
+
+                    return System.IO.Path.GetFileNameWithoutExtension(currentProcess.MainModule.ModuleName);
+                }
+                catch
+                {
+                    return "[MainModuleNameCouldNotBeFound]";
+                }
+            }
+        }
 
         #endregion
     }

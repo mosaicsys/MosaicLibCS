@@ -550,7 +550,7 @@ namespace MosaicLib.SerialIO
 
         WaitEventNotifier threadWaitEventNotifier = new WaitEventNotifier(WaitEventNotifier.Behavior.WakeOne);
 
-        private object userTableMutex = new object();
+        private readonly object userTableMutex = new object();
         private Dictionary<Socket, TableItem> userTableDictionary = new Dictionary<Socket, TableItem>();
         private volatile bool rebuildTablesFromUserTable = false;
 
@@ -614,7 +614,7 @@ namespace MosaicLib.SerialIO
             public string LastLoggedNotUsableReason { get; set; }
         }
 
-        private object threadStartMutex = new object();
+        private readonly object threadStartMutex = new object();
         private System.Threading.Thread serviceThread = null;
         private volatile bool threadStarted = false;
         private volatile bool stopThread = false;

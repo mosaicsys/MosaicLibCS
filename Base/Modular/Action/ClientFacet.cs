@@ -109,10 +109,13 @@
 //-------------------------------------------------
 
 using System;
-using MosaicLib.Utils;
-using MosaicLib.Time;
-using MosaicLib.Modular.Common;
+using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.Serialization;
+
+using MosaicLib.Modular.Common;
+using MosaicLib.Time;
+using MosaicLib.Utils;
 
 namespace MosaicLib.Modular.Action
 {
@@ -382,6 +385,91 @@ namespace MosaicLib.Modular.Action
             action.Run(timeLimit);
             return action;
         }
+
+        /// <summary>
+        /// Blocks the caller until the given action completes or the isWaitLimitReachedDelegate returns true (typically based on a timer expiring).
+        /// This evaluation takes place in a spin loop with the spin's wait period given using the spinInterval value.  
+        /// If the caller does not provide a spinInterval then 0.1 seconds will be used.  The any given spinInterval value will be clipped to be between 0.001 seconds and 0.5 seconds.
+        /// <para/>supports call chaining
+        /// </summary>
+        public static TClientFacetType WaitUntilComplete<TClientFacetType>(this TClientFacetType action, Func<bool> isWaitLimitReachedDelegate, TimeSpan? spinInterval = null) 
+            where TClientFacetType : IClientFacet
+        {
+            TimeSpan useSpinInterval = (spinInterval ?? (0.1).FromSeconds()).Clip(spinIntervalClipRangeMinValue, spinIntervalClipRangeMaxValue);
+
+            isWaitLimitReachedDelegate = isWaitLimitReachedDelegate ?? (() => false);
+
+            if (action != null)
+            {
+                for (; ; )
+                {
+                    if (action.ActionState.IsComplete)
+                        break;
+
+                    if (isWaitLimitReachedDelegate())
+                        break;
+
+                    action.WaitUntilComplete(useSpinInterval);
+                }
+            }
+
+            return action;
+        }
+
+        /// <summary>
+        /// Blocks the caller until the given actionSet completes (based on the chosen completionType) or the isWaitLimitReachedDelegate returns true (typically based on a timer expiring).
+        /// This evaluation takes place in a spin loop with the spin's wait period given using the spinInterval value.  
+        /// If the caller does not provide a spinInterval then 0.1 seconds will be used.  The any given spinInterval value will be clipped to be between 0.001 seconds and 0.5 seconds
+        /// <para/>supports call chaining
+        /// </summary>
+        public static TClientFacetType [] WaitUntilSetComplete<TClientFacetType>(this TClientFacetType [] actionSetArray, Func<bool> isWaitLimitReachedDelegate = null, TimeSpan? spinInterval = null, WaitForSetCompletionType completionType = WaitForSetCompletionType.All) 
+            where TClientFacetType : IClientFacet
+        {
+            TimeSpan useSpinInterval = (spinInterval ?? (0.1).FromSeconds()).Clip(spinIntervalClipRangeMinValue, spinIntervalClipRangeMaxValue);
+
+            isWaitLimitReachedDelegate = isWaitLimitReachedDelegate ?? (() => false);
+
+            IClientFacet firstAction = actionSetArray.FirstOrDefault();
+
+            if (firstAction != null)
+            {
+                for (; ; )
+                {
+                    if (completionType == WaitForSetCompletionType.Any && actionSetArray.Any(a => a.ActionState.IsComplete))
+                        break;
+                    else if (completionType == WaitForSetCompletionType.AllOrAnyFailure && actionSetArray.Any(a => a.ActionState.Failed))
+                        break;
+
+                    IClientFacet firstWaitableAction = actionSetArray.FirstOrDefault(a => !a.ActionState.IsComplete);
+                    if (firstWaitableAction == null)
+                        break;      // all items have completed
+
+                    if (isWaitLimitReachedDelegate())
+                        break;
+
+                    firstWaitableAction.WaitUntilComplete(useSpinInterval);
+                }
+            }
+
+            return actionSetArray;
+        }
+
+        /// <summary>
+        /// This enumeration is used with the IEnumerable variant of the WaitUntilComplete extension methods.  
+        /// It determines if the WaitUntilComplete method is intended to wait for 
+        /// <para/>All: all of the given actions in the set to be complete before returning,
+        /// <para/>Any: any of the given actions in the set to be complete before returning, or
+        /// <para/>AllOrAnyFailure: all of the given actions succeeded, or any of the actions failed before returning.
+        /// </summary>
+        public enum WaitForSetCompletionType
+        {
+            All,
+            Any,
+            AllOrAnyFailure,
+        }
+
+        private static readonly TimeSpan spinIntervalClipRangeMinValue = (0.001).FromSeconds();
+        private static readonly TimeSpan spinIntervalClipRangeMaxValue = (0.5).FromSeconds(); 
     }
 
     #endregion

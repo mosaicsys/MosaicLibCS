@@ -820,7 +820,7 @@ namespace MosaicLib.Utils
         /// This method is a proxy for calling Int32.TryParse:
         ///     Converts the string representation of a number to its 32-bit signed integer equivalent.
         ///     A return value indicates whether the conversion succeeded or failed.
-        ///     This method first attempts to parse the token as a simple Integer if this fails then the method will determine
+        ///     This method first attempts to parse the token as a simple decimal Integer.   If this fails then the method will determine
         ///     if the token starts with "0x", "0X", or "$" and if so it will attempt to parse the remainder of the token as a hexadecimal integer.
         /// </summary>
         /// <param name="token">A string containing a number to convert.</param>

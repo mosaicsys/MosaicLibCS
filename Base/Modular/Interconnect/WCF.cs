@@ -936,7 +936,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
             }
         }
 
-        private object asyncInboundPushParameterQueueMutex = new object();
+        private readonly object asyncInboundPushParameterQueueMutex = new object();
         private Queue<PushParameter> asyncInboundPushParameterQueue = new Queue<PushParameter>();
         private volatile int asyncInboundPushParameterQueueCount = 0;
 
@@ -1418,7 +1418,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
             }
         }
 
-        private object inboundPushParameterQueueMutex = new object();
+        private readonly object inboundPushParameterQueueMutex = new object();
         private volatile int inboundPushParameterQueueCount = 0;
         private Queue<PushParameter> inboundPushParameterQueue = new Queue<PushParameter>();
 

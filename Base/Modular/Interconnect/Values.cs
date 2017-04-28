@@ -326,7 +326,7 @@ namespace MosaicLib.Modular.Interconnect.Values
             }
         }
 
-        private static object interconnectionTableDictionaryMutex = new object();
+        private static readonly object interconnectionTableDictionaryMutex = new object();
         private static Dictionary<string, IValuesInterconnection> interconnectionTableDictionary = new Dictionary<string, IValuesInterconnection>();
 
         #endregion
@@ -364,10 +364,7 @@ namespace MosaicLib.Modular.Interconnect.Values
                 Values.AddTable(this, false);
 
             // assign the mutex to a new object (lock handle) or to null.  the mutex field is readonly so it can only be assigned in the constructor.
-            if (registerSelfInDictionary || makeAPIThreadSafe)
-                mutex = new object();
-            else
-                mutex = null;
+            mutex  = ((registerSelfInDictionary || makeAPIThreadSafe) ? new object() : null);
         }
 
         IEnumerator IEnumerable.GetEnumerator()
@@ -749,7 +746,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// than would be produced by using a reader writer lock, with its additional overhead in total number of interlocked operations even when there is little contention.  
         /// </summary>
         /// <remarks>
-        /// Annottate this as readonly since the value is only assigned once in the constructor.  
+        /// Annotate this as readonly since the value is only assigned once in the constructor (to either new object() or null).
         /// </remarks>
         private readonly object mutex;
 
