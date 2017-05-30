@@ -636,16 +636,16 @@ namespace MosaicLib.SerialIO
 
         /// <summary>Returns an IReadAction which refers to the given ReadActionParam instance and which may be used to execute a read using the ReadActionParam defined behavior</summary>
         /// <remarks>This may not be used with Port's that have been configured to use an internal sliding buffer.  Use CreateGetnextPacketAction instead in these cases.</remarks>
-		IReadAction CreateReadAction(ReadActionParam param);
+		IReadAction CreateReadAction(ReadActionParam param = null);
 
         /// <summary>Returns an IWriteAction which refers to the given WriteActionParam instance and which may be used to execute a write using the WriteActionParams defined behavior</summary>
-        IWriteAction CreateWriteAction(WriteActionParam param);
+        IWriteAction CreateWriteAction(WriteActionParam param = null);
 
         /// <summary>
         /// Returns an IBasicAction.  Underlying action TimeSpan parameter has been initilized to given value of flushWaitTime.  
         /// This action may be used to flush the port of characters for the given wait time period.
         /// </summary>
-        IFlushAction CreateFlushAction(TimeSpan flushWaitLimit);
+        IFlushAction CreateFlushAction(TimeSpan flushWaitLimit = default(TimeSpan));
 
         // the following methods are only useful with Port's that have an associated SlidingPacketBuffer
 

@@ -22,10 +22,11 @@
  */
 
 using System;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
-using System.IO;
+using System.Text;
 
 namespace MosaicLib.Utils
 {
@@ -862,6 +863,12 @@ namespace MosaicLib.Utils
         /// <summary>Protected native volatile handle that contains the object reference.</summary>
         /// <remarks>reference objects may be flagged as being volatile and as such they may be atomically updated/replaced without additional concern.  The CLR makes certain that this operation is safe and meaningful.</remarks>
         protected volatile RefObjectType volatileObjHandle = null;
+
+        /// <summary>Debugging and logging helper</summary>
+        public override string ToString()
+        {
+            return "VolatileRefObject {0}".CheckedFormat(Object);
+        }
 	}
 
 	/// <summary>Implements the IGuardedObjectSource.  Uses mutex to implement object access synchronization.</summary>
@@ -883,7 +890,13 @@ namespace MosaicLib.Utils
         /// <summary>Protected native volatile handle that contains the object reference.</summary>
         /// <remarks>reference objects may be flagged as being volatile and as such they may be atomically updated/replaced without additional concern.  The CLR makes certain that this operation is safe and meaningful.</remarks>
 		protected volatile RefObjectType volatileObjHandle = null;
-	}
+
+        /// <summary>Debugging and logging helper</summary>
+        public override string ToString()
+        {
+            return "GuardedRefObject {0}".CheckedFormat(Object);
+        }
+    }
 
 	/// <summary>Implements the IGuardedObjectSource.  Uses mutex to implement object access synchronization.</summary>
 	/// <typeparam name="ValueObjectType">The type of the guarded object.  Must be a value type.</typeparam>
@@ -902,7 +915,13 @@ namespace MosaicLib.Utils
         /// <summary>Protected native storage for the value object type against which this class has been defined.</summary>
         /// <remarks>value objects are stored in this object and require use of the mutex for both access and modification.</remarks>
         protected ValueObjectType valueObjStorage = default(ValueObjectType);
-	}
+
+        /// <summary>Debugging and logging helper</summary>
+        public override string ToString()
+        {
+            return "GuardedValueObject {0}".CheckedFormat(Object);
+        }
+    }
 
 	#endregion
 
@@ -1203,7 +1222,13 @@ namespace MosaicLib.Utils
 
         /// <summary>Protected access to underlying sequence number generator used by this object</summary>
 		protected SequenceNumberInt seqNum = new SequenceNumberInt();
-	}
+
+        /// <summary>Debugging and logging helper</summary>
+        public override string ToString()
+        {
+            return "GuardedSequencedRefObject seqNum:{0} obj:{1}".CheckedFormat(VolatileSequenceNumber, Object);
+        }
+    }
 
     /// <summary>
     /// A variation of a <see cref="MosaicLib.Utils.VolatileRefObject{ValueObjectType}"/> that can be used as an <see cref="MosaicLib.Utils.ISequencedObjectSource{RefObjectType, SeqNumberType}"/>
@@ -1230,7 +1255,13 @@ namespace MosaicLib.Utils
         public virtual int Increment() { return seqNum.Increment(); }
 
 		private InterlockedSequenceNumberInt seqNum  = new InterlockedSequenceNumberInt();
-	}
+    
+        /// <summary>Debugging and logging helper</summary>
+        public override string ToString()
+        {
+            return "InterlockedSequencedRefObject seqNum:{0} obj:{1}".CheckedFormat(VolatileSequenceNumber, Object);
+        }
+    }
 
 	/// <summary>A variation of a GuardedValueObject that can be used as an ISequencedValueObjectSource</summary>
 	/// <typeparam name="ValueObjectType">Gives the type of the guarded object.  Must be a value type.</typeparam>
@@ -1256,7 +1287,13 @@ namespace MosaicLib.Utils
 
         /// <summary>Protected access to underlying sequence number generator used by this object</summary>
         protected SequenceNumberInt seqNum = new SequenceNumberInt();
-	}
+
+        /// <summary>Debugging and logging helper</summary>
+        public override string ToString()
+        {
+            return "GuardedSequencedValueObject seqNum:{0} obj:{1}".CheckedFormat(VolatileSequenceNumber, Object);
+        }
+    }
 
 	#endregion
 
@@ -1317,7 +1354,23 @@ namespace MosaicLib.Utils
         ISequencedSourceObserver ISequencedSourceObserver.UpdateInline() { return UpdateInline(); }
 
 		#endregion
-	}
+    
+        /// <summary>Debugging and logging helper</summary>
+        public override string ToString()
+        {
+            StringBuilder sb = new StringBuilder("SequencedRefObjectSourceObserver seqNum:{0}".CheckedFormat(VolatileSequenceNumber));
+
+            if (IsUpdateNeeded)
+                sb.Append(" UpdateNeeded");
+
+            if (HasBeenSet)
+                sb.CheckedAppendFormat(" obj:{0}", Object);
+            else
+                sb.Append(" HasNotBeenSet");
+
+            return sb.ToString();
+        }
+    }
 
 	/// <summary>Provides an implementation of the ISequencedValueObjectSourceObserver</summary>
 	/// <typeparam name="ValueObjectType">Gives the type of the observed object.  Must be a value type.</typeparam>
@@ -1373,7 +1426,23 @@ namespace MosaicLib.Utils
         ISequencedSourceObserver ISequencedSourceObserver.UpdateInline() { return UpdateInline(); }
 
 		#endregion
-	}
+
+        /// <summary>Debugging and logging helper</summary>
+        public override string ToString()
+        {
+            StringBuilder sb = new StringBuilder("SequencedValueObjectSourceObserver seqNum:{0}".CheckedFormat(VolatileSequenceNumber));
+
+            if (IsUpdateNeeded)
+                sb.Append(" UpdateNeeded");
+
+            if (HasBeenSet)
+                sb.CheckedAppendFormat(" obj:{0}", Object);
+            else
+                sb.Append(" HasNotBeenSet");
+
+            return sb.ToString();
+        }
+    }
 
 	#endregion
 

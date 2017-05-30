@@ -298,38 +298,51 @@ namespace MosaicLib.PartsLib.Tools.Performance
         {
             get 
             {
-                if (Count == 0)
-                    return 0.0;
-
-                int halfCount = (Count + 1) >> 1;
-
-                int index = 0;
-                int priorBinCountSum = 0, currentBinCount = 0;
-                double priorBinBoundary = Double.NegativeInfinity, currentBinBoundary = 0.0;
-
-                for (; index < NumBins; index++)
-                {
-                    currentBinCount = binCountArray[index];
-                    currentBinBoundary = binBoundaryArray.SafeAccess(index, Double.PositiveInfinity);
-
-                    if (halfCount <= priorBinCountSum + currentBinCount)
-                        break;
- 
-                    priorBinCountSum += currentBinCount;
-                    priorBinBoundary = currentBinBoundary;
-                }
-
-                if (Double.IsNegativeInfinity(priorBinBoundary))
-                    return binBoundaryArray[0];
-                else if (Double.IsPositiveInfinity(currentBinBoundary))
-                    return binBoundaryArray[numBins - 2];
-
-                double unitSpan = ((currentBinCount > 0) ? (double)(halfCount - priorBinCountSum) / currentBinCount : 1.0);
-
-                double estValue = unitSpan * (currentBinBoundary - priorBinBoundary) + priorBinBoundary;
-
-                return estValue;
+                return GetPercentialValueEstimate(50.0);
             }
+        }
+
+        /// <summary>
+        /// Computes and returns an estimate of the given <paramref name="percentile"/> of the values that have been added to the histogram, 
+        /// or zero if the histogram is empty.
+        /// Attempts to find the counter bin that that contains the given value and then estimates how far from low to high
+        /// in the bin this value occurred, assuming that the added values in this bin were evenly distributed from low to high.
+        /// If the first or last bin contains the percentile then this simply returns the position of the known edge of that bin (innermost edge).
+        /// </summary>
+        public double GetPercentialValueEstimate(double percentile)
+        {
+            if (Count == 0)
+                return 0.0;
+
+            double percentileAsCount = Count * percentile * 0.01;
+
+            int index = 0;
+            int priorBinCountSum = 0, currentBinCount = 0;
+            double priorBinBoundary = Double.NegativeInfinity, currentBinBoundary = 0.0;
+
+            for (; index < NumBins; index++)
+            {
+                currentBinCount = binCountArray[index];
+                currentBinBoundary = binBoundaryArray.SafeAccess(index, Double.PositiveInfinity);
+
+                if (percentileAsCount <= priorBinCountSum + currentBinCount)
+                    break;
+
+                priorBinCountSum += currentBinCount;
+                priorBinBoundary = currentBinBoundary;
+            }
+
+            if (Double.IsNegativeInfinity(priorBinBoundary))
+                return binBoundaryArray[0];
+
+            if (Double.IsPositiveInfinity(currentBinBoundary))
+                return binBoundaryArray[numBins - 2];
+
+            double unitSpan = ((currentBinCount > 0) ? (double)(percentileAsCount - priorBinCountSum) / currentBinCount : 1.0);
+
+            double estValue = unitSpan * (currentBinBoundary - priorBinBoundary) + priorBinBoundary;
+
+            return estValue;
         }
     }
 
@@ -342,7 +355,7 @@ namespace MosaicLib.PartsLib.Tools.Performance
                 Name = groupName,
                 GroupBehaviorOptions = MDRF.Writer.GroupBehaviorOptions.UseVCHasBeenSetForTouched | MDRF.Writer.GroupBehaviorOptions.IncrSeqNumOnTouched,
                 FileIndexUserRowFlagBits = fileIndexUserRowFlagBits,
-                GroupPointInfoArray = new[] { countGPI, minGPI, maxGPI, avgGPI, sdGPI, medianEstGPI, binsGPI }.Concat(extraGPISet ?? emptyGPIArray).ToArray(),
+                GroupPointInfoArray = new[] { countGPI, minGPI, maxGPI, avgGPI, sdGPI, medianEstGPI, percentile5EstGPI, percentile95EstGPI, binsGPI }.Concat(extraGPISet ?? emptyGPIArray).ToArray(),
                 ClientNVS = new NamedValueSet() { { "Histogram" }, { "NumBins", histogram.NumBins }, { "BinBoundaryArray", histogram.BinBoundaryArray } }.MergeWith(extraClientNVS ?? NamedValueSet.Empty, NamedValueMergeBehavior.AddNewItems).MakeReadOnly(),
             };
 
@@ -366,6 +379,8 @@ namespace MosaicLib.PartsLib.Tools.Performance
             avgGPI.VC = avgGPI.VC.SetValue<double>(Histogram.Average, avgGPI.ValueCST, false);
             sdGPI.VC = sdGPI.VC.SetValue<double>(Histogram.StandardDeviation, sdGPI.ValueCST, false);
             medianEstGPI.VC = medianEstGPI.VC.SetValue<double>(Histogram.MedianEstimate, medianEstGPI.ValueCST, false);
+            percentile5EstGPI.VC = percentile5EstGPI.VC.SetValue<double>(Histogram.GetPercentialValueEstimate(5.0), percentile5EstGPI.ValueCST, false);
+            percentile95EstGPI.VC = percentile95EstGPI.VC.SetValue<double>(Histogram.GetPercentialValueEstimate(95.0), percentile95EstGPI.ValueCST, false);
 
             if (!lastBinCountArray.Equals(Histogram.BinCountArray))
                 binsGPI.VC = new ValueContainer(lastBinCountArray = Histogram.BinCountArray.MakeCopyOf());
@@ -384,6 +399,8 @@ namespace MosaicLib.PartsLib.Tools.Performance
                     { "avg", Histogram.Average },
                     { "sd", Histogram.StandardDeviation },
                     { "medianEst", Histogram.MedianEstimate },
+                    { "percentile5Est", Histogram.GetPercentialValueEstimate(5.0) },
+                    { "percentile95Est", Histogram.GetPercentialValueEstimate(95.0) },
 
                     { "BinBoundaryArray", Histogram.BinBoundaryArrayVC },
                     { "bins", Histogram.BinCountArrayVC },
@@ -399,6 +416,8 @@ namespace MosaicLib.PartsLib.Tools.Performance
         public MDRF.Writer.GroupPointInfo avgGPI = new MDRF.Writer.GroupPointInfo() { Name = "avg", ValueCST = ContainerStorageType.Double, VC = new ValueContainer(0.0) };
         public MDRF.Writer.GroupPointInfo sdGPI = new MDRF.Writer.GroupPointInfo() { Name = "sd", ValueCST = ContainerStorageType.Double, VC = new ValueContainer(0.0) };
         public MDRF.Writer.GroupPointInfo medianEstGPI = new MDRF.Writer.GroupPointInfo() { Name = "medianEst", ValueCST = ContainerStorageType.Double, VC = new ValueContainer(0.0) };
+        public MDRF.Writer.GroupPointInfo percentile5EstGPI = new MDRF.Writer.GroupPointInfo() { Name = "percentile5Est", ValueCST = ContainerStorageType.Double, VC = new ValueContainer(0.0) };
+        public MDRF.Writer.GroupPointInfo percentile95EstGPI = new MDRF.Writer.GroupPointInfo() { Name = "percentile95Est", ValueCST = ContainerStorageType.Double, VC = new ValueContainer(0.0) };
         public MDRF.Writer.GroupPointInfo binsGPI = new MDRF.Writer.GroupPointInfo() { Name = "bins" };
 
         public override string ToString()

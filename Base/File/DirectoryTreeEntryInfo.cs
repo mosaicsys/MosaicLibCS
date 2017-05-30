@@ -486,7 +486,7 @@ namespace MosaicLib.File
 						break;						// once we have reached a level where nothing more can be removed (ie it is not an empty directory), we stop iterating up the stack.
 
                     if (removeIt)
-    					pruneItemList.Add(stackBackCurrentItem);		// append a copy of the backEntry as a DirectoryEntryInfo object onto the removeItemVect
+                        pruneItemList.Add(stackBackCurrentItem);		// append a copy of the backEntry as a DirectoryEntryInfo object onto the pruneItemList
 
 					stackBackParentItem.DirContentsNodeList.RemoveAt(stackBack.ItemIdxInParentList);
 

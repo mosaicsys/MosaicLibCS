@@ -122,6 +122,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
             IncludeExtras = 0x0002,
             Sparse = 0x0004,
             NoData = 0x0008,
+            HeaderAndDataOnly = 0x0010,
             ListInfo = 0x0100,
             ListIndex = 0x0200,
             ListGroupInfo = 0x0400,
@@ -133,6 +134,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
             ix = IncludeExtras,
             s = Sparse,
             nd = NoData,
+            hado = HeaderAndDataOnly,
             l = ListInfo,
             List = ListInfo,
             li = ListIndex,
@@ -206,31 +208,36 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
 
                 using (System.IO.StreamWriter sw = new System.IO.StreamWriter(csvPath))
                 {
-                    sw.CheckedWriteLine("$File.Path,{0}{1}", System.IO.Path.GetFullPath(mdrfFilePath), currentReader.FileIndexInfo.FileWasProperlyClosed ? "" : ",NotProperlyClosed");
+                    bool headerOnly = select.IsSet(Select.HeaderAndDataOnly);
 
                     Func<IGroupInfo, bool> groupFilterDelegate = (selectedGroupList.IsNullOrEmpty() ? (Func<IGroupInfo, bool>)((IGroupInfo gi) => true) : ((IGroupInfo gi) => selectedGroupList.Any(grpName => gi.Name.Contains(grpName))));
 
                     IGroupInfo[] FilteredGroupInfoArray = currentReader.GroupInfoArray.Where(gi => groupFilterDelegate(gi)).ToArray();
 
-                    sw.CheckedWriteLine("$File.Size,{0}", currentReader.FileLength);
-                    sw.CheckedWriteLine("$File.Date.First,{0:o}", currentReader.DateTimeInfo.UTCDateTime.ToLocalTime());
-                    sw.CheckedWriteLine("$File.Date.Last,{0:o}", currentReader.FileIndexInfo.FileIndexRowArray.Select(row => row.FirstBlockDateTime + (row.LastBlockDeltaTimeStamp - row.FirstBlockDeltaTimeStamp).FromSeconds()).Max().ToLocalTime());
-                    sw.CheckedWriteLine("$File.Elapsed.Hours,{0:f6}", currentReader.FileIndexInfo.LastBlockInfo.BlockDeltaTimeStamp / 3600.0);
-
-                    foreach (var key in new string[] { "HostName", "CurrentProcess.ProcessName", "Environment.MachineName", "Environment.OSVersion", "Environment.Is64BitOperatingSystem", "Environment.ProcessorCount" })
+                    if (!headerOnly)
                     {
-                        sw.WriteLineKeyIfPresent(currentReader.LibraryInfo.NVS, key);
-                    }
+                        sw.CheckedWriteLine("$File.Path,{0}{1}", System.IO.Path.GetFullPath(mdrfFilePath), currentReader.FileIndexInfo.FileWasProperlyClosed ? "" : ",NotProperlyClosed");
 
-                    if (FilteredGroupInfoArray.SafeLength() <= 1)
-                        sw.CheckedWriteLine("$Group.Name,{0}", FilteredGroupInfoArray.Select(gi => gi.Name).ToArray().SafeAccess(0, "[NoGroupSelected]"));
-                    else
-                        sw.CheckedWriteLine("$Group.Names,{0}", String.Join(",", FilteredGroupInfoArray.Select((gi, idx) => "{0}:{1}".CheckedFormat(idx+1, gi.Name)).ToArray()));
+                        sw.CheckedWriteLine("$File.Size,{0}", currentReader.FileLength);
+                        sw.CheckedWriteLine("$File.Date.First,{0:o}", currentReader.DateTimeInfo.UTCDateTime.ToLocalTime());
+                        sw.CheckedWriteLine("$File.Date.Last,{0:o}", currentReader.FileIndexInfo.FileIndexRowArray.Select(row => row.FirstBlockDateTime + (row.LastBlockDeltaTimeStamp - row.FirstBlockDeltaTimeStamp).FromSeconds()).Max().ToLocalTime());
+                        sw.CheckedWriteLine("$File.Elapsed.Hours,{0:f6}", currentReader.FileIndexInfo.LastBlockInfo.BlockDeltaTimeStamp / 3600.0);
 
-                    sw.CheckedWriteLine("");
-                    if (startDeltaTime != 0.0 || endDeltaTime != double.PositiveInfinity)
-                    {
-                        sw.CheckedWriteLine("$Filter.DeltaTime,{0:f6},{1:f6}", startDeltaTime, endDeltaTime);
+                        foreach (var key in new string[] { "HostName", "CurrentProcess.ProcessName", "Environment.MachineName", "Environment.OSVersion", "Environment.Is64BitOperatingSystem", "Environment.ProcessorCount" })
+                        {
+                            sw.WriteLineKeyIfPresent(currentReader.LibraryInfo.NVS, key);
+                        }
+
+                        if (FilteredGroupInfoArray.SafeLength() <= 1)
+                            sw.CheckedWriteLine("$Group.Name,{0}", FilteredGroupInfoArray.Select(gi => gi.Name).ToArray().SafeAccess(0, "[NoGroupSelected]"));
+                        else
+                            sw.CheckedWriteLine("$Group.Names,{0}", String.Join(",", FilteredGroupInfoArray.Select((gi, idx) => "{0}:{1}".CheckedFormat(idx + 1, gi.Name)).ToArray()));
+
+                        if (startDeltaTime != 0.0 || endDeltaTime != double.PositiveInfinity)
+                        {
+                            sw.CheckedWriteLine("$Filter.DeltaTime,{0:f6},{1:f6}", startDeltaTime, endDeltaTime);
+                        }
+
                         sw.CheckedWriteLine("");
                     }
 

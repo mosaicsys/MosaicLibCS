@@ -110,7 +110,6 @@ namespace MosaicLib.PartsLib.Tools.Performance
             Config = new PingPerformancePartConfig(config);
             this.mdrfWriter = mdrfWriter;
 
-            // we trigger acquiring a new sample two times a second
             sampleIntervalTimer = new QpcTimer() { TriggerInterval = Config.SampleInterval, AutoReset = true }.Start();
             aggregationIntervalTimer = new QpcTimer() { TriggerInterval = Config.AggregationInterval, AutoReset = true }.Start();
 
@@ -257,7 +256,7 @@ namespace MosaicLib.PartsLib.Tools.Performance
                     if (lastPingIPStatus != pingIPStatus)
                     {
                         if (pingIPStatus != System.Net.NetworkInformation.IPStatus.Success)
-                            logger.Info.Emit("Ping to '{0}' [{1}] failed: {2} after {3} sec", HostNameOrAddress, IPAddress, pingIPStatus, currentElapsedTime.TotalSeconds);
+                            logger.Info.Emit("Ping to '{0}' [{1}] failed: {2} after {3:f6} sec", HostNameOrAddress, IPAddress, pingIPStatus, currentElapsedTime.TotalSeconds);
 
                         lastPingIPStatus = pingIPStatus;
                     }

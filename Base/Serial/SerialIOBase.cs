@@ -153,6 +153,7 @@ namespace MosaicLib.SerialIO
         /// <remarks>This may not be used with Port's that have been configured to use an internal sliding buffer.  Use CreateGetnextPacketAction instead in these cases.</remarks>
         public IReadAction CreateReadAction(ReadActionParam param)
 		{
+            param = param ?? new ReadActionParam();
             return new ReadAction(actionQ, param, PerformReadAction, new ActionLogging("Read", ActionLoggingTraceReference));
 		}
 
@@ -168,6 +169,7 @@ namespace MosaicLib.SerialIO
         /// <summary>Returns an IWriteAction which refers to the given WriteActionParam instance and which may be used to execute a write using the WriteActionParams defined behavior</summary>
         public IWriteAction CreateWriteAction(WriteActionParam param)
 		{
+            param = param ?? new WriteActionParam();
             return new WriteAction(actionQ, param, PerformWriteAction, new ActionLogging("Write", ActionLoggingTraceReference));
 		}
 
@@ -238,7 +240,11 @@ namespace MosaicLib.SerialIO
         /// <summary>Base delegate method used to implement an IFlushAction.  Calls HandleFlush method to perform the actual work.</summary>
         protected void PerformFlushAction(IProviderActionBase<TimeSpan, NullObj> action, out string resultCode)
 		{
-			resultCode = HandleFlush("Flush", action.ParamValue);
+            TimeSpan flushPeriod = action.ParamValue;
+            if (flushPeriod.IsZero())
+                flushPeriod = PortConfig.IdleTime + (0.1).FromSeconds();
+
+            resultCode = HandleFlush("Flush", flushPeriod);
 		}
 
         /// <summary>

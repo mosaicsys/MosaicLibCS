@@ -392,19 +392,19 @@ namespace MosaicLib.Modular.Persist
         /// <exception cref="System.ArgumentException">
         /// If testValues is true and any of FileBaseDirPath, FileBaseName, FileRingSpecStr are null or empty, or if ExpectedMaximumFileSize if is not greater than zero.
         /// </exception>
-        public PersistentObjectFileRingConfig(PersistentObjectFileRingConfig rhs, bool testValues = true)
-            : base(rhs)
+        public PersistentObjectFileRingConfig(PersistentObjectFileRingConfig other, bool testValues = true)
+            : base(other)
         {
-            FileBaseDirPath = rhs.FileBaseDirPath;
-            FileBaseName = rhs.FileBaseName;
-            FileExtension = rhs.FileExtension;
-            FileRingSpecStr = rhs.FileRingSpecStr;
-            FileExtension = rhs.FileExtension;
-            ExpectedMaximumFileSize = rhs.ExpectedMaximumFileSize;
-            AutoCreatePath = rhs.AutoCreatePath;
-            AdvanceOnSaveRule = rhs.AdvanceOnSaveRule;
-            AdvanceAfterNSaveFailures = rhs.AdvanceAfterNSaveFailures;
-            ThrowOnLoadIssueBehavior = rhs.ThrowOnLoadIssueBehavior;
+            FileBaseDirPath = other.FileBaseDirPath;
+            FileBaseName = other.FileBaseName;
+            FileExtension = other.FileExtension;
+            FileRingSpecStr = other.FileRingSpecStr;
+            FileExtension = other.FileExtension;
+            ExpectedMaximumFileSize = other.ExpectedMaximumFileSize;
+            AutoCreatePath = other.AutoCreatePath;
+            AdvanceOnSaveRule = other.AdvanceOnSaveRule;
+            AdvanceAfterNSaveFailures = other.AdvanceAfterNSaveFailures;
+            ThrowOnLoadIssueBehavior = other.ThrowOnLoadIssueBehavior;
 
             if (testValues)
                 TestValues();
@@ -635,7 +635,8 @@ namespace MosaicLib.Modular.Persist
         /// <param name="allowThrow">Pass true to allow called method to throw on any error or false to prevent it from doing so.</param>
         public bool Load(bool allowThrow)
         {
-            string methodName = Utils.Fcns.CheckedFormat("{0}()", Fcns.CurrentMethodName, (allowThrow ? "allowThrow" : "doNotThrow"));
+            string methodName = Utils.Fcns.CheckedFormat("{0}({1})", Fcns.CurrentMethodName, (allowThrow ? "allowThrow" : "doNotThrow"));
+
             return Load(allowThrow, methodName);
         }
 

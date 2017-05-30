@@ -144,21 +144,21 @@ namespace MosaicLib.PartsLib.Common.LPM
 
     /// <summary>
     /// SyncFlags are used to inform the Sync action of any specific features that the client would like synced.  These may be combined bitwise
-    /// <para/>None(0), Quick (1), Inputs (2), Outputs (4), E84 (8)
+    /// <para/>None(0x00), Quick (0x01), Inputs (0x02), Outputs (0x04), E84 (0x08)
     /// </summary>
     [Flags]
     public enum SyncFlags : int
     {
-        /// <summary>Placeholder value for 0.</summary>
-        None = 0x0000,
-        /// <summary>Normal Sync simply verifies that the driver has been able to publish whatever the last state it may have observed was.  This type of sync does not necessarily run any commands to the target device.</summary>
-        Quick = 0x0001,
-        /// <summary>Input Sync makes certain to refresh and publish all scanned inputs before continuing</summary>
-        Inputs = 0x0002,
-        /// <summary>Output Sync updates all outputs (e84, lamp and/or buttons as needed).</summary>
-        Outputs = 0x0004,
-        /// <summary>E84 Sync re-reads the E84 inputs, iterates on the E84 state machine once and updates the E84 outputs (if needed).</summary>
-        E84 = 0x0008,
+        /// <summary>Placeholder [0x00].</summary>
+        None = 0x00,
+        /// <summary>Normal Sync simply verifies that the driver has been able to publish whatever the last state it may have observed was.  This type of sync does not necessarily run any commands to the target device. [0x01]</summary>
+        Quick = 0x01,
+        /// <summary>Input Sync makes certain to refresh and publish all scanned inputs before continuing [0x02]</summary>
+        Inputs = 0x02,
+        /// <summary>Output Sync updates all outputs (e84, lamp and/or buttons as needed). [0x04]</summary>
+        Outputs = 0x04,
+        /// <summary>E84 Sync re-reads the E84 inputs, iterates on the E84 state machine once and updates the E84 outputs (if needed). [0x08]</summary>
+        E84 = 0x08,
     }
 
     #endregion

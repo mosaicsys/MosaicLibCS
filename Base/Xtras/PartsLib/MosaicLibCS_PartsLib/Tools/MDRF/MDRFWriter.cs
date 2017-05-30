@@ -763,10 +763,11 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
                     RecordMessage("Dropped old closedFileList item ['{0}' {1} bytes]".CheckedFormat(System.IO.Path.GetFileName(droppingFileInfo.FilePath), droppingFileInfo.FileSize), dtPair);
                     closedFileList.RemoveAt(0);
-                    volatileClosedFileListCount = closedFileList.Count;
                 }
 
                 closedFileList.Add(LastFileInfo);
+
+                volatileClosedFileListCount = closedFileList.Count;
 
                 return LastFileInfo.FileSize;
             }

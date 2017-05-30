@@ -67,35 +67,48 @@ namespace MosaicLib.Modular.Action
 
         /// <summary>Gives the Logging.MesgType that is to be used for successfull Action Completion messages.</summary>
         public Logging.MesgType DoneMesgType { get; protected set; }
+
         /// <summary>Gives the Logging.MesgType that is to be used for Action Failed messages (including failed Action Completion messages).</summary>
         public Logging.MesgType ErrorMesgType { get; protected set; }
+
         /// <summary>Gives the Logging.MesgType that is to be used for other Action state change messages.</summary>
         public Logging.MesgType StateMesgType { get; protected set; }
+
         /// <summary>Gives the Logging.MesgTuype that is to be used for intermediate Action Update related messages.</summary>
         public Logging.MesgType UpdateMesgType { get; protected set; }
+
+        /// <summary>Canned configuration: Done=Signif, Error=Error, State=Debug, Update=Debug</summary>
+        public static ActionLoggingConfig Signif_Error_Debug_Debug { get { return signif_error_debug_debug; } }
+
+        /// <summary>Canned configuration: Done=Info, Error=Error, State=Debug, Update=Debug</summary>
+        public static ActionLoggingConfig Info_Error_Debug_Debug { get { return info_error_debug_debug; } }
+
+        /// <summary>Canned configuration: Done=Info, Error=Error, State=Trace, Update=Trace</summary>
+        public static ActionLoggingConfig Info_Error_Trace_Trace { get { return info_error_trace_trace; } }
+
+        /// <summary>Canned configuration: Done=Info, Error=Info, State=Trace, Update=Trace</summary>
+        public static ActionLoggingConfig Info_Info_Trace_Trace { get { return info_info_trace_trace; } }
+
+        /// <summary>Canned configuration: Done=Debug, Error=Debug, State=Trace, Update=Trace</summary>
+        public static ActionLoggingConfig Debug_Debug_Trace_Trace { get { return debug_debug_trace_trace; } }
+
+        /// <summary>Canned configuration: Done=Debug, Error=Error, State=Trace, Update=Trace</summary>
+        public static ActionLoggingConfig Debug_Error_Trace_Trace { get { return debug_error_trace_trace; } }
+
+        /// <summary>Canned configuration: Done=Trace, Error=Trace, State=Trace, Update=Trace</summary>
+        public static ActionLoggingConfig Trace_Trace_Trace_Trace { get { return trace_trace_trace_trace; } }
+
+        /// <summary>Canned configuration: Done=None, Error=None, State=None, Update=None</summary>
+        public static ActionLoggingConfig None_None_None_None { get { return none_none_none_none; } }
 
         private static readonly ActionLoggingConfig signif_error_debug_debug = new ActionLoggingConfig(Logging.MesgType.Signif, Logging.MesgType.Error, Logging.MesgType.Debug, Logging.MesgType.Debug);
         private static readonly ActionLoggingConfig info_error_debug_debug = new ActionLoggingConfig(Logging.MesgType.Info, Logging.MesgType.Error, Logging.MesgType.Debug, Logging.MesgType.Debug);
         private static readonly ActionLoggingConfig info_error_trace_trace = new ActionLoggingConfig(Logging.MesgType.Info, Logging.MesgType.Error, Logging.MesgType.Trace, Logging.MesgType.Trace);
         private static readonly ActionLoggingConfig info_info_trace_trace = new ActionLoggingConfig(Logging.MesgType.Info, Logging.MesgType.Info, Logging.MesgType.Trace, Logging.MesgType.Trace);
         private static readonly ActionLoggingConfig debug_debug_trace_trace = new ActionLoggingConfig(Logging.MesgType.Debug, Logging.MesgType.Debug, Logging.MesgType.Trace, Logging.MesgType.Trace);
+        private static readonly ActionLoggingConfig debug_error_trace_trace = new ActionLoggingConfig(Logging.MesgType.Debug, Logging.MesgType.Error, Logging.MesgType.Trace, Logging.MesgType.Trace);
         private static readonly ActionLoggingConfig trace_trace_trace_trace = new ActionLoggingConfig(Logging.MesgType.Trace, Logging.MesgType.Trace, Logging.MesgType.Trace, Logging.MesgType.Trace);
         private static readonly ActionLoggingConfig none_none_none_none = new ActionLoggingConfig(Logging.MesgType.None, Logging.MesgType.None, Logging.MesgType.None, Logging.MesgType.None);
-
-        /// <summary>Canned configuration: Done=Signif, Error=Error, State=Debug, Update=Debug</summary>
-        public static ActionLoggingConfig Signif_Error_Debug_Debug { get { return signif_error_debug_debug; } }
-        /// <summary>Canned configuration: Done=Info, Error=Error, State=Debug, Update=Debug</summary>
-        public static ActionLoggingConfig Info_Error_Debug_Debug { get { return info_error_debug_debug; } }
-        /// <summary>Canned configuration: Done=Info, Error=Error, State=Trace, Update=Trace</summary>
-        public static ActionLoggingConfig Info_Error_Trace_Trace { get { return info_error_trace_trace; } }
-        /// <summary>Canned configuration: Done=Info, Error=Info, State=Trace, Update=Trace</summary>
-        public static ActionLoggingConfig Info_Info_Trace_Trace { get { return info_info_trace_trace; } }
-        /// <summary>Canned configuration: Done=Debug, Error=Debug, State=Trace, Update=Trace</summary>
-        public static ActionLoggingConfig Debug_Debug_Trace_Trace { get { return debug_debug_trace_trace; } }
-        /// <summary>Canned configuration: Done=Trace, Error=Trace, State=Trace, Update=Trace</summary>
-        public static ActionLoggingConfig Trace_Trace_Trace_Trace { get { return trace_trace_trace_trace; } }
-        /// <summary>Canned configuration: Done=None, Error=None, State=None, Update=None</summary>
-        public static ActionLoggingConfig None_None_None_None { get { return none_none_none_none; } }
     }
 
 	/// <summary>

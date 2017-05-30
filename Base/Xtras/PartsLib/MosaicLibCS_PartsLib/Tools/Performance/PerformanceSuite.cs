@@ -62,6 +62,8 @@ namespace MosaicLib.PartsLib.Tools.Performance
             ProcessActiveSetMapGroup = 0x4000,
             /// <summary>0x10000</summary>
             PingAggregateGroups = 0x10000,
+            /// <summary>0x40000</summary>
+            SerialEchoAggregateGroups = 0x40000,
             /// <summary>0x100000</summary>
             PerformanceCounterGroups = 0x100000,
             /// <summary>0x1000000</summary>
@@ -85,6 +87,7 @@ namespace MosaicLib.PartsLib.Tools.Performance
             EnableProcPerfPart = true;
             EnableFileRWPerfPart = true;
             EnablePingPerfPart = true;
+            EnableSerialEchoPerfPart = true;
             EnablePerformanceCounterParts = true;
             EnableNetIfacePerfPart = true;
 
@@ -92,6 +95,7 @@ namespace MosaicLib.PartsLib.Tools.Performance
             ProcPerfPartConfig = new ProcessPerformancePartConfig(processDeltaOccurrenceFileIndexUserRowFlagBits: (ulong)DefaultFileIndexRowFlagBits.ProcessDeltaOccurrence, activeSetGroupsFileIndexUserRowFlagBits: (ulong)DefaultFileIndexRowFlagBits.ProcessActiveSetGroups, activeSetMapGroupFileIndexUserRowFlagBits: (ulong) DefaultFileIndexRowFlagBits.ProcessActiveSetMapGroup);
             FileRWPerfPartConfig = new FileRWPerformancePartConfig(sampleGroupsFileIndexUserRowFlagBits: (ulong) DefaultFileIndexRowFlagBits.FileRWSampleGroups, aggregateGroupsFileIndexUserRowFlagBits: (ulong) DefaultFileIndexRowFlagBits.FileRWAggregateGroups);
             PingPerfPartConfig = new PingPerformancePartConfig(aggregateGroupsFileIndexUserRowFlagBits: (ulong) DefaultFileIndexRowFlagBits.PingAggregateGroups);
+            SerialEchoPerfPartConfig = new SerialEchoPerformancePartConfig(aggregateGroupsFileIndexUserRowFlagBits: (ulong)DefaultFileIndexRowFlagBits.SerialEchoAggregateGroups);
             PerformanceCounterPartConfigArray = new[]
                 {
                     new PerformanceCountersPartConfig("{0}.PerfCtr.Fast".CheckedFormat(partID), (ulong) DefaultFileIndexRowFlagBits.PerformanceCounterGroups)
@@ -220,6 +224,7 @@ namespace MosaicLib.PartsLib.Tools.Performance
                             new PerformanceCounterSpec() { CategoryName="PhysicalDisk", CounterName = "Current Disk Queue Length", InstanceName = "_Total", PointName = "PDisk.All.QueueLen" },
 
                             new PerformanceCounterSpec() { CategoryName="PhysicalDisk", CounterName = "% Idle Time", InstanceName = pDiskInstanceName0, PointName = "PDisk.0.IdleTimePct" },
+                            new PerformanceCounterSpec() { CategoryName="PhysicalDisk", CounterName = "Current Disk Queue Length", InstanceName = pDiskInstanceName1, PointName = "PDisk.0.QueueLen" },
                             new PerformanceCounterSpec() { CategoryName="PhysicalDisk", CounterName = "Avg. Disk sec/Read", InstanceName = pDiskInstanceName0, PointName = "PDisk.0.AvgSecPerRead" },
                             new PerformanceCounterSpec() { CategoryName="PhysicalDisk", CounterName = "Avg. Disk sec/Write", InstanceName = pDiskInstanceName0, PointName = "PDisk.0.AvgSecPerWrite" },
                             new PerformanceCounterSpec() { CategoryName="PhysicalDisk", CounterName = "Disk Reads/sec", InstanceName = pDiskInstanceName0, PointName = "PDisk.0.ReadIOPs" },
@@ -228,8 +233,8 @@ namespace MosaicLib.PartsLib.Tools.Performance
                             new PerformanceCounterSpec() { CategoryName="PhysicalDisk", CounterName = "Disk Read Bytes/sec", InstanceName = pDiskInstanceName0, PointName = "PDisk.0.ReadBPS" },
                             new PerformanceCounterSpec() { CategoryName="PhysicalDisk", CounterName = "Disk Write Bytes/sec", InstanceName = pDiskInstanceName0, PointName = "PDisk.0.WriteBPS" },
 
-                            new PerformanceCounterSpec() { CategoryName="PhysicalDisk", CounterName = "Current Disk Queue Length", InstanceName = pDiskInstanceName1, PointName = "PDisk.1.QueueLen" },
                             new PerformanceCounterSpec() { CategoryName="PhysicalDisk", CounterName = "% Idle Time", InstanceName = pDiskInstanceName1, PointName = "PDisk.1.IdleTimePct" },
+                            new PerformanceCounterSpec() { CategoryName="PhysicalDisk", CounterName = "Current Disk Queue Length", InstanceName = pDiskInstanceName1, PointName = "PDisk.1.QueueLen" },
                             new PerformanceCounterSpec() { CategoryName="PhysicalDisk", CounterName = "Avg. Disk sec/Read", InstanceName = pDiskInstanceName1, PointName = "PDisk.1.AvgSecPerRead" },
                             new PerformanceCounterSpec() { CategoryName="PhysicalDisk", CounterName = "Avg. Disk sec/Write", InstanceName = pDiskInstanceName1, PointName = "PDisk.1.AvgSecPerWrite" },
                             new PerformanceCounterSpec() { CategoryName="PhysicalDisk", CounterName = "Disk Reads/sec", InstanceName = pDiskInstanceName1, PointName = "PDisk.1.ReadIOPs" },
@@ -276,12 +281,14 @@ namespace MosaicLib.PartsLib.Tools.Performance
             EnableProcPerfPart = other.EnableProcPerfPart;
             EnableFileRWPerfPart = other.EnableFileRWPerfPart;
             EnablePingPerfPart = other.EnablePingPerfPart;
+            EnableSerialEchoPerfPart = other.EnableSerialEchoPerfPart;
             EnablePerformanceCounterParts = other.EnablePerformanceCounterParts;
             EnableNetIfacePerfPart = other.EnableNetIfacePerfPart;
             CPUPerfPartConfig = other.CPUPerfPartConfig;
             ProcPerfPartConfig = other.ProcPerfPartConfig;
             FileRWPerfPartConfig = other.FileRWPerfPartConfig;
             PingPerfPartConfig = other.PingPerfPartConfig;
+            SerialEchoPerfPartConfig = other.SerialEchoPerfPartConfig;
             _performanceCounterPartConfigArray = other._performanceCounterPartConfigArray;
             NetIfacePerfPartConfig = other.NetIfacePerfPartConfig;
             MDRFWriterSetupInfo = new SetupInfo(other.MDRFWriterSetupInfo);
@@ -310,6 +317,9 @@ namespace MosaicLib.PartsLib.Tools.Performance
         public bool EnablePingPerfPart { get; set; }
 
         [ConfigItem(IsOptional = true)]
+        public bool EnableSerialEchoPerfPart { get; set; }
+
+        [ConfigItem(IsOptional = true)]
         public bool EnablePerformanceCounterParts { get; set; }
 
         [ConfigItem(IsOptional = true)]
@@ -319,6 +329,7 @@ namespace MosaicLib.PartsLib.Tools.Performance
         public ProcessPerformancePartConfig ProcPerfPartConfig { get; set; }
         public FileRWPerformancePartConfig FileRWPerfPartConfig { get; set; }
         public PingPerformancePartConfig PingPerfPartConfig { get; set; }
+        public SerialEchoPerformancePartConfig SerialEchoPerfPartConfig { get; set; }
         public PerformanceCountersPartConfig[] PerformanceCounterPartConfigArray { get { return _performanceCounterPartConfigArray ?? emptyPerformanceCountersPartConfigArray; } set { _performanceCounterPartConfigArray = value; } }
         private PerformanceCountersPartConfig[] _performanceCounterPartConfigArray;
         public NetIfacePerformancePartConfig NetIfacePerfPartConfig { get; set; }
@@ -354,13 +365,14 @@ namespace MosaicLib.PartsLib.Tools.Performance
         public string ProcPerfPartID { get { return ((ProcPerfPartConfig != null) ? "{0}.Proc".CheckedFormat(PartID) : ""); } }
         public string FileRWPerfPartID { get { return ((FileRWPerfPartConfig != null) ? "{0}.FileRW".CheckedFormat(PartID) : ""); } }
         public string PingPerfPartID { get { return ((PingPerfPartConfig != null) ? "{0}.Ping".CheckedFormat(PartID) : ""); } }
+        public string SerialEchoPerfPartID { get { return ((SerialEchoPerfPartConfig != null) ? "{0}.SerialEcho".CheckedFormat(PartID) : ""); } }
         public string[] PerformanceCounterPartIDArray { get { return PerformanceCounterPartConfigArray.Select(pcpc => pcpc.PartID).ToArray(); } }
         public string NetIfacePerfPartID { get { return ((NetIfacePerfPartConfig != null) ? "{0}.NetIface".CheckedFormat(PartID) : ""); } }
 
         public PerformanceSuitePartConfig Setup(Logging.IMesgEmitter issueEmitter = null, Logging.IMesgEmitter valueEmitter = null)
         {
             string configKeyPrefix = "{0}.".CheckedFormat(PartID);
-            new ConfigValueSetAdapter<PerformanceSuitePartConfig>(IConfig) { ValueSet = this, SetupIssueEmitter = issueEmitter, UpdateIssueEmitter = issueEmitter, ValueNoteEmitter = valueEmitter }.Setup(configKeyPrefix);
+            var adapter = new ConfigValueSetAdapter<PerformanceSuitePartConfig>(IConfig) { ValueSet = this, SetupIssueEmitter = issueEmitter, UpdateIssueEmitter = issueEmitter, ValueNoteEmitter = valueEmitter }.Setup(configKeyPrefix);
 
             if (CPUPerfPartConfig != null && EnableCPUPerfPart)
                 CPUPerfPartConfig.Setup("{0}.".CheckedFormat(CPUPerfPartID), config: IConfig, issueEmitter: issueEmitter, valueEmitter: valueEmitter);
@@ -373,6 +385,9 @@ namespace MosaicLib.PartsLib.Tools.Performance
 
             if (PingPerfPartConfig != null && EnablePingPerfPart)
                 PingPerfPartConfig.Setup("{0}.".CheckedFormat(PingPerfPartID), config: IConfig, issueEmitter: issueEmitter, valueEmitter: valueEmitter);
+
+            if (SerialEchoPerfPartConfig != null && EnableSerialEchoPerfPart)
+                SerialEchoPerfPartConfig.Setup("{0}.".CheckedFormat(SerialEchoPerfPartID), config: IConfig, issueEmitter: issueEmitter, valueEmitter: valueEmitter);
 
             if (EnablePerformanceCounterParts)
                 PerformanceCounterPartConfigArray.Select(pcpc => pcpc.Setup("{0}.".CheckedFormat(pcpc.PartID), config: IConfig, issueEmitter: issueEmitter, valueEmitter: valueEmitter)).DoForEach();
@@ -426,6 +441,9 @@ namespace MosaicLib.PartsLib.Tools.Performance
             if (Config.PingPerfPartConfig != null && Config.EnablePingPerfPart)
                 partsList.Add(pingPerf = new PingPerformancePart(Config.PingPerfPartID, Config.PingPerfPartConfig, mdrfWriter));
 
+            if (Config.SerialEchoPerfPartConfig != null && Config.EnableSerialEchoPerfPart)
+                partsList.Add(serialEchoPerf = new SerialEchoPerformancePart(Config.SerialEchoPerfPartID, Config.SerialEchoPerfPartConfig, mdrfWriter));
+
             if (!Config.PerformanceCounterPartConfigArray.IsNullOrEmpty() && Config.EnablePerformanceCounterParts)
                 partsList.AddRange(Config.PerformanceCounterPartConfigArray.Select(pcpc => new PerformanceCountersPart(pcpc, mdrfWriter)));
 
@@ -452,7 +470,7 @@ namespace MosaicLib.PartsLib.Tools.Performance
         private File.DirectoryTreePruningManager pruningMgr;
         private List<IActivePartBase> partsList = new List<IActivePartBase>();
 
-        private IActivePartBase cpuPerf, fileRWPerf, procPerf, pingPerf, netIfacePerf;
+        private IActivePartBase cpuPerf, fileRWPerf, procPerf, pingPerf, serialEchoPerf, netIfacePerf;
 
         protected override string PerformGoOnlineAction(bool andInitialize)
         {
@@ -479,12 +497,12 @@ namespace MosaicLib.PartsLib.Tools.Performance
         {
             if (BaseState.IsOnline)
             {
-                PartsLib.Tools.MDRF.Writer.FileInfo? closedFileInfo = mdrfWriter.NextClosedFileInfo;
+                PartsLib.Tools.MDRF.Writer.FileInfo closedFileInfo = mdrfWriter.NextClosedFileInfo ?? emptyFileInfo;
 
                 if (pruningMgr != null)
                 {
-                    if (closedFileInfo != null)
-                        pruningMgr.NotePathAdded(closedFileInfo.GetValueOrDefault().FilePath);
+                    if (!closedFileInfo.FilePath.IsNullOrEmpty())
+                        pruningMgr.NotePathAdded(closedFileInfo.FilePath);
 
                     pruningMgr.Service();
                 }
@@ -494,5 +512,7 @@ namespace MosaicLib.PartsLib.Tools.Performance
                 mdrfWriter.CloseCurrentFile("By request [{0} part is {1}]".CheckedFormat(PartID, BaseState));
             }
         }
+
+        private static readonly PartsLib.Tools.MDRF.Writer.FileInfo emptyFileInfo = new MDRF.Writer.FileInfo();
     }
 }

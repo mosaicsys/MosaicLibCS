@@ -284,11 +284,15 @@ namespace MosaicLib.Utils
 
         /// <summary>
         /// Extension method "safe" version of ToArray method.  If the given collection/set is non-null then this method returns the Linq ToArray method applied to the collection.
-        /// If the collection/set is null then this method creates and returns an empty array of the given ItemType.
+        /// If the collection/set is null and the given fallbackArray is non-null then this method returns the fallbackArray.
+        /// If the collection/set and the fallbackArray values are null then this creates and returns an empty array of the given ItemType (mapNullToEmpty is true) or null (mapNullToEmpty is false)
         /// </summary>
-        public static ItemType[] SafeToArray<ItemType>(this IEnumerable<ItemType> set)
+        public static ItemType[] SafeToArray<ItemType>(this IEnumerable<ItemType> set, ItemType[] fallbackArray = null, bool mapNullToEmpty = true)
         {
-            return SafeToArray(set, null);
+            if (set != null)
+                return set.ToArray();
+
+            return fallbackArray ?? (mapNullToEmpty ? new ItemType[0] : null);
         }
 
         /// <summary>
@@ -296,15 +300,21 @@ namespace MosaicLib.Utils
         /// If the collection/set is null and the given fallbackArray is non-null then this method returns the fallbackArray.
         /// If the collection/set and the fallbackArray values are null then this creates and returns an empty array of the given ItemType.
         /// </summary>
-        public static ItemType[] SafeToArray<ItemType>(this IEnumerable<ItemType> set, ItemType[] fallbackArray)
+        public static ItemType[] SafeToArray<ItemType>(this IEnumerable set, ItemType[] fallbackArray = null, bool mapNullToEmpty = true)
         {
             if (set != null)
-                return set.ToArray();
+            {
+                List<ItemType> itemList = new List<ItemType>();
+                foreach (var obj in set)
+                {
+                    if (obj is ItemType)
+                        itemList.Add((ItemType) obj);
+                }
 
-            if (fallbackArray != null)
-                return fallbackArray;
+                return itemList.ToArray();
+            }
 
-            return new ItemType[0];
+            return fallbackArray ?? (mapNullToEmpty ? new ItemType[0] : null);
         }
 
         /// <summary>
@@ -337,17 +347,28 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Extension method to make a copy of the given array (or make a new empty array if null is given)
+        /// Extension method to make a copy of the given <paramref name="array"/>.  
+        /// If the caller provided <paramref name="array"/> is null then this method uses <paramref name="fallbackArray"/> and then <paramref name="mapNullToEmpty"/>
+        /// to define the actual return value.
         /// </summary>
-        public static ItemType[] MakeCopyOf<ItemType>(this ItemType[] array)
+        /// <param name="array">Gives the caller provided array that this method is to make a copy of.</param>
+        /// <param name="fallbackArray">If the given <paramref name="array"/> is null and this parameter is non-null then this method returns the value given to this parameter.</param>
+        /// <param name="mapNullToEmpty">If both the given <paramref name="array"/> and the <paramref name="fallbackArray"/> parameters are null then if mapNullToEmpty is false, this method will return null, otherwise this method will return a new empty {ItemType} array.</param>
+        public static ItemType[] MakeCopyOf<ItemType>(this ItemType[] array, ItemType[] fallbackArray = null, bool mapNullToEmpty = true)
         {
-            int arrayLength = array.SafeLength();
-            ItemType[] resultArray = new ItemType[arrayLength];
-
             if (array != null)
+            {
+                int arrayLength = array.Length;
+                ItemType[] resultArray = new ItemType[arrayLength];
+
                 System.Array.Copy(array, resultArray, arrayLength);
 
-            return resultArray;
+                return resultArray;
+            }
+            else
+            {
+                return fallbackArray ?? (mapNullToEmpty ? new ItemType[0] : null);
+            }
         }
 
         #endregion
@@ -833,12 +854,20 @@ namespace MosaicLib.Utils
         public static IEnumerable<TSource> DoForEach<TSource>(this IEnumerable<TSource> source, Action<TSource> action = null)
         {
             action = action ?? (ignoreItem => {});
+
             foreach (TSource item in source)
                 action(item);
 
             return source;
         }
 
+        #endregion
+
+        #region Type related extension methods
+
+        /// <summary>returns the Leaf Name of the given <paramref name="type"/> type (aka: The last token for the resulting sequence of dot seperated tokens)</summary>
+        public static string GetTypeLeafName(this Type type) { return (type.ToString()).Split('.').SafeLast(); }
+        
         #endregion
     }
 
@@ -987,7 +1016,7 @@ namespace MosaicLib.Utils
         public static string CurrentClassName { get { return new System.Diagnostics.StackFrame(1).GetMethod().DeclaringType.ToString(); } }
 
         /// <summary>Creates a StackFrame for the caller and returns the Leaf Name of the current methods DeclaringType (The token at the end of any sequence of dot seperated tokens)</summary>
-        public static string CurrentClassLeafName { get { return (new System.Diagnostics.StackFrame(1).GetMethod().DeclaringType.ToString()).Split('.').SafeLast(); } }
+        public static string CurrentClassLeafName { get { return (new System.Diagnostics.StackFrame(1).GetMethod().DeclaringType).GetTypeLeafName(); } }
 
         /// <summary>
         /// Attemts to obtain and return the filename (without extension) from the ModuleName of the Current Process's MainModule.

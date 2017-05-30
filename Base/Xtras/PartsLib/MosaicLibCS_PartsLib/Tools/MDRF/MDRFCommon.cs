@@ -137,13 +137,14 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
         }
 
         public const Int32 i4OneMillion = 1024 * 1024;
+        public const Int32 i4HalfMillion = 512 * 1024;
 
         public SetupInfo ClipValues()
         {
-            // clip and round the maxDataBlockSize up to the next multiple of 4096
+            // clip and round the maxDataBlockSize up to the next multiple of 4096 that is not larger than i4OneMillion
             MaxDataBlockSize = (MaxDataBlockSize.Clip(65536, i4OneMillion) + 0xfff) & 0x7ffff000;
 
-            NominalMaxFileSize = NominalMaxFileSize.Clip(i4OneMillion, Int32.MaxValue);
+            NominalMaxFileSize = NominalMaxFileSize.Clip(i4HalfMillion, Int32.MaxValue);
 
             MaxFileRecordingPeriod = MaxFileRecordingPeriod.Clip(TimeSpan.FromMinutes(5.0), TimeSpan.FromDays(7.0));
 

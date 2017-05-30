@@ -517,6 +517,20 @@ namespace MosaicLib.Modular.Config
                 Func<TConfigValueSet, double> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TConfigValueSet, double>(itemInfo);
                 innerBoundSetter = delegate(TConfigValueSet valueSetObj, IConfigKeyAccess ika) { pfSetter(valueSetObj, ikaGetter(ika, pfGetter(valueSetObj))); };
             }
+            else if (itemInfo.ItemType == typeof(DateTime))
+            {
+                Func<IConfigKeyAccess, DateTime, DateTime> ikaGetter = (ika, defaultValue) => ika.GetValue<DateTime>(defaultValue);
+                Action<TConfigValueSet, DateTime> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TConfigValueSet, DateTime>(itemInfo);
+                Func<TConfigValueSet, DateTime> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TConfigValueSet, DateTime>(itemInfo);
+                innerBoundSetter = delegate(TConfigValueSet valueSetObj, IConfigKeyAccess ika) { pfSetter(valueSetObj, ikaGetter(ika, pfGetter(valueSetObj))); };
+            }
+            else if (itemInfo.ItemType == typeof(TimeSpan))
+            {
+                Func<IConfigKeyAccess, TimeSpan, TimeSpan> ikaGetter = (ika, defaultValue) => ika.GetValue<TimeSpan>(defaultValue);
+                Action<TConfigValueSet, TimeSpan> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TConfigValueSet, TimeSpan>(itemInfo);
+                Func<TConfigValueSet, TimeSpan> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TConfigValueSet, TimeSpan>(itemInfo);
+                innerBoundSetter = delegate(TConfigValueSet valueSetObj, IConfigKeyAccess ika) { pfSetter(valueSetObj, ikaGetter(ika, pfGetter(valueSetObj))); };
+            }
             else if (itemInfo.ItemType == typeof(string))
             {
                 Func<IConfigKeyAccess, string, string> ikaGetter = (ika, defaultValue) => (ika.HasValue ? ika.ValueAsString : defaultValue);
@@ -599,6 +613,20 @@ namespace MosaicLib.Modular.Config
                 Func<IConfigKeyAccess, double ?, double ?> ikaGetter = (ika, defaultValue) => ika.GetValue<double ?>(defaultValue);
                 Action<TConfigValueSet, double ?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TConfigValueSet, double ?>(itemInfo);
                 Func<TConfigValueSet, double ?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TConfigValueSet, double ?>(itemInfo);
+                innerBoundSetter = delegate(TConfigValueSet valueSetObj, IConfigKeyAccess ika) { pfSetter(valueSetObj, ikaGetter(ika, pfGetter(valueSetObj))); };
+            }
+            else if (itemInfo.ItemType == typeof(DateTime ?))
+            {
+                Func<IConfigKeyAccess, DateTime?, DateTime?> ikaGetter = (ika, defaultValue) => ika.GetValue<DateTime?>(defaultValue);
+                Action<TConfigValueSet, DateTime?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TConfigValueSet, DateTime?>(itemInfo);
+                Func<TConfigValueSet, DateTime?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TConfigValueSet, DateTime?>(itemInfo);
+                innerBoundSetter = delegate(TConfigValueSet valueSetObj, IConfigKeyAccess ika) { pfSetter(valueSetObj, ikaGetter(ika, pfGetter(valueSetObj))); };
+            }
+            else if (itemInfo.ItemType == typeof(TimeSpan ?))
+            {
+                Func<IConfigKeyAccess, TimeSpan ?, TimeSpan ?> ikaGetter = (ika, defaultValue) => ika.GetValue<TimeSpan ?>(defaultValue);
+                Action<TConfigValueSet, TimeSpan ?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TConfigValueSet, TimeSpan ?>(itemInfo);
+                Func<TConfigValueSet, TimeSpan ?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TConfigValueSet, TimeSpan ?>(itemInfo);
                 innerBoundSetter = delegate(TConfigValueSet valueSetObj, IConfigKeyAccess ika) { pfSetter(valueSetObj, ikaGetter(ika, pfGetter(valueSetObj))); };
             }
             else if (itemInfo.ItemType == typeof(ValueContainer))

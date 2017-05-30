@@ -20,9 +20,11 @@
  */
 
 using System;
-using System.IO;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 
 using MosaicLib.Modular;
@@ -53,6 +55,7 @@ namespace MosaicLib.PartsLib.Tools.Performance
             AggregateGroupsFileIndexUserRowFlagBits = other.AggregateGroupsFileIndexUserRowFlagBits;
             SampleInterval = other.SampleInterval;
             AggregationInterval = other.AggregationInterval;
+            ProcessorAffinityMask = other.ProcessorAffinityMask;
         }
 
         [ConfigItem(IsOptional = true)]
@@ -66,6 +69,9 @@ namespace MosaicLib.PartsLib.Tools.Performance
 
         [ConfigItem(IsOptional = true)]
         public TimeSpan AggregationInterval { get; set; }
+
+        [ConfigItem(IsOptional = true)]
+        public long ProcessorAffinityMask { get; set; }
 
         public CPUPerformancePartConfig Setup(string prefixName = "CPUPerf.", IConfig config = null, Logging.IMesgEmitter issueEmitter = null, Logging.IMesgEmitter valueEmitter = null)
         {
@@ -115,6 +121,48 @@ namespace MosaicLib.PartsLib.Tools.Performance
         Histogram ah1, ah10, ah30;
 
         MDRFHistogramGroupSource h1Grp, h10Grp, h30Grp, ah1Grp, ah10Grp, ah30Grp;
+
+        protected override void MainThreadFcn()
+        {
+            bool affinityInUse = (Config.ProcessorAffinityMask != 0);
+            ProcessThread currentProcessThread = null;
+            Process currentProcess = null;
+
+            if (affinityInUse)
+            {
+                System.Threading.Thread.BeginThreadAffinity();
+
+                int currentThreadID = GetCurrentThreadId();
+
+                currentProcess = Process.GetCurrentProcess();
+
+                if (currentProcess != null)
+                    currentProcessThread = currentProcess.Threads.SafeToArray<ProcessThread>().FirstOrDefault(pth => pth.Id == currentThreadID);
+
+                if (currentProcessThread != null)
+                {
+                    currentProcessThread.ProcessorAffinity = new IntPtr(Config.ProcessorAffinityMask);
+                    Log.Info.Emit("Current ProcessThread.ProcessorAffinity set to {0}", Config.ProcessorAffinityMask);
+                }
+                else
+                {
+                    Log.Warning.Emit("Current ProcessThread.ProcessorAffinity could not be set to {0} [could not find current ProcessThread in current process]", Config.ProcessorAffinityMask);
+                }
+            }
+
+            base.MainThreadFcn();
+
+            if (affinityInUse)
+            {
+                if (currentProcessThread != null)
+                    currentProcessThread.ProcessorAffinity = new IntPtr(-1);
+
+                System.Threading.Thread.EndThreadAffinity();
+            }
+        }
+
+        [DllImport("kernel32.dll")]
+        public static extern int GetCurrentThreadId();
 
         protected override void PerformMainLoopService()
         {

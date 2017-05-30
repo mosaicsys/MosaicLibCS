@@ -914,10 +914,19 @@ namespace MosaicLib.Utils
         {
             /// <summary>Default constructor</summary>
             public MatchRuleSet() { }
+
             /// <summary>constructor starting with an externally provided set of rules</summary>
             public MatchRuleSet(IEnumerable<MatchRule> rules) : base(rules ?? emptyMatchRuleArray) { }
-            /// <summary>copy constructor - makes a deep clone of the given rhs value.</summary>
-            public MatchRuleSet(MatchRuleSet rhs) : base(rhs.Select((r) => new MatchRule(r))) { }
+
+            /// <summary>
+            /// copy constructor - makes a deep clone of the given rhs value.
+            /// if the rhs value is null then this converts the null either to None, or Any based on the value of the <paramref name="convertNullToAny"/> parameter (true -> any, false -> None)
+            /// <param name="other">Gives the MatchRuleSet of which a copy is to be made.  If null is provided then this method uses the <paramref name="convertNullToAny"/> parameter to determine the constructor's behavior</param>
+            /// <param name="convertNullToAny">When <paramref name="other"/> is given as null, this parameter determines if the copy constructor maps the null to Any (true) or None (false).  Default value is false (None)</param>
+            /// </summary>
+            public MatchRuleSet(MatchRuleSet other, bool convertNullToAny = false)
+                : base((other ?? (convertNullToAny ? Any : None)).Select((r) => new MatchRule(r)))
+            { }
 
             private static readonly MatchRule[] emptyMatchRuleArray = new MatchRule[0];
 

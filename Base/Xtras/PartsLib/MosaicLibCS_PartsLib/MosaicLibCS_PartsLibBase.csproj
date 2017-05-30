@@ -83,6 +83,7 @@
     <Compile Include="Tools\Performance\PerformanceSuite.cs" />
     <Compile Include="Tools\Performance\PingPerformance.cs" />
     <Compile Include="Tools\Performance\ProcessPerformance.cs" />
+    <Compile Include="Tools\Performance\SerialEchoPerformance.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\..\MosaicLibCSBase2010.csproj">

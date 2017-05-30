@@ -320,18 +320,23 @@ namespace MosaicLib.File
         /// <summary>Returns true if the SetupFaultCode is not empty</summary>
         public bool DidSetupFail { get { return (SetupFaultCode.Length != 0); } }
 
-        /// <summary>Service the manager - performs one iteration of cleanup if any cleanup is needed.</summary>
-        public bool Service() { return Service(true); }
-
         /// <summary>Service the manager.  Pass true if service operation is permitted to delete files.</summary>
-        public bool Service(bool cleanupIfNeeded)
+        public bool Service(bool cleanupIfNeeded = true)
         {
             bool didAnything = false;
 
             treeRootEntry.UpdateTree(Info.Emitter);
 
-            if (cleanupIfNeeded && IsTreePruningNeeded)
-                didAnything = didAnything || PerformIncrementalPrune();
+            if (cleanupIfNeeded)
+            {
+                string treePruningNeededReason = TreePruningNeededReason;
+
+                if (!treePruningNeededReason.IsNullOrEmpty())
+                {
+                    if (PerformIncrementalPrune(treePruningNeededReason))
+                        didAnything = true;
+                }
+            }
 
             return didAnything;
         }
@@ -388,43 +393,49 @@ namespace MosaicLib.File
         /// <summary>Gives the total number of file items under and including this tree.</summary>
         public int TreeFileCount { get { Service(false); return treeRootEntry.TreeFileCount; } }
 
-        /// <summary>returns true if there are one or more items in the tree that need to be deleted</summary>
+        [Obsolete("Please replace use of this property with the use of the new TreePruningNeededReason property (2017-05-17)")]
         public bool IsTreePruningNeeded
+        {
+            get { return !TreePruningNeededReason.IsNullOrEmpty(); }
+        }
+
+        /// <summary>returns non-empty string if there are one or more items in the tree that need to be deleted, string gives the reason why the next file needs to be deleted.  Returns empty string if tree pruning is not needed.</summary>
+        public string TreePruningNeededReason
         {
             get
             {
                 if (IsPruningBlocked)
-                    return false;
+                    return string.Empty;
 
                 if (treeRootEntry.DirContentsNodeList.Count == 0)
-                    return false;			// you cannot prune an empty tree!
+                    return string.Empty;			// you cannot prune an empty tree!
 
                 if (config.PruneRules.TreeNumItemsLimit != 0)
                 {
                     if (treeRootEntry.TreeItemCount > config.PruneRules.TreeNumItemsLimit)
-                        return true;
+                        return "Directory Tree Item Count Limit Reached: {0} > {1}".CheckedFormat(treeRootEntry.TreeItemCount, config.PruneRules.TreeNumItemsLimit);
                 }
 
                 if (config.PruneRules.TreeNumFilesLimit != 0)
                 {
                     if (treeRootEntry.TreeFileCount > config.PruneRules.TreeNumFilesLimit)
-                        return true;
+                        return "Directory Tree File Count Limit Reached: {0} > {1}".CheckedFormat(treeRootEntry.TreeFileCount, config.PruneRules.TreeNumFilesLimit);
                 }
 
                 if (config.PruneRules.TreeTotalSizeLimit != 0)
                 {
                     if (treeRootEntry.TreeContentsSize > config.PruneRules.TreeTotalSizeLimit)
-                        return true;
+                        return "Directory Tree Total Size Limit Reached: {0} > {1} bytes".CheckedFormat(treeRootEntry.TreeContentsSize, config.PruneRules.TreeTotalSizeLimit);
                 }
 
                 if (config.PruneRules.FileAgeLimit > TimeSpan.Zero)
                 {
                     TimeSpan treeAge = treeRootEntry.TreeAge;
                     if (treeAge > config.PruneRules.FileAgeLimit)
-                        return true;
+                        return "Directory Tree Oldest file age is at or above File Age Limit: {0:f6} >= {1:f6} days".CheckedFormat(treeAge.TotalDays, config.PruneRules.FileAgeLimit.TotalDays);
                 }
 
-                return false;
+                return string.Empty;
             }
         }
 
@@ -452,10 +463,13 @@ namespace MosaicLib.File
         /// <param name="pruneItemList">Gives the list of DirectoryEntryInfo items that are to be removed from the file system.</param>
         /// <param name="deleteEmitter">Gives the IMesgEmitter that will recieve messages about the successfull deletions</param>
         /// <param name="issueEmitter">Gives the IMesgEmitter that will receive any messages about failures while attempting to delete each item.</param>
+        /// <param name="reason">Gives the string description for the reason that these items are to be deleted.  Null or Empty will be replaced with [NoReasonGiven]</param>
         /// <returns>The number of items that were successfully deleted.</returns>
-        public int DeletePrunedItems(List<DirectoryEntryInfo> pruneItemList, Logging.IMesgEmitter deleteEmitter, Logging.IMesgEmitter issueEmitter)
+        public int DeletePrunedItems(List<DirectoryEntryInfo> pruneItemList, Logging.IMesgEmitter deleteEmitter, Logging.IMesgEmitter issueEmitter, string reason = null)
         {
             int deletedItemCount = 0;		// actually the count of the number of items that we have attempted to delete
+
+            reason = reason.MapNullOrEmptyTo("[NoReasonGiven]");
 
             for (int idx = 0; idx < pruneItemList.Count; idx++)
             {
@@ -469,7 +483,7 @@ namespace MosaicLib.File
                     {
                         System.IO.File.Delete(entryToDelete.Path);
                         deletedItemCount++;
-                        deleteEmitter.Emit("Pruned file:'{0}', size:{1}, age:{2:f3} days", entryToDelete.Path, entryToDelete.Length, ageInDays);
+                        deleteEmitter.Emit("Pruned file:'{0}', size:{1}, age:{2:f6} days, reason:{3}", entryToDelete.Path, entryToDelete.Length, ageInDays, reason);
                     }
                     catch (System.Exception ex)
                     {
@@ -482,7 +496,7 @@ namespace MosaicLib.File
                     {
                         System.IO.Directory.Delete(entryToDelete.Path);
                         deletedItemCount++;
-                        deleteEmitter.Emit("Pruned directory:'{0}', size:{1}, age:{2:f3} days", entryToDelete.Path, entryToDelete.Length, ageInDays);
+                        deleteEmitter.Emit("Pruned directory:'{0}', size:{1}, age:{2:f6} days, reason:{3}", entryToDelete.Path, entryToDelete.Length, ageInDays, reason);
                     }
                     catch (System.Exception ex)
                     {
@@ -491,7 +505,7 @@ namespace MosaicLib.File
                 }
                 else
                 {
-                    issueEmitter.Emit("Prune cannot delete unknown tree node at path:'{0}'", entryToDelete.Path);
+                    issueEmitter.Emit("Prune cannot delete unknown tree node at path:'{0}', reason:{1}", entryToDelete.Path, reason);
                 }
             }
 
@@ -500,25 +514,29 @@ namespace MosaicLib.File
 
         /// <summary>
         /// Peform an incremental prune iteration.
+        /// <para/>If given initialTreePruningNeededReason is null or empty then it will be replaced with the current value from the TreePruningNeededReason property.
         /// <para/>returns true if any tree items where deleted, false otherwise.
         /// </summary>
         /// <returns>true if any tree items where deleted, false otherwise.</returns>
         /// <remarks>Number of deletions is limited by config.maxEntriesToDeletePerIteration</remarks>
-        public bool PerformIncrementalPrune()
+        public bool PerformIncrementalPrune(string initialTreePruningNeededReason = null)
         {
             int deletedItemCount = 0;		// actually the count of the number of items that we have attempted to delete
             bool incrementalPruneFailed = false;
 
             List<DirectoryEntryInfo> pruneItemList = new List<DirectoryEntryInfo>();
 
-            while (deletedItemCount < config.MaxEntriesToDeletePerIteration && IsTreePruningNeeded && !incrementalPruneFailed)
+            string treePruningNeededReason = initialTreePruningNeededReason ?? TreePruningNeededReason;
+            initialTreePruningNeededReason = treePruningNeededReason;
+
+            while (deletedItemCount < config.MaxEntriesToDeletePerIteration && !treePruningNeededReason.IsNullOrEmpty() && !incrementalPruneFailed)
             {
                 pruneItemList.Clear();
 
                 ExtractNextListOfIncrementalItemsToPrune(pruneItemList, Info.Emitter);
 
                 int iterationItemsToDelete = pruneItemList.Count;
-                int iterationDeletedItemsCount = DeletePrunedItems(pruneItemList, Info.Emitter, Issue.Emitter);
+                int iterationDeletedItemsCount = DeletePrunedItems(pruneItemList, Info.Emitter, Issue.Emitter, reason: treePruningNeededReason);
                 deletedItemCount += iterationDeletedItemsCount;
 
                 if (iterationItemsToDelete == 0)
@@ -531,6 +549,8 @@ namespace MosaicLib.File
                     Debug.Emitter.Emit("DeleteItems was not able to delete all of the items during this iteration: items:{0}, deleted items:{1}", iterationItemsToDelete, iterationDeletedItemsCount);
                     incrementalPruneFailed = true;
                 }
+
+                treePruningNeededReason = TreePruningNeededReason;
             }
 
             if (incrementalPruneFailed)
@@ -541,19 +561,18 @@ namespace MosaicLib.File
                 BlockPruningForPeriod(blockPeriod);
             }
 
-            if (deletedItemCount > 0)
-            {
-                Info.Emitter.Emit("Incremental Prune deleted {0} items.  Directory state: path:'{1}' total files:{2}, items:{3}, size:{4:f3} Mb, Age:{5:f3} days"
-                                            , deletedItemCount
-                                            , treeRootEntry.Path
-                                            , treeRootEntry.TreeFileCount
-                                            , treeRootEntry.TreeItemCount
-                                            , (treeRootEntry.TreeContentsSize * (1.0 / (1024.0 * 1024.0)))
-                                            , treeRootEntry.TreeAge.TotalDays
-                                            );
-            }
+            if (deletedItemCount <= 0)
+                return false;
 
-            return (deletedItemCount != 0);
+            Info.Emitter.Emit("Incremental Prune deleted {0} items [{1}]", deletedItemCount, initialTreePruningNeededReason);
+            Info.Emitter.Emit("Updated Directory state: path:'{0}' total files:{1}, items:{2}, size:{3:f3} Mb, Age:{4:f6} days"
+                                        , treeRootEntry.Path
+                                        , treeRootEntry.TreeFileCount
+                                        , treeRootEntry.TreeItemCount
+                                        , (treeRootEntry.TreeContentsSize * (1.0 / (1024.0 * 1024.0)))
+                                        , treeRootEntry.TreeAge.TotalDays
+                                        );
+            return true;
         }
 
         #endregion
@@ -634,15 +653,16 @@ namespace MosaicLib.File
 
             if (!DidSetupFail && config.MaxInitialAutoCleanupIterations > 0)
             {
-                for (int iteration = 0; IsTreePruningNeeded && (iteration < config.MaxInitialAutoCleanupIterations); iteration++)
+                for (int iteration = 0; (iteration < config.MaxInitialAutoCleanupIterations); iteration++)
                 {
-                    PerformIncrementalPrune();
+                    if (!PerformIncrementalPrune())
+                        break;
                 }
             }
 
             if (!DidSetupFail)
             {
-                Info.Emitter.Emit("Directory is usable: path:'{0}' total files:{1}, items:{2}, size:{3:f3} Mb, Age:{4:f3} days",
+                Info.Emitter.Emit("Directory is usable: path:'{0}' total files:{1}, items:{2}, size:{3:f3} Mb, Age:{4:f6} days",
                                 config.DirPath,
                                 treeRootEntry.TreeFileCount,
                                 treeRootEntry.TreeItemCount,

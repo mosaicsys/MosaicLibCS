@@ -149,7 +149,7 @@ namespace MosaicLib.File
 						DirectoryEntryInfo oldestEntry = dirEntryList[oldestFileDirEntryID];
 
                         if (oldestEntry.CreationAge >= config.purgeRules.FileAgeLimit)
-                            return "Oldest file age is at or above File Age Limit: {0:f3} >= {1:f3} days".CheckedFormat(oldestEntry.CreationAge.TotalDays, config.purgeRules.FileAgeLimit.TotalDays);
+                            return "Oldest file age is at or above File Age Limit: {0:f6} >= {1:f6} days".CheckedFormat(oldestEntry.CreationAge.TotalDays, config.purgeRules.FileAgeLimit.TotalDays);
 					}
 					else
 					{

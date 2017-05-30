@@ -65,11 +65,17 @@ namespace MosaicLib
         /// <summary>urn://mosaicsys.com/NS/MLib.Semi.E005</summary>
         public const string E005NameSpace = SemiNameSpace + ".E005";
 
+        /// <summary>urn://mosaicsys.com/NS/MLib.Semi.E039</summary>
+        public const string E039NameSpace = SemiNameSpace + ".E039";
+
         /// <summary>urn://mosaicsys.com/NS/MLib.Semi.E004</summary>
         public const string E084NameSpace = SemiNameSpace + ".E084";
 
         /// <summary>urn://mosaicsys.com/NS/MLib.Semi.E087</summary>
         public const string E087NameSpace = SemiNameSpace + ".E087";
+
+        /// <summary>urn://mosaicsys.com/NS/MLib.Semi.E0890</summary>
+        public const string E090NameSpace = SemiNameSpace + ".E090";
     }
 }
 

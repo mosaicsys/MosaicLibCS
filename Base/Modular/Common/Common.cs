@@ -2431,6 +2431,15 @@ namespace MosaicLib.Modular.Common
         }
 
         /// <summary>
+        /// Updates the desired NamedValue to be a keyword (has empty value container value), or adds a new keyword NamedValue, from the given name, to the list if it was not already present.
+        /// </summary>
+        /// <exception cref="System.NotSupportedException">thrown if the collection has been set to IsReadOnly</exception>
+        public NamedValueSet SetKeyword(string name)
+        {
+            return SetValue(new NamedValue(name));
+        }
+
+        /// <summary>
         /// Updates the desired NamedValue to contain the given vc value, or adds a new NamedValue, initialized from the given name and vc value, to the list if it was not already present.
         /// </summary>
         /// <exception cref="System.NotSupportedException">thrown if the collection has been set to IsReadOnly</exception>
@@ -3369,6 +3378,46 @@ namespace MosaicLib.Modular.Common
         }
 
         /// <summary>
+        /// Conditional SetKeyword variant as extension method. 
+        /// If the given condition is true then this method Sets the given name as a keyword (vc is empty), 
+        /// otherwise the method does not modify the given nvs.
+        /// </summary>
+        public static NamedValueSet ConditionalSetKeyword(this NamedValueSet nvs, string name, bool condition)
+        {
+            if (condition)
+                nvs.SetKeyword(name);
+
+            return nvs;
+        }
+
+        /// <summary>
+        /// Conditional SetValue variant as extension method. 
+        /// If the given condition is true then this method Sets the given name to the given value, 
+        /// otherwise the method does not modify the given nvs.
+        /// </summary>
+        public static NamedValueSet ConditionalSetValue<TValueType>(this NamedValueSet nvs, string name, bool condition, TValueType value)
+        {
+            if (condition)
+                nvs.SetValue(name, value);
+
+            return nvs;
+        }
+
+        /// <summary>
+        /// SetValue variant as extension method.  
+        /// If the given nullable value is not null then this method Sets the given name to the given value
+        /// otherwise the method does not modify the given nvs.
+        /// </summary>
+        public static NamedValueSet SetValueIfNotNull<TValueType>(this NamedValueSet nvs, string name, TValueType? value)
+            where TValueType : struct
+        {
+            if (value != null)
+                nvs.SetValue(name, value.GetValueOrDefault());
+
+            return nvs;
+        }
+
+        /// <summary>
         /// Converts the given INamedValueSet iNvSet to a readonly NamedValueSet, either by casting or by copying.
         /// If the given iNvSet value is null then this method return null.
         /// If the given iNvSet value IsReadOnly and its type is actually a NamedValueSet then this method returns the given iNvSet down casted as a NamedValueSet (path used for serialziation)
@@ -3482,21 +3531,55 @@ namespace MosaicLib.Modular.Common
             bool add = mergeBehavior.IsAddSelected();
             bool update = mergeBehavior.IsUpdateSelected();
 
+            bool removeEmpty = ((mergeBehavior & NamedValueMergeBehavior.RemoveEmpty) != NamedValueMergeBehavior.None);
+            bool removeNull = ((mergeBehavior & NamedValueMergeBehavior.RemoveNull) != NamedValueMergeBehavior.None);
+            bool appendLists = ((mergeBehavior & NamedValueMergeBehavior.AppendLists) != NamedValueMergeBehavior.None);
+
             if (lhs == null || lhs.IsReadOnly)
-                lhs = lhs.ConvertToWriteable();
+                lhs = new NamedValueSet(lhs.GetEnumerable(TraversalType.TopLevelOnly), asReadOnly: false, subSets: lhs.SubSets);
 
             if (rhs != null)
             {
                 foreach (INamedValue rhsItem in rhs)
                 {
-                    bool lhsContainsRhsName = !lhs.Contains(rhsItem.Name);
-                    if (lhsContainsRhsName ? add : update)
+                    bool lhsContainsRhsName = lhs.Contains(rhsItem.Name);
+                    bool rhsIsIListOfString = rhsItem.VC.cvt == ContainerStorageType.IListOfString;
+                    bool rhsIsIListOfVC = rhsItem.VC.cvt == ContainerStorageType.IListOfVC;
+
+                    if (lhsContainsRhsName)
+                    {
+                        bool mayBeAppend = appendLists && (rhsIsIListOfString || rhsIsIListOfVC);
+                        INamedValue lhsItem = (mayBeAppend ? lhs[rhsItem.Name] : null);
+                        bool isAppend = (mayBeAppend && lhsItem != null && lhsItem.VC.cvt == rhsItem.VC.cvt);
+
+                        if ((removeEmpty && rhsItem.VC.IsEmpty) || (removeNull && rhsItem.VC.IsNull))
+                        {
+                            lhs.Remove(rhsItem.Name);
+                        }
+                        else if (update)
+                        {
+                            if (!isAppend)
+                                lhs.SetValue(rhsItem.Name, rhsItem.VC);
+                            else if (rhsIsIListOfString)
+                                lhs.SetValue(rhsItem.Name, new List<string>(lhsItem.VC.GetValue<IList<string>>(false, emptyIListOfString).Concat(rhsItem.VC.GetValue<IList<string>>(false, emptyIListOfString))).AsReadOnly());
+                            else
+                                lhs.SetValue(rhsItem.Name, new List<ValueContainer>(lhsItem.VC.GetValue<IList<ValueContainer>>(false, emptyIListVC).Concat(rhsItem.VC.GetValue<IList<ValueContainer>>(false, emptyIListVC))).AsReadOnly());
+                        }
+                        // else leave the existing lhs item alone.
+                    }
+                    else if (add)
+                    {
                         lhs.SetValue(rhsItem.Name, rhsItem.VC);
+                    }
+                    // else do not add the non-matching item to the lhs.
                 }
             }
 
             return lhs;
         }
+
+        private static readonly IList<string> emptyIListOfString = new List<string>().AsReadOnly();
+        private static readonly IList<ValueContainer> emptyIListVC = new List<ValueContainer>().AsReadOnly();
 
         /// <summary>Returns true if the given mergeBehavior value has the AddNewItems flag set.</summary>
         public static bool IsAddSelected(this NamedValueMergeBehavior mergeBehavior)
@@ -3522,7 +3605,6 @@ namespace MosaicLib.Modular.Common
             return nvs;
         }
 
-
         /// <summary>
         /// Attemps to "Add" the contents of each of the given dictionary's DictionaryItem items to this set.
         /// Returns this object to support call chaining.
@@ -3534,28 +3616,33 @@ namespace MosaicLib.Modular.Common
 
             return nvs;
         }
-
-
     }
 
     /// <summary>
     /// This Flag enumeration is used to help specify the caller's specific desired behavior when "merging" two or more INamedValueSet objects.
-    /// <para/>None (0), AddNewItems (1), UpdateExistingItems(2), and combinations of these.
+    /// <para/>None (0x00), AddNewItems (0x01), UpdateExistingItems(0x02), RemoveEmpty(0x04), RemoveNull(0x08), AppendLists (0x10) and combinations of these.
     /// </summary>
     [Flags]
     public enum NamedValueMergeBehavior
     {
-        None = 0,
-        /// <summary>Merge by adding new items from the rhs into the lhs only if the lhs does not already contains an element with the same name.</summary>
-        AddNewItems = 1,
-        /// <summary>Merge by updating only each item in the lhs that is also in the rhs by replacing the lhs item's value the corresponding rhs item's value.</summary>
-        UpdateExistingItems = 2,
+        /// <summary>Placeholder default value [0x00]</summary>
+        None = 0x00,
+        /// <summary>Merge by adding new items from the rhs into the lhs only if the lhs does not already contains an element with the same name. [0x01]</summary>
+        AddNewItems = 0x01,
+        /// <summary>Merge by updating only each item in the lhs that is also in the rhs by replacing the lhs item's value the corresponding rhs item's value. [0x02]</summary>
+        UpdateExistingItems = 0x02,
+        /// <summary>Select to remove empty items (and any matching named value in the from set) from the resulting set [0x04]</summary>
+        RemoveEmpty = 0x04,
+        /// <summary>Select to remove null items (and any matching named value in the from set) from the resulting set [0x08]</summary>
+        RemoveNull = 0x08,
+        /// <summary>Select to request that the merge operation will concatinate the contents of corresonding list objects.  This behavior is only useful when combined with Update [0x10]</summary>
+        AppendLists = 0x10,
 
-        /// <summary>Shorthand for AddNewItems</summary>
+        /// <summary>Shorthand for AddNewItems [0x01]</summary>
         AddOnly = AddNewItems,
-        /// <summary>Shorthand for UpdateExistingItems</summary>
+        /// <summary>Shorthand for UpdateExistingItems [0x02]</summary>
         UpdateOnly = UpdateExistingItems,
-        /// <summary>Shorthand for AddNewItems | UpdateExistingItems</summary>
+        /// <summary>Shorthand for AddNewItems | UpdateExistingItems [0x03]</summary>
         AddAndUpdate = AddNewItems | UpdateExistingItems,
     }
 

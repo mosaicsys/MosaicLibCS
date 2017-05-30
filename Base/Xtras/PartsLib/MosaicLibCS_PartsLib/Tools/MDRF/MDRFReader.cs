@@ -135,13 +135,14 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
 
                 if (fileWasProperlyClosed)
                 {
-                    // if file was properly closed then find the last row index that is not empty
-                    for (lastRowIndex = firstRowIndex; ; lastRowIndex++)
+                    // scan backward from the given starting lastRowIndex until we reach the firstRowIndex or we find another non-empty row
+
+                    while (lastRowIndex > firstRowIndex)
                     {
                         FileIndexRowBase firb = fileIndexInfo.FileIndexRowArray.SafeAccess(lastRowIndex);
 
-                        if (firb != null && !firb.IsEmpty)
-                            lastRowIndex++;
+                        if (firb == null || firb.IsEmpty)
+                            lastRowIndex--;
                         else
                             break;
                     }
@@ -162,7 +163,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                             break;
                     }
                 }
-                // else if the file was not properly closed then we cannot trust that the index or the last row information is actually valid
+                // else if the file was not properly closed then we cannot trust that the index or the last row information is actually valid - so we will need to read through the end
             }
 
             if (firstRowIndex > 0 && AutoRewindToPriorFullGroupRow)
@@ -207,8 +208,6 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
 
         /// <summary>Reports that reading has ended on a file [0x0002]</summary>
         ReadingEnd = 0x0002,
-
-        ///Todo: Finish adding summary comments for these enum items (MDRF.Reader.ProcessContentEvent)
 
         /// <summary></summary>
         RowStart = 0x0004,
