@@ -346,7 +346,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
                     }
                     catch (System.Exception ex)
                     {
-                        SetupResultCode = SetupResultCode.MapNullOrEmptyTo("{0} failed: CreateDirectory '{1}': {2} {3}".CheckedFormat(CurrentMethodName, setup.DirPath, ex.GetType(), ex.Message));
+                        SetupResultCode = SetupResultCode.MapNullOrEmptyTo("{0} failed: CreateDirectory '{1}': {2}".CheckedFormat(CurrentMethodName, setup.DirPath, ex.ToString(ExceptionFormat.TypeAndMessage)));
                     }
                 }
             }
@@ -625,7 +625,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
                 {
                     if (InnerIsFileOpen)
                     {
-                        ec = RecordError("{0} failed: {1} {2} {3}".CheckedFormat(CurrentMethodName, currentFileInfo, ex.GetType(), ex.Message), dtPair);
+                        ec = RecordError("{0} failed: {1} {2}".CheckedFormat(CurrentMethodName, currentFileInfo, ex.ToString(ExceptionFormat.TypeAndMessage)), dtPair);
 
                         CloseFile(dtPair);
                     }
@@ -652,7 +652,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
                 if (rethrow)
                     throw;
 
-                ec = RecordError("{0} failed: {1} {2} {3}".CheckedFormat(CurrentMethodName, currentFileInfo, ex.GetType(), ex.Message), dtPair);
+                ec = RecordError("{0} failed: {1} {2}".CheckedFormat(CurrentMethodName, currentFileInfo, ex.ToString(ExceptionFormat.TypeAndMessage)), dtPair);
 
                 CloseFile(dtPair);
             }
@@ -986,7 +986,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
             }
             catch (System.Exception ex)
             {
-                string mesg = "{0} failed: {1} {2} {3}".CheckedFormat(CurrentMethodName, currentFileInfo, ex.GetType(), ex.Message);
+                string mesg = "{0} failed: {1} {2}".CheckedFormat(CurrentMethodName, currentFileInfo, ex.ToString(ExceptionFormat.TypeAndMessage));
 
                 ec = mesg;
             }
@@ -1131,7 +1131,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
                 }
                 catch (System.Exception ex)
                 {
-                    Log.Debug.Emit(RecordError("{0} failed: {1} {2} {3}".CheckedFormat(CurrentMethodName, currentFileInfo, ex.GetType(), ex.Message), dtPair));
+                    Log.Debug.Emit(RecordError("{0} failed: {1} {2}".CheckedFormat(CurrentMethodName, currentFileInfo, ex.ToString(ExceptionFormat.TypeAndMessage)), dtPair));
                     fs = null;
                 }
             }
@@ -1339,7 +1339,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
             {
                 CloseFile(dtPair);
 
-                return RecordError("{0} failed: {1} {2} {3}".CheckedFormat(CurrentMethodName, currentFileInfo, ex.GetType(), ex.Message), dtPair);
+                return RecordError("{0} failed: {1} {2}".CheckedFormat(CurrentMethodName, currentFileInfo, ex.ToString(ExceptionFormat.TypeAndMessage)), dtPair);
             }
 
             lastFileIndexWriteTimeStamp = QpcTimeStamp.Now;
@@ -1403,7 +1403,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
             {
                 CloseFile(dtPair);
 
-                return RecordError("{0} failed: {1} {2} {3}".CheckedFormat(CurrentMethodName, currentFileInfo, ex.GetType(), ex.Message), dtPair);
+                return RecordError("{0} failed: {1} {2}".CheckedFormat(CurrentMethodName, currentFileInfo, ex.ToString(ExceptionFormat.TypeAndMessage)), dtPair);
             }
 
             return string.Empty;
@@ -2429,9 +2429,12 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
         [ConfigItem(IsOptional = true)]
         public bool OnlyRecordMessagesIfFileIsAlreadyActive { get; set; }
 
+        /// <summary>
+        /// Update this object's ConfigItem marked public properties from corresponingly named config keys (using the namePrefix)
+        /// </summary>
         public MDRFLogMessageHandlerAdapterConfig Setup(string prefixName = "Logging.LMH.MDRFLogMessageHandler.", IConfig config = null, Logging.IMesgEmitter issueEmitter = null, Logging.IMesgEmitter valueEmitter = null)
         {
-            ConfigValueSetAdapter<MDRFLogMessageHandlerAdapterConfig> adapter = new ConfigValueSetAdapter<MDRFLogMessageHandlerAdapterConfig>() 
+            ConfigValueSetAdapter<MDRFLogMessageHandlerAdapterConfig> adapter = new ConfigValueSetAdapter<MDRFLogMessageHandlerAdapterConfig>(config) 
             { 
                 ValueSet = this, 
                 SetupIssueEmitter = issueEmitter, 

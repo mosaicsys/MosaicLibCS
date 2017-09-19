@@ -161,13 +161,19 @@ namespace MosaicLib.Semi.E039
         /// </summary>
         public class AddObject : ObjIDAndAttributeBase
         {
-            public AddObject(E039ObjectID objID, INamedValueSet attributes = null, E039ObjectFlags flags = E039ObjectFlags.None) 
+            public AddObject(E039ObjectID objID, INamedValueSet attributes = null, E039ObjectFlags flags = E039ObjectFlags.None, bool ifNeeded = false, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.None) 
                 : base(objID, attributes) 
             {
                 Flags = flags;
+                IfNeeded = ifNeeded;
+                MergeBehavior = mergeBehavior;
             }
 
             public E039ObjectFlags Flags { get; private set; }
+
+            public bool IfNeeded { get; private set; }
+
+            public NamedValueMergeBehavior MergeBehavior { get; private set; }
 
             public INotificationObject<IE039Object> AddedObjectPublisher { get; set; }
         }
@@ -342,48 +348,102 @@ namespace MosaicLib.Semi.E039
     [Flags]
     public enum E039ToStringSelect : int
     {
+        /// <summary>Placeholder default value [0x00]</summary>
         None = 0x00,
+        /// <summary>Output of an object ID should include the ID's FullName.  If this options is not selected then it shall just include the ID's Name but not its Type. [0x01]</summary>
         FullName = 0x01,
+        /// <summary>Output of an object ID should include the ID's UUID if it has one assigned [0x02]</summary>
         UUID = 0x02,
+        /// <summary>Output of an object should include its attributes [0x04]</summary>
         Attributes = 0x04,
+        /// <summary>Output of links should include just the Name of the link endpoints [0x10]</summary>
         LinkedShortIDs = 0x10,
+        /// <summary>Output of links should include the FullName's of each of the link endpoints [0x20]</summary>
         LinkedFullIDs = 0x20,
 
+        /// <summary>FullName | UUID [0x03]</summary>
         DefaultObjIDSelect = (FullName | UUID),
+
+        /// <summary>DefaultObjIDSelect | Attributes | LinkedShortIDs [0x17]</summary>
         DefaultObjSelect = (DefaultObjIDSelect | Attributes | LinkedShortIDs),
     }
 
     #endregion
 
-    #region E039 object types and interfaces: E039ObjectID, IE039BasicObject, IE039CompositeObject, IE039ContainerObject, IE039LocationObject, IE039BatchLocationObject, E039Link
+    #region E039 object types and interfaces: E039ObjectID, IE039Object, E039Link, E039ObjectFlags, and related extension methods
 
+    /// <summary>
+    /// This class is used to represent the immutable "identity" of an E039 object.  This object is immutable to all external client code
+    /// as all of its public properties have only private setters, or no setter at all.
+    /// Namely this is the object's Type and Name.  This identity may also include a UUID.
+    /// This object also provides a "FullName" property which gives a string of the form "Type:Name".  This property is generally used for
+    /// logging and as a dictionary key for dictionaries that index E039Object's by their type and name.
+    /// All E039Object instances that stem from a common table entry shall make use of the same E039ObjectID instance.
+    /// The UUID is intended support being persisted so that objects with a long lifetime can be reliably identified in relation to other 
+    /// objects that are repeatedly created and removed but which share the same name and type as previously used objects.
+    /// This object supports serialization and deserialization, however the E039Object explicitly serializes its own Name and UUID as it is
+    /// generally serialized in a wrapper container that already knows the type of all of the E039Objects that are to be so serialized.
+    /// As such the E039Object does not directly serialize its ID using this object's serialized output.
+    /// </summary>
     [DataContract(Namespace=Constants.E039NameSpace, Name="ObjectID")]
     public class E039ObjectID : IEquatable<E039ObjectID>
     {
-        public E039ObjectID() {}
+        /// <summary>
+        /// public Default constructor.  Constructs an empty E039ObjectID.  
+        /// The resulting object's Name, Type, FullName, and UUID will return empty strings.
+        /// Table will be assigned to be null.
+        /// </summary>
+        public E039ObjectID() 
+        {}
 
-        public E039ObjectID(string name, string type, bool assignUUID = false)
+        /// <summary>
+        /// public explicit constructor.  
+        /// Allows caller to specify the <paramref name="name"/> and <paramref name="type"/> to be used.  
+        /// If the optional <paramref name="assignUUID"/> parameter is explicitly set to true then this constructor will generate and retain a new non-empty UUID.
+        /// Table is always set to null using this constructor.
+        /// </summary>
+        public E039ObjectID(string name, string type, bool assignUUID = false, IE039TableObserver tableObserver = null)
+            : this(name, type, assignUUID ? Guid.NewGuid().ToString() : null, tableObserver)
+        {}
+
+        /// <summary>Custom constructor for use by E039 internals.  Gives caller access to assign all of the critical properties of an E039ObjectID</summary>
+        internal E039ObjectID(string name, string type, string uuid, IE039TableObserver tableObserver)
         {
             Name = name;
             Type = type;
-            FullName = "{0}:{1}".CheckedFormat(Type, Name);
-            _uuid = (assignUUID ? Guid.NewGuid().ToString() : null);
+            FullName = (!name.IsNullOrEmpty() || !type.IsNullOrEmpty()) ? "{0}:{1}".CheckedFormat(Type, Name) : string.Empty;
+            UUID = uuid;
+            TableObserver = tableObserver;
         }
 
-        internal E039ObjectID(E039ObjectID other, bool assignUUIDIfNeeded = true)
+        /// <summary>
+        /// pseudo Copy constructor used by the E039 internals.  
+        /// Makes a copy of the given other and allows the caller to replace the table being used
+        /// </summary>
+        internal E039ObjectID(E039ObjectID other, IE039TableObserver tableObserver)
         {
             _name = other._name;
             _type = other._type;
             FullName = other.FullName;
             _uuid = other._uuid;
-            if ((_uuid == null) && assignUUIDIfNeeded)
-                _uuid = Guid.NewGuid().ToString();
+
+            TableObserver = tableObserver;
         }
 
+        /// <summary>Returns the string Name for this E039ObjectID</summary>
         public string Name { get { return _name.MapNullToEmpty(); } private set { _name = value.MapNullOrEmptyTo(null); } }
+
+        /// <summary>Returns the string Type for this E039ObjectID</summary>
         public string Type { get { return _type.MapNullToEmpty(); } private set { _type = value.MapNullOrEmptyTo(null); } }
+
+        /// <summary>Returns the full name of the object as "Type:Name"</summary>
         public string FullName { get; private set; }
+
+        /// <summary>Returns the UUID assigned to this object (if any).  Generally this is only included in an E039ObjectID obtained from a table or which is being used to Add an object with a predefined UUID.</summary>
         public string UUID { get { return _uuid.MapNullToEmpty(); } private set { _uuid = value.MapNullOrEmptyTo(null); } }
+
+        /// <summary>Returns the TableObserver instance which created this E039ObjectID (and thus contains the corresponding object) if non-null.  For client constructed E039ObjectID instances, this property will be null.</summary>
+        public IE039TableObserver TableObserver { get; private set; }
 
         [DataMember(Name = "Name", IsRequired = false, EmitDefaultValue = false)]
         private string _name;
@@ -402,25 +462,45 @@ namespace MosaicLib.Semi.E039
             FullName = "{0}:{1}".CheckedFormat(Type, Name);
         }
 
+        /// <summary>Returns the reference Empty E039ObjectID</summary>
         public static E039ObjectID Empty { get { return _empty; } }
         private static readonly E039ObjectID _empty = new E039ObjectID() { };
 
+        /// <summary>
+        /// IEquatable{E039ObjectID} implementation method.  
+        /// Returns true if the objects have the same Name and Type 
+        /// and they either have the same UUID or at least one of them has a null or empty UUID
+        /// and they either have the same Table or at least one of them's Table property is null.
+        /// </summary>
         public bool Equals(E039ObjectID other)
         {
+            // if the stored Name or Type do not match then they are not equal
             if (_name != other._name || _type != other._type)
                 return false;
 
-            if (_uuid == other._uuid|| (_uuid == null) || (other._uuid == null))
-                return true;
+            // if both IDs include different non-empty UUIDs then return false
+            if (_uuid != null && other._uuid != null && _uuid != other._uuid)
+                return false;
 
-            return false;
+            // if both stored Tables are non-null and they are not the same reference then return false
+            if (TableObserver != null && other.TableObserver != null && !Object.ReferenceEquals(TableObserver, other.TableObserver))
+                return false;
+
+            // all tested values are equal
+            return true;
         }
 
+        /// <summary>Debugging and Logging helper method.  returns ToString(DefaultObjIDSelect = FullName | UUID)</summary>
         public override string ToString()
         {
             return ToString(E039ToStringSelect.DefaultObjIDSelect);
         }
 
+        /// <summary>
+        /// Adjustable ToString variant accepts <paramref name="toStringSelect"/> to indicate which flavor of ToString will be used.
+        /// FullName inclues the FullName, otherwise just the Name is included.  
+        /// If UUID is included and this ID includes a UUID then the uuid will be appended to the resulting string.
+        /// </summary>
         public string ToString(E039ToStringSelect toStringSelect)
         {
             StringBuilder sb = new StringBuilder();
@@ -441,7 +521,7 @@ namespace MosaicLib.Semi.E039
         }
 
         /// <summary>
-        /// Returns true if the Type and Name are non-empty
+        /// Returns true if the Type and Name are non-empty.  The UUID may be empty and Table may be null.
         /// </summary>
         public bool IsValid { get { return !Type.IsNullOrEmpty() && !Name.IsNullOrEmpty(); } }
     }
@@ -485,7 +565,7 @@ namespace MosaicLib.Semi.E039
             : this(other.FromID, other.ToID, other.Key)
         { }
 
-        /// <summary>Identifies the object that is the source of the link (the from end)</summary>
+        /// <summary>Identifies the object that is the source of the link (the "from" end)</summary>
         public E039ObjectID FromID { get { return _fromID ?? E039ObjectID.Empty; } set { _fromID = value; } }
 
         // We are currently not peristing the FromID since it is known by context in a serialized object body.
@@ -493,14 +573,26 @@ namespace MosaicLib.Semi.E039
         private E039ObjectID _fromID;
 
         /// <summary>identifies the Key that is used to identify this "type" of the link (client specified terminology)</summary>
-        [DataMember(Order = 20, IsRequired = false, EmitDefaultValue = false)]
+        [DataMember(Order = 100, IsRequired = false, EmitDefaultValue = false)]
         public string Key { get; set; }
 
-        /// <summary>identifies the object that is the target of the link (the to end)</summary>
-        public E039ObjectID ToID { get { return _toID ?? E039ObjectID.Empty; } set { _toID = value; } }
+        /// <summary>identifies the object that is the target of the link (the "to" end)</summary>
+        public E039ObjectID ToID { get { return _toID ?? E039ObjectID.Empty; } set { _toID = value; toName = value.Name; toType = value.Type; } }
 
-        [DataMember(Name = "ToID", Order = 40, IsRequired = false, EmitDefaultValue = false)]
+        // [DataMember(Name = "ToID", Order = 200, IsRequired = false, EmitDefaultValue = false)]
         private E039ObjectID _toID;
+
+        [DataMember(Name = "ToName", Order = 300, IsRequired = false, EmitDefaultValue = false)]
+        private string toName;
+
+        [DataMember(Name = "ToType", Order = 400, IsRequired = false, EmitDefaultValue = false)]
+        private string toType;
+
+        [OnDeserialized]
+        void OnDeserialized(StreamingContext sc)
+        {
+            _toID = new E039ObjectID(toName, toType, assignUUID: false);
+        }
 
         /// <summary>Returns true if the FromID, ToID, and Key are empty.</summary>
         public bool IsEmpty { get { return (FromID.IsEmpty && Key.IsNullOrEmpty() && ToID.IsEmpty); } }
@@ -541,36 +633,168 @@ namespace MosaicLib.Semi.E039
         private static readonly E039LinkFilter _filterNone = (link) => false;
     }
 
-    #endregion
-
-    #region E039ObjectFlags and extension methods
-
     /// <summary>
     /// Object instance and use flags.
-    /// <para/>None (0x00), Pinned (0x10), CreateIVA (0x100), IsFinal (0x100)
+    /// <para/>None (0x0000), Pinned (0x0010), CreateIVA (0x0100), IsFinal (0x1000), ClientUsableFlags (0x0110)
     /// </summary>
-    [DataContract(Namespace=Constants.E039NameSpace)]
+    [DataContract(Namespace = Constants.E039NameSpace)]
     [Flags]
     public enum E039ObjectFlags : int
     {
+        /// <summary>PlaceHolder default value [0x0000]</summary>
         [EnumMember]
         None = 0x00,
 
+        /// <summary>Client usable: Flag indicates that the object cannot as a side effect of a final link to it being removed [0x0010]</summary>
         [EnumMember]
-        Pinned = 0x10, 
+        Pinned = 0x10,
 
+        /// <summary>Client usable: Flag indicates that the client would like the table manager to create an IVA for this object [0x0100]</summary>
         [EnumMember]
         CreateIVA = 0x100,
 
+        /// <summary>Flag indicates that the table manager has published this as a final value.  This is done immediately before the object is removed from the table [0x1000]</summary>
         [EnumMember]
         IsFinal = 0x1000,
+
+        /// <summary>Gives the set of client usable flags (Pinned | CreateIVA) [0x0110]</summary>
+        ClientUsableFlags = (E039ObjectFlags.Pinned | E039ObjectFlags.CreateIVA),
     }
 
     public static partial class ExtensionMethods
     {
+        /// <summary>
+        /// Returns true if the given <paramref name="flags"/> value has the IsFinal bit set.
+        /// </summary>
         public static bool IsFinal(this E039ObjectFlags flags) { return flags.IsSet(E039ObjectFlags.IsFinal); }
 
-        public static bool IsFinal(this IE039Object obj) { return (obj == null) && obj.Flags.IsFinal(); }
+        /// <summary>
+        /// Returns true if the given <paramref name="obj"/> is non-null and its Flags property has the IsFinal bit set 
+        /// to indicate that this is the final value that will be published to the corresonding publisher, 
+        /// generally because the object is being removed from the table.
+        /// </summary>
+        public static bool IsFinal(this IE039Object obj) 
+        { 
+            return (obj != null) && obj.Flags.IsFinal(); 
+        }
+
+        /// <summary>
+        /// Attempts to obtain, and return, the object identified by the given <paramref name="objID"/> using the TableObserver that the <paramref name="objID"/> references.
+        /// <para/>Note:  This EM is only suitable for use with <paramref name="objID"/> instances that have been obtained from a TableObserver (or a publishder that it created)
+        /// or where the id's was constructed with a reference to the appropriate tableObserver for which the id is expected to be known.
+        /// <para/>If the given <paramref name="objID"/>'s TableObserver property is null or if no matching object is found in the given table then this method returns the <paramref name="fallbackValue"/>.
+        /// </summary>
+        public static IE039Object GetObject(this E039ObjectID objID, IE039Object fallbackValue = null)
+        {
+            IE039TableObserver tableObserver = ((objID != null) ? objID.TableObserver : null);
+
+            if (tableObserver != null)
+            {
+                INotificationObject<IE039Object> publisher = tableObserver.GetPublisher(objID);
+                if (publisher != null)
+                    return publisher.Object ?? fallbackValue;
+            }
+
+            return fallbackValue;
+        }
+    }
+
+    #endregion
+
+    #region E039Object (for publication and internal use)
+
+    [DataContract(Namespace = Constants.E039NameSpace, Name = "ObjInst")]
+    public class E039Object : IE039Object
+    {
+        public E039Object()
+        {
+            ID = E039ObjectID.Empty;
+        }
+
+        public E039Object(IE039Object other, E039ObjectID alternateID = null)
+        {
+            ID = alternateID ?? other.ID;
+            Flags = other.Flags;
+            Attributes = other.Attributes.ConvertToReadOnly();
+
+            LinksFromOtherObjectsList = other.LinksFromOtherObjectsList;
+            LinksToOtherObjectsList = other.LinksToOtherObjectsList;
+        }
+
+        public E039Object(E039ObjectID id, E039ObjectFlags flags, INamedValueSet attributes)
+        {
+            ID = id;
+            Flags = flags;
+            Attributes = attributes.MapNullToEmpty().ConvertToReadOnly();
+        }
+
+        public E039ObjectID ID
+        {
+            get { return _id; }
+            internal set
+            {
+                _id = value;
+                Name = _id.Name.MapEmptyTo();
+                UUID = _id.UUID.MapEmptyTo();
+            }
+        }
+        private E039ObjectID _id;
+
+        [DataMember(Order = 100, IsRequired = false, EmitDefaultValue = false)]
+        internal string Name { get; set; }
+
+        [DataMember(Order = 110, IsRequired = false, EmitDefaultValue = false)]
+        internal string UUID { get; set; }
+
+        public E039ObjectFlags Flags { get; internal set; }
+
+        [DataMember(Order = 200, Name = "Flags", IsRequired = false, EmitDefaultValue = false)]
+        private string FlagsSerializationHelper { get { return Flags.ToString(); } set { Flags = value.TryParse<E039ObjectFlags>(); } }
+
+        [DataMember(Order = 300, Name = "Attribs", IsRequired = false, EmitDefaultValue = false)]
+        public NamedValueSet Attributes { get; internal set; }
+
+        INamedValueSet IE039Object.Attributes { get { return this.Attributes.ConvertToReadOnly(); } }
+
+        public IList<E039Link> LinksToOtherObjectsList { get { return _linksToOtherObjectsList ?? _emptyLinkList; } internal set { _linksToOtherObjectsList = (value != null && value.Count > 0) ? value : null; } }
+        public IList<E039Link> LinksFromOtherObjectsList { get { return _linksFromOtherObjectsList ?? _emptyLinkList; } internal set { _linksFromOtherObjectsList = (value != null && value.Count > 0) ? value : null; } }
+
+        private IList<E039Link> _linksToOtherObjectsList = null;
+        private IList<E039Link> _linksFromOtherObjectsList = null;
+
+        [DataMember(Name = "LinksOut", Order = 400, IsRequired = false, EmitDefaultValue = false)]
+        private List<E039Link> SerializationHelperForLinksToOtherObjectsList { get { return (_linksToOtherObjectsList == null ? null : new List<E039Link>(_linksToOtherObjectsList)); } set { _linksToOtherObjectsList = (value != null && value.Count > 0) ? value.AsReadOnly() : null; } }
+
+        private static readonly IList<E039Link> _emptyLinkList = new List<E039Link>().AsReadOnly();
+
+        public override string ToString()
+        {
+            return ToString(E039ToStringSelect.DefaultObjSelect);
+        }
+
+        public string ToString(E039ToStringSelect toStringSelect)
+        {
+            StringBuilder sb = new StringBuilder();
+
+            sb.Append(ID.ToString(toStringSelect));
+
+            bool linkShortIDs = toStringSelect.IsSet(E039ToStringSelect.LinkedShortIDs);
+            E039ToStringSelect linkIDToStringSelect = linkShortIDs ? E039ToStringSelect.None : E039ToStringSelect.FullName;
+
+            if (linkShortIDs || toStringSelect.IsSet(E039ToStringSelect.LinkedFullIDs))
+            {
+                if (_linksToOtherObjectsList != null)
+                    sb.CheckedAppendFormat(" to:[{0}]", String.Join(",", _linksToOtherObjectsList.Select(link => link.ToString(linkIDToStringSelect)).ToArray()));
+
+                if (_linksFromOtherObjectsList != null)
+                    sb.CheckedAppendFormat(" from:[{0}]", String.Join(",", _linksFromOtherObjectsList.Select(link => link.ToString(linkIDToStringSelect)).ToArray()));
+            }
+
+            if (toStringSelect.IsSet(E039ToStringSelect.Attributes))
+                sb.CheckedAppendFormat(" attribs:{0}", Attributes);
+
+            return sb.ToString();
+        }
     }
 
     #endregion
@@ -720,17 +944,18 @@ namespace MosaicLib.Semi.E039
                         // Find (or create) the TypeTableTracker for the persisted type.  
                         // The corresponding TypeSetTracker may not be the same one as the one that we just created (this supports migration of object location from an old typeset to a new one)
 
-                        foreach (IE039Object loadedObject in typeTable.ObjectInstanceSet)
+                        foreach (E039Object loadedObject in typeTable.ObjectInstanceSet)
                         {
-                            E039ObjectID objID = new E039ObjectID(loadedObject.ID, assignUUIDIfNeeded: true);
+                            E039ObjectID objID = new E039ObjectID(loadedObject.Name, typeTable.Type, loadedObject.UUID, this);
 
                             ObjectTracker ot = FindObjectTrackerForID(objID, createIfNeeded: true, initialFlags: loadedObject.Flags);
 
-                            ot.obj = new E039Object(loadedObject);
+                            ot.obj = new E039Object(loadedObject, objID);
 
                             foreach (var loadedLink in loadedObject.LinksToOtherObjectsList)
                             {
-                                E039Link adjLink = new E039Link(loadedLink) { FromID = loadedObject.ID };
+                                E039ObjectID adjLinkToID = new E039ObjectID(loadedLink.ToID, this);
+                                E039Link adjLink = new E039Link(loadedLink) { FromID = objID, ToID = adjLinkToID };
 
                                 LinkTrackerPair ltp = new LinkTrackerPair(adjLink);
                                 ot.linkTrackerPairsToOtherObjectsDictionary[ltp.LinkKeyStr] = ltp;
@@ -774,6 +999,8 @@ namespace MosaicLib.Semi.E039
             InnerPublishTouchedObjectTrackers();
 
             InnerPublishSeqNumsIfNeeded();
+
+            SetupMainThreadStartingAndStoppingActions();
         }
 
         E039BasicTablePartConfig Config { get; set; }
@@ -827,7 +1054,7 @@ namespace MosaicLib.Semi.E039
             {
                 ObjectTracker ot = null;
 
-                externalUUIDToObjPublisherDictionary.TryGetValue(objSpec.UUID.Sanitize(), out ot);
+                externalUUIDToObjectTrackerDictionary.TryGetValue(objSpec.UUID.Sanitize(), out ot);
 
                 if (ot == null)
                 {
@@ -940,7 +1167,7 @@ namespace MosaicLib.Semi.E039
 
                 // switch the link's FromID to use the objectTracker version (the one that has the UUID in it)
                 if (link.FromID.UUID.IsNullOrEmpty())
-                    link.FromID = objectTracker.objID;
+                    link.FromID = objectTracker.ObjID;
             }
 
             if (updateItem is E039UpdateItem.TestAndSetAttributes)
@@ -987,7 +1214,7 @@ namespace MosaicLib.Semi.E039
             if (testConditionsMet)
                 return InnerPerformSetAttributesUpdateItem(ot, updateItem);
             else if (updateItem.FailIfTestConditionsNotMet)
-                return "Test failed: test attribute {0} did not match object '{1}' value {2}".CheckedFormat(firstMismatch, ot.objID, objAttributes[firstMismatch.Name].VC);
+                return "Test failed: test attribute {0} did not match object '{1}' value {2}".CheckedFormat(firstMismatch, ot.ObjID, objAttributes[firstMismatch.Name].VC);
             else
                 return string.Empty;
         }
@@ -1016,9 +1243,8 @@ namespace MosaicLib.Semi.E039
                 if (otherOT == null)
                     return "Target/To object not found for link '{0}'".CheckedFormat(link.ToString(E039ToStringSelect.DefaultObjIDSelect));
 
-                // switch the link's ToID to use the otherOT version (the one that has the UUID in it)
-                if (link.ToID.UUID.IsNullOrEmpty())
-                    link.ToID = otherOT.objID;
+                // switch the link's ToID to use the ObjID from the linkTo object's ObjectTracker (will have correct values of UUID and TableObserver)
+                link.ToID = otherOT.ObjID;
             }
 
             string linkKeyStr = link.Key;
@@ -1118,6 +1344,8 @@ namespace MosaicLib.Semi.E039
 
             E039ObjectID objID = updateItem.ObjID;
 
+            E039ObjectFlags clientFlags = updateItem.Flags & E039ObjectFlags.ClientUsableFlags;
+
             if (!objID.IsValid)
                 return "Cannot add object for invalid id: '{0}'".CheckedFormat(objID);
 
@@ -1125,11 +1353,47 @@ namespace MosaicLib.Semi.E039
 
             ObjectTracker ot = FindObjectTrackerForID(objID);
 
-            if (ot != null)
+            if (ot != null && !updateItem.IfNeeded)
                 return "Cannot add object '{0}': object already exists".CheckedFormat(updateItem.ObjID);
 
-            ot = FindObjectTrackerForID(objID, createIfNeeded: true, initialFlags: updateItem.Flags);
-            ot.obj = new E039Object(objID, updateItem.Flags, updateItem.Attributes);
+            if (ot == null)
+            {
+                ot = FindObjectTrackerForID(objID, createIfNeeded: true, initialFlags: updateItem.Flags);
+                ot.obj = new E039Object(objID, clientFlags, updateItem.Attributes);
+            }
+            else
+            {
+                // merge in the given uuid (if non-empty) and if the old object did not already have one.
+                string updateItemUUID = objID.UUID;
+                if (!updateItemUUID.IsNullOrEmpty() && ot.ObjID.UUID.IsNullOrEmpty())
+                {
+                    ot.AssignUUID(updateItemUUID);
+
+                    // update the uuid to tracker dictionaries with the new UUID and tracker.
+                    uuidToObjectTrackerDictionary[updateItemUUID] = ot;
+
+                    lock (externalDicationaryMutex)
+                    {
+                        externalUUIDToObjectTrackerDictionary[updateItemUUID] = ot;
+                    }
+                }
+
+                // replace the ClientUsableFlags flags in the object with the corresponding values given in the update item.  CreateIVA is a special case as we may need to create the IVA here.
+                if ((ot.flags & E039ObjectFlags.ClientUsableFlags) != clientFlags)
+                {
+                    E039ObjectFlags newFlags = (ot.flags & ~E039ObjectFlags.ClientUsableFlags) | clientFlags;
+
+                    ot.obj.Flags = ot.flags = newFlags;
+                    
+                    CreateIVAIfNeeded(ot);
+                }
+
+                // merge in attributes
+                if (updateItem.MergeBehavior != NamedValueMergeBehavior.None && !updateItem.Attributes.IsNullOrEmpty())
+                {
+                    ot.obj.Attributes = ot.obj.Attributes.MergeWith(updateItem.Attributes, updateItem.MergeBehavior);
+                }
+            }
 
             InnerMarkedTouchedIfNeeded(ot);
 
@@ -1154,7 +1418,7 @@ namespace MosaicLib.Semi.E039
 
                 potentialObjectTrackersToRemoveListPerPass.Clear();
 
-                E039ObjectID objID = ot.objID;
+                E039ObjectID objID = ot.ObjID;
 
                 ot.obj.Flags |= E039ObjectFlags.IsFinal;
 
@@ -1194,7 +1458,7 @@ namespace MosaicLib.Semi.E039
                 lock (externalDicationaryMutex)
                 {
                     if (idHasUUID)
-                        externalUUIDToObjPublisherDictionary.Remove(objID.UUID);
+                        externalUUIDToObjectTrackerDictionary.Remove(objID.UUID);
 
                     Dictionary<string, ObjectTracker> externalObjectNameToTrackerDictionary = null;
                     externalTypeToObjectNameDictionaryDictionary.TryGetValue(objID.Type, out externalObjectNameToTrackerDictionary);
@@ -1344,26 +1608,28 @@ namespace MosaicLib.Semi.E039
 
         #endregion
 
-        #region SimpleActivePart overrides
+        #region SimpleActivePart overrides, SetupMainThreadStartingAndStoppingActions
 
-        protected override void MainThreadFcn()
+        private void SetupMainThreadStartingAndStoppingActions()
         {
-            persistHelperPart.CreateGoOnlineAction(true).RunInline();
+            AddMainThreadStartingAction(() => persistHelperPart.CreateGoOnlineAction(true).RunInline());
 
-            base.MainThreadFcn();
-
-            persistHelperPart.CreateGoOfflineAction().RunInline();
-            Fcns.DisposeOfObject(ref persistHelperPart);
-
-            // make last attempt to flush any 
-            foreach (var tst in typeSetTrackerArray)
+            AddMainThreadStoppingAction(() => 
             {
-                if (tst.persistFileRingAdapter != null && tst.IsWritePending)
+                // set the persistHelperPart offline and dispose of it.
+                persistHelperPart.CreateGoOfflineAction().RunInline();
+                Fcns.DisposeOfObject(ref persistHelperPart);
+
+                // make last attempt to flush any outstanding tables by directly updating the persist reference copies and then asking the relevant persistFileRingAdapters to Save
+                foreach (var tst in typeSetTrackerArray)
                 {
-                    UpdateFileContentsAndOptionallyIssueWrite(tst, issueWrite: false);
-                    tst.persistFileRingAdapter.Save(allowThrow: false);
+                    if (tst.persistFileRingAdapter != null && tst.IsWritePending)
+                    {
+                        UpdateFileContentsAndOptionallyIssueWrite(tst, issueWrite: false);
+                        tst.persistFileRingAdapter.Save(allowThrow: false);
+                    }
                 }
-            }
+            });
         }
 
         protected override void PerformMainLoopService()
@@ -1426,12 +1692,12 @@ namespace MosaicLib.Semi.E039
 
         List<ObjectTracker> recentlyTouchedObjectTrackerList = new List<ObjectTracker>();
 
-        static readonly ObjectTracker emptyObjectTracker = new ObjectTracker(E039ObjectID.Empty);
+        static readonly ObjectTracker emptyObjectTracker = new ObjectTracker(E039ObjectID.Empty, null);
 
         #region support fields for asynchronous methods
 
         object externalDicationaryMutex = new object();
-        Dictionary<string, ObjectTracker> externalUUIDToObjPublisherDictionary = new Dictionary<string, ObjectTracker>();
+        Dictionary<string, ObjectTracker> externalUUIDToObjectTrackerDictionary = new Dictionary<string, ObjectTracker>();
         Dictionary<string, Dictionary<string, ObjectTracker>> externalTypeToObjectNameDictionaryDictionary = new Dictionary<string, Dictionary<string, ObjectTracker>>();
 
         #endregion
@@ -1457,9 +1723,8 @@ namespace MosaicLib.Semi.E039
             if (!createIfNeeded)
                 return null;
 
-            ot = new ObjectTracker(id)
+            ot = new ObjectTracker(id, this)
             {
-                objID = id,
                 flags = initialFlags,
                 typeTableTracker = ttt,
                 typeSetTracker = ttt.typeSetTracker,
@@ -1469,8 +1734,7 @@ namespace MosaicLib.Semi.E039
 
             ot.objPublisher = new InterlockedNotificationRefObject<IE039Object>();
 
-            if (ot.flags.IsSet(E039ObjectFlags.CreateIVA))
-                ot.objIVA = Config.ObjectIVI.GetValueAccessor<E039Object>("{0}{1}.{2}".CheckedFormat(Config.ObjectIVAPrefix, id.Type, id.Name));
+            CreateIVAIfNeeded(ot);
 
             // Add the ObjectTracker to the various dictionaries
 
@@ -1485,7 +1749,7 @@ namespace MosaicLib.Semi.E039
             lock (externalDicationaryMutex)
             {
                 if (idHasUUID)
-                    externalUUIDToObjPublisherDictionary[id.UUID] = ot;
+                    externalUUIDToObjectTrackerDictionary[id.UUID] = ot;
 
                 Dictionary<string, ObjectTracker> externalObjectNameToTrackerDictionary = null;
                 externalTypeToObjectNameDictionaryDictionary.TryGetValue(id.Type, out externalObjectNameToTrackerDictionary);
@@ -1497,6 +1761,14 @@ namespace MosaicLib.Semi.E039
             }
 
             return ot;
+        }
+
+        private void CreateIVAIfNeeded(ObjectTracker ot)
+        {
+            E039ObjectID id = ot.ObjID;
+
+            if (ot.flags.IsSet(E039ObjectFlags.CreateIVA) && ot.objIVA == null)
+                ot.objIVA = Config.ObjectIVI.GetValueAccessor<E039Object>("{0}{1}.{2}".CheckedFormat(Config.ObjectIVAPrefix, id.Type, id.Name));
         }
 
         TypeTableTracker FindTypeTableTrackerForType(string typeName, bool createIfNeeded = false)
@@ -1576,12 +1848,17 @@ namespace MosaicLib.Semi.E039
 
         private class ObjectTracker
         {
-            public ObjectTracker(E039ObjectID objID)
+            public ObjectTracker(E039ObjectID objID, IE039TableObserver tableObserver)
             {
-                this.objID = (objID.UUID.IsNullOrEmpty() ? new E039ObjectID(objID) : objID);
+                ObjID = new E039ObjectID(objID, tableObserver);
             }
 
-            public E039ObjectID objID;
+            public void AssignUUID(string uuid)
+            {
+                obj.ID = ObjID = new E039ObjectID(ObjID.Name, ObjID.Type, uuid, ObjID.TableObserver);
+            }
+
+            public E039ObjectID ObjID { get; private set; }
             public E039ObjectFlags flags;
 
             public TypeTableTracker typeTableTracker;
@@ -1790,86 +2067,7 @@ namespace MosaicLib.Semi.E039
 
     #endregion
 
-    #region E039Object (for publication and internal use)
-
-    [DataContract(Namespace = Constants.E039NameSpace, Name = "ObjInst")]
-    public class E039Object : IE039Object
-    {
-        public E039Object()
-        {
-            ID = E039ObjectID.Empty;
-        }
-
-        public E039Object(IE039Object other)
-        {
-            ID = other.ID;
-            Flags = other.Flags;
-            Attributes = other.Attributes.ConvertToReadOnly();
-
-            LinksFromOtherObjectsList = other.LinksFromOtherObjectsList;
-            LinksToOtherObjectsList = other.LinksToOtherObjectsList;
-        }
-
-        public E039Object(E039ObjectID id, E039ObjectFlags flags, INamedValueSet attributes)
-        {
-            ID = id;
-            Flags = flags;
-            Attributes = attributes.MapNullToEmpty().ConvertToReadOnly();
-        }
-
-        [DataMember(Order = 10, IsRequired = false, EmitDefaultValue = false)]
-        public E039ObjectID ID { get; internal set; }
-
-        public E039ObjectFlags Flags { get; internal set; }
-
-        [DataMember(Order = 20, Name = "Flags", IsRequired = false, EmitDefaultValue = false)]
-        private string FlagsSerializationHelper { get { return Flags.ToString(); } set { Flags = value.TryParse<E039ObjectFlags>(); } }
-
-        [DataMember(Order = 30, Name = "Attribs", IsRequired = false, EmitDefaultValue = false)]
-        public NamedValueSet Attributes { get; internal set; }
-
-        INamedValueSet IE039Object.Attributes { get { return this.Attributes.ConvertToReadOnly(); } }
-
-        public IList<E039Link> LinksToOtherObjectsList { get { return _linksToOtherObjectsList ?? _emptyLinkList; } internal set { _linksToOtherObjectsList = (value != null && value.Count > 0) ? value : null; } }
-        public IList<E039Link> LinksFromOtherObjectsList { get { return _linksFromOtherObjectsList ?? _emptyLinkList; } internal set { _linksFromOtherObjectsList = (value != null && value.Count > 0) ? value : null; } }
-
-        private IList<E039Link> _linksToOtherObjectsList = null;
-        private IList<E039Link> _linksFromOtherObjectsList = null;
-
-        [DataMember(Name = "LinksOut", Order = 50, IsRequired = false, EmitDefaultValue = false)]
-        private List<E039Link> SerializationHelperForLinksToOtherObjectsList { get { return (_linksToOtherObjectsList == null ? null : new List<E039Link>(_linksToOtherObjectsList)); } set { _linksToOtherObjectsList = (value != null && value.Count > 0) ? value.AsReadOnly() : null; } }
-
-        private static readonly IList<E039Link> _emptyLinkList = new List<E039Link>().AsReadOnly();
-
-        public override string ToString()
-        {
-            return ToString(E039ToStringSelect.DefaultObjSelect);
-        }
-
-        public string ToString(E039ToStringSelect toStringSelect)
-        {
-            StringBuilder sb = new StringBuilder();
-
-            sb.Append(ID.ToString(toStringSelect));
-
-            bool linkShortIDs = toStringSelect.IsSet(E039ToStringSelect.LinkedShortIDs);
-            E039ToStringSelect linkIDToStringSelect = linkShortIDs ? E039ToStringSelect.None : E039ToStringSelect.FullName;
-
-            if (linkShortIDs || toStringSelect.IsSet(E039ToStringSelect.LinkedFullIDs))
-            {
-                if (_linksToOtherObjectsList != null)
-                    sb.CheckedAppendFormat(" to:[{0}]", String.Join(",", _linksToOtherObjectsList.Select(link => link.ToString(linkIDToStringSelect)).ToArray()));
-
-                if (_linksFromOtherObjectsList != null)
-                    sb.CheckedAppendFormat(" from:[{0}]", String.Join(",", _linksFromOtherObjectsList.Select(link => link.ToString(linkIDToStringSelect)).ToArray()));
-            }
-
-            if (toStringSelect.IsSet(E039ToStringSelect.Attributes))
-                sb.CheckedAppendFormat(" attribs:{0}", Attributes);
-
-            return sb.ToString();
-        }
-    }
+    #region E039PersistFileContents
 
     [DataContract(Namespace = Constants.E039NameSpace)]
     public class E039PersistFileContents : IPersistSequenceable
@@ -1886,10 +2084,9 @@ namespace MosaicLib.Semi.E039
         public Details.E039PersistTypeTableSet TypeTableSet { get; set; }
     }
 
-
     #endregion
 
-    #region Details
+    #region Details (E039PersistTypeTableSet, E039PersistTypeTable, E039PersistObjectInstanceSet)
 
     namespace Details
     {

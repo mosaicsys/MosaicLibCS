@@ -60,16 +60,11 @@ namespace MosaicLib
                     targetLMHArray = targetLMHArray ?? emptyLMHArray;
 
                     LogGate logGate = LogGate.None;
-                    bool recordSourceStackFrame = false;
 
                     foreach (ILogMessageHandler targetLMH in targetLMHArray)
-                    {
                         logGate.MesgTypeMask |= targetLMH.LoggerConfig.LogGate.MesgTypeMask;
-                        recordSourceStackFrame |= targetLMH.LoggerConfig.RecordSourceStackFrame;
-                    }
 
                     loggerConfig.LogGate = logGate;
-                    loggerConfig.RecordSourceStackFrame = recordSourceStackFrame && allowRecordSourceStackFrame;
 
                     this.targetLMHArray = targetLMHArray;
 

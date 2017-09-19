@@ -600,7 +600,7 @@ namespace MosaicLib.Semi.E087
         public CarrierActionResult AttachStatus(StatusPair statusPair) { StatusList.Add(statusPair); return this; }
 
         /// <summary>Special case of SetCannotPerformNow which uses ERRCODE.OperationIsNotImplemented and an ErrText derived from the given function name.  Supports call chaining.</summary>
-        public CarrierActionResult FunctionNotImplemented(String functionName) { SetCannotPerformNow(ERRCODE.OperationIsNotImplemented, "Operation:" + functionName + " is not implemented"); return this; }
+        public CarrierActionResult FunctionNotImplemented(String functionName) { SetCannotPerformNow(ERRCODE.OperationIsNotImplemented, "Operation:{0} is not implemented".CheckedFormat(functionName)); return this; }
 
         /// <summary>If the StatusListIsSuccess then sets the first CAACK to CAACK.AcknowledgedCommandHasBeenPerformed otherwise replaces either IsSuccess CAACK with CAACK.CommandPerformedWithErrors.  Supports call chaining.</summary>
         public CarrierActionResult SetCommandHasBeenPerformed()								

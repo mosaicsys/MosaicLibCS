@@ -275,9 +275,9 @@ namespace MosaicLib.PartsLib.Common.LPM.Sim
             }
         }
 
-        public LPMSimConfigSetAndArrayItems UpdateFromModularConfig(string prefixStr, Logging.IMesgEmitter issueEmitter, Logging.IMesgEmitter valueEmitter)
+        public LPMSimConfigSetAndArrayItems UpdateFromModularConfig(string prefixStr, Logging.IMesgEmitter issueEmitter = null, Logging.IMesgEmitter valueEmitter = null, IConfig configInstance = null)
         {
-            ConfigValueSetAdapter<LPMSimConfigSetAndArrayItems> adapter = new ConfigValueSetAdapter<LPMSimConfigSetAndArrayItems>() { ValueSet = this, SetupIssueEmitter = issueEmitter, UpdateIssueEmitter = issueEmitter, ValueNoteEmitter = valueEmitter }.Setup(prefixStr);
+            ConfigValueSetAdapter<LPMSimConfigSetAndArrayItems> adapter = new ConfigValueSetAdapter<LPMSimConfigSetAndArrayItems>(configInstance) { ValueSet = this, SetupIssueEmitter = issueEmitter, UpdateIssueEmitter = issueEmitter, ValueNoteEmitter = valueEmitter }.Setup(prefixStr);
 
             return this;
         }

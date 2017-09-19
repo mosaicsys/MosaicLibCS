@@ -20,12 +20,13 @@
  */
 
 using System;
-using System.Text;
-using System.Collections.Generic;
-using System.Linq;
-using System.Diagnostics;
-using System.Reflection;
 using System.Collections;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Reflection;
+using System.Text;
 
 using MosaicLib.Modular.Common;
 
@@ -34,7 +35,7 @@ namespace MosaicLib.Utils
     #region Extension Methods
 
     /// <summary>
-    /// This class contains a set of extension methods.  At present this primarily adds variants of the CheckedFormat methods above to be used directly with Strings and StringBuilder
+    /// standard location for ExtensionMethods added under MosaicLib.Utils.
     /// </summary>
     public static partial class ExtensionMethods
     {
@@ -81,7 +82,7 @@ namespace MosaicLib.Utils
         #region Array (and some IList) access extension methods
 
         /// <summary>
-        /// Extension method accepts given array and testIndex and returns true if the array is non-null and the testIndex is >= 0 and less than the array's Length
+        /// Extension method accepts given <paramref name="array"/> and <paramref name="testIndex"/> and returns true if the <paramref name="array"/> is non-null and the <paramref name="testIndex"/> is >= 0 and less than the <paramref name="array"/>.Length
         /// </summary>
         public static bool IsSafeIndex<ItemType>(this ItemType[] array, int testIndex)
         {
@@ -89,7 +90,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Extension method accepts given list and testIndex and returns true if the list is non-null and the testIndex is >= 0 and less than the list's Count
+        /// Extension method accepts given <paramref name="list"/> and <paramref name="testIndex"/> and returns true if the <paramref name="list"/> is non-null and the <paramref name="testIndex"/> is >= 0 and less than the <paramref name="list"/>.Count
         /// </summary>
         public static bool IsSafeIndex<ItemType>(this IList<ItemType> list, int testIndex)
         {
@@ -373,6 +374,24 @@ namespace MosaicLib.Utils
 
         #endregion
 
+        #region IDictionary related (SafeTryGetValue)
+
+        /// <summary>
+        /// This EM accepts an IDictionary <paramref name="dict"/> and attempts to obtain and return the value from it at the given <paramref name="key"/>.  
+        /// If <paramref name="dict"/> is null or it if does not contain the indicated <paramref name="key"/> then this method returns the given <paramref name="fallbackValue"/>
+        /// </summary>
+        public static TValue SafeTryGetValue<TKey, TValue>(this IDictionary<TKey, TValue> dict, TKey key, TValue fallbackValue = default(TValue))
+        {
+            TValue value = default(TValue);
+
+            if (dict != null && dict.TryGetValue(key, out value))
+                return value;
+
+            return fallbackValue;
+        }
+
+        #endregion
+
         #region byte arrays as bit masks
 
         /// <summary>
@@ -515,12 +534,34 @@ namespace MosaicLib.Utils
             return ((value & 1) == 0);
         }
 
+        /// <summary>
+        /// returns the given <paramref name="value"/> incremented.  If the incremented <paramref name="value"/> is 0 then this method returns 1 in its place
+        /// </summary>
+        public static int IncrementSkipZero(this int value)
+        {
+            if (++value == 0)
+                return 1;
+            else
+                return value;
+        }
+
+        /// <summary>
+        /// returns the given <paramref name="value"/> incremented.  If the incremented <paramref name="value"/> is 0 then this method returns 1 in its place
+        /// </summary>
+        public static uint IncrementSkipZero(this uint value)
+        {
+            if (++value == 0)
+                return 1;
+            else
+                return value;
+        }
+
         #endregion
 
         #region Enum extension methods (IsSet, IsAnySet, IsMatch, Set, Clear)
 
         /// <summary>
-        /// Returns true if the given value contains the given test pattern (by bit mask test).  Eqivilant to value.IsMatch(test, test)
+        /// Returns true if the given <paramref name="value"/> contains the given <paramref name="test"/> pattern (by bit mask test).  Eqivilant to <paramref name="value"/>.IsMatch(<paramref name="test"/>, <paramref name="test"/>)
         /// <para/>This extension method is intended for use with Flag enumerations.  Use with types that are not derived from System.Enum will simply return false;
         /// </summary>
         public static bool IsSet<TEnumType>(this TEnumType value, TEnumType test) where TEnumType : struct
@@ -535,6 +576,15 @@ namespace MosaicLib.Utils
         public static bool IsAnySet<TEnumType>(this TEnumType value, TEnumType mask)
         {
             return !value.IsMatch(mask, default(TEnumType));
+        }
+
+        /// <summary>
+        /// Returns true if the given <paramref name="value"/> does not contain any part (bit) from the given <paramref name="test"/> pattern (by bit mask test).  Eqivilant to <paramref name="value"/>.IsMatch(<paramref name="test"/>, default(<typeparamref name="TEnumType"/>))
+        /// <para/>This extension method is intended for use with Flag enumerations.  Use with types that are not derived from System.Enum will simply return false;
+        /// </summary>
+        public static bool IsClear<TEnumType>(this TEnumType value, TEnumType test) where TEnumType : struct
+        {
+            return value.IsMatch(test, default(TEnumType));
         }
 
         /// <summary>
@@ -712,6 +762,244 @@ namespace MosaicLib.Utils
 
         #endregion
 
+        #region TimeSpan related (double.FromDays, double.FromHours, double.FromSeconds, double.FromMilliseconds, IsZero, Min, Max)
+
+        /// <summary>
+        /// Variant of TimeSpan.FromDays that does not round the timeSpanInDays to the nearest msec.
+        /// This extension method converts to TimeSpan using FromTicks and TimeSpan.TicksPerDay
+        /// </summary>
+        public static TimeSpan FromDays(this double timeSpanInDays)
+        {
+            return TimeSpan.FromTicks(unchecked((long)(TimeSpan.TicksPerDay * timeSpanInDays)));
+        }
+
+        /// <summary>
+        /// Variant of TimeSpan.FromHours that does not round the timeSpanInHours to the nearest msec.
+        /// This extension method converts to TimeSpan using FromTicks and TimeSpan.TicksPerHour
+        /// </summary>
+        public static TimeSpan FromHours(this double timeSpanInHours)
+        {
+            return TimeSpan.FromTicks(unchecked((long)(TimeSpan.TicksPerHour * timeSpanInHours)));
+        }
+
+        /// <summary>
+        /// Variant of TimeSpan.FromSeconds that does not round the timeSpanInSeconds to the nearest msec.
+        /// This extension method converts to TimeSpan using FromTicks and TimeSpan.TicksPerSecond
+        /// </summary>
+        public static TimeSpan FromSeconds(this double timeSpanInSeconds)
+        {
+            return TimeSpan.FromTicks(unchecked((long)(TimeSpan.TicksPerSecond * timeSpanInSeconds)));
+        }
+
+        /// <summary>
+        /// Variant of TimeSpan.FromSeconds that does not round the timeSpanInSeconds to the nearest msec.
+        /// This extension method converts to TimeSpan using FromTicks and TimeSpan.TicksPerMillisecond
+        /// </summary>
+        public static TimeSpan FromMilliseconds(this double timeSpanInMilliseconds)
+        {
+            return TimeSpan.FromTicks(unchecked((long)(TimeSpan.TicksPerMillisecond * timeSpanInMilliseconds)));
+        }
+
+        /// <summary>
+        /// Returns true if the given timeSpan value is equal to TimeSpan.Zero
+        /// </summary>
+        public static bool IsZero(this TimeSpan timeSpan)
+        {
+            return (timeSpan == TimeSpan.Zero);
+        }
+
+        /// <summary>Returns the Min of the given TimeSpan values</summary>
+        public static TimeSpan Min(this TimeSpan a, TimeSpan b) { return (a <= b) ? a : b; }
+        /// <summary>Returns the Min of the given TimeSpan values</summary>
+        public static TimeSpan Min(this TimeSpan a, TimeSpan b, TimeSpan c) { return a.Min(b).Min(c); }
+        /// <summary>Returns the Min of the given TimeSpan values</summary>
+        public static TimeSpan Min(this TimeSpan a, params TimeSpan[] more) { return a.Concat(more).Min(); }
+
+        /// <summary>Returns the Max of the given TimeSpan values</summary>
+        public static TimeSpan Max(this TimeSpan a, TimeSpan b) { return (a >= b) ? a : b; }
+        /// <summary>Returns the Max of the given TimeSpan values</summary>
+        public static TimeSpan Max(this TimeSpan a, TimeSpan b, TimeSpan c) { return a.Max(b).Max(c); }
+        /// <summary>Returns the Max of the given TimeSpan values</summary>
+        public static TimeSpan Max(this TimeSpan a, params TimeSpan[] more) { return a.Concat(more).Max(); }
+
+        #endregion
+
+        #region DateTime related (Age, Min, Max)
+
+        /// <summary>
+        /// Returns the Age of the given <paramref name="dateTime"/>.  Caller can optionally provide the current time, preferrably already in the same DateTimeKind as the given value.
+        /// </summary>
+        public static TimeSpan Age(this DateTime dateTime, DateTime ? dateTimeNowIn = null)
+        {
+            if (dateTimeNowIn != null)
+            {
+                DateTime dateTimeNow = dateTimeNowIn.GetValueOrDefault();
+
+                if (dateTime.Kind == dateTimeNow.Kind)
+                    return (dateTimeNow - dateTime);
+                else if (dateTimeNow.Kind == DateTimeKind.Utc)
+                    return (dateTimeNow - dateTime.ToUniversalTime());
+                else if (dateTimeNow.Kind == DateTimeKind.Local)
+                    return (dateTimeNow - dateTime.ToLocalTime());
+                return (dateTimeNow.ToUniversalTime() - dateTime.ToUniversalTime());
+            }
+            else if (dateTime.Kind == DateTimeKind.Utc)
+                return (DateTime.UtcNow - dateTime);
+            else if (dateTime.Kind == DateTimeKind.Local)
+                return (DateTime.Now - dateTime);
+            else
+                return (DateTime.UtcNow - dateTime.ToUniversalTime());
+        }
+
+        /// <summary>Returns the Min of the given DateTime values</summary>
+        public static DateTime Min(this DateTime a, DateTime b) { return (a <= b) ? a : b; }
+        /// <summary>Returns the Min of the given DateTime values</summary>
+        public static DateTime Min(this DateTime a, DateTime b, DateTime c) { return a.Min(b).Min(c); }
+        /// <summary>Returns the Min of the given DateTime values</summary>
+        public static DateTime Min(this DateTime a, params DateTime[] more) { return a.Concat(more).Min(); }
+
+        /// <summary>Returns the Max of the given DateTime values</summary>
+        public static DateTime Max(this DateTime a, DateTime b) { return (a >= b) ? a : b; }
+        /// <summary>Returns the Max of the given DateTime values</summary>
+        public static DateTime Max(this DateTime a, DateTime b, DateTime c) { return a.Max(b).Max(c); }
+        /// <summary>Returns the Max of the given DateTime values</summary>
+        public static DateTime Max(this DateTime a, params DateTime[] more) { return a.Concat(more).Max(); }
+
+        #endregion
+
+        #region Random related (GetNextRandomInMinus1ToPlus1Range)
+
+        /// <summary>
+        /// Extension method for Random.  Returns the NextDouble number produced by the given Random rng source scaled and offset to fall in the range [-1.0 .. 1.0)
+        /// </summary>
+        public static double GetNextRandomInMinus1ToPlus1Range(this Random rng)
+        {
+            return (rng.NextDouble() * 2.0 - 1.0);
+        }
+
+        #endregion
+
+        #region TryGet extension method
+
+        /// <summary>
+        /// This extension method is invoked on a getter type of delegate (getterDelegate).  
+        /// It will attempt to perform the getterDelegate and returned the obtained value.
+        /// If any catchable exception is thrown while using the provided getterDelegate then this method will return the getFailedResult
+        /// which default to default(TValueType)
+        /// </summary>
+        /// <typeparam name="TValueType">This is the generic value type that is to be returned by the provided getterDelegate</typeparam>
+        public static TValueType TryGet<TValueType>(this Func<TValueType> getterDelegate, TValueType getFailedResult = default(TValueType))
+        {
+            try
+            {
+                return getterDelegate();
+            }
+            catch
+            {
+                return getFailedResult;
+            }
+        }
+
+        #endregion
+
+        #region Linq extensions (DoForEach, Concat)
+
+        /// <summary>
+        /// Simple DoForEach helper method for use with Linq.  Applies the given action to each of the {TSource} items in the given source set.
+        /// <para/>supports call chaining
+        /// </summary>
+        public static IEnumerable<TItem> DoForEach<TItem>(this IEnumerable<TItem> source, Action<TItem> action = null)
+        {
+            action = action ?? (ignoreItem => {});
+
+            foreach (TItem item in source)
+                action(item);
+
+            return source;
+        }
+
+        /// <summary>Concatinates (appends) the given <paramref name="item"/> to the given <paramref name="set"/></summary>
+        public static IEnumerable<TItem> Concat<TItem>(this IEnumerable<TItem> set, TItem item)
+        {
+            return InnerConcat(set ?? new TItem[0], item);
+        }
+
+        /// <summary>Concatinates (prefixes) the given <paramref name="item"/> with the given <paramref name="set"/></summary>
+        public static IEnumerable<TItem> Concat<TItem>(this TItem item, IEnumerable<TItem> set)
+        {
+            return InnerConcat(item, set ?? new TItem[0]);
+        }
+
+        /// <summary>Concatinates the given <paramref name="paramsItemArray"/> params items to the given <paramref name="set"/></summary>
+        public static IEnumerable<TItem> Concat<TItem>(this IEnumerable<TItem> set, params TItem[] paramsItemArray)
+        {
+            return System.Linq.Enumerable.Concat(set, paramsItemArray ?? new TItem[0]);
+        }
+
+        private static IEnumerable<TItem> InnerConcat<TItem>(TItem item, IEnumerable<TItem> set)
+        {
+            yield return item;
+
+            foreach (var setItem in set)
+                yield return setItem;
+
+            yield break;
+        }
+
+        private static IEnumerable<TItem> InnerConcat<TItem>(IEnumerable<TItem> set, TItem item)
+        {
+            foreach (var setItem in set)
+                yield return setItem;
+
+            yield return item;
+
+            yield break;
+        }
+
+        #endregion
+
+        #region Type related extension methods
+
+        /// <summary>returns the Leaf Name of the given <paramref name="type"/> type (aka: The last token for the resulting sequence of dot seperated tokens)</summary>
+        public static string GetTypeLeafName(this Type type) { return (type.ToString()).Split('.').SafeLast(); }
+        
+        #endregion
+
+        #region FileSystemInfo, FileInfo EMs (SafeGetOldestDateTimeUtc, SafeGetCreationAge, SafeExists, SafeLength)
+
+        /// <summary>Returns the DateTime that is the oldest from the given FileSystemInfo <paramref name="fsi"/>'s creation time, last modified time, and last accessed time, in UTC.</summary>
+        public static DateTime SafeGetOldestDateTimeUtc(this FileSystemInfo fsi, DateTime fallbackValue = default(DateTime))
+        {
+            if (fsi.SafeExists())
+                return fsi.CreationTimeUtc.Min(fsi.LastWriteTimeUtc).Min(fsi.LastAccessTimeUtc);
+            else
+                return fallbackValue;
+        }
+
+        /// <summary>Returns the amount of time that has elapsed from the FileSystemInfo.CreateionTime to now as a TimeSpan (returns zero if the given <paramref name="fsi"/> instance is null)</summary>
+        public static TimeSpan SafeGetCreationAge(this FileSystemInfo fsi, TimeSpan fallbackValue = default(TimeSpan))
+        {
+            if (fsi.SafeExists())
+                return fsi.CreationTimeUtc.Age();
+            else
+                return fallbackValue;
+        }
+
+        /// <summary>Returns true if the given <paramref name="fsi"/> is not null and it Exists</summary>
+        public static bool SafeExists(this FileSystemInfo fsi)
+        {
+            return (fsi != null && fsi.Exists);
+        }
+
+        /// <summary>If the given <paramref name="fi"/> is non-null and it Exists then this method returns its Length, otherwise this method returns 0</summary>
+        public static long SafeLength(this FileInfo fi)
+        {
+            return (fi.SafeExists() ? fi.Length : 0);
+        }
+
+        #endregion
+
+        //---------------------------
         #region Exception related methods (ToString)
 
         /// <summary>
@@ -758,116 +1046,6 @@ namespace MosaicLib.Utils
 
         private static readonly IList<char> boxEscapeCharsList = new List<char>() { '[', ']' }.AsReadOnly();
 
-        #endregion
-
-        #region TimeSpan related (double.FromDays, double.FromHours, double.FromSeconds, double.FromMilliseconds, IsZero)
-
-        /// <summary>
-        /// Variant of TimeSpan.FromDays that does not round the timeSpanInDays to the nearest msec.
-        /// This extension method converts to TimeSpan using FromTicks and TimeSpan.TicksPerDay
-        /// </summary>
-        public static TimeSpan FromDays(this double timeSpanInDays)
-        {
-            return TimeSpan.FromTicks(unchecked((long)(TimeSpan.TicksPerDay * timeSpanInDays)));
-        }
-
-        /// <summary>
-        /// Variant of TimeSpan.FromHours that does not round the timeSpanInHours to the nearest msec.
-        /// This extension method converts to TimeSpan using FromTicks and TimeSpan.TicksPerHour
-        /// </summary>
-        public static TimeSpan FromHours(this double timeSpanInHours)
-        {
-            return TimeSpan.FromTicks(unchecked((long)(TimeSpan.TicksPerHour * timeSpanInHours)));
-        }
-
-        /// <summary>
-        /// Variant of TimeSpan.FromSeconds that does not round the timeSpanInSeconds to the nearest msec.
-        /// This extension method converts to TimeSpan using FromTicks and TimeSpan.TicksPerSecond
-        /// </summary>
-        public static TimeSpan FromSeconds(this double timeSpanInSeconds)
-        {
-            return TimeSpan.FromTicks(unchecked((long)(TimeSpan.TicksPerSecond * timeSpanInSeconds)));
-        }
-
-        /// <summary>
-        /// Variant of TimeSpan.FromSeconds that does not round the timeSpanInSeconds to the nearest msec.
-        /// This extension method converts to TimeSpan using FromTicks and TimeSpan.TicksPerMillisecond
-        /// </summary>
-        public static TimeSpan FromMilliseconds(this double timeSpanInMilliseconds)
-        {
-            return TimeSpan.FromTicks(unchecked((long)(TimeSpan.TicksPerMillisecond * timeSpanInMilliseconds)));
-        }
-
-
-
-        /// <summary>
-        /// Returns true if the given timeSpan value is equal to TimeSpan.Zero
-        /// </summary>
-        public static bool IsZero(this TimeSpan timeSpan)
-        {
-            return (timeSpan == TimeSpan.Zero);
-        }
-
-        #endregion
-
-        #region Random related (GetNextRandomInMinus1ToPlus1Range)
-
-        /// <summary>
-        /// Extension method for Random.  Returns the NextDouble number produced by the given Random rng source scaled and offset to fall in the range [-1.0 .. 1.0)
-        /// </summary>
-        public static double GetNextRandomInMinus1ToPlus1Range(this Random rng)
-        {
-            return (rng.NextDouble() * 2.0 - 1.0);
-        }
-
-        #endregion
-
-        #region TryGet extension method
-
-        /// <summary>
-        /// This extension method is invoked on a getter type of delegate (getterDelegate).  
-        /// It will attempt to perform the getterDelegate and returned the obtained value.
-        /// If any catchable exception is thrown while using the provided getterDelegate then this method will return the getFailedResult
-        /// which default to default(TValueType)
-        /// </summary>
-        /// <typeparam name="TValueType">This is the generic value type that is to be returned by the provided getterDelegate</typeparam>
-        public static TValueType TryGet<TValueType>(this Func<TValueType> getterDelegate, TValueType getFailedResult = default(TValueType))
-        {
-            try
-            {
-                return getterDelegate();
-            }
-            catch
-            {
-                return getFailedResult;
-            }
-        }
-
-        #endregion
-
-        #region Linq extensions (DoForEach)
-
-        /// <summary>
-        /// Simple DoForEach helper method for use with Linq.  Applies the given action to each of the {TSource} items in the given source set.
-        /// <para/>supports call chaining
-        /// </summary>
-        public static IEnumerable<TSource> DoForEach<TSource>(this IEnumerable<TSource> source, Action<TSource> action = null)
-        {
-            action = action ?? (ignoreItem => {});
-
-            foreach (TSource item in source)
-                action(item);
-
-            return source;
-        }
-
-        #endregion
-
-        #region Type related extension methods
-
-        /// <summary>returns the Leaf Name of the given <paramref name="type"/> type (aka: The last token for the resulting sequence of dot seperated tokens)</summary>
-        public static string GetTypeLeafName(this Type type) { return (type.ToString()).Split('.').SafeLast(); }
-        
         #endregion
     }
 

@@ -33,7 +33,7 @@ namespace MosaicLib.Utils
     #region utility interfaces: ICopyable<TObjectType>
 
     /// <summary>
-    /// This interface is used with generics so that they can make use of some type of copy construction in a generic manner
+    /// This interface is used with generics so that they can make use of some type of copy construction in a generic manner through the use of the MakeCopyOfThis method defined by this interface.
     /// </summary>
     public interface ICopyable<TObjectType>
     {
@@ -604,7 +604,7 @@ namespace MosaicLib.Utils
     }
 
     /// <summary>
-    /// This struct provides the standard System.Threading.Interlocked operations wrapped around a volatile System.Int64 value.  This is done to allow us to surpress the warnings that are generated when passing a volatile by reference
+    /// This struct provides the standard System.Threading.Interlocked operations wrapped around a volatile System.Int64 value.  This is done to allow us to suppress the warnings that are generated when passing a volatile by reference
     /// </summary>
     public struct AtomicInt64 : IAtomicValue<System.Int64>
     {
@@ -1965,12 +1965,15 @@ namespace MosaicLib.Utils
     public class ScopedLock : IDisposable
     {
         /// <summary>Default constructor.  Same as expicitly calling ScopedLock(null)</summary>
-        public ScopedLock() : this(null) { }
+        public ScopedLock() 
+            : this(null, acquireLock: false) 
+        { }
 
-        /// <summary>Optionally locking constructor.  If the given mutexObject is non-null then this constructor will Lock it.</summary>
-        public ScopedLock(object mutexObject)
+        /// <summary>Optionally locking constructor.  If the given <paramref name="mutexObject"/> is non-null and if <paramref name="acquireLock"/> is true then this constructor will Lock the given <paramref name="mutexObject"/>.</summary>
+        public ScopedLock(object mutexObject, bool acquireLock = true)
         {
-            Lock(mutexObject);
+            if (acquireLock && mutexObject != null)
+                Lock(mutexObject);
         }
 
         /// <summary>Calls Release in order to unlock any currently held lock.</summary>

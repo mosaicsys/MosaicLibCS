@@ -795,6 +795,8 @@ namespace MosaicLib.Semi.E041
 
             this.e30ALIDHandlerFacet = e30ALIDHandlerFacet;
             IVI = ivi ?? Values.Instance;
+
+            SetupMainThreadStartingAndStoppingActions();
         }
 
         private IValuesInterconnection IVI { get; set; }
@@ -1907,22 +1909,23 @@ namespace MosaicLib.Semi.E041
 
         #endregion
 
-        #region MainThreadFcn
+        #region SetupMainThreadStartingAndStoppingActions
 
-        /// <summary>
-        /// override the MainThreadFcn so that we can use it to create the Set objects that can be iterated by this part (without owning the lock)
-        /// </summary>
-        protected override void MainThreadFcn()
+        private void SetupMainThreadStartingAndStoppingActions()
         {
-            anStateCurrentActiveSet = new ReferenceSet<ANState>(new SetID("{0}.ANStateCurrentlyActiveSet".CheckedFormat(PartID)), Config.ANStateCurrentlyActiveSetMaxCount, true);
-            anStateRecentlyClearedSet = new ReferenceSet<ANState>(new SetID("{0}.ANStateRecentlyClearedSet".CheckedFormat(PartID)), Config.ANStateRecentlyClearedSetMaxCount, true);
-            anStateHistorySet = new ReferenceSet<ANState>(new SetID("{0}.ANStateHistorySet".CheckedFormat(PartID)), Config.ANStateHistorySetMaxCount, true);
+            AddMainThreadStartingAction(() => 
+            {
+                anStateCurrentActiveSet = new ReferenceSet<ANState>(new SetID("{0}.ANStateCurrentlyActiveSet".CheckedFormat(PartID)), Config.ANStateCurrentlyActiveSetMaxCount, true);
+                anStateRecentlyClearedSet = new ReferenceSet<ANState>(new SetID("{0}.ANStateRecentlyClearedSet".CheckedFormat(PartID)), Config.ANStateRecentlyClearedSetMaxCount, true);
+                anStateHistorySet = new ReferenceSet<ANState>(new SetID("{0}.ANStateHistorySet".CheckedFormat(PartID)), Config.ANStateHistorySetMaxCount, true);
+            });
 
-            base.MainThreadFcn();
-
-            anStateCurrentActiveSet.UnregisterSelf();
-            anStateRecentlyClearedSet.UnregisterSelf();
-            anStateHistorySet.UnregisterSelf();
+            AddMainThreadStoppingAction(() =>
+            {
+                anStateCurrentActiveSet.UnregisterSelf();
+                anStateRecentlyClearedSet.UnregisterSelf();
+                anStateHistorySet.UnregisterSelf();
+            });
         }
 
         #endregion

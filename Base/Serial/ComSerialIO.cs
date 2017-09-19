@@ -75,7 +75,7 @@ namespace MosaicLib.SerialIO
         /// <summary>True if a valid SpecStr has been given to this object and false otherwise.</summary>
         public bool IsValid { get { return faultCode == string.Empty; } }
         /// <summary>Returns a non-empty description of the issue if IsValid is false.  returns empty string if IsValid is ture.</summary>
-        public string ErrorCode { get { return (IsValid ? string.Empty : (!String.IsNullOrEmpty(SpecStr) ? ("ComPortConfig parse failed: " + faultCode) : "No valid SpecStr has been parsed")); } }
+        public string ErrorCode { get { return (IsValid ? string.Empty : (!String.IsNullOrEmpty(SpecStr) ? ("ComPortConfig parse failed: {0}".CheckedFormat(faultCode)) : "No valid SpecStr has been parsed")); } }
 
 		private void ParseSpec()
 		{
@@ -206,7 +206,7 @@ namespace MosaicLib.SerialIO
 			}
 			catch (System.Exception ex)
 			{
-				faultCode = "Exception:" + ex.Message;
+                faultCode = ex.ToString(ExceptionFormat.TypeAndMessage);
 			}
 
 			if (string.IsNullOrEmpty(faultCode))
@@ -232,7 +232,7 @@ namespace MosaicLib.SerialIO
 			}
 			catch (System.Exception ex)
 			{
-				faultCode = "Exception:" + ex.Message;
+                faultCode = ex.ToString(ExceptionFormat.TypeAndMessage);
 			}
 
 			if (string.IsNullOrEmpty(faultCode))
@@ -306,7 +306,7 @@ namespace MosaicLib.SerialIO
             }
             catch (System.Exception ex)
             {
-                return "Exception:" + ex.Message;
+                return ex.ToString(ExceptionFormat.TypeAndMessage);
             }
 		}
 
@@ -329,7 +329,7 @@ namespace MosaicLib.SerialIO
 			}
 			catch (System.Exception ex)
 			{
-				return "Exception:" + ex.Message;
+                return ex.ToString(ExceptionFormat.TypeAndMessage);
 			}
 		}
 

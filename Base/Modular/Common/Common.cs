@@ -82,7 +82,7 @@ namespace MosaicLib.Modular.Common
         public ValueContainer(System.Object initialValueAsObject)
             : this()
         {
-            ValueAsObject = initialValueAsObject;
+            SetFromObject(initialValueAsObject);
         }
 
         /// <summary>A quick encoding on the field/union field in which the value has been placed.  (Type had been called ContainerValueType)</summary>
@@ -387,6 +387,11 @@ namespace MosaicLib.Modular.Common
                 isNullable = false;
                 decodedValueType = ContainerStorageType.String;
             }
+            else if (valueType == typeof(Logging.LogGate))
+            {
+                isNullable = false;
+                decodedValueType = ContainerStorageType.Custom;
+            }
             else
             {
                 isNullable = false;     // this flag is not useful when used with reference types
@@ -418,7 +423,8 @@ namespace MosaicLib.Modular.Common
                 switch (cvt)
                 {
                     case ContainerStorageType.None: return null;
-                    default:
+                    case ContainerStorageType.Custom: return null;
+                    default: return null;
                     case ContainerStorageType.Object: return o;
                     case ContainerStorageType.String: return o;
                     case ContainerStorageType.IListOfString: return o;
@@ -441,28 +447,7 @@ namespace MosaicLib.Modular.Common
             }
             set
             {
-                if (value != null)
-                {
-                    Type t = value.GetType();
-
-                    if (t == typeof(ValueContainer))
-                    {
-                        CopyFrom((ValueContainer)value);
-                    }
-                    else
-                    {
-                        ContainerStorageType valueCVT;
-                        bool valueTypeIsNullable;
-
-                        DecodeType(t, out valueCVT, out valueTypeIsNullable);
-
-                        SetValue<System.Object>(value, valueCVT, valueTypeIsNullable);
-                    }
-                }
-                else
-                {
-                    SetToNullObject();
-                }
+                SetFromObject(value);
             }
         }
 
@@ -476,7 +461,28 @@ namespace MosaicLib.Modular.Common
         /// </summary>
         public ValueContainer SetFromObject(System.Object value)
         {
-            ValueAsObject = value;
+            if (value != null)
+            {
+                Type t = value.GetType();
+
+                if (t == typeof(ValueContainer))
+                {
+                    CopyFrom((ValueContainer)value);
+                }
+                else
+                {
+                    ContainerStorageType valueCVT;
+                    bool valueTypeIsNullable;
+
+                    DecodeType(t, out valueCVT, out valueTypeIsNullable);
+
+                    SetValue<System.Object>(value, valueCVT, valueTypeIsNullable);
+                }
+            }
+            else
+            {
+                SetToNullObject();
+            }
 
             return this;
         }
@@ -503,7 +509,7 @@ namespace MosaicLib.Modular.Common
         /// container then this method will attempt to convert the given value to an object and store it as such.
         /// <para/>Supports call chaining
         /// </summary>
-        public ValueContainer SetValue<TValueType>(TValueType value, ContainerStorageType decodedValueType, bool isNullable)
+        public ValueContainer SetValue<TValueType>(TValueType value, ContainerStorageType decodedValueType, bool isNullable = false)
         {
             SetToNullObject();
 
@@ -517,9 +523,9 @@ namespace MosaicLib.Modular.Common
                     switch (decodedValueType)
                     {
                         case ContainerStorageType.None: o = null; cvt = ContainerStorageType.None; break;
-                        default:
+                        default: o = null; cvt = ContainerStorageType.None; break;
                         case ContainerStorageType.Object: o = (System.Object)value; cvt = ContainerStorageType.Object; break;
-                        case ContainerStorageType.String: o = ((value != null) ? ((System.Object) value).ToString() : null); break;
+                        case ContainerStorageType.String: o = ((value != null) ? ((System.Object) value).ToString() : null); break; 
                         case ContainerStorageType.Boolean: u.b = (System.Boolean)System.Convert.ChangeType(value, typeof(System.Boolean)); break;
                         case ContainerStorageType.Binary: u.bi = (System.Byte)System.Convert.ChangeType(value, typeof(System.Byte)); break;
                         case ContainerStorageType.SByte: u.i8 = (System.SByte)System.Convert.ChangeType(value, typeof(System.SByte)); break;
@@ -630,6 +636,25 @@ namespace MosaicLib.Modular.Common
                                 }
                             }
                             break;
+                        case ContainerStorageType.Custom:
+                            {
+                                if (value == null)
+                                {
+                                    cvt = ContainerStorageType.String;
+                                    o = null;
+                                }
+                                else if (value is Logging.LogGate || value is Logging.LogGate?)
+                                {
+                                    Logging.LogGate logGate = (Logging.LogGate)((System.Object)value);
+                                    CopyFrom((ValueContainer)logGate);      // use fully type specified explicit cast
+                                }
+                                else
+                                {
+                                    cvt = ContainerStorageType.String;
+                                    o = ((System.Object)value).ToString(); // use default ToString method
+                                }
+                            }
+                            break;
                     }
                 }
                 else
@@ -638,7 +663,7 @@ namespace MosaicLib.Modular.Common
                     // o has already been cleared above.
                 }
             }
-            catch
+            catch // (System.Exception ex)
             {
                 // if the above logic fails then cast the value as an object and save it as such.
                 cvt = ContainerStorageType.Object;
@@ -653,8 +678,8 @@ namespace MosaicLib.Modular.Common
         /// This method decodes the TValueType to get the corresponding ContainerStorageType.
         /// If the contained value type matches this decoded ContainerStorageType then this method simply transfers the value from the corresponding storage field to the value.
         /// Otherwise the method uses the System.Convert.ChangeType method to attempt to convert the contained value into the desired TValueType type.
-        /// If this transfer or conversion is successful then this method returns the transfered/converted value.  If this transfer/conversion is not
-        /// successful then this method returns the given defaultValue (which defaults to default(TValueType)).
+        /// If this transfer or conversion is successful then this method returns the transfered/converted value.  
+        /// If this transfer/conversion throws an exception and <paramref name="rethrow"/> is true then this method rethrows the original exception, otherwise this method returns the given <paramref name="defaultValue"/>
         /// <para/>Note: because this method must decode the type information on each call, it may be less efficient to use this method than to use the version where the
         /// caller explicitly uses DecodeType method combined with the more complete GetValue method.
         /// </summary>
@@ -722,7 +747,7 @@ namespace MosaicLib.Modular.Common
                     switch (cvt)
                     {
                         case ContainerStorageType.None: value = defaultValue; break;
-                        default:
+                        default: value = (TValueType)o; break;
                         case ContainerStorageType.Object: value = (TValueType)o; break;
                         case ContainerStorageType.String: value = (TValueType)o; break;
                         case ContainerStorageType.Boolean: value = (TValueType)((System.Object)u.b); break;
@@ -746,9 +771,8 @@ namespace MosaicLib.Modular.Common
                                     value = (TValueType)((System.Object)((o as IList<String> ?? emptyIListOfString).ToArray()));      // special case for reading from an IListOfString to an String array.
                                 else
                                     value = (TValueType)((System.Object)(o as IList<String> ?? emptyIListOfString));      // all other cases the TValueType should be castable from an IList<String>
-
-                                break; 
                             }
+                            break;
                         case ContainerStorageType.IListOfVC:
                             {
                                 // IListOfVC can be read as VC [] or as IList<VC>
@@ -756,15 +780,31 @@ namespace MosaicLib.Modular.Common
                                     value = (TValueType)((System.Object)((o as IList<ValueContainer> ?? emptyIListOfVC).ToArray()));      // special case for reading from an IListOfVC to an VC array.
                                 else
                                     value = (TValueType)((System.Object)(o as IList<ValueContainer> ?? emptyIListOfVC));      // all other cases the TValueType should be castable from an IList<VC>
-
-                                break;
                             }
+                            break;
+                    }
+                }
+                else if (decodedValueType == ContainerStorageType.Custom)
+                {
+                    if (TValueTypeType == typeof(Logging.LogGate))
+                    {
+                        Logging.LogGate logGate = (Logging.LogGate)this;            // use explicit cast to get this.
+                        value = (TValueType)((object)logGate);
+                    }
+                    else if (TValueTypeType == typeof(Logging.LogGate?))
+                    {
+                        Logging.LogGate ? logGate = (IsNullOrEmpty ? null : (Logging.LogGate ?)((Logging.LogGate)this));            // use explicit cast to get this.
+                        value = (TValueType)((object)logGate);
+                    }
+                    else
+                    {
+                        throw new ValueContainerGetValueException("Unable to get {0} as type '{1}': no recognized custom conversion exists".CheckedFormat(this, typeof(TValueType)), null);
                     }
                 }
                 else if (decodedValueType == ContainerStorageType.TimeSpan && cvt.IsFloatingPoint() && allowTypeChangeAttempt)
                 {
                     // support a direct conversion attempt from floating point value to TimeSpan by interpresting the floating value as seconds.
-                    value = (TValueType)((System.Object) TimeSpan.FromSeconds((cvt == ContainerStorageType.Double) ? u.f64 : u.f32));
+                    value = (TValueType)((System.Object) (((cvt == ContainerStorageType.Double) ? u.f64 : u.f32).FromSeconds()));
                 }
                 else if (decodedValueType.IsValueType() && !valueTypeIsNullable && !rethrow && IsNullOrEmpty)
                 {
@@ -869,7 +909,10 @@ namespace MosaicLib.Modular.Common
             catch (System.Exception ex)
             {
                 value = defaultValue;
-                LastGetValueException = new ValueContainerGetValueException("Unable to get {0} as type '{1}': {2}".CheckedFormat(this, typeof(TValueType), ex.Message), ex);
+                if (ex is ValueContainerGetValueException)
+                    LastGetValueException = ex;
+                else
+                    LastGetValueException = new ValueContainerGetValueException("Unable to get {0} as type '{1}': {2}".CheckedFormat(this, typeof(TValueType), ex.Message), ex);
             }
 
             if (rethrow && LastGetValueException != null)
@@ -1084,17 +1127,19 @@ namespace MosaicLib.Modular.Common
 
                 if (o is INamedValueSet) { return (o as INamedValueSet).ToStringSML(); }
                 if (o is INamedValue) { return (o as INamedValue).ToStringSML(); }
-                if (o is bool[]) { return "[Bool_Array{0}]".CheckedFormat(String.Concat((o as bool[]).Select(v => " {0}".CheckedFormat(v)))); }
-                if (o is sbyte[]) { return "[I1_Array{0}]".CheckedFormat(String.Concat((o as sbyte[]).Select(v => " {0}".CheckedFormat((int)v)))); }
-                if (o is short[]) { return "[I2_Array{0}]".CheckedFormat(String.Concat((o as short[]).Select(v => " {0}".CheckedFormat(v)))); }
-                if (o is int[]) { return "[I4_Array{0}]".CheckedFormat(String.Concat((o as int[]).Select(v => " {0}".CheckedFormat(v)))); }
-                if (o is long[]) { return "[I8_Array{0}]".CheckedFormat(String.Concat((o as long[]).Select(v => " {0}".CheckedFormat(v)))); }
-                if (o is byte[]) { return "[U1_Array{0}]".CheckedFormat(String.Concat((o as byte[]).Select(v => " {0}".CheckedFormat((uint)v)))); }
-                if (o is ushort[]) { return "[U2_Array{0}]".CheckedFormat(String.Concat((o as ushort[]).Select(v => " {0}".CheckedFormat(v)))); }
-                if (o is uint[]) { return "[U4_Array{0}]".CheckedFormat(String.Concat((o as uint[]).Select(v => " {0}".CheckedFormat(v)))); }
-                if (o is ulong[]) { return "[U8_Array{0}]".CheckedFormat(String.Concat((o as ulong[]).Select(v => " {0}".CheckedFormat(v)))); }
-                if (o is float[]) { return "[F4_Array{0}]".CheckedFormat(String.Concat((o as float[]).Select(v => " {0}".CheckedFormat(v)))); }
-                if (o is double[]) { return "[F8_Array{0}]".CheckedFormat(String.Concat((o as double[]).Select(v => " {0}".CheckedFormat(v)))); }
+
+                Type oType = o.GetType();
+                if (oType == typeof(bool[])) { return "[Bool_Array{0}]".CheckedFormat(String.Concat((o as bool[]).Select(v => " {0}".CheckedFormat(v)))); }
+                if (oType == typeof(sbyte[])) { return "[I1_Array{0}]".CheckedFormat(String.Concat((o as sbyte[]).Select(v => " {0}".CheckedFormat((int)v)))); }
+                if (oType == typeof(short[])) { return "[I2_Array{0}]".CheckedFormat(String.Concat((o as short[]).Select(v => " {0}".CheckedFormat(v)))); }
+                if (oType == typeof(int[])) { return "[I4_Array{0}]".CheckedFormat(String.Concat((o as int[]).Select(v => " {0}".CheckedFormat(v)))); }
+                if (oType == typeof(long[])) { return "[I8_Array{0}]".CheckedFormat(String.Concat((o as long[]).Select(v => " {0}".CheckedFormat(v)))); }
+                if (oType == typeof(byte[])) { return "[U1_Array{0}]".CheckedFormat(String.Concat((o as byte[]).Select(v => " {0}".CheckedFormat((uint)v)))); }
+                if (oType == typeof(ushort[])) { return "[U2_Array{0}]".CheckedFormat(String.Concat((o as ushort[]).Select(v => " {0}".CheckedFormat(v)))); }
+                if (oType == typeof(uint[])) { return "[U4_Array{0}]".CheckedFormat(String.Concat((o as uint[]).Select(v => " {0}".CheckedFormat(v)))); }
+                if (oType == typeof(ulong[])) { return "[U8_Array{0}]".CheckedFormat(String.Concat((o as ulong[]).Select(v => " {0}".CheckedFormat(v)))); }
+                if (oType == typeof(float[])) { return "[F4_Array{0}]".CheckedFormat(String.Concat((o as float[]).Select(v => " {0}".CheckedFormat(v)))); }
+                if (oType == typeof(double[])) { return "[F8_Array{0}]".CheckedFormat(String.Concat((o as double[]).Select(v => " {0}".CheckedFormat(v)))); }
             }
 
             if (cvt == ContainerStorageType.Object)
@@ -1118,12 +1163,14 @@ namespace MosaicLib.Modular.Common
 
     /// <summary>
     /// Enumeration that is used with the ValueContainer struct.
-    /// <para/>None (0 : default), Object, String, IListOfString, IListOfVC, Boolean, SByte, Int16, Int32, Int64, Byte, UInt16, UInt32, UInt64, Single, Double, TimeSpan, DateTime
+    /// <para/>None (0 : default), Object, String, IListOfString, IListOfVC, Boolean, Binary, SByte, Int16, Int32, Int64, Byte, UInt16, UInt32, UInt64, Single, Double, TimeSpan, DateTime
     /// </summary>
     public enum ContainerStorageType : int
     {
         /// <summary>Custom value for cases where the storage type has not been defined -(the default value: 0)</summary>
         None = 0,
+        /// <summary>Custom value for special GetValue/SetValue cases.  This CST is not intended to be used for actual storage</summary>
+        Custom,
         /// <summary>Use Object field</summary>
         Object,
         /// <summary>Use Object field as a String</summary>
@@ -1134,7 +1181,7 @@ namespace MosaicLib.Modular.Common
         IListOfVC,
         /// <summary>Use Union.b field</summary>
         Boolean,
-        /// <summary>Use Union.vi field</summary>
+        /// <summary>Use Union.bi field</summary>
         Binary,
         /// <summary>Use Union.i8 field (signed)</summary>
         SByte,
@@ -1370,10 +1417,14 @@ namespace MosaicLib.Modular.Common
                 ContainerStorageType useCST = vc.cvt;
                 if (useCST == ContainerStorageType.Object && vc.o != null)
                 {
-                    if ((vc.o is string []) || (vc.o is IList<string>))
+                    if ((vc.o is string[]) || (vc.o is IList<string>))
                         useCST = ContainerStorageType.IListOfString;
                     else if ((vc.o is ValueContainer[]) || (vc.o is IList<ValueContainer>))
                         useCST = ContainerStorageType.IListOfVC;
+                }
+                else if (useCST == ContainerStorageType.Custom)
+                {
+                    useCST = ContainerStorageType.None;
                 }
 
                 switch (useCST)
@@ -3534,9 +3585,13 @@ namespace MosaicLib.Modular.Common
             bool removeEmpty = ((mergeBehavior & NamedValueMergeBehavior.RemoveEmpty) != NamedValueMergeBehavior.None);
             bool removeNull = ((mergeBehavior & NamedValueMergeBehavior.RemoveNull) != NamedValueMergeBehavior.None);
             bool appendLists = ((mergeBehavior & NamedValueMergeBehavior.AppendLists) != NamedValueMergeBehavior.None);
+            bool isSum = ((mergeBehavior & NamedValueMergeBehavior.Sum) != NamedValueMergeBehavior.None);
 
             if (lhs == null || lhs.IsReadOnly)
+            {
+                lhs = lhs ?? NamedValueSet.Empty;
                 lhs = new NamedValueSet(lhs.GetEnumerable(TraversalType.TopLevelOnly), asReadOnly: false, subSets: lhs.SubSets);
+            }
 
             if (rhs != null)
             {
@@ -3549,7 +3604,7 @@ namespace MosaicLib.Modular.Common
                     if (lhsContainsRhsName)
                     {
                         bool mayBeAppend = appendLists && (rhsIsIListOfString || rhsIsIListOfVC);
-                        INamedValue lhsItem = (mayBeAppend ? lhs[rhsItem.Name] : null);
+                        INamedValue lhsItem = ((isSum || mayBeAppend) ? lhs[rhsItem.Name] : null);
                         bool isAppend = (mayBeAppend && lhsItem != null && lhsItem.VC.cvt == rhsItem.VC.cvt);
 
                         if ((removeEmpty && rhsItem.VC.IsEmpty) || (removeNull && rhsItem.VC.IsNull))
@@ -3558,7 +3613,9 @@ namespace MosaicLib.Modular.Common
                         }
                         else if (update)
                         {
-                            if (!isAppend)
+                            if (isSum)
+                                lhs.SetValue(rhsItem.Name, lhsItem.VC.Sum(rhsItem.VC));
+                            else if (!isAppend)
                                 lhs.SetValue(rhsItem.Name, rhsItem.VC);
                             else if (rhsIsIListOfString)
                                 lhs.SetValue(rhsItem.Name, new List<string>(lhsItem.VC.GetValue<IList<string>>(false, emptyIListOfString).Concat(rhsItem.VC.GetValue<IList<string>>(false, emptyIListOfString))).AsReadOnly());
@@ -3580,6 +3637,44 @@ namespace MosaicLib.Modular.Common
 
         private static readonly IList<string> emptyIListOfString = new List<string>().AsReadOnly();
         private static readonly IList<ValueContainer> emptyIListVC = new List<ValueContainer>().AsReadOnly();
+
+        /// <summary>
+        /// Returns a new ValueContainer containing the sum of the given <paramref name="lhs"/> and <paramref name="rhs"/> values, 
+        /// if the two values have the same contained type and that type is "sumable", 
+        /// or returns the given <paramref name="lhs"/> value if they are not.
+        /// </summary>
+        public static ValueContainer Sum(this ValueContainer lhs, ValueContainer rhs)
+        {
+            ValueContainer result = lhs;
+
+            if (lhs.cvt == rhs.cvt)
+            {
+                switch (lhs.cvt)
+                {
+                    case ContainerStorageType.String: result.o = string.Concat((lhs.o as string), (rhs.o as string)); break;      // string.Concat does MapNullToEmpty on its own
+                    case ContainerStorageType.IListOfString: result.SetValue<IList<string>>(new List<string>(lhs.GetValue(false, emptyIListOfString).Concat(rhs.GetValue(false, emptyIListOfString))).AsReadOnly()); break;
+                    case ContainerStorageType.IListOfVC: result.SetValue<IList<ValueContainer>>(new List<ValueContainer>(lhs.GetValue(false, emptyIListVC).Concat(rhs.GetValue(false, emptyIListVC))).AsReadOnly()); break;
+                    case ContainerStorageType.Boolean: result.u.b = lhs.u.b | rhs.u.b; break;
+                    case ContainerStorageType.Binary: result.u.bi = unchecked((Byte)(lhs.u.bi + rhs.u.bi)); break;
+                    case ContainerStorageType.SByte: result.u.i8 = unchecked((SByte)(lhs.u.i8 + rhs.u.i8)); break;
+                    case ContainerStorageType.Int16: result.u.i16 = unchecked((Int16) (lhs.u.i16 + rhs.u.i16)); break;
+                    case ContainerStorageType.Int32: result.u.i32 = lhs.u.i32 + rhs.u.i32; break;
+                    case ContainerStorageType.Int64: result.u.i64 = lhs.u.i64 + rhs.u.i64; break;
+                    case ContainerStorageType.Byte: result.u.u8 = unchecked((Byte) (lhs.u.u8 + rhs.u.u8)); break;
+                    case ContainerStorageType.UInt16: result.u.u16 = unchecked((UInt16) (lhs.u.u16 + rhs.u.u16)); break;
+                    case ContainerStorageType.UInt32: result.u.u32 = lhs.u.u32 + rhs.u.u32; break;
+                    case ContainerStorageType.UInt64: result.u.u64 = lhs.u.u64 + rhs.u.u64; break;
+                    case ContainerStorageType.Single: result.u.f32 = lhs.u.f32 + rhs.u.f32; break;
+                    case ContainerStorageType.Double: result.u.f64 = lhs.u.f64 + rhs.u.f64; break;
+                    case ContainerStorageType.TimeSpan: result.u.TimeSpan = lhs.u.TimeSpan + rhs.u.TimeSpan; break;
+                    case ContainerStorageType.DateTime:
+                    default:
+                        break;
+                }
+            }
+
+            return result;
+        }
 
         /// <summary>Returns true if the given mergeBehavior value has the AddNewItems flag set.</summary>
         public static bool IsAddSelected(this NamedValueMergeBehavior mergeBehavior)
@@ -3637,6 +3732,8 @@ namespace MosaicLib.Modular.Common
         RemoveNull = 0x08,
         /// <summary>Select to request that the merge operation will concatinate the contents of corresonding list objects.  This behavior is only useful when combined with Update [0x10]</summary>
         AppendLists = 0x10,
+        /// <summary>Select to request that the merge operation will sum corresponding contents of corresonding objects.  This behavior is only useful when combined with Update [0x10]</summary>
+        Sum = 0x20,
 
         /// <summary>Shorthand for AddNewItems [0x01]</summary>
         AddOnly = AddNewItems,

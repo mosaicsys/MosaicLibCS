@@ -170,7 +170,7 @@ namespace MosaicLib.SerialIO
 			}
 			catch (System.Exception ex)
 			{
-				faultCode = "Exception:" + ex.Message;
+				faultCode = ex.ToString(ExceptionFormat.TypeAndMessage);
 			}
 
 			if (string.IsNullOrEmpty(faultCode))
@@ -200,7 +200,7 @@ namespace MosaicLib.SerialIO
 			}
 			catch (System.Exception ex)
 			{
-				faultCode = "Exception:" + ex.Message;
+				faultCode = ex.ToString(ExceptionFormat.TypeAndMessage);
 			}
 
 			if (string.IsNullOrEmpty(faultCode))
@@ -278,7 +278,7 @@ namespace MosaicLib.SerialIO
 			}
 			catch (System.Exception ex)
 			{
-				return "Exception:" + ex.Message;
+				return ex.ToString(ExceptionFormat.TypeAndMessage);
 			}
 		}
 
@@ -297,7 +297,7 @@ namespace MosaicLib.SerialIO
 			}
 			catch (System.Exception ex)
 			{
-				return "Exception:" + ex.Message;
+				return ex.ToString(ExceptionFormat.TypeAndMessage);
 			}
 		}
 
@@ -693,7 +693,7 @@ namespace MosaicLib.SerialIO
                     }
                     catch (System.Exception ex)
                     {
-                        Trace.Debug.Emit("Select failed: {0}", ex.Message);
+                        Trace.Debug.Emit("Select failed: {0}", ex.ToString(ExceptionFormat.TypeAndMessage));
 
                         threadWaitEventNotifier.WaitMSec(selectThrewWaitMSec);
                         rebuildTablesFromUserTable = true;

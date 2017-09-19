@@ -214,13 +214,18 @@ namespace MosaicLib.Modular.Config
         /// </summary>
         protected DictionaryConfigKeyProvider Add(ConfigKeyAccessImpl ckai)
         {
-            keyItemDictionary[ckai.Key] = new DictionaryKeyItem()
+            DictionaryKeyItem dItem = new DictionaryKeyItem()
             {
                 key = ckai.Key,
                 initialContainedValue = ckai.ValueContainer,
                 ckai = ckai,
                 keyMetaData = ckai.MetaData,
             };
+
+            if (ckai.HasValue)
+                ckai.ValueSeqNum = ckai.CurrentSeqNum = dItem.seqNumGen = dItem.seqNumGen.IncrementSkipZero();
+
+            keyItemDictionary[ckai.Key] = dItem;
 
             return this;
         }
@@ -236,6 +241,8 @@ namespace MosaicLib.Modular.Config
             public string key;
             /// <summary>The initial value from construction time.</summary>
             public ValueContainer initialContainedValue;
+            /// <summary>This value is used to generate sequence numbers for the corresponding config key value.</summary>
+            public int seqNumGen;
             /// <summary>The provider reference ConfigKeyAccessImpl object used for this key</summary>
             public ConfigKeyAccessImpl ckai;
             /// <summary>key's MetaData from the ckai</summary>
@@ -334,6 +341,7 @@ namespace MosaicLib.Modular.Config
                 DictionaryKeyItem item = null;
                 IConfigKeyAccess kvpIcka = kvp.Key;
                 string key = (kvpIcka != null ? kvpIcka.Key : null);
+
                 if (key == null)
                     firstError = firstError ?? "Internal: Encountered null key spec";
                 else if (!key.StartsWith(KeyPrefix))
@@ -366,17 +374,19 @@ namespace MosaicLib.Modular.Config
                         firstError = firstError ?? Fcns.CheckedFormat("Internal: key:'{0}' is fixed in provider:'{1}'", kvpIcka.Key, Name);
                     else
                     {
+                        int entryValueSeqNum = item.ckai.ValueSeqNum;
                         ValueContainer entryValue = item.ckai.ValueContainer;
 
                         item.ckai.ValueContainer = kvp.Value;
+                        item.ckai.CurrentSeqNum = item.ckai.ValueSeqNum = item.seqNumGen = item.seqNumGen.IncrementSkipZero();
                         item.comment = commentStr;
 
                         numChangedItems++;
 
-                        if (entryValue.IsEqualTo(item.initialContainedValue))
-                            Logger.Debug.Emit("key:'{0}' value changed to {1} [from initial value:{2}]", key, kvp.Value, item.initialContainedValue);
+                        if (entryValueSeqNum == 0)
+                            Logger.Debug.Emit("key:'{0}' value changed to {1} seq:{2} [from initial value:{3}]", key, kvp.Value, item.ckai.ValueSeqNum, item.initialContainedValue);
                         else
-                            Logger.Debug.Emit("key:'{0}' value changed to {1} [from:{2}, initial:{3}]", key, kvp.Value, entryValue, item.initialContainedValue);
+                            Logger.Debug.Emit("key:'{0}' value changed to {1} seq:{2} [from:{3} seq:{4} initial:{5}]", key, kvp.Value, item.ckai.ValueSeqNum, entryValue, entryValueSeqNum, item.initialContainedValue);
                     }
                 }
             }
@@ -393,7 +403,14 @@ namespace MosaicLib.Modular.Config
         private string EnsureItemExists(IConfigKeyAccessSpec icks, ValueContainer initialValue, ref DictionaryKeyItem item, string commentStr)
         {
             ConfigKeyAccessImpl ckai = new ConfigKeyAccessImpl(icks.Key, icks.Flags, this) { ValueContainer = initialValue };
-            item = new DictionaryKeyItem() { key = icks.Key, ckai = ckai, keyMetaData = ckai.MetaData, initialContainedValue = initialValue, comment = commentStr };
+            item = new DictionaryKeyItem() 
+            { 
+                key = icks.Key, 
+                ckai = ckai, 
+                keyMetaData = ckai.MetaData, 
+                initialContainedValue = initialValue, 
+                comment = commentStr 
+            };
 
             string ec = VerifyAndNoteItemAdded(item);
 

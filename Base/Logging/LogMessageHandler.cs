@@ -299,9 +299,9 @@ namespace MosaicLib
             /// <para/>Keys are LogGate, DirectoryPath, MaxFilesToKeep, MaxFileAgeToKeepInDays, MaxTotalSizeToKeep, AdvanceAfterFileReachesSize, AdvanceAfterFileReachesAge, 
             /// IncludeQPCTime, IncludeThreadInfo, IncludeFileAndLine
             /// </summary>
-            public FileRotationLoggingConfig UpdateFromModularConfig(string configKeyPrefixStr, Logging.IMesgEmitter issueEmitter, Logging.IMesgEmitter valueEmitter)
+            public FileRotationLoggingConfig UpdateFromModularConfig(string configKeyPrefixStr, Logging.IMesgEmitter issueEmitter = null, Logging.IMesgEmitter valueEmitter = null, IConfig configInstance = null)
             {
-                ConfigValueSetAdapter<ConfigKeyValuesHelper> adapter = new ConfigValueSetAdapter<ConfigKeyValuesHelper>() { ValueSet = new ConfigKeyValuesHelper(), SetupIssueEmitter = issueEmitter, ValueNoteEmitter = valueEmitter }.Setup(configKeyPrefixStr);
+                ConfigValueSetAdapter<ConfigKeyValuesHelper> adapter = new ConfigValueSetAdapter<ConfigKeyValuesHelper>(configInstance) { ValueSet = new ConfigKeyValuesHelper(), SetupIssueEmitter = issueEmitter, ValueNoteEmitter = valueEmitter }.Setup(configKeyPrefixStr);
 
                 ConfigKeyValuesHelper configValues = adapter.ValueSet;
 
@@ -543,7 +543,6 @@ namespace MosaicLib
                     this.level = level;
                     this.source = source;
                     this.IncludeData = data;
-                    this.fAndL = fandl;
                     this.endLStr = endlStr;
                     this.tabStr = tabStr;
                     IncludeThreadInfo = threadInfo;
@@ -563,7 +562,6 @@ namespace MosaicLib
                     qpc = rhs.qpc;
                     level = rhs.level;
                     source = rhs.source;
-                    fAndL = rhs.fAndL;
                     endLStr = rhs.endLStr;
                     tabStr = rhs.tabStr;
                     IncludeNamedValueSet = rhs.IncludeNamedValueSet;
@@ -588,7 +586,8 @@ namespace MosaicLib
                 /// <summary>True if the ThreadName and/or ThreadID is to be included in the formatted output lines.</summary>
                 public bool IncludeThreadInfo { get; set; }
                 /// <summary>True if the source File and Line information is included in formatted output lines.</summary>
-                public bool IncludeFileAndLine { get { return fAndL; } set { fAndL = value; } }
+                [Obsolete("Support for recording file and line information has been removed from logging.  This property is no longer supported (2017-07-21)")]
+                public bool IncludeFileAndLine { get { return false; } set { } }
 
                 /// <summary>
                 /// This static property may be used to define the data encoding format that is used by default when a LineFormat object is told to IncludeData but is not explicitly given the DataEncodingFormat to use.
@@ -633,11 +632,6 @@ namespace MosaicLib
                         default: break;
                     }
                     if (IncludeThreadInfo) { os.Write(tabStr); os.Write(FormatThreadInfo(lm)); }
-                    if (fAndL && lm.SourceStackFrame != null)
-                    {
-                        { os.Write(tabStr); os.Write(lm.SourceStackFrame.GetFileName()); }
-                        { os.Write(tabStr); os.Write(lm.SourceStackFrame.GetFileLineNumber().ToString()); }
-                    }
                     { os.Write(endLStr); }
                 }
 
@@ -665,11 +659,6 @@ namespace MosaicLib
                         default: break;
                     }
                     if (IncludeThreadInfo) { ostr.Append(tabStr); ostr.Append(FormatThreadInfo(lm)); }
-                    if (fAndL && lm.SourceStackFrame != null)
-                    {
-                        { ostr.Append(tabStr); ostr.Append(lm.SourceStackFrame.GetFileName()); }
-                        { ostr.Append(tabStr); ostr.Append(lm.SourceStackFrame.GetFileLineNumber().ToString()); }
-                    }
                     { ostr.Append(endLStr); }
                 }
 
@@ -691,7 +680,7 @@ namespace MosaicLib
                     else firstItem = false;
                 }
 
-                private bool date, qpc, source, level, fAndL;
+                private bool date, qpc, source, level;
                 private string endLStr = defaultEolStr;
                 private string tabStr = defaultTabStr;
                 private readonly Utils.IByteArrayTranscoder base64UrlCoder = Utils.ByteArrayTranscoders.Base64UrlTranscoder;
@@ -758,10 +747,10 @@ namespace MosaicLib
                 /// <param name="name">Defines the LMH name.</param>
                 /// <param name="logGate">Defines the LogGate value for messages handled here.  Messages with MesgType that is not included in this gate will be ignored.</param>
                 /// <param name="recordSourceStackFrame">Indicates if this handler should record and save source file and line numbers.</param>
-                public CommonLogMessageHandlerBase(string name, LogGate logGate, bool recordSourceStackFrame = true)
+                public CommonLogMessageHandlerBase(string name, LogGate logGate, bool recordSourceStackFrame = false)
                 {
                     this.name = name;
-                    loggerConfig = new LoggerConfig() { GroupName = "LMH:" + name, LogGate = logGate, RecordSourceStackFrame = recordSourceStackFrame };
+                    loggerConfig = new LoggerConfig() { GroupName = "LMH:" + name, LogGate = logGate };
 
                     logger = new LogMesgHandlerLogger(this);
                 }
@@ -835,7 +824,7 @@ namespace MosaicLib
                 protected string name = null;
 
                 /// <summary>Protected storage for this object's current loggerConfig</summary>
-                protected LoggerConfig loggerConfig = LoggerConfig.AllNoFL;
+                protected LoggerConfig loggerConfig = LoggerConfig.All;
 
                 /// <summary>Protected storage for this object's internal ILogger object.</summary>
                 protected ILogger logger = null;
@@ -917,7 +906,7 @@ namespace MosaicLib
                 /// <param name="name">Defines the LMH name.</param>
                 /// <param name="logGate">Defines the LogGate value for messages handled here.  Messages with MesgType that is not included in this gate will be ignored.</param>
                 /// <param name="recordSourceStackFrame">Indicates if this handler should record and save source file and line numbers.</param>
-                public SimpleLogMessageHandlerBase(string name, LogGate logGate, bool recordSourceStackFrame = true)
+                public SimpleLogMessageHandlerBase(string name, LogGate logGate, bool recordSourceStackFrame = false)
                     : base(name, logGate, recordSourceStackFrame)
                 { }
 
@@ -966,7 +955,7 @@ namespace MosaicLib
                 /// <param name="ostream">Gives the StreamWriter instance to which the output text will be written.</param>
                 /// <param name="flushAfterEachWrite">Set to true to flush the ostream after each write, or false to Flush only when explicitly told to by the LogDistribution system.</param>
                 public StreamWriterLogMessageHandlerBase(string name, LogGate logGate, LineFormat lineFmt, System.IO.StreamWriter ostream, bool flushAfterEachWrite)
-                    : base(name, logGate, recordSourceStackFrame: lineFmt.IncludeFileAndLine)
+                    : base(name, logGate)
                 {
                     this.lineFmt = lineFmt;
                     this.ostream = ostream;
@@ -1219,7 +1208,7 @@ namespace MosaicLib
                 /// <param name="name">Defines the LMH name.</param>
                 /// <param name="logGate">Defines the LogGate value for messages handled here.  Messages with MesgType that is not included in this gate will be ignored.</param>
                 /// <param name="recordSourceStackFrame">Indicates if this handler should record source stack frames.</param>
-                public AccumulatingLogMessageHandler(string name, LogGate logGate, bool recordSourceStackFrame = true)
+                public AccumulatingLogMessageHandler(string name, LogGate logGate, bool recordSourceStackFrame = false)
                     : base(name, logGate, recordSourceStackFrame: recordSourceStackFrame)
                 { }
 
@@ -1309,11 +1298,11 @@ namespace MosaicLib
         /// The resulting array consisists of a pattern that looks like:
         /// <para/>================================================================================================================================
         /// <para/>Log file for 'logBaseName'
-        /// <para/>Hosting Assembly: 'HostingAssemblyName (callerProvidedAssemblyName)'
-        /// <para/>Main Assembly: 'MainAssemblyName'
         /// <para/>Process name:'GetCurrentPerocess.ProcessName' id:GetCurrentProcess.Id 32bit
         /// <para/>Machine:'machineName' os:'os name and version' 64bit Cores:'nunCores' PageSize:pageSize
         /// <para/>User:'userName' {interactive|service}
+        /// <para/>Hosting Assembly: 'HostingAssemblyName (callerProvidedAssemblyName)'
+        /// <para/>Main Assembly: 'MainAssemblyName'
         /// <para/>[optional null]
         /// <para/>================================================================================================================================
         /// </summary>
@@ -1330,11 +1319,12 @@ namespace MosaicLib
             string[] defaultFileHeaderLines1 = new string[]
             {
                 ((logBaseName != null) ? "Log file for '{0}'".CheckedFormat(logBaseName) : null),
-                ((hostingAssembly != null) ? "Hosting Assembly: '{0}'".CheckedFormat(hostingAssembly) : null),
-                ((mainAssembly != null && mainAssembly != hostingAssembly) ? "Main Assembly: '{0}'".CheckedFormat(mainAssembly) : null),
                 "Process name:'{0}' id:{1} {2}".CheckedFormat(currentProcess.ProcessName, currentProcess.Id, Environment.Is64BitProcess ? "64-bit" : "32-bit"),
                 "Machine:'{0}' os:'{1}'{2} Cores:{3} PageSize:{4}".CheckedFormat(Environment.MachineName, Environment.OSVersion, Environment.Is64BitOperatingSystem ? " 64-bit" : "", Environment.ProcessorCount, Environment.SystemPageSize),
                 "User:'{0}' {1}".CheckedFormat(Environment.UserName, Environment.UserInteractive ? "interactive" : "service"),
+                ((hostingAssembly != null) ? "Hosting Assembly: '{0}'".CheckedFormat(hostingAssembly) : null),
+                ((mainAssembly != null && mainAssembly != hostingAssembly) ? "Main Assembly: '{0}'".CheckedFormat(mainAssembly) : null),
+                (System.Diagnostics.Debugger.IsAttached ? "Debugger is attached" : null),
             }.Where(s => !s.IsNullOrEmpty()).ToArray();
 
             if (!includeNullForDynamicLines)
@@ -1348,16 +1338,16 @@ namespace MosaicLib
         /// <summary>
         /// This method may be used to generate the dynamic header lines, typically combined with the use of GenerateDefaultHeaderLines.
         /// The resulting array looks like:
-        /// <para/>Uptime: 1.001 hours [only included if time >= 0.001 hours]
+        /// <para/>Uptime: 1.001 hours
         /// </summary>
         public static string[] GenerateDynamicHeaderLines()
         {
-            double appUptimeHours = appUptimeBaseTimeStamp.Age.TotalHours;
-            double roundedAppUptimeHours = appUptimeHours.Round(4, MidpointRounding.ToEven);
+            double appUptimeHours = Math.Max(0.0, appUptimeBaseTimeStamp.Age.TotalHours);
+            double roundedAppUptimeHours = appUptimeHours.Round(3, MidpointRounding.ToEven);
 
             string [] dynamicHeaderLinesArray = new string[]
             {
-                ((appUptimeHours > 0.0005) ? "Uptime: {0:f3} hours".CheckedFormat(appUptimeHours) : null),
+                "Uptime: {0:f3} hours".CheckedFormat(roundedAppUptimeHours),
             }.Where(s => s != null).ToArray();
 
             return dynamicHeaderLinesArray;

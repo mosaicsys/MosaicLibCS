@@ -21,6 +21,9 @@
  */
 
 using System;
+using System.Collections.Generic;
+using System.Linq;
+
 using MosaicLib.Utils;
 using MosaicLib.Time;
 using MosaicLib.Modular.Action;
@@ -992,7 +995,7 @@ namespace MosaicLib.Modular.Part
 		/// <returns>"Action:Service(serviceName): there is no implementation for this requested service action."</returns>
 		protected virtual string PerformServiceAction(string serviceName)
 		{
-			return "Action:Service(" + serviceName + "): there is no implementation for this requested service action.";
+			return "Action:Service({0}): there is no implementation for this requested service action.".CheckedFormat(serviceName);
 		}
 
 		#endregion
@@ -1006,13 +1009,15 @@ namespace MosaicLib.Modular.Part
 		protected virtual void MainThreadFcn()
 		{
 			using (Logging.EnterExitTrace entryExitTrace = new Logging.EnterExitTrace(Log, "MainThreadFcn", Logging.MesgType.Debug))
-			{
+            {
                 try
                 {
                     LogThreadInfo(Log.Debug);
 
                     // The following is the part's main loop:
                     //	Loop until the action queue has been disabled
+
+                    mainThreadStartingActionList.Where(action => action != null).DoForEach(action => action());
 
                     while (actionQ.QueueEnable)
                     {
@@ -1057,10 +1062,62 @@ namespace MosaicLib.Modular.Part
                     entryExitTrace.ExtraMessage = "Caught unexpected {0}".CheckedFormat(ex.ToString(ExceptionFormat.TypeAndMessage));
                 }
 
+                try
+                {
+                    mainThreadStoppingActionList.Where(action => action != null).DoForEach(action => action());
+                }
+                catch (System.Exception ex)
+                {
+                    Log.Debug.Emit("{0} failed during execution of stopping action list: {1}", Fcns.CurrentMethodName, ex.ToString(ExceptionFormat.Full));
+
+                    if (entryExitTrace.ExtraMessage.IsNullOrEmpty())
+                        entryExitTrace.ExtraMessage = "Caught unexpected {0} during stopping action list".CheckedFormat(ex.ToString(ExceptionFormat.TypeAndMessage));
+                }
+
                 if (entryExitTrace.ExtraMessage.IsNullOrEmpty())
                     entryExitTrace.ExtraMessage = "Normal exit";
-			}
+            }
 		}
+
+        private List<System.Action> mainThreadStartingActionList = new List<System.Action>();
+        private List<System.Action> mainThreadStoppingActionList = new List<System.Action>();
+
+        /// <summary>
+        /// Adds the given <paramref name="action"/> to the list of actions that will be performed by the MainThreadFcn just before it enters its main spin loop.
+        /// Caller can use the optional <paramref name="addSelect"/> parameter to determine if the action is to be Appended to (default), or Prefixed to the list.
+        /// </summary>
+        protected void AddMainThreadStartingAction(System.Action action, ActionListAddSelection addSelect = ActionListAddSelection.Append)
+        {
+            if (addSelect == ActionListAddSelection.Prefix)
+                mainThreadStartingActionList.Insert(0, action);
+            else
+                mainThreadStartingActionList.Add(action);
+        }
+
+        /// <summary>
+        /// Adds the given <paramref name="action"/> to the list of actions that will be performed by the MainThreadFcn just after it leaves its main spin loop.
+        /// Caller can use the optional <paramref name="addSelect"/> parameter to determine if the action is to be Appended to, or Prefixed to  (default) the list.
+        /// </summary>
+        protected void AddMainThreadStoppingAction(System.Action action, ActionListAddSelection addSelect = ActionListAddSelection.Prefix)
+        {
+            if (addSelect == ActionListAddSelection.Prefix)
+                mainThreadStoppingActionList.Insert(0, action);
+            else
+                mainThreadStoppingActionList.Add(action);
+        }
+
+        /// <summary>
+        /// Enumeration defines the list position that MainThreadActionList Actions can be added to the Stopping and Starting list.
+        /// <para/>Append (0 - default), Prefix
+        /// </summary>
+        protected enum ActionListAddSelection
+        {
+            /// <summary>Selects that the action is appended to the list</summary>
+            Append = 0,
+
+            /// <summary>Selects that the action is added to the front of the list</summary>
+            Prefix,
+        }
 
         /// <summary>
         /// Generates and emits a log message including the current Managed Thread's name and id as well as the current Win32 ThreadID on which this managed thread is running.

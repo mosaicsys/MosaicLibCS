@@ -598,16 +598,6 @@ namespace MosaicLib.Time
 
     public static partial class ExtensionMethods
     {
-        public static TimeSpan Min(this TimeSpan a, TimeSpan b)
-        {
-            return ((a <= b) ? a : b);
-        }
-
-        public static TimeSpan Max(this TimeSpan a, TimeSpan b)
-        {
-            return ((a >= b) ? a : b);
-        }
-
         public static QpcTimeStamp Min(this QpcTimeStamp a, QpcTimeStamp b)
         {
             return ((a <= b) ? a : b);

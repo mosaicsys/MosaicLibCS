@@ -324,23 +324,42 @@ namespace MosaicLib.Semi.E090
 
     public class E090SubstLocObserver : ISequencedObjectSourceObserver<IE039Object>
     {
-        public E090SubstLocObserver(ISequencedObjectSource<IE039Object, int> objLocPublisher)
+        public E090SubstLocObserver(ISequencedObjectSource<IE039Object, int> objLocPublisher, bool alsoObserveContents = true)
         {
             objLocObserver = new SequencedRefObjectSourceObserver<IE039Object, int>(objLocPublisher);
-            Info = new E090SubstLocInfo(Object);
+            AlsoObserveContents = alsoObserveContents;
+            Update(forceUpdate: true);
         }
 
         public IE039Object Object { get { return objLocObserver.Object; } }
         public E090SubstLocInfo Info { get; private set; }
 
+        public bool AlsoObserveContents { get; private set; }
+
+        public IE039Object ContainsObject { get; private set; }
+        public E090SubstInfo ContainsSubstInfo { get; private set; }
+
         public bool IsUpdateNeeded { get { return objLocObserver.IsUpdateNeeded; } set { objLocObserver.IsUpdateNeeded = value; } }
 
-        public bool Update()
+        bool ISequencedSourceObserver.Update()
+        {
+            return this.Update(forceUpdate: false);
+        }
+
+        public bool Update(bool forceUpdate = false)
         {
             bool didUpdate = objLocObserver.Update();
 
-            if (didUpdate)
+            if (didUpdate || forceUpdate)
+            {
                 Info = new E090SubstLocInfo(Object);
+
+                if (AlsoObserveContents)
+                {
+                    ContainsObject = Info.GetContainedE039Object();
+                    ContainsSubstInfo = new E090SubstInfo(ContainsObject);
+                }
+            }
 
             return didUpdate;
         }
@@ -428,21 +447,26 @@ namespace MosaicLib.Semi.E090
         public E090SubstLocInfo(IE039Object obj)
             : this()
         {
+            Obj = obj;
             ObjID = (obj != null) ? obj.ID : E039ObjectID.Empty;
-            LinkToSubst = (obj != null) ? obj.LinksToOtherObjectsList.FirstOrDefault(link => link.Key == "Contains") : default(E039Link);
-            SrcLinksToHere = (obj != null) ? obj.LinksFromOtherObjectsList.Where(link => link.Key == "SrcLoc").ToArray() : emptyLinkArray;
-            DestLinksToHere = (obj != null) ? obj.LinksFromOtherObjectsList.Where(link => link.Key == "DestLoc").ToArray() : emptyLinkArray;
+            LinkToSubst = (obj != null) ? obj.LinksToOtherObjectsList.FirstOrDefault(link => (link.Key == "Contains")) : default(E039Link);
+            SrcLinksToHere = (obj != null) ? obj.LinksFromOtherObjectsList.Where(link => (link.Key == "SrcLoc")).ToArray() : emptyLinkArray;
+            DestLinksToHere = (obj != null) ? obj.LinksFromOtherObjectsList.Where(link => (link.Key == "DestLoc")).ToArray() : emptyLinkArray;
         }
 
         public E090SubstLocInfo(E090SubstLocInfo other)
             : this()
         {
+            Obj = other.Obj;
             ObjID = other.ObjID;
             LinkToSubst = other.LinkToSubst;
             SrcLinksToHere = other.SrcLinksToHere.MakeCopyOf(mapNullToEmpty: false);
             DestLinksToHere = other.DestLinksToHere.MakeCopyOf(mapNullToEmpty: false);
         }
 
+        private IE039Object Obj { get; set; }
+
+        /// <summary>Gives the E039ObjectID of the object from which this structure was created, or E039ObjectID.Empty if the default constructor was used.</summary>
         public E039ObjectID ObjID { get { return _objID ?? E039ObjectID.Empty; } set { _objID = value; } }
         private E039ObjectID _objID;
 
@@ -463,7 +487,22 @@ namespace MosaicLib.Semi.E090
             } 
         }
 
+        /// <summary>
+        /// Attempts to follow the (first) LinkToSubst link and obtain the IE039Object for the current state of the linked object from its table.  
+        /// Returns the resulting IE039Object, or the given <paramref name="fallbackObj"/> if the link could not be successfully followed.
+        /// </summary>
+        public IE039Object GetContainedE039Object(IE039Object fallbackObj = null)
+        {
+            return LinkToSubst.ToID.GetObject(fallbackObj);
+        }
+
         private static readonly E039Link[] emptyLinkArray = new E039Link[0];
+
+        /// <summary>Gives an empty E090SubstInfo object to be used as a default value.</summary>
+        public static E090SubstLocInfo Empty { get { return new E090SubstLocInfo() { ObjID = E039ObjectID.Empty, SrcLinksToHere = emptyLinkArray, DestLinksToHere = emptyLinkArray }; } }
+
+        /// <summary>Returns true if the contents are the same as the contents of the Empty E090SubstInfo object.</summary>
+        public bool IsEmpty { get { return this.Equals(Empty); } }
 
         public bool Equals(E090SubstLocInfo other)
         {
@@ -477,6 +516,9 @@ namespace MosaicLib.Semi.E090
         /// <summary>Debugging and logging helper</summary>
         public override string ToString()
         {
+            if (IsEmpty)
+                return "E090SubstLocInfo Empty";
+
             StringBuilder sb = new StringBuilder("E090SubstLocInfo {0} {1}".CheckedFormat(ObjID.ToString(E039ToStringSelect.FullName), SLS));
 
             if (!LinkToSubst.IsToIDEmpty)
@@ -502,7 +544,8 @@ namespace MosaicLib.Semi.E090
         public E090SubstInfo(IE039Object obj) 
             : this()
         {
-            ObjID = (obj != null) ? obj.ID : E039ObjectID.Empty;
+            Obj = obj;
+            _objID = (obj != null) ? obj.ID : null;
 
             INamedValueSet attributes = (obj != null) ? obj.Attributes : NamedValueSet.Empty;
             
@@ -511,15 +554,16 @@ namespace MosaicLib.Semi.E090
             LotID = attributes["LotID"].VC.GetValue<string>(rethrow: false).MapNullToEmpty();
             SubstUsageStr = attributes["SubstUsage"].VC.GetValue<string>(rethrow: false).MapNullToEmpty();
 
-            LocsLinkedToHere = (obj != null) ? obj.LinksFromOtherObjectsList.Where(link => link.Key == "Contains").ToArray() : emptyLinkArray;
-            LinkToSrc = (obj != null) ? obj.LinksToOtherObjectsList.FirstOrDefault(link => link.Key == "SrcLoc") : default(E039Link);
-            LinkToDest = (obj != null) ? obj.LinksToOtherObjectsList.FirstOrDefault(link => link.Key == "DestLoc") : default(E039Link);
+            LocsLinkedToHere = (obj != null) ? obj.LinksFromOtherObjectsList.Where(link => (link.Key == "Contains")).ToArray() : emptyLinkArray;
+            LinkToSrc = (obj != null) ? obj.LinksToOtherObjectsList.FirstOrDefault(link => (link.Key == "SrcLoc")) : default(E039Link);
+            LinkToDest = (obj != null) ? obj.LinksToOtherObjectsList.FirstOrDefault(link => (link.Key == "DestLoc")) : default(E039Link);
         }
 
         public E090SubstInfo(E090SubstInfo other)
             : this()
         {
-            ObjID = other.ObjID;
+            Obj = other.Obj;
+            _objID = other._objID;
 
             SPS = other.SPS;
             STS = other.STS;
@@ -547,6 +591,9 @@ namespace MosaicLib.Semi.E090
             return nvs;
         }
 
+        private IE039Object Obj { get; set; }
+
+        /// <summary>Gives the E039ObjectID of the object from which this structure was created, or E039ObjectID.Empty if the default constructor was used.</summary>
         public E039ObjectID ObjID { get { return _objID ?? E039ObjectID.Empty; } set { _objID = value; } }
         private E039ObjectID _objID;
 
@@ -579,7 +626,13 @@ namespace MosaicLib.Semi.E090
         /// <summary>Proxy link for SubstDestination attribute- gives link to the SubstLoc object which is the Destination location for this substrate.</summary>
         public E039Link LinkToDest { get; set; }
 
-        public static E090SubstInfo Empty { get { return new E090SubstInfo() { LotID = "", SubstUsageStr = "", STS = SubstState.Undefined, SPS = SubstProcState.Undefined }; } }
+        /// <summary>Gives an empty E090SubstInfo object to be used as a default value.</summary>
+        public static E090SubstInfo Empty { get { return new E090SubstInfo() { LotID = "", SubstUsageStr = "", STS = SubstState.Undefined, SPS = SubstProcState.Undefined, LocsLinkedToHere = emptyLinkArray }; } }
+
+        /// <summary>Returns true if the contents are the same as the contents of the Empty E090SubstInfo object.</summary>
+        public bool IsEmpty { get { return this.Equals(Empty); } }
+
+        /// <summary>Gives the initial E090SubstInfo to be used with newly created E090 objects.</summary>
         public static E090SubstInfo Initial { get { return new E090SubstInfo() { LotID = "", SubstUsage = SubstUsage.Product, STS = SubstState.AtSource, SPS = SubstProcState.NeedsProcessing }; } }
 
         public bool Equals(E090SubstInfo other)
@@ -595,7 +648,6 @@ namespace MosaicLib.Semi.E090
                 );
         }
 
-        public bool IsEmpty { get { return this.Equals(Empty); } }
         public bool IsValid 
         { 
             get 
@@ -631,6 +683,9 @@ namespace MosaicLib.Semi.E090
 
         public override string ToString()
         {
+            if (IsEmpty)
+                return "E90SubstInfo Empty";
+
             StringBuilder sb = new StringBuilder("E90SubstInfo {0} {1} {2}".CheckedFormat(ObjID.ToString(E039ToStringSelect.FullName), STS, SPS));
 
             if (!LotID.IsNullOrEmpty())

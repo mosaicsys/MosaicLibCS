@@ -26,8 +26,9 @@ using System.Linq;
 using System.IO;
 
 using MosaicLib.File;
-using MosaicLib.Utils;
+using MosaicLib.Modular.Config;
 using MosaicLib.Time;
+using MosaicLib.Utils;
 
 namespace MosaicLib
 {
@@ -59,7 +60,8 @@ namespace MosaicLib
                     public bool IncludeDate { get { return LineFormat.IncludeDate; } set { LineFormat.IncludeDate = value; } }
                     public bool IncludeQpc { get { return LineFormat.IncludeQpc; } set { LineFormat.IncludeQpc = value; } }
                     public bool IncludeSource { get { return LineFormat.IncludeSource; } set { LineFormat.IncludeSource = value; } }
-                    public bool IncludeFileAndLine { get { return LineFormat.IncludeFileAndLine; } set { LineFormat.IncludeFileAndLine = value; } }
+                    [Obsolete("Support for recording file and line information has been removed from logging.  This property is no longer supported (2017-07-21)")]
+                    public bool IncludeFileAndLine { get { return false; } set { } }
                     public bool IncludeData { get { return LineFormat.IncludeData; } set { LineFormat.IncludeData = value; } }
                     public bool IncludeThreadInfo { get { return LineFormat.IncludeThreadInfo; } set { LineFormat.IncludeThreadInfo = value; } }
                     public bool IncludeNamedValueSet { get { return LineFormat.IncludeNamedValueSet; } set { LineFormat.IncludeNamedValueSet = value; } }
@@ -111,7 +113,6 @@ namespace MosaicLib
 
                         LineFormat = new LineFormat(true, true, true, true, true, false, "\r\n", "\t") { IncludeThreadInfo = false, IncludeNamedValueSet = false };
 
-                        IncludeFileAndLine = false;
                         IncludeQpc = true;
                         IncludeData = true;
                         IncludeThreadInfo = true;
@@ -165,7 +166,7 @@ namespace MosaicLib
                     /// calls its UpdateFromModularConfig method to fill in its values from modular config.  Finally this method updates the localy stored
                     /// values from the updated FileRotationLoggingConfig contents and reconstructs the LineFormat
                     /// </summary>
-                    public Config UpdateFromModularConfig(string configKeyPrefixStr, Logging.IMesgEmitter issueEmitter, Logging.IMesgEmitter valueEmitter)
+                    public Config UpdateFromModularConfig(string configKeyPrefixStr, Logging.IMesgEmitter issueEmitter = null, Logging.IMesgEmitter valueEmitter = null, IConfig configInstance = null)
                     {
                         FileRotationLoggingConfig frlConfig = new FileRotationLoggingConfig(Name, DirPath)
                         {
@@ -176,12 +177,11 @@ namespace MosaicLib
                             includeQpcTime = IncludeQpc,
                             includeNamedValueSet = IncludeNamedValueSet,
                             includeThreadInfo = IncludeThreadInfo,
-                            includeFileAndLine = IncludeFileAndLine,
                             advanceRules = AdvanceRules,
                             purgeRules = new FileRotationLoggingConfig.PurgeRules(PruneRules),
                             mesgQueueSize = MesgQueueSize,
                         };
-                        frlConfig.UpdateFromModularConfig(configKeyPrefixStr, issueEmitter, valueEmitter);
+                        frlConfig.UpdateFromModularConfig(configKeyPrefixStr, issueEmitter: issueEmitter, valueEmitter: valueEmitter, configInstance: configInstance);
 
                         DirPath = frlConfig.dirPath;
                         FileNamePrefix = frlConfig.fileNamePrefix;
@@ -191,7 +191,6 @@ namespace MosaicLib
                         IncludeQpc = frlConfig.includeQpcTime;
                         IncludeNamedValueSet = frlConfig.includeNamedValueSet;
                         IncludeThreadInfo = frlConfig.includeThreadInfo;
-                        IncludeFileAndLine = frlConfig.includeFileAndLine;
 
                         AdvanceRules = frlConfig.advanceRules;
 
@@ -212,7 +211,7 @@ namespace MosaicLib
                 /// Constructor - <see cref="FileRotationLoggingConfig"/> parameter defines all initial values for the configuration and operation of this LMH.
                 /// </summary>
                 public TextFileDateTreeLogMessageHandler(Config configIn) 
-					: base(configIn.Name, configIn.LogGate, recordSourceStackFrame: configIn.IncludeFileAndLine)
+					: base(configIn.Name, configIn.LogGate)
 				{
                     config = new Config(configIn);
                     

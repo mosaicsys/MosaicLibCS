@@ -1,5 +1,5 @@
 //-------------------------------------------------------------------
-/*! @file Vacuum.cs
+/*! @file FlowModel.cs
  *  @brief 
  * 
  * Copyright (c) Mosaic Systems Inc.
@@ -1167,14 +1167,20 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
 
                 double volumetricFlowOutOfEnd2InSCMS = 0.0;
 
-                bool isTurboPump = Config.PumpBehavior.IsSet(PumpBehavior.TurboPump);
+                double basePipeVolumetricFlowOutOfEnd1InSCMS, basePipeResistanceInKPaSecPerM3;
 
-                bool nextDisableBondingConnectionBetweenChambers = isTurboPump ? !pumpIsEffectivelyOff : true;      // bonding is disabled for pumps types other than turbo pumps and for turbo pumps when they are not effectively off.
+                GetDefaultPipeFlowRateAndResistance(out basePipeVolumetricFlowOutOfEnd1InSCMS, out basePipeResistanceInKPaSecPerM3);
+
+                double basePipeVolumetricFlowOutOfEnd2InSCMS = -basePipeVolumetricFlowOutOfEnd1InSCMS;
+
+                bool turboAsPipeIsContributing = Config.IsTurboPump && (End1.PressureInKPa > End2.PressureInKPa) && (basePipeVolumetricFlowOutOfEnd2InSCMS > 0.0 || IsBondingConnectionBetweenChambers);
+
+                bool nextDisableBondingConnectionBetweenChambers = Config.IsTurboPump ? !pumpIsEffectivelyOff && !turboAsPipeIsContributing : true;      // bonding is disabled for pumps types other than turbo pumps and for turbo pumps when they are not effectively off.
 
                 if (DisableBondingConnectionBetweenChambers != nextDisableBondingConnectionBetweenChambers)
                     DisableBondingConnectionBetweenChambers = nextDisableBondingConnectionBetweenChambers;
 
-                if (!pumpIsEffectivelyOff)
+                if (!pumpIsEffectivelyOff && !IsBondingConnectionBetweenChambers)
                 {
                     effectiveBestBasePressureInKPa = Config.nominalMinimumPressureInKPa;
                     pumpingSpeedDerating = 1.0;
@@ -1198,10 +1204,13 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                         // determine volumetricFlow through pump from effictivePumpingSpeedCMS
                         volumetricFlowOutOfEnd2InSCMS = effectivePumpingSpeedCMS * End1.PressureInKPa / Physics.Gasses.Air.StandardAtmPressureInKPa;
                     }
+
+                    if (turboAsPipeIsContributing && basePipeVolumetricFlowOutOfEnd2InSCMS > volumetricFlowOutOfEnd2InSCMS)
+                        volumetricFlowOutOfEnd2InSCMS = basePipeVolumetricFlowOutOfEnd1InSCMS;       // at minimum turbo pumps behave like pipes (even when on) if the flow is from End1 to End2.  As such they should have high pumping capacity until the load End1 gets below the backing pressure End2.
                 }
                 else
                 {
-                    if (Config.PumpBehavior.IsSet(PumpBehavior.TurboPump))
+                    if (Config.IsTurboPump)
                     {
                         base.UpdateFlows();     // Turbo pumps behave like pipes when turned off.
                         return;
@@ -1228,6 +1237,10 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             LowSpeed = 3,
         }
 
+        /// <summary>
+        /// Defines the type of pump behavior supported by this device.
+        /// <para/>None (0x00), RoughingPump (0x01), TurboPump (0x02)
+        /// </summary>
         [Flags]
         public enum PumpBehavior : int
         {
@@ -1263,7 +1276,11 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             PumpConfig ICopyable<PumpConfig>.MakeCopyOfThis(bool deepCopy) { return new PumpConfig(this); }
 
             /// <summary>Defines the desired pump behavior</summary>
-            public PumpBehavior PumpBehavior { get; set; }
+            public PumpBehavior PumpBehavior { get { return _pumpBehavior; } set { _pumpBehavior = value; IsTurboPump = value.IsSet(PumpBehavior.TurboPump); } }
+            private PumpBehavior _pumpBehavior;
+
+            /// <summary>Returns true if the PumpBehavior has PumpBehavior.TurboPump set.</summary>
+            public bool IsTurboPump { get; private set; }
 
             /// <summary>Gives the initial PumpMode value for the pump at construction time</summary>
             public PumpMode InitialPumpMode { get; set; }
@@ -2615,8 +2632,8 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             public NodePairBase(string name, TConfigType config, string toStringComponentTypeStr)
                 : base(name, config, toStringComponentTypeStr)
             {
-                End1 = new Node("{0}.End1".CheckedFormat(name), nodePair: this);
-                End2 = new Node("{0}.End2".CheckedFormat(name), nodePair: this);
+                End1 = new Node("{0}.End1".CheckedFormat(name), nodePair: this) { PressureInKPa = config.InitialPressureInKPa };
+                End2 = new Node("{0}.End2".CheckedFormat(name), nodePair: this) { PressureInKPa = config.InitialPressureInKPa };
             }
 
             ComponentConfig INodePair.Config { get { return Config; } }
@@ -2634,7 +2651,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                 DistributePressures();
             }
 
-            public override void UpdateFlows()
+            public void GetDefaultPipeFlowRateAndResistance(out double volumetricFlowOutOfEnd1InSCMS, out double resistanceInKPaSecPerM3)
             {
                 double pEnd1 = End1.PressureInKPa;
                 double pEnd2 = End2.PressureInKPa;
@@ -2648,7 +2665,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                 double pDiff = pEnd2 - pEnd1;       // we are calculating the flow out of End1 (and into End2) which occurs when p@End2 > p@End1
                 double pAvg = (pEnd1 + pEnd2) * 0.5;
 
-                double resistanceInKPaSecPerM3 = ResistanceInKPaSecPerM3;
+                resistanceInKPaSecPerM3 = ResistanceInKPaSecPerM3;
 
                 //if (double.IsNaN(resistanceInKPaSecPerM3) || resistanceInKPaSecPerM3 <= 0.0)
                 //    throw new System.InvalidOperationException("resistance");
@@ -2685,13 +2702,21 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                 if (isBondingConnectionBetweenChambers != nextIsBondingConnectionBetweenChambersValue)
                     isBondingConnectionBetweenChambers = nextIsBondingConnectionBetweenChambersValue;
 
-                double volumetricFlowInSCMS = (!IsBondingConnectionBetweenChambers) ? ((pAvg / Physics.Gasses.Air.StandardAtmPressureInKPa) * flowRateM3PerSec) : 0.0;
-
-                End1.VolumetricFlowOutOfNodeInSCMS = volumetricFlowInSCMS;        // (pDiff = pEnd2 - pEnd1) above, or zero if this IsBondingConnectionBetweenChambers
-                End2.VolumetricFlowOutOfNodeInSCMS = -volumetricFlowInSCMS;
+                volumetricFlowOutOfEnd1InSCMS = (!IsBondingConnectionBetweenChambers) ? ((pAvg / Physics.Gasses.Air.StandardAtmPressureInKPa) * flowRateM3PerSec) : 0.0;
 
                 //if (double.IsNaN(volumetricFlowInSCMS) || double.IsInfinity(volumetricFlowInSCMS))
                 //    throw new System.InvalidOperationException("volumetricFlowInSCMS");
+            }
+
+            public override void UpdateFlows()
+            {
+                double volumetricFlowOutOfEnd1InSCMS;
+                double resistanceInKPaSecPerM3;
+
+                GetDefaultPipeFlowRateAndResistance(out volumetricFlowOutOfEnd1InSCMS, out resistanceInKPaSecPerM3);
+
+                End1.VolumetricFlowOutOfNodeInSCMS = volumetricFlowOutOfEnd1InSCMS;        // (pDiff = pEnd2 - pEnd1) above, or zero if this IsBondingConnectionBetweenChambers
+                End2.VolumetricFlowOutOfNodeInSCMS = -volumetricFlowOutOfEnd1InSCMS;
 
                 lastResistanceInKPaSecPerM3 = resistanceInKPaSecPerM3;
             }

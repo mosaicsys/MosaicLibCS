@@ -287,7 +287,10 @@ namespace MosaicLib.File
 
         #endregion
 
-        #region public methods
+        #region public methods and properties
+
+        public DirectoryTreeEntryNode TreeRootEntry { get { return treeRootEntry; } }
+        public Dictionary<string, DirectoryTreeEntryNode> DirectoryTreeNodeDictionary { get { return TreeRootEntry.RootDirectoryTreeEntryNodeDictionary; } }
 
         /// <summary>Get only property returns a clone of the last Config settings for which the object has been Setup, or null if the object has not been Setup yet.</summary>
         public Config SetupConfig
@@ -407,7 +410,7 @@ namespace MosaicLib.File
                 if (IsPruningBlocked)
                     return string.Empty;
 
-                if (treeRootEntry.DirContentsNodeList.Count == 0)
+                if (treeRootEntry.DirContentsNodeCount == 0)
                     return string.Empty;			// you cannot prune an empty tree!
 
                 if (config.PruneRules.TreeNumItemsLimit != 0)

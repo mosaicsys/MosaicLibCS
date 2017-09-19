@@ -308,7 +308,7 @@ namespace MosaicLib.SerialIO
 			}
 			catch (System.Exception ex)
 			{
-				faultCode = "Exception:" + ex.Message;
+				faultCode = ex.ToString(ExceptionFormat.TypeAndMessage);
 			}
 
 			if (string.IsNullOrEmpty(faultCode))
@@ -334,7 +334,7 @@ namespace MosaicLib.SerialIO
 			}
 			catch (System.Exception ex)
 			{
-				faultCode = "Exception:" + ex.Message;
+				faultCode = ex.ToString(ExceptionFormat.TypeAndMessage);
 			}
 
 			if (string.IsNullOrEmpty(faultCode))
@@ -453,7 +453,7 @@ namespace MosaicLib.SerialIO
 			}
 			catch (System.Exception ex)
 			{
-				return "Exception:" + ex.Message;
+				return ex.ToString(ExceptionFormat.TypeAndMessage);
 			}
 		}
 
@@ -493,7 +493,7 @@ namespace MosaicLib.SerialIO
 			}
 			catch (System.Exception ex)
 			{
-				return "Exception:" + ex.Message;
+				return ex.ToString(ExceptionFormat.TypeAndMessage);
 			}
 		}
 
@@ -654,7 +654,7 @@ namespace MosaicLib.SerialIO
 			}
 			catch (System.Exception ex)
 			{
-				faultCode = "Exception:" + ex.Message;
+				faultCode = ex.ToString(ExceptionFormat.TypeAndMessage);
 			}
 
 			if (string.IsNullOrEmpty(faultCode))
@@ -681,7 +681,7 @@ namespace MosaicLib.SerialIO
 			catch (System.Exception ex)
 			{
 				if (string.IsNullOrEmpty(faultCode))
-					faultCode = "Exception:" + ex.Message;
+					faultCode = ex.ToString(ExceptionFormat.TypeAndMessage);
 			}
 
 			if (string.IsNullOrEmpty(faultCode))
@@ -723,7 +723,7 @@ namespace MosaicLib.SerialIO
                 }
                 catch (System.Exception ex)
                 {
-                    Log.Info.Emit("Accept failed for {0}: {1}, ignored", listenSP.LocalEndPoint, ex.Message);
+                    Log.Info.Emit("Accept failed for {0}: {1}, ignored", listenSP.LocalEndPoint, ex.ToString(ExceptionFormat.TypeAndMessage));
                 }
 			}
 			

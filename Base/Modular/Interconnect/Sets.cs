@@ -667,11 +667,11 @@ namespace MosaicLib.Modular.Interconnect.Sets
         }
 
         /// <summary>protected constructor used by derived classes  Allows caller to specify the SetID, SetType, initial Changeability, initial UpdateState and to create and setup the mutex if required.</summary>
-        protected SetBase(SetID setID, SetType setType, SetChangeability changability, UpdateState updateState, bool createMutex)
+        protected SetBase(SetID setID, SetType setType, SetChangeability changeability, UpdateState updateState, bool createMutex = true)
         {
             SetID = setID;
             SetType = setType;
-            Changeability = changability;
+            Changeability = changeability;
             UpdateState = updateState;
 
             itemContainerListMutex = (createMutex ? new object() : null);
@@ -2391,7 +2391,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
 
         #endregion
 
-        #region internal class implemenrations
+        #region internal class implementation(s)
 
         /// <summary>Throws a SetUseException if the SetID in the given setDelta does not match this set's SetID</summary>
         protected void ThrowIfDeltaSetIDDoesNotMatch(ISetDelta setDelta)
@@ -2490,6 +2490,15 @@ namespace MosaicLib.Modular.Interconnect.Sets
 
         #endregion
     }
+
+    /// Todo: review if this is still useful/required
+    //public static class TrackingSetFactory
+    //{
+    //    public static object CreateTrackingSet(Type objectType, SetID setID)
+    //    {
+    //        throw new System.NotImplementedException();
+    //    }
+    //}
 
     /// <summary>
     /// Configuration class used by AdjustableTrackingSet's ApplyDeltas method to configure some of its custom behavior

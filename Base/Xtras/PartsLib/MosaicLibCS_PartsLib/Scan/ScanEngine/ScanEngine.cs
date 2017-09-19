@@ -96,7 +96,7 @@ namespace MosaicLib.PartsLib.Scan.ScanEngine
         private IEnumerable<IScanEnginePlugin> _pluginsToAddSet = null;
 
         /// <summary>
-        /// Uses Modular.Config to Setup portions of this instance.  Requires and issueEmitter and a valueEmitter to use (use null or Logging.NullEmitter to surpress output).
+        /// Uses Modular.Config to Setup portions of this instance.  Requires and issueEmitter and a valueEmitter to use (use null or Logging.NullEmitter to suppress output).
         /// Prefixes this object's Name with period in front of the annotated members that can be filled in from config keys.  All such config keys are ReadOnlyOnce = true and IsOptional = true.
         /// </summary>
         public ScanEnginePartConfig Setup(Logging.IMesgEmitter issueEmitter, Logging.IMesgEmitter valueEmitter)

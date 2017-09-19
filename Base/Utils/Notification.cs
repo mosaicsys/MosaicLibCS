@@ -1036,8 +1036,11 @@ namespace MosaicLib.Utils
 	{
         /// <summary>Default Constructor.  By default the contained Object will be null and sequence number will be in its initial, unset, state.</summary>
         public InterlockedNotificationRefObject() { }
+
         /// <summary>Explicit Constructor.  Caller provides default initialValue for Object.  Sequence number will be incremented from initial state.</summary>
-        public InterlockedNotificationRefObject(RefObjectType initialValue) : base(initialValue) { }
+        public InterlockedNotificationRefObject(RefObjectType initialValue) 
+            : base(initialValue) 
+        { }
 
         /// <summary>Sets the contained object and notifies all parties in the contained notificationList.  Use of lock free, volatile update and notify pattern requires that property setter cannot be used reentrantly.</summary>
 		public override RefObjectType Object { set { base.Object = value; notificationList.Notify(); } }
@@ -1060,8 +1063,11 @@ namespace MosaicLib.Utils
 	{
         /// <summary>Default Constructor.  By default the contained Object will be null and sequence number will be in its initial, unset, state.</summary>
         public GuardedNotificationValueObject() { }
+
         /// <summary>Explicit Constructor.  Caller provides default initialValue for Object.  Sequence number will be incremented from initial state.</summary>
-        public GuardedNotificationValueObject(ValueObjectType initialValue) : base(initialValue) { }
+        public GuardedNotificationValueObject(ValueObjectType initialValue) 
+            : base(initialValue) 
+        { }
 
         /// <summary>
         /// Accessor inherited from GuardedValueObject which uses mutex to control access to stored value object.  Accessor is thread safe and reentrant.

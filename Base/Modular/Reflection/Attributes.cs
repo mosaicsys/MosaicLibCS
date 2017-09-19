@@ -626,6 +626,16 @@ namespace MosaicLib.Modular.Reflection
                     Func<TAnnotatedClass, ValueContainer> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, ValueContainer>(itemInfo);
                     vcGetter = (annotatedInstance) => { return (ValueContainer)pfGetter(annotatedInstance); };
                 }
+                else if (itemInfo.ItemType == typeof(Logging.LogGate))
+                {
+                    Func<TAnnotatedClass, Logging.LogGate> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, Logging.LogGate>(itemInfo);
+                    vcGetter = (annotatedInstance) => { return new ValueContainer().SetValue<Logging.LogGate>(pfGetter(annotatedInstance), useStorageType, isNullable); };
+                }
+                else if (itemInfo.ItemType == typeof(Logging.LogGate ?))
+                {
+                    Func<TAnnotatedClass, Logging.LogGate ?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, Logging.LogGate ?>(itemInfo);
+                    vcGetter = (annotatedInstance) => { return new ValueContainer().SetValue<Logging.LogGate ?>(pfGetter(annotatedInstance), useStorageType, isNullable); };
+                }
                 else
                 {
                     // cover other types using ValueContainer's internal construction time object recognizer: enumeration, unrecognized, ...
@@ -825,6 +835,16 @@ namespace MosaicLib.Modular.Reflection
                 {
                     Action<TAnnotatedClass, ValueContainer> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, ValueContainer>(itemInfo);
                     vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc); };
+                }
+                else if (itemInfo.ItemType == typeof(Logging.LogGate))
+                {
+                    Action<TAnnotatedClass, Logging.LogGate> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, Logging.LogGate>(itemInfo);
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<Logging.LogGate>(rethrow || forceRethrowFlag)); };
+                }
+                else if (itemInfo.ItemType == typeof(Logging.LogGate ?))
+                {
+                    Action<TAnnotatedClass, Logging.LogGate ?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, Logging.LogGate ?>(itemInfo);
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<Logging.LogGate ?>(rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType.IsEnum)
                 {

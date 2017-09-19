@@ -22,6 +22,8 @@
 
 using System;
 
+using MosaicLib.Utils;
+
 namespace MosaicLib
 {
 	public static partial class Logging
@@ -78,7 +80,7 @@ namespace MosaicLib
                 dist4q = callerProvidedLMD ?? Logging.LogMessageDistribution.Instance;
 
                 if (dist4q == null)
-                    Utils.Asserts.TakeBreakpointAfterFault(ClassName + ": LogMessageDistribution is null");
+                    Utils.Asserts.TakeBreakpointAfterFault("{0}: LogMessageDistribution is null".CheckedFormat(ClassName));
 
                 if (dist4q != null)
                     dist4q.StartQueuedMessageDeliveryIfNeeded();

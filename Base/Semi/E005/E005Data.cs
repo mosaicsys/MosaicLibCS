@@ -377,21 +377,23 @@ namespace MosaicLib.Semi.E005.Data
                 case ContainerStorageType.Object:
                     if (vc.o != null)
                     {
+                        Type oType = vc.o.GetType();
+
                         if (vc.o is INamedValue) { byteArrayBuilder.AppendWithIH(vc.o as INamedValue); return; }
                         else if (vc.o is INamedValueSet) { byteArrayBuilder.AppendWithIH(vc.o as INamedValueSet); return; }
                         else if (vc.o is ValueContainer[]) { byteArrayBuilder.AppendWithIH(new List<ValueContainer>(vc.o as ValueContainer[] ?? emptyVCArray)); return; }
                         else if (vc.o is string[]) { byteArrayBuilder.AppendWithIH(vc.GetValue<string[]>(true)); return; }
-                        else if (vc.o is bool[]) { byteArrayBuilder.AppendWithIH(ItemFormatCode.Bo, 1, vc.o as bool[]); return; }
-                        else if (vc.o is sbyte[]) { byteArrayBuilder.AppendWithIH(ItemFormatCode.I1, 1, vc.o as sbyte[]); return; }
-                        else if (vc.o is short[]) { byteArrayBuilder.AppendWithIH(ItemFormatCode.I2, 2, vc.o as short[]); return; }
-                        else if (vc.o is int[]) { byteArrayBuilder.AppendWithIH(ItemFormatCode.I4, 4, vc.o as int[]); return; }
-                        else if (vc.o is long[]) { byteArrayBuilder.AppendWithIH(ItemFormatCode.I8, 8, vc.o as long[]); return; }
-                        else if (vc.o is byte[]) { byteArrayBuilder.AppendWithIH(ItemFormatCode.U1, 1, vc.o as byte[]); return; }
-                        else if (vc.o is ushort[]) { byteArrayBuilder.AppendWithIH(ItemFormatCode.U2, 2, vc.o as ushort[]); return; }
-                        else if (vc.o is uint[]) { byteArrayBuilder.AppendWithIH(ItemFormatCode.U4, 4, vc.o as uint[]); return; }
-                        else if (vc.o is ulong[]) { byteArrayBuilder.AppendWithIH(ItemFormatCode.U8, 8, vc.o as ulong[]); return; }
-                        else if (vc.o is float[]) { byteArrayBuilder.AppendWithIH(ItemFormatCode.F4, 4, vc.o as float[]); return; }
-                        else if (vc.o is double[]) { byteArrayBuilder.AppendWithIH(ItemFormatCode.F8, 8, vc.o as double[]); return; }
+                        else if (oType == typeof(bool[])) { byteArrayBuilder.AppendWithIH(ItemFormatCode.Bo, 1, vc.o as bool[]); return; }
+                        else if (oType == typeof(sbyte[])) { byteArrayBuilder.AppendWithIH(ItemFormatCode.I1, 1, vc.o as sbyte[]); return; }
+                        else if (oType == typeof(short[])) { byteArrayBuilder.AppendWithIH(ItemFormatCode.I2, 2, vc.o as short[]); return; }
+                        else if (oType == typeof(int[])) { byteArrayBuilder.AppendWithIH(ItemFormatCode.I4, 4, vc.o as int[]); return; }
+                        else if (oType == typeof(long[])) { byteArrayBuilder.AppendWithIH(ItemFormatCode.I8, 8, vc.o as long[]); return; }
+                        else if (oType == typeof(byte[])) { byteArrayBuilder.AppendWithIH(ItemFormatCode.U1, 1, vc.o as byte[]); return; }
+                        else if (oType == typeof(ushort[])) { byteArrayBuilder.AppendWithIH(ItemFormatCode.U2, 2, vc.o as ushort[]); return; }
+                        else if (oType == typeof(uint[])) { byteArrayBuilder.AppendWithIH(ItemFormatCode.U4, 4, vc.o as uint[]); return; }
+                        else if (oType == typeof(ulong[])) { byteArrayBuilder.AppendWithIH(ItemFormatCode.U8, 8, vc.o as ulong[]); return; }
+                        else if (oType == typeof(float[])) { byteArrayBuilder.AppendWithIH(ItemFormatCode.F4, 4, vc.o as float[]); return; }
+                        else if (oType == typeof(double[])) { byteArrayBuilder.AppendWithIH(ItemFormatCode.F8, 8, vc.o as double[]); return; }
                     }
 
                     break;

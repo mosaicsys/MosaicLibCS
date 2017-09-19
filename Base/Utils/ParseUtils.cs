@@ -23,6 +23,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 
 namespace MosaicLib.Utils
 {
@@ -33,6 +34,8 @@ namespace MosaicLib.Utils
     {
         /// <summary>span anything except whitespace</summary>
         ToNextWhiteSpace,
+        /// <summary>span anything except whitespace, ',', and '|'</summary>
+        ToNextTokenSeparator,
         /// <summary>span seq of letters and numbers</summary>
         AlphaNumeric,
         /// <summary>span alphanumeric, '-', '_' and '.'</summary>
@@ -58,32 +61,39 @@ namespace MosaicLib.Utils
     /// one of these objects.  To pass this object into method tree's, please use the ref notation so that the lower levels of the tree will
     /// use the original object rather than a copy of it.
     /// </remarks>
-	public struct StringScanner
+	public struct StringScanner : IEquatable<StringScanner>
     {
-        //-----------------------------------------------------------------
         #region private fields
 
-        /// <summary>Stores a reference to the original given string (or null if none)</summary>
+        /// <summary>Stores a reference to the original given string (or null if none - this is also the default value)</summary>
         private string str;
 
+        /// <summary>Stores the current scan index.</summary>
+        private int idx;
+
         #endregion
 
-        //-----------------------------------------------------------------
         #region Constructors
 
-        /// <summary>Standard constructor.  Gives a scanner positioned at the first character in the given string (null is mapped to empty automatically).</summary>
-        public StringScanner(string s) : this() { Str = s; }
+        /// <summary>Standard Constructor.  Gives a new scanner at a specified position (defaults to 0 - the first character) in the given string (null is mapped to empty automatically).</summary>
+        public StringScanner(string str, int idx = 0) 
+            : this() 
+        {
+            Str = str; 
+            Idx = idx;
+        }
 
-        /// <summary>Constructor.  Gives a new scanner at a specified position in the given string (null is mapped to empty automatically).</summary>
-        public StringScanner(string s, int i) : this() { Str = s; Idx = i; }
-
-        /// <summary>Copy constructor.  Gives a scanner with the same string and position as the given scanner.</summary>
-        public StringScanner(StringScanner rhs) : this(rhs.str, rhs.Idx) {}
+        /// <summary>Copy constructor.  Gives a scanner with the same string and position as the given <paramref name="other"/> scanner.</summary>
+        public StringScanner(StringScanner other) 
+            : this() 
+        {
+            str = other.str;
+            idx = other.idx;
+        }
 
         #endregion
 
-        //-----------------------------------------------------------------
-        #region public state accessor properties, some are settable
+        #region public state accessor properties, some are settable, Rewind, Equals
 
         /// <summary>
         /// Gives get/set access to the string that is currently referenced by this object.  
@@ -93,26 +103,26 @@ namespace MosaicLib.Utils
         public string Str 
         { 
             get { return str.MapNullToEmpty(); } 
-            set { str = value.MapNullToEmpty(); Idx = 0; } 
+            set { str = value; idx = 0; } 
         }
 
         /// <summary>Get/Set: gives the current index location in the contained string.</summary>
-        public int Idx { get; set; }
+        public int Idx { get { return idx; } set { idx = value; } }
 
         /// <summary>Returns true if there are no more remaining characters in the string at the current position or if the current position is otherwise invalid.</summary>
-        public bool IsAtEnd { get { return (str == null || Idx >= str.Length || Idx < 0); } }
+        public bool IsAtEnd { get { return (!IsIdxValid); } }
 
-        /// <summary>Returns true if the current index position referes to a legal character in the contained string</summary>
-        public bool IsIdxValid { get { return (!IsAtEnd); } }
-
-        /// <summary>Returns the character at the currently indexed scan position or the null character if the current index is not, or is no longer, valid.</summary>
-        public char Char { get { return (!IsAtEnd ? str[Idx] : (char)0); } }
+        /// <summary>Returns true if the current index position referes to a legal character in the contained string, and the string is not null</summary>
+        public bool IsIdxValid { get { return (str != null && (idx >= 0 && idx < str.Length)); } }
 
         /// <summary>Returns the number of characters that remain in the contained string to its end or 0 if the current index position is not, or is no longer, valid</summary>
         public int NumChars { get { return (!IsAtEnd ? (str.Length - Idx) : 0); } }
 
+        /// <summary>Returns the character at the currently indexed scan position or the null character if the current index is not, or is no longer, valid.</summary>
+        public char Char { get { return (IsIdxValid ? str[Idx] : (char)0); } }
+
         /// <summary>Returns a new string containing the remaining characters in the contained string from the current position to its end (or the empty string if there are none)</summary>
-        public string Rest { get { return (IsAtEnd ? String.Empty : (Idx == 0 ? Str : Str.Substring(Idx))); } }
+        public string Rest { get { return (!IsIdxValid ? String.Empty : (Idx == 0 ? Str : Str.Substring(Idx))); } }
 
         /// <summary>static Operator that may be used to increment the current position.  Does nothing if the current position is at (or past) the last position in the current string.</summary>
         public static StringScanner operator ++(StringScanner ss) 
@@ -123,16 +133,24 @@ namespace MosaicLib.Utils
             return ss; 
         }
 
-        #endregion
-
-        #region Related methods
-
         /// <summary>Sets the current position back to the start of the string.</summary>
-        public void Rewind() { Idx = 0; }
+        public void Rewind() 
+        { 
+            Idx = 0;
+        }
+
+        /// <summary>
+        /// Returns true if this StringScanner has identical contents to the <paramref name="other"/> StringScanner
+        /// </summary>
+        public bool Equals(StringScanner other)
+        {
+            return (str == other.str
+                    && idx == other.idx
+                    );
+        }
 
         #endregion
 
-        //-------------------------------------
         #region Whitespace traversal functions
 
         /// <summary>
@@ -161,8 +179,7 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        //-------------------------------------
-        #region Token match and extract functions
+        #region Token match and extract functions IsValidTokenChar, IsValidTokenEndChar, MatchToken, ExtractToken
 
         /// <summary>
         /// Returns true if the given char is a valid char in the set of chars defined by the tokenType.
@@ -173,17 +190,7 @@ namespace MosaicLib.Utils
         /// </summary>
         public static bool IsValidTokenChar(Char c, TokenType tokenType)
         {
-            switch (tokenType)
-            {
-                case TokenType.ToNextWhiteSpace: return !Char.IsWhiteSpace(c);
-                case TokenType.AlphaNumeric: return (Char.IsLetterOrDigit(c));
-                case TokenType.SimpleFileName: return (Char.IsLetterOrDigit(c) || c == '-' || c == '_' || c == '.');
-                case TokenType.SimpleFilePath: return (Char.IsLetterOrDigit(c) || c == '-' || c == '_' || c == '.' || c == '\\' || c == '/' || c == ':');
-                case TokenType.HexDigits: return (Char.IsDigit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'));
-                case TokenType.NumericDigits: return (Char.IsDigit(c));
-                case TokenType.NumericFloatDigits: return (Char.IsDigit(c) || c == '-' || c == '.' || c == '+' || c == 'e' || c == 'E');
-                default: return false;
-            }
+            return c.IsValidTokenChar(tokenType);
         }
 
         /// <summary>
@@ -192,17 +199,7 @@ namespace MosaicLib.Utils
         /// </summary>
         public static bool IsValidTokenEndChar(Char c, TokenType tokenType)
         {
-            switch (tokenType)
-            {
-                case TokenType.ToNextWhiteSpace: return Char.IsWhiteSpace(c);
-                case TokenType.AlphaNumeric: return (Char.IsWhiteSpace(c));
-                case TokenType.SimpleFileName: return (Char.IsWhiteSpace(c));
-                case TokenType.SimpleFilePath: return (Char.IsWhiteSpace(c));
-                case TokenType.HexDigits: return Char.IsWhiteSpace(c);
-                case TokenType.NumericDigits: return Char.IsWhiteSpace(c);
-                case TokenType.NumericFloatDigits: return Char.IsWhiteSpace(c);
-                default: return false;
-            }
+            return c.IsValidTokenEndChar(tokenType);
         }
 
         /// <summary>Determines if the current position in the Str matches the given token and returns true if so.  When returning false, the scanner Idx is not moved.  SkipsLeadingWhiteSpace, TokenType.SimpleFileName</summary>
@@ -266,7 +263,7 @@ namespace MosaicLib.Utils
         public string ExtractToken(TokenType tokenType, bool requireTokenEnd)
         {
             string token;
-            ExtractToken(out token, tokenType, true, true, requireTokenEnd);
+            ExtractToken(out token, tokenType: tokenType, skipLeadingWhiteSpace: true, skipTrailingWhiteSpace: true, requireTokenEnd: requireTokenEnd);
             return token;
         }
 
@@ -343,7 +340,7 @@ namespace MosaicLib.Utils
         /// when true keepDelimter causes the method to include the delimiter in the resulting token while when false keepDelimieter cause it to skip over and discard delimiter.
         /// When true, skipLeadingWhiteSpace and skipTrailingWhiteSpace causes the method to skip leading and/or traiing white space provided that the method was successful.
         /// </summary>
-        public bool ExtractToken(out string tokenStr, ICollection<char> toDelimiterSet, bool keepDelimter, bool skipLeadingWhiteSpace = true, bool skipTrailingWhiteSpace = true)
+        public bool ExtractToken(out string tokenStr, ICollection<char> toDelimiterSet, bool keepDelimiter, bool skipLeadingWhiteSpace = true, bool skipTrailingWhiteSpace = true)
         {
             StringScanner localScan = this;
 
@@ -377,7 +374,7 @@ namespace MosaicLib.Utils
 
             // save the token (or the fraction thereof)
 
-            tokenStr = Str.Substring(tokenStart.Idx, tokenLen + keepDelimter.MapToInt());
+            tokenStr = Str.Substring(tokenStart.Idx, tokenLen + keepDelimiter.MapToInt());
 
             if (foundDelimter)
                 localScan++;
@@ -392,7 +389,6 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        //-------------------------------------
         #region debugging - support hover over quick view
 
         /// <summary>Debugging assistant, returns the current Idx and the Rest of the string.</summary>
@@ -496,7 +492,7 @@ namespace MosaicLib.Utils
         /// <returns>true if the ExtractToken method succeeds or false otherwise.</returns>
         public bool ParseValue(out string value)
         {
-            return ParseValue(out value, true);
+            return ParseValue(out value, skipTrailingWhiteSpace: true);
         }
 
         /// <summary>
@@ -512,48 +508,41 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Extracts a TokenType.SimpleFileName token and parses it using Int32.TryParse as a Decimal number or as a HexNumber if the first two characters of the token are "0x" or "0X".
+        /// Extracts a TokenType.SimpleFileName token and parses it using Int32.TryParse as a Decimal number or as a HexNumber if the token is prefixed with "0x", "0X", or "$".
         /// RequireTokenEnd, SkipTrailingWhiteSpace
         /// </summary>
         /// <param name="value">assigned to the parsed value or to zero if the extraction or parse were not successful.</param>
         /// <returns>true on success or false otherwise.</returns>
         public bool ParseValue(out Int32 value)
         {
-            return ParseValue(out value, true);
+            return ParseValue(out value, skipTrailingWhiteSpace: true);
         }
 
         /// <summary>
-        /// Extracts a TokenType.SimpleFileName token and parses it using Int32.TryParse as a Decimal number or as a HexNumber if the first two characters of the token are "0x" or "0X".
+        /// Extracts a TokenType.SimpleFileName token and parses it using Int32.TryParse as a Decimal number or as a HexNumber if the token is prefixed with "0x", "0X", or "$".
         /// </summary>
-        /// <param name="value">assigned to the parsed value or to zero if the extraction or parse were not successful.</param>
-        /// <param name="skipTrailingWhiteSpace">If true, trailing whitespace will also be skipped if a token was successfully extracted.</param>
-        /// <returns>true on success or false otherwise.</returns>
-        public bool ParseValue(out Int32 value, bool skipTrailingWhiteSpace)
+        public bool ParseValue(out Int32 value, bool skipTrailingWhiteSpace, bool requireTokenEnd = false)
         {
-            return ParseValue(out value, parseFailedResult: default(Int32), skipTrailingWhiteSpace: skipTrailingWhiteSpace, tokenType: TokenType.SimpleFileName, requireTokenEnd: false);
+            return ParseValue(out value, parseFailedResult: default(Int32), skipTrailingWhiteSpace: skipTrailingWhiteSpace, tokenType: TokenType.ToNextTokenSeparator, requireTokenEnd: requireTokenEnd);
         }
 
         /// <summary>
-        /// Extracts a TokenType.SimpleFileName token and parses it using Uint32.TryParse as a Decimal number or as a HexNumber if the first two characters of the token are "0x" or "0X".
+        /// Extracts a TokenType.SimpleFileName token and parses it using Uint32.TryParse as a Decimal number or as a HexNumber if the token is prefixed with "0x", "0X", or "$".
         /// SkipTrailingWhiteSpace
         /// </summary>
         /// <param name="value">assigned to the parsed value or to zero if the extraction or parse were not successful.</param>
         /// <returns>true on success or false otherwise.</returns>
         public bool ParseValue(out UInt32 value)
         {
-            return ParseValue(out value, true);
+            return ParseValue(out value, skipTrailingWhiteSpace: true);
         }
 
         /// <summary>
-        /// Extracts a TokenType.SimpleFileName token and parses it using Uint32.TryParse as a Decimal number or as a HexNumber if the first two characters of the token are "0x" or "0X".
-        /// RequireTokenEnd
+        /// Extracts a TokenType.SimpleFileName token and parses it using Uint32.TryParse as a Decimal number or as a HexNumber if the token is prefixed with "0x", "0X", or "$".
         /// </summary>
-        /// <param name="value">assigned to the parsed value or to zero if the extraction or parse were not successful.</param>
-        /// <param name="skipTrailingWhiteSpace">If true, trailing whitespace will also be skipped if a token was successfully extracted.</param>
-        /// <returns>true on success or false otherwise.</returns>
-        public bool ParseValue(out UInt32 value, bool skipTrailingWhiteSpace)
+        public bool ParseValue(out UInt32 value, bool skipTrailingWhiteSpace, bool requireTokenEnd = false)
         {
-            return ParseValue(out value, parseFailedResult: default(UInt32), skipTrailingWhiteSpace: skipTrailingWhiteSpace, tokenType: TokenType.SimpleFileName, requireTokenEnd: false);
+            return ParseValue(out value, parseFailedResult: default(UInt32), skipTrailingWhiteSpace: skipTrailingWhiteSpace, tokenType: TokenType.ToNextTokenSeparator, requireTokenEnd: requireTokenEnd);
         }
 
         /// <summary>
@@ -565,7 +554,7 @@ namespace MosaicLib.Utils
         /// <returns>true on success or false otherwise.</returns>
         public bool ParseValue(out bool value)
         {
-            return ParseValue(out value, true);
+            return ParseValue(out value, skipTrailingWhiteSpace: true);
         }
 
         /// <summary>
@@ -590,7 +579,7 @@ namespace MosaicLib.Utils
         /// <returns>true on success or false otherwise.</returns>
         public bool ParseValue(out Double value)
         {
-            return ParseValue(out value, true);
+            return ParseValue(out value, skipTrailingWhiteSpace: true);
         }
 
         /// <summary>
@@ -702,13 +691,13 @@ namespace MosaicLib.Utils
                     else if (valueTypeType == typeof(float))
                     {
                         float typedValue;
-                        success = float.TryParse(token, out typedValue);
+                        success = ParseValue(token, out typedValue);
                         valueObject = typedValue;
                     }
                     else if (valueTypeType == typeof(double))
                     {
                         double typedValue;
-                        success = double.TryParse(token, out typedValue);
+                        success = ParseValue(token, out typedValue);
                         valueObject = typedValue;
                     }
                     else if (valueTypeType == typeof(TimeSpan))
@@ -720,7 +709,7 @@ namespace MosaicLib.Utils
                     else if (valueTypeType == typeof(DateTime))
                     {
                         DateTime typedValue;
-                        success = DateTime.TryParse(token, out typedValue);
+                        success = ParseValue(token, out typedValue);
                         valueObject = typedValue;
                     }
                     else
@@ -741,55 +730,55 @@ namespace MosaicLib.Utils
                         if (valueTypeType == typeof(byte))
                         {
                             byte typedValue;
-                            success = byte.TryParse(tryParseValueFromStr, numberStyle, System.Globalization.CultureInfo.InvariantCulture, out typedValue);
+                            success = byte.TryParse(tryParseValueFromStr, numberStyle, invariantCultureFormatProvider, out typedValue);
                             valueObject = typedValue;
                         }
                         else if (valueTypeType == typeof(sbyte))
                         {
                             sbyte typedValue;
-                            success = sbyte.TryParse(tryParseValueFromStr, numberStyle, System.Globalization.CultureInfo.InvariantCulture, out typedValue);
+                            success = sbyte.TryParse(tryParseValueFromStr, numberStyle, invariantCultureFormatProvider, out typedValue);
                             valueObject = typedValue;
                         }
                         else if (valueTypeType == typeof(short))
                         {
                             short typedValue;
-                            success = short.TryParse(tryParseValueFromStr, numberStyle, System.Globalization.CultureInfo.InvariantCulture, out typedValue);
+                            success = short.TryParse(tryParseValueFromStr, numberStyle, invariantCultureFormatProvider, out typedValue);
                             valueObject = typedValue;
                         }
                         else if (valueTypeType == typeof(int))
                         {
                             int typedValue;
-                            success = int.TryParse(tryParseValueFromStr, numberStyle, System.Globalization.CultureInfo.InvariantCulture, out typedValue);
+                            success = int.TryParse(tryParseValueFromStr, numberStyle, invariantCultureFormatProvider, out typedValue);
                             valueObject = typedValue;
                         }
                         else if (valueTypeType == typeof(long))
                         {
                             long typedValue;
-                            success = long.TryParse(tryParseValueFromStr, numberStyle, System.Globalization.CultureInfo.InvariantCulture, out typedValue);
+                            success = long.TryParse(tryParseValueFromStr, numberStyle, invariantCultureFormatProvider, out typedValue);
                             valueObject = typedValue;
                         }
                         else if (valueTypeType == typeof(long))
                         {
                             long typedValue;
-                            success = long.TryParse(tryParseValueFromStr, numberStyle, System.Globalization.CultureInfo.InvariantCulture, out typedValue);
+                            success = long.TryParse(tryParseValueFromStr, numberStyle, invariantCultureFormatProvider, out typedValue);
                             valueObject = typedValue;
                         }
                         else if (valueTypeType == typeof(ushort))
                         {
                             ushort typedValue;
-                            success = ushort.TryParse(tryParseValueFromStr, numberStyle, System.Globalization.CultureInfo.InvariantCulture, out typedValue);
+                            success = ushort.TryParse(tryParseValueFromStr, numberStyle, invariantCultureFormatProvider, out typedValue);
                             valueObject = typedValue;
                         }
                         else if (valueTypeType == typeof(uint))
                         {
                             uint typedValue;
-                            success = uint.TryParse(tryParseValueFromStr, numberStyle, System.Globalization.CultureInfo.InvariantCulture, out typedValue);
+                            success = uint.TryParse(tryParseValueFromStr, numberStyle, invariantCultureFormatProvider, out typedValue);
                             valueObject = typedValue;
                         }
                         else if (valueTypeType == typeof(ulong))
                         {
                             ulong typedValue;
-                            success = ulong.TryParse(tryParseValueFromStr, numberStyle, System.Globalization.CultureInfo.InvariantCulture, out typedValue);
+                            success = ulong.TryParse(tryParseValueFromStr, numberStyle, invariantCultureFormatProvider, out typedValue);
                             valueObject = typedValue;
                         }
                     }
@@ -816,6 +805,9 @@ namespace MosaicLib.Utils
 
         #region Related public static String Value Parsers
 
+        private static readonly NumberStyles defaultFloatingPointTryParseNumberStyles = (NumberStyles.AllowLeadingWhite | NumberStyles.AllowTrailingWhite | NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint | NumberStyles.AllowThousands | NumberStyles.AllowExponent);
+        private static readonly IFormatProvider invariantCultureFormatProvider = System.Globalization.CultureInfo.InvariantCulture;
+
         /// <summary>
         /// This method is a proxy for calling Int32.TryParse:
         ///     Converts the string representation of a number to its 32-bit signed integer equivalent.
@@ -838,18 +830,18 @@ namespace MosaicLib.Utils
 
             unchecked
             {
-                if (Int32.TryParse(token, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out value))
+                if (Int32.TryParse(token, System.Globalization.NumberStyles.Integer, invariantCultureFormatProvider, out value))
                     return true;
 
                 if ((token.StartsWith("0x") || token.StartsWith("0X"))
-                    && Int32.TryParse(token.Substring(2), System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out value)
+                    && Int32.TryParse(token.Substring(2), System.Globalization.NumberStyles.HexNumber, invariantCultureFormatProvider, out value)
                     )
                 {
                     return true;
                 }
 
                 if (token.StartsWith("$")
-                    && Int32.TryParse(token.Substring(1), System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out value)
+                    && Int32.TryParse(token.Substring(1), System.Globalization.NumberStyles.HexNumber, invariantCultureFormatProvider, out value)
                     )
                 {
                     return true;
@@ -882,18 +874,18 @@ namespace MosaicLib.Utils
 
             unchecked
             {
-                if (UInt32.TryParse(token, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out value))
+                if (UInt32.TryParse(token, System.Globalization.NumberStyles.Integer, invariantCultureFormatProvider, out value))
                     return true;
 
                 if ((token.StartsWith("0x") || token.StartsWith("0X"))
-                    && UInt32.TryParse(token.Substring(2), System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out value)
+                    && UInt32.TryParse(token.Substring(2), System.Globalization.NumberStyles.HexNumber, invariantCultureFormatProvider, out value)
                     )
                 {
                     return true;
                 }
 
                 if (token.StartsWith("$")
-                    && UInt32.TryParse(token.Substring(1), System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out value)
+                    && UInt32.TryParse(token.Substring(1), System.Globalization.NumberStyles.HexNumber, invariantCultureFormatProvider, out value)
                     )
                 {
                     return true;
@@ -919,10 +911,34 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
+        /// This method is a proxy for calling Single.TryParse:
+        ///     Converts the string representation of a number to its single-precision floating-point
+        ///     number equivalent. A return value indicates whether the conversion succeeded
+        ///     or failed.  This method uses a invariant culture FormatProvider.
+        /// </summary>
+        /// <param name="token">A string containing a number to convert.</param>
+        /// <param name="value">
+        ///     When this method returns, contains the single-precision floating-point number
+        ///     equivalent to the token parameter, if the conversion succeeded, or zero if the
+        ///     conversion failed.  The conversion fails if the token parameter is null, is not
+        ///     a number in a valid format, or represents a number less than System.Single.MinValue
+        ///     or greater than System.Single.MaxValue. (Inf, and NaN flavors are also accepted)
+        /// </param>
+        /// <returns>true if token was converted successfully, or false otherwise.</returns>
+        public static bool ParseValue(string token, out Single value)
+        {
+            token = token ?? string.Empty;
+
+            bool success = Single.TryParse(token, defaultFloatingPointTryParseNumberStyles, invariantCultureFormatProvider, out value);
+
+            return success;
+        }
+
+        /// <summary>
         /// This method is a proxy for calling Double.TryParse:
         ///     Converts the string representation of a number to its double-precision floating-point
         ///     number equivalent. A return value indicates whether the conversion succeeded
-        ///     or failed.
+        ///     or failed.  This method uses a invariant culture FormatProvider.
         /// </summary>
         /// <param name="token">A string containing a number to convert.</param>
         /// <param name="value">
@@ -930,41 +946,44 @@ namespace MosaicLib.Utils
         ///     equivalent to the token parameter, if the conversion succeeded, or zero if the
         ///     conversion failed.  The conversion fails if the token parameter is null, is not
         ///     a number in a valid format, or represents a number less than System.Double.MinValue
-        ///     or greater than System.Double.MaxValue. This parameter is passed uninitialized.
+        ///     or greater than System.Double.MaxValue. (Inf, and NaN flavors are also accepted)
         /// </param>
         /// <returns>true if token was converted successfully, or false otherwise.</returns>
         public static bool ParseValue(string token, out Double value)
         {
             token = token ?? string.Empty;
 
-            bool success = Double.TryParse(token, out value);
+            bool success = Double.TryParse(token, defaultFloatingPointTryParseNumberStyles, invariantCultureFormatProvider, out value);
 
             return success;
         }
 
         /// <summary>
         /// This method attempts to parse the given token as a TimeSpan, first using Double.TryParse and then using TimeSpan.TryParse.
-        /// Returns true on success or false otherwise
+        /// Returns true on success or false otherwise.  
+        /// If <paramref name="formatProvider"/> is null (the default) then this method will use the invariant culture format provider.
         /// </summary>
-        public static bool ParseValue(string token, out TimeSpan value)
+        public static bool ParseValue(string token, out TimeSpan value, IFormatProvider formatProvider = null)
         {
             double dValue;
-            bool success = double.TryParse(token, out dValue);
-            if (success)
+            bool dValueParseSuccess = ParseValue(token, out dValue);
+
+            if (dValueParseSuccess)
                 value = TimeSpan.FromSeconds(dValue);
             else
-                success = TimeSpan.TryParse(token, out value);
+                dValueParseSuccess = TimeSpan.TryParse(token, formatProvider ?? invariantCultureFormatProvider, out value);
 
-            return success;
+            return dValueParseSuccess;
         }
 
         /// <summary>
         /// This method attempts to parse the given token as a TimeSpan, first using Double.TryParse and then using TimeSpan.TryParse.
         /// Returns true on success or false otherwise
+        /// If <paramref name="formatProvider"/> is null (the default) then this method will use the invariant culture format provider.
         /// </summary>
-        public static bool ParseValue(string token, out DateTime value)
+        public static bool ParseValue(string token, out DateTime value, IFormatProvider formatProvider = null, DateTimeStyles dateTimeStyles = DateTimeStyles.None)
         {
-            bool success = DateTime.TryParse(token, out value);
+            bool success = DateTime.TryParse(token, formatProvider ?? invariantCultureFormatProvider, dateTimeStyles, out value);
 
             return success;
         }
@@ -1421,6 +1440,62 @@ namespace MosaicLib.Utils
         #endregion
 
         //-------------------------------------
+    }
+
+    public static partial class ExtensionMethods
+    {
+        /// <summary>
+        /// Returns true if the given char is a valid char in the set of chars defined by the tokenType.
+        /// TokenType.ToNextWhiteSpace accepts all characters except whitespace characters.
+        /// TokenType.AlphaNumeric accepts all letters and digits.
+        /// TokenType.SimpleFileName accepts all AlphaNumeric and adds '-', '_' and '.'
+        /// TokenType.SimpleFilePath accepts all SimpleFileName and adds '\\', '/' and ':'
+        /// </summary>
+        public static bool IsValidTokenChar(this Char c, TokenType tokenType)
+        {
+            switch (tokenType)
+            {
+                case TokenType.ToNextWhiteSpace: return !Char.IsWhiteSpace(c);
+                case TokenType.ToNextTokenSeparator: return !c.IsTokenSeperatorChar();
+                case TokenType.AlphaNumeric: return (Char.IsLetterOrDigit(c));
+                case TokenType.SimpleFileName: return (Char.IsLetterOrDigit(c) || c == '-' || c == '_' || c == '.');
+                case TokenType.SimpleFilePath: return (Char.IsLetterOrDigit(c) || c == '-' || c == '_' || c == '.' || c == '\\' || c == '/' || c == ':');
+                case TokenType.HexDigits: return (Char.IsDigit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'));
+                case TokenType.NumericDigits: return (Char.IsDigit(c));
+                case TokenType.NumericFloatDigits: return (Char.IsDigit(c) || c == '-' || c == '.' || c == '+' || c == 'e' || c == 'E');
+                default: return false;
+            }
+        }
+
+        /// <summary>
+        /// Returns true if the given char is a valid end of token char. 
+        /// For all TokenType's this reduces to Char.IsWhiteSpace(c)
+        /// </summary>
+        public static bool IsValidTokenEndChar(this Char c, TokenType tokenType)
+        {
+            switch (tokenType)
+            {
+                case TokenType.ToNextWhiteSpace: return Char.IsWhiteSpace(c);
+                case TokenType.ToNextTokenSeparator: return c.IsTokenSeperatorChar();
+                case TokenType.AlphaNumeric: return Char.IsWhiteSpace(c);
+                case TokenType.SimpleFileName: return Char.IsWhiteSpace(c);
+                case TokenType.SimpleFilePath: return Char.IsWhiteSpace(c);
+                case TokenType.HexDigits: return Char.IsWhiteSpace(c);
+                case TokenType.NumericDigits: return Char.IsWhiteSpace(c);
+                case TokenType.NumericFloatDigits: return Char.IsWhiteSpace(c);
+                default: return false;
+            }
+        }
+
+        /// <summary>
+        /// Returns true if the given character is consider a token seperator: whitespace ',', '|'
+        /// </summary>
+        /// <param name="ch"></param>
+        /// <returns></returns>
+        public static bool IsTokenSeperatorChar(this char ch)
+        {
+            return (Char.IsWhiteSpace(ch) || ch == ',' || ch == '|');
+        }
     }
 }
 //-----------------------------------------------------------------

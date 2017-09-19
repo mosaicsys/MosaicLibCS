@@ -70,6 +70,15 @@ namespace MosaicLib.Utils
             return (string.IsNullOrEmpty(s) ? mappedS : s); 
         }
 
+        /// <summary>
+        /// When the given string <paramref name="s"/> is the empty string then this method returns the given <paramref name="mapEmptyTo"/> value,
+        /// otherwise this method returns the given <paramref name="s"/> value without change.
+        /// </summary>
+        public static string MapEmptyTo(this string s, string mapEmptyTo = null)
+        {
+            return ((s == string.Empty) ? mapEmptyTo : s);
+        }
+
 		#endregion
 
         #region static String Ascii predicate method(s)

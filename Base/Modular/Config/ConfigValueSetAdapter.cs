@@ -162,8 +162,9 @@ namespace MosaicLib.Modular.Config
     /// <remarks>
     /// The primary methods/properties used on this adapter are: Construction, ValueSet, Setup, Update, IsUpdateNeeded
     /// </remarks>
-
-    public class ConfigValueSetAdapter<TConfigValueSet> : DisposableBase where TConfigValueSet : class
+    public class ConfigValueSetAdapter<TConfigValueSet>
+        : DisposableBase // Allows this object to remove itself from the config instance's ChangeNotificationList on dispose.
+        where TConfigValueSet : class
     {
         #region Ctor
 
@@ -432,6 +433,13 @@ namespace MosaicLib.Modular.Config
             return itemInfo.GenerateFullName(baseNames);
         }
 
+        /// <summary>
+        /// This method is used to generate the member setter for a specific keySetupInfo item.
+        /// </summary>
+        /// <remarks>
+        /// This method cannot make use of the more generic Modular.Reflection.AnnotatedClassItemAccessHelper.GenerateSetMemberFromVCAction method as this method does not currently
+        /// support definition of the default value to use.  As such this method cannot be easily reduced to use of the more generic version.
+        /// </remarks>
         Action<TConfigValueSet, Logging.IMesgEmitter, Logging.IMesgEmitter> GenerateUpdateMemberFromKeyAccessAction(KeySetupInfo keySetupInfo)
         {
             ItemInfo<Attributes.ConfigItemAttribute> itemInfo = keySetupInfo.ItemInfo;
@@ -677,16 +685,16 @@ namespace MosaicLib.Modular.Config
             }
             else if (itemInfo.ItemType == typeof(Logging.LogGate))
             {
-                Func<IConfigKeyAccess, Logging.LogGate, Logging.LogGate> ikaGetter
-                    = (ika, defaultValue)
-                        =>
-                        {
-                            Logging.LogGate gate = defaultValue;
-                            gate.TryParse(ika.GetValue<string>(defaultValue.ToString()));
-                            return gate;
-                        };
+                Func<IConfigKeyAccess, Logging.LogGate, Logging.LogGate> ikaGetter = (ika, defaultValue) => ika.GetValue<Logging.LogGate>(defaultValue);
                 Action<TConfigValueSet, Logging.LogGate> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TConfigValueSet, Logging.LogGate>(itemInfo);
                 Func<TConfigValueSet, Logging.LogGate> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TConfigValueSet, Logging.LogGate>(itemInfo);
+                innerBoundSetter = delegate(TConfigValueSet valueSetObj, IConfigKeyAccess ika) { pfSetter(valueSetObj, ikaGetter(ika, pfGetter(valueSetObj))); };
+            }
+            else if (itemInfo.ItemType == typeof(Logging.LogGate ?))
+            {
+                Func<IConfigKeyAccess, Logging.LogGate ?, Logging.LogGate ?> ikaGetter = (ika, defaultValue) => ika.GetValue<Logging.LogGate ?>(defaultValue);
+                Action<TConfigValueSet, Logging.LogGate ?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TConfigValueSet, Logging.LogGate ?>(itemInfo);
+                Func<TConfigValueSet, Logging.LogGate ?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TConfigValueSet, Logging.LogGate ?>(itemInfo);
                 innerBoundSetter = delegate(TConfigValueSet valueSetObj, IConfigKeyAccess ika) { pfSetter(valueSetObj, ikaGetter(ika, pfGetter(valueSetObj))); };
             }
             else

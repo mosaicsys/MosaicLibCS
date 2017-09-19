@@ -329,6 +329,9 @@ namespace MosaicLib.Modular.Config
         /// <summary>Returns the ConfigSubscriptionSeqNums containing the most recently produced sequence number values from each source.</summary>
         ConfigSubscriptionSeqNums SeqNums { get; }
 
+        /// <summary>Returns the ChangeSeqNum property value from SeqNums</summary>
+        int ChangeSeqNum { get; }
+
         /// <summary>This property is true when any ReadOnce config key's value is not Fixed and it has been changed and no longer matches the original value that was read for it.</summary>
         bool ReadOnceConfigKeyHasBeenChangedSinceItWasRead { get; }
 
@@ -359,6 +362,14 @@ namespace MosaicLib.Modular.Config
         {
             return (ChangeSeqNum == other.ChangeSeqNum && EnsureExistsSeqNum == other.EnsureExistsSeqNum && KeyAddedSeqNum == other.KeyAddedSeqNum && KeyMetaDataChangeSeqNum == other.KeyMetaDataChangeSeqNum);
         }
+
+        /// <summary>
+        /// Debugging and logging helper method
+        /// </summary>
+        public override string ToString()
+        {
+            return "Chg:{0} EE:{1} KeyAdd:{2} KeyMDChg:{3}".CheckedFormat(ChangeSeqNum, EnsureExistsSeqNum, KeyAddedSeqNum, KeyMetaDataChangeSeqNum);
+        }
     }
 
     /// <summary>
@@ -375,7 +386,10 @@ namespace MosaicLib.Modular.Config
         /// This method is intended for internal use only.  
         /// It assumes that the icka given is non-null, not ValueIsFixed.  As such it is assumed to have been previously found.
         /// </remarks>
-        bool TryUpdateConfigKeyAccess(string methodName, IConfigKeyAccess icka);
+        bool TryUpdateConfigKeyAccess(string methodName, IConfigKeyAccess icka, bool suppressLogging = false);
+
+        /// <summary>Returns the ConfigSubscriptionSeqNums containing the most recently produced sequence number values from each source.</summary>
+        ConfigSubscriptionSeqNums SeqNums { get; }
     }
 
     /// <summary>
@@ -507,6 +521,9 @@ namespace MosaicLib.Modular.Config
         /// <summary>True if this KeyAccess object's ValueContainer contents are not null or None.  Generally this is false when the given key was not found.</summary>
         bool HasValue { get; }
 
+        /// <summary>This property returns true if ValueIsFixed is false and ValueSeqNum is not the same as the CurrentSeqNum.</summary>
+        bool IsUpdateNeeded { get; }
+
         /// <summary>
         /// This method will refresh the ValueContainer and ValueAsString properties to represent the most recently accepted value for the corresponding key and provider.
         /// This method will update the NVS if the reference copy has been modified since this accessor object was created.
@@ -514,12 +531,31 @@ namespace MosaicLib.Modular.Config
         /// Returns true if the ValueAsString value changed or false otherwise.
         /// If the andMetaData parameter is set to true then this access object's NVS will be updated to the most recent one for this key, if needed.
         /// </summary>
-        bool UpdateValue();
+        bool UpdateValue(bool forceUpdate = false);
+
+        /// <summary>
+        /// This method will refresh the ValueContainer and ValueAsString properties to represent the most recently accepted value for the corresponding key and provider.
+        /// This method will update the NVS if the reference copy has been modified since this accessor object was created.
+        /// This method will have no effect if the flag indicates that the key is a ReadOnlyOnce key or if the provider indicates that the key is Fixed.
+        /// If the andMetaData parameter is set to true then this access object's NVS will be updated to the most recent one for this key, if needed.
+        /// <para/>supports call chaining
+        /// </summary>
+        IConfigKeyAccess UpdateValueInline(bool forceUpdate = false);
 
         /// <summary>
         /// returns a string represenation of this key access object using the requested level of detail
         /// </summary>
         string ToString(ToStringDetailLevel detailLevel);
+
+        /// <summary>
+        /// Gives the seqeunce number of the value as it was last updated.
+        /// </summary>
+        int ValueSeqNum { get; }
+
+        /// <summary>
+        /// Gives the sequence number of the root ConfigKey value for this key (as created and maintained by the provider)
+        /// </summary>
+        int CurrentSeqNum { get; }
     }
 
     /// <summary>
@@ -771,7 +807,7 @@ namespace MosaicLib.Modular.Config
 
                 try
                 {
-                    value = valueContainer.GetValue<ValueT>(true);
+                    value = valueContainer.GetValue<ValueT>(rethrow: true);
                     keyAccess.ResultCode = null;
                     getSuccess = true;
                 }
@@ -920,6 +956,10 @@ namespace MosaicLib.Modular.Config
                 }; 
             } 
         }
+
+
+        /// <summary>Returns the ChangeSeqNum property value from SeqNums</summary>
+        public int ChangeSeqNum { get { return changeSeqNum.VolatileValue; } }
 
         /// <summary>This property is true when any ReadOnce config key's value is not Fixed and it has been changed and no longer matches the original value that was read for it.</summary>
         public bool ReadOnceConfigKeyHasBeenChangedSinceItWasRead { get; private set; }
@@ -1285,15 +1325,19 @@ namespace MosaicLib.Modular.Config
         /// This method is intended for internal use only.  
         /// It assumes that the icka given is non-null, not ValueIsFixed.  As such it is assumed to have been previously found.
         /// </remarks>
-        public virtual bool TryUpdateConfigKeyAccess(string methodName, IConfigKeyAccess icka)
+        public virtual bool TryUpdateConfigKeyAccess(string methodName, IConfigKeyAccess icka, bool suppressLogging = false)
         {
             ConfigKeyAccessFlags flags = icka.Flags;
 
-            using (var eeTrace = (!icka.Flags.SilenceLogging ? new Logging.EnterExitTrace(TraceEmitter, methodName) : null))
+            suppressLogging |= icka.Flags.SilenceLogging;
+
+            using (var eeTrace = (!suppressLogging ? new Logging.EnterExitTrace(TraceEmitter, methodName) : null))
             {
+                int entryValueSeqNum = icka.ValueSeqNum;
                 ValueContainer entryValue = icka.ValueContainer;
                 string entryResultCode = icka.ResultCode;
 
+                int updatedValueSeqNum = icka.ValueSeqNum;
                 ValueContainer updatedValue = entryValue;
                 string updatedResultCode = entryResultCode;
 
@@ -1310,44 +1354,50 @@ namespace MosaicLib.Modular.Config
                     lock (mutex)
                     {
                         updatedICKA = ckai.Provider.GetConfigKeyAccess(icka);
-                    }
 
-                    if (updatedICKA != null)
-                    {
-                        updatedValue = updatedICKA.ValueContainer;
-                        updatedResultCode = updatedICKA.ResultCode;
-                    }
-                    else if (icka.IsUsable)
-                    {
-                        updatedResultCode = "Internal: Provider returned null IConfigKeyAccess during update attempt.";
+                        if (updatedICKA != null)
+                        {
+                            updatedValueSeqNum = updatedICKA.ValueSeqNum;
+                            updatedValue = updatedICKA.ValueContainer;
+                            updatedResultCode = updatedICKA.ResultCode;
+                        }
+                        else if (icka.IsUsable)
+                        {
+                            updatedResultCode = "Internal: Provider returned null IConfigKeyAccess during update attempt.";
+                        }
                     }
                 }
 
-                bool valueChanged = (ckai != null && !entryValue.IsEqualTo(updatedValue));
+                bool valueOrSeqNumChanged = (ckai != null && (!entryValue.IsEqualTo(updatedValue) || entryValueSeqNum != updatedValueSeqNum));
                 bool resultCodeChanged = (entryResultCode != updatedResultCode);
 
-                if (valueChanged)
+                if (valueOrSeqNumChanged)
+                {
                     ckai.ValueContainer = updatedValue;
+                    ckai.ValueSeqNum = updatedValueSeqNum;
+                }
 
                 if (resultCodeChanged)
-                    icka.ResultCode = updatedResultCode;
-
-                if (valueChanged && !resultCodeChanged)
                 {
-                    if (!icka.Flags.SilenceLogging)
-                        Logger.Debug.Emit("{0}: key '{1}' value updated to {2} [from:{3}]", methodName, icka.Key, icka.ValueContainer, entryValue);
+                    icka.ResultCode = updatedResultCode;
+                }
+
+                if (valueOrSeqNumChanged && !resultCodeChanged)
+                {
+                    if (!suppressLogging)
+                        Logger.Debug.Emit("{0}: key '{1}' value updated to {2} seq:{3} [from:{4} seq:{5}]", methodName, icka.Key, icka.ValueContainer, icka.ValueSeqNum, entryValue, entryValueSeqNum);
                     eeTrace.ExtraMessage = "Value udpated";
                 }
-                else if (resultCodeChanged && !valueChanged)
+                else if (resultCodeChanged && !valueOrSeqNumChanged)
                 {
-                    if (!icka.Flags.SilenceLogging)
+                    if (!suppressLogging)
                         Logger.Debug.Emit("{0}: key '{1}' result code changed to '{2}' [from:'{3}']", methodName, icka.Key, icka.ResultCode, entryResultCode);
                     eeTrace.ExtraMessage = "ResultCode udpated";
                 }
-                else if (valueChanged && resultCodeChanged)
+                else if (valueOrSeqNumChanged && resultCodeChanged)
                 {
-                    if (!icka.Flags.SilenceLogging)
-                        Logger.Debug.Emit("{0}: key '{1}' value&rc updated to {2}/'{3}' [from:{4}/'{5}']", methodName, icka.Key, icka.ValueContainer, icka.ResultCode, entryValue, entryResultCode);
+                    if (!suppressLogging)
+                        Logger.Debug.Emit("{0}: key '{1}' value&rc updated to {2} seq:{3} rc:'{4}' [from:{5} seq:{6} rc:'{7}']", methodName, icka.Key, icka.ValueContainer, icka.ValueSeqNum, icka.ResultCode, entryValue, entryValueSeqNum, entryResultCode);
                     eeTrace.ExtraMessage = "Value and ResultCode udpated";
                 }
                 else
@@ -1355,7 +1405,7 @@ namespace MosaicLib.Modular.Config
                     eeTrace.ExtraMessage = "no change";
                 }
 
-                return (valueChanged || resultCodeChanged);
+                return (valueOrSeqNumChanged || resultCodeChanged);
             }
         }
 
@@ -1566,12 +1616,21 @@ namespace MosaicLib.Modular.Config
             ValueContainer = rhs.ValueContainer;
             HasValue = rhs.HasValue;
 
+            ValueSeqNum = rhs.ValueSeqNum;
+            if (RootICKA == null)
+                CurrentSeqNum = rhs.CurrentSeqNum;
+
             ProviderFlags = rhs.ProviderFlags;
             provider = rhs.ProviderInfo as IConfigKeyProvider;      // this will produce null if the rhs's ProviderInfo object does not also implement IConfigKeyProvider.  This does not attempt to change the rhs.MetaData information.
         }
 
+        /// <summary>Gives the IConfigInternal instance under which this config key access was created</summary>
         internal IConfigInternal ConfigInternal { get; set; }
+
+        /// <summary>Gives the ICKA from which this CKA was last cloned</summary>
         private IConfigKeyAccess CopyFromICKA { get; set; }
+
+        /// <summary>Gives the original CKA from which this CKA was last cloned.  Usually the RootICKA is created, and maintained, by the corresponding provider.</summary>
         private IConfigKeyAccess RootICKA { get; set; }
         
         /// <summary>Gives the provider instance that is serving this key.</summary>
@@ -1637,6 +1696,7 @@ namespace MosaicLib.Modular.Config
             }
         }
 
+        /// <summary>Returns the current value of the key in a ValueContainer as the provider last read (or saved) it.  May contain null, such as when the key was not found.</summary>
         public ValueContainer ValueContainer
         {
             get { return valueContainer; }
@@ -1655,21 +1715,42 @@ namespace MosaicLib.Modular.Config
         /// <summary>True if this KeyAccess object's ValueContainer contents are not null or None.  Generally this is false when the given key was not found.</summary>
         public bool HasValue { get; private set; }
 
+        /// <summary>This property returns true if ValueIsFixed is false and ValueSeqNum is not the same as the CurrentSeqNum.</summary>
+        public bool IsUpdateNeeded { get { return (!ValueIsFixed && (ValueSeqNum != CurrentSeqNum)); } }
+
         /// <summary>
         /// This method will refresh the ValueAsString property to represent the most recently accepted value for the corresponding key and provider.
         /// This method will have no effect if the flag indicates that the key is a ReadOnlyOnce key or if the provider indicates that the key is Fixed.
         /// Returns true if the ValueAsString value changed or false otherwise.
         /// </summary>
-        public bool UpdateValue()
+        public bool UpdateValue(bool forceUpdate = false)
         {
             // UpdateValue does not do anything when the IConfigKeyAccess flags include Fixed or ReadOnlyOnce.
-            if (ValueIsFixed || ConfigInternal == null)
+            if (!IsUpdateNeeded && !forceUpdate || ValueIsFixed || (ConfigInternal == null))
                 return false;
 
             string methodName = Fcns.CheckedFormat("IConfigKeyAccess.UpdateValue[key:'{0}']", Key);
 
             return ConfigInternal.TryUpdateConfigKeyAccess(methodName, this);
         }
+
+        IConfigKeyAccess IConfigKeyAccess.UpdateValueInline(bool forceUpdate)
+        {
+            UpdateValue(forceUpdate: forceUpdate);
+
+            return this;
+        }
+
+        /// <summary>
+        /// Gives the seqeunce number of the value as it was last updated.
+        /// </summary>
+        public int ValueSeqNum { get; set; }
+
+        /// <summary>
+        /// Gives the sequence number of the root ConfigKey value for this key (as created and maintained by the provider)
+        /// </summary>
+        public int CurrentSeqNum { get { return (RootICKA != null ? RootICKA.CurrentSeqNum : _currentSeqNum); } internal set { _currentSeqNum = value; } }
+        private int _currentSeqNum = 0;
 
         /// <summary>
         /// basic logging/debugging ToString implementation.  Returns ToString(ToStringDetailLevel.Nominal)

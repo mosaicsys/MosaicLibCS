@@ -219,7 +219,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
         #endregion
 
         /// <summary>
-        /// Method used immediately prior to returing this item the a freelist.
+        /// Method used immediately prior to returing this item a freelist.
         /// </summary>
         internal void Clear()
         {
@@ -404,6 +404,9 @@ namespace MosaicLib.Modular.Interconnect.WCF
 
     #region ISubscribeToSet
 
+    /// <summary>
+    /// Interface used when Subscribing to a remote set.  This interface is generally implemented by ClientServiceParts
+    /// </summary>
     public interface ISubscribeToSet
     {
         /// <summary>
@@ -485,6 +488,8 @@ namespace MosaicLib.Modular.Interconnect.WCF
                 PushParameterHandler = AsyncConsumePushParameter, 
                 EndSessionHandler = AsynchHandleEndSession, 
             };
+
+            SetupMainThreadStartingAndStoppingActions();
         }
 
         private ServerServiceConfig Config { get; set; }
@@ -562,13 +567,14 @@ namespace MosaicLib.Modular.Interconnect.WCF
             return "Service Action '{0}' cannot be performed: No matching session client name was found".CheckedFormat(actionAsStr);
         }
 
-        protected override void MainThreadFcn()
+        private void SetupMainThreadStartingAndStoppingActions()
         {
-            base.MainThreadFcn();
+            AddMainThreadStoppingAction(() =>
+            {
+                InnerCloseServiceHost();
 
-            InnerCloseServiceHost();
-
-            ServicePendingCloseQueue(true);
+                ServicePendingCloseQueue(true);
+            });
         }
 
         protected override void PerformMainLoopService()
@@ -1067,21 +1073,17 @@ namespace MosaicLib.Modular.Interconnect.WCF
             IVI = Config.LocalIVI ?? Interconnect.Values.Values.GetTable(Config.LocalValueTableName, true);
 
             clientCallbackHandler = new InterconnectPropagationSessionClientCallbackHandler() { PushParameterHandler = AsynchConsumePushParameter };
+
+            SetupMainThreadStartingAndStoppingActions();
         }
 
         #region ISubscribeToSet implementation.
 
-        /// <summary>
-        /// Requests the client to subscribe to a given set from the connected ServerServicePart.  
-        /// The returned value is a set (a hidden tracking set) that is maintained by the ClientServicePart and which the client can track with their own TrackingSet(s)
-        /// </summary>
-        //ITrackableSet SubscribeToSetByName(string setName);
-
-        /// <summary>
-        /// Requests the client to subscribe to a given set from the connected ServerServicePart.  
-        /// The returned value is a set (a hidden tracking set) that is maintained by the ClientServicePart and which the client can track with their own TrackingSet(s)
-        /// </summary>
-        //ITrackableSet SubscribeToSetByUUID(string setUUID);
+        ///// <summary>
+        ///// Requests the client to subscribe to a given set from the connected ServerServicePart.  
+        ///// The returned value is a set (a hidden tracking set) that is maintained by the ClientServicePart and which the client can track with their own TrackingSet(s)
+        ///// </summary>
+        //IClientFacetWithResult<ITrackingSet<TSetItemType>> SubscribeToSet<TSetItemType>(string setName = null, string setUUID = null);
 
         #endregion
 
@@ -1205,11 +1207,9 @@ namespace MosaicLib.Modular.Interconnect.WCF
             return base.PerformServiceAction(action);
         }
 
-        protected override void MainThreadFcn()
+        private void SetupMainThreadStartingAndStoppingActions()
         {
-            base.MainThreadFcn();
-
-            InnerCloseConnectionAndGoOffline("At MainThreadFcn.End", null);
+            AddMainThreadStoppingAction(() => InnerCloseConnectionAndGoOffline("At MainThreadFcn.End", null));
         }
 
         protected override void PerformMainLoopService()

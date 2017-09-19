@@ -304,7 +304,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// If the given name is not null, not Empty, and is not found in the table then this method returns null unless the addNewTableIfMissing parameter is true, in which case
         /// this method creates a new table of the given name, adds it to the table, and returns it.
         /// </summary>
-        public static IValuesInterconnection GetTable(string interconnectionTableName, bool addNewTableIfMissing)
+        public static IValuesInterconnection GetTable(string interconnectionTableName, bool addNewTableIfMissing = true)
         {
             if (interconnectionTableName.IsNullOrEmpty())
                 return Instance;

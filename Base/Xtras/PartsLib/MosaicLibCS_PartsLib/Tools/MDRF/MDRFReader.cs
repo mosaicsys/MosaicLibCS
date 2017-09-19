@@ -209,43 +209,43 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
         /// <summary>Reports that reading has ended on a file [0x0002]</summary>
         ReadingEnd = 0x0002,
 
-        /// <summary></summary>
+        /// <summary>Reports that the reader has started reading on a new row in the index</summary>
         RowStart = 0x0004,
 
-        /// <summary></summary>
+        /// <summary>Reports that the reader has finished reading from the given row in the index</summary>
         RowEnd = 0x0008,
 
-        /// <summary></summary>
+        /// <summary>Reports that the reader has just processed a NewTimeStamp block</summary>
         NewTimeStamp = 0x0010,
 
-        /// <summary></summary>
+        /// <summary>Reports that the reader has detected that the FileLength changed since the last time that the reader read the file index</summary>
         FileLengthChanged = 0x0020,
 
-        /// <summary></summary>
+        /// <summary>Reports that the reader has read the given Occurrence block</summary>
         Occurrence = 0x0100,
 
-        /// <summary></summary>
+        /// <summary>Reports that the reader has read the given Message block</summary>
         Message = 0x0200,
 
-        /// <summary></summary>
+        /// <summary>Reports that the reader has read the given Error (Message) block</summary>
         Error = 0x0400,
 
-        /// <summary></summary>
+        /// <summary>Reports that the reader has read the given Group block</summary>
         Group = 0x1000,
 
-        /// <summary></summary>
+        /// <summary>Reports that the reader has read the given Group block, which was empty</summary>
         EmptyGroup = 0x2000,
 
-        /// <summary></summary>
+        /// <summary>Reports that the reader has read the given Group block, which was partial</summary>
         PartialGroup = 0x4000,
 
         /// <summary>Indicates that the corresponding groups data block payload indicates that this is the start of a full group update (writeall).  NOTE: this event is only included if the filterSpec includes the first defined group.</summary>
         StartOfFullGroup = 0x8000,
 
-        /// <summary></summary>
+        /// <summary>Reports that the reader has just started reading a Group Set (a run of Group blocks with no blocks of other types between them).</summary>
         GroupSetStart = 0x10000,
 
-        /// <summary></summary>
+        /// <summary>Reports that the reader has just finished reading a Group Set (a run of Group blocks with no blocks of other types between them).</summary>
         GroupSetEnd = 0x20000,
 
         /// <summary>

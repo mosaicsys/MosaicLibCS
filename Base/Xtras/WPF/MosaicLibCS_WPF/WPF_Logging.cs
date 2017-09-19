@@ -45,6 +45,8 @@ namespace MosaicLib.WPF.Logging
 {
     using MosaicLib;        // apparently this makes MosaicLib get searched before MosaicLib.WPF.Logging for resolving symbols here.
     using MosaicLib.Modular.Common;
+    using MosaicLib.Time;
+    using MosaicLib.Utils;
 
     public class LogFilterConfig
     {
@@ -119,9 +121,7 @@ namespace MosaicLib.WPF.Logging
 
         public System.Threading.SynchronizationContext SynchronizationContext { get; private set; }
 
-        public void Update() { Update(null); }
-
-        public void Update(object state)
+        public void Update(object stateIgnored = null)
         {
             WpfLogMessageHandlerToolBase.SeqNumPair newSeqNumPair = WpfLogMessageHandlerToolBase.Instance.GetNewMessages(lastMesgSeqNumPair, ref updateMesgQueue);
             int maxMesgsToKeep = WpfLogMessageHandlerToolBase.Instance.MaxMessageToKeep;
@@ -207,7 +207,7 @@ namespace MosaicLib.WPF.Logging
             lock (lmocInstanceListMutex)
             {
                 lmocInstanceList.Add(lmoc);
-                lmocInstanceArray = null;
+                lmocInstanceArray = lmocInstanceList.ToArray();
             }
         }
 
@@ -216,7 +216,7 @@ namespace MosaicLib.WPF.Logging
             lock (lmocInstanceListMutex)
             {
                 lmocInstanceList.Remove(lmoc);
-                lmocInstanceArray = null;
+                lmocInstanceArray = lmocInstanceList.ToArray();
             }
         }
 
@@ -233,26 +233,37 @@ namespace MosaicLib.WPF.Logging
                     if (lmocInstanceArray == null)
                         lmocInstanceArray = lmocInstanceList.ToArray();
 
-                    // latch the first non-null SychronizationContext as the default one that is used for all such objects.
-                    if (DefaultSynchronizationContext == null)
-                    {
-                        foreach (LogMessageObservableCollection lmoc in lmocInstanceArray)
-                        {
-                            System.Threading.SynchronizationContext sc = lmoc.SynchronizationContext;
-                            if (sc != null)
-                            {
-                                DefaultSynchronizationContext = sc;
-                                break;
-                            }
-                        }
-                    }
-
                     return lmocInstanceArray;
                 }
             }
         }
 
-        public static System.Threading.SynchronizationContext DefaultSynchronizationContext { get; private set; }
+        /// <summary>
+        /// Obtains (and latches) the first non-null SychronizationContext from the list of LogMessageObservableCollection instances that have been registered in its static InstanceArray.
+        /// Generally this will be the SynchronizationContext of the thread that created the first added LogMessageObservableCollection.
+        /// <para/>Note: once non-null, this SychronizationContext will be used for all first level Post calls from LMH into the DistributeUpdateCalls mechanism.
+        /// </summary>
+        public static System.Threading.SynchronizationContext DefaultSynchronizationContext 
+        { 
+            get { return UpdateDefaultSynchronizationContextIfNeeded(); } 
+            private set { _defaultSynchronizationContext = value; } 
+        }
+        private static System.Threading.SynchronizationContext _defaultSynchronizationContext = null;
+
+        /// <summary>
+        /// latch the first non-null SychronizationContext as the default one that is used for all such objects.
+        /// </summary>
+        private static System.Threading.SynchronizationContext UpdateDefaultSynchronizationContextIfNeeded()
+        {
+            if (_defaultSynchronizationContext == null)
+            {
+                LogMessageObservableCollection[] lmocArray = InstanceArray;
+                if (!lmocArray.IsNullOrEmpty())
+                    _defaultSynchronizationContext = InstanceArray.Select(lmoc => lmoc.SynchronizationContext).FirstOrDefault(sc => sc != null);
+            }
+
+            return _defaultSynchronizationContext; 
+        }
 
         #endregion
     }
@@ -357,42 +368,36 @@ namespace MosaicLib.WPF.Logging
 
         #region Methods and properties used to inform LogMessageObservableCollection list about possible change
 
-        /// <summary>
-        /// This variable is set from the when the asynch action is created to when the invoked delegate method begins executing.  
-        /// It serves to block creating new, redundant update calls until the handler has had a chance to start distributing update calls
-        /// </summary>
-        volatile bool invokeDistributeUpdateCallsCreatedAndNotActive = false;
-
         protected void NoteMessagesAdded()
         {
-            if (!invokeDistributeUpdateCallsCreatedAndNotActive)
-            {
-                invokeDistributeUpdateCallsCreatedAndNotActive = true;
+            bool seqNumsWereTheSameOnEntry = (seqNumGenNoteMessagesAdded.VolatileValue == seqNumDistributedUpdateCalls);
 
+            seqNumGenNoteMessagesAdded.IncrementSkipZero();
+
+            if (seqNumsWereTheSameOnEntry || distributeUpdateCallsAnywayTimer.IsTriggered)
+            {
                 System.Threading.SynchronizationContext defaultSC = LogMessageObservableCollection.DefaultSynchronizationContext;
                 if (defaultSC != null)
-                    defaultSC.Post(DistributeUpdateCalls, distributeUpdateCallsMutex);       // invoke my DistributeUpdateCalls in the context of the default LogMessageObservableCollection's SynchronizationContext
-                else
-                    System.Threading.ThreadPool.QueueUserWorkItem(DistributeUpdateCalls, distributeUpdateCallsMutex);       // if there is no default sc then use a ThreadPool thread
+                    defaultSC.Post(DistributeUpdateCalls, distributeUpdateCallsMutexNoLongerInUse);       // invoke my DistributeUpdateCalls in the context of LogMessageObservableCollection's SynchronizationContext
             }
         }
 
-        object distributeUpdateCallsMutex = new object();
+        QpcTimer distributeUpdateCallsAnywayTimer = new QpcTimer() { TriggerInterval = (0.5).FromSeconds(), AutoReset = true }.Start();
 
-        protected void DistributeUpdateCalls(object mutex)
+        object distributeUpdateCallsMutexNoLongerInUse = null; // new object();      // this mutex is no longer in use.  distributing update calls is only done on the callers thread.
+
+        Utils.AtomicInt32 seqNumGenNoteMessagesAdded = new Utils.AtomicInt32();
+        volatile int seqNumDistributedUpdateCalls = 0;
+
+        protected void DistributeUpdateCalls(object mutexNoLongerInUse)
         {
-            System.Threading.SynchronizationContext defaultSC = LogMessageObservableCollection.DefaultSynchronizationContext;
+            seqNumDistributedUpdateCalls = seqNumGenNoteMessagesAdded.VolatileValue;
+
             System.Threading.SynchronizationContext currentSC = System.Threading.SynchronizationContext.Current;
 
-            // block the outer update loop rate to not exceed maximum rate when being run from an thread other than the default one.
-            if (!object.ReferenceEquals(defaultSC, currentSC))
-                System.Threading.Thread.Sleep(DispatchUpdateStartDelay);
-
-            lock (mutex)    // only run one instance at a time per mutex (blocks later queued calls)
+            //lock (mutex)    // only run one instance at a time per mutex (blocks later queued calls)
             {
                 LogMessageObservableCollection[] activeCollectionSnapshot = LogMessageObservableCollection.InstanceArray;
-
-                invokeDistributeUpdateCallsCreatedAndNotActive = false;
 
                 foreach (LogMessageObservableCollection lmoc in activeCollectionSnapshot)
                 {
@@ -400,7 +405,7 @@ namespace MosaicLib.WPF.Logging
                     if (object.ReferenceEquals(currentSC, lmocSC))
                         lmoc.Update();
                     else
-                        lmocSC.Send(lmoc.Update, null); // syncronous cross thread invoke: only returns after the update is complete
+                        lmocSC.Post(lmoc.Update, null); // asynchronous cross thread invoke.  If any of the lmoc instances use a different SC than the default one (construction time one) then just post the update call to its sc.
                 }
             }
         }
@@ -413,8 +418,6 @@ namespace MosaicLib.WPF.Logging
         RawLogMesgArray rawLogMesgArray;
 
         Utils.AtomicUInt32 contentResetChangeSeqNum = new MosaicLib.Utils.AtomicUInt32(1);
-
-        readonly TimeSpan DispatchUpdateStartDelay = TimeSpan.FromSeconds(0.030);       // limit update rate to 30 Hz
 
         #endregion
 

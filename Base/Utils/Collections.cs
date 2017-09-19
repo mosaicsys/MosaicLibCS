@@ -200,7 +200,7 @@ namespace MosaicLib.Utils
         /// Provides a simple, thread safe, queue for first-in first-out storage of items.  
         /// This object is based on the System.Collections.Generic.Queue object with a simplified API.  
         /// It wraps the various accessor methods with use of a local mutex to enforce thead safety, and implements a cached copy of the queue count with
-        /// a VoltileCount property that allows the user to avoid needing locked access to the queue to check the size of the queue at the last time that 
+        /// a VolatileCount property that allows the user to avoid needing locked access to the queue to check the size of the queue at the last time that 
         /// its length was changed.
         /// </summary>
         /// <typeparam name="ItemType">Defines the type of item that the client will store in this queue.  May be a reference or a value type.</typeparam>
