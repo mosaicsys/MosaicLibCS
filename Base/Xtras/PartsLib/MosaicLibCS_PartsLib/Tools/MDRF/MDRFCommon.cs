@@ -506,6 +506,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
 
         internal FileIndexRowBase Clear()
         {
+            RowIndex = 0;
             FileIndexRowFlagBitsU4 = 0;
             FileOffsetToStartOfFirstBlock = 0;
             FileIndexUserRowFlagBits = 0;
@@ -516,6 +517,9 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
             return this;
         }
 
+        /// <summary>
+        /// Returns true if the row's contents are empty (zero).  This test does not check the contained RowIndex for zero.
+        /// </summary>
         public bool IsEmpty 
         { 
             get 
@@ -535,7 +539,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
             if (IsEmpty)
                 return "[Empty]";
 
-            return "Offset:{0} Bits:{1} URBits:${2:X8} 1stDTS:{3:f6} lastDTS:{4:f6} 1stDT:{5:yyyyMMdd_HHmmssfff}".CheckedFormat(FileOffsetToStartOfFirstBlock, FileIndexRowFlagBits, FileIndexUserRowFlagBits, FirstBlockDeltaTimeStamp, LastBlockDeltaTimeStamp, FirstBlockDateTime);
+            return "{0} Offset:{1} Bits:{2} URBits:${3:X8} 1stDTS:{4:f6} lastDTS:{5:f6} 1stDT:{6:yyyyMMdd_HHmmssfff}".CheckedFormat(RowIndex, FileOffsetToStartOfFirstBlock, FileIndexRowFlagBits, FileIndexUserRowFlagBits, FirstBlockDeltaTimeStamp, LastBlockDeltaTimeStamp, FirstBlockDateTime);
         }
     }
 

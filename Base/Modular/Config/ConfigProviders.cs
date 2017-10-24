@@ -167,7 +167,7 @@ namespace MosaicLib.Modular.Config
         {
             ConfigKeyAccessFlags flags = new ConfigKeyAccessFlags();
 
-            return AddRange(nameValuePairSource.Select((kvp) => new ConfigKeyAccessImpl(KeyPrefix + kvp.Key, flags, this) { ValueContainer = kvp.Value }));
+            return AddRange(nameValuePairSource.Select((kvp) => new ConfigKeyAccessImpl(KeyPrefix + kvp.Key, flags, this) { VC = kvp.Value }));
         }
 
         /// <summary>
@@ -178,7 +178,7 @@ namespace MosaicLib.Modular.Config
         {
             ConfigKeyAccessFlags flags = new ConfigKeyAccessFlags();
 
-            return Add(new ConfigKeyAccessImpl(KeyPrefix + name, flags, this) { ValueContainer = vc });
+            return Add(new ConfigKeyAccessImpl(KeyPrefix + name, flags, this) { VC = vc });
         }
 
         /// <summary>
@@ -189,7 +189,7 @@ namespace MosaicLib.Modular.Config
         {
             ConfigKeyAccessFlags flags = new ConfigKeyAccessFlags();
 
-            return Add(new ConfigKeyAccessImpl(KeyPrefix + name, flags, this) { ValueContainer = new ValueContainer(value) });
+            return Add(new ConfigKeyAccessImpl(KeyPrefix + name, flags, this) { VC = new ValueContainer(value) });
         }
 
         #endregion
@@ -217,7 +217,7 @@ namespace MosaicLib.Modular.Config
             DictionaryKeyItem dItem = new DictionaryKeyItem()
             {
                 key = ckai.Key,
-                initialContainedValue = ckai.ValueContainer,
+                initialContainedValue = ckai.VC,
                 ckai = ckai,
                 keyMetaData = ckai.MetaData,
             };
@@ -250,7 +250,7 @@ namespace MosaicLib.Modular.Config
             /// <summary>The last comment string given to this key if the dictionary is not fixed.</summary>
             public string comment;
             /// <summary>Returns the current ConfigKeyAccessImpl's ValueContainer value, or ValueContainer.Empty if the ckai is null</summary>
-            public ValueContainer CurrentValue { get { return (ckai != null ? ckai.ValueContainer : ValueContainer.Empty); } }
+            public ValueContainer CurrentValue { get { return (ckai != null ? ckai.VC : ValueContainer.Empty); } }
 
             public override string ToString()
             {
@@ -375,9 +375,9 @@ namespace MosaicLib.Modular.Config
                     else
                     {
                         int entryValueSeqNum = item.ckai.ValueSeqNum;
-                        ValueContainer entryValue = item.ckai.ValueContainer;
+                        ValueContainer entryValue = item.ckai.VC;
 
-                        item.ckai.ValueContainer = kvp.Value;
+                        item.ckai.VC = kvp.Value;
                         item.ckai.CurrentSeqNum = item.ckai.ValueSeqNum = item.seqNumGen = item.seqNumGen.IncrementSkipZero();
                         item.comment = commentStr;
 
@@ -402,7 +402,7 @@ namespace MosaicLib.Modular.Config
 
         private string EnsureItemExists(IConfigKeyAccessSpec icks, ValueContainer initialValue, ref DictionaryKeyItem item, string commentStr)
         {
-            ConfigKeyAccessImpl ckai = new ConfigKeyAccessImpl(icks.Key, icks.Flags, this) { ValueContainer = initialValue };
+            ConfigKeyAccessImpl ckai = new ConfigKeyAccessImpl(icks.Key, icks.Flags, this) { VC = initialValue };
             item = new DictionaryKeyItem() 
             { 
                 key = icks.Key, 
@@ -641,7 +641,7 @@ namespace MosaicLib.Modular.Config
                         string fullKey = KeyPrefix + includeKeyPrefix + keyItem.Key;
 
                         if (!includeFilesKeysDictionary.ContainsKey(fullKey))
-                            includeFilesKeysDictionary[fullKey] = new ConfigKeyAccessImpl(fullKey, flags, this) { ValueContainer = keyItem.VC };
+                            includeFilesKeysDictionary[fullKey] = new ConfigKeyAccessImpl(fullKey, flags, this) { VC = keyItem.VC };
                         else
                             Logger.Warning.Emit("Redundant value found for key '{0}' under path '{1}'", fullKey, includePath);
                     }
@@ -746,9 +746,9 @@ namespace MosaicLib.Modular.Config
                     valueItem.ckai = new ConfigKeyAccessImpl("{0}{1}".CheckedFormat(currentSection.sectionKeyPrefix, valueItem.fileKeyName), defaultAccessFlags, this);
 
                     if (valueItem.hasEquals)
-                        valueItem.ckai.ValueContainer = new ValueContainer(linePartsArray.SafeAccess(1, String.Empty));
+                        valueItem.ckai.VC = new ValueContainer(linePartsArray.SafeAccess(1, String.Empty));
                     else
-                        valueItem.ckai.ValueContainer = new ValueContainer();
+                        valueItem.ckai.VC = new ValueContainer();
 
                     currentSection.Add(valueItem);
                 }
@@ -849,7 +849,7 @@ namespace MosaicLib.Modular.Config
                 if (hasEquals || ckai.HasValue)
                 {
                     if (ckai.HasValue)
-                        saveFileLine = "{0}={1}".CheckedFormat(fileKeyName, ckai.ValueContainer.ValueAsObject);
+                        saveFileLine = "{0}={1}".CheckedFormat(fileKeyName, ckai.VC.ValueAsObject);
                     else
                         saveFileLine = fileKeyName;
                 }
@@ -1016,7 +1016,7 @@ namespace MosaicLib.Modular.Config
                 PersistKeyTracker pkt = new PersistKeyTracker()
                 {
                     fileKeyItem = fileKeyItem,
-                    ckai = new ConfigKeyAccessImpl("{0}{1}".CheckedFormat(KeyPrefix, fileKeyItem.Key), defaultAccessFlags, this) { ValueContainer = fileKeyItem.VC },
+                    ckai = new ConfigKeyAccessImpl("{0}{1}".CheckedFormat(KeyPrefix, fileKeyItem.Key), defaultAccessFlags, this) { VC = fileKeyItem.VC },
                 };
 
                 persistKeyTrackerList.Add(pkt);
@@ -1076,7 +1076,7 @@ namespace MosaicLib.Modular.Config
             {
                 dictionaryKeyItem = item,
                 ckai = item.ckai,
-                fileKeyItem = new KeyItem() { Key = persistKey, VC = item.ckai.ValueContainer, Comment = item.comment },
+                fileKeyItem = new KeyItem() { Key = persistKey, VC = item.ckai.VC, Comment = item.comment },
             };
 
             persistKeyTrackerList.Add(pkt);
@@ -1095,8 +1095,8 @@ namespace MosaicLib.Modular.Config
             // update the configKeyStore KeySet item(s) contents
             foreach (var pkt in persistKeyTrackerList)
             {
-                if (!pkt.fileKeyItem.VC.Equals(pkt.ckai.ValueContainer))
-                    pkt.fileKeyItem.VC = pkt.ckai.ValueContainer;
+                if (!pkt.fileKeyItem.VC.Equals(pkt.ckai.VC))
+                    pkt.fileKeyItem.VC = pkt.ckai.VC;
 
                 if (pkt.fileKeyItem.Comment != pkt.dictionaryKeyItem.comment)
                     pkt.fileKeyItem.Comment = pkt.dictionaryKeyItem.comment;
@@ -1212,7 +1212,7 @@ namespace MosaicLib.Modular.Config
 
                     item = new ValueItem() { parentRegKey = regKey, valueName = valueName, initialValueKind = valueKind, lastContainedValue = valueContainer, isFixed = isFixed };
 
-                    item.ckai = new ConfigKeyAccessImpl(keyName, defaultAccessFlags, this) { ValueContainer = item.lastContainedValue };
+                    item.ckai = new ConfigKeyAccessImpl(keyName, defaultAccessFlags, this) { VC = item.lastContainedValue };
                     if (item.isFixed)
                         item.ckai.ProviderFlags = item.ckai.ProviderFlags.MergeWith(new ConfigKeyProviderFlags() { IsFixed = true });
 
@@ -1278,7 +1278,7 @@ namespace MosaicLib.Modular.Config
             {
                 foreach (ValueItem item in valueItemList)
                 {
-                    if (!item.ckai.ProviderFlags.IsFixed && !item.lastContainedValue.IsEqualTo(item.ckai.ValueContainer))
+                    if (!item.ckai.ProviderFlags.IsFixed && !item.lastContainedValue.IsEqualTo(item.ckai.VC))
                     {
                         try
                         {
@@ -1286,7 +1286,7 @@ namespace MosaicLib.Modular.Config
 
                             if (doSet)
                             {
-                                object valueAsObject = item.ckai.ValueContainer.ValueAsObject;
+                                object valueAsObject = item.ckai.VC.ValueAsObject;
 
                                 // convert IList<String> values into string array values.
                                 IList<String> vaoailos = valueAsObject as IList<String>;
@@ -1294,7 +1294,7 @@ namespace MosaicLib.Modular.Config
                                     valueAsObject = vaoailos.ToArray();
 
                                 item.parentRegKey.SetValue(item.valueName, valueAsObject);
-                                item.lastContainedValue = item.ckai.ValueContainer;
+                                item.lastContainedValue = item.ckai.VC;
                                 updateCount++;
                             }
                         }

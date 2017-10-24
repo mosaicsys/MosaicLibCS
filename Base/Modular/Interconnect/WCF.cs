@@ -1912,7 +1912,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
 
                 if (item != null)
                 {
-                    item.IVA.ValueContainer = vpi.VC;       // may mark set as pending if the VC contents is differnt than the current ValueContainer contents.
+                    item.IVA.VC = vpi.VC;       // may mark set as pending if the VC contents is differnt than the current ValueContainer contents.
 
                     if (!havePendingIVAValuesToSet)
                         havePendingIVAValuesToSet = item.IVA.IsSetPending;
@@ -1937,7 +1937,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
                     {
                         if (!vpi.VC.IsEmpty)
                         {
-                            item.IVA.ValueContainer = vpi.VC;
+                            item.IVA.VC = vpi.VC;
 
                             if (!havePendingIVAValuesToSet)
                                 havePendingIVAValuesToSet = item.IVA.IsSetPending;
@@ -1966,7 +1966,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
                     {
                         if (!vpi.VC.IsEmpty)
                         {
-                            item.IVA.ValueContainer = vpi.VC;
+                            item.IVA.VC = vpi.VC;
 
                             if (!havePendingIVAValuesToSet)
                                 havePendingIVAValuesToSet = item.IVA.IsSetPending;
@@ -2214,7 +2214,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
                         vpi.ID = item.AssignedID;
                     }
 
-                    vpi.VC = (item.IVA.HasValueBeenSet ? item.IVA.ValueContainer : ValueContainer.Empty);
+                    vpi.VC = (item.IVA.HasValueBeenSet ? item.IVA.VC : ValueContainer.Empty);
 
                     pendingVPIQueue.Enqueue(vpi);
                 }

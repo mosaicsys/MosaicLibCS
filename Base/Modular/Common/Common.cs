@@ -64,12 +64,15 @@ namespace MosaicLib.Modular.Common
 
     #endregion
 
-    #region ValueContainer - contains all value type specific logic
+    #region ValueContainer - contains all value type specific logic (ContainerStorageType, VC related ExtensionMethods, ValueContainerGetValueException)
 
     /// <summary>
-    /// This is a value type storage for a set of well known types that can be used to help marshal many types of values from place to place using copying of an explicit box
-    /// so-as to avoid the need to box and unbox the values so they can be passed as objects which would be expected to increase the GC load significantly and posses the added
-    /// risk of forcing lots of high generation GC activity since these values are intended to be shared between threads.
+    /// This is a value type storage object for a set of well known types, especially value types.  
+    /// It is used to provide a formal box to be placed around such value types so that they can be passed from place to place in the code using a generic container while using copy symantics rather than the more traditional object box/unbox based reference symantics.
+    /// This object supports a full range of basic value object types and it supports use with a limited set of well known reference objects, to which it can safely apply techniques so that the actual stored value can safely be stored and passed using a read-only representation to support full thread safety.
+    /// This object can also be used to reference and pass arbitrary object types by casting them to the System.Object type, although this is not the preferred purpose for this object.
+    /// This ojects is used by, and supports use with, a large and growing number of the other modular types in this library, especially to support generic forms of interconnection, serialization, and attribute harvested value set adapters.
+    /// This type is used in place of the traditional object boxing and unboxing solution to avoid the generation and propagation of small short lifetime memory objects when passing such underlying value types from place to place in a more generic manner.
     /// </summary>
     public struct ValueContainer : IEquatable<ValueContainer>
     {
@@ -96,7 +99,7 @@ namespace MosaicLib.Modular.Common
 
         /// <summary>The Union type allows for various types to be supported using fields that only use one 8 byte block for storage.</summary>
         [StructLayout(LayoutKind.Explicit, Pack = 8)]
-        public struct Union
+        public struct Union : IEquatable<Union>
         {
             /// <summary>Boolean value in union</summary>
             [FieldOffset(0)]
@@ -141,12 +144,18 @@ namespace MosaicLib.Modular.Common
             /// <summary>Helper property to read/write a DateTime - internally gets/saves the i64 Binary representation in the DateTime</summary>
             public DateTime DateTime { get { return DateTime.FromBinary(i64); } set { i64 = value.ToBinary(); } }
 
+            /// <summary>IEquatable{Union} implementation method.  Returns true if both unions contain the same binary content value (based on u64 field - large enough and has simple and safe basic equality meaning)</summary>
+            public bool Equals(Union other)
+            {
+                return (u64 == other.u64);
+            }
+
             /// <summary>
             /// Compare the contents of this instance to the rhs by comparing the contents of the largest fields that are in both.  For this purpose we are using u64.
             /// </summary>
-            public bool IsEqualTo(Union rhs)
+            public bool IsEqualTo(Union other)
             {
-                return (u64 == rhs.u64);
+                return this.Equals(other);
             }
         }
 
@@ -302,7 +311,7 @@ namespace MosaicLib.Modular.Common
                         cvt = ContainerStorageType.IListOfString;
                         u = rhs.u;
 
-                        IList<string> rhsILS = rhs.GetValue<IList<String>>(ContainerStorageType.IListOfString, false, false);
+                        IList<string> rhsILS = rhs.GetValue<IList<String>>(ContainerStorageType.IListOfString, valueTypeIsNullable: false, rethrow: false);
 
                         if (rhsILS == null || rhsILS.IsReadOnly)
                         {
@@ -323,7 +332,7 @@ namespace MosaicLib.Modular.Common
                         cvt = ContainerStorageType.IListOfVC;
                         u = rhs.u;
 
-                        IList<ValueContainer> rhsILVC = rhs.GetValue<IList<ValueContainer>>(ContainerStorageType.IListOfVC, false, false);
+                        IList<ValueContainer> rhsILVC = rhs.GetValue<IList<ValueContainer>>(ContainerStorageType.IListOfVC, valueTypeIsNullable: false, rethrow: false);
 
                         if (rhsILVC == null || rhsILVC.IsReadOnly)
                         {
@@ -339,9 +348,39 @@ namespace MosaicLib.Modular.Common
                         return this;
                     }
 
+                case ContainerStorageType.INamedValueSet:
+                    {
+                        cvt = ContainerStorageType.INamedValueSet;
+                        u = rhs.u;
+
+                        o = (rhs.o as INamedValueSet).ConvertToReadOnly();
+
+                        return this;
+                    }
+
+                case ContainerStorageType.INamedValue:
+                    {
+                        cvt = ContainerStorageType.INamedValue;
+                        u = rhs.u;
+
+                        o = (rhs.o as INamedValue).ConvertToReadOnly();
+
+                        return this;
+                    }
+
                 default:
                     return CopyFrom(rhs);
             }
+        }
+
+        /// <summary>
+        /// Accepts a given type and attempts to generate an apporpriate ContainerStorageType (and isNullable) value as the best container storage type to use with the given <typeparamref name="TValueType"/>.
+        /// Unrecognized type default as ContainerStorageType.Object.
+        /// </summary>
+        public static void DecodeType<TValueType>(out ContainerStorageType decodedValueType, out bool isNullable)
+        {
+            Type t = typeof(TValueType);
+            DecodeType(t, out decodedValueType, out isNullable);
         }
 
         /// <summary>
@@ -382,6 +421,16 @@ namespace MosaicLib.Modular.Common
                 isNullable = false;
                 decodedValueType = ContainerStorageType.IListOfVC;
             }
+            else if (iNamedValueSetType.IsAssignableFrom(valueType))
+            {
+                isNullable = false;
+                decodedValueType = ContainerStorageType.INamedValueSet;
+            }
+            else if (iNamedValueType.IsAssignableFrom(valueType))
+            {
+                isNullable = false;
+                decodedValueType = ContainerStorageType.INamedValue;
+            }
             else if (valueType.IsEnum)
             {
                 isNullable = false;
@@ -405,6 +454,8 @@ namespace MosaicLib.Modular.Common
         private static readonly Type vcArrayType = typeof(ValueContainer[]);
         private static readonly Type iListOfStringType = typeof(IList<System.String>);
         private static readonly Type iListOfVCType = typeof(IList<ValueContainer>);
+        private static readonly Type iNamedValueSetType = typeof(INamedValueSet);
+        private static readonly Type iNamedValueType = typeof(INamedValue);
         private static readonly Type vcEnumerableType = typeof(IEnumerable<ValueContainer>);
 
         /// <summary>
@@ -429,6 +480,8 @@ namespace MosaicLib.Modular.Common
                     case ContainerStorageType.String: return o;
                     case ContainerStorageType.IListOfString: return o;
                     case ContainerStorageType.IListOfVC: return o;
+                    case ContainerStorageType.INamedValueSet: return o;
+                    case ContainerStorageType.INamedValue: return o;
                     case ContainerStorageType.Boolean: return u.b;
                     case ContainerStorageType.Binary: return u.bi;
                     case ContainerStorageType.SByte: return u.i8;
@@ -488,16 +541,15 @@ namespace MosaicLib.Modular.Common
         }
 
         /// <summary>
-        /// Typeed value setter method.  
+        /// Typed value setter method.  
         /// This method decodes the ContainerStorageType from the given TValueType and then sets the corresponding storage field from value.
         /// <para/>Supports call chaining
         /// </summary>
         public ValueContainer SetValue<TValueType>(TValueType value)
         {
-            Type t = typeof(TValueType);
             ContainerStorageType valueCVT;
             bool valueTypeIsNullable;
-            DecodeType(t, out valueCVT, out valueTypeIsNullable);
+            DecodeType<TValueType>(out valueCVT, out valueTypeIsNullable);
 
             SetValue<TValueType>(value, valueCVT, valueTypeIsNullable);
 
@@ -655,6 +707,8 @@ namespace MosaicLib.Modular.Common
                                 }
                             }
                             break;
+                        case ContainerStorageType.INamedValueSet: o = (value as INamedValueSet).ConvertToReadOnly(mapNullToEmpty: true); break;
+                        case ContainerStorageType.INamedValue: o = (value as INamedValue).ConvertToReadOnly(mapNullToEmpty: true); break;
                     }
                 }
                 else
@@ -782,6 +836,8 @@ namespace MosaicLib.Modular.Common
                                     value = (TValueType)((System.Object)(o as IList<ValueContainer> ?? emptyIListOfVC));      // all other cases the TValueType should be castable from an IList<VC>
                             }
                             break;
+                        case ContainerStorageType.INamedValueSet: value = (TValueType)o; break;
+                        case ContainerStorageType.INamedValue: value = (TValueType)o; break;
                     }
                 }
                 else if (decodedValueType == ContainerStorageType.Custom)
@@ -891,6 +947,18 @@ namespace MosaicLib.Modular.Common
 
                             conversionDone = true;
                         }
+                        else if (decodedValueType == ContainerStorageType.INamedValueSet && (cvt == ContainerStorageType.IListOfString || cvt == ContainerStorageType.IListOfVC))
+                        {
+                            value = (TValueType)((System.Object) this.ConvertToNamedValueSet(asReadOnly: true));
+
+                            conversionDone = true;
+                        }
+                        else if (decodedValueType == ContainerStorageType.INamedValue && (cvt == ContainerStorageType.IListOfString || cvt == ContainerStorageType.IListOfVC || cvt == ContainerStorageType.String))
+                        {
+                            value = (TValueType)((System.Object)this.ConvertToNamedValue(asReadOnly: true));
+
+                            conversionDone = true;
+                        }
                     }
 
                     if (!conversionDone)
@@ -982,6 +1050,14 @@ namespace MosaicLib.Modular.Common
                 {
                     return defaultBasePerItemSizeInBytes + (o as ValueContainer []).EstimatedContentSizeInBytes();
                 }
+                else if (o is INamedValueSet)
+                {
+                    return (o as INamedValueSet).EstimatedContentSizeInBytes;
+                }
+                else if (o is INamedValue)
+                {
+                    return (o as INamedValue).EstimatedContentSizeInBytes;
+                }
                 else
                 {
                     return 0;
@@ -994,15 +1070,21 @@ namespace MosaicLib.Modular.Common
         /// <summary>
         /// Equality testing implementation method.  Uses ValueContainer in signature to remove need for casting (as with Equals).
         /// </summary>
-        public bool IsEqualTo(ValueContainer rhs)
+        public bool IsEqualTo(ValueContainer other)
         {
-            if (cvt != rhs.cvt)
+            return Equals(other);
+        }
+
+        /// <summary>IEquatable{ValueContainer} Equals implementation.  Returns true if the contents of this ValueContainer are "equal" to the contents of the other ValueContainer.</summary>
+        public bool Equals(ValueContainer other)
+        {
+            if (cvt != other.cvt)
                 return false;
 
             if (IsNonNullObject)
             {
                 ValueContainer[] vcArray = o as ValueContainer[];
-                ValueContainer[] rhsVCArray = rhs.o as ValueContainer[];
+                ValueContainer[] rhsVCArray = other.o as ValueContainer[];
 
                 if (vcArray != null)
                 {
@@ -1011,21 +1093,19 @@ namespace MosaicLib.Modular.Common
             }
 
             if (cvt == ContainerStorageType.IListOfString)
-                return (o as IList<String>).IsEqualTo(rhs.o as IList<String>);
+                return (o as IList<String>).IsEqualTo(other.o as IList<String>);
             else if (cvt == ContainerStorageType.IListOfVC)
-                return (o as IList<ValueContainer>).IsEqualTo(rhs.o as IList<ValueContainer>);
+                return (o as IList<ValueContainer>).IsEqualTo(other.o as IList<ValueContainer>);
+            else if (cvt == ContainerStorageType.INamedValueSet)
+                return (o as INamedValueSet).MapNullToEmpty().Equals(other.o as INamedValueSet);
+            else if (cvt == ContainerStorageType.INamedValue)
+                return (o as INamedValue).MapNullToEmpty().Equals(other.o as INamedValue);
             else if (cvt.IsReferenceType())
-                return System.Object.Equals(o, rhs.o);
+                return System.Object.Equals(o, other.o);
             else if (cvt.IsNone())
                 return true;
             else
-                return u.IsEqualTo(rhs.u);
-        }
-
-        /// <summary>IEquatable{ValueContainer} Equals implementation.  Returns true if the contents of this ValueContainer are "equal" to the contents of the other ValueContainer.</summary>
-        public bool Equals(ValueContainer other)
-        {
-            return IsEqualTo(other);
+                return u.Equals(other.u);
         }
 
         /// <summary>Support Equality testing for boxed versions.</summary>
@@ -1044,11 +1124,19 @@ namespace MosaicLib.Modular.Common
         }
 
         /// <summary>
-        /// Override ToString for logging and debugging.  
+        /// Override ToString for logging and debugging.  (Currently the same as ToStringSML)
+        /// </summary>
+        public override string ToString()
+        {
+            return ToStringSML();
+        }
+
+        /// <summary>
+        /// ToString variant that support SML like output format.
         /// This format is generally similar to SML except that it generally uses square brackets as element delimiters rather than
         /// greater and less than symbols (which are heavily used in XML and must thus be escaped when placing such strings in XML output).
         /// </summary>
-        public override string ToString()
+        public string ToStringSML()
         {
             if (cvt.IsNone())
                 return "[None]";
@@ -1110,6 +1198,10 @@ namespace MosaicLib.Modular.Common
                         else
                             return "[LS]";
                     }
+                case ContainerStorageType.INamedValueSet:
+                    return (o as INamedValueSet).MapNullToEmpty().ToStringSML(nvsNodeName: "NVS", nvNodeName: "NV");
+                case ContainerStorageType.INamedValue:
+                    return (o as INamedValue).MapNullToEmpty().ToStringSML(nvNodeName: "NV");
             }
 
             if (o != null)
@@ -1148,12 +1240,6 @@ namespace MosaicLib.Modular.Common
                 return "[{0} '{1}']".CheckedFormat(cvt, ValueAsObject);
         }
 
-        /// <summary>ToString variant that support SML like output format. (Currently the same as ToString)</summary>
-        public string ToStringSML()
-        {
-            return ToString();
-        }
-
         /// <summary>Constists of ' ', '"', '[' and ']'</summary>
         private static readonly List<char> basicUnquotedStringExcludeList = new List<char>() { ' ', '\"', '[', ']' };
 
@@ -1179,6 +1265,10 @@ namespace MosaicLib.Modular.Common
         IListOfString,
         /// <summary>Use Object field as an IList{ValueContainer} - usually contains a ReadOnlyCollection{ValueContainer}</summary>
         IListOfVC,
+        /// <summary>Use Object field as an INamedValueSet - usually marked as ReadOnly</summary>
+        INamedValueSet,
+        /// <summary>Use Object field as an INamedValue - usually marked as ReadOnly</summary>
+        INamedValue,
         /// <summary>Use Union.b field</summary>
         Boolean,
         /// <summary>Use Union.bi field</summary>
@@ -1223,6 +1313,8 @@ namespace MosaicLib.Modular.Common
                 case ContainerStorageType.String:
                 case ContainerStorageType.IListOfString:
                 case ContainerStorageType.IListOfVC:
+                case ContainerStorageType.INamedValueSet:
+                case ContainerStorageType.INamedValue:
                     return true;
                 default:
                     return false;
@@ -1320,6 +1412,39 @@ namespace MosaicLib.Modular.Common
             }
 
             return true;
+        }
+
+        /// <summary>
+        /// Extension method used to set the contents of a ValueContainer to contain a list of the given items.  
+        /// This method will produce an IListOfStrings if ItemType is string and otherwise it will produce an IListOfVC
+        /// If the given itemParamArray is null or is empty then this method will return an Empty ValueContainer
+        /// If only one value is given in the itemParamArray then the returned ValueContainer will simply be a ValueContainer containing that Item.
+        /// </summary>
+        public static ValueContainer SetFromItems<ItemType>(this ValueContainer vc, params ItemType[] itemParamArray)
+        {
+            if (itemParamArray.IsNullOrEmpty())
+                return ValueContainer.Empty;
+            else if (itemParamArray.Length == 1)
+                return vc.SetValue(itemParamArray[0]);
+            else if (typeof(ItemType) == typeof(string))
+                return vc.SetValue<IList<string>>(new List<string>(itemParamArray.Select(item => item as string)).AsReadOnly(), ContainerStorageType.IListOfString);
+            else
+                return vc.SetValue<IList<ValueContainer>>(new List<ValueContainer>(itemParamArray.Select(item => new ValueContainer(item))).AsReadOnly(), ContainerStorageType.IListOfVC);
+        }
+
+        /// <summary>
+        /// Extension method used to set the contents of a ValueContainer to contain a set of the given items.  
+        /// This method will produce an IListOfStrings if ItemType is string and otherwise it will produce an IListOfVC
+        /// If the given itemSet is null then this method will return an Empty ValueContainer.
+        /// </summary>
+        public static ValueContainer SetFromSet<ItemType>(this ValueContainer vc, IEnumerable<ItemType> itemSet)
+        {
+            if (itemSet == null)
+                return ValueContainer.Empty;
+            else if (typeof(ItemType) == typeof(string))
+                return vc.SetValue<IList<string>>(new List<string>(itemSet.Select(item => item as string)).AsReadOnly(), ContainerStorageType.IListOfString);
+            else
+                return vc.SetValue<IList<ValueContainer>>(new List<ValueContainer>(itemSet.Select(item => new ValueContainer(item))).AsReadOnly(), ContainerStorageType.IListOfVC);
         }
     }
 
@@ -1421,6 +1546,10 @@ namespace MosaicLib.Modular.Common
                         useCST = ContainerStorageType.IListOfString;
                     else if ((vc.o is ValueContainer[]) || (vc.o is IList<ValueContainer>))
                         useCST = ContainerStorageType.IListOfVC;
+                    else if (vc.o is INamedValueSet)
+                        useCST = ContainerStorageType.INamedValueSet;
+                    else if (vc.o is INamedValue)
+                        useCST = ContainerStorageType.INamedValue;
                 }
                 else if (useCST == ContainerStorageType.Custom)
                 {
@@ -1461,11 +1590,17 @@ namespace MosaicLib.Modular.Common
                     case ContainerStorageType.String: 
                         sGetValue = vc.o as string; 
                         break;
-                    case ContainerStorageType.IListOfString: 
-                        slGetValue = new Details.sl(vc.GetValue<IEnumerable<string>>(ContainerStorageType.IListOfString, false, false)); 
+                    case ContainerStorageType.IListOfString:
+                        slGetValue = new Details.sl(vc.GetValue<IEnumerable<string>>(ContainerStorageType.IListOfString, valueTypeIsNullable: false, rethrow: false)); 
                         break;
                     case ContainerStorageType.IListOfVC: 
-                        vcaGetValue = vc.GetValue<IEnumerable<ValueContainer>>(ContainerStorageType.IListOfVC, false, false).Select(vcItem => new ValueContainerEnvelope() { VC = vcItem }).ToArray(); 
+                        vcaGetValue = vc.GetValue<IEnumerable<ValueContainer>>(ContainerStorageType.IListOfVC, valueTypeIsNullable: false, rethrow: false).Select(vcItem => new ValueContainerEnvelope() { VC = vcItem }).ToArray(); 
+                        break;
+                    case ContainerStorageType.INamedValueSet:
+                        nvsGetValue = vc.GetValue<INamedValueSet>(ContainerStorageType.INamedValueSet, valueTypeIsNullable: false, rethrow: false).ConvertToReadOnly();
+                        break;
+                    case ContainerStorageType.INamedValue:
+                        nviGetValue = vc.GetValue<INamedValue>(ContainerStorageType.INamedValue, valueTypeIsNullable: false, rethrow: false).ConvertToReadOnly();
                         break;
                 }
 
@@ -1519,10 +1654,10 @@ namespace MosaicLib.Modular.Common
         private object o { get { return oGetValue; } set { VC = new ValueContainer() { cvt = ContainerStorageType.Object, o = value }; } }
 
         [DataMember(EmitDefaultValue = false, IsRequired = false)]
-        private NamedValue nvi { get { return nviGetValue; } set { VC = new ValueContainer(value.ConvertToReadOnly()); } }
+        private NamedValue nvi { get { return nviGetValue; } set { VC = new ValueContainer(value); } }
 
         [DataMember(EmitDefaultValue = false, IsRequired = false)]
-        private NamedValueSet nvs { get { return nvsGetValue; } set { VC = new ValueContainer(value.ConvertToReadOnly()); } }
+        private NamedValueSet nvs { get { return nvsGetValue; } set { VC = new ValueContainer(value); } }
 
         [DataMember(EmitDefaultValue = false, IsRequired = false)]
         private string s { get { return sGetValue; } set { VC = new ValueContainer() { cvt = ContainerStorageType.String, o = value }; } }
@@ -2180,13 +2315,13 @@ namespace MosaicLib.Modular.Common
         bool IsReadOnly { get; }
 
         /// <summary>Returns true if the this INamedValueSet has the same contents, in the same order, as the given rhs.</summary>
-        bool IsEqualTo(INamedValueSet rhs, TraversalType searchTraversalType = TraversalType.EntireTree);
+        bool IsEqualTo(INamedValueSet rhs, TraversalType searchTraversalType = TraversalType.EntireTree, bool compareReadOnly = true);
 
         /// <summary>Custom ToString variant that allows the caller to determine if the ro/rw postfix should be included on thie string result, and to determine if NamedValues with empty VCs should be treated as a keyword.</summary>
         string ToString(bool includeROorRW = true, bool treatNameWithEmptyVCAsKeyword = true, TraversalType traversalType = TraversalType.EntireTree);
 
         /// <summary>ToString variant that support SML like output format.</summary>
-        string ToStringSML(TraversalType traversalType = TraversalType.EntireTree);
+        string ToStringSML(TraversalType traversalType = TraversalType.EntireTree, string nvsNodeName = "NVS", string nvNodeName = "NV");
 
         /// <summary>
         /// Returns the approximate size of the contents in bytes. 
@@ -2269,7 +2404,7 @@ namespace MosaicLib.Modular.Common
         bool IsReadOnly { get; }
 
         /// <summary>Returns true if the this INamedValue is equal to the given rhs.</summary>
-        bool IsEqualTo(INamedValue rhs);
+        bool IsEqualTo(INamedValue rhs, bool compareReadOnly = true);
 
         /// <summary>
         /// Returns the approximate size of the contents in bytes. 
@@ -2280,7 +2415,7 @@ namespace MosaicLib.Modular.Common
         string ToString(bool useDoubleEqualsForRW, bool treatNameWithEmptyVCAsKeyword);
 
         /// <summary>ToString variant that support SML like output format.</summary>
-        string ToStringSML();
+        string ToStringSML(string nvNodeName = "NV");
     }
 
     #endregion
@@ -2485,18 +2620,18 @@ namespace MosaicLib.Modular.Common
         /// Updates the desired NamedValue to be a keyword (has empty value container value), or adds a new keyword NamedValue, from the given name, to the list if it was not already present.
         /// </summary>
         /// <exception cref="System.NotSupportedException">thrown if the collection has been set to IsReadOnly</exception>
-        public NamedValueSet SetKeyword(string name)
+        public NamedValueSet SetKeyword(string name, bool asReadOnly = false)
         {
-            return SetValue(new NamedValue(name));
+            return SetValue(new NamedValue(name) { IsReadOnly = asReadOnly });
         }
 
         /// <summary>
         /// Updates the desired NamedValue to contain the given vc value, or adds a new NamedValue, initialized from the given name and vc value, to the list if it was not already present.
         /// </summary>
         /// <exception cref="System.NotSupportedException">thrown if the collection has been set to IsReadOnly</exception>
-        public NamedValueSet SetValue(string name, ValueContainer vc)
+        public NamedValueSet SetValue(string name, ValueContainer vc, bool asReadOnly = false)
         {
-            return SetValue(new NamedValue(name, vc));
+            return SetValue(new NamedValue(name, vc, asReadOnly: asReadOnly));
         }
 
         /// <summary>
@@ -2504,9 +2639,9 @@ namespace MosaicLib.Modular.Common
         /// In either case the given object value will be assigned into a ValueContainer automatically using this signature.
         /// </summary>
         /// <exception cref="System.NotSupportedException">thrown if the collection has been set to IsReadOnly</exception>
-        public NamedValueSet SetValue(string name, object value)
+        public NamedValueSet SetValue(string name, object value, bool asReadOnly = false)
         {
-            return SetValue(new NamedValue(name, value));
+            return SetValue(new NamedValue(name, value, asReadOnly: asReadOnly));
         }
 
         /// <summary>
@@ -2525,7 +2660,7 @@ namespace MosaicLib.Modular.Common
                 // we found a matching NamedValue in the list
 
                 NamedValue listNV = list[index];
-                if (!listNV.IsReadOnly)
+                if (!listNV.IsReadOnly && !nv.IsReadOnly)
                 {
                     // update the value for the NamedValue item that is already in the set
                     listNV.VC = nv.VC;
@@ -2703,18 +2838,18 @@ namespace MosaicLib.Modular.Common
         }
 
         /// <summary>Returns true if the this INamedValueSet has the same contents, in the same order, as the given rhs.</summary>
-        public bool IsEqualTo(INamedValueSet rhs, TraversalType searchTraversalType = TraversalType.EntireTree)
+        public bool IsEqualTo(INamedValueSet rhs, TraversalType searchTraversalType = TraversalType.EntireTree, bool compareReadOnly = true)
         {
             if (System.Object.ReferenceEquals(this, rhs))
                 return true;
 
-            if (rhs == null || Count != rhs.Count || IsReadOnly != rhs.IsReadOnly)
+            if (rhs == null || Count != rhs.Count || (IsReadOnly != rhs.IsReadOnly && compareReadOnly))
                 return false;
 
             int setCount = Count;
             for (int index = 0; index < setCount; index++)
             {
-                if (!list[index].IsEqualTo(rhs[index]))
+                if (!list[index].IsEqualTo(rhs[index], compareReadOnly: compareReadOnly))
                     return false;
             }
 
@@ -2730,7 +2865,7 @@ namespace MosaicLib.Modular.Common
 
                 for (int idx = 0; idx < thisSubSetsArrayLength; idx++)
                 {
-                    if (!thisSubSetsArray[idx].IsEqualTo(rhsSubSetsArray[idx], searchTraversalType))
+                    if (!thisSubSetsArray[idx].IsEqualTo(rhsSubSetsArray[idx], searchTraversalType: searchTraversalType, compareReadOnly: compareReadOnly))
                         return false;
                 }
             }
@@ -3008,22 +3143,22 @@ namespace MosaicLib.Modular.Common
         }
 
         /// <summary>ToString variant that support SML like output format.</summary>
-        public string ToStringSML(TraversalType traversalType = TraversalType.EntireTree)
+        public string ToStringSML(TraversalType traversalType = TraversalType.EntireTree, string nvsNodeName = "NVS", string nvNodeName = "NV")
         {
-            StringBuilder sb = new StringBuilder("[L ");
+            StringBuilder sb = new StringBuilder("[{0} ".CheckedFormat(nvsNodeName));
 
             switch (traversalType)
             {
                 case TraversalType.EntireTree:
-                    sb.Append(String.Join(" ", GetEnumerable(traversalType).Select((nv) => nv.ToStringSML()).ToArray()));
+                    sb.Append(String.Join(" ", GetEnumerable(traversalType).Select((nv) => nv.ToStringSML(nvNodeName: nvNodeName)).ToArray()));
                     if (!subSetsArray.IsNullOrEmpty())
-                        sb.CheckedAppendFormat("[L-SubSets {0}]", String.Join(" ", subSetsArray.Select(invs => invs.ToStringSML(traversalType).ToArray())));
+                        sb.CheckedAppendFormat("[{0}-SubSets {1}]", nvsNodeName, String.Join(" ", subSetsArray.Select(invs => invs.ToStringSML(traversalType, nvsNodeName: nvsNodeName, nvNodeName: nvNodeName).ToArray())));
                     break;
 
                 default:
                 case TraversalType.Flatten:
                 case TraversalType.TopLevelOnly:
-                    sb.Append(String.Join(" ", GetEnumerable(traversalType).Select((nv) => nv.ToStringSML()).ToArray()));
+                    sb.Append(String.Join(" ", GetEnumerable(traversalType).Select((nv) => nv.ToStringSML(nvNodeName: nvNodeName)).ToArray()));
                     break;
             }
 
@@ -3049,7 +3184,7 @@ namespace MosaicLib.Modular.Common
         public int GetEstimatedContentSizeInBytes(TraversalType traversalType = TraversalType.EntireTree)
         {
             int totalApproximateSize = GetEnumerable(traversalType).Sum(inv => inv.EstimatedContentSizeInBytes);
-            return totalApproximateSize;
+            return totalApproximateSize + 10;
         }
 
 
@@ -3205,7 +3340,9 @@ namespace MosaicLib.Modular.Common
 
         /// <summary>Default Constructor, for use with deserialization</summary>
         public NamedValue()
-        {}
+        {
+            Name = string.Empty;
+        }
 
         /// <summary>Constructor - builds NamedValue with the given name.  VC defaults to ValueContainer.Empty (and has not been set).  This constructor may thus be used to create keyword entries for use in a NamedValueSet</summary>
         public NamedValue(string name)
@@ -3307,12 +3444,12 @@ namespace MosaicLib.Modular.Common
         /// <summary>
         /// Returns true if the given rhs has the same Name, VC contents and IsReadOnly value as this object.
         /// </summary>
-        public bool IsEqualTo(INamedValue rhs)
+        public bool IsEqualTo(INamedValue rhs, bool compareReadOnly = true)
         {
             return (rhs != null 
                     && Name == rhs.Name 
                     && VC.IsEqualTo(rhs.VC) 
-                    && IsReadOnly == rhs.IsReadOnly
+                    && (IsReadOnly == rhs.IsReadOnly || !compareReadOnly)
                     );
         }
 
@@ -3397,9 +3534,12 @@ namespace MosaicLib.Modular.Common
         }
 
         /// <summary>ToString variant that support SML like output format.</summary>
-        public string ToStringSML()
+        public string ToStringSML(string nvNodeName = "NV")
         {
-            return "[L {0} {1}]".CheckedFormat((new ValueContainer(Name)).ToStringSML(), VC.ToStringSML());
+            if (!VC.IsEmpty)
+                return "[{0} {1} {2}]".CheckedFormat(nvNodeName, (new ValueContainer(Name)).ToStringSML(), VC.ToStringSML());
+            else
+                return "[{0} {1}]".CheckedFormat(nvNodeName, (new ValueContainer(Name)).ToStringSML());
         }
 
         /// <summary>
@@ -3407,7 +3547,7 @@ namespace MosaicLib.Modular.Common
         /// </summary>
         public int EstimatedContentSizeInBytes 
         {
-            get { return (Name.Length * sizeof(char)) + VC.EstimatedContentSizeInBytes; }
+            get { return (Name.Length * sizeof(char)) + VC.EstimatedContentSizeInBytes + 10; }
         }
 
         #endregion
@@ -3467,62 +3607,177 @@ namespace MosaicLib.Modular.Common
 
             return nvs;
         }
+        /// <summary>
+        /// SetValue variant as extension method.  
+        /// If the given nullable value is not null then this method Sets the given name to the given value
+        /// otherwise the method does not modify the given nvs.
+        /// </summary>
+        public static NamedValueSet SetValueIfNotNull<TValueType>(this NamedValueSet nvs, string name, TValueType value)
+            where TValueType : class
+        {
+            if (value != null)
+                nvs.SetValue(name, value);
+
+            return nvs;
+        }
 
         /// <summary>
         /// Converts the given INamedValueSet iNvSet to a readonly NamedValueSet, either by casting or by copying.
-        /// If the given iNvSet value is null then this method return null.
+        /// If the given iNvSet value is null then this method return NamedValueSet.Empty or null, based on the value of the given mapNullToEmpty parameter.
         /// If the given iNvSet value IsReadOnly and its type is actually a NamedValueSet then this method returns the given iNvSet down casted as a NamedValueSet (path used for serialziation)
         /// Otherwise this method returns a new readonly NamedValueSet created as a sufficiently deep clone of the given iNvSet.
         /// </summary>
-        public static NamedValueSet ConvertToReadOnly(this INamedValueSet iNvSet)
+        public static NamedValueSet ConvertToReadOnly(this INamedValueSet iNvSet, bool mapNullToEmpty = true)
         {
             if (iNvSet == null)
-                return null;
+                return (mapNullToEmpty ? NamedValueSet.Empty : null);
 
             // special case where we downcast readonly NamedValueSets (passed as INamedValueSets) so that we do not need to copy them after they are already readonly.
             if (iNvSet.IsReadOnly && (iNvSet is NamedValueSet))
                 return (iNvSet as NamedValueSet);
 
-            return new NamedValueSet(iNvSet.GetEnumerable(TraversalType.TopLevelOnly), true, iNvSet.SubSets);
+            return new NamedValueSet(iNvSet.GetEnumerable(TraversalType.TopLevelOnly), asReadOnly: true,subSets: iNvSet.SubSets);
         }
 
         /// <summary>
         /// Converts the given INamedValue iNv to a readonly NamedValue, either by casting or by copying.
+        /// If the given iNv value is null then this method returns NamedValue.Empty or null, based on the value of the given mapNullToEmpty parameter.
         /// If the given iNv value IsReadOnly and its type is actually a NamedValue then this method returns the given iNv down casted as a NamedValue (path used for serialziation)
-        /// Otherwise this method returns a new readonly NamedValue this is a copy of the given inv.
+        /// Otherwise this method returns a new readonly NamedValue as a copy of the given inv.
         /// </summary>
-        public static NamedValue ConvertToReadOnly(this INamedValue iNv)
+        public static NamedValue ConvertToReadOnly(this INamedValue iNv, bool mapNullToEmpty = false)
         {
+            if (iNv == null)
+                return (mapNullToEmpty ? NamedValue.Empty : null);
+
             if (iNv.IsReadOnly && (iNv is NamedValue))
                 return (iNv as NamedValue);
 
-            return new NamedValue(iNv, true);
+            return new NamedValue(iNv, asReadOnly: true);
         }
 
         /// <summary>
         /// Converts the given INamedValueSet iNvSet to a read/write NamedValueSet by cloning if needed.
-        /// If the given nvSet value is not null and it is !IsReadonly then return the given value.
+        /// If the given iNvSet is null then this method returns a new writeable NamedValueSet or null, based on the value of the given mapNullToEmpty parameter.
+        /// If the given iNvSet value is not null and it is !IsReadonly then return the given value.
         /// Otherwise this method constructs and returns a new readwrite NamedValueSet copy the given nvSet.
         /// </summary>
-        public static NamedValueSet ConvertToWriteable(this INamedValueSet iNvSet)
+        public static NamedValueSet ConvertToWriteable(this INamedValueSet iNvSet, bool mapNullToEmpty = true)
         {
-            if (iNvSet != null && !iNvSet.IsReadOnly && (iNvSet is NamedValueSet))
+            if (iNvSet == null)
+                return mapNullToEmpty ? new NamedValueSet() : null;
+
+            if (!iNvSet.IsReadOnly && (iNvSet is NamedValueSet))
                 return (iNvSet as NamedValueSet);
 
-            return new NamedValueSet(iNvSet.GetEnumerable(TraversalType.TopLevelOnly), false, iNvSet.SubSets);
+            return new NamedValueSet(iNvSet.GetEnumerable(TraversalType.TopLevelOnly), asReadOnly: false, subSets: iNvSet.SubSets);
         }
 
         /// <summary>
         /// Converts the given INamedValue iNv to a read/write NamedValue by cloning if needed.
+        /// If the given iNv is null this method returns a new NamedValue or null, based on the value of the given mapNullToEmpty parameter.
         /// If the given nv !IsReadonly then this method returns it unchanged.
         /// Otherwise this method constructs and returns a new readonly NamedValue copy of the given nv.
         /// </summary>
-        public static NamedValue ConvertToWriteable(this INamedValue iNv)
+        public static NamedValue ConvertToWriteable(this INamedValue iNv, bool mapNullToEmpty = true)
         {
-            if (iNv != null && !iNv.IsReadOnly && (iNv is NamedValue))
+            if (iNv == null)
+                return mapNullToEmpty ? new NamedValue() : null;
+
+            if (!iNv.IsReadOnly && (iNv is NamedValue))
                 return (iNv as NamedValue);
 
-            return new NamedValue(iNv, false);
+            return new NamedValue(iNv, asReadOnly: false);
+        }
+
+        public static NamedValueSet ConvertToNamedValueSet(this ValueContainer vc, bool asReadOnly = false, bool rethrow = false, bool mapNullToEmpty = true)
+        {
+            INamedValueSet invs = null;
+
+            switch (vc.cvt)
+            {
+                case ContainerStorageType.INamedValueSet:
+                    invs = (vc.o as INamedValueSet);
+                    break;
+                case ContainerStorageType.IListOfString:
+                    {
+                        IList<string> sList = vc.GetValue<IList<string>>(rethrow: rethrow) ?? emptyIListOfString;
+
+                        invs = new NamedValueSet(sList.Select(s => new NamedValue(s) { IsReadOnly = asReadOnly })) { IsReadOnly = asReadOnly };
+                    }
+                    break;
+                case ContainerStorageType.IListOfVC:
+                    {
+                        IList<ValueContainer> vcList = vc.GetValue<IList<ValueContainer>>(rethrow: rethrow) ?? emptyIListOfVC;
+
+                        invs = new NamedValueSet(vcList.Select(vcItem => vcItem.ConvertToNamedValue(asReadOnly: asReadOnly, rethrow: rethrow, mapNullToEmpty: mapNullToEmpty))) { IsReadOnly = asReadOnly };
+                    }
+                    break;
+                case ContainerStorageType.None:
+                    invs = NamedValueSet.Empty;
+                    break;
+                default:
+                    invs = new NamedValueSet(new [] { vc.ConvertToNamedValue(asReadOnly: asReadOnly, rethrow: rethrow, mapNullToEmpty: mapNullToEmpty) }, asReadOnly: asReadOnly);
+                    break;
+            }
+
+            if (asReadOnly)
+                return invs.ConvertToReadOnly(mapNullToEmpty: mapNullToEmpty);
+            else
+                return invs.ConvertToWriteable(mapNullToEmpty: mapNullToEmpty);
+        }
+
+        public static NamedValue ConvertToNamedValue(this ValueContainer vc, bool asReadOnly = false, bool rethrow = false, bool mapNullToEmpty = true)
+        {
+            INamedValue inv = null;
+
+            switch (vc.cvt)
+            {
+                case ContainerStorageType.INamedValue: 
+                    inv = (vc.o as INamedValue); 
+                    break;
+                case ContainerStorageType.IListOfString:
+                    {
+                        IList<string> sList = vc.GetValue<IList<string>>(rethrow: rethrow) ?? emptyIListOfString;
+
+                        string nodeName = sList.SafeAccess(0);
+
+                        switch (sList.Count)
+                        {
+                            case 0: inv = NamedValue.Empty; break;
+                            case 1: inv = new NamedValue(nodeName) { IsReadOnly = asReadOnly }; break;
+                            case 2: inv = new NamedValue(nodeName, sList[1], asReadOnly: asReadOnly); break;
+                            default: inv = new NamedValue(nodeName, sList.SafeSubArray(1), asReadOnly: asReadOnly); break;
+                        }
+                    }
+                    break;
+                case ContainerStorageType.IListOfVC:
+                    {
+                        IList<ValueContainer> vcList = vc.GetValue<IList<ValueContainer>>(rethrow: rethrow) ?? emptyIListOfVC;
+
+                        string nodeName = vcList.SafeAccess(0).GetValue<string>(rethrow: rethrow);
+
+                        switch (vcList.Count)
+                        {
+                            case 0: inv = NamedValue.Empty; break;
+                            case 1: inv = new NamedValue(nodeName) { IsReadOnly = asReadOnly }; break;
+                            case 2: inv = new NamedValue(nodeName, vcList[1], asReadOnly: asReadOnly); break;
+                            default: inv = new NamedValue(nodeName, vcList.SafeSubArray(1), asReadOnly: asReadOnly); break;
+                        }
+                    }
+                    break;
+                case ContainerStorageType.None:
+                    inv = NamedValue.Empty;
+                    break;
+                default: 
+                    inv = new NamedValue(vc.GetValue<string>(rethrow: rethrow)); 
+                    break;
+            }
+
+            if (asReadOnly)
+                return inv.ConvertToReadOnly(mapNullToEmpty: mapNullToEmpty);
+            else
+                return inv.ConvertToWriteable(mapNullToEmpty: mapNullToEmpty);
         }
 
         /// <summary>
@@ -3555,6 +3810,22 @@ namespace MosaicLib.Modular.Common
         public static INamedValueSet MapNullToEmpty(this INamedValueSet iNvSet)
         {
             return (iNvSet ?? NamedValueSet.Empty);
+        }
+
+        /// <summary>
+        /// passes the given iNv through as the return value unless it is a non-null, empty set in which case this method returns null.
+        /// </summary>
+        public static INamedValue MapEmptyToNull(this INamedValue iNv)
+        {
+            return (iNv.IsNullOrEmpty() ? null : iNv);
+        }
+
+        /// <summary>
+        /// passes the given iNv through as the return value unless it is a null, in which case this method returns NamedValue.Empty.
+        /// </summary>
+        public static INamedValue MapNullToEmpty(this INamedValue iNv)
+        {
+            return (iNv ?? NamedValue.Empty);
         }
 
         /// <summary>
@@ -3620,7 +3891,7 @@ namespace MosaicLib.Modular.Common
                             else if (rhsIsIListOfString)
                                 lhs.SetValue(rhsItem.Name, new List<string>(lhsItem.VC.GetValue<IList<string>>(false, emptyIListOfString).Concat(rhsItem.VC.GetValue<IList<string>>(false, emptyIListOfString))).AsReadOnly());
                             else
-                                lhs.SetValue(rhsItem.Name, new List<ValueContainer>(lhsItem.VC.GetValue<IList<ValueContainer>>(false, emptyIListVC).Concat(rhsItem.VC.GetValue<IList<ValueContainer>>(false, emptyIListVC))).AsReadOnly());
+                                lhs.SetValue(rhsItem.Name, new List<ValueContainer>(lhsItem.VC.GetValue<IList<ValueContainer>>(false, emptyIListOfVC).Concat(rhsItem.VC.GetValue<IList<ValueContainer>>(false, emptyIListOfVC))).AsReadOnly());
                         }
                         // else leave the existing lhs item alone.
                     }
@@ -3636,7 +3907,7 @@ namespace MosaicLib.Modular.Common
         }
 
         private static readonly IList<string> emptyIListOfString = new List<string>().AsReadOnly();
-        private static readonly IList<ValueContainer> emptyIListVC = new List<ValueContainer>().AsReadOnly();
+        private static readonly IList<ValueContainer> emptyIListOfVC = new List<ValueContainer>().AsReadOnly();
 
         /// <summary>
         /// Returns a new ValueContainer containing the sum of the given <paramref name="lhs"/> and <paramref name="rhs"/> values, 
@@ -3653,7 +3924,7 @@ namespace MosaicLib.Modular.Common
                 {
                     case ContainerStorageType.String: result.o = string.Concat((lhs.o as string), (rhs.o as string)); break;      // string.Concat does MapNullToEmpty on its own
                     case ContainerStorageType.IListOfString: result.SetValue<IList<string>>(new List<string>(lhs.GetValue(false, emptyIListOfString).Concat(rhs.GetValue(false, emptyIListOfString))).AsReadOnly()); break;
-                    case ContainerStorageType.IListOfVC: result.SetValue<IList<ValueContainer>>(new List<ValueContainer>(lhs.GetValue(false, emptyIListVC).Concat(rhs.GetValue(false, emptyIListVC))).AsReadOnly()); break;
+                    case ContainerStorageType.IListOfVC: result.SetValue<IList<ValueContainer>>(new List<ValueContainer>(lhs.GetValue(false, emptyIListOfVC).Concat(rhs.GetValue(false, emptyIListOfVC))).AsReadOnly()); break;
                     case ContainerStorageType.Boolean: result.u.b = lhs.u.b | rhs.u.b; break;
                     case ContainerStorageType.Binary: result.u.bi = unchecked((Byte)(lhs.u.bi + rhs.u.bi)); break;
                     case ContainerStorageType.SByte: result.u.i8 = unchecked((SByte)(lhs.u.i8 + rhs.u.i8)); break;

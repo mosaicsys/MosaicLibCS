@@ -513,6 +513,9 @@ namespace MosaicLib.Modular.Config
         string ValueAsString { get; }
 
         /// <summary>Returns the current value of the key in a ValueContainer as the provider last read (or saved) it.  May contain null, such as when the key was not found.</summary>
+        Common.ValueContainer VC { get; }
+
+        /// <summary>Alternate (old) name for newly named VC property</summary>
         Common.ValueContainer ValueContainer { get; }
 
         /// <summary>True if this KeyAccess object is usable (ResultCode is empty)</summary>
@@ -802,7 +805,7 @@ namespace MosaicLib.Modular.Config
 
             if (keyAccess != null && keyAccess.HasValue)
             {
-                ValueContainer valueContainer = keyAccess.ValueContainer;
+                ValueContainer valueContainer = keyAccess.VC;
                 string resultCode = keyAccess.ResultCode;
 
                 try
@@ -1264,7 +1267,7 @@ namespace MosaicLib.Modular.Config
                 else
                 {
                     // we did not find or create an ckaiRoot (from which to clone an accessor to give back to the caller).  As such the key was not found, nor created, by any provider.
-                    ickaReturn = new ConfigKeyAccessImpl(mappedKey, flags, null) { ValueContainer = defaultValue, ProviderFlags = new ConfigKeyProviderFlags() { KeyWasNotFound = true }, ConfigInternal = this };
+                    ickaReturn = new ConfigKeyAccessImpl(mappedKey, flags, null) { VC = defaultValue, ProviderFlags = new ConfigKeyProviderFlags() { KeyWasNotFound = true }, ConfigInternal = this };
 
                     if (!flags.SilenceIssues && !flags.IsOptional)
                         Trace.Trace.Emit("{0}: {1}", methodName, ickaReturn.ResultCode);
@@ -1334,7 +1337,7 @@ namespace MosaicLib.Modular.Config
             using (var eeTrace = (!suppressLogging ? new Logging.EnterExitTrace(TraceEmitter, methodName) : null))
             {
                 int entryValueSeqNum = icka.ValueSeqNum;
-                ValueContainer entryValue = icka.ValueContainer;
+                ValueContainer entryValue = icka.VC;
                 string entryResultCode = icka.ResultCode;
 
                 int updatedValueSeqNum = icka.ValueSeqNum;
@@ -1358,7 +1361,7 @@ namespace MosaicLib.Modular.Config
                         if (updatedICKA != null)
                         {
                             updatedValueSeqNum = updatedICKA.ValueSeqNum;
-                            updatedValue = updatedICKA.ValueContainer;
+                            updatedValue = updatedICKA.VC;
                             updatedResultCode = updatedICKA.ResultCode;
                         }
                         else if (icka.IsUsable)
@@ -1373,7 +1376,7 @@ namespace MosaicLib.Modular.Config
 
                 if (valueOrSeqNumChanged)
                 {
-                    ckai.ValueContainer = updatedValue;
+                    ckai.VC = updatedValue;
                     ckai.ValueSeqNum = updatedValueSeqNum;
                 }
 
@@ -1385,7 +1388,7 @@ namespace MosaicLib.Modular.Config
                 if (valueOrSeqNumChanged && !resultCodeChanged)
                 {
                     if (!suppressLogging)
-                        Logger.Debug.Emit("{0}: key '{1}' value updated to {2} seq:{3} [from:{4} seq:{5}]", methodName, icka.Key, icka.ValueContainer, icka.ValueSeqNum, entryValue, entryValueSeqNum);
+                        Logger.Debug.Emit("{0}: key '{1}' value updated to {2} seq:{3} [from:{4} seq:{5}]", methodName, icka.Key, icka.VC, icka.ValueSeqNum, entryValue, entryValueSeqNum);
                     eeTrace.ExtraMessage = "Value udpated";
                 }
                 else if (resultCodeChanged && !valueOrSeqNumChanged)
@@ -1397,7 +1400,7 @@ namespace MosaicLib.Modular.Config
                 else if (valueOrSeqNumChanged && resultCodeChanged)
                 {
                     if (!suppressLogging)
-                        Logger.Debug.Emit("{0}: key '{1}' value&rc updated to {2} seq:{3} rc:'{4}' [from:{5} seq:{6} rc:'{7}']", methodName, icka.Key, icka.ValueContainer, icka.ValueSeqNum, icka.ResultCode, entryValue, entryValueSeqNum, entryResultCode);
+                        Logger.Debug.Emit("{0}: key '{1}' value&rc updated to {2} seq:{3} rc:'{4}' [from:{5} seq:{6} rc:'{7}']", methodName, icka.Key, icka.VC, icka.ValueSeqNum, icka.ResultCode, entryValue, entryValueSeqNum, entryResultCode);
                     eeTrace.ExtraMessage = "Value and ResultCode udpated";
                 }
                 else
@@ -1613,7 +1616,7 @@ namespace MosaicLib.Modular.Config
             }
 
             ResultCode = rhs.ResultCode;
-            ValueContainer = rhs.ValueContainer;
+            VC = rhs.VC;
             HasValue = rhs.HasValue;
 
             ValueSeqNum = rhs.ValueSeqNum;
@@ -1685,29 +1688,32 @@ namespace MosaicLib.Modular.Config
         {
             get 
             {
-                if (valueContainer.cvt == ContainerStorageType.String)
-                    return valueContainer.GetValue<string>(ContainerStorageType.String, false, false);
-                else if (valueContainer.cvt.IsReferenceType())
-                    return valueContainer.GetValue<string>(ContainerStorageType.String, false, false);
-                else if (valueContainer.IsNullOrNone)       // special case so that an empty container gives back ValueAsString as just null rather than "None"
+                if (vc.cvt == ContainerStorageType.String)
+                    return vc.GetValue<string>(ContainerStorageType.String, false, false);
+                else if (vc.cvt.IsReferenceType())
+                    return vc.GetValue<string>(ContainerStorageType.String, false, false);
+                else if (vc.IsNullOrNone)       // special case so that an empty container gives back ValueAsString as just null rather than "None"
                     return null;
                 else
-                    return valueContainer.ToString();
+                    return vc.ToString();
             }
         }
 
         /// <summary>Returns the current value of the key in a ValueContainer as the provider last read (or saved) it.  May contain null, such as when the key was not found.</summary>
-        public ValueContainer ValueContainer
+        public ValueContainer VC
         {
-            get { return valueContainer; }
-            set 
-            { 
-                valueContainer = value;
+            get { return vc; }
+            set
+            {
+                vc = value;
                 HasValue = !value.IsNullOrNone;
             }
         }
 
-        private Common.ValueContainer valueContainer;
+        /// <summary>Alternate (old) name for newly named VC property</summary>
+        public ValueContainer ValueContainer { get { return VC; } }
+
+        private Common.ValueContainer vc;
 
         /// <summary>True if this KeyAccess object is usable (ResultCode is empty)</summary>
         public bool IsUsable { get { return String.IsNullOrEmpty(ResultCode); } }
@@ -1778,9 +1784,9 @@ namespace MosaicLib.Modular.Config
                 case ToStringDetailLevel.Full:
                 default:
                     if (IsUsable)
-                        return Fcns.CheckedFormat("key:'{0}' Value:{1} flags:{2} md:{3} {4}", Key, ValueContainer, Flags, metaDataStr, ProviderFlags);
+                        return Fcns.CheckedFormat("key:'{0}' Value:{1} flags:{2} md:{3} {4}", Key, VC, Flags, metaDataStr, ProviderFlags);
                     else
-                        return Fcns.CheckedFormat("key:'{0}' Value:{1} flags:{2} md:{3} {4} ec:'{5}'", Key, ValueContainer, Flags, metaDataStr, ProviderFlags, ResultCode);
+                        return Fcns.CheckedFormat("key:'{0}' Value:{1} flags:{2} md:{3} {4} ec:'{5}'", Key, VC, Flags, metaDataStr, ProviderFlags, ResultCode);
             }
         }
 

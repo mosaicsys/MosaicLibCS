@@ -50,6 +50,8 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
         public double LastFileDeltaTimeStamp { get; set; }
         public DateTime FirstDateTime { get; set; }
         public DateTime LastDateTime { get; set; }
+        public int FirstEventBlockStartOffset { get; set; }
+        public int LastEventBlockStartOffset { get; set; }
         public double NominalMinimumGroupAndTimeStampUpdateInterval { get; set; }
         /// <summary>When non-zero this mask will be used to skip reading contents from rows that do not have any of the indicated user row flag bits set</summary>
         public UInt64 FileIndexUserRowFlagBitsMask { get; set; }
@@ -82,6 +84,8 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                 LastFileDeltaTimeStamp = Double.PositiveInfinity;
                 FirstDateTime = DateTime.MinValue;
                 LastDateTime = DateTime.MaxValue;
+                FirstEventBlockStartOffset = 0;
+                LastEventBlockStartOffset = int.MaxValue;
                 NominalMinimumGroupAndTimeStampUpdateInterval = 0.0;
                 FileIndexUserRowFlagBitsMask = 0;
                 AutoRewindToPriorFullGroupRow = false;
@@ -96,6 +100,8 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                 LastFileDeltaTimeStamp = other.LastFileDeltaTimeStamp;
                 FirstDateTime = other.FirstDateTime;
                 LastDateTime = other.LastDateTime;
+                FirstEventBlockStartOffset = other.FirstEventBlockStartOffset;
+                LastEventBlockStartOffset = other.LastEventBlockStartOffset;
                 NominalMinimumGroupAndTimeStampUpdateInterval = other.NominalMinimumGroupAndTimeStampUpdateInterval;
                 FileIndexUserRowFlagBitsMask = other.FileIndexUserRowFlagBitsMask;
                 AutoRewindToPriorFullGroupRow = other.AutoRewindToPriorFullGroupRow;
@@ -109,86 +115,90 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
         private static readonly Func<IOccurrenceInfo, bool> defaultOccurrenceFilter = (IOccurrenceInfo oi) => true;
         private static readonly Func<IGroupInfo, bool> defaultGroupFilter = (IGroupInfo gi) => true;
 
-        internal ReadAndProcessFilterSpec SetupFiltering(DateTimeInfo dateTimeInfo, FileIndexInfo fileIndexInfo, ref int firstRowIndex, ref int lastRowIndex)
+        internal FileIndexRowBase[] UpdateFilterSpecAndGenerateFilteredFileIndexRows(DateTimeInfo dateTimeInfo, FileIndexInfo fileIndexInfo)
         {
             bool deltaTSAreDefaults = (FirstFileDeltaTimeStamp == Double.NegativeInfinity && LastFileDeltaTimeStamp == Double.PositiveInfinity);
             bool dateTimesAreDefaults = (FirstDateTime == DateTime.MinValue && LastDateTime == DateTime.MaxValue);
+            bool eventBlockOffsetsAreDefaults = (FirstEventBlockStartOffset == 0 && LastEventBlockStartOffset == int.MaxValue);
             bool fileWasProperlyClosed = fileIndexInfo.FileWasProperlyClosed;
 
-            // make first adjustment of firstRowIndex and lastRowIndex
+            // first filter out all of the null/empty rows and all of the rows that do not have the desired userRowFlagBitsSet (if desired).
 
+            Func<FileIndexRowBase, bool> filterFunction = row => (row != null && !row.IsEmpty && ((FileIndexUserRowFlagBitsMask == 0) || (row.FileIndexUserRowFlagBits & FileIndexUserRowFlagBitsMask) != 0));
+
+            FileIndexRowBase[] filteredFIRBArray = fileIndexInfo.FileIndexRowArray.Where(filterFunction).ToArray();
+
+            int firstFilteredIndex = 0;
+            int lastFilteredIndex = filteredFIRBArray.SafeLength() - 1;
+
+            // find first filtered row that is at or after all constraints
+            while (firstFilteredIndex < lastFilteredIndex)
             {
-                while (firstRowIndex < lastRowIndex)
-                {
-                    // test next row
-                    FileIndexRowBase nextFirb = fileIndexInfo.FindNextNonEmptyFileIndexRow(ref firstRowIndex);
+                FileIndexRowBase nextFilteredFIB = filteredFIRBArray.SafeAccess(firstFilteredIndex + 1);
 
-                    if (nextFirb == null || nextFirb.IsEmpty)
-                        break;
-                    else if (!deltaTSAreDefaults && FirstFileDeltaTimeStamp > nextFirb.FirstBlockDeltaTimeStamp)
-                        firstRowIndex++;
-                    else if (!dateTimesAreDefaults && FirstDateTime > nextFirb.FirstBlockDateTime)
-                        firstRowIndex++;
+                if (!deltaTSAreDefaults && FirstFileDeltaTimeStamp >= nextFilteredFIB.FirstBlockDeltaTimeStamp)
+                    firstFilteredIndex++;
+                else if (!dateTimesAreDefaults && FirstDateTime >= nextFilteredFIB.FirstBlockDateTime)
+                    firstFilteredIndex++;
+                else if (!eventBlockOffsetsAreDefaults && FirstEventBlockStartOffset >= nextFilteredFIB.FileOffsetToStartOfFirstBlock)
+                    firstFilteredIndex++;
+                else
+                    break;
+            }
+
+            // if we can trust the index to contain the last valid row then rewinde the lastFilteredIndex as long as it cannot contain any data for the user defined filtered range
+            if (fileWasProperlyClosed)
+            {
+                while (firstFilteredIndex < lastFilteredIndex)
+                {
+                    FileIndexRowBase lastFilteredFIB = filteredFIRBArray[lastFilteredIndex];
+
+                    if (!deltaTSAreDefaults && LastFileDeltaTimeStamp < lastFilteredFIB.FirstBlockDeltaTimeStamp)
+                        lastFilteredIndex--;
+                    else if (!dateTimesAreDefaults && LastDateTime < lastFilteredFIB.FirstBlockDateTime)
+                        lastFilteredIndex--;
+                    else if (!eventBlockOffsetsAreDefaults && LastEventBlockStartOffset < lastFilteredFIB.FileOffsetToStartOfFirstBlock)
+                        lastFilteredIndex--;
                     else
                         break;
                 }
-
-                if (fileWasProperlyClosed)
-                {
-                    // scan backward from the given starting lastRowIndex until we reach the firstRowIndex or we find another non-empty row
-
-                    while (lastRowIndex > firstRowIndex)
-                    {
-                        FileIndexRowBase firb = fileIndexInfo.FileIndexRowArray.SafeAccess(lastRowIndex);
-
-                        if (firb == null || firb.IsEmpty)
-                            lastRowIndex--;
-                        else
-                            break;
-                    }
-
-                    // now rewind as needed so that the row starts at or before the indicated constraints
-                    while (lastRowIndex > firstRowIndex)
-                    {
-                        // test next to last row
-                        FileIndexRowBase lastFirb = fileIndexInfo.FileIndexRowArray.SafeAccess(lastRowIndex - 1);
-
-                        if (lastFirb == null)
-                            break;
-                        else if (!deltaTSAreDefaults && LastFileDeltaTimeStamp < lastFirb.FirstBlockDeltaTimeStamp)
-                            lastRowIndex--;
-                        else if (!dateTimesAreDefaults && LastDateTime < lastFirb.FirstBlockDateTime)
-                            lastRowIndex--;
-                        else
-                            break;
-                    }
-                }
-                // else if the file was not properly closed then we cannot trust that the index or the last row information is actually valid - so we will need to read through the end
             }
 
-            if (firstRowIndex > 0 && AutoRewindToPriorFullGroupRow)
+            if (firstFilteredIndex > 0 && AutoRewindToPriorFullGroupRow)
             {
                 // rewind to first prior row that has its ContainsStartOfFullGroup bit set, or until we get back to the front of the file)
-                while (firstRowIndex > 0)
+                while (firstFilteredIndex > 0)
                 {
-                    FileIndexRowBase firb = fileIndexInfo.FileIndexRowArray.SafeAccess(firstRowIndex);
-                    if (firb != null && firb.FileIndexRowFlagBits.IsSet(FileIndexRowFlagBits.ContainsStartOfFullGroup))
+                    FileIndexRowBase firstFilteredFIB = filteredFIRBArray[firstFilteredIndex];
+                    if ((firstFilteredFIB.FileIndexRowFlagBits & FileIndexRowFlagBits.ContainsStartOfFullGroup) != 0)
                         break;
 
-                    firstRowIndex--;
+                    firstFilteredIndex--;
                 }
             }
 
-            if (deltaTSAreDefaults)
+            if (dateTimesAreDefaults)
             {
-                FirstFileDeltaTimeStamp = 0.0;
-                if (fileWasProperlyClosed)
-                    LastFileDeltaTimeStamp = fileIndexInfo.LastBlockInfo.BlockDeltaTimeStamp;
+                FileIndexRowBase firstFilteredFIB = filteredFIRBArray[firstFilteredIndex];
+                FileIndexRowBase lastFilteredFIB = filteredFIRBArray[lastFilteredIndex];
+                FileIndexRowBase lastFilteredP1FIB = filteredFIRBArray.SafeAccess(lastFilteredIndex + 1);
+
+                FirstDateTime = (firstFilteredFIB != null) ? firstFilteredFIB.FirstBlockDateTime : DateTime.MinValue;
+
+                if (lastFilteredFIB == null)
+                    LastDateTime = DateTime.MaxValue;
+                else if (lastFilteredP1FIB != null)
+                    LastDateTime = lastFilteredP1FIB.FirstBlockDateTime;
+                else if (fileWasProperlyClosed)
+                    LastDateTime = lastFilteredFIB.FirstBlockDateTime + (fileIndexInfo.LastBlockInfo.BlockDeltaTimeStamp - lastFilteredFIB.FirstBlockDeltaTimeStamp).FromSeconds();
+                else
+                    LastDateTime = DateTime.MaxValue;
             }
 
-            return this;
+            return filteredFIRBArray.SafeSubArray(firstFilteredIndex, lastFilteredIndex - firstFilteredIndex + 1);
         }
     }
+
 
     /// <summary>
     /// bitfield enumeration gives each of the "events" that the file reader client can be informed of while processing an mdrf file.
@@ -301,12 +311,15 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
         {
             string dbbLenPart = null;
             if (dataBlockBuffer != null)
-                dbbLenPart = " dbbLen:{0}/{1}".CheckedFormat(dataBlockBuffer.headerLength, dataBlockBuffer.payloadLength);
+                dbbLenPart = " dbbLen:{0}/{1}@{2}".CheckedFormat(dataBlockBuffer.headerLength, dataBlockBuffer.payloadLength, dataBlockBuffer.fileOffsetToStartOfBlock);
 
             string common = "pce:{0} dt:{1:yyyyMMdd_HHmmss.fff} deltaT:{2:f6} seq:{3}{4}".CheckedFormat(PCE, UTCDateTime.ToLocalTime(), FileDeltaTimeStamp, SeqNum, dbbLenPart);
 
             switch (PCE)
             {
+                case ProcessContentEvent.RowStart:
+                case ProcessContentEvent.RowEnd:
+                    return "{0} row:{1} vc:{2}".CheckedFormat(common, Row, VC);
                 case ProcessContentEvent.Group:
                 case ProcessContentEvent.EmptyGroup:
                 case ProcessContentEvent.PartialGroup:
@@ -365,6 +378,17 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                     && (headerLength == other.headerLength)
                     && (payloadDataArray.IsEqualTo(other.payloadDataArray))
                     );
+        }
+
+        public bool DoesFilterAcceptThis(ReadAndProcessFilterSpec filterSpec, bool checkIfComesAfterStartOfFilterPeriod = true, bool checkComesBeforeEndOfFilterPeriod = true)
+        {
+            if (checkIfComesAfterStartOfFilterPeriod && (fileOffsetToStartOfBlock < filterSpec.FirstEventBlockStartOffset || fileDeltaTimeStamp < filterSpec.FirstFileDeltaTimeStamp))
+                return false;
+
+            if (checkIfComesAfterStartOfFilterPeriod && (fileOffsetToStartOfBlock > filterSpec.LastEventBlockStartOffset || fileDeltaTimeStamp > filterSpec.LastFileDeltaTimeStamp))
+                return false;
+
+            return true;
         }
     }
 
@@ -479,7 +503,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
         {
             try
             {
-                FileLength = unchecked((int)((fs != null) ? fs.Length : 0));
+                FileLength = unchecked((int)((fs != null) ? fs.Length : 0));        // This will obtain the current actual file length from win32 using the file handle
             }
             catch
             {
@@ -870,18 +894,18 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
             return ec;
         }
 
-        private int currentRowIndex = 0, nextRowIndex = 0;
-        private FileIndexRowBase currentScanRow = null, nextScanRow = null;
         private int lastReadAndProcessFileLength = 0;
 
         private IGroupInfo[] FilteredGroupInfoArray { get; set; }
-
+        private FileIndexRowBase currentScanRow = null;
+        private FileIndexRowBase nextScanRow = null;
 
         public void ReadAndProcessContents(ReadAndProcessFilterSpec filterSpec)
         {
-            int firstRowIndex = 0, lastRowIndex = FileIndexInfo.NumRows;
+            filterSpec = new ReadAndProcessFilterSpec(filterSpec);      // make a clone of the given value so that the caller can re-use, and changed, there copy while we use ours.
 
-            filterSpec = new ReadAndProcessFilterSpec(filterSpec).SetupFiltering(DateTimeInfo, FileIndexInfo, ref firstRowIndex, ref lastRowIndex);      // replace our copy with a clone so that the caller can re-use their copy and we can change ours.  Then call Setup on it to adjust things
+            FileIndexRowBase[] filteredFileIndexRowArray = filterSpec.UpdateFilterSpecAndGenerateFilteredFileIndexRows(DateTimeInfo, FileIndexInfo);
+            int numFilteredFileIndexRows = filteredFileIndexRowArray.SafeLength();
 
             FilteredGroupInfoArray = GroupInfoArray.Where(gi => filterSpec.GroupFilterDelegate(gi)).ToArray();
 
@@ -895,7 +919,9 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
             UpdateFileLength();
 
             if (lastReadAndProcessFileLength == 0)
+            {
                 lastReadAndProcessFileLength = FileLength;
+            }
             else if (lastReadAndProcessFileLength != FileLength)
             {
                 LoadFileIndexInfo();
@@ -905,88 +931,77 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                 SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = ProcessContentEvent.FileLengthChanged });
             }
 
-            currentRowIndex = firstRowIndex;
-            currentScanRow = FileIndexInfo.FindNextNonEmptyFileIndexRow(ref currentRowIndex);
-            nextRowIndex = currentRowIndex + 1;
-            nextScanRow = FileIndexInfo.FindNextNonEmptyFileIndexRow(ref nextRowIndex);
-
-            SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = ProcessContentEvent.RowStart, Row = currentScanRow, FileDeltaTimeStamp = currentScanRow.FirstBlockDeltaTimeStamp });
-
             bool isFirstBlock = true;
-            for (; ; )
+
+            int currentFilteredScanRowIndex = 0;
+            currentScanRow = filteredFileIndexRowArray.SafeAccess(currentFilteredScanRowIndex);
+            nextScanRow = filteredFileIndexRowArray.SafeAccess(currentFilteredScanRowIndex + 1);
+
+            if (currentScanRow != null)
             {
-                DataBlockBuffer dbb;
-                if (isFirstBlock)
-                {
-                    dbb = ReadFirstDataBlockUsingFileIndex(currentRowIndex);
-                    isFirstBlock = false;
-                }
-                else
-                {
-                    dbb = ReadNextDataBlock();
-                }
+                SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = ProcessContentEvent.RowStart, Row = currentScanRow, FileDeltaTimeStamp = currentScanRow.FirstBlockDeltaTimeStamp });
 
-                if (dbb == null || !dbb.IsValid || dbb.fileDeltaTimeStamp > filterSpec.LastFileDeltaTimeStamp)
-                    break;
-
-                if (lastDbbTimeStamp != dbb.fileDeltaTimeStamp)
+                for (; ; )
                 {
-                    lastDbbTimeStamp = dbb.fileDeltaTimeStamp;
-
-                    if ((dbb.fileDeltaTimeStamp >= filterSpec.FirstFileDeltaTimeStamp) && ((dbb.fileDeltaTimeStamp - lastGroupOrTSUpdateEventTimeStamp) >= filterSpec.NominalMinimumGroupAndTimeStampUpdateInterval))
+                    DataBlockBuffer dbb;
+                    if (isFirstBlock)
                     {
-                        SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = ProcessContentEvent.NewTimeStamp, DataBlockBuffer = LastTimeStampUpdateDBB });
-                        lastGroupOrTSUpdateEventTimeStamp = dbb.fileDeltaTimeStamp;
+                        dbb = ReadFirstDataBlockUsingFileIndex(currentScanRow);
+                        isFirstBlock = false;
                     }
-                }
+                    else
+                    {
+                        dbb = ReadNextDataBlock();
+                    }
 
-                ProcessContents(dbb, filterSpec);
-
-                if (fileScanOffset >= FileLength)
-                    break;
-
-                if (nextScanRow != null && !nextScanRow.IsEmpty && fileScanOffset >= nextScanRow.FileOffsetToStartOfFirstBlock)
-                {
-                    if (currentRowIndex >= lastRowIndex)
+                    if (dbb == null || !dbb.IsValid || !dbb.DoesFilterAcceptThis(filterSpec, checkIfComesAfterStartOfFilterPeriod: false, checkComesBeforeEndOfFilterPeriod: true))
                         break;
 
-                    SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = ProcessContentEvent.RowEnd, Row = currentScanRow, FileDeltaTimeStamp = currentScanRow.LastBlockDeltaTimeStamp });
-
-                    for (;;)
+                    if (lastDbbTimeStamp != dbb.fileDeltaTimeStamp)
                     {
-                        // make the next scan row and index be the current scan row and index
-                        currentRowIndex = nextRowIndex;
+                        lastDbbTimeStamp = dbb.fileDeltaTimeStamp;
+
+                        if ((dbb.fileDeltaTimeStamp >= filterSpec.FirstFileDeltaTimeStamp) 
+                            && (dbb.fileOffsetToStartOfBlock >= filterSpec.FirstEventBlockStartOffset) 
+                            && ((dbb.fileDeltaTimeStamp - lastGroupOrTSUpdateEventTimeStamp) >= filterSpec.NominalMinimumGroupAndTimeStampUpdateInterval))
+                        {
+                            SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = ProcessContentEvent.NewTimeStamp, DataBlockBuffer = LastTimeStampUpdateDBB });
+                            lastGroupOrTSUpdateEventTimeStamp = dbb.fileDeltaTimeStamp;
+                        }
+                    }
+
+                    ProcessContents(dbb, filterSpec);
+
+                    // "advance" to the next scan row.  This logic is only used to keep the currentScanRow current as much as possible.  
+                    // Note that this logic does not skip regions of the file itself and this logic does not stop processing if the reader runs off the end of the index table while reading.  
+                    // That only happens on an error (from ReadNextDataBlock/ReadFirstDataBlockUsingFileIndex) or 
+
+                    if (nextScanRow != null && fileScanOffset >= nextScanRow.FileOffsetToStartOfFirstBlock)
+                    {
+                        SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = ProcessContentEvent.RowEnd, Row = currentScanRow, FileDeltaTimeStamp = currentScanRow.LastBlockDeltaTimeStamp });
+
+                        bool currentAndNextRowsAreNotContiguous = (nextScanRow.RowIndex != currentScanRow.RowIndex + 1);
+
+                        currentFilteredScanRowIndex++;
                         currentScanRow = nextScanRow;
+                        nextScanRow = filteredFileIndexRowArray.SafeAccess(currentFilteredScanRowIndex + 1);
 
-                        nextRowIndex = currentRowIndex + 1;
-                        nextScanRow = FileIndexInfo.FindNextNonEmptyFileIndexRow(ref nextRowIndex);
-
-                        if (fileScanOffset < currentScanRow.FileOffsetToStartOfFirstBlock)
+                        if (currentAndNextRowsAreNotContiguous)
                             fileScanOffset = currentScanRow.FileOffsetToStartOfFirstBlock;
 
-                        // if the user is not using a FileIndexUserRowFlagBitsMask then we are done advancing.
-                        if (filterSpec.FileIndexUserRowFlagBitsMask == 0)
-                            break;
-
-                        // if the current row is null or empty or the next row is null or empty then we cannot move forward more at this point
-                        if (currentScanRow == null || currentScanRow.IsEmpty || nextScanRow == null || nextScanRow.IsEmpty)
-                            break;
-
-                        // finally if the current row (which is neither null nor empty) has any of the masked bits set, or the filter does not give any relevant mask bits, then we want to process this row.
-                        if ((currentScanRow.FileIndexUserRowFlagBits & filterSpec.FileIndexUserRowFlagBitsMask) != 0 || (filterSpec.FileIndexUserRowFlagBitsMask == 0))
-                            break;
+                        SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = ProcessContentEvent.RowStart, Row = currentScanRow, FileDeltaTimeStamp = currentScanRow.LastBlockDeltaTimeStamp });
                     }
 
-                    if (currentScanRow == null)
+                    if (fileScanOffset >= FileLength)
                         break;
-
-                    SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = ProcessContentEvent.RowStart, Row = currentScanRow, FileDeltaTimeStamp = currentScanRow.FirstBlockDeltaTimeStamp });
                 }
             }
 
+            // signal the RowEnd of the currentScanRow if it is not null.
             if (currentScanRow != null)
                 SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = ProcessContentEvent.RowEnd, Row = currentScanRow, FileDeltaTimeStamp = currentScanRow.LastBlockDeltaTimeStamp });
 
+            // signal the end of the file
             SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = ProcessContentEvent.ReadingEnd, FileDeltaTimeStamp = lastDbbTimeStamp });
         }
 
@@ -1041,17 +1056,18 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
 
             ProcessContentEvent pce = eventData.PCE;
 
-            if (!pce.IsAnySet(ProcessContentEvent.RowStart | ProcessContentEvent.RowEnd))
+            // if this event is a not a RowStart or a RowEnd (which are synthetic events) then look to see if this event marks the beginning of a groupset or the end of a group set set
+            if ((pce & (ProcessContentEvent.RowStart | ProcessContentEvent.RowEnd)) == 0)
             {
-                // detect if we need to generate a GroupSetStart or GroupSetEnd event before emitting the current one...  RowStart and RowEnd events are ignored in relation to this work
+                // detect if we need to generate a GroupSetStart or GroupSetEnd event before emitting the current one...  RowStart and RowEnd events are ignored in relation to this work as they are not actually in the file format
 
-                bool lastWasGroupOrGroupSetStart = (lastEventPCE.IsSet(ProcessContentEvent.Group) || lastEventPCE == ProcessContentEvent.GroupSetStart);
-                bool currentIsGroupOrGroupSetStart = (pce.IsSet(ProcessContentEvent.Group) || pce == ProcessContentEvent.GroupSetStart);
-                if (lastWasGroupOrGroupSetStart && !currentIsGroupOrGroupSetStart && ProcessContentEvent.GroupSetEnd.IsAnySet(filterSpec.PCEMask))
+                bool lastWasGroupOrGroupSetStart = ((lastEventPCE & ProcessContentEvent.Group) != 0 || lastEventPCE == ProcessContentEvent.GroupSetStart);
+                bool currentIsGroupOrGroupSetStart = ((pce & ProcessContentEvent.Group) != 0 || pce == ProcessContentEvent.GroupSetStart);
+                if (lastWasGroupOrGroupSetStart && !currentIsGroupOrGroupSetStart && (filterSpec.PCEMask & ProcessContentEvent.GroupSetEnd) != 0)
                 {
                     filterSpec.EventHandlerDelegate(this, new ProcessContentEventData(eventData) { PCE = ProcessContentEvent.GroupSetEnd, GroupInfoArray = GroupInfoArray, FilteredGroupInfoArray = FilteredGroupInfoArray });
                 }
-                else if (!lastWasGroupOrGroupSetStart && currentIsGroupOrGroupSetStart && ProcessContentEvent.GroupSetStart.IsAnySet(filterSpec.PCEMask))
+                else if (!lastWasGroupOrGroupSetStart && currentIsGroupOrGroupSetStart && (filterSpec.PCEMask & ProcessContentEvent.GroupSetStart) != 0)
                 {
                     filterSpec.EventHandlerDelegate(this, new ProcessContentEventData(eventData) { PCE = ProcessContentEvent.GroupSetStart, GroupInfoArray = GroupInfoArray, FilteredGroupInfoArray = FilteredGroupInfoArray });
                 }
@@ -1059,7 +1075,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                 lastEventPCE = pce;
             }
 
-            if (pce.IsAnySet(filterSpec.PCEMask) && filterSpec.EventHandlerDelegate != null)
+            if ((filterSpec.PCEMask & pce) != 0)
                 filterSpec.EventHandlerDelegate(this, eventData);
         }
 
@@ -1069,7 +1085,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
             {
                 case FixedBlockTypeID.ErrorV1:
                 case FixedBlockTypeID.MessageV1:
-                    if (dbb.fileDeltaTimeStamp >= filterSpec.FirstFileDeltaTimeStamp)
+                    if (dbb.DoesFilterAcceptThis(filterSpec, checkIfComesAfterStartOfFilterPeriod: true, checkComesBeforeEndOfFilterPeriod: true))
                         ProcessMessageOrErrorBlock(dbb, filterSpec);
                     return;
                 case FixedBlockTypeID.MetaDataV1:
@@ -1077,7 +1093,10 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                 case FixedBlockTypeID.FileIndexV1:
                 case FixedBlockTypeID.DateTimeV1:
                 case FixedBlockTypeID.FileEndV1:
+                    // There is no direct PCE event for each of these.
+                    return;
                 case FixedBlockTypeID.TimeStampUpdateV1:
+                    // NewTimeStamp events are synthesized/processed directly in ReadAndProcessContents
                     return;
 
                 default:
@@ -1094,16 +1113,29 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                     {
                         IOccurrenceInfo oi = mdci as IOccurrenceInfo;
 
-                        if (oi != null && dbb.fileDeltaTimeStamp >= filterSpec.FirstFileDeltaTimeStamp && filterSpec.OccurrenceFilterDelegate(oi) && filterSpec.PCEMask.IsAnySet(ProcessContentEvent.Occurrence))
+                        if (oi != null 
+                            && dbb.DoesFilterAcceptThis(filterSpec, checkIfComesAfterStartOfFilterPeriod: !filterSpec.AutoRewindToPriorFullGroupRow, checkComesBeforeEndOfFilterPeriod: true) 
+                            && filterSpec.OccurrenceFilterDelegate(oi) 
+                            && (filterSpec.PCEMask & ProcessContentEvent.Occurrence) != 0
+                            )
+                        {
                             ProcessOccurrenceBlock(oi, dbb, filterSpec);
+                        }
                     }
                     break;
                 case MDItemType.Group:
                     {
                         IGroupInfo gi = mdci as IGroupInfo;
 
-                        if (gi != null && filterSpec.GroupFilterDelegate(gi) && filterSpec.PCEMask.IsAnySet(ProcessContentEvent.Group | ProcessContentEvent.EmptyGroup | ProcessContentEvent.PartialGroup | ProcessContentEvent.StartOfFullGroup | ProcessContentEvent.GroupSetStart | ProcessContentEvent.GroupSetEnd))
+                        // only filter on coming before end of filter period if 
+                        if (gi != null
+                            && dbb.DoesFilterAcceptThis(filterSpec, checkIfComesAfterStartOfFilterPeriod: !filterSpec.AutoRewindToPriorFullGroupRow, checkComesBeforeEndOfFilterPeriod: true)
+                            && filterSpec.GroupFilterDelegate(gi) 
+                            && (filterSpec.PCEMask & (ProcessContentEvent.Group | ProcessContentEvent.EmptyGroup | ProcessContentEvent.PartialGroup | ProcessContentEvent.StartOfFullGroup | ProcessContentEvent.GroupSetStart | ProcessContentEvent.GroupSetEnd)) != 0
+                            )
+                        {
                             ProcessGroupBlock(gi, dbb, filterSpec);
+                        }
                     }
                     break;
                 default:
@@ -1120,7 +1152,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
             UInt64 messageRecordedUtcTimeU8 = 0;
             ValueContainer messageVC = ValueContainer.Empty;
 
-            UInt64 seqNum = dbb.payloadDataArray.DecodeU8Auto(ref decodeIndex, ref dbb.resultCode);
+            UInt64 seqNumU8 = dbb.payloadDataArray.DecodeU8Auto(ref decodeIndex, ref dbb.resultCode);
 
             if (!dbb.IsValid || !Utils.Data.Pack(dbb.payloadDataArray, decodeIndex + 0, out messageRecordedUtcTimeU8))
                 return;
@@ -1140,9 +1172,9 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
             };
 
             if (dbb.FixedBlockTypeID == FixedBlockTypeID.ErrorV1)
-                SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = ProcessContentEvent.Error, MessageInfo = messageInfo, DataBlockBuffer = dbb });
+                SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = ProcessContentEvent.Error, MessageInfo = messageInfo, SeqNum = seqNumU8, DataBlockBuffer = dbb });
             else
-                SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = ProcessContentEvent.Message, MessageInfo = messageInfo, DataBlockBuffer = dbb });
+                SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = ProcessContentEvent.Message, MessageInfo = messageInfo, SeqNum = seqNumU8, DataBlockBuffer = dbb });
         }
 
         private void ProcessOccurrenceBlock(IOccurrenceInfo oi, DataBlockBuffer dbb, ReadAndProcessFilterSpec filterSpec)
@@ -1212,7 +1244,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
 
                 if (startReached)
                 {
-                    if ((groupBlockFlagBits & GroupBlockFlagBits.IsStartOfFullGroup) != GroupBlockFlagBits.None)
+                    if ((groupBlockFlagBits & GroupBlockFlagBits.IsStartOfFullGroup) != 0)
                     {
                         SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = (ProcessContentEvent.Group | ProcessContentEvent.StartOfFullGroup), GroupInfo = gi, SeqNum = seqNumU8, DataBlockBuffer = dbb });
                         lastGroupOrTSUpdateEventTimeStamp = dbb.fileDeltaTimeStamp;
@@ -1297,15 +1329,13 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
             return ReadDataBlockAndHandleTimeStampUpdates(ref fileScanOffset, requirePayloadBytes);
         }
 
-        public DataBlockBuffer ReadFirstDataBlockUsingFileIndex(int rowIndex, bool requirePayloadBytes = true)
+        public DataBlockBuffer ReadFirstDataBlockUsingFileIndex(FileIndexRowBase row, bool requirePayloadBytes = true)
         {
             if (SetupInfo == null || FileIndexInfo == null)
                 return new DataBlockBuffer() { resultCode = "{0} failed: SetupInfo and/or FileIndexInfo are null".CheckedFormat(Fcns.CurrentMethodName) };
 
-            FileIndexRowBase row = FileIndexInfo.FileIndexRowArray.SafeAccess(rowIndex);
-
             if (row == null || row.IsEmpty)
-                return new DataBlockBuffer() { resultCode = "{0} failed: FileIndexInfo does not contain a valid and non-empty row at {0}".CheckedFormat(Fcns.CurrentMethodName, rowIndex) };
+                return new DataBlockBuffer() { resultCode = "{0} failed: FileIndexInfo does not contain a valid and non-empty row at {0}".CheckedFormat(Fcns.CurrentMethodName, (row != null ? row.RowIndex : 0)) };
 
             currentBlockDeltaTimeStamp = row.FirstBlockDeltaTimeStamp;
             fileScanOffset = row.FileOffsetToStartOfFirstBlock;

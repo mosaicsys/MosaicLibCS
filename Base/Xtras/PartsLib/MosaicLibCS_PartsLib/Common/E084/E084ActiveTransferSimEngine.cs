@@ -195,7 +195,7 @@ namespace MosaicLib.PartsLib.Common.E084
 
         private PresentPlaced LPMPresentPlacedInput
         {
-            get { return lpmPresentPlacedInputIVA.Update().ValueContainer.GetValue<PresentPlaced>(false); }
+            get { return lpmPresentPlacedInputIVA.Update().VC.GetValue<PresentPlaced>(false); }
             set { lpmPresentPlacedInputIVA.Set(new ValueContainer(value)); }
         }
 
@@ -274,7 +274,7 @@ namespace MosaicLib.PartsLib.Common.E084
 
         void UpdateReadyToLoadAndUnload(bool forceUpdate, bool publishIfNeeded)
         {
-            PresentPlaced presentPlacedInput = lpmPresentPlacedInputIVA.Update().ValueContainer.GetValue<PresentPlaced>(false);
+            PresentPlaced presentPlacedInput = lpmPresentPlacedInputIVA.Update().VC.GetValue<PresentPlaced>(false);
 
             if (lastPresentPlacedInput != presentPlacedInput || forceUpdate)
             {
@@ -298,7 +298,7 @@ namespace MosaicLib.PartsLib.Common.E084
             currentActivity = activity;
 
             privateState.StateStr = (Utils.Fcns.CheckedFormat("{0} [{1}]", activity, reason));
-            privateState.IsCycling = (enableAutoLoadIVA.Update().ValueContainer.GetValue<bool>(false) && enableAutoUnloadIVA.Update().ValueContainer.GetValue<bool>(false));
+            privateState.IsCycling = (enableAutoLoadIVA.Update().VC.GetValue<bool>(false) && enableAutoUnloadIVA.Update().VC.GetValue<bool>(false));
             privateState.IsReady = (currentActivity == ActivitySelect.Ready);
             UpdateReadyToLoadAndUnload(true, false);
 
@@ -476,17 +476,17 @@ namespace MosaicLib.PartsLib.Common.E084
             {
                 // clear the enable auto load and enable auto unload values
 
-                if (enableAutoLoadIVA.Update().ValueContainer.GetValue<bool>(false))
+                if (enableAutoLoadIVA.Update().VC.GetValue<bool>(false))
                     enableAutoLoadIVA.Set(false);
 
-                if (enableAutoUnloadIVA.Update().ValueContainer.GetValue<bool>(false))
+                if (enableAutoUnloadIVA.Update().VC.GetValue<bool>(false))
                     enableAutoUnloadIVA.Set(false);
 
                 IValueAccessor a2pPinsStateIVA = SelectedActiveToPassivePinsStateIVA;
                 IValueAccessor p2aPinsStateIVA = SelectedPassiveToActivePinsStateIVA;
 
-                IActiveToPassivePinsState a2pPinsState = new ActiveToPassivePinsState(a2pPinsStateIVA.Update().ValueContainer);
-                IPassiveToActivePinsState p2aPinsState = new PassiveToActivePinsState(p2aPinsStateIVA.Update().ValueContainer);
+                IActiveToPassivePinsState a2pPinsState = new ActiveToPassivePinsState(a2pPinsStateIVA.Update().VC);
+                IPassiveToActivePinsState p2aPinsState = new PassiveToActivePinsState(p2aPinsStateIVA.Update().VC);
 
                 if (!a2pPinsState.IsIdle)
                 {
@@ -503,8 +503,8 @@ namespace MosaicLib.PartsLib.Common.E084
 
                 Spin(TimeSpan.FromSeconds(0.5));
 
-                a2pPinsState = new ActiveToPassivePinsState(a2pPinsStateIVA.Update().ValueContainer);
-                p2aPinsState = new PassiveToActivePinsState(p2aPinsStateIVA.Update().ValueContainer);
+                a2pPinsState = new ActiveToPassivePinsState(a2pPinsStateIVA.Update().VC);
+                p2aPinsState = new PassiveToActivePinsState(p2aPinsStateIVA.Update().VC);
 
                 if (!p2aPinsState.IsSelectable)
                     SetCurrentActivity(ActivitySelect.WaitForPinsReady, Utils.Fcns.CheckedFormat("Reset complete with E84 P->A pins not selectable [{0}]", p2aPinsState));
@@ -520,8 +520,8 @@ namespace MosaicLib.PartsLib.Common.E084
             IValueAccessor a2pPinsStateIVA = SelectedActiveToPassivePinsStateIVA;
             IValueAccessor p2aPinsStateIVA = SelectedPassiveToActivePinsStateIVA;
 
-            IActiveToPassivePinsState a2pPinsState = new ActiveToPassivePinsState(a2pPinsStateIVA.Update().ValueContainer);
-            IPassiveToActivePinsState p2aPinsState = new PassiveToActivePinsState(p2aPinsStateIVA.Update().ValueContainer);
+            IActiveToPassivePinsState a2pPinsState = new ActiveToPassivePinsState(a2pPinsStateIVA.Update().VC);
+            IPassiveToActivePinsState p2aPinsState = new PassiveToActivePinsState(p2aPinsStateIVA.Update().VC);
 
             if (!a2pPinsState.IsIdle)
             {
@@ -542,8 +542,8 @@ namespace MosaicLib.PartsLib.Common.E084
             IValueAccessor a2pPinsStateIVA = SelectedActiveToPassivePinsStateIVA;
             IValueAccessor p2aPinsStateIVA = SelectedPassiveToActivePinsStateIVA;
 
-            IActiveToPassivePinsState a2pPinsState = new ActiveToPassivePinsState(a2pPinsStateIVA.Update().ValueContainer);
-            IPassiveToActivePinsState p2aPinsState = new PassiveToActivePinsState(p2aPinsStateIVA.Update().ValueContainer);
+            IActiveToPassivePinsState a2pPinsState = new ActiveToPassivePinsState(a2pPinsStateIVA.Update().VC);
+            IPassiveToActivePinsState p2aPinsState = new PassiveToActivePinsState(p2aPinsStateIVA.Update().VC);
 
             if (!a2pPinsState.IsIdle)
             {
@@ -563,9 +563,9 @@ namespace MosaicLib.PartsLib.Common.E084
 
             if (nextActivitySelect == ActivitySelect.None)
             {
-                PresentPlaced presentPlacedInput = lpmPresentPlacedInputIVA.Update().ValueContainer.GetValue<PresentPlaced>(false);
+                PresentPlaced presentPlacedInput = lpmPresentPlacedInputIVA.Update().VC.GetValue<PresentPlaced>(false);
 
-                if (presentPlacedInput.IsNeitherPresentNorPlaced() && enableAutoLoadIVA.Update().ValueContainer.GetValue<bool>(false))
+                if (presentPlacedInput.IsNeitherPresentNorPlaced() && enableAutoLoadIVA.Update().VC.GetValue<bool>(false))
                 {
                     if (loadUnloadStartHoldoffTimer.StartIfNeeded(configValues.LoadUnloadStartHoldoff).IsTriggered)
                     {
@@ -573,7 +573,7 @@ namespace MosaicLib.PartsLib.Common.E084
                         loadUnloadStartHoldoffTimer.Stop();
                     }
                 }
-                else if (presentPlacedInput.IsProperlyPlaced() && enableAutoUnloadIVA.Update().ValueContainer.GetValue<bool>(false))
+                else if (presentPlacedInput.IsProperlyPlaced() && enableAutoUnloadIVA.Update().VC.GetValue<bool>(false))
                 {
                     if (loadUnloadStartHoldoffTimer.StartIfNeeded(configValues.LoadUnloadStartHoldoff).IsTriggered)
                     {
@@ -769,7 +769,7 @@ namespace MosaicLib.PartsLib.Common.E084
             PassiveToActivePinBits fixedPinsMask = PassiveToActivePinBits.PinsBitMask & ~deltaPinsMask;
             for (; ; )
             {
-                IPassiveToActivePinsState p2aPinsState = new PassiveToActivePinsState(p2aPinsStateIVA.Update().ValueContainer);
+                IPassiveToActivePinsState p2aPinsState = new PassiveToActivePinsState(p2aPinsStateIVA.Update().VC);
 
                 PassiveToActivePinBits packedWord = p2aPinsState.PackedWord;
 

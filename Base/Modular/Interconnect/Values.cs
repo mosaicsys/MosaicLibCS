@@ -160,6 +160,11 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// Setter sets IsSetPending if the given value is not equal to the current one.
         /// <para/>This is a value object and as such this property can only be assigned an entire ValueContainer.
         /// </summary>
+        ValueContainer VC { get; set; }
+
+        /// <summary>
+        /// get/set property is an alternative name for the VC property
+        /// </summary>
         ValueContainer ValueContainer { get; set; }
 
         /// <summary>
@@ -813,10 +818,10 @@ namespace MosaicLib.Modular.Interconnect.Values
             public UInt32 SeqNum { get { return seqNum; } }
 
             /// <summary>Contains the most recently assigned value in a container</summary>
-            public ValueContainer ValueContainer { get { return valueContainer; } private set { valueContainer = value; } }
+            public ValueContainer VC { get { return vc; } private set { vc = value; } }
 
             /// <summary>Backing store for ValueContainer propety</summary>
-            private ValueContainer valueContainer;
+            private ValueContainer vc;
 
             /// <summary>used by one or more attached accessors to Set the value of the table entry.  Also increments the SeqNum, skipping zero which is reserved as the initial unwritten state.</summary>
             /// <remarks>
@@ -824,7 +829,7 @@ namespace MosaicLib.Modular.Interconnect.Values
             /// </remarks>
             public void Set(ref ValueContainer valueContainerIn)
             {
-                valueContainer.DeepCopyFrom(valueContainerIn);
+                vc.DeepCopyFrom(valueContainerIn);
 
                 seqNum = InnerGuardedIncrementSkipZero(seqNum);
             }
@@ -834,7 +839,7 @@ namespace MosaicLib.Modular.Interconnect.Values
             /// </summary>
             public void Reset()
             {
-                valueContainer.SetToEmpty();
+                vc.SetToEmpty();
                 seqNum = 0;
             }
 
@@ -846,7 +851,7 @@ namespace MosaicLib.Modular.Interconnect.Values
             /// </summary>
             public override string ToString()
             {
-                return "VTE: {0:d4}:{1} seqNum:{2} {3}".CheckedFormat(ID, Name, SeqNum, ValueContainer);
+                return "VTE: {0:d4}:{1} seqNum:{2} {3}".CheckedFormat(ID, Name, SeqNum, VC);
             }
         }
 
@@ -877,16 +882,22 @@ namespace MosaicLib.Modular.Interconnect.Values
             /// Setter sets IsSetPending if the given value is not equal to the current one.
             /// <para/>This is a value object and as such this property can only be assigned an entire ValueContainer.
             /// </summary>
-            public ValueContainer ValueContainer 
+            public ValueContainer VC 
             { 
-                get { return valueContainer; } 
+                get { return vc; } 
                 set 
                 {
-                    IsSetPending |= !valueContainer.IsEqualTo(value);
-                    valueContainer = value; 
+                    IsSetPending |= !vc.IsEqualTo(value);
+                    vc = value; 
                 } 
             }
-            protected ValueContainer valueContainer;
+
+            /// <summary>
+            /// get/set property is an alternative name for the VC property
+            /// </summary>
+            public ValueContainer ValueContainer { get { return VC; } set { VC = value; } }
+
+            protected ValueContainer vc;
 
             /// <summary>
             /// get/set property contains the last set or the last updated value for this accessor.  
@@ -894,8 +905,8 @@ namespace MosaicLib.Modular.Interconnect.Values
             /// </summary>
             public object ValueAsObject 
             { 
-                get { return valueContainer.ValueAsObject; } 
-                set { ValueContainer = new ValueContainer(value); } 
+                get { return vc.ValueAsObject; } 
+                set { VC = new ValueContainer(value); } 
             }
 
             /// <summary>This property is set whenever the ValueContainer is changed and is cleared whenver the update has been delievered to the ValueInterconnection instance or when Update is called.</summary>
@@ -913,7 +924,7 @@ namespace MosaicLib.Modular.Interconnect.Values
             /// <summary>Resets this value accessor and the corresponding IVI table entry to be empty with sequence number zero.</summary>
             public IValueAccessor Reset()
             {
-                valueContainer.SetToEmpty();
+                vc.SetToEmpty();
 
                 if (InterconnectInstance != null)
                     InterconnectInstance.Reset(this);
@@ -924,7 +935,7 @@ namespace MosaicLib.Modular.Interconnect.Values
             /// <summary>Sets ValueContainer to the given value and then Sets the corresponding interconnection table space entry's value from the given one.  This method supports call chaining.</summary>
             public IValueAccessor Set(ValueContainer valueContainerIn)
             {
-                valueContainer = valueContainerIn;
+                vc = valueContainerIn;
 
                 return Set();
             }
@@ -940,7 +951,7 @@ namespace MosaicLib.Modular.Interconnect.Values
             /// <summary>Checks if the current ValueContainer is different than the given one.  If the are not Equal then calls Set(valueContainer) to set the local and interconnect values from the given one.  This method supports call chaining.</summary>
             public IValueAccessor SetIfDifferent(ValueContainer valueContainer)
             {
-                ValueContainer = valueContainer;
+                VC = valueContainer;
 
                 if (IsSetPending)
                     Set();
@@ -991,7 +1002,7 @@ namespace MosaicLib.Modular.Interconnect.Values
             {
                 if (IsUpdateNeeded)
                 {
-                    valueContainer = ((TableEntry != null) ? TableEntry.ValueContainer : emptyValueContainer);
+                    vc = ((TableEntry != null) ? TableEntry.VC : emptyValueContainer);
                     ValueSeqNum = CurrentSeqNum;
 
                     IsSetPending = false;
@@ -1008,7 +1019,7 @@ namespace MosaicLib.Modular.Interconnect.Values
             internal void InnerGuardedSetTableEntryFromValue()
             {
                 if (TableEntry != null)
-                    TableEntry.Set(ref valueContainer);
+                    TableEntry.Set(ref vc);
 
                 IsSetPending = false;
 
@@ -1032,11 +1043,11 @@ namespace MosaicLib.Modular.Interconnect.Values
             public override string ToString()
             {
                 if (IsSetPending)
-                    return "Accessor '{0}'@{1} {2} [SetPending vSeq:{3} current:{4}]".CheckedFormat(Name, ID, ValueContainer, ValueSeqNum, CurrentSeqNum);
+                    return "Accessor '{0}'@{1} {2} [SetPending vSeq:{3} current:{4}]".CheckedFormat(Name, ID, VC, ValueSeqNum, CurrentSeqNum);
                 else if (IsUpdateNeeded)
-                    return "Accessor '{0}'@{1} {2} [UpdateNeeded vSeq:{3} current:{4}]".CheckedFormat(Name, ID, ValueContainer, ValueSeqNum, CurrentSeqNum);
+                    return "Accessor '{0}'@{1} {2} [UpdateNeeded vSeq:{3} current:{4}]".CheckedFormat(Name, ID, VC, ValueSeqNum, CurrentSeqNum);
                 else
-                    return "Accessor '{0}'@{1} {2} [vSeq:{3}]".CheckedFormat(Name, ID, ValueContainer, ValueSeqNum);
+                    return "Accessor '{0}'@{1} {2} [vSeq:{3}]".CheckedFormat(Name, ID, VC, ValueSeqNum);
             }
         }
 
@@ -1065,7 +1076,7 @@ namespace MosaicLib.Modular.Interconnect.Values
             { 
                 get 
                 {
-                    if (valueContainer.IsNullOrEmpty && !decodedValueType.IsReferenceType() && !decodedTypeIsNullable)
+                    if (vc.IsNullOrEmpty && !decodedValueType.IsReferenceType() && !decodedTypeIsNullable)
                     {
                         if ((LastValueGetException as System.NullReferenceException) == null)
                             LastValueGetException = new NullReferenceException();
@@ -1088,7 +1099,7 @@ namespace MosaicLib.Modular.Interconnect.Values
                 }
                 set 
                 {
-                    ValueContainer = new ValueContainer().SetValue<TValueType>(value, decodedValueType, decodedTypeIsNullable);
+                    VC = new ValueContainer().SetValue<TValueType>(value, decodedValueType, decodedTypeIsNullable);
                 } 
             }
 
@@ -1102,7 +1113,7 @@ namespace MosaicLib.Modular.Interconnect.Values
             /// </summary>
             public TValueType GetValue(bool rethrow)
             {
-                return valueContainer.GetValue<TValueType>(decodedValueType, decodedTypeIsNullable, rethrow);
+                return vc.GetValue<TValueType>(decodedValueType, decodedTypeIsNullable, rethrow);
             }
 
             /// <summary>Updates both the local copy and the corresponding interconnection table space entry's value from the given one.  This method supports call chaining.</summary>
@@ -1914,11 +1925,11 @@ namespace MosaicLib.Modular.Interconnect.Values
                     {
                         try
                         {
-                            IVA.ValueContainer = getMemberAsVCFunction(valueSetObj, null, null, true);
+                            IVA.VC = getMemberAsVCFunction(valueSetObj, null, null, true);
                             LastTransferedValueSeqNum = 0;      // trigger that next update needs to retransfer the value.
 
                             if (IVA.IsSetPending && valueUpdateEmitter.IsEnabled)
-                                valueUpdateEmitter.Emit("Member:'{0}' transfered to Name:'{1}' value:'{2}' [type:'{3}']", MemberName, ValueName, IVA.ValueContainer, TValueSetTypeStr);
+                                valueUpdateEmitter.Emit("Member:'{0}' transfered to Name:'{1}' value:'{2}' [type:'{3}']", MemberName, ValueName, IVA.VC, TValueSetTypeStr);
                         }
                         catch (System.Exception ex)
                         {
@@ -1936,12 +1947,12 @@ namespace MosaicLib.Modular.Interconnect.Values
                         {
                             if (!OptimizeUpdates || LastTransferedValueSeqNum != IVA.ValueSeqNum)
                             {
-                                setMemberFromVCFunction(valueSetObj, IVA.ValueContainer, null, null, true);
+                                setMemberFromVCFunction(valueSetObj, IVA.VC, null, null, true);
                                 LastTransferedValueSeqNum = IVA.ValueSeqNum;
                             }
 
                             if (valueUpdateEmitter.IsEnabled)
-                                valueUpdateEmitter.Emit("Member:'{0}' transfered from Name:'{1}' value:'{2}' [type:'{3}']", MemberName, ValueName, IVA.ValueContainer, TValueSetTypeStr);
+                                valueUpdateEmitter.Emit("Member:'{0}' transfered from Name:'{1}' value:'{2}' [type:'{3}']", MemberName, ValueName, IVA.VC, TValueSetTypeStr);
                         }
                         catch (System.Exception ex)
                         {
@@ -2186,7 +2197,7 @@ namespace MosaicLib.Modular.Interconnect.Values
                 {
                     ValueContainer entryVC = lastTransferredVC;
 
-                    IVA.ValueContainer = lastTransferredVC.SetValue<TValueType>(GetterDelegate(), decodedCST, decodedIsNullable);
+                    IVA.VC = lastTransferredVC.SetValue<TValueType>(GetterDelegate(), decodedCST, decodedIsNullable);
 
                     if (ValueNoteEmitter != null && ValueNoteEmitter.IsEnabled)
                     {
@@ -2199,7 +2210,7 @@ namespace MosaicLib.Modular.Interconnect.Values
                 catch (System.Exception ex)
                 {
                     (IssueEmitter ?? Logging.NullEmitter).Emit("{0} failed on IVA {1}: {2}", Fcns.CurrentMethodName, IVA, ex.ToString(ExceptionFormat.TypeAndMessage));
-                    IVA.ValueContainer = ValueContainer.Empty;
+                    IVA.VC = ValueContainer.Empty;
                 }
             }
 
@@ -2208,7 +2219,7 @@ namespace MosaicLib.Modular.Interconnect.Values
                 try
                 {
                     ValueContainer entryVC = lastTransferredVC;
-                    SetterDelegate((lastTransferredVC = IVA.ValueContainer).GetValue<TValueType>(decodedCST, decodedIsNullable, true));
+                    SetterDelegate((lastTransferredVC = IVA.VC).GetValue<TValueType>(decodedCST, decodedIsNullable, true));
 
                     if (ValueNoteEmitter != null && ValueNoteEmitter.IsEnabled)
                     {

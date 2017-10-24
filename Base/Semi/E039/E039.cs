@@ -47,7 +47,7 @@ namespace MosaicLib.Semi.E039
     /// This interface is used by clients of an E039Table manager part to get observer access to the published state of the objects that are stored in the table.
     /// This interface is functional immediately after the part has been constructed and does not require that the part has been started or that it is online.
     /// </summary>
-    public interface IE039TableObserver
+    public interface IE039TableObserver : IActivePartBase
     {
         /// <summary>
         /// Gives acceess to the notifcation object that is used to publish the last generated set of sequence numbers.
@@ -206,13 +206,15 @@ namespace MosaicLib.Semi.E039
         /// <summary>Adds the indicated link from the identified FromID object to the identified ToID object</summary>
         public class AddLink : LinkBase
         {
-            public AddLink(E039Link link, bool autoUnlinkFromPriorByTypeStr = false)
+            public AddLink(E039Link link, bool autoUnlinkFromPriorByTypeStr = false, bool ifNeeded = false)
                 : base(link) 
             {
                 AutoUnlinkFromPriorByTypeStr = autoUnlinkFromPriorByTypeStr;
+                IfNeeded = ifNeeded;
             }
 
             public bool AutoUnlinkFromPriorByTypeStr { get; private set; }
+            public bool IfNeeded { get; private set; }
 
             public override string ToString()
             {
@@ -1249,9 +1251,10 @@ namespace MosaicLib.Semi.E039
 
             string linkKeyStr = link.Key;
 
-            LinkTrackerPair ltp = null;
+            LinkTrackerPair ltp = ot.linkTrackerPairsToOtherObjectsDictionary.SafeTryGetValue(linkKeyStr);
 
-            ot.linkTrackerPairsToOtherObjectsDictionary.TryGetValue(linkKeyStr, out ltp);
+            if (ltp != null && addLink.Link.ToID.IsEmpty && addLink.IfNeeded)
+                return string.Empty;        // we are adding a link key that already exists and the caller provided target is empty and the caller indicated to add the link if needed.  So do nothing.
 
             if (ltp != null && (ltp.ObjectTracker != null || !ltp.Link.IsToIDEmpty))
                 return "Link key '{0}' already in use as '{1}'".CheckedFormat(linkKeyStr, ltp.Link);

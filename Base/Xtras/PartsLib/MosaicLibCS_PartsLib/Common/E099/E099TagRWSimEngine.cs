@@ -231,7 +231,7 @@ namespace MosaicLib.PartsLib.Common.E099.Sim
         {
             get
             {
-                byte[] rawTagContentByteArray = ContentByteArray.SafeAccess(Config.IDStartOffset, Config.IDSize);
+                byte[] rawTagContentByteArray = ContentByteArray.SafeSubArray(Config.IDStartOffset, Config.IDSize);
 
                 int startIdx = 0;
                 int count = rawTagContentByteArray.Length;
@@ -254,7 +254,7 @@ namespace MosaicLib.PartsLib.Common.E099.Sim
                         count = trialCount-1;
                 }
 
-                byte [] zeroTrimmedTagContentByteArray = rawTagContentByteArray.SafeAccess(startIdx, count);
+                byte[] zeroTrimmedTagContentByteArray = rawTagContentByteArray.SafeSubArray(startIdx, count);
 
                 string trimmedTagContent = Utils.ByteArrayTranscoders.ByteStringTranscoder.Encode(zeroTrimmedTagContentByteArray).Trim();
 
@@ -273,7 +273,7 @@ namespace MosaicLib.PartsLib.Common.E099.Sim
         {
             int pageStartOffset = pageIndex * Config.PageDataSize;
 
-            TagPageContents page = new TagPageContents() { PageIndex = pageIndex, ByteArray = ContentByteArray.SafeAccess(pageStartOffset, Config.PageDataSize) };
+            TagPageContents page = new TagPageContents() { PageIndex = pageIndex, ByteArray = ContentByteArray.SafeSubArray(pageStartOffset, Config.PageDataSize) };
 
             return page;
         }
@@ -433,15 +433,15 @@ namespace MosaicLib.PartsLib.Common.E099.Sim
 
             if (counterIsEnabledIVA.IsUpdateNeeded || tagIsPresentIVA.IsUpdateNeeded)
             {
-                privateState.CounterIsEnabled = counterIsEnabledIVA.Update().ValueContainer.GetValue<bool>(false);
-                privateState.TagIsPresent = tagIsPresentIVA.Update().ValueContainer.GetValue<bool>(false);
+                privateState.CounterIsEnabled = counterIsEnabledIVA.Update().VC.GetValue<bool>(false);
+                privateState.TagIsPresent = tagIsPresentIVA.Update().VC.GetValue<bool>(false);
 
                 PublishPrivateState();
             }
 
             if (isOnlineIVA.IsUpdateNeeded)
             {
-                if (isOnlineIVA.Update().ValueContainer.GetValue<bool>(false))
+                if (isOnlineIVA.Update().VC.GetValue<bool>(false))
                     PerformGoOnlineAction(false);
                 else
                     PerformGoOfflineAction();
@@ -536,7 +536,7 @@ namespace MosaicLib.PartsLib.Common.E099.Sim
                 }
 
                 int pageStartOffset = pageIdx * privateState.Config.PageDataSize;
-                ITagPageContents pageContents = new TagPageContents() { PageIndex = pageIdx, ByteArray = privateState.ContentByteArray.SafeAccess(pageStartOffset, privateState.Config.PageDataSize) };
+                ITagPageContents pageContents = new TagPageContents() { PageIndex = pageIdx, ByteArray = privateState.ContentByteArray.SafeSubArray(pageStartOffset, privateState.Config.PageDataSize) };
 
                 pageContentsList.Add(pageContents);
 

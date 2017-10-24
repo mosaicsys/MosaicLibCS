@@ -289,7 +289,7 @@ namespace MosaicLib.Modular.Interconnect.Values
                 {
                     if (syncItem.iva1.IsUpdateNeeded || full)
                     {
-                        syncItem.iva2.ValueContainer = syncItem.iva1.Update().ValueContainer;
+                        syncItem.iva2.VC = syncItem.iva1.Update().VC;
 
                         if (syncItem.iva2.IsSetPending)
                         {
@@ -366,7 +366,7 @@ namespace MosaicLib.Modular.Interconnect.Values
                 {
                     if (syncItem.iva2.IsUpdateNeeded || full)
                     {
-                        syncItem.iva1.ValueContainer = syncItem.iva2.Update().ValueContainer;
+                        syncItem.iva1.VC = syncItem.iva2.Update().VC;
 
                         if (syncItem.iva1.IsSetPending)
                         {
@@ -434,13 +434,13 @@ namespace MosaicLib.Modular.Interconnect.Values
 
             if (iva1.HasValueBeenSet)
             {
-                ValueContainer vc = iva1.ValueContainer;
+                ValueContainer vc = iva1.VC;
                 ValueTraceEmitter.Emit("Propagating initial iva1 '{0}' to iva2 '{1}'", iva1, iva2);
                 iva2.Set(vc);
             }
             else if (iva2.HasValueBeenSet)
             {
-                ValueContainer vc = iva2.ValueContainer;
+                ValueContainer vc = iva2.VC;
                 ValueTraceEmitter.Emit("Propagating initial iva2 '{0}' to iva1 '{1}'", iva2, iva1);
                 iva1.Set(vc);
             }

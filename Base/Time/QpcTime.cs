@@ -22,6 +22,7 @@
 
 using System;
 using System.Runtime.InteropServices;
+using System.Linq;
 
 using MosaicLib;
 using MosaicLib.Utils;
@@ -598,15 +599,34 @@ namespace MosaicLib.Time
 
     public static partial class ExtensionMethods
     {
-        public static QpcTimeStamp Min(this QpcTimeStamp a, QpcTimeStamp b)
+        #region QpcTimeStamp related (Age, Min, Max)
+
+        /// <summary>
+        /// Returns the Age of the given <paramref name="qpcTimeStamp"/>.  Caller can optionally provide the current timestamp against which the age is to be measured.
+        /// </summary>
+        public static TimeSpan Age(this QpcTimeStamp qpcTimeStamp, QpcTimeStamp? qpcTimeStampNowIn = null)
         {
-            return ((a <= b) ? a : b);
+            QpcTimeStamp qpcTimeStampNow = qpcTimeStampNowIn ?? QpcTimeStamp.Now;
+
+            TimeSpan age = (qpcTimeStampNow - qpcTimeStamp);
+            return age;
         }
 
-        public static QpcTimeStamp Max(this QpcTimeStamp a, QpcTimeStamp b)
-        {
-            return ((a >= b) ? a : b);
-        }
+        /// <summary>Returns the Min of the given QpcTimeStamp values</summary>
+        public static QpcTimeStamp Min(this QpcTimeStamp a, QpcTimeStamp b) { return (a <= b) ? a : b; }
+        /// <summary>Returns the Min of the given QpcTimeStamp values</summary>
+        public static QpcTimeStamp Min(this QpcTimeStamp a, QpcTimeStamp b, QpcTimeStamp c) { return a.Min(b).Min(c); }
+        /// <summary>Returns the Min of the given QpcTimeStamp values</summary>
+        public static QpcTimeStamp Min(this QpcTimeStamp a, params QpcTimeStamp[] more) { return a.Concat(more).Min(); }
+
+        /// <summary>Returns the Max of the given QpcTimeStamp values</summary>
+        public static QpcTimeStamp Max(this QpcTimeStamp a, QpcTimeStamp b) { return (a >= b) ? a : b; }
+        /// <summary>Returns the Max of the given QpcTimeStamp values</summary>
+        public static QpcTimeStamp Max(this QpcTimeStamp a, QpcTimeStamp b, QpcTimeStamp c) { return a.Max(b).Max(c); }
+        /// <summary>Returns the Max of the given QpcTimeStamp values</summary>
+        public static QpcTimeStamp Max(this QpcTimeStamp a, params QpcTimeStamp[] more) { return a.Concat(more).Max(); }
+
+        #endregion
     }
 
     #endregion

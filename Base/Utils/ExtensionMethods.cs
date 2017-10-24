@@ -29,6 +29,7 @@ using System.Reflection;
 using System.Text;
 
 using MosaicLib.Modular.Common;
+using MosaicLib.Time;
 
 namespace MosaicLib.Utils
 {
@@ -84,17 +85,17 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method accepts given <paramref name="array"/> and <paramref name="testIndex"/> and returns true if the <paramref name="array"/> is non-null and the <paramref name="testIndex"/> is >= 0 and less than the <paramref name="array"/>.Length
         /// </summary>
-        public static bool IsSafeIndex<ItemType>(this ItemType[] array, int testIndex)
+        public static bool IsSafeIndex<ItemType>(this ItemType[] array, int testIndex, int length = 1)
         {
-            return (array != null && testIndex >= 0 && testIndex < array.Length);
+            return (array != null && testIndex >= 0 && length > 0 && (testIndex + length) <= array.Length);
         }
 
         /// <summary>
         /// Extension method accepts given <paramref name="list"/> and <paramref name="testIndex"/> and returns true if the <paramref name="list"/> is non-null and the <paramref name="testIndex"/> is >= 0 and less than the <paramref name="list"/>.Count
         /// </summary>
-        public static bool IsSafeIndex<ItemType>(this IList<ItemType> list, int testIndex)
+        public static bool IsSafeIndex<ItemType>(this IList<ItemType> list, int testIndex, int length = 1)
         {
-            return (list != null && testIndex >= 0 && testIndex < list.Count);
+            return (list != null && testIndex >= 0 && length > 0 && (testIndex + length) <= list.Count);
         }
 
         /// <summary>
@@ -111,13 +112,51 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method version of Array indexed sub-array get access that handles all out of range accesses by returning either a partial sub-array or an empty array.
         /// </summary>
+        [Obsolete("This method has been renamed to SafeSubArray to avoid ambiguity in the applicable set of EMs with the same name.  Please convert to use the new SafeSubArray method (2017-09-20)")]
         public static ItemType[] SafeAccess<ItemType>(this ItemType[] fromArray, int getFromIndex, int getSubArrayLength)
         {
-            getSubArrayLength = Math.Max(0, Math.Min(getSubArrayLength, (fromArray.Length - getFromIndex + 1)));
+            return fromArray.SafeSubArray(getFromIndex, getSubArrayLength);
+        }
+
+        /// <summary>
+        /// Extension method version of Array indexed sub-array get access that handles all out of range accesses by returning either a partial sub-array or an empty array.
+        /// </summary>
+        public static ItemType[] SafeSubArray<ItemType>(this ItemType[] fromArray, int getFromIndex, int getSubArrayLength = -1)
+        {
+            int fromArrayLength = fromArray.SafeLength();
+
+            if (getSubArrayLength >= 0)
+                getSubArrayLength = Math.Max(0, Math.Min(getSubArrayLength, (fromArrayLength - getFromIndex)));
+            else
+                getSubArrayLength = Math.Max(0, (fromArrayLength - getFromIndex));
+
             ItemType[] subArray = new ItemType[getSubArrayLength];
 
-            if (fromArray != null && getFromIndex >= 0 && getFromIndex < fromArray.Length)
+            if (fromArray != null && getFromIndex >= 0 && getFromIndex < fromArrayLength)
                 System.Array.Copy(fromArray, getFromIndex, subArray, 0, getSubArrayLength);
+
+            return subArray;
+        }
+
+        /// <summary>
+        /// Extension method version of IList indexed sub-array get access that handles all out of range accesses by returning either a partial sub-array or an empty array.
+        /// </summary>
+        public static ItemType[] SafeSubArray<ItemType>(this IList<ItemType> fromList, int getFromIndex, int getSubArrayLength = -1)
+        {
+            int fromListCount = fromList.SafeCount();
+
+            if (getSubArrayLength >= 0)
+                getSubArrayLength = Math.Max(0, Math.Min(getSubArrayLength, (fromListCount - getFromIndex)));
+            else
+                getSubArrayLength = Math.Max(0, (fromListCount - getFromIndex));
+
+            ItemType[] subArray = new ItemType[getSubArrayLength];
+
+            if (fromList != null && getFromIndex >= 0 && getFromIndex < fromListCount)
+            {
+                for (int putToIndex = 0; putToIndex < getSubArrayLength && getFromIndex < fromListCount; putToIndex++, getFromIndex++)
+                    subArray[putToIndex] = fromList[getFromIndex];
+            }
 
             return subArray;
         }
@@ -198,15 +237,15 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Extension method returns true if the given list is null or its Count is zero.
+        /// Extension method returns true if given <paramref name="collection"/> is null or empty (Count == 0)
         /// </summary>
-        public static bool IsNullOrEmpty<TItemType>(this IList<TItemType> list)
+        public static bool IsNullOrEmpty(this ICollection collection)
         {
-            return ((list == null) || (list.Count == 0));
+            return (collection == null || collection.Count == 0);
         }
 
         /// <summary>
-        /// Extension method returns true if the given IEnumerable is null or empty (initial MoveNext returns false).
+        /// Extension method returns true if the given IEnumerable <paramref name="ien"/> is null or empty (initial MoveNext returns false).
         /// </summary>
         public static bool IsNullOrEmpty(this IEnumerable ien)
         {
@@ -214,7 +253,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Extension method returns true if given array is null or empty (Length == 0)
+        /// Extension method returns true if given <paramref name="array"/> is null or empty (Length == 0)
         /// </summary>
         public static bool IsEmpty<ItemType>(this ItemType[] array)
         {
@@ -222,23 +261,23 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Extension method returns true if given IList is null or empty (Count == 0)
+        /// Extension method returns true if given <paramref name="collection"/> is null or empty (Count == 0)
         /// </summary>
-        public static bool IsEmpty<ItemType>(this IList<ItemType> list)
+        public static bool IsEmpty<TItemType>(this ICollection<TItemType> collection)
         {
-            return (list == null || list.Count == 0);
+            return (collection == null || collection.Count == 0);
         }
 
         /// <summary>
-        /// Extension method returns true if given IEnumerable is null or empty (initial MoveNext returns false)
+        /// Extension method returns true if the given IEnumerable <paramref name="ien"/> is null or empty (initial MoveNext returns false).
         /// </summary>
         public static bool IsEmpty(this IEnumerable ien)
         {
-            return (ien == null || (ien.GetEnumerator().MoveNext() == false));
+            return ((ien == null) || (ien.GetEnumerator().MoveNext() == false));
         }
 
         /// <summary>
-        /// Extension method returns the Length from the given array or zero if the given array is null
+        /// Extension method returns the Length from the given <paramref name="array"/> or zero if the given <paramref name="array"/> is null
         /// </summary>
         public static int SafeLength<ItemType>(this ItemType[] array)
         {
@@ -246,21 +285,33 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Extension method returns the Coutn from the given list or zero if the given list is null
+        /// Extension method returns the Coutn from the given <paramref name="collection"/> or zero if the given <paramref name="collection"/> is null
         /// </summary>
-        public static int SafeCount<ItemType>(this IList<ItemType> list)
+        public static int SafeCount<TItemType>(this ICollection<TItemType> collection)
         {
-            return (list != null ? list.Count : 0);
+            return (collection != null ? collection.Count : 0);
         }
 
         /// <summary>
-        /// Extension method sets all of the elements of the given array to the given value.  Has no effect if the array is null or is zero length.
+        /// Extension method sets all of the elements of the given <paramref name="array"/> to the given <paramref name="value"/>.  Has no effect if the <paramref name="array"/> is null or is zero length.
         /// </summary>
         public static void SetAll<ItemType>(this ItemType[] array, ItemType value)
         {
             int numItems = ((array != null) ? array.Length : 0);
 
             for (int idx = 0; idx < numItems; idx++)
+                array[idx] = value;
+        }
+
+        /// <summary>
+        /// Extension method sets all of the elements of the given <paramref name="arraySegment"/> to the given <paramref name="value"/>.  Has no effect if the <paramref name="arraySegment"/> is empty.
+        /// </summary>
+        public static void SetAll<ItemType>(this ArraySegment<ItemType> arraySegment, ItemType value)
+        {
+            ItemType[] array = arraySegment.Array;
+            int endIdx = Math.Min(arraySegment.Offset + arraySegment.Count, array.SafeLength());
+
+            for (int idx = arraySegment.Offset; idx < endIdx; idx++)
                 array[idx] = value;
         }
 
@@ -372,6 +423,17 @@ namespace MosaicLib.Utils
             }
         }
 
+        /// <summary>
+        /// Etension method to add a set of items (params parameter) to a given list)
+        /// </summary>
+        public static List<ItemType> SafeAddSet<ItemType>(this List<ItemType> list, params ItemType [] itemSetArray)
+        {
+            if (list != null && !itemSetArray.IsEmpty())
+                list.AddRange(itemSetArray);
+
+            return list;
+        }
+
         #endregion
 
         #region IDictionary related (SafeTryGetValue)
@@ -384,7 +446,7 @@ namespace MosaicLib.Utils
         {
             TValue value = default(TValue);
 
-            if (dict != null && dict.TryGetValue(key, out value))
+            if (dict != null && !Object.ReferenceEquals(key, null) && dict.TryGetValue(key, out value))
                 return value;
 
             return fallbackValue;
@@ -1182,19 +1244,39 @@ namespace MosaicLib.Utils
         #region CurrentStackFrame, CurrentMethod, CurrentMethodName, CurrentClassName, CurrentClassLeafName, CurrentProcessMainModuleShortName helper "functions (getters)".
 
         /// <summary>Creates and returns the callers current StackFrame</summary>
-        public static StackFrame CurrentStackFrame { get { return new System.Diagnostics.StackFrame(1); } }
+        public static StackFrame CurrentStackFrame 
+        {
+            [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+            get { return new System.Diagnostics.StackFrame(1); } 
+        }
 
         /// <summary>Creates a StackFrame for the caller and returns the stack frame's current method.</summary>
-        public static MethodBase CurrentMethod { get { return new System.Diagnostics.StackFrame(1).GetMethod(); } }
+        public static MethodBase CurrentMethod 
+        {
+            [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+            get { return new System.Diagnostics.StackFrame(1).GetMethod(); } 
+        }
 
         /// <summary>Creates a StackFrame for the caller and returns the Name of the stack frame's current method.</summary>
-        public static string CurrentMethodName { get { return new System.Diagnostics.StackFrame(1).GetMethod().Name; } }
+        public static string CurrentMethodName 
+        {
+            [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+            get { return new System.Diagnostics.StackFrame(1).GetMethod().Name; } 
+        }
 
         /// <summary>Creates a StackFrame for the caller and returns the Name of the current methods DeclaringType</summary>
-        public static string CurrentClassName { get { return new System.Diagnostics.StackFrame(1).GetMethod().DeclaringType.ToString(); } }
+        public static string CurrentClassName 
+        {
+            [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+            get { return new System.Diagnostics.StackFrame(1).GetMethod().DeclaringType.ToString(); } 
+        }
 
         /// <summary>Creates a StackFrame for the caller and returns the Leaf Name of the current methods DeclaringType (The token at the end of any sequence of dot seperated tokens)</summary>
-        public static string CurrentClassLeafName { get { return (new System.Diagnostics.StackFrame(1).GetMethod().DeclaringType).GetTypeLeafName(); } }
+        public static string CurrentClassLeafName 
+        {
+            [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+            get { return (new System.Diagnostics.StackFrame(1).GetMethod().DeclaringType).GetTypeLeafName(); } 
+        }
 
         /// <summary>
         /// Attemts to obtain and return the filename (without extension) from the ModuleName of the Current Process's MainModule.

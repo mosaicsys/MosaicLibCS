@@ -136,14 +136,8 @@ namespace MosaicLib.SerialIO
             BufferHasBeenIncreased(n);
         }
 
-        /// <summary>Clears the buffer contents, aligns the empty buffer and updates the get and put timestamps.</summary>
-        protected virtual void ResetBuffer()
-        {
-            ResetBuffer(true);
-        }
-
         /// <summary>Clears the buffer contents, aligns the empty buffer and updates the get and put timestamps.  Optionally resets the get and put timers</summary>
-        protected virtual void ResetBuffer(bool resetTimers)
+        public virtual void ResetBuffer(bool resetTimers = true)
         {
             getIdx = 0;
             putIdx = 0;
@@ -171,10 +165,13 @@ namespace MosaicLib.SerialIO
 
         /// <summary>Returns the number of bytes that are currently held in the buffer.  (putIdx - getIdx)</summary>
         public int BufferDataCount { get { return (putIdx - getIdx); } }
+
         /// <summary>Returns true if BufferDataCount is zero</summary>
         public bool BufferEmpty { get { return (putIdx <= getIdx); } }
+        
         /// <summary>Returns the QpcTimeStamp from the last time that bytes were pulled from the buffer, or put to the buffer after it has been aligned, or the buffer was reset.</summary>
         public QpcTimeStamp ContentGetTime { get { return getTimeStamp; } }	// >= timestamp of head char
+        
         /// <summary>Returns the QpcTimeStamp from the last time that bytes were appended into the buffer or the buffer was reset.</summary>
         public QpcTimeStamp ContentPutTime { get { return putTimeStamp; } }	// = timestamp of tail char
 
@@ -186,11 +183,13 @@ namespace MosaicLib.SerialIO
 
         /// <summary>This gives ths index into the buffer at which the first content byte is found (if any)</summary>
 		protected int getIdx = 0;
+        
         /// <summary>This gives the QpcTimeStamp at the point when the getIdx was last changed.</summary>
         protected QpcTimeStamp getTimeStamp = QpcTimeStamp.Zero;
 
         /// <summary>This gives the index into the buffer at which the next byte can be put into the buffer, or the buffer length if the buffer is full.</summary>
         protected int putIdx = 0;
+
         /// <summary>This gives the QpcTimeStamp at the point when the putIdx was last changed.</summary>
         protected QpcTimeStamp putTimeStamp = QpcTimeStamp.Zero;
     }

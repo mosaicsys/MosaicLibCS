@@ -151,7 +151,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>Packs and returns 2 bytes from the indicated location in the given byteArray in BigEndian Order.  Returns 0 if any of the indicates bytes are not accessible.</summary>
-        public static UInt16 Pack2(Byte[] byteArray, int baseIdx)
+        public static UInt16 Pack2(Byte[] byteArray, int baseIdx = 0)
         {
             UInt16 value;
             Pack(byteArray, baseIdx, out value);
@@ -159,7 +159,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>Packs and returns 3 bytes from the indicated location in the given byteArray in BigEndian Order.  Returns 0 if any of the indicates bytes are not accessible.</summary>
-        public static UInt32 Pack3(Byte[] byteArray, int baseIdx)
+        public static UInt32 Pack3(Byte[] byteArray, int baseIdx = 0)
         {
             UInt32 value;
             Pack(byteArray, baseIdx, 3, out value);
@@ -167,7 +167,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>Packs and returns 4 bytes from the indicated location in the given byteArray in BigEndian Order.  Returns 0 if any of the indicates bytes are not accessible.</summary>
-        public static UInt32 Pack4(Byte[] byteArray, int baseIdx)
+        public static UInt32 Pack4(Byte[] byteArray, int baseIdx = 0)
         {
             UInt32 value;
             Pack(byteArray, baseIdx, out value);
@@ -175,7 +175,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>Packs and returns 8 bytes from the indicated location in the given byteArray in BigEndian Order.  Returns 0 if any of the indicates bytes are not accessible.</summary>
-        public static UInt64 Pack8(Byte[] byteArray, int baseIdx)
+        public static UInt64 Pack8(Byte[] byteArray, int baseIdx = 0)
         {
             UInt64 value;
 
@@ -263,7 +263,7 @@ namespace MosaicLib.Utils
 
         /// <summary>Unpacks 2 bytes from the given UInt16 value and saves them in the give byteArray at the given baseIdx offset.  Uses Big Endian byte ordering.</summary>
         /// <returns>True on success, false if the byteArray or baseIdx could not be used to save the required number of bytes.</returns>
-        public static bool Unpack(UInt16 w, byte[] byteArray, int baseIdx)
+        public static bool Unpack(UInt16 w, byte[] byteArray, int baseIdx = 0)
 		{
 			if (byteArray == null || baseIdx < 0 || ((baseIdx + 2) > byteArray.Length))
 				return false;
@@ -273,7 +273,7 @@ namespace MosaicLib.Utils
 
         /// <summary>Unpacks 4 bytes from the given UInt32 value and saves them in the give byteArray at the given baseIdx offset.  Uses Big Endian byte ordering.</summary>
         /// <returns>True on success, false if the byteArray or baseIdx could not be used to save the required number of bytes.</returns>
-        public static bool Unpack(UInt32 l, byte[] byteArray, int baseIdx)
+        public static bool Unpack(UInt32 l, byte[] byteArray, int baseIdx = 0)
 		{
 			if (byteArray == null || baseIdx < 0 || ((baseIdx + 4) > byteArray.Length))
 				return false;
@@ -283,7 +283,7 @@ namespace MosaicLib.Utils
 
         /// <summary>Unpacks 8 bytes from the given UInt64 value and saves them in the give byteArray at the given baseIdx offset.  Uses Big Endian byte ordering.</summary>
         /// <returns>True on success, false if the byteArray or baseIdx could not be used to save the required number of bytes.</returns>
-        public static bool Unpack(UInt64 l, byte[] byteArray, int baseIdx)
+        public static bool Unpack(UInt64 l, byte[] byteArray, int baseIdx = 0)
         {
             if (byteArray == null || baseIdx < 0 || ((baseIdx + 8) > byteArray.Length))
                 return false;
@@ -494,7 +494,197 @@ namespace MosaicLib.Utils
 
 	#endregion
 
-	//-------------------------------------------------
+    #region Extension methods for marshaling between byte arrays and other objects
+
+    public static partial class ExtensionMethods
+    {
+        /// <summary>
+        /// This method obtains the byte array length that will be required in order to marshal the given <paramref name="value"/> object to a byte array.
+        /// </summary>
+        public static int GetMarshaledByteArraySize<TObjType>(this TObjType value, int fallbackValue = 0, bool rethrow = true)
+        {
+            try
+            {
+                int length = Marshal.SizeOf(value);
+
+                return length;
+            }
+            catch (System.Exception ex)
+            {
+                if (rethrow && ex != null)
+                    throw;
+
+                return fallbackValue;
+            }
+        }
+
+        /// <summary>
+        /// This method allocates a byte array of the length given by Marshal.Sizeof({TObjType}), 
+        /// pins it and marshals the given <paramref name="value"/>'s contents into the allocated byte array 
+        /// which is unpinned and returned.  
+        /// If the method encounteres any error (exceptions) this method will either <paramref name="rethrow"/> (when requested)
+        /// or will return the given <paramref name="fallbackValue"/>.
+        /// </summary>
+        public static byte[] MarshalStructToByteArray<TObjType>(this TObjType value, byte[] fallbackValue = null, bool rethrow = true)
+        {
+            GCHandle gch = default(GCHandle);
+            IntPtr gchP = default(IntPtr);
+
+            try
+            {
+                int length = Marshal.SizeOf(typeof(TObjType));
+                byte [] data = new byte [length];
+
+                gch = GCHandle.Alloc(data, GCHandleType.Pinned);
+                gchP = gch.AddrOfPinnedObject();
+
+                Marshal.StructureToPtr(value, gchP, false);
+
+                return data;
+            }
+            catch (System.Exception ex)
+            {
+                if (rethrow && ex != null)
+                    throw;
+
+                return fallbackValue;
+            }
+            finally
+            {
+                gchP = default(IntPtr);
+
+                if (gch.IsAllocated)
+                    gch.Free();
+            }
+        }
+
+        /// <summary>
+        /// This method pins the given <paramref name="byteArray"/>, verifies that it has sufficient size to receive the <paramref name="value"/>'s contents,
+        /// and marshals those contents into the byte array starting at the given <paramref name="startIdx"/>. 
+        /// Method returns the number of bytes produced after unpining the byte array.
+        /// If the method encounteres any error (exceptions) this method will either <paramref name="rethrow"/> (when requested)
+        /// or will return 0.
+        /// </summary>
+        public static int MarshalStructIntoToByteArray<TObjType>(this TObjType value, byte[] byteArray, int startIdx = 0, bool rethrow = true)
+        {
+            GCHandle gch = default(GCHandle);
+            IntPtr gchP = default(IntPtr);
+
+            try
+            {
+                int length = Marshal.SizeOf(typeof(TObjType));
+
+                if (byteArray != null)
+                    gch = GCHandle.Alloc(byteArray, GCHandleType.Pinned);
+
+                if (gch.IsAllocated && byteArray.IsSafeIndex(startIdx, length))
+                {
+                    gchP = gch.AddrOfPinnedObject();
+                    if (startIdx != 0)
+                        gchP = IntPtr.Add(gchP, startIdx);
+                }
+                else
+                {
+                    throw new System.IndexOutOfRangeException("invalid combination of size, startIdx, and length [{0}, {1}, {2}]".CheckedFormat(byteArray.SafeCount(), startIdx, length));
+                }
+
+                Marshal.StructureToPtr(value, gchP, false);
+
+                return length;
+            }
+            catch (System.Exception ex)
+            {
+                if (rethrow && ex != null)
+                    throw;
+
+                return 0;
+            }
+            finally
+            {
+                gchP = default(IntPtr);
+
+                if (gch.IsAllocated)
+                    gch.Free();
+            }
+        }
+
+        /// <summary>
+        /// This method pins the given byteArray, computes a relative offset into the byte array, 
+        /// and marshals the indicated bytes into a new instance of the given <typeparamref name="TObjType"/> which is returned after unpinning the given byteArray.
+        /// If the method encounteres any error (exceptions) this method will either <paramref name="rethrow"/> (when requested)
+        /// or will return the given <paramref name="fallbackValue"/>.
+        /// </summary>
+        public static TObjType MarshalStructFromByteArray<TObjType>(this byte[] byteArray, int startIdx = 0, TObjType fallbackValue = default(TObjType), bool rethrow = true, int? byteCountIn = null)
+        {
+            TObjType value;
+
+            byteArray.MarshalStructFromByteArray(out value, startIdx: startIdx, fallbackValue: fallbackValue, rethrow: rethrow, availableByteCountIn: byteCountIn);
+
+            return value;
+        }
+
+        /// <summary>
+        /// This method pins the given <paramref name="byteArray"/>, computes a relative offset into it, verifies that the byte array is sufficiently large, 
+        /// and marshals the indicated bytes into a new instance of the given <typeparamref name="TObjType"/> which is assigned to the given <paramref name="valueOut"/> out parameter.  The number of bytes produced is returned after unpinning the given byteArray.
+        /// If the method encounteres any error (exceptions) this method will either <paramref name="rethrow"/> (when requested)
+        /// or will assign the given <paramref name="fallbackValue"/> and return zero.
+        /// </summary>
+        public static int MarshalStructFromByteArray<TObjType>(this byte[] byteArray, out TObjType valueOut, int startIdx = 0, TObjType fallbackValue = default(TObjType), bool strictLength = true, bool rethrow = true, int? availableByteCountIn = null)
+        {
+            GCHandle gch = default(GCHandle);
+            IntPtr gchP = default(IntPtr);
+
+            try
+            {
+                int length = Marshal.SizeOf(typeof(TObjType));
+
+                if (byteArray != null)
+                {
+                    gch = GCHandle.Alloc(byteArray, GCHandleType.Pinned);
+                }
+
+                int testLength = (strictLength ? length : 1);
+
+                bool lengthLessThanGivenAvailableByteCount = ((availableByteCountIn == null) || (testLength <= availableByteCountIn));
+
+                if (byteArray.IsSafeIndex(startIdx, length: testLength) && gch.IsAllocated && lengthLessThanGivenAvailableByteCount)
+                {
+                    gchP = gch.AddrOfPinnedObject();
+                    if (startIdx != 0)
+                        gchP = IntPtr.Add(gchP, startIdx);
+                }
+                else
+                {
+                    throw new System.IndexOutOfRangeException("invalid combination of size, and startIdx [{0}, {1}]".CheckedFormat(byteArray.SafeCount(), startIdx));
+                }
+
+                valueOut = (TObjType)Marshal.PtrToStructure(gchP, typeof(TObjType));
+
+                return Math.Min(length, byteArray.SafeCount() - startIdx);
+            }
+            catch (System.Exception ex)
+            {
+                valueOut = fallbackValue;
+
+                if (rethrow && ex != null)
+                    throw;
+
+                return 0;
+            }
+            finally
+            {
+                gchP = default(IntPtr);
+
+                if (gch.IsAllocated)
+                    gch.Free();
+            }
+        }
+        private static readonly byte[] emptyByteArray = new byte[0];
+    }
+
+    #endregion
+
+    //-------------------------------------------------
 	#region Atomic Value types
 
     /// <summary>Defines an interface to the Atomic Value storage and manipulation types used here.</summary>

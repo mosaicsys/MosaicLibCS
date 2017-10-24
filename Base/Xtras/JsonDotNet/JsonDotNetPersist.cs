@@ -100,7 +100,7 @@ namespace Mosaic.JsonDotNet
         /// <param name="writeStream">Gives the stream on which the serialized data is to be written.</param>
         public override void WriteObject(TObjectType obj, System.IO.Stream writeStream)
         {
-            // Todo: determine how to both set Encoding and how to avoid closing the writeStream
+            // To do: determine how to both set Encoding and how to avoid closing the writeStream
             using (TextWriter tw = new StreamWriter(writeStream, Encoding, DefaultStreamWriterBufferSize, true))
             using (JsonWriter jw = new JsonTextWriter(tw) { CloseOutput = false })
             {

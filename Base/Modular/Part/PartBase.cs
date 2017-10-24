@@ -211,7 +211,7 @@ namespace MosaicLib.Modular.Part
 	/// </remarks>
 	public interface IBaseState : IEquatable<IBaseState>
 	{
-		/// <summary>return true if the part is simulated</summary>
+        /// <summary>return true if the part is simulated</summary>
 		bool IsSimulated { get; }
 
 		/// <summary>return true if the part is a primary part.  secondary parts are parts that provide secondary functional facade on a common underlying part but where the secondary facade should not be used to manage the part's online/offline state or to start or stop it.</summary>
@@ -479,24 +479,44 @@ namespace MosaicLib.Modular.Part
         // NOTE: Dispose specific behavior related to the use of the Explicit Dispose Action and the use of the AddExplicitDipsoseAction method have been moved to
         //  DisposeableBase class to support more common use of this delegate list based approach to disposal.
 
-        #region More utility properties and methods
+        #region More utility properties and methods (CurrentStackFrame, CurrentMethod, CurrentMethodName, CurrentClassName, CurrentClassLeafName, FmtWin32EC, FmtStdEC)
 
         // Note: The following 5 CurrentYYY methods are copies of the corresponding global static methods under the MosaicLib.Utils.Fcns "namespace" static class
 
         /// <summary>Creates and returns the callers current StackFrame</summary>
-        public static StackFrame CurrentStackFrame { get { return new System.Diagnostics.StackFrame(1); } }
+        public static StackFrame CurrentStackFrame 
+        {
+            [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+            get { return new System.Diagnostics.StackFrame(1); }
+        }
 
         /// <summary>Creates a StackFrame for the caller and returns the stack frame's current method.</summary>
-        public static MethodBase CurrentMethod { get { return new System.Diagnostics.StackFrame(1).GetMethod(); } }
+        public static MethodBase CurrentMethod 
+        {
+            [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+            get { return new System.Diagnostics.StackFrame(1).GetMethod(); } 
+        }
 
         /// <summary>Creates a StackFrame for the caller and returns the Name of the stack frame's current method.</summary>
-        public static string CurrentMethodName { get { return new System.Diagnostics.StackFrame(1).GetMethod().Name; } }
+        public static string CurrentMethodName 
+        {
+            [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+            get { return new System.Diagnostics.StackFrame(1).GetMethod().Name; } 
+        }
 
         /// <summary>Creates a StackFrame for the caller and returns the Name of the current methods DeclaringType</summary>
-        public static string CurrentClassName { get { return new System.Diagnostics.StackFrame(1).GetMethod().DeclaringType.ToString(); } }
+        public static string CurrentClassName 
+        {
+            [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+            get { return new System.Diagnostics.StackFrame(1).GetMethod().DeclaringType.ToString(); } 
+        }
 
         /// <summary>Creates a StackFrame for the caller and returns the Leaf Name of the current methods DeclaringType (The token at the end of any sequence of dot seperated tokens)</summary>
-        public static string CurrentClassLeafName { get { return (new System.Diagnostics.StackFrame(1).GetMethod().DeclaringType.ToString()).Split('.').SafeLast(); } }
+        public static string CurrentClassLeafName 
+        {
+            [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+            get { return (new System.Diagnostics.StackFrame(1).GetMethod().DeclaringType.ToString()).Split('.').SafeLast(); } 
+        }
 
         /// <summary>Protected utility method.  Returns the result of calling <code>Utils.EC.FmtWin32EC(PartID, win32EC);</code></summary>
 		protected string FmtWin32EC(int win32EC) { return Utils.EC.FmtWin32EC(PartID, win32EC); }
@@ -1126,7 +1146,7 @@ namespace MosaicLib.Modular.Part
         }
 
         /// <summary>Variant SetBaseState which allows caller to set the useState</summary>
-        protected void SetBaseState(UseState useState, string reason, bool publish)
+        protected void SetBaseState(UseState useState, string reason, bool publish = true)
         {
             privateBaseState.SetState(useState, privateBaseState.ConnState, reason);
             if (publish)
@@ -1134,7 +1154,7 @@ namespace MosaicLib.Modular.Part
         }
 
         /// <summary>Variant SetBaseState which allows caller to set the action name</summary>
-        protected void SetBaseState(string actionName, string reason, bool publish)
+        protected void SetBaseState(string actionName, string reason, bool publish = true)
         {
             privateBaseState.ActionName = actionName;
             if (publish)
@@ -1142,7 +1162,7 @@ namespace MosaicLib.Modular.Part
         }
 
         /// <summary>Variant SetBaseState which allows caller to set the useState and identify a specific action name</summary>
-        protected void SetBaseState(UseState useState, string actionName, string reason, bool publish)
+        protected void SetBaseState(UseState useState, string actionName, string reason, bool publish = true)
         {
             privateBaseState.SetState(useState, actionName);
             if (publish)
@@ -1150,7 +1170,7 @@ namespace MosaicLib.Modular.Part
         }
 
         /// <summary>Variant SetBaseState which allows caller to set the connState</summary>
-        protected void SetBaseState(ConnState connState, string reason, bool publish)
+        protected void SetBaseState(ConnState connState, string reason, bool publish = true)
         {
             privateBaseState.SetState(privateBaseState.UseState, connState, reason);
             if (publish)
@@ -1158,13 +1178,13 @@ namespace MosaicLib.Modular.Part
         }
 
         /// <summary>Variant SetBaseState which allows caller to set the useState and the commState.  actionName will be set to null/empty.</summary>
-        protected void SetBaseState(UseState useState, ConnState connState, string reason, bool publish)
+        protected void SetBaseState(UseState useState, ConnState connState, string reason, bool publish = true)
         {
             SetBaseState(useState, null, connState, reason, publish);
         }
 
         /// <summary>Variant SetBaseState which allows caller to set the useState, the action name, and the commState</summary>
-        protected void SetBaseState(UseState useState, string actionName, ConnState connState, string reason, bool publish)
+        protected void SetBaseState(UseState useState, string actionName, ConnState connState, string reason, bool publish = true)
         {
             privateBaseState.SetState(useState, actionName, connState, reason);
             if (publish)
@@ -1172,7 +1192,7 @@ namespace MosaicLib.Modular.Part
         }
 
         /// <summary>Variant SetBaseState which allows the caller to set the BaseState contents to match a value from some other source.</summary>
-        protected void SetBaseState(IBaseState rhs, string reason, bool publish)
+        protected void SetBaseState(IBaseState rhs, string reason, bool publish = true)
         {
             privateBaseState.SetState(rhs, reason);
             if (publish)

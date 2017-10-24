@@ -2491,7 +2491,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
         #endregion
     }
 
-    /// Todo: review if this is still useful/required
+    /// To do: review if this is still useful/required
     //public static class TrackingSetFactory
     //{
     //    public static object CreateTrackingSet(Type objectType, SetID setID)

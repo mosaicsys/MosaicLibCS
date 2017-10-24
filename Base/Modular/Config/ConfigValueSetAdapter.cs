@@ -639,7 +639,7 @@ namespace MosaicLib.Modular.Config
             }
             else if (itemInfo.ItemType == typeof(ValueContainer))
             {
-                Func<IConfigKeyAccess, ValueContainer, ValueContainer> ikaGetter = (ika, defaultValue) => ika.ValueContainer;
+                Func<IConfigKeyAccess, ValueContainer, ValueContainer> ikaGetter = (ika, defaultValue) => ika.VC;
                 Action<TConfigValueSet, ValueContainer> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TConfigValueSet, ValueContainer>(itemInfo);
                 Func<TConfigValueSet, ValueContainer> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TConfigValueSet, ValueContainer>(itemInfo);
                 innerBoundSetter = delegate(TConfigValueSet valueSetObj, IConfigKeyAccess ika) { pfSetter(valueSetObj, ikaGetter(ika, pfGetter(valueSetObj))); };

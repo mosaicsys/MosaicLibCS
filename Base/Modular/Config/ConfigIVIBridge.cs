@@ -247,7 +247,7 @@ namespace MosaicLib.Modular.Config
                                                                                 Flags = new ConfigKeyAccessFlags() { MayBeChanged = true }, 
                                                                                 MetaData = new NamedValueSet() { { "EnsureExists", BridgeConfig.UseEnsureExists }, { "DefaultProvider", BridgeConfig.DefaultConfigKeyProviderName } } 
                                                                             }
-                                                                         , iva.ValueContainer);
+                                                                         , iva.VC);
 
                         AddSyncItemAndPerformInitialPropagation(iva, cka, ivaNativeName, null, mappedFromIVAName, mappedToCKAKeyName);
                     }
@@ -274,7 +274,7 @@ namespace MosaicLib.Modular.Config
 
                     IConfigKeyAccess cka = (propagateConfigKeyName ? Config.GetConfigKeyAccess(new ConfigKeyAccessSpec() { Key = configKeyName, Flags = new ConfigKeyAccessFlags() { MayBeChanged = true } }) : null);
 
-                    propagateConfigKeyName &= (BridgeConfig.CKAPropagateFilterPredicate == null || (cka != null && BridgeConfig.CKAPropagateFilterPredicate(cka.Key, cka.MetaData, cka.ValueContainer)));
+                    propagateConfigKeyName &= (BridgeConfig.CKAPropagateFilterPredicate == null || (cka != null && BridgeConfig.CKAPropagateFilterPredicate(cka.Key, cka.MetaData, cka.VC)));
 
                     string mappedFromConfigKeyName = configKeyName;
                     propagateConfigKeyName &= (BridgeConfig.CKAMapNameFromTo == null || BridgeConfig.CKAMapNameFromTo.MapInverse(configKeyName, ref mappedFromConfigKeyName));
@@ -309,9 +309,9 @@ namespace MosaicLib.Modular.Config
                 {
                     if (syncItem.iva.IsUpdateNeeded)
                     {
-                        ValueContainer vc = syncItem.iva.Update().ValueContainer;
+                        ValueContainer vc = syncItem.iva.Update().VC;
 
-                        if (!vc.IsEqualTo(syncItem.cka.ValueContainer))
+                        if (!vc.IsEqualTo(syncItem.cka.VC))
                         {
                             ValueTraceEmitter.Emit("Propagating iva change '{0}' to cka '{1}'", syncItem.iva, syncItem.cka);
                             syncItem.cka.SetValue(vc, "{0}: Propagating value change from iva '{1}'".CheckedFormat(PartID, syncItem.iva), autoUpdate: false);
@@ -331,9 +331,9 @@ namespace MosaicLib.Modular.Config
                 {
                     if (syncItem.cka.UpdateValue())
                     {
-                        ValueContainer vc = syncItem.cka.ValueContainer;
+                        ValueContainer vc = syncItem.cka.VC;
 
-                        if (!vc.IsEqualTo(syncItem.iva.ValueContainer))
+                        if (!vc.IsEqualTo(syncItem.iva.VC))
                         {
                             ValueTraceEmitter.Emit("Propagating cka change '{0}' to iva '{1}'", syncItem.cka, syncItem.iva);
                             syncItem.iva.Set(vc);
@@ -369,8 +369,8 @@ namespace MosaicLib.Modular.Config
 
             if (cka.HasValue)
             {
-                ValueContainer vc = cka.ValueContainer;
-                if (!iva.ValueContainer.IsEqualTo(vc))
+                ValueContainer vc = cka.VC;
+                if (!iva.VC.IsEqualTo(vc))
                 {
                     ValueTraceEmitter.Emit("Propagating initial cka '{0}' to iva '{1}'", cka, iva);
                     iva.Set(vc);
@@ -382,7 +382,7 @@ namespace MosaicLib.Modular.Config
             }
             else if (iva.HasValueBeenSet)
             {
-                ValueContainer vc = iva.ValueContainer;
+                ValueContainer vc = iva.VC;
                 ValueTraceEmitter.Emit("Propagating initial iva '{0}' to cka '{1}'", iva, cka);
                 cka.SetValue(vc, "{0}: Propagating initial value from iva '{1}'".CheckedFormat(PartID, iva));
             }

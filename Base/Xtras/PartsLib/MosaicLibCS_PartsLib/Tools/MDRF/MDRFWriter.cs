@@ -1724,7 +1724,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
                 {
                     gpi.ValueSourceIVA = gt.ivi.GetValueAccessor(gpi.Name);
                     if (gpi.ValueSourceIVA.HasValueBeenSet)
-                        gpi.VC = gpi.ValueSourceIVA.ValueContainer;
+                        gpi.VC = gpi.ValueSourceIVA.VC;
                     lastServicedIVASeqNum = gpi.ValueSourceIVA.ValueSeqNum;
                 }
 
@@ -1748,7 +1748,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
                 {
                     if (lastServicedIVASeqNum != iva.ValueSeqNum)
                     {
-                        groupPointInfo.VC = iva.ValueContainer;
+                        groupPointInfo.VC = iva.VC;
                         lastServicedValue = groupPointInfo.VC;
                         if (!touched)
                             touched = true;

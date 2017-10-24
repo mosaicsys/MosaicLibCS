@@ -160,12 +160,21 @@ namespace MosaicLib.Semi.E090
             return ec;
         }
 
-        public static List<E039UpdateItem> GenerateCreateE090SubstLocItems(this List<E039UpdateItem> updateItemList, string substLocName, out E039UpdateItem.AddObject addObjectUpdateItem, INamedValueSet attributes = null, E039ObjectFlags flags = E039ObjectFlags.None)
+        public static E039UpdateItem.AddObject GenerateCreateE090SubstLocItems(this string substLocName, List<E039UpdateItem> updateItemList, INamedValueSet attributes = null, E039ObjectFlags flags = E039ObjectFlags.None, bool addIfNeeded = false)
+        {
+            E039UpdateItem.AddObject addObjectItem;
+
+            updateItemList.GenerateCreateE090SubstLocItems(substLocName, out addObjectItem, attributes: attributes, flags: flags, addIfNeeded: addIfNeeded);
+
+            return addObjectItem;
+        }
+
+        public static List<E039UpdateItem> GenerateCreateE090SubstLocItems(this List<E039UpdateItem> updateItemList, string substLocName, out E039UpdateItem.AddObject addObjectUpdateItem, INamedValueSet attributes = null, E039ObjectFlags flags = E039ObjectFlags.None, bool addIfNeeded = false)
         {
             E039ObjectID substLocObjID = new E039ObjectID(substLocName, Constants.SubstrateLocationObjectType, assignUUID: true);
 
-            updateItemList.Add(addObjectUpdateItem = new E039UpdateItem.AddObject(substLocObjID, attributes: attributes, flags: flags));
-            updateItemList.Add(new E039UpdateItem.AddLink(new E039Link(substLocObjID, E039ObjectID.Empty, "Contains")));
+            updateItemList.Add(addObjectUpdateItem = new E039UpdateItem.AddObject(substLocObjID, attributes: attributes, flags: flags, ifNeeded: addIfNeeded));
+            updateItemList.Add(new E039UpdateItem.AddLink(new E039Link(substLocObjID, E039ObjectID.Empty, "Contains"), ifNeeded: addIfNeeded));
 
             return updateItemList;
         }

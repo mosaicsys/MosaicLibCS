@@ -78,7 +78,7 @@ namespace MosaicLib.WPF.Interconnect
             LastServicedValueSeqNum = ValueAccessor.ValueSeqNum;
 
             // extract new values from the IVA's ValueContainer
-            ValueContainer ivaVC = ValueAccessor.ValueContainer;
+            ValueContainer ivaVC = ValueAccessor.VC;
             object valueAsObject = ivaVC.ValueAsObject;
             string valueAsString = valueAsObject as string;
 
@@ -202,7 +202,7 @@ namespace MosaicLib.WPF.Interconnect
 
                 if (!inNotifyValueHasBeenUpdated)
                 {
-                    if (!ValueAccessor.ValueContainer.IsEqualTo(newValueVC))
+                    if (!ValueAccessor.VC.IsEqualTo(newValueVC))
                     {
                         ValueAccessor.Set(newValueVC);
                         lastVC = newValueVC;
