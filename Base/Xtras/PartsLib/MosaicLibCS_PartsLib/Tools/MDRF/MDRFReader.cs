@@ -380,12 +380,12 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                     );
         }
 
-        public bool DoesFilterAcceptThis(ReadAndProcessFilterSpec filterSpec, bool checkIfComesAfterStartOfFilterPeriod = true, bool checkComesBeforeEndOfFilterPeriod = true)
+        public bool DoesFilterAcceptThis(ReadAndProcessFilterSpec filterSpec, bool checkIfComesAfterStartOfFilterPeriod = true, bool checkIfComesBeforeEndOfFilterPeriod = true)
         {
             if (checkIfComesAfterStartOfFilterPeriod && (fileOffsetToStartOfBlock < filterSpec.FirstEventBlockStartOffset || fileDeltaTimeStamp < filterSpec.FirstFileDeltaTimeStamp))
                 return false;
 
-            if (checkIfComesAfterStartOfFilterPeriod && (fileOffsetToStartOfBlock > filterSpec.LastEventBlockStartOffset || fileDeltaTimeStamp > filterSpec.LastFileDeltaTimeStamp))
+            if (checkIfComesBeforeEndOfFilterPeriod && (fileOffsetToStartOfBlock > filterSpec.LastEventBlockStartOffset || fileDeltaTimeStamp > filterSpec.LastFileDeltaTimeStamp))
                 return false;
 
             return true;
@@ -946,15 +946,15 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                     DataBlockBuffer dbb;
                     if (isFirstBlock)
                     {
-                        dbb = ReadFirstDataBlockUsingFileIndex(currentScanRow);
+                        dbb = ReadFirstDataBlockUsingFileIndex(currentScanRow, requirePayloadBytes: false);
                         isFirstBlock = false;
                     }
                     else
                     {
-                        dbb = ReadNextDataBlock();
+                        dbb = ReadNextDataBlock(requirePayloadBytes: false);
                     }
 
-                    if (dbb == null || !dbb.IsValid || !dbb.DoesFilterAcceptThis(filterSpec, checkIfComesAfterStartOfFilterPeriod: false, checkComesBeforeEndOfFilterPeriod: true))
+                    if (dbb == null || !dbb.IsValid || !dbb.DoesFilterAcceptThis(filterSpec, checkIfComesAfterStartOfFilterPeriod: false, checkIfComesBeforeEndOfFilterPeriod: true))
                         break;
 
                     if (lastDbbTimeStamp != dbb.fileDeltaTimeStamp)
@@ -1081,12 +1081,18 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
 
         private void ProcessContents(DataBlockBuffer dbb, ReadAndProcessFilterSpec filterSpec)
         {
+            if (!dbb.DoesFilterAcceptThis(filterSpec, checkIfComesAfterStartOfFilterPeriod: !filterSpec.AutoRewindToPriorFullGroupRow, checkIfComesBeforeEndOfFilterPeriod: true))
+                return;
+
             switch (dbb.FixedBlockTypeID)
             {
                 case FixedBlockTypeID.ErrorV1:
                 case FixedBlockTypeID.MessageV1:
-                    if (dbb.DoesFilterAcceptThis(filterSpec, checkIfComesAfterStartOfFilterPeriod: true, checkComesBeforeEndOfFilterPeriod: true))
+                    if ((filterSpec.PCEMask & (ProcessContentEvent.Message | ProcessContentEvent.Error)) != 0)
+                    {
+                        PopulateDataBlockBufferIfNeeded(dbb);
                         ProcessMessageOrErrorBlock(dbb, filterSpec);
+                    }
                     return;
                 case FixedBlockTypeID.MetaDataV1:
                 case FixedBlockTypeID.FileHeaderV1:
@@ -1113,12 +1119,12 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                     {
                         IOccurrenceInfo oi = mdci as IOccurrenceInfo;
 
-                        if (oi != null 
-                            && dbb.DoesFilterAcceptThis(filterSpec, checkIfComesAfterStartOfFilterPeriod: !filterSpec.AutoRewindToPriorFullGroupRow, checkComesBeforeEndOfFilterPeriod: true) 
+                        if (oi != null
                             && filterSpec.OccurrenceFilterDelegate(oi) 
                             && (filterSpec.PCEMask & ProcessContentEvent.Occurrence) != 0
                             )
                         {
+                            PopulateDataBlockBufferIfNeeded(dbb);
                             ProcessOccurrenceBlock(oi, dbb, filterSpec);
                         }
                     }
@@ -1129,11 +1135,11 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
 
                         // only filter on coming before end of filter period if 
                         if (gi != null
-                            && dbb.DoesFilterAcceptThis(filterSpec, checkIfComesAfterStartOfFilterPeriod: !filterSpec.AutoRewindToPriorFullGroupRow, checkComesBeforeEndOfFilterPeriod: true)
                             && filterSpec.GroupFilterDelegate(gi) 
                             && (filterSpec.PCEMask & (ProcessContentEvent.Group | ProcessContentEvent.EmptyGroup | ProcessContentEvent.PartialGroup | ProcessContentEvent.StartOfFullGroup | ProcessContentEvent.GroupSetStart | ProcessContentEvent.GroupSetEnd)) != 0
                             )
                         {
+                            PopulateDataBlockBufferIfNeeded(dbb);
                             ProcessGroupBlock(gi, dbb, filterSpec);
                         }
                     }

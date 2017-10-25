@@ -374,6 +374,8 @@ namespace MosaicLib.Semi.E005.Data
                 case ContainerStorageType.String: byteArrayBuilder.AppendWithIH(vc.o as string); return;
                 case ContainerStorageType.IListOfString: byteArrayBuilder.AppendWithIH(vc.GetValue<string[]>(true)); return;
                 case ContainerStorageType.IListOfVC: byteArrayBuilder.AppendWithIH(vc.GetValue<IList<ValueContainer>>(true)); return;
+                case ContainerStorageType.INamedValueSet: byteArrayBuilder.AppendWithIH(vc.o as INamedValueSet); return;
+                case ContainerStorageType.INamedValue: byteArrayBuilder.AppendWithIH(vc.o as INamedValue); return;
                 case ContainerStorageType.Object:
                     if (vc.o != null)
                     {
