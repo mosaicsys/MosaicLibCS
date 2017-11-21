@@ -103,10 +103,10 @@ namespace MosaicLib.Utils
         /// </summary>
         public static ItemType SafeAccess<ItemType>(this ItemType[] fromArray, int getFromIndex, ItemType defaultValue = default(ItemType))
         {
-            if (fromArray == null || getFromIndex < 0 || getFromIndex >= fromArray.Length)
-                return defaultValue;
-            else
+            if (fromArray.IsSafeIndex(getFromIndex))
                 return fromArray[getFromIndex];
+            else
+                return defaultValue;
         }
 
         /// <summary>
@@ -121,14 +121,11 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method version of Array indexed sub-array get access that handles all out of range accesses by returning either a partial sub-array or an empty array.
         /// </summary>
-        public static ItemType[] SafeSubArray<ItemType>(this ItemType[] fromArray, int getFromIndex, int getSubArrayLength = -1)
+        public static ItemType[] SafeSubArray<ItemType>(this ItemType[] fromArray, int getFromIndex, int getSubArrayLength = int.MaxValue)
         {
             int fromArrayLength = fromArray.SafeLength();
 
-            if (getSubArrayLength >= 0)
-                getSubArrayLength = Math.Max(0, Math.Min(getSubArrayLength, (fromArrayLength - getFromIndex)));
-            else
-                getSubArrayLength = Math.Max(0, (fromArrayLength - getFromIndex));
+            getSubArrayLength = Math.Max(0, Math.Min(getSubArrayLength, (fromArrayLength - getFromIndex)));
 
             ItemType[] subArray = new ItemType[getSubArrayLength];
 
@@ -141,14 +138,11 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method version of IList indexed sub-array get access that handles all out of range accesses by returning either a partial sub-array or an empty array.
         /// </summary>
-        public static ItemType[] SafeSubArray<ItemType>(this IList<ItemType> fromList, int getFromIndex, int getSubArrayLength = -1)
+        public static ItemType[] SafeSubArray<ItemType>(this IList<ItemType> fromList, int getFromIndex, int getSubArrayLength = int.MaxValue)
         {
             int fromListCount = fromList.SafeCount();
 
-            if (getSubArrayLength >= 0)
-                getSubArrayLength = Math.Max(0, Math.Min(getSubArrayLength, (fromListCount - getFromIndex)));
-            else
-                getSubArrayLength = Math.Max(0, (fromListCount - getFromIndex));
+            getSubArrayLength = Math.Max(0, Math.Min(getSubArrayLength, (fromListCount - getFromIndex)));
 
             ItemType[] subArray = new ItemType[getSubArrayLength];
 
@@ -162,20 +156,9 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Extension method version of string indexed get access that handles all out of range accesses by returning the default(char)
-        /// </summary>
-        public static char SafeAccess(this string fromStr, int getFromIndex)
-        {
-            if (fromStr == null || getFromIndex < 0 || getFromIndex > fromStr.Length)
-                return default(char);
-            else
-                return fromStr[getFromIndex];
-        }
-
-        /// <summary>
         /// Extension method version of string indexed get access that handles all out of range accesses by returning the given default value
         /// </summary>
-        public static char SafeAccess(this string fromStr, int getFromIndex, char defaultValue)
+        public static char SafeAccess(this string fromStr, int getFromIndex, char defaultValue = default(char))
         {
             if (fromStr == null || getFromIndex < 0 || getFromIndex > fromStr.Length)
                 return defaultValue;
@@ -222,6 +205,28 @@ namespace MosaicLib.Utils
                 return defaultValue;
             else
                 return fromArray[fromArray.Length - 1];
+        }
+
+        /// <summary>
+        /// Extension method version of Array.Copy with copy length clipped to prevent exceptions
+        /// </summary>
+        public static void SafeCopyFrom<ItemType>(this ItemType[] copyIntoArray, ItemType[] copyFromArray, int copyFromIndex = 0, int copyLengthLimitIn = int.MaxValue)
+        {
+            copyIntoArray.SafeCopyFrom(copyToIndex: 0, copyFromArray: copyFromArray, copyFromIndex: copyFromIndex, copyLengthLimitIn: copyLengthLimitIn);
+        }
+
+        /// <summary>
+        /// Extension method version of Array.Copy with copy length clipped to prevent exceptions
+        /// </summary>
+        public static void SafeCopyFrom<ItemType>(this ItemType[] copyIntoArray, int copyToIndex, ItemType[] copyFromArray, int copyFromIndex = 0, int copyLengthLimitIn = int.MaxValue)
+        {
+            int fromArrayLength = copyFromArray.SafeLength();
+            int intoArrayLength = copyIntoArray.SafeLength();
+
+            int copyLength = Math.Max(0, Math.Min(copyLengthLimitIn, Math.Min(fromArrayLength - copyFromIndex, intoArrayLength - copyToIndex)));
+
+            if (copyLength > 0)
+                System.Array.Copy(copyFromArray, copyFromIndex, copyIntoArray, copyToIndex, copyLength);
         }
 
         #endregion
@@ -424,12 +429,36 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Etension method to add a set of items (params parameter) to a given list)
+        /// Extension method to add a set of items (from an enumerable source) to the given list
         /// </summary>
-        public static List<ItemType> SafeAddSet<ItemType>(this List<ItemType> list, params ItemType [] itemSetArray)
+        public static List<ItemType> SafeAddSet<ItemType>(this List<ItemType> list, IEnumerable<ItemType> itemSet)
         {
-            if (list != null && !itemSetArray.IsEmpty())
-                list.AddRange(itemSetArray);
+            if (list != null && itemSet != null)
+                list.AddRange(itemSet);
+
+            return list;
+        }
+
+        /// <summary>
+        /// Extension method to add a group of items (params parameter) to a given list)
+        /// </summary>
+        public static List<ItemType> SafeAddItems<ItemType>(this List<ItemType> list, params ItemType[] itemsArray)
+        {
+            if (list != null && !itemsArray.IsEmpty())
+                list.AddRange(itemsArray);
+
+            return list;
+        }
+
+        [Obsolete("This method is being replaced with similarly named SafeAddItems nomenclature now used with params itemsArray.  Please convert to using the new naming. (2017-11-01)")]
+        public static List<ItemType> SafeAddSet<ItemType>(this List<ItemType> list, ItemType item, params ItemType[] itemSetArray)
+        {
+            if (list != null)
+            {
+                list.Add(item);
+                if (!itemSetArray.IsEmpty())
+                    list.AddRange(itemSetArray);
+            }
 
             return list;
         }
@@ -624,44 +653,52 @@ namespace MosaicLib.Utils
 
         /// <summary>
         /// Returns true if the given <paramref name="value"/> contains the given <paramref name="test"/> pattern (by bit mask test).  Eqivilant to <paramref name="value"/>.IsMatch(<paramref name="test"/>, <paramref name="test"/>)
-        /// <para/>This extension method is intended for use with Flag enumerations.  Use with types that are not derived from System.Enum will simply return false;
+        /// <para/>This extension method is intended for use with enumerations (especially Flag enumerations) and integer value types.  Use with unsupported types will simply return false;
         /// </summary>
-        public static bool IsSet<TEnumType>(this TEnumType value, TEnumType test) where TEnumType : struct
+        public static bool IsSet<TValueType>(this TValueType value, TValueType test) where TValueType : struct
         {
             return value.IsMatch(test, test);
         }
 
         /// <summary>
-        /// Returns true if the given value bit anded with the given mask is equal to the given match:  return ((value &amp; mask) == match).
-        /// <para/>This extension method is intended for use with Flag enumerations.  Use with types that are not derived from System.Enum will simply return false;
+        /// Returns true if the given value anded with the given mask is not zero:  return ((value &amp; mask) != default(value)).
+        /// <para/>This extension method is intended for use with enumerations (especially Flag enumerations) and integer value types.  Use with unsupported types will simply return false;
         /// </summary>
-        public static bool IsAnySet<TEnumType>(this TEnumType value, TEnumType mask)
+        public static bool IsAnySet<TValueType>(this TValueType value, TValueType mask)
         {
-            return !value.IsMatch(mask, default(TEnumType));
+            return !value.IsMatch(mask, default(TValueType));
         }
 
         /// <summary>
-        /// Returns true if the given <paramref name="value"/> does not contain any part (bit) from the given <paramref name="test"/> pattern (by bit mask test).  Eqivilant to <paramref name="value"/>.IsMatch(<paramref name="test"/>, default(<typeparamref name="TEnumType"/>))
-        /// <para/>This extension method is intended for use with Flag enumerations.  Use with types that are not derived from System.Enum will simply return false;
+        /// Returns true if the given <paramref name="value"/> does not contain any part (bit) from the given <paramref name="test"/> pattern (by bit mask test).  Eqivilant to <paramref name="value"/>.IsMatch(<paramref name="test"/>, default(<typeparamref name="TValueType"/>))
+        /// <para/>This extension method is intended for use with enumerations (especially Flag enumerations) and integer value types.  Use with unsupported types will simply return false;
         /// </summary>
-        public static bool IsClear<TEnumType>(this TEnumType value, TEnumType test) where TEnumType : struct
+        public static bool IsClear<TValueType>(this TValueType value, TValueType test) where TValueType : struct
         {
-            return value.IsMatch(test, default(TEnumType));
+            return value.IsMatch(test, default(TValueType));
         }
 
         /// <summary>
         /// Returns true if the given value bit anded with the given mask is equal to the given match:  return ((value &amp; mask) == match).
-        /// <para/>This extension method is intended for use with Flag enumerations.  Use with types that are not derived from System.Enum will simply return false;
+        /// <para/>This extension method is intended for use with enumerations (especially Flag enumerations) and integer value types.  Use with unsupported types will simply return false;
         /// </summary>
-        public static bool IsMatch<TEnumType>(this TEnumType value, TEnumType mask, TEnumType match)
+        public static bool IsMatch<TValueType>(this TValueType value, TValueType mask, TValueType match)
         {
             try
             {
-                if (!(value is System.Enum))
-                    return false;
+                TypeCode typeCode = TypeCode.Empty;
 
-                System.Enum startingValueAsEnum = value as System.Enum;
-                TypeCode typeCode = startingValueAsEnum.GetTypeCode();
+                if (value is System.Enum)
+                {
+                    System.Enum startingValueAsEnum = value as System.Enum;
+                    typeCode = startingValueAsEnum.GetTypeCode();
+                }
+                else if (value is IConvertible)
+                {
+                    IConvertible ic = (IConvertible) value;
+                    typeCode = ic.GetTypeCode();
+                }
+
                 switch (typeCode)
                 {
                     case TypeCode.Int64:
@@ -672,7 +709,6 @@ namespace MosaicLib.Utils
 
                         return ((valueU8 & maskU8) == matchU8);
 
-                    default:
                     case TypeCode.Int32:
                     case TypeCode.UInt32:
                         uint valueU4 = (uint)System.Convert.ChangeType(value, typeof(uint));
@@ -683,6 +719,7 @@ namespace MosaicLib.Utils
 
                     case TypeCode.Int16:
                     case TypeCode.UInt16:
+                    case TypeCode.Char:
                         ushort valueU2 = (ushort)System.Convert.ChangeType(value, typeof(ushort));
                         ushort maskU2 = (ushort)System.Convert.ChangeType(mask, typeof(ushort));
                         ushort matchU2 = (ushort)System.Convert.ChangeType(match, typeof(ushort));
@@ -696,6 +733,10 @@ namespace MosaicLib.Utils
                         byte matchU1 = (byte)System.Convert.ChangeType(match, typeof(byte));
 
                         return ((valueU1 & maskU1) == matchU1);
+
+                    default:
+                    case TypeCode.Empty:
+                        return false;
                 }
             }
             catch
@@ -705,120 +746,176 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// For Enum derived TEnumType types, this method accepts the given startingValue and pattern and returns startingValue &amp; ~pattern.
+        /// For Enum derived <typeparamref name="TValueType"/> types, this method accepts the given startingValue and pattern and returns startingValue &amp; ~pattern.
+        /// <para/>This extension method is intended for use with enumerations (especially Flag enumerations) and integer value types.  Use with unsupported types will simply return default(startingValue);
         /// </summary>
-        public static TEnumType Clear<TEnumType>(this TEnumType startingValue, TEnumType pattern) where TEnumType : struct
+        public static TValueType Clear<TValueType>(this TValueType startingValue, TValueType pattern) where TValueType : struct
         {
             return Set(startingValue, pattern, setPattern: false);
         }
 
         /// <summary>
-        /// For Enum derived TEnumType types, this method accepts the given startingValue and pattern and returns either startingValue | pattern (setPattern: true) or startingValue &amp; ~pattern (setPattern: false) depending on the given value of setPattern.
+        /// For Enum derived <typeparamref name="TValueType"/> types, this method accepts the given startingValue and pattern and returns either startingValue | pattern (setPattern: true) or startingValue &amp; ~pattern (setPattern: false) depending on the given value of setPattern.
+        /// <para/>This extension method is intended for use with enumerations (especially Flag enumerations) and integer value types.  Use with unsupported types will simply return default(startingValue);
         /// </summary>
-        public static TEnumType Set<TEnumType>(this TEnumType startingValue, TEnumType pattern, bool setPattern = true) where TEnumType : struct
+        public static TValueType Set<TValueType>(this TValueType startingValue, TValueType pattern, bool setPattern = true) where TValueType : struct
         {
             try
             {
-                if (!(startingValue is System.Enum))
-                    return default(TEnumType);
+                TypeCode typeCode = TypeCode.Empty;
+                bool isEnum = false;
 
-                System.Enum startingValueAsEnum = startingValue as System.Enum;
-                TypeCode typeCode = startingValueAsEnum.GetTypeCode();
+                if (startingValue is System.Enum)
+                {
+                    System.Enum startingValueAsEnum = startingValue as System.Enum;
+                    typeCode = startingValueAsEnum.GetTypeCode();
+                    isEnum = true;
+                }
+                else if (startingValue is IConvertible)
+                {
+                    IConvertible ic = (IConvertible)startingValue;
+                    typeCode = ic.GetTypeCode();
+                }
+
                 switch (typeCode)
                 {
                     case TypeCode.Int64:
-                        long valueI8 = (long)System.Convert.ChangeType(startingValue, typeof(long));
-                        long patternI8 = (long)System.Convert.ChangeType(pattern, typeof(long));
+                        {
+                            long valueI8 = (long)System.Convert.ChangeType(startingValue, typeof(long));
+                            long patternI8 = (long)System.Convert.ChangeType(pattern, typeof(long));
 
-                        if (setPattern)
-                            valueI8 |= patternI8;
-                        else
-                            valueI8 &= ~patternI8;
+                            if (setPattern)
+                                valueI8 |= patternI8;
+                            else
+                                valueI8 &= ~patternI8;
 
-                        return (TEnumType)System.Enum.ToObject(typeof(TEnumType), valueI8);
+                            if (isEnum)
+                                return (TValueType)System.Enum.ToObject(typeof(TValueType), valueI8);
+                            else
+                                return (TValueType)((System.Object)valueI8);
+                        }
 
                     case TypeCode.UInt64:
-                        ulong valueU8 = (ulong)System.Convert.ChangeType(startingValue, typeof(ulong));
-                        ulong patternU8 = (ulong)System.Convert.ChangeType(pattern, typeof(ulong));
+                        {
+                            ulong valueU8 = (ulong)System.Convert.ChangeType(startingValue, typeof(ulong));
+                            ulong patternU8 = (ulong)System.Convert.ChangeType(pattern, typeof(ulong));
 
-                        if (setPattern)
-                            valueU8 |= patternU8;
-                        else
-                            valueU8 &= ~patternU8;
+                            if (setPattern)
+                                valueU8 |= patternU8;
+                            else
+                                valueU8 &= ~patternU8;
 
-                        return (TEnumType)System.Enum.ToObject(typeof(TEnumType), valueU8);
+                            if (isEnum)
+                                return (TValueType)System.Enum.ToObject(typeof(TValueType), valueU8);
+                            else
+                                return (TValueType)((System.Object)valueU8);
+                        }
 
-                    default:
                     case TypeCode.Int32:
-                        int valueI4 = (int)System.Convert.ChangeType(startingValue, typeof(int));
-                        int patternI4 = (int)System.Convert.ChangeType(pattern, typeof(int));
+                        {
+                            int valueI4 = (int)System.Convert.ChangeType(startingValue, typeof(int));
+                            int patternI4 = (int)System.Convert.ChangeType(pattern, typeof(int));
 
-                        if (setPattern)
-                            valueI4 |= patternI4;
-                        else
-                            valueI4 &= ~patternI4;
+                            if (setPattern)
+                                valueI4 |= patternI4;
+                            else
+                                valueI4 &= ~patternI4;
 
-                        return (TEnumType)System.Enum.ToObject(typeof(TEnumType), valueI4);
+                            if (isEnum)
+                                return (TValueType)System.Enum.ToObject(typeof(TValueType), valueI4);
+                            else
+                                return (TValueType)((System.Object)valueI4);
+                        }
 
                     case TypeCode.UInt32:
-                        uint valueU4 = (uint)System.Convert.ChangeType(startingValue, typeof(uint));
-                        uint patternU4 = (uint)System.Convert.ChangeType(pattern, typeof(uint));
+                        {
+                            uint valueU4 = (uint)System.Convert.ChangeType(startingValue, typeof(uint));
+                            uint patternU4 = (uint)System.Convert.ChangeType(pattern, typeof(uint));
 
-                        if (setPattern)
-                            valueU4 |= patternU4;
-                        else
-                            valueU4 &= ~patternU4;
+                            if (setPattern)
+                                valueU4 |= patternU4;
+                            else
+                                valueU4 &= ~patternU4;
 
-                        return (TEnumType)System.Enum.ToObject(typeof(TEnumType), valueU4);
+                            if (isEnum)
+                                return (TValueType)System.Enum.ToObject(typeof(TValueType), valueU4);
+                            else
+                                return (TValueType)((System.Object)valueU4);
+                        }
 
                     case TypeCode.Int16:
-                        short valueI2 = (short)System.Convert.ChangeType(startingValue, typeof(short));
-                        short patternI2 = (short)System.Convert.ChangeType(pattern, typeof(short));
+                        {
+                            short valueI2 = (short)System.Convert.ChangeType(startingValue, typeof(short));
+                            short patternI2 = (short)System.Convert.ChangeType(pattern, typeof(short));
 
-                        if (setPattern)
-                            valueI2 |= patternI2;
-                        else
-                            valueI2 &= (short)~patternI2;
+                            if (setPattern)
+                                valueI2 |= patternI2;
+                            else
+                                valueI2 &= (short)~patternI2;
 
-                        return (TEnumType)System.Enum.ToObject(typeof(TEnumType), valueI2);
+                            if (isEnum)
+                                return (TValueType)System.Enum.ToObject(typeof(TValueType), valueI2);
+                            else
+                                return (TValueType)((System.Object)valueI2);
+                        }
 
                     case TypeCode.UInt16:
-                        ushort valueU2 = (ushort)System.Convert.ChangeType(startingValue, typeof(ushort));
-                        ushort patternU2 = (ushort)System.Convert.ChangeType(pattern, typeof(ushort));
+                    case TypeCode.Char:
+                        {
+                            ushort valueU2 = (ushort)System.Convert.ChangeType(startingValue, typeof(ushort));
+                            ushort patternU2 = (ushort)System.Convert.ChangeType(pattern, typeof(ushort));
 
-                        if (setPattern)
-                            valueU2 |= patternU2;
-                        else
-                            valueU2 &= (ushort) ~patternU2;
+                            if (setPattern)
+                                valueU2 |= patternU2;
+                            else
+                                valueU2 &= (ushort)~patternU2;
 
-                        return (TEnumType)System.Enum.ToObject(typeof(TEnumType), valueU2);
+                            if (isEnum)
+                                return (TValueType)System.Enum.ToObject(typeof(TValueType), valueU2);
+                            else
+                                return (TValueType)((System.Object)valueU2);
+                        }
 
                     case TypeCode.SByte:
-                        sbyte valueI1 = (sbyte)System.Convert.ChangeType(startingValue, typeof(sbyte));
-                        sbyte patternI1 = (sbyte)System.Convert.ChangeType(pattern, typeof(sbyte));
+                        {
+                            sbyte valueI1 = (sbyte)System.Convert.ChangeType(startingValue, typeof(sbyte));
+                            sbyte patternI1 = (sbyte)System.Convert.ChangeType(pattern, typeof(sbyte));
 
-                        if (setPattern)
-                            valueI1 |= patternI1;
-                        else
-                            valueI1 &= (sbyte)~patternI1;
+                            if (setPattern)
+                                valueI1 |= patternI1;
+                            else
+                                valueI1 &= (sbyte)~patternI1;
 
-                        return (TEnumType)System.Enum.ToObject(typeof(TEnumType), valueI1);
+                            if (isEnum)
+                                return (TValueType)System.Enum.ToObject(typeof(TValueType), valueI1);
+                            else
+                                return (TValueType)((System.Object)valueI1);
+                        }
 
                     case TypeCode.Byte:
-                        byte valueU1 = (byte)System.Convert.ChangeType(startingValue, typeof(byte));
-                        byte patternU1 = (byte)System.Convert.ChangeType(pattern, typeof(byte));
+                        {
+                            byte valueU1 = (byte)System.Convert.ChangeType(startingValue, typeof(byte));
+                            byte patternU1 = (byte)System.Convert.ChangeType(pattern, typeof(byte));
 
-                        if (setPattern)
-                            valueU1 |= patternU1;
-                        else
-                            valueU1 &= (byte) ~patternU1;
+                            if (setPattern)
+                                valueU1 |= patternU1;
+                            else
+                                valueU1 &= (byte)~patternU1;
 
-                        return (TEnumType)System.Enum.ToObject(typeof(TEnumType), valueU1);
+                            if (isEnum)
+                                return (TValueType)System.Enum.ToObject(typeof(TValueType), valueU1);
+                            else
+                                return (TValueType)((System.Object)valueU1);
+                        }
+
+                    default:
+                    case TypeCode.Empty:
+                        return default(TValueType);
                 }
             }
             catch
             {
-                return default(TEnumType);
+                return default(TValueType);
             }
         }
 
@@ -980,7 +1077,7 @@ namespace MosaicLib.Utils
             return source;
         }
 
-        /// <summary>Concatinates (appends) the given <paramref name="item"/> to the given <paramref name="set"/></summary>
+        /// <summary>Concatinates the given <paramref name="item"/> onto the end of the given <paramref name="set"/></summary>
         public static IEnumerable<TItem> Concat<TItem>(this IEnumerable<TItem> set, TItem item)
         {
             return InnerConcat(set ?? new TItem[0], item);
@@ -992,10 +1089,22 @@ namespace MosaicLib.Utils
             return InnerConcat(item, set ?? new TItem[0]);
         }
 
-        /// <summary>Concatinates the given <paramref name="paramsItemArray"/> params items to the given <paramref name="set"/></summary>
-        public static IEnumerable<TItem> Concat<TItem>(this IEnumerable<TItem> set, params TItem[] paramsItemArray)
+        /// <summary>Concatinates the given items onto the end of the given <paramref name="set"/></summary>
+        public static IEnumerable<TItem> Concat<TItem>(this IEnumerable<TItem> set, TItem item1, TItem item2)
         {
-            return System.Linq.Enumerable.Concat(set, paramsItemArray ?? new TItem[0]);
+            return System.Linq.Enumerable.Concat(set ?? new TItem[0], new TItem[] { item1, item2 });
+        }
+
+        /// <summary>Concatinates the given items onto the end of the given <paramref name="set"/></summary>
+        public static IEnumerable<TItem> Concat<TItem>(this IEnumerable<TItem> set, TItem item1, TItem item2, TItem item3)
+        {
+            return System.Linq.Enumerable.Concat(set ?? new TItem[0], new TItem[] { item1, item2, item3 });
+        }
+
+        /// <summary>Concatinates the given items onto the end of the given <paramref name="set"/></summary>
+        public static IEnumerable<TItem> Concat<TItem>(this IEnumerable<TItem> set, TItem item1, TItem item2, TItem item3, params TItem[] moreParamsItemArray)
+        {
+            return System.Linq.Enumerable.Concat(set ?? new TItem[0], new TItem[] { item1, item2, item3 }.Concat(moreParamsItemArray ?? new TItem[0]));
         }
 
         private static IEnumerable<TItem> InnerConcat<TItem>(TItem item, IEnumerable<TItem> set)

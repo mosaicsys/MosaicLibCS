@@ -1059,6 +1059,18 @@ namespace MosaicLib.Utils
             /// </summary>
             public static MatchRule None { get { return matchRuleNone; } }
 
+            /// <summary>Static factory method to create MatchType.Prefix match rule instances</summary>
+            public static MatchRule Prefix(string prefix) { return new MatchRule(MatchType.Prefix, prefix); }
+
+            /// <summary>Static factory method to create MatchType.Suffix match rule instances</summary>
+            public static MatchRule Suffix(string suffix) { return new MatchRule(MatchType.Suffix, suffix); }
+
+            /// <summary>Static factory method to create MatchType.Contains match rule instances</summary>
+            public static MatchRule Contains(string contains) { return new MatchRule(MatchType.Contains, contains); }
+
+            /// <summary>Static factory method to create MatchType.Regex match rule instances</summary>
+            public static MatchRule Regex(string regex) { return new MatchRule(MatchType.Regex, regex); }
+
             private static readonly MatchRule matchRuleAny = new MatchRule(MatchType.Any);
             private static readonly MatchRule matchRuleNone = new MatchRule(MatchType.None);
 

@@ -669,7 +669,15 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
         /// </summary>
         public ActiveTimers Setup(string namePrefix, Logging.IMesgEmitter issueEmitter, Logging.IMesgEmitter valueEmitter)
         {
-            ConfigValueSetAdapter<ActiveTimers> adapter = new ConfigValueSetAdapter<ActiveTimers>() { ValueSet = this, SetupIssueEmitter = issueEmitter, UpdateIssueEmitter = issueEmitter, ValueNoteEmitter = valueEmitter }.Setup(namePrefix);
+            return Setup(config: null, namePrefix: namePrefix, issueEmitter: issueEmitter, valueEmitter: valueEmitter);
+        }
+
+        /// <summary>
+        /// Update this object's ConfigItem marked public properties from corresponingly named config keys (using the namePrefix)
+        /// </summary>
+        public ActiveTimers Setup(IConfig config, string namePrefix, Logging.IMesgEmitter issueEmitter, Logging.IMesgEmitter valueEmitter)
+        {
+            ConfigValueSetAdapter<ActiveTimers> adapter = new ConfigValueSetAdapter<ActiveTimers>(config) { ValueSet = this, SetupIssueEmitter = issueEmitter, UpdateIssueEmitter = issueEmitter, ValueNoteEmitter = valueEmitter }.Setup(namePrefix);
 
             return this;
         }

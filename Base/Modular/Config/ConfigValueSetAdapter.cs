@@ -41,17 +41,17 @@ namespace MosaicLib.Modular.Config
         /// This attribute is used to annotate public settable properties and fields in a class in order that the class can be used as the ConfigValueSet for
         /// a ConfigValueSetAdapter adapter.  Each settable property or field in the ConfigValueSet class specifies a specific property and value source that 
 		/// will receive the initial value and possibly later updates for config key's value that use normal update behavior.
-        /// <para/>Name = null, NameAdjust = NameAdjust.Prefix0, UpdateNormally = false (ReadOnlyOnce = true), IsOptional = false, SilenceIssues = false
+        /// <para/>Name = null, NameAdjust = NameAdjust.Prefix0, UpdateNormally = false (ReadOnlyOnce = true), IsOptional = false, SilenceIssues = false,
+        /// <para/>EnsureExists = false, DefaultProviderName = "", AdditionalKeywords = empty string array.
         /// </summary>
         [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field, AllowMultiple = false)]
         public class ConfigItemAttribute : AnnotatedItemAttributeBase
         {
             /// <summary>
             /// Default constructor.
-            /// <para/>Name = null, NameAdjust = NameAdjust.Prefix0, UpdateNormally = false (ReadOnlyOnce = true), IsOptional = false, SilenceIssues = false
+            /// <para/>Name = null, NameAdjust = NameAdjust.Prefix0, UpdateNormally = false (ReadOnlyOnce = true), IsOptional = false, SilenceIssues = false, EnsureExists = false, DefaultProviderName = "", AdditionalKeywords = new string[0]
             /// </summary>
             public ConfigItemAttribute() 
-                : base()
             { }
 
             /// <summary>
@@ -61,7 +61,8 @@ namespace MosaicLib.Modular.Config
             private ConfigKeyAccessFlags accessFlags = new ConfigKeyAccessFlags();
 
             /// <summary>
-            /// gives C# client access to the NamedValueSet that contains some of the values that are setable here.
+            /// gives C# client get only access to the NamedValueSet that contains some of the values that are setable here.  
+            /// The getter will generate an NVS to contain the the merged contents of the AdditionalKeywords and the results from calling the GetDerivedTypeMetaDataToMerge contents.
             /// </summary>
             public INamedValueSet MetaData
             {
@@ -69,22 +70,24 @@ namespace MosaicLib.Modular.Config
                 {
                     if (metaData == null)
                     {
-                        NamedValueSet nvs = new NamedValueSet() { { "AccessFlags", AccessFlags } };
-
-                        if (ensureExistsHasBeenSet)
-                            nvs.Add("EnsureExists", EnsureExists);
-
-                        if (defaultProviderNameHasBeenSet)
-                            nvs.Add("DefaultProviderName", DefaultProviderName);
-
-                        if (additionalKeywordsHasBeenSet)
-                            nvs.AddRange(AdditionalKeywords.Select(keyword => new NamedValue(keyword)));
-
                         INamedValueSet mergeWithNVS = GetDerivedTypeMetaDataToMerge();
-                        if (!mergeWithNVS.IsNullOrEmpty())
-                            nvs.SubSets = new INamedValueSet[] { mergeWithNVS };
 
-                        metaData = nvs.ConvertToReadOnly();
+                        if (additionalKeywordsHasBeenSet || !mergeWithNVS.IsEmpty())
+                        {
+                            NamedValueSet nvs = new NamedValueSet();
+
+                            if (additionalKeywordsHasBeenSet)
+                                nvs.AddRange(AdditionalKeywords.Select(keyword => new NamedValue(keyword) { IsReadOnly = true }));
+
+                            if (!mergeWithNVS.IsNullOrEmpty())
+                                nvs = nvs.MergeWith(mergeWithNVS, NamedValueMergeBehavior.AddAndUpdate);
+
+                            metaData = nvs.ConvertToReadOnly();
+                        }
+                        else
+                        {
+                            metaData = NamedValueSet.Empty;
+                        }
                     }
 
                     return metaData;
@@ -121,17 +124,13 @@ namespace MosaicLib.Modular.Config
             /// <summary>
             /// Set this property to true to attempt to create a config key in the default provider, or in any provider that supports this feature, if the key was not already found.
             /// </summary>
-            public bool EnsureExists { get { return ensureExists; } set { ensureExists = value; ensureExistsHasBeenSet = true; metaData = null; } }
-            private bool ensureExists = false;
-            private bool ensureExistsHasBeenSet = false;
+            public bool EnsureExists { get { return accessFlags.EnsureExists ?? false; } set { accessFlags.EnsureExists = value; } }
 
             /// <summary>
             /// This property may be used to request that the key be obtained from the named provider before searching other providers for the same name.  
             /// In addition when using the EnsureExists feature, the provider named here will be asked to create the requested config key before consulting other providers.
             /// </summary>
-            public string DefaultProviderName { get { return defaultProviderName.MapNullToEmpty(); } set { defaultProviderName = value; defaultProviderNameHasBeenSet = true; metaData = null; } }
-            private string defaultProviderName = null;
-            private bool defaultProviderNameHasBeenSet = false;
+            public string DefaultProviderName { get { return accessFlags.DefaultProviderName.MapNullToEmpty(); } set { accessFlags.DefaultProviderName = value; } }
 
             /// <summary>
             /// Allows the caller to specify a set of additional keywords to be included in the NamedValueSet that will be produced when using the MetaData property.
@@ -141,7 +140,6 @@ namespace MosaicLib.Modular.Config
             private bool additionalKeywordsHasBeenSet = false;
 
             private static readonly string[] emptyStringArray = new string[0];
-
         }
     }
 
@@ -176,6 +174,8 @@ namespace MosaicLib.Modular.Config
         /// </summary>
         public ConfigValueSetAdapter(IConfig defaultConfigInstance = null)
         {
+            KeyMetaDataMergeBehavior = NamedValueMergeBehavior.AddNewItems;
+
             ConfigInstance = defaultConfigInstance;
 
             configItemInfoList = AnnotatedClassItemAccessHelper<Attributes.ConfigItemAttribute>.ExtractItemInfoAccessListFrom(typeof(TConfigValueSet), ItemSelection.IncludeExplicitPublicItems | ItemSelection.IncludeInheritedItems);
@@ -200,11 +200,26 @@ namespace MosaicLib.Modular.Config
         /// <summary>Defines the emitter used to emit Update related changes in config point values.  Defaults to the null emitter.</summary>
         public Logging.IMesgEmitter ValueNoteEmitter { get { return FixupEmitterRef(ref valueNoteEmitter); } set { valueNoteEmitter = value; } }
 
+        /// <summary>Helper property that may be used to update the default value of EnsureExists meta data value when generating per key meta data</summary>
+        public bool? EnsureExists { get; set; }
+
+        /// <summary>Helper property that may be used to update the default value of DefaultProviderName meta data value when generating per key meta data</summary>
+        public string DefaultProviderName { get; set; }
+
+        /// <summary>Helper property that may be used to deafult the default set of metadata keywords used when generating per key meta data</summary>
+        public string[] AdditionalKeywords { get; set; }
+
         /// <summary>
         /// When this property has non-empty contents, the MetaData for each IConfigKeyAccessSpec generated by this adapter will have the contents of this NVS merged
         /// into whatever MetaData the key was already given.  Merging uses NamedValueMergeBehavior.AddNewItems behavior.
         /// </summary>
-        public INamedValueSet DefaultKeyMetaData { get; set; }
+        public INamedValueSet DefaultKeyMetaData { get { return _DefaultKeyMetaData; } set { _DefaultKeyMetaData = value.ConvertToReadOnly(); } }
+        private INamedValueSet _DefaultKeyMetaData = NamedValueSet.Empty;
+
+        /// <summary>
+        /// Defines the merge behavior that will be used by this adapter and by the Config instance when merging key meta data defined here.  Defaults to AddNewItems.
+        /// </summary>
+        public NamedValueMergeBehavior KeyMetaDataMergeBehavior { get; set; }
 
         ///<summary>
         ///After Setup has been performed, this property will contain the IConfig instance with which this adapter interacts.
@@ -244,6 +259,13 @@ namespace MosaicLib.Modular.Config
             bool anySetupIssues = false;
             int idx;
 
+            INamedValueSet defaultNVS = DefaultKeyMetaData;
+
+            if (!AdditionalKeywords.IsNullOrEmpty())
+                defaultNVS = defaultNVS.MergeWith(AdditionalKeywords.Select(keyword => new NamedValue(keyword) { IsReadOnly = true }), KeyMetaDataMergeBehavior);
+
+            defaultNVS = defaultNVS.ConvertToReadOnly(mapNullToEmpty: false);
+
             for (idx = 0; idx < NumItems; idx++)
             {
                 ItemInfo<Attributes.ConfigItemAttribute> itemInfo = configItemInfoList[idx];
@@ -261,17 +283,25 @@ namespace MosaicLib.Modular.Config
                 }
 
                 ConfigKeyAccessFlags customAccessFlags = new ConfigKeyAccessFlags(itemAttribute.AccessFlags) { SilenceIssues = true };
-                INamedValueSet keyMetaData = itemAttribute.MetaData.MapEmptyToNull();
 
-                if (keyMetaData.IsNullOrEmpty())
-                    keyMetaData = DefaultKeyMetaData;
-                else if (!DefaultKeyMetaData.IsNullOrEmpty())
-                    keyMetaData = keyMetaData.ConvertToWriteable().MergeWith(DefaultKeyMetaData, NamedValueMergeBehavior.AddNewItems);
+                // Apply global setup properties down into individual item attributes
+                if ((EnsureExists ?? false) && customAccessFlags.EnsureExists == null)
+                    customAccessFlags.EnsureExists = true;
 
-                bool ensureExists = (keyMetaData ?? NamedValueSet.Empty)["EnsureExists"].VC.GetValue<bool>(false);
-                ValueContainer defaultValue = (ensureExists ? GetDefaultValue(itemInfo) : ValueContainer.Empty);
+                if (!DefaultProviderName.IsNullOrEmpty() && customAccessFlags.DefaultProviderName == null)
+                    customAccessFlags.DefaultProviderName = DefaultProviderName;
 
-                IConfigKeyAccess keyAccess = ConfigInstance.GetConfigKeyAccess(new ConfigKeyAccessSpec(fullKeyName, customAccessFlags) { MetaData = keyMetaData }, defaultValue);
+                INamedValueSet itemKeyMetaData = itemAttribute.MetaData.MapEmptyToNull();
+                INamedValueSet combindKeyMetaData = itemKeyMetaData;
+
+                if (combindKeyMetaData.IsNullOrEmpty())
+                    combindKeyMetaData = defaultNVS;
+                else if (!defaultNVS.IsNullOrEmpty())
+                    combindKeyMetaData = combindKeyMetaData.MergeWith(defaultNVS, KeyMetaDataMergeBehavior);
+
+                ValueContainer defaultValue = ((customAccessFlags.EnsureExists ?? false) ? GetDefaultValue(itemInfo) : ValueContainer.Empty);
+
+                IConfigKeyAccess keyAccess = ConfigInstance.GetConfigKeyAccess(new ConfigKeyAccessSpec(fullKeyName, customAccessFlags) { MetaData = combindKeyMetaData, MergeBehavior = KeyMetaDataMergeBehavior }, defaultValue);
 
                 KeySetupInfo keySetupInfo = new KeySetupInfo()
                 {

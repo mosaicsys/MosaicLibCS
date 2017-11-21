@@ -31,6 +31,10 @@ namespace MosaicLib.SerialIO
 {
 	//-----------------------------------------------------------------
 
+    /// <summary>
+    /// Used to define the general mode that a port is being used in.  Some modes have the side effect of requesting RTS handshake (rs485).
+    /// <para/>Valid values: DOSMode_Default (0), RS232_3wire, RS232_4wire, RS232_5wire, RS232_7wire, RS232_9wire, RS485_5wire, RS485_3wireMDEcho, RS485_3wireMDNoEcho, Fiber_1pair, Fiber_1pairInv
+    /// </summary>
 	public enum PortMode
 	{
 		// standard asynchronous rs-232 modes
@@ -82,6 +86,7 @@ namespace MosaicLib.SerialIO
 		private int			dataBits;
 		private StopBits	stopBits;
 		private PortMode	portMode;
+        private Handshake   handshake;
 
 		//-------------------------------
 		// public methods
@@ -102,7 +107,7 @@ namespace MosaicLib.SerialIO
 					case PortMode.RS232_5wire:
 					case PortMode.RS232_7wire:
 					case PortMode.RS232_9wire:
-						return Handshake.RequestToSend;
+                        return handshake.MapDefaultTo(Handshake.RequestToSend);
 
 					case PortMode.DOSMode_Default:
 					case PortMode.RS232_3wire:
@@ -112,9 +117,13 @@ namespace MosaicLib.SerialIO
 					case PortMode.Fiber_1pair:
 					case PortMode.Fiber_1pairInv:
 					default:
-						return Handshake.None;
+                        return handshake.MapDefaultTo(Handshake.None);
 				}
 			}
+            set
+            {
+                handshake = value;
+            }
 		}
 
 		public ComPortUartConfig(string cfgStr) : this() { ParseString(cfgStr); }
@@ -148,6 +157,7 @@ namespace MosaicLib.SerialIO
 						&& !scan.ParseXmlAttribute("Mode", PortModeTokenValueMap, out portMode)
 						&& !scan.ParseXmlAttribute("Parity", ParityTokenValueMap, out parity)
 						&& !scan.ParseXmlAttribute("StopBits", StopBitsCharTokenValueMap, out stopBits)
+                        && !scan.ParseXmlAttribute("Handshake", out handshake)
 						)
 					{
 						success = false;
@@ -191,12 +201,15 @@ namespace MosaicLib.SerialIO
 		{
 			if (xmlStyle)
 			{
-				return Fcns.CheckedFormat("<UartConfig  Baud=\"{0}\" DataBits=\"{1}\" Mode=\"{2}\" Parity=\"{3}\" StopBits=\"{4}\"/>"
+                string handshakeStr = (handshake != System.IO.Ports.Handshake.None) ? " Handshake=\"{0}\"".CheckedFormat(handshake) : string.Empty;
+
+				return Fcns.CheckedFormat("<UartConfig  Baud=\"{0}\" DataBits=\"{1}\" Mode=\"{2}\" Parity=\"{3}\" StopBits=\"{4}\"{5}/>"
 										, baudRate
                                         , StringScanner.FindTokenNameByValue(dataBits, DataBitsCharTokenValueMap, "?")
                                         , StringScanner.FindTokenNameByValue(portMode, PortModeCharTokenValueMap, "?")
                                         , StringScanner.FindTokenNameByValue(parity, ParityCharTokenValueMap, "?")
                                         , StringScanner.FindTokenNameByValue(stopBits, StopBitsCharTokenValueMap, "?")
+                                        , handshakeStr
 										);
 			}
 			else if (portMode == PortMode.DOSMode_Default)

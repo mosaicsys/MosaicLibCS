@@ -510,6 +510,9 @@ namespace MosaicLib.PartsLib.Helpers
         public TimeSpan Motion1To2Time { get { return Config.Motion1To2Time; } set { Config.Motion1To2Time = value; UpdateMotionRates(); } }
         public TimeSpan Motion2To1Time { get { return Config.Motion2To1Time; } set { Config.Motion2To1Time = value; UpdateMotionRates(); } }
 
+        /// <summary>Set only property - sets both Config.Motion1To2Time and Config.Motion2To1Time to the given value and updates internal motion rate derived caculated values.</summary>
+        public TimeSpan MotionTime { set { Config.Motion1To2Time = Config.Motion2To1Time = value; UpdateMotionRates(); } }
+
         protected void UpdateMotionRates()
         {
             motion1To2IsInstant = (Motion1To2Time <= TimeSpan.Zero);

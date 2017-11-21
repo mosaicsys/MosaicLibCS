@@ -45,6 +45,7 @@ namespace MosaicLib.WPF.Logging
 {
     using MosaicLib;        // apparently this makes MosaicLib get searched before MosaicLib.WPF.Logging for resolving symbols here.
     using MosaicLib.Modular.Common;
+    using MosaicLib.Modular.Config;
     using MosaicLib.Time;
     using MosaicLib.Utils;
 
@@ -124,7 +125,7 @@ namespace MosaicLib.WPF.Logging
         public void Update(object stateIgnored = null)
         {
             WpfLogMessageHandlerToolBase.SeqNumPair newSeqNumPair = WpfLogMessageHandlerToolBase.Instance.GetNewMessages(lastMesgSeqNumPair, ref updateMesgQueue);
-            int maxMesgsToKeep = WpfLogMessageHandlerToolBase.Instance.MaxMessageToKeep;
+            int maxMesgsToKeep = WpfLogMessageHandlerToolBase.Instance.MaxMessagesToKeep;
 
             if (!newSeqNumPair.AreThereAnyChanges(lastMesgSeqNumPair))
                 return;
@@ -272,10 +273,17 @@ namespace MosaicLib.WPF.Logging
     {
         #region Construction
 
-        public WpfLogMessageHandlerToolBase() : this("WpfLMH", Logging.LogGate.All, 10000) { }
-        public WpfLogMessageHandlerToolBase(string name, Logging.LogGate defaultCollectionGate, int maxMessagesToKeep)
-            : base(name, defaultCollectionGate, recordSourceStackFrame: false)
+        public WpfLogMessageHandlerToolBase(string name = "WpfLMH", Logging.LogGate ? defaultCollectionGate = null, int ? maxMessagesToKeepIn = null)
+            : base(name, defaultCollectionGate ?? Logging.LogGate.All, recordSourceStackFrame: false)
         {
+            int maxMessagesToKeep = maxMessagesToKeepIn ?? Modular.Config.Config.Instance.GetConfigKeyAccessOnce("Logging.{0}.MaxMessagesToKeep".CheckedFormat(name)).VC.GetValue(rethrow: false, defaultValue: 10000);
+            Logging.LogGate? configLogGate = Modular.Config.Config.Instance.GetConfigKeyAccessOnce("Logging.{0}.LogGate".CheckedFormat(name)).VC.GetValue<Logging.LogGate ?>(rethrow: false);
+
+            if (!defaultCollectionGate.HasValue && configLogGate.HasValue)
+            {
+                loggerConfig.LogGate = configLogGate.GetValueOrDefault();
+            }
+
             rawLogMesgArray = new RawLogMesgArray(maxMessagesToKeep);
         }
 
@@ -283,7 +291,7 @@ namespace MosaicLib.WPF.Logging
 
         #region Singleton
 
-        static readonly Utils.SingletonHelper<WpfLogMessageHandlerToolBase> singletonHelper = new Utils.SingletonHelper<WpfLogMessageHandlerToolBase>();
+        static readonly Utils.ISingleton<WpfLogMessageHandlerToolBase> singletonHelper = new Utils.SingletonHelperBase<WpfLogMessageHandlerToolBase>(() => new WpfLogMessageHandlerToolBase());
 
         public static WpfLogMessageHandlerToolBase Instance { get { return singletonHelper.Instance; } }
 
@@ -334,7 +342,9 @@ namespace MosaicLib.WPF.Logging
         }
 
         public Int64 LastMesgAddedSeqNum { get { return rawLogMesgArray.LastMesgAddedSeqNum; } }
-        public int MaxMessageToKeep { get { return rawLogMesgArray.MaxMessagesToKeep; } }
+        public int MaxMessagesToKeep { get { return rawLogMesgArray.MaxMessagesToKeep; } }
+        [Obsolete("Please replace use of this property with the correctly spelled version (2017-10-29)")]
+        public int MaxMessageToKeep { get { return MaxMessagesToKeep; } }
         public int CurrentMessageCount { get { return rawLogMesgArray.CurrentMessageCount; } }
 
         #endregion

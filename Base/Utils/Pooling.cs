@@ -44,7 +44,7 @@ namespace MosaicLib.Utils.Pooling
         public BasicFreeList()
         {
             MaxItemsToKeep = 10;
-            WillDispose = default(TItemType) is IDisposable;
+            WillDispose = typeof(IDisposable).IsAssignableFrom(typeof(TItemType));
         }
 
         /// <summary>

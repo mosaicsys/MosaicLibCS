@@ -75,8 +75,8 @@ namespace MosaicLib.Utils
 		{ 
 			value = 0;
 
-            if (byteArray == null || (baseIdx < 0) || ((baseIdx + 1) >= byteArray.Length))
-				return false;
+            if (!byteArray.IsSafeIndex(baseIdx, length: 2))
+                return false;
 
             value = Pack(byteArray [baseIdx], byteArray [baseIdx + 1]);
 			return true;
@@ -88,8 +88,8 @@ namespace MosaicLib.Utils
 		{ 
 			value = 0;
 
-            if (byteArray == null || (baseIdx < 0) || ((baseIdx + 3) >= byteArray.Length))
-				return false;
+            if (!byteArray.IsSafeIndex(baseIdx, length: 4))
+                return false;
 
             value = Pack(byteArray [baseIdx], byteArray [baseIdx + 1], byteArray [baseIdx + 2], byteArray [baseIdx + 3]);
 			return true;
@@ -101,7 +101,7 @@ namespace MosaicLib.Utils
         {
             value = 0;
 
-            if (byteArray == null || (baseIdx < 0) || ((baseIdx + 7) >= byteArray.Length))
+            if (!byteArray.IsSafeIndex(baseIdx, length: 8))
                 return false;
 
             value = Pack(byteArray[baseIdx], byteArray[baseIdx + 1], byteArray[baseIdx + 2], byteArray[baseIdx + 3], byteArray[baseIdx + 4], byteArray[baseIdx + 5], byteArray[baseIdx + 6], byteArray[baseIdx + 7]);
@@ -114,7 +114,7 @@ namespace MosaicLib.Utils
         {
             value = 0;
 
-            if (byteArray == null || (baseIdx < 0) || ((baseIdx + numBytes) > byteArray.Length))
+            if (!byteArray.IsSafeIndex(baseIdx, length: numBytes))
                 return false;
 
             switch (numBytes)
@@ -133,7 +133,7 @@ namespace MosaicLib.Utils
         {
             value = 0;
 
-            if (byteArray == null || (baseIdx < 0) || ((baseIdx + numBytes) > byteArray.Length))
+            if (!byteArray.IsSafeIndex(baseIdx, length: numBytes))
                 return false;
 
             switch (numBytes)
@@ -498,6 +498,26 @@ namespace MosaicLib.Utils
 
     public static partial class ExtensionMethods
     {
+        /// <summary>
+        /// This method obtains the byte array length that will be required in order to marshal the given <paramref name="type"/> of object to a byte array.
+        /// </summary>
+        public static int GetMarshaledByteArraySize(this System.Type type, int fallbackValue = 0, bool rethrow = true)
+        {
+            try
+            {
+                int length = Marshal.SizeOf(type);
+
+                return length;
+            }
+            catch (System.Exception ex)
+            {
+                if (rethrow && ex != null)
+                    throw;
+
+                return fallbackValue;
+            }
+        }
+
         /// <summary>
         /// This method obtains the byte array length that will be required in order to marshal the given <paramref name="value"/> object to a byte array.
         /// </summary>

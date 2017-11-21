@@ -43,8 +43,8 @@ namespace Mosaic.JsonDotNet
         /// Constructor: Accepts provider name, filePath to ini file to read/write, keyPrefix to prefix on all contained keys, 
         /// and isReadWrite to indicate if the INI file is writable or not (ie if all of the keys should be IsFixed).
         /// </summary>
-        public PersistentJsonDotNetTextFileRingProvider(string name, PersistentObjectFileRingConfig ringConfig, string keyPrefix = "", bool isReadWrite = true, INamedValueSet metaData = null, bool sortKeysOnSave = false)
-            : base(name, ringConfig, new DataContractPersistentJsonDotNetTextFileRingStorageAdapter<ConfigKeyStore>(name, ringConfig) { Object = new ConfigKeyStore() }, keyPrefix: keyPrefix, isReadWrite: isReadWrite, metaData: metaData, keysMayBeAddedUsingEnsureExistsOption: isReadWrite, sortKeysOnSave: sortKeysOnSave)
+        public PersistentJsonDotNetTextFileRingProvider(string name, PersistentObjectFileRingConfig ringConfig, string keyPrefix = "", bool isReadWrite = true, INamedValueSet providerMetaData = null, bool sortKeysOnSave = false)
+            : base(name, ringConfig, new DataContractPersistentJsonDotNetTextFileRingStorageAdapter<ConfigKeyStore>(name, ringConfig) { Object = new ConfigKeyStore() }, keyPrefix: keyPrefix, isReadWrite: isReadWrite, providerMetaData: providerMetaData, keysMayBeAddedUsingEnsureExistsOption: isReadWrite, sortKeysOnSave: sortKeysOnSave)
         { }
     }
 }

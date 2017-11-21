@@ -67,16 +67,25 @@ namespace MosaicLib.Modular.Config
         public bool UseEnsureExists { get; set; }
         public string DefaultConfigKeyProviderName { get; set; }
 
-        public MatchRuleSet IVAPropagateNameMatchRuleSet { get; set; }      // applies to native IVA names for consideration and inclusion in sync set
-        public IMapNameFromTo IVAMapNameFromTo { get; set; }    // mapping definition used to map from native IVA names and mapped CKA names.  Only names that can be mapped both ways will be included.
+        /// <summary>applies to native IVA names for consideration and inclusion in sync set</summary>
+        public MatchRuleSet IVAPropagateNameMatchRuleSet { get; set; }
 
-        public MatchRuleSet CKAPropagateKeyMatchRuleSet { get; set; }  // applies in conjunction with CKAPropagateFilterPredicate to native CKA names for consideration and inclusion in sync set.
-        public ConfigKeyFilterPredicate CKAPropagateFilterPredicate { get; set; } // applies in conjuction with CKAPropagateKeyMatchRuleSet to CKA objects for consideration and inclusion in sync set.
-        public IMapNameFromTo CKAMapNameFromTo { get; set; } // mapping definition used to map from native CKA names to mapped IVA names.  Only names that can be mapped both ways will be included.
+        /// <summary>mapping definition used to map from native IVA names and mapped CKA names.  Only names that can be mapped both ways will be included.</summary>
+        public IMapNameFromTo IVAMapNameFromTo { get; set; }
+
+        /// <summary>applies in conjunction with CKAPropagateFilterPredicate to native CKA names for consideration and inclusion in sync set.</summary>
+        public MatchRuleSet CKAPropagateKeyMatchRuleSet { get; set; }
+
+        /// <summary>applies in conjuction with CKAPropagateKeyMatchRuleSet to CKA objects for consideration and inclusion in sync set.</summary>
+        public ConfigKeyFilterPredicate CKAPropagateFilterPredicate { get; set; }
+
+        /// <summary>mapping definition used to map from native CKA names to mapped IVA names.  Only names that can be mapped both ways will be included.</summary>
+        public IMapNameFromTo CKAMapNameFromTo { get; set; }
 
         public ConfigIVIBridgeConfig(string partID)
         {
             PartID = partID;
+            MinSyncInterval = (0.2).FromSeconds();
             IssueLogMesgType = Logging.MesgType.Error;
             ValueUpdateTraceLogMesgType = Logging.MesgType.Debug;
             UseEnsureExists = true;
@@ -243,9 +252,8 @@ namespace MosaicLib.Modular.Config
                         IValueAccessor iva = IVI.GetValueAccessor(ivaNativeName);
                         IConfigKeyAccess cka = Config.GetConfigKeyAccess(new ConfigKeyAccessSpec() 
                                                                             { 
-                                                                                Key = mappedToCKAKeyName, 
-                                                                                Flags = new ConfigKeyAccessFlags() { MayBeChanged = true }, 
-                                                                                MetaData = new NamedValueSet() { { "EnsureExists", BridgeConfig.UseEnsureExists }, { "DefaultProvider", BridgeConfig.DefaultConfigKeyProviderName } } 
+                                                                                Key = mappedToCKAKeyName,
+                                                                                Flags = new ConfigKeyAccessFlags() { MayBeChanged = true, EnsureExists = BridgeConfig.UseEnsureExists, DefaultProviderName = BridgeConfig.DefaultConfigKeyProviderName }, 
                                                                             }
                                                                          , iva.VC);
 

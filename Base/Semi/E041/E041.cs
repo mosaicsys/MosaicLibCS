@@ -786,7 +786,7 @@ namespace MosaicLib.Semi.E041
         /// <summary>
         /// Constructor.  partID is required.  e30ALIDHandlerFacet may be null
         /// </summary>
-        public ANManagerPart(string partID, IE30ALIDHandlerFacet e30ALIDHandlerFacet = null, IValuesInterconnection ivi = null) 
+        public ANManagerPart(string partID, IE30ALIDHandlerFacet e30ALIDHandlerFacet = null, IValuesInterconnection ivi = null, IConfig iConfig = null) 
             : base(partID)
         {
             ActionLoggingConfig = MosaicLib.Modular.Action.ActionLoggingConfig.Debug_Debug_Trace_Trace;
@@ -795,11 +795,13 @@ namespace MosaicLib.Semi.E041
 
             this.e30ALIDHandlerFacet = e30ALIDHandlerFacet;
             IVI = ivi ?? Values.Instance;
+            IConfig = iConfig ?? Modular.Config.Config.Instance;
 
             SetupMainThreadStartingAndStoppingActions();
         }
 
         private IValuesInterconnection IVI { get; set; }
+        private IConfig IConfig { get; set; }
 
         private IReferenceSet<ANState> anStateCurrentActiveSet;
         private IReferenceSet<ANState> anStateRecentlyClearedSet;
@@ -863,7 +865,7 @@ namespace MosaicLib.Semi.E041
                 SetupIssueEmitter = Log.Debug,
                 UpdateIssueEmitter = Log.Debug,
                 ValueNoteEmitter = Log.Debug,
-            }.Setup(PartID + ".");
+            }.Setup(IConfig, "{0}.".CheckedFormat(PartID));
 
             Config = configValuesAdapter.ValueSet;
         }

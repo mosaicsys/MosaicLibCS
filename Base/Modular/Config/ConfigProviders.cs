@@ -49,26 +49,18 @@ namespace MosaicLib.Modular.Config
         /// Constructor.  Requires name.  Other properties shall be initialized using property initializer list.
         /// Provider generated messages will use the string "Config.Provider.{name}" where {name} is the name given here.
         /// </summary>
-        public ConfigKeyProviderBase(string name) 
-            : this(name, null)
-        {}
-        /// <summary>
-        /// Constructor.  Requires name.  Other properties shall be initialized using property initializer list.
-        /// Provider generated messages will use the string "Config.Provider.{name}" where {name} is the name given here.
-        /// </summary>
-        public ConfigKeyProviderBase(string name, INamedValueSet metaData) 
+        public ConfigKeyProviderBase(string name, INamedValueSet providerMetaData = null) 
         {
             Logger = new Logging.Logger("Config.Provider." + name);
             Name = name;
 
-            ProviderMetaData = new NamedValueSet() { { "Provider", Name } }.MergeWith(metaData).MakeReadOnly();
+            ProviderMetaData = new NamedValueSet() { { "Provider", Name } }.MergeWith(providerMetaData).MakeReadOnly();
         }
 
         /// <summary>
         /// This is the Logger instance that the provider will use.
         /// </summary>
         public Logging.Logger Logger { get; protected set; }
-
 
         #region IConfigKeyProviderInfo
 
@@ -107,12 +99,12 @@ namespace MosaicLib.Modular.Config
         /// <summary>
         /// Attempts to find information about the given keyAccessSpec and returns an object that implements the IConfigKeyAccess interface for this key.  
         /// returns null if the key was not found or is not supported by this provider.
-        /// if ensureExists is true and defaultValue is non-empty and non-null and this provider supports 
+        /// if ensureExists is true and this provider supports ensure exists then this method will create the indicated key and will set its initial value to the given <paramref name="initialValue"/>
         /// </summary>
         /// <remarks>
         /// At the IConfigKeyProvider level, this method is typically only called once per fixed or read-only-once key as the config instance may keep prior key access objects and simply return clones of them.
         /// </remarks>
-        public abstract IConfigKeyAccess GetConfigKeyAccess(IConfigKeyAccessSpec keyAccessSpec, bool ensureExists = false, ValueContainer defaultValue = new ValueContainer());
+        public abstract IConfigKeyAccess GetConfigKeyAccess(IConfigKeyAccessSpec keyAccessSpec, bool ensureExists = false, ValueContainer initialValue = default(ValueContainer));
 
         /// <summary>
         /// This method allows the caller to update a set of values of the indicated keys to contain the corresponding valueAsString values.
@@ -151,8 +143,8 @@ namespace MosaicLib.Modular.Config
     public class DictionaryConfigKeyProvider : ConfigKeyProviderBase, IEnumerable
     {
         /// <summary>Constructor</summary>
-        public DictionaryConfigKeyProvider(string name, bool isFixed = true, INamedValueSet metaData = null, bool keysMayBeAddedUsingEnsureExistsOption = false) 
-            : base(name, metaData)
+        public DictionaryConfigKeyProvider(string name, bool isFixed = true, INamedValueSet providerMetaData = null, bool keysMayBeAddedUsingEnsureExistsOption = false)
+            : base(name, providerMetaData: providerMetaData)
         {
             BaseFlags = new ConfigKeyProviderFlags() { IsFixed = isFixed, KeysMayBeAddedUsingEnsureExistsOption = keysMayBeAddedUsingEnsureExistsOption };
         }
@@ -167,7 +159,7 @@ namespace MosaicLib.Modular.Config
         {
             ConfigKeyAccessFlags flags = new ConfigKeyAccessFlags();
 
-            return AddRange(nameValuePairSource.Select((kvp) => new ConfigKeyAccessImpl(KeyPrefix + kvp.Key, flags, this) { VC = kvp.Value }));
+            return AddRange(nameValuePairSource.Select((kvp) => new ConfigKeyAccessImpl(KeyPrefix + kvp.Key, flags, null, this) { VC = kvp.Value }));
         }
 
         /// <summary>
@@ -178,7 +170,7 @@ namespace MosaicLib.Modular.Config
         {
             ConfigKeyAccessFlags flags = new ConfigKeyAccessFlags();
 
-            return Add(new ConfigKeyAccessImpl(KeyPrefix + name, flags, this) { VC = vc });
+            return Add(new ConfigKeyAccessImpl(KeyPrefix + name, flags, null, this) { VC = vc });
         }
 
         /// <summary>
@@ -189,7 +181,7 @@ namespace MosaicLib.Modular.Config
         {
             ConfigKeyAccessFlags flags = new ConfigKeyAccessFlags();
 
-            return Add(new ConfigKeyAccessImpl(KeyPrefix + name, flags, this) { VC = new ValueContainer(value) });
+            return Add(new ConfigKeyAccessImpl(KeyPrefix + name, flags, null, this) { VC = new ValueContainer(value) });
         }
 
         #endregion
@@ -219,7 +211,6 @@ namespace MosaicLib.Modular.Config
                 key = ckai.Key,
                 initialContainedValue = ckai.VC,
                 ckai = ckai,
-                keyMetaData = ckai.MetaData,
             };
 
             if (ckai.HasValue)
@@ -245,8 +236,6 @@ namespace MosaicLib.Modular.Config
             public int seqNumGen;
             /// <summary>The provider reference ConfigKeyAccessImpl object used for this key</summary>
             public ConfigKeyAccessImpl ckai;
-            /// <summary>key's MetaData from the ckai</summary>
-            public INamedValueSet keyMetaData;
             /// <summary>The last comment string given to this key if the dictionary is not fixed.</summary>
             public string comment;
             /// <summary>Returns the current ConfigKeyAccessImpl's ValueContainer value, or ValueContainer.Empty if the ckai is null</summary>
@@ -287,24 +276,24 @@ namespace MosaicLib.Modular.Config
             else if (searchPredicateIsNull)
                 return keyItemDictionary.Keys.Where((key) => matchRuleSet.MatchesAny(key)).ToArray();
             else if (matchRuleSetIsNullOrAny)
-                return keyItemDictionary.Values.Where((item) => searchPredicate(item.key, item.keyMetaData, item.CurrentValue)).Select(item => item.key).ToArray();
+                return keyItemDictionary.Values.Where((item) => (item.ckai != null) && searchPredicate(item.key, item.ckai.MetaData, item.CurrentValue)).Select(item => item.key).ToArray();
             else
-                return keyItemDictionary.Values.Where((item) => (matchRuleSet.MatchesAny(item.key, true) && searchPredicate(item.key, item.keyMetaData, item.CurrentValue))).Select(item => item.key).ToArray();
+                return keyItemDictionary.Values.Where((item) => (matchRuleSet.MatchesAny(item.key, true) && (item.ckai != null) && searchPredicate(item.key, item.ckai.MetaData, item.CurrentValue))).Select(item => item.key).ToArray();
         }
 
         /// <summary>
         /// Attempts to find information about the given keyAccessSpec and returns an object that implements the IConfigKeyAccess interface for this key.  
         /// returns null if the key was not found or is not supported by this provider.
-        /// if ensureExists is true and defaultValue is non-empty and non-null and this provider supports 
+        /// if ensureExists is true and this provider supports ensure exists then this method will create the indicated key and will set its initial value to the given <paramref name="initialValue"/>
         /// </summary>
-        public override IConfigKeyAccess GetConfigKeyAccess(IConfigKeyAccessSpec keyAccessSpec, bool ensureExists = false, ValueContainer initialValue = new ValueContainer())
+        public override IConfigKeyAccess GetConfigKeyAccess(IConfigKeyAccessSpec keyAccessSpec, bool ensureExists = false, ValueContainer initialValue = default(ValueContainer))
         {
             DictionaryKeyItem item = null;
             string key = ((keyAccessSpec != null) ? keyAccessSpec.Key : null) ?? String.Empty;
 
             if (!keyItemDictionary.TryGetValue(key, out item))
             {
-                if (ensureExists && !initialValue.IsEmpty && BaseFlags.KeysMayBeAddedUsingEnsureExistsOption)
+                if (ensureExists && BaseFlags.KeysMayBeAddedUsingEnsureExistsOption)
                 {
                     string ec = EnsureItemExists(keyAccessSpec, initialValue, ref item, "Key created by request using EnsureExists");
 
@@ -348,17 +337,22 @@ namespace MosaicLib.Modular.Config
                     firstError = firstError ?? Fcns.CheckedFormat("Internal: key:'{0}' is not valid for use with provider:'{1}', required key prefix:'{2}'", kvpIcka.Key, Name, KeyPrefix);
                 else if (!keyItemDictionary.TryGetValue(key ?? String.Empty, out item) || item == null || item.ckai == null)
                 {
-                    if (BaseFlags.KeysMayBeAddedUsingEnsureExistsOption)
-                    {
-                        string ec = EnsureItemExists(kvpIcka, kvp.Value, ref item, commentStr);
+                    ConfigKeyAccessImpl kvpCKAI = kvpIcka as ConfigKeyAccessImpl;
 
-                        if (ec.IsNullOrEmpty())
+                    if (BaseFlags.KeysMayBeAddedUsingEnsureExistsOption && kvpCKAI != null && kvpCKAI.RootICKA == null && (kvpCKAI.Provider == this || kvpCKAI.Provider == null))
+                    {
+                        IConfigKeyAccessSpec ickas = new ConfigKeyAccessSpec(kvpIcka);
+
+                        kvpCKAI.RootICKA = GetConfigKeyAccess(ickas, ensureExists: true, initialValue: kvp.Value);
+                        if (kvpCKAI.RootICKA != null)
                         {
+                            kvpCKAI.Provider = this;
+
                             numChangedItems++;
                         }
                         else
                         {
-                            firstError = firstError ?? "cannot add key:'{0}' value:'{1}' to provider '{2}': {3}".CheckedFormat(key, kvp.Value, Name, ec);
+                            firstError = firstError ?? "cannot add key:'{0}' value:'{1}' to provider '{2}'".CheckedFormat(key, kvp.Value, Name);
                         }
                     }
                     else
@@ -402,12 +396,12 @@ namespace MosaicLib.Modular.Config
 
         private string EnsureItemExists(IConfigKeyAccessSpec icks, ValueContainer initialValue, ref DictionaryKeyItem item, string commentStr)
         {
-            ConfigKeyAccessImpl ckai = new ConfigKeyAccessImpl(icks.Key, icks.Flags, this) { VC = initialValue };
+            ConfigKeyAccessImpl ckai = new ConfigKeyAccessImpl(icks, this) { VC = initialValue };
+
             item = new DictionaryKeyItem() 
             { 
                 key = icks.Key, 
-                ckai = ckai, 
-                keyMetaData = ckai.MetaData, 
+                ckai = ckai,
                 initialContainedValue = initialValue, 
                 comment = commentStr 
             };
@@ -451,8 +445,8 @@ namespace MosaicLib.Modular.Config
         /// removes these from the set (array) and generates a dictionary of IConfigKeyAccess objects to represent
         /// the key/value pairs that were found.  These are added to the dictionary that is supported for this config key provider.
         /// </summary>
-        public MainArgsConfigKeyProvider(string name, ref string[] mainArgs, string keyPrefix = "", INamedValueSet metaData = null)
-            : base(name, isFixed: true, metaData: metaData)
+        public MainArgsConfigKeyProvider(string name, ref string[] mainArgs, string keyPrefix = "", INamedValueSet providerMetaData = null)
+            : base(name, isFixed: true, providerMetaData: providerMetaData)
         {
             KeyPrefix = keyPrefix = keyPrefix.MapNullToEmpty();
 
@@ -503,8 +497,8 @@ namespace MosaicLib.Modular.Config
         /// <summary>
         /// Constructor.  enumerates all current environment variables and adds them this provider's dictionary of key/value pairs using given keyPrefix value.
         /// </summary>
-        public EnvVarsConfigKeyProvider(string name, string keyPrefix = "", INamedValueSet metaData = null)
-            : base(name, isFixed: true, metaData: metaData)
+        public EnvVarsConfigKeyProvider(string name, string keyPrefix = "", INamedValueSet providerMetaData = null)
+            : base(name, isFixed: true, providerMetaData: providerMetaData)
         {
             KeyPrefix = keyPrefix = keyPrefix.MapNullToEmpty();
 
@@ -538,8 +532,8 @@ namespace MosaicLib.Modular.Config
         /// Constructor:  iterates through all of the app config AppSettings and adds the last value given to each app setting key to the dictionary of known config key value pairs.
         /// <para/>the selection to report the last value for given appSettings key/value pair appears to be a "feature" of the GetValues method.
         /// </summary>
-        public AppConfigConfigKeyProvider(string name, string keyPrefix = "", INamedValueSet metaData = null)
-            : base(name, isFixed: true, metaData: metaData)
+        public AppConfigConfigKeyProvider(string name, string keyPrefix = "", INamedValueSet providerMetaData = null)
+            : base(name, isFixed: true, providerMetaData: providerMetaData)
         {
             KeyPrefix = keyPrefix = keyPrefix.MapNullToEmpty();
 
@@ -600,8 +594,8 @@ namespace MosaicLib.Modular.Config
         /// either path names or |includeKeyPrefix|includeFilePath| type items.  Then loads each of the resulting files, validates the KeyItem entires contained there and
         /// then adds each of them to the dictionary of key/value pairs provided by this provider using the given keyPrefix combined with the IncludeKeyPrefix (as appropriate).
         /// </summary>
-        public IncludeFilesConfigKeyProvider(string name, string searchPrefix, IConfig config, string keyPrefix = "", INamedValueSet metaData = null)
-            : base(name, isFixed: true, metaData: metaData)
+        public IncludeFilesConfigKeyProvider(string name, string searchPrefix, IConfig config, string keyPrefix = "", INamedValueSet providerMetaData = null)
+            : base(name, isFixed: true, providerMetaData: providerMetaData)
         {
             KeyPrefix = keyPrefix = keyPrefix.MapNullToEmpty();
 
@@ -641,7 +635,7 @@ namespace MosaicLib.Modular.Config
                         string fullKey = KeyPrefix + includeKeyPrefix + keyItem.Key;
 
                         if (!includeFilesKeysDictionary.ContainsKey(fullKey))
-                            includeFilesKeysDictionary[fullKey] = new ConfigKeyAccessImpl(fullKey, flags, this) { VC = keyItem.VC };
+                            includeFilesKeysDictionary[fullKey] = new ConfigKeyAccessImpl(fullKey, flags, null, this) { VC = keyItem.VC };
                         else
                             Logger.Warning.Emit("Redundant value found for key '{0}' under path '{1}'", fullKey, includePath);
                     }
@@ -672,8 +666,8 @@ namespace MosaicLib.Modular.Config
         /// Constructor: Accepts provider name, filePath to ini file to read/write, keyPrefix to prefix on all contained keys, 
         /// and isReadWrite to indicate if the INI file is writable or not (ie if all of the keys should be IsFixed).
         /// </summary>
-        public IniFileConfigKeyProvider(string name, string filePath, string keyPrefix = "", bool isReadWrite = false, INamedValueSet metaData = null, IEnumerable<string> ensureSectionsExist = null)
-            : base(name, !isReadWrite, metaData, keysMayBeAddedUsingEnsureExistsOption : isReadWrite)
+        public IniFileConfigKeyProvider(string name, string filePath, string keyPrefix = "", bool isReadWrite = false, INamedValueSet providerMetaData = null, IEnumerable<string> ensureSectionsExist = null)
+            : base(name, !isReadWrite, providerMetaData, keysMayBeAddedUsingEnsureExistsOption : isReadWrite)
         {
             if (isReadWrite)
                 BaseFlags = new ConfigKeyProviderFlags(BaseFlags) { MayBeChanged = true, IsPersisted = true };
@@ -743,7 +737,7 @@ namespace MosaicLib.Modular.Config
 
                     ValueLineItem valueItem = new ValueLineItem(lineIdx, rawFileLine, trimmedLine) { fileKeyName = fileKeyName, hasEquals = linePartsArray.Length >= 2 };
 
-                    valueItem.ckai = new ConfigKeyAccessImpl("{0}{1}".CheckedFormat(currentSection.sectionKeyPrefix, valueItem.fileKeyName), defaultAccessFlags, this);
+                    valueItem.ckai = new ConfigKeyAccessImpl("{0}{1}".CheckedFormat(currentSection.sectionKeyPrefix, valueItem.fileKeyName), defaultAccessFlags, null, this);
 
                     if (valueItem.hasEquals)
                         valueItem.ckai.VC = new ValueContainer(linePartsArray.SafeAccess(1, String.Empty));
@@ -956,7 +950,7 @@ namespace MosaicLib.Modular.Config
         /// and isReadWrite to indicate if the INI file is writable or not (ie if all of the keys should be IsFixed).
         /// </summary>
         public PersistentXmlTextFileRingProvider(string name, PersistentObjectFileRingConfig ringConfig, string keyPrefix = "", bool isReadWrite = true, INamedValueSet metaData = null, bool sortKeysOnSave = false)
-            : base(name, ringConfig, new DataContractPersistentXmlTextFileRingStorageAdapter<ConfigKeyStore>(name, ringConfig) { Object = new ConfigKeyStore() }, keyPrefix: keyPrefix, isReadWrite: isReadWrite, metaData: metaData, keysMayBeAddedUsingEnsureExistsOption: isReadWrite, sortKeysOnSave: sortKeysOnSave)
+            : base(name, ringConfig, new DataContractPersistentXmlTextFileRingStorageAdapter<ConfigKeyStore>(name, ringConfig) { Object = new ConfigKeyStore() }, keyPrefix: keyPrefix, isReadWrite: isReadWrite, providerMetaData: metaData, keysMayBeAddedUsingEnsureExistsOption: isReadWrite, sortKeysOnSave: sortKeysOnSave)
         { }
     }
 
@@ -971,8 +965,8 @@ namespace MosaicLib.Modular.Config
         /// Constructor: Accepts provider name, filePath to ini file to read/write, keyPrefix to prefix on all contained keys, 
         /// and isReadWrite to indicate if the INI file is writable or not (ie if all of the keys should be IsFixed).
         /// </summary>
-        public PersistentSerializedTextFileRingProviderBase(string name, PersistentObjectFileRingConfig ringConfig, IPersistentStorage<ConfigKeyStore> ringAdapter, string keyPrefix = "", bool isReadWrite = true, bool keysMayBeAddedUsingEnsureExistsOption = true, INamedValueSet metaData = null, bool sortKeysOnSave = false)
-            : base(name, !isReadWrite, metaData, keysMayBeAddedUsingEnsureExistsOption: isReadWrite)
+        public PersistentSerializedTextFileRingProviderBase(string name, PersistentObjectFileRingConfig ringConfig, IPersistentStorage<ConfigKeyStore> ringAdapter, string keyPrefix = "", bool isReadWrite = true, bool keysMayBeAddedUsingEnsureExistsOption = true, INamedValueSet providerMetaData = null, bool sortKeysOnSave = false)
+            : base(name, !isReadWrite, providerMetaData, keysMayBeAddedUsingEnsureExistsOption: isReadWrite)
         {
             if (isReadWrite)
                 BaseFlags = new ConfigKeyProviderFlags(BaseFlags) { MayBeChanged = true, IsPersisted = true };
@@ -1016,7 +1010,7 @@ namespace MosaicLib.Modular.Config
                 PersistKeyTracker pkt = new PersistKeyTracker()
                 {
                     fileKeyItem = fileKeyItem,
-                    ckai = new ConfigKeyAccessImpl("{0}{1}".CheckedFormat(KeyPrefix, fileKeyItem.Key), defaultAccessFlags, this) { VC = fileKeyItem.VC },
+                    ckai = new ConfigKeyAccessImpl("{0}{1}".CheckedFormat(KeyPrefix, fileKeyItem.Key), defaultAccessFlags, null, this) { VC = fileKeyItem.VC },
                 };
 
                 persistKeyTrackerList.Add(pkt);
@@ -1212,7 +1206,7 @@ namespace MosaicLib.Modular.Config
 
                     item = new ValueItem() { parentRegKey = regKey, valueName = valueName, initialValueKind = valueKind, lastContainedValue = valueContainer, isFixed = isFixed };
 
-                    item.ckai = new ConfigKeyAccessImpl(keyName, defaultAccessFlags, this) { VC = item.lastContainedValue };
+                    item.ckai = new ConfigKeyAccessImpl(keyName, defaultAccessFlags, null, this) { VC = item.lastContainedValue };
                     if (item.isFixed)
                         item.ckai.ProviderFlags = item.ckai.ProviderFlags.MergeWith(new ConfigKeyProviderFlags() { IsFixed = true });
 

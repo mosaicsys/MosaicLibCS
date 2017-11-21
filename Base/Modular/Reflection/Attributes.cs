@@ -21,6 +21,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 
 using MosaicLib.Utils;
@@ -236,7 +237,7 @@ namespace MosaicLib.Modular.Reflection
         /// <summary>
         /// Defines which public properties and/or fields are included in the ValueSet representation 
         /// As a flag enum, user may combine enum values using the or operator "|"
-        /// <para/>None (0x00), IncludeExplicitPublicItems (0x01), IncludeAllPublicProperties (0x02), IncludeAllPublicFields (0x04), IncludeExplicitItems (0x08), IncludeInheritedItems(0x10)
+        /// <para/>None (0x00), IncludeExplicitPublicItems (0x01), IncludeAllPublicProperties (0x02), IncludeAllPublicFields (0x04), IncludeExplicitItems (0x08), IncludeInheritedItems(0x10), UseStrictAttributeTypeChecking(0x20)
         /// </summary>
         [Flags]
         public enum ItemSelection
@@ -258,6 +259,10 @@ namespace MosaicLib.Modular.Reflection
             /// 0x10
             /// </summary>
             IncludeInheritedItems = 0x10,
+            /// <summary>
+            /// When set, only items that are annotated with the specific given type (by reference equality) will be used.  Otherwise the first attribute of the indicated type will be used.
+            /// </summary>
+            UseStrictAttributeTypeChecking = 0x20,
         }
 
         /// <summary>
@@ -1000,11 +1005,12 @@ namespace MosaicLib.Modular.Reflection
                 bool includeAllPublicProperties = ((itemSelection & ItemSelection.IncludeAllPublicProperties) != default(ItemSelection));
                 bool includeAllPublicFields = ((itemSelection & ItemSelection.IncludeAllPublicFields) != default(ItemSelection));
                 bool includeInheritedItems = ((itemSelection & ItemSelection.IncludeInheritedItems) != default(ItemSelection));
+                bool useStrictAttributeTypeChecking = ((itemSelection & ItemSelection.UseStrictAttributeTypeChecking) != default(ItemSelection));
 
                 List<ItemInfo<TItemAttribute>> itemAccessInfoList = new List<ItemInfo<TItemAttribute>>();
 
-                BindingFlags bindingFlags = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
-
+                BindingFlags bindingFlags = (BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+ 
                 if (!includeInheritedItems)
                     bindingFlags |= BindingFlags.DeclaredOnly;
 
@@ -1023,8 +1029,8 @@ namespace MosaicLib.Modular.Reflection
                     bool isSetMethodPublic = (isSetMethodAvailable && setPMI.IsPublic);
                     bool isGetOrSetMethodPublic = (isGetMethodPublic || isSetMethodPublic);
 
-                    attribArray = pi.GetCustomAttributes(ItemAttributeType, false);
-                    TItemAttribute ia = (attribArray.Length == 1 ? (attribArray[0] as TItemAttribute) : null);
+                    attribArray = pi.GetCustomAttributes(ItemAttributeType, false).Where(attrib => attrib != null && (attrib.GetType() == ItemAttributeType || !useStrictAttributeTypeChecking)).ToArray();
+                    TItemAttribute ia = attribArray.SafeAccess(0) as TItemAttribute;
 
                     bool includeThisPublicProperty = (isGetOrSetMethodPublic && (includeAllPublicProperties || (ia != null && includeExplicitPublicItems)));
                     bool includeThisExplicitProperty = (!isGetOrSetMethodPublic && (ia != null && includeExplicitItems));
@@ -1048,8 +1054,8 @@ namespace MosaicLib.Modular.Reflection
                     Type fiType = fi.FieldType;
                     bool isPublic = fi.IsPublic;
 
-                    attribArray = fi.GetCustomAttributes(ItemAttributeType, false);
-                    TItemAttribute ia = (attribArray.Length == 1 ? (attribArray[0] as TItemAttribute) : null);
+                    attribArray = fi.GetCustomAttributes(ItemAttributeType, false).Where(attrib => attrib != null && (attrib.GetType() == ItemAttributeType || !useStrictAttributeTypeChecking)).ToArray();
+                    TItemAttribute ia = attribArray.SafeAccess(0) as TItemAttribute;
 
                     bool includeThisPublicField = (isPublic && (includeAllPublicFields || (ia != null && includeExplicitPublicItems)));
                     bool includeThisExplicitField = (!isPublic && (ia != null && includeExplicitItems));
