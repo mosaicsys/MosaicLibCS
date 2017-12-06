@@ -29,6 +29,8 @@ namespace MosaicLib.Semi.E005
 
     /// <summary>
     /// Alarm Category Code Byte (the Alarm severity portion of it)
+    /// <para/>PersonalSafety (1), EquipmentSafety (2), ParameterControlWarning (3), ParameterControlError (4), IrrecoverableError (5), EquipmentStatusWarning (6), AttentionFlags (7), DataIntegrity (8), 
+    /// E041_Attention (100), E041_Warning (101), E041_Error (102), E041_Alarm (103) 
     /// </summary>
     [DataContract(Namespace = Constants.SemiNameSpace)]
     public enum ALCD : byte

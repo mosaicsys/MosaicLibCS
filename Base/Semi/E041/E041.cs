@@ -50,7 +50,7 @@ namespace MosaicLib.Semi.E041
     // additionally, that the term can be used in places where the system wishes to provide indications 
     // of Warning, non-fatal or other non-error attention conditions.  The general ability to use a common 
     // annunciator mechanism and to associated it with a specific set of actions that a user (or other external 
-    // agent/decision authority) may request is a more generally capable use model.  In addition it is a 
+    // agent/decision authority) may request is a more generally capable use model.  It is a 
     // proper super-set of the functions required to support the E041 Exception use model and as such can 
     // covers that case as well.
     //
@@ -65,17 +65,17 @@ namespace MosaicLib.Semi.E041
     /*
      * Note 2: The E041 Annunciator system is being significantly altered in the MosaicLibCS version.
      * - The Part accessible portions (IANSource, IANCondition, IANOccurrence) are now focused on the form and utility of supporting the client code that uses the desired annunciator source object. 
-     * - the annunciator manager is now a SimpleActivePart and all external interactions with are are marshaled as such.
+     * - the annunciator manager is now a SimpleActivePart and all external interactions with it are marshaled as such.
      * - the annunciator manager has the ability to generate and publish a history of changes to each annunciator's state over time (including action management from outside).
      * - the annuncaitor manager has the ability to keep track of the "active" annunciators and to publish a collection of these that is suitable for use in the GUI.
      * 
      * The focus on the types and classes defined here are changed to be more focused on the utility to the annunciator source object types, and are somewhat less focused on 
-     * the exact behavior of annunciator related visualization.  In particular the visibility state from the C++ library has been removed.  The implmenentation of visibility is now locally 
+     * the exact behavior of annunciator related visualization.  In particular the visibility state from the C++ library has been removed.  The implementation of visibility is now locally 
      * rendered by whether a given IANSource is present in the active annunciator set.  The GUI may further modify this logic as desired to control which active annunciators are actually
      * displayed to the user and/or how they are presented.  
      * 
      * The combination of the annunciator source and the ANMangerPart are now entirely responsible for which annunciators are retained in the set of active annuncators.  
-     * For IANCondition and IANOccurrence use model objects, the ANManagerPart generally controls when the related annunciator accepts an acknoweldge request and thus becomes non-signaling.  
+     * For IANCondition and IANOccurrence use model objects, the ANManagerPart generally controls when the related annunciator accepts an Acknoweldge request and thus becomes non-signaling.  
      * For the more general IANSource use model objects, the client code is entirely responsible for when it's annunciators transition from signaling to non-signaling 
      * (using the Clear method).  This may be done with or without having any form of interaction with the user/decision authority.
      */
@@ -111,7 +111,7 @@ namespace MosaicLib.Semi.E041
         /// <summary>
         /// Under E041 Alarm annunciators are used simply to report exception conditions but they do not offer or support specific (recovery) action invocation by the decision authority.  
         /// As such Alarm annunciators cannot be used with speicific (recovery) actions.  
-        /// Please <see cref="IANCondition"/> for use pattern interface that is intended to be used with these ANTypes.
+        /// Please <see cref="IANCondition"/> for use pattern interface that is intended to be used with this ANType.
         /// </summary>
         [EnumMember]
         Alarm = E005.ALCD.E041_Alarm,
@@ -125,37 +125,37 @@ namespace MosaicLib.Semi.E041
     [DataContract(Namespace = MosaicLib.Constants.SemiNameSpace)]
     public enum ANSignalState : int 
 	{
-        /// <summary>the annunciator is not signaling (default value)</summary>
+        /// <summary>The annunciator is not signaling (default value).</summary>
         /// <remarks>Normal transitions: -> On (Post), -> OnAndWaiting (Post)</remarks>
         [EnumMember]
         Off = 0,
 
-        /// <summary>the annunciator is posted with no enabled actions</summary>
+        /// <summary>The annunciator is posted with no enabled actions.</summary>
         /// <remarks>Normal transitions: -> OnAndWaiting (Post), -> Off (Clear)</remarks>
         [EnumMember]
         On,
 
-        /// <summary>the annunciator is posted with one or more actions enabled, an action may or not have been selected.</summary>
+        /// <summary>The annunciator is posted with one or more actions enabled.  An action may or not have been selected.</summary>
         /// <remarks>Normal transitions: -> OnAndActionActive (NoteActionStarted, NoteActionCompleted, NoteActionFailed), -> On (Post), -> Off (Clear)</remarks>
         [EnumMember]
         OnAndWaiting,
 
-        /// <summary>a selected action has been accepted and started</summary>
+        /// <summary>A selected action has been accepted and started.</summary>
         /// <remarks>Normal transitions: -> OnAndActionComplete (NoteActionCompleted), -> OnAndActionFailed (NoteActionFailed), -> OnAndActionAborted (NoteActionAborted)</remarks>
         [EnumMember]
         OnAndActionActive,
 
-        /// <summary>a selected action is complete</summary>
+        /// <summary>A selected action is complete.</summary>
         /// <remarks>Normal transitions: -> Off (Clear), -> On (Post), -> OnAndWaiting (Post) </remarks>
         [EnumMember]
         OnAndActionCompleted,
 
-        /// <summary>a selected action failed</summary>
+        /// <summary>A selected action failed.</summary>
         /// <remarks>Normal transitions: -> Off (Clear), -> On (Post), -> OnAndWaiting (Post) </remarks>
         [EnumMember]
         OnAndActionFailed,
 
-        /// <summary>a selected action was aborted</summary>
+        /// <summary>A selected action was aborted.</summary>
         /// <remarks>Normal transitions: -> Off (Clear), -> On (Post), -> OnAndWaiting (Post) </remarks>
         [EnumMember]
         OnAndActionAborted,
@@ -398,10 +398,10 @@ namespace MosaicLib.Semi.E041
     /// <summary>The interface to object(s) that can represent the current state of an Annunciator.</summary>
     public interface IANState : IEquatable<IANState>
     {
-        /// <summary>Gives the ANSpec for this annunciator.</summary>
+        /// <summary>Gives the ANSpec for the annunciator that produced this state.</summary>
         IANSpec ANSpec { get; }
 
-        /// <summary>Gives the annunciator name (from ANSpec) or as explicitly assigned.</summary>
+        /// <summary>Gives the annunciator name (from ANSpec, or as explicitly assigned) of the annunciator that produced this state.</summary>
         string ANName { get; }
 
         /// <summary>This gives he ANSignalState value that the annunciator currently has.</summary>
@@ -416,8 +416,11 @@ namespace MosaicLib.Semi.E041
         /// <summary>Gives the most recently given reason for the current state or condition</summary>
         string Reason { get; }
 
-        /// <summary>This gives the QpcTimeStamp taken at the time that this state object was generated (or last updated)</summary>
+        /// <summary>This gives the QpcTimeStamp recorded at the time that this state object was generated (or last updated)</summary>
         QpcTimeStamp TimeStamp { get; }
+
+        /// <summary>This gives the DateTime recorded at the time that this state object was generated (or last updated)</summary>
+        DateTime DateTime { get; }
 
         /// <summary>This ReadOnly INamedValueSet contains a set of action names that the annunciator currently supports.  Each corresponding value shall be set to True to indicate that the corresponding name is currently available.</summary>
         INamedValueSet ActionList { get; }
@@ -459,6 +462,7 @@ namespace MosaicLib.Semi.E041
             ANSignalState = other.ANSignalState;
             Reason = other.Reason;
             TimeStamp = other.TimeStamp;
+            DateTime = other.DateTime;
             actionList = (rhsIsANState ? rhsAsANState.actionList : other.ActionList);
             selectedActionName = (rhsIsANState ? rhsAsANState.selectedActionName : other.SelectedActionName); ;
             activeActionName = (rhsIsANState ? rhsAsANState.activeActionName : other.ActiveActionName); ;
@@ -467,10 +471,10 @@ namespace MosaicLib.Semi.E041
             ALIDLookupState = other.ALIDLookupState;
         }
 
-        /// <summary>Gives the ANSpec for this annunciator</summary>
+        /// <summary>Gives the ANSpec for the annunciator that produced this state.</summary>
         public IANSpec ANSpec { get; set; }
 
-        /// <summary>Gives the annunciator name (from ANSpec) or as explicitly assigned.</summary>
+        /// <summary>Gives the annunciator name (from ANSpec, or as explicitly assigned) of the annunciator that produced this state.</summary>
         [DataMember(Order = 10)]
         public string ANName { get { return ((ANSpec != null) ? ANSpec.ANName : anName); } set { anName = value; } }
         private string anName = null;
@@ -490,9 +494,13 @@ namespace MosaicLib.Semi.E041
         [DataMember(Order = 40)]
         public string Reason { get; set; }
 
-        /// <summary>This gives the QpcTimeStamp taken at the time that this state object was generated (or last updated)</summary>
+        /// <summary>This gives the QpcTimeStamp recorded at the time that this state object was generated (or last updated)</summary>
         [DataMember(Order = 50)]
         public QpcTimeStamp TimeStamp { get; set; }
+
+        /// <summary>This gives the DateTime recorded at the time that this state object was generated (or last updated)</summary>
+        [DataMember(Order = 51)]
+        public DateTime DateTime { get; set; }
 
         /// <summary>This ReadOnly INamedValueSet contains a set of action names that the annunciator currently supports.  Each corresponding value shall be set to True to indicate that the corresponding name is currently available.</summary>
         [DataMember(Order = 60)]
@@ -522,8 +530,14 @@ namespace MosaicLib.Semi.E041
         [DataMember(Order = 110)]
         public ALIDLookupState ALIDLookupState { get; set; }
 
-        /// <summary>Returns true if this ANState has the same contents as the given other IANState</summary>
+        /// <summary>Returns true if this ANState has the same contents as the given <paramref name="other"/> IANState</summary>
         public bool IsEqualTo(IANState other)
+        {
+            return Equals(other);
+        }
+
+        /// <summary>Returns true if this ANState has the same contents as the given <paramref name="other"/> IANState</summary>
+        public bool Equals(IANState other)
         {
             return (other != null
                     && Object.ReferenceEquals(ANSpec, other.ANSpec)
@@ -531,6 +545,7 @@ namespace MosaicLib.Semi.E041
                     && ANSignalState == other.ANSignalState
                     && Reason == other.Reason
                     && TimeStamp == other.TimeStamp
+                    && DateTime == other.DateTime
                     && ActionList.IsEqualTo(other.ActionList)
                     && SelectedActionName == other.SelectedActionName
                     && ActiveActionName == other.ActiveActionName
@@ -538,12 +553,6 @@ namespace MosaicLib.Semi.E041
                     && ALID == other.ALID
                     && ALIDLookupState == other.ALIDLookupState
                     );
-        }
-
-        /// <summary>Returns true if this ANState has the same contents as the given other IANState</summary>
-        public bool Equals(IANState other)
-        {
-            return IsEqualTo(other);
         }
 
         /// <summary>Debugging and logging helper method</summary>
@@ -572,15 +581,14 @@ namespace MosaicLib.Semi.E041
         {
             return base.GetHashCode();
         }
-
     }
 
     #endregion
 
-    #region IANSource types: IANSourceBase, IANEvent, IANCondition
+    #region IANSource types: IANSourceBase, IANOccurrence, IANCondition
 
     /// <summary>
-    /// This gives the public interface that defines the basic API that is common to all IANSoruce types.
+    /// This gives the public interface that defines the basic API that is common to all IANSource types.
     /// </summary>
     public interface IANSourceBase
     {
@@ -687,6 +695,7 @@ namespace MosaicLib.Semi.E041
         /// Requests that the manager create a new IANSource annunciator source for the given anSpec.  
         /// The given anSpec.Name must be unique (IE it cannot have already been registered) and the anSpec.ANType must not be the Alarm type.
         /// Returns the the requested IANSource on success or null if the registration failed.
+        /// <para/>Note that the <paramref name="sourceObjectID"/> is only provided (and retained by the manager) to improve the quality of error log messages in cases where two clients attempt to register the same ANName.  This parameter is not otherwise used.
         /// </summary>
         /// <exception cref="ANRegistrationException">thrown with appropriate message if given anSpec is not valid or if the given ANName has already been registered</exception>
         /// <remarks>As with CreateGoOnlineAction(bool andInitialize), this method also starts the target part if it has not already been started</remarks>
@@ -696,6 +705,7 @@ namespace MosaicLib.Semi.E041
         /// Requests that the manager create a new IANOccurrence type annunciator source for the given anSpec.  
         /// The given anSpec.Name must be unique (IE it cannot have already been registered) and the given anSpec.ANType must not be the Alarm type.
         /// Returns the requested IANOccurrence for the annunciator on success or null if the registration failed.
+        /// <para/>Note that the <paramref name="sourceObjectID"/> is only provided (and retained by the manager) to improve the quality of error log messages in cases where two clients attempt to register the same ANName.  This parameter is not otherwise used.
         /// </summary>
         /// <exception cref="ANRegistrationException">thrown with appropriate message if given anSpec is not valid for this type of source or if the given ANName has already been registered</exception>
         /// <remarks>As with CreateGoOnlineAction(bool andInitialize), this method also starts the target part if it has not already been started</remarks>
@@ -705,6 +715,7 @@ namespace MosaicLib.Semi.E041
         /// Requests that the manager create a new IANCondition type annunciator source for the given anSpec.  
         /// The given anSpec.Name must be unique (IE it cannot have already been registered) and the given anSpec.ANType must not be the Error type.
         /// Returns the requested IANCondition for the annunciator on success or null if the registration failed.
+        /// <para/>Note that the <paramref name="sourceObjectID"/> is only provided (and retained by the manager) to improve the quality of error log messages in cases where two clients attempt to register the same ANName.  This parameter is not otherwise used.
         /// </summary>
         /// <exception cref="ANRegistrationException">thrown with appropriate message if given anSpec is not valid for this type of source or if the given ANName has already been registered</exception>
         /// <remarks>As with CreateGoOnlineAction(bool andInitialize), this method also starts the target part if it has not already been started</remarks>
@@ -951,6 +962,7 @@ namespace MosaicLib.Semi.E041
         /// Requests that the manager create a new IANSource annunciator source for the given anSpec.  
         /// The given anSpec.Name must be unique (IE it cannot have already been registered).
         /// Returns the the requested IANSource on success or null if the registration failed.
+        /// <para/>Note that the <paramref name="sourceObjectID"/> is only provided (and retained by the manager) to improve the quality of error log messages in cases where two clients attempt to register the same ANName.  This parameter is not otherwise used.
         /// </summary>
         /// <exception cref="ANRegistrationException">thrown with appropriate message if given anSpec is not vALID or if the given ANName has already been registered</exception>
         /// <remarks>As with CreateGoOnlineAction(bool andInitialize), this method also starts the target part if it has not already been started</remarks>
@@ -982,6 +994,7 @@ namespace MosaicLib.Semi.E041
         /// Requests that the manager create a new IANOccurrence type annunciator source for the given anSpec.  
         /// The given anSpec.Name must be unique (IE it cannot have already been registered) and the given anSpec.ANType must not be the Alarm type.
         /// Returns the requested IANOccurrence for the annunciator on success or null if the registration failed.
+        /// <para/>Note that the <paramref name="sourceObjectID"/> is only provided (and retained by the manager) to improve the quality of error log messages in cases where two clients attempt to register the same ANName.  This parameter is not otherwise used.
         /// </summary>
         /// <exception cref="ANRegistrationException">thrown with appropriate message if given anSpec is not valid for this type of source or if the given ANName has already been registered</exception>
         /// <remarks>As with CreateGoOnlineAction(bool andInitialize), this method also starts the target part if it has not already been started</remarks>
@@ -1013,6 +1026,7 @@ namespace MosaicLib.Semi.E041
         /// Requests that the manager create a new IANCondition type annunciator source for the given anSpec.  
         /// The given anSpec.Name must be unique (IE it cannot have already been registered) and the given anSpec.ANType must be the Alarm type.
         /// Returns the requested IANCondition for the annunciator on success or null if the registration failed.
+        /// <para/>Note that the <paramref name="sourceObjectID"/> is only provided (and retained by the manager) to improve the quality of error log messages in cases where two clients attempt to register the same ANName.  This parameter is not otherwise used.
         /// </summary>
         /// <exception cref="ANRegistrationException">thrown with appropriate message if given anSpec is not valid for this type of source or if the given ANName has already been registered</exception>
         /// <remarks>As with CreateGoOnlineAction(bool andInitialize), this method also starts the target part if it has not already been started</remarks>
@@ -1292,8 +1306,12 @@ namespace MosaicLib.Semi.E041
                                 continue;
 
                             INamedValueSet actionList = anState.ActionList;
-                            if (!actionList.GetValue(selectedActionName).GetValue<bool>(false))
-                                continue;
+                            if (actionList.Contains(selectedActionName))
+                            {
+                                string actionDisabledResaon = actionList[selectedActionName].GetActionDisableReason();
+                                if (!actionDisabledResaon.IsNullOrEmpty())
+                                    continue;
+                            }
 
                             anSourceTracking = FindAnSourceTrackingFromANState(anState);
                             if (anSourceTracking == null || anSourceTracking.anSourceImpl == null)
@@ -1540,7 +1558,7 @@ namespace MosaicLib.Semi.E041
 
             #endregion
 
-            #region IANSourceBase, IANSource, IANCondition, IANEvent
+            #region IANSourceBase, IANSource, IANCondition, IANOccurrence
 
             /// <summary>IBasicNotificationList which is notified when an action is selected on an annunciator or when an action abort is requested.</summary>
             IBasicNotificationList IANSource.NotifyOnActionSelectedOrAbortedList { get { return notifyOnActionSelectedOrAbortedBNL; } }
@@ -1824,7 +1842,8 @@ namespace MosaicLib.Semi.E041
             {
                 ANState.ANSignalState = anSignalState;
                 ANState.Reason = reason;
-                ANState.TimeStamp.SetToNow();
+                ANState.TimeStamp = QpcTimeStamp.Now;
+                ANState.DateTime = DateTime.Now;
 
                 if (publish)
                 {

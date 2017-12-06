@@ -1802,14 +1802,14 @@ namespace MosaicLib.Modular.Interconnect.Values
 
         private void InnerTransferValuesFromIVAs()
         {
-            foreach (var vsab in imvsaArray)
-                vsab.TransferValuesFromIVAs();
+            foreach (var imvsa in imvsaArray)
+                imvsa.TransferValuesFromIVAs();
         }
 
         private void InnerTransferValuesToIVAs()
         {
-            foreach (var ivsa in imvsaArray)
-                ivsa.TransferValuesToIVAs();
+            foreach (var imvsa in imvsaArray)
+                imvsa.TransferValuesToIVAs();
         }
     }
 
@@ -2015,7 +2015,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         {
             foreach (var iasi in itemAccessSetupInfoArray)
             {
-                if (iasi.MemberFromIVAAction != null)
+                if (iasi != null && iasi.MemberFromIVAAction != null)
                     iasi.MemberFromIVAAction(ValueSet, IssueEmitter, ValueNoteEmitter);
             }
         }
@@ -2029,7 +2029,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         {
             foreach (var iasi in itemAccessSetupInfoArray)
             {
-                if (iasi.MemberToIVAAction != null)
+                if (iasi != null && iasi.MemberToIVAAction != null)
                     iasi.MemberToIVAAction(ValueSet, IssueEmitter, ValueNoteEmitter);
             }
         }
@@ -2090,13 +2090,16 @@ namespace MosaicLib.Modular.Interconnect.Values
 
                 Logging.IMesgEmitter selectedIssueEmitter = IssueEmitter;
 
-                if ((MustSupportSet && ItemAccess.UseGetter() && itemInfo.CanGetValue && itemAccessSetupInfo.MemberToIVAAction == null) 
-                    || (MustSupportUpdate && ItemAccess.UseSetter() && itemInfo.CanSetValue && itemAccessSetupInfo.MemberFromIVAAction == null))
+                if (itemAccessSetupInfo.MemberToIVAAction == null)
                 {
-                    if (!itemAttribute.SilenceIssues)
-                        selectedIssueEmitter.Emit("Member/Value '{0}'/'{1}' is not usable: no valid accessor delegate could be generated for its ValueSet type:'{3}'", memberName, fullValueName, itemInfo.ItemType, TValueSetTypeStr);
+                    if (MustSupportSet && ItemAccess.UseGetter() && itemInfo.CanGetValue && !itemAttribute.SilenceIssues)
+                        selectedIssueEmitter.Emit("Member/Value '{0}'/'{1}' is not usable: no valid getter delegate could be generated for its ValueSet type:'{3}'", memberName, fullValueName, itemInfo.ItemType, TValueSetTypeStr);
+                }
 
-                    continue;
+                if (itemAccessSetupInfo.MemberFromIVAAction == null)
+                {
+                    if (MustSupportUpdate && ItemAccess.UseSetter() && itemInfo.CanSetValue && !itemAttribute.SilenceIssues)
+                        selectedIssueEmitter.Emit("Member/Value '{0}'/'{1}' is not usable: no valid setter delegate could be generated for its ValueSet type:'{3}'", memberName, fullValueName, itemInfo.ItemType, TValueSetTypeStr);
                 }
 
                 itemAccessSetupInfoArray[idx] = itemAccessSetupInfo;
@@ -2399,9 +2402,10 @@ namespace MosaicLib.Modular.Interconnect.Values
                 ContainerStorageType useStorageType = UseStorageType;
 
                 AnnotatedClassItemAccessHelper.GetMemberAsVCFunctionDelegate<TValueSet> getMemberAsVCFunction = (adapterItemAccess.UseGetter() ? itemInfo.GenerateGetMemberToVCFunc<TValueSet>() : null);
-                AnnotatedClassItemAccessHelper.SetMemberFromVCActionDelegate<TValueSet> setMemberFromVCFunction = (adapterItemAccess.UseSetter() ? itemInfo.GenerateSetMemberFromVCAction<TValueSet>() : null);
+                AnnotatedClassItemAccessHelper.SetMemberFromVCActionDelegate<TValueSet> setMemberFromVCFunction = (adapterItemAccess.UseSetter() ? itemInfo.GenerateSetMemberFromVCAction<TValueSet>(forceRethrowFlag: false) : null);
                 
                 string TValueSetTypeStr = typeof(TValueSet).Name;
+                bool silenceIssues = ((itemInfo.IAnnotatedItemAttribute != null) && itemInfo.IAnnotatedItemAttribute.SilenceIssues);
 
                 if (getMemberAsVCFunction != null)
                 {
@@ -2409,15 +2413,18 @@ namespace MosaicLib.Modular.Interconnect.Values
                     {
                         try
                         {
-                            IVA.VC = getMemberAsVCFunction(valueSetObj, null, null, true);
+                            // rethrow is only enabled if the item's issues have not been silenced and if we have a active issue emitter to use.
+                            bool rethrow = !silenceIssues && updateIssueEmitter != null && updateIssueEmitter.IsEnabled;
+
+                            IVA.VC = getMemberAsVCFunction(valueSetObj, null, null, rethrow: rethrow);
                             LastTransferedValueSeqNum = 0;      // trigger that next update needs to retransfer the value.
 
-                            if (IVA.IsSetPending && valueUpdateEmitter.IsEnabled)
+                            if (IVA.IsSetPending && valueUpdateEmitter != null && valueUpdateEmitter.IsEnabled)
                                 valueUpdateEmitter.Emit("Member:'{0}' transfered to Name:'{1}' value:'{2}' [type:'{3}']", MemberName, ValueName, IVA.VC, TValueSetTypeStr);
                         }
                         catch (System.Exception ex)
                         {
-                            if (!itemInfo.ItemAttribute.SilenceIssues)
+                            if (!itemInfo.ItemAttribute.SilenceIssues && updateIssueEmitter != null)
                                 updateIssueEmitter.Emit("Member'{0}' tranfer to Name:'{1}' in type '{2}' could not be performed: {3}", MemberName, ValueName, TValueSetTypeStr, ex);
                         }
                     };
@@ -2431,16 +2438,19 @@ namespace MosaicLib.Modular.Interconnect.Values
                         {
                             if (!OptimizeUpdates || LastTransferedValueSeqNum != IVA.ValueSeqNum)
                             {
-                                setMemberFromVCFunction(valueSetObj, IVA.VC, null, null, true);
+                                // rethrow is only enabled if the item's issues have not been silenced and if we have a active issue emitter to use.
+                                bool rethrow = !silenceIssues && updateIssueEmitter != null && updateIssueEmitter.IsEnabled;
+
+                                setMemberFromVCFunction(valueSetObj, IVA.VC, null, null, rethrow);
                                 LastTransferedValueSeqNum = IVA.ValueSeqNum;
                             }
 
-                            if (valueUpdateEmitter.IsEnabled)
+                            if (valueUpdateEmitter != null && valueUpdateEmitter.IsEnabled)
                                 valueUpdateEmitter.Emit("Member:'{0}' transfered from Name:'{1}' value:'{2}' [type:'{3}']", MemberName, ValueName, IVA.VC, TValueSetTypeStr);
                         }
                         catch (System.Exception ex)
                         {
-                            if (!itemInfo.ItemAttribute.SilenceIssues)
+                            if (!itemInfo.ItemAttribute.SilenceIssues && updateIssueEmitter != null)
                                 updateIssueEmitter.Emit("Member:'{0}' transfer from Name:'{1}' in type '{2}' could not be performed: {3}", MemberName, ValueName, TValueSetTypeStr, ex);
                         }
                     };
@@ -2748,8 +2758,10 @@ namespace MosaicLib.Modular.Interconnect.Values
             {
                 try
                 {
+                    bool rethrow = (IssueEmitter != null && IssueEmitter.IsEnabled);
+
                     ValueContainer entryVC = lastTransferredVC;
-                    SetterDelegate((lastTransferredVC = IVA.VC).GetValue<TValueType>(decodedCST, decodedIsNullable, true));
+                    SetterDelegate((lastTransferredVC = IVA.VC).GetValue<TValueType>(decodedCST, decodedIsNullable, rethrow: rethrow));
 
                     if (ValueNoteEmitter != null && ValueNoteEmitter.IsEnabled)
                     {

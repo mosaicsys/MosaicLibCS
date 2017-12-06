@@ -977,7 +977,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// This method attempts to parse the given token as a TimeSpan, first using Double.TryParse and then using TimeSpan.TryParse.
+        /// This method attempts to parse the given token as a DateTime using DateTime.TryParse.
         /// Returns true on success or false otherwise
         /// If <paramref name="formatProvider"/> is null (the default) then this method will use the invariant culture format provider.
         /// </summary>

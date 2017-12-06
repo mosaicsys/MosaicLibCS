@@ -281,7 +281,7 @@ namespace MosaicLib.Modular.Common
         #region Direct content updaters (SetToNullObject, SetToEmpty, CopyFrom, DeepCopyFrom)
 
         /// <summary>
-        /// Sets the container to contain the null object: cvt = ContainerStorageType.Object (0), o = null, u = default(Union) = default(Union)
+        /// Sets the container to contain the null object: cvt = ContainerStorageType.Object (0), o = null, u = default(Union)
         /// <para/>Supports call chaining
         /// </summary>
         public ValueContainer SetToNullObject()
@@ -294,7 +294,7 @@ namespace MosaicLib.Modular.Common
         }
 
         /// <summary>
-        /// Sets the container to be empty: cvt = ContainerStorageType.None, o = null, u = default(Union) = default(Union)
+        /// Sets the container to be empty: cvt = ContainerStorageType.None, o = null, u = default(Union)
         /// <para/>Supports call chaining
         /// </summary>
         public ValueContainer SetToEmpty()
@@ -672,165 +672,231 @@ namespace MosaicLib.Modular.Common
         /// </summary>
         public ValueContainer SetValue<TValueType>(TValueType value, ContainerStorageType decodedValueType, bool isNullable = false)
         {
-            SetToNullObject();
-
             try
             {
-                bool forceToNull = (isNullable && (value == null));
-
-                if (!forceToNull)
+                // handle all nullable cases where value is given as null here.  They all result in this VC being set to Null
+                if (isNullable && value == null)
                 {
-                    cvt = decodedValueType;
+                    SetToNullObject();
+                    return this;
+                }
+
+                // update the cvt to be the given decodedValueType and clear the value contained here
+                cvt = decodedValueType;
+                o = null;
+                u = default(Union);
+
+                // see if we can use the simple assignement version.
+
+                switch (decodedValueType)
+                {
+                    case ContainerStorageType.None: o = null; cvt = ContainerStorageType.None; return this;
+                    case ContainerStorageType.Object: o = (System.Object)value; cvt = ContainerStorageType.Object; return this;
+                    case ContainerStorageType.String: o = ((value != null) ? ((System.Object)value).ToString() : null); return this;
+                    case ContainerStorageType.Boolean: if (value is bool) { u.b = (bool)((System.Object)value); return this; } break;
+                    case ContainerStorageType.Binary: if (value is byte) { u.bi = (byte)((System.Object)value); return this; } break;
+                    case ContainerStorageType.SByte: if (value is sbyte) { u.i8 = (sbyte)((System.Object)value); return this; } break;
+                    case ContainerStorageType.Int16: if (value is short) { u.i16 = (short)((System.Object)value); return this; } break;
+                    case ContainerStorageType.Int32: if (value is int) { u.i32 = (int)((System.Object)value); return this; } break;
+                    case ContainerStorageType.Int64: if (value is long) { u.i64 = (long)((System.Object)value); return this; } break;
+                    case ContainerStorageType.Byte: if (value is byte) { u.u8 = (byte)((System.Object)value); return this; } break;
+                    case ContainerStorageType.UInt16: if (value is ushort) { u.u16 = (ushort)((System.Object)value); return this; } break;
+                    case ContainerStorageType.UInt32: if (value is uint) { u.u32 = (uint)((System.Object)value); return this; } break;
+                    case ContainerStorageType.UInt64: if (value is ulong) { u.u64 = (ulong)((System.Object)value); return this; } break;
+                    case ContainerStorageType.Single: if (value is float) { u.f32 = (float)((System.Object)value); return this; } break;
+                    case ContainerStorageType.Double: if (value is double) { u.f64 = (double)((System.Object)value); return this; } break;
+                    case ContainerStorageType.TimeSpan: if (value is TimeSpan) { u.TimeSpan = (TimeSpan)((System.Object)value); return this; } break;
+                    case ContainerStorageType.DateTime: if (value is DateTime) { u.DateTime = (DateTime)((System.Object)value); return this; } break;
+                    case ContainerStorageType.INamedValueSet: o = (value as INamedValueSet).ConvertToReadOnly(mapNullToEmpty: true); return this;
+                    case ContainerStorageType.INamedValue: o = (value as INamedValue).ConvertToReadOnly(mapNullToEmpty: true); return this;
+                    case ContainerStorageType.IListOfString:
+                    case ContainerStorageType.IListOfVC:
+                    case ContainerStorageType.Custom:
+                    default: break;
+                }
+
+                // all other cases will need to attempt to do some form of conversion.
+
+                if (value is string)
+                {
+                    StringScanner ss = new StringScanner(value as string);
+
                     switch (decodedValueType)
                     {
-                        case ContainerStorageType.None: o = null; cvt = ContainerStorageType.None; break;
-                        default: o = null; cvt = ContainerStorageType.None; break;
-                        case ContainerStorageType.Object: o = (System.Object)value; cvt = ContainerStorageType.Object; break;
-                        case ContainerStorageType.String: o = ((value != null) ? ((System.Object) value).ToString() : null); break; 
-                        case ContainerStorageType.Boolean: u.b = (System.Boolean)System.Convert.ChangeType(value, typeof(System.Boolean)); break;
-                        case ContainerStorageType.Binary: u.bi = (System.Byte)System.Convert.ChangeType(value, typeof(System.Byte)); break;
-                        case ContainerStorageType.SByte: u.i8 = (System.SByte)System.Convert.ChangeType(value, typeof(System.SByte)); break;
-                        case ContainerStorageType.Int16: u.i16 = (System.Int16)System.Convert.ChangeType(value, typeof(System.Int16)); break;
-                        case ContainerStorageType.Int32: u.i32 = (System.Int32)System.Convert.ChangeType(value, typeof(System.Int32)); break;
-                        case ContainerStorageType.Int64: u.i64 = (System.Int64)System.Convert.ChangeType(value, typeof(System.Int64)); break;
-                        case ContainerStorageType.Byte: u.u8 = (System.Byte)System.Convert.ChangeType(value, typeof(System.Byte)); break;
-                        case ContainerStorageType.UInt16: u.u16 = (System.UInt16)System.Convert.ChangeType(value, typeof(System.UInt16)); break;
-                        case ContainerStorageType.UInt32: u.u32 = (System.UInt32)System.Convert.ChangeType(value, typeof(System.UInt32)); break;
-                        case ContainerStorageType.UInt64: u.u64 = (System.UInt64)System.Convert.ChangeType(value, typeof(System.UInt64)); break;
-                        case ContainerStorageType.Single: u.f32 = (System.Single)System.Convert.ChangeType(value, typeof(System.Single)); break;
-                        case ContainerStorageType.Double: u.f64 = (System.Double)System.Convert.ChangeType(value, typeof(System.Double)); break;
-                        case ContainerStorageType.TimeSpan: u.TimeSpan = (System.TimeSpan)System.Convert.ChangeType(value, typeof(System.TimeSpan)); break;
-                        case ContainerStorageType.DateTime: u.DateTime = (System.DateTime)System.Convert.ChangeType(value, typeof(System.DateTime)); break;
-                        case ContainerStorageType.IListOfString: 
-                            {
-                                Object valueAsObject = (System.Object)value;
-                                String [] valueAsArrayOfStrings = (valueAsObject as String []);
-                                IList<String> oAsIListOfStrings = (o as IList<String>);
-
-                                if (valueAsObject == null)
-                                {
-                                    // first case - the given value is null
-                                    o = emptyIListOfString;
-                                }
-                                else if (valueAsArrayOfStrings != null)
-                                {
-                                    if (oAsIListOfStrings == null || !oAsIListOfStrings.IsReadOnly || !(oAsIListOfStrings.IsEqualTo(valueAsArrayOfStrings)))
-                                        o = new List<String>(valueAsArrayOfStrings).AsReadOnly();
-                                    // else o already contains the same readonly List of string from the array - do not replace it - this optimization step is only done for this CST
-                                }
-                                else
-                                {
-                                    IList<String> valueAsIListOfStrings = (valueAsObject as IList<String>);
-                                    IEnumerable<string> valueAsStringEnumerable = (valueAsIListOfStrings == null) ? (valueAsObject as IEnumerable<string>) : null;
-                                    // cast should not throw unless TValueType is not castable to IList<String>.  Also should not be null since valueAsObject is not null.
-
-                                    if (valueAsIListOfStrings != null)
-                                    {
-                                        if (oAsIListOfStrings == null || !oAsIListOfStrings.IsReadOnly || !(oAsIListOfStrings.IsEqualTo(valueAsIListOfStrings)))
-                                        {
-                                            if (valueAsIListOfStrings == null || valueAsIListOfStrings.IsReadOnly)
-                                                o = valueAsIListOfStrings;
-                                            else
-                                                o = new List<String>(valueAsIListOfStrings).AsReadOnly();
-                                        }
-                                        // else o already contains the same readonly List of string contents as the given value.  no need to copy or change the existing contained value.
-                                    }
-                                    else if (valueAsStringEnumerable != null)
-                                    {
-                                        List<string> valueAsListOfStrings = new List<string>(valueAsStringEnumerable);
-
-                                        if (oAsIListOfStrings == null || !oAsIListOfStrings.IsReadOnly || !(oAsIListOfStrings.IsEqualTo(valueAsListOfStrings)))
-                                        {
-                                            o = valueAsListOfStrings.AsReadOnly();
-                                        }
-                                        // else o already contains the same readonly List of string contents as the given value.  no need to copy or change the existing contained value.
-                                    }
-                                    else
-                                    {
-                                        // else this is an unrecognized case.  This setter does not support the given object type.  Use a fallback
-                                        cvt = ContainerStorageType.Object;
-                                        o = value;
-                                    }
-                                }
-                            }
-                            break;
-
-                        case ContainerStorageType.IListOfVC:
-                            {
-                                Object valueAsObject = (System.Object)value;
-
-                                ValueContainer[] valueAsArrayOfVCs = (valueAsObject as ValueContainer[]);
-
-                                if (valueAsObject == null)
-                                {
-                                    // first case - the given value is null
-                                    o = emptyIListOfVC;
-                                }
-                                else if (valueAsArrayOfVCs != null)
-                                {
-                                    // convert given array into a readonly list of deep copies of each of the given VCs
-                                    o = new List<ValueContainer>(valueAsArrayOfVCs.Select(vc => ValueContainer.Empty.DeepCopyFrom(vc))).AsReadOnly();
-                                }
-                                else
-                                {
-                                    IList<ValueContainer> valueAsILVC = (valueAsObject as IList<ValueContainer>);
-                                    IEnumerable<ValueContainer> valueAsVCEnumerable = (valueAsILVC == null) ? (valueAsObject as IEnumerable<ValueContainer>) : null;
-
-                                    if (valueAsILVC != null)
-                                    {
-                                        if (valueAsILVC.IsReadOnly)
-                                            o = valueAsILVC;        // if valueAsILVC is already readonly then we just keep that value as it has already been deep cloned
-                                        else
-                                            o = new List<ValueContainer>(valueAsILVC.Select(vc => ValueContainer.Empty.DeepCopyFrom(vc))).AsReadOnly();  // otherwise we need to generate a deep clone of the given list and save that new list (as readonly).
-                                    }
-                                    else if (valueAsVCEnumerable != null)
-                                    {
-                                        // convert given enumerable into a readonly list of deep copies of each of the given VCs
-                                        o = new List<ValueContainer>(valueAsVCEnumerable.Select(vc => ValueContainer.Empty.DeepCopyFrom(vc))).AsReadOnly();
-                                    }
-                                    else
-                                    {
-                                        // else this is an unrecognized case.  This setter does not support the given object type.  Use a fallback
-                                        cvt = ContainerStorageType.Object;
-                                        o = value;
-                                    }
-                                }
-                            }
-                            break;
-                        case ContainerStorageType.Custom:
-                            {
-                                if (value == null)
-                                {
-                                    cvt = ContainerStorageType.String;
-                                    o = null;
-                                }
-                                else if (value is Logging.LogGate || value is Logging.LogGate?)
-                                {
-                                    Logging.LogGate logGate = (Logging.LogGate)((System.Object)value);
-                                    CopyFrom((ValueContainer)logGate);      // use fully type specified explicit cast
-                                }
-                                else
-                                {
-                                    cvt = ContainerStorageType.String;
-                                    o = ((System.Object)value).ToString(); // use default ToString method
-                                }
-                            }
-                            break;
-                        case ContainerStorageType.INamedValueSet: o = (value as INamedValueSet).ConvertToReadOnly(mapNullToEmpty: true); break;
-                        case ContainerStorageType.INamedValue: o = (value as INamedValue).ConvertToReadOnly(mapNullToEmpty: true); break;
+                        case ContainerStorageType.Boolean: if (ss.ParseValue<bool>(out u.b) && ss.IsAtEnd) return this; break;
+                        case ContainerStorageType.Binary: if (ss.ParseValue<byte>(out u.bi) && ss.IsAtEnd) return this; break;
+                        case ContainerStorageType.SByte: if (ss.ParseValue<sbyte>(out u.i8) && ss.IsAtEnd) return this; break;
+                        case ContainerStorageType.Int16: if (ss.ParseValue<short>(out u.i16) && ss.IsAtEnd) return this; break;
+                        case ContainerStorageType.Int32: if (ss.ParseValue<int>(out u.i32) && ss.IsAtEnd) return this; break;
+                        case ContainerStorageType.Int64: if (ss.ParseValue<long>(out u.i64) && ss.IsAtEnd) return this; break;
+                        case ContainerStorageType.Byte: if (ss.ParseValue<byte>(out u.u8) && ss.IsAtEnd) return this; break;
+                        case ContainerStorageType.UInt16: if (ss.ParseValue<ushort>(out u.u16) && ss.IsAtEnd) return this; break;
+                        case ContainerStorageType.UInt32: if (ss.ParseValue<uint>(out u.u32) && ss.IsAtEnd) return this; break;
+                        case ContainerStorageType.UInt64: if (ss.ParseValue<ulong>(out u.u64) && ss.IsAtEnd) return this; break;
+                        case ContainerStorageType.Single: if (ss.ParseValue<float>(out u.f32) && ss.IsAtEnd) return this; break;
+                        case ContainerStorageType.Double: if (ss.ParseValue<double>(out u.f64) && ss.IsAtEnd) return this; break;
+                        case ContainerStorageType.TimeSpan: { TimeSpan ts; if (ss.ParseValue<TimeSpan>(out ts) && ss.IsAtEnd) { u.TimeSpan = ts; return this; } } break;
+                        case ContainerStorageType.DateTime: { DateTime dt; if (ss.ParseValue<DateTime>(out dt) && ss.IsAtEnd) { u.DateTime = dt; return this; } } break;
+                        default: break;
                     }
                 }
-                else
+
+                switch (decodedValueType)
                 {
-                    cvt = ContainerStorageType.Object;
-                    // o has already been cleared above.
+                    default: o = null; cvt = ContainerStorageType.None; break;
+                    case ContainerStorageType.Boolean: u.b = (System.Boolean)System.Convert.ChangeType(value, typeof(System.Boolean)); break;
+                    case ContainerStorageType.Binary: u.bi = (System.Byte)System.Convert.ChangeType(value, typeof(System.Byte)); break;
+                    case ContainerStorageType.SByte: u.i8 = (System.SByte)System.Convert.ChangeType(value, typeof(System.SByte)); break;
+                    case ContainerStorageType.Int16: u.i16 = (System.Int16)System.Convert.ChangeType(value, typeof(System.Int16)); break;
+                    case ContainerStorageType.Int32: u.i32 = (System.Int32)System.Convert.ChangeType(value, typeof(System.Int32)); break;
+                    case ContainerStorageType.Int64: u.i64 = (System.Int64)System.Convert.ChangeType(value, typeof(System.Int64)); break;
+                    case ContainerStorageType.Byte: u.u8 = (System.Byte)System.Convert.ChangeType(value, typeof(System.Byte)); break;
+                    case ContainerStorageType.UInt16: u.u16 = (System.UInt16)System.Convert.ChangeType(value, typeof(System.UInt16)); break;
+                    case ContainerStorageType.UInt32: u.u32 = (System.UInt32)System.Convert.ChangeType(value, typeof(System.UInt32)); break;
+                    case ContainerStorageType.UInt64: u.u64 = (System.UInt64)System.Convert.ChangeType(value, typeof(System.UInt64)); break;
+                    case ContainerStorageType.Single: u.f32 = (System.Single)System.Convert.ChangeType(value, typeof(System.Single)); break;
+                    case ContainerStorageType.Double:
+                        {
+                            if (value is TimeSpan)
+                                u.f64 = ((TimeSpan)((System.Object)value)).TotalSeconds;
+                            else
+                                u.f64 = (System.Double)System.Convert.ChangeType(value, typeof(System.Double));
+                        }
+                        break;
+                    case ContainerStorageType.TimeSpan:
+                        {
+                            if (value is double)
+                                u.TimeSpan = ((double)((System.Object)value)).FromSeconds();
+                            else
+                                u.TimeSpan = (System.TimeSpan)System.Convert.ChangeType(value, typeof(System.TimeSpan));
+                        }
+                        break;
+                    case ContainerStorageType.DateTime: u.DateTime = (System.DateTime)System.Convert.ChangeType(value, typeof(System.DateTime)); break;
+                    case ContainerStorageType.IListOfString: 
+                        {
+                            Object valueAsObject = (System.Object)value;
+                            String [] valueAsArrayOfStrings = (valueAsObject as String []);
+                            IList<String> oAsIListOfStrings = (o as IList<String>);
+
+                            if (valueAsObject == null)
+                            {
+                                // first case - the given value is null
+                                o = emptyIListOfString;
+                            }
+                            else if (valueAsArrayOfStrings != null)
+                            {
+                                if (oAsIListOfStrings == null || !oAsIListOfStrings.IsReadOnly || !(oAsIListOfStrings.IsEqualTo(valueAsArrayOfStrings)))
+                                    o = new List<String>(valueAsArrayOfStrings).AsReadOnly();
+                                // else o already contains the same readonly List of string from the array - do not replace it - this optimization step is only done for this CST
+                            }
+                            else
+                            {
+                                IList<String> valueAsIListOfStrings = (valueAsObject as IList<String>);
+                                IEnumerable<string> valueAsStringEnumerable = (valueAsIListOfStrings == null) ? (valueAsObject as IEnumerable<string>) : null;
+                                // cast should not throw unless TValueType is not castable to IList<String>.  Also should not be null since valueAsObject is not null.
+
+                                if (valueAsIListOfStrings != null)
+                                {
+                                    if (oAsIListOfStrings == null || !oAsIListOfStrings.IsReadOnly || !(oAsIListOfStrings.IsEqualTo(valueAsIListOfStrings)))
+                                    {
+                                        if (valueAsIListOfStrings == null || valueAsIListOfStrings.IsReadOnly)
+                                            o = valueAsIListOfStrings;
+                                        else
+                                            o = new List<String>(valueAsIListOfStrings).AsReadOnly();
+                                    }
+                                    // else o already contains the same readonly List of string contents as the given value.  no need to copy or change the existing contained value.
+                                }
+                                else if (valueAsStringEnumerable != null)
+                                {
+                                    List<string> valueAsListOfStrings = new List<string>(valueAsStringEnumerable);
+
+                                    if (oAsIListOfStrings == null || !oAsIListOfStrings.IsReadOnly || !(oAsIListOfStrings.IsEqualTo(valueAsListOfStrings)))
+                                    {
+                                        o = valueAsListOfStrings.AsReadOnly();
+                                    }
+                                    // else o already contains the same readonly List of string contents as the given value.  no need to copy or change the existing contained value.
+                                }
+                                else
+                                {
+                                    // else this is an unrecognized case.  This setter does not support the given object type.  Use a fallback
+                                    cvt = ContainerStorageType.Object;
+                                    o = value;
+                                }
+                            }
+                        }
+                        break;
+
+                    case ContainerStorageType.IListOfVC:
+                        {
+                            Object valueAsObject = (System.Object)value;
+
+                            ValueContainer[] valueAsArrayOfVCs = (valueAsObject as ValueContainer[]);
+
+                            if (valueAsObject == null)
+                            {
+                                // first case - the given value is null
+                                o = emptyIListOfVC;
+                            }
+                            else if (valueAsArrayOfVCs != null)
+                            {
+                                // convert given array into a readonly list of deep copies of each of the given VCs
+                                o = new List<ValueContainer>(valueAsArrayOfVCs.Select(vc => ValueContainer.Empty.DeepCopyFrom(vc))).AsReadOnly();
+                            }
+                            else
+                            {
+                                IList<ValueContainer> valueAsILVC = (valueAsObject as IList<ValueContainer>);
+                                IEnumerable<ValueContainer> valueAsVCEnumerable = (valueAsILVC == null) ? (valueAsObject as IEnumerable<ValueContainer>) : null;
+
+                                if (valueAsILVC != null)
+                                {
+                                    if (valueAsILVC.IsReadOnly)
+                                        o = valueAsILVC;        // if valueAsILVC is already readonly then we just keep that value as it has already been deep cloned
+                                    else
+                                        o = new List<ValueContainer>(valueAsILVC.Select(vc => ValueContainer.Empty.DeepCopyFrom(vc))).AsReadOnly();  // otherwise we need to generate a deep clone of the given list and save that new list (as readonly).
+                                }
+                                else if (valueAsVCEnumerable != null)
+                                {
+                                    // convert given enumerable into a readonly list of deep copies of each of the given VCs
+                                    o = new List<ValueContainer>(valueAsVCEnumerable.Select(vc => ValueContainer.Empty.DeepCopyFrom(vc))).AsReadOnly();
+                                }
+                                else
+                                {
+                                    // else this is an unrecognized case.  This setter does not support the given object type.  Use a fallback
+                                    cvt = ContainerStorageType.Object;
+                                    o = value;
+                                }
+                            }
+                        }
+                        break;
+                    case ContainerStorageType.Custom:
+                        {
+                            if (value == null)
+                            {
+                                cvt = ContainerStorageType.String;
+                                o = null;
+                            }
+                            else if (value is Logging.LogGate || value is Logging.LogGate?)
+                            {
+                                Logging.LogGate logGate = (Logging.LogGate)((System.Object)value);
+                                CopyFrom((ValueContainer)logGate);      // use fully type specified explicit cast
+                            }
+                            else
+                            {
+                                cvt = ContainerStorageType.String;
+                                o = ((System.Object)value).ToString(); // use default ToString method
+                            }
+                        }
+                        break;
                 }
             }
-            catch // (System.Exception ex)
+            catch (System.Exception ex)
             {
                 // if the above logic fails then cast the value as an object and save it as such.
                 cvt = ContainerStorageType.Object;
                 o = value;
+
+                GlobalLastSetValueFailedException = ex;
+                unchecked { GlobalSetValueFailedCount++; }
             }
 
             return this;
@@ -889,7 +955,7 @@ namespace MosaicLib.Modular.Common
         /// If this transfer/conversion is not used or is not successful then this method returns the given defaultValue (which defaults to default(TValueType)).  
         /// If rethrow is true and the method encounters any excpetions then it will rethrow the exception.
         /// </summary>
-        public TValueType GetValue<TValueType>(ContainerStorageType decodedValueType, bool valueTypeIsNullable, bool rethrow, bool allowTypeChangeAttempt, TValueType defaultValue = default(TValueType))
+        public TValueType GetValue<TValueType>(ContainerStorageType decodedValueType, bool isNullable, bool rethrow, bool allowTypeChangeAttempt, TValueType defaultValue = default(TValueType))
         {
             Type TValueTypeType = typeof(TValueType);
             TValueType value;
@@ -980,12 +1046,22 @@ namespace MosaicLib.Modular.Common
                     // support direct conversion attempt from TimeSpan to double
                     value = (TValueType)((System.Object)(u.TimeSpan.TotalSeconds));
                 }
-                else if (decodedValueType.IsValueType() && !valueTypeIsNullable && !rethrow && IsNullOrEmpty)
+                else if (decodedValueType == ContainerStorageType.Byte && cvt == ContainerStorageType.Binary && allowTypeChangeAttempt)
                 {
-                    // support direct assignment of an empty or null container to a value type with rethrow = false by without any attempt to actually perform the conversion (it will fail).
+                    // support direct conversion from Binary to Byte
+                    value = (TValueType)((System.Object)(u.bi));
+                }
+                else if (decodedValueType == ContainerStorageType.Binary && cvt == ContainerStorageType.Byte && allowTypeChangeAttempt)
+                {
+                    // support direct conversion from Byte to Binary
+                    value = (TValueType)((System.Object)(u.u8));
+                }
+                else if (decodedValueType.IsValueType() && !isNullable && !rethrow && IsNullOrEmpty)
+                {
+                    // support direct assignment of an empty or null container to a value type with rethrow = false without any attempt to actually perform the conversion (as it will obviously fail).
                     value = defaultValue;
                 }
-                else if (valueTypeIsNullable && (IsNullOrEmpty || (allowTypeChangeAttempt && cvt == ContainerStorageType.String && (o as string).IsNullOrEmpty())))
+                else if (isNullable && (IsNullOrEmpty || (allowTypeChangeAttempt && cvt == ContainerStorageType.String && (o as string).IsNullOrEmpty())))
                 {
                     // we can always assign a null/empty container to a nullable type by setting the type to its default (aka null).
                     // also allows simple conversion of any null or empty string to a nullable type using the same assignement to default (aka null).
@@ -1095,10 +1171,14 @@ namespace MosaicLib.Modular.Common
             catch (System.Exception ex)
             {
                 value = defaultValue;
+
                 if (ex is ValueContainerGetValueException)
                     LastGetValueException = ex;
                 else
                     LastGetValueException = new ValueContainerGetValueException("Unable to get {0} as type '{1}': {2}".CheckedFormat(this, typeof(TValueType), ex.Message), ex);
+
+                GlobalLastGetValueFailedException = LastGetValueException;
+                unchecked { GlobalGetValueFailedCount++; }
             }
 
             if (rethrow && LastGetValueException != null)
@@ -1133,6 +1213,32 @@ namespace MosaicLib.Modular.Common
                 return false;
             }
         }
+
+        #endregion
+
+        #region static global exception counts and latched exceptions
+
+        /// <summary>
+        /// Global static volatile pseudo count of the number of exceptions that have occurred within a ValueContainer.SetValue method call.
+        /// <para/>Note: As this variable is not atomically incremented, this count may not exactly represent the total count of such exceptions if two such exceptions are generated at the exact same time on two differnt cpu cores.
+        /// </summary>
+        public static volatile int GlobalSetValueFailedCount = 0;
+
+        /// <summary>
+        /// Global static volatile pseudo count of the number of exceptions that have occurred within a ValueContainer.GetValue method call.
+        /// <para/>Note: As this variable is not atomically incremented, this count may not exactly represent the total count of such exceptions if two such exceptions are generated at the exact same time on two differnt cpu cores.
+        /// </summary>
+        public static volatile int GlobalGetValueFailedCount = 0;
+
+        /// <summary>
+        /// Global static volatile field that gives the last exception that was generated and caught during a ValueContainer.SetValue method call.
+        /// </summary>
+        public static volatile System.Exception GlobalLastSetValueFailedException = null;
+
+        /// <summary>
+        /// Global static volatile field that gives the last exception that was generated and caught during a ValueContainer.GetValue method call.
+        /// </summary>
+        public static volatile System.Exception GlobalLastGetValueFailedException = null;
 
         #endregion
 
@@ -3719,8 +3825,10 @@ namespace MosaicLib.Modular.Common
         {
             if (!VC.IsEmpty)
                 return "[{0} {1} {2}]".CheckedFormat(nvNodeName, ValueContainer.Create(Name).ToStringSML(), VC.ToStringSML());
-            else
+            else if (!Name.IsNullOrEmpty())
                 return "[{0} {1}]".CheckedFormat(nvNodeName, ValueContainer.Create(Name).ToStringSML());
+            else
+                return "[{0}]".CheckedFormat(nvNodeName);
         }
 
         /// <summary>
@@ -4847,13 +4955,15 @@ namespace MosaicLib.Modular.Common
                 {
                     if (!itemAttribute.SilenceIssues)
                         IssueEmitter.Emit("Member/Value '{0}'/'{1}' is not usable: Member must provide public getter, in ValueSet type '{2}'", memberName, nvsItemName, TValueSetTypeStr);
+
                     continue;
                 }
 
                 if (MustSupportSet && !itemInfo.CanSetValue)
                 {
-                    if (!itemAttribute.SilenceIssues)
+                    if (!itemAttribute.SilenceIssues) 
                         IssueEmitter.Emit("Member/Value '{0}'/'{1}' is not usable: Member must provide public setter, in ValueSet type '{2}'", memberName, nvsItemName, TValueSetTypeStr);
+
                     continue;
                 }
 
@@ -4867,13 +4977,16 @@ namespace MosaicLib.Modular.Common
 
                 Logging.IMesgEmitter selectedIssueEmitter = IssueEmitter;
 
-                if ((MustSupportGet && ItemAccess.UseGetter() && itemInfo.CanGetValue && itemAccessSetupInfo.MemberToValueFunc == null) 
-                    || (MustSupportSet && ItemAccess.UseSetter() && itemInfo.CanSetValue && itemAccessSetupInfo.MemberFromValueAction == null))
+                if (itemAccessSetupInfo.MemberToValueFunc == null)
                 {
-                    if (!itemAttribute.SilenceIssues)
+                    if (MustSupportGet && ItemAccess.UseGetter() && itemInfo.CanGetValue && !itemAttribute.SilenceIssues) 
                         selectedIssueEmitter.Emit("Member/Value '{0}'/'{1}' is not usable: no valid accessor delegate could be generated for its ValueSet type:'{3}'", memberName, nvsItemName, itemInfo.ItemType, TValueSetTypeStr);
+                }
 
-                    continue;
+                if (itemAccessSetupInfo.MemberFromValueAction == null)
+                {
+                    if (MustSupportSet && ItemAccess.UseSetter() && itemInfo.CanSetValue && !itemAttribute.SilenceIssues)
+                        selectedIssueEmitter.Emit("Member/Value '{0}'/'{1}' is not usable: no valid accessor delegate could be generated for its ValueSet type:'{3}'", memberName, nvsItemName, itemInfo.ItemType, TValueSetTypeStr);
                 }
 
                 itemAccessSetupInfoArray[idx] = itemAccessSetupInfo;
@@ -4899,10 +5012,9 @@ namespace MosaicLib.Modular.Common
             foreach (var iasi in itemAccessSetupInfoArray)
             {
                 INamedValue inv = nvs[iasi.NVSItemName];
+
                 if (iasi != null && iasi.MemberFromValueAction != null && (!merge || !inv.IsNullOrEmpty()))
-                {
-                    iasi.MemberFromValueAction(ValueSet, inv.VC, IssueEmitter, ValueNoteEmitter, false);
-                }
+                    iasi.MemberFromValueAction(ValueSet, inv.VC, IssueEmitter, ValueNoteEmitter, rethrow: false);
             }
 
             return this;
@@ -4923,7 +5035,7 @@ namespace MosaicLib.Modular.Common
             foreach (var iasi in itemAccessSetupInfoArray)
             {
                 if (iasi != null && iasi.MemberToValueFunc != null)
-                    nvs.SetValue(iasi.NVSItemName, iasi.MemberToValueFunc(ValueSet, IssueEmitter, ValueNoteEmitter, false));
+                    nvs.SetValue(iasi.NVSItemName, iasi.MemberToValueFunc(ValueSet, IssueEmitter, ValueNoteEmitter, rethrow: false));
             }
 
             if (asReadOnly)

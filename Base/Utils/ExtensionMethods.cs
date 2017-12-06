@@ -520,7 +520,7 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        #region Math and number related extension methods (Ceiling, Floor, Round, Clip, IsInRange)
+        #region Math and number related extension methods (Ceiling, Floor, Round, Clip, IsInRange, IncrementSkipZero, SafeOneOver)
 
         /// <summary>Returns the Math.Ceiling of the given value</summary>
         public static double Ceiling(this double value)
@@ -645,6 +645,25 @@ namespace MosaicLib.Utils
                 return 1;
             else
                 return value;
+        }
+
+
+        /// <summary>
+        /// If the given <paramref name="value"/> is not zero then this method returns (1.0 / <paramref name="value"/>).  
+        /// Otherwise this method returns the given <paramref name="fallbackValue"/>.
+        /// </summary>
+        public static double SafeOneOver(this double value, double fallbackValue = 0.0)
+        {
+            return ((value != 0.0) ? (1.0 / value) : fallbackValue);
+        }
+
+        /// <summary>
+        /// If the given <paramref name="value"/> is not zero then this method returns (1.0 / <paramref name="value"/>).  
+        /// Otherwise this method returns the given <paramref name="fallbackValue"/>.
+        /// </summary>
+        public static float SafeOneOver(this float value, float fallbackValue = 0.0f)
+        {
+            return ((value != 0.0f) ? (1.0f / value) : fallbackValue);
         }
 
         #endregion

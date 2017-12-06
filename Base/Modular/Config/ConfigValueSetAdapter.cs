@@ -279,6 +279,7 @@ namespace MosaicLib.Modular.Config
                 {
                     if (!itemAttribute.SilenceIssues)
                         SetupIssueEmitter.Emit("Member/key '{0}'/'{1}' is not usable:  There is no valid public member Setter, in ValueSet type '{2}'", memberName, fullKeyName, tConfigValueSetTypeStr);
+
                     continue;
                 }
 
