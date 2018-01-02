@@ -162,41 +162,42 @@ namespace MosaicLib.Modular.Config
     {
         /// <summary>
         /// Attempts to find information about the given key and returns an object that implements the IConfigKeyAccess interface for this key.  
-        /// If the key does not exist then a stub ConfigKeyAccess object is generated containing a non-empty ResultCode and null for the ValueAsString and this object is returned.
-        /// <para/>Uses ConfigKeyAccessFlags.Optional for the flags.
+        /// If the key does not exist and caller requests ensureExists (true) then this method will request the config instance to find a suitable provider and request that it create the key using the given defaultValue.
+        /// If the key does not exist or it could not be created then this method returns a fallback IConfigKeyAccess object that indicates that the key was not found.
         /// </summary>
-        public static IConfigKeyAccess GetConfigKeyAccess(this string key)
+        public static IConfigKeyAccess GetConfigKeyAccess(this string key, bool isOptional = true, bool mayBeChanged = true, bool? ensureExists = null, string defaultProviderName = null, INamedValueSet keyMetaData = null, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate, ValueContainer? defaultValue = null, bool silenceLogging = false)
         {
-            return Config.Instance.GetConfigKeyAccess(key);
+            return Config.Instance.GetConfigKeyAccess(key, isOptional: isOptional, mayBeChanged: mayBeChanged, ensureExists: ensureExists, defaultProviderName: defaultProviderName, keyMetaData: keyMetaData, mergeBehavior: mergeBehavior, defaultValue: defaultValue, silenceLogging: silenceLogging);
         }
 
         /// <summary>
         /// Attempts to find information about the given key and returns an object that implements the IConfigKeyAccess interface for this key.  
-        /// If the key does not exist then a stub ConfigKeyAccess object is generated containing a non-empty ResultCode and null for the ValueAsString and this object is returned.
+        /// If the key does not exist and caller requests ensureExists (true) then this method will request the config instance to find a suitable provider and request that it create the key using the given defaultValue.
+        /// If the key does not exist or it could not be created then this method returns a fallback IConfigKeyAccess object that indicates that the key was not found.
         /// </summary>
-        public static IConfigKeyAccess GetConfigKeyAccess(this IConfig config, string key, bool isOptional = true, bool mayBeChanged = true, bool? ensureExists = null, string defaultProviderName = null, INamedValueSet keyMetaData = null, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate, ValueContainer? defaultValue = null)
+        public static IConfigKeyAccess GetConfigKeyAccess(this IConfig config, string key, bool isOptional = true, bool mayBeChanged = true, bool? ensureExists = null, string defaultProviderName = null, INamedValueSet keyMetaData = null, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate, ValueContainer? defaultValue = null, bool silenceLogging = false)
         {
-            return config.GetConfigKeyAccess(new ConfigKeyAccessSpec(key, new ConfigKeyAccessFlags() { IsOptional = isOptional, MayBeChanged = mayBeChanged, EnsureExists = ensureExists, DefaultProviderName = defaultProviderName }, keyMetaData: keyMetaData, mergeBehavior: mergeBehavior), defaultValue: defaultValue);
+            return (config ?? Config.Instance).GetConfigKeyAccess(new ConfigKeyAccessSpec(key, new ConfigKeyAccessFlags() { IsOptional = isOptional, MayBeChanged = mayBeChanged, EnsureExists = ensureExists, DefaultProviderName = defaultProviderName, SilenceLogging = silenceLogging }, keyMetaData: keyMetaData, mergeBehavior: mergeBehavior), defaultValue: defaultValue);
         }
 
         /// <summary>
         /// Attempts to find information from the given provider about the given key and returns an object that implements the IConfigKeyAccess interface for this key.  
-        /// If the provider does not support this key then the provider will return null.
-        /// <para/>Uses ConfigKeyAccessFlags.Optional for the flags.
+        /// If the provider does not support this key and the key could not be created, or the caller did not request that it be created, then the provider will return null.
         /// </summary>
-        public static IConfigKeyAccess GetConfigKeyAccess(this IConfigKeyProvider provider, string key, bool isOptional = true, bool mayBeChanged = true, bool? ensureExists = null, string defaultProviderName = null, INamedValueSet keyMetaData = null, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate, ValueContainer defaultValue = default(ValueContainer))
+        public static IConfigKeyAccess GetConfigKeyAccess(this IConfigKeyProvider provider, string key, bool isOptional = true, bool mayBeChanged = true, bool? ensureExists = null, string defaultProviderName = null, INamedValueSet keyMetaData = null, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate, ValueContainer defaultValue = default(ValueContainer), bool silenceLogging = false)
         {
-            return provider.GetConfigKeyAccess(new ConfigKeyAccessSpec(key, new ConfigKeyAccessFlags() { IsOptional = isOptional, MayBeChanged = mayBeChanged, EnsureExists = ensureExists, DefaultProviderName = defaultProviderName }, keyMetaData: keyMetaData, mergeBehavior: mergeBehavior), initialValue: defaultValue);
+            return provider.GetConfigKeyAccess(new ConfigKeyAccessSpec(key, new ConfigKeyAccessFlags() { IsOptional = isOptional, MayBeChanged = mayBeChanged, EnsureExists = ensureExists, DefaultProviderName = defaultProviderName, SilenceLogging = silenceLogging }, keyMetaData: keyMetaData, mergeBehavior: mergeBehavior), initialValue: defaultValue);
         }
 
         /// <summary>
         /// Attempts to find information about the given key and returns an object that implements the IConfigKeyAccess interface for this key.  
-        /// If the key does not exist then a stub ConfigKeyAccess object is generated containing a non-empty ResultCode and null for the ValueAsString and this object is returned.
-        /// <para/>Uses ConfigKeyAccessFlags.ReadOnlyOnce | ConfigKeyAccessFlags.Optional for the flags.
+        /// If the key does not exist and caller requests ensureExists (true) then this method will request the config instance to find a suitable provider and request that it create the key using the given defaultValue.
+        /// If the key does not exist or it could not be created then this method returns a fallback IConfigKeyAccess object that indicates that the key was not found.
+        /// <para/>Adds in the ConfigKeyAccessFlags.ReadOnlyOnce flags on top of the values specified by the caller in the optional parameters.
         /// </summary>
-        public static IConfigKeyAccess GetConfigKeyAccessOnce(this IConfig config, string key, bool isOptional = true, bool? ensureExists = null, string defaultProviderName = null, INamedValueSet keyMetaData = null, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate, ValueContainer? defaultValue = null)
+        public static IConfigKeyAccess GetConfigKeyAccessOnce(this IConfig config, string key, bool isOptional = true, bool? ensureExists = null, string defaultProviderName = null, INamedValueSet keyMetaData = null, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate, ValueContainer? defaultValue = null, bool silenceLogging = false)
         {
-            return config.GetConfigKeyAccess(key: key, isOptional: isOptional, mayBeChanged: false, ensureExists: ensureExists, defaultProviderName: defaultProviderName, keyMetaData: keyMetaData, mergeBehavior: mergeBehavior, defaultValue: defaultValue);
+            return (config ?? Config.Instance).GetConfigKeyAccess(key: key, isOptional: isOptional, mayBeChanged: false, ensureExists: ensureExists, defaultProviderName: defaultProviderName, keyMetaData: keyMetaData, mergeBehavior: mergeBehavior, defaultValue: defaultValue, silenceLogging: silenceLogging);
         }
 
         /// <summary>

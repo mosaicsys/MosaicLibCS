@@ -225,8 +225,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
         public MDItemType ItemType { get; protected set; }
         public string Name { get; set; }
         public string Comment { get; set; }
-        public NamedValueSet ClientNVS { get; set; }
-        INamedValueSet IMetaDataCommonInfo.ClientNVS { get { return ClientNVS; } }
+        public INamedValueSet ClientNVS { get; set; }
         public Semi.E005.Data.ItemFormatCode IFC { get; protected set; }
 
         public int ClientID { get; set; }
@@ -2040,12 +2039,25 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
     public interface IMDRFRecordingEngine : IActivePartBase
     {
         /// <summary>
+        /// Gives the client direct access to the MDRFWriter that this object creates and uses.
+        /// <para/>Warning: this property may be null if there is no currently active mdrfWriter.
+        /// </summary>
+        IMDRFWriter MDRFWriter { get; }
+
+        /// <summary>
         /// StringParamAction action factory method.
         /// The resulting action, when run, will record an occurrance containing the eventName and the given eventDataNVS.
         /// The OccurrenceInfo used for this event is determined from the given eventName.  
         /// If the eventName matches a name registered with a specific occurrance then that occurrence will be used, otherwise the DefaultRecordEventOccurrance will be used.
         /// </summary>
         IStringParamAction RecordEvent(string eventName = null, INamedValueSet eventDataNVS = null, bool writeAll = false);
+
+        /// <summary>
+        /// Action factory method.
+        /// The resulting action, when run, will record the requested occurrence with the given nvs attached.
+        /// The OccurrenceDefinitionInfo used for this event is determined from the given occurrenceName.  
+        /// </summary>
+        IClientFacet RecordOccurrence(string occurrenceName = null, INamedValueSet occurrenceDataNVS = null, bool writeAll = false);
     }
 
     /// <summary>
@@ -2080,11 +2092,11 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
             AllocateUserRowFlagBitsForGroups = other.AllocateUserRowFlagBitsForGroups;
 
-            if (other.GroupDefinitionSet != null)
-                GroupDefinitionSet = other.GroupDefinitionSet.Select(otherTuple => Tuple.Create<string, MatchRuleSet, INamedValueSet>(otherTuple.Item1, new Utils.StringMatching.MatchRuleSet(otherTuple.Item2), otherTuple.Item3.ConvertToReadOnly())).ToArray();
+            if (other.GroupDefinitionItemArray != null)
+                GroupDefinitionItemArray = other.GroupDefinitionItemArray.SafeToArray();
 
-            if (other.EventDefinitionSet != null)
-                EventDefinitionSet = other.EventDefinitionSet.Select(otherTuple => Tuple.Create<string, IEnumerable<string>, INamedValueSet>(otherTuple.Item1, otherTuple.Item2.SafeToArray(), otherTuple.Item3.ConvertToReadOnly())).ToArray();
+            if (other.OccurrenceDefinitionItemArray != null)
+                OccurrenceDefinitionItemArray = other.OccurrenceDefinitionItemArray.Select(item => new MDRFRecordingEngineItems.OccurenceDefinitionItem() { OccurrenceName = item.OccurrenceName, EventNames = item.EventNames.SafeToArray(mapNullToEmpty: false), OccurrenceMetaData = item.OccurrenceMetaData }).ToArray();
 
             if (other.PruningConfig != null)
             {
@@ -2109,15 +2121,51 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
         public bool AllocateUserRowFlagBitsForGroups { get; set; }
 
-        public IEnumerable<Tuple<string, Utils.StringMatching.MatchRuleSet, INamedValueSet>> GroupDefinitionSet { get; set; }
+        public MDRFRecordingEngineItems.GroupDefinitionItem[] GroupDefinitionItemArray { get; set; }
 
-        public IEnumerable<Tuple<string, IEnumerable<string>, INamedValueSet>> EventDefinitionSet { get; set; }
+        public MDRFRecordingEngineItems.OccurenceDefinitionItem[] OccurrenceDefinitionItemArray { get; set; }
 
         public DirectoryTreePruningManager.Config PruningConfig { get; set; }
 
         public TimeSpan NominalPruningInterval { get; set; }
 
         private static readonly TimeSpan[] emptyTimeSpanArray = new TimeSpan[0];
+
+        [Obsolete("The use of this property has been deprecated, please change to use the new GroupDefinitionItemArray [2017-12-20]")]
+        public IEnumerable<Tuple<string, Utils.StringMatching.MatchRuleSet, INamedValueSet>> GroupDefinitionSet 
+        {
+            get { return GroupDefinitionItemArray.Select(item => Tuple.Create(item.GroupName, item.MatchRuleSet, item.GroupMetaData)); }
+            set { GroupDefinitionItemArray = value.Select(t => new MDRFRecordingEngineItems.GroupDefinitionItem() { GroupName = t.Item1, MatchRuleSet = t.Item2, GroupMetaData = t.Item3 }).ToArray(); }
+        }
+
+        [Obsolete("The use of this property has been deprecated, please change to use the new OccurrenceDefinitionItemArray [2017-12-20]")]
+        public IEnumerable<Tuple<string, IEnumerable<string>, INamedValueSet>> EventDefinitionSet 
+        {
+            get { return OccurrenceDefinitionItemArray.Select(item => Tuple.Create<string, IEnumerable<string>, INamedValueSet>(item.OccurrenceName, item.EventNames.SafeToArray(), item.OccurrenceMetaData)); }
+            set { OccurrenceDefinitionItemArray = value.Select(t => new MDRFRecordingEngineItems.OccurenceDefinitionItem() { OccurrenceName = t.Item1, EventNames = t.Item2.ToArray(), OccurrenceMetaData = t.Item3 }).ToArray(); }
+        }
+    }
+
+    namespace MDRFRecordingEngineItems
+    {
+        public struct GroupDefinitionItem
+        {
+            public string GroupName { get; set; }
+            public MatchRuleSet MatchRuleSet { get; set; }
+            public Func<string, INamedValueSet, bool> TableItemFilter { get; set; }
+            public INamedValueSet GroupMetaData { get { return _groupMetaData; } set { _groupMetaData = value.ConvertToReadOnly(mapNullToEmpty: false); } }
+
+            private INamedValueSet _groupMetaData;
+        }
+
+        public struct OccurenceDefinitionItem
+        {
+            public string OccurrenceName { get; set; }
+            public string[] EventNames { get; set; }
+            public INamedValueSet OccurrenceMetaData { get { return _occurrenceMetaData; } set { _occurrenceMetaData = value.ConvertToReadOnly(mapNullToEmpty: false); } }
+
+            private INamedValueSet _occurrenceMetaData;
+        }
     }
 
     /// <summary>
@@ -2132,6 +2180,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
         {
             Config = new MDRFRecordingEngineConfig(config);
 
+            mdrfWriter = new MDRFWriter("{0}.mw".CheckedFormat(PartID), Config.SetupInfo, enableAPILocking: true);
             AddExplicitDisposeAction(() => Fcns.DisposeOfObject(ref mdrfWriter));
         }
 
@@ -2141,15 +2190,21 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
         #region private fields (et. al.)
 
-        IMDRFWriter mdrfWriter = null;
+        IMDRFWriter mdrfWriter;
         QpcTimer mdrfWriterServiceTimer;
 
-        DirectoryTreePruningManager pruningManager = null;
+        DirectoryTreePruningManager pruningManager;
         QpcTimer pruningServiceTimer;
 
         #endregion
 
-        #region local actions and custom properties
+        #region IMDRFRecordingEngine implementation
+
+        /// <summary>
+        /// Gives the client direct access to the MDRFWriter that this object creates and uses.
+        /// <para/>Warning: this property will be null until the part has been set online
+        /// </summary>
+        public IMDRFWriter MDRFWriter { get { return mdrfWriter; } }
 
         /// <summary>
         /// StringParamAction action factory method.
@@ -2160,7 +2215,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
         public IStringParamAction RecordEvent(string eventName = null, INamedValueSet eventDataNVS = null, bool writeAll = false)
         {
             ActionMethodDelegateActionArgStrResult<string, NullObj> performRecordEventDelegate = (actionProviderFacet) => PerformRecordEvent(actionProviderFacet, writeAll);
-            IStringParamAction action = new StringActionImpl(actionQ, eventName, performRecordEventDelegate, "{0}({1}{2})".CheckedFormat(CurrentMethodName, eventName, writeAll ? ",writeAll" : string.Empty), ActionLoggingReference);
+            IStringParamAction action = new StringActionImpl(actionQ, eventName, performRecordEventDelegate, "{0}({1}{2})".CheckedFormat(CurrentMethodName, eventName, writeAll ? ",writeAll" : ""), ActionLoggingReference);
 
             if (eventDataNVS != null)   
                 action.NamedParamValues = eventDataNVS;
@@ -2173,9 +2228,9 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
             string eventName = action.ParamValue;
             INamedValueSet eventDataNVS = action.NamedParamValues;
 
-            if (!BaseState.IsOnline || mdrfWriter == null)
-                return "Part is not Online or there is no valid mdrfWriter";
- 
+            if (!BaseState.IsOnline)
+                return "Part is not Online";
+
             NamedValueSet occurrenceDataNVS = new NamedValueSet() { { "eventName", eventName } }.MergeWith(eventDataNVS, NamedValueMergeBehavior.AddNewItems);
 
             OccurrenceInfo occurrenceInfo = null;
@@ -2186,8 +2241,32 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
             return mdrfWriter.RecordOccurrence(occurrenceInfo, occurrenceDataNVS, writeAll: writeAll);
         }
 
+        /// <summary>
+        /// Action factory method.
+        /// The resulting action, when run, will record the requested occurrence with the given nvs attached.
+        /// The OccurrenceDefinitionInfo used for this event is determined from the given occurrenceName.  
+        /// </summary>
+        public IClientFacet RecordOccurrence(string occurrenceName = null, INamedValueSet occurrenceDataNVS = null, bool writeAll = false)
+        {
+            return new BasicActionImpl(actionQ, () => PerformRecordEvent(occurrenceName, occurrenceDataNVS, writeAll), "{0}({1}{2})".CheckedFormat(CurrentMethodName, occurrenceName, writeAll ? ",writeAll" : ""), ActionLoggingReference);
+        }
+
+        private string PerformRecordEvent(string occurrenceName, INamedValueSet occurrenceDataNVS, bool writeAll)
+        {
+            if (!BaseState.IsOnline)
+                return "Part is not Online";
+
+            OccurrenceInfo occurrenceInfo = null;
+
+            if (!occurrenceInfoDictionary.TryGetValue(occurrenceName.Sanitize(), out occurrenceInfo) || occurrenceInfo == null)
+                return "'{0}' not a known occurrence name".CheckedFormat(occurrenceName);
+
+            return mdrfWriter.RecordOccurrence(occurrenceInfo, occurrenceDataNVS, writeAll: writeAll);
+        }
+
         OccurrenceInfo defaultRecordEventOccurranceInfo;
         private Dictionary<string, OccurrenceInfo> eventNameToOccurrenceInfoDictionary = new Dictionary<string,OccurrenceInfo>();
+        private Dictionary<string, OccurrenceInfo> occurrenceInfoDictionary = new Dictionary<string, OccurrenceInfo>();
 
         /// <summary>
         /// This method may be used by a client to select a new scheduled scan period using the given scanPeriodScheduleSelection value (converted to an Int32)
@@ -2214,6 +2293,8 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
         #region SimpleActivePartBase overrides (PerformGoOnlineAction, PerformGoOfflineAction, MainThreadFcn, PerformMainLoopService)
 
+        bool once = true;
+
         protected override string PerformGoOnlineAction(bool andInitialize)
         {
             if (Config.PruningConfig != null && pruningManager == null)
@@ -2222,15 +2303,17 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
                 pruningServiceTimer = new QpcTimer() { TriggerInterval = Config.NominalPruningInterval, AutoReset = true, Started = true };
             }
 
-            if (mdrfWriter == null)
+            if (once)
             {
+                once = false;
+
                 List<UInt64> availableUserFlagRowBitsList = new List<UInt64>(Enumerable.Range(8, 63).Select(bitIdx => (1UL << bitIdx)));
 
                 List<string> ivaNamesList = new List<string>(Config.SourceIVI.ValueNamesArray);
 
                 List<GroupInfo> groupInfoList = new List<GroupInfo>();
 
-                if (Config.GroupDefinitionSet.IsNullOrEmpty())
+                if (Config.GroupDefinitionItemArray.IsNullOrEmpty())
                 {
                     IValueAccessor[] ivaArray = ivaNamesList.Select(name => Config.SourceIVI.GetValueAccessor(name)).ToArray();
                     groupInfoList.Add(new GroupInfo() 
@@ -2244,9 +2327,12 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
                 }
                 else
                 {
-                    foreach (var tuple in Config.GroupDefinitionSet)
+                    foreach (var item in Config.GroupDefinitionItemArray)
                     {
-                        string[] matchedIVANamesArray = ivaNamesList.Where(ivaName => tuple.Item2.MatchesAny(ivaName)).ToArray();
+                        MatchRuleSet matchRuleSet = item.MatchRuleSet.MapDefaultTo(MatchRuleSet.Any);
+                        string[] matchedIVANamesArray = ((item.TableItemFilter != null) ? Config.SourceIVI.GetFilteredNames(item.TableItemFilter) : ivaNamesList.ToArray())
+                                                        .Where(ivaName => matchRuleSet.MatchesAny(ivaName))
+                                                        .ToArray();
 
                         foreach (string matchedIVAName in matchedIVANamesArray)
                             ivaNamesList.Remove(matchedIVAName);
@@ -2255,12 +2341,12 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
                         groupInfoList.Add(new GroupInfo() 
                                         { 
-                                            Name = tuple.Item1,
+                                            Name = item.GroupName,
                                             GroupBehaviorOptions = GroupBehaviorOptions.UseSourceIVAsForTouched,
                                             FileIndexUserRowFlagBits = Config.AllocateUserRowFlagBitsForGroups ? availableUserFlagRowBitsList.SafeTakeFirst() : 0,
                                             IVI = Config.SourceIVI,
                                             GroupPointInfoArray = ivaArray.Select(iva => new GroupPointInfo() { Name = iva.Name, ValueSourceIVA = iva }).ToArray(),
-                                            ClientNVS = tuple.Item3.ConvertToReadOnly(),
+                                            ClientNVS = item.GroupMetaData,
                                         });
                     }
                 }
@@ -2274,31 +2360,32 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
                 List<OccurrenceInfo> occuranceInfoList = new List<OccurrenceInfo>();
                 occuranceInfoList.Add(defaultRecordEventOccurranceInfo);
 
-                if (Config.EventDefinitionSet != null)
+                if (!Config.OccurrenceDefinitionItemArray.IsNullOrEmpty())
                 {
-                    foreach (var tuple in Config.EventDefinitionSet)
+                    foreach (var item in Config.OccurrenceDefinitionItemArray)
                     {
-                        string [] eventNamesArray = tuple.Item2.SafeToArray();
-
-                        NamedValueSet occurrenceInfoNVS = new NamedValueSet() { { "eventNames", eventNamesArray } }.MergeWith(tuple.Item3, NamedValueMergeBehavior.AddNewItems);
+                        INamedValueSet occurrenceInfoNVS = (item.EventNames.IsNullOrEmpty() 
+                                                            ? item.OccurrenceMetaData
+                                                            : new NamedValueSet() { { "eventNames", item.EventNames} }.MergeWith(item.OccurrenceMetaData, NamedValueMergeBehavior.AddNewItems));
 
                         OccurrenceInfo occurrenceInfo = new OccurrenceInfo()
                         {
-                            Name = tuple.Item1,
+                            Name = item.OccurrenceName,
                             FileIndexUserRowFlagBits = availableUserFlagRowBitsList.SafeTakeFirst(),
                             ClientNVS = occurrenceInfoNVS.ConvertToReadOnly(),
                         };
 
                         occuranceInfoList.Add(occurrenceInfo);
 
-                        foreach (var eventName in eventNamesArray)
-                        {
-                            eventNameToOccurrenceInfoDictionary[eventName.Sanitize()] = occurrenceInfo;
-                        }
+                        item.EventNames.DoForEach(eventName => { eventNameToOccurrenceInfoDictionary[eventName.Sanitize()] = occurrenceInfo; });
+
+                        occurrenceInfoDictionary[occurrenceInfo.Name.Sanitize()] = occurrenceInfo;
                     }
                 }
 
-                mdrfWriter = new MDRFWriter("{0}.mw".CheckedFormat(PartID), Config.SetupInfo, groupInfoList.ToArray(), occuranceInfoList.ToArray());
+                mdrfWriter.AddRange(groupInfoList);
+                mdrfWriter.AddRange(occuranceInfoList);
+
                 mdrfWriterServiceTimer = new QpcTimer() { TriggerInterval = Config.NominalScanPeriod, AutoReset = true, Started = true };
             }
 
@@ -2309,7 +2396,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
         {
             PerformMainLoopService(forceServiceWriter: true, forceServicePruning: true);
 
-            Fcns.DisposeOfObject(ref mdrfWriter);
+            mdrfWriter.CloseCurrentFile("Closed by request: {0}".CheckedFormat(CurrentActionDescription));
 
             return string.Empty;
         }
@@ -2345,21 +2432,19 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
         private void PerformMainLoopService(bool forceServiceWriter = false, bool forceServicePruning = false)
         {
-            if (mdrfWriter != null && (mdrfWriterServiceTimer.IsTriggered || forceServiceWriter))
+            if (BaseState.IsOnline)
             {
-                mdrfWriter.RecordGroups(writeAll: forceServiceWriter);
-            }
+                if (mdrfWriterServiceTimer.IsTriggered || forceServiceWriter)
+                    mdrfWriter.RecordGroups(writeAll: forceServiceWriter);
 
-            if (pruningManager != null && (pruningServiceTimer.IsTriggered || forceServicePruning))
-            {
-                if (mdrfWriter != null)
+                if (pruningManager != null && (pruningServiceTimer.IsTriggered || forceServicePruning))
                 {
                     FileInfo? closedFileInfo = mdrfWriter.NextClosedFileInfo;
                     if (closedFileInfo != null)
                         pruningManager.NotePathAdded(closedFileInfo.GetValueOrDefault().FilePath);
-                }
 
-                pruningManager.Service();
+                    pruningManager.Service();
+                }
             }
         }
 

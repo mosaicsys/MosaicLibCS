@@ -1580,7 +1580,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         public ValueSetAdapterGroup() { }
 
         /// <summary>
-        /// Adds the given ValueSetAdapterBase object to this group.
+        /// Adds the given IModularValueSetAdapter object to this group.
         /// </summary>
         public ValueSetAdapterGroup Add(IModularValueSetAdapter imvsa)
         {
@@ -1590,7 +1590,17 @@ namespace MosaicLib.Modular.Interconnect.Values
         }
 
         /// <summary>
-        /// Adds the given enumerable set of ValueSetAdapterBase objects to this group
+        /// Adds the given list of IModularValueSetAdapter items to this group.
+        /// </summary>
+        public ValueSetAdapterGroup AddItems(params IModularValueSetAdapter [] imvsaItemArray)
+        {
+            imvsaList.AddRange(imvsaItemArray);
+            rebuildNeeded = true;
+            return this;
+        }
+
+        /// <summary>
+        /// Adds the given enumerable set of IModularValueSetAdapter objects to this group
         /// </summary>
         public ValueSetAdapterGroup AddRange(IEnumerable<IModularValueSetAdapter> imvsaSet)
         {
@@ -1599,7 +1609,39 @@ namespace MosaicLib.Modular.Interconnect.Values
             return this;
         }
 
+        /// <summary>
+        /// Adds the given IValueAccessor object to this group.
+        /// </summary>
+        public ValueSetAdapterGroup Add(IValueAccessor iva)
+        {
+            extraIVAList.Add(iva);
+            rebuildNeeded = true;
+            return this;
+        }
+
+        /// <summary>
+        /// Adds the given list of IValueAccessor items to this group.
+        /// </summary>
+        public ValueSetAdapterGroup AddItems(params IValueAccessor [] ivaItemArray)
+        {
+            extraIVAList.AddRange(ivaItemArray);
+            rebuildNeeded = true;
+            return this;
+        }
+
+        /// <summary>
+        /// Adds the given set of IValueAccessor items to this group.
+        /// </summary>
+        public ValueSetAdapterGroup AddRange(IEnumerable<IValueAccessor> ivaSet)
+        {
+            extraIVAList.AddRange(ivaSet);
+            rebuildNeeded = true;
+            return this;
+        }
+
         List<IModularValueSetAdapter> imvsaList = new List<IModularValueSetAdapter>();
+        List<IValueAccessor> extraIVAList = new List<IValueAccessor>();
+
         IModularValueSetAdapter[] imvsaArray = new IModularValueSetAdapter[0];
         bool rebuildNeeded = false;
         IValueAccessor [] ivaArray = null;
@@ -1611,7 +1653,7 @@ namespace MosaicLib.Modular.Interconnect.Values
                 return;
 
             imvsaArray = imvsaList.ToArray();
-            ivaArray = imvsaArray.SelectMany(ivsa => ivsa.IVAArray).ToArray();
+            ivaArray = imvsaArray.SelectMany(ivsa => ivsa.IVAArray).Concat(extraIVAList).ToArray();
             ivaArrayLength = ivaArray.Length;
 
             rebuildNeeded = false;
@@ -1643,12 +1685,12 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <summary>
         /// Returns an array of the ValueSetAdapterBase instances that have been added to this group, as an array of IValueSetAdapters
         /// </summary>
-        public IValueSetAdapter[] ToArray()
-        {
-            RebuildArraysIfNeeded();
+        public IValueSetAdapter[] ToArray() { RebuildArraysIfNeeded(); return imvsaArray; }
 
-            return imvsaArray;
-        }
+        /// <summary>
+        /// Gives caller access to the set of ModularValueSetAdapters that have been added to this set.
+        /// </summary>
+        public IEnumerable<IModularValueSetAdapter> ModularValueSetAdapterSet { get { RebuildArraysIfNeeded(); return imvsaArray; } }
 
         /// <summary>Defines the emitter used to emit Setup, Set, and Update related errors.  Defaults to the null emitter.</summary>
         public Logging.IMesgEmitter IssueEmitter  { get { return issueEmitter; } set { issueEmitter = value; imvsaList.DoForEach(imvsa => imvsa.IssueEmitter = value); } }

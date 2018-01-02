@@ -188,7 +188,7 @@ namespace MosaicLib.WPF.Common
             switch (mainLoggerType)
             {
                 case FileRingLogMessageHandlerType.TextFileRotationDirectoryLogMessageHandler:
-                    fileRotationRingConfig.UpdateFromModularConfig("Config.Logging.FileRing.", issueListEmitter, valuesListEmitter, configInstance:config);
+                    fileRotationRingConfig.UpdateFromModularConfig("Config.Logging.FileRing.", issueListEmitter, valuesListEmitter, configInstance: config);
                     break;
                 case  FileRingLogMessageHandlerType.TextFileDateTreeDirectoryLogMessageHandler:
                     dateTreeDirConfig.UpdateFromModularConfig("Config.Logging.DateTree.", issueListEmitter, valuesListEmitter, configInstance: config);
@@ -246,25 +246,38 @@ namespace MosaicLib.WPF.Common
             Logging.ILogMessageHandler mainLMHQueueLMH = new Logging.Handlers.QueueLogMessageHandler("lmhMainSet.q", mainLMHList.ToArray(), maxQueueSize: maxQueueSize);
             Logging.AddLogMessageHandlerToDefaultDistributionGroup(mainLMHQueueLMH);
 
-            // Setup the trace logger.  This logger uses a seperate message queue.
-            Logging.FileRotationLoggingConfig traceRingConfig = new Logging.FileRotationLoggingConfig((logBaseName ?? String.Empty) + "TraceRing")
+            string traceLoggingGroupName = config.GetConfigKeyAccessOnce("Config.Logging.TraceRing.LGID", silenceLogging: true).GetValue("LGID.Trace");
+            bool traceRingEnable = config.GetConfigKeyAccessOnce("Config.Logging.TraceRing.Enable").GetValue(!traceLoggingGroupName.IsNullOrEmpty());
+
+            if (traceRingEnable)
             {
-                mesgQueueSize = traceQueueSize,
-                nameUsesDateAndTime = false,     // will use 4 digit file names.  Limit of 100 files total
-                includeThreadInfo = true,
-                fileHeaderLines = Logging.GenerateDefaultHeaderLines("{0} Trace Output".CheckedFormat(logBaseName), includeNullForDynamicLines: true, hostingAssembly: callerAssy),
-                fileHeaderLinesDelegate = Logging.GenerateDynamicHeaderLines,
-            }.UpdateFromModularConfig("Config.Logging.TraceRing.", issueListEmitter, valuesListEmitter, configInstance: config);
+                // Setup the trace logger.  This logger uses a seperate message queue.
+                Logging.FileRotationLoggingConfig traceRingConfig = new Logging.FileRotationLoggingConfig((logBaseName ?? String.Empty) + "TraceRing")
+                {
+                    mesgQueueSize = traceQueueSize,
+                    nameUsesDateAndTime = false,     // will use 4 digit file names.  Limit of 100 files total
+                    includeThreadInfo = true,
+                    fileHeaderLines = Logging.GenerateDefaultHeaderLines("{0} Trace Output".CheckedFormat(logBaseName), includeNullForDynamicLines: true, hostingAssembly: callerAssy),
+                    fileHeaderLinesDelegate = Logging.GenerateDynamicHeaderLines,
+                    logGate = Logging.LogGate.All,
+                }.UpdateFromModularConfig("Config.Logging.TraceRing.", issueListEmitter, valuesListEmitter, configInstance: config);
 
-            string traceLoggingGroupName = "LGID.Trace";
+                Logging.ILogMessageHandler traceRingLMH = Logging.CreateQueuedTextFileRotationDirectoryLogMessageHandler(traceRingConfig);
 
-            Logging.ILogMessageHandler traceRingLMH = Logging.CreateQueuedTextFileRotationDirectoryLogMessageHandler(traceRingConfig);
+                Logging.AddLogMessageHandlerToDistributionGroup(traceLoggingGroupName, traceRingLMH);
+                Logging.SetDistributionGroupGate(traceLoggingGroupName, Logging.LogGate.All);
 
-            Logging.AddLogMessageHandlerToDistributionGroup(traceLoggingGroupName, traceRingLMH);
-            Logging.SetDistributionGroupGate(traceLoggingGroupName, Logging.LogGate.All);
+                Logging.MapLoggersToDistributionGroup(Logging.LoggerNameMatchType.Regex, @"(\.Data|\.Trace)", traceLoggingGroupName);
 
-            Logging.LinkDistributionToGroup(Logging.DefaultDistributionGroupName, traceLoggingGroupName);
-            Logging.MapLoggersToDistributionGroup(Logging.LoggerNameMatchType.Regex, @"(\.Data|\.Trace)", traceLoggingGroupName);
+                bool traceRingLinkFromDefaultGroup = config.GetConfigKeyAccessOnce("Config.Logging.TraceRing.LinkFromDefaultGroup").GetValue(true);
+                bool traceRingLinkToDefaultGroup = config.GetConfigKeyAccessOnce("Config.Logging.TraceRing.LinkToDefaultGroup", silenceLogging: true).GetValue(false);
+
+                if (traceRingLinkFromDefaultGroup)
+                    Logging.LinkDistributionToGroup(Logging.DefaultDistributionGroupName, traceLoggingGroupName);
+
+                if (traceRingLinkToDefaultGroup)
+                    Logging.LinkDistributionToGroup(traceLoggingGroupName, Logging.DefaultDistributionGroupName);
+            }
 
             appLogger = new Logging.Logger("AppLogger");
             Logging.LogMessage lm = appLogger.GetLogMessage(AppEventMesgType, "App Starting");

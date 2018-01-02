@@ -325,7 +325,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
         /// Performs an update iteration.  When non-zero maxDeltaItemCount is used to specify the maximum number of incremental set changes that can be applied per iteration.
         /// Supports call chaining.
         /// </summary>
-        ITrackingSet PerformUpdateIteration(int maxDeltaItemCount);
+        ITrackingSet PerformUpdateIteration(int maxDeltaItemCount = 0);
 
         /// <summary>
         /// Performs an update iteration and generates the corresponding ISetDelta object.
@@ -368,18 +368,11 @@ namespace MosaicLib.Modular.Interconnect.Sets
     [DataContract(Namespace = Constants.ModularInterconnectNameSpace)]
     public class SetID : IEquatable<SetID>
     {
-        /// <summary>Name only constructor.  UUID is generated automatically.</summary>
-        public SetID(string name)
+        /// <summary>Constructor with explicitly provided <paramref name="name"/> and optionally provided <paramref name="uuid"/></summary>
+        public SetID(string name, string uuid = null)
         {
-            Name = name ?? String.Empty;
-            UUID = Guid.NewGuid().ToString();
-        }
-
-        /// <summary>Constructor with explicitly provided name and uuid</summary>
-        public SetID(string name, string uuid)
-        {
-            Name = name;
-            UUID = uuid;
+            Name = name.MapNullToEmpty();
+            UUID = uuid ?? Guid.NewGuid().ToString();
         }
 
         /// <summary>Gives the Set's Name</summary>
@@ -390,25 +383,25 @@ namespace MosaicLib.Modular.Interconnect.Sets
         [DataMember(Order = 20)]
         public string UUID { get; private set; }
 
-        /// <summary>Returns true if this and the given rhs SetID have the same Name and UUID</summary>
-        public bool IsEqualTo(SetID rhs)
+        /// <summary>Returns true if this and the given <paramref name="other"/> SetID have the same Name and UUID</summary>
+        public bool IsEqualTo(SetID other)
         {
-            return (rhs != null
-                    && Name == rhs.Name
-                    && UUID == rhs.UUID
-                    );
+            return Equals(other);
         }
 
-        /// <summary>Returns true if this and the given other SetID have the same Name and UUID</summary>
+        /// <summary>Returns true if this and the given <paramref name="other"/> SetID have the same Name and UUID</summary>
         public bool Equals(SetID other)
         {
-            return IsEqualTo(other);
+            return (other != null
+                    && Name == other.Name
+                    && UUID == other.UUID
+                    );
         }
 
         /// <summary>Support object.Equals override for use in testing</summary>
         public override bool Equals(object obj)
         {
-            return IsEqualTo(obj as SetID);
+            return Equals(obj as SetID);
         }
 
         /// <summary>When Equals is overriden, then GetHashCode should also be overriden.</summary>
@@ -459,19 +452,19 @@ namespace MosaicLib.Modular.Interconnect.Sets
         [DataMember(Order = 30)]
         public int Count { get; set; }
 
-        /// <summary>Returns true if the given rhs has the same contents as this object has.</summary>
-        public bool IsEqualTo(SeqNumRangeInfo rhs)
+        /// <summary>Returns true if the given <paramref name="other"/> has the same contents as this object has.</summary>
+        public bool IsEqualTo(SeqNumRangeInfo other)
         {
-            return (First == rhs.First
-                    && Last == rhs.Last
-                    && Count == rhs.Count
-                    );
+            return Equals(other);
         }
 
-        /// <summary>Returns true if the given other has the same contents as this object has.</summary>
+        /// <summary>Returns true if the given <paramref name="other"/> has the same contents as this object has.</summary>
         public bool Equals(SeqNumRangeInfo other)
         {
-            return IsEqualTo(other);
+            return (First == other.First
+                    && Last == other.Last
+                    && Count == other.Count
+                    );
         }
 
         /// <summary>Support object.Equals override for use in testing</summary>
@@ -480,7 +473,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
             if (obj == null || !(obj is SeqNumRangeInfo))
                 return false;
 
-            return IsEqualTo((SeqNumRangeInfo)obj);
+            return Equals((SeqNumRangeInfo)obj);
         }
 
         /// <summary>When Equals is overriden, then GetHashCode should also be overriden.</summary>
@@ -498,7 +491,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
 
     /// <summary>
     /// Lists the different types of Set objects
-    /// <para/>One of Copy, Reference, Tracking, TrackingAccumulator
+    /// <para/>Copy (0), Reference, Tracking, TrackingAccumulator
     /// </summary>
     [DataContract(Namespace = Constants.ModularInterconnectNameSpace)]
     public enum SetType : int
@@ -506,12 +499,15 @@ namespace MosaicLib.Modular.Interconnect.Sets
         /// <summary>Value for a Copy Set</summary>
         [EnumMember]
         Copy = 0,
+
         /// <summary>Value for a Reference Set</summary>
         [EnumMember]
         Reference,
+
         /// <summary>Value for a Tracking Set</summary>
         [EnumMember]
         Tracking,
+
         /// <summary>Value for a Tracking Accumulator Set</summary>
         [EnumMember]
         TrackingAccumulator,
@@ -527,6 +523,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
         /// <summary>Value for a set that can be modified.</summary>
         [EnumMember]
         Changeable = 0,
+
         /// <summary>Value for a set that cannot be modified (will throw if any public or public interface method is used to attempt to change the set contents).</summary>
         [EnumMember]
         Fixed,
@@ -542,15 +539,19 @@ namespace MosaicLib.Modular.Interconnect.Sets
         /// <summary>Set is still in its construction state</summary>
         [EnumMember]
         Initial = 0,
+
         /// <summary>The Set is Empty</summary>
         [EnumMember]
         Empty,
+
         /// <summary>The Set (or a set that it tracks) is currently being updated</summary>
         [EnumMember]
         InProgress,
+
         /// <summary>The last Set update was completed and there were no additional pending updates known at that time.</summary>
         [EnumMember]
         Complete,
+
         /// <summary>The last Set update operation failed.</summary>
         [EnumMember]
         Failed,
@@ -1632,7 +1633,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
         /// Standard constructor.  Caller provides setID and capacity to use and passes a registerSelf boolean to indicate if this class should register itself with Interconnect.Sets.Sets.Instance.
         /// If registered, this class will automatically unregister itself when it is Disposed explicitly.
         /// </summary>
-        public ReferenceSet(SetID setID, int capacity, bool registerSelf)
+        public ReferenceSet(SetID setID, int capacity, bool registerSelf = true)
             : this(setID, capacity, (registerSelf ? Sets.Instance : null))
         {}
 
@@ -1640,7 +1641,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
         /// Alternate standard constructor.  Caller provides the setID and capacity to use and provides the, possibly null, Sets instance that this set is to register itself with.
         /// </summary>
         public ReferenceSet(SetID setID, int capacity, Sets registerSelfWithSetsInstance)
-            : base(setID, SetType.Reference, SetChangeability.Changeable, UpdateState.Initial, true)
+            : base(setID, SetType.Reference, SetChangeability.Changeable, UpdateState.Initial, createMutex: true)
         {
             InnerSetCapacity(capacity);
 
@@ -1814,11 +1815,11 @@ namespace MosaicLib.Modular.Interconnect.Sets
         //   other tracking sets can update themselves from the reference one without needing to know that they are using the same thread as it uses to update itself.
 
         /// <summary>Constructor used by the ReferenceSet{TObjectType}'s CreateTrackingSet method(s).  Constructs this tracking set to track the given IReferenceSet{TObjectType} as its source.</summary>
-        internal TrackingSet(ReferenceSet<TObjectType> rhs)
-            : base(rhs.SetID, SetType.Tracking, SetChangeability.Changeable, UpdateState.Initial, false)
+        internal TrackingSet(ReferenceSet<TObjectType> referenceSet)
+            : base(referenceSet.SetID, SetType.Tracking, SetChangeability.Changeable, UpdateState.Initial, createMutex: false)
         {
-            trackingSourceReferenceSet = rhs;
-            trackingSourceSet = rhs;
+            trackingSourceReferenceSet = referenceSet;
+            trackingSourceSet = referenceSet;
             SourceSetType = trackingSourceSet.SetType;
             SourceChangeability = trackingSourceSet.Changeability;
 
@@ -1826,11 +1827,11 @@ namespace MosaicLib.Modular.Interconnect.Sets
         }
 
         /// <summary>Constructor that allows one tracking set to be constructed to track another tracking set.</summary>
-        internal TrackingSet(TrackingSet<TObjectType> rhs)
-            : base(rhs.SetID, SetType.Tracking, SetChangeability.Changeable, UpdateState.Initial, false)
+        internal TrackingSet(TrackingSet<TObjectType> trackingSet)
+            : base(trackingSet.SetID, SetType.Tracking, SetChangeability.Changeable, UpdateState.Initial, createMutex: false)
         {
-            trackingSourceTrackingSet = rhs;
-            trackingSourceSet = rhs;
+            trackingSourceTrackingSet = trackingSet;
+            trackingSourceSet = trackingSet;
             SourceSetType = trackingSourceSet.SetType;
             SourceChangeability = trackingSourceSet.Changeability;
 
@@ -1839,7 +1840,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
 
         /// <summary>Constructor that support derived classes.</summary>
         protected TrackingSet(SetID setID, SetType setType)
-            : base(setID, setType, SetChangeability.Changeable, UpdateState.Initial, false)
+            : base(setID, setType, SetChangeability.Changeable, UpdateState.Initial, createMutex: false)
         {
             CreateDCAIfSupported();
         }
@@ -1903,7 +1904,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
         /// Performs an update iteration.  When non-zero maxDeltaItemCount is used to specify the maximum number of incremental set changes that can be applied per iteration.
         /// Supports call chaining.
         /// </summary>
-        public virtual ITrackingSet PerformUpdateIteration(int maxDeltaItemCount)
+        public virtual ITrackingSet PerformUpdateIteration(int maxDeltaItemCount = 0)
         {
             using (ScopedLock sc = new ScopedLock(itemContainerListMutex))
             {
@@ -2163,9 +2164,12 @@ namespace MosaicLib.Modular.Interconnect.Sets
         /// This method processes the given setDelta removes each of the ISetDeltaRemoveRangeItem from the set (if allowRemove is true) 
         /// and then adds each of the ISetDeltaAddContiguousRangeItem to it.
         /// </summary>
-        protected ISetDelta InnerApplySetDelta(ISetDelta setDelta, ApplyDeltasConfig<TObjectType> applyDeltasConfig)
+        protected ISetDelta InnerApplySetDelta(ISetDelta setDelta, ApplyDeltasConfig<TObjectType> applyDeltasConfig = null)
         {
+            applyDeltasConfig = applyDeltasConfig ?? this.applyDeltasConfig;
+
             bool allowRemove = applyDeltasConfig.AllowItemsToBeRemoved;
+            Func<TObjectType, bool> addItemFilter = applyDeltasConfig.AddItemFilter;
 
             if (!setDelta.HasObjects)
                 setDelta = Deserialize(setDelta);
@@ -2197,7 +2201,8 @@ namespace MosaicLib.Modular.Interconnect.Sets
                     foreach (object o in addRangeItem.RangeObjects)
                     {
                         TObjectType item = (o is TObjectType) ? ((TObjectType)o) : default(TObjectType);
-                        if (applyDeltasConfig.ApplyFilterToItem(item))
+
+                        if (ApplyFilterToItem(addItemFilter, item))
                         {
                             ItemContainer itemContainer = new ItemContainer(itemSeqNum++, item);
 
@@ -2232,7 +2237,27 @@ namespace MosaicLib.Modular.Interconnect.Sets
 
                 AssignNewSeqNum();
             }
+
             return setDelta;
+        }
+
+        /// <summary>
+        /// Evaluates the filter and returns the value it returned.
+        /// If defined, the filter delegate is invoked in a try/catch body that returns false if the filter threw any recognized exception.
+        /// </summary>
+        private bool ApplyFilterToItem(Func<TObjectType, bool> filter, TObjectType item)
+        {
+            if (filter == null)
+                return true;
+
+            try
+            {
+                return filter(item);
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         /// <summary>Accepts an ISetDelta object and ensures that each set addition in the delta also includes its correspondingly serialized string version.  Uses JSON DataContract serialization.  Returns the new ISetDelta instance that includes these changes.</summary>
@@ -2491,15 +2516,6 @@ namespace MosaicLib.Modular.Interconnect.Sets
         #endregion
     }
 
-    /// To do: review if this is still useful/required
-    //public static class TrackingSetFactory
-    //{
-    //    public static object CreateTrackingSet(Type objectType, SetID setID)
-    //    {
-    //        throw new System.NotImplementedException();
-    //    }
-    //}
-
     /// <summary>
     /// Configuration class used by AdjustableTrackingSet's ApplyDeltas method to configure some of its custom behavior
     /// </summary>
@@ -2532,25 +2548,6 @@ namespace MosaicLib.Modular.Interconnect.Sets
         /// and any use of thread synchronization primitives by the filter may cause deadlock.
         /// </summary>
         public Func<TObjectType, bool> AddItemFilter { get; private set; }
-
-        /// <summary>
-        /// Evaluates the filter and returns the value it returned.
-        /// If defined, the filter delegate is invoked in a try/catch body that returns false if the filter threw any recognized exception.
-        /// </summary>
-        internal bool ApplyFilterToItem(TObjectType item)
-        {
-            if (AddItemFilter == null)
-                return true;
-
-            try
-            {
-                return AddItemFilter(item);
-            }
-            catch
-            {
-                return false;
-            }
-        }
     }
 
     /// <summary>
@@ -2584,12 +2581,41 @@ namespace MosaicLib.Modular.Interconnect.Sets
         }
 
         /// <summary>
-        /// This method is not usable on AdjustableTrackingSet instances.  AdjustableTrackingSets only support use of ApplyDeltas on IDeltaSet instances that have been generated by some other ITrackingSet instance.
+        /// Performs an update iteration.  When non-zero maxDeltaItemCount is used to specify the maximum number of incremental set changes that can be applied per iteration.
+        /// Supports call chaining.
+        /// <para/>Use of this method is only permitted if the ApplyDeltas method has not already been used and use of this method makes future use of ApplyDeltas invalid.
         /// </summary>
-        /// <exception cref="SetUseException">This method always throws a SetUseException</exception>
-        public override ITrackingSet PerformUpdateIteration(int maxDeltaItemCount)
+        /// <exception cref="SetUseException">This method may throw a SetUseException if the ApplyDeltas method has been used already or if the underlying set to track is not of a supported type.</exception>
+        public override ITrackingSet PerformUpdateIteration(int maxDeltaItemCount = 0)
         {
-            throw new SetUseException("The AdjustableTrackingSet type can only be used with ApplyDeltaSet on IDeltaSet instances that are generated from another tracking set");
+            if (useModel != UseModel.UseTwoStepUpdate)
+            {
+                switch (useModel)
+                {
+                    case UseModel.NotSet:
+                        useModel = UseModel.UseTwoStepUpdate;
+                        if (trackingSourceSet is ReferenceSet<TObjectType>)
+                            innerTrackingSet = new TrackingSet<TObjectType>(trackingSourceSet as ReferenceSet<TObjectType>);
+                        else if (trackingSourceSet is TrackingSet<TObjectType>)
+                            innerTrackingSet = new TrackingSet<TObjectType>(trackingSourceSet as TrackingSet<TObjectType>);
+                        else
+                            throw new SetUseException("The underlying source set [{0}] set type is not supported with this object".CheckedFormat(trackingSourceSet));
+                        break;
+
+                    case UseModel.ApplyDeltasExplicitly:
+                    default:
+                        throw new SetUseException("{0} cannot be used after its use has been set to {1}".CheckedFormat(Fcns.CurrentMethodName, useModel));
+                }
+            }
+
+            if (innerTrackingSet != null)
+            {
+                ISetDelta setDelta = innerTrackingSet.PerformUpdateIteration(maxDeltaItemCount, false);
+
+                base.ApplyDeltas(setDelta);
+            }
+
+            return this;
         }
 
         /// <summary>
@@ -2598,8 +2624,46 @@ namespace MosaicLib.Modular.Interconnect.Sets
         /// <exception cref="SetUseException">This method always throws a SetUseException</exception>
         public override ISetDelta PerformUpdateIteration(int maxDeltaItemCount, bool includeSerializedItems)
         {
-            throw new SetUseException("The AdjustableTrackingSet type can only be used with ApplyDeltaSet on IDeltaSet instances that are generated from another tracking set");
+            throw new SetUseException("The AdjustableTrackingSet does not support use of this part of the underlying ITrackingSet interface");
         }
+
+        /// <summary>
+        /// Accepts an ISetDelta object that was generated by an external ITrackingSet of the same object type as this one and applies the delta to this set, deserializing the set delta addions if needed.
+        /// Supports call chaining.
+        /// <para/>Use of this method is only permitted if the PerformUpdateIteration method has not already been used and use of this method makes future use of PerformUpdateIteration invalid.
+        /// </summary>
+        /// <exception cref="SetUseException">Thrown if the SetID in the given setDelta does not match this set's SetID or the given setDelta does not already contain deserialized items and TObjectType is not known to support use with DataContract serialization</exception>
+        public override ITrackingSet ApplyDeltas(ISetDelta setDelta)
+        {
+            if (useModel != UseModel.ApplyDeltasExplicitly)
+            {
+                switch (useModel)
+                {
+                    case UseModel.NotSet:
+                        useModel = UseModel.ApplyDeltasExplicitly;
+                        break;
+
+                    case UseModel.UseTwoStepUpdate:
+                    default:
+                        throw new SetUseException("{0} cannot be used after its use has been set to {1}".CheckedFormat(Fcns.CurrentMethodName, useModel));
+                }
+            }
+
+            return base.ApplyDeltas(setDelta);
+        }
+
+        private enum UseModel : int
+        {
+            NotSet = 0,
+            ApplyDeltasExplicitly,
+            UseTwoStepUpdate,
+        }
+
+        /// <summary>Gives the current use model for this object.  NotSet, ApplyDeltasExplicitly or UseTwoStepUpdate</summary>
+        private UseModel useModel = UseModel.NotSet;
+
+        /// <summary>When UseTwoStepUpdate is selected, this is set to a new internal tracking set that is used to convert the originally given reference or tracking set into ISetDelta values so that they can be applied using the locally defined ApplyDeltasConfig value.</summary>
+        private ITrackingSet<TObjectType> innerTrackingSet = null;
 
         /// <summary>
         /// Get/set property for changing the ApplyDeltasConfig{TObjectType} instance that this adjustable tracking set will use for its optional filtering and range removal control.

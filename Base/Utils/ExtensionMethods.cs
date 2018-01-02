@@ -625,6 +625,12 @@ namespace MosaicLib.Utils
             return ((value & 1) == 0);
         }
 
+        /// <summary>Returns true if the given value is not divisible by 2.</summary>
+        public static bool IsOdd(this int value)
+        {
+            return ((value & 1) != 0);
+        }
+
         /// <summary>
         /// returns the given <paramref name="value"/> incremented.  If the incremented <paramref name="value"/> is 0 then this method returns 1 in its place
         /// </summary>
@@ -1088,10 +1094,13 @@ namespace MosaicLib.Utils
         /// </summary>
         public static IEnumerable<TItem> DoForEach<TItem>(this IEnumerable<TItem> source, Action<TItem> action = null)
         {
-            action = action ?? (ignoreItem => {});
+            if (source != null)
+            {
+                action = action ?? (ignoreItem => { });
 
-            foreach (TItem item in source)
-                action(item);
+                foreach (TItem item in source)
+                    action(item);
+            }
 
             return source;
         }

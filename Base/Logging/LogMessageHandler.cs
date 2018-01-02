@@ -25,13 +25,14 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.Serialization;
 
-using MosaicLib.Utils;
+using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Config;
 using MosaicLib.Modular.Config.Attributes;
+using MosaicLib.Modular.Interconnect.Sets;
 using MosaicLib.Time;
-using System.Runtime.Serialization;
-using MosaicLib.Modular.Common;
+using MosaicLib.Utils;
 
 namespace MosaicLib
 {
@@ -469,19 +470,39 @@ namespace MosaicLib
         #region additional data types used by LMH objects but which may be directly used by clients
 
         /// <summary>
-        /// Enumeration used to define the supported data inclusion formats for log output.
-        /// <para/>None (0: default), Base64, EscapedAscii, Hex
+        /// Flags Enumeration used to define the supported data inclusion formats for log output.
+        /// <para/>None (0x00: default), Base64 (0x01), EscapedAscii (0x02), Hex (0x04), Optional (0x08)
         /// </summary>
+        [Flags]
         public enum DataEncodingFormat : int
         {
-            /// <summary>Data field will not be included in generated log message output, even when non-empty</summary>
-            None = 0,
+            /// <summary>Data field will not be included in generated log message output, even when non-null</summary>
+            None = 0x00,
             /// <summary>Data field will be included in generated log message output using Base64 encoding</summary>
-            Base64,
+            Base64 = 0x01,
             /// <summary>Data field will be included in generated log message output using Escaped Ascii encoding</summary>
-            EscapedAscii,
+            EscapedAscii = 0x02,
             /// <summary>Data field will be included in generated log message output using Hex encoding with no seperators</summary>
-            Hex,
+            Hex = 0x04,
+            /// <summary>When specified, inclusion of Data segment in output is optional.</summary>
+            Optional = 0x08,
+        }
+
+        /// <summary>
+        /// Flags enumeration used to define the supported NVS inclusion formats for log output.
+        /// <para/>None (0x00), ToString (0x01), ToStringSML (0x02), Optinal (0x04)
+        /// </summary>
+        [Flags]
+        public enum NamedValueSetFormat : int
+        {
+            /// <summary>NVS field will not be included, even when non-null</summary>
+            None = 0x00,
+            /// <summary>NVS field will be formatted using ToString(includeROorRW: false)</summary>
+            ToString = 0x01,
+            /// <summary>NVS field will be formatted using ToStringSML()</summary>
+            ToStringSML = 0x02,
+            /// <summary>NVS field will only be included if the message was explicitly given a non-null NVS value</summary>
+            Optional = 0x04,
         }
 
         #endregion
@@ -530,23 +551,25 @@ namespace MosaicLib
                 /// <param name="qpc">Set to true to include the QPC timestamp portion in formatted output lines</param>
                 /// <param name="level">Set to true to include the MesgType/LogLevel portion in formatted output lines</param>
                 /// <param name="source">Set to true to include the Logger/Source Name portion in formatted output lines</param>
-                /// <param name="data">Set to true to include the base64 coded optional Data in formatted output lines</param>
-                /// <param name="fandl">Set to true to include the file name and line number in formatted output lines</param>
+                /// <param name="data">Set to true to include the base64 coded optional Data in formatted output lines.</param>
+                /// <param name="fandl">[No longer supported]</param>
                 /// <param name="endlStr">Defines the end-of-line string that is used in formatted output lines</param>
                 /// <param name="tabStr">Defines the tab string that is used as a column seperator in output lines</param>
                 /// <param name="threadInfo">Set to true to include the thread information in the output lines</param>
                 /// <param name="nvs">Set to true to include message NamedValueSet information in the output lines</param>
-                public LineFormat(bool date = true, bool qpc = true, bool level = true, bool source = true, bool data = true, bool fandl = false, string endlStr = defaultEolStr, string tabStr = defaultTabStr, bool threadInfo = false, bool nvs = true)
+                public LineFormat(bool date = true, bool qpc = true, bool level = true, bool source = true, bool? data = true, bool fandl = false, string endlStr = defaultEolStr, string tabStr = defaultTabStr, bool threadInfo = false, bool? nvs = true)
                 {
                     this.date = date;
                     this.qpc = qpc;
                     this.level = level;
                     this.source = source;
-                    this.IncludeData = data;
                     this.endLStr = endlStr;
                     this.tabStr = tabStr;
+                    if (nvs != null)
+                        IncludeNamedValueSet = nvs ?? false;
+                    if (data != null)
+                        IncludeData = data ?? false;
                     IncludeThreadInfo = threadInfo;
-                    IncludeNamedValueSet = nvs;
                 }
 
                 /// <summary>Copy constructor</summary>
@@ -556,17 +579,17 @@ namespace MosaicLib
                 }
 
                 /// <summary>Copy constructor helper method</summary>
-                public void SetFrom(LineFormat rhs)
+                public void SetFrom(LineFormat other)
                 {
-                    date = rhs.date;
-                    qpc = rhs.qpc;
-                    level = rhs.level;
-                    source = rhs.source;
-                    endLStr = rhs.endLStr;
-                    tabStr = rhs.tabStr;
-                    IncludeNamedValueSet = rhs.IncludeNamedValueSet;
-                    IncludeThreadInfo = rhs.IncludeThreadInfo;
-                    DataEncodingFormat = rhs.DataEncodingFormat;
+                    date = other.date;
+                    qpc = other.qpc;
+                    level = other.level;
+                    source = other.source;
+                    endLStr = other.endLStr;
+                    tabStr = other.tabStr;
+                    _namedValueSetFormat = other._namedValueSetFormat;
+                    _dataEncodingFormat = other._dataEncodingFormat;
+                    IncludeThreadInfo = other.IncludeThreadInfo;
                 }
 
                 /// <summary>True if the Date is included in formatted output lines.</summary>
@@ -578,11 +601,17 @@ namespace MosaicLib
                 /// <summary>True if the Logger/Source Name is included in formatted output lines.</summary>
                 public bool IncludeSource { get { return source; } set { source = value; } }
                 /// <summary>get/set property:  True if NamedValueSet content information will be included in formatted output lines.</summary>
-                public bool IncludeNamedValueSet { get; set; }
+                public bool IncludeNamedValueSet { get { return NamedValueSetFormat.IsAnySet(Logging.NamedValueSetFormat.ToString | Logging.NamedValueSetFormat.ToStringSML); } set { NamedValueSetFormat = (value ? DefaultNamedValueSetFormat : Logging.NamedValueSetFormat.None); } }
+                /// <summary>Defiones the format used for the optional message NVS contents</summary>
+                public NamedValueSetFormat NamedValueSetFormat { get { if (_namedValueSetFormat == null) _namedValueSetFormat = DefaultNamedValueSetFormat; return _namedValueSetFormat ?? NamedValueSetFormat.None; } set { _namedValueSetFormat = value; } }
+                private NamedValueSetFormat? _namedValueSetFormat;
+                /// <summary>get/set property:  True if NamedValueSet content should use ToStringSML.  False will cause use of ToString.</summary>
+                public bool NamedValueSetsUseToStringSML { get; set; }
                 /// <summary>True if (optioal) message data converted to base64 and is included in the formatted output lines.</summary>
-                public bool IncludeData { get { return (DataEncodingFormat != DataEncodingFormat.None); } set { DataEncodingFormat = (value ? DefaultDataEncodingFormat : DataEncodingFormat.None); } }
-                /// <summary>Defines the encoding format used for the optinal message data block, when it is present</summary>
-                public DataEncodingFormat DataEncodingFormat { get; set; }
+                public bool IncludeData { get { return DataEncodingFormat.IsAnySet(Logging.DataEncodingFormat.Base64 | Logging.DataEncodingFormat.EscapedAscii | Logging.DataEncodingFormat.Hex); } set { DataEncodingFormat = (value ? DefaultDataEncodingFormat : Logging.DataEncodingFormat.None); } }
+                /// <summary>Defines the encoding format used for the optional message data block contents</summary>
+                public DataEncodingFormat DataEncodingFormat { get { if (_dataEncodingFormat == null) _dataEncodingFormat = DefaultDataEncodingFormat; return _dataEncodingFormat ?? DataEncodingFormat.None; } set { _dataEncodingFormat = value; } }
+                private DataEncodingFormat? _dataEncodingFormat;
                 /// <summary>True if the ThreadName and/or ThreadID is to be included in the formatted output lines.</summary>
                 public bool IncludeThreadInfo { get; set; }
                 /// <summary>True if the source File and Line information is included in formatted output lines.</summary>
@@ -591,10 +620,35 @@ namespace MosaicLib
 
                 /// <summary>
                 /// This static property may be used to define the data encoding format that is used by default when a LineFormat object is told to IncludeData but is not explicitly given the DataEncodingFormat to use.
-                /// <para/>Historically this properties initial value was Base64 but it has been changed to Hex
+                /// <para/>When not explicitly specified, this property will self initialize using the config key Config.Logging.LineFormat.DefaultDataEncodingFormat and when that is absent it will use Hex | Optional.
                 /// </summary>
-                public static DataEncodingFormat DefaultDataEncodingFormat { get { return defaultDataEncodingFormat; } set { defaultDataEncodingFormat = value; } }
-                private static DataEncodingFormat defaultDataEncodingFormat = DataEncodingFormat.Hex;
+                public static DataEncodingFormat DefaultDataEncodingFormat 
+                { 
+                    get 
+                    { 
+                        if (_defaultDataEncodingFormat == null) 
+                            _defaultDataEncodingFormat = Config.Instance.GetConfigKeyAccessOnce("Config.Logging.LineFormat.DefaultDataEncodingFormat", isOptional: true).GetValue(DataEncodingFormat.Hex | DataEncodingFormat.Optional);
+                        return _defaultDataEncodingFormat ?? DataEncodingFormat.None;
+                    } 
+                    set { _defaultDataEncodingFormat = value; } 
+                }
+                private static DataEncodingFormat ? _defaultDataEncodingFormat;
+
+                /// <summary>
+                /// This static property may be used to define the NamedValueSet logging format that is used by default when a LineFormat object is told to IncludeNamedValueSet but is not explicitly given the NamedValueSetFormat to use.
+                /// <para/>When not explicitly specified, this property will self initialize using the config key Config.Logging.LineFormat.DefaultDataEncodingFormat and when that is absent it will use ToStringSML | Optional.
+                /// </summary>
+                public static NamedValueSetFormat DefaultNamedValueSetFormat 
+                {
+                    get 
+                    { 
+                        if (_defaultNamedValueSetFormat == null)
+                            _defaultNamedValueSetFormat = Config.Instance.GetConfigKeyAccessOnce("Config.Logging.LineFormat.DefaultNamedValueSetFormat", isOptional: true).GetValue(NamedValueSetFormat.ToStringSML | NamedValueSetFormat.Optional);
+                        return _defaultNamedValueSetFormat ?? NamedValueSetFormat.None;
+                    } 
+                    set { _defaultNamedValueSetFormat = value; } 
+                }
+                private static NamedValueSetFormat ? _defaultNamedValueSetFormat;
 
                 /// <summary>Converts the thread info in the given message into a string consiting of the managed TID, the Win32 TID (in hex) and the thread name if it is not null or empty.</summary>
                 private string FormatThreadInfo(LogMessage lm)
@@ -616,20 +670,31 @@ namespace MosaicLib
                         return;
 
                     bool firstItem = true;
+                    INamedValueSet nvs = lm.Raw_nvs;
 
                     if (date) { TabIfNeeded(os, ref firstItem); os.Write(lm.GetFormattedDateTime()); }
                     if (qpc) { TabIfNeeded(os, ref firstItem); os.Write((lm.EmittedQpcTime.Time % 1000.0).ToString("000.000000")); }
                     if (level) { TabIfNeeded(os, ref firstItem); os.Write(ConvertToFixedWidthString(lm.MesgType)); }
                     if (source) { TabIfNeeded(os, ref firstItem); os.Write(lm.LoggerName); }
                     { TabIfNeeded(os, ref firstItem); os.Write(lm.MesgEscaped); }
-                    if (IncludeNamedValueSet) { os.Write(tabStr); os.Write(lm.NamedValueSet.ToString(false, true)); }
-                    switch (DataEncodingFormat)
+                    if (NamedValueSetFormat != Logging.NamedValueSetFormat.None && ((NamedValueSetFormat & Logging.NamedValueSetFormat.Optional) == 0 || nvs != null))
                     {
-                        case DataEncodingFormat.Base64: { os.Write(tabStr); if (lm.Data.IsNullOrEmpty()) os.Write("[]"); else  os.CheckedWrite("[b64 {0}]", base64UrlCoder.Encode(lm.Data)); } break;
-                        case DataEncodingFormat.EscapedAscii: { os.Write(tabStr); if (lm.Data.IsNullOrEmpty()) os.Write("[]"); else os.CheckedWrite("[A {0}]", byteStringCoder.Encode(lm.Data).GenerateLoggingVersion()); } break;
-                        case DataEncodingFormat.Hex: { os.Write(tabStr); if (lm.Data.IsNullOrEmpty()) os.Write("[]"); else os.CheckedWrite("[hex {0}]", hexCoder.Encode(lm.Data)); } break;
-                        case DataEncodingFormat.None:
-                        default: break;
+                        switch (NamedValueSetFormat & ~Logging.NamedValueSetFormat.Optional)
+                        {
+                            case Logging.NamedValueSetFormat.ToString: { os.Write(tabStr); os.Write(nvs.ToString(includeROorRW: false)); } break;
+                            case Logging.NamedValueSetFormat.ToStringSML: { os.Write(tabStr); os.Write(nvs.ToStringSML()); } break;
+                            default: break;
+                        }
+                    }
+                    if (DataEncodingFormat != Logging.DataEncodingFormat.None && ((DataEncodingFormat & Logging.DataEncodingFormat.Optional) == 0 || lm.Data != null))
+                    {
+                        switch (DataEncodingFormat & ~Logging.DataEncodingFormat.Optional)
+                        {
+                            case DataEncodingFormat.Base64: { os.Write(tabStr); if (lm.Data.IsNullOrEmpty()) os.Write("[]"); else  os.CheckedWrite("[b64 {0}]", base64UrlCoder.Encode(lm.Data)); } break;
+                            case DataEncodingFormat.EscapedAscii: { os.Write(tabStr); if (lm.Data.IsNullOrEmpty()) os.Write("[]"); else os.CheckedWrite("[A {0}]", byteStringCoder.Encode(lm.Data).GenerateLoggingVersion()); } break;
+                            case DataEncodingFormat.Hex: { os.Write(tabStr); if (lm.Data.IsNullOrEmpty()) os.Write("[]"); else os.CheckedWrite("[hex {0}]", hexCoder.Encode(lm.Data)); } break;
+                            default: break;
+                        }
                     }
                     if (IncludeThreadInfo) { os.Write(tabStr); os.Write(FormatThreadInfo(lm)); }
                     { os.Write(endLStr); }
@@ -643,23 +708,51 @@ namespace MosaicLib
                 public void FormatLogMessageToStringBuilder(LogMessage lm, System.Text.StringBuilder ostr)
                 {
                     bool firstItem = (ostr.Length == 0);
+                    INamedValueSet nvs = lm.Raw_nvs;
 
                     if (date) { TabIfNeeded(ostr, ref firstItem); ostr.Append(lm.GetFormattedDateTime()); }
                     if (qpc) { TabIfNeeded(ostr, ref firstItem); ostr.Append((lm.EmittedQpcTime.Time % 1000.0).ToString("000.000000")); }
                     if (level) { TabIfNeeded(ostr, ref firstItem); ostr.Append(ConvertToFixedWidthString(lm.MesgType)); }
                     if (source) { TabIfNeeded(ostr, ref firstItem); ostr.Append(lm.LoggerName); }
                     { TabIfNeeded(ostr, ref firstItem); ostr.Append(lm.MesgEscaped); }
-                    if (IncludeNamedValueSet) { ostr.Append(tabStr); ostr.Append(lm.NamedValueSet.ToString(false, true)); }
-                    switch (DataEncodingFormat)
+                    if (NamedValueSetFormat != Logging.NamedValueSetFormat.None && ((NamedValueSetFormat & Logging.NamedValueSetFormat.Optional) == 0 || nvs != null))
                     {
-                        case DataEncodingFormat.Base64: { ostr.Append(tabStr); if (lm.Data.IsNullOrEmpty()) ostr.Append("[]"); else  ostr.CheckedAppendFormat("[b64 {0}]", base64UrlCoder.Encode(lm.Data)); } break;
-                        case DataEncodingFormat.EscapedAscii: { ostr.Append(tabStr); if (lm.Data.IsNullOrEmpty()) ostr.Append("[]"); else ostr.CheckedAppendFormat("[A {0}]", byteStringCoder.Encode(lm.Data).GenerateLoggingVersion()); } break;
-                        case DataEncodingFormat.Hex: { ostr.Append(tabStr); if (lm.Data.IsNullOrEmpty()) ostr.Append("[]"); else ostr.CheckedAppendFormat("[hex {0}]", hexCoder.Encode(lm.Data)); } break;
-                        case DataEncodingFormat.None:
-                        default: break;
+                        switch (NamedValueSetFormat & ~Logging.NamedValueSetFormat.Optional)
+                        {
+                            case Logging.NamedValueSetFormat.ToString: { ostr.Append(tabStr); ostr.Append(nvs.ToString(includeROorRW: false)); } break;
+                            case Logging.NamedValueSetFormat.ToStringSML: { ostr.Append(tabStr); ostr.Append(nvs.ToStringSML()); } break;
+                            default: break;
+                        }
+                    }
+                    if (DataEncodingFormat != Logging.DataEncodingFormat.None && ((DataEncodingFormat & Logging.DataEncodingFormat.Optional) == 0 || lm.Data != null))
+                    {
+                        switch (DataEncodingFormat & ~Logging.DataEncodingFormat.Optional)
+                        {
+                            case DataEncodingFormat.Base64: { ostr.Append(tabStr); if (lm.Data.IsNullOrEmpty()) ostr.Append("[]"); else  ostr.CheckedAppendFormat("[b64 {0}]", base64UrlCoder.Encode(lm.Data)); } break;
+                            case DataEncodingFormat.EscapedAscii: { ostr.Append(tabStr); if (lm.Data.IsNullOrEmpty()) ostr.Append("[]"); else ostr.CheckedAppendFormat("[A {0}]", byteStringCoder.Encode(lm.Data).GenerateLoggingVersion()); } break;
+                            case DataEncodingFormat.Hex: { ostr.Append(tabStr); if (lm.Data.IsNullOrEmpty()) ostr.Append("[]"); else ostr.CheckedAppendFormat("[hex {0}]", hexCoder.Encode(lm.Data)); } break;
+                            default: break;
+                        }
                     }
                     if (IncludeThreadInfo) { ostr.Append(tabStr); ostr.Append(FormatThreadInfo(lm)); }
                     { ostr.Append(endLStr); }
+                }
+
+                /// <summary>
+                /// Returns log messages NamedValueSet string contents as:
+                /// <para/>[] - when messages Raw_nvs is null
+                /// <para/>[NVS ...] notation when NamedValueSetsUseToStringSML is true
+                /// <para/>or [key{=value} ...] notation when NamedValueSetsUseToStringSML is false. 
+                /// </summary>
+                private string GetNVSStringContents(LogMessage lm)
+                {
+                    INamedValueSet nvs = lm.Raw_nvs;
+                    if (nvs == null)
+                        return "[]";
+                    else if (NamedValueSetsUseToStringSML)
+                        return nvs.ToStringSML();
+                    else
+                        return nvs.ToString(includeROorRW: false);
                 }
 
                 /// <summary>Method is used to append a TabStr to the given StreamWriter if this is not the first Item in the line.</summary>
@@ -1022,7 +1115,6 @@ namespace MosaicLib
             #endregion
 
             //-------------------------------------------------------------------
-
             #region Basic LogMessageHandler Implementation classes (ConsoleLogMesssageHandler, SimpleFileLogMessageHandler, Win32DebugLogMessageHandler, DiagnosticTraceLogMessageHandler, NullLogMessageHandler)
 
             /// <summary>
@@ -1284,6 +1376,64 @@ namespace MosaicLib
 
                     NoteMessagesHaveBeenDelivered();
                 }
+            }
+
+            #endregion
+
+            //-------------------------------------------------------------------
+            #region SetLogMessageHandler
+
+            /// <summary>
+            /// This class provides a simple implementation of an LMH that will format the message and
+            /// emit it to the current debugger using OutputDebugString.
+            /// </summary>
+            public class SetLogMessageHandler : SimpleLogMessageHandlerBase
+            {
+                /// <summary>Constructor.</summary>
+                /// <param name="setName">Defines the set name of the set created for this logger.  LMH name will be setName.lmh.</param>
+                /// <param name="logGate">Defines the LogGate value for messages handled here.  Messages with MesgType that is not included in this gate will be ignored.</param>
+                /// <param name="capacity">Defines the capacity of the resulting set.</param>
+                /// <param name="registerSet">Set to true to select that the set shall be registered.  If a non-null <paramref name="setsInstance"/> is explicitly provided then this parameter is not required, otherwise this parameter will select registration with the default Sets.Instance singleton.</param>
+                /// <param name="setsInstance">Gives the caller provided Sets Instance that for registration of the created set (if any).  If this parameter is null and <paramref name="registerSet"/> is true then the method will register the created set with the default Sets.Instance singleton.</param>
+                /// <param name="messageFilter">Optinal.  When non-null, this method may be used to filter which methods are to be included in the set.</param>
+                public SetLogMessageHandler(string setName, LogGate ? logGate = null, int capacity = 1000, bool registerSet = true, Sets setsInstance = null, Func<Logging.ILogMessage, bool> messageFilter = null)
+                    : base("{0}.lmh".CheckedFormat(setName), logGate ?? LogGate.All, recordSourceStackFrame: false)
+                {
+                    if (registerSet && setsInstance == null)
+                        setsInstance = Sets.Instance;
+
+                    Set = new ReferenceSet<Logging.LogMessage>(new SetID(setName), capacity, setsInstance);
+                    this.messageFilter = messageFilter;
+                }
+
+                /// <summary>
+                /// Takes the given LogMessage and adds it to the set if the 
+                /// </summary>
+                protected override void InnerHandleLogMessage(LogMessage lm)
+                {
+                    try
+                    {
+                        if (lm != null && (messageFilter == null || messageFilter(lm)))
+                        {
+                            if (!lm.Emitted) 
+                                lm.NoteEmitted();
+
+                            Set.Add(lm);
+                        }
+                    }
+                    catch (System.Exception ex)
+                    {
+                        string mesg = "{0}: {1} caught excpetion: {2}".CheckedFormat(Fcns.CurrentClassLeafName, Fcns.CurrentMethodName, ex.ToString(ExceptionFormat.TypeAndMessage));
+                        if (System.Diagnostics.Debugger.IsAttached)
+                            System.Diagnostics.Debugger.Log(0, "Excpetion", mesg);
+                        else
+                            BasicFallbackLogging.OutputDebugString("{0}\r", mesg);
+                    }
+                }
+
+                public IReferenceSet<Logging.LogMessage> Set { get; private set; }
+
+                Func<Logging.ILogMessage, bool> messageFilter;
             }
 
             #endregion

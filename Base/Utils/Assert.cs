@@ -75,54 +75,90 @@ namespace MosaicLib.Utils
     /// This static helper class was renamed from Assert to Asserts to remove a class/method name collision with the Assert method name in the NUnit.Framework namespace.
     /// </remarks>
 	public static class Asserts
-	{
-		#region Standard public methods
+    {
+        #region Standard public methods [standard variations of the normal methods that clients use from this static helper class]
 
-		// the following are the standard variations of the normal methods that clients use from this static helper class
         /// <summary>Logs the given condDesc condition description as an assert error message if the given cond condition is not true.</summary>
-		public static void LogIfConditionIsNotTrue(bool cond, string condDesc) { if (!cond) NoteConditionCheckFailed(condDesc, AssertType.Log, new System.Diagnostics.StackFrame(1, true)); }
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        public static void LogIfConditionIsNotTrue(bool cond, string condDesc) { if (!cond) NoteConditionCheckFailed(condDesc, AssertType.Log, new System.Diagnostics.StackFrame(1, true)); }
+        
         /// <summary>Logs the given condDesc as an assert Condition Failed error message.</summary>
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
         public static void LogThatConditionCheckFailed(string condDesc) { NoteConditionCheckFailed(condDesc, AssertType.Log, new System.Diagnostics.StackFrame(1, true)); }
+        
         /// <summary>Logs the given faultDesc as an Assert Fault error message</summary>
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
         public static void LogFaultOccurance(string faultDesc) { NoteFaultOccurance(faultDesc, null, AssertType.Log, new System.Diagnostics.StackFrame(1, true)); }
+        
         /// <summary>Logs the given faultDesc as an Assert Fault error message with the given faultDesc fault description and the given ex exception.</summary>
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
         public static void LogFaultOccurance(string faultDesc, System.Exception ex) { NoteFaultOccurance(faultDesc, ex, AssertType.Log, new System.Diagnostics.StackFrame(1, true)); }
 
+        
         /// <summary>Takes a debugger breakpoint if the given cond condition is not true.  Also logs a Condition Failed message for the given condition description in this case.</summary>
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
         public static void TakeBreakpointIfConditionIsNotTrue(bool cond, string condDesc) { if (!cond) NoteConditionCheckFailed(condDesc, AssertType.DebugBreakpoint, new System.Diagnostics.StackFrame(1, true)); }
+        
         /// <summary>Takss a debugger breakpoint and logs a Condition Failed message for the given condDesc condition description</summary>
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
         public static void TakeBreakpointAfterConditionCheckFailed(string condDesc) { NoteConditionCheckFailed(condDesc, AssertType.DebugBreakpoint, new System.Diagnostics.StackFrame(1, true)); }
+        
         /// <summary>Takes a debugger breakpoint and logs an Assert Fault message for the given faultDesc fault description.</summary>
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
         public static void TakeBreakpointAfterFault(string faultDesc) { NoteFaultOccurance(faultDesc, null, AssertType.DebugBreakpoint, new System.Diagnostics.StackFrame(1, true)); }
+        
         /// <summary>Takes a debugger breakpoint and logs an Assert Fault message for the given faultDesc fault description and ex exception.</summary>
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
         public static void TakeBreakpointAfterFault(string faultDesc, System.Exception ex) { NoteFaultOccurance(faultDesc, ex, AssertType.DebugBreakpoint, new System.Diagnostics.StackFrame(1, true)); }
 
+
         /// <summary>Throws an <see cref="AssertException"/> if the given condition is not true. </summary>
-		public static void ThrowIfConditionIsNotTrue(bool cond, string condDesc) { if (!cond) NoteConditionCheckFailed(condDesc, AssertType.ThrowException, new System.Diagnostics.StackFrame(1, true)); }
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        public static void ThrowIfConditionIsNotTrue(bool cond, string condDesc) { if (!cond) NoteConditionCheckFailed(condDesc, AssertType.ThrowException, new System.Diagnostics.StackFrame(1, true)); }
+        
         /// <summary>Throws an <see cref="AssertException"/>. </summary>
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
         public static void ThrowAfterFault(string faultDesc) { NoteFaultOccurance(faultDesc, null, AssertType.ThrowException, new System.Diagnostics.StackFrame(1, true)); }
+        
         /// <summary>Throws an <see cref="AssertException"/> with the given ex as the inner exception. </summary>
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
         public static void ThrowAfterFault(string faultDesc, System.Exception ex) { NoteFaultOccurance(faultDesc, ex, AssertType.ThrowException, new System.Diagnostics.StackFrame(1, true)); }
 
         /// <summary>Defines the default assert type for the following non-typed assert methods.  defaults to AssertType.DebugBreakpoint</summary>
         public static AssertType DefaultAssertType = AssertType.DebugBreakpoint;
 
+        
         /// <summary>Asserts that the given cond condition is true.  If not then it uses the DefaultAssertType to define what action is taken.</summary>
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
         public static void CheckIfConditionIsNotTrue(bool cond, string condDesc) { if (!cond) NoteConditionCheckFailed(condDesc, DefaultAssertType, new System.Diagnostics.StackFrame(1, true)); }
+        
         /// <summary>Asserts that the described condition (condDesc) test has failed.  Uses the DefaultAssertType to define what action is taken.</summary>
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
         public static void NoteConditionCheckFailed(string condDesc) { NoteConditionCheckFailed(condDesc, DefaultAssertType, new System.Diagnostics.StackFrame(1, true)); }
+        
         /// <summary>Asserts that a described fault (faultDesc) has occurred.  Uses the DefaultAssertType to define what action is taken.</summary>
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
         public static void NoteFaultOccurance(string faultDesc) { NoteFaultOccurance(faultDesc, null, DefaultAssertType, new System.Diagnostics.StackFrame(1, true)); }
+        
         /// <summary>Asserts that a described fault (faultDesc) and exception has occurred.  Uses the DefaultAssertType to define what action is taken.</summary>
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
         public static void NoteFaultOccurance(string faultDesc, System.Exception ex) { NoteFaultOccurance(faultDesc, ex, DefaultAssertType, new System.Diagnostics.StackFrame(1, true)); }
 
+        
         /// <summary>Asserts that the given cond condition is true.  Action taken when the condition is not true is determined by the given assertType value.</summary>
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
         public static void CheckIfConditionIsNotTrue(bool cond, string condDesc, AssertType assertType) { if (!cond) NoteConditionCheckFailed(condDesc, assertType, new System.Diagnostics.StackFrame(1, true)); }
+        
         /// <summary>Reports that the given condDesc described condition test failed.  Action taken when the condition is not true is determined by the given assertType value.</summary>
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
         public static void NoteConditionCheckFailed(string condDesc, AssertType assertType) { NoteConditionCheckFailed(condDesc, assertType, new System.Diagnostics.StackFrame(1, true)); }
+
         /// <summary>Reports that the faultDesc described fault has occurred.  Action taken when the condition is not true is determined by the given assertType value.</summary>
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
         public static void NoteFaultOccurance(string faultDesc, AssertType assertType) { NoteFaultOccurance(faultDesc, null, assertType, new System.Diagnostics.StackFrame(1, true)); }
+
         /// <summary>Reports that the faultDesc described fault and the ex Exception has occurred.  Action taken when the condition is not true is determined by the given assertType value.</summary>
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
         public static void NoteFaultOccurance(string faultDesc, System.Exception ex, AssertType assertType) { NoteFaultOccurance(faultDesc, ex, assertType, new System.Diagnostics.StackFrame(1, true)); }
 
 		#endregion
@@ -208,9 +244,6 @@ namespace MosaicLib.Utils
 					System.Diagnostics.Debugger.Break();
 			}
 		}
-
-        //[DllImport("Kernel32.dll")]
-        //private static extern void FatalExit(int exitCode);
 
 		#endregion
 	}

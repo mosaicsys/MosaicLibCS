@@ -215,7 +215,7 @@ namespace MosaicLib.Utils
         /// <summary>Caller invokes this to Notify a target object that something notable has happened.</summary>
         public override void Notify()
 		{
-            using (var eeTrace = (IsTraceEmitterEnabled) ? new Logging.EnterExitTrace(TraceEmitter, Fcns.CurrentMethodName, 0) : null)
+            using (var eeTrace = (IsTraceEmitterEnabled) ? new Logging.EnterExitTrace(TraceEmitter) : null)
             {
                 if (behavior == Behavior.WakeAll)
                     EventWaitHandleHelper.PulseEvent(eventH);
@@ -243,7 +243,7 @@ namespace MosaicLib.Utils
         /// <summary>Resets the underlying event.</summary>
         public override void Reset()
 		{
-            using (var eeTrace = (IsTraceEmitterEnabled) ? new Logging.EnterExitTrace(TraceEmitter, Fcns.CurrentMethodName, 0) : null)
+            using (var eeTrace = (IsTraceEmitterEnabled) ? new Logging.EnterExitTrace(TraceEmitter) : null)
             {
                 EventWaitHandleHelper.ResetEvent(eventH);
             }
@@ -252,7 +252,7 @@ namespace MosaicLib.Utils
         /// <summary>returns true if object was signaling at end of wait, false otherwise</summary>
         public override bool Wait()
 		{
-            using (var eeTrace = (IsTraceEmitterEnabled) ? new Logging.EnterExitTrace(TraceEmitter, Fcns.CurrentMethodName, 0) : null)
+            using (var eeTrace = (IsTraceEmitterEnabled) ? new Logging.EnterExitTrace(TraceEmitter) : null)
             {
                 bool signaled = false;
                 try
@@ -284,7 +284,7 @@ namespace MosaicLib.Utils
 		{
             string methodName = (IsTraceEmitterEnabled) ? Fcns.CheckedFormat("{0}({1})", Fcns.CurrentMethodName, timeLimitInMSec) : string.Empty;
 
-            using (var eeTrace = (IsTraceEmitterEnabled) ? new Logging.EnterExitTrace(TraceEmitter, methodName, 0) : null)
+            using (var eeTrace = (IsTraceEmitterEnabled) ? new Logging.EnterExitTrace(TraceEmitter, methodName) : null)
             {
                 bool signaled = false;
                 try

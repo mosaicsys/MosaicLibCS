@@ -33,36 +33,30 @@ namespace MosaicLib.Modular.Action
 
     /// <summary>
     /// This class defines the Logging.MesgType's for each of the standard classes of log messaages that Action objects emit during normal use.
+    /// It also includes other logging related configuration parameters.
     /// These include Done, Error, State and Update events.
     /// <para/>Commonly used static values: Signif_Error_Debug_Debug, Info_Error_Debug_Debug, Info_Error_Trace_Trace, Info_Info_Trace_Trace, Debug_Debug_Trace_Trace, Trace_Trace_Trace_Trace, None_None_None_None
     /// </summary>
     public class ActionLoggingConfig
     {
-        /// <summary>Default constructor:  Sets all Mesg Types to Logging.MesgTypes.None</summary>
-        public ActionLoggingConfig()
-        {
-            DoneMesgType = Logging.MesgType.None;
-            ErrorMesgType = Logging.MesgType.None;
-            StateMesgType = Logging.MesgType.None;
-            UpdateMesgType = Logging.MesgType.None;
-        }
-
-        /// <summary>Explicit constructor:  Caller passes the 4 Logging.MesgType values explicitly.</summary>
-        public ActionLoggingConfig(Logging.MesgType doneMesgType, Logging.MesgType errorMesgType, Logging.MesgType stateMesgType, Logging.MesgType updateMesgType) 
+        /// <summary>Explicit constructor with all available properties as optional ones.</summary>
+        public ActionLoggingConfig(Logging.MesgType doneMesgType = Logging.MesgType.None, Logging.MesgType errorMesgType = Logging.MesgType.None, Logging.MesgType stateMesgType = Logging.MesgType.None, Logging.MesgType updateMesgType = Logging.MesgType.None, ActionLoggingStyleSelect actionLoggingStyleSelect = Action.ActionLoggingStyleSelect.None) 
         {
             DoneMesgType = doneMesgType;
             ErrorMesgType = errorMesgType;
             StateMesgType = stateMesgType;
             UpdateMesgType = updateMesgType;
+            ActionLoggingStyleSelect = actionLoggingStyleSelect;
         }
 
-        /// <summary>Copy Constructor:  Creates a new instance from the given rhs that contains copies of the contained MesgType values.</summary>
-        public ActionLoggingConfig(ActionLoggingConfig rhs) 
+        /// <summary>Copy Constructor:  Creates a new instance from the given <paramref name="other"/> that contains copies of the contained MesgType values.</summary>
+        public ActionLoggingConfig(ActionLoggingConfig other) 
         {
-            DoneMesgType = rhs.DoneMesgType;
-            ErrorMesgType = rhs.ErrorMesgType;
-            StateMesgType = rhs.StateMesgType;
-            UpdateMesgType = rhs.UpdateMesgType;
+            DoneMesgType = other.DoneMesgType;
+            ErrorMesgType = other.ErrorMesgType;
+            StateMesgType = other.StateMesgType;
+            UpdateMesgType = other.UpdateMesgType;
+            ActionLoggingStyleSelect = other.ActionLoggingStyleSelect;
         }
 
         /// <summary>Gives the Logging.MesgType that is to be used for successfull Action Completion messages.</summary>
@@ -77,6 +71,9 @@ namespace MosaicLib.Modular.Action
         /// <summary>Gives the Logging.MesgTuype that is to be used for intermediate Action Update related messages.</summary>
         public Logging.MesgType UpdateMesgType { get; protected set; }
 
+        /// <summary>Gives the currently selected action logging style</summary>
+        public ActionLoggingStyleSelect ActionLoggingStyleSelect { get; protected set; }
+        
         /// <summary>Canned configuration: Done=Signif, Error=Error, State=Debug, Update=Debug</summary>
         public static ActionLoggingConfig Signif_Error_Debug_Debug { get { return signif_error_debug_debug; } }
 
@@ -109,6 +106,20 @@ namespace MosaicLib.Modular.Action
         private static readonly ActionLoggingConfig debug_error_trace_trace = new ActionLoggingConfig(Logging.MesgType.Debug, Logging.MesgType.Error, Logging.MesgType.Trace, Logging.MesgType.Trace);
         private static readonly ActionLoggingConfig trace_trace_trace_trace = new ActionLoggingConfig(Logging.MesgType.Trace, Logging.MesgType.Trace, Logging.MesgType.Trace, Logging.MesgType.Trace);
         private static readonly ActionLoggingConfig none_none_none_none = new ActionLoggingConfig(Logging.MesgType.None, Logging.MesgType.None, Logging.MesgType.None, Logging.MesgType.None);
+    }
+
+    /// <summary>
+    /// Flag enumeration used to select specific logging options.
+    /// <para/>None (0x00), OldXmlishStyle (0x01)
+    /// </summary>
+    [Flags]
+    public enum ActionLoggingStyleSelect : int
+    {
+        /// <summary>Default, placeholder (0x00)</summary>
+        None = 0x00,
+
+        /// <summary>Selects use of older Xmlish style of these messages (0x01)</summary>
+        OldXmlishStyle = 0x01,
     }
 
 	/// <summary>
@@ -205,12 +216,21 @@ namespace MosaicLib.Modular.Action
         }
 
         /// <summary>Returns a string version of the Mesg and MesgDetail.</summary>
+        public string ActionDescription
+        {
+            get
+            {
+                if (string.IsNullOrEmpty(mesgDetail))
+                    return Mesg;
+                else
+                    return Utils.Fcns.CheckedFormat("{0}[{1}]", Mesg, MesgDetail);
+            }
+        }
+
+        /// <summary>Returns a string version of the Mesg and MesgDetail.</summary>
         public override string ToString()
 		{
-			if (string.IsNullOrEmpty(mesgDetail))
-				return Mesg;
-			else
-				return Utils.Fcns.CheckedFormat("{0}[{1}]", Mesg, MesgDetail);
+            return ActionDescription;
 		}
 
         /// <summary>Uses the given Logger and Config to update/replace the contents of the 4 emitters.</summary>
@@ -525,26 +545,53 @@ namespace MosaicLib.Modular.Action
 		private static void EmitStateChangeMesg(ActionLogging logging, ActionStateCode toState, ActionStateCode fromState, string resultCode)
 		{
             Logging.IMesgEmitter emitter = logging.State;
-			bool isComplete = (toState == ActionStateCode.Complete);
+            string description = logging.ActionDescription;
+            bool useNewStyle = ((logging.Config.ActionLoggingStyleSelect & ActionLoggingStyleSelect.OldXmlishStyle) == 0);
+
+            bool isComplete = (toState == ActionStateCode.Complete);
             bool rcIsNonEmpty = !resultCode.IsNullOrEmpty();
             bool includeRC = (isComplete || rcIsNonEmpty);
 			if (isComplete)
                 emitter = rcIsNonEmpty ? logging.Error : logging.Done;
 
-			if (includeRC)
-                emitter.Emit("<ActionStateChange id='{0}' to='{1}' from='{2}' rc='{3}'/>", logging, toState, fromState, resultCode.GenerateQuotableVersion());
-			else
-				emitter.Emit("<ActionStateChange id='{0}' to='{1}' from='{2}'/>", logging, toState, fromState);
+            if (useNewStyle)
+            {
+                if (isComplete && !rcIsNonEmpty)
+                    emitter.Emit("Action '{0}': Succeeded [{1}, from:{2}]", description, toState, fromState);
+                else if (isComplete)
+                    emitter.Emit("Action '{0}': Failed [{1}, from:{2}, rc:{3}]", description, toState, fromState, resultCode.GenerateQuotableVersion());
+                else if (!includeRC)
+                    emitter.Emit("Action '{0}': State change [to:{1}, from:{2}]", description, toState, fromState);
+                else
+                    emitter.Emit("Action '{0}': State change [to:{1}, from:{2}, rc:{3}]", description, toState, fromState, resultCode.GenerateQuotableVersion());
+            }
+            else
+            {
+                if (!includeRC)
+                    emitter.Emit("<ActionStateChange id='{0}' to='{1}' from='{2}'/>", description, toState, fromState);
+                else
+                    emitter.Emit("<ActionStateChange id='{0}' to='{1}' from='{2}' rc='{3}'/>", description, toState, fromState, resultCode.GenerateQuotableVersion());
+            }
 		}
 
-        /// <summary>Used internally to gennerate and emit consistantly formatted ActinoNamedValueListUpdate records.</summary>
-        private static void EmitNamedValueListUpdateMesg(ActionLogging logging, ActionStateCode state, Common.INamedValueSet nvl)
+        /// <summary>Used internally to generate and emit consistantly formatted ActionNamedValueListUpdate records.</summary>
+        private static void EmitUpdateNamedValuesMesg(ActionLogging logging, ActionStateCode state, Common.INamedValueSet nvs)
         {
             Logging.IMesgEmitter emitter = logging.Update;
+            string description = logging.ActionDescription;
+            bool useNewStyle = ((logging.Config.ActionLoggingStyleSelect & ActionLoggingStyleSelect.OldXmlishStyle) == 0);
 
-            string nvls = (nvl != null ? nvl.ToString() : "");
+            if (useNewStyle)
+            {
+                if (emitter.IsEnabled)
+                    emitter.EmitWith("Action '{0}': NVS updated [state:{1}]".CheckedFormat(logging, state), nvs);
+            }
+            else
+            {
+                string nvls = ((nvs != null) ? nvs.ToString() : "");
 
-            emitter.Emit("<ActionNamedValueListUpdate id='{0}' state='{1}'>{2}</ActionNamedValueListUpdate>", logging, state, nvls);
+                emitter.Emit("<ActionNamedValueListUpdate id='{0}' state='{1}'>{2}</ActionNamedValueListUpdate>", logging, state, nvls);
+            }
         }
 
         /// <summary>Method sets the volatile isCancelRequested value</summary>
@@ -592,7 +639,7 @@ namespace MosaicLib.Modular.Action
             if (IsStarted || IsIssued)
             {
                 namedValues = namedValueSet.ConvertToReadOnly();
-                EmitNamedValueListUpdateMesg(logging, StateCode, namedValues);
+                EmitUpdateNamedValuesMesg(logging, StateCode, namedValues);
             }
             else
             {
@@ -625,13 +672,13 @@ namespace MosaicLib.Modular.Action
                 if (updateNVL)
                 {
                     namedValues = namedValueSet.ConvertToReadOnly();
-                    EmitNamedValueListUpdateMesg(logging, StateCode, namedValues);
+                    EmitUpdateNamedValuesMesg(logging, StateCode, namedValues);
                 }
                 EmitStateChangeMesg(logging, stateCode, entryASC, rc);
             }
             else
             {
-                HandleInvalidStateChange(Utils.Fcns.CheckedFormat("SetStateComplete('{0}')", (rc != null ? rc : "<NullString>")), logging);
+                HandleInvalidStateChange("SetStateComplete[{0}]".CheckedFormat(rc.MapDefaultTo("<NullString>")), logging);
             }
 		}
 
@@ -655,7 +702,7 @@ namespace MosaicLib.Modular.Action
         /// </summary>
 		private void HandleInvalidStateChange(string methodName, ActionLogging logging)
 		{
-			string ec = Utils.Fcns.CheckedFormat("ActionState.{0}: is not legal while action is in state '{1}'", methodName, StateCode);
+			string ec = Utils.Fcns.CheckedFormat("ActionState.{0}: is not legal while action is in state {1}", methodName, StateCode);
 			Utils.Asserts.TakeBreakpointAfterFault(ec);
 			SetStateInvalid(ec, logging);
 		}
@@ -1209,7 +1256,7 @@ namespace MosaicLib.Modular.Action
 			}
             else if (!resultCode.IsNullOrEmpty())
             {
-                EmitActionError("Invoked delegate gave rc:'{0}' after action already complete".CheckedFormat(resultCode), ActionState.StateCode);
+                EmitActionError("Invoked delegate gave rc:[{0}] after action already complete".CheckedFormat(resultCode), ActionState.StateCode);
             }
 		}
 
@@ -1320,7 +1367,13 @@ namespace MosaicLib.Modular.Action
         /// </summary>
 		protected void EmitActionEvent(string eventStr, ActionStateCode actionStateCode) 
 		{
-			logging.State.Emit("<ActionEvent id='{0}' state='{1}'>{2}</ActionEvent>", logging.Mesg, actionStateCode, eventStr); 
+            bool useNewStyle = ((logging.Config.ActionLoggingStyleSelect & ActionLoggingStyleSelect.OldXmlishStyle) == 0);
+            string description = logging.ActionDescription;
+
+            if (useNewStyle)
+                logging.Error.Emit("Action '{0}': Event [state:{1}, {2}]", description, actionStateCode, eventStr);
+            else
+                logging.State.Emit("<ActionEvent id='{0}' state='{1}'>{2}</ActionEvent>", description, actionStateCode, eventStr); 
 		}
 
         /// <summary>
@@ -1328,8 +1381,14 @@ namespace MosaicLib.Modular.Action
         /// <para/>{ActionError id="{0}" state="{1}"}{2}{/ActionError}
         /// </summary>
         protected void EmitActionError(string eventStr, ActionStateCode actionStateCode) 
-		{ 
-			logging.Error.Emit("<ActionError id='{0}' state='{1}'>{2}</ActionError>", logging.Mesg, actionStateCode, eventStr); 
+		{
+            bool useNewStyle = ((logging.Config.ActionLoggingStyleSelect & ActionLoggingStyleSelect.OldXmlishStyle) == 0);
+            string description = logging.ActionDescription;
+
+            if (useNewStyle)
+                logging.Error.Emit("Action '{0}': Error [state:{1}, {2}]", description, actionStateCode, eventStr);
+            else
+                logging.Error.Emit("<ActionError id='{0}' state='{1}'>{2}</ActionError>", description, actionStateCode, eventStr); 
 		}
 
         /// <summary>

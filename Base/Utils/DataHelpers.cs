@@ -2174,13 +2174,12 @@ namespace MosaicLib.Utils
     /// </summary>
     public class ScopedLock : IDisposable
     {
-        /// <summary>Default constructor.  Same as expicitly calling ScopedLock(null)</summary>
-        public ScopedLock() 
-            : this(null, acquireLock: false) 
-        { }
-
-        /// <summary>Optionally locking constructor.  If the given <paramref name="mutexObject"/> is non-null and if <paramref name="acquireLock"/> is true then this constructor will Lock the given <paramref name="mutexObject"/>.</summary>
-        public ScopedLock(object mutexObject, bool acquireLock = true)
+        /// <summary>
+        /// Default constructor: Supports optional locking.  
+        /// If the given <paramref name="mutexObject"/> is non-null and if <paramref name="acquireLock"/> is true then this constructor will Lock the given <paramref name="mutexObject"/>.
+        /// Dispose method will release the held mutexObject if one is held at that time.
+        /// </summary>
+        public ScopedLock(object mutexObject = null, bool acquireLock = true)
         {
             if (acquireLock && mutexObject != null)
                 Lock(mutexObject);

@@ -86,34 +86,14 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Returns true if all of the characters in this string have char values from 32 to 127, or the string is empty.  valueForNull is returned if the given string is null.
         /// </summary>
-        public static bool IsBasicAscii(this string s, bool valueForNull = true)
-        {
-            return s.IsBasicAscii(null, valueForNull);
-        }
-
-        /// <summary>
-        /// Returns true if the given character value is between 32 and 127
-        /// </summary>
-        public static bool IsBasicAscii(this char c)
-        {
-            return IsBasicAscii(c, null);
-        }
-
-        /// <summary>
-        /// Returns true if all of the characters in this string have char values from 32 to 127, or the string is empty.
-        /// If otherExcludeCharsList is not null then the method returns false if any character in s is also included in the given otherExcludeCharsList.
-        /// valueForNull is returned if the given string is null.
-        /// </summary>
-        public static bool IsBasicAscii(this string s, IList<char> otherExcludeCharsList, bool valueForNull = true)
+        public static bool IsBasicAscii(this string s, bool valueForNull = true, char? escapeChar = null)
         {
             if (s == null)
                 return valueForNull;
 
-            int sLength = s.Length;
-            for (int idx = 0; idx < sLength; idx++)
+            foreach (char c in s)
             {
-                char c = s[idx];
-                if (!c.IsBasicAscii(otherExcludeCharsList))
+                if (!c.IsBasicAscii() || c == escapeChar)
                     return false;
             }
 
@@ -121,11 +101,44 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
+        /// Returns true if all of the characters in this string have char values from 32 to 127, or the string is empty.
+        /// If otherExcludeCharsList is not null then the method returns false if any character in s is also included in the given otherExcludeCharsList.
+        /// valueForNull is returned if the given string is null.
+        /// </summary>
+        public static bool IsBasicAscii(this string s, IList<char> otherExcludeCharsList, bool valueForNull = true, char ? escapeChar = null)
+        {
+            if (otherExcludeCharsList == null)
+                return s.IsBasicAscii(valueForNull: valueForNull, escapeChar: escapeChar);
+
+            if (s == null)
+                return valueForNull;
+
+            foreach (char c in s)
+            {
+                if (!c.IsBasicAscii() || otherExcludeCharsList.Contains(c) || c == escapeChar)
+                    return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Returns true if the given char c's value is between 32 and 127.
+        /// </summary>
+        public static bool IsBasicAscii(this char c, char? escapeChar = null)
+        {
+            if (c < 32 || c > 127 || c == escapeChar)
+                return false;
+
+            return true;
+        }
+
+        /// <summary>
         /// Returns true if the given char c's value is between 32 and 127.  If otherExcludeCharsList is not null then the method returns false if the given char c is included in the given otherExcludeCharsList.
         /// </summary>
-        public static bool IsBasicAscii(this char c, IList<char> otherExcludeCharsList)
+        public static bool IsBasicAscii(this char c, IList<char> otherExcludeCharsList, char? escapeChar = null)
         {
-            if (c < 32 || c > 127)
+            if (!c.IsBasicAscii(escapeChar: escapeChar))
                 return false;
 
             if (otherExcludeCharsList != null && otherExcludeCharsList.Contains(c))
@@ -183,57 +196,55 @@ namespace MosaicLib.Utils
         /// Generate and return a "JSON escaped" version of given string s.
         /// By default this escapes all non-printable characters and also escapes the escape charater and the double-quote character
         /// </summary>
-        public static string GenerateJSONVersion(this string s)
+        public static string GenerateJSONVersion(this string s, char escapeChar = '\\')
         {
-            if (s.IsBasicAscii(jsonForceEscapeCharList, true))
+            if (s.IsBasicAscii(jsonForceEscapeCharList, valueForNull: true, escapeChar: escapeChar))
                 return s ?? string.Empty;
 
-            return s.GenerateEscapedVersion(jsonForceEscapeCharList);
+            return s.GenerateEscapedVersion(jsonForceEscapeCharList, escapeChar: escapeChar);
         }
 
-        private static readonly List<char> jsonForceEscapeCharList = new List<char>() { '\"', '\\' };
+        private static readonly IList<char> jsonForceEscapeCharList = new List<char>() { '\"' }.AsReadOnly();
 
         /// <summary>
         /// Generate and return a escaped version of given string s that is suitable for logging.
-        /// By default this escapes all non-printable characters and also escapes the escape charater and the double-quote character
+        /// By default this escapes all non-printable characters and also escapes the escape charater
         /// </summary>
-        public static string GenerateLoggingVersion(this string s)
+        public static string GenerateLoggingVersion(this string s, char escapeChar = '\\')
         {
-            if (s.IsBasicAscii(loggingForceEscapeCharList, true))
+            if (s.IsBasicAscii(valueForNull: true, escapeChar: escapeChar))
                 return s ?? string.Empty;
 
-            return s.GenerateEscapedVersion(loggingForceEscapeCharList);
+            return s.GenerateEscapedVersion(escapeChar: escapeChar);
         }
-
-        private static readonly IList<char> loggingForceEscapeCharList = new List<char>() { '\\' }.AsReadOnly();
 
         /// <summary>
         /// Generate and return a escaped version of given string s that is suitable for inserting in-between single or double quotes.
         /// By default this escapes all non-printable characters and also escapes the escape charater and the single and double-quote characters
         /// </summary>
-        public static string GenerateQuotableVersion(this string s)
+        public static string GenerateQuotableVersion(this string s, bool applyBasicAsciiBasedEscaping = true, char escapeChar = '\\')
         {
-            if (s.IsBasicAscii(quotesForceEscapeCharList, true))
+            if (s.IsBasicAscii(quotesForceEscapeCharList, valueForNull: true, escapeChar: escapeChar))
                 return s ?? string.Empty;
 
-            return s.GenerateEscapedVersion(quotesForceEscapeCharList);
+            return s.GenerateEscapedVersion(quotesForceEscapeCharList, applyBasicAsciiBasedEscaping: applyBasicAsciiBasedEscaping, escapeChar: escapeChar);
         }
 
-        private static readonly IList<char> quotesForceEscapeCharList = new List<char>() { '\'', '\"', '\\' }.AsReadOnly();
+        private static readonly IList<char> quotesForceEscapeCharList = new List<char>() { '\'', '\"' }.AsReadOnly();
 
         /// <summary>
         /// Generate and return a Square Bracket escaped version of given string s.
         /// By default this escapes all non-printable characters and also escapes the escape charater and the open and close square bracket characters ('[' and ']')
         /// </summary>
-        public static string GenerateSquareBracketEscapedVersion(this string s)
+        public static string GenerateSquareBracketEscapedVersion(this string s, bool applyBasicAsciiBasedEscaping = true, char escapeChar = '\\')
         {
-            if (s.IsBasicAscii(squareBracketForceEscapeCharList, true))
+            if (s.IsBasicAscii(squareBracketForceEscapeCharList, valueForNull: true, escapeChar: escapeChar))
                 return s ?? string.Empty;
 
-            return s.GenerateEscapedVersion(squareBracketForceEscapeCharList);
+            return s.GenerateEscapedVersion(squareBracketForceEscapeCharList, applyBasicAsciiBasedEscaping: applyBasicAsciiBasedEscaping, escapeChar: escapeChar);
         }
 
-        private static readonly List<char> squareBracketForceEscapeCharList = new List<char>() { '[', ']' };
+        private static readonly IList<char> squareBracketForceEscapeCharList = new List<char>() { '[', ']' }.AsReadOnly();
 
 
         /// <summary>
@@ -241,15 +252,24 @@ namespace MosaicLib.Utils
         /// Also generates escaped version of any other characters that are explicitly includes in the given extraEscapeCharList
         /// (typically '\"' or '\'')
         /// </summary>
-        public static string GenerateEscapedVersion(this string s, IList<char> extraEscapeCharList)
+        public static string GenerateEscapedVersion(this string s, IList<char> extraEscapeCharList = null, string fallbackValue = "", bool applyBasicAsciiBasedEscaping = true, char escapeChar = '\\')
         {
-            s = s.MapNullToEmpty();
+            if (s == null)
+                return fallbackValue;
+
+            bool hasEscapeList = !extraEscapeCharList.IsNullOrEmpty();
 
             StringBuilder sb = new StringBuilder();
 
             foreach (char c in s)
             {
-                if (c.IsBasicAscii(extraEscapeCharList) && c != '\\')
+                bool isBasicAscii = c.IsBasicAscii();
+                bool isInExtraExcapeList = hasEscapeList && extraEscapeCharList.Contains(c);
+                bool isEscapeChar = (c == escapeChar);
+
+                bool directlyIncludeChar = (!isEscapeChar && !isInExtraExcapeList && (isBasicAscii || !applyBasicAsciiBasedEscaping));
+
+                if (directlyIncludeChar)
                 {
                     sb.Append(c);
                 }
@@ -258,20 +278,21 @@ namespace MosaicLib.Utils
                     // this character is 
                     switch (c)
                     {
-                        case '\"': sb.Append("\\\""); break;        // double quote char - we may not get here depending on the contents of the extraEscapeCharList
-                        case '\'': sb.Append(@"\'"); break;         // single quote char - we may not get here depending on the contents of the extraEscapeCharList
-                        case '\\': sb.Append(@"\\"); break;         // escape char      // JSON calls this a reverse solidus
-                        case '\r': sb.Append(@"\r"); break;         // carrage return
-                        case '\n': sb.Append(@"\n"); break;         // line feed
-                        case '\t': sb.Append(@"\t"); break;         // (horizontal) tab
-                        case '\b': sb.Append(@"\b"); break;         // backspace
-                        case '\f': sb.Append(@"\f"); break;         // form feed
-                        case '\v': sb.Append(@"\v"); break;         // vertical tab
+                        case '\"': sb.EscapeAndAppend('\"', escapeChar); break;        // double quote char - we may not get here depending on the contents of the extraEscapeCharList
+                        case '\'': sb.EscapeAndAppend('\'', escapeChar); break;         // single quote char - we may not get here depending on the contents of the extraEscapeCharList
+                        case '\r': sb.EscapeAndAppend('r', escapeChar); break;         // carrage return
+                        case '\n': sb.EscapeAndAppend('n', escapeChar); break;         // line feed
+                        case '\t': sb.EscapeAndAppend('t', escapeChar); break;         // (horizontal) tab
+                        case '\b': sb.EscapeAndAppend('b', escapeChar); break;         // backspace
+                        case '\f': sb.EscapeAndAppend('f', escapeChar); break;         // form feed
+                        case '\v': sb.EscapeAndAppend('v', escapeChar); break;         // vertical tab
                         default:
-                            if (c >= 0x00 && c <= 0xff)
-                                sb.CheckedAppendFormat("\\x{0:x2}", unchecked((Byte)c));
+                            if (isEscapeChar || isBasicAscii)
+                                sb.EscapeAndAppend(c, escapeChar);
+                            else if (c >= 0x00 && c <= 0xff)
+                                sb.CheckedAppendFormat("{0}x{1:x2}", escapeChar, unchecked((Byte)c));
                             else
-                                sb.CheckedAppendFormat("\\u{0:x4}", unchecked((UInt16)c));
+                                sb.CheckedAppendFormat("{0}u{1:x4}", escapeChar, unchecked((UInt16)c));
 
                             break;
                     }
@@ -279,6 +300,15 @@ namespace MosaicLib.Utils
             }
 
             return sb.ToString();
+        }
+
+        /// <summary>
+        /// Appends the given <paramref name="escapeChar"/> and then the given <paramref name="c"/> char to the given <paramref name="sb"/> StringBuilder.
+        /// </summary>
+        public static void EscapeAndAppend(this StringBuilder sb, char c, char escapeChar)
+        {
+            sb.Append(escapeChar);
+            sb.Append(c);
         }
 
         #endregion
@@ -897,12 +927,46 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        #region SafeToString
+        #region SafeToString variants
 
-        /// <summary>Extension method that returns ToString applied to the given object, or mapNullTo (defaults to "") if the given object is null.</summary>
-        public static string SafeToString(this object o, string mapNullTo = "")
+        /// <summary>
+        /// Extension method that returns ToString applied to the given object, or mapNullTo (defaults to "") if the given object is null.  
+        /// Also executes the underlying ToString in a try catch pattern and converts any caught excpetion into an appropriately desriptive result string.
+        /// </summary>
+        public static string SafeToString(this object o, string mapNullTo = "", ExceptionFormat caughtExceptionToStringFormat = (ExceptionFormat.TypeAndMessage | ExceptionFormat.IncludeStackTrace))
         {
-            return (o != null ? o.ToString() : mapNullTo);
+            try
+            {
+                return ((o != null) ? o.ToString() : mapNullTo);
+            }
+            catch (System.Exception ex)
+            {
+                return "o.ToString() generated exception: {0}".CheckedFormat(ex.ToString(caughtExceptionToStringFormat));
+            }
+        }
+
+        /// <summary>
+        /// Attempts to conver the given <paramref name="formattable"/> instance into a string, making use of any optionally provided <paramref name="formatProvider"/>, by calling the appropriate ToString method signature.
+        /// If this ToString call throws an exception then this method will return a string that indicates that an excpetion was encountered and which includes the excpetion type, its message, and its stack trace.
+        /// </summary>
+        public static string SafeToString(this IFormattable formattable, string format, IFormatProvider formatProvider = null, string mapNullTo = "", ExceptionFormat caughtExceptionToStringFormat = (ExceptionFormat.TypeAndMessage | ExceptionFormat.IncludeStackTrace))
+        {
+            try
+            {
+                if (formattable == null)
+                    return mapNullTo;
+                else if (format == null && formatProvider == null)
+                    return formattable.ToString();
+                else
+                    return formattable.ToString(format, formatProvider);
+            }
+            catch (System.Exception ex)
+            {
+                if (formatProvider == null)
+                    return "Formattable.ToString('{0}') generated exception: {1}".CheckedFormat(format, ex.ToString(caughtExceptionToStringFormat));
+                else
+                    return "Formattable.ToString('{0}', fp) generated exception: {1}".CheckedFormat(format, ex.ToString(caughtExceptionToStringFormat));
+            }
         }
 
         #endregion
@@ -1189,6 +1253,52 @@ namespace MosaicLib.Utils
             /// <summary>matches if the string value is exactly the same as the RuleString</summary>
             [EnumMember]
             Exact,
+        }
+    }
+
+    #endregion
+
+    #region IFormattable helpers
+
+    /// <summary>This class is primarily intended to support unit testing.  It allows a ToString proxy delegate to be wrapped in an object that will use the delegate to produce a ToString result when one of the IFormattable interface methods are called.</summary>
+    public class FormattableWrapper : IFormattable
+    {
+        /// <summary>Constructor: accepts a format provider ToString factory delegate</summary>
+        public FormattableWrapper(Func<string, IFormatProvider, string> formatProviderStringFactoryDelegate)
+        {
+            formatProviderToStringResultFactoryDelegate = formatProviderStringFactoryDelegate;
+        }
+
+        /// <summary>Constructor: accepts a basic ToString factory delegate</summary>
+        public FormattableWrapper(Func<string> basicStringFactoryDelegate) 
+        { 
+            basicToStringResultFactoryDelegate = basicStringFactoryDelegate; 
+        }
+
+        private Func<string, IFormatProvider, string> formatProviderToStringResultFactoryDelegate;
+        private Func<string> basicToStringResultFactoryDelegate;
+
+        /// <summary>Returns the result of calling either the format provider or the basic ToString factory delegate (depending on which this wrapper was constructed from)</summary>
+        public override string ToString()
+        {
+            if (formatProviderToStringResultFactoryDelegate != null)
+                return formatProviderToStringResultFactoryDelegate(null, null);
+
+            if (basicToStringResultFactoryDelegate != null)
+                return basicToStringResultFactoryDelegate();
+
+            return null;
+        }
+
+        string IFormattable.ToString(string format, IFormatProvider formatProvider)
+        {
+            if (formatProviderToStringResultFactoryDelegate != null)
+                return formatProviderToStringResultFactoryDelegate(format, formatProvider);
+
+            if (basicToStringResultFactoryDelegate != null)
+                return basicToStringResultFactoryDelegate();
+
+            return null;
         }
     }
 

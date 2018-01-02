@@ -23,11 +23,15 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using MosaicLib.Utils;
-using MosaicLib.Time;
-using MosaicLib.Modular.Common;
+
+using MosaicLib;
+using MosaicLib.Modular;
 using MosaicLib.Modular.Action;
+using MosaicLib.Modular.Common;
+using MosaicLib.Modular.Config;
 using MosaicLib.Modular.Part;
+using MosaicLib.Time;
+using MosaicLib.Utils;
 
 namespace MosaicLib.SerialIO
 {
@@ -69,7 +73,7 @@ namespace MosaicLib.SerialIO
                 logger.InstanceLogGate = Logging.LogGate.Debug;     // by default only emit Debug and above messages.  Logging.Logger.[name].LogGate.Increase config key can be used to elevate this level
             }
 
-            traceDataLogger = new Logging.Logger(config.Name + ".Data", config.TraceDataLoggerGroupID, config.TraceDataLoggerInitialLogGate);
+            traceDataLogger = new Logging.Logger("{0}.Data".CheckedFormat(PartID), config.TraceDataLoggerGroupID, config.TraceDataLoggerInitialLogGate);
 			TraceData = traceDataLogger.Emitter(config.TraceDataMesgType);
 
 			BaseStateChangeEmitter = Debug;
@@ -97,6 +101,31 @@ namespace MosaicLib.SerialIO
                     slidingPacketBuffer.PacketEndScannerDelegate = config.RxPacketEndScannerDelegate;
 			}
 
+            IConfig iConfig = portConfig.IConfig;
+
+            TraceDataFormat fallbackDataFormat = ((config.RxPacketEndStrArray.Length > 0) ? TraceDataFormat.DefaultAsciiV2 : TraceDataFormat.DefaultBinaryV2);
+            TraceDataEvent fallbackEventMask = (HasSlidingBuffer ? TraceDataEvent.DefaultPacketV2 : TraceDataEvent.DefaultBinaryV2);
+            char fallbackAsciiEscapeChar = '&';     // this default value is specifically choosen to avoid overlaying the logging escape character so that we will not generally layer the escape char escaping in trace data.
+
+            if (iConfig != null)
+            {
+                traceDataFormat = portConfig.TraceDataFormat
+                                ?? iConfig.GetConfigKeyAccessOnce("Config.SerialIO.{0}.TraceData.Format".CheckedFormat(PartID), isOptional: true).GetValue<TraceDataFormat?>()
+                                ?? iConfig.GetConfigKeyAccessOnce("Config.SerialIO.DefaultTraceDataFormat", isOptional: true).GetValue(fallbackDataFormat);
+                traceDataEventMask = portConfig.TraceDataEventMask 
+                                ?? iConfig.GetConfigKeyAccessOnce("Config.SerialIO.{0}.TraceData.EventMask".CheckedFormat(PartID), isOptional: true).GetValue<TraceDataEvent?>()
+                                ?? iConfig.GetConfigKeyAccessOnce("Config.SerialIO.DefaultTraceDataEventMask", isOptional: true).GetValue(fallbackEventMask);
+                traceDataAsciiEscapeChar = portConfig.TraceDataAsciiEscapeChar
+                                ?? iConfig.GetConfigKeyAccessOnce("Config.SerialIO.{0}.TraceData.AsciiEscapeChar".CheckedFormat(PartID), isOptional: true).GetValue<char?>()
+                                ?? iConfig.GetConfigKeyAccessOnce("Config.SerialIO.DefaultTraceDataAsciiEscapeChar".CheckedFormat(PartID), isOptional: true).GetValue<char>(fallbackAsciiEscapeChar);
+            }
+            else
+            {
+                traceDataFormat = portConfig.TraceDataFormat ?? fallbackDataFormat;
+                traceDataEventMask = portConfig.TraceDataEventMask ?? fallbackEventMask;
+                traceDataAsciiEscapeChar = portConfig.TraceDataAsciiEscapeChar ?? fallbackAsciiEscapeChar;
+            }
+
             // threadWakeupNotifier.TraceEmitter = traceDataLogger.Trace;
 		}
 
@@ -117,6 +146,10 @@ namespace MosaicLib.SerialIO
 
         /// <summary>Gives read-only access to the PortBehavior structure that gives information about the general behavior of this port.</summary>
         IPortBehavior IPort.PortBehavior { get { return PortBehavior; } }
+
+        private TraceDataFormat traceDataFormat;
+        private TraceDataEvent traceDataEventMask;
+        private char traceDataAsciiEscapeChar;
 
         /// <summary>
         /// Impelmentation and storage class for IPortBehavior interface.
@@ -256,13 +289,15 @@ namespace MosaicLib.SerialIO
         {
             if (HasSlidingBuffer)
             {
+                string actionDescription = "GetNextPacket";
+
                 UpdateNumberOfPacketsAvailable(Math.Max(0, slidingPacketBuffer.NumPacketsReady - 1));
                 Packet p = slidingPacketBuffer.GetNextPacket();
 
                 if (p != null)
-                    GenerateDataTrace("GetNextPacket." + p.Type.ToString(), p.ErrorCode, p.Data, 0, p.Data.Length);
+                    GenerateDataTrace(TraceDataEvent.Packet, actionDescription, "Type:{0}".CheckedFormat(p.Type), p.ErrorCode, p.Data, 0, p.Data.Length);
                 else
-                    GenerateDataTrace("GetNextPacket.<null>", "no packet available", null, 0, 0);
+                    GenerateDataTrace(TraceDataEvent.Packet, actionDescription, null, "no packet available", null, 0, 0);
 
                 action.ResultValue = p;
                 resultCode = string.Empty;
@@ -277,17 +312,17 @@ namespace MosaicLib.SerialIO
         /// <summary>Base delegate method used to implement GoOnline(andInitialize) actions.</summary>
         protected override string PerformGoOnlineAction(bool andInitialize)
 		{
-			string actionName = (andInitialize ? "GoOnlineAndInitialize" : "GoOnline");
+			string actionDescription = (andInitialize ? "GoOnlineAndInitialize" : "GoOnline");
 
-			SetBaseState(UseState.AttemptOnline, actionName + ".Start", true);
+			SetBaseState(UseState.AttemptOnline, actionDescription + ".Start", true);
 
             if (andInitialize || !BaseState.IsConnected)
                 Log.Debug.Emit("Initiating connection for spec [{0}]", PortConfig.SpecStr);
 
-			string rc = InnerPerformGoOnlineAction(actionName, andInitialize);
+			string rc = InnerPerformGoOnlineAction(actionDescription, andInitialize);
 
 			if (string.IsNullOrEmpty(rc) && InnerReadBytesAvailable != 0)
-				HandleFlush(actionName, TimeSpan.FromSeconds(0.100));
+				HandleFlush(actionDescription, (0.100).FromSeconds());
 
 			bool success = string.IsNullOrEmpty(rc);
 
@@ -298,11 +333,11 @@ namespace MosaicLib.SerialIO
 			}
 
 			if (success)
-				SetBaseState(UseState.Online, actionName + " Done", true);
+				SetBaseState(UseState.Online, "{0} Done".CheckedFormat(actionDescription), true);
 			else if (PortConfig.EnableAutoReconnect)
-                SetBaseState(UseState.OnlineFailure, actionName + " Failed (will attempt auto reconnect)", true);
+                SetBaseState(UseState.OnlineFailure, "{0} Failed (will attempt auto reconnect)".CheckedFormat(actionDescription), true);
             else
-                SetBaseState(UseState.AttemptOnlineFailed, actionName + " Failed", true);
+                SetBaseState(UseState.AttemptOnlineFailed, "{0} Failed".CheckedFormat(actionDescription), true);
 
 			return (success ? string.Empty : rc);
 		}
@@ -310,9 +345,9 @@ namespace MosaicLib.SerialIO
         /// <summary>Base delegate method used to implement GoOffline actions.</summary>
         protected override string PerformGoOfflineAction()
 		{
-			string actionName = "GoOffline";
+			string actionDescription = "GoOffline";
 
-			string rc = InnerPerformGoOfflineAction(actionName);
+            string rc = InnerPerformGoOfflineAction(actionDescription);
 			bool success = string.IsNullOrEmpty(rc);
 
 			if (success && InnerIsConnected)
@@ -322,9 +357,9 @@ namespace MosaicLib.SerialIO
 			}
 
 			if (success)
-				SetBaseState(UseState.Offline, actionName + ".Inner.Done", true);
+				SetBaseState(UseState.Offline, "{0}.Inner.Done".CheckedFormat(actionDescription), true);
 			else
-				SetBaseState(UseState.Offline, actionName + ".Inner.Failed", true);
+                SetBaseState(UseState.Offline, "{0}.Inner.Failed".CheckedFormat(actionDescription), true);
 
 			return (success ? string.Empty : rc);
 		}
@@ -352,9 +387,9 @@ namespace MosaicLib.SerialIO
 		#region Other abstract utility methods to be implemented by a sub-class
 
         /// <summary>Abstract method used so that derived class can perform port type specific actions when the port is going online.  Returns empty string on success or non-empty string on failure.</summary>
-		protected abstract string InnerPerformGoOnlineAction(string actionName, bool andInitialize);
+		protected abstract string InnerPerformGoOnlineAction(string source, bool andInitialize);
         /// <summary>Abstract method used so that derived class can perform port type specific actions when the port is going offline.  Returns empty string on success or non-empty string on failure.</summary>
-        protected abstract string InnerPerformGoOfflineAction(string actionName);
+        protected abstract string InnerPerformGoOfflineAction(string source);
 
         /// <summary>Abstract getter property.  Returns the number of bytes that are currently available to be read or zero if there are none.</summary>
         protected abstract int InnerReadBytesAvailable { get; }
@@ -730,10 +765,10 @@ namespace MosaicLib.SerialIO
 			}
 		}
 
-		protected string HandleFlush(string actionName, TimeSpan timeLimit)
+		protected string HandleFlush(string source, TimeSpan timeLimit)
 		{
 			if (AreAnyActionsPending)
-				CancelPendingActions(actionName + " Action invoked");
+				CancelPendingActions("{0} was requested".CheckedFormat(source));
 
             // flush the sliding buffer first.
             if (HasSlidingBuffer && ((slidingPacketBuffer.BufferDataCount > 0) || slidingPacketBuffer.NumPacketsReady > 0))
@@ -745,7 +780,7 @@ namespace MosaicLib.SerialIO
                     UpdateNumberOfPacketsAvailable(Math.Max(0, slidingPacketBuffer.NumPacketsReady - 1));
                     Packet p = slidingPacketBuffer.GetNextPacket();
                     if (p != null && !p.IsNullOrNoneOrEmptyData)
-                        GenerateDataTrace(actionName + " " + p.Type.ToString(), String.Empty, p.Data, 0, p.Data.Length);
+                        GenerateDataTrace(TraceDataEvent.Flush, source, "PacketType:{0}".CheckedFormat(p.Type), String.Empty, p.Data, 0, p.Data.Length);
                     else
                         break;
                 }
@@ -756,7 +791,7 @@ namespace MosaicLib.SerialIO
                     byte[] buffer;
                     int getIdx, getCount;
                     slidingPacketBuffer.GetBufferGetAccessInfo(out buffer, out getIdx, out getCount);
-                    GenerateDataTrace(actionName + " Sliding Buffer", String.Empty, buffer, getIdx, getCount);
+                    GenerateDataTrace(TraceDataEvent.Flush, source, "from sliding buffer", String.Empty, buffer, getIdx, getCount);
                     UpdateNumberOfPacketsAvailable(0);
                     slidingPacketBuffer.FlushBuffer();
                 }
@@ -776,7 +811,7 @@ namespace MosaicLib.SerialIO
 			{
 				QpcTimeStamp now = QpcTimeStamp.Now;
                 ActionResultEnum readResult = ActionResultEnum.None;
-				rc = HandleRead(actionName, flushBuf, 0, flushBuf.Length, out didCount, ref readResult);
+				rc = HandleRead(source, flushBuf, 0, flushBuf.Length, out didCount, ref readResult);
 				bool success = string.IsNullOrEmpty(rc);
                 bool forceFlushDone = (readResult != ActionResultEnum.None && readResult != ActionResultEnum.ReadDone);
 
@@ -793,7 +828,7 @@ namespace MosaicLib.SerialIO
 				if ((now - actionStartTime) > timeLimit)
 				{
 					if (!portIsIdle)
-						rc = actionName + " time limit reached before port fully idle";
+						rc = "{0}: time limit reached before port fully idle".CheckedFormat(source);
 
 					break;
 				}
@@ -804,20 +839,20 @@ namespace MosaicLib.SerialIO
             return rc;
 		}
 
-        protected string HandleRead(string actionName, byte[] buffer, int startIdx, int maxCount, out int didCount, ref ActionResultEnum readResult)
+        protected string HandleRead(string source, byte[] buffer, int startIdx, int maxCount, out int didCount, ref ActionResultEnum readResult)
 		{
 			string rc = InnerHandleRead(buffer, startIdx, maxCount, out didCount, ref readResult);
 
-			GenerateDataTrace(actionName, rc, buffer, startIdx, didCount);
+			GenerateDataTrace(TraceDataEvent.Read, source, null, rc, buffer, startIdx, didCount);
 
 			return (string.IsNullOrEmpty(rc) ? string.Empty : rc);
 		}
 
-		protected string HandleWrite(string actionName, byte [] buffer, int startIdx, int count, out int didCount, ref ActionResultEnum writeResult)
+		protected string HandleWrite(string source, byte [] buffer, int startIdx, int count, out int didCount, ref ActionResultEnum writeResult)
 		{
             string rc = InnerHandleWrite(buffer, startIdx, count, out didCount, ref writeResult);
 
-			GenerateDataTrace(actionName, rc, buffer, startIdx, didCount);
+            GenerateDataTrace(TraceDataEvent.Write, source, null, rc, buffer, startIdx, didCount);
 
 			return (string.IsNullOrEmpty(rc) ? string.Empty : rc);
 		}
@@ -855,64 +890,107 @@ namespace MosaicLib.SerialIO
 
 		private System.Text.StringBuilder traceSB = new System.Text.StringBuilder();
 
-		private void GenerateDataTrace(string actionName, string resultCode, byte [] buffer, int startIdx, int count)
-		{
-			if (!TraceData.IsEnabled)
-				return;
+        private void GenerateDataTrace(TraceDataEvent traceDataEvent, string source, string detail, string resultCode, byte[] buffer, int startIdx, int count)
+        {
+            if (!TraceData.IsEnabled || ((traceDataEventMask & traceDataEvent) == 0) || (traceDataFormat == TraceDataFormat.None))
+                return;
 
-			string mesg = null;
+            string mesg = null;
 
-			try
-			{
-				traceSB.Length = 0;	// clear the string
+            bool useNewStyle = (traceDataFormat != TraceDataFormat.OldXmlishStyle);
+            bool includeDottedAscii = ((traceDataFormat & TraceDataFormat.IncludeDottedAscii) != 0);
+            bool includeEscapedAscii = ((traceDataFormat & TraceDataFormat.IncludeEscapedAscii) != 0);
+            bool includeHex = ((traceDataFormat & TraceDataFormat.IncludeHex) != 0);
+            bool useMessageDataField = ((traceDataFormat & TraceDataFormat.UseMessageDataField) != 0);
 
-				traceSB.AppendFormat("<DataTrace action=\"{0}\" count=\"{1}\" rc=\"{2}\">", 
-										actionName, count,
-										(string.IsNullOrEmpty(resultCode) ? "" : resultCode));
+            try
+            {
+                traceSB.Length = 0;	// clear the string
 
-				int idx = 0, endIdx = startIdx + count;
+                if (useNewStyle)
+                {
+                    traceSB.CheckedAppendFormat("DataTrace {0}", traceDataEvent);
 
-				while (startIdx < endIdx)
-				{
-                    const int maxSectionSize = 32;
-					int sectionCount = System.Math.Min(maxSectionSize, endIdx - startIdx);
-					int sectionEndIdx = startIdx + sectionCount;
+                    if (!source.IsNullOrEmpty())
+                        traceSB.CheckedAppendFormat(" src:{0}", source);
 
-                    traceSB.AppendFormat("<ascii n=\"{0}\">", sectionCount);
+                    if (!detail.IsNullOrEmpty())
+                        traceSB.CheckedAppendFormat(" detail:[{0}]", detail.GenerateSquareBracketEscapedVersion(escapeChar: traceDataAsciiEscapeChar));
 
-                    for (idx = startIdx; idx < sectionEndIdx; idx++)
+                    traceSB.CheckedAppendFormat(" count:{0}", count);
+
+                    if (includeEscapedAscii)
+                        traceSB.CheckedAppendFormat(" ascii:[{0}]", ByteArrayTranscoders.ByteStringTranscoder.Encode(buffer, startIdx, count).GenerateSquareBracketEscapedVersion(escapeChar: traceDataAsciiEscapeChar));
+
+                    if (!resultCode.IsNullOrEmpty())
+                        traceSB.CheckedAppendFormat(" rc:[{0}]", resultCode.GenerateSquareBracketEscapedVersion(escapeChar: traceDataAsciiEscapeChar));
+                }
+                else
+                {
+                    traceSB.CheckedAppendFormat("<DataTrace action=\"{0}\" count=\"{1}\" rc=\"{2}\" event=\"{3}\" detail=\"{4}\">",
+                                            source, count,
+                                            (string.IsNullOrEmpty(resultCode) ? "" : resultCode), traceDataEvent, detail);
+                }
+
+                if (includeDottedAscii || includeHex)
+                {
+                    const int maxSectionSize = 64;
+
+                    for (int idx = 0, endIdx = startIdx + count, segment = 1; startIdx < endIdx; segment++)
                     {
-                        Char c = (Char)buffer[idx];
-                        bool dotChar = !(Char.IsLetterOrDigit(c) || Char.IsPunctuation(c));
+                        int sectionCount = System.Math.Min(maxSectionSize, endIdx - startIdx);
+                        int sectionEndIdx = startIdx + sectionCount;
 
-                        traceSB.Append(dotChar ? '.' : c);
+                        if (useNewStyle)
+                            traceSB.CheckedAppendFormat(" segment:{0}", segment);
+
+                        if (includeDottedAscii)
+                        {
+                            traceSB.CheckedAppendFormat(useNewStyle ? " ascii_dotted:{0}:[" : "<ascii n=\"{0}\">", sectionCount);
+
+                            for (idx = startIdx; idx < sectionEndIdx; idx++)
+                            {
+                                Char c = (Char)buffer[idx];
+                                bool dotChar = !(Char.IsLetterOrDigit(c) || Char.IsPunctuation(c) || c == ' ');
+
+                                traceSB.Append(dotChar ? '.' : c);
+                            }
+
+                            traceSB.Append(useNewStyle ? "]" : "</ascii>");
+                        }
+
+                        if (includeHex)
+                        {
+                            traceSB.CheckedAppendFormat(useNewStyle ? "hex:{0}:[" : "<hex n=\"{0}\">", sectionCount);
+
+                            for (idx = startIdx; idx < sectionEndIdx; idx++)
+                            {
+                                byte b = buffer[idx];
+                                traceSB.Append(b.ToString("x2"));
+                            }
+
+                            traceSB.AppendFormat(useNewStyle ? "]" : "</hex>");
+                        }
+
+                        startIdx += sectionCount;
                     }
+                }
 
-                    traceSB.Append("</ascii>");
-                    traceSB.AppendFormat("<hex n=\"{0}\">", sectionCount);
+                if (!useNewStyle)
+                    traceSB.Append("</DataTrace>");
 
-					for (idx = startIdx; idx < sectionEndIdx; idx++)
-					{
-						byte b = buffer[idx];
-						traceSB.Append(b.ToString("x2"));
-					}
+                mesg = traceSB.ToString();
+            }
+            catch (System.Exception ex)
+            {
+                mesg = "GenerateDataTrace failed:{0}".CheckedFormat(ex.ToString(ExceptionFormat.TypeAndMessage));
+            }
 
-					traceSB.AppendFormat("</hex>");
-
-					startIdx += sectionCount;
-				}
-
-				traceSB.Append("</DataTrace>");
-
-				mesg = traceSB.ToString();
-			}
-			catch (System.Exception ex)
-			{
-				mesg = "GenerateDataTrace failed:" + ex.Message;
-			}
-
-			TraceData.Emit(mesg);
-		}
+            if (useMessageDataField)
+                TraceData.EmitWith(mesg, data: buffer.SafeSubArray(startIdx, count));
+            else
+                TraceData.Emit(mesg);
+        }
 
 		#endregion
 

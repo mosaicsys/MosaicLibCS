@@ -25,16 +25,19 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Runtime.Serialization;
-using MosaicLib.Semi.E005;
-using MosaicLib.Utils;
-using MosaicLib.Time;
-using MosaicLib.Modular.Common;
-using MosaicLib.Modular.Part;
+
+using MosaicLib.Modular;
 using MosaicLib.Modular.Action;
+using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Config;
 using MosaicLib.Modular.Config.Attributes;
 using MosaicLib.Modular.Interconnect.Sets;
 using MosaicLib.Modular.Interconnect.Values;
+using MosaicLib.Modular.Part;
+
+using MosaicLib.Semi.E005;
+using MosaicLib.Time;
+using MosaicLib.Utils;
 
 namespace MosaicLib.Semi.E041
 {
@@ -121,6 +124,7 @@ namespace MosaicLib.Semi.E041
     /// This enum defines the signaling state produced by the annunciator source.  
     /// This state includes the effects of operations that the source can perform including 
     /// Clear, Post, NoteActionStarted, NoteActionCompleted, NoteActionFailed, and NoteActionAborted, 
+    /// <para/>Off (0), On, OnAndWaiting, OnAndActionActive, OnAndActionCompleted, OnAndActionFailed, OnAndActionAborted
 	/// </summary>
     [DataContract(Namespace = MosaicLib.Constants.SemiNameSpace)]
     public enum ANSignalState : int 
@@ -269,10 +273,12 @@ namespace MosaicLib.Semi.E041
 
             ValueContainer actionEnableVC = actionEnableNV.VC;
 
-            if (actionEnableVC.cvt == ContainerStorageType.String)
-                return actionEnableVC.GetValue<string>(false) ?? "ActionDisableReasonIsNull";
-            else
-                return actionEnableVC.GetValue<bool>(false) ? String.Empty : "Action is not currently enabled {0}".CheckedFormat(actionEnableVC);
+            switch (actionEnableVC.cvt)
+            {
+                case ContainerStorageType.String: return actionEnableVC.GetValue<string>(false) ?? "ActionDisableReasonIsNull";
+                case ContainerStorageType.IListOfString: return ((actionEnableVC.GetValue<string []>(false).SafeCount() > 0) ? actionEnableVC.ToStringSML() : string.Empty);
+                default: return actionEnableVC.GetValue<bool>(false) ? String.Empty : "Action is not currently enabled {0}".CheckedFormat(actionEnableVC);
+            }
         }
     }
 
@@ -416,10 +422,16 @@ namespace MosaicLib.Semi.E041
         /// <summary>Gives the most recently given reason for the current state or condition</summary>
         string Reason { get; }
 
-        /// <summary>This gives the QpcTimeStamp recorded at the time that this state object was generated (or last updated)</summary>
+        /// <summary>Gives the ANSeqAndTimeInfo for the last change to this state</summary>
+        ANSeqAndTimeInfo SeqAndTimeInfo { get; }
+
+        /// <summary>Gives the ANSeqAndTimeInfo for the last change to this state from non-signaling to signaling (from Off to any of the On states)s</summary>
+        ANSeqAndTimeInfo LastTransitionToOnSeqAndTimeInfo { get; }
+
+        /// <summary>This gives the QpcTimeStamp recorded at the time that this state object was generated (or last updated) - as found in SeqAndTimeInfo</summary>
         QpcTimeStamp TimeStamp { get; }
 
-        /// <summary>This gives the DateTime recorded at the time that this state object was generated (or last updated)</summary>
+        /// <summary>This gives the DateTime recorded at the time that this state object was generated (or last updated) - as found in SeqAndTimeInfo</summary>
         DateTime DateTime { get; }
 
         /// <summary>This ReadOnly INamedValueSet contains a set of action names that the annunciator currently supports.  Each corresponding value shall be set to True to indicate that the corresponding name is currently available.</summary>
@@ -444,6 +456,47 @@ namespace MosaicLib.Semi.E041
         bool IsEqualTo(IANState rhs);
     }
 
+    /// <summary>
+    /// This struct is used to contain and serialize a triplet of a sequence number, a QpcTimeStamp and a DateTime.  It is used to record and propagate timeing and sequence information for ANState objects.
+    /// </summary>
+    [DataContract(Namespace = MosaicLib.Constants.SemiNameSpace)]
+    public struct ANSeqAndTimeInfo : IEquatable<ANSeqAndTimeInfo>
+    {
+        /// <summary>This gives the sequence number as recorded by the ANManager's at the time that this state object was generated (or last updated)</summary>
+        [DataMember(Order = 100)]
+        public ulong SeqNum { get; set; }
+
+        /// <summary>This gives the QpcTimeStamp recorded at the time that this state object was generated (or last updated)</summary>
+        public QpcTimeStamp TimeStamp { get; set; }
+
+        /// <summary>This gives the Time from the QpcTimeStamp recorded at the time that this state object was generated (or last updated) - used to support serialization</summary>
+        [DataMember(Order = 200, Name = "TimeStamp")]
+        private double TimeStampDouble { get { return TimeStamp.Time; } set { TimeStamp = new QpcTimeStamp() { Time = value }; } }
+
+        /// <summary>This gives the DateTime recorded at the time that this state object was generated (or last updated)</summary>
+        [DataMember(Order = 300)]
+        public DateTime DateTime { get; set; }
+
+        /// <summary>Returns true if this ANSeqAndTimeInfo has the same contents as the given <paramref name="other"/> ANSeqAndTimeInfo</summary>
+        public bool Equals(ANSeqAndTimeInfo other)
+        {
+            return (SeqNum == other.SeqNum
+                    && TimeStamp == other.TimeStamp
+                    && DateTime == other.DateTime);
+        }
+
+        /// <summary>
+        /// Copy constructor used to assign sequence numbers
+        /// </summary>
+        internal ANSeqAndTimeInfo(ANSeqAndTimeInfo other, ref ulong seqNumSourceRef)
+            : this()
+        {
+            SeqNum = ++seqNumSourceRef;
+            TimeStamp = other.TimeStamp;
+            DateTime = other.DateTime;
+        }
+    }
+
     /// <summary>This is the storage implementation and serialization object for the IANState interface.</summary>
     [DataContract(Namespace = MosaicLib.Constants.SemiNameSpace)]
     public class ANState : IANState
@@ -461,8 +514,8 @@ namespace MosaicLib.Semi.E041
             anName = (rhsIsANState ? rhsAsANState.anName : other.ANName);
             ANSignalState = other.ANSignalState;
             Reason = other.Reason;
-            TimeStamp = other.TimeStamp;
-            DateTime = other.DateTime;
+            SeqAndTimeInfo = other.SeqAndTimeInfo;
+            LastTransitionToOnSeqAndTimeInfo = other.LastTransitionToOnSeqAndTimeInfo;
             actionList = (rhsIsANState ? rhsAsANState.actionList : other.ActionList);
             selectedActionName = (rhsIsANState ? rhsAsANState.selectedActionName : other.SelectedActionName); ;
             activeActionName = (rhsIsANState ? rhsAsANState.activeActionName : other.ActiveActionName); ;
@@ -494,13 +547,21 @@ namespace MosaicLib.Semi.E041
         [DataMember(Order = 40)]
         public string Reason { get; set; }
 
-        /// <summary>This gives the QpcTimeStamp recorded at the time that this state object was generated (or last updated)</summary>
+        /// <summary>Gives the ANSeqAndTimeInfo for the last change to this state</summary>
         [DataMember(Order = 50)]
-        public QpcTimeStamp TimeStamp { get; set; }
+        public ANSeqAndTimeInfo SeqAndTimeInfo { get; set; }
+
+        ///Todo: create unit test asserts to verify that this value works as described
+
+        /// <summary>Gives the ANSeqAndTimeInfo for the last change to this state from non-signaling to signaling (from Off to any of the On states)s</summary>
+        [DataMember(Order = 51)]
+        public ANSeqAndTimeInfo LastTransitionToOnSeqAndTimeInfo { get; set; }
+
+        /// <summary>This gives the QpcTimeStamp recorded at the time that this state object was generated (or last updated)</summary>
+        public QpcTimeStamp TimeStamp { get { return SeqAndTimeInfo.TimeStamp; } }
 
         /// <summary>This gives the DateTime recorded at the time that this state object was generated (or last updated)</summary>
-        [DataMember(Order = 51)]
-        public DateTime DateTime { get; set; }
+        public DateTime DateTime { get { return SeqAndTimeInfo.DateTime; } }
 
         /// <summary>This ReadOnly INamedValueSet contains a set of action names that the annunciator currently supports.  Each corresponding value shall be set to True to indicate that the corresponding name is currently available.</summary>
         [DataMember(Order = 60)]
@@ -544,8 +605,8 @@ namespace MosaicLib.Semi.E041
                     && ANName == other.ANName
                     && ANSignalState == other.ANSignalState
                     && Reason == other.Reason
-                    && TimeStamp == other.TimeStamp
-                    && DateTime == other.DateTime
+                    && SeqAndTimeInfo.Equals(other.SeqAndTimeInfo)
+                    && LastTransitionToOnSeqAndTimeInfo.Equals(other.LastTransitionToOnSeqAndTimeInfo)
                     && ActionList.IsEqualTo(other.ActionList)
                     && SelectedActionName == other.SelectedActionName
                     && ActiveActionName == other.ActiveActionName
@@ -1840,10 +1901,11 @@ namespace MosaicLib.Semi.E041
 
             private void SetSignalState(ANSignalState anSignalState, string reason, bool publish)
             {
+                ANSignalState entrySignalState = ANState.ANSignalState;
+
                 ANState.ANSignalState = anSignalState;
                 ANState.Reason = reason;
-                ANState.TimeStamp = QpcTimeStamp.Now;
-                ANState.DateTime = DateTime.Now;
+                ANState.SeqAndTimeInfo = new ANSeqAndTimeInfo() { TimeStamp = QpcTimeStamp.Now, DateTime = DateTime.Now };
 
                 if (publish)
                 {
@@ -2036,6 +2098,8 @@ namespace MosaicLib.Semi.E041
 
         List<ANState> anStateWorkingList = new List<ANState>();
 
+        private ulong anSeqNumSource = 0;
+
         /// <summary>
         /// Pulls and processes all of the recently queued ANState update records.  
         /// Implements publication, use of E30ALIDHandlerFacet, and maintenance of currently active, recently cleared, and history ANState Sets.
@@ -2059,6 +2123,9 @@ namespace MosaicLib.Semi.E041
                     if (anState == null)
                         continue;
 
+                    if (anState.SeqAndTimeInfo.SeqNum == 0)
+                        anState.SeqAndTimeInfo = new ANSeqAndTimeInfo(anState.SeqAndTimeInfo, ref anSeqNumSource);
+
                     ANSourceTracking anSourceTracking = FindAnSourceTrackingFromANState(anState);
 
                     if (anSourceTracking != null && anSourceTracking.anSourceImpl != null)
@@ -2069,6 +2136,12 @@ namespace MosaicLib.Semi.E041
 
                         bool isEqual = (anState.IsEqualTo(lastServicedANState));
                         bool isInitialState = (anSourceTracking.lastServicedANState == null);
+                        bool isOffToOnTransition = (isInitialState || anSourceTracking.lastServicedANState.ANSignalState == ANSignalState.Off && anState.ANSignalState != ANSignalState.Off);
+
+                        if (isOffToOnTransition)
+                            anState.LastTransitionToOnSeqAndTimeInfo = anState.SeqAndTimeInfo;
+                        else
+                            anState.LastTransitionToOnSeqAndTimeInfo = lastServicedANState.LastTransitionToOnSeqAndTimeInfo;
 
                         if (!isEqual || isInitialState)
                         {

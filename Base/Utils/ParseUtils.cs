@@ -1342,7 +1342,8 @@ namespace MosaicLib.Utils
         /// <param name="value">receives the parsed EnumT contents of the requested attribute value or parseFailedValue if any portion of the operation failed.</param>
         /// <returns>true if the attributeName matched and a properly delimited value string was found and could be parsed successfully and assigned to the value output parameter.</returns>
         /// <remarks>NOTE: this signature is retained to prevent collision with non-Enum centric variant</remarks>
-        public bool ParseXmlAttribute<EnumT>(string attribName, out EnumT value) where EnumT : struct
+        public bool ParseXmlAttribute<EnumT>(string attribName, out EnumT value) 
+            where EnumT : struct
         {
             return ParseXmlAttribute(attribName, out value, default(EnumT), false, true);
         }
@@ -1357,7 +1358,8 @@ namespace MosaicLib.Utils
         /// <param name="ignoreCase">If true, ignore case; otherwise, regard case.</param>
         /// <param name="skipTrailingWhiteSpace">Set to true to allow the scanner to advance over trailing whitespace after successful parsing.  Set to false to prevent this.</param>
         /// <returns>true if the attributeName matched and a properly delimited value string was found and could be parsed successfully and assigned to the value output parameter.</returns>
-        public bool ParseXmlAttribute<EnumT>(string attribName, out EnumT value, EnumT parseFailedValue, bool ignoreCase, bool skipTrailingWhiteSpace) where EnumT : struct
+        public bool ParseXmlAttribute<EnumT>(string attribName, out EnumT value, EnumT parseFailedValue, bool ignoreCase, bool skipTrailingWhiteSpace) 
+            where EnumT : struct
         {
             StringScanner localScan = this;
             string attribValue;
