@@ -1856,14 +1856,14 @@ namespace MosaicLib
         #region ListMesgEmitter
 
         /// <summary>
-        /// This emitter is used to collect emitted messages into a List of Items, each of which contains an emitted MesgStr and a StackFrame (which will be null if CollectStackFrames was false at the time the message was emitted)
+        /// This emitter is used to collect emitted messages into a List of Items, each of which contains an emitted MesgStr, and optional NVS and Data (from EmitWith)
         /// </summary>
         public class ListMesgEmitter : GenericMesgEmitterBase
         {
             /// <summary>Default constructor</summary>
-            public ListMesgEmitter()
+            public ListMesgEmitter(bool isEnabled = true)
             {
-                IsEnabled = true;
+                IsEnabled = isEnabled;
                 EmittedItemList = new List<Item>();
             }
 
@@ -1877,16 +1877,24 @@ namespace MosaicLib
             /// Method implements the required abstract basic Emit method from the base class.
             /// If the emitter is not enabled then this method immediately returns.
             /// Generates a new Item with its Mesg property assigned to the given Str.  
-            /// Item's StackFrame property will be assigned to null or the results of calling CollectStackFrame based on the current value of the CollectStackFrames property.
             /// The resulting Item is appended to the EmittedItemList maintained by this instance.
             /// </summary>
             /// <param name="str">Gives the string message body to emit.</param>
             public override void Emit(string str)
             {
+                EmitWith(str);
+            }
+
+            /// <summary>EmitWith method.  If the Emitter IsEnabled then it will emit the given string using behavior defined by the actual implementation class.</summary>
+            /// <param name="str">Gives the string message body to emit.</param>
+            /// <param name="nvs">Gives the INamedValueSet that is to be included in the message (will get merged with any default NVS defined by logger)</param>
+            /// <param name="data">Gives the byte array data that is to be included in the message</param>
+            public override void EmitWith(string str, INamedValueSet nvs = null, byte[] data = null)
+            {
                 if (!IsEnabled)
                     return;
 
-                Item item = new Item() { MesgStr = str };
+                Item item = new Item() { MesgStr = str, NVS = nvs, Data = data, SeqNum = staticItemSeqNumGen.Increment() };
 
                 using (new ScopedLock(EmittedItemListMutex))
                 {
@@ -1901,19 +1909,36 @@ namespace MosaicLib
             /// </summary>
             public List<Item> EmittedItemList { get; private set; }
 
+            /// <summary>Clears the contents of the EmittedItemList.  Threadsafe if non-null <see cref="EmittedItemListMutex"/> has been provided.</summary>
+            public void Clear() { using (new ScopedLock(EmittedItemListMutex)) { EmittedItemList.Clear(); } }
+
+            /// <summary>Captures and returns an array of the Items that are currently in the.  Threadsafe if non-null <see cref="EmittedItemListMutex"/> has been provided.</summary>
+            public Item[] EmitterItemArray { get { using (new ScopedLock(EmittedItemListMutex)) { return EmittedItemList.ToArray(); } } }
+
             /// <summary>
             /// Returns an IEnumerable that produces the set of MesgStrs from each of the items that are currently in the list
             /// </summary>
-            public IEnumerable<string> EmittedMesgStrs { get { return EmittedItemList.Select(item => item.MesgStr); } }
+            public IEnumerable<string> EmittedMesgStrs { get { return EmitterItemArray.Select(item => item.MesgStr); } }
 
             /// <summary>Optional: If this object is assigned a non-null value it will be used as a mutex when internally accessing the EmittedItemList to append items to it.</summary>
             public object EmittedItemListMutex { get; set; }
+
+            private static AtomicUInt64 staticItemSeqNumGen = new AtomicUInt64();
 
             /// <summary>This is the container object used for emitted items.  It consists of a MesgStr and a, possibly null, StackFrame.</summary>
             public class Item
             {
                 /// <summary>Returns the emitted Message String for this Item</summary>
                 public String MesgStr { get; internal set; }
+
+                /// <summary>Returns the emitted NVS for this Item (may be null)</summary>
+                public INamedValueSet NVS { get; internal set; }
+
+                /// <summary>Returns the emitted Data for this Item (may be null)</summary>
+                public byte [] Data { get; internal set; }
+
+                /// <summary>Returns the sequence number assigned to this item.</summary>
+                public ulong SeqNum { get; internal set; }
 
                 /// <summary>Returns the collected StackFrame for this Item or null if no frame was acquired.</summary>
                 [Obsolete("Support for recording stack frame during logging has been removed.  Use of this property is no longer supported. (2017-07-21)")]
@@ -1922,7 +1947,19 @@ namespace MosaicLib
                 /// <summary>Generates a printable version of the contained MesgStr (and StackFrame if included) contents</summary>
                 public override string ToString()
                 {
-                    return MesgStr ?? String.Empty;
+                    StringBuilder sb = new StringBuilder();
+
+                    sb.CheckedAppendFormat("MesgStr:[{0}]", MesgStr.GenerateSquareBracketEscapedVersion());
+
+                    if (NVS != null)
+                        sb.CheckedAppendFormat(" {0}", NVS.ToStringSML());
+
+                    if (Data != null)
+                        sb.CheckedAppendFormat(" Data:[{0}]", ByteArrayTranscoders.HexStringTranscoder.Encode(Data));
+
+                    sb.CheckedAppendFormat(" SeqNum:{0}", SeqNum);
+
+                    return sb.ToString();
                 }
             }
         }

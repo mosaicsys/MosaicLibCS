@@ -50,13 +50,13 @@ namespace MosaicLib.Modular.Action
         }
 
         /// <summary>Copy Constructor:  Creates a new instance from the given <paramref name="other"/> that contains copies of the contained MesgType values.</summary>
-        public ActionLoggingConfig(ActionLoggingConfig other) 
+        public ActionLoggingConfig(ActionLoggingConfig other, Logging.MesgType ? doneMesgType = null, Logging.MesgType ? errorMesgType = null, Logging.MesgType ? stateMesgType = null, Logging.MesgType ? updateMesgType = null, ActionLoggingStyleSelect ? actionLoggingStyleSelect = null) 
         {
-            DoneMesgType = other.DoneMesgType;
-            ErrorMesgType = other.ErrorMesgType;
-            StateMesgType = other.StateMesgType;
-            UpdateMesgType = other.UpdateMesgType;
-            ActionLoggingStyleSelect = other.ActionLoggingStyleSelect;
+            DoneMesgType = doneMesgType ?? other.DoneMesgType;
+            ErrorMesgType = errorMesgType ?? other.ErrorMesgType;
+            StateMesgType = stateMesgType ?? other.StateMesgType;
+            UpdateMesgType = updateMesgType ?? other.UpdateMesgType;
+            ActionLoggingStyleSelect = actionLoggingStyleSelect ?? other.ActionLoggingStyleSelect;
         }
 
         /// <summary>Gives the Logging.MesgType that is to be used for successfull Action Completion messages.</summary>
@@ -581,16 +581,18 @@ namespace MosaicLib.Modular.Action
             string description = logging.ActionDescription;
             bool useNewStyle = ((logging.Config.ActionLoggingStyleSelect & ActionLoggingStyleSelect.OldXmlishStyle) == 0);
 
-            if (useNewStyle)
+            if (emitter.IsEnabled)
             {
-                if (emitter.IsEnabled)
+                if (useNewStyle)
+                {
                     emitter.EmitWith("Action '{0}': NVS updated [state:{1}]".CheckedFormat(logging, state), nvs);
-            }
-            else
-            {
-                string nvls = ((nvs != null) ? nvs.ToString() : "");
+                }
+                else
+                {
+                    string nvls = ((nvs != null) ? nvs.ToString() : "");
 
-                emitter.Emit("<ActionNamedValueListUpdate id='{0}' state='{1}'>{2}</ActionNamedValueListUpdate>", logging, state, nvls);
+                    emitter.Emit("<ActionNamedValueListUpdate id='{0}' state='{1}'>{2}</ActionNamedValueListUpdate>", logging, state, nvls);
+                }
             }
         }
 
@@ -660,7 +662,7 @@ namespace MosaicLib.Modular.Action
         public void SetStateComplete(string rc, ActionLogging logging, bool updateNVL, Common.INamedValueSet namedValueSet)
 		{
 			ActionStateCode entryASC = stateCode;
-			bool isError = !String.IsNullOrEmpty(rc);
+			bool isError = !rc.IsNullOrEmpty();
 
 			// normal transition is from Issued to Complete.
 			//	also accept transition from Ready or Started to Complete if we are given a non-null resultCode
@@ -755,7 +757,10 @@ namespace MosaicLib.Modular.Action
 		void CompleteRequest(string resultCode, ResultType resultValue);
 	}
 
-	/// <summary>Action Method Delegate for a simple synchronous method that returns the string result code which is then used to complete the action.</summary>
+	/// <summary>
+    /// Action Method Delegate for a simple synchronous method that returns the string result code which is then used to complete the action.
+    /// <para/>Note: unlike the ActionMethodDelegateActionArgStrResult and the FullActionMethodDelegate, if this delegate returns null it indicates that the action is complete.
+    /// </summary>
 	/// <returns>string result code.  null or string.Empty indicates that the caller must complete the action successfully, any other value is a fault code and indicates that the caller must mark the action has failed.</returns>
 	public delegate string ActionMethodDelegateStrResult();
 
@@ -1371,7 +1376,7 @@ namespace MosaicLib.Modular.Action
             string description = logging.ActionDescription;
 
             if (useNewStyle)
-                logging.Error.Emit("Action '{0}': Event [state:{1}, {2}]", description, actionStateCode, eventStr);
+                logging.State.Emit("Action '{0}': Event [state:{1}, {2}]", description, actionStateCode, eventStr);
             else
                 logging.State.Emit("<ActionEvent id='{0}' state='{1}'>{2}</ActionEvent>", description, actionStateCode, eventStr); 
 		}
