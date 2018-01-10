@@ -33,6 +33,7 @@ using MosaicLib.Modular.Interconnect.Values.Attributes;
 using MosaicLib.Modular.Part;
 using MosaicLib.Time;
 using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
 
 namespace MosaicLib.PartsLib.Scan.ScanEngine
 {
@@ -89,7 +90,7 @@ namespace MosaicLib.PartsLib.Scan.ScanEngine
             set { double period = value.TotalSeconds; NominalRateInHz = (period > 0.0 ? 1.0/period : 0.0); }
         }
 
-        public IList<IScanEnginePlugin> PluginsToAddList { get { return _pluginsToAddList; } set { _pluginsToAddList = new List<IScanEnginePlugin>(value).AsReadOnly(); } }
+        public IList<IScanEnginePlugin> PluginsToAddList { get { return _pluginsToAddList; } set { _pluginsToAddList = new ReadOnlyIList<IScanEnginePlugin>(value); } }
         private IList<IScanEnginePlugin> _pluginsToAddList;
 
         public IEnumerable<IScanEnginePlugin> PluginsToAddSet { get { return _pluginsToAddSet ?? _pluginsToAddList ?? emptyPluginArray; } set { _pluginsToAddSet = value; } }

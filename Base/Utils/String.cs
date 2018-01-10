@@ -27,6 +27,7 @@ using System.Runtime.Serialization;
 using System.Text;
 
 using MosaicLib.Modular.Common;
+using MosaicLib.Utils.Collections;
 
 namespace MosaicLib.Utils
 {
@@ -204,7 +205,7 @@ namespace MosaicLib.Utils
             return s.GenerateEscapedVersion(jsonForceEscapeCharList, escapeChar: escapeChar);
         }
 
-        private static readonly IList<char> jsonForceEscapeCharList = new List<char>() { '\"' }.AsReadOnly();
+        private static readonly IList<char> jsonForceEscapeCharList = new ReadOnlyIList<char>(new [] { '\"' });
 
         /// <summary>
         /// Generate and return a escaped version of given string s that is suitable for logging.
@@ -230,7 +231,7 @@ namespace MosaicLib.Utils
             return s.GenerateEscapedVersion(quotesForceEscapeCharList, applyBasicAsciiBasedEscaping: applyBasicAsciiBasedEscaping, escapeChar: escapeChar);
         }
 
-        private static readonly IList<char> quotesForceEscapeCharList = new List<char>() { '\'', '\"' }.AsReadOnly();
+        private static readonly IList<char> quotesForceEscapeCharList = new ReadOnlyIList<char>(new [] { '\'', '\"' });
 
         /// <summary>
         /// Generate and return a Square Bracket escaped version of given string s.
@@ -244,7 +245,7 @@ namespace MosaicLib.Utils
             return s.GenerateEscapedVersion(squareBracketForceEscapeCharList, applyBasicAsciiBasedEscaping: applyBasicAsciiBasedEscaping, escapeChar: escapeChar);
         }
 
-        private static readonly IList<char> squareBracketForceEscapeCharList = new List<char>() { '[', ']' }.AsReadOnly();
+        private static readonly IList<char> squareBracketForceEscapeCharList = new ReadOnlyIList<char>(new [] { '[', ']' });
 
 
         /// <summary>
@@ -946,10 +947,10 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Attempts to conver the given <paramref name="formattable"/> instance into a string, making use of any optionally provided <paramref name="formatProvider"/>, by calling the appropriate ToString method signature.
-        /// If this ToString call throws an exception then this method will return a string that indicates that an excpetion was encountered and which includes the excpetion type, its message, and its stack trace.
+        /// Attempts to convert the given <paramref name="formattable"/> instance into a string, making use of any optionally provided <paramref name="formatProvider"/>, by calling the appropriate ToString method signature.
+        /// If this ToString call throws an exception then this method will return a string that indicates that an excpetion was encountered and which includes the excpetion type, its message, and its stack trace  (details depend on <paramref name="caughtExceptionToStringFormat"/>).
         /// </summary>
-        public static string SafeToString(this IFormattable formattable, string format, IFormatProvider formatProvider = null, string mapNullTo = "", ExceptionFormat caughtExceptionToStringFormat = (ExceptionFormat.TypeAndMessage | ExceptionFormat.IncludeStackTrace))
+        public static string SafeToString(this IFormattable formattable, string format = null, IFormatProvider formatProvider = null, string mapNullTo = "", ExceptionFormat caughtExceptionToStringFormat = (ExceptionFormat.TypeAndMessage | ExceptionFormat.IncludeStackTrace))
         {
             try
             {
@@ -962,10 +963,29 @@ namespace MosaicLib.Utils
             }
             catch (System.Exception ex)
             {
-                if (formatProvider == null)
-                    return "Formattable.ToString('{0}') generated exception: {1}".CheckedFormat(format, ex.ToString(caughtExceptionToStringFormat));
+                if (format == null && formatProvider == null)
+                    return "formattable.ToString() generated exception: {0}".CheckedFormat(ex.ToString(caughtExceptionToStringFormat));
+                else if (formatProvider == null)
+                    return "formattable.ToString('{0}') generated exception: {1}".CheckedFormat(format, ex.ToString(caughtExceptionToStringFormat));
                 else
-                    return "Formattable.ToString('{0}', fp) generated exception: {1}".CheckedFormat(format, ex.ToString(caughtExceptionToStringFormat));
+                    return "formattable.ToString('{0}', fp) generated exception: {1}".CheckedFormat(format, ex.ToString(caughtExceptionToStringFormat));
+            }
+        }
+
+        /// <summary>
+        /// Attempts to invoke the given <paramref name="stringDelegate"/> instance to produce a string.
+        /// If the given <paramref name="stringDelegate"/> is null then this method returns <paramref name="mapNullTo"/> in its place.
+        /// If the delegate throws then this method will return a string that indicates that an excpetion was encountered and which includes the excpetion type, its message, and its stack trace (details depend on <paramref name="caughtExceptionToStringFormat"/>).
+        /// </summary>
+        public static string SafeToString(this Func<string> stringDelegate, string mapNullTo = "", ExceptionFormat caughtExceptionToStringFormat = (ExceptionFormat.TypeAndMessage | ExceptionFormat.IncludeStackTrace))
+        {
+            try
+            {
+                return ((stringDelegate != null) ? stringDelegate() : mapNullTo);
+            }
+            catch (System.Exception ex)
+            {
+                return "stringDelegate() generated exception: {0}".CheckedFormat(ex.ToString(caughtExceptionToStringFormat));
             }
         }
 
@@ -992,8 +1012,8 @@ namespace MosaicLib.Utils
             public MatchRuleSet(IEnumerable<MatchRule> rules) : base(rules ?? emptyMatchRuleArray) { }
 
             /// <summary>
-            /// copy constructor - makes a deep clone of the given rhs value.
-            /// if the rhs value is null then this converts the null either to None, or Any based on the value of the <paramref name="convertNullToAny"/> parameter (true -> any, false -> None)
+            /// copy constructor - makes a deep clone of the given <paramref name="other"/> value.
+            /// if the <paramref name="other"/> value is null then this converts the null either to None, or Any based on the value of the <paramref name="convertNullToAny"/> parameter (true -> any, false -> None)
             /// <param name="other">Gives the MatchRuleSet of which a copy is to be made.  If null is provided then this method uses the <paramref name="convertNullToAny"/> parameter to determine the constructor's behavior</param>
             /// <param name="convertNullToAny">When <paramref name="other"/> is given as null, this parameter determines if the copy constructor maps the null to Any (true) or None (false).  Default value is false (None)</param>
             /// </summary>
@@ -1163,12 +1183,12 @@ namespace MosaicLib.Utils
 
             /// <summary>
             /// Copy constructor.
-            /// <exception cref="System.ArgumentException">Thrown if MatchType is Regex and the rhs's RuleString is not a valid regular expression.</exception>
+            /// <exception cref="System.ArgumentException">Thrown if MatchType is Regex and the <paramref name="other"/>'s RuleString is not a valid regular expression.</exception>
             /// </summary>
-            public MatchRule(MatchRule rhs)
+            public MatchRule(MatchRule other)
             {
-                MatchType = rhs.MatchType;
-                RuleString = rhs.RuleString;
+                MatchType = other.MatchType;
+                RuleString = other.RuleString;
                 BuildRegexIfNeeded();
             }
 
@@ -1198,7 +1218,7 @@ namespace MosaicLib.Utils
             /// Prefix checks if testString StartsWith the RuleString, Suffix tests if testString EndsWith RuleString, 
             /// Contains tests if testString Contains RuleString, and Regex tests if RuleString as regular expression IsMatch of testString.
             /// </summary>
-            /// <exception cref="System.ArgumentException">May be thrown if MatchType is Regex and the rhs's RuleString is not a valid regular expression.</exception>
+            /// <exception cref="System.ArgumentException">May be thrown if MatchType is Regex and this item's RuleString is not a valid regular expression.</exception>
             public bool Matches(String testString)
             {
                 testString = testString ?? String.Empty;

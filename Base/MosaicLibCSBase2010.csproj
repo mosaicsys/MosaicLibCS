@@ -122,6 +122,7 @@
     <Compile Include="Utils\Enums.cs" />
     <Compile Include="Utils\ErrorCodeUtils.cs" />
     <Compile Include="Utils\ExtensionMethods.cs" />
+    <Compile Include="Utils\Interlocks.cs" />
     <Compile Include="Utils\Notification.cs" />
     <Compile Include="Utils\ObjID.cs" />
     <Compile Include="Utils\ParseUtils.cs" />

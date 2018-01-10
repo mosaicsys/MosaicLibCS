@@ -30,6 +30,7 @@ using System.Text;
 
 using MosaicLib.Modular.Common;
 using MosaicLib.Time;
+using MosaicLib.Utils.Collections;
 
 namespace MosaicLib.Utils
 {
@@ -80,7 +81,7 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        #region Array (and some IList) access extension methods
+        #region Array, IList, List and String access extension methods (IsSafeIndex, SafeAccess, SafeSubArray, SafePut, SafeLast, SafeCopyFrom)
 
         /// <summary>
         /// Extension method accepts given <paramref name="array"/> and <paramref name="testIndex"/> and returns true if the <paramref name="array"/> is non-null and the <paramref name="testIndex"/> is >= 0 and less than the <paramref name="array"/>.Length
@@ -231,7 +232,7 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        #region Other Array, IList, IEnumerable related extension methods
+        #region Other Array, IList, List, IEnumerable related extension methods (IsNullOrEmpty, IsEmpty, MapNullToEmpty, SafeLength, SafeCount, SetAll, Clear, SafeAccess, SafeToArray, SafeTakeFirst, SafeTakeLast, SafeAddSet, SafeAddItems)
 
         /// <summary>
         /// Extension method returns true if the given array is null or its Length is zero.
@@ -279,6 +280,22 @@ namespace MosaicLib.Utils
         public static bool IsEmpty(this IEnumerable ien)
         {
             return ((ien == null) || (ien.GetEnumerator().MoveNext() == false));
+        }
+
+        /// <summary>
+        /// Extension method either returns the given <paramref name="listIn"/> (if it is not null) or returns a new empty List{TItemType} if the given <paramref name="listIn"/> is null.
+        /// </summary>
+        public static List<TItemType> MapNullToEmpty<TItemType>(this List<TItemType> listIn)
+        {
+            return listIn ?? new List<TItemType>();
+        }
+
+        /// <summary>
+        /// Extension method either returns the given <paramref name="iListIn"/> (if it is not null) or returns a new empty List{TItemType} if the given <paramref name="iListIn"/> is null.
+        /// </summary>
+        public static IList<TItemType> MapNullToEmpty<TItemType>(this IList<TItemType> iListIn)
+        {
+            return iListIn ?? new List<TItemType>();
         }
 
         /// <summary>
@@ -340,14 +357,27 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Extension method "safe" version of ToArray method.  If the given collection/set is non-null then this method returns the Linq ToArray method applied to the collection.
-        /// If the collection/set is null and the given fallbackArray is non-null then this method returns the fallbackArray.
-        /// If the collection/set and the fallbackArray values are null then this creates and returns an empty array of the given ItemType (mapNullToEmpty is true) or null (mapNullToEmpty is false)
+        /// Extension method "safe" version of ToArray method.  If the given <paramref name="set"/> is non-null then this method returns the Linq ToArray method applied to the <paramref name="set"/>.
+        /// If the <paramref name="set"/> is null and the given <paramref name="fallbackArray"/> is non-null then this method returns the <paramref name="fallbackArray"/>.
+        /// If the <paramref name="set"/> and the <paramref name="fallbackArray"/> values are null then this creates and returns an empty array of the given ItemType (<paramref name="mapNullToEmpty"/> is true) or null (<paramref name="mapNullToEmpty"/> is false)
         /// </summary>
         public static ItemType[] SafeToArray<ItemType>(this IEnumerable<ItemType> set, ItemType[] fallbackArray = null, bool mapNullToEmpty = true)
         {
             if (set != null)
                 return set.ToArray();
+
+            return fallbackArray ?? (mapNullToEmpty ? new ItemType[0] : null);
+        }
+
+        /// <summary>
+        /// Extension method "safe" version of ToArray method.  If the given <paramref name="collection"/> is non-null then this method returns the Linq ToArray method applied to the <paramref name="collection"/>.
+        /// If the <paramref name="collection"/> is null and the given <paramref name="fallbackArray"/> is non-null then this method returns the <paramref name="fallbackArray"/>.
+        /// If the <paramref name="collection"/> and the <paramref name="fallbackArray"/> values are null then this creates and returns an empty array of the given ItemType (<paramref name="mapNullToEmpty"/> is true) or null (<paramref name="mapNullToEmpty"/> is false)
+        /// </summary>
+        public static ItemType[] SafeToArray<ItemType>(this ICollection<ItemType> collection, ItemType[] fallbackArray = null, bool mapNullToEmpty = true)
+        {
+            if (collection != null && (collection.Count > 0 || fallbackArray == null || fallbackArray.Length != 0))
+                return collection.ToArray();
 
             return fallbackArray ?? (mapNullToEmpty ? new ItemType[0] : null);
         }
@@ -429,23 +459,37 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Extension method to add a set of items (from an enumerable source) to the given list
+        /// Extension method to add a set of items (from an enumerable source) to the given <paramref name="list"/>.  
+        /// If createListIfNeeded is true, <paramref name="list"/> is null and <paramref name="itemSet"/> is non-empty then this method will construct a new list to contain the itemSet items which will be returned.
+        /// <para/>Supports call chaining.
         /// </summary>
-        public static List<ItemType> SafeAddSet<ItemType>(this List<ItemType> list, IEnumerable<ItemType> itemSet)
+        public static List<ItemType> SafeAddSet<ItemType>(this List<ItemType> list, IEnumerable<ItemType> itemSet, bool createListIfNeeded = true)
         {
-            if (list != null && itemSet != null)
-                list.AddRange(itemSet);
+            if (!itemSet.IsNullOrEmpty())
+            {
+                if (list != null)
+                    list.AddRange(itemSet);
+                else if (createListIfNeeded)
+                    list = new List<ItemType>(itemSet);
+            }
 
             return list;
         }
 
         /// <summary>
-        /// Extension method to add a group of items (params parameter) to a given list)
+        /// Extension method to add a group of items (params parameter) to a given <paramref name="list"/>)
+        /// If <paramref name="list"/> is null and <paramref name="itemsArray"/> is non-empty then this method will construct a new list to contain the itemSet items which will be returned.
+        /// <para/>Supports call chaining.
         /// </summary>
         public static List<ItemType> SafeAddItems<ItemType>(this List<ItemType> list, params ItemType[] itemsArray)
         {
-            if (list != null && !itemsArray.IsEmpty())
-                list.AddRange(itemsArray);
+            if (!itemsArray.IsNullOrEmpty())
+            {
+                if (list != null)
+                    list.AddRange(itemsArray);
+                else
+                    list = new List<ItemType>(itemsArray);
+            }
 
             return list;
         }
@@ -461,6 +505,31 @@ namespace MosaicLib.Utils
             }
 
             return list;
+        }
+
+        #endregion
+
+        #region IList methods (ConvertToReadOnly, ConvertToWriteable)
+
+        /// <summary>
+        /// Extension method either returns the given <paramref name="iListIn"/> (if it is alread a ReadOnlyIList instance) or returns a new ReadOnlyIList{TItemType} if the given <paramref name="iListIn"/>, or null if the given <paramref name="iListIn"/> is null and <paramref name="mapNullToEmpty"/> is false.
+        /// </summary>
+        public static IList<TItemType> ConvertToReadOnly<TItemType>(this IList<TItemType> iListIn, bool mapNullToEmpty = true)
+        {
+            ReadOnlyIList<TItemType> roIList = iListIn as ReadOnlyIList<TItemType>;
+
+            return roIList ?? ((iListIn != null || mapNullToEmpty) ? new ReadOnlyIList<TItemType>(iListIn) : null);
+        }
+
+        /// <summary>
+        /// Extension method either returns the given <paramref name="iListIn"/> (if it is not IsReadOnly) or returns a new List{TItemType} if the given <paramref name="iListIn"/> is non-empty, or null if the given <paramref name="iListIn"/> is null and <paramref name="mapNullToEmpty"/> is false.
+        /// </summary>
+        public static IList<TItemType> ConvertToWritable<TItemType>(this IList<TItemType> iListIn, bool mapNullToEmpty = true)
+        {
+            if (iListIn != null)
+                return !iListIn.IsReadOnly ? iListIn : new List<TItemType>(iListIn);
+            else
+                return mapNullToEmpty ? new List<TItemType>() : null;
         }
 
         #endregion
@@ -1226,7 +1295,7 @@ namespace MosaicLib.Utils
                 if (exceptionFormat.IsSet(ExceptionFormat.IncludeMessage) && !ex.Message.IsNullOrEmpty())
                     sb.AppendFormat(" Mesg:[{0}]", ex.Message.GenerateEscapedVersion(boxEscapeCharsList));
 
-                if (exceptionFormat.IsSet(ExceptionFormat.IncludeMessage) && !ex.Data.IsNullOrEmpty())
+                if (exceptionFormat.IsSet(ExceptionFormat.IncludeData) && !ex.Data.IsNullOrEmpty())
                 {
                     NamedValueSet nvs = new NamedValueSet().AddRange(ex.Data);
                     sb.AppendFormat(" Data:{0}", nvs.ToString(includeROorRW: false, treatNameWithEmptyVCAsKeyword: false));
@@ -1243,7 +1312,7 @@ namespace MosaicLib.Utils
             }
         }
 
-        private static readonly IList<char> boxEscapeCharsList = new List<char>() { '[', ']' }.AsReadOnly();
+        private static readonly IList<char> boxEscapeCharsList = new ReadOnlyIList<char>(new [] { '[', ']' });
 
         #endregion
     }

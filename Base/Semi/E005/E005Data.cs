@@ -26,8 +26,9 @@ using System.Linq;
 using System.Text;
 
 using MosaicLib;
-using MosaicLib.Utils;
 using MosaicLib.Modular.Common;
+using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
 
 namespace MosaicLib.Semi.E005.Data
 {
@@ -488,7 +489,7 @@ namespace MosaicLib.Semi.E005.Data
                 byteArrayBuilder.AppendWithIH(vcList[idx]);
         }
 
-        public static readonly IList<ValueContainer> emptyVCList = new List<ValueContainer>().AsReadOnly();
+        public static readonly IList<ValueContainer> emptyVCList = ReadOnlyIList<ValueContainer>.Empty;
 
         internal static void AppendWithIH<TItemType>(this List<byte> byteArrayBuilder, ItemFormatCode ifc, int itemSizeInBytes, TItemType[] itemArray) where TItemType : struct
         {
@@ -655,9 +656,9 @@ namespace MosaicLib.Semi.E005.Data
                 IList<ValueContainer> vcList = lhsVC.o as IList<ValueContainer> ?? emptyIListOfVC;
 
                 if ((vcList.Count != 0 || convertEmptyList) && vcList.All(vc => vc.cvt == ContainerStorageType.String))
-                    return new ValueContainer(new List<string>(vcList.Select(vc => (vc.o as String))).AsReadOnly() as IList<string>);
+                    return new ValueContainer(new ReadOnlyIList<string>(vcList.Select(vc => (vc.o as String))));
                 else if (deep)
-                    return new ValueContainer(new List<ValueContainer>(vcList.Select(vc => vc.Normalize(convertEmptyList, true))).AsReadOnly() as IList<ValueContainer>);
+                    return new ValueContainer(new ReadOnlyIList<ValueContainer>(vcList.Select(vc => vc.Normalize(convertEmptyList, true))));
             }
 
             return lhsVC;
@@ -771,8 +772,8 @@ namespace MosaicLib.Semi.E005.Data
             return ifc;
         }
 
-        private static readonly IList<string> emptyIListOfString = new List<string>().AsReadOnly();
-        private static readonly IList<ValueContainer> emptyIListOfVC = new List<ValueContainer>().AsReadOnly();
+        private static readonly IList<string> emptyIListOfString = ReadOnlyIList<string>.Empty;
+        private static readonly IList<ValueContainer> emptyIListOfVC = ReadOnlyIList<ValueContainer>.Empty;
 
         public static ValueContainer DecodeE005Data(this byte[] byteArray, ref int startIndex, ref string ec)
         {

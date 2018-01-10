@@ -37,6 +37,7 @@ using MosaicLib.PartsLib.Tools.MDRF.Common;
 using MosaicLib.Semi.E005.Data;
 using MosaicLib.Time;
 using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
 
 namespace MosaicLib.PartsLib.Tools.MDRF.Reader
 {
@@ -774,7 +775,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                                 LocalGroupInfo gi = new LocalGroupInfo(mdci)
                                 {
                                     FileIndexUserRowFlagBits = nvs["FileIndexUserRowFlagBits"].VC.GetValue<UInt64>(false),
-                                    GroupPointFileIDList = new List<int>(nvs["ItemList"].VC.GetValue<string>(false).MapNullToEmpty().Split(',').Select(s => new StringScanner(s).ParseValue<int>(0)).Where(clientID => clientID > 0)).AsReadOnly(),
+                                    GroupPointFileIDList = new ReadOnlyIList<int>(nvs["ItemList"].VC.GetValue<string>(false).MapNullToEmpty().Split(',').Select(s => new StringScanner(s).ParseValue<int>(0)).Where(clientID => clientID > 0)),
                                 };
                                 giList.Add(gi);
                                 giDictionary[gi.Name] = gi;
@@ -812,7 +813,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                                     return mddci as LocalGroupPointInfo;
                                 }).Where(gpi => gpi != null).ToArray();
 
-                gi.GroupPointInfoList = new List<IGroupPointInfo>(gpiArray).AsReadOnly();
+                gi.GroupPointInfoList = new ReadOnlyIList<IGroupPointInfo>(gpiArray);
                 gi.GroupPointInfoArray = gpiArray;
                 gi.GroupPointIVAArray = gpiArray.Select(gpi => gpi.IVA).ToArray();
             }
@@ -836,14 +837,14 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
         {
             public IValueAccessor IVA { get; set; }
 
-            public LocalGroupPointInfo(MetaDataCommonInfoBase rhs) : base(rhs) { }
+            public LocalGroupPointInfo(MetaDataCommonInfoBase other) : base(other) { }
         }
 
         private class LocalGroupInfo : GroupInfo
         {
             public IValueAccessor[] GroupPointIVAArray { get; set; }
 
-            public LocalGroupInfo(MetaDataCommonInfoBase rhs) : base(rhs) { }
+            public LocalGroupInfo(MetaDataCommonInfoBase other) : base(other) { }
         }
 
         #endregion

@@ -20,16 +20,17 @@
  */
 
 using System;
-using System.Linq;
+using System.Collections;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Linq;
 
 namespace MosaicLib.Utils
 {
-    //-------------------------------------------------
-    #region Notification related collections and Collections namespace
-
     namespace Collections
     {
+        #region LockedObjectListWithCachedArray
+
         /// <summary>
         /// Provides a thread safe container for storing a set of objects with a backing cached array for thread safe efficient atomic snapshot of the set contents.
         /// This object is intended to be used in the following cases:
@@ -196,6 +197,10 @@ namespace MosaicLib.Utils
             #endregion
         }
 
+        #endregion
+
+        #region SimpleLockedQueue
+
         /// <summary>
         /// Provides a simple, thread safe, queue for first-in first-out storage of items.  
         /// This object is based on the System.Collections.Generic.Queue object with a simplified API.  
@@ -334,7 +339,303 @@ namespace MosaicLib.Utils
             /// <summary>storage for the VolatileCount property.  Used as a local cached copy of the queue.Count value.</summary>
             private volatile int volatileCount = 0;
         }
+
+        #endregion
+
+        #region ReadOnlyIList
+
+        /// <summary>
+        /// This class is a local replacement for the System.Collections.ObjectModel.ReadOnlyCollection as the native one simply provides a read-only facade on the underlying mutable IList from which it is constructed.
+        /// <para/>Note: This object is intended as a utility storage class.  All interfaces are implemented explicitly so the caller can only make use of this object's contents by casting it to one of the supported interfaces.
+        /// </summary>
+        public class ReadOnlyIList<TItemType> : IList<TItemType>, ICollection<TItemType>, IEnumerable<TItemType>, IList, ICollection, IEnumerable
+        {
+            /// <summary>
+            /// Constructs the contents of this item based on the contents of the given <paramref name="sourceItemList"/>.  
+            /// If the given <paramref name="sourceItemList"/> is null then this method will be constructed as an empty list.
+            /// </summary>
+            public ReadOnlyIList(IList<TItemType> sourceItemList)
+            {
+                ReadOnlyIList<TItemType> sourceAaROIL = sourceItemList as ReadOnlyIList<TItemType>;
+
+                itemsArray = (sourceAaROIL != null) ? sourceAaROIL.itemsArray : sourceItemList.SafeToArray(fallbackArray: emptyArray);
+            }
+
+            /// <summary>
+            /// Constructs the contents of this item based on the contents of the given <paramref name="sourceItemCollection"/>.  
+            /// If the given <paramref name="sourceItemCollection"/> is null then this method will be constructed as an empty list.
+            /// </summary>
+            public ReadOnlyIList(ICollection<TItemType> sourceItemCollection = null)
+            {
+                ReadOnlyIList<TItemType> sourceAaROIL = sourceItemCollection as ReadOnlyIList<TItemType>;
+
+                itemsArray = (sourceAaROIL != null) ? sourceAaROIL.itemsArray : sourceItemCollection.SafeToArray(fallbackArray: emptyArray);
+            }
+
+            /// <summary>
+            /// Constructs the contents of this item based on the contents of the given <paramref name="sourceItemSet"/>.  
+            /// If the given <paramref name="sourceItemSet"/> is null then this method will be constructed as an empty list.
+            /// </summary>
+            public ReadOnlyIList(IEnumerable<TItemType> sourceItemSet)
+            {
+                ReadOnlyIList<TItemType> sourceAaROIL = sourceItemSet as ReadOnlyIList<TItemType>;
+
+                itemsArray = (sourceAaROIL != null) ? sourceAaROIL.itemsArray : sourceItemSet.SafeToArray(fallbackArray: emptyArray);
+            }
+
+            /// <summary>
+            /// Helper static getter - returns a singleton (static) empty ReadOnlyIList{TItemType}.
+            /// </summary>
+            public static ReadOnlyIList<TItemType> Empty { get { return _empty; } }
+            private static readonly ReadOnlyIList<TItemType> _empty = new ReadOnlyIList<TItemType>();
+
+            private TItemType[] itemsArray;
+            private static readonly TItemType[] emptyArray = new TItemType[0];
+            private ReadOnlyCollection<TItemType> _rocOfItems = null;
+
+            private ReadOnlyCollection<TItemType> ROCOfItems { get { return _rocOfItems = (_rocOfItems ?? new ReadOnlyCollection<TItemType>(itemsArray)); } }
+
+            int IList<TItemType>.IndexOf(TItemType item)
+            {
+                return ROCOfItems.IndexOf(item);
+            }
+
+            void IList<TItemType>.Insert(int index, TItemType item)
+            {
+                throw new System.NotSupportedException("{0}.{1} cannot be used.  collection is read-only".CheckedFormat(Fcns.CurrentClassLeafName, Fcns.CurrentMethodName));
+            }
+
+            void IList<TItemType>.RemoveAt(int index)
+            {
+                throw new System.NotSupportedException("{0}.{1} cannot be used.  collection is read-only".CheckedFormat(Fcns.CurrentClassLeafName, Fcns.CurrentMethodName));
+            }
+
+            TItemType IList<TItemType>.this[int index]
+            {
+                get
+                {
+                    return itemsArray[index];
+                }
+                set
+                {
+                    throw new System.NotSupportedException("{0}.{1} cannot be used.  collection is read-only".CheckedFormat(Fcns.CurrentClassLeafName, Fcns.CurrentMethodName));
+                }
+            }
+
+            void ICollection<TItemType>.Add(TItemType item)
+            {
+                throw new System.NotSupportedException("{0}.{1} cannot be used.  collection is read-only".CheckedFormat(Fcns.CurrentClassLeafName, Fcns.CurrentMethodName));
+            }
+
+            void ICollection<TItemType>.Clear()
+            {
+                throw new System.NotSupportedException("{0}.{1} cannot be used.  collection is read-only".CheckedFormat(Fcns.CurrentClassLeafName, Fcns.CurrentMethodName));
+            }
+
+            bool ICollection<TItemType>.Contains(TItemType item)
+            {
+                return ROCOfItems.Contains(item);
+            }
+
+            void ICollection<TItemType>.CopyTo(TItemType[] array, int arrayIndex)
+            {
+                ROCOfItems.CopyTo(array, arrayIndex);
+            }
+
+            int ICollection<TItemType>.Count
+            {
+                get { return itemsArray.Length; }
+            }
+
+            bool ICollection<TItemType>.IsReadOnly
+            {
+                get { return true; }
+            }
+
+            bool ICollection<TItemType>.Remove(TItemType item)
+            {
+                throw new System.NotSupportedException("{0}.{1} cannot be used.  collection is read-only".CheckedFormat(Fcns.CurrentClassLeafName, Fcns.CurrentMethodName));
+            }
+
+            IEnumerator<TItemType> IEnumerable<TItemType>.GetEnumerator()
+            {
+                return new ArrayEnumerator<TItemType>(itemsArray);
+            }
+
+            IEnumerator IEnumerable.GetEnumerator()
+            {
+                return new ArrayEnumerator<TItemType>(itemsArray);
+            }
+
+            int IList.Add(object value)
+            {
+                throw new System.NotSupportedException("{0}.{1} cannot be used.  collection is read-only".CheckedFormat(Fcns.CurrentClassLeafName, Fcns.CurrentMethodName));
+            }
+
+            void IList.Clear()
+            {
+                throw new System.NotSupportedException("{0}.{1} cannot be used.  collection is read-only".CheckedFormat(Fcns.CurrentClassLeafName, Fcns.CurrentMethodName));
+            }
+
+            bool IList.Contains(object value)
+            {
+                return (ROCOfItems as IList).Contains(value);
+            }
+
+            int IList.IndexOf(object value)
+            {
+                return (ROCOfItems as IList).IndexOf(value);
+            }
+
+            void IList.Insert(int index, object value)
+            {
+                throw new System.NotSupportedException("{0}.{1} cannot be used.  collection is read-only".CheckedFormat(Fcns.CurrentClassLeafName, Fcns.CurrentMethodName));
+            }
+
+            bool IList.IsFixedSize
+            {
+                get { return true; }
+            }
+
+            bool IList.IsReadOnly
+            {
+                get { return true; }
+            }
+
+            void IList.Remove(object value)
+            {
+                throw new System.NotSupportedException("{0}.{1} cannot be used.  collection is read-only".CheckedFormat(Fcns.CurrentClassLeafName, Fcns.CurrentMethodName));
+            }
+
+            void IList.RemoveAt(int index)
+            {
+                throw new NotImplementedException();
+            }
+
+            object IList.this[int index]
+            {
+                get
+                {
+                    return itemsArray[index];
+                }
+                set
+                {
+                    throw new System.NotSupportedException("{0}.{1} cannot be used.  collection is read-only".CheckedFormat(Fcns.CurrentClassLeafName, Fcns.CurrentMethodName));
+                }
+            }
+
+            void ICollection.CopyTo(Array array, int index)
+            {
+                (ROCOfItems as IList).CopyTo(array, index);
+            }
+
+            int ICollection.Count
+            {
+                get { return itemsArray.Length; }
+            }
+
+            bool ICollection.IsSynchronized
+            {
+                get { return false; }
+            }
+
+            object ICollection.SyncRoot
+            {
+                get { return null; }
+            }
+        }
+
+        /// <summary>
+        /// IEnumerator{TItemType} struct that supports enumerating through an array.
+        /// </summary>
+        public struct ArrayEnumerator<TItemType> : IEnumerator<TItemType>, IDisposable, IEnumerator
+        {
+            public ArrayEnumerator(TItemType[] array)
+            {
+                this.array = array;
+                this.arrayLength = array.SafeLength();
+                this.index = 0;
+                this.current = default(TItemType);
+            }
+
+            private TItemType[] array;
+            private int arrayLength;
+
+            /// <summary>
+            /// Gives the index of the "next" element.  
+            /// This value is zero (no current element yet) until the first MoveNext call is made at which point it is 1 and indicates that the current element came from array[0] in the array.
+            /// Then it advances until index >= arrayLength + 1 which indicates that the current element would be found after the end of the array (since array[arrayLength] is not valid index). 
+            /// </summary>
+            private int index;
+
+            private TItemType current;
+
+            /// <summary>Gets the element at the enumerator's current "position".  Will return default({TItemType}) if there is no current element.</summary>
+            public TItemType Current
+            {
+                get
+                {
+                    return this.current;
+                }
+            }
+
+            /// <summary>Gets the element at the enumerator's current "position".  Throws System.InvalidOperationExcpetion if the enumerator is positioned before the first element of the array or if it is positioned after the last element of the array.</summary>
+            /// <exception cref="System.InvalidOperationException">The enumerator is positioned before the first element of the array or if it is positioned after the last element of the array.</exception>
+            object IEnumerator.Current
+            {
+                get
+                {
+                    if (index <= 0 || index >= arrayLength + 1)
+                    {
+                        throw new System.InvalidOperationException("The enumerator is positioned before the first element of the array or after the last element");
+                    }
+
+                    return this.Current;
+                }
+            }
+
+            /// <summary>Releases all resources used by this enumerator (currently this is a no-op).</summary>
+            public void Dispose()
+            {
+            }
+
+            /// <summary>Advances the enumerator's position.  On the first call to this method the position is advanced to the first element.  After the enumerable contents have been used up the position is advanced to one after the last element.  Returns true if the current position is valid (aka the enumerator has not run off the end of the array)</summary>
+            public bool MoveNext()
+            {
+                if (index < arrayLength)
+                {
+                    current = array[index];
+                    index++;
+
+                    return true;
+                }
+
+                return MoveNextRare();
+            }
+
+            /// <summary>Inline code optimization that is used to handle the case where the normal MoveNext falls off the end of the array.</summary>
+            private bool MoveNextRare()
+            {
+                index = arrayLength + 1;
+                current = default(TItemType);
+
+                return false;
+            }
+
+            /// <summary>Sets the enumerator to its initial position (one before the first element of the collection).</summary>
+            void IEnumerator.Reset()
+            {
+                index = 0;
+                current = default(TItemType);
+            }
+        }
+
+        #endregion
     }
+
+    //-------------------------------------------------
+
+    #region Obsolete LockedObjectListWithCachedArray and LockedDelegateListBase variants that are still being retained outside of the Collections sub-namespace
 
     /// <summary>
     /// Please replace current use with the equivalent, relocated, MosaicLib.Utils.Collections.LockedObjectListWithCachedArray class

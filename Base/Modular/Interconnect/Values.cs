@@ -2607,10 +2607,12 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <param name="baseNames">
         /// Gives a list of 1 or more base names that are prepended to specific sub-sets of the list of item names based on each item's NameAdjust attribute property value.
         /// </param>
-        public IValueSetAdapter Setup(params string[] baseNames)
+        public DelegateValueSetAdapter Setup(params string[] baseNames)
         {
             return Setup(null, baseNames);
         }
+
+        IValueSetAdapter IValueSetAdapter.Setup(params string[] baseNames) { return this.Setup(baseNames); }
 
         /// <summary>
         /// This method determines the set of full IVA Names from the added DelegateItemSpec items, and creates a set of IVA objects for them.
@@ -2622,7 +2624,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <param name="baseNames">
         /// Gives a list of 1 or more base names that are prepended to specific sub-sets of the list of item names based on each item's NameAdjust attribute property value.
         /// </param>
-        public IValueSetAdapter Setup(IValuesInterconnection ivi, params string[] baseNames)
+        public DelegateValueSetAdapter Setup(IValuesInterconnection ivi, params string[] baseNames)
         {
             if (ivi != null || IVI == null)
                 IVI = ivi;
@@ -2649,6 +2651,8 @@ namespace MosaicLib.Modular.Interconnect.Values
             return this;
         }
 
+        IValueSetAdapter IValueSetAdapter.Setup(IValuesInterconnection ivi, params string[] baseNames) { return this.Setup(ivi, baseNames); }
+
         IDelegateIVAItem[] setSpecificDelegateIVAItemArray;
         IDelegateIVAItem[] updateSpecificDelegateIVAItemArray;
 
@@ -2662,7 +2666,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// to Set all of the IValueAccessors.
         /// <para/>Supports call chaining.
         /// </summary>
-        public IValueSetAdapter Set()
+        public DelegateValueSetAdapter Set()
         {
             TransferValuesToIVAs();
 
@@ -2670,6 +2674,8 @@ namespace MosaicLib.Modular.Interconnect.Values
 
             return this;
         }
+
+        IValueSetAdapter IValueSetAdapter.Set() { return this.Set(); }
 
         /// <summary>
         /// This property determines if the Set method uses ValueContainer equality testing to determine which IValueAccessor objects to actually write to the table.
@@ -2690,7 +2696,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// from those accessor objects to the corresponding setter delegates.
         /// <para/>Supports call chaining.
         /// </summary>
-        public IValueSetAdapter Update()
+        public DelegateValueSetAdapter Update()
         {
             IVI.Update(updateSpecificIvaArray, numEntriesToUpdate: updateSpecificIvaArrayLength);
 
@@ -2698,6 +2704,8 @@ namespace MosaicLib.Modular.Interconnect.Values
 
             return this;
         }
+
+        IValueSetAdapter IValueSetAdapter.Update() { return this.Update(); }
 
         /// <summary>
         /// Gives the caller access to the set of IValueAccessors that have been created by this adatper and which are used to interact with the corresponding IVI

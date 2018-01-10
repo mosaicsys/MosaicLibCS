@@ -926,15 +926,14 @@ namespace MosaicLib.Modular.Action
         /// </summary>
         protected void CaptureClientNamedParamValues()
         {
-            if (clientNamedParamValues != null)
-            {
-                providerNamedParamValues = clientNamedParamValues.ConvertToReadOnly();
-                EmitActionEvent(Utils.Fcns.CheckedFormat("NamedParamValues has been set to '{0}' by Start", providerNamedParamValues), actionState.StateCode);
-            }
-            else
-            {
-                providerNamedParamValues = null;
-            }
+            INamedValueSet entryProviderNPV = providerNamedParamValues;
+
+            providerNamedParamValues = clientNamedParamValues.ConvertToReadOnly(mapNullToEmpty: false);
+ 
+            if (providerNamedParamValues != null)
+                EmitActionEvent("NamedParamValues have been captured", actionState.StateCode, nvs: providerNamedParamValues);
+            else if (entryProviderNPV != null)
+                EmitActionEvent("NamedParamValues have been cleared", actionState.StateCode);
         }
 
         /// <summary>Starts the action if it is in an Idle state and return string.Empty or returns an error message if the action is not in a state from which it can be started.</summary>
@@ -1370,15 +1369,17 @@ namespace MosaicLib.Modular.Action
         /// Protected common method used to generate and emit consistently formatted ActionEvent records
         /// <para/>{ActionEvent id="{0}" state="{1}"}{2}{/ActionEvent}
         /// </summary>
-		protected void EmitActionEvent(string eventStr, ActionStateCode actionStateCode) 
+		protected void EmitActionEvent(string eventStr, ActionStateCode actionStateCode, INamedValueSet nvs = null) 
 		{
             bool useNewStyle = ((logging.Config.ActionLoggingStyleSelect & ActionLoggingStyleSelect.OldXmlishStyle) == 0);
             string description = logging.ActionDescription;
 
+            string nvsStr = (nvs.IsNullOrEmpty() ? "" : " {0}".CheckedFormat(nvs.ToStringSML()));
+
             if (useNewStyle)
-                logging.State.Emit("Action '{0}': Event [state:{1}, {2}]", description, actionStateCode, eventStr);
+                logging.State.Emit("Action '{0}': Event [state:{1}, {2}{3}]", description, actionStateCode, eventStr, nvsStr);
             else
-                logging.State.Emit("<ActionEvent id='{0}' state='{1}'>{2}</ActionEvent>", description, actionStateCode, eventStr); 
+                logging.State.Emit("<ActionEvent id='{0}' state='{1}'>{2}{3}</ActionEvent>", description, actionStateCode, eventStr, nvsStr); 
 		}
 
         /// <summary>

@@ -37,6 +37,7 @@ using MosaicLib.Semi;
 using MosaicLib.Semi.E039.Details;
 using MosaicLib.Time;
 using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
 using MosaicLib.Utils.StringMatching;
 
 namespace MosaicLib.Semi.E039
@@ -765,9 +766,9 @@ namespace MosaicLib.Semi.E039
         private IList<E039Link> _linksFromOtherObjectsList = null;
 
         [DataMember(Name = "LinksOut", Order = 400, IsRequired = false, EmitDefaultValue = false)]
-        private List<E039Link> SerializationHelperForLinksToOtherObjectsList { get { return (_linksToOtherObjectsList == null ? null : new List<E039Link>(_linksToOtherObjectsList)); } set { _linksToOtherObjectsList = (value != null && value.Count > 0) ? value.AsReadOnly() : null; } }
+        private List<E039Link> SerializationHelperForLinksToOtherObjectsList { get { return (_linksToOtherObjectsList == null ? null : new List<E039Link>(_linksToOtherObjectsList)); } set { _linksToOtherObjectsList = (value != null && value.Count > 0) ? new ReadOnlyIList<E039Link>(value) : null; } }
 
-        private static readonly IList<E039Link> _emptyLinkList = new List<E039Link>().AsReadOnly();
+        private static readonly IList<E039Link> _emptyLinkList = ReadOnlyIList<E039Link>.Empty;
 
         public override string ToString()
         {
@@ -1544,14 +1545,14 @@ namespace MosaicLib.Semi.E039
         {
             if (ot.rebuildLinksFromOtherObjectsList)
             {
-                ot.obj.LinksFromOtherObjectsList = new List<E039Link>(ot.linkTrackerPairsFromOtherObjectsDictionary.Values.Select(ltp => ltp.Link)).AsReadOnly();
+                ot.obj.LinksFromOtherObjectsList = new ReadOnlyIList<E039Link>(ot.linkTrackerPairsFromOtherObjectsDictionary.Values.Select(ltp => ltp.Link));
                 ot.rebuildLinksFromOtherObjectsList = false;
                 InnerMarkedTouchedIfNeeded(ot);
             }
 
             if (ot.rebuildLinksToOtherObjectsList)
             {
-                ot.obj.LinksToOtherObjectsList = new List<E039Link>(ot.linkTrackerPairsToOtherObjectsDictionary.Values.Select(ltp => ltp.Link)).AsReadOnly();
+                ot.obj.LinksToOtherObjectsList = new ReadOnlyIList<E039Link>(ot.linkTrackerPairsToOtherObjectsDictionary.Values.Select(ltp => ltp.Link));
                 ot.rebuildLinksToOtherObjectsList = false;
                 InnerMarkedTouchedIfNeeded(ot);
             }
