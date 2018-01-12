@@ -33,17 +33,18 @@ namespace MosaicLib.WPF.Extensions
 {
     public static class IsPressedObserver
     {
-        public static readonly DependencyProperty observerDP
-            = DependencyProperty.RegisterAttached("Observe", typeof(bool), typeof(IsPressedObserver),
-                                                    new FrameworkPropertyMetadata(OnObserveChanged));
-        public static readonly DependencyProperty isPressedDP
-            = DependencyProperty.RegisterAttached("IsPressed", typeof(bool), typeof(IsPressedObserver));
+        public static readonly DependencyProperty ObserverProperty = DependencyProperty.RegisterAttached("Observe", typeof(bool), typeof(IsPressedObserver), new FrameworkPropertyMetadata(OnObserveChanged));
+        public static readonly DependencyProperty IsPressedProperty = DependencyProperty.RegisterAttached("IsPressed", typeof(bool), typeof(IsPressedObserver));
 
-        public static bool GetObserve(FrameworkElement obj) { return (bool)obj.GetValue(observerDP); }
-        public static void SetObserve(FrameworkElement obj, bool value) { obj.SetValue(observerDP, value); }
+        [AttachedPropertyBrowsableForType(typeof(FrameworkElement))]
+        public static bool GetObserve(FrameworkElement obj) { return (bool)obj.GetValue(ObserverProperty); }
+        [AttachedPropertyBrowsableForType(typeof(FrameworkElement))]
+        public static void SetObserve(FrameworkElement obj, bool value) { obj.SetValue(ObserverProperty, value); }
 
-        public static bool GetIsPressed(FrameworkElement obj) { return (bool)obj.GetValue(isPressedDP); }
-        public static void SetIsPressed(FrameworkElement obj, bool value) { obj.SetValue(isPressedDP, value); }
+        [AttachedPropertyBrowsableForType(typeof(FrameworkElement))]
+        public static bool GetIsPressed(FrameworkElement obj) { return (bool)obj.GetValue(IsPressedProperty); }
+        [AttachedPropertyBrowsableForType(typeof(FrameworkElement))]
+        public static void SetIsPressed(FrameworkElement obj, bool value) { obj.SetValue(IsPressedProperty, value); }
 
         private static void OnObserveChanged(DependencyObject obj, DependencyPropertyChangedEventArgs e)
         {
@@ -73,7 +74,7 @@ namespace MosaicLib.WPF.Extensions
         {
             if (b != null)
             {
-                b.SetCurrentValue(isPressedDP, b.IsPressed);
+                b.SetCurrentValue(IsPressedProperty, b.IsPressed);
             }
         }
     }

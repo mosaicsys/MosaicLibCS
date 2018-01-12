@@ -1180,10 +1180,16 @@ namespace MosaicLib.Utils
             return InnerConcat(set ?? new TItem[0], item);
         }
 
-        /// <summary>Concatinates (prefixes) the given <paramref name="item"/> with the given <paramref name="set"/></summary>
+        /// <summary>Concatinates (prefixes) the given <paramref name="item"/> in front of the given <paramref name="set"/></summary>
         public static IEnumerable<TItem> Concat<TItem>(this TItem item, IEnumerable<TItem> set)
         {
             return InnerConcat(item, set ?? new TItem[0]);
+        }
+
+        /// <summary>Concatinates (prefixes) the given <paramref name="item"/> in front of the given <paramref name="array"/></summary>
+        public static IEnumerable<TItem> Concat<TItem>(this TItem item, TItem [] array)
+        {
+            return InnerConcat(item, array ?? new TItem[0]);
         }
 
         /// <summary>Concatinates the given items onto the end of the given <paramref name="set"/></summary>
@@ -1202,6 +1208,18 @@ namespace MosaicLib.Utils
         public static IEnumerable<TItem> Concat<TItem>(this IEnumerable<TItem> set, TItem item1, TItem item2, TItem item3, params TItem[] moreParamsItemArray)
         {
             return System.Linq.Enumerable.Concat(set ?? new TItem[0], new TItem[] { item1, item2, item3 }.Concat(moreParamsItemArray ?? new TItem[0]));
+        }
+
+        /// <summary>
+        /// If <paramref name="condition"/> is true then this method returns an enumeable with the given itesm concatinated onto the end of the given <paramref name="set"/>.
+        /// Otherwise this method returns the given <paramref name="set"/> unmodified.
+        /// </summary>
+        public static IEnumerable<TItem> ConditionalConcatItems<TItem>(this IEnumerable<TItem> set, bool condition, params TItem [] itemsParamArray)
+        {
+            if (!condition || itemsParamArray.IsNullOrEmpty())
+                return set;
+            else
+                return (set ?? new TItem[0]).Concat(itemsParamArray);
         }
 
         private static IEnumerable<TItem> InnerConcat<TItem>(TItem item, IEnumerable<TItem> set)

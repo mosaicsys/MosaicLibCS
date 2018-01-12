@@ -1538,9 +1538,9 @@ namespace MosaicLib.Modular.Common
         Object,
         /// <summary>Use Object field as a String</summary>
         String,
-        /// <summary>Use Object field as an IList{String} - usually contains a ReadOnlyCollection{String}</summary>
+        /// <summary>Use Object field as an IList{String} - normally contains a ReadOnlyIList{String}</summary>
         IListOfString,
-        /// <summary>Use Object field as an IList{ValueContainer} - usually contains a ReadOnlyCollection{ValueContainer}</summary>
+        /// <summary>Use Object field as an IList{ValueContainer} - normally contains a ReadOnlyIList{ValueContainer}</summary>
         IListOfVC,
         /// <summary>Use Object field as an INamedValueSet - usually marked as ReadOnly</summary>
         INamedValueSet,

@@ -25,6 +25,9 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 
+using MosaicLib;
+using MosaicLib.Utils;
+
 namespace MosaicLib.Utils
 {
     namespace Collections
@@ -350,6 +353,14 @@ namespace MosaicLib.Utils
         /// </summary>
         public class ReadOnlyIList<TItemType> : IList<TItemType>, ICollection<TItemType>, IEnumerable<TItemType>, IList, ICollection, IEnumerable
         {
+            /// <summary>
+            /// Constructs the contents of this item from the set of explicitly defined items (<paramref name="firstItem"/> followed by 0 or <paramref name="moreItemsArray"/> items).
+            /// </summary>
+            public ReadOnlyIList(TItemType firstItem, params TItemType[] moreItemsArray)
+            {
+                itemsArray = firstItem.Concat(moreItemsArray).ToArray();
+            }
+
             /// <summary>
             /// Constructs the contents of this item based on the contents of the given <paramref name="sourceItemList"/>.  
             /// If the given <paramref name="sourceItemList"/> is null then this method will be constructed as an empty list.
