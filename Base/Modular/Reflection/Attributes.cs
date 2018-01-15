@@ -714,6 +714,9 @@ namespace MosaicLib.Modular.Reflection
                     }
                     catch (System.Exception ex)
                     {
+                        GlobalExceptionCount++;
+                        GlobalLastException = ex;
+
                         if (!silenceIssues && updateIssueEmitter != null && updateIssueEmitter.IsEnabled)
                             updateIssueEmitter.Emit("Unable to get value from DerivedName:'{0}' [type:'{1}']: {2}", itemInfo.DerivedName, itemInfo.ItemType, ex);
 
@@ -741,6 +744,9 @@ namespace MosaicLib.Modular.Reflection
                 Action<TAnnotatedClass, ValueContainer, bool> vcSetter = null;
 
                 bool silenceIssues = (itemAttribute != null ? itemAttribute.SilenceIssues : false);
+
+                Type nullableBaseType = itemInfo.ItemType.GetNullableBaseType();
+                bool isNullable = (nullableBaseType != null);
 
                 if (itemInfo.ItemType == typeof(bool))
                 {
@@ -927,23 +933,52 @@ namespace MosaicLib.Modular.Reflection
                     Action<TAnnotatedClass, INamedValue> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, INamedValue>(itemInfo);
                     vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<INamedValue>(decodedValueType: ContainerStorageType.INamedValue, isNullable: false, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
-                else if (itemInfo.ItemType.IsEnum)
+                else if (itemInfo.ItemType.IsEnum || (nullableBaseType != null && nullableBaseType.IsEnum))
                 {
+                    Type enumType = nullableBaseType ?? itemInfo.ItemType;
+
                     vcSetter = (annotatedInstance, vc, rethrow) =>
                     {
                         rethrow |= forceRethrowFlag;
-                        object value;
+
+                        object value = null;
+
                         try
                         {
-                            value = System.Enum.Parse(itemInfo.ItemType, vc.GetValue<string>(rethrow));
+                            if (vc.IsNullOrEmpty)
+                            {
+                                if (!isNullable && rethrow)
+                                    throw new System.InvalidCastException("Cannot cast {0} to be of type {1}".CheckedFormat(vc, itemInfo.ItemType));
+                            }
+                            else
+                            {
+                                switch (vc.cvt)
+                                {
+                                    case ContainerStorageType.I1: value = System.Enum.ToObject(enumType, vc.u.i8); break;
+                                    case ContainerStorageType.I2: value = System.Enum.ToObject(enumType, vc.u.i16); break;
+                                    case ContainerStorageType.I4: value = System.Enum.ToObject(enumType, vc.u.i32); break;
+                                    case ContainerStorageType.I8: value = System.Enum.ToObject(enumType, vc.u.i64); break;
+                                    case ContainerStorageType.U1: value = System.Enum.ToObject(enumType, vc.u.u8); break;
+                                    case ContainerStorageType.U2: value = System.Enum.ToObject(enumType, vc.u.u16); break;
+                                    case ContainerStorageType.U4: value = System.Enum.ToObject(enumType, vc.u.u32); break;
+                                    case ContainerStorageType.U8: value = System.Enum.ToObject(enumType, vc.u.u64); break;
+                                    default:
+                                        value = System.Enum.Parse(enumType, vc.GetValue<string>(rethrow));
+                                        break;
+                                }
+                            }
                         }
-                        catch
+                        catch (System.Exception ex)
                         {
+                            GlobalExceptionCount++;
+                            GlobalLastException = ex;
+
                             if (rethrow)
                                 throw;
-
-                            value = 0;
                         }
+
+                        if (value == null && !isNullable)
+                            value = itemInfo.ItemType.CreateDefaultInstance();
 
                         if (itemInfo.IsProperty)
                             itemInfo.PropertyInfo.SetValue(annotatedInstance, value, emptyObjectArray);
@@ -954,12 +989,15 @@ namespace MosaicLib.Modular.Reflection
                 else
                 {
                     // cover other types using ValueContainer's internal construction time object recognizer: unrecognized, ...
+
                     vcSetter = (annotatedInstance, vc, rethrow) =>
                     {
+                        object o = System.Convert.ChangeType(vc.ValueAsObject, itemInfo.ItemType);
+
                         if (itemInfo.IsProperty)
-                            itemInfo.PropertyInfo.SetValue(annotatedInstance, vc.ValueAsObject, emptyObjectArray);
+                            itemInfo.PropertyInfo.SetValue(annotatedInstance, o, emptyObjectArray);
                         else
-                            itemInfo.FieldInfo.SetValue(annotatedInstance, vc.ValueAsObject);
+                            itemInfo.FieldInfo.SetValue(annotatedInstance, o);
                     };
                 }
 
@@ -975,6 +1013,9 @@ namespace MosaicLib.Modular.Reflection
                     }
                     catch (System.Exception ex)
                     {
+                        GlobalExceptionCount++;
+                        GlobalLastException = ex;
+
                         if (!silenceIssues && updateIssueEmitter != null && valueUpdateEmitter.IsEnabled)
                             updateIssueEmitter.Emit("Unable to set value '{0}' to DerivedName:'{1}' [type:'{2}']: {3}", vc, itemInfo.DerivedName, itemInfo.ItemType, ex);
 
@@ -1031,6 +1072,21 @@ namespace MosaicLib.Modular.Reflection
 
                 return action;
             }
+
+            #endregion
+
+            #region static global exception counts and latched exceptions
+
+            /// <summary>
+            /// Global static volatile pseudo count of the number of exceptions that have occurred within a Reflection.Attributes method call.
+            /// <para/>Note: As this variable is not atomically incremented, this count may not exactly represent the total count of such exceptions if two such exceptions are generated at the exact same time on two differnt cpu cores.
+            /// </summary>
+            public static volatile int GlobalExceptionCount = 0;
+
+            /// <summary>
+            /// Global static volatile field that gives the last exception that was generated and caught during a Reflection.Attributes method call.
+            /// </summary>
+            public static volatile System.Exception GlobalLastException = null;
 
             #endregion
         }

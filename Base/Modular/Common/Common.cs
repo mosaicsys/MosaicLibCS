@@ -1009,8 +1009,21 @@ namespace MosaicLib.Modular.Common
                         value = defaultValue;
                     else
                     {
-                        // This covers both string and numeric representations of the enumeration as the string representation of a number can also be parsed as the enum.
-                        value = (TValueType)System.Enum.Parse(TValueTypeType, ValueAsObject.SafeToString().MapNullToEmpty(), false);
+                        // convert the integer and string conversion types seperately
+                        switch (cvt)
+                        {
+                            case ContainerStorageType.I1: value = (TValueType)System.Enum.ToObject(TValueTypeType, u.i8); break;
+                            case ContainerStorageType.I2: value = (TValueType)System.Enum.ToObject(TValueTypeType, u.i16); break;
+                            case ContainerStorageType.I4: value = (TValueType)System.Enum.ToObject(TValueTypeType, u.i32); break;
+                            case ContainerStorageType.I8: value = (TValueType)System.Enum.ToObject(TValueTypeType, u.i64); break;
+                            case ContainerStorageType.U1: value = (TValueType)System.Enum.ToObject(TValueTypeType, u.u8); break;
+                            case ContainerStorageType.U2: value = (TValueType)System.Enum.ToObject(TValueTypeType, u.u16); break;
+                            case ContainerStorageType.U4: value = (TValueType)System.Enum.ToObject(TValueTypeType, u.u32); break;
+                            case ContainerStorageType.U8: value = (TValueType)System.Enum.ToObject(TValueTypeType, u.u64); break;
+                            default:
+                                value = (TValueType)System.Enum.Parse(TValueTypeType, ValueAsObject.SafeToString().MapNullToEmpty(), false);
+                                break;
+                        }
                     }
                 }
                 else if (decodedValueType == cvt)
@@ -1656,7 +1669,7 @@ namespace MosaicLib.Modular.Common
         /// <summary>
         /// Returns true if the given ContainerStorageType is a signed or unsigned integer.  Boolean is treated as an unsigned type.
         /// </summary>
-        public static bool IsInteger(this ContainerStorageType cst, bool includeSigned, bool includeUnsigned)
+        public static bool IsInteger(this ContainerStorageType cst, bool includeSigned = true, bool includeUnsigned = true)
         {
             switch (cst)
             {

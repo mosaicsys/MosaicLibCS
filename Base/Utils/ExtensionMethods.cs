@@ -1246,9 +1246,117 @@ namespace MosaicLib.Utils
 
         #region Type related extension methods
 
-        /// <summary>returns the Leaf Name of the given <paramref name="type"/> type (aka: The last token for the resulting sequence of dot seperated tokens)</summary>
-        public static string GetTypeLeafName(this Type type) { return (type.ToString()).Split('.').SafeLast(); }
-        
+        /// <summary>
+        /// returns the Leaf Name of the given <paramref name="type"/> type (aka: The last token for the resulting sequence of dot seperated tokens)
+        /// NOTE: this method has been re-implemented using the GetTypeDigestName(recursive: true) method.
+        /// </summary>
+        public static string GetTypeLeafName(this Type type) 
+        {
+            return type.GetTypeDigestName(recursive: true);
+        }
+
+        /// <summary>
+        /// This method generates a digest version of the name of the given <paramref name="type"/>.  
+        /// This consists of removing the namespace prefix from the types name.
+        /// For types based on generics, the <paramref name="recursive"/> flag selects whether the method is applied recursively to 
+        /// the sub-type.  If so then each of the sub-types will also be digested in the returned string otherwise only
+        /// the main type will be digested.
+        /// </summary>
+        public static string GetTypeDigestName(this Type type, bool recursive = true)
+        {
+            return type.ToString().MapNullToEmpty().GetTypeDigestName(recursive: recursive);
+        }
+
+        /// <summary>
+        /// This is a private helper extension method that is used by the GetTypeDigestName method.
+        /// It is not made public so that it will not clutter the string extension namespace and because its behavior
+        /// is not tested on anything other than actual type name strings.
+        /// </summary>
+        private static string GetTypeDigestName(this string typeNameStr, bool recursive = true)
+        {
+            int tickIdx = typeNameStr.IndexOf('`');
+
+            string leftPart = ((tickIdx >= 0) ? typeNameStr.Substring(0, tickIdx) : typeNameStr);
+            string rightPart = ((tickIdx >= 0) ? typeNameStr.Substring(tickIdx) : string.Empty);
+
+            int lastDotIdx = leftPart.LastIndexOf('.');
+            string leafLeftPart = (lastDotIdx >= 0) ? leftPart.Substring(lastDotIdx + 1) : leftPart;
+
+            if (rightPart.IsNullOrEmpty())
+                return leafLeftPart;
+
+            int firstRightPartSqBIdx = rightPart.IndexOf('[');
+            int lastRightPartSqBIdx = rightPart.LastIndexOf(']');
+
+            if (firstRightPartSqBIdx < 0 || firstRightPartSqBIdx >= lastRightPartSqBIdx || !recursive)
+                return String.Concat(leafLeftPart, rightPart);
+
+            string leafRightOpenPart = rightPart.Substring(0, firstRightPartSqBIdx + 1);
+            string leafRightClosePart = rightPart.Substring(lastRightPartSqBIdx);
+
+            string leafRightMiddlePart = rightPart.Substring(firstRightPartSqBIdx + 1, Math.Max(0, lastRightPartSqBIdx - firstRightPartSqBIdx - 1));
+            int leafRightMiddlePartLen = leafRightMiddlePart.Length;
+
+            List<string> leafRightMiddlePartSplitList = new List<string>();
+
+            int depth = 0;
+            int lastCommaIndex = -1;
+
+            int commaScanIdx = 0;
+            for (; commaScanIdx < leafRightMiddlePartLen; commaScanIdx++)
+            {
+                char c = leafRightMiddlePart[commaScanIdx];
+
+                switch (c)
+                {
+                    default: break;
+                    case '[': depth++; break;
+                    case ']': depth = Math.Max(0, depth-1); break;
+                    case ',': 
+                        if (depth == 0)
+                        {
+                            if (lastCommaIndex == 0)
+                                leafRightMiddlePartSplitList.Add(leafRightMiddlePart.Substring(0, commaScanIdx));
+                            else
+                                leafRightMiddlePartSplitList.Add(leafRightMiddlePart.Substring(lastCommaIndex + 1, Math.Max(0, commaScanIdx - lastCommaIndex - 1)));
+
+                            lastCommaIndex = commaScanIdx;
+                        }
+                        break;
+                }
+            }
+
+            if (lastCommaIndex < 0)
+                leafRightMiddlePartSplitList.Add(leafRightMiddlePart);
+            else
+                leafRightMiddlePartSplitList.Add(leafRightMiddlePart.Substring(lastCommaIndex + 1));
+
+            string leafRightLeafMiddlePart = String.Join(",", leafRightMiddlePartSplitList.Select(midTypeName => midTypeName.GetTypeDigestName(recursive: true)));
+
+            return String.Concat(leafLeftPart, leafRightOpenPart, leafRightLeafMiddlePart, leafRightClosePart);
+        }
+
+        /// <summary>Returns true if the give type <paramref name="t"/> is Nullable</summary>
+        public static bool IsNullable(this Type t)
+        {
+            return (t != null && t.IsGenericType && (t.GetGenericTypeDefinition() == typeof(System.Nullable<>)));
+        }
+
+        /// <summary>For Nullable types <paramref name="t"/> this method returns the base type (from first type in GetGenericArguments()).  Otherwise this method return <paramref name="fallbackValue"/>.</summary>
+        public static Type GetNullableBaseType(this Type t, Type fallbackValue = null)
+        {
+            if (t.IsNullable())
+                return t.GetGenericArguments().SafeAccess(0, defaultValue: fallbackValue);
+
+            return fallbackValue;
+        }
+
+        /// <summary>Returns the default value for the given type <paramref name="t"/>.  Will be null for reference types.</summary>
+        public static object CreateDefaultInstance(this Type t)
+        {
+            return (t.IsValueType ? Activator.CreateInstance(t) : null);
+        }
+
         #endregion
 
         #region FileSystemInfo, FileInfo EMs (SafeGetOldestDateTimeUtc, SafeGetCreationAge, SafeExists, SafeLength)
