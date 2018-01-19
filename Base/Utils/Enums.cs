@@ -32,24 +32,18 @@ namespace MosaicLib.Utils
     /// </summary>
     public static partial class Enum
 	{
-		#region TryParse (two variants - returns bool and returns EnumT value)
+		#region TryParse variants and Parse
 
         /// <summary>
         /// Helper function to parse a string s as an enum of type EnumT
         ///     Uses System.Enum.Parse to convert the string representation of the name or numeric value of one or
         ///     more enumerated constants to an equivalent enumerated object. 
         /// </summary>
-        /// <typeparam name="EnumT">The specific Enum type to parse.  This method will throw if this is not derived from System.Enum</typeparam>
-        /// <param name="s">The string to parse</param>
-        /// <param name="parseFailedResult">Defines the EnumT value that will be returned if the parse fails</param>
-        /// <param name="ignoreCase">If true, ignore case; otherwise, regard case.</param>
-        /// <returns>parsed EnumT value on success, or parseFailedResult on failure</returns>
-        /// <exception cref="System.InvalidOperationException">Thrown if EnumT is not a type of enum.</exception>
-        public static EnumT TryParse<EnumT>(this string s, EnumT parseFailedResult = default(EnumT), bool ignoreCase = true)
+        public static EnumT TryParse<EnumT>(this string s, EnumT parseFailedResult = default(EnumT), bool ignoreCase = true, bool autoTrim = true)
         {
             EnumT result;
 
-            TryParse<EnumT>(s, out result, parseFailedResult, ignoreCase);
+            s.Parse(out result, fallbackValue: parseFailedResult, ignoreCase: ignoreCase, autoTrim: autoTrim, rethrow: false);
 
             return result;
         }
@@ -60,43 +54,72 @@ namespace MosaicLib.Utils
         ///     more enumerated constants to an equivalent enumerated object. 
         ///     A parameter specifies whether the operation is case-sensitive.
         /// </summary>
-        /// <typeparam name="EnumT">The specific Enum type to parse.  This method will throw if this is not derived from System.Enum</typeparam>
-        /// <param name="s">The string containing the value to parse into the specified EnumT type.</param>
-        /// <param name="result">Assigned to the Parsed value on success or to parseFailedResult on failure</param>
-        /// <param name="parseFailedResult">Defines the EnumT value that will be assigned to the result if the parse itself fails.</param>
-        /// <param name="ignoreCase">If true, ignore case; otherwise, regard case.</param>
-        /// <returns>True if the Parse was successful, false otherwise</returns>
-        /// <exception cref="System.InvalidOperationException">Thrown if EnumT is not a type of enum. (where clause only requires it is a type of struct)</exception>
-        public static bool TryParse<EnumT>(this string s, out EnumT result, EnumT parseFailedResult = default(EnumT), bool ignoreCase = true)
+        /// <remarks>
+        /// NOTE: !!!!! The following code cannot use System.Enum.TryParse as the addition of the required "where" clause would prevent the use of this method in the StringScanner.ParseValue generic methods.
+        /// </remarks>
+        public static bool TryParse<EnumT>(this string s, out EnumT result, EnumT parseFailedResult = default(EnumT), bool ignoreCase = true, bool autoTrim = true)
+        {
+            return s.Parse(out result, fallbackValue: parseFailedResult, ignoreCase: ignoreCase, autoTrim: autoTrim, rethrow: false);
+        }
+
+        /// <summary>
+        /// Helper function that is used to call System.Enum.Parse with optional catching of any exception that it throws.  
+        /// Returns true if the parse succeeded, or false if rethrow is false and the parse did not, or could not, succeed.
+        /// </summary>
+        public static bool Parse<EnumT>(this string s, out EnumT result, EnumT fallbackValue = default(EnumT), bool ignoreCase = true, bool autoTrim = true, bool rethrow = true)
 		{
 			Type enumT = typeof(EnumT);
 
-			if (!enumT.IsEnum)
-				throw new System.InvalidOperationException(Fcns.CheckedFormat("Type:'{0}' is not usable with Utils.Enum.TryParse.  It must be a System.Enum", typeof(EnumT).ToString()));
+            result = fallbackValue;
 
             try
             {
-                if (s == null)
-                {
-                    result = parseFailedResult;
-                    return false;
-                }
+                if (s != null && autoTrim)
+                    s = s.Trim();
 
-                result = (EnumT)System.Enum.Parse(typeof(EnumT), s, ignoreCase);
+                if (s.IsNullOrEmpty() && !rethrow)
+                    return false;
+
+                result = (EnumT)System.Enum.Parse(enumT, s, ignoreCase);
                 return true;
             }
-            catch (System.Exception)
+            catch (System.Exception ex)
             {
-                // we expect System.ArgumentExecption or System.InvalidCastException but have observed System.OverflowException as well
+                // In theory the above use of System.Enum.Parse can generate a System.ArgumentExecption, an System.ArgumentException, or a System.OverflowException
                 //  Documentation for System.Enum.Parse added possibility of throw for System.OverflowExecption in documentation for .Net 3.5 (was not in 2.0 or 3.0)
                 //  Catching all System.Exceptions here is still safe since the risk of additional undocumented exceptions that can be thrown is much larger than the
                 //  risk that we will fail to pass on some other unexpected type of exception that is not a direct result of calling System.Enum.Parse.
-                // Prior code had only caught System.ArgumentException and System.InvalidCastException
 
-                result = parseFailedResult;
+                if (rethrow && ex != null)
+                    throw;
+
                 return false;
             }
 		}
+
+        /// <summary>
+        /// Trial alternative version of TryParse.  This one is based directly on System.Enum.TryParse and suppports that same set of optional parameters as the current TryParse local variant does.
+        /// </summary>
+        private static bool TryParse2<EnumT>(this string s, out EnumT result, EnumT parseFailedResult = default(EnumT), bool ignoreCase = true, bool autoTrim = true)
+            where EnumT : struct
+        {
+            Type enumT = typeof(EnumT);
+
+            if (!enumT.IsEnum)
+                throw new System.ArgumentException("Type:'{0}' is not usable with Utils.Enum.{1}.  It must be a System.Enum".CheckedFormat(typeof(EnumT), Fcns.CurrentMethodName));
+
+            if (s != null)
+                s = s.Trim();
+
+            if (!s.IsNullOrEmpty())
+            {
+                if (System.Enum.TryParse(s, ignoreCase, out result))
+                    return true;
+            }
+
+            result = parseFailedResult;
+            return false;
+        }
 
 		#endregion
 	}

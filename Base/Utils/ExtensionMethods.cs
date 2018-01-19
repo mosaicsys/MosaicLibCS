@@ -299,6 +299,14 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
+        /// Extension method returns the given <paramref name="iListIn"/> is non-empty otherwise this method returns null.
+        /// </summary>
+        public static IList<TItemType> MapEmptyToNull<TItemType>(this IList<TItemType> iListIn)
+        {
+            return (iListIn.SafeCount() != 0) ? iListIn : null;
+        }
+
+        /// <summary>
         /// Extension method returns the Length from the given <paramref name="array"/> or zero if the given <paramref name="array"/> is null
         /// </summary>
         public static int SafeLength<ItemType>(this ItemType[] array)
@@ -307,7 +315,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Extension method returns the Coutn from the given <paramref name="collection"/> or zero if the given <paramref name="collection"/> is null
+        /// Extension method returns the Count from the given <paramref name="collection"/> or zero if the given <paramref name="collection"/> is null
         /// </summary>
         public static int SafeCount<TItemType>(this ICollection<TItemType> collection)
         {

@@ -2014,10 +2014,10 @@ namespace MosaicLib.Modular.Common
         private Int16? i16 { get { return ((vc.cvt == ContainerStorageType.Int16) ? (Int16?)vc.u.i16 : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.Int16, u = new ValueContainer.Union() { i16 = value.GetValueOrDefault() } } : ValueContainer.Null); } }
 
         [DataMember(EmitDefaultValue = false, IsRequired = false)]
-        private Int32? i32 { get { return ((vc.cvt == ContainerStorageType.Int32) ? (Int16?)vc.u.i32 : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.Int32, u = new ValueContainer.Union() { i32 = value.GetValueOrDefault() } } : ValueContainer.Null); } }
+        private Int32? i32 { get { return ((vc.cvt == ContainerStorageType.Int32) ? (Int32?)vc.u.i32 : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.Int32, u = new ValueContainer.Union() { i32 = value.GetValueOrDefault() } } : ValueContainer.Null); } }
 
         [DataMember(EmitDefaultValue = false, IsRequired = false)]
-        private Int64? i64 { get { return ((vc.cvt == ContainerStorageType.Int64) ? (Int16?)vc.u.i64 : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.Int64, u = new ValueContainer.Union() { i64 = value.GetValueOrDefault() } } : ValueContainer.Null); } }
+        private Int64? i64 { get { return ((vc.cvt == ContainerStorageType.Int64) ? (Int64?)vc.u.i64 : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.Int64, u = new ValueContainer.Union() { i64 = value.GetValueOrDefault() } } : ValueContainer.Null); } }
 
         [DataMember(EmitDefaultValue = false, IsRequired = false)]
         private Byte? u8 { get { return ((vc.cvt == ContainerStorageType.Byte) ? (Byte?)vc.u.u8 : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.Byte, u = new ValueContainer.Union() { u8 = value.GetValueOrDefault() } } : ValueContainer.Null); } }
