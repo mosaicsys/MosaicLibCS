@@ -365,7 +365,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
             resultCode = string.Empty;
         }
 
-        private static readonly byte[] emptyByteArray = new byte[0];
+        private static readonly byte[] emptyByteArray = EmptyArrayFactory<byte>.Instance;
 
         public bool Equals(DataBlockBuffer other)
         {
@@ -1018,7 +1018,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
             }
         }
 
-        private static IValueAccessor[] emptyIVAArray = new IValueAccessor[0];
+        private static IValueAccessor[] emptyIVAArray = EmptyArrayFactory<IValueAccessor>.Instance;
 
         private ProcessContentEvent lastEventPCE = ProcessContentEvent.None;
         private FixedBlockTypeID lastBlockTypeID = FixedBlockTypeID.None;

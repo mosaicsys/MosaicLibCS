@@ -24,8 +24,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 
-using MosaicLib.Utils;
 using MosaicLib.Modular.Common;
+using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
 
 namespace MosaicLib.Modular.Reflection
 {
@@ -1027,7 +1028,7 @@ namespace MosaicLib.Modular.Reflection
                 return memberFromVCDelegate;
             }
 
-            private static readonly object[] emptyObjectArray = new object[0];
+            private static readonly object[] emptyObjectArray = EmptyArrayFactory<object>.Instance;
 
             #endregion
 

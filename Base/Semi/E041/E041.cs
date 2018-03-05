@@ -551,8 +551,6 @@ namespace MosaicLib.Semi.E041
         [DataMember(Order = 50)]
         public ANSeqAndTimeInfo SeqAndTimeInfo { get; set; }
 
-        ///Todo: create unit test asserts to verify that this value works as described
-
         /// <summary>Gives the ANSeqAndTimeInfo for the last change to this state from non-signaling to signaling (from Off to any of the On states)s</summary>
         [DataMember(Order = 51)]
         public ANSeqAndTimeInfo LastTransitionToOnSeqAndTimeInfo { get; set; }
@@ -689,14 +687,15 @@ namespace MosaicLib.Semi.E041
     public interface IANCondition : IANSourceBase
     {
         /// <summary>
-        /// Used by the client to indicate that this ANAlarm is asserting its condition with the given reason explaning why it is being asserted.
-        /// The client may call this method occasinally to update the reason if the underlying reason for the condition may change over time before it has been resolved.
-        /// It is not recomended to call this method repeatedly and high rate use of this method may cause some reported reasons to be discarded/filtereted out.
+        /// Used by the client to indicate that this ANAlarm is asserting its condition with the given <paramref name="reason"/> explaning why it is being asserted.
+        /// The client may call this method occasionally to update the reason if the underlying reason for the condition may change over time before it has been resolved.
+        /// It is not recomended to call this method repeatedly with different reasons as high rate use of this method may cause some reported reasons to be discarded/filtereted out.
+        /// NOTE: The AcceptAlarmReasonChangeAfterTimeSpan configuration value can be used to control the the throttleing of any such frequence reason changes.
         /// </summary>
         void Set(string reason);
 
         /// <summary>
-        /// Used by the client to indicate that this ANAlarm is no longer asserting its condition along with the reason that the source believes explains how the condition was resolved.
+        /// Used by the client to indicate that this ANAlarm is no longer asserting its condition along with the <paramref name="reason"/> that the source believes explains how the condition was resolved.
         /// Use of this method will only produce a single state change for this source and repeated use of this method will be ignored once the ConditionState is already false.
         /// This method will cause the annuciator to enable its Acknoweldge action and thus allow the signaling state to be cleared using that action.  
         /// Acknowledge action requests are processed by the ANManagerPart without direct use of this interface.
@@ -704,7 +703,9 @@ namespace MosaicLib.Semi.E041
         void Clear(string reason);
 
         /// <summary>
-        /// This method dispatches between calling Set(reason) and Clear(reason) based on the given conditionState value.
+        /// This method dispatches between calling Set(<paramref name="reason"/>) and Clear(<paramref name="reason"/>) based on the given <paramref name="conditionState"/> value.
+        /// It is not recomended to call this method repeatedly with the <paramref name="conditionState"/> true and with different <paramref name="reason"/> values as high rate use of this method may cause some reported reasons to be discarded/filtereted out.
+        /// NOTE: The AcceptAlarmReasonChangeAfterTimeSpan configuration value can be used to control the the throttleing of any such frequence reason changes while the <paramref name="conditionState"/> is true.
         /// </summary>
         void Service(bool conditionState, string reason);
 
@@ -1010,7 +1011,7 @@ namespace MosaicLib.Semi.E041
             [ConfigItem(IsOptional = true, SilenceIssues = true)]
             public TimeSpan AutoAcknowledgeErrorAfterTimeSpan { get; set; }
 
-            /// <summary>This defines the TimeSpan after which an Alarm reason change will cause publication of its ANState.  Defaults to 30.0</summary>
+            /// <summary>This defines the TimeSpan after which a reason change will cause publication of its ANState.  Defaults to 0.0</summary>
             [ConfigItem(IsOptional = true, SilenceIssues = true)]
             public TimeSpan AcceptAlarmReasonChangeAfterTimeSpan { get; set; }
         }
@@ -1816,7 +1817,7 @@ namespace MosaicLib.Semi.E041
 
             /// <summary>
             /// Used by the client to indicate that this ANAlarm is asserting its condition with the given reason explaning why it is being asserted.
-            /// The client may call this method occasinally to update the reason if the underlying reason for the condition may change over time before it has been resolved.
+            /// The client may call this method occasionally to update the reason if the underlying reason for the condition may change over time before it has been resolved.
             /// It is not recomended to call this method repeatedly and high rate use of this method may cause some reported reasons to be discarded/filtereted out.
             /// </summary>
             void IANCondition.Set(string reason)

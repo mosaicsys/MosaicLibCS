@@ -47,7 +47,7 @@ namespace MosaicLib.Utils
         /// <remarks>
         /// Based on the use of a locked list of the objects and a volatile handle to an array of objects that is (re)obtained from the list when needed
         /// </remarks>
-        public class LockedObjectListWithCachedArray<ObjectType>
+        public class LockedObjectListWithCachedArray<ObjectType> : IList<ObjectType>, ICollection<ObjectType>, IEnumerable<ObjectType>, IList, ICollection, IEnumerable
         {
             /// <summary>Default contstructor</summary>
             public LockedObjectListWithCachedArray() { }
@@ -58,13 +58,27 @@ namespace MosaicLib.Utils
                 AddRange(collection);
             }
 
-            #region Public methods and properties
+            #region Public methods and properties (IndexOf, Insert, RemoveAt, Add, Remove, Clear, AddRange
 
             /// <summary>
-            /// Adds the given object instance to the list and triggers the Array be rebuilt on next use.  
+            /// Searches for the specified <paramref name="item"/> in the list and returns the zero-based index of the first occurrence, or -1 if the <paramref name="item"/> was not found.
             /// Re-entrant and thread safe using leaf lock on list contents.
+            /// <para/>Supports call chaining
             /// </summary>
-            /// <returns>this object for call chaining</returns>
+            public int IndexOf(ObjectType item)
+            {
+                lock (listMutex)
+                {
+                    return objectList.IndexOf(item);
+                }
+            }
+
+            /// <summary>
+            /// Adds the given object instance to the list.  
+            /// Re-entrant and thread safe using leaf lock on list contents.
+            /// Triggers array rebuild on next use.
+            /// <para/>Supports call chaining
+            /// </summary>
             public LockedObjectListWithCachedArray<ObjectType> Add(ObjectType d)
             {
                 lock (listMutex)
@@ -75,28 +89,83 @@ namespace MosaicLib.Utils
 
                 return this;
             }
+
             /// <summary>
-            /// Removes the given object instance from the list and triggers the Array be rebuilt on next use.  
+            /// Inserts the given <paramref name="item"/> into this list at the given <paramref name="index"/>.  The inserted item will be placed before any prior item at the specified location.
             /// Re-entrant and thread safe using leaf lock on list contents.
+            /// Triggers array rebuild on next use.
+            /// <para/>Supports call chaining
             /// </summary>
-            /// <returns>this object for call chaining</returns>
-            public LockedObjectListWithCachedArray<ObjectType> Remove(ObjectType d)
+            /// <exception cref="System.ArgumentOutOfRangeException">index is less than 0, or it is greater or equal to the Count.</exception>
+            public LockedObjectListWithCachedArray<ObjectType> Insert(int index, ObjectType item)
             {
                 lock (listMutex)
                 {
                     rebuildVolatileObjectArray = true;
-                    objectList.Remove(d);
+                    objectList.Insert(index, item);
                 }
 
                 return this;
             }
 
             /// <summary>
-            /// Adds the given collection of objects to the end of the list and triggers the Array to be rebuilt on its next use.
+            /// Removes the the item that is at the given <paramref name="index"/> position from the list's current contents.
             /// Re-entrant and thread safe using leaf lock on list contents.
+            /// Triggers array rebuild on next use.
+            /// <para/>Supports call chaining
             /// </summary>
-            /// <param name="collection">Gives the IEnumerable collection of items to append to the end of this list.</param>
-            /// <returns>this object for call chaining</returns>
+            /// <exception cref="System.ArgumentOutOfRangeException">index is less than 0, or it is greater or equal to the Count.</exception>
+            public LockedObjectListWithCachedArray<ObjectType> RemoveAt(int index)
+            {
+                lock (listMutex)
+                {
+                    rebuildVolatileObjectArray = true;
+                    objectList.RemoveAt(index);
+                }
+
+                return this;
+            }
+
+            /// <summary>
+            /// Removes the first instance of given object <paramref name="item"/> from the list.  
+            /// Re-entrant and thread safe using leaf lock on list contents.
+            /// Triggers array rebuild on next use.
+            /// <para/>Supports call chaining
+            /// </summary>
+            public LockedObjectListWithCachedArray<ObjectType> Remove(ObjectType item)
+            {
+                lock (listMutex)
+                {
+                    rebuildVolatileObjectArray = true;
+                    objectList.Remove(item);
+                }
+
+                return this;
+            }
+
+            /// <summary>
+            /// Removes all objects from the list.  
+            /// Re-entrant and thread safe using leaf lock on list contents.
+            /// Triggers array rebuild on next use.
+            /// <para/>Supports call chaining
+            /// </summary>
+            public LockedObjectListWithCachedArray<ObjectType> Clear()
+            {
+                lock (listMutex)
+                {
+                    rebuildVolatileObjectArray = true;
+                    objectList.Clear();
+                }
+
+                return this;
+            }
+
+            /// <summary>
+            /// Adds the given <paramref name="collection"/> of objects to the end of the list.
+            /// Re-entrant and thread safe using leaf lock on list contents.
+            /// Triggers array rebuild on next use.
+            /// <para/>Supports call chaining
+            /// </summary>
             public LockedObjectListWithCachedArray<ObjectType> AddRange(IEnumerable<ObjectType> collection)
             {
                 lock (listMutex)
@@ -109,11 +178,24 @@ namespace MosaicLib.Utils
             }
 
             /// <summary>
+            /// returns true if the given <paramref name="item"/> is found in the list.
+            /// </summary>
+            public bool Contains(ObjectType item)
+            {
+                lock (listMutex)
+                {
+                    return objectList.Contains(item);
+                }
+            }
+
+            /// <summary>
             /// Gets or sets the element at the specified index. 
+            /// Re-entrant and thread safe using leaf lock on list contents.
+            /// Use of setter triggers array rebuild on next use.
+            /// <para/>Supports call chaining
             /// </summary>
             /// <param name="index">The zero-based index of the element to get or set.</param>
-            /// <returns>The element at the specified index.</returns>
-            /// <exception cref="System.ArgumentOutOfRangeException">index is less than 0.  -or- index is equal to or greater than Count.</exception>
+            /// <exception cref="System.ArgumentOutOfRangeException">index is less than 0, or it is greater or equal to the Count.</exception>
             public ObjectType this[int index]
             {
                 get
@@ -131,8 +213,8 @@ namespace MosaicLib.Utils
                 {
                     lock (listMutex)
                     {
-                        objectList[index] = value;
                         rebuildVolatileObjectArray = true;
+                        objectList[index] = value;
                     }
                 }
             }
@@ -172,7 +254,7 @@ namespace MosaicLib.Utils
 
                             array = objectList.ToArray();
                             if (array == null)
-                                array = emptyObjectArray;
+                                array = EmptyArrayFactory<ObjectType>.Instance;
 
                             volatileObjectArray = array;
                         }
@@ -188,15 +270,173 @@ namespace MosaicLib.Utils
 
             /// <summary>mutex used to guard/sequence access to the underlying list so that both changes and access to the list are performed atomically.</summary>
             private readonly object listMutex = new object();
+
             /// <summary>underlying reference list of delegates, access to this list must only be made while owning the corresponding mutex.</summary>
             private List<ObjectType> objectList = new List<ObjectType>();
-            /// <summary>Single common empty array that is used as the array when the list is empty.</summary>
-            private static ObjectType[] emptyObjectArray = new ObjectType[0];
+
             /// <summary>volatile handle to the array of delegates produced during the last rebuild operation.</summary>
-            private volatile ObjectType[] volatileObjectArray = emptyObjectArray;
+            private volatile ObjectType[] volatileObjectArray = EmptyArrayFactory<ObjectType>.Instance;
+
             /// <summary>volatile boolean used to flag that a rebuild is required during the next access to the Array property.</summary>
             private volatile bool rebuildVolatileObjectArray = true;
 
+            #endregion
+            
+            #region IList, ICollection, IEnumerable implementations
+
+            void IList<ObjectType>.Insert(int index, ObjectType item)
+            {
+                Insert(index, item);
+            }
+
+            void IList<ObjectType>.RemoveAt(int index)
+            {
+                RemoveAt(index);
+            }
+
+            bool ICollection<ObjectType>.Remove(ObjectType item)
+            {
+                lock (listMutex)
+                {
+                    rebuildVolatileObjectArray = true;
+                    return objectList.Remove(item);
+                }
+            }
+
+            void ICollection<ObjectType>.Add(ObjectType item)
+            {
+                Add(item);
+            }
+
+            void ICollection<ObjectType>.Clear()
+            {
+                Clear();
+            }
+
+            void ICollection<ObjectType>.CopyTo(ObjectType[] array, int arrayIndex)
+            {
+                lock (listMutex)
+                {
+                    objectList.CopyTo(array, arrayIndex);
+                }
+            }
+
+            bool ICollection<ObjectType>.IsReadOnly
+            {
+                get { return false; }
+            }
+
+            IEnumerator<ObjectType> IEnumerable<ObjectType>.GetEnumerator()
+            {
+                return new ArrayEnumerator<ObjectType>(Array);
+            }
+
+            IEnumerator IEnumerable.GetEnumerator()
+            {
+                return new ArrayEnumerator<ObjectType>(Array);
+            }
+
+            int IList.Add(object value)
+            {
+                lock (listMutex)
+                {
+                    rebuildVolatileObjectArray = true;
+                    return (objectList as IList).Add(value);
+                }
+            }
+
+            void IList.Clear()
+            {
+                Clear();
+            }
+
+            bool IList.Contains(object value)
+            {
+                lock (listMutex)
+                {
+                    return (objectList as IList).Contains(value);
+                }
+            }
+
+            int IList.IndexOf(object value)
+            {
+                lock (listMutex)
+                {
+                    return (objectList as IList).IndexOf(value);
+                }
+            }
+
+            void IList.Insert(int index, object value)
+            {
+                lock (listMutex)
+                {
+                    rebuildVolatileObjectArray = true;
+                    (objectList as IList).Insert(index, value);
+                }
+            }
+
+            bool IList.IsFixedSize
+            {
+                get { lock (listMutex) { return (objectList as IList).IsFixedSize; } }
+            }
+
+            bool IList.IsReadOnly
+            {
+                get { return false; }
+            }
+
+            void IList.Remove(object value)
+            {
+                lock (listMutex)
+                {
+                    rebuildVolatileObjectArray = true;
+                    (objectList as IList).Remove(value);
+                }
+            }
+
+            void IList.RemoveAt(int index)
+            {
+                lock (listMutex)
+                {
+                    rebuildVolatileObjectArray = true;
+                    (objectList as IList).RemoveAt(index);
+                }
+            }
+
+            object IList.this[int index]
+            {
+                get
+                {
+                    return this[index];
+                }
+                set
+                {
+                    lock (listMutex)
+                    {
+                        rebuildVolatileObjectArray = true;
+                        (objectList as IList)[index] = value;
+                    }
+                }
+            }
+
+            void ICollection.CopyTo(Array array, int index)
+            {
+                lock (listMutex)
+                {
+                    (objectList as IList).CopyTo(array, index);
+                }
+            }
+
+            bool ICollection.IsSynchronized
+            {
+                get { return true; }
+            }
+
+            object ICollection.SyncRoot
+            {
+                get { return listMutex; }
+            } 
+           
             #endregion
         }
 
@@ -345,12 +585,31 @@ namespace MosaicLib.Utils
 
         #endregion
 
+        #region EmptyArrayFactory
+
+        /// <summary>
+        /// This is a static factory class used to produce instances of an empty array of a given type.  
+        /// The use of generics here and the immutability of empty arrays allows multiple code points to use the same empty array instance (one per requested <typeparamref name="TItemType"/>)
+        /// </summary>
+        public static class EmptyArrayFactory<TItemType>
+        {
+            /// <summary>
+            /// Returns an instance of an empty array of the selected <typeparamref name="TItemType"/> type.  This is a singleton, immutable, instance.
+            /// </summary>
+            public static TItemType[] Instance { get { return instance; } }
+
+            private static readonly TItemType[] instance = new TItemType[0];
+        }
+
+        #endregion
+
         #region ReadOnlyIList
 
         /// <summary>
         /// This class is a local replacement for the System.Collections.ObjectModel.ReadOnlyCollection as the native one simply provides a read-only facade on the underlying mutable IList from which it is constructed.
         /// <para/>Note: This object is intended as a utility storage class.  All interfaces are implemented explicitly so the caller can only make use of this object's contents by casting it to one of the supported interfaces.
         /// </summary>
+        [Serializable]
         public class ReadOnlyIList<TItemType> : IList<TItemType>, ICollection<TItemType>, IEnumerable<TItemType>, IList, ICollection, IEnumerable
         {
             /// <summary>
@@ -401,10 +660,14 @@ namespace MosaicLib.Utils
             private static readonly ReadOnlyIList<TItemType> _empty = new ReadOnlyIList<TItemType>();
 
             private TItemType[] itemsArray;
-            private static readonly TItemType[] emptyArray = new TItemType[0];
+            private static readonly TItemType[] emptyArray = EmptyArrayFactory<TItemType>.Instance;
+
+            [NonSerialized]
             private ReadOnlyCollection<TItemType> _rocOfItems = null;
 
             private ReadOnlyCollection<TItemType> ROCOfItems { get { return _rocOfItems = (_rocOfItems ?? new ReadOnlyCollection<TItemType>(itemsArray)); } }
+
+            #region IList, ICollection, IEnumerable implementations
 
             int IList<TItemType>.IndexOf(TItemType item)
             {
@@ -554,6 +817,8 @@ namespace MosaicLib.Utils
             {
                 get { return null; }
             }
+
+            #endregion
         }
 
         /// <summary>

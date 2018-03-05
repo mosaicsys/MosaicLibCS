@@ -35,6 +35,7 @@ using MosaicLib.Modular.Interconnect.Values;
 using MosaicLib.Modular.Part;
 using MosaicLib.Time;
 using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
 using MosaicLib.Utils.StringMatching;
 using MosaicLib.Utils.Pooling;
 
@@ -54,6 +55,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
                     SessionMode = SessionMode.Required, 
                     CallbackContract = typeof(IInterconnectPropagationSessionCommonAPI),
                     ProtectionLevel = System.Net.Security.ProtectionLevel.None)]
+    [Obsolete("Use of Interconnect.WCF has been replaced with use of corresponding Interconnect.Remoting features.  Interconnect.WCF is no longer supported and will be removed (2018-02-18)")]
     public interface IInterconnectPropagationSessionClientAPI 
         : IInterconnectPropagationSessionCommonAPI
     {
@@ -75,6 +77,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
     /// This is the packaged content for the values that are passed to a StartSession call.
     /// </summary>
     [DataContract(Namespace = Constants.ModularInterconnectNameSpace)]
+    [Obsolete("Use of Interconnect.WCF has been replaced with use of corresponding Interconnect.Remoting features.  Interconnect.WCF is no longer supported and will be removed (2018-02-18)")]
     public class StartSessionParameter
     {
         #region Serialzied Properties
@@ -118,6 +121,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
     [ServiceContract(Name = "InterConnPropagCommonAPI", 
                     Namespace = Constants.ModularInterconnectNameSpace, 
                     ProtectionLevel = System.Net.Security.ProtectionLevel.None)]
+    //[Obsolete("Use of Interconnect.WCF has been replaced with use of corresponding Interconnect.Remoting features.  Interconnect.WCF is no longer supported and will be removed (2018-02-18)")]
     public interface IInterconnectPropagationSessionCommonAPI
     {
         /// <summary>
@@ -407,6 +411,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
     /// <summary>
     /// Interface used when Subscribing to a remote set.  This interface is generally implemented by ClientServiceParts
     /// </summary>
+    [Obsolete("Use of Interconnect.WCF has been replaced with use of corresponding Interconnect.Remoting features.  Interconnect.WCF is no longer supported and will be removed (2018-02-18)")]
     public interface ISubscribeToSet
     {
         /// <summary>
@@ -423,6 +428,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
     /// <summary>
     /// This class is used to specify all of the per instance configurable details about a Part that is used as the Client end of this WCF Modular Interconnect Service
     /// </summary>
+    [Obsolete("Use of Interconnect.WCF has been replaced with use of corresponding Interconnect.Remoting features.  Interconnect.WCF is no longer supported and will be removed (2018-02-18)")]
     public class ServerServiceConfig
     {
         /// <summary>
@@ -461,7 +467,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
             return (ServerServiceConfig) MemberwiseClone();
         }
 
-        public static readonly Uri[] EmptyUriArray = new Uri[0];
+        public static readonly Uri[] EmptyUriArray = EmptyArrayFactory<Uri>.Instance;
     }
 
     /// <summary>
@@ -473,6 +479,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
     /// <remarks>
     /// At present the current class definition is a placeholder until the coding of the ClientServicePart and the ConnetionScanHelper is done.
     /// </remarks>
+    [Obsolete("Use of Interconnect.WCF has been replaced with use of corresponding Interconnect.Remoting features.  Interconnect.WCF is no longer supported and will be removed (2018-02-18)")]
     public class ServerServicePart : SimpleActivePartBase
     {
         #region Construction
@@ -1016,6 +1023,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
     /// <summary>
     /// This class is used to specify all of the per instance configurable details about a Part that is used as the Client end of this WCF Modular Interconnect Service
     /// </summary>
+    [Obsolete("Use of Interconnect.WCF has been replaced with use of corresponding Interconnect.Remoting features.  Interconnect.WCF is no longer supported and will be removed (2018-02-18)")]
     public class ClientServiceConfig
     {
         /// <summary>
@@ -1059,6 +1067,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
     /// <summary>
     /// This is the Part that is used to implement the Client end of a Interconnect WCF Service.
     /// </summary>
+    [Obsolete("Use of Interconnect.WCF has been replaced with use of corresponding Interconnect.Remoting features.  Interconnect.WCF is no longer supported and will be removed (2018-02-18)")]
     public class ClientServicePart : SimpleActivePartBase //, ISubscribeToSet
     {
         /// <summary>

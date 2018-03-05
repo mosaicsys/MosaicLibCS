@@ -23,7 +23,9 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+
 using MosaicLib.Time;
+using MosaicLib.Utils.Collections;
 
 namespace MosaicLib.SerialIO
 {
@@ -256,7 +258,7 @@ namespace MosaicLib.SerialIO
         /// <summary>Returns the Data content array for this Packet.  May be null if no data is assocaited with this Packet</summary>
         public byte[] Data { get { return data; } set { data = value; dataStr = null; } }
 
-        /// <summary>Contains the ErrorCode for property for any Packet.  Will return String.Empty whenever the internally stored copy of thie property is, or has been set to, null.  Setter will set Type to Error if it is Null</summary>
+        /// <summary>Contains the ErrorCode for property for any Packet.  Will return String.Empty whenever the internally stored copy of this property is, or has been set to, null.  Setter will set Type to Error if it is Null</summary>
         public string ErrorCode 
         { 
             get { return (errorCode ?? String.Empty); } 
@@ -312,7 +314,7 @@ namespace MosaicLib.SerialIO
         }
 
         /// <summary>Fixed emptyData field used in place of null Data property during ToString operations.</summary>
-        private static byte[] emptyData = new byte[0];
+        private static byte[] emptyData = EmptyArrayFactory<byte>.Instance;
 
         /// <summary>
         /// Returns a string version of the Packet that indicates the type and length of the packet but does not include its data content
@@ -699,7 +701,7 @@ namespace MosaicLib.SerialIO
             {
                 packetEndScannerDelegate = value;
                 if (value != null)
-                    PacketEndStrArray = new string[0];
+                    PacketEndStrArray = EmptyArrayFactory<string>.Instance;
             }
         }
 

@@ -25,6 +25,7 @@ using System.Runtime.Serialization;
 using System.Linq;
 using System.Text;
 using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
 using MosaicLib.Time;
 using MosaicLib.Modular;
 using MosaicLib.Modular.Part;
@@ -274,7 +275,7 @@ namespace MosaicLib.PartsLib.Common.E099
                 return "{0} Tag:{1} Pages:{2}".CheckedFormat(ActionInfo, TagID, String.Join(" ", PageContentsArray.Select(page => page.ToString()).ToArray()));
         }
 
-        private static readonly ITagPageContents[] emptyPageContentsArray = new ITagPageContents[0];
+        private static readonly ITagPageContents[] emptyPageContentsArray = EmptyArrayFactory<ITagPageContents>.Instance;
         private static readonly IActionState emptyActionState = new ActionStateCopy();
     }
 

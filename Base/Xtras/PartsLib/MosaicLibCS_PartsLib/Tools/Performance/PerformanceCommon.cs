@@ -34,6 +34,7 @@ using MosaicLib.Modular.Interconnect.Values;
 using MosaicLib.Modular.Part;
 using MosaicLib.Time;
 using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
 
 namespace MosaicLib.PartsLib.Tools.Performance
 {
@@ -366,7 +367,7 @@ namespace MosaicLib.PartsLib.Tools.Performance
             GroupInfo.Touched = true;
         }
 
-        private PartsLib.Tools.MDRF.Writer.GroupPointInfo[] emptyGPIArray = new MDRF.Writer.GroupPointInfo[0];
+        private PartsLib.Tools.MDRF.Writer.GroupPointInfo[] emptyGPIArray = EmptyArrayFactory<MDRF.Writer.GroupPointInfo>.Instance;
 
         public Histogram Histogram { get; private set; }
         int[] lastBinCountArray;

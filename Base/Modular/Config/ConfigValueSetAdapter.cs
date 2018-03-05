@@ -28,6 +28,7 @@ using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Config.Attributes;
 using MosaicLib.Modular.Reflection.Attributes;
 using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
 
 namespace MosaicLib.Modular.Config
 {
@@ -139,7 +140,7 @@ namespace MosaicLib.Modular.Config
             private string [] additionalKeywords = null;
             private bool additionalKeywordsHasBeenSet = false;
 
-            private static readonly string[] emptyStringArray = new string[0];
+            private static readonly string[] emptyStringArray = EmptyArrayFactory<string>.Instance;
         }
     }
 
@@ -457,7 +458,7 @@ namespace MosaicLib.Modular.Config
             return ValueContainer.Empty;
         }
 
-        private static readonly object[] emptyObjectArray = new object[0];
+        private static readonly object[] emptyObjectArray = EmptyArrayFactory<object>.Instance;
 
         protected string GenerateFullKeyName(ItemInfo<Attributes.ConfigItemAttribute> itemInfo, string[] baseNames)
         {

@@ -32,6 +32,7 @@ using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Part;
 using MosaicLib.Semi.E039;
 using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
 
 namespace MosaicLib.Semi.E090
 {
@@ -505,7 +506,7 @@ namespace MosaicLib.Semi.E090
             return LinkToSubst.ToID.GetObject(fallbackObj);
         }
 
-        private static readonly E039Link[] emptyLinkArray = new E039Link[0];
+        private static readonly E039Link[] emptyLinkArray = EmptyArrayFactory<E039Link>.Instance;
 
         /// <summary>Gives an empty E090SubstInfo object to be used as a default value.</summary>
         public static E090SubstLocInfo Empty { get { return new E090SubstLocInfo() { ObjID = E039ObjectID.Empty, SrcLinksToHere = emptyLinkArray, DestLinksToHere = emptyLinkArray }; } }
@@ -584,7 +585,7 @@ namespace MosaicLib.Semi.E090
             LinkToDest = other.LinkToDest;
         }
 
-        private static readonly E039Link[] emptyLinkArray = new E039Link[0];
+        private static readonly E039Link[] emptyLinkArray = EmptyArrayFactory<E039Link>.Instance;
 
         public NamedValueSet UpdateAttributeValues(NamedValueSet nvs)
         {

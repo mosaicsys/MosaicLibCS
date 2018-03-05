@@ -27,10 +27,11 @@ using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 
-using MosaicLib.Utils;
-using MosaicLib.Time;
 using MosaicLib.Modular.Action;
 using MosaicLib.Modular.Part;
+using MosaicLib.Time;
+using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
 
 namespace MosaicLib.SerialIO
 {
@@ -672,13 +673,13 @@ namespace MosaicLib.SerialIO
         private const int selectWaitMicroSec = 10000;
 
         private Dictionary<Socket, TableItem> referenceActiveTableItemDictionary = new Dictionary<Socket, TableItem>();
-        private TableItem[] activeTableItemArray = new TableItem[0];
-        private TableItem[] inactiveTableItemArray = new TableItem[0];
+        private TableItem[] activeTableItemArray = EmptyArrayFactory<TableItem>.Instance;
+        private TableItem[] inactiveTableItemArray = EmptyArrayFactory<TableItem>.Instance;
         private QpcTimer rebuildTableItemsTimer = new QpcTimer() { TriggerIntervalInSec = 0.200 };
 
-        private Socket[] activeReadSocketArray = new Socket[0];
-        private Socket[] activeWriteSocketArray = new Socket[0];
-        private Socket[] activeErrorSocketArray = new Socket[0];
+        private Socket[] activeReadSocketArray = EmptyArrayFactory<Socket>.Instance;
+        private Socket[] activeWriteSocketArray = EmptyArrayFactory<Socket>.Instance;
+        private Socket[] activeErrorSocketArray = EmptyArrayFactory<Socket>.Instance;
 
         private List<Socket> selectReadSocketListParam = new List<Socket>();
         private List<Socket> selectWriteSocketListParam = new List<Socket>();

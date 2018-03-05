@@ -142,7 +142,7 @@ namespace MosaicLib.Modular.Action
         public ActionLogging(Logging.IBasicLogger logger, ActionLoggingConfig config)
 		{
             this.mesg = String.Empty;
-            this.mesgDetail = String.Empty;
+            MesgDetail = String.Empty;
             this.logger = logger;
             this.config = config;
             UpdateEmitters();
@@ -152,7 +152,7 @@ namespace MosaicLib.Modular.Action
         protected ActionLogging(string mesg, string mesgDetails, Logging.IBasicLogger logger, ActionLoggingConfig config, Logging.IMesgEmitter doneEmitter, Logging.IMesgEmitter errorEmitter, Logging.IMesgEmitter stateEmitter, Logging.IMesgEmitter updateEmitter)
         {
             this.mesg = mesg;
-            this.mesgDetail = mesgDetails;
+            MesgDetail = mesgDetails;
             this.logger = logger;
             this.config = config;
             this.doneEmitter = doneEmitter;
@@ -163,6 +163,7 @@ namespace MosaicLib.Modular.Action
 
         string mesg;
 		string mesgDetail;
+        internal string eMesgDetail;
         volatile Logging.IBasicLogger logger;
         volatile ActionLoggingConfig config;
         volatile Logging.IMesgEmitter doneEmitter, errorEmitter, stateEmitter, updateEmitter;
@@ -171,7 +172,7 @@ namespace MosaicLib.Modular.Action
         public string Mesg { get { return mesg; } set { mesg = value; } }
 
         /// <summary>Typically updated to contain the string version of the ParamValue or other per instance details for a specific Action instance.</summary>
-        public string MesgDetail { get { return mesgDetail; } set { mesgDetail = value; } }
+        public string MesgDetail { get { return mesgDetail; } set { mesgDetail = value; eMesgDetail = mesgDetail.GenerateEscapedVersion(); } }
 
         /// <summary>Gives the, optinal, Logging.IBasicLogger that shall be used as the base for the Emitters according to the corresponding Config values.  When set to null the Emitters are explicitly set to the Logging.NullEmitter.</summary>
         public Logging.IBasicLogger Logger { get { return logger; } set { logger = value; UpdateEmitters(); } }
@@ -223,7 +224,7 @@ namespace MosaicLib.Modular.Action
                 if (string.IsNullOrEmpty(mesgDetail))
                     return Mesg;
                 else
-                    return Utils.Fcns.CheckedFormat("{0}[{1}]", Mesg, MesgDetail);
+                    return "{0}[{1}]".CheckedFormat(Mesg, eMesgDetail);
             }
         }
 
@@ -269,7 +270,7 @@ namespace MosaicLib.Modular.Action
     /// This class does not directly support DataContract serialiation (it has no DataMembers itself) but it needs to be marked with the DataContract attribute
     /// so that its derived types can be DataContract serialized.
     /// </remarks>
-    [DataContract(Namespace = Constants.ModularActionNameSpace)]
+    [DataContract(Namespace = Constants.ModularActionNameSpace), Serializable]
     public class ActionStateImplBase : IActionState
     {
         #region Protected constructor(s)
@@ -282,15 +283,34 @@ namespace MosaicLib.Modular.Action
         /// Please note that the namedValues are not deep-cloned by this operation.  
         /// NVL cloning is done on entry to the ActionImpl class and from there it requred that the IActionState users do not modify the contents of these shared objects.
         /// </remarks>
-        protected ActionStateImplBase(IActionState rhs)
+        protected ActionStateImplBase(IActionState other)
         {
-            ActionStateImplBase rhsAsASIB = rhs as ActionStateImplBase;
+            if (other != null)
+            {
+                ActionStateImplBase otherAsASIB = other as ActionStateImplBase;
 
-            stateCode = rhs.StateCode;
-            timeStamp = rhs.TimeStamp;
-            resultCode = ((rhsAsASIB != null) ? rhsAsASIB.resultCode : rhs.ResultCode);     // try to make a naked copy of the result code (rather than using the public ResultCode property that has additional logic).
-            isCancelRequested = rhs.IsCancelRequested;
-            namedValues = rhs.NamedValues.ConvertToReadOnly();
+                stateCode = other.StateCode;
+                timeStamp = other.TimeStamp;
+                resultCode = ((otherAsASIB != null) ? otherAsASIB.resultCode : other.ResultCode);     // try to make a naked copy of the result code (rather than using the public ResultCode property that has additional logic).
+                isCancelRequested = other.IsCancelRequested;
+                namedValues = other.NamedValues.ConvertToReadOnly();
+            }
+        }
+
+        #endregion
+
+        #region Serialization support
+
+        [OnSerializing]
+        private void OnSerializing(StreamingContext context)
+        {
+            age = timeStamp.Age.TotalSeconds;
+        }
+
+        [OnDeserialized]
+        private void OnDeserialized(StreamingContext context)
+        {
+            timeStamp = QpcTimeStamp.Now + age.FromSeconds();
         }
 
         #endregion
@@ -299,14 +319,21 @@ namespace MosaicLib.Modular.Action
 
         /// <summary>stores the last ActionStateCode value</summary>
         protected ActionStateCode stateCode = ActionStateCode.Initial;
+
         /// <summary>stores the last QpcTimeStamp for the stateCode value.</summary>
+        [NonSerialized]
         protected Time.QpcTimeStamp timeStamp = Time.QpcTimeStamp.Zero;
+
         /// <summary>stores the resultCode which is valid while the Action is Complete.</summary>
         protected string resultCode = null;
+
         /// <summary>Indicates if the client has requested that the current Action execution be canceled by the provider.</summary>
         protected volatile bool isCancelRequested = false;
+
         /// <summary>Contains the last set of NameValues that have been given by the provider.  This will always be a readonly copy of a set that was passed in from elsewhere.</summary>
         protected Common.NamedValueSet namedValues = null;
+
+        private double age;
 
         #endregion
 
@@ -318,7 +345,7 @@ namespace MosaicLib.Modular.Action
             if (namedValues.IsNullOrEmpty())
                 return Fcns.CheckedFormat("{0} rc:'{1}'{2}", stateCode, resultCode, (IsCancelRequested ? " CancelRequested" : ""));
             else
-                return Fcns.CheckedFormat("{0} rc:'{1}'{2} {3}", stateCode, resultCode, (IsCancelRequested ? " CancelRequested" : ""), namedValues);
+                return Fcns.CheckedFormat("{0} rc:'{1}'{2} {3}", stateCode, resultCode, (IsCancelRequested ? " CancelRequested" : ""), namedValues.ToStringSML());
         }
 
         /// <summary>Public Getter returns the published ActionStateCode.  Protected Setter updates the StateCode to the given value and sets the timeStamp to QpcTimeStamp.Now.</summary>
@@ -461,7 +488,6 @@ namespace MosaicLib.Modular.Action
                     // && thisIAS.TimeStamp == other.TimeStamp
                     && thisIAS.NamedValues.IsEqualTo(other.NamedValues)
                     );
-
         }
     }
 
@@ -469,7 +495,7 @@ namespace MosaicLib.Modular.Action
     /// This is a basic storage wrapper object for IActionState.  Any code that wishes may use this class to create a clone of a given IActionState.
     /// This class is also used as the source/destination class for all DataContract serialization/deserialization of an IActionState's contents.
     /// </summary>
-    [DataContract(Name = "ActionState", Namespace = Constants.ModularActionNameSpace)]
+    [DataContract(Name = "ActionState", Namespace = Constants.ModularActionNameSpace), Serializable]
     public class ActionStateCopy : ActionStateImplBase
     {
         /// <summary>Default constructor</summary>
@@ -484,7 +510,7 @@ namespace MosaicLib.Modular.Action
         {
             this.StateCode = stateCode;
             this.resultCode = resultCode;
-            this.namedValues = namedValues.ConvertToReadOnly();
+            this.namedValues = namedValues.ConvertToReadOnly(mapNullToEmpty: false);
         }
 
         /// <summary>Copy constructor</summary>
@@ -492,8 +518,8 @@ namespace MosaicLib.Modular.Action
         /// Please note that the namedValues are not deep-cloned by this operation.  
         /// NVL cloning is done on entry to the ActionImpl class and from there it requred that the IActionState users do not modify the contents of these shared objects.
         /// </remarks>
-        public ActionStateCopy(IActionState rhs) 
-            : base(rhs) 
+        public ActionStateCopy(IActionState other) 
+            : base(other) 
         { }
 
         /// <summary>
@@ -515,16 +541,16 @@ namespace MosaicLib.Modular.Action
         private bool DC_IsCancelRequested { get { return base.isCancelRequested; } set { base.isCancelRequested = value; } }
 
         /// <summary>
-        /// This property is only used for DataContract serialization/deserialization.
+        /// This property is used for DataContract serialization/deserialization.  The getter is also used for remoting as it gives the remoting code getter access to the internally deserialized and stored namedValues field, which may be null.
         /// The property setter sets the IsReadOnly flag on the NamedValueSet instance that it is given.
         /// It can (and should) do this because this setter is only called by DataContract deserialization and as such the NamedValueSet instance it is being given
         /// has always been freshly constructed and has no other users or clients that are permitted to further change it.
         /// </summary>
         [DataMember(Name = "NamedValues", Order = 40, EmitDefaultValue = false, IsRequired = false)]
-        private NamedValueSet DC_NamedValues 
+        internal NamedValueSet DC_NamedValues 
         {
             get { return base.namedValues; }
-            set { base.namedValues = ((value != null) ? value.MakeReadOnly() : null); } 
+            private set { base.namedValues = ((value != null) ? value.MakeReadOnly() : null); }     // this path is only used for deserialization.  As such we can safely convert the given NVS instance to be readonly without needing to copy it first.
         }
 
         /// <summary>Returns the approximate size of the contents in bytes.</summary>
@@ -534,10 +560,28 @@ namespace MosaicLib.Modular.Action
         }
     }
 
+    public static partial class ExtensionMethods
+    {
+        /// <summary>
+        /// Allows the caller to pass an IActionState instance and get back an ActionStateCopy from it.  
+        /// This is done by casting if the underlying object is already an ActionStateCopy, otherwise this done using a copy constructor.
+        /// </summary>
+        public static ActionStateCopy ConvertToActionStateCopy(this IActionState actionStateIn)
+        {
+            ActionStateCopy actionState = actionStateIn as ActionStateCopy;
+
+            if (actionState == null && actionStateIn != null)
+                actionState = new ActionStateCopy(actionStateIn);
+
+            return actionState;
+        }
+    }
+
     ///<summary>
 	/// Define a class that contains the information necessary to determine the progress and success of a specfic Action.
 	///</summary>
-	public class ActionStateImpl : ActionStateImplBase
+    [Serializable]
+    public class ActionStateImpl : ActionStateImplBase
 	{
 		#region local methods
 
@@ -556,14 +600,16 @@ namespace MosaicLib.Modular.Action
 
             if (useNewStyle)
             {
+                string eDescription = description.GenerateEscapedVersion();
+
                 if (isComplete && !rcIsNonEmpty)
-                    emitter.Emit("Action '{0}': Succeeded [{1}, from:{2}]", description, toState, fromState);
+                    emitter.Emit("Action succeeded [name:({0}) state:{1}<-{2}]", eDescription, toState, fromState);
                 else if (isComplete)
-                    emitter.Emit("Action '{0}': Failed [{1}, from:{2}, rc:{3}]", description, toState, fromState, resultCode.GenerateQuotableVersion());
+                    emitter.Emit("Action failed [name:({0}) state:{1}<-{2} resultCode:({3})]", eDescription, toState, fromState, resultCode.GenerateEscapedVersion());
                 else if (!includeRC)
-                    emitter.Emit("Action '{0}': State change [to:{1}, from:{2}]", description, toState, fromState);
+                    emitter.Emit("Action state changed [name:({0}) state:{1}<-{2}]", eDescription, toState, fromState);
                 else
-                    emitter.Emit("Action '{0}': State change [to:{1}, from:{2}, rc:{3}]", description, toState, fromState, resultCode.GenerateQuotableVersion());
+                    emitter.Emit("Action state changed [name:({0}) state:{1}<-{2} resultCode:({3})]", eDescription, toState, fromState, resultCode.GenerateEscapedVersion());
             }
             else
             {
@@ -585,7 +631,8 @@ namespace MosaicLib.Modular.Action
             {
                 if (useNewStyle)
                 {
-                    emitter.EmitWith("Action '{0}': NVS updated [state:{1}]".CheckedFormat(logging, state), nvs);
+                    // NOTE: the nvs is passed directly to the message level so it will show up when the message is formatted for output.
+                    emitter.EmitWith("Action state NamedValues updated [name:({0}) state:{1}]".CheckedFormat(logging.ActionDescription.GenerateEscapedVersion(), state), nvs);
                 }
                 else
                 {
@@ -901,7 +948,7 @@ namespace MosaicLib.Modular.Action
         /// <summary>
         /// Carries a set of name/value pair objects that can be passed by the client to the target Part as named parameter values based on the Common.NamedValueList
         /// facility.  These may be used to carry an arbitrary set of parameters, by name, to the Action's implementing part.
-        /// A readonly copy of thie property is made when the action is Started and this clone is then made available to the provider.
+        /// A readonly copy of this property is made when the action is Started and this clone is then made available to the provider.
         /// </summary>
         /// <remarks>
         /// Client is free to replace this property at any time or to change the underlying set contents at any time.  
@@ -1282,16 +1329,19 @@ namespace MosaicLib.Modular.Action
             }
         }
 
-        /// <summary>Provider invokes this to indicate that the action is complete and to provide the final resultCode</summary>
+        /// <summary>Provider invokes this to indicate that the action is complete and to provide the final <paramref name="resultCode"/></summary>
         public void CompleteRequest(string resultCode) 
         { 
             CompleteRequest(resultCode, false, null); 
         }
 
-        /// <summary>Provider invokes this to indicate that the action is complete and to provide the final resultCode and set of NamedValues</summary>
+        /// <summary>
+        /// Provider invokes this to indicate that the action is complete and to provide the final <paramref name="resultCode"/>.
+        /// If a non-null <paramref name="namedValueSet"/> is provided then it will be used to secify the completed IActionState's NamedValues.
+        /// </summary>
         public void CompleteRequest(string resultCode, Common.INamedValueSet namedValueSet) 
         { 
-            CompleteRequest(resultCode, true, namedValueSet); 
+            CompleteRequest(resultCode, (namedValueSet != null), namedValueSet); 
         }
 
         /// <summary>Internal private common implementation for the CompleteRequest method.</summary>
@@ -1343,19 +1393,19 @@ namespace MosaicLib.Modular.Action
         public string ToString(ToStringSelect select)
         {
             string mesg = logging.Mesg;
-            string mesgDetail = logging.MesgDetail;
+            string eMesgDetail = logging.MesgDetail;
 
-            bool includeMesgDetail = (!mesgDetail.IsNullOrEmpty() && (select != ToStringSelect.JustMesg));
+            bool includeMesgDetail = (!eMesgDetail.IsNullOrEmpty() && (select != ToStringSelect.JustMesg));
             bool includeState = (select == ToStringSelect.MesgDetailAndState);
 
             if (!includeMesgDetail && !includeState)
                 return mesg;
             else if (includeMesgDetail && !includeState)
-                return "{0} '{1}'".CheckedFormat(mesg, mesgDetail);
+                return "{0}[{1}]".CheckedFormat(mesg, eMesgDetail);
             else if (!includeMesgDetail && includeState)
                 return "{0} state:{1}".CheckedFormat(mesg, ActionState);
             else
-                return "{0} '{1}' state:{2}".CheckedFormat(mesg, mesgDetail, ActionState);
+                return "{0}[{1}] state:{2}".CheckedFormat(mesg, eMesgDetail, ActionState);
         }
 
         /// <summary>Protected method is used internally to record that the ActionState may have been changed so as to force the generation of a new clone when one of the clients next asks for it.</summary>
@@ -1374,27 +1424,31 @@ namespace MosaicLib.Modular.Action
             bool useNewStyle = ((logging.Config.ActionLoggingStyleSelect & ActionLoggingStyleSelect.OldXmlishStyle) == 0);
             string description = logging.ActionDescription;
 
-            string nvsStr = (nvs.IsNullOrEmpty() ? "" : " {0}".CheckedFormat(nvs.ToStringSML()));
-
             if (useNewStyle)
-                logging.State.Emit("Action '{0}': Event [state:{1}, {2}{3}]", description, actionStateCode, eventStr, nvsStr);
+            {
+                logging.State.EmitWith("Action event reported [name:({0}) state:{1} event:({2})]".CheckedFormat(description.GenerateEscapedVersion(), actionStateCode, eventStr.GenerateEscapedVersion()), nvs: nvs);
+            }
             else
-                logging.State.Emit("<ActionEvent id='{0}' state='{1}'>{2}{3}</ActionEvent>", description, actionStateCode, eventStr, nvsStr); 
+            {
+                string nvsStr = (nvs.IsNullOrEmpty() ? "" : " {0}".CheckedFormat(nvs.ToStringSML()));
+
+                logging.State.Emit("<ActionEvent id='{0}' state='{1}'>{2}{3}</ActionEvent>", description, actionStateCode, eventStr, nvsStr);
+            }
 		}
 
         /// <summary>
         /// Protected common method used to generate and emit consistently formatted ActionError records
         /// <para/>{ActionError id="{0}" state="{1}"}{2}{/ActionError}
         /// </summary>
-        protected void EmitActionError(string eventStr, ActionStateCode actionStateCode) 
+        protected void EmitActionError(string errorStr, ActionStateCode actionStateCode) 
 		{
             bool useNewStyle = ((logging.Config.ActionLoggingStyleSelect & ActionLoggingStyleSelect.OldXmlishStyle) == 0);
             string description = logging.ActionDescription;
 
             if (useNewStyle)
-                logging.Error.Emit("Action '{0}': Error [state:{1}, {2}]", description, actionStateCode, eventStr);
+                logging.Error.Emit("Action issue detected [name:({0}) state:{1} error:({2})]", description.GenerateEscapedVersion(), actionStateCode, errorStr.GenerateEscapedVersion());
             else
-                logging.Error.Emit("<ActionError id='{0}' state='{1}'>{2}</ActionError>", description, actionStateCode, eventStr); 
+                logging.Error.Emit("<ActionError id='{0}' state='{1}'>{2}</ActionError>", description, actionStateCode, errorStr); 
 		}
 
         /// <summary>

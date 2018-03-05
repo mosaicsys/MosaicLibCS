@@ -28,6 +28,8 @@ using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
 using System.Text;
 
+using MosaicLib.Utils.Collections;
+
 namespace MosaicLib.Utils
 {
     #region utility interfaces: ICopyable<TObjectType>
@@ -699,7 +701,7 @@ namespace MosaicLib.Utils
                     gch.Free();
             }
         }
-        private static readonly byte[] emptyByteArray = new byte[0];
+        private static readonly byte[] emptyByteArray = EmptyArrayFactory<byte>.Instance;
     }
 
     #endregion
@@ -1674,24 +1676,28 @@ namespace MosaicLib.Utils
         /// Attempts to use an underlying DataContractSerializer to read the deserialize the corresponding object from the given stream using its ReadObject method.  
         /// Returns the object if the read was successful.
         /// </summary>
+        /// <exception cref="System.Runtime.Serialization.SerializationException">May be thrown by the underlying Data contract serialization object's ReadObject method that is used here.</exception>
         TObjectType ReadObject(System.IO.Stream readStream);
 
         /// <summary>
         /// Attempts to use the contained DataContractSerializer to read the deserialize the corresponding object from the given TextReader.
         /// </summary>
         /// <param name="tr">Acts as the source of the text from which the DataContractSerializer is to deserialize the object.</param>
+        /// <exception cref="System.Runtime.Serialization.SerializationException">May be thrown by the underlying Data contract serialization object's ReadObject method that is used here.</exception>
         TObjectType ReadObject(System.IO.TextReader tr);
 
         /// <summary>
         /// Attempts to use an underlying DataContractSerializer to read the deserialize the corresponding object from the given string.
         /// </summary>
         /// <param name="s">Contains the text from which the DataContractSerializer is to deserialize the object.</param>
+        /// <exception cref="System.Runtime.Serialization.SerializationException">May be thrown by the underlying Data contract serialization object's ReadObject method that is used here.</exception>
         TObjectType ReadObject(String s);
 
         /// <summary>
         /// Attempts to open the given path as an serialized text file and read/deserialize the given object from it using an underlying DataContractSerializer
         /// If the underlying File.Open or ReadObject method call fails, this method will either return the given defaultValue (of rethrow is false) or will rethrow the original exception.
         /// </summary>
+        /// <exception cref="System.Runtime.Serialization.SerializationException">May be thrown by the underlying Data contract serialization object's ReadObject method that is used here.</exception>
         TObjectType ReadFromFile(String path, TObjectType defaultValue, bool rethrow);
 
         /// <summary>
@@ -1708,6 +1714,9 @@ namespace MosaicLib.Utils
         /// Attempts to open the given path as a text file and write/serialize the given object into the file using an underlying DataContractSerializer.
         /// If the underlying File.Open or DataContractSerializer.WiteObject call fails, this method will either return (of rethrow is false) or will rethrow the original exception.
         /// </summary>
+        /// <exception cref="System.Runtime.Serialization.InvalidDataContractException">The type being serialized does not conform to data contract rules. For example, the System.Runtime.Serialization.DataContractAttribute attribute has not been applied to the type.</exception>
+        /// <exception cref="System.Runtime.Serialization.SerializationException">There is a problem with the instance being written</exception>
+        /// <exception cref="System.ServiceModel.QuotaExceededException">The maximum number of objects to serialize has been exceeded. Check the System.Runtime.Serialization.DataContractSerializer.MaxItemsInObjectGraph property.</exception>
         void WriteToFile(TObjectType obj, String path, bool rethrow);
 
         /// <summary>
@@ -1715,6 +1724,9 @@ namespace MosaicLib.Utils
         /// </summary>
         /// <param name="obj">Gives the object that is to be serialized</param>
         /// <returns>A string containing the serialized representation of the given object as serialized by the contained DataContractSerializer</returns>
+        /// <exception cref="System.Runtime.Serialization.InvalidDataContractException">The type being serialized does not conform to data contract rules. For example, the System.Runtime.Serialization.DataContractAttribute attribute has not been applied to the type.</exception>
+        /// <exception cref="System.Runtime.Serialization.SerializationException">There is a problem with the instance being written</exception>
+        /// <exception cref="System.ServiceModel.QuotaExceededException">The maximum number of objects to serialize has been exceeded. Check the System.Runtime.Serialization.DataContractSerializer.MaxItemsInObjectGraph property.</exception>
         string ConvertObjectToString(TObjectType obj);
     }
 

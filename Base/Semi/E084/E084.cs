@@ -208,7 +208,7 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
         ///<summary>U_REQ - to active: set signal to indicate that port is ready to accept an automatic unload transfer request, cleared to signal that physical removal has completed.<para/>pin 2, 0x0002</summary>
 		bool U_REQ { get; }
 
-        ///<summary>VA - only used for interbay passive OHS vehicles.  Valid signal for use wiht VS_0 and VS_1 select signals.<para/>pin 3, 0x0004</summary>
+        ///<summary>VA - only used for interbay passive OHS vehicles.  Valid signal for use with VS_0 and VS_1 select signals.<para/>pin 3, 0x0004</summary>
 		bool VA { get; }
 
         ///<summary>READY - to active: set signal to indicate that port is allocated for transfer and that port is ready for physical transfer to begin.  signal cleared when COMPT has been observed.<para/>pin 4, 0x0008</summary>
@@ -574,7 +574,7 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
         ///<summary>U_REQ - to active: set signal to indicate that port is ready to accept an automatic unload transfer request, cleared to signal that physical removal has completed.<para/>pin 2, 0x0002</summary>
         public bool U_REQ { get; set; }
 
-        ///<summary>VA - only used for interbay passive OHS vehicles.  Valid signal for use wiht VS_0 and VS_1 select signals.<para/>pin 3, 0x0004</summary>
+        ///<summary>VA - only used for interbay passive OHS vehicles.  Valid signal for use with VS_0 and VS_1 select signals.<para/>pin 3, 0x0004</summary>
         public bool VA { get; set; }
 
         ///<summary>READY - to active: set signal to indicate that port is allocated for transfer and that port is ready for physical transfer to begin.  signal cleared when COMPT has been observed.<para/>pin 4, 0x0008</summary>

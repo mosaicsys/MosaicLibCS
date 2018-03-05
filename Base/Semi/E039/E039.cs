@@ -501,7 +501,7 @@ namespace MosaicLib.Semi.E039
 
         /// <summary>
         /// Adjustable ToString variant accepts <paramref name="toStringSelect"/> to indicate which flavor of ToString will be used.
-        /// FullName inclues the FullName, otherwise just the Name is included.  
+        /// FullName includes the FullName, otherwise just the Name is included.  
         /// If UUID is included and this ID includes a UUID then the uuid will be appended to the resulting string.
         /// </summary>
         public string ToString(E039ToStringSelect toStringSelect)
@@ -855,7 +855,7 @@ namespace MosaicLib.Semi.E039
 
         private IValuesInterconnection _partBaseIVI, _objectIVI;
 
-        private static readonly E039TableTypeSetPersistSpecItem [] _emptyPersistSpecItemArray = new E039TableTypeSetPersistSpecItem[0];
+        private static readonly E039TableTypeSetPersistSpecItem [] _emptyPersistSpecItemArray = EmptyArrayFactory<E039TableTypeSetPersistSpecItem>.Instance;
     }
 
     public class E039TableTypeSetPersistSpecItem
@@ -1009,7 +1009,7 @@ namespace MosaicLib.Semi.E039
         E039BasicTablePartConfig Config { get; set; }
         IValuesInterconnection ObjectIVI { get; set; }
 
-        static readonly E039ObjectID[] emptyE039ObjectIDArray = new E039ObjectID[0];
+        static readonly E039ObjectID[] emptyE039ObjectIDArray = EmptyArrayFactory<E039ObjectID>.Instance;
 
         #endregion
 

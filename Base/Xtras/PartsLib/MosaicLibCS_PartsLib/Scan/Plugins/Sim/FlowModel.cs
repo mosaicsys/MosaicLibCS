@@ -36,6 +36,7 @@ using MosaicLib.PartsLib.Scan.Plugin.Sim.Common;
 using MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel.Components;
 using MosaicLib.Time;
 using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
 
 using Physics = MosaicLib.PartsLib.Common.Physics;
 
@@ -43,6 +44,43 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
 {
     namespace Components
     {
+        #region Serviceable
+
+        /// <summary>
+        /// This object allows a client to invoke delegates during setup and service phases of the use of the flow model.
+        /// This is intended to allow an external entity to "hang" custom logic off of the internals of a flow model, such as to propagate a value from one component to another.
+        /// <para/>defaults: ServicePhases = BeforeRelaxation
+        /// </summary>
+        public class Serviceable : FlowModel.IServiceable
+        {
+            Serviceable()
+            {
+                ServicePhases = Sim.FlowModel.ServicePhases.BeforeRelaxation;
+            }
+
+            public ServicePhases ServicePhases { get; set; }
+
+            public Action<string, string> SetupProxyDelegate { get; set; }
+
+            public Action<ServicePhases, TimeSpan, QpcTimeStamp> ServiceProxyDelegate { get; set; }
+
+            void FlowModel.IServiceable.Setup(string scanEnginePartName, string vacuumSimPartName)
+            {
+                Action<string, string> setupProxyDelegate = SetupProxyDelegate;
+                if (setupProxyDelegate != null)
+                    setupProxyDelegate(scanEnginePartName, vacuumSimPartName);
+            }
+
+            void FlowModel.IServiceable.Service(ServicePhases servicePhase, TimeSpan measuredServiceInterval, QpcTimeStamp timestampNow)
+            {
+                Action<ServicePhases, TimeSpan, QpcTimeStamp> serviceProxyDelegate = ServiceProxyDelegate;
+                if (serviceProxyDelegate != null)
+                    serviceProxyDelegate(servicePhase, measuredServiceInterval, timestampNow);
+            }
+        }
+
+        #endregion
+
         #region Pipe
 
         public class Pipe : FlowModel.NodePairBase<PipeConfig>
@@ -54,8 +92,13 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
 
         public class PipeConfig : FlowModel.ComponentConfig, ICopyable<PipeConfig>
         {
-            public PipeConfig() { }
-            public PipeConfig(PipeConfig other) : base(other) { }
+            public PipeConfig() 
+            { }
+
+            public PipeConfig(PipeConfig other) 
+                : base(other) 
+            { }
+
             PipeConfig ICopyable<PipeConfig>.MakeCopyOfThis(bool deepCopy) { return new PipeConfig(this); }
         }
 
@@ -486,22 +529,31 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             { }
 
             public Gauge(string name, GaugeConfig config, FlowModel.Node observesNode)
-                : base(name, config, Fcns.CurrentClassLeafName)
+                : this(name, config, GetValueSourceDelegate(observesNode, config))
             {
                 ObservesNode = observesNode;
+            }
+
+            public Gauge(string name, GaugeConfig config, Func<double> rawValueSourceDelegate)
+                : base(name, config, Fcns.CurrentClassLeafName)
+            {
+                RawValueSourceDelegate = rawValueSourceDelegate;
                 ServicePhases = ServicePhases.AfterRelaxation | ServicePhases.AfterSetup;
 
                 GaugeMode = Config.InitialGaugeMode.MapDefaultTo(GaugeMode.AllwaysOn);
             }
 
-            /// <summary>Shows the Node that this Gauge is reporting on (from which the gauge gets the flow or pressure)</summary>
+            /// <summary>Shows the Node that this Gauge is reporting on (from which the gauge gets the flow or pressure).  Note that this property will be null for gauge instances that are looking at a directly specified RawValueSourceDelegate</summary>
             public FlowModel.Node ObservesNode { get; private set; }
 
+            /// <summary>Allows the client to "attach" a gauge to any delgate that can produce a floating point value.</summary>
+            public Func<double> RawValueSourceDelegate { get; private set; }
+
             /// <summary>Gives the most recently observed pressure value in client specified PressureUnits.  Will have noise added if NoiseLevelInPercent is above zero.</summary>
-            public double Value { get { return Config.ConvertValueUOM(servicedValueStdUnits, outbound: true); } }
+            public double Value { get { return Config.ConvertValueUOM(servicedScaledValueStdUnits, outbound: true); } }
 
             /// <summary>Gives the most recently observed differential pressure value (Pressure - Config.DifferentialReferencePPressure) in client specified PressureUnits.  Will have noise added if either Config.noise related parameter is above zero.</summary>
-            public double DifferentialValue { get { return Config.ConvertValueUOM(serviceDifferentialValueStdUnits, outbound: true); } }
+            public double DifferentialValue { get { return Config.ConvertValueUOM(servicedScaledDifferentialValueStdUnits, outbound: true); } }
 
             /// <summary>Returns true if the last raw reading was outside of the stated min..max reading range.</summary>
             public bool ReadingOutOfRange { get; private set; }
@@ -552,7 +604,9 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             private System.Random rng = new Random();
 
             private double servicedValueStdUnits;
-            private double serviceDifferentialValueStdUnits;
+            private double servicedDifferentialValueStdUnits;
+            private double servicedScaledValueStdUnits;
+            private double servicedScaledDifferentialValueStdUnits;
             private bool gaugeWasForcedOff = false;
 
             public void SetGaugeMode(GaugeMode gaugeMode)
@@ -564,16 +618,19 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                 gaugeWasForcedOff = false;
             }
 
+            private static Func<double> GetValueSourceDelegate(FlowModel.Node sourceNode, GaugeConfig config)
+            {
+                switch (config.GaugeType)
+                {
+                    case GaugeType.Pressure: return (() => sourceNode.PressureInKPa);
+                    case GaugeType.VolumetricFlow: return (() => sourceNode.VolumetricFlowOutOfNodeInSCMS);
+                    default: return (() => 0.0);
+                }
+            }
+
             public override void Service(ServicePhases servicePhase, TimeSpan measuredServiceInterval, QpcTimeStamp timestampNow)
             {
-                double rawValueInStdUnits = 0.0;
-
-                switch (Config.GaugeType)
-                {
-                    case GaugeType.Pressure: rawValueInStdUnits = ObservesNode.PressureInKPa; break;
-                    case GaugeType.VolumetricFlow: rawValueInStdUnits = ObservesNode.VolumetricFlowOutOfNodeInSCMS; break;
-                    default: break;
-                }
+                double rawValueInStdUnits = RawValueSourceDelegate();
 
                 bool gaugeIsOn = (GaugeMode == GaugeMode.AllwaysOn || GaugeMode == GaugeMode.On);
 
@@ -594,12 +651,14 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                     clippedValueInStdUnits = rawValueInStdUnits.Clip(Config.minimumValueInStdUnits, Config.maximumValueInStdUnits);
 
                 double rngValueM1P1 = rng.GetNextRandomInMinus1ToPlus1Range();
-                double rPercent = rngValueM1P1 * Config.noiseLevelInPercentOfCurrentValue;    // a number from -noiseLevelInPercent to +noiseLevelInPercent
+                double rPercent = rngValueM1P1 * Config.NoiseLevelInPercentOfCurrentValue;    // a number from -noiseLevelInPercent to +noiseLevelInPercent
                 double rGeometricNoiseGain = (100.0 + rPercent) * 0.01;            // a number from 1.0-rp  to 1.0+rp  rp is clipped to be no larger than 0.5
                 double clippedValueWithNoiseInStdUnits = clippedValueInStdUnits * rGeometricNoiseGain + (rngValueM1P1 * Config.NoiseLevelBase); // add in multaplicative noise and base noise 
 
                 servicedValueStdUnits = (gaugeIsOn ? clippedValueWithNoiseInStdUnits : Config.offValueInStdUnits);
-                serviceDifferentialValueStdUnits = (gaugeIsOn ? (servicedValueStdUnits - Config.differentialReferenceValueInStdUnits).Clip(Config.minimumDifferentialValueInStdUnits, Config.maximumDifferentialValueInStdUnits) : Config.offDifferentialValueInStdUnits);
+                servicedDifferentialValueStdUnits = (gaugeIsOn ? (servicedScaledValueStdUnits - Config.differentialReferenceValueInStdUnits).Clip(Config.minimumDifferentialValueInStdUnits, Config.maximumDifferentialValueInStdUnits) : Config.offDifferentialValueInStdUnits);
+                servicedScaledValueStdUnits = servicedValueStdUnits * Config.ReadingGain;
+                servicedScaledDifferentialValueStdUnits = servicedDifferentialValueStdUnits * Config.ReadingGain;
 
                 SensorFault = forceSensorFault || (gaugeWasForcedOff && Config.GaugeBehavior.IsSet(GaugeBehavior.SensorFaultWhenGaugeForcedOff));
                 if (ReadingOutOfRange)
@@ -677,6 +736,8 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
 
                 minimumDifferentialValueInStdUnits = double.NegativeInfinity;
                 maximumDifferentialValueInStdUnits = double.PositiveInfinity;
+
+                ReadingGain = 1.0;
             }
 
             public GaugeConfig(GaugeConfig other)
@@ -694,8 +755,9 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                 minimumDifferentialValueInStdUnits = other.minimumDifferentialValueInStdUnits;
                 maximumDifferentialValueInStdUnits = other.maximumDifferentialValueInStdUnits;
 
-                noiseLevelInPercentOfCurrentValue = other.noiseLevelInPercentOfCurrentValue;
+                NoiseLevelInPercentOfCurrentValue = other.NoiseLevelInPercentOfCurrentValue;
                 NoiseLevelBase = other.NoiseLevelBase;
+                ReadingGain = other.ReadingGain;
             }
 
             GaugeConfig ICopyable<GaugeConfig>.MakeCopyOfThis(bool deepCopy) { return new GaugeConfig(this); }
@@ -731,17 +793,16 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             public double MaximumDifferentialValue { get { return ConvertValueUOM(maximumDifferentialValueInStdUnits, outbound: true); } set { maximumDifferentialValueInStdUnits = ConvertValueUOM(value, inbound: true); } }
 
             /// <summary>Get/Set value gives the geometric level of noise for this reading (most useful when emulating sensors that are essentially logarithmic).  At value of 2.0 gives noise of value * fraction randomly choosen between (0.98 and 1.02)</summary>
-            public double NoiseLevelInPercentOfCurrentValue
-            {
-                get { return noiseLevelInPercentOfCurrentValue; }
-                set { noiseLevelInPercentOfCurrentValue = value.Clip(0.0, 50.0, 0.0); }
-            }
+            public double NoiseLevelInPercentOfCurrentValue { get; set; }
+
             /// <summary>Get/Set value gives the base level of noise that is added to the reading in the client selected PressureUnits or VolumetricFlow units (as approrpiate)</summary>
             public double NoiseLevelBase { get; set; }
 
+            /// <summary>Gives a gain factor on the reading that is produced in relation to the actual value source that it is observing.</summary>
+            public double ReadingGain { get; set; }
+
             internal double differentialReferenceValueInStdUnits;
             internal double offValueInStdUnits, offDifferentialValueInStdUnits;
-            internal double noiseLevelInPercentOfCurrentValue;
             internal double minimumValueInStdUnits, maximumValueInStdUnits;
             internal double minimumDifferentialValueInStdUnits, maximumDifferentialValueInStdUnits;
 
@@ -1496,6 +1557,10 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
         AutoAdjustInterval = 1,
     }
 
+    /// <summary>
+    /// Flags enumreatinon to define which parts of the FlowModel service loop a given entity it interested in receiving service calls during.
+    /// <para/>None (0x00), BeforeRelaxation (0x01), AfterRelaxation (0x02), AtStartOfRelaxationInterval (0x04), AtEndOfRelaxationInterval (0x08), AllRelaxationPhases (0x0f), AfterSetup (0x0100), Manual (0x0200), FaultInjection (0x0400)
+    /// </summary>
     [Flags]
     public enum ServicePhases : int
     {
@@ -1505,6 +1570,8 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
         AfterRelaxation = 0x02,
         AtStartOfRelaxationInterval = 0x04,
         AtEndOfRelaxationInterval = 0x08,
+
+        AllRelaxationPhases = (BeforeRelaxation | AfterRelaxation | AtStartOfRelaxationInterval | AtEndOfRelaxationInterval),
 
         AfterSetup = 0x0100,
         Manual = 0x0200,
@@ -1608,6 +1675,13 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             return this;
         }
 
+        public FlowModel AddItems(params IServiceable[] serviceableSetParamsArray)
+        {
+            serviceableList.AddRange(serviceableSetParamsArray);
+
+            return this;
+        }
+
         public FlowModel Add<TValueType>(DelegateItemSpec<TValueType> delegateItemSpec)
         {
             delegateValueSetAdapter.Add(delegateItemSpec);
@@ -1647,6 +1721,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
 
         #region IScanEnginePlugIn implementation methods: Setup, UpdateInputs, Service, UpdateOutputs
 
+        private List<IServiceable> serviceableList = new List<IServiceable>();
         private List<IComponent> componentList = new List<IComponent>();
         private DelegateValueSetAdapter delegateValueSetAdapter = new DelegateValueSetAdapter() { OptimizeSets = true };
 
@@ -1685,13 +1760,14 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                 componentList.Add(nodePairChain);
             }
 
+            serviceableBaseArray = serviceableList.Concat(componentList).ToArray();
             componentBaseArray = componentList.ToArray();
             nodePairChainArray = nodePairChainList.ToArray();
             nodePairArray = workingNodePairList.ToArray();
             nodePairChainAndNodePairArray = nodePairChainArray.Concat(nodePairArray).ToArray();
 
-            foreach (var comp in componentBaseArray)
-                comp.Setup(scanEnginePartName, Name);
+            foreach (var item in serviceableBaseArray)
+                item.Setup(scanEnginePartName, Name);
 
             Node[] chamberNodes = allChambersArray.Select(item => item.EffectiveNode).ToArray();
             Node[] nodePairsNodesArray = nodePairChainArray.Concat(nodePairArray).SelectMany(item => new[] { item.End1, item.End2 }).ToArray();
@@ -1719,7 +1795,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             foreach (var node in mainNodesArray)
                 node.SetupInitialPressure();
 
-            ServiceComponents(ServicePhases.AfterSetup, TimeSpan.Zero, QpcTimeStamp.Now);
+            ServiceServiceableItemsAndComponents(ServicePhases.AfterSetup, TimeSpan.Zero, QpcTimeStamp.Now);
         }
 
         INodePair[] ExtractNextChain(List<INodePair> workingNodePairList)
@@ -1759,13 +1835,13 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
 
         public override void Service(TimeSpan measuredServiceInterval, QpcTimeStamp timeStampNow)
         {
-            ServiceComponents(ServicePhases.BeforeRelaxation, measuredServiceInterval, timeStampNow);
+            ServiceServiceableItemsAndComponents(ServicePhases.BeforeRelaxation, measuredServiceInterval, timeStampNow);
 
             TimeSpan remainingTime = measuredServiceInterval;
 
             do
             {
-                ServiceComponents(ServicePhases.AtStartOfRelaxationInterval, measuredServiceInterval, timeStampNow);
+                ServiceServiceableItemsAndComponents(ServicePhases.AtStartOfRelaxationInterval, measuredServiceInterval, timeStampNow);
 
                 Array.Copy(nodeFlowsArray, lastNodeFlowsArray, nodeFlowsArray.Length);
 
@@ -1807,10 +1883,10 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                         break;
                 }
 
-                ServiceComponents(ServicePhases.AtEndOfRelaxationInterval, measuredServiceInterval, timeStampNow);
+                ServiceServiceableItemsAndComponents(ServicePhases.AtEndOfRelaxationInterval, measuredServiceInterval, timeStampNow);
             } while (remainingTime > TimeSpan.Zero);
 
-            ServiceComponents(ServicePhases.AfterRelaxation, measuredServiceInterval, timeStampNow);
+            ServiceServiceableItemsAndComponents(ServicePhases.AfterRelaxation, measuredServiceInterval, timeStampNow);
         }
 
         public override void UpdateOutputs()
@@ -1818,6 +1894,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             delegateValueSetAdapter.Set();
         }
 
+        private IServiceable[] serviceableBaseArray;
         private IComponent[] componentBaseArray;
         private Chamber[] allChambersArray;
         private Chamber[] singleChambersArray;
@@ -1828,7 +1905,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
         private INodePair[] nodePairChainAndNodePairArray;
         private bool[] nodePairChainAndNodePairIsBondingConnectedArray;
 
-        private static readonly ChamberSet[] emptyChamberSetArray = new ChamberSet[0];
+        private static readonly ChamberSet[] emptyChamberSetArray = EmptyArrayFactory<ChamberSet>.Instance;
 
         private Node[] mainNodesArray;
         private int mainNodesArrayLength;
@@ -1841,12 +1918,12 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
 
         #region outer internals: ServiceComponents
 
-        private void ServiceComponents(ServicePhases servicePhase, TimeSpan measuredServiceInterval, QpcTimeStamp timeStampNow)
+        private void ServiceServiceableItemsAndComponents(ServicePhases servicePhase, TimeSpan measuredServiceInterval, QpcTimeStamp timeStampNow)
         {
-            foreach (var comp in componentBaseArray)
+            foreach (var item in serviceableBaseArray)
             {
-                if (comp.ServicePhases.IncludeInPhase(servicePhase))
-                    comp.Service(servicePhase, measuredServiceInterval, timeStampNow);
+                if (item.ServicePhases.IncludeInPhase(servicePhase))
+                    item.Service(servicePhase, measuredServiceInterval, timeStampNow);
             }
         }
 
@@ -2294,9 +2371,17 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
 
         #endregion
 
-        #region base and helper classes for components: ComponentBase, Node, NodePair
+        #region base and helper classes for components: ComponentBase, Node, NodePair, Serviceable
 
-        public interface IComponent
+        public interface IServiceable
+        {
+            ServicePhases ServicePhases { get; }
+
+            void Setup(string scanEnginePartName, string vacuumSimPartName);
+            void Service(ServicePhases servicePhase, TimeSpan measuredServiceInterval, QpcTimeStamp timestampNow);
+        }
+
+        public interface IComponent : IServiceable
         {
             string Name { get; }
             ComponentConfig Config { get; }
@@ -2307,10 +2392,6 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             double Temperature { get; }
             double TemperatureInDegK { get; }
 
-            ServicePhases ServicePhases { get; }
-
-            void Setup(string scanEnginePartName, string vacuumSimPartName);
-            void Service(ServicePhases servicePhase, TimeSpan measuredServiceInterval, QpcTimeStamp timestampNow);
             void UpdateFlows();
         }
 
@@ -2375,6 +2456,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                 PressureUnits = PressureUnits.kilopascals;
                 VolumetricFlowUnits = VolumetricFlowUnits.sccm;
                 TemperatureUnits = TemperatureUnits.DegC;
+                EffectiveResistanceGainAdjustment = 1.0;
             }
 
             public ComponentConfig(ComponentConfig other)
@@ -2385,6 +2467,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                 RadiusInM = other.RadiusInM;
                 LengthInM = other.LengthInM;
                 InitialPressureInKPa = other.InitialPressureInKPa;
+                EffectiveResistanceGainAdjustment = other.EffectiveResistanceGainAdjustment;
             }
 
             ComponentConfig ICopyable<ComponentConfig>.MakeCopyOfThis(bool deepCopy) { return new ComponentConfig(this); }
@@ -2409,6 +2492,11 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
 
             public double InitialPressure { get { return PressureUnits.ConvertFromKPA(InitialPressureInKPa); } set { InitialPressureInKPa = PressureUnits.ConvertToKPa(value); } }
             public double InitialPressureInKPa { get; set; }
+
+            /// <summary>
+            /// Allows the modeled component resistance to be adjusted by this gain factor from its natively calculated value.
+            /// </summary>
+            public double EffectiveResistanceGainAdjustment { get; set; }
         }
 
         public class Node
@@ -2769,7 +2857,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                     //if (double.IsNaN(resistanceInKPaSecPerM3) || resistanceInKPaSecPerM3 <= 0.0)
                     //    throw new System.InvalidOperationException("resistance");
 
-                    return resistanceInKPaSecPerM3;
+                    return resistanceInKPaSecPerM3 * Config.EffectiveResistanceGainAdjustment;
                 }
             }
 

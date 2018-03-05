@@ -344,7 +344,7 @@ namespace MosaicLib
 
                 #region private variables
 
-                static readonly ILogMessageHandler[] emptyLMHArray = new ILogMessageHandler[0];
+                static readonly ILogMessageHandler[] emptyLMHArray = Utils.Collections.EmptyArrayFactory<ILogMessageHandler>.Instance;
 
                 ILogMessageHandler[] targetLMHArray = null;
                 System.Threading.Thread mainThread = null;

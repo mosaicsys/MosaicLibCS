@@ -228,7 +228,7 @@ namespace MosaicLib.Semi.E005.Data
                 if (throwOnException)
                     throw new ConvertValueException("{0} failed on '{1}'".CheckedFormat(Fcns.CurrentMethodName, vc), ex);
 
-                return new byte[0];
+                return emptyByteArray;
             }
         }
 
@@ -272,7 +272,7 @@ namespace MosaicLib.Semi.E005.Data
             }
         }
 
-        public static readonly byte[] emptyByteArray = new byte[0];
+        public static readonly byte[] emptyByteArray = EmptyArrayFactory<byte>.Instance;
 
         public static NamedValueSet ConvertFromE005Data(this NamedValueSet nvs, byte[] byteArray, bool throwOnException)
         {
@@ -308,7 +308,7 @@ namespace MosaicLib.Semi.E005.Data
 
         public static NamedValueSet ConvertFromE005Data(this NamedValueSet nvs, byte[] byteArray, ref int startIndex, ref string ec)
         {
-            nvs = (nvs ?? new NamedValueSet()).ConvertToWriteable();
+            nvs = nvs.ConvertToWriteable(mapNullToEmpty: true);
 
             {
                 int nvsListNumElements;
@@ -354,6 +354,22 @@ namespace MosaicLib.Semi.E005.Data
         #endregion
 
         #region Append support methods (AppendWithIH variants, AppendIH, AppendContentBytes, AppendRaw variants)
+
+        public static void AppendWithIH(this List<byte> byteArrayBuilder, object o)
+        {
+            if (o == null)
+                byteArrayBuilder.AppendWithIH(ValueContainer.CreateFromObject(o));
+            else if (o is INamedValueSet)
+                byteArrayBuilder.AppendWithIH(o as INamedValueSet);
+            else if (o is INamedValue)
+                byteArrayBuilder.AppendWithIH(o as INamedValue);
+            else if (o is string[])
+                byteArrayBuilder.AppendWithIH(o as string[]);
+            else if (o is IList<string>)
+                byteArrayBuilder.AppendWithIH(o as IList<string>);
+            else
+                byteArrayBuilder.AppendWithIH(ValueContainer.CreateFromObject(o));
+        }
 
         public static void AppendWithIH(this List<byte> byteArrayBuilder, ValueContainer vc)
         {
@@ -407,7 +423,7 @@ namespace MosaicLib.Semi.E005.Data
             byteArrayBuilder.AppendWithIH(vc.ToStringSML());     // fallback is always to handle it like a string
         }
 
-        public static readonly ValueContainer[] emptyVCArray = new ValueContainer[0];
+        public static readonly ValueContainer[] emptyVCArray = EmptyArrayFactory<ValueContainer>.Instance;
 
 
         public static void AppendWithIH(this List<byte> byteArrayBuilder, INamedValueSet nvs)
@@ -466,7 +482,18 @@ namespace MosaicLib.Semi.E005.Data
             }
         }
 
-        public static void AppendWithIH(this List<byte> byteArrayBuilder, string [] stringArray)
+        public static void AppendWithIH(this List<byte> byteArrayBuilder, IList<string> stringList)
+        {
+            stringList = stringList ?? ReadOnlyIList<string>.Empty;
+            int stringListCount = stringList.Count;
+
+            byteArrayBuilder.AppendIH(ItemFormatCode.L, stringListCount);
+
+            for (int idx = 0; idx < stringListCount; idx++)
+                byteArrayBuilder.AppendWithIH(stringList[idx]);
+        }
+
+        public static void AppendWithIH(this List<byte> byteArrayBuilder, string[] stringArray)
         {
             stringArray = stringArray ?? emptyStringArray;
 
@@ -476,7 +503,7 @@ namespace MosaicLib.Semi.E005.Data
                 byteArrayBuilder.AppendWithIH(s);
         }
 
-        public static readonly string [] emptyStringArray = new string[0];
+        public static readonly string [] emptyStringArray = EmptyArrayFactory<string>.Instance;
 
         public static void AppendWithIH(this List<byte> byteArrayBuilder, IList<ValueContainer> vcList)
         {
@@ -666,7 +693,7 @@ namespace MosaicLib.Semi.E005.Data
         
         #endregion
 
-        #region DecodeE005Data (byte array) related methods [inclues Normalize]
+        #region DecodeE005Data (byte array) related methods [includes Normalize]
 
         public static ValueContainer DecodeE005Data(this byte[] byteArray)
         {
@@ -966,18 +993,18 @@ namespace MosaicLib.Semi.E005.Data
             return vc;
         }
 
-        private static readonly bool[] emptyBoArray = new bool[0];
-        private static readonly byte[] emptyBiArray = new byte[0];
-        private static readonly sbyte[] emptyI1Array = new sbyte[0];
-        private static readonly short[] emptyI2Array = new short[0];
-        private static readonly int[] emptyI4Array = new int[0];
-        private static readonly long[] emptyI8Array = new long[0];
-        private static readonly byte[] emptyU1Array = new byte[0];
-        private static readonly ushort[] emptyU2Array = new ushort[0];
-        private static readonly uint[] emptyU4Array = new uint[0];
-        private static readonly ulong[] emptyU8Array = new ulong[0];
-        private static readonly float[] emptyF4Array = new float[0];
-        private static readonly double[] emptyF8Array = new double[0];
+        private static readonly bool[] emptyBoArray = EmptyArrayFactory<bool>.Instance;
+        private static readonly byte[] emptyBiArray = EmptyArrayFactory<byte>.Instance;
+        private static readonly sbyte[] emptyI1Array = EmptyArrayFactory<sbyte>.Instance;
+        private static readonly short[] emptyI2Array = EmptyArrayFactory<short>.Instance;
+        private static readonly int[] emptyI4Array = EmptyArrayFactory<int>.Instance;
+        private static readonly long[] emptyI8Array = EmptyArrayFactory<long>.Instance;
+        private static readonly byte[] emptyU1Array = EmptyArrayFactory<byte>.Instance;
+        private static readonly ushort[] emptyU2Array = EmptyArrayFactory<ushort>.Instance;
+        private static readonly uint[] emptyU4Array = EmptyArrayFactory<uint>.Instance;
+        private static readonly ulong[] emptyU8Array = EmptyArrayFactory<ulong>.Instance;
+        private static readonly float[] emptyF4Array = EmptyArrayFactory<float>.Instance;
+        private static readonly double[] emptyF8Array = EmptyArrayFactory<double>.Instance;
 
         #endregion
     }
@@ -1175,8 +1202,6 @@ namespace MosaicLib.Semi.E005.Data
         /// </summary>
         public ElementType[] Array { get; set; }
 
-        private static readonly ElementType[] emptyArray = new ElementType[0];
-
         /// <summary>
         /// Gives the caller access to the TypeConversionSettings that is used by this object, either the default value or the caller provided value.
         /// </summary>
@@ -1202,16 +1227,16 @@ namespace MosaicLib.Semi.E005.Data
 
         ValueContainer IValueContainerBuilder.BuildContents()
         {
-            ElementType[] array = Array ?? emptyArray;
+            ElementType[] array = Array ?? EmptyArrayFactory<ElementType>.Instance;
 
             if (array.Length == 1)
             {
                 if (typeof(ElementType) != typeof(byte))
                     return new ValueContainer(array[0]);
                 else if (TypeConversionSettings.ByteIsBinary)
-                    return ValueContainer.Empty.SetValue(array[0], ContainerStorageType.Binary, false);
+                    return ValueContainer.Create(array[0], ContainerStorageType.Binary, false);
                 else
-                    return ValueContainer.Empty.SetValue(array[0], ContainerStorageType.Byte, false);
+                    return ValueContainer.Create(array[0], ContainerStorageType.Byte, false);
             }
             else
             {

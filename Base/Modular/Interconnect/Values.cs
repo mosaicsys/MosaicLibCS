@@ -30,6 +30,7 @@ using System.Text.RegularExpressions;
 using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Reflection.Attributes;
 using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
 
 // Modular.Interconnect is the general namespace for tools that help interconnect Modular Parts without requiring that that have pre-existing knowledge of each-other's classes.
 // This file contains the definitions for the underlying Modular.Interconnect.Values portion of Modular.Interconnect.
@@ -314,6 +315,72 @@ namespace MosaicLib.Modular.Interconnect.Values
 
     #endregion
 
+    #region IIVIRegistration
+
+    public interface IIVIRegistration
+    {
+        /// <summary>Gives the "name" of this registartion table instance</summary>
+        string Name { get; }
+
+        /// <summary>
+        /// Gets the desired IValueInterconnection table form the table dictionary mantained here (if the name is found in the dectionary) and returns is.
+        /// If the given <paramref name="iviName"/> is not found in the table then this method returns null unless the <paramref name="addNewTableIfMissing"/> parameter is true, in which case
+        /// this method creates a new ivi of the given name, adds it to the table, and returns it.
+        /// If the given <paramref name="iviName"/> is not found and throwOnNotFound is true then this method 
+        /// </summary>
+        /// <exception cref="IVINameNotFoundException">This exception if thrown if the given <paramref name="iviName"/> is not found and <paramref name="throwOnNotFound"/> is true and <paramref name="addNewTableIfMissing"/> is false</exception>
+        IValuesInterconnection FindIVI(string iviName, bool addNewTableIfMissing = true, bool throwOnNotFound = false);
+
+        /// <summary>
+        /// Attempts to register the given <paramref name="ivi"/> to the table dictionary maintained here.
+        /// If there is already an ivi that has been registered with the same Name then this method uses the <paramref name="howToHandleDuplicates"/> parameter to select the desired behavior.
+        /// <para/>supports call chaining by returning given <paramref name="ivi"/> instance.
+        /// </summary>
+        /// <exception cref="DuplicateIValuesInterconnectionNameException">will be thrown if there is already an ivi registered with the same name and the <paramref name="howToHandleDuplicates"/> has been set to DuplicateIVINameRegistrationBehavior.Throw</exception>
+        IValuesInterconnection RegisterIVI(IValuesInterconnection ivi, DuplicateIVINameRegistrationBehavior howToHandleDuplicates = DuplicateIVINameRegistrationBehavior.None);
+    }
+
+    /// <summary>
+    /// This enumeration is used to define how the RegisterIVI method should handle cases where there is already another ivi of the same name in the table.
+    /// <para/>None (0), Replace, Throw
+    /// </summary>
+    public enum DuplicateIVINameRegistrationBehavior : int
+    {
+        /// <summary>The new registration will be ignored if another ivi has already been registered with the same name.  This case will generate a log message as well.</summary>
+        None = 0,
+
+        /// <summary>The new registration will cause the table entry to be updated to refer to the newly given part rather than the prior one.  This case will generate a log message as well.</summary>
+        Replace,
+
+        /// <summary>A DuplicateIValuesInterconnectionNameException will be thrown</summary>
+        Throw,
+    }
+
+    /// <summary>
+    /// Exception that is throw by IIVIRegistartion's FindIVI method when throwOnNotFound is true and the given iviName is not found.
+    /// </summary>
+    public class IVINameNotFoundException : System.Exception
+    {
+        /// <summary>
+        /// Constructor.  Caller provides a string mesg and an optional innerException (or null if there is none).
+        /// </summary>
+        public IVINameNotFoundException(string mesg, System.Exception innerException = null) : base(mesg, innerException) { }
+    }
+
+
+    /// <summary>
+    /// Exception that is throw by IVIRegistration.RegisterIVI when howToHandleDuplicates is set to Throw and the given ivi name is already in the table.
+    /// </summary>
+    public class DuplicateIValuesInterconnectionNameException : System.Exception
+    {
+        /// <summary>
+        /// Constructor.  Caller provides a string mesg and an optional innerException (or null if there is none).
+        /// </summary>
+        public DuplicateIValuesInterconnectionNameException(string mesg, System.Exception innerException = null) : base(mesg, innerException) { }
+    }
+
+    #endregion
+
     #region static Values namespace for Interconnection singleton Instance
 
     /// <summary>
@@ -342,29 +409,10 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// if rethrow is false and any of the listed exception conditions are encountered then the method will have no effect.
         /// <para/>supports call chaining by returning given interconnectionTable instance.
         /// </summary>
-        /// <exception cref="System.ArgumentNullException">Thrown if the given interconnectionTable is null</exception>
-        /// <exception cref="System.ArgumentException">Thrown if the given interconnectionTable's Name is null or empty, or if the dictionary already contains a table with the given name.</exception>
+        /// <exception cref="DuplicateIValuesInterconnectionNameException">will be thrown if there is already an ivi registered with the same name and the <paramref name="rethrow"/> is true</exception>
         public static IValuesInterconnection AddTable(IValuesInterconnection interconnectionTable, bool rethrow)
         {
-            try
-            {
-                if (interconnectionTable == null)
-                    throw new System.ArgumentNullException("interconnectionTable");
-                else if (interconnectionTable.Name.IsNullOrEmpty())
-                    throw new System.ArgumentException("given table Name cannot be null or empty", "interconnectTable", null);
-
-                lock (interconnectionTableDictionaryMutex)
-                {
-                    interconnectionTableDictionary.Add(interconnectionTable.Name, interconnectionTable);
-                }
-            }
-            catch (System.Exception ex)
-            {
-                if (rethrow)
-                    throw ex;
-            }
-
-            return interconnectionTable;
+            return IVIRegistration.Instance.RegisterIVI(interconnectionTable, rethrow ? DuplicateIVINameRegistrationBehavior.Throw : DuplicateIVINameRegistrationBehavior.None);
         }
 
         /// <summary>
@@ -378,25 +426,144 @@ namespace MosaicLib.Modular.Interconnect.Values
             if (interconnectionTableName.IsNullOrEmpty())
                 return Instance;
 
-            lock (interconnectionTableDictionaryMutex)
-            {
-                IValuesInterconnection interconnectionTable = null;
-
-                if (interconnectionTableDictionary.TryGetValue(interconnectionTableName, out interconnectionTable) && interconnectionTable != null)
-                    return interconnectionTable;
-
-                if (addNewTableIfMissing)
-                {
-                    interconnectionTable = new ValuesInterconnection(interconnectionTableName, false);
-                    interconnectionTableDictionary[interconnectionTableName] = interconnectionTable;
-                }
-
-                return interconnectionTable;
-            }
+            return IVIRegistration.Instance.FindIVI(interconnectionTableName, addNewTableIfMissing: addNewTableIfMissing, throwOnNotFound: false);
         }
 
-        private static readonly object interconnectionTableDictionaryMutex = new object();
-        private static Dictionary<string, IValuesInterconnection> interconnectionTableDictionary = new Dictionary<string, IValuesInterconnection>();
+        #endregion
+    }
+
+    /// <summary>
+    /// Standard implementation class for <seealso cref="IIVIRegistration"/>.  Also provides a static singleton Instance property for ease of use.
+    /// </summary>
+    public class IVIRegistration : IIVIRegistration
+    {
+        #region Singleton instance
+
+        /// <summary>Gives the caller get and set access to the singleton IIVIRegistration instance that is used to provide application wide value interconnection.</summary>
+        public static IIVIRegistration Instance
+        {
+            get { return singletonInstanceHelper.Instance; }
+            set { singletonInstanceHelper.Instance = value; }
+        }
+
+        private static SingletonHelperBase<IIVIRegistration> singletonInstanceHelper = new SingletonHelperBase<IIVIRegistration>(SingletonInstanceBehavior.AutoConstructIfNeeded, () => new IVIRegistration("MainIVIRegistration"));
+
+        #endregion
+
+        #region construction
+
+        /// <summary>Base constructor.  Caller is required to provide the name which will be used as the source name when creating the local logger instance</summary>
+        public IVIRegistration(string name)
+        {
+            Name = name.MapNullToEmpty();
+            Logger = new Logging.Logger(Name);
+        }
+
+        #endregion
+
+        #region IIVIRegistration implementation
+
+        /// <summary>Returns the name of this ivi registration object.</summary>
+        public string Name { get; private set; }
+
+        /// <summary>
+        /// Gets the desired IValueInterconnection table form the table dictionary mantained here (if the name is found in the dectionary) and returns is.
+        /// If the given <paramref name="iviName"/> is not found in the table then this method returns null unless the <paramref name="addNewTableIfMissing"/> parameter is true, in which case
+        /// this method creates a new ivi of the given name, adds it to the table, and returns it.
+        /// If the given <paramref name="iviName"/> is not found and throwOnNotFound is true then this method 
+        /// </summary>
+        /// <exception cref="IVINameNotFoundException">This exception if thrown if the given <paramref name="iviName"/> is not found and <paramref name="throwOnNotFound"/> is true and <paramref name="addNewTableIfMissing"/> is false</exception>
+        public IValuesInterconnection FindIVI(string iviName, bool addNewTableIfMissing = true, bool throwOnNotFound = false)
+        {
+            IValuesInterconnection ivi = null;
+            string sanitizedIVIName = iviName.Sanitize();
+
+            string mesg = null;
+
+            lock (mutex)
+            {
+                ivi = iviNameDictionary.SafeTryGetValue(sanitizedIVIName);
+
+                if (ivi == null && addNewTableIfMissing)
+                {
+                    ivi = new ValuesInterconnection(iviName, registerSelfInDictionary: false);
+                    iviNameDictionary[sanitizedIVIName] = ivi;
+                    mesg = "{0}: created IVI table '{1}' by request".CheckedFormat(Fcns.CurrentMethodName, iviName);
+                }
+                else
+                {
+                    mesg = "{0}: Could not find given IVI name '{1}'".CheckedFormat(Fcns.CurrentMethodName, iviName);
+                }
+            }
+
+            if (ivi == null && throwOnNotFound)
+                throw new IVINameNotFoundException("IVI name '{0}' was not found in IVIRegistration table '{1}'".CheckedFormat(iviName, Name));
+
+            if (!mesg.IsNullOrEmpty())
+                Logger.Debug.Emit(mesg);
+
+            return ivi;
+        }
+
+        /// <summary>
+        /// Attempts to register the given <paramref name="ivi"/> to the table dictionary maintained here.
+        /// If there is already an ivi that has been registered with the same Name then this method uses the <paramref name="howToHandleDuplicates"/> parameter to select the desired behavior.
+        /// <para/>supports call chaining by returning given <paramref name="ivi"/> instance.
+        /// </summary>
+        /// <exception cref="DuplicateIValuesInterconnectionNameException">will be thrown if there is already an ivi registered with the same name and the <paramref name="howToHandleDuplicates"/> has been set to DuplicateIVINameRegistrationBehavior.Throw</exception>
+        public IValuesInterconnection RegisterIVI(IValuesInterconnection ivi, DuplicateIVINameRegistrationBehavior howToHandleDuplicates = DuplicateIVINameRegistrationBehavior.None)
+        {
+            string mesg = null;
+
+            if (ivi == null)
+            {
+                mesg = "{0} failed: given ivi parameter is null".CheckedFormat(Fcns.CurrentMethodName);
+            }
+            else
+            {
+                string sanitizedIVIName = ivi.Name.Sanitize();
+
+                lock (mutex)
+                {
+                    IValuesInterconnection existingIVI = iviNameDictionary.SafeTryGetValue(sanitizedIVIName);
+                    if (existingIVI == null)
+                    {
+                        iviNameDictionary[sanitizedIVIName] = ivi;
+                    }
+                    else
+                    {
+                        switch (howToHandleDuplicates)
+                        {
+                            case DuplicateIVINameRegistrationBehavior.None:
+                                mesg = "Registration of IVI name '{0}' did not replace previously registered ivi of the same name".CheckedFormat(sanitizedIVIName);
+                                break;
+
+                            case DuplicateIVINameRegistrationBehavior.Replace:
+                                iviNameDictionary[sanitizedIVIName] = ivi;
+                                mesg = "Registration of IVI name '{0}' replaced previously registered ivi of the same name".CheckedFormat(sanitizedIVIName);
+                                break;
+
+                            case DuplicateIVINameRegistrationBehavior.Throw:
+                                throw new DuplicateIValuesInterconnectionNameException("Registration of IVI name '{0}' failed: by request cannot replace previously registered ivi with the same name [{1}]".CheckedFormat(sanitizedIVIName, Name));
+                        }
+                    }
+                }
+            }
+
+            if (!mesg.IsNullOrEmpty())
+                Logger.Debug.Emit(mesg);
+
+            return ivi;
+        }
+
+        #endregion
+
+        #region Private implementation fields, etc.
+
+        protected Logging.Logger Logger { get; private set; }
+
+        private readonly object mutex = new object();
+        private Dictionary<string, IValuesInterconnection> iviNameDictionary = new Dictionary<string, IValuesInterconnection>();
 
         #endregion
     }
@@ -425,15 +592,18 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// This instance will use a mutex for thread safety if either of the makeAPIThreadSafe or the registerSelfInDictionary parameters are true.  
         /// Otherwise this instance will not make use of a mutex to enforce thread safety of its API and as such the client must either use only one thread or enforce non-renterant use on their own.
         /// </summary>
-        public ValuesInterconnection(string name, bool registerSelfInDictionary = true, bool makeAPIThreadSafe = true)
+        public ValuesInterconnection(string name, bool registerSelfInDictionary = true, bool makeAPIThreadSafe = true, IIVIRegistration registerSelfWith = null, DuplicateIVINameRegistrationBehavior howToHandleDuplicates = DuplicateIVINameRegistrationBehavior.None)
         {
             Name = name;
 
-            if (registerSelfInDictionary && !Name.IsNullOrEmpty())
-                Values.AddTable(this, false);
+            if (registerSelfWith == null && registerSelfInDictionary)
+                registerSelfWith = IVIRegistration.Instance;
+
+            if (registerSelfWith != null && !Name.IsNullOrEmpty())
+                registerSelfWith.RegisterIVI(this, howToHandleDuplicates: howToHandleDuplicates);
 
             // assign the mutex to a new object (lock handle) or to null.  the mutex field is readonly so it can only be assigned in the constructor.
-            mutex  = ((registerSelfInDictionary || makeAPIThreadSafe) ? new object() : null);
+            mutex = ((registerSelfWith != null || makeAPIThreadSafe) ? new object() : null);
         }
 
         IEnumerator IEnumerable.GetEnumerator()
@@ -531,7 +701,7 @@ namespace MosaicLib.Modular.Interconnect.Values
                 if (numItems > 0 && startAtIndex >= 0)
                     return tableItemNamesList.GetRange(startAtIndex, numItems).ToArray();
                 else
-                    return emptyStringArray;
+                    return Utils.Collections.EmptyArrayFactory<string>.Instance;
             }
         }
 
@@ -569,7 +739,6 @@ namespace MosaicLib.Modular.Interconnect.Values
 
         /// <summary>Default filter accepts all items that are given to it</summary>
         private static readonly Func<string, INamedValueSet, bool> fallbackTableItemFilter = (name, nvs) => true;
-        private static readonly string[] emptyStringArray = new string[0];
 
         /// <summary>
         /// Provides a property that returns the current total number of named values in this values interconnect table space.
@@ -915,7 +1084,7 @@ namespace MosaicLib.Modular.Interconnect.Values
             }
         }
 
-        private Modular.Common.IMapNameFromTo[] emptyMapFromToArray = new Common.IMapNameFromTo[0];
+        private Modular.Common.IMapNameFromTo[] emptyMapFromToArray = EmptyArrayFactory<Modular.Common.IMapNameFromTo>.Instance;
 
         #endregion
 
@@ -951,7 +1120,8 @@ namespace MosaicLib.Modular.Interconnect.Values
         private ValueTableEntry[] TableArray { get { return tableArray ?? (tableArray = table.ToArray()); } }
 
         /// <summary>empty array of accessor objects to avoid needing to do null pointer checks in foreach iterators.</summary>
-        private static readonly IValueAccessor[] emptyValueAccessorArray = new IValueAccessor[0];
+        private static readonly IValueAccessor[] emptyValueAccessorArray = EmptyArrayFactory<IValueAccessor>.Instance;
+
         /// <summary>empty ValueAccessor to simplify safe invocation of down-casted method using ?? operator.</summary>
         private static readonly ValueAccessorImpl emptyValueAccessor = new ValueAccessorImpl(null, null);
 
@@ -1642,7 +1812,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         List<IModularValueSetAdapter> imvsaList = new List<IModularValueSetAdapter>();
         List<IValueAccessor> extraIVAList = new List<IValueAccessor>();
 
-        IModularValueSetAdapter[] imvsaArray = new IModularValueSetAdapter[0];
+        IModularValueSetAdapter[] imvsaArray = EmptyArrayFactory<IModularValueSetAdapter>.Instance;
         bool rebuildNeeded = false;
         IValueAccessor [] ivaArray = null;
         int ivaArrayLength = 0;
@@ -1653,7 +1823,7 @@ namespace MosaicLib.Modular.Interconnect.Values
                 return;
 
             imvsaArray = imvsaList.ToArray();
-            ivaArray = imvsaArray.SelectMany(ivsa => ivsa.IVAArray).Concat(extraIVAList).ToArray();
+            ivaArray = imvsaArray.SelectMany(ivsa => ivsa.IVAArray).Concat(extraIVAList).Where(iva => (iva != null)).ToArray();
             ivaArrayLength = ivaArray.Length;
 
             rebuildNeeded = false;
@@ -1774,15 +1944,9 @@ namespace MosaicLib.Modular.Interconnect.Values
         {
             get
             {
-                RebuildArraysIfNeeded(); 
+                RebuildArraysIfNeeded();
 
-                foreach (IValueAccessor iva in ivaArray)
-                {
-                    if (iva.IsUpdateNeeded)
-                        return true;
-                }
-
-                return false;
+                return ivaArray.IsUpdateNeeded();
             }
         }
 
@@ -2241,10 +2405,20 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <summary>Allows the client to specify the default meta data merge behavior to use with each IValueAccessor obtained during Setup.  Defaults to AddNewItems</summary>
         public NamedValueMergeBehavior DefaultMetaDataMergeBehavior { get; set; }
 
-        /// <summary>When true (the default), TValueSet class is expected to provide public getters for all annotated properties</summary>
+        /// <summary>
+        /// When true, TValueSet class is expected to provide public getters for all annotated items so that this adapter can be used to "Set" ivas from the ValueSet for all annotated items, 
+        /// and the adapter's IssueEmitter will be used to report any annotated items that do not provide a public getter and for which issue reporting has not been silenced (this logic is applied by the Setup method).
+        /// Generally this property should be set to false if one or more annotated ValueSet items do not provide public getters, or any such item's ItemAccess has been set to prevent its public getter from being used.
+        /// (defaults to true)
+        /// </summary>
         public bool MustSupportSet { get; set; }
 
-        /// <summary>When true (the default), TValueSet class is expected to provide public setters for all annotated properties</summary>
+        /// <summary>
+        /// When true, TValueSet class is expected to provide public setters for all annotated items so that this adapter can be used to "Update" al annotated ValueSet items from their corresonding IVAs,
+        /// and the adapter's IssueEmitter will be used to report any annotated items that do not provide a public setter and for which issue reporting has not been silenced (this logic is applied by the Setup method).
+        /// Generally this property should be set to false if one or more annotated ValueSet items do not provide public setters, or any such item's ItemAccess has been set to prevent its public setter from being used.
+        /// (defaults to true)
+        /// </summary>
         public bool MustSupportUpdate { get; set; }
 
         /// <summary>This property helps define the set of behaviors that this adapter shall perform.  It defaults to ItemAccess.Normal (Get and Set).  Setting it to any other value will also clear the corresponding MustSupport flag(s)</summary>
@@ -2261,7 +2435,6 @@ namespace MosaicLib.Modular.Interconnect.Values
             }
         }
         private ItemAccess _itemAccess = ItemAccess.Normal;
-
 
         /// <summary>
         /// This method determines the set of full Parameter Names from the ValueSet's annotated items, and creates a set of IValueAccessor objects for them.
@@ -2467,7 +2640,7 @@ namespace MosaicLib.Modular.Interconnect.Values
                         catch (System.Exception ex)
                         {
                             if (!itemInfo.ItemAttribute.SilenceIssues && updateIssueEmitter != null)
-                                updateIssueEmitter.Emit("Member'{0}' tranfer to Name:'{1}' in type '{2}' could not be performed: {3}", MemberName, ValueName, TValueSetTypeStr, ex);
+                                updateIssueEmitter.Emit("Member'{0}' tranfer to Name:'{1}' in type '{2}' could not be performed: {3}", MemberName, ValueName, TValueSetTypeStr, ex.ToString(ExceptionFormat.TypeAndMessage));
                         }
                     };
                 }
@@ -2493,13 +2666,13 @@ namespace MosaicLib.Modular.Interconnect.Values
                         catch (System.Exception ex)
                         {
                             if (!itemInfo.ItemAttribute.SilenceIssues && updateIssueEmitter != null)
-                                updateIssueEmitter.Emit("Member:'{0}' transfer from Name:'{1}' in type '{2}' could not be performed: {3}", MemberName, ValueName, TValueSetTypeStr, ex);
+                                updateIssueEmitter.Emit("Member:'{0}' transfer from Name:'{1}' in type '{2}' could not be performed: {3}", MemberName, ValueName, TValueSetTypeStr, ex.ToString(ExceptionFormat.TypeAndMessage));
                         }
                     };
                 }
             }
 
-            private static readonly object[] emptyObjectArray = new object[0];
+            private static readonly object[] emptyObjectArray = EmptyArrayFactory<object>.Instance;
 
             /// <summary>
             /// Flag used to determine if Update operations are optimized for this item
@@ -2880,7 +3053,7 @@ namespace MosaicLib.Modular.Interconnect.Values
             return false;
         }
 
-        private static readonly IValueAccessor[] emptyIVAArray = new IValueAccessor[0];
+        private static readonly IValueAccessor[] emptyIVAArray = EmptyArrayFactory<IValueAccessor>.Instance;
 
         /// <summary>
         /// This extension method allows the caller to set the given <paramref name="iva"/>'s VC to from the given <paramref name="valueAsObject"/> value.  

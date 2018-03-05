@@ -68,7 +68,7 @@ namespace MosaicLib.Modular.Interconnect.Parts
         /// <param name="serviceName">Gives the initial value of the service name to be performed, or null, or string.Empty if the name is not already known.</param>
         /// <param name="throwOnNotFound">When true this method will throw a PartIDNotFoundException if the given partID is not found.  When false the method will return null when the given partID is not found.</param>
         /// <exception cref="PartIDNotFoundException">Thrown when the partID is not found and throwOnNotFound is given as true.</exception>
-        IStringParamAction CreateServiceAction(string partID, string serviceName, bool throwOnNotFound);
+        IStringParamAction CreateServiceAction(string partID, string serviceName, bool throwOnNotFound = false);
 
         /// <summary>
         /// Attempt to find a registered part and then asks it to create a service action with the given initial serviceName parameter value.
@@ -79,23 +79,53 @@ namespace MosaicLib.Modular.Interconnect.Parts
         /// <param name="namedParamValues">Gives the initial value that the created action's NamedParamValues will be set to.</param>
         /// <param name="throwOnNotFound">When true this method will throw a PartIDNotFoundException if the given partID is not found.  When false the method will return null when the given partID is not found.</param>
         /// <exception cref="PartIDNotFoundException">Thrown when the partID is not found and throwOnNotFound is given as true.</exception>
-        IStringParamAction CreateServiceAction(string partID, string serviceName, INamedValueSet namedParamValues, bool throwOnNotFound);
+        IStringParamAction CreateServiceAction(string partID, string serviceName, INamedValueSet namedParamValues, bool throwOnNotFound = false);
 
         /// <summary>
-        /// Attempts to register the given part as an available target for creation of Interconnected Actions
+        /// Attempts to register the given part in this IPartsInterconnection table.
+        /// If there is already a part that has been registered with the given PartID then this method uses the <paramref name="howToHandleDuplicates"/> parameter to select the desired behavior.
+        /// <para/>supports call chaining
         /// </summary>
-        void RegisterPart(IActivePartBase part);
+        /// <exception cref="DuplicatePartIDException">will be thrown if there is already a part registered with the partID registered and the <paramref name="howToHandleDuplicates"/> has been set to DuplicatePartBehavior.Throw</exception>
+        IActivePartBase RegisterPart(IActivePartBase part, DuplicatePartIDRegistrationBehavior howToHandleDuplicates = DuplicatePartIDRegistrationBehavior.Replace);
     }
 
     /// <summary>
-    /// Exception that is throw by IActinsInterconnection.CreateServiceAction when throwOnNotFound is true and the given partID is not found.
+    /// This enumeration is used to define how the RegisterPart method should handle cases where there is already another part of the same name in the table.
+    /// <para/>None (0), Replace, Throw
+    /// </summary>
+    public enum DuplicatePartIDRegistrationBehavior : int
+    {
+        /// <summary>The new registration will be ignored if another part has already been registered with the same name.  This case will generate a log message however.</summary>
+        None = 0,
+
+        /// <summary>The new registration will cause the table entry to be updated to refer to the newly given part rather than the prior one.  This case will generate a log message as well.</summary>
+        Replace,
+
+        /// <summary>A DuplicatePartIDException will be thrown</summary>
+        Throw,        
+    }
+
+    /// <summary>
+    /// Exception that is throw by IPartsInterconnection's FindPart or CreateServiceAction methods when throwOnNotFound is true and the given partID is not found.
     /// </summary>
     public class PartIDNotFoundException : System.Exception
     {
         /// <summary>
         /// Constructor.  Caller provides a string mesg and an optional innerException (or null if there is none).
         /// </summary>
-        public PartIDNotFoundException(string mesg, System.Exception innerException) : base(mesg, innerException) {}
+        public PartIDNotFoundException(string mesg, System.Exception innerException = null) : base(mesg, innerException) {}
+    }
+
+    /// <summary>
+    /// Exception that is throw by IPartsInterconnection.RegisterPart when howToHandleDuplicates is set to Throw and the given partID is already in the table.
+    /// </summary>
+    public class DuplicatePartIDException : System.Exception
+    {
+        /// <summary>
+        /// Constructor.  Caller provides a string mesg and an optional innerException (or null if there is none).
+        /// </summary>
+        public DuplicatePartIDException(string mesg, System.Exception innerException = null) : base(mesg, innerException) { }
     }
 
     #endregion
@@ -166,7 +196,7 @@ namespace MosaicLib.Modular.Interconnect.Parts
             }
 
             if (part == null && throwOnNotFound)
-                throw new PartIDNotFoundException("PartID '{0}' was not found in Action Interconnection '{1}'".CheckedFormat(partID, Name), null);
+                throw new PartIDNotFoundException("PartID '{0}' was not found in Action Interconnection '{1}'".CheckedFormat(partID, Name));
 
             return part;
         }
@@ -207,29 +237,53 @@ namespace MosaicLib.Modular.Interconnect.Parts
         }
 
         /// <summary>
-        /// Attempts to register the given part as an available target for creation of Interconnected Actions
+        /// Attempts to register the given <paramref name="part"/> in this IPartsInterconnection table.
+        /// If there is already a part that has been registered with the given PartID then this method uses the <paramref name="howToHandleDuplicates"/> parameter to select the desired behavior.
         /// </summary>
-        public void RegisterPart(IActivePartBase part)
+        /// <exception cref="DuplicatePartIDException">will be thrown if there is already a part registered with the partID registered and the <paramref name="howToHandleDuplicates"/> has been set to DuplicatePartBehavior.Throw</exception>
+        public IActivePartBase RegisterPart(IActivePartBase part, DuplicatePartIDRegistrationBehavior howToHandleDuplicates = DuplicatePartIDRegistrationBehavior.Replace)
         {
-            IActivePartBase replacedPart = null;
+            string mesg = null;
 
-            if (part != null && !part.PartID.IsNullOrEmpty())
+            if (part == null)
             {
-                string partID = part.PartID;
+                mesg = "{0} failed: given part parameter is null".CheckedFormat(Fcns.CurrentMethodName);
+            }
+            else
+            {
+                string sanitizedPartID = part.PartID.Sanitize();
+
                 lock (mutex)
                 {
-                    partIDDictionary.TryGetValue(partID, out replacedPart);
-                    partIDDictionary[partID] = part;
+                    IActivePartBase existingPart = partIDDictionary.SafeTryGetValue(sanitizedPartID);
+                    if (existingPart == null)
+                    {
+                        partIDDictionary[sanitizedPartID] = part;
+                    }
+                    else
+                    {
+                        switch (howToHandleDuplicates)
+                        {
+                            case DuplicatePartIDRegistrationBehavior.None:
+                                mesg = "Registration of PartID '{0}' did not replace previously registered part of the same name [by request, {1}]".CheckedFormat(sanitizedPartID, existingPart.GetType());
+                                break;
+
+                            case DuplicatePartIDRegistrationBehavior.Replace:
+                                partIDDictionary[sanitizedPartID] = part;
+                                mesg = "Registration of PartID '{0}' replaced previously registered part of the same name [by request, {1}]".CheckedFormat(sanitizedPartID, existingPart.GetType());
+                                break;
+
+                            case DuplicatePartIDRegistrationBehavior.Throw:
+                                throw new DuplicatePartIDException("Registration of PartID '{0}' failed: by request cannot replace previously registered part with the same name [{1} {2}]".CheckedFormat(sanitizedPartID, Name, existingPart.GetType()));
+                        }
+                    }
                 }
             }
 
-            if (replacedPart != null)
-            {
-                if (!object.ReferenceEquals(part, replacedPart))
-                    Logger.Debug.Emit("Registration of PartID '{0}' replaced a previously registered part of the same name", part.PartID);
-                else
-                    Logger.Debug.Emit("Redundant registration encountered for PartID '{0}'", part.PartID);
-            }
+            if (!mesg.IsNullOrEmpty())
+                Logger.Debug.Emit(mesg);
+
+            return part;
         }
 
         #endregion

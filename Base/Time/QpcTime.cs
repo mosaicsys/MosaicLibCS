@@ -110,7 +110,6 @@ namespace MosaicLib.Time
 	/// This struct stores a single QPC counter value as a double and allows it to be used as a TimeStamp type of object by supporting all of the
 	/// relevant interfaces and related properties and methods.
 	/// </remarks>
-
 	public struct QpcTimeStamp : IComparable, IComparable<QpcTimeStamp>, IEquatable<QpcTimeStamp>
 	{
 		/// <summary>Storage for the actual time stamp value.</summary>

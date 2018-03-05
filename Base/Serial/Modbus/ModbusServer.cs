@@ -269,7 +269,7 @@ namespace MosaicLib.SerialIO.Modbus.Server
 
             if (exceptionCode != ExceptionCode.IgnoreRequest)
             {
-                // build an excpetion response packet
+                // build an exception response packet
                 responseAdu.ExceptionCodeToSend = exceptionCode;
 
                 responseAdu.InitializeResponsePDUForSend();

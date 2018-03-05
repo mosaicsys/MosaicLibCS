@@ -490,7 +490,7 @@ namespace MosaicLib
 
         /// <summary>
         /// Flags enumeration used to define the supported NVS inclusion formats for log output.
-        /// <para/>None (0x00), ToString (0x01), ToStringSML (0x02), Optinal (0x04)
+        /// <para/>None (0x00), ToString (0x01), ToStringSML (0x02), Optional (0x04)
         /// </summary>
         [Flags]
         public enum NamedValueSetFormat : int
@@ -935,7 +935,7 @@ namespace MosaicLib
                 /// </summary>
                 protected void GenerateAndProduceHeaderLines(string[] baseHeaderLines, Func<string[]> headerLineDelegate, Action<Logging.LogMessage> headerLogMessageConsumer)
                 {
-                    List<string> headerLines = new List<string>(baseHeaderLines ?? emptyStringArray);
+                    List<string> headerLines = new List<string>(baseHeaderLines ?? Utils.Collections.EmptyArrayFactory<string>.Instance);
 
                     if (headerLineDelegate != null)
                     {
@@ -976,7 +976,6 @@ namespace MosaicLib
 
                 /// <summary>This logger instance is used to obtain the log messages that will be formatted into the newly opened file to implement the header.</summary>
                 private Logging.Logger headerLoggerStub = null;
-                private static readonly string[] emptyStringArray = new string[0];
 
                 #endregion
             }
@@ -1393,16 +1392,14 @@ namespace MosaicLib
                 /// <param name="setName">Defines the set name of the set created for this logger.  LMH name will be setName.lmh.</param>
                 /// <param name="logGate">Defines the LogGate value for messages handled here.  Messages with MesgType that is not included in this gate will be ignored.</param>
                 /// <param name="capacity">Defines the capacity of the resulting set.</param>
-                /// <param name="registerSet">Set to true to select that the set shall be registered.  If a non-null <paramref name="setsInstance"/> is explicitly provided then this parameter is not required, otherwise this parameter will select registration with the default Sets.Instance singleton.</param>
-                /// <param name="setsInstance">Gives the caller provided Sets Instance that for registration of the created set (if any).  If this parameter is null and <paramref name="registerSet"/> is true then the method will register the created set with the default Sets.Instance singleton.</param>
-                /// <param name="messageFilter">Optinal.  When non-null, this method may be used to filter which methods are to be included in the set.</param>
-                public SetLogMessageHandler(string setName, LogGate ? logGate = null, int capacity = 1000, bool registerSet = true, Sets setsInstance = null, Func<Logging.ILogMessage, bool> messageFilter = null)
-                    : base("{0}.lmh".CheckedFormat(setName), logGate ?? LogGate.All, recordSourceStackFrame: false)
+                /// <param name="registerSet">Set to true to select that the set shall be registered.  If a non-null <paramref name="iSetsInstance"/> is explicitly provided then this parameter is not required, otherwise this parameter will select registration with the default Sets.Instance singleton.</param>
+                /// <param name="iSetsInstance">Gives the caller provided Sets Instance that for registration of the created set (if any).  If this parameter is null and <paramref name="registerSet"/> is true then the method will register the created set with the default Sets.Instance singleton.</param>
+                /// <param name="messageFilter">Optional.  When non-null, this method may be used to filter which methods are to be included in the set.</param>
+                public SetLogMessageHandler(string setName, LogGate ? logGate = null, int capacity = 1000, bool registerSet = true, ISetsInterconnection iSetsInstance = null, Func<Logging.ILogMessage, bool> messageFilter = null)
+                    : base("{0}.lmh".CheckedFormat(setName), logGate ?? LogGate.All)
                 {
-                    if (registerSet && setsInstance == null)
-                        setsInstance = Sets.Instance;
-
-                    Set = new ReferenceSet<Logging.LogMessage>(new SetID(setName), capacity, setsInstance);
+                    Set = new ReferenceSet<Logging.LogMessage>(new SetID(setName), capacity, registerSet ? (iSetsInstance ?? Sets.Instance) : null);
+ 
                     this.messageFilter = messageFilter;
                 }
 
@@ -1423,14 +1420,17 @@ namespace MosaicLib
                     }
                     catch (System.Exception ex)
                     {
-                        string mesg = "{0}: {1} caught excpetion: {2}".CheckedFormat(Fcns.CurrentClassLeafName, Fcns.CurrentMethodName, ex.ToString(ExceptionFormat.TypeAndMessage));
+                        string mesg = "{0}: {1} caught exception: {2}".CheckedFormat(Fcns.CurrentClassLeafName, Fcns.CurrentMethodName, ex.ToString(ExceptionFormat.TypeAndMessage));
                         if (System.Diagnostics.Debugger.IsAttached)
-                            System.Diagnostics.Debugger.Log(0, "Excpetion", mesg);
+                            System.Diagnostics.Debugger.Log(0, "Exception", mesg);
                         else
                             BasicFallbackLogging.OutputDebugString("{0}\r", mesg);
                     }
                 }
 
+                /// <summary>
+                /// NOTE: this Set needs to be a set of Logging.LogMessage items rather than a set of Logging.ILogMessage items so that its items can be serialized and deserialized in linked tracking sets.
+                /// </summary>
                 public IReferenceSet<Logging.LogMessage> Set { get; private set; }
 
                 Func<Logging.ILogMessage, bool> messageFilter;

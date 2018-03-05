@@ -23,6 +23,8 @@ using System;
 using System.Text;
 using System.Collections.Generic;
 
+using MosaicLib.Utils.Collections;
+
 namespace MosaicLib.Utils
 {
 	#region Byte Array Transcoders
@@ -92,7 +94,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Protected read only empty byte array field.  Immutable.  Used for null transformation to minimize if statements in normal flow of control.
         /// </summary>
-		protected readonly static byte [] emptyArray = new byte [0];
+        protected readonly static byte[] emptyArray = EmptyArrayFactory<byte>.Instance;
 
         /// <summary>Encodes the bytes in the given source buffer and returns the resulting encoded string.</summary>
         /// <param name="sourceBuffer">specifies the source buffer from which to encode bytes</param>

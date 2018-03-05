@@ -20,12 +20,14 @@
  */
 
 using System;
-using System.IO;
 using System.Collections.Generic;
-using System.Runtime.Serialization;
+using System.IO;
 using System.Linq;
+using System.Runtime.Serialization;
+using System.Text;
 
 using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
 using MosaicLib.Time;
 using MosaicLib.Modular;
 using MosaicLib.Modular.Part;
@@ -37,7 +39,6 @@ using MosaicLib.Modular.Config.Attributes;
 using MosaicLib.Modular.Interconnect.Values;
 using MosaicLib.Modular.Interconnect.Values.Attributes;
 using MosaicLib.Modular.Common;
-using System.Text;
 
 namespace MosaicLib.PartsLib.Common.LPM
 {
@@ -636,7 +637,7 @@ namespace MosaicLib.PartsLib.Common.LPM
 
         public SlotState[] SlotMap { get { return slotMap; } set { slotMap = value ?? emptySlotMap; } }
         private SlotState[] slotMap = emptySlotMap;
-        private static readonly SlotState[] emptySlotMap = new SlotState[0];
+        private static readonly SlotState[] emptySlotMap = EmptyArrayFactory<SlotState>.Instance;
 
         public string ResultCode { get; set; }
 

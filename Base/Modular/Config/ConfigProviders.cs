@@ -34,6 +34,7 @@ using MosaicLib;
 using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Persist;
 using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
 using MosaicLib.Utils.StringMatching;
 
 namespace MosaicLib.Modular.Config
@@ -257,7 +258,6 @@ namespace MosaicLib.Modular.Config
         /// </summary>
         protected Dictionary<string, DictionaryKeyItem> keyItemDictionary = new Dictionary<string, DictionaryKeyItem>();
 
-        private static readonly string[] emptyStringArray = new string[0];
         private static readonly DictionaryKeyItem emptyItem = new DictionaryKeyItem() { key = String.Empty };
 
         /// <summary>
@@ -567,7 +567,7 @@ namespace MosaicLib.Modular.Config
             }
         }
 
-        private readonly string[] emptyKeyValuesArray = new string[0];
+        private readonly string[] emptyKeyValuesArray = EmptyArrayFactory<string>.Instance;
 
         /// <summary>
         /// Debugging helper field.  retains the orginal value returned from System.Configuration.ConfigurationManager.AppSettings.
@@ -679,7 +679,7 @@ namespace MosaicLib.Modular.Config
             givenFilePath = filePath;
             fullFilePath = System.IO.Path.GetFullPath(filePath);
 
-            string[] rawFileLines = new string [0];
+            string[] rawFileLines = EmptyArrayFactory<string>.Instance;
 
             try
             {
@@ -913,7 +913,7 @@ namespace MosaicLib.Modular.Config
         /// </summary>
         protected override string HandleSetValuesChangedContents()
         {
-            string[] linesToSave = sectionItemArray.SelectMany(sectionItem => (sectionItem.sectionName != null ? new string[] { sectionItem.rawFileLine } : new string[0]).Concat(sectionItem.lineItemList.Select(lineItem => lineItem.UpdateSaveFileLine()))).ToArray();
+            string[] linesToSave = sectionItemArray.SelectMany(sectionItem => (sectionItem.sectionName != null ? new string[] { sectionItem.rawFileLine } : EmptyArrayFactory<string>.Instance).Concat(sectionItem.lineItemList.Select(lineItem => lineItem.UpdateSaveFileLine()))).ToArray();
 
             try
             {

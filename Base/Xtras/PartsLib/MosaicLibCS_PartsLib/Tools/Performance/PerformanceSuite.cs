@@ -38,6 +38,7 @@ using MosaicLib.PartsLib.Tools.MDRF.Common;
 using MosaicLib.PartsLib.Tools.MDRF.Writer;
 using MosaicLib.Time;
 using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
 
 namespace MosaicLib.PartsLib.Tools.Performance
 {
@@ -398,7 +399,7 @@ namespace MosaicLib.PartsLib.Tools.Performance
             return this;
         }
 
-        private static readonly PerformanceCountersPartConfig[] emptyPerformanceCountersPartConfigArray = new PerformanceCountersPartConfig[0];
+        private static readonly PerformanceCountersPartConfig[] emptyPerformanceCountersPartConfigArray = EmptyArrayFactory<PerformanceCountersPartConfig>.Instance;
     }
 
     public class PerformanceSuitePart : SimpleActivePartBase

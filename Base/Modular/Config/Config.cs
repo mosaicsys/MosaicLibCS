@@ -32,6 +32,7 @@ using System.Collections;
 using MosaicLib;
 using MosaicLib.Modular.Common;
 using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
 using MosaicLib.Utils.StringMatching;
 
 namespace MosaicLib.Modular.Config
@@ -175,7 +176,7 @@ namespace MosaicLib.Modular.Config
         /// If the key does not exist and caller requests ensureExists (true) then this method will request the config instance to find a suitable provider and request that it create the key using the given defaultValue.
         /// If the key does not exist or it could not be created then this method returns a fallback IConfigKeyAccess object that indicates that the key was not found.
         /// </summary>
-        public static IConfigKeyAccess GetConfigKeyAccess(this IConfig config, string key, bool isOptional = true, bool mayBeChanged = true, bool? ensureExists = null, string defaultProviderName = null, INamedValueSet keyMetaData = null, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate, ValueContainer? defaultValue = null, bool silenceLogging = false)
+        public static IConfigKeyAccess GetConfigKeyAccess(this IConfigKeyGetSet config, string key, bool isOptional = true, bool mayBeChanged = true, bool? ensureExists = null, string defaultProviderName = null, INamedValueSet keyMetaData = null, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate, ValueContainer? defaultValue = null, bool silenceLogging = false)
         {
             return (config ?? Config.Instance).GetConfigKeyAccess(new ConfigKeyAccessSpec(key, new ConfigKeyAccessFlags() { IsOptional = isOptional, MayBeChanged = mayBeChanged, EnsureExists = ensureExists, DefaultProviderName = defaultProviderName, SilenceLogging = silenceLogging }, keyMetaData: keyMetaData, mergeBehavior: mergeBehavior), defaultValue: defaultValue);
         }
@@ -195,7 +196,7 @@ namespace MosaicLib.Modular.Config
         /// If the key does not exist or it could not be created then this method returns a fallback IConfigKeyAccess object that indicates that the key was not found.
         /// <para/>Adds in the ConfigKeyAccessFlags.ReadOnlyOnce flags on top of the values specified by the caller in the optional parameters.
         /// </summary>
-        public static IConfigKeyAccess GetConfigKeyAccessOnce(this IConfig config, string key, bool isOptional = true, bool? ensureExists = null, string defaultProviderName = null, INamedValueSet keyMetaData = null, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate, ValueContainer? defaultValue = null, bool silenceLogging = false)
+        public static IConfigKeyAccess GetConfigKeyAccessOnce(this IConfigKeyGetSet config, string key, bool isOptional = true, bool? ensureExists = null, string defaultProviderName = null, INamedValueSet keyMetaData = null, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate, ValueContainer? defaultValue = null, bool silenceLogging = false)
         {
             return (config ?? Config.Instance).GetConfigKeyAccess(key: key, isOptional: isOptional, mayBeChanged: false, ensureExists: ensureExists, defaultProviderName: defaultProviderName, keyMetaData: keyMetaData, mergeBehavior: mergeBehavior, defaultValue: defaultValue, silenceLogging: silenceLogging);
         }
@@ -244,7 +245,7 @@ namespace MosaicLib.Modular.Config
         }
 
         /// <summary>
-        /// Convienience extension method for use in setting the keyAccess's keys value and then updatinging the keyAccess to reflect the new value.
+        /// Convenience extension method for use in setting the keyAccess's keys value and then updatinging the keyAccess to reflect the new value.
         /// Attempts to assign the given key's value from the valueContainer.  Returns empty string on success or a description of the failure reason on failure.
         /// </summary>
         public static string SetValue(this IConfigKeyAccess keyAccess, ValueContainer valueContainer, string commentStr = "", bool autoUpdate = true)
@@ -264,7 +265,7 @@ namespace MosaicLib.Modular.Config
         }
 
         /// <summary>
-        /// Convienience extension method for use in setting the keyAccess's keys value and then updatinging the keyAccess to reflect the new value.
+        /// Convenience extension method for use in setting the keyAccess's keys value and then updatinging the keyAccess to reflect the new value.
         /// Attempts to assign the given key's value from the valueContainer.  Returns empty string on success or a description of the failure reason on failure.
         /// </summary>
         public static string SetValue(this IConfigKeyAccess keyAccess, object value, string commentStr = "", bool autoUpdate = true)
@@ -281,6 +282,21 @@ namespace MosaicLib.Modular.Config
             }
             else
                 return "keyAccess parameter was given as null";
+        }
+
+        /// <summary>
+        /// Conveinience extension method returns true if any non-null IConfigKeyAccess item in the given <paramref name="ickaArray"/> array has its IsUpdateNeeded true.
+        /// Returns false otherwise.
+        /// </summary>
+        public static bool IsUpdateNeeded(this IConfigKeyAccess[] ickaArray)
+        {
+            foreach (var icka in ickaArray)
+            {
+                if (icka != null && icka.IsUpdateNeeded)
+                    return true;
+            }
+
+            return false;
         }
     }
 
@@ -1182,7 +1198,7 @@ namespace MosaicLib.Modular.Config
             }
         }
 
-        private Modular.Common.IMapNameFromTo[] emptyMapFromToArray = new Common.IMapNameFromTo[0];
+        private Modular.Common.IMapNameFromTo[] emptyMapFromToArray = EmptyArrayFactory<Common.IMapNameFromTo>.Instance;
 
         #endregion
 
@@ -1619,18 +1635,6 @@ namespace MosaicLib.Modular.Config
             }
 
             return firstError ?? String.Empty;
-        }
-
-        #endregion
-
-        #region EnsureExists related methods
-
-        /// <summary>
-        /// This method allows the caller to attempt to verify that the given set of keys either already exist, or attempts to create them in the most suitable provider.
-        /// </summary>
-        public string EnsureExists(KeyValuePair<IConfigKeyAccessSpec, ValueContainer>[] keyAccessSpecAndValuesPairArray)
-        {
-            throw new System.NotImplementedException();
         }
 
         #endregion

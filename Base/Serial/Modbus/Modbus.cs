@@ -26,10 +26,11 @@ using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 
-using MosaicLib.Utils;
-using MosaicLib.Time;
 using MosaicLib.Modular.Action;
 using MosaicLib.Modular.Part;
+using MosaicLib.Time;
+using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
 
 namespace MosaicLib.SerialIO.Modbus
 {
@@ -528,7 +529,7 @@ namespace MosaicLib.SerialIO.Modbus
 
                 set
                 {
-                    byte [] copyFrom = ((value != null) ? value : new byte [0]);
+                    byte[] copyFrom = ((value != null) ? value : EmptyArrayFactory<byte>.Instance);
                     if (copyFrom.Length > bytes.Length)
                         System.Array.Resize(ref copyFrom, bytes.Length);
 
@@ -919,7 +920,7 @@ namespace MosaicLib.SerialIO.Modbus
 
                 if (String.IsNullOrEmpty(ecStr))
                 {
-                    // verify that the fc matches the outgoing one even if response is an excpetion.  
+                    // verify that the fc matches the outgoing one even if response is an exception.  
                     // Also verify that we did not receive any extra bytes.
                     byte txFC = requestAdu.PktBuf.bytes[requestAdu.PDUStartOffset];
                     byte rxFC = unchecked((byte)(PktBuf.bytes[PDUStartOffset] & ~ExceptionFunctionCodeMask));
@@ -1228,7 +1229,7 @@ namespace MosaicLib.SerialIO.Modbus
             }
 
             /// <summary>
-            /// This method invokes InitializeResponsePDU and then if this response is not an excpetion, this method also fills in the PDU header.
+            /// This method invokes InitializeResponsePDU and then if this response is not an exception, this method also fills in the PDU header.
             /// </summary>
             public void InitializeResponsePDUForSend()
             {

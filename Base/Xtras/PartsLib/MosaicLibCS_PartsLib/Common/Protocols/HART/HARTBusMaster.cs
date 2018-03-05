@@ -22,6 +22,8 @@
 using System;
 using System.Collections.Generic;
 
+using MosaicLib.Utils.Collections;
+
 namespace MosaicLib.PartsLib.Protocols.HART
 {
     #region Individual Commands
@@ -91,7 +93,7 @@ namespace MosaicLib.PartsLib.Protocols.HART
             public Variable CurrentVariable { get; private set; }
             public Variable[] DynamicVariables { get { return dynamicVariables; } }
 
-            private Variable[] dynamicVariables = new Variable [0];
+            private Variable[] dynamicVariables = EmptyArrayFactory<Variable>.Instance;
 
             public ReadCurrentAndAllDynamicVariables() : this(new PacketAddressInfo()) { }
             public ReadCurrentAndAllDynamicVariables(PacketAddressInfo addrInfo)

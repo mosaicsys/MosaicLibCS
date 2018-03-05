@@ -153,11 +153,12 @@ namespace MosaicLib.Modular.Part
     public static class BaseStateFcns
     {
         /// <summary>Returns true if the given UseState value is any of the Online states.</summary>
-        public static bool IsOnline(this UseState useState, bool acceptAttemptOnline = false)
+        public static bool IsOnline(this UseState useState, bool acceptAttemptOnline = false, bool acceptUninitialized = true)
         {
             switch (useState)
             {
                 case UseState.OnlineUnintialized:
+                    return acceptUninitialized;
                 case UseState.Online:
                 case UseState.OnlineBusy:
                 case UseState.OnlineFailure:
@@ -539,7 +540,7 @@ namespace MosaicLib.Modular.Part
 	/// This struct is used by most types of Part as a storage container for the part's base state.  This struct also implements the IBaseState interface
 	/// and may be used with some other storage container to service the part's BaseState property.
 	/// </summary>
-    [DataContract(Namespace=Constants.ModularNameSpace)]
+    [DataContract(Namespace=Constants.ModularNameSpace), Serializable]
 	public struct BaseState : IBaseState
 	{
 		#region private fields
@@ -547,12 +548,29 @@ namespace MosaicLib.Modular.Part
 		private UseState useState;
         private ConnState connState;
         private string actionName;
+        [NonSerialized]
         private QpcTimeStamp timeStamp;
         private string reason;
 
 		#endregion
 
-		#region IBaseState interface
+        #region Serialization support
+
+        [OnSerializing]
+        private void OnSerializing(StreamingContext context)
+        {
+            age = timeStamp.Age.TotalSeconds;
+        }
+
+        [OnDeserialized]
+        private void OnDeserialized(StreamingContext context)
+        {
+            timeStamp = QpcTimeStamp.Now + age.FromSeconds();
+        }
+
+        #endregion
+
+        #region IBaseState interface
 
         /// <summary>return true if the part is simulated</summary>
         [DataMember(Order = 100, EmitDefaultValue = false, IsRequired = false)]
@@ -580,6 +598,8 @@ namespace MosaicLib.Modular.Part
 
         /// <summary>reports the timestamp at which the new contents or state object was generated.</summary>
         public QpcTimeStamp TimeStamp { get { return timeStamp; } }
+
+        private double age;
 
         /// <summary>summary property reports true if the UseState is in an Online state</summary>
         public bool IsOnline { get { return UseState.IsOnline(); } }
@@ -787,18 +807,23 @@ namespace MosaicLib.Modular.Part
     //-----------------------------------------------------------------
     #region SimplePartBaseBehavior, SimplePartBaseSettings, and SimplePartBase
 
+    /// <summary>
+    /// Defines the behavior options that can be select at the SimplePartBase level
+    /// <para/>None (0x00), TreatPartAsBusyWhenQueueIsNotEmpty (0x01), TreatPartAsBusyWhenInternalPartBusyCountIsNonZero (0x02), All (0x03)
+    /// </summary>
     [Flags]
     public enum SimplePartBaseBehavior : int
     {
-        None = 0,
+        /// <summary>Default, placeholder value [0x00]</summary>
+        None = 0x00,
 
-        /// <summary>When present, this flag indicates that the part should be busy whenever any action queue is non-empty</summary>
-        TreatPartAsBusyWhenQueueIsNotEmpty = 1,
+        /// <summary>When present, this flag indicates that the part should be busy whenever any action queue is non-empty [0x01]</summary>
+        TreatPartAsBusyWhenQueueIsNotEmpty = 0x01,
 
-        /// <summary>When present, this flag indicates that the part should be busy whenever its internal part busy counter is non-zero</summary>
-        TreatPartAsBusyWhenInternalPartBusyCountIsNonZero = 2,
+        /// <summary>When present, this flag indicates that the part should be busy whenever its internal part busy counter is non-zero [0x02]</summary>
+        TreatPartAsBusyWhenInternalPartBusyCountIsNonZero = 0x02,
 
-        /// <summary>(TreatPartAsBusyWhenQueueIsNotEmpty | TreatPartAsBusyWhenInternalPartBusyCountIsNonZero)</summary>
+        /// <summary>(TreatPartAsBusyWhenQueueIsNotEmpty | TreatPartAsBusyWhenInternalPartBusyCountIsNonZero) [0x03]</summary>
         All = (TreatPartAsBusyWhenQueueIsNotEmpty | TreatPartAsBusyWhenInternalPartBusyCountIsNonZero),
     }
 
@@ -810,6 +835,12 @@ namespace MosaicLib.Modular.Part
     /// </summary>
     public struct SimplePartBaseSettings
     {
+        /// <summary>When non-null, this may be used to specify the initial instance log gate used by the part's default logger.  This will be ignored when using any SimplePartBase constructor where the caller provides the logger to use.</summary>
+        public Logging.LogGate ? InitialInstanceLogGate { get; set; }
+
+        /// <summary>When non-null, this may be used to specify the log group name to be used by the part's default logger.  This will be ignored when using any SimplePartBase constructor where the caller provides the logger to use.</summary>
+        public string LogGroupName { get; set; }
+
         /// <summary>Defines the behavior characteristics that will be enabled for a part</summary>
         public SimplePartBaseBehavior SimplePartBaseBehavior { get; set; }
 
@@ -832,6 +863,11 @@ namespace MosaicLib.Modular.Part
         public IValuesInterconnection PartBaseIVI { get; set; }
 
         /// <summary>
+        /// Used to specify settings in relation to logging options for this part.
+        /// </summary>
+        public LoggingOptionSelect LoggingOptionSelect { get; set; }
+
+        /// <summary>
         /// This method is called during Settings assignment.  It applies any required settings changes of struct default values.
         /// <para/>if the BaseStatePublicationValueName property has not been explicitly set, it will be set to string.Empty.
         /// </summary>
@@ -845,8 +881,18 @@ namespace MosaicLib.Modular.Part
 
         /// <summary>
         /// returns a constructor default SimpleParstBaseSettings value.
+        /// <para/>LoggingOptionSelect = LoggingOptionSelect.OldXmlishStyle
         /// </summary>
-        public static SimplePartBaseSettings DefaultVersion0 { get { return new SimplePartBaseSettings(); } }
+        public static SimplePartBaseSettings DefaultVersion0 
+        { 
+            get 
+            {
+                return new SimplePartBaseSettings() 
+                { 
+                    LoggingOptionSelect = LoggingOptionSelect.OldXmlishStyle, 
+                }; 
+            } 
+        }
 
         /// <summary>
         /// returns te first non-constructor default SimpleParstBaseSettings value (established under MosaicLibCS 0.1.6.0):
@@ -858,11 +904,26 @@ namespace MosaicLib.Modular.Part
             { 
                 return new SimplePartBaseSettings() 
                 { 
-                    SimplePartBaseBehavior = SimplePartBaseBehavior.All 
+                    SimplePartBaseBehavior = SimplePartBaseBehavior.All,
                 }; 
             } 
         }
     }
+
+    /// <summary>
+    /// Flag enumeration used to select specific logging options.
+    /// <para/>None (0x00), OldXmlishStyle (0x01)
+    /// </summary>
+    [Flags]
+    public enum LoggingOptionSelect : int
+    {
+        /// <summary>Default, placeholder (0x00)</summary>
+        None = 0x00,
+
+        /// <summary>Selects use of older Xmlish style of these messages (0x01)</summary>
+        OldXmlishStyle = 0x01,
+    }
+
 
     /// <summary>Standard extension methods wrapper class/namespace</summary>
     public static partial class ExtensionMethods
@@ -882,7 +943,9 @@ namespace MosaicLib.Modular.Part
                                                     SimplePartBaseBehavior? simplePartBaseBehavior = null, 
                                                     string baseStatePublicationValueName = null, 
                                                     bool setBaseStatePublicationValueNameToNull = false, 
-                                                    IValuesInterconnection partBaseIVI = null)
+                                                    IValuesInterconnection partBaseIVI = null,
+                                                    LoggingOptionSelect ? loggingOptionSelect = null
+                                                    )
         {
             if (simplePartBaseBehavior.HasValue)
                 settings.SimplePartBaseBehavior = simplePartBaseBehavior.Value;
@@ -895,6 +958,9 @@ namespace MosaicLib.Modular.Part
 
             if (partBaseIVI != null)
                 settings.PartBaseIVI = partBaseIVI;
+
+            if (loggingOptionSelect != null)
+                settings.LoggingOptionSelect = loggingOptionSelect ?? default(LoggingOptionSelect);
 
             return settings;
         }
@@ -929,15 +995,15 @@ namespace MosaicLib.Modular.Part
         protected SimplePartBase(string partID, string partType, Logging.IBasicLogger basicLogger = null, SimplePartBaseSettings? initialSettings = null)
             : base(partID, partType)
         {
-            Log = basicLogger ?? new Logging.Logger(partID);
+            if (initialSettings != null)
+                settings = initialSettings.GetValueOrDefault();
+
+            Log = basicLogger ?? new Logging.Logger(partID, groupName: settings.LogGroupName ?? "", initialInstanceLogGate: settings.InitialInstanceLogGate ?? Logging.LogGate.All);
 
             BaseStatePublishedNotificationList = new EventHandlerNotificationList<IBaseState>(this);
             BaseStateChangeEmitter = Log.Emitter(Logging.MesgType.Trace);
 
             publishedBaseState.Object = PrivateBaseState;
-
-            if (initialSettings != null)
-                settings = initialSettings.GetValueOrDefault();
 
             settings = settings.SetupForUse();
         }
@@ -1059,16 +1125,38 @@ namespace MosaicLib.Modular.Part
                 baseStatePublisherIVA.Set(publishState);
 
             bool includeAction = (publishState.ActionName != String.Empty || entryActionName != publishState.ActionName);
+            bool useNewStyle = ((settings.LoggingOptionSelect & LoggingOptionSelect.OldXmlishStyle) == 0);
 
             if (entryUseState != publishState.UseState)
             {
                 if (!includeAction)
-                    BaseStateChangeEmitter.Emit("<PartUseStateChange to='{0}' from='{1}' reason='{2}'/>", publishState.UseState, entryUseState, reason.GenerateQuotableVersion());
+                {
+                    if (useNewStyle)
+                        BaseStateChangeEmitter.Emit("UseState changed [state:{0}<-{1} reason:({2})]", publishState.UseState, entryUseState, reason.GenerateEscapedVersion());
+                    else
+                        BaseStateChangeEmitter.Emit("<PartUseStateChange to='{0}' from='{1}' reason='{2}'/>", publishState.UseState, entryUseState, reason.GenerateQuotableVersion());
+                }
                 else
-                    BaseStateChangeEmitter.Emit("<PartUseStateChange to='{0}','{1}', from='{2}','{3}', reason='{2}'/>", publishState.UseState, publishState.ActionName, entryUseState, entryActionName, reason.GenerateQuotableVersion());
+                {
+                    if (useNewStyle)
+                    {
+                        if (publishState.ActionName == entryActionName)
+                            BaseStateChangeEmitter.Emit("UseState changed [state:{0}<-{1} actionName:({2}) reason:({3})]", publishState.UseState, entryUseState, publishState.ActionName.GenerateEscapedVersion(), reason.GenerateEscapedVersion());
+                        else
+                            BaseStateChangeEmitter.Emit("UseState changed [state:{0}<-{1} actionName:({2})<-({3}) reason:({4})]", publishState.UseState, entryUseState, publishState.ActionName.GenerateEscapedVersion(), entryActionName.GenerateEscapedVersion(), reason.GenerateEscapedVersion());
+                    }
+                    else
+                        BaseStateChangeEmitter.Emit("<PartUseStateChange to='{0}','{1}', from='{2}','{3}', reason='{4}'/>", publishState.UseState, publishState.ActionName.GenerateQuotableVersion(), entryUseState, entryActionName.GenerateQuotableVersion(), reason.GenerateQuotableVersion());
+                }
             }
+
             if (entryConnState != publishState.ConnState)
-                BaseStateChangeEmitter.Emit("<PartConnStateChange to='{0}' from='{1}' reason='{2}'/>", publishState.ConnState, entryConnState, reason.GenerateQuotableVersion());
+            {
+                if (useNewStyle)
+                    BaseStateChangeEmitter.Emit("ConnState changed [state:{0}<-{1} reason:({2})]", publishState.ConnState, entryConnState, reason.GenerateEscapedVersion());
+                else
+                    BaseStateChangeEmitter.Emit("<PartConnStateChange to='{0}' from='{1}' reason='{2}'/>", publishState.ConnState, entryConnState, reason.GenerateQuotableVersion());
+            }
 
             if (BaseStatePublishedNotificationList != null)
                 BaseStatePublishedNotificationList.Notify(publishState);

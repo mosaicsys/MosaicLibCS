@@ -56,11 +56,12 @@ namespace MosaicLib.Modular.Action
         /// </summary>
         void UpdateNamedValues(Common.INamedValueSet namedValueSet);
 
-        /// <summary>Provider invokes this to indicate that the action is complete and to provide the final resultCode</summary>
+        /// <summary>Provider invokes this to indicate that the action is complete and to provide the final <paramref name="resultCode"/></summary>
         void CompleteRequest(string resultCode);
 
         /// <summary>
-        /// Provider invokes this to indicate that the action is complete and to provide the final resultCode and set of NamedValues (from which a readonly copy is made and retained)
+        /// Provider invokes this to indicate that the action is complete and to provide the final <paramref name="resultCode"/>.
+        /// If a non-null <paramref name="namedValueSet"/> is provided then it will be used to secify the completed IActionState's NamedValues.
         /// </summary>
         void CompleteRequest(string resultCode, Common.INamedValueSet namedValueSet);
 

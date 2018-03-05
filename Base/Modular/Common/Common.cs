@@ -75,6 +75,7 @@ namespace MosaicLib.Modular.Common
     /// This ojects is used by, and supports use with, a large and growing number of the other modular types in this library, especially to support generic forms of interconnection, serialization, and attribute harvested value set adapters.
     /// This type is used in place of the traditional object boxing and unboxing solution to avoid the generation and propagation of small short lifetime memory objects when passing such underlying value types from place to place in a more generic manner.
     /// </summary>
+    [Serializable]
     public struct ValueContainer : IEquatable<ValueContainer>
     {
         #region non-default "Constructor"
@@ -109,44 +110,44 @@ namespace MosaicLib.Modular.Common
         #region value storage Union type (explicit layout struct with all fields using FieldOffset(0))
 
         /// <summary>The Union type allows for various types to be supported using fields that only use one 8 byte block for storage.</summary>
-        [StructLayout(LayoutKind.Explicit, Pack = 8)]
+        [StructLayout(LayoutKind.Explicit, Pack = 8), Serializable]
         public struct Union : IEquatable<Union>
         {
             /// <summary>Boolean value in union</summary>
-            [FieldOffset(0)]
+            [FieldOffset(0), NonSerialized]
             public System.Boolean b;
             /// <summary>"Binary" Byte value in union</summary>
-            [FieldOffset(0)]
+            [FieldOffset(0), NonSerialized]
             public System.Byte bi;
             /// <summary>SByte value in union</summary>
-            [FieldOffset(0)]
+            [FieldOffset(0), NonSerialized]
             public System.SByte i8;
             /// <summary>Int16 value in union</summary>
-            [FieldOffset(0)]
+            [FieldOffset(0), NonSerialized]
             public System.Int16 i16;
             /// <summary>Int32 value in union</summary>
-            [FieldOffset(0)]
+            [FieldOffset(0), NonSerialized]
             public System.Int32 i32;
             /// <summary>Int64 value in union</summary>
-            [FieldOffset(0)]
+            [FieldOffset(0), NonSerialized]
             public System.Int64 i64;
             /// <summary>Byte value in union</summary>
-            [FieldOffset(0)]
+            [FieldOffset(0), NonSerialized]
             public System.Byte u8;
             /// <summary>UInt16 value in union</summary>
-            [FieldOffset(0)]
+            [FieldOffset(0), NonSerialized]
             public System.UInt16 u16;
             /// <summary>UInt32 value in union</summary>
-            [FieldOffset(0)]
+            [FieldOffset(0), NonSerialized]
             public System.UInt32 u32;
             /// <summary>UInt64 value in union</summary>
             [FieldOffset(0)]
             public System.UInt64 u64;
             /// <summary>Single value in union</summary>
-            [FieldOffset(0)]
+            [FieldOffset(0), NonSerialized]
             public System.Single f32;
             /// <summary>Double value in union</summary>
-            [FieldOffset(0)]
+            [FieldOffset(0), NonSerialized]
             public System.Double f64;
 
             /// <summary>Helper property to read/write a TimeSpan - internally gets/saves the i64 TickCount in the TimeSpan</summary>
@@ -1385,7 +1386,12 @@ namespace MosaicLib.Modular.Common
             else if (cvt == ContainerStorageType.INamedValue)
                 return (o as INamedValue).MapNullToEmpty().Equals(other.o as INamedValue);
             else if (cvt.IsReferenceType())
+            {
+                if (o is System.Array && other.o is System.Array)
+                    return Utils.Fcns.Equals(o as System.Array, other.o as System.Array);
+
                 return System.Object.Equals(o, other.o);
+            }
             else if (cvt.IsNone())
                 return true;
             else
@@ -1758,7 +1764,7 @@ namespace MosaicLib.Modular.Common
     }
 
     /// <summary>
-    /// Excpetion that may be thrown by the ValueContainer's GetValue method.  Message will give more details of the problem.
+    /// Exception that may be thrown by the ValueContainer's GetValue method.  Message will give more details of the problem.
     /// </summary>
     public class ValueContainerGetValueException : System.Exception
     {
@@ -1782,7 +1788,7 @@ namespace MosaicLib.Modular.Common
     /// Please note the custom handling of the VC property allows this class to be used as the base class for DataContract objects where no class constructor is used when
     /// creating the deserialized version of an object and thus the fields are all set to the default(type) values without regard to any coded constructor behavior.
     /// </remarks>
-    [DataContract(Name = "VC", Namespace = Constants.ModularNameSpace)]
+    [DataContract(Name = "VC", Namespace = Constants.ModularNameSpace), Serializable]
     public class ValueContainerEnvelope : IEquatable<ValueContainerEnvelope>
     {
         /// <summary>Default constructor.  By default the contained value will read as Empty until it has been explicitly set to some other value.</summary>
@@ -1842,7 +1848,7 @@ namespace MosaicLib.Modular.Common
         #region serialization helper properties each as optional DataMembers
 
         [OnSerializing]
-        void OnSerializing(StreamingContext sc)
+        private void OnSerializing(StreamingContext context)
         {
             if (!onSerializingCanBeSkipped)
             {
@@ -1918,19 +1924,11 @@ namespace MosaicLib.Modular.Common
         }
 
         [OnDeserializing]
-        void OnDeserializing(StreamingContext sc)
+        private void OnDeserializing(StreamingContext context)
         {
             if (vc.cvt != ContainerStorageType.None || onSerializingCanBeSkipped)
                 VC = ValueContainer.Empty;
         }
-
-        //[OnSerialized]
-        //void OnSerialized(StreamingContext sc)
-        //{ }
-
-        //[OnDeserialized]
-        //void OnDeserialized(StreamingContext sc)
-        //{ }
 
         void ClearDecodedProperties()
         {
@@ -1944,13 +1942,28 @@ namespace MosaicLib.Modular.Common
             vcaGetValue = null;
         }
 
+        [NonSerialized]
         private bool nullGetValue;
+
+        [NonSerialized]
         private object oGetValue;
+
+        [NonSerialized]
         private NamedValue nviGetValue;
+
+        [NonSerialized]
         private NamedValueSet nvsGetValue;
+
+        [NonSerialized]
         private string sGetValue;
+
+        [NonSerialized]
         private Details.sl slGetValue;
+
+        [NonSerialized]
         private CustomSerialization.TypeAndValueCarrier tavcGetValue;
+
+        [NonSerialized]
         private ValueContainerEnvelope[] vcaGetValue;
 
         // expectation is that exactly one property/element will produce a non-default value and this will define both the ContainerStorageType and the value for the deserializer to produce.
@@ -2626,7 +2639,7 @@ namespace MosaicLib.Modular.Common
         /// <summary>Returns true if the this INamedValueSet has the same contents, in the same order, as the given <paramref name="other"/>.</summary>
         bool IsEqualTo(INamedValueSet other, TraversalType searchTraversalType = TraversalType.EntireTree, bool compareReadOnly = true);
 
-        /// <summary>Custom ToString variant that allows the caller to determine if the ro/rw postfix should be included on thie string result, and to determine if NamedValues with empty VCs should be treated as a keyword.</summary>
+        /// <summary>Custom ToString variant that allows the caller to determine if the ro/rw postfix should be included on this string result, and to determine if NamedValues with empty VCs should be treated as a keyword.</summary>
         string ToString(bool includeROorRW = true, bool treatNameWithEmptyVCAsKeyword = true, TraversalType traversalType = TraversalType.EntireTree);
 
         /// <summary>ToString variant that support SML like output format.</summary>
@@ -2693,6 +2706,28 @@ namespace MosaicLib.Modular.Common
         /// Returns true if the given traversalType indicates that only the top level of the tree should be traversed
         /// </summary>
         public static bool CoverTopLevelOnly(this TraversalType traversalType) { return (traversalType == TraversalType.TopLevelOnly); }
+
+        /// <summary>
+        /// Null tolerante version of INamedValueSet.ToStringSML method.  Returns <paramref name="fallbackValue"/> in place of null.
+        /// </summary>
+        public static string SafeToStringSML(this INamedValueSet invs, TraversalType traversalType = TraversalType.EntireTree, string nvsNodeName = "NVS", string nvNodeName = "NV", string fallbackValue = "")
+        {
+            if (invs != null)
+                return invs.ToStringSML(traversalType: traversalType, nvsNodeName: nvsNodeName, nvNodeName: nvNodeName);
+            else
+                return fallbackValue;
+        }
+
+        /// <summary>
+        /// Null tolerante version of INamedValue.ToStringSML method.  Returns <paramref name="fallbackValue"/> in place of null.
+        /// </summary>
+        public static string SafeToStringSML(this INamedValue inv, string nvNodeName = "NV", string fallbackValue = "")
+        {
+            if (inv != null)
+                return inv.ToStringSML(nvNodeName: nvNodeName);
+            else
+                return fallbackValue;
+        }
     }
 
     /// <summary>
@@ -2750,7 +2785,7 @@ namespace MosaicLib.Modular.Common
     /// Initial constructed object contents do not make use of any default constructor and instead essentally zero-fill the object as if it were a struct rather than
     /// being a class.
     /// </remarks>
-    [CollectionDataContract(ItemName = "nvi", Namespace = Constants.ModularNameSpace)]
+    [CollectionDataContract(ItemName = "nvi", Namespace = Constants.ModularNameSpace), Serializable]
     public class NamedValueSet : ICollection<NamedValue>, INamedValueSet
     {
         #region Empty constant
@@ -3105,7 +3140,7 @@ namespace MosaicLib.Modular.Common
 
         #endregion
 
-        #region INamedValueSet (leftovers - most of the other members and properties are found in other regions of this class)
+        #region INamedValueSet (leftovers - most of the other members and properties are found in other regions of this class) - Includes IEquatable<INamedValueSet>
 
         /// <summary>Returns true if this set, or any of its sub-sets, contains a NamedValue for the given name (after sanitization).</summary>
         public bool Contains(string name, TraversalType searchTraversalType = TraversalType.EntireTree)
@@ -3406,7 +3441,7 @@ namespace MosaicLib.Modular.Common
 
         #endregion
 
-        #region Equality support
+        #region Equality support (IEquatable<INamedValueSet> is supported under INamedValueSet)
 
         /// <summary>Support object level Equality testing versions.</summary>
         public override bool Equals(object rhsAsObject)
@@ -3432,7 +3467,7 @@ namespace MosaicLib.Modular.Common
             return ToString(true, false, TraversalType.Flatten);
         }
 
-        /// <summary>Custom ToString variant that allows the caller to determine if the ro/rw postfix should be included on thie string result and if each NV with an empty VC should be treated like a keyword.</summary>
+        /// <summary>Custom ToString variant that allows the caller to determine if the ro/rw postfix should be included on this string result and if each NV with an empty VC should be treated like a keyword.</summary>
         public string ToString(bool includeROorRW, bool treatNameWithEmptyVCAsKeyword, TraversalType traversalType = TraversalType.EntireTree)
         {
             StringBuilder sb = new StringBuilder("[");
@@ -3574,7 +3609,7 @@ namespace MosaicLib.Modular.Common
         }
 
         private INamedValueSet [] subSetsArray = null;
-        private static readonly INamedValueSet[] emptySubSetsArray = new INamedValueSet[0];
+        private static readonly INamedValueSet[] emptySubSetsArray = EmptyArrayFactory<INamedValueSet>.Instance;
 
         #endregion
 
@@ -3624,6 +3659,7 @@ namespace MosaicLib.Modular.Common
         }
 
         /// <summary>This dictionary is only used to optimize access to sets that have at least 10 elements</summary>
+        [NonSerialized]
         volatile Dictionary<string, int> nameToIndexDictionary = null;
 
         /// <summary>Defines the minimum Set size required to decide to create the nameToIndexDictionary</summary>
@@ -3653,7 +3689,7 @@ namespace MosaicLib.Modular.Common
     /// <summary>
     /// This object defines a single named value.  A named value is a pairing of a name and a ValueContainer.
     /// </summary>
-    [DataContract(Namespace = Constants.ModularNameSpace)]
+    [DataContract(Namespace = Constants.ModularNameSpace), Serializable]
     public class NamedValue : INamedValue
     {
         #region Empty constant
@@ -3868,7 +3904,7 @@ namespace MosaicLib.Modular.Common
         #region ToString (variants), ToStringSML, and EstimatedContentSizeInBytes
 
         /// <summary>
-        /// Custom ToString variant that allows the caller to determine if the ro/rw postfix should be included on thie string result and if NV's with an empty VC should be treated like a keyword (by only returning the name)
+        /// Custom ToString variant that allows the caller to determine if the ro/rw postfix should be included on this string result and if NV's with an empty VC should be treated like a keyword (by only returning the name)
         /// </summary>
         public string ToString(bool useDoubleEqualsForRW, bool treatNameWithEmptyVCAsKeyword)
         {
@@ -4188,7 +4224,7 @@ namespace MosaicLib.Modular.Common
         }
 
         /// <summary>
-        /// passes the given iNvSet through as the return value unless it is a non-null, empty set in which case this method returns null.
+        /// passes the given <paramref name="iNvSet"/> through as the return value unless it is a non-null, empty set in which case this method returns null.
         /// </summary>
         public static INamedValueSet MapEmptyToNull(this INamedValueSet iNvSet)
         {
@@ -4196,11 +4232,27 @@ namespace MosaicLib.Modular.Common
         }
 
         /// <summary>
-        /// passes the given iNvSet through as the return value unless it is a null, in which case this method returns NamedValueSet.Empty.
+        /// passes the given <paramref name="nvSet"/> through as the return value unless it is a non-null, empty set in which case this method returns null.
+        /// </summary>
+        public static NamedValueSet MapEmptyToNull(this NamedValueSet nvSet)
+        {
+            return (nvSet.IsNullOrEmpty() ? null : nvSet);
+        }
+
+        /// <summary>
+        /// passes the given <paramref name="iNvSet"/> through as the return value unless it is a null, in which case this method returns NamedValueSet.Empty.
         /// </summary>
         public static INamedValueSet MapNullToEmpty(this INamedValueSet iNvSet)
         {
             return (iNvSet ?? NamedValueSet.Empty);
+        }
+
+        /// <summary>
+        /// passes the given <paramref name="nvSet"/> through as the return value unless it is a null, in which case this method returns NamedValueSet.Empty.
+        /// </summary>
+        public static NamedValueSet MapNullToEmpty(this NamedValueSet nvSet)
+        {
+            return (nvSet ?? NamedValueSet.Empty);
         }
 
         /// <summary>

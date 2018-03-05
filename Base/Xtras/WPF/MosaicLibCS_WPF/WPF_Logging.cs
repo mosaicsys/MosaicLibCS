@@ -95,6 +95,7 @@ namespace MosaicLib.WPF.Logging
         #endregion
     }
 
+    // [Obsolete("WPF_Logging is being deprectated.  Please change to use Set based logging and screen display. (2018-02-26)")]
     public class LogMessageObservableCollection
         : System.Collections.ObjectModel.ObservableCollection<LogMessageCollectionItem>
         , IDisposable

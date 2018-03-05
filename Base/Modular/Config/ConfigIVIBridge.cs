@@ -33,6 +33,7 @@ using MosaicLib.Modular.Interconnect;
 using MosaicLib.Modular.Interconnect.Values;
 using MosaicLib.Modular.Part;
 using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
 using MosaicLib.Utils.StringMatching;
 using MosaicLib.Time;
 
@@ -403,7 +404,7 @@ namespace MosaicLib.Modular.Config
 
         private ConfigSubscriptionSeqNums lastConfigSeqNums = new ConfigSubscriptionSeqNums();
 
-        private static readonly string[] emptyStringArray = new string[0];
+        private static readonly string[] emptyStringArray = EmptyArrayFactory<string>.Instance;
 
         private class SyncItem
         {

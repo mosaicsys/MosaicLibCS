@@ -344,6 +344,10 @@ namespace MosaicLib.Utils
 	/// </summary>
 	public class NullNotifier : EventNotifierBase
 	{
+        /// <summary>Support a singleton Instance for clients to use.</summary>
+        public static NullNotifier Instance { get { return instance; } }
+        private static NullNotifier instance = new NullNotifier();
+
         /// <summary>
         /// Default constructor for a NullNotifier.
         /// </summary>
@@ -866,55 +870,61 @@ namespace MosaicLib.Utils
 			int delegateExceptions = 0, notifyExceptions = 0, eventWaitHandleExeceptions = 0;
             System.Exception firstEx = null;
 
-            BasicNotificationDelegate[] basicNotificationDelegateArray = (basicNotificationDelegateList != null ? basicNotificationDelegateList.Array : emptyBasicNotificationDelegateArray);
-            foreach (BasicNotificationDelegate bnd in basicNotificationDelegateArray)
+            BasicNotificationDelegate[] basicNotificationDelegateArray = basicNotificationDelegateList.SafeToArray(mapNullToEmpty: false);
+            INotifyable[] notifyableArray = notifyableList.SafeToArray(mapNullToEmpty: false);
+            System.Threading.EventWaitHandle[] eventWaitHandleArray = eventWaitHandleList.SafeToArray(mapNullToEmpty: false);
+
+            if (!basicNotificationDelegateArray.IsNullOrEmpty())
             {
-                try 
-                { 
-                    (bnd ?? nullBasicNotificationDelegate)(); 
-                }
-                catch (System.Exception ex) 
+                foreach (BasicNotificationDelegate bnd in basicNotificationDelegateArray)
                 {
-                    firstEx = firstEx ?? ex;
-                    delegateExceptions++; 
+                    try 
+                    { 
+                        (bnd ?? nullBasicNotificationDelegate)(); 
+                    }
+                    catch (System.Exception ex) 
+                    {
+                        firstEx = firstEx ?? ex;
+                        delegateExceptions++; 
+                    }
                 }
             }
 
-            INotifyable[] notifyableArray = (notifyableList != null ? notifyableList.Array : emptyNotifyableArray);
-            foreach (INotifyable notificationItem in notifyableArray)
+            if (!notifyableArray.IsNullOrEmpty())
             {
-                try 
-                { 
-                    (notificationItem ?? nullNotifier).Notify(); 
-                }
-                catch (System.Exception ex)
+                foreach (INotifyable notificationItem in notifyableArray)
                 {
-                    firstEx = firstEx ?? ex;
-                    notifyExceptions++; 
+                    try
+                    {
+                        (notificationItem ?? nullNotifier).Notify();
+                    }
+                    catch (System.Exception ex)
+                    {
+                        firstEx = firstEx ?? ex;
+                        notifyExceptions++;
+                    }
                 }
             }
 
-            System.Threading.EventWaitHandle[] eventWaitHandleArray = (eventWaitHandleList != null ? eventWaitHandleList.Array : emptyEventWaitHandleArray);
-            foreach (System.Threading.EventWaitHandle eventWaitHandle in eventWaitHandleArray)
+            if (!eventWaitHandleArray.IsNullOrEmpty())
             {
-                try 
-                { 
-                    EventWaitHandleHelper.SetEvent(eventWaitHandle); 
-                }
-                catch (System.Exception ex)
+                foreach (System.Threading.EventWaitHandle eventWaitHandle in eventWaitHandleArray)
                 {
-                    firstEx = firstEx ?? ex;
-                    eventWaitHandleExeceptions++; 
+                    try
+                    {
+                        EventWaitHandleHelper.SetEvent(eventWaitHandle);
+                    }
+                    catch (System.Exception ex)
+                    {
+                        firstEx = firstEx ?? ex;
+                        eventWaitHandleExeceptions++;
+                    }
                 }
             }
 
             if (firstEx != null)
-                Asserts.TakeBreakpointAfterFault(Utils.Fcns.CheckedFormat("Notify triggered exception(s): delegates:{0} inotifyable:{1} eventWaitHandle:{2} firstEx:{3}", delegateExceptions, notifyExceptions, eventWaitHandleExeceptions, firstEx.ToString(ExceptionFormat.TypeAndMessage | ExceptionFormat.IncludeStackTrace)));
+                Asserts.TakeBreakpointAfterFault(Utils.Fcns.CheckedFormat("Notify triggered exception(s): delegates:{0} inotifyable:{1} eventWaitHandle:{2} firstEx:{3}", delegateExceptions, notifyExceptions, eventWaitHandleExeceptions, firstEx.ToString(ExceptionFormat.TypeAndMessageAndStackTrace)));
 		}
-
-        private static readonly BasicNotificationDelegate[] emptyBasicNotificationDelegateArray = new BasicNotificationDelegate[0];
-        private static readonly INotifyable[] emptyNotifyableArray = new INotifyable[0];
-        private static readonly System.Threading.EventWaitHandle[] emptyEventWaitHandleArray = new System.Threading.EventWaitHandle[0];
 
 		#endregion
 

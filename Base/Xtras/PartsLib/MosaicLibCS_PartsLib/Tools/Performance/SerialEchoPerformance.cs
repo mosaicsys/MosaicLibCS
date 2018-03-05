@@ -36,6 +36,7 @@ using MosaicLib.Modular.Part;
 using MosaicLib.SerialIO;
 using MosaicLib.Time;
 using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
 
 namespace MosaicLib.PartsLib.Tools.Performance
 {
@@ -49,7 +50,7 @@ namespace MosaicLib.PartsLib.Tools.Performance
             ResponseTimeLimit = (1.0).FromSeconds();
             TestDataLength = 100;
             TestDataPatternCount = 8;
-            PortTargetSpecArray = emptyStringArray;
+            PortTargetSpecArray = EmptyArrayFactory<string>.Instance;
         }
 
         public SerialEchoPerformancePartConfig(SerialEchoPerformancePartConfig other)
@@ -60,7 +61,7 @@ namespace MosaicLib.PartsLib.Tools.Performance
             ResponseTimeLimit = other.ResponseTimeLimit;
             TestDataLength = Math.Max(16, other.TestDataLength);
             TestDataPatternCount = Math.Max(1, other.TestDataPatternCount);
-            PortTargetSpecArray = other.PortTargetSpecArray ?? emptyStringArray;
+            PortTargetSpecArray = other.PortTargetSpecArray ?? EmptyArrayFactory<string>.Instance;
         }
 
         [ConfigItem(IsOptional = true)]
@@ -94,7 +95,7 @@ namespace MosaicLib.PartsLib.Tools.Performance
                 if (strArray == null && !str.IsNullOrEmpty())
                     strArray = str.Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries).Select(s => s.Trim()).ToArray();
 
-                PortTargetSpecArray = strArray ?? emptyStringArray;
+                PortTargetSpecArray = strArray ?? EmptyArrayFactory<string>.Instance;
             }
         }
 
@@ -104,8 +105,6 @@ namespace MosaicLib.PartsLib.Tools.Performance
 
             return this;
         }
-
-        private static readonly string[] emptyStringArray = new string[0];
     }
     
     public class SerialEchoPerformancePart : SimpleActivePartBase

@@ -26,6 +26,7 @@ using System.Runtime.Serialization;
 using System.Linq;
 using System.Text;
 using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
 using MosaicLib.Time;
 using MosaicLib.Modular;
 using MosaicLib.Modular.Part;
@@ -219,7 +220,7 @@ namespace MosaicLib.PartsLib.Common.E099.Sim
         public TagRWSimEngineConfig Config { get; internal set; }
 
         public byte[] ContentByteArray { get; internal set; }
-        private static readonly byte[] EmptyByteArray = new byte[0];
+        private static readonly byte[] EmptyByteArray = EmptyArrayFactory<byte>.Instance;
 
         public int Count { get; internal set; }
 
@@ -335,7 +336,7 @@ namespace MosaicLib.PartsLib.Common.E099.Sim
         #region Construction
 
         /// <summary>
-        /// Constructor for use wihtout an lpmSimPart.  Caller provides full part name and object does not look for carrier removed events.
+        /// Constructor for use without an lpmSimPart.  Caller provides full part name and object does not look for carrier removed events.
         /// </summary>
         public E099TagRWSimEngine(string partID)
             :this(partID, null)
@@ -549,7 +550,7 @@ namespace MosaicLib.PartsLib.Common.E099.Sim
             return String.Empty;
         }
 
-        private readonly static ITagPageContents[] EmptyPageContentsArray = new ITagPageContents[0];
+        private readonly static ITagPageContents[] EmptyPageContentsArray = EmptyArrayFactory<ITagPageContents>.Instance;
 
         public IBasicAction CreateWritePagesAction(ITagPageContents[] pages)
         {

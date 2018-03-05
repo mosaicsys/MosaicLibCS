@@ -22,17 +22,18 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
+using System.ComponentModel;
 using System.Linq;
 using System.Text;
+using System.Windows;
+using System.Windows.Threading;
+
 
 using MosaicLib;
 using MosaicLib.Utils;
 using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Interconnect.Values;
-using System.Collections.Specialized;
-using System.ComponentModel;
-using System.Windows.Threading;
-using System.Windows;
 
 namespace MosaicLib.WPF.Interconnect
 {
@@ -453,16 +454,20 @@ namespace MosaicLib.WPF.Interconnect
     public class WPFValueInterconnectAdapter : Dictionary<string, WPFValueAccessor>, IWPFValueAccessorFactory
     {
         /// <summary>Default constructor - defaults to using the Values.Instance IValueInterconnection object</summary>
-        public WPFValueInterconnectAdapter()
-            : this(Modular.Interconnect.Values.Values.Instance)
+        public WPFValueInterconnectAdapter(MosaicLib.Logging.IMesgEmitter issueEmitter = null)
+            : this(Modular.Interconnect.Values.Values.Instance, issueEmitter: issueEmitter)
         {
         }
 
         /// <summary>Constructor allows the caller to give the IValuesInterconnection instance to use.</summary>
-        public WPFValueInterconnectAdapter(IValuesInterconnection valuesInterconnectionInstanceToUse)
+        public WPFValueInterconnectAdapter(IValuesInterconnection valuesInterconnectionInstanceToUse, MosaicLib.Logging.IMesgEmitter issueEmitter = null)
         {
+            IssueEmitter = issueEmitter ?? MosaicLib.Logging.NullMesgEmitter.Instance;
+
             ivi = valuesInterconnectionInstanceToUse;
         }
+
+        public MosaicLib.Logging.IMesgEmitter IssueEmitter { get; private set; }
 
         /// <summary>
         /// Service method.  Scans and updates active items which have new values.  Adds new named values to the dictionary as they are found in the IVI's table.
@@ -470,7 +475,15 @@ namespace MosaicLib.WPF.Interconnect
         /// </summary>
         public WPFValueInterconnectAdapter Service()
         {
-            UpdateActiveItems();
+            try
+            {
+                UpdateActiveItems();
+            }
+            catch (System.Exception ex)
+            {
+                if (IssueEmitter.IsEnabled)
+                    IssueEmitter.Emit("{0}: caught unexpected exception: {1}", Fcns.CurrentMethodName, ex.ToString(ExceptionFormat.TypeAndMessage));
+            }
 
             return this;
         }
@@ -582,7 +595,16 @@ namespace MosaicLib.WPF.Interconnect
             for (int updateWvaIdx = 0; updateWvaIdx < numItemsToUpdate; updateWvaIdx++)
             {
                 WPFValueAccessor wva = wvaUpdateArray[updateWvaIdx];
-                wva.NotifyValueHasBeenUpdated();
+
+                try
+                {
+                    wva.NotifyValueHasBeenUpdated();
+                }
+                catch (System.Exception ex)
+                {
+                    if (IssueEmitter.IsEnabled)
+                        IssueEmitter.Emit("{0}: [{1}].NotifyValueHasBeenUpdated() generated unexpected exception: {2}", Fcns.CurrentMethodName, wva, ex.ToString(ExceptionFormat.TypeAndMessage));
+                }
             }
 
             rebuildArrays = false;

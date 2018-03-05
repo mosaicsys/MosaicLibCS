@@ -23,11 +23,13 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.Serialization;
 
 using MosaicLib.Utils;
 using MosaicLib.Time;
 using MosaicLib.Modular.Action;
 using MosaicLib.Modular.Common;
+using MosaicLib.Modular.Interconnect.Parts;
 using MosaicLib.Modular.Interconnect.Values;
 
 namespace MosaicLib.Modular.Part
@@ -135,6 +137,7 @@ namespace MosaicLib.Modular.Part
     /// <summary>
     /// Implementation object for IActionInfo.  This class is immutable.
     /// </summary>
+    [DataContract(Namespace = Constants.ModularNameSpace), Serializable]
     public class ActionInfo : IActionInfo
     {
         /// <summary>
@@ -228,11 +231,23 @@ namespace MosaicLib.Modular.Part
         }
 
         /// <summary>Gives the basic "name" of the action</summary>
+        [DataMember(Order = 100)]
         public string Description { get; private set; }
+
         /// <summary>Gives the basic "name" of the action with details (such as the content of parameters and/or of any NamedParamValues)</summary>
+        [DataMember(Order = 200)]
         public string DescriptionWithDetails { get; private set; }
+
         /// <summary>Gives the last seens IActionState for this action</summary>
         public IActionState ActionState { get; private set; }
+
+        /// <summary>Support for DataContract serialization of this object</summary>
+        [DataMember(Order = 300, Name = "ActionState")]
+        private ActionStateCopy ActionStateCopy
+        {
+            get { return new ActionStateCopy(ActionState); }
+            set { ActionState = value; }
+        }
 
         private static readonly IActionInfo emptyActionInfo = new ActionInfo();
 
@@ -272,6 +287,11 @@ namespace MosaicLib.Modular.Part
         /// <para/>Defaults to GoOnlineAndGoOfflineHandling.None for backwards compatibility.
         /// </summary>
         public GoOnlineAndGoOfflineHandling GoOnlineAndGoOfflineHandling { get; set; }
+
+        /// <summary>Set this to an IPI to request the part to register itself with a specific IPI instance.  Explicitly set this to null to indicate that the part should not register itself with any IPI instance (even the default one)</summary>
+        public IPartsInterconnection RegisterPartWith { get { return registerPartWith; } set { registerPartWith = value; registerPartWithHasBeenSet = true; } }
+        internal IPartsInterconnection registerPartWith;
+        internal bool registerPartWithHasBeenSet;
 
         /// <summary>
         /// Defines this part's behavior option flag value(s).
@@ -366,17 +386,22 @@ namespace MosaicLib.Modular.Part
         }
 
         /// <summary>
-        /// SimpleActivePartBaseSettings content builder helper extension method.
+        /// SimpleActivePartBaseSettings content builder helper extension method.  
         /// </summary>
-        public static SimpleActivePartBaseSettings Build(this SimpleActivePartBaseSettings settings, 
-                                                         bool ? automaticallyIncAndDecBusyCountAroundActionInvoke = null,
-                                                         int ? maxActionsToInvokePerServiceLoop = null,
+        public static SimpleActivePartBaseSettings Build(this SimpleActivePartBaseSettings settings,
+                                                         bool? automaticallyIncAndDecBusyCountAroundActionInvoke = null,
+                                                         int? maxActionsToInvokePerServiceLoop = null,
                                                          GoOnlineAndGoOfflineHandling? goOnlineAndOfflineHandling = null,
                                                          SimpleActivePartBehaviorOptions? simpleActivePartBehaviorOptions = null,
                                                          TimeSpan? waitTimeLimit = null,
-                                                         SimplePartBaseSettings? simplePartBaseSettings = null, 
+                                                         SimplePartBaseSettings? simplePartBaseSettings = null,
                                                          IValuesInterconnection partBaseIVI = null,
-                                                         bool setBaseStatePublicationValueNameToNull = false
+                                                         bool setBaseStatePublicationValueNameToNull = false,
+                                                         Logging.LogGate? initialInstanceLogGate = null,
+                                                         string logGroupName = null,
+                                                         IPartsInterconnection registerPartWith = null,
+                                                         bool disablePartRegistration = false,
+                                                         LoggingOptionSelect? loggingOptionSelect = null
                                                          )
         {
             if (automaticallyIncAndDecBusyCountAroundActionInvoke.HasValue)
@@ -403,11 +428,25 @@ namespace MosaicLib.Modular.Part
             if (setBaseStatePublicationValueNameToNull)
                 settings.simplePartBaseSettings.BaseStatePublicationValueName = null;
 
+            if (initialInstanceLogGate != null)
+                settings.simplePartBaseSettings.InitialInstanceLogGate = initialInstanceLogGate;
+
+            if (logGroupName != null)
+                settings.simplePartBaseSettings.LogGroupName = logGroupName;
+
+            if (disablePartRegistration)
+                settings.RegisterPartWith = null;
+            else if (registerPartWith != null)
+                settings.RegisterPartWith = registerPartWith;
+
+            if (loggingOptionSelect != null)
+                settings.simplePartBaseSettings.LoggingOptionSelect = loggingOptionSelect ?? default(LoggingOptionSelect);
+
             return settings;
         }
     }
 
-	/// <summary>
+    /// <summary>
 	/// This abstract class is the standard base class to be used by most types of Active Parts.  
 	/// It derives from SimplePartBase, and implements IActivePartBase and INotifyable.
 	/// </summary>
@@ -596,8 +635,11 @@ namespace MosaicLib.Modular.Part
 
 			actionLoggingReference = new ActionLogging(Log, ActionLoggingConfig.Info_Error_Debug_Debug);
 
-            Interconnect.Parts.Parts.Instance.RegisterPart(this);
-		}
+            if (!settings.registerPartWithHasBeenSet)
+                Interconnect.Parts.Parts.Instance.RegisterPart(this);
+            else if (settings.registerPartWith != null)
+                settings.registerPartWith.RegisterPart(this);
+        }
 
         /// <summary>
         /// Protected sealed implementation for DisposableBase.Dispose(DisposeType) abstract method.
@@ -1166,7 +1208,7 @@ namespace MosaicLib.Modular.Part
         /// </summary>
 		protected virtual void PerformAction(IProviderFacet action)
 		{
-            string actionName = (action != null) ? action.ToString() : null;
+            string actionName = (action != null) ? action.ToString(ToStringSelect.MesgAndDetail) : null;
 
             IActionInfo actionInfo = null;
 

@@ -35,6 +35,7 @@ using MosaicLib.Modular.Interconnect.Values;
 using MosaicLib.Modular.Part;
 using MosaicLib.Time;
 using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
 
 namespace MosaicLib.PartsLib.Tools.Performance
 {
@@ -47,7 +48,7 @@ namespace MosaicLib.PartsLib.Tools.Performance
             AggregationInterval = (30.0).FromSeconds();
             ResponseTimeLimit = (1.0).FromSeconds();
             ExtraLength = 0;
-            PingTargetArray = emptyStringArray;
+            PingTargetArray = EmptyArrayFactory<string>.Instance;
         }
 
         public PingPerformancePartConfig(PingPerformancePartConfig other)
@@ -57,7 +58,7 @@ namespace MosaicLib.PartsLib.Tools.Performance
             AggregationInterval = other.AggregationInterval;
             ResponseTimeLimit = other.ResponseTimeLimit;
             ExtraLength = other.ExtraLength;
-            PingTargetArray = other.PingTargetArray ?? emptyStringArray;
+            PingTargetArray = other.PingTargetArray ?? EmptyArrayFactory<string>.Instance;
         }
 
         [ConfigItem(IsOptional = true)]
@@ -88,7 +89,7 @@ namespace MosaicLib.PartsLib.Tools.Performance
                 if (strArray == null && !str.IsNullOrEmpty())
                     strArray = str.Split(new[] { ' ', ',', '|' }, StringSplitOptions.RemoveEmptyEntries).Select(s => s.Trim()).ToArray();
 
-                PingTargetArray = strArray ?? emptyStringArray;
+                PingTargetArray = strArray ?? EmptyArrayFactory<string>.Instance;
             }
         }
 
@@ -98,8 +99,6 @@ namespace MosaicLib.PartsLib.Tools.Performance
 
             return this;
         }
-
-        private static readonly string[] emptyStringArray = new string[0];
     }
     
     public class PingPerformancePart : SimpleActivePartBase

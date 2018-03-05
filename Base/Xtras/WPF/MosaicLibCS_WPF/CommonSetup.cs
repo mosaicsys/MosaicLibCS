@@ -125,16 +125,123 @@ namespace MosaicLib.WPF.Common
         public static FileRingLogMessageHandlerType DefaultMainLoggerType { get { return defaultMainLoggerType; } set { defaultMainLoggerType = value; } }
         private static FileRingLogMessageHandlerType defaultMainLoggerType = FileRingLogMessageHandlerType.TextFileRotationDirectoryLogMessageHandler;
 
+        public static UnhandledExceptionEventHandler UnhandledExceptionEventHandler { get { return _unhandledExceptionEventHandler; } set { _unhandledExceptionEventHandler = value;} }
+        private static UnhandledExceptionEventHandler _unhandledExceptionEventHandler = DefaultUnhandledExceptionEventHandler;
+
+        public static void DefaultUnhandledExceptionEventHandler(object sender, UnhandledExceptionEventArgs e)
+        {
+            try
+            {
+                StringBuilder sb = new StringBuilder();
+
+                sb.CheckedAppendFormat("{0} has been triggered", Fcns.CurrentMethodName);
+                sb.AppendLine();
+                sb.CheckedAppendFormat(" DateTime   : {0:o}", DateTime.Now);
+                sb.AppendLine();
+                sb.CheckedAppendFormat(" QpcTime    : {0:f6}", Time.QpcTimeStamp.Now.Time);
+                sb.AppendLine();
+                sb.AppendLine();
+
+                System.Exception ex = e.ExceptionObject as System.Exception;
+                if (ex != null)
+                {
+                    sb.AppendLine("System.Exception:");
+
+                    sb.CheckedAppendFormat(" Type       : {0}", ex.GetType());
+                    sb.AppendLine();
+
+                    sb.CheckedAppendFormat(" Message    : {0}", ex.Message);
+                    sb.AppendLine();
+
+                    sb.AppendLine(" Stack Trace:");
+                    sb.CheckedAppendFormat("{0}", ex.StackTrace);
+                    sb.AppendLine();
+
+                    if (ex.Source != null)
+                    {
+                        sb.CheckedAppendFormat(" Source     : {0}", ex.Source);
+                        sb.AppendLine();
+                    }
+
+                    if (ex.Data != null)
+                    {
+                        sb.AppendLine(" Data       :");
+                        object[] keysArray = ex.Data.Keys.SafeToArray<object>();
+                        object[] valuesArray = ex.Data.Values.SafeToArray<object>();
+                        for (int rowIdx = 0; rowIdx < keysArray.Length; rowIdx++)
+                        {
+                            sb.CheckedAppendFormat("  Row {0:d3}   : {1}={2}", (rowIdx + 1), keysArray[rowIdx], valuesArray[rowIdx]);
+                            sb.AppendLine();
+                        }
+                    }
+
+                    if (ex.TargetSite != null)
+                    {
+                        sb.CheckedAppendFormat(" TargetSite : {0}", ex.TargetSite);
+                        sb.AppendLine();
+                    }
+
+                    if (ex.HelpLink != null)
+                    {
+                        sb.CheckedAppendFormat(" Help Link  : {0}", ex.HelpLink);
+                        sb.AppendLine();
+                    }
+
+                    if (ex.InnerException != null)
+                    {
+                        sb.CheckedAppendFormat(" Inner Exception : {0}", ex.InnerException.ToString(ExceptionFormat.TypeAndMessage | ExceptionFormat.IncludeStackTrace));
+                        sb.AppendLine();
+                    }
+                }
+                else
+                {
+                    Type eoType = (e.ExceptionObject != null ? e.ExceptionObject.GetType() : null);
+
+                    sb.AppendLine("Unrecognized Exception Object:");
+                    sb.CheckedAppendFormat("   Type:{0}", eoType.MapDefaultTo<object>("[Null]"));
+                    sb.AppendLine();
+                    sb.CheckedAppendFormat(" Object:{0}", e.ExceptionObject.MapDefaultTo("[Null]"));
+                    sb.AppendLine();
+                }
+
+                if (sender != null)
+                {
+                    sb.AppendLine();
+                    sb.AppendLine("Sender:");
+                    sb.CheckedAppendFormat("   Type:{0}", sender.GetType());
+                    sb.AppendLine();
+                    sb.CheckedAppendFormat(" Object:{0}", sender);
+                    sb.AppendLine();
+                }
+
+                if (e.IsTerminating)
+                {
+                    sb.AppendLine();
+                    sb.AppendLine("IsTerminating was set");
+                }
+
+                string text = sb.ToString();
+
+                System.IO.File.WriteAllText(uehFileWritePath, text);
+            }
+            catch (System.Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("{0}: generated unexpected exception: {1}", Fcns.CurrentMethodName, ex.ToString(ExceptionFormat.TypeAndMessage | ExceptionFormat.IncludeStackTrace));
+            }
+        }
+
+        private static string uehFileWritePath = "UnhandledExceptionReport.txt";
+
         /// <summary>
         /// Basic HandleOnStartup method signature.  Caller provides logBaseName.  
         /// Program's command line arguments will be obtained from the given StartupEventArgs value.  These will be used with the (optional) initial setup of Modular.Config.
         /// appLogger will be assigned to a new logger (this is expected to be used by the client in calls to later HandleYYY methods).
         /// <para/>See the description of the full HandleOnStartup method variant for more details.
         /// </summary>
-        public static void HandleOnStartup(StartupEventArgs e, ref Logging.Logger appLogger, string logBaseName = null)
+        public static void HandleOnStartup(StartupEventArgs e, ref Logging.Logger appLogger, string logBaseName = null, bool useSetLMH = false, bool enableUEH = true)
         {
             string[] args = (e != null) ? e.Args : null;
-            HandleOnStartup(ref args, ref appLogger, logBaseName : logBaseName, addWPFLMH: (e != null));
+            HandleOnStartup(ref args, ref appLogger, logBaseName: logBaseName, addWPFLMH: (e != null) && !useSetLMH, addSetLMH: (e != null) && useSetLMH, enableUEH: enableUEH);
         }
 
         /// <summary>
@@ -144,7 +251,7 @@ namespace MosaicLib.WPF.Common
         /// logBaseName is used to define the name of the logger instances and will appear in the resulting output log file file names.
         /// When addWPFLMH is passed as true then this method will also add an instance of the WpfLogMessageHandlerToolBase to the default log distribution group.
         /// </summary>
-        public static void HandleOnStartup(ref string[] argsRef, ref Logging.Logger appLogger, string logBaseName = null, bool addWPFLMH = false)
+        public static void HandleOnStartup(ref string[] argsRef, ref Logging.Logger appLogger, string logBaseName = null, bool addWPFLMH = false, bool addSetLMH = false, bool enableUEH = true)
         {
             System.Reflection.Assembly callerAssy = CallerAssembly;
             logBaseName = logBaseName ?? callerAssy.GetAssemblyNameFromFullName();
@@ -161,6 +268,14 @@ namespace MosaicLib.WPF.Common
 
             if (argsRef != null && config.Providers.IsNullOrEmpty())
                 config.AddStandardProviders(ref argsRef);
+
+            if (enableUEH && UnhandledExceptionEventHandler != null)
+            {
+                uehFileWritePath = config.GetConfigKeyAccessOnce("Config.UnhandledExceptionEventHandler.FilePath", silenceLogging: true).GetValue(uehFileWritePath);
+
+                AppDomain currentDomain = AppDomain.CurrentDomain;
+                currentDomain.UnhandledException += UnhandledExceptionEventHandler;
+            }
 
             int ringQueueSize = 500;
             int traceQueueSize = 1000;
@@ -220,12 +335,24 @@ namespace MosaicLib.WPF.Common
 
             LogMessageHandlerSettingFlags diagTraceLMHSettingFlags = config.GetConfigKeyAccessOnce("Config.Logging.DiagnosticTrace").GetValue(LogMessageHandlerSettingFlags.IncludeWhenDebuggerAttached);
             LogMessageHandlerSettingFlags wpfLMHSettingFlags = config.GetConfigKeyAccessOnce("Config.Logging.WPF").GetValue(addWPFLMH ? LogMessageHandlerSettingFlags.IncludeAlways : LogMessageHandlerSettingFlags.Disabled);
+            LogMessageHandlerSettingFlags setLMHSettingFlags = config.GetConfigKeyAccessOnce("Config.Logging.Set").GetValue(addSetLMH ? LogMessageHandlerSettingFlags.IncludeAlways : LogMessageHandlerSettingFlags.Disabled);
 
             bool addDiagTraceLMH = diagTraceLMHSettingFlags.IsSet(LogMessageHandlerSettingFlags.IncludeAlways) || diagTraceLMHSettingFlags.IsSet(LogMessageHandlerSettingFlags.IncludeWhenDebuggerAttached) && System.Diagnostics.Debugger.IsAttached;
             addWPFLMH = wpfLMHSettingFlags.IsSet(LogMessageHandlerSettingFlags.IncludeAlways) || wpfLMHSettingFlags.IsSet(LogMessageHandlerSettingFlags.IncludeWhenDebuggerAttached) && System.Diagnostics.Debugger.IsAttached;
+            addSetLMH = setLMHSettingFlags.IsSet(LogMessageHandlerSettingFlags.IncludeAlways) || wpfLMHSettingFlags.IsSet(LogMessageHandlerSettingFlags.IncludeWhenDebuggerAttached) && System.Diagnostics.Debugger.IsAttached;
 
             Logging.ILogMessageHandler diagTraceLMH = addDiagTraceLMH ? Logging.CreateDiagnosticTraceLogMessageHandler(logGate: Logging.LogGate.Debug) : null;
             Logging.ILogMessageHandler wpfLMH = addWPFLMH ? MosaicLib.WPF.Logging.WpfLogMessageHandlerToolBase.Instance : null;
+
+            Logging.ILogMessageHandler setLMH = null;
+            if (addSetLMH)
+            {
+                string setName = config.GetConfigKeyAccessOnce("Config.Logging.Set.Name").GetValue("").MapNullOrEmptyTo("LogMessageHistory");
+                int setCapacity = config.GetConfigKeyAccessOnce("Config.Logging.Set.Capacity").GetValue(1000);
+                Logging.LogGate setLogGate = config.GetConfigKeyAccessOnce("Config.Logging.Set.LogGate").GetValue(Logging.LogGate.Debug);
+
+                setLMH = new MosaicLib.Logging.Handlers.SetLogMessageHandler("LogMessageHistory", capacity: setCapacity, logGate: setLogGate);
+            }
 
             // Normally all of the standard lmh objects (main, diag, wpf) share the use of a single message queue.
             List<Logging.ILogMessageHandler> mainLMHList = new List<Logging.ILogMessageHandler>();
@@ -242,6 +369,11 @@ namespace MosaicLib.WPF.Common
                 mainLMHList.Add(wpfLMH);
             else if (wpfLMH != null)
                 Logging.AddLogMessageHandlerToDefaultDistributionGroup(wpfLMH);
+
+            if (setLMH != null && setLMHSettingFlags.IsClear(LogMessageHandlerSettingFlags.NonQueued))
+                mainLMHList.Add(setLMH);
+            else if (setLMH != null)
+                Logging.AddLogMessageHandlerToDefaultDistributionGroup(setLMH);
 
             Logging.ILogMessageHandler mainLMHQueueLMH = new Logging.Handlers.QueueLogMessageHandler("lmhMainSet.q", mainLMHList.ToArray(), maxQueueSize: maxQueueSize);
             Logging.AddLogMessageHandlerToDefaultDistributionGroup(mainLMHQueueLMH);

@@ -249,9 +249,9 @@ namespace MosaicLib.Utils
 
 
         /// <summary>
-        /// Generate and return "escaped" version of given string s.  Supports use for general JSON style escapeing.
-        /// Also generates escaped version of any other characters that are explicitly includes in the given extraEscapeCharList
-        /// (typically '\"' or '\'')
+        /// Generate and return "escaped" version of given string <paramref name="s"/>.
+        /// When <paramref name="extraEscapeCharList"/> is non-empty then this method also generates escaped version of any other characters that are explicitly included in it.
+        /// <para/>Supports use for general JSON style escapeing.
         /// </summary>
         public static string GenerateEscapedVersion(this string s, IList<char> extraEscapeCharList = null, string fallbackValue = "", bool applyBasicAsciiBasedEscaping = true, char escapeChar = '\\')
         {
@@ -932,9 +932,9 @@ namespace MosaicLib.Utils
 
         /// <summary>
         /// Extension method that returns ToString applied to the given object, or mapNullTo (defaults to "") if the given object is null.  
-        /// Also executes the underlying ToString in a try catch pattern and converts any caught excpetion into an appropriately desriptive result string.
+        /// Also executes the underlying ToString in a try catch pattern and converts any caught exception into an appropriately desriptive result string.
         /// </summary>
-        public static string SafeToString(this object o, string mapNullTo = "", ExceptionFormat caughtExceptionToStringFormat = (ExceptionFormat.TypeAndMessage | ExceptionFormat.IncludeStackTrace))
+        public static string SafeToString(this object o, string mapNullTo = "", ExceptionFormat caughtExceptionToStringFormat = (ExceptionFormat.TypeAndMessageAndStackTrace))
         {
             try
             {
@@ -948,9 +948,9 @@ namespace MosaicLib.Utils
 
         /// <summary>
         /// Attempts to convert the given <paramref name="formattable"/> instance into a string, making use of any optionally provided <paramref name="formatProvider"/>, by calling the appropriate ToString method signature.
-        /// If this ToString call throws an exception then this method will return a string that indicates that an excpetion was encountered and which includes the excpetion type, its message, and its stack trace  (details depend on <paramref name="caughtExceptionToStringFormat"/>).
+        /// If this ToString call throws an exception then this method will return a string that indicates that an exception was encountered and which includes the exception type, its message, and its stack trace  (details depend on <paramref name="caughtExceptionToStringFormat"/>).
         /// </summary>
-        public static string SafeToString(this IFormattable formattable, string format = null, IFormatProvider formatProvider = null, string mapNullTo = "", ExceptionFormat caughtExceptionToStringFormat = (ExceptionFormat.TypeAndMessage | ExceptionFormat.IncludeStackTrace))
+        public static string SafeToString(this IFormattable formattable, string format = null, IFormatProvider formatProvider = null, string mapNullTo = "", ExceptionFormat caughtExceptionToStringFormat = (ExceptionFormat.TypeAndMessageAndStackTrace))
         {
             try
             {
@@ -975,9 +975,9 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Attempts to invoke the given <paramref name="stringDelegate"/> instance to produce a string.
         /// If the given <paramref name="stringDelegate"/> is null then this method returns <paramref name="mapNullTo"/> in its place.
-        /// If the delegate throws then this method will return a string that indicates that an excpetion was encountered and which includes the excpetion type, its message, and its stack trace (details depend on <paramref name="caughtExceptionToStringFormat"/>).
+        /// If the delegate throws then this method will return a string that indicates that an exception was encountered and which includes the exception type, its message, and its stack trace (details depend on <paramref name="caughtExceptionToStringFormat"/>).
         /// </summary>
-        public static string SafeToString(this Func<string> stringDelegate, string mapNullTo = "", ExceptionFormat caughtExceptionToStringFormat = (ExceptionFormat.TypeAndMessage | ExceptionFormat.IncludeStackTrace))
+        public static string SafeToString(this Func<string> stringDelegate, string mapNullTo = "", ExceptionFormat caughtExceptionToStringFormat = (ExceptionFormat.TypeAndMessageAndStackTrace))
         {
             try
             {
@@ -1021,7 +1021,7 @@ namespace MosaicLib.Utils
                 : base((other ?? (convertNullToAny ? Any : None)).Select((r) => new MatchRule(r)))
             { }
 
-            private static readonly MatchRule[] emptyMatchRuleArray = new MatchRule[0];
+            private static readonly MatchRule[] emptyMatchRuleArray = EmptyArrayFactory<MatchRule>.Instance;
 
             /// <summary>
             /// Shorthand constructor, constructs this MatchRuleSet to contain a single MatchRule of the indicated matchType

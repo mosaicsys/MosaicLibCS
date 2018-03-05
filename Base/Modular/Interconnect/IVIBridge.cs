@@ -32,9 +32,10 @@ using MosaicLib.Modular.Config.Attributes;
 using MosaicLib.Modular.Interconnect;
 using MosaicLib.Modular.Interconnect.Values;
 using MosaicLib.Modular.Part;
-using MosaicLib.Utils;
-using MosaicLib.Utils.StringMatching;
 using MosaicLib.Time;
+using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
+using MosaicLib.Utils.StringMatching;
 
 namespace MosaicLib.Modular.Interconnect.Values
 {
@@ -454,7 +455,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         private string[] lastIVI2NamesArray = emptyStringArray;
         private int lastIVI2NamesArrayLength = 0;
 
-        private static readonly string[] emptyStringArray = new string[0];
+        private static readonly string[] emptyStringArray = EmptyArrayFactory<string>.Instance;
 
         private class SyncItem
         {

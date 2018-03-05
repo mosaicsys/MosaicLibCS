@@ -356,7 +356,7 @@ namespace MosaicLib
             }
 
             List<PerLoggerIDInfo> perLoggerIDInfoList = new List<PerLoggerIDInfo>();	// index by loggerID
-            PerLoggerIDInfo[] perLoggerIDInfoArray = new PerLoggerIDInfo[0];      // index by loggerID - always stays synchronized with perLoggerIDInfoList contents
+            PerLoggerIDInfo[] perLoggerIDInfoArray = Utils.Collections.EmptyArrayFactory<PerLoggerIDInfo>.Instance;      // index by loggerID - always stays synchronized with perLoggerIDInfoList contents
             Dictionary<string, int> loggerNameToIDMap = new Dictionary<string, int>();
 
             AtomicInt32 serviceExclusionAtomicInt = new AtomicInt32();
@@ -469,7 +469,7 @@ namespace MosaicLib
                 public List<DistHandlerInfo> distHandlerInfoList = new List<DistHandlerInfo>();
 
                 /// <summary>This is the array of info objects for the log message handlers that will recieve messages that are distributed to/through this group.</summary>
-                public DistHandlerInfo[] distHandlerInfoArray = new DistHandlerInfo [0];
+                public DistHandlerInfo[] distHandlerInfoArray = Utils.Collections.EmptyArrayFactory<DistHandlerInfo>.Instance;
 
                 /// <summary>Used to add a new log message handler to this group's distribution list.</summary>
                 public void Add(DistHandlerInfo dhInfo) 
@@ -484,7 +484,7 @@ namespace MosaicLib
                 private List<PerDistGroupIDInfo> linkedDistGroupList = new List<PerDistGroupIDInfo>();
 
                 /// <summary>cached ToArray version of linkedDistGroupList for improved foreach behavior.</summary>
-                private PerDistGroupIDInfo[] linkedDistGroupArray = new PerDistGroupIDInfo[0];
+                private PerDistGroupIDInfo[] linkedDistGroupArray = Utils.Collections.EmptyArrayFactory<PerDistGroupIDInfo>.Instance;
 
                 /// <summary>public get-only propery version of linkedDistGroupArray cached list value.</summary>
                 public PerDistGroupIDInfo[] LinkedDistGroupArray { get { return linkedDistGroupArray; } }
@@ -576,7 +576,7 @@ namespace MosaicLib
 
             PerDistGroupIDInfo defaultDistGroupIDInfo = null;
             List<PerDistGroupIDInfo> distGroupIDInfoList = new List<PerDistGroupIDInfo>();			// index by group id
-            PerDistGroupIDInfo[] distGroupIDInfoArray = new PerDistGroupIDInfo[0];
+            PerDistGroupIDInfo[] distGroupIDInfoArray = Utils.Collections.EmptyArrayFactory<PerDistGroupIDInfo>.Instance;
             Dictionary<string, int> distGroupNameToIDMap = new Dictionary<string, int>();
 
             // information used to implement queued logging.

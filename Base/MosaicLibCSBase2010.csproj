@@ -81,9 +81,15 @@
     <Compile Include="Modular\Config\ConfigValueSetAdapter.cs" />
     <Compile Include="Modular\Interconnect\IVIBridge.cs" />
     <Compile Include="Modular\Interconnect\Parts.cs" />
+    <Compile Include="Modular\Interconnect\Remoting\Buffers.cs" />
+    <Compile Include="Modular\Interconnect\Remoting\Messages.cs" />
+    <Compile Include="Modular\Interconnect\Remoting\Remoting.cs" />
+    <Compile Include="Modular\Interconnect\Remoting\Sessions.cs" />
+    <Compile Include="Modular\Interconnect\Remoting\MessageStreamTools.cs" />
     <Compile Include="Modular\Interconnect\Values.cs" />
     <Compile Include="Modular\Interconnect\WCF.cs" />
     <Compile Include="Modular\Interconnect\Sets.cs" />
+    <Compile Include="Modular\Interconnect\Remoting\Transport.cs" />
     <Compile Include="Modular\Part\PartBase.cs" />
     <Compile Include="Modular\Part\SimpleActivePart.cs" />
     <Compile Include="Modular\Persist\Persist.cs" />

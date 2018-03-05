@@ -29,7 +29,7 @@ namespace MosaicLib.Utils
 
     /// <summary>
     /// Fcns class is essentially a namespace for series of static helper methods
-    /// <para/>inclues: DisposeOf... methods, CheckedFormat and other String related methods, array/list specific Equals methods, ...
+    /// <para/>includes: DisposeOf... methods, CheckedFormat and other String related methods, array/list specific Equals methods, ...
     /// </summary>
     public static partial class Fcns
 	{
@@ -188,11 +188,17 @@ namespace MosaicLib.Utils
         /// This IsDisposing and IsDisposed may both be set simultaneously for a brief period.
         /// </summary>
         public virtual bool IsDisposed { get; private set; }
+
         /// <summary>
         /// true whenever either of the object's Dispose patterns are currently in use.  
         /// This IsDisposing and IsDisposed may both be set simultaneously for a brief period.
         /// </summary>
 		public virtual bool IsDisposing { get { return (activeDisposeCounter.VolatileValue != 0); } }
+
+        /// <summary>
+        /// Returns true whenever the object IsDisposing or it IsDisposed
+        /// </summary>
+        public virtual bool IsDisposingOrDisposed { get { return IsDisposing || IsDisposed; } }
 
         /// <summary>
         /// Default constructor.
@@ -286,7 +292,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Sub-class callable method used to add an explicitDisposeAction to the explicitDisposeActionList.  
         /// All such added actions will be invoked in LIFO order when the part is being explicitly disposed.
-        /// For SimpleActiveParts this will occure after the part has been stopped and after the DisposeCalledPassdown(disposeType) has taken place.
+        /// For SimpleActiveParts this will occur after the part has been stopped and after the DisposeCalledPassdown(disposeType) has taken place.
         /// </summary>
         protected void AddExplicitDisposeAction(Action explicitDisposeAction)
         {

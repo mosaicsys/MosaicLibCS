@@ -34,6 +34,7 @@ using MosaicLib.Modular.Interconnect.Values;
 using MosaicLib.Modular.Part;
 using MosaicLib.Time;
 using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
 
 namespace MosaicLib.PartsLib.Tools.MDRF.Common
 {
@@ -462,7 +463,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
 
         #endregion
 
-        private static readonly TRowType[] emptyRowTypeArray = new TRowType[0];
+        private static readonly TRowType[] emptyRowTypeArray = EmptyArrayFactory<TRowType>.Instance;
 
         /// <summary>
         /// Helper method that is used to forward scan through the index to find and return the next non-empty row after the rowIndex passed in.
@@ -809,7 +810,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
     /// </summary>
     public static partial class ExtensionMethods
     {
-        private static readonly byte[] emptyByteArray = new byte[0];
+        private static readonly byte[] emptyByteArray = EmptyArrayFactory<byte>.Instance;
         private static readonly ValueContainer.Union emptyU = new ValueContainer.Union();
 
         #region F4 <-> U4, F8 <-> U8 conversion

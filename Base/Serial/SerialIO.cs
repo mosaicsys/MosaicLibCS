@@ -22,13 +22,14 @@
 
 using System;
 
-using MosaicLib.Utils;
-using MosaicLib.Time;
 using MosaicLib.Modular;
 using MosaicLib.Modular.Action;
 using MosaicLib.Modular.Config;
 using MosaicLib.Modular.Interconnect.Values;
 using MosaicLib.Modular.Part;
+using MosaicLib.Time;
+using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
 
 namespace MosaicLib.SerialIO
 {
@@ -245,7 +246,7 @@ namespace MosaicLib.SerialIO
 
                 switch (value)
                 {
-                    case LineTerm.None: RxPacketEndStrArray = new string[0]; break;
+                    case LineTerm.None: RxPacketEndStrArray = emptyStrArray; break;
                     case LineTerm.Auto: RxPacketEndStrArray = new string[] { "\r", "\n" }; TrimWhitespaceOnRx = true; break;
                     case LineTerm.CR: RxPacketEndStrArray = new string[] { "\r" }; break;
                     case LineTerm.CRLF: RxPacketEndStrArray = new string[] { "\r\n" }; break;
@@ -457,8 +458,8 @@ namespace MosaicLib.SerialIO
         private string loggerGroupID;				        // for normal logger
         private string traceDataLoggerGroupID;				// for data trace logger
 
-        private static string[] emptyStrArray = new string[0];
-        private static byte[] emptyByteArray = new byte[0];
+        private static string[] emptyStrArray = EmptyArrayFactory<string>.Instance;
+        private static byte[] emptyByteArray = EmptyArrayFactory<byte>.Instance;
 
         #endregion
     }
@@ -589,7 +590,7 @@ namespace MosaicLib.SerialIO
         /// <summary>Returns the string ResultCode after the Read Action has completed.  This is generally the same value as the Read Action's ResultCode value.</summary>
         public string ResultCode { get { return resultCode; } set { resultCode = value; } }
 
-        private static byte[] emptyByteArray = new byte[0];
+        private static byte[] emptyByteArray = EmptyArrayFactory<byte>.Instance;
     }
 
 	/// <summary>This class is used with the SerialIO.Port Write Action.  It contains the set of parameters to be passed to the action and the place where the action records the results once it has been performed</summary>
@@ -670,7 +671,7 @@ namespace MosaicLib.SerialIO
         /// <summary>Returns the string ResultCode after the Write Action has completed.  This is generally the same value as the Write Action's ResultCode value.</summary>
         public string ResultCode { get { return resultCode; } set { resultCode = value; } }
 
-        private static byte[] emptyByteArray = new byte[0];
+        private static byte[] emptyByteArray = EmptyArrayFactory<byte>.Instance;
     }
 
 	//-----------------------------------------------------------------

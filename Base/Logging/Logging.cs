@@ -2939,7 +2939,7 @@ namespace MosaicLib
         /// Allows an IFormattable <paramref name="formattable"/> to be safely emitted through the emitter.  
         /// Internally uses SafeToString and allows the caller to specify the SafeToString optional paramters.
         /// </summary>
-        public static void Emit(this Logging.IMesgEmitter emitter, IFormattable formattable, string format = null, IFormatProvider formatProvider = null, string mapNullTo = "", ExceptionFormat caughtExceptionToStringFormat = (ExceptionFormat.TypeAndMessage | ExceptionFormat.IncludeStackTrace))
+        public static void Emit(this Logging.IMesgEmitter emitter, IFormattable formattable, string format = null, IFormatProvider formatProvider = null, string mapNullTo = "", ExceptionFormat caughtExceptionToStringFormat = (ExceptionFormat.TypeAndMessageAndStackTrace))
         {
             if (emitter != null && emitter.IsEnabled)
             {

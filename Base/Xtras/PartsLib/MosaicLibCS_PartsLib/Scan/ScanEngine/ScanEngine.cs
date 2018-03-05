@@ -112,7 +112,7 @@ namespace MosaicLib.PartsLib.Scan.ScanEngine
             return this;
         }
 
-        public static readonly IScanEnginePlugin[] emptyPluginArray = new IScanEnginePlugin[0];
+        public static readonly IScanEnginePlugin[] emptyPluginArray = EmptyArrayFactory<IScanEnginePlugin>.Instance;
     }
 
     #endregion
@@ -512,7 +512,7 @@ namespace MosaicLib.PartsLib.Scan.ScanEngine
 
         protected List<IScanEnginePlugin> pluginList = new List<IScanEnginePlugin>();
         protected IScanEnginePlugin[] pluginArray;
-        public static readonly IScanEnginePlugin[] emptyPluginArray = new IScanEnginePlugin[0];
+        public static readonly IScanEnginePlugin[] emptyPluginArray = EmptyArrayFactory<IScanEnginePlugin>.Instance;
 
         #endregion
     }

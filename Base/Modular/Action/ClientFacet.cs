@@ -231,7 +231,7 @@ namespace MosaicLib.Modular.Action
         /// <summary>
         /// Carries a set of name/value pair objects that can be passed by the client to the target Part as named parameter values based on the Common.NamedValueList
         /// facility.  These may be used to carry an arbitrary set of parameters, by name, to the Action's implementing part.
-        /// A readonly copy of thie property is made when the action is Started and this clone is then made available to the provider.
+        /// A readonly copy of this property is made when the action is Started and this clone is then made available to the provider.
         /// </summary>
         Common.INamedValueSet NamedParamValues { get; set; }
 

@@ -35,6 +35,7 @@ using MosaicLib.Modular.Interconnect.Values;
 using MosaicLib.Modular.Part;
 using MosaicLib.Time;
 using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
 
 namespace MosaicLib.PartsLib.Tools.Performance
 {
@@ -72,7 +73,7 @@ namespace MosaicLib.PartsLib.Tools.Performance
             return this;
         }
 
-        private static readonly PerformanceCounterSpec[] emptyPCSpecArray = new PerformanceCounterSpec[0];
+        private static readonly PerformanceCounterSpec[] emptyPCSpecArray = EmptyArrayFactory<PerformanceCounterSpec>.Instance;
     }
 
     public class PerformanceCounterSpec

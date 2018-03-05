@@ -41,7 +41,7 @@ namespace MosaicLib.Utils.Interlocks
         /// If <paramref name="appendDetails"/> is true and <paramref name="formattableDetails"/> is non-null then this method will add the concatination of the given <paramref name="denyReason"/>, the given <paramref name="seperator"/> and the results generated from the IFormattable object's ToString method.
         /// If used, the <paramref name="formattableDetails"/> is evaulated using the SafeToString method which is passed the given <paramref name="caughtExceptionToStringFormat"/> value which is responsible for handling cases where the ToString method throws an exception.
         /// </summary>
-        public static IList<string> AddDenyReason(this IList<string> denyReasonList, string denyReason, IFormattable formattableDetails = null, bool appendDetails = true, string seperator = " ", ExceptionFormat caughtExceptionToStringFormat = (ExceptionFormat.TypeAndMessage | ExceptionFormat.IncludeStackTrace), bool triggerCondition = true)
+        public static IList<string> AddDenyReason(this IList<string> denyReasonList, string denyReason, IFormattable formattableDetails = null, bool appendDetails = true, string seperator = " ", ExceptionFormat caughtExceptionToStringFormat = (ExceptionFormat.TypeAndMessageAndStackTrace), bool triggerCondition = true)
         {
             if (!triggerCondition || denyReason.IsNullOrEmpty())
                 return denyReasonList;
@@ -62,7 +62,7 @@ namespace MosaicLib.Utils.Interlocks
         /// If <paramref name="appendDetails"/> is true and <paramref name="detailsFactoryDelegate"/> is non-null then this method will add the concatination of the given <paramref name="denyReason"/>, the given <paramref name="seperator"/> and the results returned by invoking the delegate.
         /// If used, the <paramref name="detailsFactoryDelegate"/> is evaulated using the SafeToString method which is passed the given <paramref name="caughtExceptionToStringFormat"/> value which is responsible for handling cases where the delegate throws an exception.
         /// </summary>
-        public static IList<string> AddDenyReason(this IList<string> denyReasonList, string denyReason, Func<string> detailsFactoryDelegate, bool appendDetails = true, string seperator = " ", ExceptionFormat caughtExceptionToStringFormat = (ExceptionFormat.TypeAndMessage | ExceptionFormat.IncludeStackTrace), bool triggerCondition = true)
+        public static IList<string> AddDenyReason(this IList<string> denyReasonList, string denyReason, Func<string> detailsFactoryDelegate, bool appendDetails = true, string seperator = " ", ExceptionFormat caughtExceptionToStringFormat = (ExceptionFormat.TypeAndMessageAndStackTrace), bool triggerCondition = true)
         {
             if (!triggerCondition || denyReason.IsNullOrEmpty())
                 return denyReasonList;

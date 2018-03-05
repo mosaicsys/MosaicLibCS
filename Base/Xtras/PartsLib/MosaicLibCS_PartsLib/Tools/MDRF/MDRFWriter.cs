@@ -35,6 +35,7 @@ using MosaicLib.PartsLib.Tools.MDRF.Common;
 using MosaicLib.Semi.E005.Data;
 using MosaicLib.Time;
 using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
 using MosaicLib.Utils.StringMatching;
 
 
@@ -411,9 +412,9 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
         bool groupOrOccurrenceInfoListModified = false;
 
         static readonly SetupInfo defaultSetupInfo = new SetupInfo();
-        static readonly GroupInfo[] emptyGroupInfoArray = new GroupInfo[0];
-        static readonly GroupPointInfo[] emptyPointGroupInfoArray = new GroupPointInfo[0];
-        static readonly OccurrenceInfo[] emptyOccurrenceInfoArray = new OccurrenceInfo[0];
+        static readonly GroupInfo[] emptyGroupInfoArray = EmptyArrayFactory<GroupInfo>.Instance;
+        static readonly GroupPointInfo[] emptyPointGroupInfoArray = EmptyArrayFactory<GroupPointInfo>.Instance;
+        static readonly OccurrenceInfo[] emptyOccurrenceInfoArray = EmptyArrayFactory<OccurrenceInfo>.Instance;
 
         #endregion
 
@@ -542,9 +543,62 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
             }
         }
 
+        // NOTE: for perfomance when serializing objects like NamedValueSets (non-readonly) we do not normally box the value in an ValueContainer since all we are going to do is call AppendWithIH which now accepts an object directly and will 
+        // serialize specific supported types directly (INamedValueSet, INamedValue, string [] and IList<string>).
         public string RecordOccurrence(IOccurrenceInfo occurrenceInfo, object dataValue, DateTimeStampPair dtPair = null, bool writeAll = false, bool forceFlush = false)
         {
-            return RecordOccurrence(occurrenceInfo, dataVC: new ValueContainer(dataValue), dtPair: dtPair, writeAll: writeAll, forceFlush: forceFlush);
+            if (occurrenceInfo == null)
+                return "{0} failed:  occurrenceInfo parameter cannot be null".CheckedFormat(CurrentMethodName);
+
+            if (IsDisposed)
+                return "{0} has already been disposed".CheckedFormat(CurrentClassLeafName);
+
+            using (var scopedLock = new ScopedLock(mutex))
+            {
+                ReassignIDsAndBuildNewTrackersIfNeeded(dtPair);
+
+                OccurrenceTracker occurrenceTracker = occurrenceTrackerArray.SafeAccess(occurrenceInfo.OccurrenceID - 1);
+
+                if (occurrenceTracker == null)
+                {
+                    if (occurrenceInfo.OccurrenceID == 0)
+                        return RecordError("{0} failed: no tracker found for occurrence {1} (probably was not registered)".CheckedFormat(CurrentMethodName, occurrenceInfo), dtPair);
+                    else
+                        return RecordError("{0} failed: no tracker found for occurrence {1}".CheckedFormat(CurrentMethodName, occurrenceInfo), dtPair);
+                }
+
+                ContainerStorageType cst = ContainerStorageType.None;
+                bool isNullable = false;
+                if (dataValue != null && occurrenceTracker.ifc != ItemFormatCode.None)
+                    ValueContainer.DecodeType(dataValue.GetType(), out cst, out isNullable);
+
+                if (occurrenceTracker.ifc != ItemFormatCode.None && occurrenceTracker.inferredCST != cst)
+                    return RecordError("{0} failed on {1}: data {2} is not compatible with required ifc:{3}".CheckedFormat(CurrentMethodName, occurrenceInfo, ValueContainer.CreateFromObject(dataValue), occurrenceTracker.ifc), dtPair);
+
+                dtPair = (dtPair ?? DateTimeStampPair.Now).UpdateFileDeltas(fileReferenceDTPair);
+
+                writeAll |= writerBehavior.IsSet(WriterBehavior.WriteAllBeforeEveryOccurrence);
+
+                string ec = ActiviateFile(dtPair);
+
+                if (writeAll)
+                    RecordGroups(writeAll, dtPair, WriterBehavior.None);        // no "special" writer behaviors are selected when recursively using RecordGroups
+
+                if (ec.IsNullOrEmpty())
+                {
+                    StartOccurrenceDataBlock(occurrenceTracker, dtPair);
+                    dataBlockBuffer.payloadDataList.AppendWithIH(dataValue);
+                    ec = WriteDataBlock(dtPair);
+                }
+
+                if (ec.IsNullOrEmpty() && (forceFlush || writerBehavior.IsSet(WriterBehavior.FlushAfterEveryOccurrence)))
+                    ec = InnerFlush(FlushFlags.All, dtPair, false);
+
+                if (!ec.IsNullOrEmpty())
+                    RecordError(ec, dtPair);
+
+                return ec;
+            }
         }
 
         public string RecordOccurrence(IOccurrenceInfo occurrenceInfo, ValueContainer dataVC = default(ValueContainer), DateTimeStampPair dtPair = null, bool writeAll = false, bool forceFlush = false)
@@ -2058,6 +2112,12 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
         /// The OccurrenceDefinitionInfo used for this event is determined from the given occurrenceName.  
         /// </summary>
         IClientFacet RecordOccurrence(string occurrenceName = null, INamedValueSet occurrenceDataNVS = null, bool writeAll = false);
+
+        /// <summary>
+        /// Action factory method.
+        /// The resulting action, when run, will record the requested occurrence with the given nvs attached.
+        /// </summary>
+        IClientFacet RecordOccurrence(IOccurrenceInfo occurrenceInfo = null, INamedValueSet occurrenceDataNVS = null, bool writeAll = false);
     }
 
     /// <summary>
@@ -2129,7 +2189,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
         public TimeSpan NominalPruningInterval { get; set; }
 
-        private static readonly TimeSpan[] emptyTimeSpanArray = new TimeSpan[0];
+        private static readonly TimeSpan[] emptyTimeSpanArray = EmptyArrayFactory<TimeSpan>.Instance;
 
         [Obsolete("The use of this property has been deprecated, please change to use the new GroupDefinitionItemArray [2017-12-20]")]
         public IEnumerable<Tuple<string, Utils.StringMatching.MatchRuleSet, INamedValueSet>> GroupDefinitionSet 
@@ -2217,7 +2277,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
             ActionMethodDelegateActionArgStrResult<string, NullObj> performRecordEventDelegate = (actionProviderFacet) => PerformRecordEvent(actionProviderFacet, writeAll);
             IStringParamAction action = new StringActionImpl(actionQ, eventName, performRecordEventDelegate, "{0}({1}{2})".CheckedFormat(CurrentMethodName, eventName, writeAll ? ",writeAll" : ""), ActionLoggingReference);
 
-            if (eventDataNVS != null)   
+            if (!eventDataNVS.IsNullOrEmpty())   
                 action.NamedParamValues = eventDataNVS;
 
             return action;
@@ -2248,7 +2308,12 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
         /// </summary>
         public IClientFacet RecordOccurrence(string occurrenceName = null, INamedValueSet occurrenceDataNVS = null, bool writeAll = false)
         {
-            return new BasicActionImpl(actionQ, () => PerformRecordEvent(occurrenceName, occurrenceDataNVS, writeAll), "{0}({1}{2})".CheckedFormat(CurrentMethodName, occurrenceName, writeAll ? ",writeAll" : ""), ActionLoggingReference);
+            var action = new BasicActionImpl(actionQ, (a) => PerformRecordEvent(occurrenceName, a.NamedParamValues, writeAll), "{0}({1}{2})".CheckedFormat(CurrentMethodName, occurrenceName, writeAll ? ",writeAll" : ""), ActionLoggingReference);
+
+            if (!occurrenceDataNVS.IsNullOrEmpty())
+                action.NamedParamValues = occurrenceDataNVS;
+
+            return action;
         }
 
         private string PerformRecordEvent(string occurrenceName, INamedValueSet occurrenceDataNVS, bool writeAll)
@@ -2260,6 +2325,28 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
             if (!occurrenceInfoDictionary.TryGetValue(occurrenceName.Sanitize(), out occurrenceInfo) || occurrenceInfo == null)
                 return "'{0}' not a known occurrence name".CheckedFormat(occurrenceName);
+
+            return mdrfWriter.RecordOccurrence(occurrenceInfo, occurrenceDataNVS, writeAll: writeAll);
+        }
+
+        /// <summary>
+        /// Action factory method.
+        /// The resulting action, when run, will record the requested occurrence with the given nvs attached.
+        /// </summary>
+        public IClientFacet RecordOccurrence(IOccurrenceInfo occurrenceInfo = null, INamedValueSet occurrenceDataNVS = null, bool writeAll = false)
+        {
+            var action = new BasicActionImpl(actionQ, (a) => PerformRecordEvent(occurrenceInfo, a.NamedParamValues, writeAll), "{0}({1}{2})".CheckedFormat(CurrentMethodName, occurrenceInfo.Name, writeAll ? ",writeAll" : ""), ActionLoggingReference);
+
+            if (!occurrenceDataNVS.IsNullOrEmpty())
+                action.NamedParamValues = occurrenceDataNVS;
+
+            return action;
+        }
+
+        private string PerformRecordEvent(IOccurrenceInfo occurrenceInfo, INamedValueSet occurrenceDataNVS, bool writeAll)
+        {
+            if (!BaseState.IsOnline)
+                return "Part is not Online";
 
             return mdrfWriter.RecordOccurrence(occurrenceInfo, occurrenceDataNVS, writeAll: writeAll);
         }

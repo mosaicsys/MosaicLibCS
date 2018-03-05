@@ -79,6 +79,14 @@ namespace MosaicLib.Utils
             return Utils.Fcns.Equals(lhs, rhs);
         }
 
+        /// <summary>
+        /// Retruns true if the pair of given System.Array objects are the same size, the same length and who's corresponding content items are Equal
+        /// </summary>
+        public static bool IsEqualTo(this System.Array lhs, System.Array rhs)
+        {
+            return Utils.Fcns.Equals(lhs, rhs);
+        }
+
         #endregion
 
         #region Array, IList, List and String access extension methods (IsSafeIndex, SafeAccess, SafeSubArray, SafePut, SafeLast, SafeCopyFrom)
@@ -232,7 +240,7 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        #region Other Array, IList, List, IEnumerable related extension methods (IsNullOrEmpty, IsEmpty, MapNullToEmpty, SafeLength, SafeCount, SetAll, Clear, SafeAccess, SafeToArray, SafeTakeFirst, SafeTakeLast, SafeAddSet, SafeAddItems)
+        #region Other Array, IList, List, IEnumerable related extension methods (IsNullOrEmpty, IsEmpty, MapNullToEmpty, SafeLength, SafeCount, SetAll, Clear, SafeAccess, SafeToArray, SafeTakeFirst, SafeTakeLast, SafeAddSet, SafeAddItems, ConditionalAddItems)
 
         /// <summary>
         /// Extension method returns true if the given array is null or its Length is zero.
@@ -280,6 +288,22 @@ namespace MosaicLib.Utils
         public static bool IsEmpty(this IEnumerable ien)
         {
             return ((ien == null) || (ien.GetEnumerator().MoveNext() == false));
+        }
+
+        /// <summary>
+        /// Extension method either returns the given <paramref name="arrayIn"/> (if it is not null) or returns a new empty array of <typeparamref name="TItemType"/> if the given <paramref name="arrayIn"/> is null.
+        /// </summary>
+        public static TItemType [] MapNullToEmpty<TItemType>(this TItemType [] arrayIn, TItemType [] fallbackArray = null)
+        {
+            return arrayIn ?? fallbackArray ?? EmptyArrayFactory<TItemType>.Instance;
+        }
+
+        /// <summary>
+        /// Extension method returns the given <paramref name="arrayIn"/> is non-empty otherwise this method returns null.
+        /// </summary>
+        public static TItemType[] MapEmptyToNull<TItemType>(this TItemType[] arrayIn)
+        {
+            return (arrayIn.SafeLength() != 0) ? arrayIn : null;
         }
 
         /// <summary>
@@ -374,7 +398,7 @@ namespace MosaicLib.Utils
             if (set != null)
                 return set.ToArray();
 
-            return fallbackArray ?? (mapNullToEmpty ? new ItemType[0] : null);
+            return fallbackArray ?? (mapNullToEmpty ? EmptyArrayFactory<ItemType>.Instance : null);
         }
 
         /// <summary>
@@ -387,8 +411,22 @@ namespace MosaicLib.Utils
             if (collection != null && (collection.Count > 0 || fallbackArray == null || fallbackArray.Length != 0))
                 return collection.ToArray();
 
-            return fallbackArray ?? (mapNullToEmpty ? new ItemType[0] : null);
+            return fallbackArray ?? (mapNullToEmpty ? EmptyArrayFactory<ItemType>.Instance : null);
         }
+
+        /// <summary>
+        /// Extension method "safe" version of LockedObjectListWithCachedArray.Array property.  If the given <paramref name="list"/> is non-null then this method returns the Linq ToArray method applied to the <paramref name="list"/>.
+        /// If the <paramref name="list"/> is null and the given <paramref name="fallbackArray"/> is non-null then this method returns the <paramref name="fallbackArray"/>.
+        /// If the <paramref name="list"/> and the <paramref name="fallbackArray"/> values are null then this creates and returns an empty array of the given ItemType (<paramref name="mapNullToEmpty"/> is true) or null (<paramref name="mapNullToEmpty"/> is false)
+        /// </summary>
+        public static ItemType[] SafeToArray<ItemType>(this Utils.Collections.LockedObjectListWithCachedArray<ItemType> list, ItemType[] fallbackArray = null, bool mapNullToEmpty = true)
+        {
+            if (list != null)
+                return list.Array;
+
+            return fallbackArray ?? (mapNullToEmpty ? EmptyArrayFactory<ItemType>.Instance : null);
+        }
+
 
         /// <summary>
         /// Extension method "safe" version of ToArray method.  If the given collection/set is non-null then this method returns the Linq ToArray method applied to the collection.
@@ -399,17 +437,19 @@ namespace MosaicLib.Utils
         {
             if (set != null)
             {
+                bool itemTypeIsObject = (typeof(ItemType) == typeof(object));
+
                 List<ItemType> itemList = new List<ItemType>();
                 foreach (var obj in set)
                 {
-                    if (obj is ItemType)
+                    if (obj is ItemType || itemTypeIsObject)
                         itemList.Add((ItemType) obj);
                 }
 
                 return itemList.ToArray();
             }
 
-            return fallbackArray ?? (mapNullToEmpty ? new ItemType[0] : null);
+            return fallbackArray ?? (mapNullToEmpty ? EmptyArrayFactory<ItemType>.Instance : null);
         }
 
         /// <summary>
@@ -462,7 +502,7 @@ namespace MosaicLib.Utils
             }
             else
             {
-                return fallbackArray ?? (mapNullToEmpty ? new ItemType[0] : null);
+                return fallbackArray ?? (mapNullToEmpty ? EmptyArrayFactory<ItemType>.Instance : null);
             }
         }
 
@@ -513,6 +553,19 @@ namespace MosaicLib.Utils
             }
 
             return list;
+        }
+
+        /// <summary>
+        /// Extension method to conditionally add an item (or group thereof - params parameter) to a given <paramref name="list"/>)
+        /// If <paramref name="list"/> is null and <paramref name="itemsArray"/> is non-empty then this method will construct a new list to contain the itemSet items which will be returned.
+        /// <para/>Supports call chaining.
+        /// </summary>
+        public static List<ItemType> ConditionalAddItems<ItemType>(this List<ItemType> list, bool condition, params ItemType[] itemsArray)
+        {
+            if (condition)
+                return list.SafeAddItems(itemsArray);
+            else
+                return list;
         }
 
         #endregion
@@ -1026,7 +1079,7 @@ namespace MosaicLib.Utils
         #region TimeSpan related (double.FromDays, double.FromHours, double.FromSeconds, double.FromMilliseconds, IsZero, Min, Max)
 
         /// <summary>
-        /// Variant of TimeSpan.FromDays that does not round the timeSpanInDays to the nearest msec.
+        /// Variant of TimeSpan.FromDays that does not round the <paramref name="timeSpanInDays"/> to the nearest msec.
         /// This extension method converts to TimeSpan using FromTicks and TimeSpan.TicksPerDay
         /// </summary>
         public static TimeSpan FromDays(this double timeSpanInDays)
@@ -1035,7 +1088,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Variant of TimeSpan.FromHours that does not round the timeSpanInHours to the nearest msec.
+        /// Variant of TimeSpan.FromHours that does not round the <paramref name="timeSpanInHours"/> to the nearest msec.
         /// This extension method converts to TimeSpan using FromTicks and TimeSpan.TicksPerHour
         /// </summary>
         public static TimeSpan FromHours(this double timeSpanInHours)
@@ -1044,7 +1097,16 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Variant of TimeSpan.FromSeconds that does not round the timeSpanInSeconds to the nearest msec.
+        /// Variant of TimeSpan.FromMinutes that does not round the <paramref name="timeSpanInMinutes"/> to the nearest msec.
+        /// This extension method converts to TimeSpan using FromTicks and TimeSpan.TicksPerMinute
+        /// </summary>
+        public static TimeSpan FromMinutes(this double timeSpanInMinutes)
+        {
+            return TimeSpan.FromTicks(unchecked((long)(TimeSpan.TicksPerMinute * timeSpanInMinutes)));
+        }
+
+        /// <summary>
+        /// Variant of TimeSpan.FromSeconds that does not round the <paramref name="timeSpanInSeconds"/> to the nearest msec.
         /// This extension method converts to TimeSpan using FromTicks and TimeSpan.TicksPerSecond
         /// </summary>
         public static TimeSpan FromSeconds(this double timeSpanInSeconds)
@@ -1053,7 +1115,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Variant of TimeSpan.FromSeconds that does not round the timeSpanInSeconds to the nearest msec.
+        /// Variant of TimeSpan.FromSeconds that does not round the <paramref name="timeSpanInMilliseconds"/> to the nearest msec.
         /// This extension method converts to TimeSpan using FromTicks and TimeSpan.TicksPerMillisecond
         /// </summary>
         public static TimeSpan FromMilliseconds(this double timeSpanInMilliseconds)
@@ -1163,7 +1225,7 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        #region Linq extensions (DoForEach, Concat)
+        #region Linq extensions (DoForEach, Concat, FilterAndRemove)
 
         /// <summary>
         /// Simple DoForEach helper method for use with Linq.  Applies the given action to each of the {TSource} items in the given source set.
@@ -1185,37 +1247,49 @@ namespace MosaicLib.Utils
         /// <summary>Concatinates the given <paramref name="item"/> onto the end of the given <paramref name="set"/></summary>
         public static IEnumerable<TItem> Concat<TItem>(this IEnumerable<TItem> set, TItem item)
         {
-            return InnerConcat(set ?? new TItem[0], item);
+            return InnerConcat(set ?? EmptyArrayFactory<TItem>.Instance, item);
         }
 
         /// <summary>Concatinates (prefixes) the given <paramref name="item"/> in front of the given <paramref name="set"/></summary>
         public static IEnumerable<TItem> Concat<TItem>(this TItem item, IEnumerable<TItem> set)
         {
-            return InnerConcat(item, set ?? new TItem[0]);
+            return InnerConcat(item, set ?? EmptyArrayFactory<TItem>.Instance);
         }
 
         /// <summary>Concatinates (prefixes) the given <paramref name="item"/> in front of the given <paramref name="array"/></summary>
         public static IEnumerable<TItem> Concat<TItem>(this TItem item, TItem [] array)
         {
-            return InnerConcat(item, array ?? new TItem[0]);
+            return InnerConcat(item, array ?? EmptyArrayFactory<TItem>.Instance);
         }
 
         /// <summary>Concatinates the given items onto the end of the given <paramref name="set"/></summary>
         public static IEnumerable<TItem> Concat<TItem>(this IEnumerable<TItem> set, TItem item1, TItem item2)
         {
-            return System.Linq.Enumerable.Concat(set ?? new TItem[0], new TItem[] { item1, item2 });
+            return System.Linq.Enumerable.Concat(set ?? EmptyArrayFactory<TItem>.Instance, new TItem[] { item1, item2 });
         }
 
         /// <summary>Concatinates the given items onto the end of the given <paramref name="set"/></summary>
         public static IEnumerable<TItem> Concat<TItem>(this IEnumerable<TItem> set, TItem item1, TItem item2, TItem item3)
         {
-            return System.Linq.Enumerable.Concat(set ?? new TItem[0], new TItem[] { item1, item2, item3 });
+            return System.Linq.Enumerable.Concat(set ?? EmptyArrayFactory<TItem>.Instance, new TItem[] { item1, item2, item3 });
         }
 
         /// <summary>Concatinates the given items onto the end of the given <paramref name="set"/></summary>
         public static IEnumerable<TItem> Concat<TItem>(this IEnumerable<TItem> set, TItem item1, TItem item2, TItem item3, params TItem[] moreParamsItemArray)
         {
-            return System.Linq.Enumerable.Concat(set ?? new TItem[0], new TItem[] { item1, item2, item3 }.Concat(moreParamsItemArray ?? new TItem[0]));
+            return System.Linq.Enumerable.Concat(set ?? EmptyArrayFactory<TItem>.Instance, new TItem[] { item1, item2, item3 }.Concat(moreParamsItemArray ?? EmptyArrayFactory<TItem>.Instance));
+        }
+
+        /// <summary>Concatinates (prefixes) the given <paramref name="item"/> in front of the given <paramref name="itemParamsArray"/></summary>
+        public static IEnumerable<TItem> ConcatItems<TItem>(this TItem item, params TItem[] itemParamsArray)
+        {
+            return InnerConcat(item, itemParamsArray ?? EmptyArrayFactory<TItem>.Instance);
+        }
+
+        /// <summary>Concatinates the given <paramref name="itemParamsArray"/> params items onto the end of the given <paramref name="set"/></summary>
+        public static IEnumerable<TItem> ConcatItems<TItem>(this IEnumerable<TItem> set, params TItem[] itemParamsArray)
+        {
+            return System.Linq.Enumerable.Concat(set ?? EmptyArrayFactory<TItem>.Instance, itemParamsArray ?? EmptyArrayFactory<TItem>.Instance);
         }
 
         /// <summary>
@@ -1227,7 +1301,7 @@ namespace MosaicLib.Utils
             if (!condition || itemsParamArray.IsNullOrEmpty())
                 return set;
             else
-                return (set ?? new TItem[0]).Concat(itemsParamArray);
+                return (set ?? EmptyArrayFactory<TItem>.Instance).Concat(itemsParamArray);
         }
 
         private static IEnumerable<TItem> InnerConcat<TItem>(TItem item, IEnumerable<TItem> set)
@@ -1246,6 +1320,44 @@ namespace MosaicLib.Utils
                 yield return setItem;
 
             yield return item;
+
+            yield break;
+        }
+
+        /// <summary>
+        /// Linq type extension method that uses the given <paramref name="filterPredicate"/> to select which items in the given list are to be placed in the output set, removes them from the list
+        /// and yields them.  If <paramref name="consecutive"/> is set to true then the filter will end as soon as the filter yields at least one element and then finds a following non-matching element.
+        /// If <paramref name="fromFront"/> is set to true then the filter will end as soon as the first non-matching element is found.
+        /// If <paramref name="filterPredicate"/> is null and <paramref name="mapNullFilterPredicateToAll"/> is true then this method will remove and return all of the elements in the list.
+        /// </summary>
+        public static IEnumerable<TItemType> FilterAndRemove<TItemType>(this List<TItemType> list, Func<TItemType, bool> filterPredicate = null, bool consecutive = false, bool fromFront = false, bool mapNullFilterPredicateToAll = true)
+        {
+            if (filterPredicate == null && mapNullFilterPredicateToAll)
+                filterPredicate = (item => true);
+
+            if (!list.IsNullOrEmpty() && filterPredicate != null)
+            {
+                bool foundAny = false;
+                for (int idx = 0; idx < list.Count;)
+                {
+                    TItemType item = list[idx];
+
+                    if (filterPredicate(item))
+                    {
+                        list.RemoveAt(idx);
+                        foundAny = true;
+                        yield return item;
+                    }
+                    else if (consecutive && foundAny || fromFront)
+                    {
+                        yield break;
+                    }
+                    else
+                    {
+                        idx++;
+                    }
+                }
+            }
 
             yield break;
         }
@@ -1453,33 +1565,41 @@ namespace MosaicLib.Utils
 
     /// <summary>
     /// Flag Enumeration used with System.Exception ToString extension method above.  Defines the string contents to be included from the exception.
-    /// <para/>Default (0), TypeAndMessage (5), Full (31), AllButStackTrace (15), IncludeType (1), IncludeSource (2), IncludeMessage (4), IncludeData (8), IncludeStackTrace (16)
+    /// <para/>Default (0x00), TypeAndMessage (0x05), TypeAndMessageAndStackTrace (0x15), Full (0x1f), AllButStackTrace (0x0f), 
+    /// <para/>IncludeType (0x01), IncludeSource (0x02), IncludeMessage (0x04), IncludeData (0x08), IncludeStackTrace (0x10)
     /// </summary>
     [Flags]
     public enum ExceptionFormat : int
     {
-        /// <summary>Use basic System.Exception.ToString method (0)</summary>
-        Default = 0,
+        /// <summary>Use basic System.Exception.ToString method [x00]</summary>
+        Default = 0x00,
 
-        /// <summary>IncludeType | IncludeMessage (5)</summary>
+        /// <summary>IncludeType | IncludeMessage [0x05]</summary>
         TypeAndMessage = (IncludeType | IncludeMessage),
 
-        /// <summary>IncludeType | IncludeSource | IncludeMessage | IncludeData | IncludeStackTrace (31)</summary>
+        /// <summary>IncludeType | IncludeMessage | IncludeStackTrace [0x15]</summary>
+        TypeAndMessageAndStackTrace = (IncludeType | IncludeMessage | IncludeStackTrace),
+
+        /// <summary>IncludeType | IncludeSource | IncludeMessage | IncludeData | IncludeStackTrace [0x1f]</summary>
         Full = (IncludeType | IncludeSource | IncludeMessage | IncludeData | IncludeStackTrace),
 
-        /// <summary>IncludeType | IncludeSource | IncludeMessage | IncludeData (15)</summary>
+        /// <summary>IncludeType | IncludeSource | IncludeMessage | IncludeData [0x0f]</summary>
         AllButStackTrace = (IncludeType | IncludeSource | IncludeMessage | IncludeData),
 
-        /// <summary>Includes Type: field (1)</summary>
-        IncludeType = 1,
-        /// <summary>Includes Src: field (2)</summary>
-        IncludeSource = 2,
-        /// <summary>Includes Mesg:[] field (4)</summary>
-        IncludeMessage = 4,
-        /// <summary>Includes Data:[] field (8)</summary>
-        IncludeData = 8,
-        /// <summary>Includes Stack:[] field (16)</summary>
-        IncludeStackTrace = 16,
+        /// <summary>Includes Type: field [0x01]</summary>
+        IncludeType = 0x01,
+
+        /// <summary>Includes Src: field [0x02]</summary>
+        IncludeSource = 0x02,
+
+        /// <summary>Includes Mesg:[] field [0x04]</summary>
+        IncludeMessage = 0x04,
+
+        /// <summary>Includes Data:[] field [0x08]</summary>
+        IncludeData = 0x08,
+
+        /// <summary>Includes Stack:[] field [0x10]</summary>
+        IncludeStackTrace = 0x10,
     }
 
     #endregion
@@ -1552,6 +1672,20 @@ namespace MosaicLib.Utils
             }
 
             return true;
+        }
+
+        /// <summary>
+        /// Retruns true if the pair of given System.Array objects are the same size, the same length and who's corresponding content items are Equal
+        /// </summary>
+        public static bool Equals(System.Array lhs, System.Array rhs)
+        {
+            if (System.Object.ReferenceEquals(lhs, rhs))
+                return true;
+
+            if (lhs == null || rhs == null || lhs.Length != rhs.Length)
+                return false;
+
+            return lhs.SafeToArray<object>().SequenceEqual(rhs.SafeToArray<object>());
         }
 
 

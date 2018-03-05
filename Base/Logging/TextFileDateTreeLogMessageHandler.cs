@@ -159,8 +159,6 @@ namespace MosaicLib
                         base.SetFrom(rhs);
                     }
 
-                    private static readonly string[] emptyStringArray = new string[0];
-
                     /// <summary>
                     /// Modular.Config helper setup method.  Constructs a FileRotationLoggingConfig from the matching contents in this object and then
                     /// calls its UpdateFromModularConfig method to fill in its values from modular config.  Finally this method updates the localy stored
