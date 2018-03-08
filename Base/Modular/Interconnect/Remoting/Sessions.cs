@@ -55,10 +55,10 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
         /// <summary>Session is connected and is active (valid traffic sent or received within stated period)</summary>
         Active,
 
-        /// <summary>Session is connected but no recent (valid) traffic has been sent, or recieved</summary>
+        /// <summary>Session is connected but no recent (valid) traffic has been sent, or received</summary>
         Idle,
 
-        /// <summary>Session is connected but no recent (valid) traffic has been sent, or recieved, and the outbound queue is non-empty.  This is typically only expected when the session is about to fail.</summary>
+        /// <summary>Session is connected but no recent (valid) traffic has been sent, or received, and the outbound queue is non-empty.  This is typically only expected when the session is about to fail.</summary>
         IdleWithPendingWork,
 
         /// <summary>Requests that the transport layer open the session's connection.  Transport responds with NoteTransportConnected once the connection is complete.</summary>
@@ -1503,12 +1503,12 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
                         }
                         else
                         {
-                            HandleSessionProtocolViolation(qpcTimeStamp, "recieved message buffer with zero SeqNum: {10} [{1}]".CheckedFormat(buffer, State));
+                            HandleSessionProtocolViolation(qpcTimeStamp, "received message buffer with zero SeqNum: {10} [{1}]".CheckedFormat(buffer, State));
                         }
                     }
                     else
                     {
-                        HandleSessionProtocolViolation(qpcTimeStamp, "recieved message buffer while session is not connected: {1}".CheckedFormat(State));
+                        HandleSessionProtocolViolation(qpcTimeStamp, "received message buffer while session is not connected: {1}".CheckedFormat(State));
                     }
                     break;
 

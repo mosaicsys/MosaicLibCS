@@ -815,7 +815,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
 
                 gi.GroupPointInfoList = new ReadOnlyIList<IGroupPointInfo>(gpiArray);
                 gi.GroupPointInfoArray = gpiArray;
-                gi.GroupPointIVAArray = gpiArray.Select(gpi => gpi.IVA).ToArray();
+                gi.GroupPointIVAArray = gpiArray.Select(gpi => gpi.IVA).WhereIsNotDefault().ToArray();
             }
 
             MetaDataArray = mddNVSList.ToArray();
@@ -823,7 +823,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
             GroupInfoArray = giArray;
             GroupPointInfoArray = gpiList.ToArray();
             OccurrenceInfoArray = oiList.ToArray();
-            GroupPointIVAArray = gpiList.Select(gpi => gpi.IVA).ToArray();
+            GroupPointIVAArray = gpiList.Select(gpi => gpi.IVA).WhereIsNotDefault().ToArray();
 
             GroupInfoDictionary = giDictionary;
             GroupPointInfoDictionary = gpiDictionary;
@@ -1236,6 +1236,8 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
             {
                 // this is not a sparse group - it also might be a StartOfFullGroup group
 
+                int ivaSetPendingCount = 0;
+
                 for (int gpiIndex = 0; gpiIndex < numPoints; gpiIndex++)
                 {
                     IGroupPointInfo gpi = gi.GroupPointInfoList[gpiIndex];
@@ -1246,8 +1248,15 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                         return;
 
                     if (iva != null)
-                        iva.Set(gpi.VC);
+                    {
+                        iva.VC = gpi.VC;
+                        if (iva.IsSetPending)
+                            ivaSetPendingCount++;
+                    }
                 }
+
+                if (ivaSetPendingCount > 0)
+                    IVI.Set(GroupPointIVAArray);
 
                 if (startReached)
                 {
@@ -1270,6 +1279,8 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
 
                 decodeIndex += ((numPoints + 7) >> 3);
 
+                int ivaSetPendingCount = 0;
+
                 for (int gpiIndex = 0; gpiIndex < numPoints; gpiIndex++)
                 {
                     if (dbb.payloadDataArray.GetBit(gpiIndex + bitIndexOffset))
@@ -1285,9 +1296,16 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                         gpi.VC = pointVC;
 
                         if (iva != null)
-                            iva.Set(pointVC);
+                        {
+                            iva.VC = pointVC;
+                            if (iva.IsSetPending)
+                                ivaSetPendingCount ++;
+                        }
                     }
                 }
+
+                if (ivaSetPendingCount > 0)
+                    IVI.Set(GroupPointIVAArray);
 
                 if (startReached && intervalReached)
                     SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = (ProcessContentEvent.Group | ProcessContentEvent.PartialGroup), GroupInfo = gi, SeqNum = seqNumU8, DataBlockBuffer = dbb });

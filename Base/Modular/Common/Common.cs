@@ -259,24 +259,14 @@ namespace MosaicLib.Modular.Common
         /// <summary>
         /// Returns an ValueContainer with cvt set to ContainerStorageType.Object and o set to Null
         /// </summary>
-        public static ValueContainer Null 
-        { 
-            get 
-            { 
-                return default(ValueContainer).SetToNullObject(); 
-            } 
-        }
+        public static ValueContainer Null { get { return _null; } }
+        private static readonly ValueContainer _null = default(ValueContainer).SetToNullObject();
 
         /// <summary>
         /// Returns an ValueContainer with cvt set to ContainerStorageType.None
         /// </summary>
-        public static ValueContainer Empty 
-        { 
-            get 
-            { 
-                return default(ValueContainer).SetToEmpty(); 
-            } 
-        }
+        public static ValueContainer Empty { get { return _empty; } }
+        private static readonly ValueContainer _empty = default(ValueContainer).SetToEmpty();
 
         #endregion
 
@@ -402,77 +392,218 @@ namespace MosaicLib.Modular.Common
         #region Type decoding helper static methods (DecodeType variants and related readonly static field "type constants")
 
         /// <summary>
-        /// Accepts a given type and attempts to generate an apporpriate ContainerStorageType (and isNullable) value as the best container storage type to use with the given <typeparamref name="TValueType"/>.
+        /// Accepts a given <typeparamref name="TValueType"/> and attempts to generate an apporpriate ContainerStorageType (and isNullable) value as the best container storage type to use with the given <typeparamref name="TValueType"/>.
         /// Unrecognized type default as ContainerStorageType.Object.
         /// </summary>
+        /// <remarks>This method will be deprecated in the future as its use has been replaced by the use of an appropriate variant of the static GetDecodedTypeInfo method</remarks>
         public static void DecodeType<TValueType>(out ContainerStorageType decodedValueType, out bool isNullable)
         {
-            Type t = typeof(TValueType);
-            DecodeType(t, out decodedValueType, out isNullable);
+            DecodedTypeInfo dti = StaticTypeDecoder<TValueType>.dti;
+            decodedValueType = dti.cst;
+            isNullable = dti.isNullable;
         }
 
         /// <summary>
-        /// Accepts a given type and attempts to generate an apporpriate ContainerStorageType (and isNullable) value as the best container storage type to use with the given Type.
+        /// Accepts a given <paramref name="type"/> and attempts to generate an apporpriate ContainerStorageType (and isNullable) value as the best container storage type to use with the given Type.
         /// Unrecognized type default as ContainerStorageType.Object.
         /// </summary>
+        /// <remarks>This method will be deprecated in the future as its use has been replaced by the use of an appropriate variant of the static GetDecodedTypeInfo method</remarks>
         public static void DecodeType(Type type, out ContainerStorageType decodedValueType, out bool isNullable)
         {
-            isNullable = (type.IsGenericType && (type.GetGenericTypeDefinition() == typeof(System.Nullable<>)));
+            DecodedTypeInfo dti = GetDecodedTypeInfo(type);
+            decodedValueType = dti.cst;
+            isNullable = dti.isNullable;
+        }
+
+        /// <summary>Private class used to optimize type decoding for templatized types.  Use of this class ensures that the type lookup logic will only be run once per unique type of <typeparamref name="TValueType"/></summary>
+        public static class StaticTypeDecoder<TValueType>
+        {
+            public static DecodedTypeInfo dti = ValueContainer.GetDecodedTypeInfo(typeof(TValueType));
+        }
+
+        /// <summary>
+        /// Accepts a given <typeparamref name="TValueType"/> and attempts to generate an apporpriate ContainerStorageType (and isNullable) value as the best container storage type to use with the given Type.
+        /// Unrecognized type default as ContainerStorageType.Object.
+        /// </summary>
+        public static DecodedTypeInfo GetDecodedTypeInfo<TValueType>()
+        {
+            return GetDecodedTypeInfo(typeof(TValueType));
+        }
+
+        /// <summary>
+        /// Accepts a given <paramref name="type"/> and attempts to generate an apporpriate ContainerStorageType (and isNullable) value as the best container storage type to use with the given Type.
+        /// Unrecognized type default as ContainerStorageType.Object.
+        /// </summary>
+        public static DecodedTypeInfo GetDecodedTypeInfo(Type type)
+        {
+            DecodedTypeInfo dti = default(DecodedTypeInfo);
+
+            if (decodedTypeInfoDictionary.TryGetValue(type, out dti))
+                return dti;
+
+            dti.isNullable = (type.IsGenericType && (type.GetGenericTypeDefinition() == typeof(System.Nullable<>)));
 
             Type valueType = type;
 
             // for nullable types extract the underlying type.
-            if (isNullable)
+            if (dti.isNullable)
                 valueType = Nullable.GetUnderlyingType(type);
 
-            if (valueType == typeof(System.Boolean)) decodedValueType = ContainerStorageType.Boolean;
-            else if (valueType == typeof(System.SByte)) decodedValueType = ContainerStorageType.SByte;
-            else if (valueType == typeof(System.Int16)) decodedValueType = ContainerStorageType.Int16;
-            else if (valueType == typeof(System.Int32)) decodedValueType = ContainerStorageType.Int32;
-            else if (valueType == typeof(System.Int64)) decodedValueType = ContainerStorageType.Int64;
-            else if (valueType == typeof(System.Byte)) decodedValueType = ContainerStorageType.Byte;
-            else if (valueType == typeof(System.UInt16)) decodedValueType = ContainerStorageType.UInt16;
-            else if (valueType == typeof(System.UInt32)) decodedValueType = ContainerStorageType.UInt32;
-            else if (valueType == typeof(System.UInt64)) decodedValueType = ContainerStorageType.UInt64;
-            else if (valueType == typeof(System.Single)) decodedValueType = ContainerStorageType.Single;
-            else if (valueType == typeof(System.Double)) decodedValueType = ContainerStorageType.Double;
-            else if (valueType == typeof(System.TimeSpan)) decodedValueType = ContainerStorageType.TimeSpan;
-            else if (valueType == typeof(System.DateTime)) decodedValueType = ContainerStorageType.DateTime;
-            else if (valueType == stringType) decodedValueType = ContainerStorageType.String;
-            else if (valueType == typeof(ReadOnlyIList<string>) || iListOfStringType.IsAssignableFrom(valueType) || valueType == stringArrayType || stringEnumerableType.IsAssignableFrom(valueType))
+            // all well known value types types are only reachable using the dictionary used above.  The following list is only used to support types that cannot easily be pre-known (and thus added to the dictionary)
+            if (iListOfStringType.IsAssignableFrom(valueType) || stringEnumerableType.IsAssignableFrom(valueType))
             {
-                isNullable = false;
-                decodedValueType = ContainerStorageType.IListOfString;
+                dti.isNullable = false;
+                dti.cst = ContainerStorageType.IListOfString;
             }
-            else if (valueType == typeof(ReadOnlyIList<ValueContainer>) || iListOfVCType.IsAssignableFrom(valueType) || valueType == vcArrayType || vcEnumerableType.IsAssignableFrom(valueType))
+            else if (iListOfVCType.IsAssignableFrom(valueType) || vcEnumerableType.IsAssignableFrom(valueType))
             {
-                isNullable = false;
-                decodedValueType = ContainerStorageType.IListOfVC;
+                dti.isNullable = false;
+                dti.cst = ContainerStorageType.IListOfVC;
             }
             else if (iNamedValueSetType.IsAssignableFrom(valueType))
             {
-                isNullable = false;
-                decodedValueType = ContainerStorageType.INamedValueSet;
+                dti.isNullable = false;
+                dti.cst = ContainerStorageType.INamedValueSet;
             }
             else if (iNamedValueType.IsAssignableFrom(valueType))
             {
-                isNullable = false;
-                decodedValueType = ContainerStorageType.INamedValue;
+                dti.isNullable = false;
+                dti.cst = ContainerStorageType.INamedValue;
             }
             else if (valueType.IsEnum)
             {
-                isNullable = false;
-                decodedValueType = ContainerStorageType.String;
-            }
-            else if (valueType == typeof(Logging.LogGate))
-            {
-                isNullable = false;
-                decodedValueType = ContainerStorageType.Custom;
+                dti.isNullable = false;
+                dti.cst = ContainerStorageType.String;
             }
             else
             {
-                isNullable = false;     // this flag is not useful when used with reference types
-                decodedValueType = ContainerStorageType.Object;
+                dti.isNullable = false;     // this flag is not useful when used with reference types
+                dti.cst = ContainerStorageType.Object;
+            }
+
+            return dti;
+        }
+
+        private static readonly Dictionary<Type, DecodedTypeInfo> decodedTypeInfoDictionary = GenerateDecodedTypeDictionary();
+
+        private static Dictionary<Type, DecodedTypeInfo> GenerateDecodedTypeDictionary()
+        {
+            TypeAndDecodedTypeInfo[] decodeTypeAndInfoArray = new[]
+            {
+                #region IListOfString: string, string [], IList<string>, List<string>, ReadOnlyIList<string>
+
+                new TypeAndDecodedTypeInfo(type: typeof(string), cst: ContainerStorageType.String),
+                new TypeAndDecodedTypeInfo(type: typeof(string []), cst: ContainerStorageType.IListOfString),
+                new TypeAndDecodedTypeInfo(type: typeof(IList<string>), cst: ContainerStorageType.IListOfString),
+                new TypeAndDecodedTypeInfo(type: typeof(List<string>), cst: ContainerStorageType.IListOfString),
+                new TypeAndDecodedTypeInfo(type: typeof(Utils.Collections.ReadOnlyIList<string>), cst: ContainerStorageType.IListOfString),
+
+                #endregion
+
+                #region IListOfVC: ValueContainer [], IList<ValueContainer>, List<ValueContainer>, ReadOnlyIList<ValueContainer>
+
+                new TypeAndDecodedTypeInfo(type: typeof(ValueContainer []), cst: ContainerStorageType.IListOfVC),
+                new TypeAndDecodedTypeInfo(type: typeof(IList<ValueContainer>), cst: ContainerStorageType.IListOfVC),
+                new TypeAndDecodedTypeInfo(type: typeof(List<ValueContainer>), cst: ContainerStorageType.IListOfVC),
+                new TypeAndDecodedTypeInfo(type: typeof(Utils.Collections.ReadOnlyIList<ValueContainer>), cst: ContainerStorageType.IListOfVC),
+
+                #endregion
+
+                #region NamedValueSet, INamedValueSet, NamedValue, INamedValue
+
+                new TypeAndDecodedTypeInfo(type: typeof(NamedValueSet), cst: ContainerStorageType.INamedValueSet),
+                new TypeAndDecodedTypeInfo(type: typeof(INamedValueSet), cst: ContainerStorageType.INamedValueSet),
+                new TypeAndDecodedTypeInfo(type: typeof(NamedValue), cst: ContainerStorageType.INamedValue),
+                new TypeAndDecodedTypeInfo(type: typeof(INamedValue), cst: ContainerStorageType.INamedValue),
+
+                #endregion
+
+                #region LogGate (nullable and not)
+
+                new TypeAndDecodedTypeInfo(type: typeof(Logging.LogGate), cst: ContainerStorageType.Custom),
+                new TypeAndDecodedTypeInfo(type: typeof(Logging.LogGate ?), cst: ContainerStorageType.Custom, isNullable: false),    // NOTE: this is a special case.   Even though the type is nullable, since we are using the Custom type we do not indicate that the type isNullable
+
+                #endregion
+
+                #region Bo, I1 .. I8, U1 .. U8, F4 .. F8, TimeSpan, DateTime
+
+                new TypeAndDecodedTypeInfo(type: typeof(bool), cst: ContainerStorageType.Bo ),
+
+                new TypeAndDecodedTypeInfo(type: typeof(sbyte), cst: ContainerStorageType.I1 ),
+                new TypeAndDecodedTypeInfo(type: typeof(short), cst: ContainerStorageType.I2 ),
+                new TypeAndDecodedTypeInfo(type: typeof(int), cst: ContainerStorageType.I4 ),
+                new TypeAndDecodedTypeInfo(type: typeof(long), cst: ContainerStorageType.I8 ),
+
+                new TypeAndDecodedTypeInfo(type: typeof(byte), cst: ContainerStorageType.U1 ),
+                new TypeAndDecodedTypeInfo(type: typeof(ushort), cst: ContainerStorageType.U2 ),
+                new TypeAndDecodedTypeInfo(type: typeof(uint), cst: ContainerStorageType.U4 ),
+                new TypeAndDecodedTypeInfo(type: typeof(ulong), cst: ContainerStorageType.U8 ),
+
+                new TypeAndDecodedTypeInfo(type: typeof(float), cst: ContainerStorageType.F4 ),
+                new TypeAndDecodedTypeInfo(type: typeof(double), cst: ContainerStorageType.F8 ),
+
+                new TypeAndDecodedTypeInfo(type: typeof(TimeSpan), cst: ContainerStorageType.TimeSpan ),
+                new TypeAndDecodedTypeInfo(type: typeof(DateTime), cst: ContainerStorageType.DateTime ),
+
+                #endregion
+
+                #region nullable Bo, I1 .. I8, U1 .. U8, F4 .. F8, TimeSpan, DateTime
+
+                new TypeAndDecodedTypeInfo(type: typeof(bool ?), cst: ContainerStorageType.Bo, isNullable: true ),
+
+                new TypeAndDecodedTypeInfo(type: typeof(sbyte ?), cst: ContainerStorageType.I1, isNullable: true ),
+                new TypeAndDecodedTypeInfo(type: typeof(short ?), cst: ContainerStorageType.I2, isNullable: true ),
+                new TypeAndDecodedTypeInfo(type: typeof(int ?), cst: ContainerStorageType.I4, isNullable: true ),
+                new TypeAndDecodedTypeInfo(type: typeof(long ?), cst: ContainerStorageType.I8, isNullable: true ),
+
+                new TypeAndDecodedTypeInfo(type: typeof(byte ?), cst: ContainerStorageType.U1, isNullable: true ),
+                new TypeAndDecodedTypeInfo(type: typeof(ushort ?), cst: ContainerStorageType.U2, isNullable: true ),
+                new TypeAndDecodedTypeInfo(type: typeof(uint ?), cst: ContainerStorageType.U4, isNullable: true ),
+                new TypeAndDecodedTypeInfo(type: typeof(ulong ?), cst: ContainerStorageType.U8, isNullable: true ),
+
+                new TypeAndDecodedTypeInfo(type: typeof(float ?), cst: ContainerStorageType.F4, isNullable: true ),
+                new TypeAndDecodedTypeInfo(type: typeof(double ?), cst: ContainerStorageType.F8, isNullable: true ),
+
+                new TypeAndDecodedTypeInfo(type: typeof(TimeSpan ?), cst: ContainerStorageType.TimeSpan, isNullable: true ),
+                new TypeAndDecodedTypeInfo(type: typeof(DateTime ?), cst: ContainerStorageType.DateTime, isNullable: true ),
+
+                #endregion
+            };
+
+            Dictionary<Type, DecodedTypeInfo> dictionary = new Dictionary<Type, DecodedTypeInfo>();
+
+            foreach (var dtai in decodeTypeAndInfoArray)
+                dictionary[dtai.type] = dtai.dti;
+
+            return dictionary;
+        }
+
+        private struct TypeAndDecodedTypeInfo
+        {
+            public TypeAndDecodedTypeInfo(Type type, ContainerStorageType cst, bool isNullable = false)
+                : this()
+            {
+                this.type = type ?? typeof(object);
+                dti.cst = cst;
+                dti.isNullable = isNullable;
+            }
+            public Type type;
+            public DecodedTypeInfo dti;
+
+            public override string ToString()
+            {
+                return "Type:{0} {1}".CheckedFormat(type, dti);
+            }
+        }
+
+        public struct DecodedTypeInfo
+        {
+            public ContainerStorageType cst;
+            public bool isNullable;
+
+            public override string ToString()
+            {
+                return "{0}{1}".CheckedFormat(cst, isNullable ? " Nullable" : "");
             }
         }
 
@@ -556,7 +687,8 @@ namespace MosaicLib.Modular.Common
         /// </summary>
         public static ValueContainer Create<TValueType>(TValueType value)
         {
-            return default(ValueContainer).SetValue<TValueType>(value);
+            DecodedTypeInfo dti = StaticTypeDecoder<TValueType>.dti;
+            return default(ValueContainer).SetValue<TValueType>(value, dti.cst, dti.isNullable);
         }
 
         /// <summary>
@@ -646,20 +778,15 @@ namespace MosaicLib.Modular.Common
         {
             if (value != null)
             {
-                Type t = value.GetType();
-
-                if (t == typeof(ValueContainer))
+                if (value is ValueContainer)
                 {
                     CopyFrom((ValueContainer)value);
                 }
                 else
                 {
-                    ContainerStorageType valueCVT;
-                    bool valueTypeIsNullable;
+                    DecodedTypeInfo dti = GetDecodedTypeInfo(value.GetType());
 
-                    DecodeType(t, out valueCVT, out valueTypeIsNullable);
-
-                    SetValue<System.Object>(value, valueCVT, valueTypeIsNullable);
+                    SetValue<System.Object>(value, dti.cst, dti.isNullable);
                 }
             }
             else
@@ -681,11 +808,51 @@ namespace MosaicLib.Modular.Common
         /// </summary>
         public ValueContainer SetValue<TValueType>(TValueType value)
         {
-            ContainerStorageType valueCVT;
-            bool valueTypeIsNullable;
-            DecodeType<TValueType>(out valueCVT, out valueTypeIsNullable);
+            DecodedTypeInfo dti = StaticTypeDecoder<TValueType>.dti;
 
-            SetValue<TValueType>(value, valueCVT, valueTypeIsNullable);
+            // first try doing the assignment directly for supported types
+            try
+            {
+                // handle all nullable cases where value is given as null here.  They all result in this VC being set to Null
+                if (dti.isNullable && value == null)
+                {
+                    SetToNullObject();
+                    return this;
+                }
+
+                // for well known ContainerStorageTypes (that do not have type ambiguity) we can directly handle the value here and give the optimizer more help
+                switch (cvt = dti.cst)
+                {
+                    case ContainerStorageType.Bo: o = null; u = new Union() { b = (bool)((object)value) }; return this;
+                    case ContainerStorageType.Bi: o = null; u = new Union() { bi = (byte)((object)value) }; return this;
+                    case ContainerStorageType.I1: o = null; u = new Union() { i8 = (sbyte)((object)value) }; return this;
+                    case ContainerStorageType.I2: o = null; u = new Union() { i16 = (short)((object)value) }; return this;
+                    case ContainerStorageType.I4: o = null; u = new Union() { i32 = (int)((object)value) }; return this;
+                    case ContainerStorageType.I8: o = null; u.i64 = (long)((object)value); return this;
+                    case ContainerStorageType.U1: o = null; u = new Union() { u8 = (byte)((object)value) }; return this;
+                    case ContainerStorageType.U2: o = null; u = new Union() { u16 = (ushort)((object)value) }; return this;
+                    case ContainerStorageType.U4: o = null; u = new Union() { u32 = (uint)((object)value) }; return this;
+                    case ContainerStorageType.U8: o = null; u.u64 = (ulong)((object)value); return this;
+                    case ContainerStorageType.F4: o = null; u = new Union() { f32 = (float)((object)value) }; return this;
+                    case ContainerStorageType.F8: o = null; u.f64 = (double)((object)value); return this;
+                    case ContainerStorageType.TimeSpan: o = null; u.TimeSpan = (TimeSpan)((object)value); return this;
+                    case ContainerStorageType.DateTime: o = null; u.DateTime = (DateTime)((object)value); return this;
+                    case ContainerStorageType.String: o = value; u = default(Union); return this;
+                    case ContainerStorageType.INamedValueSet: o = (value as INamedValueSet).ConvertToReadOnly(mapNullToEmpty: true); u = default(Union); return this;
+                    case ContainerStorageType.INamedValue: o = (value as INamedValue).ConvertToReadOnly(mapNullToEmpty: true); u = default(Union); return this;
+                    case ContainerStorageType.Object: o = value; u = default(Union); return this;
+                    default: cvt = ContainerStorageType.None; break;
+                }
+            }
+            catch (System.Exception ex)
+            {
+                // we do not expect this catch statement to be triggered as the value type is very well known in this method.
+                GlobalLastSetValueFailedException = ex;
+                unchecked { GlobalSetValueFailedCount++; }
+            }
+
+            // fallback to using the more general SetValue method if the above logic does not recognize the given type
+            SetValue<TValueType>(value, dti.cst, dti.isNullable);
 
             return this;
         }
@@ -944,7 +1111,7 @@ namespace MosaicLib.Modular.Common
 
         #endregion
 
-        #region GetValue variants and LastGetValueExcpetion property
+        #region GetValue variants and LastGetValueException property
 
         /// <summary>
         /// Typed GetValue method.  
@@ -956,15 +1123,44 @@ namespace MosaicLib.Modular.Common
         /// <para/>Note: because this method must decode the type information on each call, it may be less efficient to use this method than to use the version where the
         /// caller explicitly uses DecodeType method combined with the more complete GetValue method.
         /// </summary>
-        public TValueType GetValue<TValueType>(bool rethrow, TValueType defaultValue = default(TValueType))
+        public TValueType GetValue<TValueType>(bool rethrow, TValueType defaultValue = default(TValueType), bool allowTypeChangeAttempt = true)
         {
-            Type t = typeof(TValueType);
-            ContainerStorageType valueCVT;
-            bool valueTypeIsNullable;
+            DecodedTypeInfo dti = StaticTypeDecoder<TValueType>.dti;
 
-            DecodeType(t, out valueCVT, out valueTypeIsNullable);
+            try
+            {
+                // if the stored type is exactly what the caller is asking for and it is one of the supported types then simply return it.
+                if (dti.cst == cvt)
+                {
+                    switch (dti.cst)
+                    {
+                        case ContainerStorageType.Bo: return (TValueType)((object)u.b);
+                        case ContainerStorageType.Bi: return (TValueType)((object)u.bi);
+                        case ContainerStorageType.I1: return (TValueType)((object)u.i8);
+                        case ContainerStorageType.I2: return (TValueType)((object)u.i16);
+                        case ContainerStorageType.I4: return (TValueType)((object)u.i32);
+                        case ContainerStorageType.I8: return (TValueType)((object)u.i64);
+                        case ContainerStorageType.U1: return (TValueType)((object)u.u8);
+                        case ContainerStorageType.U2: return (TValueType)((object)u.u16);
+                        case ContainerStorageType.U4: return (TValueType)((object)u.u32);
+                        case ContainerStorageType.U8: return (TValueType)((object)u.u64);
+                        case ContainerStorageType.F4: return (TValueType)((object)u.f32);
+                        case ContainerStorageType.F8: return (TValueType)((object)u.f64);
+                        case ContainerStorageType.TimeSpan: return (TValueType)((object)u.TimeSpan);
+                        case ContainerStorageType.DateTime: return (TValueType)((object)u.DateTime);
+                        case ContainerStorageType.String: if (typeof(TValueType) == stringType) { return (TValueType)o; } break;
+                        default: break;
+                    }
+                }
+            }
+            catch (System.Exception ex)
+            {
+                GlobalLastGetValueFailedException = ex;
+                unchecked { GlobalGetValueFailedCount++; }
+            }
 
-            return GetValue<TValueType>(valueCVT, valueTypeIsNullable, rethrow, defaultValue: defaultValue);
+            // fall through to the prior version of GetValue that handles all of the special cases.
+            return GetValue<TValueType>(dti.cst, dti.isNullable, rethrow: rethrow, allowTypeChangeAttempt: allowTypeChangeAttempt, defaultValue: defaultValue);
         }
 
         /// <summary>
@@ -1295,7 +1491,7 @@ namespace MosaicLib.Modular.Common
 
         #endregion
 
-        #region EstimatedContentSizeInBytes
+        #region EstimatedContentSizeInBytes (deprecated)
 
         /// <summary>
         /// Returns the estimated size of the given contents in bytes.  
@@ -1303,6 +1499,7 @@ namespace MosaicLib.Modular.Common
         /// For string types this returns the l6 + the length of the string in bytes
         /// For string array and string list types, this returns 16 + the summed length of each of the strings in bytes + 16 bytes of overhead for each one.
         /// </summary>
+        [Obsolete("The use of this property has been deprecated.  (2018-03-07)")]
         public int EstimatedContentSizeInBytes
         {
             get
@@ -1366,36 +1563,45 @@ namespace MosaicLib.Modular.Common
             if (cvt != other.cvt)
                 return false;
 
-            if (IsNonNullObject)
+            switch (cvt)
             {
-                ValueContainer[] vcArray = o as ValueContainer[];
-                ValueContainer[] rhsVCArray = other.o as ValueContainer[];
+                case ContainerStorageType.None: return true;
+                case ContainerStorageType.Bo: return (u.b == other.u.b);
+                case ContainerStorageType.Bi: return (u.bi == other.u.bi);
+                case ContainerStorageType.I1: return (u.i8 == other.u.i8);
+                case ContainerStorageType.I2: return (u.i16 == other.u.i16);
+                case ContainerStorageType.I4: return (u.i32 == other.u.i32);
+                case ContainerStorageType.I8: return (u.i64 == other.u.i64);
+                case ContainerStorageType.U1: return (u.u8 == other.u.u8);
+                case ContainerStorageType.U2: return (u.u16 == other.u.u16);
+                case ContainerStorageType.U4: return (u.u32 == other.u.u32);
+                case ContainerStorageType.U8: return (u.u64 == other.u.u64);
+                case ContainerStorageType.F4: return (u.f32 == other.u.f32);
+                case ContainerStorageType.F8: return (u.f64 == other.u.f64);
+                case ContainerStorageType.TimeSpan: return (u.TimeSpan == other.u.TimeSpan);
+                case ContainerStorageType.DateTime: return (u.DateTime == other.u.DateTime);
+                case ContainerStorageType.String: return System.Object.Equals(o, other.o);
+                case ContainerStorageType.IListOfString: return (o as IList<String>).IsEqualTo(other.o as IList<String>);
+                case ContainerStorageType.IListOfVC: return (o as IList<ValueContainer>).IsEqualTo(other.o as IList<ValueContainer>);
+                case ContainerStorageType.INamedValueSet: return (o as INamedValueSet).MapNullToEmpty().Equals(other.o as INamedValueSet);
+                case ContainerStorageType.INamedValue: return (o as INamedValue).MapNullToEmpty().Equals(other.o as INamedValue);
+                case ContainerStorageType.Object:
+                    {
+                        if (o != null)
+                        {
+                            ValueContainer[] vcArray = o as ValueContainer[];
 
-                if (vcArray != null)
-                {
-                    return vcArray.IsEqualTo(rhsVCArray);
-                }
+                            if (vcArray != null)
+                                return vcArray.IsEqualTo(other.o as ValueContainer[]);
+                        }
+
+                        if (o is System.Array && other.o is System.Array)
+                            return Utils.Fcns.Equals(o as System.Array, other.o as System.Array);
+
+                        return System.Object.Equals(o, other.o);
+                    }
+                default: return false;
             }
-
-            if (cvt == ContainerStorageType.IListOfString)
-                return (o as IList<String>).IsEqualTo(other.o as IList<String>);
-            else if (cvt == ContainerStorageType.IListOfVC)
-                return (o as IList<ValueContainer>).IsEqualTo(other.o as IList<ValueContainer>);
-            else if (cvt == ContainerStorageType.INamedValueSet)
-                return (o as INamedValueSet).MapNullToEmpty().Equals(other.o as INamedValueSet);
-            else if (cvt == ContainerStorageType.INamedValue)
-                return (o as INamedValue).MapNullToEmpty().Equals(other.o as INamedValue);
-            else if (cvt.IsReferenceType())
-            {
-                if (o is System.Array && other.o is System.Array)
-                    return Utils.Fcns.Equals(o as System.Array, other.o as System.Array);
-
-                return System.Object.Equals(o, other.o);
-            }
-            else if (cvt.IsNone())
-                return true;
-            else
-                return u.Equals(other.u);
         }
 
         /// <summary>Support Equality testing for boxed versions.</summary>
@@ -1545,9 +1751,9 @@ namespace MosaicLib.Modular.Common
 
     /// <summary>
     /// Enumeration that is used with the ValueContainer struct.
-    /// <para/>None (0 : default), Object, String, IListOfString, IListOfVC, Boolean, Binary, SByte, Int16, Int32, Int64, Byte, UInt16, UInt32, UInt64, Single, Double, TimeSpan, DateTime
+    /// <para/>None (0 : default), Custom, Object, String, IListOfString, IListOfVC, INamedValueSet, INamedValue, Boolean, Binary, SByte, Int16, Int32, Int64, Byte, UInt16, UInt32, UInt64, Single, Double, TimeSpan, DateTime
     /// </summary>
-    public enum ContainerStorageType : int
+    public enum ContainerStorageType : byte
     {
         /// <summary>Custom value for cases where the storage type has not been defined -(the default value: 0)</summary>
         None = 0,
@@ -1630,7 +1836,7 @@ namespace MosaicLib.Modular.Common
     public static partial class ExtensionMethods
     {
         /// <summary>
-        /// Returns true if the given ContainerStorageType is a reference type.  (Currently Object, String, IListOfString)
+        /// Returns true if the given ContainerStorageType is a reference type.  (Currently Object, String, IListOfString, IListOfVC, INamedValueSet, INamedValue)
         /// </summary>
         public static bool IsReferenceType(this ContainerStorageType cst)
         {
@@ -2055,7 +2261,7 @@ namespace MosaicLib.Modular.Common
         /// <summary>Override ToString for logging and debugging.</summary>
         public override string ToString()
         {
-            return VC.ToString();
+            return VC.ToStringSML();
         }
     }
 
@@ -3938,6 +4144,7 @@ namespace MosaicLib.Modular.Common
         /// <summary>
         /// Returns the approximate size of the contents in bytes. 
         /// </summary>
+        [Obsolete("The use of this property has been deprecated.  (2018-03-07)")]
         public int EstimatedContentSizeInBytes 
         {
             get { return (Name.Length * sizeof(char)) + VC.EstimatedContentSizeInBytes + 10; }

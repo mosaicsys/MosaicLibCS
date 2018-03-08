@@ -854,7 +854,7 @@ namespace MosaicLib
 			public LoggerSourceInfo()
 			{
 				ID = LoggerID_Invalid;
-				Name = "[INVALID]";
+				Name = "_EmptyLSI_";
                 LoggerConfigSource = allLoggerConfigSource;
 			}
 
@@ -880,7 +880,7 @@ namespace MosaicLib
                 if (IsValid)
                     return "LoggerSourceInfo: id:{0} name:'{1}' config:'{2}'".CheckedFormat(ID, Name, LoggerConfigSource.Object);
                 else
-                    return "LoggerSourceInfo: [INVALID] id:{0} name:'{1}'".CheckedFormat(ID, Name);
+                    return "LoggerSourceInfo: id:{0} name:'{1}' [NotValid]".CheckedFormat(ID, Name);
             }
         }
 
@@ -893,7 +893,7 @@ namespace MosaicLib
 		public const int NullMessageSeqNum = 0;
 
         /// <summary>This interface defines the publicly accessible properties and methods that a LogMessage provides for accessing its stored contents.</summary>
-        public interface ILogMessage
+        public interface ILogMessage : IEquatable<ILogMessage>
         {
             /// <summary>Returns the name of the sourcing logger object or a fixed string if there is no such object.</summary>
             string LoggerName { get; }
@@ -913,6 +913,9 @@ namespace MosaicLib
             /// <summary>Returns a, possibly null, byte array of binary data that is associated with this message.</summary>
             byte[] Data { get; }
 
+            /// <summary>True if the message has been given to the distribution system.</summary>
+            bool Emitted { get; }
+
             /// <summary>Returns the QpcTimeStamp at which this message was emitted or zero if it has not been emitted</summary>
             QpcTimeStamp EmittedQpcTime { get; }
 
@@ -925,6 +928,9 @@ namespace MosaicLib
             /// <summary>Returns the Win32 ThreadID (from kernel32.GetCurrentThreadID) of the thread that setup this message</summary>
             int Win32ThreadID { get; }
 
+            /// <summary>Returns the Name of the Thread that initially setup this message.</summary>
+            string ThreadName { get; }
+
             /// <summary>Returns the DataTime taken at the time the message was emitted or the empty DateTime if it has not bee emitted.</summary>
             DateTime EmittedDateTime { get; }
 
@@ -935,10 +941,9 @@ namespace MosaicLib
 		/// <summary>This class implements the public sharable container that is used for all information that is to be logged using this logging system.</summary>
 		/// <remarks>
 		/// Messages are generated from a specific source and also include:
-		///		a MesgType, a message string, an optional INamedValueSet, 
-		///		an optional reference to the stack frame from which the message was, originally, allocated and from which the
-		///		distribution system can get the file name an line number of the allocating code.
+		///		a MesgType, a message string, an optional INamedValueSet, and an optional data byte array
 		/// </remarks>
+        [DataContract(Namespace=Constants.LoggingNameSpace), Serializable]
         public class LogMessage : ILogMessage
 		{
             /// <summary>Default constructor.</summary>
@@ -948,22 +953,24 @@ namespace MosaicLib
                 Win32ThreadID = -1;
             }
 
-            /// <summary>Copy constructor - creates a duplicate of the given rhs</summary>
-            public LogMessage(LogMessage rhs) 
+            /// <summary>Copy constructor - creates a duplicate of the given <paramref name="other"/></summary>
+            public LogMessage(LogMessage other) 
             {
-                LoggerSourceInfo = rhs.LoggerSourceInfo;
-                MesgType = rhs.MesgType;
-                _mesg = rhs.Mesg;
-                _mesgEscaped = rhs._mesgEscaped;
-                _nvs = rhs._nvs;
-                _data = ((rhs.Data != null) ? (rhs.Data.Clone() as byte []) : null);
-                Emitted = rhs.Emitted;
-                EmittedDateTime = rhs.EmittedDateTime;
-                EmittedQpcTime = rhs.EmittedQpcTime;
-                SeqNum = rhs.SeqNum;
-                ThreadID = rhs.ThreadID;
-                Win32ThreadID = rhs.Win32ThreadID;
-                _threadName = rhs._threadName;
+                _loggerSourceInfo = other._loggerSourceInfo;
+                _loggerID = other._loggerID;
+                _loggerName = other._loggerName;
+                MesgType = other.MesgType;
+                _mesg = other.Mesg;
+                _mesgEscaped = other._mesgEscaped;
+                _nvs = other._nvs;
+                _data = ((other.Data != null) ? (other.Data.Clone() as byte []) : null);
+                Emitted = other.Emitted;
+                _emittedQpcTime = other._emittedQpcTime;
+                EmittedDateTime = other.EmittedDateTime;
+                SeqNum = other.SeqNum;
+                ThreadID = other.ThreadID;
+                Win32ThreadID = other.Win32ThreadID;
+                _threadName = other._threadName;
             }
 
             /// <summary>Resets contents to default state</summary>
@@ -978,8 +985,8 @@ namespace MosaicLib
                 Win32ThreadID = -1;
                 ThreadName = null;
                 Emitted = false;
-                EmittedQpcTime = QpcTimeStamp.Zero;
-                EmittedDateTime = DateTime.MinValue;
+                _emittedQpcTime = QpcTimeStamp.Zero;
+                EmittedDateTime = default(DateTime);
                 SeqNum = NullMessageSeqNum;
 
                 return this;
@@ -1006,12 +1013,12 @@ namespace MosaicLib
             }
 
             /// <summary>Sets up contents from a given source with an explicitly given mesgType and an optional mesg, nvs, and data</summary>
-            public LogMessage Setup(LoggerSourceInfo loggerSourceInfo, MesgType mesgType, string mesg = null, INamedValueSet nvs = null, byte [] data = null)
+            public LogMessage Setup(LoggerSourceInfo loggerSourceInfo = null, MesgType mesgType = Logging.MesgType.None, string mesg = null, INamedValueSet nvs = null, byte [] data = null)
             {
-                Mesg = mesg;
                 LoggerSourceInfo = loggerSourceInfo;
                 MesgType = mesgType;
-                _nvs = nvs.ConvertToReadOnly(mapNullToEmpty: false);
+                Mesg = mesg;
+                _nvs = nvs.ConvertToReadOnly(mapNullToEmpty: false).MapEmptyToNull();
                 _data = data;
                 SetThreadID();
 
@@ -1030,23 +1037,32 @@ namespace MosaicLib
             /// Returns the LoggerSourceInfo of the logger that generated this message or null if message is in default state or no such source was given.
             /// Messages all share a reference to the same logger source id and string if they all come from the same source id.
             /// </summary>
-            public LoggerSourceInfo LoggerSourceInfo { get; private set; }
+            public LoggerSourceInfo LoggerSourceInfo { get { return _loggerSourceInfo; } private set { _loggerSourceInfo = value; if (value != null && value.IsValid) { _loggerName = value.Name; _loggerID = value.ID; } } }
+            [NonSerialized]
+            private LoggerSourceInfo _loggerSourceInfo;
 
             /// <summary>Returns true if the current SourceInfo is non null.</summary>
             public bool IsLoggerSourceInfoValid { get { return (LoggerSourceInfo != null && LoggerSourceInfo.IsValid); } }
 
             /// <summary>Returns the LoggerID in the Log Distribution System for the LoggerSourceInfo or LoggerID_Invalid if there is no valid LoggerSourceInfo</summary>
-            public int LoggerID { get { return (IsLoggerSourceInfoValid ? LoggerSourceInfo.ID : LoggerID_Invalid); } }
+            public int LoggerID { get { return _loggerID ?? LoggerID_Invalid; } }
+
+            [DataMember(Order = 100, Name = "LoggerID", IsRequired = false, EmitDefaultValue = false)]
+            private int? _loggerID = null;
 
             /// <summary>Returns the LoggerName for the logger reference in the given LoggerSourceInfo or a fixed string ("NULL_LOGGER") if there is none</summary>
-            public string LoggerName { get { return GetLoggerName("NULL_LOGGER"); } }
+            public string LoggerName { get { return (_loggerName ?? GetLoggerName("_NullLoggerName_")); } }
 
             /// <summary>helper method used to Get LoggerName where caller specifies the string to return when the message has no defined LoggerSourceInfo</summary>
             public string GetLoggerName(string nullLoggerName) { return (IsLoggerSourceInfoValid ? LoggerSourceInfo.Name : nullLoggerName); }
 
+            [DataMember(Order = 200, Name = "LoggerName", IsRequired = false, EmitDefaultValue = false)]
+            private string _loggerName = null;
+
 			// information about the actual event
 
             /// <summary>Returns the MesgType that the message was setup for or MesgType.None if the message has not been setup.</summary>
+            [DataMember(Order = 300, Name="MesgType", IsRequired = false, EmitDefaultValue = false)]
             public MesgType MesgType { get; private set; }
 
             /// <summary>Returns the current Message Body.  Returns empty string if the message has not been given a body.  Setter allows the contained mesg to be updated, provided that the message has not been emitted.</summary>
@@ -1055,6 +1071,8 @@ namespace MosaicLib
 				get { return (_mesg ?? string.Empty); } 
 				set { AssertNotEmitted("Mesg property Set"); _mesg = value; }
 			}
+
+            [DataMember(Order = 400, Name="Mesg", IsRequired=false, EmitDefaultValue=false)]
             private string _mesg = null;
 
             /// <summary>Returns an escaped version the string body of the message or the empty string if none was given</summary>
@@ -1068,6 +1086,7 @@ namespace MosaicLib
                     return _mesgEscaped;
                 }
             }
+            [NonSerialized]
             private string _mesgEscaped = null;
 
 			// the message data - an optional binary block of bytes
@@ -1082,6 +1101,7 @@ namespace MosaicLib
                     _data = value; 
                 }
 			}
+            [DataMember(Order = 500, Name = "Data", IsRequired = false, EmitDefaultValue = false)]
             private byte[] _data = null;
 
             // the message can contain an INamedValueSet
@@ -1096,12 +1116,14 @@ namespace MosaicLib
                 set 
                 { 
                     AssertNotEmitted("NamedValueSet property Set"); 
-                    _nvs = value.ConvertToReadOnly(); 
+                    _nvs = value.ConvertToReadOnly(mapNullToEmpty: false).MapEmptyToNull(); 
                 } 
             }
             /// <summary>Returns raw _nvs field contents.  Used for logging to clarify cases where no NVS has been provided as seperate from case where an empty one has.</summary>
             internal INamedValueSet Raw_nvs { get { return _nvs; } }
-            private INamedValueSet _nvs = null;
+
+            [DataMember(Order = 600, Name = "NVS", IsRequired = false, EmitDefaultValue = false)]
+            private NamedValueSet _nvs = null;
 
             /// <summary>Returns the System.Diagnostics.StackFrame from which the message was created/emitted.  May be null if SourceStackFrames are not being acquired.</summary>
             [Obsolete("Support for recording of stack frames for logging has been removed.  This property is no longer supported (2017-07-21)")]
@@ -1109,14 +1131,27 @@ namespace MosaicLib
 
 			// information about wether the message has been emitted and if so when it was emitted (qpc and local)
 
-            /// <summary>True if the message has been given to the distribution system.  Cleared after distribution is complete or the message has been cloned.</summary>
-            public bool Emitted { get; private set; }
+            /// <summary>True if the message has been given to the distribution system.</summary>
+            public bool Emitted { get { return _emitted; } private set { _emitted = value; _emittedDC = (value) ? (bool?)null : false; } }
+            [NonSerialized]
+            private bool _emitted;
+
+            [DataMember(Order = 700, Name = "Emitted", IsRequired = false, EmitDefaultValue = false)]
+            private bool? _emittedDC = false;
 
             /// <summary>Returns the QpcTimeStamp at which the message was first emitted. - non transferable between process spaces.</summary>
-            public QpcTimeStamp EmittedQpcTime { get; private set; }
+            public QpcTimeStamp EmittedQpcTime { get { return _emittedQpcTime; } private set { _emittedQpcTime = value; } }
+            [NonSerialized]
+            private QpcTimeStamp _emittedQpcTime;
+
+            [DataMember(Order = 700, Name = "EmittedAge", IsRequired = false, EmitDefaultValue = false)]
+            private double _emittedAge { get { return EmittedQpcTime.IsZero ? 0.0 : EmittedQpcTime.Age.TotalSeconds; } set { EmittedQpcTime = ((value == 0.0) ? QpcTimeStamp.Zero : QpcTimeStamp.Now + value.FromSeconds()); } }
 
             /// <summary>Returns the DataTime taken at the time the message was emitted or the empty DateTime if it has not bee emitted.</summary>
             public DateTime EmittedDateTime { get; private set; }
+
+            [DataMember(Order = 800, Name = "EmittedDateTime", IsRequired = false, EmitDefaultValue = false)]
+            private string _emittedDateTime { get { return EmittedDateTime.ToString("o"); } set { EmittedDateTime = DateTime.ParseExact(value, "o", null); } }
 
             /// <summary>Resets the message to the non-emitted state. - used during internal Logging infrastructure message recycling.</summary>
             [Obsolete("This method will be deprecated as messages are no longer reused.  Please remove the use of this method [2017-12-19]")]
@@ -1145,16 +1180,20 @@ namespace MosaicLib
 			}
 
             /// <summary>Returns the message Sequence number as assigned when the message was emitted.  May be used to determine when the message has been delivered from the distribution system.</summary>
+            [DataMember(Order = 900, Name = "SeqNum", IsRequired = false, EmitDefaultValue = false)]
             public int SeqNum { get; internal set; }
 
             /// <summary>Returns the ThreadID that initially setup this message.</summary>
+            [DataMember(Order = 1000, Name = "ThreadID", IsRequired = false, EmitDefaultValue = false)]
             public int ThreadID { get; private set; }
 
             /// <summary>Returns the Win32 ThreadID (from kernel32.GetCurrentThreadID) of the thread that setup this message</summary>
+            [DataMember(Order = 1100, Name = "Win32ThreadID", IsRequired = false, EmitDefaultValue = false)]
             public int Win32ThreadID { get; private set; }
 
-            /// <summary>Returns the ThreadName that initially setup this message.</summary>
+            /// <summary>Returns the Name of the Thread that initially setup this message.</summary>
             public string ThreadName { get { return _threadName ?? String.Empty; } private set { _threadName = value; } }
+            [DataMember(Order = 1200, Name = "ThreadName", IsRequired = false, EmitDefaultValue = false)]
             private string _threadName = null;
 
             /// <summary>Method used to set the contained ThreadID and ThreadName during setup</summary>
@@ -1173,6 +1212,45 @@ namespace MosaicLib
             public string GetFormattedDateTime(Utils.Dates.DateTimeFormat dtFormat = Utils.Dates.DateTimeFormat.LogDefault) 
             { 
                 return Utils.Dates.CvtToString(EmittedDateTime, dtFormat); 
+            }
+
+            [OnDeserialized]
+            private void HandleOnDeserialized(StreamingContext context)
+            {
+                _emitted = _emittedDC ?? true;
+                if (_nvs != null && !_nvs.IsReadOnly)
+                    _nvs.IsReadOnly = true;
+
+                if (_emitted && EmittedQpcTime.IsZero)
+                    EmittedQpcTime = QpcTimeStamp.Now;
+            }
+
+            bool IEquatable<ILogMessage>.Equals(ILogMessage other)
+            {
+                return this.Equals(other, includeEmittedQpcTime: false);
+            }
+
+            /// <summary>
+            /// IEquatable{ILogMessage}.Equals implementation method - allows caller to indicate if emittedQpcTime should be included in comparison (defaults to false).
+            /// </summary>
+            public bool Equals(ILogMessage other, bool includeEmittedQpcTime = false)
+            {
+                bool edtEquals = (EmittedDateTime == other.EmittedDateTime);
+
+                return (other != null
+                    && SeqNum == other.SeqNum
+                    && LoggerName == other.LoggerName
+                    && MesgType == other.MesgType
+                    && Mesg == other.Mesg
+                    && NamedValueSet.Equals(other.NamedValueSet)
+                    && Data.IsEqualTo(other.Data)
+                    && Emitted == other.Emitted
+                    && (!includeEmittedQpcTime || EmittedQpcTime == other.EmittedQpcTime)
+                    && EmittedDateTime == other.EmittedDateTime
+                    && ThreadID == other.ThreadID
+                    && Win32ThreadID == other.Win32ThreadID
+                    && ThreadName == other.ThreadName
+                    );
             }
         };
 

@@ -99,7 +99,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
 
         #endregion
 
-        #region Non-Serialized parts (primarily for Service to identify the Client Connection on which this parameter was recieved).
+        #region Non-Serialized parts (primarily for Service to identify the Client Connection on which this parameter was received).
 
         /// <summary>
         /// This non-serialized property is used by the Server side to record and track the client instances on which each Server side push call is handled.
@@ -208,7 +208,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
 
         #endregion
 
-        #region Non-Serialized parts (primarily for Service to identify the Client Connection on which each PushParameter was recieved).
+        #region Non-Serialized parts (primarily for Service to identify the Client Connection on which each PushParameter was received).
 
         /// <summary>
         /// This non-serialized property is used by the Server side to record and track the client instances on which each Server side push call is handled.
@@ -293,6 +293,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
         public bool IsNormalUpdateRecord { get { return (ID != 0 && Name == null); } }
 
         /// <summary>Returns the approximate size of the contents in bytes.</summary>
+        [Obsolete("The use of this property has been deprecated.  (2018-03-07)")]
         public int EstimatedContentSizeInBytes
         {
             get
@@ -1673,7 +1674,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
         /// generates and Push's these VPI's by including them in PushParameter that are given the api's Push method,
         /// and keeps track of how many PPItems have been pushed so that it keeps the outgoing connection busy without
         /// overloading the buffer space in either direction while still confirming that the PPItems are actually being processed by the other end,
-        /// informs the other end about its progess in processing the pushed items that it has recieved from the other end.
+        /// informs the other end about its progess in processing the pushed items that it has received from the other end.
         /// </summary>
         public void Service()
         {
@@ -1852,7 +1853,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
             if (IsStateInRegistrationPhase && IsClient)
             {
                 if (ppItem.VPIList == null || ppItem.VPIList.Count == 0)
-                    CompleteRegistrationPhase("recieved Push with no ValueItems [SeqNum:{0}]".CheckedFormat(ppItem.SeqNum));
+                    CompleteRegistrationPhase("received Push with no ValueItems [SeqNum:{0}]".CheckedFormat(ppItem.SeqNum));
                 else if (ppItem.VPIList[0].Name.IsNullOrEmpty())
                     CompleteRegistrationPhase("Recieved Pushed ValueItem with no Name [SeqNum:{0}]".CheckedFormat(ppItem.SeqNum));
             }

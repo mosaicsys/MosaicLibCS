@@ -235,7 +235,7 @@ namespace MosaicLib.SerialIO
             { }
         }
 
-        /// <summary>Returns an IGetNextPacketAction which may be executed to attempt to dequeue the next available Packet recieved by the Port.</summary>
+        /// <summary>Returns an IGetNextPacketAction which may be executed to attempt to dequeue the next available Packet received by the Port.</summary>
         public IGetNextPacketAction CreateGetNextPacketAction()
         {
             return new GetNextPacketAction(actionQ, PerformGetNextPacket, new ActionLogging("GetNextPacket", ActionLoggingTraceReference));

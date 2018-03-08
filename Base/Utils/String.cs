@@ -727,13 +727,15 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>Returns the sum of the estimated size of the contents of the given list of ValueContainers in bytes</summary>
+        [Obsolete("The use of this property has been deprecated.  (2018-03-07)")]
         public static int EstimatedContentSizeInBytes(this IList<ValueContainer> vcList)
         {
             return (vcList.Sum((vc) => vc.EstimatedContentSizeInBytes));
         }
 
         /// <summary>Returns the sum of the estimated size of the contents of the given array of ValueContainers in bytes</summary>
-        public static int EstimatedContentSizeInBytes(this ValueContainer [] vcArray)
+        [Obsolete("The use of this property has been deprecated.  (2018-03-07)")]
+        public static int EstimatedContentSizeInBytes(this ValueContainer[] vcArray)
         {
             return (vcArray.Sum((vc) => vc.EstimatedContentSizeInBytes));
         }

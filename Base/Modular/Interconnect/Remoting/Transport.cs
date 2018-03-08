@@ -977,7 +977,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                 }
                 else
                 {
-                    logger.Debug.Emit("{0} recieved with invalid IAR: AsyncState was not an AcceptTracker", Fcns.CurrentMethodName);
+                    logger.Debug.Emit("{0} received with invalid IAR: AsyncState was not an AcceptTracker", Fcns.CurrentMethodName);
                 }
 
                 HostNotifier.Notify();

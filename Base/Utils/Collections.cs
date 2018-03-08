@@ -855,7 +855,7 @@ namespace MosaicLib.Utils
                 }
             }
 
-            /// <summary>Gets the element at the enumerator's current "position".  Throws System.InvalidOperationExcpetion if the enumerator is positioned before the first element of the array or if it is positioned after the last element of the array.</summary>
+            /// <summary>Gets the element at the enumerator's current "position".  Throws System.InvalidOperationException if the enumerator is positioned before the first element of the array or if it is positioned after the last element of the array.</summary>
             /// <exception cref="System.InvalidOperationException">The enumerator is positioned before the first element of the array or if it is positioned after the last element of the array.</exception>
             object IEnumerator.Current
             {

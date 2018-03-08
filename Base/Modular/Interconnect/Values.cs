@@ -656,9 +656,9 @@ namespace MosaicLib.Modular.Interconnect.Values
 
             ValueTableEntry tableEntry = InnerGetValueTableEntry(name, metaDataIn, mergeBehavior);
 
-            IValueAccessor adapter = new ValueAccessorImpl(this, tableEntry);
+            IValueAccessor adapter = new ValueAccessorImpl(this, tableEntry, update: true);
 
-            return adapter.Update();
+            return adapter;
         }
 
         /// <summary>
@@ -668,13 +668,13 @@ namespace MosaicLib.Modular.Interconnect.Values
         public IValueAccessor<TValueType> GetValueAccessor<TValueType>(string name, INamedValueSet metaDataIn = null, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate)
         {
             if (String.IsNullOrEmpty(name))
-                return new ValueAccessorImpl<TValueType>(null, null);
+                return new ValueAccessorImpl<TValueType>(null, null, update: true);
 
             ValueTableEntry tableEntry = InnerGetValueTableEntry(name, metaDataIn, mergeBehavior);
 
-            IValueAccessor<TValueType> adapter = new ValueAccessorImpl<TValueType>(this, tableEntry);
+            IValueAccessor<TValueType> adapter = new ValueAccessorImpl<TValueType>(this, tableEntry, update: true);
 
-            return adapter.Update();
+            return adapter;
         }
 
         /// <summary>Returns an array of the names of all of the values in this interconnection table instance.</summary>
@@ -733,7 +733,7 @@ namespace MosaicLib.Modular.Interconnect.Values
 
             using (var scopedLock = new ScopedLock(mutex))
             {
-                return TableArray.Skip(startAtIndex).Take(maxNumItems.MapDefaultTo(int.MaxValue)).Where(tableEntry => tableItemFilter(tableEntry.Name, tableEntry.MetaData)).Select(tableEntry => new ValueAccessorImpl(this, tableEntry)).ToArray();
+                return TableArray.Skip(startAtIndex).Take(maxNumItems.MapDefaultTo(int.MaxValue)).Where(tableEntry => tableItemFilter(tableEntry.Name, tableEntry.MetaData)).Select(tableEntry => new ValueAccessorImpl(this, tableEntry, update: true)).ToArray();
             }
         }
 
@@ -1247,11 +1247,14 @@ namespace MosaicLib.Modular.Interconnect.Values
         internal class ValueAccessorImpl : IValueAccessor
         {
             /// <summary>Internal constructor.  Requires parent ValuesIterconnection instance and ValueTableEntry instance to which this accessor is attached.</summary>
-            public ValueAccessorImpl(ValuesInterconnection ivi, ValueTableEntry tableEntry)
+            public ValueAccessorImpl(ValuesInterconnection ivi, ValueTableEntry tableEntry, bool update = false)
             {
                 IVI = ivi;
                 TableEntry = tableEntry;
                 metaData = (tableEntry != null) ? tableEntry.MetaData : NamedValueSet.Empty;
+
+                if (update)
+                    InnerGuardedUpdateValueFromTableEntry();
             }
 
             /// <summary>Retains the ValuesInterconnection instance to which this accessor belongs, or null if there is none.</summary>
@@ -1507,8 +1510,8 @@ namespace MosaicLib.Modular.Interconnect.Values
         private class ValueAccessorImpl<TValueType> : ValueAccessorImpl, IValueAccessor<TValueType>
         {
             /// <summary>Internal constructor.  Requires parent ValuesIterconnection instance and ValueTableEntry instance to which this accessor is attached.</summary>
-            internal ValueAccessorImpl(ValuesInterconnection interconnectInstance, ValueTableEntry tableEntry)
-                : base(interconnectInstance, tableEntry)
+            internal ValueAccessorImpl(ValuesInterconnection interconnectInstance, ValueTableEntry tableEntry, bool update = false)
+                : base(interconnectInstance, tableEntry, update: update)
             {
                 typeOfTValueType = typeof(TValueType);
                 ValueContainer.DecodeType(typeOfTValueType, out decodedValueType, out decodedTypeIsNullable);

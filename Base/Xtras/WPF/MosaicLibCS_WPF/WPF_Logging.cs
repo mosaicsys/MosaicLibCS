@@ -83,14 +83,18 @@ namespace MosaicLib.WPF.Logging
         public string MesgEscaped { get { return lm.MesgEscaped; } }
         public byte[] Data { get { return lm.Data; } }
         public INamedValueSet NamedValueSet { get { return lm.NamedValueSet; } }
+        public bool Emitted { get { return lm.Emitted; } }
         public MosaicLib.Time.QpcTimeStamp EmittedQpcTime { get { return lm.EmittedQpcTime; } }
         public int SeqNum { get { return lm.SeqNum; } }
         public int ThreadID { get { return lm.ThreadID; } }
         public int Win32ThreadID { get { return lm.Win32ThreadID; } }
+        public string ThreadName { get { return lm.ThreadName; } }
         public DateTime EmittedDateTime { get { return lm.EmittedDateTime; } }
         public string GetFormattedDateTime() { return lm.GetFormattedDateTime(); }
         public string GetFormattedDateTime(MosaicLib.Utils.Dates.DateTimeFormat dtFormat) { return lm.GetFormattedDateTime(dtFormat); }
         public string DisplayTime { get { return EmittedDateTime.ToString("HH:mm:ss.ffffff"); } }
+
+        public bool Equals(Logging.ILogMessage other) { return other != null && other.Equals(this); }
 
         #endregion
     }

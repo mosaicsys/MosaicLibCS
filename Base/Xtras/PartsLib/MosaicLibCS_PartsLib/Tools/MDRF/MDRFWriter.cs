@@ -1675,7 +1675,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
                     generatedHeaderList.Clear();
 
                 generatedHeaderList.AppendU4Auto(unchecked((UInt32)blockTypeID32));
-                generatedHeaderList.AppendU4Auto(unchecked((UInt32)(overridePayloadCount.MapDefaultTo(payloadDataList.Count))));
+                generatedHeaderList.AppendU4Auto(unchecked((UInt32)((overridePayloadCount != 0) ? overridePayloadCount : payloadDataList.Count)));
             }
 
             /// <summary>
@@ -1817,7 +1817,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
                 }
                 else
                 {
-                    bool different = groupPointInfo.VCIsUsable && (groupTracker.writeAll || !lastServicedValue.Equals(groupPointInfo.VC));
+                    bool different = groupPointInfo.VCIsUsable && (touched || groupTracker.writeAll || !lastServicedValue.Equals(groupPointInfo.VC));
 
                     if (different)
                         lastServicedValue = groupPointInfo.VC;

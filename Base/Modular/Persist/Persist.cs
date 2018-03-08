@@ -74,7 +74,7 @@ namespace MosaicLib.Modular.Persist
         bool LoadNoThrow();
 
         /// <summary>Attempts to Read each of the files in the ring and returns the oldest valid deserialized object as measured by the contents of the PersistedVersionSequenceNumber</summary>
-        /// <returns>True if a valid file was found and loaded, false or throw PersistentStorageExcpetion (based on allowThrow) if no valid ring file was found (Object is set as new ObjType()).</returns>
+        /// <returns>True if a valid file was found and loaded, false or throw PersistentStorageException (based on allowThrow) if no valid ring file was found (Object is set as new ObjType()).</returns>
         /// <exception cref="PersistentStorageException">if allowThrow is true then this method throws PersistentStorageException on failure to load or parse any existing file in the ring or if there are not valid files in the ring.  If possible Object will be updated with most recent file prior to throwing the report of such a failure.</exception>
         /// <param name="allowThrow">Pass true to allow called method to throw on any error or false to prevent it from doing so.</param>
         bool Load(bool allowThrow);
@@ -630,7 +630,7 @@ namespace MosaicLib.Modular.Persist
         }
 
         /// <summary>Attempts to Read each of the files in the ring and returns the oldest valid deserialized object as measured by the contents of the PersistedVersionSequenceNumber</summary>
-        /// <returns>True if a valid file was found and loaded, false or throw PersistentStorageExcpetion (based on allowThrow) if no valid ring file was found (Object is set as new ObjType()).</returns>
+        /// <returns>True if a valid file was found and loaded, false or throw PersistentStorageException (based on allowThrow) if no valid ring file was found (Object is set as new ObjType()).</returns>
         /// <exception cref="PersistentStorageException">if allowThrow is true then this method throws PersistentStorageException on failure to load or parse any existing file in the ring or if there are not valid files in the ring.  If possible Object will be updated with most recent file prior to throwing the report of such a failure.</exception>
         /// <param name="allowThrow">Pass true to allow called method to throw on any error or false to prevent it from doing so.</param>
         public bool Load(bool allowThrow)

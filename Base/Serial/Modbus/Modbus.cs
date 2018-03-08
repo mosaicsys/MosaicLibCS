@@ -830,7 +830,7 @@ namespace MosaicLib.SerialIO.Modbus
                         break;
                 }
 
-                return true;    // we have recieved a complete response, even if it is not a valid one.
+                return true;    // we have received a complete response, even if it is not a valid one.
             }
 
             /// <summary>
@@ -943,7 +943,7 @@ namespace MosaicLib.SerialIO.Modbus
                 if (String.IsNullOrEmpty(ecStr))
                     ecStr = DecodeRxPkt();
 
-                return true;    // we have recieved a complete response, even if it is not a valid one.
+                return true;    // we have received a complete response, even if it is not a valid one.
             }
 
             /// <summary>

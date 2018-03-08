@@ -21,9 +21,10 @@
 
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.Serialization;
+using System.Text;
 
 using MosaicLib.Modular.Action;
 using MosaicLib.Modular.Common;
@@ -1258,7 +1259,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
                         try
                         {
-                            if (pushItem.itemFlags != PushItemFlags.None)
+                            if (pushItem.itemLength > 0)
                                 pushItem.data = dataDCA.ReadObject(ms);
                         }
                         catch (System.Exception ex)
@@ -1272,6 +1273,10 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
                             pushItem.data = data;
                         }
 
+                        logger.Trace.Emit("Processing received PushItem: {0}", pushItem);
+
+                        int id = Math.Abs(pushItem.idPlusOne) - 1;
+
                         switch (pushItem.itemType)
                         {
                             case PushItemType.Register:
@@ -1279,39 +1284,42 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
                                     string localFullName = (pushItem.data.suffixName != null ? String.Concat(localNamePrefix, pushItem.data.suffixName) : null);
                                     string suffixName = pushItem.data.suffixName.MapNullToEmpty();
 
-                                    IVATracker existingIVATracker = stringToIVATrackerDictionary.SafeTryGetValue(suffixName);
+                                    IVATracker preexistingIVATracker = stringToIVATrackerDictionary.SafeTryGetValue(suffixName);
 
-                                    IValueAccessor iva = (existingIVATracker != null ? existingIVATracker.iva : ivi.GetValueAccessor(localFullName));
+                                    IValueAccessor iva = (preexistingIVATracker != null ? preexistingIVATracker.iva : ivi.GetValueAccessor(localFullName));
 
-                                    if (pushItem.data.vce != null)
-                                        iva.Set(pushItem.data.vce.VC);
+                                    if (pushItem.ItemFlagsHasInlineVC)
+                                        iva.Set(pushItem.inlineVC);
+                                    else if ((pushItem.itemFlags & PushItemFlags.HasVCE) != 0)
+                                        iva.Set((pushItem.data.vce != null) ? pushItem.data.vce.VC : default(ValueContainer));
 
                                     IVATracker ivaTracker = new IVATracker()
                                     {
-                                        id = pushItem.id,
+                                        id = id,
                                         suffixName = suffixName,
                                         iva = iva,
                                         isInitiator = false,
-                                        isDuplicate = (existingIVATracker != null),
+                                        isDuplicate = (preexistingIVATracker != null),
                                         lastValueSeqNum = iva.ValueSeqNum,
                                         lastMDSeqNum = iva.MetaDataSeqNum,
                                         pushItem = new PushItem()
                                         {
-                                            id = pushItem.id,
+                                            idPlusOne = pushItem.idPlusOne,
                                         },
                                     };
 
-                                    if (pushItem.data.mdNVS != null)
+                                    if ((pushItem.itemFlags & PushItemFlags.HasMDNVS) != 0)
                                     {
-                                        iva.SetMetaData(pushItem.data.mdNVS, mergeBehavior: NamedValueMergeBehavior.AddAndUpdate);
+                                        if (pushItem.data.mdNVS != null)
+                                            iva.SetMetaData(pushItem.data.mdNVS, mergeBehavior: NamedValueMergeBehavior.AddAndUpdate);
                                         ivaTracker.lastMDSeqNum = iva.MetaDataSeqNum;
                                     }
 
-                                    while (pushItem.id >= remotelyAssignedIVATrackerList.Count)
+                                    while (id >= remotelyAssignedIVATrackerList.Count)
                                         remotelyAssignedIVATrackerList.Add(null);
 
-                                    remotelyAssignedIVATrackerList[pushItem.id] = ivaTracker;
-                                    if (existingIVATracker != null)
+                                    remotelyAssignedIVATrackerList[id] = ivaTracker;
+                                    if (preexistingIVATracker == null)
                                         stringToIVATrackerDictionary[suffixName] = ivaTracker;
 
                                     updateArraysNeeded = true;
@@ -1332,32 +1340,38 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
                                         updateArraysNeeded = false;
                                     }
 
-                                    IVATracker ivaTracker = ((pushItem.itemType == PushItemType.InitiatorUpdate) ? remotelyAssignedIVATrackerArray : locallyAssignedIVATrackerArray).SafeAccess(pushItem.id);
+                                    IVATracker ivaTracker = ((pushItem.itemType == PushItemType.InitiatorUpdate) ? remotelyAssignedIVATrackerArray : locallyAssignedIVATrackerArray).SafeAccess(id);
 
                                     if (ivaTracker != null && pushItem.data != null)
                                     {
                                         IValueAccessor iva = ivaTracker.iva;
                                         PushItemData data = pushItem.data;
 
-                                        if (data.vce != null)
+                                        if (pushItem.ItemFlagsHasInlineVC)
                                         {
-                                            iva.SetIfDifferent(data.vce.VC);
+                                            iva.SetIfDifferent(pushItem.inlineVC);
+                                            ivaTracker.lastValueSeqNum = iva.ValueSeqNum;
+                                        }
+                                        else if ((pushItem.itemFlags & PushItemFlags.HasVCE) != 0)
+                                        {
+                                            iva.SetIfDifferent((data.vce != null) ? data.vce.VC : default(ValueContainer));
                                             ivaTracker.lastValueSeqNum = iva.ValueSeqNum;
                                         }
 
-                                        if (data.mdNVS != null)
+                                        if ((pushItem.itemFlags & PushItemFlags.HasMDNVS) != 0)
                                         {
-                                            ivaTracker.iva.SetMetaData(data.mdNVS, mergeBehavior: NamedValueMergeBehavior.AddAndUpdate);
+                                            if (data.mdNVS != null)
+                                                ivaTracker.iva.SetMetaData(data.mdNVS, mergeBehavior: NamedValueMergeBehavior.AddAndUpdate);
                                             ivaTracker.lastMDSeqNum = iva.MetaDataSeqNum;
                                         }
 
-                                        if (data.failureCode != null)
+                                        if ((pushItem.itemFlags & PushItemFlags.HasFailureCode) != 0)
                                         {
                                             logger.Debug.Emit("{0}: push item {1} received with (or generated) failureCode: {2}", Fcns.CurrentMethodName, pushItem, data.failureCode);
 
                                             if (data.vce == null)
                                             {
-                                                iva.Set("Received failure code: {0}".CheckedFormat(data.failureCode));
+                                                iva.Set("Received failure code: {0}".CheckedFormat(data.failureCode ?? "[NullFailureCode]"));
                                                 ivaTracker.lastValueSeqNum = iva.ValueSeqNum;
                                             }
                                         }
@@ -1431,7 +1445,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
                             try
                             {
-                                if (pushItem.itemFlags != PushItemFlags.None)
+                                if (pushItem.ItemFlagsIncludesSerializedPayload)
                                 {
                                     ms = GetEmptyMemoryStreamIfNeeded();
 
@@ -1448,9 +1462,9 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
                                 pushItem.itemFlags = PushItemFlags.HasFailureCode;
 
-                                PushItemData data = new PushItemData() { failureCode = failureCode };
+                                PushItemData failureCodePushItemData = new PushItemData() { failureCode = failureCode };
 
-                                dataDCA.WriteObject(data, ms);
+                                dataDCA.WriteObject(failureCodePushItemData, ms);
                             }
 
                             pushItem.itemLength = (ms != null) ? unchecked((int)ms.Length) : 0;
@@ -1461,6 +1475,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
                             {
                                 ms.WriteTo(mesgOStream);
                             }
+
+                            logger.Trace.Emit("Serialized PushItem: {0}", pushItem);
                         }
                     }
                 }
@@ -1546,30 +1562,64 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
         {
             for (int idx = 0; idx < updateCount; idx++)
             {
-                var ivaTracker = locallyAssignedUpdateIVATrackerArray[idx];
-                var iva = ivaTracker.iva;
-                var pushItem = ivaTracker.pushItem;
-                var pushItemData = pushItem.data;
-
-                pushItem.itemType = (ivaTracker.isInitiator ? PushItemType.InitiatorUpdate : PushItemType.AcceptorUpdate);
-
-                UInt32 ivaValueSeqNum = iva.ValueSeqNum;
-                UInt32 ivaMetaDataSeqNum = iva.MetaDataSeqNum;
-
-                pushItemData.suffixName = null;
-                pushItemData.vce = (ivaTracker.lastValueSeqNum != ivaValueSeqNum) ? new ValueContainerEnvelope() { VC = iva.VC } : null;
-                pushItemData.mdNVS = (ivaTracker.lastMDSeqNum != ivaMetaDataSeqNum) ? iva.MetaData.ConvertToReadOnly().MapEmptyToNull() : null;
-                pushItemData.failureCode = null;
-
-                pushItem.itemFlags = ((pushItemData.vce != null) ? PushItemFlags.HasVCE : PushItemFlags.None) | ((pushItemData.mdNVS != null) ? PushItemFlags.HasMDNVS : PushItemFlags.None);
-
-                ivaTracker.lastValueSeqNum = ivaValueSeqNum;
-                ivaTracker.lastMDSeqNum = ivaMetaDataSeqNum;
-
-                pushItem.pending = true;
-
-                pendingPushItemList.Add(pushItem);
+                UpdateAndEnqueueUpdatePushItem(locallyAssignedUpdateIVATrackerArray[idx]);
             };
+        }
+
+        private void UpdateAndEnqueueUpdatePushItem(IVATracker ivaTracker)
+        {
+            var iva = ivaTracker.iva;
+            var pushItem = ivaTracker.pushItem;
+            var pushItemData = pushItem.data;
+
+            pushItem.itemType = (ivaTracker.isInitiator ? PushItemType.InitiatorUpdate : PushItemType.AcceptorUpdate);
+
+            UInt32 ivaValueSeqNum = iva.ValueSeqNum;
+            UInt32 ivaMetaDataSeqNum = iva.MetaDataSeqNum;
+
+            ValueContainer vc = iva.VC;
+            bool useInlineVC = UseInlineVC(vc.cvt);
+
+            pushItem.itemFlags = PushItemFlags.None;
+
+            if (ivaTracker.lastValueSeqNum != ivaValueSeqNum)
+            {
+                if (useInlineVC)
+                {
+                    pushItem.itemFlags |= PushItemFlags.HasInlineVC;
+                    pushItem.inlineVC = vc;
+                    pushItemData.vce = null;
+                }
+                else
+                {
+                    pushItem.itemFlags |= PushItemFlags.HasVCE;
+                    pushItemData.vce = (ivaTracker.lastValueSeqNum != ivaValueSeqNum) ? new ValueContainerEnvelope() { VC = iva.VC } : null;
+                    pushItem.inlineVC = default(ValueContainer);
+                }
+            }
+            else
+            {
+                pushItem.inlineVC = default(ValueContainer);
+                pushItemData.vce = null;
+            }
+
+            if (ivaTracker.lastMDSeqNum != ivaMetaDataSeqNum)
+            {
+                pushItem.itemFlags |= PushItemFlags.HasMDNVS;
+                pushItemData.mdNVS = iva.MetaData.ConvertToReadOnly().MapEmptyToNull();
+            }
+
+            pushItemData.suffixName = null;
+            pushItemData.failureCode = null;
+
+            ivaTracker.lastValueSeqNum = ivaValueSeqNum;
+            ivaTracker.lastMDSeqNum = ivaMetaDataSeqNum;
+
+            pushItem.pending = true;
+
+            pendingPushItemList.Add(pushItem);
+
+            logger.Trace.Emit("Update enqueued PushItem: {0}", pushItem);
         }
 
         private void ServiceRegistration()
@@ -1600,6 +1650,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
                 ValueContainer vc = iva.VC;
                 NamedValueSet mdNVS = iva.MetaData.ConvertToReadOnly().MapEmptyToNull();
 
+                bool useInlineVC = UseInlineVC(vc.cvt);
+                int idPlusOne = id + 1;
                 IVATracker ivaTracker = new IVATracker()
                 {
                     id = id,
@@ -1610,13 +1662,14 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
                     lastMDSeqNum = iva.MetaDataSeqNum,
                     pushItem = new PushItem()
                     {
-                        id = id,
+                        idPlusOne = isClientSide ? idPlusOne : -idPlusOne,
                         itemType = PushItemType.Register,
-                        itemFlags = PushItemFlags.HasSuffixName | PushItemFlags.HasVCE | (mdNVS != null ? PushItemFlags.HasMDNVS : PushItemFlags.None),
+                        itemFlags = PushItemFlags.HasSuffixName | (useInlineVC ? PushItemFlags.HasInlineVC : PushItemFlags.HasVCE) | (mdNVS != null ? PushItemFlags.HasMDNVS : PushItemFlags.None),
+                        inlineVC = (useInlineVC ? vc : default(ValueContainer)),
                         data = new PushItemData()
                         {
                             suffixName = suffixName,
-                            vce = new ValueContainerEnvelope() { VC = vc },
+                            vce = (!useInlineVC ? (new ValueContainerEnvelope() { VC = vc }) : null),
                             mdNVS = mdNVS,
                         },
                         pending = true,
@@ -1624,6 +1677,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
                 };
 
                 pendingPushItemList.Add(ivaTracker.pushItem);
+
+                logger.Trace.Emit("Registration enqueued PushItem: {0}", ivaTracker.pushItem);
 
                 locallyAssignedIVATrackerList.Add(ivaTracker);
                 stringToIVATrackerDictionary[suffixName] = ivaTracker;
@@ -1642,6 +1697,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
             UpdateTrackerArrays();
         }
+
+        private static bool UseInlineVC(ContainerStorageType cst) { return (cst.IsValueType() || cst.IsNone()); }
 
         int filterApplicationCount = 0;
 
@@ -1689,6 +1746,9 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
             HasVCE = 0x02,
             HasMDNVS = 0x04,
             HasFailureCode = 0x08,
+            HasInlineVC = 0x10,
+            UseShortID = 0x20,
+            UseIntID = 0x40,
         }
 
         public class PushItem
@@ -1697,23 +1757,96 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
             public PushItemType itemType;
             public PushItemFlags itemFlags;
-            public int id;
+            public int idPlusOne;
+            public ValueContainer inlineVC;
             public int itemLength;
+
+            public bool ItemFlagsHasInlineVC { get { return ((itemFlags & PushItemFlags.HasInlineVC) != 0); } }
+            public bool ItemFlagsIncludesSerializedPayload { get { return ((itemFlags & ~PushItemFlags.HasInlineVC) != PushItemFlags.None); } }
 
             public void WritePartsInto(System.IO.BinaryWriter bw)
             {
+                if ((itemFlags & (PushItemFlags.UseIntID | PushItemFlags.UseShortID)) == 0)
+                {
+                    if (!idPlusOne.IsInRange(-32768, 32767))
+                        itemFlags |= PushItemFlags.UseIntID;
+                    else if (!idPlusOne.IsInRange(-128, 127))
+                        itemFlags |= PushItemFlags.UseShortID;
+                }
+
                 bw.Write(unchecked((byte)itemType));
                 bw.Write(unchecked((byte)itemFlags));
-                bw.Write(id);
-                bw.Write(itemLength);
+
+                if ((itemFlags & PushItemFlags.UseIntID) != 0)
+                    bw.Write(idPlusOne);
+                else if ((itemFlags & PushItemFlags.UseIntID) != 0)
+                    bw.Write(unchecked((short) idPlusOne));
+                else
+                    bw.Write(unchecked((sbyte)idPlusOne));
+
+                if (ItemFlagsHasInlineVC)
+                {
+                    bw.Write(unchecked((byte) inlineVC.cvt));
+                    switch (inlineVC.cvt)
+                    {
+                        case ContainerStorageType.None: break;
+                        case ContainerStorageType.Bo: bw.Write(inlineVC.u.b); break;
+                        case ContainerStorageType.Bi: bw.Write(inlineVC.u.bi); break;
+                        case ContainerStorageType.I1: bw.Write(inlineVC.u.i8); break;
+                        case ContainerStorageType.I2: bw.Write(inlineVC.u.i16); break;
+                        case ContainerStorageType.I4: bw.Write(inlineVC.u.i32); break;
+                        case ContainerStorageType.I8: bw.Write(inlineVC.u.i64); break;
+                        case ContainerStorageType.U1: bw.Write(inlineVC.u.u8); break;
+                        case ContainerStorageType.U2: bw.Write(inlineVC.u.u16); break;
+                        case ContainerStorageType.U4: bw.Write(inlineVC.u.u32); break;
+                        case ContainerStorageType.U8: bw.Write(inlineVC.u.u64); break;
+                        case ContainerStorageType.F4: bw.Write(inlineVC.u.f32); break;
+                        case ContainerStorageType.F8: bw.Write(inlineVC.u.f64); break;
+                        default: break;
+                    }
+                }
+
+                if (ItemFlagsIncludesSerializedPayload)
+                    bw.Write(itemLength);
             }
 
             public void ReadPartsFrom(System.IO.BinaryReader br, bool andClearRest = true)
             {
                 itemType = unchecked((PushItemType)br.ReadByte());
                 itemFlags = unchecked((PushItemFlags)br.ReadByte());
-                id = br.ReadInt32();
-                itemLength = br.ReadInt32();
+
+                if ((itemFlags & PushItemFlags.UseIntID) != 0)
+                    idPlusOne = br.ReadInt32();
+                else if ((itemFlags & PushItemFlags.UseIntID) != 0)
+                    idPlusOne = br.ReadInt16();
+                else
+                    idPlusOne = br.ReadSByte();
+
+                if (ItemFlagsHasInlineVC)
+                {
+                    switch (inlineVC.cvt = unchecked((ContainerStorageType)br.ReadByte()))
+                    {
+                        case ContainerStorageType.None: break;
+                        case ContainerStorageType.Bo: inlineVC.u.b = br.ReadBoolean(); break;
+                        case ContainerStorageType.Bi: inlineVC.u.bi = br.ReadByte(); break;
+                        case ContainerStorageType.I1: inlineVC.u.i8 = br.ReadSByte(); break;
+                        case ContainerStorageType.I2: inlineVC.u.i16 = br.ReadInt16(); break;
+                        case ContainerStorageType.I4: inlineVC.u.i32 = br.ReadInt32(); break;
+                        case ContainerStorageType.I8: inlineVC.u.i64 = br.ReadInt64(); break;
+                        case ContainerStorageType.U1: inlineVC.u.u8 = br.ReadByte(); break;
+                        case ContainerStorageType.U2: inlineVC.u.u16 = br.ReadUInt16(); break;
+                        case ContainerStorageType.U4: inlineVC.u.u32 = br.ReadUInt32(); break;
+                        case ContainerStorageType.U8: inlineVC.u.u64 = br.ReadUInt64(); break;
+                        case ContainerStorageType.F4: inlineVC.u.f32 = br.ReadSingle(); break;
+                        case ContainerStorageType.F8: inlineVC.u.f64 = br.ReadDouble(); break;
+                    }
+                }
+                else if (!inlineVC.IsEmpty)
+                {
+                    inlineVC = default(ValueContainer);
+                }
+
+                itemLength = ItemFlagsIncludesSerializedPayload ? br.ReadInt32() : 0;
 
                 if (andClearRest)
                 {
@@ -1736,7 +1869,9 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
             public override string ToString()
             {
-                return "{0} id:{1} flags:{2} len:{3}".CheckedFormat(itemType, id, itemFlags, itemLength);
+                string inlineVCStr = (itemFlags.IsSet(PushItemFlags.HasInlineVC) ? " "+inlineVC.ToStringSML() : "");
+                string dataStr = (ItemFlagsIncludesSerializedPayload ? " data:[{0}]".CheckedFormat(data) : "");
+                return "{0} idp1:{1} flags:[{2}] len:{3}{4}{5}".CheckedFormat(itemType, idPlusOne, itemFlags, itemLength, inlineVCStr, dataStr);
             }
         }
 
@@ -1754,6 +1889,31 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
             [DataMember(Order = 400, EmitDefaultValue = false, IsRequired = false)]
             public string failureCode;
+
+            public bool IsEmpty { get { return (suffixName == null && vce == null && mdNVS == null && failureCode == null); } }
+
+            public override string ToString()
+            {
+                StringBuilder sb = new StringBuilder();
+                if (suffixName != null)
+                    sb.CheckedAppendFormat("suffix:'{0}'", suffixName);
+                if (sb.Length > 0)
+                    sb.Append(" ");
+                if (vce != null)
+                    sb.CheckedAppendFormat("vce:{0}", vce);
+                if (sb.Length > 0)
+                    sb.Append(" ");
+                if (mdNVS != null)
+                    sb.CheckedAppendFormat("md:{0}", mdNVS.ToStringSML());
+                if (sb.Length > 0)
+                    sb.Append(" ");
+                if (failureCode != null)
+                    sb.CheckedAppendFormat("failureCode:'{0}'", failureCode);
+                if (sb.Length == 0)
+                    sb.Append("[Empty]");
+
+                return sb.ToString();
+            }
         }
 
         #endregion
@@ -1767,7 +1927,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
     {
         public MessageStreamToolBase(string loggingSourceStrPart, string hostPartID, int stream, INotifyable hostNotifier, Buffers.BufferPool bufferPool)
         {
-            logger = new Logging.Logger("{0}.{1}.s{1}".CheckedFormat(hostPartID, loggingSourceStrPart, stream), groupName: Logging.LookupDistributionGroupName);
+            logger = new Logging.Logger("{0}.{1}.s{2}".CheckedFormat(hostPartID, loggingSourceStrPart, stream), groupName: Logging.LookupDistributionGroupName);
 
             HostPartID = hostPartID;
             Stream = stream;

@@ -570,7 +570,7 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        #region IList methods (ConvertToReadOnly, ConvertToWriteable)
+        #region IList<TItemType> methods (ConvertToReadOnly, ConvertToWriteable)
 
         /// <summary>
         /// Extension method either returns the given <paramref name="iListIn"/> (if it is alread a ReadOnlyIList instance) or returns a new ReadOnlyIList{TItemType} if the given <paramref name="iListIn"/>, or null if the given <paramref name="iListIn"/> is null and <paramref name="mapNullToEmpty"/> is false.
@@ -591,6 +591,50 @@ namespace MosaicLib.Utils
                 return !iListIn.IsReadOnly ? iListIn : new List<TItemType>(iListIn);
             else
                 return mapNullToEmpty ? new List<TItemType>() : null;
+        }
+
+        #endregion
+
+        #region IEnumerable methods (SafeToSet variants) - for use with IEnumerable, ICollection, and IList derived objects
+
+        /// <summary>
+        /// Non-generic IEnumerable centric method to allow IEnumerable contents to be injected into other LINQ expressions.
+        /// Returns an IEnumerable set of the objects found in the given <paramref name="set"/>.
+        /// If the given <paramref name="set"/> is null then the <paramref name="mapNullToEmpty"/> parameter determines if this method returns null (false) or an empty set (true - default)
+        /// </summary>
+        public static IEnumerable<object> SafeToSet(this IEnumerable set, bool mapNullToEmpty = true)
+        {
+            return set.SafeToSet<object>(mapNullToEmpty: mapNullToEmpty);
+        }
+
+        /// <summary>
+        /// Non-generic IEnumerable centric method to allow IEnumerable contents to be injected into other LINQ expressions.
+        /// Returns an IEnumerable set of the given <typeparamref name="TItemType"/> objects found in the given <paramref name="set"/>.  Members of the given <paramref name="set"/> that are not of the given <typeparamref name="TItemType"/> will not be included in the set.
+        /// To guarantee that all objects from the set are returned, the caller should pass <typeparamref name="TItemType"/> as System.Object.
+        /// If the given <paramref name="set"/> is null then the <paramref name="mapNullToEmpty"/> parameter determines if this method returns null (false) or an empty set (true - default)
+        /// </summary>
+        public static IEnumerable<TItemType> SafeToSet<TItemType>(this IEnumerable set, bool mapNullToEmpty = true)
+        {
+            if (set == null)
+                return (mapNullToEmpty ? Collections.EmptyArrayFactory<TItemType>.Instance : null);
+
+            bool itemTypeIsObject = (typeof(TItemType) == typeof(object));
+
+            return InnerSafeToSet<TItemType>(set, itemTypeIsObject);
+        }
+
+        /// <summary>
+        /// Inner method used to support IEnumerable SafeToSet variants
+        /// </summary>
+        private static IEnumerable<TItemType> InnerSafeToSet<TItemType>(IEnumerable set, bool itemTypeIsObject)
+        {
+            foreach (var obj in set)
+            {
+                if (obj is TItemType || itemTypeIsObject)
+                    yield return ((TItemType) obj);
+            }
+
+            yield break;
         }
 
         #endregion
@@ -1225,7 +1269,7 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        #region Linq extensions (DoForEach, Concat, FilterAndRemove)
+        #region Linq extensions (DoForEach, Concat, FilterAndRemove, WhereIsNotDefault)
 
         /// <summary>
         /// Simple DoForEach helper method for use with Linq.  Applies the given action to each of the {TSource} items in the given source set.
@@ -1360,6 +1404,16 @@ namespace MosaicLib.Utils
             }
 
             yield break;
+        }
+
+        /// <summary>
+        /// Linq type extension method that processes a given <paramref name="set"/> and returns a set of the given items that are not equal to the default for the given <typeparamref name="TItemType"/>.
+        /// Uses the given <paramref name="eqCmp"/> equality comparer or the default one for <typeparamref name="TItemType"/> if the caller does not explicitly provide a non-default <paramref name="eqCmp"/> instance to use.
+        /// </summary>
+        public static IEnumerable<TItemType> WhereIsNotDefault<TItemType>(this IEnumerable<TItemType> set, IEqualityComparer<TItemType> eqCmp = null)
+        {
+            eqCmp = eqCmp ?? EqualityComparer<TItemType>.Default;
+            return (set ?? Collections.EmptyArrayFactory<TItemType>.Instance).Where(item => !eqCmp.Equals(item, default(TItemType)));
         }
 
         #endregion
@@ -1703,14 +1757,24 @@ namespace MosaicLib.Utils
         public static int MapToInt(this bool value) { return (value ? 1 : 0); }
 
         /// <summary>
-        /// Generalized version of Map method.  If the given value does not Equals default(TValueType) then return the value, otherwise return replaceDefultWith.
+        /// MapDefaultTo method:
+        /// (for value types):  If the given <paramref name="value"/> is not Equals(default(<typeparamref name="TValueType"/>)) then return the value, otherwise return <paramref name="replaceDefaultWith"/>.
+        /// (for reference types):  If the given <paramref name="value"/> is not null then return the value, otherwise return <paramref name="replaceDefaultWith"/>.
         /// </summary>
         public static TValueType MapDefaultTo<TValueType>(this TValueType value, TValueType replaceDefaultWith)
         {
-            if (!Object.Equals(value, default(TValueType)))
-                return value;
-            else
+            if (value == null)
                 return replaceDefaultWith;
+
+            Type t = typeof(TValueType);
+
+            if (!t.IsValueType || t.IsNullable())       // we already know that it is not null
+                return value;
+
+            if (value is IEquatable<TValueType>)
+                return (!((IEquatable<TValueType>) value).Equals(default(TValueType)) ? value : replaceDefaultWith);
+
+            return (!System.Object.Equals(value, default(TValueType)) ? value : replaceDefaultWith);
         }
 
         #endregion

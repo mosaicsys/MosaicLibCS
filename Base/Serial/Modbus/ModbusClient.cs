@@ -400,7 +400,7 @@ namespace MosaicLib.SerialIO.Modbus.Client
         /// <summary>Gives the QpcTimeStamp of the last time the ClientFunctionState was internally assigned.</summary>
         public QpcTimeStamp ClientFunctionStateTime { get; set; }
 
-        /// <summary>Gives an ExceptionCode that was returned in the command response or ExcpetionCode.Custom if the failure came from some other source.</summary>
+        /// <summary>Gives an ExceptionCode that was returned in the command response or ExceptionCode.Custom if the failure came from some other source.</summary>
         public ExceptionCode ExceptionCode { get; set; }
         /// <summary>Set to true if this exception code was obtained from the resonseADU body.</summary>
         public bool ExceptionCodeIsFromResponse { get; set; }

@@ -494,130 +494,201 @@ namespace MosaicLib.Modular.Reflection
                     return null;
 
                 IAnnotatedItemAttribute itemAttribute = itemInfo.IAnnotatedItemAttribute;
-                ContainerStorageType useStorageType = ContainerStorageType.None;
-                bool isNullable = false;
+
+                ValueContainer.DecodedTypeInfo dti = ValueContainer.GetDecodedTypeInfo(itemInfo.ItemType);
+                ContainerStorageType useStorageType = dti.cst;
+                bool isNullable = dti.isNullable;
                 Func<TAnnotatedClass, ValueContainer> vcGetter = null;
 
-                ValueContainer.DecodeType(itemInfo.ItemType, out useStorageType, out isNullable);
                 if (itemAttribute != null && !itemAttribute.StorageType.IsNone())
                     useStorageType = itemAttribute.StorageType;
 
                 bool silenceIssues = (itemAttribute != null ? itemAttribute.SilenceIssues : false);
+                bool canUseQuickSetValue = (useStorageType == dti.cst);
 
                 if (itemInfo.ItemType == typeof(bool))
                 {
                     Func<TAnnotatedClass, bool> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, bool>(itemInfo);
-                    vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<bool>(pfGetter(annotatedInstance), useStorageType, isNullable); };
+                    if (canUseQuickSetValue)
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<bool>(pfGetter(annotatedInstance)); };
+                    else
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<bool>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
                 else if (itemInfo.ItemType == typeof(sbyte))
                 {
                     Func<TAnnotatedClass, sbyte> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, sbyte>(itemInfo);
-                    vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<sbyte>(pfGetter(annotatedInstance), useStorageType, isNullable); };
+                    if (canUseQuickSetValue)
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<sbyte>(pfGetter(annotatedInstance)); };
+                    else
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<sbyte>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
                 else if (itemInfo.ItemType == typeof(short))
                 {
                     Func<TAnnotatedClass, short> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, short>(itemInfo);
-                    vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<short>(pfGetter(annotatedInstance), useStorageType, isNullable); };
+                    if (canUseQuickSetValue)
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<short>(pfGetter(annotatedInstance)); };
+                    else
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<short>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
                 else if (itemInfo.ItemType == typeof(int))
                 {
                     Func<TAnnotatedClass, int> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, int>(itemInfo);
-                    vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<int>(pfGetter(annotatedInstance), useStorageType, isNullable); };
+                    if (canUseQuickSetValue)
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<int>(pfGetter(annotatedInstance)); };
+                    else
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<int>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
                 else if (itemInfo.ItemType == typeof(long))
                 {
                     Func<TAnnotatedClass, long> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, long>(itemInfo);
-                    vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<long>(pfGetter(annotatedInstance), useStorageType, isNullable); };
+                    if (canUseQuickSetValue)
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<long>(pfGetter(annotatedInstance)); };
+                    else
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<long>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
                 else if (itemInfo.ItemType == typeof(byte))
                 {
                     Func<TAnnotatedClass, byte> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, byte>(itemInfo);
-                    vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<byte>(pfGetter(annotatedInstance), useStorageType, isNullable); };
+                    if (canUseQuickSetValue)
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<byte>(pfGetter(annotatedInstance)); };
+                    else
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<byte>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
                 else if (itemInfo.ItemType == typeof(ushort))
                 {
                     Func<TAnnotatedClass, ushort> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, ushort>(itemInfo);
-                    vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<ushort>(pfGetter(annotatedInstance), useStorageType, isNullable); };
+                    if (canUseQuickSetValue)
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<ushort>(pfGetter(annotatedInstance)); };
+                    else
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<ushort>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
                 else if (itemInfo.ItemType == typeof(uint))
                 {
                     Func<TAnnotatedClass, uint> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, uint>(itemInfo);
-                    vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<uint>(pfGetter(annotatedInstance), useStorageType, isNullable); };
+                    if (canUseQuickSetValue)
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<uint>(pfGetter(annotatedInstance)); };
+                    else
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<uint>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
                 else if (itemInfo.ItemType == typeof(ulong))
                 {
                     Func<TAnnotatedClass, ulong> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, ulong>(itemInfo);
-                    vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<ulong>(pfGetter(annotatedInstance), useStorageType, isNullable); };
+                    if (canUseQuickSetValue)
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<ulong>(pfGetter(annotatedInstance)); };
+                    else
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<ulong>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
                 else if (itemInfo.ItemType == typeof(float))
                 {
                     Func<TAnnotatedClass, float> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, float>(itemInfo);
-                    vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<float>(pfGetter(annotatedInstance), useStorageType, isNullable); };
+                    if (canUseQuickSetValue)
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<float>(pfGetter(annotatedInstance)); };
+                    else
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<float>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
                 else if (itemInfo.ItemType == typeof(double))
                 {
                     Func<TAnnotatedClass, double> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, double>(itemInfo);
-                    vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<double>(pfGetter(annotatedInstance), useStorageType, isNullable); };
+                    if (canUseQuickSetValue)
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<double>(pfGetter(annotatedInstance)); };
+                    else
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<double>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
                 else if (itemInfo.ItemType == typeof(bool?))
                 {
                     Func<TAnnotatedClass, bool?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, bool?>(itemInfo);
-                    vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<bool?>(pfGetter(annotatedInstance), useStorageType, isNullable); };
+                    if (canUseQuickSetValue)
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<bool?>(pfGetter(annotatedInstance)); };
+                    else
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<bool?>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
                 else if (itemInfo.ItemType == typeof(sbyte?))
                 {
                     Func<TAnnotatedClass, sbyte?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, sbyte?>(itemInfo);
-                    vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<sbyte?>(pfGetter(annotatedInstance), useStorageType, isNullable); };
+                    if (canUseQuickSetValue)
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<sbyte?>(pfGetter(annotatedInstance)); };
+                    else
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<sbyte?>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
                 else if (itemInfo.ItemType == typeof(short?))
                 {
                     Func<TAnnotatedClass, short?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, short?>(itemInfo);
-                    vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<short?>(pfGetter(annotatedInstance), useStorageType, isNullable); };
+                    if (canUseQuickSetValue)
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<short?>(pfGetter(annotatedInstance)); };
+                    else
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<short?>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
                 else if (itemInfo.ItemType == typeof(int?))
                 {
                     Func<TAnnotatedClass, int?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, int?>(itemInfo);
-                    vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<int?>(pfGetter(annotatedInstance), useStorageType, isNullable); };
+                    if (canUseQuickSetValue)
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<int?>(pfGetter(annotatedInstance)); };
+                    else
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<int?>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
                 else if (itemInfo.ItemType == typeof(long?))
                 {
                     Func<TAnnotatedClass, long?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, long?>(itemInfo);
-                    vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<long?>(pfGetter(annotatedInstance), useStorageType, isNullable); };
+                    if (canUseQuickSetValue)
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<long?>(pfGetter(annotatedInstance)); };
+                    else
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<long?>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
                 else if (itemInfo.ItemType == typeof(byte?))
                 {
                     Func<TAnnotatedClass, byte?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, byte?>(itemInfo);
-                    vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<byte?>(pfGetter(annotatedInstance), useStorageType, isNullable); };
+                    if (canUseQuickSetValue)
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<byte?>(pfGetter(annotatedInstance)); };
+                    else
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<byte?>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
                 else if (itemInfo.ItemType == typeof(ushort?))
                 {
                     Func<TAnnotatedClass, ushort?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, ushort?>(itemInfo);
-                    vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<ushort?>(pfGetter(annotatedInstance), useStorageType, isNullable); };
+                    if (canUseQuickSetValue)
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<ushort?>(pfGetter(annotatedInstance)); };
+                    else
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<ushort?>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
                 else if (itemInfo.ItemType == typeof(uint?))
                 {
                     Func<TAnnotatedClass, uint?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, uint?>(itemInfo);
-                    vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<uint?>(pfGetter(annotatedInstance), useStorageType, isNullable); };
+                    if (canUseQuickSetValue)
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<uint?>(pfGetter(annotatedInstance)); };
+                    else
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<uint?>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
                 else if (itemInfo.ItemType == typeof(ulong?))
                 {
                     Func<TAnnotatedClass, ulong?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, ulong?>(itemInfo);
-                    vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<ulong?>(pfGetter(annotatedInstance), useStorageType, isNullable); };
+                    if (canUseQuickSetValue)
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<ulong?>(pfGetter(annotatedInstance)); };
+                    else
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<ulong?>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
                 else if (itemInfo.ItemType == typeof(float?))
                 {
                     Func<TAnnotatedClass, float?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, float?>(itemInfo);
-                    vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<float?>(pfGetter(annotatedInstance), useStorageType, isNullable); };
+                    if (canUseQuickSetValue)
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<float?>(pfGetter(annotatedInstance)); };
+                    else
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<float?>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
                 else if (itemInfo.ItemType == typeof(double?))
                 {
                     Func<TAnnotatedClass, double?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, double?>(itemInfo);
-                    vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<double?>(pfGetter(annotatedInstance), useStorageType, isNullable); };
+                    if (canUseQuickSetValue)
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<double?>(pfGetter(annotatedInstance)); };
+                    else
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<double?>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
                 else if (itemInfo.ItemType == typeof(string))
                 {
                     Func<TAnnotatedClass, string> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, string>(itemInfo);
-                    vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<string>(pfGetter(annotatedInstance), useStorageType, isNullable); };
+                    if (canUseQuickSetValue)
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<string>(pfGetter(annotatedInstance)); };
+                    else
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<string>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
                 else if (itemInfo.ItemType == typeof(object))
                 {
@@ -662,32 +733,50 @@ namespace MosaicLib.Modular.Reflection
                 else if (itemInfo.ItemType == typeof(TimeSpan))
                 {
                     Func<TAnnotatedClass, TimeSpan> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, TimeSpan>(itemInfo);
-                    vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<TimeSpan>(pfGetter(annotatedInstance), useStorageType, isNullable); };
+                    if (canUseQuickSetValue)
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<TimeSpan>(pfGetter(annotatedInstance)); };
+                    else
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<TimeSpan>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
                 else if (itemInfo.ItemType == typeof(TimeSpan ?))
                 {
                     Func<TAnnotatedClass, TimeSpan ?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, TimeSpan ?>(itemInfo);
-                    vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<TimeSpan ?>(pfGetter(annotatedInstance), useStorageType, isNullable); };
+                    if (canUseQuickSetValue)
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<TimeSpan?>(pfGetter(annotatedInstance)); };
+                    else
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<TimeSpan?>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
                 else if (itemInfo.ItemType == typeof(DateTime))
                 {
                     Func<TAnnotatedClass, DateTime> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, DateTime>(itemInfo);
-                    vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<DateTime>(pfGetter(annotatedInstance), useStorageType, isNullable); };
+                    if (canUseQuickSetValue)
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<DateTime>(pfGetter(annotatedInstance)); };
+                    else
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<DateTime>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
                 else if (itemInfo.ItemType == typeof(DateTime?))
                 {
                     Func<TAnnotatedClass, DateTime?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, DateTime?>(itemInfo);
-                    vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<DateTime?>(pfGetter(annotatedInstance), useStorageType, isNullable); };
+                    if (canUseQuickSetValue)
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<DateTime?>(pfGetter(annotatedInstance)); };
+                    else
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<DateTime?>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
                 else if (typeof(INamedValueSet).IsAssignableFrom(itemInfo.ItemType))
                 {
                     Func<TAnnotatedClass, INamedValueSet> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, INamedValueSet>(itemInfo);
-                    vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<INamedValueSet>(pfGetter(annotatedInstance), useStorageType, isNullable); };
+                    if (canUseQuickSetValue)
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<INamedValueSet>(pfGetter(annotatedInstance)); };
+                    else
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<INamedValueSet>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
                 else if (typeof(INamedValue).IsAssignableFrom(itemInfo.ItemType))
                 {
                     Func<TAnnotatedClass, INamedValue> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, INamedValue>(itemInfo);
-                    vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<INamedValue>(pfGetter(annotatedInstance), useStorageType, isNullable); };
+                    if (canUseQuickSetValue)
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<INamedValue>(pfGetter(annotatedInstance)); };
+                    else
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<INamedValue>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
                 else
                 {
@@ -741,7 +830,7 @@ namespace MosaicLib.Modular.Reflection
                 if (!itemInfo.CanSetValue)
                     return null;
 
-                IAnnotatedItemAttribute itemAttribute = itemInfo.IAnnotatedItemAttribute;
+                IAnnotatedItemAttribute itemAttribute = itemInfo.IAnnotatedItemAttribute;                
                 Action<TAnnotatedClass, ValueContainer, bool> vcSetter = null;
 
                 bool silenceIssues = (itemAttribute != null ? itemAttribute.SilenceIssues : false);
@@ -752,117 +841,117 @@ namespace MosaicLib.Modular.Reflection
                 if (itemInfo.ItemType == typeof(bool))
                 {
                     Action<TAnnotatedClass, bool> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, bool>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<bool>(ContainerStorageType.Boolean, isNullable: false, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<bool>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(sbyte))
                 {
                     Action<TAnnotatedClass, sbyte> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, sbyte>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<sbyte>(decodedValueType: ContainerStorageType.SByte, isNullable: false, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<sbyte>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(short))
                 {
                     Action<TAnnotatedClass, short> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, short>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<short>(decodedValueType: ContainerStorageType.Int16, isNullable: false, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<short>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(int))
                 {
                     Action<TAnnotatedClass, int> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, int>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<int>(decodedValueType: ContainerStorageType.Int32, isNullable: false, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<int>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(long))
                 {
                     Action<TAnnotatedClass, long> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, long>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<long>(decodedValueType: ContainerStorageType.Int64, isNullable: false, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<long>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(byte))
                 {
                     Action<TAnnotatedClass, byte> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, byte>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<byte>(decodedValueType: ContainerStorageType.Byte, isNullable: false, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<byte>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(ushort))
                 {
                     Action<TAnnotatedClass, ushort> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, ushort>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<ushort>(decodedValueType: ContainerStorageType.UInt16, isNullable: false, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<ushort>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(uint))
                 {
                     Action<TAnnotatedClass, uint> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, uint>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<uint>(decodedValueType: ContainerStorageType.UInt32, isNullable: false, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<uint>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(ulong))
                 {
                     Action<TAnnotatedClass, ulong> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, ulong>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<ulong>(decodedValueType: ContainerStorageType.UInt64, isNullable: false, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<ulong>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(float))
                 {
                     Action<TAnnotatedClass, float> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, float>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<float>(decodedValueType: ContainerStorageType.Single, isNullable: false, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<float>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(double))
                 {
                     Action<TAnnotatedClass, double> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, double>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<double>(decodedValueType: ContainerStorageType.Double, isNullable: false, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<double>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(bool?))
                 {
                     Action<TAnnotatedClass, bool?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, bool?>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<bool?>(decodedValueType: ContainerStorageType.Boolean, isNullable: true, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<bool?>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(sbyte?))
                 {
                     Action<TAnnotatedClass, sbyte?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, sbyte?>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<sbyte?>(decodedValueType: ContainerStorageType.SByte, isNullable: true, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<sbyte?>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(short?))
                 {
                     Action<TAnnotatedClass, short?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, short?>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<short?>(decodedValueType: ContainerStorageType.Int16, isNullable: true, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<short?>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(int?))
                 {
                     Action<TAnnotatedClass, int?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, int?>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<int?>(decodedValueType: ContainerStorageType.Int32, isNullable: true, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<int?>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(long?))
                 {
                     Action<TAnnotatedClass, long?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, long?>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<long?>(decodedValueType: ContainerStorageType.Int64, isNullable: true, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<long?>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(byte?))
                 {
                     Action<TAnnotatedClass, byte?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, byte?>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<byte?>(decodedValueType: ContainerStorageType.Byte, isNullable: true, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<byte?>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(ushort?))
                 {
                     Action<TAnnotatedClass, ushort?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, ushort?>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<ushort?>(decodedValueType: ContainerStorageType.UInt16, isNullable: true, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<ushort?>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(uint?))
                 {
                     Action<TAnnotatedClass, uint?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, uint?>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<uint?>(decodedValueType: ContainerStorageType.UInt32, isNullable: true, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<uint?>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(ulong?))
                 {
                     Action<TAnnotatedClass, ulong?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, ulong?>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<ulong?>(decodedValueType: ContainerStorageType.UInt64, isNullable: true, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<ulong?>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(float?))
                 {
                     Action<TAnnotatedClass, float?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, float?>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<float?>(decodedValueType: ContainerStorageType.Single, isNullable: true, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<float?>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(double?))
                 {
                     Action<TAnnotatedClass, double?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, double?>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<double?>(decodedValueType: ContainerStorageType.Double, isNullable: true, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<double?>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(string))
                 {
                     Action<TAnnotatedClass, string> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, string>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<string>(decodedValueType: ContainerStorageType.String, isNullable: false, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<string>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(object))
                 {
@@ -907,22 +996,22 @@ namespace MosaicLib.Modular.Reflection
                 else if (itemInfo.ItemType == typeof(TimeSpan))
                 {
                     Action<TAnnotatedClass, TimeSpan> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, TimeSpan>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<TimeSpan>(decodedValueType: ContainerStorageType.TimeSpan, isNullable: false, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<TimeSpan>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(TimeSpan?))
                 {
                     Action<TAnnotatedClass, TimeSpan?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, TimeSpan?>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<TimeSpan?>(decodedValueType: ContainerStorageType.TimeSpan, isNullable: true, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<TimeSpan?>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(DateTime))
                 {
                     Action<TAnnotatedClass, DateTime> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, DateTime>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<DateTime>(decodedValueType: ContainerStorageType.DateTime, isNullable: false, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<DateTime>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(DateTime?))
                 {
                     Action<TAnnotatedClass, DateTime?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, DateTime?>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<DateTime?>(decodedValueType: ContainerStorageType.DateTime, isNullable: true, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<DateTime?>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (typeof(INamedValueSet).IsAssignableFrom(itemInfo.ItemType))
                 {

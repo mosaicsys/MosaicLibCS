@@ -517,7 +517,7 @@ namespace MosaicLib.SerialIO
 
 		/// <summary>one or more bytes were successfully returned from the port</summary>
 		ReadDone,
-		/// <summary>no bytes have been or were recieved from the port during the stated time period</summary>
+		/// <summary>no bytes have been or were received from the port during the stated time period</summary>
 		ReadTimeout,
 		/// <summary>some error was reported by the port during the read.  read will terminate with all bytes that had been previously received.</summary>
 		ReadFailed,
@@ -736,7 +736,7 @@ namespace MosaicLib.SerialIO
         int NumPacketsReady { get; }
 
         /// <summary>
-        /// Returns an IGetNextPacketAction which may be executed to attempt to dequeue the next available Packet recieved by the Port.
+        /// Returns an IGetNextPacketAction which may be executed to attempt to dequeue the next available Packet received by the Port.
         /// GetNextPacketActions do not wait.  If there is no packet available then the action completes with the result (packet) set to null.
         /// </summary>
         IGetNextPacketAction CreateGetNextPacketAction();

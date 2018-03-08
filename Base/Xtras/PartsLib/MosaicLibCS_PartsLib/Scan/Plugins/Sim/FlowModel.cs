@@ -55,7 +55,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
         {
             Serviceable()
             {
-                ServicePhases = Sim.FlowModel.ServicePhases.BeforeRelaxation;
+                ServicePhases = ServicePhases.BeforeRelaxation | ServicePhases.AfterSetup;
             }
 
             public ServicePhases ServicePhases { get; set; }

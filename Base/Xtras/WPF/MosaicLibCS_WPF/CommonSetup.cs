@@ -111,6 +111,9 @@ namespace MosaicLib.WPF.Common
             }
         }
 
+        /// <summary>
+        /// An enumeration of the supported log message handler types that may be used as the file log ring for the default logging group.
+        /// </summary>
         public enum FileRingLogMessageHandlerType
         {
             TextFileRotationDirectoryLogMessageHandler,
