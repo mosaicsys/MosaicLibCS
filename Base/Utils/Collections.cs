@@ -460,16 +460,61 @@ namespace MosaicLib.Utils
             public SimpleLockedQueue() { }
 
             /// <summary>
-            /// Enqueues the given item.
+            /// Enqueues the given <paramref name="item"/>.
             /// </summary>
-            public void Enqueue(ItemType item)
+            public SimpleLockedQueue<ItemType> Enqueue(ItemType item)
             {
                 lock (mutex)
                 {
                     backingQueue.Enqueue(item);
                     volatileCount = backingQueue.Count;
                 }
+
+                return this;
             }
+
+            /// <summary>
+            /// Enqueues the given items.
+            /// </summary>
+            public SimpleLockedQueue<ItemType> EnqueueItems(params ItemType[] itemParamsArray)
+            {
+                lock (mutex)
+                {
+                    try
+                    {
+                        if (itemParamsArray != null)
+                            itemParamsArray.DoForEach(item => backingQueue.Enqueue(item));
+                    }
+                    finally
+                    {
+                        volatileCount = backingQueue.Count;
+                    }
+                }
+
+                return this;
+            }
+
+            /// <summary>
+            /// Enqueues the given <paramref name="set"/> of items.
+            /// </summary>
+            public SimpleLockedQueue<ItemType> EnqueueSet(ICollection<ItemType> set)
+            {
+                lock (mutex)
+                {
+                    try
+                    {
+                        if (set != null)
+                            set.DoForEach(item => backingQueue.Enqueue(item));
+                    }
+                    finally
+                    {
+                        volatileCount = backingQueue.Count;
+                    }
+                }
+
+                return this;
+            }
+
 
             /// <summary>
             /// Attempts to return the next object in the queue (without removing it).  throws if the queue is currently empty.
@@ -539,6 +584,37 @@ namespace MosaicLib.Utils
                 }
 
                 return emptyValue;
+            }
+
+
+            /// <summary>
+            /// Dequeues and removes all of the items in the queue and returns them in an array.
+            /// </summary>
+            public ItemType [] DequeueAll()
+            {
+                ItemType[] array;
+
+                lock (mutex)
+                {
+                    try
+                    {
+                        if (IsEmpty)
+                        {
+                            array = Collections.EmptyArrayFactory<ItemType>.Instance;
+                        }
+                        else
+                        {
+                            array = backingQueue.ToArray();
+                            backingQueue.Clear();
+                        }
+                    }
+                    finally
+                    {
+                        volatileCount = backingQueue.Count;
+                    }
+                }
+
+                return array;
             }
 
             /// <summary>

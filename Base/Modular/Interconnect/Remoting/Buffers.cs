@@ -48,11 +48,12 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Buffers
         public PurposeCode PurposeCode;
 
         /// <summary>Returns true if the current header's Magic matches the expected value.</summary>
-        public bool IsPurposeCodeValid { get { return PurposeCode.IsValid(); } }
+        public bool IsPurposeCodeValid { get { return PurposeCode.IsValid(includeAck: AckSeqNum != 0); } }
 
         /// <summary>Information about the purpose of the delivery of this buffer</summary>
         public BufferHeaderFlags Flags;
 
+        /// <summary>Gives the header length</summary>
         public int Length { get { return Math.Max(_length, MinimumSize); } set { _length = unchecked((ushort) value); } }
         private ushort _length;
 
@@ -130,7 +131,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Buffers
     /// </summary>
     public enum PurposeCode : uint
     {
-        /// <summary>Placeholder default value [0x00000000]</summary>
+        /// <summary>Placeholder default value.  This value is used for Ack only buffers [0x00000000]</summary>
         None = 0x00000000,
 
         /// <summary>This buffer is being used to forward a management request (E005 NVS data). [0xde47ea12]</summary>
@@ -147,6 +148,9 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Buffers
 
         /// <summary>This buffer is the only buffer in a message (is is both the Start and the End). [0xde47ea16]</summary>
         Message = 0xde47ea16,
+
+        /// <summary>This buffer is only used to carry an Ack code. [0xde47ea17]</summary>
+        Ack = 0xde47ea17,
     }
 
     /// <summary>
@@ -177,7 +181,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Buffers
     public static partial class ExtensionMethods
     {
         /// <summary>Returns true if the given <paramref name="purposeCode"/> value is known</summary>
-        public static bool IsValid(this PurposeCode purposeCode, bool includeManagement = true, bool includeMessages = true)
+        public static bool IsValid(this PurposeCode purposeCode, bool includeManagement = true, bool includeMessages = true, bool includeAck = true)
         {
             switch (purposeCode)
             {
@@ -188,6 +192,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Buffers
                 case PurposeCode.MessageEnd:
                 case PurposeCode.Message:
                     return includeMessages;
+                case PurposeCode.Ack:
+                    return includeAck;
                 default:
                     return false;
             }
@@ -451,6 +457,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Buffers
         {
             return Equals(other, compareTimeStamps: false);
         }
+
         /// <summary>
         /// IEquatable{Buffer} implementation method.  Returns true if both buffers have the same contents.  Ignores header.Length bytes at the front of both byteArrays (as one may have been updated when the other has not).
         /// </summary>
@@ -472,7 +479,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Buffers
         public override string ToString()
         {
             if (Flags.IsSet(BufferHeaderFlags.BufferContainsE005NVS))
-                return "{0} State:{1} Header:{2} [{3}:{4}]".CheckedFormat(BufferName, State, header, byteCount, GetPayloadAsE005NVS().SafeToStringSML());
+                return "{0} State:{1} Header:{2} [E005NVS {3}:{4}]".CheckedFormat(BufferName, State, header, byteCount, GetPayloadAsE005NVS().SafeToStringSML());
 
             if (PurposeCode == Buffers.PurposeCode.Message && Flags.IsAnySet(BufferHeaderFlags.MessageContainsJsonNVS | BufferHeaderFlags.MessageContainsJsonString))
             {
@@ -497,7 +504,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Buffers
     public class BufferPool
     {
         /// <summary>Default buffer size (1024 - 24 == 1000)</summary>
-        const int defaultBufferSize = (1024 - 24);
+        const int defaultBufferSize = (1024 - 26);
 
         /// <summary>
         /// Constructor.

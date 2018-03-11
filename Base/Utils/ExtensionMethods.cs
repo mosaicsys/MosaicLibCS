@@ -218,16 +218,18 @@ namespace MosaicLib.Utils
 
         /// <summary>
         /// Extension method version of Array.Copy with copy length clipped to prevent exceptions
+        /// Returns the number of bytes copied (or 0 if none where)
         /// </summary>
-        public static void SafeCopyFrom<ItemType>(this ItemType[] copyIntoArray, ItemType[] copyFromArray, int copyFromIndex = 0, int copyLengthLimitIn = int.MaxValue)
+        public static int SafeCopyFrom<ItemType>(this ItemType[] copyIntoArray, ItemType[] copyFromArray, int copyFromIndex = 0, int copyLengthLimitIn = int.MaxValue)
         {
-            copyIntoArray.SafeCopyFrom(copyToIndex: 0, copyFromArray: copyFromArray, copyFromIndex: copyFromIndex, copyLengthLimitIn: copyLengthLimitIn);
+            return copyIntoArray.SafeCopyFrom(copyToIndex: 0, copyFromArray: copyFromArray, copyFromIndex: copyFromIndex, copyLengthLimitIn: copyLengthLimitIn);
         }
 
         /// <summary>
-        /// Extension method version of Array.Copy with copy length clipped to prevent exceptions
+        /// Extension method version of Array.Copy with copy length clipped to prevent exceptions.
+        /// Returns the number of bytes copied (or 0 if none where)
         /// </summary>
-        public static void SafeCopyFrom<ItemType>(this ItemType[] copyIntoArray, int copyToIndex, ItemType[] copyFromArray, int copyFromIndex = 0, int copyLengthLimitIn = int.MaxValue)
+        public static int SafeCopyFrom<ItemType>(this ItemType[] copyIntoArray, int copyToIndex, ItemType[] copyFromArray, int copyFromIndex = 0, int copyLengthLimitIn = int.MaxValue)
         {
             int fromArrayLength = copyFromArray.SafeLength();
             int intoArrayLength = copyIntoArray.SafeLength();
@@ -236,6 +238,8 @@ namespace MosaicLib.Utils
 
             if (copyLength > 0)
                 System.Array.Copy(copyFromArray, copyFromIndex, copyIntoArray, copyToIndex, copyLength);
+
+            return copyLength;
         }
 
         #endregion

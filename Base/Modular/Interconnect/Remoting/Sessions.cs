@@ -270,7 +270,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
 
     public interface ITransportServerSessionManagerFacet : ITransportSessionFacetBase
     {
-        ITransportConnectionSessionFacet ProcessSessionLevelInboundBuffers(QpcTimeStamp qpcTimeStamp, object transportEndpoint, params Buffers.Buffer[] bufferParamsArray);
+        ITransportConnectionSessionFacet ProcessSessionLevelInboundBuffers(QpcTimeStamp qpcTimeStamp, object transportEndpoint, HandleBuffersDelegate newConnectionHandleOutboundBuffersDelegate, params Buffers.Buffer[] bufferParamsArray);
     }
 
 
@@ -338,7 +338,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
             if (session != null)
                 session.HandleInboundBuffers(qpcTimeStamp, transportEndpoint, bufferParamsArray);
             else
-                ProcessSessionLevelInboundBuffers(qpcTimeStamp, transportEndpoint, bufferParamsArray);
+                ProcessSessionLevelInboundBuffers(qpcTimeStamp, transportEndpoint, null, bufferParamsArray);        // passing null triggers this method to use the SessionManager's HandleOutboundBuffersDelegate
         }
 
         public void HandleTransportException(QpcTimeStamp qpcTimeStamp, object transportEndpoint, System.Exception ex, bool endpointClosed = false)
@@ -352,7 +352,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
                 session.HandleTransportException(qpcTimeStamp, transportEndpoint, ex, endpointClosed);
         }
 
-        public ITransportConnectionSessionFacet ProcessSessionLevelInboundBuffers(QpcTimeStamp qpcTimeStamp, object transportEndpoint, params Buffers.Buffer[] bufferParamsArray)
+        public ITransportConnectionSessionFacet ProcessSessionLevelInboundBuffers(QpcTimeStamp qpcTimeStamp, object transportEndpoint, HandleBuffersDelegate newConnectionHandleOutboundBuffersDelegate, params Buffers.Buffer[] bufferParamsArray)
         {
             var firstBuffer = bufferParamsArray.SafeAccess(0);
             Buffers.BufferHeaderV1 firstHeader = (firstBuffer != null) ? firstBuffer.header : default(Buffers.BufferHeaderV1);
@@ -378,7 +378,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
                         TransportParamsNVS = TransportParamsNVS,
                         TransportEndpoint = transportEndpoint,
                         TransportRole = Transport.TransportRole.Server,
-                        HandleOutboundBuffersDelegate = HandleOutboundBuffersDelegate,
+                        HandleOutboundBuffersDelegate = newConnectionHandleOutboundBuffersDelegate ?? HandleOutboundBuffersDelegate,
                         SessionName = name,
                         SessionUUID = sessionUUID,
                     };
@@ -1278,7 +1278,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
             // if there is nothing else to send and there is a new buffer seq num to acknowledge and enough time has elpased then send a simple ack buffer.
             if (sendNowList.Count == 0 && (bufferAckSeqNumToSend != maxSentBufferAckSeqNum) && !sendBufferAckSeqNumAfterTimeStamp.IsZero && qpcTimeStamp >= sendBufferAckSeqNumAfterTimeStamp)
             {
-                Buffers.Buffer explicitAckBuffer = BufferPool.Acquire(qpcTimeStamp).Update(purposeCode: PurposeCode.None).SetState(qpcTimeStamp, BufferState.ReadyToSend, "Sending explicit ack");
+                Buffers.Buffer explicitAckBuffer = BufferPool.Acquire(qpcTimeStamp).Update(purposeCode: PurposeCode.Ack).SetState(qpcTimeStamp, BufferState.ReadyToSend, "Sending explicit ack");
                 sendNowList.Add(explicitAckBuffer);
 
                 TraceEmitter.Emit("Sending explicit ack: {0}", explicitAckBuffer);
@@ -1459,7 +1459,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
 
             switch (bufferPurposeCode)
             {
-                case PurposeCode.None:      // these are used for expicit acks
+                case PurposeCode.Ack:      // these are used for expicit acks
                     TraceEmitter.Emit("Received explicit ack: {0}", buffer);
                     break;
 

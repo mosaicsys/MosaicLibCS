@@ -327,7 +327,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
 
                     logger = new Logging.Logger("{0}_{1}{2:d2}_Port{3:d5}".CheckedFormat(ConnectionType, Role, InstanceNum, Port));
 
-                    traceLogger = new Logging.Logger("{0}.Trace".CheckedFormat(logger.Name), groupName: Logging.LookupDistributionGroupName, initialInstanceLogGate: Logging.LogGate.Debug);
+                    traceLogger = new Logging.Logger("{0}.Trace".CheckedFormat(logger.Name), groupName: Logging.LookupDistributionGroupName, initialInstanceLogGate: connParamsNVS["Transport.TraceLogger.InitialInstanceLogGate"].VC.GetValue(rethrow: false, defaultValue: Logging.LogGate.Debug));
                     trace = traceLogger.Trace;
 
                     logger.Debug.Emit("LocalEndPoint: {0}", LocalEndPoint);
@@ -580,7 +580,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
 
                         postedRecvList.Add(rt);
 
-                        rt.iar = udpSocket.BeginReceiveFrom(buffer.byteArray, 0, buffer.byteCount, SocketFlags.None, ref rt.fromEndPoint, HandleBeginRecvAsyncRequestCallback, rt);
+                        rt.iar = udpSocket.BeginReceiveFrom(buffer.byteArray, 0, buffer.byteArraySize, SocketFlags.None, ref rt.fromEndPoint, HandleBeginRecvAsyncRequestCallback, rt);
 
                         count++;
                     }
@@ -729,13 +729,17 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
 
                     logger = new Logging.Logger("{0}_{1}{2:d2}_Port{3:d5}".CheckedFormat(ConnectionType, Role, InstanceNum, Port));
 
-                    traceLogger = new Logging.Logger("{0}.Trace".CheckedFormat(logger.Name), groupName: Logging.LookupDistributionGroupName, initialInstanceLogGate: Logging.LogGate.Trace);
+                    traceLogger = new Logging.Logger("{0}.Trace".CheckedFormat(logger.Name), groupName: Logging.LookupDistributionGroupName, initialInstanceLogGate: connParamsNVS["Transport.TraceLogger.InitialInstanceLogGate"].VC.GetValue(rethrow: false, defaultValue: Logging.LogGate.Debug));
                     trace = traceLogger.Trace;
 
                     switch (Role)
                     {
                         case TransportRole.Client:
-                            if (connParamsNVS.Contains("IPAddress"))
+                            if (connParamsNVS.Contains("HostName"))
+                            {
+                                HostName = connParamsNVS["HostName"].VC.GetValue<string>(rethrow: false);
+                            }
+                            else if (connParamsNVS.Contains("IPAddress"))
                             {
                                 IPAddress ipAddress;
                                 if (IPAddress.TryParse(connParamsNVS["IPAddress"].VC.GetValue<string>(rethrow: false).MapNullToEmpty(), out ipAddress))
@@ -748,21 +752,19 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                                 IPAddress = IPV6 ? IPAddress.IPv6Loopback : IPAddress.Loopback;
                             }
 
-                            ClientTargetIPEndPoint = new IPEndPoint(IPAddress, Port);
-
-                            TcpClient tcpClient = new TcpClient(IPAddress.AddressFamily);
-
                             ConnectionTracker ct = new ConnectionTracker()
                             {
                                 bufferPool = BufferPool,
                                 hostNotifier = HostNotifier,
-                                tcpClient = tcpClient,
+                                tcpClient = null,
                                 tcpSocket = null,
-                                remoteEndPoint = ClientTargetIPEndPoint,
+                                remoteHostName = HostName,
+                                remotePort = Port,
+                                remoteIPAddress = IPAddress,
                                 connectionSession = null,                   // these will be filled in just prior to calling BeginConnect
                                 emitter = logger.Debug,
                                 traceEmitter = trace,
-                            }.SetState(ConnectionTrackerState.WaitingForConnectRequest, "Initializing connection to {0}".CheckedFormat(ClientTargetIPEndPoint));
+                            }.SetState(ConnectionTrackerState.WaitingForConnectRequest, "Initializing connection to {0}".CheckedFormat((!HostName.IsNullOrEmpty() ? "host:{0}".CheckedFormat(HostName) : "address:{0}".CheckedFormat(IPAddress))));
 
                             connectionTrackerList.Add(ct);
 
@@ -791,7 +793,12 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                     }
 
                     if (IsClient)
-                        logger.Debug.Emit("ConnectsToEndPoint: {0}", ClientTargetIPEndPoint);
+                    {
+                        if (IPAddress != null)
+                            logger.Debug.Emit("Connects to address:'{0}' port:{1}", IPAddress, Port);
+                        else
+                            logger.Debug.Emit("Connects to host:'{0}' port:{1}", HostName, Port);
+                    }
                 }
                 catch (System.Exception ex)
                 {
@@ -832,10 +839,11 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
 
             public string ConnectionType { get; private set; }
             public bool IPV6 { get; private set; }
+            public AddressFamily SelectedAddressFamily { get { return (IPV6 ? AddressFamily.InterNetworkV6 : AddressFamily.InterNetwork); } }
             public int Port { get; private set; }
             public TimeSpan KeepAlivePeriod { get; private set; }
+            public string HostName { get; private set; }
             public IPAddress IPAddress { get; private set; }
-            public IPEndPoint ClientTargetIPEndPoint { get; private set; }
             public IPEndPoint ServerIPEndPoint { get; private set; }
             public EndPoint LocalEndPoint { get; private set; }
 
@@ -998,6 +1006,9 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                 public TcpClient tcpClient;
                 public Socket tcpSocket;
                 public IPEndPoint localEndPoint;
+                public string remoteHostName;
+                public int remotePort;
+                public volatile IPAddress remoteIPAddress;
                 public IPEndPoint remoteEndPoint;
                 public ITransportConnectionSessionFacet connectionSession;
 
@@ -1016,6 +1027,9 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                         switch (State)
                         {
                             case ConnectionTrackerState.WaitingForConnectRequest:
+                                return !remoteHostName.IsNullOrEmpty() || remoteIPAddress != null;
+                            case ConnectionTrackerState.WaitingForHostIPAddress:
+                                return !remoteHostName.IsNullOrEmpty();
                             case ConnectionTrackerState.WaitingForConnected:
                                 return tcpClient != null;
 
@@ -1105,6 +1119,9 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
 
                 /// <summary>Client Role only:  Wait until the session indicates that would like to connect/reconnect to the target.</summary>
                 WaitingForConnectRequest,
+
+                /// <summary>Client Role only:  BeginGetHostIPAddress has been issued, waiting for IAsyncResult callback to be performed which will change state to WaitingforConnected.</summary>
+                WaitingForHostIPAddress,
 
                 /// <summary>Client Role only:  BeginConnect has been issued, waiting for IAsyncResult callback to be performed which will change state to TellSessionTransportIsConnected.</summary>
                 WaitingForConnected,
@@ -1202,9 +1219,16 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                                     {
                                         case SessionStateCode.RequestTransportConnect:
                                         case SessionStateCode.RequestTransportReconnect:
-                                            ct.SetState(ConnectionTrackerState.WaitingForConnected, "issuing BeginConnect({0}, ...)".CheckedFormat(ct.remoteEndPoint));
+                                            if (!ct.remoteHostName.IsNullOrEmpty() && ct.remoteIPAddress == null)
+                                            {
+                                                ct.SetState(ConnectionTrackerState.WaitingForHostIPAddress, "issuing BeginGetHostAddresses({0}) ...".CheckedFormat(ct.remoteHostName));
 
-                                            ct.tcpClient.BeginConnect(ct.remoteEndPoint.Address, ct.remoteEndPoint.Port, HandleBeginConnectAsyncRequestCallback, ct);
+                                                System.Net.Dns.BeginGetHostAddresses(ct.remoteHostName, HandleBeginGetHostAddressAsyncRequestCallback, ct);
+                                            }
+                                            else
+                                            {
+                                                IssueBeginConnect(ct);
+                                            }
 
                                             count++;
                                             break;
@@ -1212,6 +1236,15 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                                             break;
                                     }
                                 }
+                                break;
+
+                            case ConnectionTrackerState.WaitingForHostIPAddress:
+                                if (ct.remoteIPAddress != null)
+                                {
+                                    logger.Debug.Emit("Host name '{0}' has been resolved to address '{1}'", ct.remoteHostName, ct.remoteIPAddress);
+                                    IssueBeginConnect(ct);
+                                }
+
                                 break;
 
                             case ConnectionTrackerState.WaitingForConnected:
@@ -1290,17 +1323,14 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                                     else if (ct.connectionSession == null)
                                     {
                                         // ask the session manager to process the first buffer run (which generally contains a session request buffer).
-                                        ct.connectionSession = ServerSession.ProcessSessionLevelInboundBuffers(qpcTimeStamp, ct.remoteEndPoint, rt.bufferArray);
+                                        HandleBuffersDelegate newConnectionHandleOutboundBuffersDelegate = (ts, ep, bufArray) => HandleConnectionOutboundBuffersDelegate(ts, ct, ep, bufArray);
+
+                                        ct.connectionSession = ServerSession.ProcessSessionLevelInboundBuffers(qpcTimeStamp, ct.remoteEndPoint, newConnectionHandleOutboundBuffersDelegate, rt.bufferArray);
 
                                         if (ct.connectionSession != null)
-                                        {
-                                            ct.connectionSession.HandleOutboundBuffersDelegate = (ts, ep, bufArray) => HandleConnectionOutboundBuffersDelegate(ts, ct, ep, bufArray);
                                             ct.SetState(ConnectionTrackerState.Ready, "Received Buffers have been processed at session level");
-                                        }
                                         else 
-                                        {
                                             ct.SetState(ConnectionTrackerState.Ready, "Received Buffers have been ignored at session level");
-                                        }
 
                                         count++;
                                     }
@@ -1347,6 +1377,45 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
             }
 
             List<ConnectionTracker> connectionTrackerList = new List<ConnectionTracker>();
+
+            private void HandleBeginGetHostAddressAsyncRequestCallback(IAsyncResult iar)
+            {
+                ConnectionTracker ct = (iar != null) ? (iar.AsyncState as ConnectionTracker) : null;
+
+                if (ct != null)
+                {
+                    try
+                    {
+                        var hostAddressArray = System.Net.Dns.EndGetHostAddresses(iar);
+
+                        var firstFilteredAddress = hostAddressArray.Where(addr => (addr.AddressFamily == (IPV6 ? AddressFamily.InterNetworkV6 : AddressFamily.InterNetwork))).FirstOrDefault();
+
+                        var firstAddress = firstFilteredAddress ?? hostAddressArray.FirstOrDefault();
+
+                        if (firstAddress != null)
+                            ct.remoteIPAddress = firstAddress;
+                        else
+                            throw new HostNotFoundException("GetHostByAddress '{0}' gave no valid addresses".CheckedFormat(ct.remoteHostName));
+                    }
+                    catch (System.Exception ex)
+                    {
+                        ct.HandleAsynchException(Fcns.CurrentMethodName, ex);
+                    }
+
+                    ct.hostNotifier.Notify();
+                }
+            }
+
+            private void IssueBeginConnect(ConnectionTracker ct)
+            {
+                ct.remoteEndPoint = new IPEndPoint(ct.remoteIPAddress, ct.remotePort);
+
+                ct.tcpClient = new TcpClient(ct.remoteIPAddress.AddressFamily);
+
+                ct.SetState(ConnectionTrackerState.WaitingForConnected, "issuing BeginConnect({0}, ...)".CheckedFormat(ct.remoteEndPoint));
+
+                ct.tcpClient.BeginConnect(ct.remoteEndPoint.Address, ct.remoteEndPoint.Port, HandleBeginConnectAsyncRequestCallback, ct);
+            }
 
             private void HandleBeginConnectAsyncRequestCallback(IAsyncResult iar)
             {
@@ -1640,6 +1709,17 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
             #endregion
         }
 
+        /// <summary>
+        /// Exception thrown if an attempt to find a host fails to return any IPAddresses.
+        /// </summary>
+        public class HostNotFoundException : System.Exception
+        {
+            /// <summary>Default constructor</summary>
+            public HostNotFoundException(string mesg, System.Exception innerException = null)
+                : base(mesg, innerException)
+            { }
+        }
+
         #endregion
 
         #region PatchPanelTransport, PatchPanel
@@ -1675,7 +1755,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                 InstanceName = "Test{0}_{1:d2}".CheckedFormat(Role, InstanceNum);
 
                 logger = new Logging.Logger(InstanceName);
-                traceLogger = new Logging.Logger("{0}.Trace".CheckedFormat(logger.Name), groupName: Logging.LookupDistributionGroupName, initialInstanceLogGate: connParamsNVS["TraceLogger.InitialInstanceLogGate"].VC.GetValue(rethrow: false, defaultValue: Logging.LogGate.Debug));
+                traceLogger = new Logging.Logger("{0}.Trace".CheckedFormat(logger.Name), groupName: Logging.LookupDistributionGroupName, initialInstanceLogGate: connParamsNVS["Transport.TraceLogger.InitialInstanceLogGate"].VC.GetValue(rethrow: false, defaultValue: Logging.LogGate.Debug));
                 traceEmitter = traceLogger.Trace;
 
                 ConnParamsNVS = (connParamsNVS = connParamsNVS.ConvertToReadOnly(mapNullToEmpty: true));

@@ -382,6 +382,21 @@ namespace MosaicLib.Modular.Common
                         return this;
                     }
 
+                case ContainerStorageType.Object:
+                    {
+                        cvt = ContainerStorageType.Object;
+                        u = rhs.u;
+
+                        if (rhs.o == null)
+                            o = null;
+                        else if (rhs.o is ICloneable)
+                            o = ((ICloneable)rhs.o).Clone();
+                        else
+                            o = rhs.o;
+
+                        return this;
+                    }
+
                 default:
                     return CopyFrom(rhs);
             }

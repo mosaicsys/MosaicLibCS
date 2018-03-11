@@ -2090,6 +2090,10 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
     #region MDRFRecordingEngine, MDRFRecordingEngineConfig, IMDRFRecordingEngine
 
+
+    /// <summary>
+    /// Gives the interface that is implemented by the MDRFRecordingEngine part.
+    /// </summary>
     public interface IMDRFRecordingEngine : IActivePartBase
     {
         /// <summary>
@@ -2118,6 +2122,13 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
         /// The resulting action, when run, will record the requested occurrence with the given nvs attached.
         /// </summary>
         IClientFacet RecordOccurrence(IOccurrenceInfo occurrenceInfo = null, INamedValueSet occurrenceDataNVS = null, bool writeAll = false);
+
+        /// <summary>
+        /// This method may be used by a client to select a new scheduled scan period using the given scanPeriodScheduleSelection value (converted to an Int32)
+        /// <para/>If the given value cannot be correctly converted to an int32, the period selector will be set to 0.
+        /// </summary>
+        /// <remarks>Use of the generic <typeparamref name="TScheduleIndex"/> type is intended to support use with both integer value types and with enumeration value types.</remarks>
+        void SelectScanPeriodSchedule<TScheduleIndex>(TScheduleIndex scanPeriodScheduleSelection) where TScheduleIndex : struct;
     }
 
     /// <summary>
@@ -2131,6 +2142,10 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
     /// </summary>
     public class MDRFRecordingEngineConfig
     {
+        /// <summary>
+        /// Basic constructor.
+        /// <para/>defaults: NominalScanPeriod = 0.1 seconds, NominalPruningInterval = 10.0 seconds.
+        /// </summary>
         public MDRFRecordingEngineConfig(string partID)
         {
             PartID = partID;
@@ -2138,6 +2153,9 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
             NominalPruningInterval = (10.0).FromSeconds();
         }
 
+        /// <summary>
+        /// Copy constructor
+        /// </summary>
         public MDRFRecordingEngineConfig(MDRFRecordingEngineConfig other)
         {
             PartID = other.PartID;
@@ -2156,7 +2174,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
                 GroupDefinitionItemArray = other.GroupDefinitionItemArray.SafeToArray();
 
             if (other.OccurrenceDefinitionItemArray != null)
-                OccurrenceDefinitionItemArray = other.OccurrenceDefinitionItemArray.Select(item => new MDRFRecordingEngineItems.OccurenceDefinitionItem() { OccurrenceName = item.OccurrenceName, EventNames = item.EventNames.SafeToArray(mapNullToEmpty: false), OccurrenceMetaData = item.OccurrenceMetaData }).ToArray();
+                OccurrenceDefinitionItemArray = other.OccurrenceDefinitionItemArray.Select(item => new MDRFRecordingEngineItems.OccurrenceDefinitionItem() { OccurrenceName = item.OccurrenceName, EventNames = item.EventNames.SafeToArray(mapNullToEmpty: false), OccurrenceMetaData = item.OccurrenceMetaData }).ToArray();
 
             if (other.PruningConfig != null)
             {
@@ -2169,24 +2187,38 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
             NominalPruningInterval = other.NominalPruningInterval;
         }
 
+        /// <summary>Defines the PartID that will be used by the MDRFRecordingEngine that is constructed from this configuration object</summary>
         public string PartID { get; private set; }
 
+        /// <summary>Gives the MDRF SetupInfo that is used to configure the underlying MDRFWriter.</summary>
         public SetupInfo SetupInfo { get; set; }
 
+        /// <summary>Gives the nominal scan priod for recording groups.</summary>
         public TimeSpan NominalScanPeriod { get; set; }
 
-        public TimeSpan [] ScanPeriodScheduleArray { get; set; }
+        /// <summary>
+        /// Gives an array of selectable nominal scan periods.  
+        /// These are used with the SelectScanPeriodSchedule method if the client would like to be able to vary the nominal scan period based on external information.
+        /// If a value is selected that is outside of the usable indecies for this array then the NominalScanPeriod will be used instead.
+        /// </summary>
+        public TimeSpan[] ScanPeriodScheduleArray { get; set; }
 
+        /// <summary>Gives the IVI instance that is to be used for defining group and reading values.  The Values.Instance singleton will be used if this property is null.</summary>
         public IValuesInterconnection SourceIVI { get; set; }
 
+        /// <summary>Set to true to allocate user row flag bit values for each group that is defined here.</summary>
         public bool AllocateUserRowFlagBitsForGroups { get; set; }
 
+        /// <summary>Gives the array of GroupDefinitionItems that are used to define the groups that will be recorded by the engine</summary>
         public MDRFRecordingEngineItems.GroupDefinitionItem[] GroupDefinitionItemArray { get; set; }
 
-        public MDRFRecordingEngineItems.OccurenceDefinitionItem[] OccurrenceDefinitionItemArray { get; set; }
+        /// <summary>Gives the array of OccurrenceDefinitionItems that are used to define the occurrence types that may be directly recorded by this engine.  The client may also directly register OccurrenceInfo objects with the underlying MDRFWriter.</summary>
+        public MDRFRecordingEngineItems.OccurrenceDefinitionItem[] OccurrenceDefinitionItemArray { get; set; }
 
+        /// <summary>Gives the pruning configuration for the DirectoryTreePruningManager that can be used by the engine to prevent the engine from filling the local storage.</summary>
         public DirectoryTreePruningManager.Config PruningConfig { get; set; }
 
+        /// <summary>Defines the nominal interval that the DirectoryTreePruningManager will be serviced.</summary>
         public TimeSpan NominalPruningInterval { get; set; }
 
         private static readonly TimeSpan[] emptyTimeSpanArray = EmptyArrayFactory<TimeSpan>.Instance;
@@ -2202,26 +2234,44 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
         public IEnumerable<Tuple<string, IEnumerable<string>, INamedValueSet>> EventDefinitionSet 
         {
             get { return OccurrenceDefinitionItemArray.Select(item => Tuple.Create<string, IEnumerable<string>, INamedValueSet>(item.OccurrenceName, item.EventNames.SafeToArray(), item.OccurrenceMetaData)); }
-            set { OccurrenceDefinitionItemArray = value.Select(t => new MDRFRecordingEngineItems.OccurenceDefinitionItem() { OccurrenceName = t.Item1, EventNames = t.Item2.ToArray(), OccurrenceMetaData = t.Item3 }).ToArray(); }
+            set { OccurrenceDefinitionItemArray = value.Select(t => new MDRFRecordingEngineItems.OccurrenceDefinitionItem() { OccurrenceName = t.Item1, EventNames = t.Item2.ToArray(), OccurrenceMetaData = t.Item3 }).ToArray(); }
         }
     }
 
     namespace MDRFRecordingEngineItems
     {
+        /// <summary>
+        /// Defines the characteristics of a Group that will be recorded using an MDRFRecordingEngine
+        /// </summary>
         public struct GroupDefinitionItem
         {
+            /// <summary>Gives the name of this group</summary>
             public string GroupName { get; set; }
+
+            /// <summary>Gives the MatchRuleSet for the set of IVA names that are to be included in this group.  When null, all names may be included in this group.</summary>
             public MatchRuleSet MatchRuleSet { get; set; }
+
+            /// <summary>Gives an optional TableItemFilter that (when non-null) will be used to filter the IVA entires before applying the MatchRuleSet to define which IVA items are in each group.  Each IVA will only show up in the first group that accepts its name and metadata information.</summary>
             public Func<string, INamedValueSet, bool> TableItemFilter { get; set; }
+ 
+            /// <summary>Gives the meta data that is to be recorded with the group definition in each resulting MDRF file that is created by the engine</summary>
             public INamedValueSet GroupMetaData { get { return _groupMetaData; } set { _groupMetaData = value.ConvertToReadOnly(mapNullToEmpty: false); } }
 
             private INamedValueSet _groupMetaData;
         }
 
-        public struct OccurenceDefinitionItem
+        /// <summary>
+        /// Defines the characteristics of an Occurrence that can be recorded using an MDRFRecordingEngine
+        /// </summary>
+        public struct OccurrenceDefinitionItem
         {
+            /// <summary>Gives the desired Occurrence name</summary>
             public string OccurrenceName { get; set; }
+
+            /// <summary>Gives the supported set of Event names that will use this occurrence</summary>
             public string[] EventNames { get; set; }
+
+            /// <summary>Gives the meta data that is to be recorded with the occurrence definition in each resulting MDRF file that is created by the engine</summary>
             public INamedValueSet OccurrenceMetaData { get { return _occurrenceMetaData; } set { _occurrenceMetaData = value.ConvertToReadOnly(mapNullToEmpty: false); } }
 
             private INamedValueSet _occurrenceMetaData;
@@ -2230,6 +2280,8 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
     /// <summary>
     /// This class defines a part that can be used to implement standard MDRF recording scenarios.
+    /// This part filters the given SourceIVI and defines groups to be recorded on the first use of a GoOnline action.
+    /// This part only records MDRF files while it is in an online state.
     /// </summary>
     public class MDRFRecordingEngine : SimpleActivePartBase, IMDRFRecordingEngine
     {

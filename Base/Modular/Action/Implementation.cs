@@ -554,6 +554,7 @@ namespace MosaicLib.Modular.Action
         }
 
         /// <summary>Returns the approximate size of the contents in bytes.</summary>
+        [Obsolete("The use of this property has been deprecated.  (2018-03-09)")]
         public int EstimatedContentSizeInBytes
         {
             get { return (30 + 10 + DC_ResultCode.EstimatedContentSizeInBytes() + (DC_IsCancelRequested ? 40 : 0) + DC_NamedValues.MapNullToEmpty().EstimatedContentSizeInBytes); }

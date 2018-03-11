@@ -91,14 +91,23 @@ namespace MosaicLib.SerialIO
 
 			if (config.RxPacketEndStrArray.Length > 0 || config.RxPacketEndScannerDelegate != null)
 			{
-                slidingPacketBuffer = new SlidingPacketBuffer(config.RxBufferSize, config.RxPacketEndStrArray, config.IdleTime)
+                slidingPacketBuffer = new SlidingPacketBuffer(config.RxBufferSize, config.RxPacketEndStrArray, config.IdleTime, stripWhitespace: config.TrimWhitespaceOnRx)
                 {
-                    StripWhitespace = config.TrimWhitespaceOnRx,
                     DiscardWhitespacePackets = config.DiscardWhitespacePacketsOnRx,
                 };
-                
+
                 if (config.RxPacketEndScannerDelegate != null)
+                {
                     slidingPacketBuffer.PacketEndScannerDelegate = config.RxPacketEndScannerDelegate;
+                }
+
+                if (slidingPacketBuffer.DetectWhitespace != config.DetectWhitespace)
+                {
+                    if (config.DetectWhitespace)
+                        slidingPacketBuffer.DetectWhitespace = true;
+                    else if (!config.TrimWhitespaceOnRx && !config.DiscardWhitespacePacketsOnRx && config.RxPacketEndScannerDelegate != null)
+                        slidingPacketBuffer.DetectWhitespace = false;
+                }
 			}
 
             IConfig iConfig = portConfig.IConfig;
@@ -388,22 +397,28 @@ namespace MosaicLib.SerialIO
 
         /// <summary>Abstract method used so that derived class can perform port type specific actions when the port is going online.  Returns empty string on success or non-empty string on failure.</summary>
 		protected abstract string InnerPerformGoOnlineAction(string source, bool andInitialize);
+
         /// <summary>Abstract method used so that derived class can perform port type specific actions when the port is going offline.  Returns empty string on success or non-empty string on failure.</summary>
         protected abstract string InnerPerformGoOfflineAction(string source);
 
         /// <summary>Abstract getter property.  Returns the number of bytes that are currently available to be read or zero if there are none.</summary>
         protected abstract int InnerReadBytesAvailable { get; }
+
         /// <summary>Virtual getter property.  Returns the number of bytes in the write buffer that are currently used so as to allow the port to block issuing write actions when there is insufficient space.  base class implementation returns 0.</summary>
         protected virtual int InnerWriteSpaceUsed { get { return 0; } }
+
         /// <summary>Virtual getter property.  Returns the size of the write buffer, or zero if there is none.  base class implementation returns 0.</summary>
         protected virtual int InnerWriteSpaceAvailable { get { return 0; } }
+
         /// <summary>Virtual getter property.  Returns true if the InnerWriteSpaceUsed is less than the InnerWriteSpaceAvailable</summary>
         protected virtual bool InnerIsAnyWriteSpaceAvailable { get { return (InnerWriteSpaceUsed < InnerWriteSpaceAvailable); } }
 
         /// <summary>Abstract method that is implemented in the derived class to perform the low level reading of bytes from the port into the given buffer.  Method assigns the actual transfered count and the readResult</summary>
         protected abstract string InnerHandleRead(byte[] buffer, int startIdx, int maxCount, out int didCount, ref ActionResultEnum readResult);
+
         /// <summary>Abstract method that is implemented in the derived class to perform the low level writing of bytes to the port from the given buffer.  Method assigns the actual transfered count and the writeResult</summary>
         protected abstract string InnerHandleWrite(byte[] buffer, int startIdx, int count, out int didCount, ref ActionResultEnum writeResult);
+
         /// <summary>Abstract getter property.  Returns true if the underlying port is known to be connected or false otherwise.</summary>
         protected abstract bool InnerIsConnected { get; }
 

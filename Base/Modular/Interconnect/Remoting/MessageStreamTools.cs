@@ -1802,6 +1802,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
                         case ContainerStorageType.U8: bw.Write(inlineVC.u.u64); break;
                         case ContainerStorageType.F4: bw.Write(inlineVC.u.f32); break;
                         case ContainerStorageType.F8: bw.Write(inlineVC.u.f64); break;
+                        case ContainerStorageType.TimeSpan: bw.Write(inlineVC.u.i64); break;        // TimeSpan values are stored internally as i64 values
+                        case ContainerStorageType.DateTime: bw.Write(inlineVC.u.i64); break;        // DateTime values are stored internally as i64 values
                         default: break;
                     }
                 }
@@ -1839,6 +1841,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
                         case ContainerStorageType.U8: inlineVC.u.u64 = br.ReadUInt64(); break;
                         case ContainerStorageType.F4: inlineVC.u.f32 = br.ReadSingle(); break;
                         case ContainerStorageType.F8: inlineVC.u.f64 = br.ReadDouble(); break;
+                        case ContainerStorageType.TimeSpan: inlineVC.u.i64 = br.ReadInt64(); break;        // TimeSpan values are stored internally as i64 values
+                        case ContainerStorageType.DateTime: inlineVC.u.i64 = br.ReadInt64(); break;        // DateTime values are stored internally as i64 values
                     }
                 }
                 else if (!inlineVC.IsEmpty)

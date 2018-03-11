@@ -118,6 +118,7 @@ namespace MosaicLib.SerialIO
 			: this(name, specStr)
 		{ 
             TrimWhitespaceOnRx = (rxLineTerm != LineTerm.None && rxLineTerm != LineTerm.Custom);
+            DetectWhitespace |= TrimWhitespaceOnRx;
 
             RxLineTerm = rxLineTerm;
             TxLineTerm = txLineTerm;
@@ -186,6 +187,7 @@ namespace MosaicLib.SerialIO
 
             TrimWhitespaceOnRx = cloneFrom.TrimWhitespaceOnRx;
             DiscardWhitespacePacketsOnRx = cloneFrom.DiscardWhitespacePacketsOnRx;
+            DetectWhitespace = cloneFrom.DetectWhitespace;
             EnableAutoReconnect = cloneFrom.EnableAutoReconnect;
             ReconnectHoldoff = cloneFrom.ReconnectHoldoff;
             ConnectTimeout = cloneFrom.ConnectTimeout;
@@ -267,7 +269,7 @@ namespace MosaicLib.SerialIO
             {
                 switch (value)
                 {
-                    case LineTerm.None: TxPacketEndStr = String.Empty; break;
+                    case LineTerm.None: TxPacketEndStr = string.Empty; break;
                     case LineTerm.Auto: TxPacketEndStr = "\r\n"; break;
                     case LineTerm.CR: TxPacketEndStr = "\r"; break;
                     case LineTerm.CRLF: TxPacketEndStr = "\r\n"; break;
@@ -357,6 +359,9 @@ namespace MosaicLib.SerialIO
 
         /// <summary>Only valid in packet mode.  Selects that whitespace packets shall be removed/discarded from the Packet sequence produced by the port.</summary>
         public bool DiscardWhitespacePacketsOnRx { get; set; }
+
+        /// <summary>This property is used in conjunction with TrimWhitespaceOnRx and DiscardWhitespacePacketsOnRx to control use of whitespace detection for ports that make use of a sliding buffer.</summary>
+        public bool DetectWhitespace { get; set; }
 
         /// <summary>Set to true so that the port will automatically attempt to reconnect any time the current connection is lost.  When false the client is responsible for performing such actions explicitly when needed.</summary>
         public bool EnableAutoReconnect { get; set; }
@@ -466,7 +471,7 @@ namespace MosaicLib.SerialIO
 
     /// <summary>
     /// This flag enum is used to select various details about the type and inclusion of SerialIO Trace Data.
-    /// <para/>None (0x00), OldXmlishStyle (0x01), UseMessageDataField (0x02), IncludeEscapedAscii (0x04), IncludeDottedAscii (0x08), InlcludeHex (0x10)
+    /// <para/>None (0x00), OldXmlishStyle (0x01), UseMessageDataField (0x02), IncludeEscapedAscii (0x04), IncludeDottedAscii (0x08), IncludeHex (0x10), DefaultBinaryV2 (0x02), DefaultAsciiV2 (0x04)
     /// </summary>
     [Flags]
     public enum TraceDataFormat
@@ -484,7 +489,7 @@ namespace MosaicLib.SerialIO
 
     /// <summary>
     /// This flag enum is used to select which sources of trace data a given SerialIO port should include.
-    /// <para/>None (0x00), Flush (0x01), Write (0x02), Read (0x04), Packet (0x08)
+    /// <para/>None (0x00), Flush (0x01), Write (0x02), Read (0x04), Packet (0x08), DefaultBinaryV2 (0x07), DefaultPacketV2 (0x0b), All (0x0f)
     /// </summary>
     [Flags]
     public enum TraceDataEvent
@@ -497,6 +502,7 @@ namespace MosaicLib.SerialIO
 
         DefaultBinaryV2 = (Flush | Read | Write),
         DefaultPacketV2 = (Flush | Write | Packet),
+        All = (Flush | Write | Read | Packet),
     }
 
 	#endregion

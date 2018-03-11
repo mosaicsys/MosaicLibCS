@@ -350,11 +350,12 @@ namespace MosaicLib.WPF.Common
             Logging.ILogMessageHandler setLMH = null;
             if (addSetLMH)
             {
-                string setName = config.GetConfigKeyAccessOnce("Config.Logging.Set.Name").GetValue("").MapNullOrEmptyTo("LogMessageHistory");
+                string setName = config.GetConfigKeyAccessOnce("Config.Logging.Set.Name").GetValue("LogMessageHistory");
                 int setCapacity = config.GetConfigKeyAccessOnce("Config.Logging.Set.Capacity").GetValue(1000);
                 Logging.LogGate setLogGate = config.GetConfigKeyAccessOnce("Config.Logging.Set.LogGate").GetValue(Logging.LogGate.Debug);
 
-                setLMH = new MosaicLib.Logging.Handlers.SetLogMessageHandler("LogMessageHistory", capacity: setCapacity, logGate: setLogGate);
+                if (!setName.IsNullOrEmpty())
+                    setLMH = new MosaicLib.Logging.Handlers.SetLogMessageHandler(setName, capacity: setCapacity, logGate: setLogGate);
             }
 
             // Normally all of the standard lmh objects (main, diag, wpf) share the use of a single message queue.

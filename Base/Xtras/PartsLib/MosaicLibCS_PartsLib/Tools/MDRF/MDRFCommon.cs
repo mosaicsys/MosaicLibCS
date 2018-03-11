@@ -40,38 +40,80 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
 {
     #region SetupInfo
 
+    /// <summary>
+    /// Setup information that is used to configure an MDRFWriter in order to write to an MDRF file.
+    /// </summary>
     public class SetupInfo
     {
+        /// <summary>Helper debug and logging method</summary>
         public override string ToString()
         {
             string nvsStr = (ClientNVS.IsNullOrEmpty() ? "" : " {0}".CheckedFormat(ClientNVS));
             return "SetupInfo Client:'{0}' fnPrefix:'{1}' nomSize:{2} numRows:{3}{4}".CheckedFormat(ClientName, FileNamePrefix, NominalMaxFileSize, FileIndexNumRows, nvsStr);
         }
 
+        /// <summary>Gives the client provided meta data NVS that the client would like included in the file.  May be used to give file level context information for use by tools that read MDRF files.</summary>
         public NamedValueSet ClientNVS { get; set; }
 
+        /// <summary>Gives the path to the directory that an MDRFWriter shall create its MDRF file within.</summary>
         public string DirPath { get; set; }
+
+        /// <summary>Gives the name of the client that is writing MDRF files.  May be empty.</summary>
         public string ClientName { get; set; }
+
         /// <summary>This is combined with the current date to create each mdrf file name.  <para/><code>string fileName = "{0}_{1}.mdrf".CheckedFormat(setup.FileNamePrefix, dateTimePart);</code></summary>
         public string FileNamePrefix { get; set; }
+
+        /// <summary>When true, the MDRFWriter will create the DirPath directoy if needed.  When false it will not attempt to do this.  Defaults to true</summary>
         public bool CreateDirectoryIfNeeded { get; set; }
+
+        /// <summary>Gives the maximum MDRF data block size.  Used to size internal buffers.  Defaults to 252144.</summary>
         public Int32 MaxDataBlockSize { get; set; }
+ 
+        /// <summary>Gives the nominal maximum MDRF file size after which a new file will be created.  Defaults to 100 * 1024 * 1024</summary>
         public Int32 NominalMaxFileSize { get; set; }
+
+        /// <summary>
+        /// Defines the size of the file index block, in rows.
+        /// The file index divides the file into nominal regions of NominalMaxFileSize/FileIndexNumRows bytes.  
+        /// Each row records the file offset (and delta times) to the first block in the row's given region of the file.
+        /// In addition flag bits are recorded and retained in each row as the bitwise or of the flag bits of all blocks that have been written (started) within this rows corresponding file region.
+        /// This allows clients to make use of some form of random access based on the use of known user assigned and writer flag bits.
+        /// Defaults to 2048.
+        /// </summary>
         public Int32 FileIndexNumRows { get; set; }
+
+        /// <summary>Gives the nominal maximum TimeSpan during which a given MDRF file can be recorded.  Defaults to 24 hours</summary>
         public TimeSpan MaxFileRecordingPeriod { get; set; }
+
+        /// <summary>Gives the minimum file recording period for cases where a file is started just before a new file boundary condition is detected.  Defaults to 15 seconds</summary>
         public TimeSpan MinInterFileCreateHoldoffPeriod { get; set; }
+
+        /// <summary>Gives the minimum nominal interval between updating the FileIndex.  Set this to be much smaller if you are expecting to use the index to querty the file contents while a file is being written.  Defaults to 60 seconds.</summary>
         public TimeSpan MinNominalFileIndexWriteInterval { get; set; }
+
+        /// <summary>Gives the nominal interval between time triggered group write all operations.  Defaults to 60 seconds.</summary>
         public TimeSpan MinNominalWriteAllInterval { get; set; }
+
+        /// <summary>Gives the offset used with I8 values in preparation for U8Auto coding.  Defaults to 120</summary>
         public Int64 I8Offset { get; set; }
+
+        /// <summary>Gives the offset used with I4 values in preparation for U8Auto coding.  Defaults to 120</summary>
         public Int32 I4Offset { get; set; }
+
+        /// <summary>Gives the offset used with I2 values in preparation for U8Auto coding.  Defaults to 27</summary>
         public Int16 I2Offset { get; set; }
 
+        /// <summary>Default constructor.  Calls SetFrom(null).</summary>
         public SetupInfo() { SetFrom(null); }
-        public SetupInfo(SetupInfo rhs) { SetFrom(rhs); }
 
-        public SetupInfo SetFrom(SetupInfo rhs)
+        /// <summary>Copy constructor.  Calls SetFrom(<paramref name="other"/>)</summary>
+        public SetupInfo(SetupInfo other) { SetFrom(other); }
+
+        /// <summary>Used to initialize the contents of this object, either as a copy of the given non-null <paramref name="other"/> instance, or using the default values when <paramref name="other"/> is given as null.</summary>
+        public SetupInfo SetFrom(SetupInfo other)
         {
-            if (rhs == null)
+            if (other == null)
             {
                 ClientNVS = new NamedValueSet();
 
@@ -82,64 +124,77 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
                 MaxDataBlockSize = 262144;
                 NominalMaxFileSize = 100 * 1024 * 1024;
                 FileIndexNumRows = 2048;            // 51200 bytes per row.  42 seconds per row (assuming full file consumes one day)
-                MaxFileRecordingPeriod = TimeSpan.FromHours(24.0);
-                MinInterFileCreateHoldoffPeriod = TimeSpan.FromSeconds(15.0);
-                MinNominalFileIndexWriteInterval = TimeSpan.FromSeconds(60.0);
-                MinNominalWriteAllInterval = TimeSpan.FromMinutes(15.0);
+                MaxFileRecordingPeriod = (24.0).FromHours();
+                MinInterFileCreateHoldoffPeriod = (15.0).FromSeconds();
+                MinNominalFileIndexWriteInterval = (60.0).FromSeconds();
+                MinNominalWriteAllInterval = (15.0).FromMinutes();
                 I8Offset = 120;
                 I4Offset = 120;
                 I2Offset = 27;
             }
             else
             {
-                ClientNVS = rhs.ClientNVS.ConvertToReadOnly();
+                ClientNVS = other.ClientNVS.ConvertToReadOnly();
 
-                DirPath = rhs.DirPath;
-                ClientName = rhs.ClientName.MapNullOrEmptyTo("NoClientNameGiven");
-                FileNamePrefix = rhs.FileNamePrefix;
-                CreateDirectoryIfNeeded = rhs.CreateDirectoryIfNeeded;
-                MaxDataBlockSize = rhs.MaxDataBlockSize;
-                NominalMaxFileSize = rhs.NominalMaxFileSize;
-                FileIndexNumRows = rhs.FileIndexNumRows;
-                MaxFileRecordingPeriod = rhs.MaxFileRecordingPeriod;
-                MinInterFileCreateHoldoffPeriod = rhs.MinInterFileCreateHoldoffPeriod;
-                MinNominalFileIndexWriteInterval = rhs.MinNominalFileIndexWriteInterval;
-                MinNominalWriteAllInterval = rhs.MinNominalWriteAllInterval;
-                I8Offset = rhs.I8Offset;
-                I4Offset = rhs.I4Offset;
-                I2Offset = rhs.I2Offset;
+                DirPath = other.DirPath;
+                ClientName = other.ClientName.MapNullOrEmptyTo("NoClientNameGiven");
+                FileNamePrefix = other.FileNamePrefix;
+                CreateDirectoryIfNeeded = other.CreateDirectoryIfNeeded;
+                MaxDataBlockSize = other.MaxDataBlockSize;
+                NominalMaxFileSize = other.NominalMaxFileSize;
+                FileIndexNumRows = other.FileIndexNumRows;
+                MaxFileRecordingPeriod = other.MaxFileRecordingPeriod;
+                MinInterFileCreateHoldoffPeriod = other.MinInterFileCreateHoldoffPeriod;
+                MinNominalFileIndexWriteInterval = other.MinNominalFileIndexWriteInterval;
+                MinNominalWriteAllInterval = other.MinNominalWriteAllInterval;
+                I8Offset = other.I8Offset;
+                I4Offset = other.I4Offset;
+                I2Offset = other.I2Offset;
             }
 
             return this;
         }
 
-        public SetupInfo MapDefaultsTo(SetupInfo rhs)
+        /// <summary>This method is used to replace default (0) values for most property/field here with the value from the given <paramref name="other"/> instance.</summary>
+        public SetupInfo MapDefaultsTo(SetupInfo other)
         {
             if (ClientNVS.IsNullOrEmpty())
-                ClientNVS = rhs.ClientNVS.ConvertToReadOnly();
+                ClientNVS = other.ClientNVS.ConvertToReadOnly();
 
-            DirPath = DirPath.MapNullOrEmptyTo(rhs.DirPath);
-            ClientName = ClientName.MapNullOrEmptyTo(rhs.ClientName);
-            FileNamePrefix = FileNamePrefix.MapNullOrEmptyTo(rhs.FileNamePrefix);
+            DirPath = DirPath.MapNullOrEmptyTo(other.DirPath);
+            ClientName = ClientName.MapNullOrEmptyTo(other.ClientName);
+            FileNamePrefix = FileNamePrefix.MapNullOrEmptyTo(other.FileNamePrefix);
 
-            CreateDirectoryIfNeeded = CreateDirectoryIfNeeded.MapDefaultTo(rhs.CreateDirectoryIfNeeded);
-            MaxDataBlockSize = MaxDataBlockSize.MapDefaultTo(rhs.MaxDataBlockSize);
-            NominalMaxFileSize = NominalMaxFileSize.MapDefaultTo(rhs.NominalMaxFileSize);
-            FileIndexNumRows = FileIndexNumRows.MapDefaultTo(rhs.FileIndexNumRows);
-            MaxFileRecordingPeriod = MaxFileRecordingPeriod.MapDefaultTo(rhs.MaxFileRecordingPeriod);
-            MinInterFileCreateHoldoffPeriod = MinInterFileCreateHoldoffPeriod.MapDefaultTo(rhs.MinInterFileCreateHoldoffPeriod);
-            MinNominalFileIndexWriteInterval = MinNominalFileIndexWriteInterval.MapDefaultTo(rhs.MinNominalFileIndexWriteInterval);
-            MinNominalWriteAllInterval = MinNominalWriteAllInterval.MapDefaultTo(rhs.MinNominalWriteAllInterval);
-            I8Offset = I8Offset.MapDefaultTo(rhs.I8Offset);
-            I4Offset = I4Offset.MapDefaultTo(rhs.I4Offset);
-            I2Offset = I2Offset.MapDefaultTo(rhs.I2Offset);
+            CreateDirectoryIfNeeded = CreateDirectoryIfNeeded.MapDefaultTo(other.CreateDirectoryIfNeeded);
+            MaxDataBlockSize = MaxDataBlockSize.MapDefaultTo(other.MaxDataBlockSize);
+            NominalMaxFileSize = NominalMaxFileSize.MapDefaultTo(other.NominalMaxFileSize);
+            FileIndexNumRows = FileIndexNumRows.MapDefaultTo(other.FileIndexNumRows);
+            MaxFileRecordingPeriod = MaxFileRecordingPeriod.MapDefaultTo(other.MaxFileRecordingPeriod);
+            MinInterFileCreateHoldoffPeriod = MinInterFileCreateHoldoffPeriod.MapDefaultTo(other.MinInterFileCreateHoldoffPeriod);
+            MinNominalFileIndexWriteInterval = MinNominalFileIndexWriteInterval.MapDefaultTo(other.MinNominalFileIndexWriteInterval);
+            MinNominalWriteAllInterval = MinNominalWriteAllInterval.MapDefaultTo(other.MinNominalWriteAllInterval);
+            I8Offset = I8Offset.MapDefaultTo(other.I8Offset);
+            I4Offset = I4Offset.MapDefaultTo(other.I4Offset);
+            I2Offset = I2Offset.MapDefaultTo(other.I2Offset);
 
             return this;
         }
 
+        /// <summary>1024 * 1024 = 1048576</summary>
         public const Int32 i4OneMillion = 1024 * 1024;
+
+        /// <summary>512 * 1024 = 524288</summary>
         public const Int32 i4HalfMillion = 512 * 1024;
 
+        /// <summary>
+        /// Used to enforce specific range limits on values in this object:
+        /// <para/>MaxDataBlockSize must be between 65536 and 1048576, rounded up to the next multiple of 16384,
+        /// NominalMaxFileSize must be between 524288 and 2147483647 (Int32.MaxValue),
+        /// MaxFileRecordingPeriod must be between 5 minutes and 7 days,
+        /// FileIndexNumRows must be between 256 and 65536,
+        /// MinInterFileCreateHoldoffPeriod must be between 15 seconds and 1 hour,
+        /// If I8Offset/I4Offset/I2Offset is -1 it will be set to zero.
+        /// </summary>
         public SetupInfo ClipValues()
         {
             // clip and round the maxDataBlockSize up to the next multiple of 4096 that is not larger than i4OneMillion
@@ -165,12 +220,18 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
 
         #region U8/I8, U4/I4 and U2/I2 conversions with offset from setup (for use with U8Auto conversion)
 
+        /// <summary>Applies the I8Offset to the given <paramref name="i8"/> value and returns it as a UInt64</summary>
         public UInt64 ConvertToU8WithI8Offset(Int64 i8) { return unchecked((UInt64)(i8 + I8Offset)); }
+        /// <summary>Applies the I4Offset to the given <paramref name="i4"/> value and returns it as a UInt32</summary>
         public UInt32 ConvertToU4WithI4Offset(Int32 i4) { return unchecked((UInt32)(i4 + I4Offset)); }
+        /// <summary>Applies the I2Offset to the given <paramref name="i2"/> value and returns it as a UInt16</summary>
         public UInt16 ConvertToU2WithI2Offset(Int16 i2) { return unchecked((UInt16)(i2 + I2Offset)); }
 
+        /// <summary>Converts the given <paramref name="u8"/> value to an Int64, subtracts the given I8Offset and returns it.</summary>
         public Int64 ConvertToI8FromU8WithOffset(UInt64 u8) { return unchecked((Int64)(u8) - I8Offset); }
+        /// <summary>Converts the given <paramref name="u4"/> value to an Int32, subtracts the given I4Offset and returns it.</summary>
         public Int32 ConvertToI4FromU4WithOffset(UInt32 u4) { return unchecked((Int32)(u4) - I4Offset); }
+        /// <summary>Converts the given <paramref name="u2"/> value to an Int16, subtracts the given I2Offset and returns it.</summary>
         public Int16 ConvertToI2FromU2WithOffset(UInt16 u2) { return unchecked((Int16)(u2 - I2Offset)); }
 
         #endregion
