@@ -1503,12 +1503,12 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
                         }
                         else
                         {
-                            HandleSessionProtocolViolation(qpcTimeStamp, "received message buffer with zero SeqNum: {10} [{1}]".CheckedFormat(buffer, State));
+                            HandleSessionProtocolViolation(qpcTimeStamp, "received message buffer with zero SeqNum [state:{0} buffer:{1}]".CheckedFormat(State, buffer));
                         }
                     }
                     else
                     {
-                        HandleSessionProtocolViolation(qpcTimeStamp, "received message buffer while session is not connected: {1}".CheckedFormat(State));
+                        HandleSessionProtocolViolation(qpcTimeStamp, "received message buffer while session is not connected [state:{0} buffer:{1}]".CheckedFormat(State, buffer));
                     }
                     break;
 

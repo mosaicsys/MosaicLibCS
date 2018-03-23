@@ -49,6 +49,7 @@ namespace MosaicLib.WPF.Logging
     using MosaicLib.Time;
     using MosaicLib.Utils;
 
+    [Obsolete("WPF_Logging is being deprectated.  Please change to use Set based logging and screen display. (2018-02-26)")]
     public class LogFilterConfig
     {
         public LogFilterConfig() : this(Logging.LogGate.Debug) { }
@@ -65,10 +66,11 @@ namespace MosaicLib.WPF.Logging
         public Logging.LogGate DisplayLogGate { get; protected set; }
     }
 
+    [Obsolete("WPF_Logging is being deprectated.  Please change to use Set based logging and screen display. (2018-02-26)")]
     public interface ILogMessageCollectionItem : Logging.ILogMessage
-    {
-    }
+    { }
 
+    [Obsolete("WPF_Logging is being deprectated.  Please change to use Set based logging and screen display. (2018-02-26)")]
     public class LogMessageCollectionItem : ILogMessageCollectionItem
     {
         public LogMessageCollectionItem(Logging.ILogMessage lm) { this.lm = lm; }
@@ -99,7 +101,7 @@ namespace MosaicLib.WPF.Logging
         #endregion
     }
 
-    // [Obsolete("WPF_Logging is being deprectated.  Please change to use Set based logging and screen display. (2018-02-26)")]
+    [Obsolete("WPF_Logging is being deprectated.  Please change to use Set based logging and screen display. (2018-02-26)")]
     public class LogMessageObservableCollection
         : System.Collections.ObjectModel.ObservableCollection<LogMessageCollectionItem>
         , IDisposable
@@ -274,6 +276,7 @@ namespace MosaicLib.WPF.Logging
         #endregion
     }
 
+    [Obsolete("WPF_Logging is being deprectated.  Please change to use Set based logging and screen display. (2018-02-26)")]
     public class WpfLogMessageHandlerToolBase : MosaicLib.Logging.Handlers.CommonLogMessageHandlerBase
     {
         #region Construction

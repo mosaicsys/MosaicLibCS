@@ -923,7 +923,7 @@ namespace MosaicLib.Utils
             }
 
             if (firstEx != null)
-                Asserts.TakeBreakpointAfterFault(Utils.Fcns.CheckedFormat("Notify triggered exception(s): delegates:{0} inotifyable:{1} eventWaitHandle:{2} firstEx:{3}", delegateExceptions, notifyExceptions, eventWaitHandleExeceptions, firstEx.ToString(ExceptionFormat.TypeAndMessageAndStackTrace)));
+                Asserts.TakeBreakpointAfterFault(Utils.Fcns.CheckedFormat("Notify triggered exception(s): delegates:{0} iNotifyable:{1} eventWaitHandle:{2} firstEx:{3}", delegateExceptions, notifyExceptions, eventWaitHandleExeceptions, firstEx.ToString(ExceptionFormat.TypeAndMessageAndStackTrace)));
 		}
 
 		#endregion
@@ -970,15 +970,14 @@ namespace MosaicLib.Utils
 	/// without owning the mutex, a delegate may be invoked after it has been removed.
 	/// Notify method is not intended to be reentrantly invoked but will not generate any exceptions if this occurs.
 	/// </remarks>
-
     public class EventHandlerNotificationList<EventArgsType> : BasicNotificationList, IEventHandlerNotificationList<EventArgsType>, INotifyable<EventArgsType>
 	{
-		#region Ctor
+		#region Construction
 
-		/// <summary> Ctor defaults to using EventHandlerNotificationList instance itself as source of events </summary>
+		/// <summary>Constructor defaults to using EventHandlerNotificationList instance itself as source of events </summary>
 		public EventHandlerNotificationList() { Source = this; }
 
-		/// <summary> Ctor allows caller to explicitly specify the source object that will be passed to the delegates on Notify </summary>
+        /// <summary>Constructor allows caller to explicitly specify the source object that will be passed to the delegates on Notify </summary>
 		public EventHandlerNotificationList(object eventSourceObject) { Source = eventSourceObject; }
 
 		#endregion
@@ -1011,20 +1010,31 @@ namespace MosaicLib.Utils
         /// </summary>
 		public virtual void Notify(EventArgsType eventArgs) 
 		{
-            int delegateExceptions = 0;
             object source = Source;
 
-            if (eventNotificationDelegateList != null)
+            int delegateExceptions = 0;
+            System.Exception firstEx = null;
+
+            EventHandlerDelegate<EventArgsType>[] eventNotificationDelegateArray = eventNotificationDelegateList.SafeToArray(mapNullToEmpty: false);
+
+            if (eventNotificationDelegateArray != null)
             {
-                foreach (EventHandlerDelegate<EventArgsType> eventDelegate in eventNotificationDelegateList.Array)
+                foreach (EventHandlerDelegate<EventArgsType> eventDelegate in eventNotificationDelegateArray)
                 {
-                    try { (eventDelegate ?? nullEventNotificationDelegate)(source, eventArgs); }
-                    catch { delegateExceptions++; }
+                    try 
+                    { 
+                        (eventDelegate ?? nullEventNotificationDelegate)(source, eventArgs); 
+                    }
+                    catch (System.Exception ex)
+                    {
+                        firstEx = firstEx ?? ex;
+                        delegateExceptions++; 
+                    }
                 }
             }
 
-            if (delegateExceptions != 0)
-                Asserts.TakeBreakpointAfterFault(Utils.Fcns.CheckedFormat("Notify(EventArgs) triggered exceptions: delegates:{0}", delegateExceptions));
+            if (firstEx != null)
+                Asserts.TakeBreakpointAfterFault(Utils.Fcns.CheckedFormat("Notify(EventArgs) triggered exception(s): delegates:{0} firstEx:{3}", delegateExceptions, firstEx.ToString(ExceptionFormat.TypeAndMessageAndStackTrace)));
 
             base.Notify();
         }

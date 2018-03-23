@@ -260,6 +260,8 @@ namespace MosaicLib
             public static MesgTypeMask operator |(MesgTypeMask lhs, MesgTypeMask rhs) { return new MesgTypeMask(lhs.maskBits | rhs.maskBits); }
             /// <summary>Returns new MesgTypeMask containing the logical and of the masks on the left and right sides</summary>
             public static MesgTypeMask operator &(MesgTypeMask lhs, MesgTypeMask rhs) { return new MesgTypeMask(lhs.maskBits & rhs.maskBits); }
+            /// <summary>Returns new MesgTypeMask containing the logical exclusive or of the masks on the left and right sides</summary>
+            public static MesgTypeMask operator ^(MesgTypeMask lhs, MesgTypeMask rhs) { return new MesgTypeMask(lhs.maskBits ^ rhs.maskBits); }
             /// <summary>Returns new MesgTypeMask containing the logical inverse (compliment) of the given mask (on the right of the operator)</summary>
             public static MesgTypeMask operator ~(MesgTypeMask rhs) { return new MesgTypeMask(~rhs.maskBits); }
 
@@ -429,6 +431,8 @@ namespace MosaicLib
 			public static LogGate operator |(LogGate lhs, LogGate rhs) { return new LogGate(lhs.mask | rhs.mask); }
             /// <summary>Returns new LogGate containing the logical and of the masks on the left and right sides</summary>
 			public static LogGate operator &(LogGate lhs, LogGate rhs) { return new LogGate(lhs.mask & rhs.mask); }
+            /// <summary>Returns new LogGate containing the logical exclusive or of the masks on the left and right sides</summary>
+            public static LogGate operator ^(LogGate lhs, LogGate rhs) { return new LogGate(lhs.mask ^ rhs.mask); }
             /// <summary>Returns new LogGate containing the logical inverse (compliment) of the given mask (on the right of the operator)</summary>
 			public static LogGate operator ~(LogGate lhs) { return new LogGate(~lhs.mask); }
 

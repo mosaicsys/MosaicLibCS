@@ -1385,37 +1385,61 @@ namespace MosaicLib.Modular.Common
 
                     if (!conversionDone)
                     {
-                        if (decodedValueType == ContainerStorageType.IListOfString && cvt == ContainerStorageType.IListOfVC)
+                        switch (decodedValueType)
                         {
-                            IList<ValueContainer> oAsIsListOfVC = o as IList<ValueContainer> ?? emptyIListOfVC;
-                            if (TValueTypeType == stringArrayType)
-                                value = (TValueType)((System.Object)(oAsIsListOfVC.Select(vcItem => vcItem.ValueAsObject.ToString()).ToArray()));
-                            else
-                                value = (TValueType)((System.Object)new ReadOnlyIList<string>(oAsIsListOfVC.Select(vcItem => vcItem.ValueAsObject.ToString())));
+                            case (ContainerStorageType.IListOfString):
+                                if (cvt == ContainerStorageType.IListOfVC)
+                                {
+                                    IList<ValueContainer> oAsIsListOfVC = o as IList<ValueContainer> ?? emptyIListOfVC;
+                                    if (TValueTypeType == stringArrayType)
+                                        value = (TValueType)((System.Object)(oAsIsListOfVC.Select(vcItem => vcItem.ValueAsObject.ToString()).ToArray()));
+                                    else
+                                        value = (TValueType)((System.Object)new ReadOnlyIList<string>(oAsIsListOfVC.Select(vcItem => vcItem.ValueAsObject.ToString())));
 
-                            conversionDone = true;
-                        }
-                        else if (decodedValueType == ContainerStorageType.IListOfVC && cvt == ContainerStorageType.IListOfString)
-                        {
-                            IList<string> oAsIsListOfString = o as IList<string> ?? emptyIListOfString;
-                            if (TValueTypeType == vcArrayType)
-                                value = (TValueType)((System.Object)(oAsIsListOfString.Select(str => ValueContainer.Create(str)).ToArray()));
-                            else
-                                value = (TValueType)((System.Object)new ReadOnlyIList<ValueContainer>(oAsIsListOfString.Select(str => ValueContainer.Create(str))));
+                                    conversionDone = true;
+                                }
+                                else if (cvt == ContainerStorageType.String)
+                                {
+                                    string s = o as string;
+                                    string[] sa = (s != null) ? new[] { s } : Utils.Collections.EmptyArrayFactory<string>.Instance;
 
-                            conversionDone = true;
-                        }
-                        else if (decodedValueType == ContainerStorageType.INamedValueSet && (cvt == ContainerStorageType.IListOfString || cvt == ContainerStorageType.IListOfVC))
-                        {
-                            value = (TValueType)((System.Object)this.ConvertToNamedValueSet(asReadOnly: true));
+                                    if (TValueTypeType == stringArrayType)
+                                        value = (TValueType)((System.Object)(sa));
+                                    else
+                                        value = (TValueType)((System.Object)new ReadOnlyIList<string>(sa));
 
-                            conversionDone = true;
-                        }
-                        else if (decodedValueType == ContainerStorageType.INamedValue && (cvt == ContainerStorageType.IListOfString || cvt == ContainerStorageType.IListOfVC || cvt == ContainerStorageType.String))
-                        {
-                            value = (TValueType)((System.Object)this.ConvertToNamedValue(asReadOnly: true));
+                                    conversionDone = true;
+                                }
+                                break;
+                            case ContainerStorageType.IListOfVC:
+                                if (cvt == ContainerStorageType.IListOfString)
+                                {
+                                    IList<string> oAsIsListOfString = o as IList<string> ?? emptyIListOfString;
+                                    if (TValueTypeType == vcArrayType)
+                                        value = (TValueType)((System.Object)(oAsIsListOfString.Select(str => ValueContainer.Create(str)).ToArray()));
+                                    else
+                                        value = (TValueType)((System.Object)new ReadOnlyIList<ValueContainer>(oAsIsListOfString.Select(str => ValueContainer.Create(str))));
 
-                            conversionDone = true;
+                                    conversionDone = true;
+                                }
+                                break;
+                            case ContainerStorageType.INamedValueSet:
+                                if (cvt == ContainerStorageType.IListOfString || cvt == ContainerStorageType.IListOfVC)
+                                {
+                                    value = (TValueType)((System.Object)this.ConvertToNamedValueSet(asReadOnly: true));
+
+                                    conversionDone = true;
+                                }
+                                break;
+                            case ContainerStorageType.INamedValue:
+                                if (cvt == ContainerStorageType.IListOfString || cvt == ContainerStorageType.IListOfVC || cvt == ContainerStorageType.String)
+                                {
+                                    value = (TValueType)((System.Object)this.ConvertToNamedValue(asReadOnly: true));
+
+                                    conversionDone = true;
+                                }
+                                break;
+                            default: break;
                         }
                     }
 
@@ -2694,7 +2718,6 @@ namespace MosaicLib.Modular.Common
                 {
                     DataContractJsonSerializer dcjs = new DataContractJsonSerializer(TargetType);
 
-                    IFormatter formatter = new BinaryFormatter();
                     using (System.IO.MemoryStream ms = new System.IO.MemoryStream())
                     {
                         dcjs.WriteObject(ms, valueObject);

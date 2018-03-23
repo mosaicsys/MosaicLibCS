@@ -241,10 +241,10 @@ namespace MosaicLib.WPF.Common
         /// appLogger will be assigned to a new logger (this is expected to be used by the client in calls to later HandleYYY methods).
         /// <para/>See the description of the full HandleOnStartup method variant for more details.
         /// </summary>
-        public static void HandleOnStartup(StartupEventArgs e, ref Logging.Logger appLogger, string logBaseName = null, bool useSetLMH = false, bool enableUEH = true)
+        public static void HandleOnStartup(StartupEventArgs e, ref Logging.Logger appLogger, string logBaseName = null, bool useSetLMH = true, bool enableUEH = true)
         {
             string[] args = (e != null) ? e.Args : null;
-            HandleOnStartup(ref args, ref appLogger, logBaseName: logBaseName, addWPFLMH: (e != null) && !useSetLMH, addSetLMH: (e != null) && useSetLMH, enableUEH: enableUEH);
+            HandleOnStartup(ref args, ref appLogger, logBaseName: logBaseName, addWPFLMH: false, addSetLMH: (e != null) && useSetLMH, enableUEH: enableUEH);
         }
 
         /// <summary>
@@ -337,15 +337,15 @@ namespace MosaicLib.WPF.Common
             }
 
             LogMessageHandlerSettingFlags diagTraceLMHSettingFlags = config.GetConfigKeyAccessOnce("Config.Logging.DiagnosticTrace").GetValue(LogMessageHandlerSettingFlags.IncludeWhenDebuggerAttached);
-            LogMessageHandlerSettingFlags wpfLMHSettingFlags = config.GetConfigKeyAccessOnce("Config.Logging.WPF").GetValue(addWPFLMH ? LogMessageHandlerSettingFlags.IncludeAlways : LogMessageHandlerSettingFlags.Disabled);
+            //LogMessageHandlerSettingFlags wpfLMHSettingFlags = config.GetConfigKeyAccessOnce("Config.Logging.WPF").GetValue(addWPFLMH ? LogMessageHandlerSettingFlags.IncludeAlways : LogMessageHandlerSettingFlags.Disabled);
             LogMessageHandlerSettingFlags setLMHSettingFlags = config.GetConfigKeyAccessOnce("Config.Logging.Set").GetValue(addSetLMH ? LogMessageHandlerSettingFlags.IncludeAlways : LogMessageHandlerSettingFlags.Disabled);
 
             bool addDiagTraceLMH = diagTraceLMHSettingFlags.IsSet(LogMessageHandlerSettingFlags.IncludeAlways) || diagTraceLMHSettingFlags.IsSet(LogMessageHandlerSettingFlags.IncludeWhenDebuggerAttached) && System.Diagnostics.Debugger.IsAttached;
-            addWPFLMH = wpfLMHSettingFlags.IsSet(LogMessageHandlerSettingFlags.IncludeAlways) || wpfLMHSettingFlags.IsSet(LogMessageHandlerSettingFlags.IncludeWhenDebuggerAttached) && System.Diagnostics.Debugger.IsAttached;
-            addSetLMH = setLMHSettingFlags.IsSet(LogMessageHandlerSettingFlags.IncludeAlways) || wpfLMHSettingFlags.IsSet(LogMessageHandlerSettingFlags.IncludeWhenDebuggerAttached) && System.Diagnostics.Debugger.IsAttached;
+            //addWPFLMH = wpfLMHSettingFlags.IsSet(LogMessageHandlerSettingFlags.IncludeAlways) || wpfLMHSettingFlags.IsSet(LogMessageHandlerSettingFlags.IncludeWhenDebuggerAttached) && System.Diagnostics.Debugger.IsAttached;
+            addSetLMH = setLMHSettingFlags.IsSet(LogMessageHandlerSettingFlags.IncludeAlways) || setLMHSettingFlags.IsSet(LogMessageHandlerSettingFlags.IncludeWhenDebuggerAttached) && System.Diagnostics.Debugger.IsAttached;
 
             Logging.ILogMessageHandler diagTraceLMH = addDiagTraceLMH ? Logging.CreateDiagnosticTraceLogMessageHandler(logGate: Logging.LogGate.Debug) : null;
-            Logging.ILogMessageHandler wpfLMH = addWPFLMH ? MosaicLib.WPF.Logging.WpfLogMessageHandlerToolBase.Instance : null;
+            //Logging.ILogMessageHandler wpfLMH = addWPFLMH ? MosaicLib.WPF.Logging.WpfLogMessageHandlerToolBase.Instance : null;
 
             Logging.ILogMessageHandler setLMH = null;
             if (addSetLMH)
@@ -369,10 +369,10 @@ namespace MosaicLib.WPF.Common
             else if (diagTraceLMH != null)
                 Logging.AddLogMessageHandlerToDefaultDistributionGroup(diagTraceLMH);
 
-            if (wpfLMH != null && wpfLMHSettingFlags.IsClear(LogMessageHandlerSettingFlags.NonQueued))
-                mainLMHList.Add(wpfLMH);
-            else if (wpfLMH != null)
-                Logging.AddLogMessageHandlerToDefaultDistributionGroup(wpfLMH);
+            //if (wpfLMH != null && wpfLMHSettingFlags.IsClear(LogMessageHandlerSettingFlags.NonQueued))
+            //    mainLMHList.Add(wpfLMH);
+            //else if (wpfLMH != null)
+            //    Logging.AddLogMessageHandlerToDefaultDistributionGroup(wpfLMH);
 
             if (setLMH != null && setLMHSettingFlags.IsClear(LogMessageHandlerSettingFlags.NonQueued))
                 mainLMHList.Add(setLMH);
@@ -424,6 +424,9 @@ namespace MosaicLib.WPF.Common
             Logging.Logger appLoggerCopy = appLogger;
             issueListEmitter.EmittedItemList.ForEach((item) => appLoggerCopy.Error.Emit(item.MesgStr));
             valuesListEmitter.EmittedItemList.ForEach((item) => appLoggerCopy.Debug.Emit(item.MesgStr));
+
+            if (addWPFLMH)
+                appLogger.Warning.Emit("Use of MosaicLib.WPF.Logging is no longer supported.  Please enable use of SetLogMessageHandler (addSetLMH/useSetLMH) and convert to use of set based log display controls");
         }
 
         /// <summary>

@@ -795,8 +795,14 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             /// <summary>Get/Set value gives the geometric level of noise for this reading (most useful when emulating sensors that are essentially logarithmic).  At value of 2.0 gives noise of value * fraction randomly choosen between (0.98 and 1.02)</summary>
             public double NoiseLevelInPercentOfCurrentValue { get; set; }
 
-            /// <summary>Get/Set value gives the base level of noise that is added to the reading in the client selected PressureUnits or VolumetricFlow units (as approrpiate)</summary>
+            /// <summary>
+            /// Get/Set value gives the base level of noise (in standard units) that is added to the reading in the client selected PressureUnits or VolumetricFlow units (as approrpiate)
+            /// <para/>Note: this value is measured in standard units (pressure: KPA, volumetricFlow: SCMS)
+            /// </summary>
             public double NoiseLevelBase { get; set; }
+
+            /// <summary>Get/Set value gives the base level of noise (in user units) that is added to the reading in the client selected PressureUnits or VolumetricFlow units (as approrpiate)</summary>
+            public double NoiseLevelBaseInUserUnits { get { return ConvertValueUOM(NoiseLevelBase, outbound: true); } set { NoiseLevelBase = ConvertValueUOM(value, inbound: true); } }
 
             /// <summary>Gives a gain factor on the reading that is produced in relation to the actual value source that it is observing.</summary>
             public double ReadingGain { get; set; }

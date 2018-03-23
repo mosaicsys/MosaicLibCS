@@ -432,9 +432,35 @@ namespace MosaicLib.Utils
                     Asserts.TakeBreakpointAfterFault("DisposableList::Dispose(CalledByFinalizer) triggered exception", ex);
                 }
             }
+
+            #endregion
         }
 
-        #endregion
+        /// <summary>
+        /// This object is a variant of DisposableBase that exposes its means of calling a series of actions when it is being explicitly disposed.
+        /// </summary>
+        public class ExplicitDisposeActionList : DisposableBase
+        {
+            /// <summary>
+            /// Method that may be used to add a single <paramref name="explicitDisposeAction"/>
+            /// <para/>Supports call chaining
+            /// </summary>
+            public ExplicitDisposeActionList Add(Action explicitDisposeAction) 
+            { 
+                AddExplicitDisposeAction(explicitDisposeAction); 
+                return this; 
+            }
+
+            /// <summary>
+            /// Method that may be used to add a set of one or more explict dispose action items
+            /// <para/>Supports call chaining
+            /// </summary>
+            public ExplicitDisposeActionList AddItems(params Action[] explicitDisposeActionParamsArray) 
+            { 
+                explicitDisposeActionParamsArray.DoForEach(explicitDisposeAction => AddExplicitDisposeAction(explicitDisposeAction)); 
+                return this; 
+            }
+        }
     }
 
     #endregion

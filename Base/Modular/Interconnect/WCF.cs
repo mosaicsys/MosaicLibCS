@@ -121,7 +121,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
     [ServiceContract(Name = "InterConnPropagCommonAPI", 
                     Namespace = Constants.ModularInterconnectNameSpace, 
                     ProtectionLevel = System.Net.Security.ProtectionLevel.None)]
-    //[Obsolete("Use of Interconnect.WCF has been replaced with use of corresponding Interconnect.Remoting features.  Interconnect.WCF is no longer supported and will be removed (2018-02-18)")]
+    [Obsolete("Use of Interconnect.WCF has been replaced with use of corresponding Interconnect.Remoting features.  Interconnect.WCF is no longer supported and will be removed (2018-02-18)")]
     public interface IInterconnectPropagationSessionCommonAPI
     {
         /// <summary>
@@ -151,6 +151,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
     /// Individual properties in the class are used for different parts of the protocol.
     /// </summary>
     [DataContract(Name = "param", Namespace = Constants.ModularInterconnectNameSpace)]
+    [Obsolete("Use of Interconnect.WCF has been replaced with use of corresponding Interconnect.Remoting features.  Interconnect.WCF is no longer supported and will be removed (2018-02-18)")]
     public class PushParameter
     {
         #region Acknowledgement and SeqNum
@@ -241,6 +242,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
     /// Custom CollectionDataContract object type used with IInterconnectPropagationSessionAPI Push method and related PushParameter parameter. 
     /// </summary>
     [CollectionDataContract(ItemName = "item", Namespace = Constants.ModularInterconnectNameSpace)]
+    [Obsolete("Use of Interconnect.WCF has been replaced with use of corresponding Interconnect.Remoting features.  Interconnect.WCF is no longer supported and will be removed (2018-02-18)")]
     public class ValuePropagationItemList : List<ValuePropagationItem>
     {
         /// <summary>Default constructor gives empty list</summary>
@@ -258,6 +260,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
     /// <para/>Normal Update Record (bidirectional, has ID but no Name)
     /// </summary>
     [DataContract(Namespace=Constants.ModularInterconnectNameSpace)]
+    [Obsolete("Use of Interconnect.WCF has been replaced with use of corresponding Interconnect.Remoting features.  Interconnect.WCF is no longer supported and will be removed (2018-02-18)")]
     public class ValuePropagationItem
     {
         /// <summary>Carries the optional server side assigned ID that is used to effeciently refer to the named value after it has been registered and assigned an ID by the server.</summary>
@@ -307,6 +310,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
     /// Custom CollectionDataContract object type used with IInterconnectPropagationSessionAPI Push method and related PushParameter parameter. 
     /// </summary>
     [CollectionDataContract(ItemName = "item", Namespace = Constants.ModularInterconnectNameSpace)]
+    [Obsolete("Use of Interconnect.WCF has been replaced with use of corresponding Interconnect.Remoting features.  Interconnect.WCF is no longer supported and will be removed (2018-02-18)")]
     public class RemoteServiceActionRequestList : List<RemoteServiceActionRequest>
     {
         /// <summary>Default constructor gives empty list</summary>
@@ -322,6 +326,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
     /// This class can also be used to request that a previously started action should be asked to RequestCancel.
     /// </summary>
     [DataContract(Namespace = Constants.ModularInterconnectNameSpace)]
+    [Obsolete("Use of Interconnect.WCF has been replaced with use of corresponding Interconnect.Remoting features.  Interconnect.WCF is no longer supported and will be removed (2018-02-18)")]
     public class RemoteServiceActionRequest
     {
         /// <summary>Carries a unique identifier created for each newly started RemoteServiceAction</summary>
@@ -363,6 +368,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
     /// Custom CollectionDataContract object type used with IInterconnectPropagationSessionAPI Push method and related PushParameter parameter. 
     /// </summary>
     [CollectionDataContract(ItemName = "item", Namespace = Constants.ModularInterconnectNameSpace)]
+    [Obsolete("Use of Interconnect.WCF has been replaced with use of corresponding Interconnect.Remoting features.  Interconnect.WCF is no longer supported and will be removed (2018-02-18)")]
     public class RemoteServiceActionUpdateList : List<RemoteServiceActionUpdate>
     {
         /// <summary>Default constructor gives empty list</summary>
@@ -376,6 +382,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
     /// This class is used as part of the PushParameters to allow one end of inform the other about updates to the IActionState for a previously started RemoteServiceAction.
     /// </summary>
     [DataContract(Namespace = Constants.ModularInterconnectNameSpace)]
+    [Obsolete("Use of Interconnect.WCF has been replaced with use of corresponding Interconnect.Remoting features.  Interconnect.WCF is no longer supported and will be removed (2018-02-18)")]
     public class RemoteServiceActionUpdate
     {
         /// <summary>Carries a unique identifier that indicates which RemoteServiceAction this state update applies to.</summary>
@@ -1466,6 +1473,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
     /// The coding of this class is intended to include 0th order optimizations to avoid generating garbage more garbage allocations than is strictly required to support the protocol
     /// and related functionality.  
     /// </remarks>
+    [Obsolete("Use of Interconnect.WCF has been replaced with use of corresponding Interconnect.Remoting features.  Interconnect.WCF is no longer supported and will be removed (2018-02-18)")]
     internal class ConnectionScanHelper : DisposableBase
     {
         #region default constrution and external setup properties

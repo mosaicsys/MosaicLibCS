@@ -172,19 +172,19 @@ namespace MosaicLib.Semi.E041
     [DataContract(Namespace = MosaicLib.Constants.SemiNameSpace)]
     public enum ANAlarmID : int
     {
-        /// <summary>Use this value when no AlarmID is known or desired</summary>
+        /// <summary>Use this value when no AlarmID is known or desired [0]</summary>
         [EnumMember]
         None = 0,
 
-        /// <summary>Use a value between 1 and this value for known AlarmIDs</summary>
+        /// <summary>Use a value between 1 and this value for known AlarmIDs [Int32.MaxValue]</summary>
         [EnumMember]
         MaxValue = Int32.MaxValue,
 
-        /// <summary>Use this value as a specification placeholder to indicate that the ALID needs to be looked up from the name of the annunciator</summary>
+        /// <summary>Use this value as a specification placeholder to indicate that the ALID needs to be looked up from the name of the annunciato [-1]r</summary>
         [EnumMember]
         Lookup = -1,
 
-        /// <summary>Use this value as a specification placeholder to indicate that the ALID can be looked up from the name of the annunciator but that no error should be produced if no matching ALID is found.</summary>
+        /// <summary>Use this value as a specification placeholder to indicate that the ALID can be looked up from the name of the annunciator but that no error should be produced if no matching ALID is found. [-2]</summary>
         [EnumMember]
         OptLookup = -2,
     }
@@ -292,7 +292,7 @@ namespace MosaicLib.Semi.E041
         /// <summary>Gives the Name of the Annunciator</summary>
         string ANName { get; }
 
-        /// <summary>Gives a brief, optinal, comment about the Annunciator as seen by its source.  This is not generally intended to be used as a formal definition or description.</summary>
+        /// <summary>Gives a brief, optional, comment about the Annunciator as seen by its source.  This is not generally intended to be used as a formal definition or description.</summary>
         string Comment { get; }
 
         /// <summary>Gives the ANType of this Annunciator</summary>
@@ -313,7 +313,7 @@ namespace MosaicLib.Semi.E041
     }
 
     /// <summary>This is the storage implementation and serialization object for the IANSpec interface.</summary>
-    [DataContract(Namespace = MosaicLib.Constants.SemiNameSpace)]
+    [DataContract(Namespace = MosaicLib.Constants.SemiNameSpace), Serializable]
 	public class ANSpec : IANSpec
 	{
         /// <summary>Gives the Name of the Annunciator</summary>
@@ -321,14 +321,15 @@ namespace MosaicLib.Semi.E041
         public string ANName { get; set; }
 
         /// <summary>Gives a brief description of the Annunciator</summary>
-        [DataMember(Order = 20)]
+        [DataMember(Order = 20, IsRequired=false, EmitDefaultValue=false)]
         public string Comment { get; set; }
 
         /// <summary>Gives the ANType of this Annunciator</summary>
         [DataMember(Order = 40)]
         public ANType ANType { get; set; }
 
-        /// <summary>Returns the non-zero sequence number that the ANManagerPart assigned to this spec during Registration.  Will be zero for client created and serialized spec objects.</summary>
+        /// <summary>Returns the non-zero sequence number that the ANManagerPart assigned to this spec during Registration.</summary>
+        [DataMember(Order = 50, IsRequired = false, EmitDefaultValue = false)]
         public Int32 SpecID { get; internal set; }
 
         /// <summary>
@@ -336,6 +337,7 @@ namespace MosaicLib.Semi.E041
         /// When set to ALID_Lookup or ALID_OptLookup this requests that the IANManager attempt to find the ALID from the (possibly later) provided IE30ALIDHandlerFacet.  
         /// For ALID_Lookup the IANManager will emit an error message if no ALID was found for this ANName after the IE30ALIDHandlerFacet has been provided.
         /// </summary>
+        [DataMember(Order = 60, IsRequired = false, EmitDefaultValue = false)]
         public ANAlarmID ALID { get; set; }
 
         /// <summary>Returns true if this object's ALID was explicitly defined by the client (i.e. it is neither None, Lookup, nor OptLookup</summary>
@@ -459,7 +461,7 @@ namespace MosaicLib.Semi.E041
     /// <summary>
     /// This struct is used to contain and serialize a triplet of a sequence number, a QpcTimeStamp and a DateTime.  It is used to record and propagate timeing and sequence information for ANState objects.
     /// </summary>
-    [DataContract(Namespace = MosaicLib.Constants.SemiNameSpace)]
+    [DataContract(Namespace = MosaicLib.Constants.SemiNameSpace), Serializable]
     public struct ANSeqAndTimeInfo : IEquatable<ANSeqAndTimeInfo>
     {
         /// <summary>This gives the sequence number as recorded by the ANManager's at the time that this state object was generated (or last updated)</summary>
@@ -498,7 +500,8 @@ namespace MosaicLib.Semi.E041
     }
 
     /// <summary>This is the storage implementation and serialization object for the IANState interface.</summary>
-    [DataContract(Namespace = MosaicLib.Constants.SemiNameSpace)]
+    [DataContract(Namespace = MosaicLib.Constants.SemiNameSpace), Serializable]
+    [KnownType(typeof(ANSpec))]
     public class ANState : IANState
 	{
         /// <summary>Default constructor</summary>
@@ -511,12 +514,11 @@ namespace MosaicLib.Semi.E041
             bool rhsIsANState = (rhsAsANState != null);
 
             ANSpec = other.ANSpec;
-            anName = (rhsIsANState ? rhsAsANState.anName : other.ANName);
             ANSignalState = other.ANSignalState;
             Reason = other.Reason;
             SeqAndTimeInfo = other.SeqAndTimeInfo;
             LastTransitionToOnSeqAndTimeInfo = other.LastTransitionToOnSeqAndTimeInfo;
-            actionList = (rhsIsANState ? rhsAsANState.actionList : other.ActionList);
+            _actionList = (rhsIsANState ? rhsAsANState._actionList : other.ActionList);
             selectedActionName = (rhsIsANState ? rhsAsANState.selectedActionName : other.SelectedActionName); ;
             activeActionName = (rhsIsANState ? rhsAsANState.activeActionName : other.ActiveActionName); ;
             ActionAbortRequested = other.ActionAbortRequested;
@@ -525,15 +527,14 @@ namespace MosaicLib.Semi.E041
         }
 
         /// <summary>Gives the ANSpec for the annunciator that produced this state.</summary>
+        [DataMember(Order = 100)]
         public IANSpec ANSpec { get; set; }
 
-        /// <summary>Gives the annunciator name (from ANSpec, or as explicitly assigned) of the annunciator that produced this state.</summary>
-        [DataMember(Order = 10)]
-        public string ANName { get { return ((ANSpec != null) ? ANSpec.ANName : anName); } set { anName = value; } }
-        private string anName = null;
+        /// <summary>Gives the annunciator name (from ANSpec) of the annunciator that produced this state.</summary>
+        public string ANName { get { return ANSpec.ANName; } set { } }
 
         /// <summary>This gives he ANSignalState value that the annunciator currently has.</summary>
-        [DataMember(Order = 30)]
+        [DataMember(Order = 300)]
         public ANSignalState ANSignalState { get { return anSignalState; } set { anSignalState = value; } }
         private volatile ANSignalState anSignalState;
 
@@ -544,15 +545,15 @@ namespace MosaicLib.Semi.E041
         public bool IsSignaling { get { return anSignalState.IsSignaling(); } }
 
         /// <summary>Gives the most recently given reason for the current state or condition</summary>
-        [DataMember(Order = 40)]
+        [DataMember(Order = 400)]
         public string Reason { get; set; }
 
         /// <summary>Gives the ANSeqAndTimeInfo for the last change to this state</summary>
-        [DataMember(Order = 50)]
+        [DataMember(Order = 500)]
         public ANSeqAndTimeInfo SeqAndTimeInfo { get; set; }
 
         /// <summary>Gives the ANSeqAndTimeInfo for the last change to this state from non-signaling to signaling (from Off to any of the On states)s</summary>
-        [DataMember(Order = 51)]
+        [DataMember(Order = 600)]
         public ANSeqAndTimeInfo LastTransitionToOnSeqAndTimeInfo { get; set; }
 
         /// <summary>This gives the QpcTimeStamp recorded at the time that this state object was generated (or last updated)</summary>
@@ -562,31 +563,34 @@ namespace MosaicLib.Semi.E041
         public DateTime DateTime { get { return SeqAndTimeInfo.DateTime; } }
 
         /// <summary>This ReadOnly INamedValueSet contains a set of action names that the annunciator currently supports.  Each corresponding value shall be set to True to indicate that the corresponding name is currently available.</summary>
-        [DataMember(Order = 60)]
-        public INamedValueSet ActionList { get { return actionList.MapNullToEmpty(); } set { actionList = value.ConvertToReadOnly(); } }
-        INamedValueSet actionList = null;
+        public INamedValueSet ActionList { get { return _actionList.MapNullToEmpty(); } set { _actionList = value.ConvertToReadOnly(); } }
+        private INamedValueSet _actionList = null;
+
+        /// <summary>Private DC serialization helper.</summary>
+        [DataMember(Order = 700, Name = "ActionList", IsRequired = false, EmitDefaultValue = false)]
+        private NamedValueSet ActionListDC { get { return _actionList.ConvertToReadOnly(mapNullToEmpty: false).MapEmptyToNull(); } set { _actionList = value.ConvertToReadOnly(mapNullToEmpty: false); } }
 
         /// <summary>When non-empty this gives the name of the action that has been selected by an external decision authority.  This may only be set when the action is OnAndWaiting, and has no currently SelectedActionName.</summary>
-        [DataMember(Order = 70)]
+        [DataMember(Order = 800)]
         public string SelectedActionName { get { return selectedActionName ?? String.Empty; } set { selectedActionName = value; } }
         private volatile string selectedActionName = null;
 
         /// <summary>When non-empty this gives the name of the action that has been accepted by the annunciator source and which it is currently processing.</summary>
-        [DataMember(Order = 80)]
+        [DataMember(Order = 900)]
         public string ActiveActionName { get { return activeActionName ?? String.Empty; } set { activeActionName = value; } }
         private string activeActionName = null;
 
         /// <summary>When true this indicates that the external decision authority has requested that the SelectedActionName be aborted.</summary>
-        [DataMember(Order = 90)]
+        [DataMember(Order = 1000)]
         public bool ActionAbortRequested { get { return actionAbortRequested; } set { actionAbortRequested = value; } }
         private volatile bool actionAbortRequested = false;
 
         /// <summary>Gives the ALID associated with this Annunciator (for looked up ANAlarmID values, this value may differ from the value in the ANSpec)</summary>
-        [DataMember(Order = 100)]
+        [DataMember(Order = 1100)]
         public ANAlarmID ALID { get; set; }
 
         /// <summary>Gives the state of any Lookup operation that is required or is in progress for this AN source.</summary>
-        [DataMember(Order = 110)]
+        [DataMember(Order = 1200)]
         public ALIDLookupState ALIDLookupState { get; set; }
 
         /// <summary>Returns true if this ANState has the same contents as the given <paramref name="other"/> IANState</summary>
@@ -599,7 +603,7 @@ namespace MosaicLib.Semi.E041
         public bool Equals(IANState other)
         {
             return (other != null
-                    && Object.ReferenceEquals(ANSpec, other.ANSpec)
+                    && ANSpec.Equals(other.ANSpec)
                     && ANName == other.ANName
                     && ANSignalState == other.ANSignalState
                     && Reason == other.Reason
@@ -1247,7 +1251,7 @@ namespace MosaicLib.Semi.E041
                 anSourceTracking.anSpec = anSpecCopy;
                 anSourceTracking.anSourceImpl = anSourceImpl;
                 if (IVI != null)
-                    anSourceTracking.anStateIVA = IVI.GetValueAccessor("{0}.ANStates.{1}".CheckedFormat(PartID, anName));
+                    anSourceTracking.anStateIVA = IVI.GetValueAccessor<ANState>("{0}.ANStates.{1}".CheckedFormat(PartID, anName));
 
                 anSourceImpl.ManagersANStatePublisher = anSourceTracking.anStatePublisher;
 
@@ -1463,7 +1467,7 @@ namespace MosaicLib.Semi.E041
             public int listIndex;
 
             public InterlockedSequencedRefObject<IANState> anStatePublisher = new InterlockedSequencedRefObject<IANState>();
-            public IValueAccessor anStateIVA;
+            public IValueAccessor<ANState> anStateIVA;
 
             public ANState initialANState;
             public ANState lastServicedANState;
@@ -1471,9 +1475,10 @@ namespace MosaicLib.Semi.E041
             /// <summary>publishes the given IANState to both the anStatePublisher and the optional anStateIVA</summary>
             public void Publish(IANState anState)
             {
-                anStatePublisher.Object = anState;
+                ANState anStateCopy = new ANState(anState);
+                anStatePublisher.Object = anStateCopy;
                 if (anStateIVA != null)
-                    anStateIVA.Set(anState);
+                    anStateIVA.Set(anStateCopy);
             }
 
             public InternalANSpec anSpec;
