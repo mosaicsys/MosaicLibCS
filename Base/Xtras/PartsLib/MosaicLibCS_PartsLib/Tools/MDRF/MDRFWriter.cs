@@ -2151,6 +2151,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
             PartID = partID;
             NominalScanPeriod = (0.1).FromSeconds();
             NominalPruningInterval = (10.0).FromSeconds();
+            ActionLoggingConfig = ActionLoggingConfig.Debug_Error_Trace_Trace;
         }
 
         /// <summary>
@@ -2185,6 +2186,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
             }
 
             NominalPruningInterval = other.NominalPruningInterval;
+            ActionLoggingConfig = new ActionLoggingConfig(other.ActionLoggingConfig);
         }
 
         /// <summary>Defines the PartID that will be used by the MDRFRecordingEngine that is constructed from this configuration object</summary>
@@ -2236,6 +2238,8 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
             get { return OccurrenceDefinitionItemArray.Select(item => Tuple.Create<string, IEnumerable<string>, INamedValueSet>(item.OccurrenceName, item.EventNames.SafeToArray(), item.OccurrenceMetaData)); }
             set { OccurrenceDefinitionItemArray = value.Select(t => new MDRFRecordingEngineItems.OccurrenceDefinitionItem() { OccurrenceName = t.Item1, EventNames = t.Item2.ToArray(), OccurrenceMetaData = t.Item3 }).ToArray(); }
         }
+
+        public ActionLoggingConfig ActionLoggingConfig { get; set; }
     }
 
     namespace MDRFRecordingEngineItems
@@ -2288,9 +2292,11 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
         #region Construction (et. al.)
 
         public MDRFRecordingEngine(MDRFRecordingEngineConfig config)
-            : base(config.PartID, SimpleActivePartBaseSettings.DefaultVersion1.Build(waitTimeLimit: (0.01).FromSeconds()))
+            : base(config.PartID, SimpleActivePartBaseSettings.DefaultVersion1.Build(waitTimeLimit: (0.01).FromSeconds(), automaticallyIncAndDecBusyCountAroundActionInvoke: false))
         {
             Config = new MDRFRecordingEngineConfig(config);
+
+            ActionLoggingReference.Config = Config.ActionLoggingConfig;
 
             mdrfWriter = new MDRFWriter("{0}.mw".CheckedFormat(PartID), Config.SetupInfo, enableAPILocking: true);
             AddExplicitDisposeAction(() => Fcns.DisposeOfObject(ref mdrfWriter));

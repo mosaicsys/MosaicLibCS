@@ -50,22 +50,23 @@ namespace MosaicLib.WPF.Controls
         {
             LogMessageSetTracker = new AdjustableLogMessageSetTracker() { LogGate = MosaicLib.Logging.LogGate.Info };
 
-            LogMessageSetTracker.NewItemsAdded += PostAttemptToScrollToEnd;
+            LogMessageSetTracker.NewItemsAdded += PostAttemptToScrollToBottom;
             LogMessageSetTracker.SetRebuilt += () => 
                                                 { 
                                                     if (!LogMessageSetTracker.Pause) 
-                                                        PostAttemptToScrollToEnd(); 
+                                                        PostAttemptToScrollToBottom(); 
                                                 };
 
             IsVisibleChanged += LogView_IsVisibleChanged;
 
-            /// Todo: move me up to top of method
             InitializeComponent();
         }
 
         public static DependencyProperty SetNameProperty = DependencyProperty.Register("SetName", typeof(string), typeof(LogView), new PropertyMetadata(null, HandleSetNamePropertyChanged));
+        public static DependencyProperty EnabledSourcesProperty = DependencyProperty.Register("EnabledSources", typeof(object), typeof(LogView), new PropertyMetadata(null, HandleEnabledSourcesPropertyChanged));
 
         public string SetName { get { return (string)GetValue(SetNameProperty); } set { SetValue(SetNameProperty, value); } }
+        public object EnabledSources { get { return (string)GetValue(EnabledSourcesProperty); } set { SetValue(EnabledSourcesProperty, value); } }
 
         private static void HandleSetNamePropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
@@ -75,27 +76,25 @@ namespace MosaicLib.WPF.Controls
                 me.LogMessageSetTracker.SetName = (string)e.NewValue;
         }
 
+        private static void HandleEnabledSourcesPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            LogView me = d as LogView;
+
+            if (me != null)
+                me.LogMessageSetTracker.EnabledSources = e.NewValue;
+        }
+
         void LogView_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
         {
             if ((bool) e.NewValue == true && !LogMessageSetTracker.Pause)
             {
-                PostAttemptToScrollToEnd();
+                PostAttemptToScrollToBottom();
             }
         }
 
-        void PostAttemptToScrollToEnd()
+        void PostAttemptToScrollToBottom()
         {
-            System.Threading.SynchronizationContext.Current.Post(o => AttemptToScrollToEnd(), this);
-        }
-
-        private void AttemptToScrollToEnd()
-        {
-            if (lvItems.Items.Count > 0)
-            {
-                object lastLVItem = lvItems.Items[lvItems.Items.Count - 1];
-
-                lvItems.ScrollIntoView(lastLVItem);
-            }
+            System.Threading.SynchronizationContext.Current.Post(o => AttemptToScrollTo(ScrollTo.Bottom), this);
         }
 
         public AdjustableLogMessageSetTracker LogMessageSetTracker { get; private set; }
@@ -105,9 +104,30 @@ namespace MosaicLib.WPF.Controls
             LogMessageSetTracker.Clear();
         }
 
-        private void HandleScrolltoEndButton_Click(object sender, RoutedEventArgs e)
+        private void HandleScrolltoTopButton_Click(object sender, RoutedEventArgs e)
         {
-            AttemptToScrollToEnd();
+            AttemptToScrollTo(ScrollTo.Top);
+        }
+
+        private void HandleScrolltoBottomButton_Click(object sender, RoutedEventArgs e)
+        {
+            AttemptToScrollTo(ScrollTo.Bottom);
+        }
+
+        private void AttemptToScrollTo(ScrollTo scrollTo)
+        {
+            if (listView.Items.Count > 0)
+            {
+                object showLVItem = listView.Items[(scrollTo == ScrollTo.Bottom) ? listView.Items.Count - 1 : 0];
+
+                listView.ScrollIntoView(showLVItem);
+            }
+        }
+
+        private enum ScrollTo
+        {
+            Top,
+            Bottom
         }
     }
 }

@@ -2407,43 +2407,52 @@ namespace MosaicLib.Modular.Interconnect.Sets
                         InnerRemoveAll(null, false);
                     }
 
-                    foreach (ISetDeltaRemoveRangeItem removeRangeItem in setDelta.RemoveRangeItems)
+                    if (setDelta.RemoveRangeItems != null)
                     {
-                        InnerRemoveSeqNumRange(removeRangeItem.RangeStartSeqNum, removeRangeItem.RangeStartSeqNum + removeRangeItem.Count - 1, false);
+                        foreach (ISetDeltaRemoveRangeItem removeRangeItem in setDelta.RemoveRangeItems)
+                        {
+                            InnerRemoveSeqNumRange(removeRangeItem.RangeStartSeqNum, removeRangeItem.RangeStartSeqNum + removeRangeItem.Count - 1, false);
+                        }
                     }
                 }
 
-                foreach (ISetDeltaAddContiguousRangeItem addRangeItem in setDelta.AddRangeItems)
+                if (setDelta.AddRangeItems != null)
                 {
-                    Int64 itemSeqNum = addRangeItem.RangeStartSeqNum;
-
-                    List<ItemContainer> itemsContainersToAddList = new List<ItemContainer>();
-
-                    foreach (object o in addRangeItem.RangeObjects)
+                    foreach (ISetDeltaAddContiguousRangeItem addRangeItem in setDelta.AddRangeItems)
                     {
-                        TObjectType item = (o is TObjectType) ? ((TObjectType)o) : default(TObjectType);
+                        Int64 itemSeqNum = addRangeItem.RangeStartSeqNum;
 
-                        if (ApplyFilterToItem(addItemFilter, item))
+                        List<ItemContainer> itemsContainersToAddList = new List<ItemContainer>();
+
+                        if (addRangeItem.RangeObjects != null)
                         {
-                            ItemContainer itemContainer = new ItemContainer(itemSeqNum++, item);
+                            foreach (object o in addRangeItem.RangeObjects)
+                            {
+                                TObjectType item = (o is TObjectType) ? ((TObjectType)o) : default(TObjectType);
 
-                            itemsContainersToAddList.Add(itemContainer);
+                                if (ApplyFilterToItem(addItemFilter, item))
+                                {
+                                    ItemContainer itemContainer = new ItemContainer(itemSeqNum++, item);
+
+                                    itemsContainersToAddList.Add(itemContainer);
+                                }
+                                else
+                                {
+                                    itemSeqNum++;       //  record the skipped sequence numbers but do not create or retain the actual ItemContainers for them.
+                                }
+                            }
                         }
-                        else
+
+                        InnerMakeSpacePriorToAdd(itemsContainersToAddList.Count);
+
+                        foreach (ItemContainer itemContainer in itemsContainersToAddList)
                         {
-                            itemSeqNum++;       //  record the skipped sequence numbers but do not create or retain the actual ItemContainers for them.
+                            itemContainer.LastIndexOfItemInList = itemContainerList.Count;
+                            itemContainer.RemovedFromSetPosition = RemovedFromSetPosition.Last;
+
+                            itemContainerList.Add(itemContainer);
+                            addedItemContainerList.Add(itemContainer);
                         }
-                    }
-
-                    InnerMakeSpacePriorToAdd(itemsContainersToAddList.Count);
-
-                    foreach (ItemContainer itemContainer in itemsContainersToAddList)
-                    {
-                        itemContainer.LastIndexOfItemInList = itemContainerList.Count;
-                        itemContainer.RemovedFromSetPosition = RemovedFromSetPosition.Last; 
-
-                        itemContainerList.Add(itemContainer);
-                        addedItemContainerList.Add(itemContainer);
                     }
                 }
 

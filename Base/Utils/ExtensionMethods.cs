@@ -1292,6 +1292,25 @@ namespace MosaicLib.Utils
             return source;
         }
 
+        /// <summary>
+        /// Simple DoForEach helper method for use with Linq.  Applies the given action to each of the {TSource} items in the given source set.
+        /// The action is also passed the index of the item in the source set in its second argument.
+        /// <para/>supports call chaining
+        /// </summary>
+        public static IEnumerable<TItem> DoForEach<TItem>(this IEnumerable<TItem> source, Action<TItem, int> action)
+        {
+            if (source != null)
+            {
+                action = action ?? ((ignoreItem, ignoreIndex) => { });
+
+                int idx = 0;
+                foreach (TItem item in source)
+                    action(item, idx++);
+            }
+
+            return source;
+        }
+
         /// <summary>Concatinates the given <paramref name="item"/> onto the end of the given <paramref name="set"/></summary>
         public static IEnumerable<TItem> Concat<TItem>(this IEnumerable<TItem> set, TItem item)
         {

@@ -20,14 +20,20 @@
  */
 
 using System;
+using System.Text;
 using System.Windows;
 using System.Windows.Data;
 using System.Globalization;
 
+using MosaicLib;
 using MosaicLib.Modular.Common;
+using MosaicLib.Utils;
 
 namespace MosaicLib.WPF.Converters
 {
+    /// <summary>
+    /// Supports bindable conversion between LogGate values and their corresonding string values.  Makes use of ValueContainer's built in converters for these types.
+    /// </summary>
 	public class LogGateStringConverter: IValueConverter
 	{
 		public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
@@ -47,4 +53,71 @@ namespace MosaicLib.WPF.Converters
             return Convert(value, targetType, parameter, culture);
         }
 	}
+
+    /// <summary>
+    /// Supports bindable, one way, conversion of an ILogMessage to a string by optionally concatinating the message's Mesg property with string formatted versions of its NamedValueSet and Data properties.
+    /// <seealso cref="LogMessageContentCombiningSelection"/> which defines the available flags/rules that may be used to perform this concatination.
+    /// </summary>
+    public class LogMessageContentCombiningConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            MosaicLib.Logging.ILogMessage lm = value as MosaicLib.Logging.ILogMessage;
+
+            if (lm != null && targetType == typeof(string))
+            {
+                if (lm.NamedValueSet == null && lm.Data == null)
+                    return lm.Mesg;
+
+                LogMessageContentCombiningSelection selection = LogMessageContentCombiningSelection.Default;
+                if (parameter != null && parameter is LogMessageContentCombiningSelection)
+                    selection = (LogMessageContentCombiningSelection)parameter;
+                
+                selection = selection.MapDefaultTo(LogMessageContentCombiningSelection.IncludeNonEmptyNVSAndDataInHex);
+
+                bool addNVS = ((selection.IsSet(LogMessageContentCombiningSelection.IncludeNonEmptyNVS) && !lm.NamedValueSet.IsNullOrEmpty()) || (selection.IsSet(LogMessageContentCombiningSelection.IncludeNVS) && lm.NamedValueSet != null));
+                bool addData = (selection.IsSet(LogMessageContentCombiningSelection.IncludeDataInHex) && lm.Data != null);
+
+                if (!addNVS && !addData)
+                    return lm.Mesg;
+
+                StringBuilder sb = new StringBuilder(lm.Mesg);
+
+                if (addNVS)
+                {
+                    sb.Append(" ");
+                    sb.Append(lm.NamedValueSet.ToStringSML());
+                }
+
+                if (addData)
+                {
+                    sb.CheckedAppendFormat(" Data:[{0}]", ByteArrayTranscoders.HexStringTranscoder.Encode(lm.Data));
+                }
+
+                return sb.ToString();
+            }
+
+            return Binding.DoNothing;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            return Binding.DoNothing;
+        }
+    }
+
+    /// <summary>
+    /// Selection control values for use with the LogContentCombiningConverter.
+    /// <para/>Default (0x00), IncludeNVS (0x01), IncludeNonEmptyNVS (0x02), IncludeDataInHex (0x04), IncludeNonEmptyNVSAndDataInHex (0x06)
+    /// <para/>Default will be processed as IncludeNonEmptyNVSAndDataInHex.
+    /// </summary>
+    [Flags]
+    public enum LogMessageContentCombiningSelection : int
+    {
+        Default = 0x00,
+        IncludeNVS = 0x01,
+        IncludeNonEmptyNVS = 0x02,
+        IncludeDataInHex = 0x04,
+        IncludeNonEmptyNVSAndDataInHex = 0x06,
+    }
 }

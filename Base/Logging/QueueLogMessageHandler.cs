@@ -53,8 +53,8 @@ namespace MosaicLib
                 /// <param name="name">Gives the name of this LMH - different than the names of the target LMH instances</param>
                 /// <param name="targetLMHArray">Gives the set of LMH instance that are to be given the dequeued LogMessages.</param>
                 /// <param name="maxQueueSize">Defines te maximum number of messages that can be held internally before messages are lost.</param>
-                /// <param name="allowRecordSourceStackFrame">When this parameter is true then this LMH will record source stack frames if any of the given targetLMH items do.  Otherwise it will not record source stack frames.</param>
-                public QueueLogMessageHandler(string name, ILogMessageHandler[] targetLMHArray, int maxQueueSize = DefaultMesgQueueSize, bool allowRecordSourceStackFrame = true)
+                /// <param name="allowRecordSourceStackFrame">The use of this parameter is now obsolete and will be ignored</param>
+                public QueueLogMessageHandler(string name, ILogMessageHandler[] targetLMHArray, int maxQueueSize = DefaultMesgQueueSize, bool allowRecordSourceStackFrame = false)
                     : base(name, LogGate.None, recordSourceStackFrame: false)
                 {
                     targetLMHArray = targetLMHArray ?? emptyLMHArray;

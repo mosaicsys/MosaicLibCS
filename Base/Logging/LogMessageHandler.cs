@@ -27,6 +27,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.Serialization;
 
+using MosaicLib;
 using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Config;
 using MosaicLib.Modular.Config.Attributes;
@@ -1466,12 +1467,16 @@ namespace MosaicLib
 
             string[] deliniatorLineArray = new string[] { "================================================================================================================================" };
 
+            string machineName = Environment.MachineName;
+            string userDomainName = Environment.UserDomainName;
+            string userName = ((userDomainName.IsNullOrEmpty() || userDomainName == machineName)) ? Environment.UserName : @"{0}/{1}".CheckedFormat(userDomainName, Environment.UserName);
+
             string[] defaultFileHeaderLines1 = new string[]
             {
                 ((logBaseName != null) ? "Log file for '{0}'".CheckedFormat(logBaseName) : null),
                 "Process name:'{0}' id:{1} {2}".CheckedFormat(currentProcess.ProcessName, currentProcess.Id, Environment.Is64BitProcess ? "64-bit" : "32-bit"),
-                "Machine:'{0}' os:'{1}'{2} Cores:{3} PageSize:{4}".CheckedFormat(Environment.MachineName, Environment.OSVersion, Environment.Is64BitOperatingSystem ? " 64-bit" : "", Environment.ProcessorCount, Environment.SystemPageSize),
-                "User:'{0}' {1}".CheckedFormat(Environment.UserName, Environment.UserInteractive ? "interactive" : "service"),
+                "Machine:'{0}' os:'{1}'{2} Cores:{3} PageSize:{4}".CheckedFormat(machineName, Environment.OSVersion, Environment.Is64BitOperatingSystem ? " 64-bit" : "", Environment.ProcessorCount, Environment.SystemPageSize),
+                "User:'{0}' {1}".CheckedFormat(userName, Environment.UserInteractive ? "interactive" : "service"),
                 ((hostingAssembly != null) ? "Hosting Assembly: '{0}'".CheckedFormat(hostingAssembly) : null),
                 ((mainAssembly != null && mainAssembly != hostingAssembly) ? "Main Assembly: '{0}'".CheckedFormat(mainAssembly) : null),
                 (System.Diagnostics.Debugger.IsAttached ? "Debugger is attached" : null),
@@ -1489,18 +1494,73 @@ namespace MosaicLib
         /// This method may be used to generate the dynamic header lines, typically combined with the use of GenerateDefaultHeaderLines.
         /// The resulting array looks like:
         /// <para/>Uptime: 1.001 hours
+        /// <para/>Process Info: time(user/priv):0.516,0.203 sec size(ws,vm):60.621,39.996 MBytes priority:Normal,8 handles:409 threads:17
         /// </summary>
         public static string[] GenerateDynamicHeaderLines()
         {
-            double appUptimeHours = Math.Max(0.0, appUptimeBaseTimeStamp.Age.TotalHours);
-            double roundedAppUptimeHours = appUptimeHours.Round(3, MidpointRounding.ToEven);
+            return GenerateDynamicHeaderLines(DynamicHeaderLinesSelect.All);
+        }
+
+        /// <summary>
+        /// This method may be used to generate the dynamic header lines, typically combined with the use of GenerateDefaultHeaderLines.
+        /// This variant uses the <paramref name="dynamicHeaderLinesSelect"/> to indicate which header contents should be included.
+        /// The resulting array might looks like:
+        /// <para/>Uptime: 1.001 hours
+        /// <para/>Process Info: time(user/priv):0.516,0.203 sec size(ws,vm):60.621,39.996 MBytes priority:Normal,8 handles:409 threads:17
+        /// </summary>
+        public static string[] GenerateDynamicHeaderLines(DynamicHeaderLinesSelect dynamicHeaderLinesSelect)
+        {
+            string uptimeLine = null;
+            if (dynamicHeaderLinesSelect.IsSet(DynamicHeaderLinesSelect.UptimeLine))
+            {
+                double appUptimeHours = Math.Max(0.0, appUptimeBaseTimeStamp.Age.TotalHours);
+                double roundedAppUptimeHours = appUptimeHours.Round(3, MidpointRounding.ToEven);
+                uptimeLine = "Uptime: {0:f3} hours".CheckedFormat(roundedAppUptimeHours);
+            }
+
+            string processInfoLine = null;
+            if (dynamicHeaderLinesSelect.IsSet(DynamicHeaderLinesSelect.ProcessInfoLine))
+            {
+                System.Diagnostics.Process process = System.Diagnostics.Process.GetCurrentProcess();
+
+                const double oneOver1M = (1.0 / (1024.0 * 1024.0));
+
+                string timeStr = Utils.ExtensionMethods.TryGet(() => " time(user/priv):{0:f3},{1:f3} sec".CheckedFormat(process.UserProcessorTime.TotalSeconds, process.PrivilegedProcessorTime.TotalSeconds), getFailedResult: string.Empty);
+                string sizeStr = Utils.ExtensionMethods.TryGet(() => " size(ws,vm):{0:f3},{1:f3} MBytes".CheckedFormat(process.WorkingSet64 * oneOver1M, process.PrivateMemorySize64 * oneOver1M), getFailedResult: string.Empty);
+                string priorityStr = Utils.ExtensionMethods.TryGet(() => " priority:{0},{1}".CheckedFormat(process.PriorityClass, process.BasePriority), getFailedResult: string.Empty);
+                string handlesStr = Utils.ExtensionMethods.TryGet(() => " handles:{0}".CheckedFormat(process.HandleCount), getFailedResult: string.Empty);
+                string threadsStr = Utils.ExtensionMethods.TryGet(() => " threads:{0}".CheckedFormat(process.Threads.Count), getFailedResult: string.Empty);
+
+                processInfoLine = "Process Info:{0}{1}{2}{3}{4}".CheckedFormat(timeStr, sizeStr, priorityStr, handlesStr, threadsStr);
+            }
 
             string [] dynamicHeaderLinesArray = new string[]
             {
-                "Uptime: {0:f3} hours".CheckedFormat(roundedAppUptimeHours),
-            }.Where(s => s != null).ToArray();
+                uptimeLine,
+                processInfoLine,
+            }.WhereIsNotDefault().ToArray();
 
             return dynamicHeaderLinesArray;
+        }
+
+        /// <summary>
+        /// Enumeration used with GenerateDynamicHeaderLines to select which contents/lines shall be selected for inclusion.
+        /// <para/>None (0x00), UptimeLine (0x01), ProcessInfoLine (0x02), All (0x03)
+        /// </summary>
+        [Flags]
+        public enum DynamicHeaderLinesSelect : int
+        {
+            /// <summary>Default, Placeholder.  By itself, this value selects that no dynamic header lines should be included.  [0x00]</summary>
+            None = 0x00,
+
+            /// <summary>Selects that the Uptime header line shall be included.  [0x01]</summary>
+            UptimeLine = 0x01,
+
+            /// <summary>Selects that the Process Info header line shall be included.  [0x02]</summary>
+            ProcessInfoLine = 0x02,
+
+            /// <summary>Selects that all header lines shall be included. (UptimeLine | ProcessInfoLine) [0x03]</summary>
+            All = (UptimeLine | ProcessInfoLine),
         }
 
         #endregion

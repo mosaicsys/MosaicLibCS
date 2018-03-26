@@ -864,7 +864,7 @@ namespace MosaicLib.Semi.E041
         /// Constructor.  partID is required.  e30ALIDHandlerFacet may be null
         /// </summary>
         public ANManagerPart(string partID, IE30ALIDHandlerFacet e30ALIDHandlerFacet = null, IValuesInterconnection ivi = null, IConfig iConfig = null) 
-            : base(partID)
+            : base(partID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion1.Build(automaticallyIncAndDecBusyCountAroundActionInvoke: false))
         {
             ActionLoggingConfig = MosaicLib.Modular.Action.ActionLoggingConfig.Debug_Debug_Trace_Trace;
 
@@ -974,7 +974,7 @@ namespace MosaicLib.Semi.E041
                 ANStateRecentlyClearedSetMaxCount = 100;
                 ANStateRecentlyClearedSetMaxRetentionTimeSpan = TimeSpan.FromHours(1.0);
 
-                ANStateHistorySetMaxCount = 10000;
+                ANStateHistorySetMaxCount = 1000;
                 ANStateCurrentlyActiveSetMaxCount = 1000;
 
                 AutoAcknowledgeInformationAfterTimeSpan = TimeSpan.Zero;
@@ -1287,6 +1287,20 @@ namespace MosaicLib.Semi.E041
         }
 
         /// <summary>
+        /// Optionally forces a ServiceALIDLookups (when <paramref name="andInitialize"/> is true) and then runs a service iteration (PerformMainLoopService)
+        /// Returns success.
+        /// </summary>
+        protected override string PerformGoOnlineAction(bool andInitialize)
+        {
+            if (andInitialize)
+                ServiceALIDLookups(true);
+
+            PerformMainLoopService();
+
+            return "";
+        }
+
+        /// <summary>
         /// Provides the part type specific implementation for performing all part type specific service actions.
         /// These include: SetSelectedActionName, RequestActionAbort, ClearRecentState, ClearHistorySet, and SelectActionNameForAll.
         /// </summary>
@@ -1404,17 +1418,19 @@ namespace MosaicLib.Semi.E041
 
         #region ServiceALIDLookups, ServiceALIDLookup, InnerLookupALIDAndLogIfNotFound methods.
 
-        private void ServiceALIDLookups()
+        private void ServiceALIDLookups(bool forceLookupNow = false)
         {
-            if (!serviceE30ALIDHandlerFacetLookupNow || E30ALIDHandlerFacet == null)
-                return;
+            var e30ALIDHandlerFacet = E30ALIDHandlerFacet;
 
-            serviceE30ALIDHandlerFacetLookupNow = false;
+            if (e30ALIDHandlerFacet != null && (serviceE30ALIDHandlerFacetLookupNow || forceLookupNow))
+            {
+                serviceE30ALIDHandlerFacetLookupNow = false;
 
-            foreach (ANSourceTracking anSourceTracking in pendingLookupANSourceTrackingList)
-                ServiceALIDLookup(anSourceTracking);
+                foreach (ANSourceTracking anSourceTracking in pendingLookupANSourceTrackingList)
+                    ServiceALIDLookup(anSourceTracking);
 
-            pendingLookupANSourceTrackingList.Clear();
+                pendingLookupANSourceTrackingList.Clear();
+            }
         }
 
         private void ServiceALIDLookup(ANSourceTracking anSourceTracking)
@@ -2004,6 +2020,7 @@ namespace MosaicLib.Semi.E041
         {
             AddMainThreadStartingAction(() => 
             {
+                SetBaseState(UseState.Initial, "Main thread has been started");
                 anStateCurrentActiveSet = new ReferenceSet<ANState>(new SetID("{0}.ANStateCurrentlyActiveSet".CheckedFormat(PartID)), Config.ANStateCurrentlyActiveSetMaxCount, true);
                 anStateRecentlyClearedSet = new ReferenceSet<ANState>(new SetID("{0}.ANStateRecentlyClearedSet".CheckedFormat(PartID)), Config.ANStateRecentlyClearedSetMaxCount, true);
                 anStateHistorySet = new ReferenceSet<ANState>(new SetID("{0}.ANStateHistorySet".CheckedFormat(PartID)), Config.ANStateHistorySetMaxCount, true);
@@ -2014,6 +2031,7 @@ namespace MosaicLib.Semi.E041
                 anStateCurrentActiveSet.UnregisterSelf();
                 anStateRecentlyClearedSet.UnregisterSelf();
                 anStateHistorySet.UnregisterSelf();
+                SetBaseState(UseState.Shutdown, "Main thread has been stopped");
             });
         }
 

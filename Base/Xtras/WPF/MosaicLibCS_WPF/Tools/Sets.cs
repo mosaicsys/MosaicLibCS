@@ -50,14 +50,30 @@ using MosaicLib.Utils;
 
 namespace MosaicLib.WPF.Tools.Sets
 {
+    #region SetTracker
+
+    /// <summary>
+    /// This class has two functions:  
+    /// <para/>First it contains a static GetSetTracker method that may be used to find, or create requested SetTracker.  
+    /// As such the first requestor for a given SetID value will create the required SetTracker object and later requestors for the same setID will be given the same SetTracker instance.
+    /// <para/>
+    /// <para/>Second it provides the implementation of a dispatcher timer based engine that finds and tracks an identified ITrackableSet and generates two resulting read-only DependencyPropertyKey's: ReferenceSet and TrackingSet
+    /// <para/>Produced (read-only) DependencyPropertyKeys: SetID, ReferenceSet, TrackingSet
+    /// <para/>Supported DependencyProperties: UpdateRate, MaximumItemsPerIteration
+    /// <para/>Supported events: NotifyOnSetUpdateList (IBasicNotificationList), SetDeltasEventNotificationList (IEventHandlerNotificationList{ISetDelta})
+    /// </summary>
     public class SetTracker : DependencyObject
     {
+        /// <summary>Gives the default update rate for set trackers</summary>
+        public const double DefaultUpdateRate = 5.0;
+        public const int DefaultMaximumItemsPerIteration = 0;
+
         #region static factory method : GetSetTracker(SetID)
 
         private static Dictionary<string, SetTracker> setNameToTrackerDictionary = new Dictionary<string, SetTracker>();
         private static Dictionary<string, SetTracker> setUUIDToTrackerDictionary = new Dictionary<string, SetTracker>();
 
-        public static SetTracker GetSetTracker(SetID setID)
+        public static SetTracker GetSetTracker(SetID setID, ISetsInterconnection isi = null, double defaultUpdateRate = DefaultUpdateRate, int defaultMaximumItemsPerIteration = DefaultMaximumItemsPerIteration)
         {
             SetTracker setTracker = null;
             string setName = setID.Name.Sanitize();
@@ -67,9 +83,9 @@ namespace MosaicLib.WPF.Tools.Sets
             else
                 setTracker = setNameToTrackerDictionary.SafeTryGetValue(setName);
 
-            if (setTracker == null)
+            if (setTracker == null && !setName.IsNullOrEmpty())
             {
-                setTracker = new SetTracker(setID);
+                setTracker = new SetTracker(setID, isi: isi, defaultUpdateRate: defaultUpdateRate, defaultMaximumItemsPerIteration: defaultMaximumItemsPerIteration);
 
                 if (!setNameToTrackerDictionary.ContainsKey(setName))
                     setNameToTrackerDictionary[setName] = setTracker;
@@ -83,7 +99,7 @@ namespace MosaicLib.WPF.Tools.Sets
 
         #endregion
 
-        public SetTracker(SetID setID, ISetsInterconnection isi = null)
+        public SetTracker(SetID setID, ISetsInterconnection isi = null, double defaultUpdateRate = DefaultUpdateRate, int defaultMaximumItemsPerIteration = DefaultMaximumItemsPerIteration)
         {
             SetID = setID;
             ISI = isi ?? Modular.Interconnect.Sets.Sets.Instance;
@@ -92,24 +108,33 @@ namespace MosaicLib.WPF.Tools.Sets
 
             _setDeltasEventNotificationList.Source = this;
 
+            _updateRate = defaultUpdateRate;
+            _maximumItemsPerIteration = defaultMaximumItemsPerIteration;
+
+            if (_updateRate != DefaultUpdateRate)
+                UpdateRate = _updateRate;
+
+            if (_maximumItemsPerIteration != DefaultMaximumItemsPerIteration)
+                MaximumItemsPerIteration = _maximumItemsPerIteration;
+
             System.Threading.SynchronizationContext.Current.Post((o) => AttemptToStartTracking(), this);
         }
 
-        public SetID SetID { get; private set; }
         public ISetsInterconnection ISI { get; private set; }
         public string ClientName { get; private set; }
 
         private IDisposable sharedDispatcherTimerToken;
 
-        /// <summary>Gives the default update rate for set trackers</summary>
-        public const double DefaultUpdateRate = 5.0;
-        public const int DefaultMaximumItemsPerIteration = 0;
+        private static DependencyPropertyKey SetIDPropertyKey = DependencyProperty.RegisterReadOnly("SetID", typeof(SetID), typeof(SetTracker), new PropertyMetadata(null));
+        private static DependencyPropertyKey ReferenceSetPropertyKey = DependencyProperty.RegisterReadOnly("ReferenceSet", typeof(ITrackableSet), typeof(SetTracker), new PropertyMetadata(null));
+        private static DependencyPropertyKey TrackingSetPropertyKey = DependencyProperty.RegisterReadOnly("TrackingSet", typeof(ITrackingSet), typeof(SetTracker), new PropertyMetadata(null));
 
         private static DependencyProperty UpdateRateProperty = DependencyProperty.Register("UpdateRate", typeof(double), typeof(SetTracker), new PropertyMetadata(DefaultUpdateRate, HandleUpdateRatePropertyChanged));
         private static DependencyProperty MaximumItemsPerIterationProperty = DependencyProperty.Register("MaximumItemsPerIteration", typeof(int), typeof(SetTracker), new PropertyMetadata(DefaultMaximumItemsPerIteration, HandleUpdateMaximumItemsPerIterationPropertyChanged));
 
-        private static DependencyPropertyKey ReferenceSetPropertyKey = DependencyProperty.RegisterReadOnly("ReferenceSet", typeof(ITrackableSet), typeof(SetTracker), new PropertyMetadata(null));
-        private static DependencyPropertyKey TrackingSetPropertyKey = DependencyProperty.RegisterReadOnly("TrackingSet", typeof(ITrackingSet), typeof(SetTracker), new PropertyMetadata(null));
+        public SetID SetID { get { return _setID; } private set { SetValue(SetIDPropertyKey, (_setID = value)); } }
+        public ITrackableSet ReferenceSet { get { return _referenceSet; } private set { SetValue(ReferenceSetPropertyKey, (_referenceSet = value)); } }
+        public ITrackingSet TrackingSet { get { return _trackingSet; } private set { SetValue(TrackingSetPropertyKey, (_trackingSet = value)); } }
 
         public double UpdateRate
         {
@@ -128,6 +153,37 @@ namespace MosaicLib.WPF.Tools.Sets
 
         public IEventHandlerNotificationList<ISetDelta> SetDeltasEventNotificationList { get { return _setDeltasEventNotificationList;} }
         private EventHandlerNotificationList<ISetDelta> _setDeltasEventNotificationList = new EventHandlerNotificationList<ISetDelta>();
+
+        public SetTracker AddSetDeltasEventHandler(EventHandlerDelegate<ISetDelta> handler, Action<ISetDelta> setPrimingDelegate = null)
+        {
+            if (_trackingSet != null && setPrimingDelegate != null)
+            {
+                var trackingSetSeqNumRangeInfo = _trackingSet.ItemListSeqNumRangeInfo;
+
+                SetDelta<MosaicLib.Logging.ILogMessage> syntheticInitializationSetDelta = new SetDelta<MosaicLib.Logging.ILogMessage>()
+                {
+                    SetID = _trackingSet.SetID,
+                    ClearSetAtStart = true,
+                    SourceSetCapacity = _trackingSet.Capacity,
+                    SourceUpdateState = _trackingSet.UpdateState,
+                    addRangeItemList = new List<SetDeltaAddContiguousRangeItem<MosaicLib.Logging.ILogMessage>>()
+                     {
+                         new SetDeltaAddContiguousRangeItem<MosaicLib.Logging.ILogMessage>()
+                         {
+                             RangeStartIndex = 0,
+                             RangeStartSeqNum = trackingSetSeqNumRangeInfo.First,
+                             rangeObjectList = _trackingSet.SafeToSet<MosaicLib.Logging.ILogMessage>().ToList(),      // log messages are never sparse so we only need one contiguous range item for all of the current messages.
+                         }
+                     }
+                };
+
+                setPrimingDelegate(syntheticInitializationSetDelta);
+            }
+
+            SetDeltasEventNotificationList.OnNotify += handler;
+
+            return this;
+        }
 
         public void AttemptToStartTracking()
         {
@@ -172,12 +228,10 @@ namespace MosaicLib.WPF.Tools.Sets
             return false;
         }
 
-        public ITrackableSet ReferenceSet { get { return _referenceSet; } private set { SetValue(ReferenceSetPropertyKey, (_referenceSet = value)); } }
+        private SetID _setID;
         private ITrackableSet _referenceSet;
-
-        public ITrackingSet TrackingSet { get { return _trackingSet; } private set { SetValue(TrackingSetPropertyKey, (_trackingSet = value)); } }
         private ITrackingSet _trackingSet;
-
+        private double _updateRate = DefaultUpdateRate;
         private int _maximumItemsPerIteration = DefaultMaximumItemsPerIteration;
 
         private static void HandleUpdateRatePropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -186,9 +240,14 @@ namespace MosaicLib.WPF.Tools.Sets
 
             if (me != null)
             {
-                Fcns.DisposeOfObject(ref me.sharedDispatcherTimerToken);
+                double selectedUpdateRate = (double)e.NewValue;
 
-                me.AttemptToStartTracking();
+                if (me._updateRate != selectedUpdateRate)
+                {
+                    Fcns.DisposeOfObject(ref me.sharedDispatcherTimerToken);
+
+                    me.AttemptToStartTracking();
+                }
             }
         }
 
@@ -198,11 +257,207 @@ namespace MosaicLib.WPF.Tools.Sets
 
             if (me != null)
             {
-                me._maximumItemsPerIteration = (int) e.NewValue;
+                int selectedMaximumItemsPerIteration = (int)e.NewValue;
+
+                if (me._maximumItemsPerIteration != selectedMaximumItemsPerIteration)
+                {
+                    me._maximumItemsPerIteration = (int)e.NewValue;
+                }
             }
         }
     }
 
+    #endregion
+
+    #region SetNewestItemPicker
+
+    /// <summary>
+    /// This tool is constructed to find a given SetTracker (by name/setID) and then to monitor the resulting stream of SetDelta additions and retain the last added item
+    /// who's selected key (using the keySelector) matches the given keyValue.
+    /// <para/>Each time a new item is found this method will update its bindable read-only DependencyProperty called the Item.
+    /// <para/>Produced (read-only) DependencyPropertyKeys: Item
+    /// </summary>
+    public class SetNewestItemPicker<TItemType, TKeyType> : DependencyObject
+            where TKeyType : IEquatable<TKeyType>
+    {
+        public SetNewestItemPicker(string setName, Func<TItemType, TKeyType> keySelector, TKeyType keyValue)
+            : this(new SetID(setName, generateUUIDForNull: false), keySelector, keyValue)
+        { }
+
+        public SetNewestItemPicker(SetID setID, Func<TItemType, TKeyType> keySelector, TKeyType keyValue)
+        {
+            this.setID = setID;
+            this.keySelector = keySelector;
+            this.keyValue = keyValue;
+
+            rootSetTracker = SetTracker.GetSetTracker(setID);
+
+            rootSetTracker.AddSetDeltasEventHandler(HandleOnNotifySetDeltasEvent, setPrimingDelegate: primingSetDelta => HandleOnNotifySetDeltasEvent(rootSetTracker, primingSetDelta));
+        }
+
+        private SetID setID;
+        private Func<TItemType, TKeyType> keySelector;
+        private TKeyType keyValue;
+
+        private SetTracker rootSetTracker;
+
+        /// <summary>
+        /// Note: this method is coded to iterate forward through the elements in each given set delta.  This is based on the assumption that
+        /// forward iteration is faster than reverse iteration and that matching elements will only appear sparsely in the set deltas.
+        /// </summary>
+        private void HandleOnNotifySetDeltasEvent(object source, ISetDelta eventArgs)
+        {
+            Modular.Interconnect.Sets.SetDelta<TItemType> setDelta = eventArgs as Modular.Interconnect.Sets.SetDelta<TItemType>;
+
+            if (setDelta != null)
+            {
+                TItemType lastMatchedItem = default(TItemType);
+                int matchCount = 0;
+
+                var addRangeItemList = setDelta.addRangeItemList;
+                int addRangeItemListCount = addRangeItemList.SafeCount();
+
+                for (int addRangeIdx = 0; addRangeIdx < addRangeItemListCount; addRangeIdx++)
+                {
+                    var addRangeItem = addRangeItemList[addRangeIdx];
+
+                    var rangeItemList = addRangeItem.rangeObjectList;
+                    int rangeItemListCount = rangeItemList.SafeCount();
+
+                    for (int rangeItemIdx = 0; rangeItemIdx < rangeItemListCount; rangeItemIdx++)
+                    {
+                        TItemType testItem = rangeItemList[rangeItemIdx];
+
+                        TKeyType testItemKey = keySelector(testItem);
+
+                        if (keyValue.Equals(testItemKey))
+                        {
+                            lastMatchedItem = testItem;
+                            matchCount++;
+                        }
+                    }
+                }
+
+                if (matchCount > 0)
+                    Item = lastMatchedItem;
+            }
+        }
+
+        private static DependencyPropertyKey ItemPropertyKey = DependencyProperty.RegisterReadOnly("Item", typeof(TItemType), typeof(SetNewestItemPicker<TItemType, TKeyType>), new PropertyMetadata(null));
+
+        public TItemType Item { get { return _item; } set { SetValue(ItemPropertyKey, _item = value); } }
+        private TItemType _item;
+    }
+
+    #endregion
+
+    #region SetNewestItemGroupPicker
+
+    /// <summary>
+    /// This tool is constructed to find a given SetTracker (by name/setID) and then to monitor the resulting stream of SetDelta additions and retain the last added item who's selected key (using the keySelector)
+    /// matches any of the key values in the given groupKeyValuesArray.  The resulting array of selected items will be published to the GroupArray DependencyProperty at the end of each handled SetDelta if any of the
+    /// items in the group where updated by that SetDelta.
+    /// <para/>Produced (read-only) DependencyPropertyKeys: GroupArray
+    /// </summary>
+    public class SetNewestItemGroupPicker<TItemType, TKeyType> : DependencyObject
+    {
+        /// <summary>
+        /// Constructor.  Accepts <paramref name="setName"/>, <paramref name="keySelector"/> and <paramref name="groupKeyValuesArray"/>.
+        /// Finds the SetTracker for the given <paramref name="setName"/> and builds a dictinary of key values to group item indecies which will be used to identify set items that are to be picked and where they are to be put into the array of group items.
+        /// </summary>
+        /// <exception cref="System.ArgumentNullException">Will be thrown if any of the given values in the <paramref name="groupKeyValuesArray"/> are null or are otherwise incompatible with the use of the Dictionary.Add method</exception>
+        /// <exception cref="System.ArgumentException">Will be thrown if there are any duplicates in the given <paramref name="groupKeyValuesArray"/>, or if the Dictionary.Add method believes that they are duplicates.</exception>
+        public SetNewestItemGroupPicker(string setName, Func<TItemType, TKeyType> keySelector, TKeyType[] groupKeyValuesArray)
+            : this(new SetID(setName, generateUUIDForNull: false), keySelector, groupKeyValuesArray)
+        { }
+
+        /// <summary>
+        /// Constructor.  Accepts <paramref name="setID"/>, <paramref name="keySelector"/> and <paramref name="groupKeyValuesArray"/>.
+        /// Finds the SetTracker for the given <paramref name="setID"/> and builds a dictinary of key values to group item indecies which will be used to identify set items that are to be picked and where they are to be put into the array of group items.
+        /// </summary>
+        /// <exception cref="System.ArgumentNullException">Will be thrown if any of the given values in the <paramref name="groupKeyValuesArray"/> are null or are otherwise incompatible with the use of the Dictionary.Add method</exception>
+        /// <exception cref="System.ArgumentException">Will be thrown if there are any duplicates in the given <paramref name="groupKeyValuesArray"/>, or if the Dictionary.Add method believes that they are duplicates.</exception>
+        public SetNewestItemGroupPicker(SetID setID, Func<TItemType, TKeyType> keySelector, TKeyType[] groupKeyValuesArray)
+        {
+            this.setID = setID;
+            this.keySelector = keySelector;
+            this.groupKeyValuesArray = groupKeyValuesArray ?? Utils.Collections.EmptyArrayFactory<TKeyType>.Instance;
+
+            this.groupKeyValuesArray.DoForEach((keyValue, idx) => keyToIndexDictionary.Add(keyValue, idx));
+
+            rootSetTracker = SetTracker.GetSetTracker(setID);
+
+            referenceGroupArray = new TItemType[maxGroupIndex = groupKeyValuesArray.Length];
+
+            GroupArray = referenceGroupArray.SafeToArray();
+
+            rootSetTracker.AddSetDeltasEventHandler(HandleOnNotifySetDeltasEvent, setPrimingDelegate: primingSetDelta => HandleOnNotifySetDeltasEvent(rootSetTracker, primingSetDelta));
+        }
+
+        private SetID setID;
+        private Func<TItemType, TKeyType> keySelector;
+        private TKeyType [] groupKeyValuesArray;
+        private Dictionary<TKeyType, int> keyToIndexDictionary = new Dictionary<TKeyType, int>();
+
+        private TItemType[] referenceGroupArray;
+        private int maxGroupIndex;
+
+        private SetTracker rootSetTracker;
+
+        private void HandleOnNotifySetDeltasEvent(object source, ISetDelta eventArgs)
+        {
+            Modular.Interconnect.Sets.SetDelta<TItemType> setDelta = eventArgs as Modular.Interconnect.Sets.SetDelta<TItemType>;
+
+            if (setDelta != null)
+            {
+                int matchCount = 0;
+
+                var addRangeItemList = setDelta.addRangeItemList;
+                int addRangeItemListCount = addRangeItemList.SafeCount();
+
+                for (int addRangeIdx = 0; addRangeIdx < addRangeItemListCount; addRangeIdx++)
+                {
+                    var addRangeItem = addRangeItemList[addRangeIdx];
+
+                    var rangeItemList = addRangeItem.rangeObjectList;
+                    int rangeItemListCount = rangeItemList.SafeCount();
+
+                    for (int rangeItemIdx = 0; rangeItemIdx < rangeItemListCount; rangeItemIdx++)
+                    {
+                        TItemType testItem = rangeItemList[rangeItemIdx];
+                        TKeyType testItemKey = keySelector(testItem);
+
+                        int groupIdx = keyToIndexDictionary.SafeTryGetValue(testItemKey, fallbackValue: -1);
+
+                        if (groupIdx >= 0 && groupIdx <= maxGroupIndex)
+                        {
+                            referenceGroupArray[groupIdx] = testItem;
+                            matchCount++;
+                        }
+                    }
+                }
+
+                if (matchCount > 0)
+                    GroupArray = referenceGroupArray.SafeToArray();
+            }
+        }
+
+        private static DependencyPropertyKey GroupPropertyKey = DependencyProperty.RegisterReadOnly("GroupArray", typeof(TItemType[]), typeof(SetNewestItemGroupPicker<TItemType, TKeyType>), new PropertyMetadata(null));
+
+        public TItemType [] GroupArray { get { return _groupArray; } set { SetValue(GroupPropertyKey, _groupArray = value); } }
+        private TItemType [] _groupArray;
+    }
+
+    #endregion
+
+    #region AdjustableLogMessageSetTracker
+
+    /// <summary>
+    /// This DependencyObject class provides a customized and adjustable means to track and filter a set of log messages as observed from selected SetTracker instance.
+    /// <para/>Produced (read-only) DependencyPropertyKeys: Set, TotalCount
+    /// <para/>Supported DependencyProperties: SetName, Pause, FilterDelegate, EnabledSources, FilterString, LogGate, EnableFatal, EnableError, EnableWarning, EnableSignif, EnableInfo, EnableDebug, EnableTrace
+    /// <para/>Supported events: SetRebuilt (BasicNotificationDelegate), NewItemsAdded (BasicNotificationDelegate)
+    /// </summary>
     public class AdjustableLogMessageSetTracker : DependencyObject
     {
         public static readonly MosaicLib.Logging.LogGate DefaultLogGate = MosaicLib.Logging.LogGate.Debug;
@@ -218,7 +473,10 @@ namespace MosaicLib.WPF.Tools.Sets
             this.maximumCapacity = maximumCapacity;
 
             if (setID != null)
+            {
                 HandleNewSetID(setID);
+                SetName = setID.Name;
+            }
         }
 
         public void Clear()
@@ -245,32 +503,7 @@ namespace MosaicLib.WPF.Tools.Sets
 
             RegenerateAdjustableSet();
 
-            if (rootSetTracker.ReferenceSet != null)
-            {
-                var refSet = rootSetTracker.ReferenceSet;
-                var refSetSeqNumnRangeInfo = refSet.ItemListSeqNumRangeInfo;
-
-                SetDelta<MosaicLib.Logging.ILogMessage> syntheticInitializationSetDelta = new SetDelta<MosaicLib.Logging.ILogMessage>()
-                {
-                    SetID = rootSetTracker.SetID,
-                    ClearSetAtStart = true,
-                    SourceSetCapacity = refSet.Capacity,
-                    SourceUpdateState = refSet.UpdateState,
-                    addRangeItemList = new List<SetDeltaAddContiguousRangeItem<MosaicLib.Logging.ILogMessage>>()
-                     {
-                         new SetDeltaAddContiguousRangeItem<MosaicLib.Logging.ILogMessage>()
-                         {
-                             RangeStartIndex = 0,
-                             RangeStartSeqNum = refSetSeqNumnRangeInfo.First,
-                             rangeObjectList = refSet.SafeToSet<MosaicLib.Logging.ILogMessage>().ToList(),      // log messages are never sparse so we only need one contiguous range item for all of the current messages.
-                         }
-                     }
-                };
-
-                setCollector.ApplyDeltas(syntheticInitializationSetDelta);
-            }
-
-            rootSetTracker.SetDeltasEventNotificationList.OnNotify += handleOnNotifySetDeltasEventHandler;
+            rootSetTracker.AddSetDeltasEventHandler(handleOnNotifySetDeltasEventHandler, setPrimingDelegate: primingSetDelta => setCollector.ApplyDeltas(primingSetDelta));
         }
 
         private EventHandlerDelegate<ISetDelta> handleOnNotifySetDeltasEventHandler;
@@ -429,7 +662,6 @@ namespace MosaicLib.WPF.Tools.Sets
             }
         }
 
-
         private static void HandlePausePropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             AdjustableLogMessageSetTracker me = d as AdjustableLogMessageSetTracker;
@@ -556,4 +788,6 @@ namespace MosaicLib.WPF.Tools.Sets
         private BasicNotificationList setRebuiltNotificationList = new BasicNotificationList();
         private BasicNotificationList newItemsAddedNotificationList = new BasicNotificationList();
     }
+
+    #endregion
 }
