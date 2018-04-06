@@ -32,6 +32,7 @@ using MosaicLib.Modular.Config.Attributes;
 using MosaicLib.Time;
 using System.Runtime.Serialization;
 using MosaicLib.Modular.Common;
+using MosaicLib.Modular.Interconnect.Sets;
 
 namespace MosaicLib
 {
@@ -744,7 +745,7 @@ namespace MosaicLib
                 /// <param name="logGate">Defines the LogGate value for messages handled here.  Messages with MesgType that is not included in this gate will be ignored.</param>
                 /// <param name="includeFileAndLines">Indicates if this handler should record and save source file and line numbers.</param>
                 /// <param name="supportReferenceCountedRelease">Indicates if this logger supports reference counted log message release.</param>
-                public CommonLogMessageHandlerBase(string name, LogGate logGate, bool includeFileAndLines, bool supportReferenceCountedRelease)
+                public CommonLogMessageHandlerBase(string name, LogGate logGate, bool includeFileAndLines = false, bool supportReferenceCountedRelease = false)
                 {
                     this.name = name;
                     loggerConfig = new LoggerConfig() { GroupName = "LMH:" + name, LogGate = logGate, RecordSourceStackFrame = includeFileAndLines };
@@ -754,8 +755,10 @@ namespace MosaicLib
 
                 /// <summary>Gives the LMH's Name</summary>
                 public string Name { get { return name; } }
+
                 /// <summary>Gives the LogGate being used by this LMH</summary>
                 public LogGate LogGate { get { return loggerConfig.LogGate; } }
+
                 /// <summary>Gives the LoggerConfig that this LMH is using.</summary>
                 public LoggerConfig LoggerConfig { get { return loggerConfig; } }
 
@@ -768,19 +771,29 @@ namespace MosaicLib
                 /// <summary>Defines the abstract method that must be implemented and which is used to handle arrays of LogMessages</summary>
                 public abstract void HandleLogMessages(LogMessage[] lmArray);
 
-                /// <summary>Defines the abstract method that must be implemented and which is used to determine if a LogMessage's sequence number is still pending delivery in this handler.</summary>
-                public abstract bool IsMessageDeliveryInProgress(int testMesgSeqNum);
+                /// <summary>Query method that may be used to tell if message delivery for a given message is still in progress on this handler.</summary>
+                /// <remarks>This default implementation returns false.</remarks>
+                public virtual bool IsMessageDeliveryInProgress(int testMesgSeqNum) { return false; }
 
-                /// <summary>Defines the abstract, blocking, method that is used to force all pending messages to be commmitted before returning.</summary>
-                public abstract void Flush();
+                /// <summary>Once called, this method only returns after the handler has made a reasonable effort to verify that all outsanding, pending messages, visible at the time of the call, have been full processed before the call returns.</summary>
+                /// <remarks>This default implementation does nothing.  This method should be overriden/replaced in derived versions when appropriate.</remarks>
+                public virtual void Flush() 
+                { }
 
-                /// <summary>This abstract method will be called when the distribution system is being shutdown.  It allows the handler to gracefully close and release all related resources.</summary>
-                public abstract void Shutdown();
+                /// <summary>
+                /// Used to tell the handler that the LogMessageDistribution system is shuting down.  
+                /// Handler is expected to close, release and/or Dispose of any unmanged resources before returning from this call.  
+                /// Any attempt to pass messages after this point may be ignored by the handler.
+                /// </summary>
+                /// <remarks>This default implementation calls <see cref="Flush"/></remarks>
+                public virtual void Shutdown() 
+                { 
+                    Flush(); 
+                }
 
                 /// <summary>This virtual method will be called when the distribution system is being restarted.  It can be overriden to allows a drived handler class to handler to (re)Start processing distributed messages, as if the handler has just been constructed.</summary>
                 public virtual void StartIfNeeded()
-                {
-                }
+                { }
 
                 /// <summary>tell any interested Notifyable objects (as currently in the notifyMessageDelivered list) that messages have been delivered</summary>
                 protected void NoteMessagesHaveBeenDelivered()
@@ -839,7 +852,7 @@ namespace MosaicLib
                         }
                         catch (System.Exception ex)
                         {
-                            delegateHeaderLines = new[] { "HeaderLinesDelegate generated unexpected exception: {0} '{1}'".CheckedFormat(ex.GetType(), ex.Message) };
+                            delegateHeaderLines = new[] { "HeaderLinesDelegate generated unexpected {0}".CheckedFormat(ex.ToString(ExceptionFormat.TypeAndMessage)) };
                         }
 
                         int firstNullIdx = -1;
@@ -1223,52 +1236,105 @@ namespace MosaicLib
             #endregion
 
             //-------------------------------------------------------------------
+            #region SetLogMessageHandler
+
+            /// <summary>
+            /// This class provides a simple implementation of an LMH that will filter and collect delivered messages in a registered reference set of the given name.
+            /// </summary>
+            public class SetLogMessageHandler : SimpleLogMessageHandlerBase
+            {
+                /// <summary>Constructor.</summary>
+                /// <param name="setName">Defines the set name of the set created for this logger.  LMH name will be setName.lmh.</param>
+                /// <param name="logGate">Defines the LogGate value for messages handled here.  Messages with MesgType that is not included in this gate will be ignored.  When null the <paramref name="logGate"/> will default to LogGate.All</param>
+                /// <param name="capacity">Defines the capacity of the resulting set.</param>
+                /// <param name="registerSet">Set to true to select that the set shall be registered.  If a non-null <paramref name="iSetsInstance"/> is explicitly provided then this parameter is not required, otherwise this parameter will select registration with the default Sets.Instance singleton.</param>
+                /// <param name="iSetsInstance">Gives the caller provided Sets Instance that for registration of the created set (if any).  If this parameter is null and <paramref name="registerSet"/> is true then the method will register the created set with the default Sets.Instance singleton.</param>
+                /// <param name="messageFilter">Optional.  When non-null, this method may be used to filter which methods are to be included in the set.</param>
+                public SetLogMessageHandler(string setName, LogGate ? logGate = null, int capacity = 1000, bool registerSet = true, ISetsInterconnection iSetsInstance = null, Func<Logging.ILogMessage, bool> messageFilter = null)
+                    : base("{0}.lmh".CheckedFormat(setName), logGate ?? LogGate.All, false, false)
+                {
+                    Set = new ReferenceSet<Logging.LogMessage>(new SetID(setName), capacity, registerSet ? (iSetsInstance ?? Sets.Instance) : null);
+ 
+                    this.messageFilter = messageFilter;
+                }
+
+                /// <summary>
+                /// Takes the given LogMessage and adds it to the set if the messageFilter is null or if the messageFilter applied to the message returns true.
+                /// </summary>
+                protected override void InnerHandleLogMessage(LogMessage lm)
+                {
+                    try
+                    {
+                        if (lm != null && (messageFilter == null || messageFilter(lm)))
+                        {
+                            if (!lm.Emitted) 
+                                lm.NoteEmitted();
+
+                            Set.Add(lm);
+                        }
+                    }
+                    catch (System.Exception ex)
+                    {
+                        string mesg = "{0}: {1} caught exception: {2}".CheckedFormat(Fcns.CurrentClassLeafName, Fcns.CurrentMethodName, ex.ToString(ExceptionFormat.TypeAndMessage));
+                        if (System.Diagnostics.Debugger.IsAttached)
+                            System.Diagnostics.Debugger.Log(0, "Exception", mesg);
+                        else
+                            BasicFallbackLogging.OutputDebugString("{0}\r", mesg);
+                    }
+                }
+
+                /// <summary>
+                /// NOTE: this Set needs to be a set of Logging.LogMessage items rather than a set of Logging.ILogMessage items so that its items can be serialized and deserialized in linked tracking sets.
+                /// </summary>
+                public IReferenceSet<Logging.LogMessage> Set { get; private set; }
+
+                Func<Logging.ILogMessage, bool> messageFilter;
+            }
+
+            #endregion
+
+            //-------------------------------------------------------------------
         }
 
         #region helper method to generate default file header line arrays
 
-
         /// <summary>
         /// This method may be used to generate a basic set of fixed header lines for use with configurable log message handlers that support them.
         /// The resulting array consisists of a pattern that looks like:
         /// <para/>================================================================================================================================
         /// <para/>Log file for 'logBaseName'
+        /// <para/>Process name:'GetCurrentPerocess.ProcessName' id:GetCurrentProcess.Id
+        /// <para/>Machine:'machineName' os:'os name and version' Cores:numCores
+        /// <para/>User:'userName' {interactive|service}
+        /// <para/>Hosting Assembly: 'HostingAssemblyName (callerProvidedAssemblyName)'
         /// <para/>Main Assembly: 'MainAssemblyName'
-        /// <para/>Process name:'GetCurrentPerocess.ProcessName' id:GetCurrentPerocess.Id
-        /// <para/>================================================================================================================================
-        /// </summary>
-
-        public static string[] GenerateDefaultHeaderLines(string logBaseName)
-        {
-            return GenerateDefaultHeaderLines(logBaseName, false);
-        }
-
-        /// <summary>
-        /// This method may be used to generate a basic set of fixed header lines for use with configurable log message handlers that support them.
-        /// The resulting array consisists of a pattern that looks like:
-        /// <para/>================================================================================================================================
-        /// <para/>Log file for 'logBaseName'
-        /// <para/>Main Assembly: 'MainAssemblyName'
-        /// <para/>Process name:'GetCurrentPerocess.ProcessName' id:GetCurrentPerocess.Id
         /// <para/>[optional null]
         /// <para/>================================================================================================================================
         /// </summary>
 
-        public static string[] GenerateDefaultHeaderLines(string logBaseName, bool includeNullForDynamicLines)
+        public static string[] GenerateDefaultHeaderLines(string logBaseName = null, bool includeNullForDynamicLines = false, System.Reflection.Assembly hostingAssembly = null)
         {
             appUptimeBaseTimeStamp = QpcTimeStamp.Now;
 
             System.Diagnostics.Process currentProcess = System.Diagnostics.Process.GetCurrentProcess();
-            System.Reflection.Assembly mainAssy = System.Reflection.Assembly.GetEntryAssembly();
+            System.Reflection.Assembly mainAssembly = System.Reflection.Assembly.GetEntryAssembly();
 
             string[] deliniatorLineArray = new string[] { "================================================================================================================================" };
 
+            string machineName = Environment.MachineName;
+            string userDomainName = Environment.UserDomainName;
+            string userName = ((userDomainName.IsNullOrEmpty() || userDomainName == machineName)) ? Environment.UserName : @"{0}/{1}".CheckedFormat(userDomainName, Environment.UserName);
+
             string[] defaultFileHeaderLines1 = new string[]
             {
-                "Log file for '{0}'".CheckedFormat(logBaseName.MapNullOrEmptyTo(currentProcess.ProcessName)),
-                "Main Assembly: '{0}'".CheckedFormat(mainAssy),
+                ((logBaseName != null) ? "Log file for '{0}'".CheckedFormat(logBaseName) : null),
                 "Process name:'{0}' id:{1}".CheckedFormat(currentProcess.ProcessName, currentProcess.Id),
-            };
+                "Machine:'{0}' os:'{1}' Cores:{2}".CheckedFormat(machineName, Environment.OSVersion, Environment.ProcessorCount),
+                "User:'{0}' {1}".CheckedFormat(userName, Environment.UserInteractive ? "interactive" : "service"),
+                ((hostingAssembly != null) ? "Hosting Assembly: '{0}'".CheckedFormat(hostingAssembly) : null),
+                ((mainAssembly != null && mainAssembly != hostingAssembly) ? "Main Assembly: '{0}'".CheckedFormat(mainAssembly) : null),
+                (System.Diagnostics.Debugger.IsAttached ? "Debugger is attached" : null),
+            }.Where(s => !s.IsNullOrEmpty()).ToArray();
 
             if (!includeNullForDynamicLines)
                 return deliniatorLineArray.Concat(defaultFileHeaderLines1).Concat(deliniatorLineArray).ToArray();
@@ -1281,19 +1347,73 @@ namespace MosaicLib
         /// <summary>
         /// This method may be used to generate the dynamic header lines, typically combined with the use of GenerateDefaultHeaderLines.
         /// The resulting array looks like:
-        /// <para/>Uptime: 1.001 hours [only included if time >= 0.001 hours]
+        /// <para/>Uptime: 1.001 hours
         /// </summary>
         public static string[] GenerateDynamicHeaderLines()
         {
-            double appUptimeHours = appUptimeBaseTimeStamp.Age.TotalHours;
-            double roundedAppUptimeHours = appUptimeHours.Round(4, MidpointRounding.ToEven);
+            return GenerateDynamicHeaderLines(DynamicHeaderLinesSelect.All);
+        }
+
+        /// <summary>
+        /// This method may be used to generate the dynamic header lines, typically combined with the use of GenerateDefaultHeaderLines.
+        /// This variant uses the <paramref name="dynamicHeaderLinesSelect"/> to indicate which header contents should be included.
+        /// The resulting array might looks like:
+        /// <para/>Uptime: 1.001 hours
+        /// <para/>Process Info: time(user/priv):0.516,0.203 sec size(ws,vm):60.621,39.996 MBytes priority:Normal,8 handles:409 threads:17
+        /// </summary>
+        public static string[] GenerateDynamicHeaderLines(DynamicHeaderLinesSelect dynamicHeaderLinesSelect)
+        {
+            string uptimeLine = null;
+            if (dynamicHeaderLinesSelect.IsSet(DynamicHeaderLinesSelect.UptimeLine))
+            {
+                double appUptimeHours = Math.Max(0.0, appUptimeBaseTimeStamp.Age.TotalHours);
+                double roundedAppUptimeHours = appUptimeHours.Round(3, MidpointRounding.ToEven);
+                uptimeLine = "Uptime: {0:f3} hours".CheckedFormat(roundedAppUptimeHours);
+            }
+
+            string processInfoLine = null;
+            if (dynamicHeaderLinesSelect.IsSet(DynamicHeaderLinesSelect.ProcessInfoLine))
+            {
+                System.Diagnostics.Process process = System.Diagnostics.Process.GetCurrentProcess();
+
+                const double oneOver1M = (1.0 / (1024.0 * 1024.0));
+
+                string timeStr = Utils.ExtensionMethods.TryGet(() => " time(user/priv):{0:f3},{1:f3} sec".CheckedFormat(process.UserProcessorTime.TotalSeconds, process.PrivilegedProcessorTime.TotalSeconds), getFailedResult: string.Empty);
+                string sizeStr = Utils.ExtensionMethods.TryGet(() => " size(ws,vm):{0:f3},{1:f3} MBytes".CheckedFormat(process.WorkingSet64 * oneOver1M, process.PrivateMemorySize64 * oneOver1M), getFailedResult: string.Empty);
+                string priorityStr = Utils.ExtensionMethods.TryGet(() => " priority:{0},{1}".CheckedFormat(process.PriorityClass, process.BasePriority), getFailedResult: string.Empty);
+                string handlesStr = Utils.ExtensionMethods.TryGet(() => " handles:{0}".CheckedFormat(process.HandleCount), getFailedResult: string.Empty);
+                string threadsStr = Utils.ExtensionMethods.TryGet(() => " threads:{0}".CheckedFormat(process.Threads.Count), getFailedResult: string.Empty);
+
+                processInfoLine = "Process Info:{0}{1}{2}{3}{4}".CheckedFormat(timeStr, sizeStr, priorityStr, handlesStr, threadsStr);
+            }
 
             string [] dynamicHeaderLinesArray = new string[]
             {
-                ((appUptimeHours > 0.0005) ? "Uptime: {0:f3} hours".CheckedFormat(appUptimeHours) : null),
-            }.Where(s => s != null).ToArray();
+                uptimeLine,
+                processInfoLine,
+            }.WhereIsNotDefault().ToArray();
 
             return dynamicHeaderLinesArray;
+        }
+
+        /// <summary>
+        /// Enumeration used with GenerateDynamicHeaderLines to select which contents/lines shall be selected for inclusion.
+        /// <para/>None (0x00), UptimeLine (0x01), ProcessInfoLine (0x02), All (0x03)
+        /// </summary>
+        [Flags]
+        public enum DynamicHeaderLinesSelect : int
+        {
+            /// <summary>Default, Placeholder.  By itself, this value selects that no dynamic header lines should be included.  [0x00]</summary>
+            None = 0x00,
+
+            /// <summary>Selects that the Uptime header line shall be included.  [0x01]</summary>
+            UptimeLine = 0x01,
+
+            /// <summary>Selects that the Process Info header line shall be included.  [0x02]</summary>
+            ProcessInfoLine = 0x02,
+
+            /// <summary>Selects that all header lines shall be included. (UptimeLine | ProcessInfoLine) [0x03]</summary>
+            All = (UptimeLine | ProcessInfoLine),
         }
 
         #endregion

@@ -214,16 +214,23 @@ namespace MosaicLib
 				Level			
 			}
 
-            /// <summary>Standard constructor for a bit type MesgTypeMask</summary>
-			public MesgTypeMask(MesgType mesgType) : this(mesgType, MaskType.Bit) { }
+            /// <summary>Constructor for mask of given type (Bit or Level) for given MesgType.  <paramref name="maskType"/> defaults to Bit</summary>
+			public MesgTypeMask(MesgType mesgType, MaskType maskType = MaskType.Bit) 
+                : this(ConvertToBitMask(mesgType, maskType)) 
+            { }
 
-            /// <summary>Constructor for mask of given type (Bit or Level) for given MesgType</summary>
-			public MesgTypeMask(MesgType mesgType, MaskType maskType) : this(ConvertToBitMask(mesgType, maskType)) { }
+            /// <summary>Constructor for mask with <paramref name="maskBits"/> specified explicitly</summary>
+            public MesgTypeMask(int maskBits) 
+            { 
+                this.maskBits = maskBits; 
+            }
 
             /// <summary>Returns new MesgTypeMask containing the logical or of the masks on the left and right sides</summary>
             public static MesgTypeMask operator |(MesgTypeMask lhs, MesgTypeMask rhs) { return new MesgTypeMask(lhs.maskBits | rhs.maskBits); }
             /// <summary>Returns new MesgTypeMask containing the logical and of the masks on the left and right sides</summary>
             public static MesgTypeMask operator &(MesgTypeMask lhs, MesgTypeMask rhs) { return new MesgTypeMask(lhs.maskBits & rhs.maskBits); }
+            /// <summary>Returns new MesgTypeMask containing the logical exclusive or of the masks on the left and right sides</summary>
+            public static MesgTypeMask operator ^(MesgTypeMask lhs, MesgTypeMask rhs) { return new MesgTypeMask(lhs.maskBits ^ rhs.maskBits); }
             /// <summary>Returns new MesgTypeMask containing the logical inverse (compliment) of the given mask (on the right of the operator)</summary>
             public static MesgTypeMask operator ~(MesgTypeMask rhs) { return new MesgTypeMask(~rhs.maskBits); }
 
@@ -250,9 +257,6 @@ namespace MosaicLib
             /// <summary>Returns true if all of the given bits in testBits are also set in this object's mask</summary>
             public bool AreAllTestBitsEnabled(int testBits) { return (testBits == (maskBits & testBits)); }
 
-            /// <summary>Constructor for mask with initialBits specified explicitly</summary>
-            public MesgTypeMask(int initialBits) { maskBits = initialBits; }
-
             /// <summary>Constructor for parsing from a string version</summary>
             public MesgTypeMask(string parseStr) : this()
             {
@@ -261,8 +265,8 @@ namespace MosaicLib
                     maskBits = mtm.maskBits;
             }
 
-            /// <summary>Helper property for unit testing.  This property is not expected to be applicable for general use.</summary>
-            public int MaskBits { get { return maskBits; } }
+            /// <summary>Gives caller get/set access to the underlying bit mask.  Helper property for unit testing.</summary>
+            public int MaskBits { get { return maskBits; } set { maskBits = value; } }
 
             /// <summary>Returns a mask derived from the given mesgType and maskType.</summary>
             /// <param name="mesgType">Defines the mesg type enum value from which the mask is derived.</param>
@@ -397,16 +401,28 @@ namespace MosaicLib
         public struct LogGate
 		{
             /// <summary>Standard constructor to build a level type mask (as opposed to a bit type mask)</summary>
-			public LogGate(MesgType mesgType) { mask = new MesgTypeMask(mesgType, MesgTypeMask.MaskType.Level); }
+			public LogGate(MesgType mesgType, MesgTypeMask.MaskType maskType = Logging.MesgTypeMask.MaskType.Level) 
+            { 
+                mask = new MesgTypeMask(mesgType, maskType); 
+            }
+
             /// <summary>Copy constructor</summary>
-            public LogGate(LogGate rhs) : this(rhs.mask) { }
+            public LogGate(LogGate other) 
+                : this(other.mask) 
+            { }
+
             /// <summary>Copy constructor from a MesgTypeMask</summary>
-            public LogGate(MesgTypeMask rhs) { mask = rhs; }
+            public LogGate(MesgTypeMask mtm) 
+            { 
+                mask = mtm; 
+            }
 
             /// <summary>Returns new LogGate containing the logical or of the masks on the left and right sides</summary>
 			public static LogGate operator |(LogGate lhs, LogGate rhs) { return new LogGate(lhs.mask | rhs.mask); }
             /// <summary>Returns new LogGate containing the logical and of the masks on the left and right sides</summary>
 			public static LogGate operator &(LogGate lhs, LogGate rhs) { return new LogGate(lhs.mask & rhs.mask); }
+            /// <summary>Returns new LogGate containing the logical exclusive or of the masks on the left and right sides</summary>
+            public static LogGate operator ^(LogGate lhs, LogGate rhs) { return new LogGate(lhs.mask ^ rhs.mask); }
             /// <summary>Returns new LogGate containing the logical inverse (compliment) of the given mask (on the right of the operator)</summary>
 			public static LogGate operator ~(LogGate lhs) { return new LogGate(~lhs.mask); }
 
@@ -426,6 +442,9 @@ namespace MosaicLib
 			private MesgTypeMask mask;
             /// <summary>get/set property that gives external access to the underlying MesgTypeMask that this object contains and uses.</summary>
             public MesgTypeMask MesgTypeMask { get { return mask; } set { mask = value; } }
+
+            /// <summary>Gives caller get/set access to the underlying MesgTypeMask bit mask.</summary>
+            public int MaskBits { get { return mask.MaskBits; } set { mask.MaskBits = value; } }
 
             /// <summary>Provide added debugging support.</summary>
             public override string ToString()
@@ -802,6 +821,9 @@ namespace MosaicLib
             /// <summary>Returns a, possibly null, byte array of binary data that is associated with this message.</summary>
             byte[] Data { get; }
 
+            /// <summary>True if the message has been given to the distribution system.</summary>
+            bool Emitted { get; }
+
             /// <summary>Returns the QpcTimeStamp at which this message was emitted or zero if it has not been emitted</summary>
             QpcTimeStamp EmittedQpcTime { get; }
 
@@ -814,14 +836,14 @@ namespace MosaicLib
             /// <summary>Returns the Win32 ThreadID (from kernel32.GetCurrentThreadID) of the thread that setup this message</summary>
             int Win32ThreadID { get; }
 
+            /// <summary>Returns the Name of the Thread that initially setup this message.</summary>
+            string ThreadName { get; }
+
             /// <summary>Returns the DataTime taken at the time the message was emitted or the empty DateTime if it has not bee emitted.</summary>
             DateTime EmittedDateTime { get; }
 
-            /// <summary>Method used to get the EmittedDataTime formatted as a standard string.</summary>
-            string GetFormattedDateTime();
-
             /// <summary>Method used to get the EmittedDataTime in one of the standard supported formats.</summary>
-            string GetFormattedDateTime(Utils.Dates.DateTimeFormat dtFormat);
+            string GetFormattedDateTime(Utils.Dates.DateTimeFormat dtFormat = Utils.Dates.DateTimeFormat.LogDefault);
         }
 
         //-------------------------------------------------------------------
@@ -1059,11 +1081,11 @@ namespace MosaicLib
                 return this;
             }
 
-            /// <summary>Method used to get the EmittedDataTime formatted as a standard string.</summary>
-            public string GetFormattedDateTime() { return GetFormattedDateTime(Utils.Dates.DateTimeFormat.LogDefault); }
-
             /// <summary>Method used to get the EmittedDataTime formatted in one of the standard supported formats.</summary>
-            public string GetFormattedDateTime(Utils.Dates.DateTimeFormat dtFormat) { return Utils.Dates.CvtToString(EmittedDateTime, dtFormat); }
+            public string GetFormattedDateTime(Utils.Dates.DateTimeFormat dtFormat = Utils.Dates.DateTimeFormat.LogDefault) 
+            { 
+                return Utils.Dates.CvtToString(EmittedDateTime, dtFormat); 
+            }
 
             /// <summary>This method has been deprecated.  Pooling of LogMessages has been removed.  (2016-03-10)</summary>
             [Obsolete("This method has been deprecated.  Pooling of LogMessages has been removed.  (2016-03-10)")]
@@ -1280,10 +1302,10 @@ namespace MosaicLib
             bool IsTypeEnabled(MesgType mesgType);
 
             /// <summary>returns a new message with type, source, file and line filled in.  Message will be empty.</summary>
-            LogMessage GetLogMessage(MesgType mesgType, System.Diagnostics.StackFrame sourceStackFrame);
+            LogMessage GetLogMessage(MesgType mesgType, System.Diagnostics.StackFrame sourceStackFrame = null);
 
             /// <summary>returns a new message with type, source, message, file and line filled in.</summary>
-            LogMessage GetLogMessage(MesgType mesgType, string mesg, System.Diagnostics.StackFrame sourceStackFrame);
+            LogMessage GetLogMessage(MesgType mesgType, string mesg, System.Diagnostics.StackFrame sourceStackFrame = null);
 
             /// <summary>returns a new message with type, source, message, file and line filled in.</summary>
             LogMessage GetLogMessage(MesgType mesgType, string mesg, System.Diagnostics.StackFrame sourceStackFrame, bool allocatedFromDist);
@@ -2219,13 +2241,13 @@ namespace MosaicLib
 			}
 
             /// <summary>Allocates and returns a non-pooled message of the requested type, log message string is initialized to be empty.</summary>
-            public LogMessage GetLogMessage(MesgType mesgType, System.Diagnostics.StackFrame sourceStackFrame) 
+            public LogMessage GetLogMessage(MesgType mesgType, System.Diagnostics.StackFrame sourceStackFrame = null) 
             { 
                 return GetLogMessage(mesgType, string.Empty, sourceStackFrame, false); 
             }
 
             /// <summary>Allocates and returns a non-pooled message of the requested type, and initializes it with the given message string</summary>
-            public LogMessage GetLogMessage(MesgType mesgType, string mesg, System.Diagnostics.StackFrame sourceStackFrame) 
+            public LogMessage GetLogMessage(MesgType mesgType, string mesg, System.Diagnostics.StackFrame sourceStackFrame = null) 
             { 
                 return GetLogMessage(mesgType, mesg, sourceStackFrame, false); 
             }

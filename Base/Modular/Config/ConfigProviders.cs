@@ -155,7 +155,7 @@ namespace MosaicLib.Modular.Config
         {
             ConfigKeyAccessFlags flags = new ConfigKeyAccessFlags();
 
-            return AddRange(nameValuePairSource.Select((kvp) => new ConfigKeyAccessImpl(KeyPrefix + kvp.Key, flags, null, this) { ValueContainer = kvp.Value, KeyMetaData = ProviderMetaData}));
+            return AddRange(nameValuePairSource.Select((kvp) => new ConfigKeyAccessImpl(KeyPrefix + kvp.Key, flags, null, this) { VC = kvp.Value, KeyMetaData = ProviderMetaData}));
         }
 
         /// <summary>
@@ -166,7 +166,7 @@ namespace MosaicLib.Modular.Config
         {
             ConfigKeyAccessFlags flags = new ConfigKeyAccessFlags();
 
-            return Add(new ConfigKeyAccessImpl(KeyPrefix + name, flags, null, this) { ValueContainer = vc, KeyMetaData = ProviderMetaData });
+            return Add(new ConfigKeyAccessImpl(KeyPrefix + name, flags, null, this) { VC = vc, KeyMetaData = ProviderMetaData });
         }
 
         /// <summary>
@@ -177,7 +177,7 @@ namespace MosaicLib.Modular.Config
         {
             ConfigKeyAccessFlags flags = new ConfigKeyAccessFlags();
 
-            return Add(new ConfigKeyAccessImpl(KeyPrefix + name, flags, null, this) { ValueContainer = new ValueContainer(value), KeyMetaData = ProviderMetaData });
+            return Add(new ConfigKeyAccessImpl(KeyPrefix + name, flags, null, this) { VC = new ValueContainer(value), KeyMetaData = ProviderMetaData });
         }
 
         /// <summary>
@@ -300,7 +300,7 @@ namespace MosaicLib.Modular.Config
                     firstError = firstError ?? Fcns.CheckedFormat("Internal: key:'{0}' is not valid for use with provider:'{1}', required key prefix:'{2}'", kvpIcka.Key, Name, KeyPrefix);
                 else if (!keyItemDictionary.TryGetValue(key ?? String.Empty, out item) || item == null || item.ckai == null)
                 {
-                    item = new Item() { key = key, ckai = new ConfigKeyAccessImpl(key, kvpIcka.Flags, null, this) { ValueContainer = kvp.Value, KeyMetaData = ProviderMetaData }, initialContainedValue = kvp.Value, comment = commentStr };
+                    item = new Item() { key = key, ckai = new ConfigKeyAccessImpl(key, kvpIcka.Flags, null, this) { VC = kvp.Value, KeyMetaData = ProviderMetaData }, initialContainedValue = kvp.Value, comment = commentStr };
                     keyItemDictionary[key] = item;
 
                     numChangedItems++;
@@ -315,7 +315,7 @@ namespace MosaicLib.Modular.Config
                     {
                         ValueContainer entryValue = item.ckai.ValueContainer;
 
-                        item.ckai.ValueContainer = kvp.Value;
+                        item.ckai.VC = kvp.Value;
                         item.comment = commentStr;
 
                         numChangedItems++;
@@ -582,7 +582,7 @@ namespace MosaicLib.Modular.Config
                         }
                         if (!includeFilesKeysDictionary.ContainsKey(fullKey))
                         {
-                            includeFilesKeysDictionary[fullKey] = new ConfigKeyAccessImpl(fullKey, flags, null, this) { ValueContainer = new ValueContainer(keyItem.Value), KeyMetaData = ProviderMetaData };
+                            includeFilesKeysDictionary[fullKey] = new ConfigKeyAccessImpl(fullKey, flags, null, this) { VC = new ValueContainer(keyItem.Value), KeyMetaData = ProviderMetaData };
                         }
                         else
                         {
@@ -690,9 +690,9 @@ namespace MosaicLib.Modular.Config
                         valueItem.ckai = new ConfigKeyAccessImpl("{0}{1}".CheckedFormat(KeyPrefix, valueItem.fileKeyName), defaultAccessFlags, null, this);
 
                     if (valueItem.hasEquals)
-                        valueItem.ckai.ValueContainer = new ValueContainer(linePartsArray.SafeAccess(1, String.Empty));
+                        valueItem.ckai.VC = new ValueContainer(linePartsArray.SafeAccess(1, String.Empty));
                     else
-                        valueItem.ckai.ValueContainer = new ValueContainer();
+                        valueItem.ckai.VC = new ValueContainer();
 
                     valueItem.ckai.KeyMetaData = ProviderMetaData;
 
@@ -866,7 +866,7 @@ namespace MosaicLib.Modular.Config
 
                     item = new ValueItem() { parentRegKey = regKey, valueName = valueName, initialValueKind = valueKind, lastContainedValue = valueContainer, isFixed = isFixed };
 
-                    item.ckai = new ConfigKeyAccessImpl(keyName, defaultAccessFlags, null, this) { ValueContainer = item.lastContainedValue, KeyMetaData = ProviderMetaData};
+                    item.ckai = new ConfigKeyAccessImpl(keyName, defaultAccessFlags, null, this) { VC = item.lastContainedValue, KeyMetaData = ProviderMetaData};
                     if (item.isFixed)
                         item.ckai.ProviderFlags = item.ckai.ProviderFlags.MergeWith(new ConfigKeyProviderFlags() { IsFixed = true });
 

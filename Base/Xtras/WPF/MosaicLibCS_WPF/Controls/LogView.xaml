@@ -1,0 +1,81 @@
+﻿<UserControl x:Class="MosaicLib.WPF.Controls.LogView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:conv="clr-namespace:MosaicLib.WPF.Converters"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+    Name="LogViewMainControl">
+    <!--<UserControl.FontSize>12</UserControl.FontSize>-->
+    <!--<UserControl.MinHeight>400</UserControl.MinHeight>-->
+    <!--<UserControl.MinWidth>800</UserControl.MinWidth>-->
+    <UserControl.Resources>
+        <conv:LogGateStringConverter x:Key="LogGateStringConverter" />
+        <conv:LogMessageContentCombiningConverter x:Key="LogContentCombiningConverter" />
+    </UserControl.Resources>
+    <DockPanel>
+        <GroupBox Name="logViewControlsGB" DockPanel.Dock="Bottom" Header="Log View Controls" Margin="0,0,0,0">
+            <WrapPanel Orientation="Horizontal">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Content="Clear" VerticalAlignment="Center" Click="HandleClearButton_Click" Margin="0,0,0,0" ToolTip="Clears displayed messages"/>
+                    <Button Content="Top" VerticalAlignment="Center" Click="HandleScrolltoTopButton_Click" Margin="5,0,0,0" ToolTip="Scrolls view to top message (earliest)"/>
+                    <Button Content="Bottom" VerticalAlignment="Center" Click="HandleScrolltoBottomButton_Click" Margin="5,0,0,0" ToolTip="Scrolls view to bottom message (most recent)"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="13,0,0,0" ToolTip="When checked this prevents new messages from being added to the filterable set and disables automatic scrolling to bottom">
+                    <CheckBox Content="Pause" IsChecked="{Binding ElementName=LogViewMainControl, Path=LogMessageSetTracker.Pause, Mode=TwoWay, FallbackValue=false}" VerticalAlignment="Center"/>
+                    <!--<Label Content="Pause" Margin="-2,0,0,0" VerticalAlignment="Center"/>-->
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="13,0,0,0" ToolTip="Selects the most detailed message type to show.  Includes all types above it.">
+                    <Label Content="Type:" VerticalAlignment="Center"/>
+                    <ComboBox MinWidth="100" SelectedValuePath="Content" SelectedValue="{Binding ElementName=LogViewMainControl, Path=LogMessageSetTracker.LogGate, Mode=TwoWay, FallbackValue=Info, Converter={StaticResource LogGateStringConverter}}" Margin="0,0,0,0" VerticalAlignment="Center">
+                        <ComboBoxItem Content="Error"/>
+                        <ComboBoxItem Content="Warning"/>
+                        <ComboBoxItem Content="Signif"/>
+                        <ComboBoxItem Content="Info"/>
+                        <ComboBoxItem Content="Debug"/>
+                    </ComboBox>
+                    <!--<CheckBox Content="Debug" IsChecked="{Binding ElementName=LogViewMainControl, Path=LogMessageSetTracker.EnableDebug, Mode=TwoWay, FallbackValue=false}" VerticalAlignment="Center" Margin="10,0,0,0"/>-->
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="13,0,0,0" ToolTip="Live filter text.  Applies to Type, Source, and/or Mesg contents (excluding NVS and Data).">
+                    <Label Content="Filter:" VerticalAlignment="Center"/>
+                    <TextBox Text="{Binding ElementName=LogViewMainControl, Path=LogMessageSetTracker.FilterString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="120" VerticalAlignment="Center"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="13,0,0,0">
+                    <Label Content="Counts (view,total):" VerticalAlignment="Center"/>
+                    <Label Content="{Binding ElementName=listView, Path=Items.Count, Mode=OneWay, FallbackValue=000}" ContentStringFormat="{}{0:d3}" Margin="3,2,0,2" MinWidth="40" BorderBrush="DarkGray" BorderThickness="1" VerticalAlignment="Center" ToolTip="Shows the number of filtered messages that are currently visible"/>
+                    <Label Content="{Binding ElementName=LogViewMainControl, Path=LogMessageSetTracker.TotalCount, Mode=OneWay, FallbackValue=000}" ContentStringFormat="{}{0:d3}" Margin="3,2,0,2" MinWidth="40" BorderBrush="DarkGray" BorderThickness="1" VerticalAlignment="Center" ToolTip="Shows the total number of messages that have been collected and availble to be filtered and displayed"/>
+                </StackPanel>
+            </WrapPanel>
+        </GroupBox>
+        <ListView x:Name="listView" ItemsSource="{Binding ElementName=LogViewMainControl, Path=LogMessageSetTracker.Set}" ScrollViewer.VerticalScrollBarVisibility="Visible" MinHeight="75">
+            <ListView.View>
+                <GridView>
+                    <GridViewColumn Header="Date" Width="100" DisplayMemberBinding="{Binding EmittedDateTime, StringFormat={}{0:HH:mm:ss.ffffff}, Mode=OneWay}"/>
+                    <GridViewColumn Header="Type" Width="60" DisplayMemberBinding="{Binding MesgType, Mode=OneWay}"/>
+                    <GridViewColumn Header="Source" Width="120" DisplayMemberBinding="{Binding LoggerName, Mode=OneWay}"/>
+                    <GridViewColumn Header="Mesg" Width="440" DisplayMemberBinding="{Binding Converter={StaticResource LogContentCombiningConverter}, Mode=OneWay}"/>
+                </GridView>
+            </ListView.View>
+            <ListView.Resources>
+                <Style TargetType="{x:Type ListViewItem}">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding MesgType}" Value="Fatal">
+                            <Setter Property="Background" Value="Red" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding MesgType}" Value="Error">
+                            <Setter Property="Background" Value="Orange" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding MesgType}" Value="Warning">
+                            <Setter Property="Background" Value="Yellow" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding MesgType}" Value="Signif">
+                            <Setter Property="Background" Value="Cornsilk" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding MesgType}" Value="Debug">
+                            <Setter Property="Foreground" Value="#FF868686" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </ListView.Resources>
+        </ListView>
+    </DockPanel>
+</UserControl>

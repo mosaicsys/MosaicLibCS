@@ -2,8 +2,9 @@
 /*! @file CommonSetup.cs
  *  @brief
  * 
- * Copyright (c) Mosaic Systems Inc.  All rights reserved.
- * Copyright (c) 2015 Mosaic Systems Inc.  All rights reserved.
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2015 Mosaic Systems Inc.
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,6 +39,18 @@ namespace MosaicLib.WPF.Common
     using MosaicLib;        // apparently this makes MosaicLib get searched before MosaicLib.WPF.Logging for resolving symbols here.
 
     /// <summary>
+    /// This enumeration is used with some Config.Logging keys to configure how standard logging is setup when using this AppSetup helper class
+    /// </summary>
+    [Flags]
+    public enum LogMessageHandlerSettingFlags : int
+    {
+        Disabled = 0x00,
+        IncludeAlways = 0x01,
+        IncludeWhenDebuggerAttached = 0x02,
+        NonQueued = 0x04,
+    }
+
+    /// <summary>
     /// Static helper methods with methods that can be used to handle OnStartup, OnDeactivated and OnExit events (using correspondingly named HandleYYY methods)
     /// </summary>
     public static partial class AppSetup
@@ -51,25 +64,56 @@ namespace MosaicLib.WPF.Common
         /// <summary>
         /// This method generates a useful default LogBaseName which is derived from the FullName of the calling assembly by taking the first portion up to the first ','
         /// </summary>
-        public static string DefaultLogBaseName
+        public static string DefaultLogBaseName { get { return CallerAssembly.GetAssemblyNameFromFullName(); } }
+
+        private static string GetAssemblyNameFromFullName(this System.Reflection.Assembly assembly)
+        {
+            if (assembly != null)
+                return assembly.FullName.Split(new[] { ',' }, 2).SafeAccess(0); // split off the "name" of the assembly from the other parts that make up its "full" name.
+            else
+                return "$$GivenAssemblyIsNull$$";
+        }
+
+        /// <summary>
+        /// Returns the first assembly that has a different FullName than this methods DeclaringType.Assembly, or if there are no other such assemblies within 10 stack frames up from this method
+        /// then this property returns the this method's DeclaringType.Assembly itself.
+        /// </summary>
+        public static System.Reflection.Assembly CallerAssembly
         {
             get
             {
-                return System.Reflection.Assembly.GetCallingAssembly().FullName.Split(',').SafeAccess(0);        // split off the "name" of the assembly from the other parts that make up its "full" name.
+                try
+                {
+                    System.Reflection.Assembly thisMethodAssembly = new System.Diagnostics.StackFrame().GetMethod().DeclaringType.Assembly;
+                    string thieMethodAssemblyFullName = thisMethodAssembly.FullName;
+
+                    System.Reflection.Assembly callStackLevelAssembly = null;
+
+                    for (int callStackLevel = 1; callStackLevel < 10; callStackLevel++)
+                    {
+                        try
+                        {
+                            callStackLevelAssembly = null;
+                            callStackLevelAssembly = new System.Diagnostics.StackFrame(callStackLevel).GetMethod().DeclaringType.Assembly;
+
+                            if (callStackLevelAssembly.FullName != thieMethodAssemblyFullName)
+                                break;
+                        }
+                        catch { }
+                    }
+
+                    return (callStackLevelAssembly ?? thisMethodAssembly);
+                }
+                catch
+                {
+                    return null;
+                }
             }
         }
 
         /// <summary>
-        /// Basic HandleOnStartup method signature.  Uses DefaultLogBaseName for the logBaseName parameter.
-        /// Program's command line arguments will be obtained from the given StartupEventArgs value.  These will be used with the (optional) initial setup of Modular.Config.
-        /// appLogger will be assigned to a new logger (this is expected to be used by the client in calls to later HandleYYY methods).
-        /// <para/>See the description of the full HandleOnStartup method variant for more details.
+        /// An enumeration of the supported log message handler types that may be used as the file log ring for the default logging group.
         /// </summary>
-        public static void HandleOnStartup(StartupEventArgs e, ref Logging.Logger appLogger)
-        {
-            HandleOnStartup(e, ref appLogger, DefaultLogBaseName);
-        }
-
         public enum FileRingLogMessageHandlerType
         {
             TextFileRotationDirectoryLogMessageHandler,
@@ -84,16 +128,123 @@ namespace MosaicLib.WPF.Common
         public static FileRingLogMessageHandlerType DefaultMainLoggerType { get { return defaultMainLoggerType; } set { defaultMainLoggerType = value; } }
         private static FileRingLogMessageHandlerType defaultMainLoggerType = FileRingLogMessageHandlerType.TextFileRotationDirectoryLogMessageHandler;
 
+        public static UnhandledExceptionEventHandler UnhandledExceptionEventHandler { get { return _unhandledExceptionEventHandler; } set { _unhandledExceptionEventHandler = value;} }
+        private static UnhandledExceptionEventHandler _unhandledExceptionEventHandler = DefaultUnhandledExceptionEventHandler;
+
+        public static void DefaultUnhandledExceptionEventHandler(object sender, UnhandledExceptionEventArgs e)
+        {
+            try
+            {
+                StringBuilder sb = new StringBuilder();
+
+                sb.CheckedAppendFormat("{0} has been triggered", Fcns.CurrentMethodName);
+                sb.AppendLine();
+                sb.CheckedAppendFormat(" DateTime   : {0:o}", DateTime.Now);
+                sb.AppendLine();
+                sb.CheckedAppendFormat(" QpcTime    : {0:f6}", Time.QpcTimeStamp.Now.Time);
+                sb.AppendLine();
+                sb.AppendLine();
+
+                System.Exception ex = e.ExceptionObject as System.Exception;
+                if (ex != null)
+                {
+                    sb.AppendLine("System.Exception:");
+
+                    sb.CheckedAppendFormat(" Type       : {0}", ex.GetType());
+                    sb.AppendLine();
+
+                    sb.CheckedAppendFormat(" Message    : {0}", ex.Message);
+                    sb.AppendLine();
+
+                    sb.AppendLine(" Stack Trace:");
+                    sb.CheckedAppendFormat("{0}", ex.StackTrace);
+                    sb.AppendLine();
+
+                    if (ex.Source != null)
+                    {
+                        sb.CheckedAppendFormat(" Source     : {0}", ex.Source);
+                        sb.AppendLine();
+                    }
+
+                    if (ex.Data != null)
+                    {
+                        sb.AppendLine(" Data       :");
+                        object[] keysArray = ex.Data.Keys.SafeToArray<object>();
+                        object[] valuesArray = ex.Data.Values.SafeToArray<object>();
+                        for (int rowIdx = 0; rowIdx < keysArray.Length; rowIdx++)
+                        {
+                            sb.CheckedAppendFormat("  Row {0:d3}   : {1}={2}", (rowIdx + 1), keysArray[rowIdx], valuesArray[rowIdx]);
+                            sb.AppendLine();
+                        }
+                    }
+
+                    if (ex.TargetSite != null)
+                    {
+                        sb.CheckedAppendFormat(" TargetSite : {0}", ex.TargetSite);
+                        sb.AppendLine();
+                    }
+
+                    if (ex.HelpLink != null)
+                    {
+                        sb.CheckedAppendFormat(" Help Link  : {0}", ex.HelpLink);
+                        sb.AppendLine();
+                    }
+
+                    if (ex.InnerException != null)
+                    {
+                        sb.CheckedAppendFormat(" Inner Exception : {0}", ex.InnerException.ToString(ExceptionFormat.TypeAndMessage | ExceptionFormat.IncludeStackTrace));
+                        sb.AppendLine();
+                    }
+                }
+                else
+                {
+                    Type eoType = (e.ExceptionObject != null ? e.ExceptionObject.GetType() : null);
+
+                    sb.AppendLine("Unrecognized Exception Object:");
+                    sb.CheckedAppendFormat("   Type:{0}", eoType.MapDefaultTo<object>("[Null]"));
+                    sb.AppendLine();
+                    sb.CheckedAppendFormat(" Object:{0}", e.ExceptionObject.MapDefaultTo("[Null]"));
+                    sb.AppendLine();
+                }
+
+                if (sender != null)
+                {
+                    sb.AppendLine();
+                    sb.AppendLine("Sender:");
+                    sb.CheckedAppendFormat("   Type:{0}", sender.GetType());
+                    sb.AppendLine();
+                    sb.CheckedAppendFormat(" Object:{0}", sender);
+                    sb.AppendLine();
+                }
+
+                if (e.IsTerminating)
+                {
+                    sb.AppendLine();
+                    sb.AppendLine("IsTerminating was set");
+                }
+
+                string text = sb.ToString();
+
+                System.IO.File.WriteAllText(uehFileWritePath, text);
+            }
+            catch (System.Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("{0}: generated unexpected exception: {1}", Fcns.CurrentMethodName, ex.ToString(ExceptionFormat.TypeAndMessage | ExceptionFormat.IncludeStackTrace));
+            }
+        }
+
+        private static string uehFileWritePath = "UnhandledExceptionReport.txt";
+
         /// <summary>
         /// Basic HandleOnStartup method signature.  Caller provides logBaseName.  
         /// Program's command line arguments will be obtained from the given StartupEventArgs value.  These will be used with the (optional) initial setup of Modular.Config.
         /// appLogger will be assigned to a new logger (this is expected to be used by the client in calls to later HandleYYY methods).
         /// <para/>See the description of the full HandleOnStartup method variant for more details.
         /// </summary>
-        public static void HandleOnStartup(StartupEventArgs e, ref Logging.Logger appLogger, string logBaseName)
+        public static void HandleOnStartup(StartupEventArgs e, ref Logging.Logger appLogger, string logBaseName = null, bool useSetLMH = true, bool enableUEH = true)
         {
             string[] args = (e != null) ? e.Args : null;
-            HandleOnStartup(ref args, ref appLogger, logBaseName, (e != null));
+            HandleOnStartup(ref args, ref appLogger, logBaseName: logBaseName, addWPFLMH: false, addSetLMH: (e != null) && useSetLMH, enableUEH: enableUEH);
         }
 
         /// <summary>
@@ -103,8 +254,11 @@ namespace MosaicLib.WPF.Common
         /// logBaseName is used to define the name of the logger instances and will appear in the resulting output log file file names.
         /// When addWPFLMH is passed as true then this method will also add an instance of the WpfLogMessageHandlerToolBase to the default log distribution group.
         /// </summary>
-        public static void HandleOnStartup(ref string[] argsRef, ref Logging.Logger appLogger, string logBaseName, bool addWPFLMH)
+        public static void HandleOnStartup(ref string[] argsRef, ref Logging.Logger appLogger, string logBaseName = null, bool addWPFLMH = false, bool addSetLMH = false, bool enableUEH = true)
         {
+            System.Reflection.Assembly callerAssy = CallerAssembly;
+            logBaseName = logBaseName ?? callerAssy.GetAssemblyNameFromFullName();
+
             System.Diagnostics.Process currentProcess = System.Diagnostics.Process.GetCurrentProcess();
             System.Threading.Thread currentThread = System.Threading.Thread.CurrentThread;
             System.Reflection.Assembly currentExecAssy = System.Reflection.Assembly.GetExecutingAssembly();
@@ -113,31 +267,38 @@ namespace MosaicLib.WPF.Common
             if (currentThread.Name.IsNullOrEmpty())
                 currentThread.Name = "{0}.Main".CheckedFormat(logBaseName);
 
-            MosaicLib.Modular.Config.IConfig config = MosaicLib.Modular.Config.Config.Instance;
+            IConfig config = Config.Instance;
 
             if (argsRef != null && config.Providers.IsNullOrEmpty())
                 config.AddStandardProviders(ref argsRef);
+
+            if (enableUEH && UnhandledExceptionEventHandler != null)
+            {
+                uehFileWritePath = config.GetConfigKeyAccessOnce("Config.UnhandledExceptionEventHandler.FilePath").GetValue(uehFileWritePath);
+
+                AppDomain currentDomain = AppDomain.CurrentDomain;
+                currentDomain.UnhandledException += UnhandledExceptionEventHandler;
+            }
 
             int ringQueueSize = 500;
             int traceQueueSize = 1000;
             Logging.ListMesgEmitter issueListEmitter = new Logging.ListMesgEmitter() { MesgType = Logging.MesgType.Error };
             Logging.ListMesgEmitter valuesListEmitter = new Logging.ListMesgEmitter() { MesgType = Logging.MesgType.Debug };
 
-            FileRingLogMessageHandlerType mainLoggerType = Config.Instance.GetConfigKeyAccessOnce("Config.Logging.MainLogger.Type").GetValue<FileRingLogMessageHandlerType>(DefaultMainLoggerType);
+            FileRingLogMessageHandlerType mainLoggerType = config.GetConfigKeyAccessOnce("Config.Logging.MainLogger.Type").GetValue<FileRingLogMessageHandlerType>(DefaultMainLoggerType);
 
             Logging.FileRotationLoggingConfig fileRotationRingConfig = new Logging.FileRotationLoggingConfig(logBaseName.MapNullToEmpty() + "LogFile")
             {
                 mesgQueueSize = ringQueueSize,
                 nameUsesDateAndTime = true,
-                fileHeaderLines = Logging.GenerateDefaultHeaderLines(logBaseName, true),
+                fileHeaderLines = Logging.GenerateDefaultHeaderLines(logBaseName, includeNullForDynamicLines: true, hostingAssembly: callerAssy),
                 fileHeaderLinesDelegate = Logging.GenerateDynamicHeaderLines,
                 logGate = Logging.LogGate.Debug,
             };
 
             Logging.Handlers.TextFileDateTreeLogMessageHandler.Config dateTreeDirConfig = new Logging.Handlers.TextFileDateTreeLogMessageHandler.Config(logBaseName.MapNullToEmpty() + "Log", @".\Logs")
             {
-                IncludeFileAndLine = false,
-                FileHeaderLines = Logging.GenerateDefaultHeaderLines(logBaseName, true),
+                FileHeaderLines = Logging.GenerateDefaultHeaderLines(logBaseName, includeNullForDynamicLines: true, hostingAssembly: callerAssy),
                 FileHeaderLinesDelegate = Logging.GenerateDynamicHeaderLines,
                 LogGate = Logging.LogGate.Debug,
             };
@@ -156,55 +317,106 @@ namespace MosaicLib.WPF.Common
                     break;
             }
 
-            Logging.FileRotationLoggingConfig traceRingConfig = new Logging.FileRotationLoggingConfig((logBaseName ?? String.Empty) + "TraceRing")
-            {
-                mesgQueueSize = traceQueueSize,
-                nameUsesDateAndTime = false,     // will use 4 digit file names.  Limit of 100 files total
-                includeThreadInfo = true,
-                fileHeaderLines = Logging.GenerateDefaultHeaderLines("{0} Trace Output".CheckedFormat(logBaseName), true),
-                fileHeaderLinesDelegate = Logging.GenerateDynamicHeaderLines,
-            }.UpdateFromModularConfig("Config.Logging.TraceRing.", issueListEmitter, valuesListEmitter);
+            Logging.ILogMessageHandler mainLMHnoQ = null;
 
-            Logging.ILogMessageHandler mainLMH = null;
+            int maxQueueSize = 1000;
 
             switch (mainLoggerType)
             {
                 case FileRingLogMessageHandlerType.TextFileRotationDirectoryLogMessageHandler:
-                    mainLMH = Logging.CreateQueuedTextFileRotationDirectoryLogMessageHandler(fileRotationRingConfig);
+                    mainLMHnoQ = new Logging.Handlers.TextFileRotationLogMessageHandler(fileRotationRingConfig);
+                    maxQueueSize = fileRotationRingConfig.mesgQueueSize;
                     break;
                 case FileRingLogMessageHandlerType.TextFileDateTreeDirectoryLogMessageHandler:
-                    mainLMH = Logging.CreateQueuedTextFileDateTreeLogMessageHandler(dateTreeDirConfig);
+                    mainLMHnoQ = new Logging.Handlers.TextFileDateTreeLogMessageHandler(dateTreeDirConfig);
+                    maxQueueSize = dateTreeDirConfig.MesgQueueSize;
                     break;
                 default:
                 case FileRingLogMessageHandlerType.None:
                     break;
             }
 
-            Logging.ILogMessageHandler diagnosticTraceLMH = null; //  Logging.CreateDiagnosticTraceLogMessageHandler(Logging.LogGate.Debug);
-            Logging.ILogMessageHandler wpfLMH = addWPFLMH ? MosaicLib.WPF.Logging.WpfLogMessageHandlerToolBase.Instance : null;
+            LogMessageHandlerSettingFlags diagTraceLMHSettingFlags = config.GetConfigKeyAccessOnce("Config.Logging.DiagnosticTrace").GetValue(LogMessageHandlerSettingFlags.IncludeWhenDebuggerAttached);
+            //LogMessageHandlerSettingFlags wpfLMHSettingFlags = config.GetConfigKeyAccessOnce("Config.Logging.WPF").GetValue(addWPFLMH ? LogMessageHandlerSettingFlags.IncludeAlways : LogMessageHandlerSettingFlags.Disabled);
+            LogMessageHandlerSettingFlags setLMHSettingFlags = config.GetConfigKeyAccessOnce("Config.Logging.Set").GetValue(addSetLMH ? LogMessageHandlerSettingFlags.IncludeAlways : LogMessageHandlerSettingFlags.Disabled);
 
-            if (mainLMH != null)
-                Logging.AddLogMessageHandlerToDefaultDistributionGroup(mainLMH);
-            if (diagnosticTraceLMH != null)
-                Logging.AddLogMessageHandlerToDefaultDistributionGroup(diagnosticTraceLMH);
+            bool addDiagTraceLMH = diagTraceLMHSettingFlags.IsSet(LogMessageHandlerSettingFlags.IncludeAlways) || diagTraceLMHSettingFlags.IsSet(LogMessageHandlerSettingFlags.IncludeWhenDebuggerAttached) && System.Diagnostics.Debugger.IsAttached;
+            //addWPFLMH = wpfLMHSettingFlags.IsSet(LogMessageHandlerSettingFlags.IncludeAlways) || wpfLMHSettingFlags.IsSet(LogMessageHandlerSettingFlags.IncludeWhenDebuggerAttached) && System.Diagnostics.Debugger.IsAttached;
+            addSetLMH = setLMHSettingFlags.IsSet(LogMessageHandlerSettingFlags.IncludeAlways) || setLMHSettingFlags.IsSet(LogMessageHandlerSettingFlags.IncludeWhenDebuggerAttached) && System.Diagnostics.Debugger.IsAttached;
 
-            // how to change wpfLMH logging level after construction
-            if (wpfLMH != null)
-                Logging.AddLogMessageHandlerToDefaultDistributionGroup(wpfLMH);
+            Logging.ILogMessageHandler diagTraceLMH = addDiagTraceLMH ? Logging.CreateDiagnosticTraceLogMessageHandler(logGate: Logging.LogGate.Debug) : null;
+            //Logging.ILogMessageHandler wpfLMH = addWPFLMH ? MosaicLib.WPF.Logging.WpfLogMessageHandlerToolBase.Instance : null;
 
-            // setup the loadPortTraceGroup - to recieve trace data from 
-            string traceLoggingGroupName = "LGID.Trace";
+            Logging.ILogMessageHandler setLMH = null;
+            if (addSetLMH)
+            {
+                string setName = config.GetConfigKeyAccessOnce("Config.Logging.Set.Name").VC.GetValue<string>(rethrow: false) ?? "LogMessageHistory";
+                int setCapacity = config.GetConfigKeyAccessOnce("Config.Logging.Set.Capacity").VC.GetValue<int?>(rethrow: false) ?? 1000;
+                Logging.LogGate setLogGate = config.GetConfigKeyAccessOnce("Config.Logging.Set.LogGate").VC.GetValue<Logging.LogGate ?>(rethrow: false) ?? Logging.LogGate.Debug;
 
-            Logging.ILogMessageHandler traceRingLMH = Logging.CreateQueuedTextFileRotationDirectoryLogMessageHandler(traceRingConfig);
+                if (!setName.IsNullOrEmpty())
+                    setLMH = new MosaicLib.Logging.Handlers.SetLogMessageHandler(setName, capacity: setCapacity, logGate: setLogGate);
+            }
 
-            Logging.AddLogMessageHandlerToDistributionGroup(traceLoggingGroupName, traceRingLMH);
-            Logging.SetDistributionGroupGate(traceLoggingGroupName, Logging.LogGate.All);
+            // Normally all of the standard lmh objects (main, diag, wpf) share the use of a single message queue.
+            List<Logging.ILogMessageHandler> mainLMHList = new List<Logging.ILogMessageHandler>();
 
-            Logging.LinkDistributionToGroup(Logging.DefaultDistributionGroupName, traceLoggingGroupName);
-            Logging.MapLoggersToDistributionGroup(Logging.LoggerNameMatchType.Regex, @"(\.Data|\.Trace)", traceLoggingGroupName);
+            if (mainLMHnoQ != null)
+                mainLMHList.Add(mainLMHnoQ);
+
+            if (diagTraceLMH != null && (diagTraceLMHSettingFlags & LogMessageHandlerSettingFlags.NonQueued) == 0)
+                mainLMHList.Add(diagTraceLMH);
+            else if (diagTraceLMH != null)
+                Logging.AddLogMessageHandlerToDefaultDistributionGroup(diagTraceLMH);
+
+            //if (wpfLMH != null && wpfLMHSettingFlags.IsClear(LogMessageHandlerSettingFlags.NonQueued))
+            //    mainLMHList.Add(wpfLMH);
+            //else if (wpfLMH != null)
+            //    Logging.AddLogMessageHandlerToDefaultDistributionGroup(wpfLMH);
+
+            if (setLMH != null && (setLMHSettingFlags & LogMessageHandlerSettingFlags.NonQueued) == 0)
+                mainLMHList.Add(setLMH);
+            else if (setLMH != null)
+                Logging.AddLogMessageHandlerToDefaultDistributionGroup(setLMH);
+
+            Logging.ILogMessageHandler mainLMHQueueLMH = new Logging.Handlers.QueueLogMessageHandler("lmhMainSet.q", mainLMHList.ToArray(), maxQueueSize: maxQueueSize);
+            Logging.AddLogMessageHandlerToDefaultDistributionGroup(mainLMHQueueLMH);
+
+            string traceLoggingGroupName = config.GetConfigKeyAccessOnce("Config.Logging.TraceRing.LGID").VC.GetValue<string>(rethrow: false) ?? "LGID.Trace";
+            bool traceRingEnable = config.GetConfigKeyAccessOnce("Config.Logging.TraceRing.Enable").VC.GetValue<bool?>(rethrow: false) ?? !traceLoggingGroupName.IsNullOrEmpty();
+
+            if (traceRingEnable)
+            {
+                // Setup the trace logger.  This logger uses a seperate message queue.
+                Logging.FileRotationLoggingConfig traceRingConfig = new Logging.FileRotationLoggingConfig((logBaseName ?? String.Empty) + "TraceRing")
+                {
+                    mesgQueueSize = traceQueueSize,
+                    nameUsesDateAndTime = false,     // will use 4 digit file names.  Limit of 100 files total
+                    includeThreadInfo = true,
+                    fileHeaderLines = Logging.GenerateDefaultHeaderLines("{0} Trace Output".CheckedFormat(logBaseName), includeNullForDynamicLines: true, hostingAssembly: callerAssy),
+                    fileHeaderLinesDelegate = Logging.GenerateDynamicHeaderLines,
+                    logGate = Logging.LogGate.All,
+                }.UpdateFromModularConfig("Config.Logging.TraceRing.", issueListEmitter, valuesListEmitter);
+
+                Logging.ILogMessageHandler traceRingLMH = Logging.CreateQueuedTextFileRotationDirectoryLogMessageHandler(traceRingConfig);
+
+                Logging.AddLogMessageHandlerToDistributionGroup(traceLoggingGroupName, traceRingLMH);
+                Logging.SetDistributionGroupGate(traceLoggingGroupName, Logging.LogGate.All);
+
+                Logging.MapLoggersToDistributionGroup(Logging.LoggerNameMatchType.Regex, @"(\.Data|\.Trace)", traceLoggingGroupName);
+
+                bool traceRingLinkFromDefaultGroup = config.GetConfigKeyAccessOnce("Config.Logging.TraceRing.LinkFromDefaultGroup").VC.GetValue<bool?>(rethrow: false) ?? true;
+                bool traceRingLinkToDefaultGroup = config.GetConfigKeyAccessOnce("Config.Logging.TraceRing.LinkToDefaultGroup").VC.GetValue<bool?>(rethrow: false) ?? false;
+
+                if (traceRingLinkFromDefaultGroup)
+                    Logging.LinkDistributionToGroup(Logging.DefaultDistributionGroupName, traceLoggingGroupName);
+
+                if (traceRingLinkToDefaultGroup)
+                    Logging.LinkDistributionToGroup(traceLoggingGroupName, Logging.DefaultDistributionGroupName);
+            }
 
             appLogger = new Logging.Logger("AppLogger");
-            Logging.LogMessage lm = appLogger.GetLogMessage(AppEventMesgType, "App Starting", appLogger.GetStackFrame(0));
+            Logging.LogMessage lm = appLogger.GetLogMessage(AppEventMesgType, "App Starting");
             lm.NamedValueSet = new NamedValueSet() { { "AppEvent", "OnStartup" } };
             appLogger.EmitLogMessage(ref lm);
 
@@ -212,6 +424,9 @@ namespace MosaicLib.WPF.Common
             Logging.Logger appLoggerCopy = appLogger;
             issueListEmitter.EmittedItemList.ForEach((item) => appLoggerCopy.Error.Emit(item.MesgStr));
             valuesListEmitter.EmittedItemList.ForEach((item) => appLoggerCopy.Debug.Emit(item.MesgStr));
+
+            if (addWPFLMH)
+                appLogger.Warning.Emit("Use of MosaicLib.WPF.Logging is no longer supported.  Please enable use of SetLogMessageHandler (addSetLMH/useSetLMH) and convert to use of set based log display controls");
         }
 
         /// <summary>
@@ -219,7 +434,7 @@ namespace MosaicLib.WPF.Common
         /// </summary>
         public static void HandleOnDeactivated(Logging.ILogger appLogger)
         {
-            Logging.LogMessage lm = appLogger.GetLogMessage(AppEventMesgType, "App Deactivated", appLogger.GetStackFrame(0));
+            Logging.LogMessage lm = appLogger.GetLogMessage(AppEventMesgType, "App Deactivated");
             lm.NamedValueSet = new NamedValueSet() { { "AppEvent", "OnDeactivated" } };
 
             appLogger.EmitLogMessage(ref lm);
@@ -231,7 +446,7 @@ namespace MosaicLib.WPF.Common
         /// </summary>
         public static void HandleOnExit(Logging.ILogger appLogger)
         {
-            Logging.LogMessage lm = appLogger.GetLogMessage(AppEventMesgType, "App Stopping", appLogger.GetStackFrame(0));
+            Logging.LogMessage lm = appLogger.GetLogMessage(AppEventMesgType, "App Stopping");
             lm.NamedValueSet = new NamedValueSet() { { "AppEvent", "OnExit" } };
             appLogger.EmitLogMessage(ref lm);
 

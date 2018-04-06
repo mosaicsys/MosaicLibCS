@@ -2,8 +2,9 @@
 /*! @file WPF_Logging.cs
  *  @brief 
  * 
- * Copyright (c) Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2011 Mosaic Systems Inc., All rights reserved
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2011 Mosaic Systems Inc.
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -44,7 +45,11 @@ namespace MosaicLib.WPF.Logging
 {
     using MosaicLib;        // apparently this makes MosaicLib get searched before MosaicLib.WPF.Logging for resolving symbols here.
     using MosaicLib.Modular.Common;
+    using MosaicLib.Modular.Config;
+    using MosaicLib.Time;
+    using MosaicLib.Utils;
 
+    [Obsolete("WPF_Logging is being deprectated.  Please change to use Set based logging and screen display. (2018-02-26)")]
     public class LogFilterConfig
     {
         public LogFilterConfig() : this(Logging.LogGate.Debug) { }
@@ -61,10 +66,11 @@ namespace MosaicLib.WPF.Logging
         public Logging.LogGate DisplayLogGate { get; protected set; }
     }
 
+    [Obsolete("WPF_Logging is being deprectated.  Please change to use Set based logging and screen display. (2018-02-26)")]
     public interface ILogMessageCollectionItem : Logging.ILogMessage
-    {
-    }
+    { }
 
+    [Obsolete("WPF_Logging is being deprectated.  Please change to use Set based logging and screen display. (2018-02-26)")]
     public class LogMessageCollectionItem : ILogMessageCollectionItem
     {
         public LogMessageCollectionItem(Logging.ILogMessage lm) { this.lm = lm; }
@@ -79,18 +85,23 @@ namespace MosaicLib.WPF.Logging
         public string MesgEscaped { get { return lm.MesgEscaped; } }
         public byte[] Data { get { return lm.Data; } }
         public INamedValueSet NamedValueSet { get { return lm.NamedValueSet; } }
+        public bool Emitted { get { return lm.Emitted; } }
         public MosaicLib.Time.QpcTimeStamp EmittedQpcTime { get { return lm.EmittedQpcTime; } }
         public int SeqNum { get { return lm.SeqNum; } }
         public int ThreadID { get { return lm.ThreadID; } }
         public int Win32ThreadID { get { return lm.Win32ThreadID; } }
+        public string ThreadName { get { return lm.ThreadName; } }
         public DateTime EmittedDateTime { get { return lm.EmittedDateTime; } }
         public string GetFormattedDateTime() { return lm.GetFormattedDateTime(); }
         public string GetFormattedDateTime(MosaicLib.Utils.Dates.DateTimeFormat dtFormat) { return lm.GetFormattedDateTime(dtFormat); }
         public string DisplayTime { get { return EmittedDateTime.ToString("HH:mm:ss.ffffff"); } }
 
+        public bool Equals(Logging.ILogMessage other) { return other != null && other.Equals(this); }
+
         #endregion
     }
 
+    [Obsolete("WPF_Logging is being deprectated.  Please change to use Set based logging and screen display. (2018-02-26)")]
     public class LogMessageObservableCollection
         : System.Collections.ObjectModel.ObservableCollection<LogMessageCollectionItem>
         , IDisposable
@@ -118,12 +129,10 @@ namespace MosaicLib.WPF.Logging
 
         public System.Threading.SynchronizationContext SynchronizationContext { get; private set; }
 
-        public void Update() { Update(null); }
-
-        public void Update(object state)
+        public void Update(object stateIgnored = null)
         {
             WpfLogMessageHandlerToolBase.SeqNumPair newSeqNumPair = WpfLogMessageHandlerToolBase.Instance.GetNewMessages(lastMesgSeqNumPair, ref updateMesgQueue);
-            int maxMesgsToKeep = WpfLogMessageHandlerToolBase.Instance.MaxMessageToKeep;
+            int maxMesgsToKeep = WpfLogMessageHandlerToolBase.Instance.MaxMessagesToKeep;
 
             if (!newSeqNumPair.AreThereAnyChanges(lastMesgSeqNumPair))
                 return;
@@ -206,7 +215,7 @@ namespace MosaicLib.WPF.Logging
             lock (lmocInstanceListMutex)
             {
                 lmocInstanceList.Add(lmoc);
-                lmocInstanceArray = null;
+                lmocInstanceArray = lmocInstanceList.ToArray();
             }
         }
 
@@ -215,7 +224,7 @@ namespace MosaicLib.WPF.Logging
             lock (lmocInstanceListMutex)
             {
                 lmocInstanceList.Remove(lmoc);
-                lmocInstanceArray = null;
+                lmocInstanceArray = lmocInstanceList.ToArray();
             }
         }
 
@@ -232,38 +241,57 @@ namespace MosaicLib.WPF.Logging
                     if (lmocInstanceArray == null)
                         lmocInstanceArray = lmocInstanceList.ToArray();
 
-                    // latch the first non-null SychronizationContext as the default one that is used for all such objects.
-                    if (DefaultSynchronizationContext == null)
-                    {
-                        foreach (LogMessageObservableCollection lmoc in lmocInstanceArray)
-                        {
-                            System.Threading.SynchronizationContext sc = lmoc.SynchronizationContext;
-                            if (sc != null)
-                            {
-                                DefaultSynchronizationContext = sc;
-                                break;
-                            }
-                        }
-                    }
-
                     return lmocInstanceArray;
                 }
             }
         }
 
-        public static System.Threading.SynchronizationContext DefaultSynchronizationContext { get; private set; }
+        /// <summary>
+        /// Obtains (and latches) the first non-null SychronizationContext from the list of LogMessageObservableCollection instances that have been registered in its static InstanceArray.
+        /// Generally this will be the SynchronizationContext of the thread that created the first added LogMessageObservableCollection.
+        /// <para/>Note: once non-null, this SychronizationContext will be used for all first level Post calls from LMH into the DistributeUpdateCalls mechanism.
+        /// </summary>
+        public static System.Threading.SynchronizationContext DefaultSynchronizationContext 
+        { 
+            get { return UpdateDefaultSynchronizationContextIfNeeded(); } 
+            private set { _defaultSynchronizationContext = value; } 
+        }
+        private static System.Threading.SynchronizationContext _defaultSynchronizationContext = null;
+
+        /// <summary>
+        /// latch the first non-null SychronizationContext as the default one that is used for all such objects.
+        /// </summary>
+        private static System.Threading.SynchronizationContext UpdateDefaultSynchronizationContextIfNeeded()
+        {
+            if (_defaultSynchronizationContext == null)
+            {
+                LogMessageObservableCollection[] lmocArray = InstanceArray;
+                if (!lmocArray.IsNullOrEmpty())
+                    _defaultSynchronizationContext = InstanceArray.Select(lmoc => lmoc.SynchronizationContext).FirstOrDefault(sc => sc != null);
+            }
+
+            return _defaultSynchronizationContext; 
+        }
 
         #endregion
     }
 
+    [Obsolete("WPF_Logging is being deprectated.  Please change to use Set based logging and screen display. (2018-02-26)")]
     public class WpfLogMessageHandlerToolBase : MosaicLib.Logging.Handlers.CommonLogMessageHandlerBase
     {
         #region Construction
 
-        public WpfLogMessageHandlerToolBase() : this("WpfLMH", Logging.LogGate.All, 10000) { }
-        public WpfLogMessageHandlerToolBase(string name, Logging.LogGate defaultCollectionGate, int maxMessagesToKeep)
-            : base(name, defaultCollectionGate, false, false)
+        public WpfLogMessageHandlerToolBase(string name = "WpfLMH", Logging.LogGate ? defaultCollectionGate = null, int ? maxMessagesToKeepIn = null)
+            : base(name, defaultCollectionGate ?? Logging.LogGate.All)
         {
+            int maxMessagesToKeep = maxMessagesToKeepIn ?? Modular.Config.Config.Instance.GetConfigKeyAccessOnce("Logging.{0}.MaxMessagesToKeep".CheckedFormat(name)).VC.GetValue<int?>(false) ?? 10000;
+            Logging.LogGate? configLogGate = Modular.Config.Config.Instance.GetConfigKeyAccessOnce("Logging.{0}.LogGate".CheckedFormat(name)).VC.GetValue<Logging.LogGate ?>(rethrow: false);
+
+            if (!defaultCollectionGate.HasValue && configLogGate.HasValue)
+            {
+                loggerConfig.LogGate = configLogGate.GetValueOrDefault();
+            }
+
             rawLogMesgArray = new RawLogMesgArray(maxMessagesToKeep);
         }
 
@@ -271,7 +299,7 @@ namespace MosaicLib.WPF.Logging
 
         #region Singleton
 
-        static readonly Utils.SingletonHelper<WpfLogMessageHandlerToolBase> singletonHelper = new Utils.SingletonHelper<WpfLogMessageHandlerToolBase>();
+        static readonly Utils.ISingleton<WpfLogMessageHandlerToolBase> singletonHelper = new Utils.SingletonHelperBase<WpfLogMessageHandlerToolBase>(() => new WpfLogMessageHandlerToolBase());
 
         public static WpfLogMessageHandlerToolBase Instance { get { return singletonHelper.Instance; } }
 
@@ -322,7 +350,9 @@ namespace MosaicLib.WPF.Logging
         }
 
         public Int64 LastMesgAddedSeqNum { get { return rawLogMesgArray.LastMesgAddedSeqNum; } }
-        public int MaxMessageToKeep { get { return rawLogMesgArray.MaxMessagesToKeep; } }
+        public int MaxMessagesToKeep { get { return rawLogMesgArray.MaxMessagesToKeep; } }
+        [Obsolete("Please replace use of this property with the correctly spelled version (2017-10-29)")]
+        public int MaxMessageToKeep { get { return MaxMessagesToKeep; } }
         public int CurrentMessageCount { get { return rawLogMesgArray.CurrentMessageCount; } }
 
         #endregion
@@ -352,62 +382,40 @@ namespace MosaicLib.WPF.Logging
             NoteMessagesAdded();
         }
 
-        public override bool IsMessageDeliveryInProgress(int testMesgSeqNum)
-        {
-            // this handler does not support any form of synchronized flush.  We return that message delivery is not in progress regardless of the given testMesgSeqNum value.
-            return false;
-        }
-
-        public override void Flush()
-        {
-            // Flush has no effect in this message handler
-        }
-
-        public override void Shutdown()
-        {
-            // Shutdown has no effect in this message handler (except that we will probably not get any more messages...)
-        }
-
         #endregion
 
         #region Methods and properties used to inform LogMessageObservableCollection list about possible change
 
-        /// <summary>
-        /// This variable is set from the when the asynch action is created to when the invoked delegate method begins executing.  
-        /// It serves to block creating new, redundant update calls until the handler has had a chance to start distributing update calls
-        /// </summary>
-        volatile bool invokeDistributeUpdateCallsCreatedAndNotActive = false;
-
         protected void NoteMessagesAdded()
         {
-            if (!invokeDistributeUpdateCallsCreatedAndNotActive)
-            {
-                invokeDistributeUpdateCallsCreatedAndNotActive = true;
+            bool seqNumsWereTheSameOnEntry = (seqNumGenNoteMessagesAdded.VolatileValue == seqNumDistributedUpdateCalls);
 
+            seqNumGenNoteMessagesAdded.IncrementSkipZero();
+
+            if (seqNumsWereTheSameOnEntry || distributeUpdateCallsAnywayTimer.IsTriggered)
+            {
                 System.Threading.SynchronizationContext defaultSC = LogMessageObservableCollection.DefaultSynchronizationContext;
                 if (defaultSC != null)
-                    defaultSC.Post(DistributeUpdateCalls, distributeUpdateCallsMutex);       // invoke my DistributeUpdateCalls in the context of the default LogMessageObservableCollection's SynchronizationContext
-                else
-                    System.Threading.ThreadPool.QueueUserWorkItem(DistributeUpdateCalls, distributeUpdateCallsMutex);       // if there is no default sc then use a ThreadPool thread
+                    defaultSC.Post(DistributeUpdateCalls, distributeUpdateCallsMutexNoLongerInUse);       // invoke my DistributeUpdateCalls in the context of LogMessageObservableCollection's SynchronizationContext
             }
         }
 
-        object distributeUpdateCallsMutex = new object();
+        QpcTimer distributeUpdateCallsAnywayTimer = new QpcTimer() { TriggerInterval = (0.5).FromSeconds(), AutoReset = true }.Start();
 
-        protected void DistributeUpdateCalls(object mutex)
+        object distributeUpdateCallsMutexNoLongerInUse = null; // new object();      // this mutex is no longer in use.  distributing update calls is only done on the callers thread.
+
+        Utils.AtomicInt32 seqNumGenNoteMessagesAdded = new Utils.AtomicInt32();
+        volatile int seqNumDistributedUpdateCalls = 0;
+
+        protected void DistributeUpdateCalls(object mutexNoLongerInUse)
         {
-            System.Threading.SynchronizationContext defaultSC = LogMessageObservableCollection.DefaultSynchronizationContext;
+            seqNumDistributedUpdateCalls = seqNumGenNoteMessagesAdded.VolatileValue;
+
             System.Threading.SynchronizationContext currentSC = System.Threading.SynchronizationContext.Current;
 
-            // block the outer update loop rate to not exceed maximum rate when being run from an thread other than the default one.
-            if (!object.ReferenceEquals(defaultSC, currentSC))
-                System.Threading.Thread.Sleep(DispatchUpdateStartDelay);
-
-            lock (mutex)    // only run one instance at a time per mutex (blocks later queued calls)
+            //lock (mutex)    // only run one instance at a time per mutex (blocks later queued calls)
             {
                 LogMessageObservableCollection[] activeCollectionSnapshot = LogMessageObservableCollection.InstanceArray;
-
-                invokeDistributeUpdateCallsCreatedAndNotActive = false;
 
                 foreach (LogMessageObservableCollection lmoc in activeCollectionSnapshot)
                 {
@@ -415,7 +423,7 @@ namespace MosaicLib.WPF.Logging
                     if (object.ReferenceEquals(currentSC, lmocSC))
                         lmoc.Update();
                     else
-                        lmocSC.Send(lmoc.Update, null); // syncronous cross thread invoke: only returs after the update is complete
+                        lmocSC.Post(lmoc.Update, null); // asynchronous cross thread invoke.  If any of the lmoc instances use a different SC than the default one (construction time one) then just post the update call to its sc.
                 }
             }
         }
@@ -428,8 +436,6 @@ namespace MosaicLib.WPF.Logging
         RawLogMesgArray rawLogMesgArray;
 
         Utils.AtomicUInt32 contentResetChangeSeqNum = new MosaicLib.Utils.AtomicUInt32(1);
-
-        readonly TimeSpan DispatchUpdateStartDelay = TimeSpan.FromSeconds(0.030);       // limit update rate to 30 Hz
 
         #endregion
 

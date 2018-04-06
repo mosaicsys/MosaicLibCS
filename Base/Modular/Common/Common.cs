@@ -29,6 +29,7 @@ using System.Collections;
 using System.Text;
 
 using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
 
 namespace MosaicLib.Modular.Common
 {
@@ -461,6 +462,100 @@ namespace MosaicLib.Modular.Common
                 }
             }
         }
+
+        #region Create, CreateFromObject static ValueContainer factory methods
+
+        /// <summary>
+        /// Static ValueContainer creation (factory) method.  Accepts object of any type and returns a ValueContainer instance which contains the <paramref name="value"/> of the object.  
+        /// Internally uses SetFromObject to attempt to extract the type for supported and supported boxed contents and to set the ValueContainers ContainerStorageType cvt accordingly.
+        /// <para/>Note use alternate SetValue&lt;System.Object&gt;(value) to force the resulting ValueContainer's cvt to be ContainerStorageType.Object and to contain the unmodified object from <paramref name="value"/>.
+        /// </summary>
+        public static ValueContainer CreateFromObject(System.Object value)
+        {
+            return default(ValueContainer).SetFromObject(value);
+        }
+
+        /// <summary>
+        /// Static ValueContainer creation (factory) method.  Accepts <paramref name="value"/> of given (or implied) <typeparamref name="TValueType"/> and returns a ValueContainer instance with contents derived from both.
+        /// Internally uses SetValue&lt;TValueType&gt;(value) which actually decodes the ContainerStorageType from the given TValueType and then sets the corresponding storage field from value.
+        /// </summary>
+        public static ValueContainer Create<TValueType>(TValueType value)
+        {
+            return default(ValueContainer).SetValue<TValueType>(value);
+        }
+
+        /// <summary>
+        /// Static ValueContainer creation (factory method).  Accepts <paramref name="value"/> of given (or implied) <typeparamref name="TValueType"/> and returns a ValueContainer instance with contents derived from both.
+        /// Internally uses SetValue&lt;TValueType&gt;(value, decodedValuetype, ) which actually decodes the ContainerStorageType from the given TValueType and then sets the corresponding storage field from value.
+        /// This method stores the given value in the desired container storage field.  If the given value does not fit in the indicated
+        /// container then this method will attempt to convert the given value to an object and store it as such.
+        /// </summary>
+        public static ValueContainer Create<TValueType>(TValueType value, ContainerStorageType decodedValueType, bool isNullable = false)
+        {
+            return default(ValueContainer).SetValue<TValueType>(value, decodedValueType, isNullable);
+        }
+
+        /// <summary>
+        /// Static ValueContainer creation (factory) method used to generate a ValueContainer to contain a list of the given items.  
+        /// This method will produce an IListOfStrings if ItemType is string and otherwise it will produce an IListOfVC
+        /// If the given itemParamArray is null or is empty then this method will return an Empty ValueContainer
+        /// If only one value is given in the itemParamArray then the returned ValueContainer will simply be a ValueContainer containing that Item.
+        /// </summary>
+        public static ValueContainer CreateFromItems<ItemType>(params ItemType[] itemParamArray)
+        {
+            if (itemParamArray.IsNullOrEmpty())
+                return ValueContainer.Empty;
+            else if (itemParamArray.Length == 1)
+                return ValueContainer.Create<ItemType>(itemParamArray[0]);
+            else if (typeof(ItemType) == typeof(string))
+                return ValueContainer.Create<IList<string>>(new ReadOnlyIList<string>(itemParamArray.Select(item => item as string)), ContainerStorageType.IListOfString);
+            else if (typeof(ItemType) == typeof(ValueContainer))
+                return ValueContainer.Create<IList<ValueContainer>>(new ReadOnlyIList<ValueContainer>(itemParamArray.Select(item => (ValueContainer)((System.Object) item))), ContainerStorageType.IListOfVC);
+            else if (typeof(ItemType) == typeof(System.Object))
+                return ValueContainer.Create<IList<ValueContainer>>(new ReadOnlyIList<ValueContainer>(itemParamArray.Select(item => ValueContainer.CreateFromObject(item))), ContainerStorageType.IListOfVC);
+            else
+                return ValueContainer.Create<IList<ValueContainer>>(new ReadOnlyIList<ValueContainer>(itemParamArray.Select(item => ValueContainer.Create(item))), ContainerStorageType.IListOfVC);
+        }
+
+        /// <summary>
+        /// Static ValueContainer creation (factory) method used to generate a ValueContainer to contain a set of the given items.  
+        /// This method will produce an IListOfStrings if ItemType is string and otherwise it will produce an IListOfVC
+        /// If the given itemSet is null then this method will return an Empty ValueContainer.
+        /// </summary>
+        public static ValueContainer CreateFromSet<ItemType>(IEnumerable<ItemType> itemSet)
+        {
+            if (itemSet == null)
+                return ValueContainer.Empty;
+            else if (typeof(ItemType) == typeof(string))
+                return ValueContainer.Create<IList<string>>(new ReadOnlyIList<string>(itemSet.Select(item => item as string)), ContainerStorageType.IListOfString);
+            else if (typeof(ItemType) == typeof(ValueContainer))
+                return ValueContainer.Create<IList<ValueContainer>>(new ReadOnlyIList<ValueContainer>(itemSet.Select(item => (ValueContainer)((System.Object)item))), ContainerStorageType.IListOfVC);
+            else if (typeof(ItemType) == typeof(System.Object))
+                return ValueContainer.Create<IList<ValueContainer>>(new ReadOnlyIList<ValueContainer>(itemSet.Select(item => ValueContainer.CreateFromObject(item))), ContainerStorageType.IListOfVC);
+            else
+                return ValueContainer.Create<IList<ValueContainer>>(new ReadOnlyIList<ValueContainer>(itemSet.Select(item => ValueContainer.Create(item))), ContainerStorageType.IListOfVC);
+        }
+
+        /// <summary>
+        /// Static ValueContainer creation (factory) method used to generate a ValueContainer to contain a set of the given items.  
+        /// This method will produce an IListOfStrings if ItemType is string and otherwise it will produce an IListOfVC
+        /// If the given itemSet is null then this method will return an Empty ValueContainer.
+        /// </summary>
+        public static ValueContainer CreateFromCollection<ItemType>(ICollection<ItemType> itemCollection)
+        {
+            if (itemCollection == null)
+                return ValueContainer.Empty;
+            else if (typeof(ItemType) == typeof(string))
+                return ValueContainer.Create<IList<string>>(new ReadOnlyIList<string>(itemCollection.Select(item => item as string)), ContainerStorageType.IListOfString);
+            else if (typeof(ItemType) == typeof(ValueContainer))
+                return ValueContainer.Create<IList<ValueContainer>>(new ReadOnlyIList<ValueContainer>(itemCollection.Select(item => (ValueContainer)((System.Object)item))), ContainerStorageType.IListOfVC);
+            else if (typeof(ItemType) == typeof(System.Object))
+                return ValueContainer.Create<IList<ValueContainer>>(new ReadOnlyIList<ValueContainer>(itemCollection.Select(item => ValueContainer.CreateFromObject(item))), ContainerStorageType.IListOfVC);
+            else
+                return ValueContainer.Create<IList<ValueContainer>>(new ReadOnlyIList<ValueContainer>(itemCollection.Select(item => ValueContainer.Create(item))), ContainerStorageType.IListOfVC);
+        }
+
+        #endregion
 
         /// <summary>
         /// Type extracting setter.  Extracts the type information from the given value and then attempts to decode

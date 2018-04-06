@@ -441,7 +441,10 @@ namespace MosaicLib.Modular.Config
         string ValueAsString { get; }
 
         /// <summary>Returns the current value of the key in a ValueContainer as the provider last read (or saved) it.  May contain null, such as when the key was not found.</summary>
-        Common.ValueContainer ValueContainer { get; }
+        ValueContainer VC { get; }
+
+        /// <summary>Alternate (old) name for newly named VC property</summary>
+        ValueContainer ValueContainer { get; }
 
         /// <summary>True if this KeyAccess object is usable (ResultCode is empty)</summary>
         bool IsUsable { get; }
@@ -1100,7 +1103,7 @@ namespace MosaicLib.Modular.Config
                 bool valueChanged = false, resultCodeChanged = false;
 
                 if (ckai != null && !entryValue.IsEqualTo(updatedValue))
-                    ckai.ValueContainer = updatedValue;
+                    ckai.VC = updatedValue;
 
                 if (entryResultCode != updatedResultCode)
                     icka.ResultCode = updatedResultCode;
@@ -1314,7 +1317,7 @@ namespace MosaicLib.Modular.Config
             DerivedFromKey = rhs;
 
             ResultCode = rhs.ResultCode;
-            ValueContainer = rhs.ValueContainer;
+            VC = rhs.ValueContainer;
             HasValue = rhs.HasValue;
 
             ConfigBaseInstance = configBaseInstance;
@@ -1366,28 +1369,32 @@ namespace MosaicLib.Modular.Config
         {
             get 
             {
-                if (valueContainer.cvt == ContainerStorageType.String)
-                    return valueContainer.GetValue<string>(ContainerStorageType.String, false, false);
-                else if (valueContainer.cvt.IsReferenceType())
-                    return valueContainer.GetValue<string>(ContainerStorageType.String, false, false);
-                else if (valueContainer.IsNullOrNone)       // special case so that an empty container gives back ValueAsString as just null rather than "None"
+                if (vc.cvt == ContainerStorageType.String)
+                    return vc.GetValue<string>(ContainerStorageType.String, false, false);
+                else if (vc.cvt.IsReferenceType())
+                    return vc.GetValue<string>(ContainerStorageType.String, false, false);
+                else if (vc.IsNullOrNone)       // special case so that an empty container gives back ValueAsString as just null rather than "None"
                     return null;
                 else
-                    return valueContainer.ToString();
+                    return vc.ToString();
             }
         }
 
-        public ValueContainer ValueContainer
+        /// <summary>Returns the current value of the key in a ValueContainer as the provider last read (or saved) it.  May contain None, such as when the key was not found.</summary>
+        public ValueContainer VC
         {
-            get { return valueContainer; }
-            set 
-            { 
-                valueContainer = value;
-                HasValue = !value.IsNullOrNone;
+            get { return vc; }
+            set
+            {
+                vc = value;
+                HasValue = !value.IsNullOrEmpty;
             }
         }
 
-        private Common.ValueContainer valueContainer;
+        /// <summary>Alternate (old) name for newly named VC property</summary>
+        public ValueContainer ValueContainer { get { return VC; } }
+
+        private Common.ValueContainer vc;
 
         /// <summary>True if this KeyAccess object is usable (ResultCode is empty)</summary>
         public bool IsUsable { get { return String.IsNullOrEmpty(ResultCode); } }

@@ -2,8 +2,9 @@
 /*! @file Disposable.cs
  *  @brief This file defines the DisposableBase class that may be used to help implement a well structured IDisposable pattern in derived classes.
  * 
- * Copyright (c) Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2008 Mosaic Systems Inc., All rights reserved
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2008 Mosaic Systems Inc.
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,19 +18,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
+
+using System;
+using System.Collections.Generic;
 
 namespace MosaicLib.Utils
 {
-	using System;
-    using System.Collections.Generic;
-
     //-------------------------------------------------------------------
     #region Helper functions and classes
 
     /// <summary>
     /// Fcns class is essentially a namespace for series of static helper methods
-    /// <para/>inclues: DisposeOf... methods, CheckedFormat and other String related methods, array/list specific Equals methods, ...
+    /// <para/>includes: DisposeOf... methods, CheckedFormat and other String related methods, array/list specific Equals methods, ...
     /// </summary>
     public static partial class Fcns
 	{
@@ -60,12 +60,25 @@ namespace MosaicLib.Utils
         /// </summary>
 		/// <typeparam name="ObjType">Any type of ref object.  May be a type that is castable to IDisposable.</typeparam>
         /// <param name="obj">Gives the object that is to be disposed.</param>
-        public static void DisposeOfGivenObject<ObjType>(ObjType obj) where ObjType : class
+        public static void DisposeOfGivenObject<ObjType>(this ObjType obj) where ObjType : class
         {
             IDisposable d = obj as IDisposable;
 
             if (d != null)
                 d.Dispose();
+        }
+
+        /// <summary>
+        /// Helper function used to remove, and dispose of each IDisposable item, in a given list (using DisposeOfGivenObject).
+        /// <para/>Removes all items from the list even if not all of them are IDisposable.
+        /// </summary>
+        /// <typeparam name="ObjType">Any type of ref object.  May be a type that is castable to IDisposable.</typeparam>
+        public static void TakeAndDisposeOfGivenObjects<ObjType>(this IList<ObjType> objList) where ObjType : class
+        {
+            while (!objList.IsNullOrEmpty())
+            {
+                objList.SafeTakeFirst().DisposeOfGivenObject();
+            }
         }
     }
 
@@ -175,11 +188,17 @@ namespace MosaicLib.Utils
         /// This IsDisposing and IsDisposed may both be set simultaneously for a brief period.
         /// </summary>
         public virtual bool IsDisposed { get; private set; }
+
         /// <summary>
         /// true whenever either of the object's Dispose patterns are currently in use.  
         /// This IsDisposing and IsDisposed may both be set simultaneously for a brief period.
         /// </summary>
 		public virtual bool IsDisposing { get { return (activeDisposeCounter.VolatileValue != 0); } }
+
+        /// <summary>
+        /// Returns true whenever the object IsDisposing or it IsDisposed
+        /// </summary>
+        public virtual bool IsDisposingOrDisposed { get { return IsDisposing || IsDisposed; } }
 
         /// <summary>
         /// Default constructor.
@@ -273,7 +292,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Sub-class callable method used to add an explicitDisposeAction to the explicitDisposeActionList.  
         /// All such added actions will be invoked in LIFO order when the part is being explicitly disposed.
-        /// For SimpleActiveParts this will occure after the part has been stopped and after the DisposeCalledPassdown(disposeType) has taken place.
+        /// For SimpleActiveParts this will occur after the part has been stopped and after the DisposeCalledPassdown(disposeType) has taken place.
         /// </summary>
         protected void AddExplicitDisposeAction(Action explicitDisposeAction)
         {
@@ -413,9 +432,35 @@ namespace MosaicLib.Utils
                     Asserts.TakeBreakpointAfterFault("DisposableList::Dispose(CalledByFinalizer) triggered exception", ex);
                 }
             }
+
+            #endregion
         }
 
-        #endregion
+        /// <summary>
+        /// This object is a variant of DisposableBase that exposes its means of calling a series of actions when it is being explicitly disposed.
+        /// </summary>
+        public class ExplicitDisposeActionList : DisposableBase
+        {
+            /// <summary>
+            /// Method that may be used to add a single <paramref name="explicitDisposeAction"/>
+            /// <para/>Supports call chaining
+            /// </summary>
+            public ExplicitDisposeActionList Add(Action explicitDisposeAction) 
+            { 
+                AddExplicitDisposeAction(explicitDisposeAction); 
+                return this; 
+            }
+
+            /// <summary>
+            /// Method that may be used to add a set of one or more explict dispose action items
+            /// <para/>Supports call chaining
+            /// </summary>
+            public ExplicitDisposeActionList AddItems(params Action[] explicitDisposeActionParamsArray) 
+            { 
+                explicitDisposeActionParamsArray.DoForEach(explicitDisposeAction => AddExplicitDisposeAction(explicitDisposeAction)); 
+                return this; 
+            }
+        }
     }
 
     #endregion

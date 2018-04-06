@@ -230,6 +230,11 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// Setter sets IsSetPending if the given value is not equal to the current one.
         /// <para/>This is a value object and as such this property can only be assigned an entire ValueContainer.
         /// </summary>
+        ValueContainer VC { get; set; }
+
+        /// <summary>
+        /// get/set property is an alternative name for the VC property
+        /// </summary>
         ValueContainer ValueContainer { get; set; }
 
         /// <summary>
@@ -953,16 +958,22 @@ namespace MosaicLib.Modular.Interconnect.Values
             /// Setter sets IsSetPending if the given value is not equal to the current one.
             /// <para/>This is a value object and as such this property can only be assigned an entire ValueContainer.
             /// </summary>
-            public ValueContainer ValueContainer 
+            public ValueContainer VC 
             { 
-                get { return valueContainer; } 
+                get { return vc; } 
                 set 
                 {
-                    IsSetPending |= !valueContainer.IsEqualTo(value);
-                    valueContainer = value; 
+                    IsSetPending |= !vc.IsEqualTo(value);
+                    vc = value; 
                 } 
             }
-            protected ValueContainer valueContainer;
+
+            /// <summary>
+            /// get/set property is an alternative name for the VC property
+            /// </summary>
+            public ValueContainer ValueContainer { get { return VC; } set { VC = value; } }
+
+            protected ValueContainer vc = default(ValueContainer);
 
             /// <summary>
             /// get/set property contains the last set or the last updated value for this accessor.  
@@ -970,14 +981,8 @@ namespace MosaicLib.Modular.Interconnect.Values
             /// </summary>
             public object ValueAsObject 
             { 
-                get 
-                { 
-                    return valueContainer.ValueAsObject; 
-                } 
-                set 
-                {
-                    ValueContainer = new ValueContainer().SetFromObject(value);
-                } 
+                get { return vc.ValueAsObject; } 
+                set { VC = new ValueContainer(value); } 
             }
 
             /// <summary>This property is set whenever the ValueContainer is changed and is cleared whenver the update has been delievered to the ValueInterconnection instance or when Update is called.</summary>
@@ -995,7 +1000,7 @@ namespace MosaicLib.Modular.Interconnect.Values
             /// <summary>Resets this value accessor and the corresponding IVI table entry to be empty with sequence number zero.</summary>
             public IValueAccessor Reset()
             {
-                valueContainer.SetToEmpty();
+                vc.SetToEmpty();
 
                 if (InterconnectInstance != null)
                     InterconnectInstance.Reset(this);
@@ -1006,7 +1011,7 @@ namespace MosaicLib.Modular.Interconnect.Values
             /// <summary>Sets ValueContainer to the given value and then Sets the corresponding interconnection table space entry's value from the given one.  This method supports call chaining.</summary>
             public IValueAccessor Set(ValueContainer valueContainerIn)
             {
-                valueContainer = valueContainerIn;
+                vc = valueContainerIn;
 
                 return Set();
             }
@@ -1073,7 +1078,7 @@ namespace MosaicLib.Modular.Interconnect.Values
             {
                 if (IsUpdateNeeded)
                 {
-                    valueContainer = ((TableEntry != null) ? TableEntry.ValueContainer : emptyValueContainer);
+                    vc = ((TableEntry != null) ? TableEntry.ValueContainer : emptyValueContainer);
                     ValueSeqNum = CurrentSeqNum;
 
                     IsSetPending = false;
@@ -1090,7 +1095,7 @@ namespace MosaicLib.Modular.Interconnect.Values
             internal void InnerGuardedSetTableEntryFromValue()
             {
                 if (TableEntry != null)
-                    TableEntry.Set(ref valueContainer);
+                    TableEntry.Set(ref vc);
 
                 IsSetPending = false;
 
@@ -1145,7 +1150,7 @@ namespace MosaicLib.Modular.Interconnect.Values
             { 
                 get 
                 {
-                    if (valueContainer.IsNullOrEmpty && !decodedValueType.IsReferenceType() && !decodedTypeIsNullable)
+                    if (vc.IsNullOrEmpty && !decodedValueType.IsReferenceType() && !decodedTypeIsNullable)
                     {
                         if ((LastValueGetException as System.NullReferenceException) == null)
                             LastValueGetException = new NullReferenceException();
@@ -1182,7 +1187,7 @@ namespace MosaicLib.Modular.Interconnect.Values
             /// </summary>
             public TValueType GetValue(bool rethrow)
             {
-                return valueContainer.GetValue<TValueType>(decodedValueType, decodedTypeIsNullable, rethrow);
+                return vc.GetValue<TValueType>(decodedValueType, decodedTypeIsNullable, rethrow);
             }
 
             /// <summary>Updates both the local copy and the corresponding interconnection table space entry's value from the given one.  This method supports call chaining.</summary>
