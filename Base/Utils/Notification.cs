@@ -1034,7 +1034,7 @@ namespace MosaicLib.Utils
             }
 
             if (firstEx != null)
-                Asserts.TakeBreakpointAfterFault(Utils.Fcns.CheckedFormat("Notify(EventArgs) triggered exception(s): delegates:{0} firstEx:{3}", delegateExceptions, firstEx.ToString(ExceptionFormat.TypeAndMessageAndStackTrace)));
+                Asserts.TakeBreakpointAfterFault(Utils.Fcns.CheckedFormat("Notify(EventArgs) triggered exception(s): delegates:{0} firstEx:{1}", delegateExceptions, firstEx.ToString(ExceptionFormat.TypeAndMessageAndStackTrace)));
 
             base.Notify();
         }

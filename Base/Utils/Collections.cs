@@ -58,7 +58,7 @@ namespace MosaicLib.Utils
                 AddRange(collection);
             }
 
-            #region Public methods and properties (IndexOf, Insert, RemoveAt, Add, Remove, Clear, AddRange
+            #region Public methods and properties (IndexOf, Insert, RemoveAt, Add, Remove, Clear, AddRange, Contains, this[int index], Count, IsEmpty, Array)
 
             /// <summary>
             /// Searches for the specified <paramref name="item"/> in the list and returns the zero-based index of the first occurrence, or -1 if the <paramref name="item"/> was not found.
@@ -83,7 +83,7 @@ namespace MosaicLib.Utils
             {
                 lock (listMutex)
                 {
-                    rebuildVolatileObjectArray = true;
+                    NoteMainListHasBeenChanged();
                     objectList.Add(d);
                 }
 
@@ -101,7 +101,7 @@ namespace MosaicLib.Utils
             {
                 lock (listMutex)
                 {
-                    rebuildVolatileObjectArray = true;
+                    NoteMainListHasBeenChanged();
                     objectList.Insert(index, item);
                 }
 
@@ -119,7 +119,7 @@ namespace MosaicLib.Utils
             {
                 lock (listMutex)
                 {
-                    rebuildVolatileObjectArray = true;
+                    NoteMainListHasBeenChanged();
                     objectList.RemoveAt(index);
                 }
 
@@ -136,7 +136,7 @@ namespace MosaicLib.Utils
             {
                 lock (listMutex)
                 {
-                    rebuildVolatileObjectArray = true;
+                    NoteMainListHasBeenChanged();
                     objectList.Remove(item);
                 }
 
@@ -153,7 +153,7 @@ namespace MosaicLib.Utils
             {
                 lock (listMutex)
                 {
-                    rebuildVolatileObjectArray = true;
+                    NoteMainListHasBeenChanged();
                     objectList.Clear();
                 }
 
@@ -170,7 +170,7 @@ namespace MosaicLib.Utils
             {
                 lock (listMutex)
                 {
-                    rebuildVolatileObjectArray = true;
+                    NoteMainListHasBeenChanged();
                     objectList.AddRange(collection);
                 }
 
@@ -213,7 +213,7 @@ namespace MosaicLib.Utils
                 {
                     lock (listMutex)
                     {
-                        rebuildVolatileObjectArray = true;
+                        NoteMainListHasBeenChanged();
                         objectList[index] = value;
                     }
                 }
@@ -253,8 +253,6 @@ namespace MosaicLib.Utils
                             rebuildVolatileObjectArray = false;
 
                             array = objectList.ToArray();
-                            if (array == null)
-                                array = EmptyArrayFactory<ObjectType>.Instance;
 
                             volatileObjectArray = array;
                         }
@@ -263,6 +261,41 @@ namespace MosaicLib.Utils
                     return array;
                 }
             }
+
+            /// <summary>
+            /// Returns the most recently generated copy of the ReadOnlyIList version of the underlying list of objects.  Will return a fixed empty ReadOnlyIList when the list is empty.
+            /// Implementation guarantees that returned value will include effects of any change made to the list by the thread that is requesting this read only list.
+            /// Changes made by other threads produce race conditions where the side effects of the change on another thread may, or may not, be visible in the read only list contents
+            /// until the thread reading this property invokes it entirely after another thread in question's Add or Remove method has returned from that method invocation.
+            /// This method does not attempt to lock or update the underlying read only list value unless it knows that at least one change has been completed to the list contents.
+            /// </summary>
+            /// <remarks>
+            /// If any change to the list has been recorded via the rebuild flag then this property will lock access to the list, 
+            /// generate the new read only list version of it and then retain the generated read only list version for later requests until the main list contents have been changed again.
+            /// Use of locked access to list during rebuild prevents the risk that the list may change contents while the rebuild is taking place.
+            /// </remarks>
+            public ReadOnlyIList<ObjectType> ReadOnlyIList
+            {
+                get
+                {
+                    ReadOnlyIList<ObjectType> readOnlyIList = volatileReadOnlyIList;
+
+                    if (rebuildVolatileReadOnlyIList)
+                    {
+                        lock (listMutex)
+                        {
+                            rebuildVolatileReadOnlyIList = false;
+
+                            readOnlyIList = new ReadOnlyIList<ObjectType>(objectList);
+
+                            volatileReadOnlyIList = readOnlyIList;
+                        }
+                    }
+
+                    return readOnlyIList;
+                }
+            }
+
 
             #endregion
 
@@ -277,8 +310,22 @@ namespace MosaicLib.Utils
             /// <summary>volatile handle to the array of delegates produced during the last rebuild operation.</summary>
             private volatile ObjectType[] volatileObjectArray = EmptyArrayFactory<ObjectType>.Instance;
 
+            private volatile ReadOnlyIList<ObjectType> volatileReadOnlyIList = ReadOnlyIList<ObjectType>.Empty;
+
+            /// <summary>
+            /// This method is used to record that a change has been made to the list that shall trigger rebuilding of any/all of the dependent volatile cached versions that are derived from the underlying list.
+            /// </summary>
+            private void NoteMainListHasBeenChanged()
+            {
+                rebuildVolatileObjectArray = true;
+                rebuildVolatileReadOnlyIList = true;
+            }
+
             /// <summary>volatile boolean used to flag that a rebuild is required during the next access to the Array property.</summary>
             private volatile bool rebuildVolatileObjectArray = true;
+
+            /// <summary>volatile boolean used to flag that a rebuild is required during the next access to the ReadOnlyILIst property.</summary>
+            private volatile bool rebuildVolatileReadOnlyIList = true;
 
             #endregion
             
@@ -298,7 +345,7 @@ namespace MosaicLib.Utils
             {
                 lock (listMutex)
                 {
-                    rebuildVolatileObjectArray = true;
+                    NoteMainListHasBeenChanged();
                     return objectList.Remove(item);
                 }
             }
@@ -340,7 +387,7 @@ namespace MosaicLib.Utils
             {
                 lock (listMutex)
                 {
-                    rebuildVolatileObjectArray = true;
+                    NoteMainListHasBeenChanged();
                     return (objectList as IList).Add(value);
                 }
             }
@@ -370,7 +417,7 @@ namespace MosaicLib.Utils
             {
                 lock (listMutex)
                 {
-                    rebuildVolatileObjectArray = true;
+                    NoteMainListHasBeenChanged();
                     (objectList as IList).Insert(index, value);
                 }
             }
@@ -389,7 +436,7 @@ namespace MosaicLib.Utils
             {
                 lock (listMutex)
                 {
-                    rebuildVolatileObjectArray = true;
+                    NoteMainListHasBeenChanged();
                     (objectList as IList).Remove(value);
                 }
             }
@@ -398,7 +445,7 @@ namespace MosaicLib.Utils
             {
                 lock (listMutex)
                 {
-                    rebuildVolatileObjectArray = true;
+                    NoteMainListHasBeenChanged();
                     (objectList as IList).RemoveAt(index);
                 }
             }
@@ -413,7 +460,7 @@ namespace MosaicLib.Utils
                 {
                     lock (listMutex)
                     {
-                        rebuildVolatileObjectArray = true;
+                        NoteMainListHasBeenChanged();
                         (objectList as IList)[index] = value;
                     }
                 }
@@ -985,6 +1032,155 @@ namespace MosaicLib.Utils
         #endregion
     }
 
+    namespace Collections.Trees
+    {
+        public class Tree<TItemType, TKeyPathItemType>
+            where TKeyPathItemType: IEquatable<TKeyPathItemType>
+        {
+            public TreeNode<TItemType, TKeyPathItemType> RootNode { get; private set; }
+
+            public IDictionary<TKeyPathItemType[], TreeNode<TItemType, TKeyPathItemType>> NodeDictionary { get; private set; }
+
+            public Tree(IEnumerable<TItemType> itemSet, Func<TItemType, TKeyPathItemType[]> keyPathSelector, DuplicatePathBehavior duplicatePathBehavior = DuplicatePathBehavior.ReplaceItem)
+            {
+                bool throwOnDuplicate = duplicatePathBehavior == DuplicatePathBehavior.ThrowDuplicatePathException;
+                bool replaceOnDuplicate = duplicatePathBehavior == DuplicatePathBehavior.ReplaceItem;
+
+                Dictionary<TKeyPathItemType[], TreeNode<TItemType, TKeyPathItemType>> treeNodeDictionary = new Dictionary<TKeyPathItemType[], TreeNode<TItemType, TKeyPathItemType>>(comparer: keyPathEqualityComparer);
+
+                foreach (var item in itemSet)
+                {
+                    TKeyPathItemType[] keyPathArray = keyPathSelector(item) ?? Utils.Collections.EmptyArrayFactory<TKeyPathItemType>.Instance;
+
+                    TreeNode<TItemType, TKeyPathItemType> currentNode = null;
+
+                    if (treeNodeDictionary.TryGetValue(keyPathArray, out currentNode) && currentNode != null && currentNode.Item != null && throwOnDuplicate)
+                        throw new DuplicatePathException("Key path [{0}] already found while building tree".CheckedFormat(keyPathArray.ToString(separator: " ")));
+
+                    if (currentNode == null)
+                    {
+                        currentNode = new TreeNode<TItemType,TKeyPathItemType> { Item = item, KeyPathArray = keyPathArray, IsRootNode = keyPathArray.IsNullOrEmpty() };
+                        treeNodeDictionary[keyPathArray] = currentNode;
+
+                        var parentNode = currentNode.TryToFillInAndReturnParentNode(treeNodeDictionary);
+
+                        if (parentNode != null)
+                            parentNode.subNodeList.Add(currentNode);
+                    }
+                    else if (replaceOnDuplicate)
+                    {
+                        currentNode.Item = item;
+                    }
+                }
+
+                NodeDictionary = treeNodeDictionary;
+                RootNode = treeNodeDictionary.SafeTryGetValue(Utils.Collections.EmptyArrayFactory<TKeyPathItemType>.Instance);
+
+                foreach (var node in treeNodeDictionary.Values)
+                {
+                    node.SubNodeArray = node.subNodeList.ToArray();
+                    node.subNodeList = null;
+                }
+            }
+
+            public static readonly KeyPathEqualityComparer keyPathEqualityComparer = new KeyPathEqualityComparer();
+
+            public class KeyPathEqualityComparer : IEqualityComparer<TKeyPathItemType[]>
+            {
+                public bool Equals(TKeyPathItemType[] arrayX, TKeyPathItemType[] arrayY)
+                {
+                    return arrayX.IsEqualTo(arrayY);
+                }
+
+                public int GetHashCode(TKeyPathItemType[] array)
+                {
+                    int length = array.SafeLength();
+                    int hash = (array == null) ? -1 : 1 + length;
+
+                    for (int idx = 0; idx < length; idx++)
+                    {
+                        var item = array[idx];
+                        int itemHash = (item != null) ? item.GetHashCode() : 0x55aa55aa;
+
+                        hash = (hash << 5) ^ hash ^ itemHash;
+                    }
+
+                    return hash;
+                }
+            }
+
+        }
+
+        public enum DuplicatePathBehavior
+        {
+            ReplaceItem = 0,
+            ThrowDuplicatePathException,
+            IgnoreItem,
+        }
+
+        public class DuplicatePathException : System.Exception
+        {
+            public DuplicatePathException(string message, System.Exception innerException = null)
+                : base(message, innerException)
+            { }
+        }
+
+        public class TreeNode<TItemType, TKeyPathItemType>
+        {
+            public bool IsRootNode { get; internal set; }
+            public TreeNode<TItemType, TKeyPathItemType> ParentNode { get; internal set; }
+
+            public TItemType Item { get; internal set; }
+
+            public TKeyPathItemType[] KeyPathArray { get; internal set; }
+
+            public TreeNode<TItemType, TKeyPathItemType>[] SubNodeArray { get; internal set; }
+
+            internal List<TreeNode<TItemType, TKeyPathItemType>> subNodeList = new List<TreeNode<TItemType, TKeyPathItemType>>();
+
+            public override string ToString()
+            {
+                return "TreeNode: keyPath:[{0}] item:[{1}]{2}".CheckedFormat(string.Join(" ", KeyPathArray), Item, IsRootNode ? " Root" : "");
+            }
+        }
+
+        public static partial class ExtensionMethods
+        {
+            public static TreeNode<TItemType,TKeyPathItemType> TryToFillInAndReturnParentNode<TItemType, TKeyPathItemType>(this TreeNode<TItemType, TKeyPathItemType> treeNode, Dictionary<TKeyPathItemType[], TreeNode<TItemType, TKeyPathItemType>> treeNodeDictionary)
+            {
+                var currentNode = treeNode;
+
+                while (currentNode.ParentNode == null && !currentNode.IsRootNode)
+                {
+                    int currentNodeKeyPathLength = currentNode.KeyPathArray.Length;
+                    if (currentNodeKeyPathLength == 0)
+                        break;
+
+                    TKeyPathItemType[] parentNodeKeyPath = treeNode.KeyPathArray.SafeSubArray(0, currentNodeKeyPathLength - 1);
+
+                    TreeNode<TItemType, TKeyPathItemType> parentNode = null;
+
+                    if (!treeNodeDictionary.TryGetValue(parentNodeKeyPath, out parentNode) || parentNode == null)
+                    {
+                        parentNode = new TreeNode<TItemType, TKeyPathItemType>() { KeyPathArray = parentNodeKeyPath, IsRootNode = parentNodeKeyPath.IsNullOrEmpty() };
+                        treeNodeDictionary[parentNodeKeyPath] = parentNode;
+                    }
+
+                    currentNode.ParentNode = parentNode;
+
+                    currentNode = parentNode;
+               }
+
+                return treeNode.ParentNode;
+            }
+
+            public static string ToString<TKeyPathItemType>(this TKeyPathItemType[] keyPathArray, string separator = " ")
+            {
+                return string.Join(separator, keyPathArray.Select(keyPathItem => keyPathItem.SafeToString()));
+            }
+        }
+    }
+
     //-------------------------------------------------
 
     #region Obsolete LockedObjectListWithCachedArray and LockedDelegateListBase variants that are still being retained outside of the Collections sub-namespace
@@ -1066,8 +1262,7 @@ namespace MosaicLib.Utils
         /// This is expected to be especially useful for situations where multiple independent assemblies may need to support use of shared resources and resource setup like logging.
         /// </remarks>
         public abstract class SharedResourceSetupAndReleaseBase : SharedResourceSetupAndReleaseBase<IDisposable, Details.SharedResourceTokenBase>
-        {
-        }
+        { }
 
         /// <summary>
         /// This class is a form of container class that uses client visible Token objects to allow multiple clients to collaborate in setting up use of some common

@@ -24,6 +24,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Runtime.Serialization;
 
@@ -289,7 +290,7 @@ namespace MosaicLib
 
                 purgeRules.dirNumFilesLimit = maxFilesInRing;
                 advanceRules.fileSizeLimit = advanceAfterFileSize;
-                advanceRules.FileAgeLimit = TimeSpan.FromDays(1.0);
+                advanceRules.FileAgeLimit = (1.0).FromDays();
 
                 excludeFileNamesSet = new List<string>();
 
@@ -512,7 +513,7 @@ namespace MosaicLib
     public static partial class Logging
     {
         /// <summary>
-        /// This partial static class acts as a namespace in which all Handler related classes and definitions are found.
+        /// This class provides a simple implementation of an LMH that will filter and collect delivered messages in a registered reference set of the given name.
         /// </summary>
         public static partial class Handlers
         {
@@ -1391,7 +1392,7 @@ namespace MosaicLib
             {
                 /// <summary>Constructor.</summary>
                 /// <param name="setName">Defines the set name of the set created for this logger.  LMH name will be setName.lmh.</param>
-                /// <param name="logGate">Defines the LogGate value for messages handled here.  Messages with MesgType that is not included in this gate will be ignored.</param>
+                /// <param name="logGate">Defines the LogGate value for messages handled here.  Messages with MesgType that is not included in this gate will be ignored.  When null the <paramref name="logGate"/> will default to LogGate.All</param>
                 /// <param name="capacity">Defines the capacity of the resulting set.</param>
                 /// <param name="registerSet">Set to true to select that the set shall be registered.  If a non-null <paramref name="iSetsInstance"/> is explicitly provided then this parameter is not required, otherwise this parameter will select registration with the default Sets.Instance singleton.</param>
                 /// <param name="iSetsInstance">Gives the caller provided Sets Instance that for registration of the created set (if any).  If this parameter is null and <paramref name="registerSet"/> is true then the method will register the created set with the default Sets.Instance singleton.</param>
@@ -1405,7 +1406,7 @@ namespace MosaicLib
                 }
 
                 /// <summary>
-                /// Takes the given LogMessage and adds it to the set if the 
+                /// Takes the given LogMessage and adds it to the set if the messageFilter is null or if the messageFilter applied to the message returns true. 
                 /// </summary>
                 protected override void InnerHandleLogMessage(LogMessage lm)
                 {
@@ -1464,6 +1465,15 @@ namespace MosaicLib
 
             System.Diagnostics.Process currentProcess = System.Diagnostics.Process.GetCurrentProcess();
             System.Reflection.Assembly mainAssembly = System.Reflection.Assembly.GetEntryAssembly();
+            System.Reflection.Assembly currentAssembly = System.Reflection.Assembly.GetExecutingAssembly();
+
+            DebuggableAttribute.DebuggingModes hostingAssemblyDebuggingFlags = hostingAssembly.GetDebuggingMode();
+            DebuggableAttribute.DebuggingModes mainAssemblyDebuggingFlags = mainAssembly.GetDebuggingMode();
+            DebuggableAttribute.DebuggingModes currentAssemblyDebuggingFlags = currentAssembly.GetDebuggingMode();
+
+            string hostingAssemblyDebugInfoStr = hostingAssemblyDebuggingFlags.IsDebuggingEnabled() ? " Debug build [{0}]".CheckedFormat(hostingAssemblyDebuggingFlags) : "";
+            string mainAssemblyDebugInfoStr = mainAssemblyDebuggingFlags.IsDebuggingEnabled() ? " Debug build [{0}]".CheckedFormat(mainAssemblyDebuggingFlags) : "";
+            string currentAssemblyDebugInfoStr = currentAssemblyDebuggingFlags.IsDebuggingEnabled() ? " Debug build [{0}]".CheckedFormat(currentAssemblyDebuggingFlags) : "";
 
             string[] deliniatorLineArray = new string[] { "================================================================================================================================" };
 
@@ -1477,8 +1487,9 @@ namespace MosaicLib
                 "Process name:'{0}' id:{1} {2}".CheckedFormat(currentProcess.ProcessName, currentProcess.Id, Environment.Is64BitProcess ? "64-bit" : "32-bit"),
                 "Machine:'{0}' os:'{1}'{2} Cores:{3} PageSize:{4}".CheckedFormat(machineName, Environment.OSVersion, Environment.Is64BitOperatingSystem ? " 64-bit" : "", Environment.ProcessorCount, Environment.SystemPageSize),
                 "User:'{0}' {1}".CheckedFormat(userName, Environment.UserInteractive ? "interactive" : "service"),
-                ((hostingAssembly != null) ? "Hosting Assembly: '{0}'".CheckedFormat(hostingAssembly) : null),
-                ((mainAssembly != null && mainAssembly != hostingAssembly) ? "Main Assembly: '{0}'".CheckedFormat(mainAssembly) : null),
+                ((hostingAssembly != null) ? "Hosting Assembly: '{0}'{1}".CheckedFormat(hostingAssembly, hostingAssemblyDebugInfoStr) : null),
+                ((mainAssembly != null && mainAssembly != hostingAssembly) ? "Main Assembly: '{0}'{1}".CheckedFormat(mainAssembly, mainAssemblyDebugInfoStr) : null),
+                (currentAssemblyDebuggingFlags.IsDebuggingEnabled() ? "Current Assembly: '{0}'{1}".CheckedFormat(currentAssembly, currentAssemblyDebugInfoStr) : null),
                 (System.Diagnostics.Debugger.IsAttached ? "Debugger is attached" : null),
             }.Where(s => !s.IsNullOrEmpty()).ToArray();
 

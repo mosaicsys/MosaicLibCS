@@ -45,12 +45,14 @@ using MosaicLib;
 using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Config;
 using MosaicLib.Modular.Interconnect.Sets;
+using MosaicLib.Semi.E039;
 using MosaicLib.Time;
 using MosaicLib.Utils;
+using MosaicLib.Utils.Pooling;
 
 namespace MosaicLib.WPF.Tools.Sets
 {
-    #region SetTracker
+    #region SetTracker (with static factory GetSetTracker method)
 
     /// <summary>
     /// This class has two functions:  
@@ -64,16 +66,20 @@ namespace MosaicLib.WPF.Tools.Sets
     /// </summary>
     public class SetTracker : DependencyObject
     {
-        /// <summary>Gives the default update rate for set trackers</summary>
+        /// <summary>Gives the default update rate for set trackers (5.0 Hz)</summary>
         public const double DefaultUpdateRate = 5.0;
+
+        /// <summary>Gives the default maximum items per iteration (0 - no limit)</summary>
         public const int DefaultMaximumItemsPerIteration = 0;
 
         #region static factory method : GetSetTracker(SetID)
 
-        private static Dictionary<string, SetTracker> setNameToTrackerDictionary = new Dictionary<string, SetTracker>();
-        private static Dictionary<string, SetTracker> setUUIDToTrackerDictionary = new Dictionary<string, SetTracker>();
+        public static SetTracker GetSetTracker(string setName, ISetsInterconnection isi = null, double defaultUpdateRate = DefaultUpdateRate, int defaultMaximumItemsPerIteration = DefaultMaximumItemsPerIteration, bool allowDelayedTrackingStart = true)
+        {
+            return GetSetTracker(new SetID(setName, generateUUIDForNull: false), isi: isi, defaultUpdateRate: defaultUpdateRate, defaultMaximumItemsPerIteration: defaultMaximumItemsPerIteration, allowDelayedTrackingStart: allowDelayedTrackingStart);
+        }
 
-        public static SetTracker GetSetTracker(SetID setID, ISetsInterconnection isi = null, double defaultUpdateRate = DefaultUpdateRate, int defaultMaximumItemsPerIteration = DefaultMaximumItemsPerIteration)
+        public static SetTracker GetSetTracker(SetID setID, ISetsInterconnection isi = null, double defaultUpdateRate = DefaultUpdateRate, int defaultMaximumItemsPerIteration = DefaultMaximumItemsPerIteration, bool allowDelayedTrackingStart = true)
         {
             SetTracker setTracker = null;
             string setName = setID.Name.Sanitize();
@@ -85,7 +91,7 @@ namespace MosaicLib.WPF.Tools.Sets
 
             if (setTracker == null && !setName.IsNullOrEmpty())
             {
-                setTracker = new SetTracker(setID, isi: isi, defaultUpdateRate: defaultUpdateRate, defaultMaximumItemsPerIteration: defaultMaximumItemsPerIteration);
+                setTracker = new SetTracker(setID, isi: isi, defaultUpdateRate: defaultUpdateRate, defaultMaximumItemsPerIteration: defaultMaximumItemsPerIteration, allowDelayedTrackingStart: allowDelayedTrackingStart);
 
                 if (!setNameToTrackerDictionary.ContainsKey(setName))
                     setNameToTrackerDictionary[setName] = setTracker;
@@ -97,9 +103,12 @@ namespace MosaicLib.WPF.Tools.Sets
             return setTracker;
         }
 
+        private static Dictionary<string, SetTracker> setNameToTrackerDictionary = new Dictionary<string, SetTracker>();
+        private static Dictionary<string, SetTracker> setUUIDToTrackerDictionary = new Dictionary<string, SetTracker>();
+
         #endregion
 
-        public SetTracker(SetID setID, ISetsInterconnection isi = null, double defaultUpdateRate = DefaultUpdateRate, int defaultMaximumItemsPerIteration = DefaultMaximumItemsPerIteration)
+        public SetTracker(SetID setID, ISetsInterconnection isi = null, double defaultUpdateRate = DefaultUpdateRate, int defaultMaximumItemsPerIteration = DefaultMaximumItemsPerIteration, bool allowDelayedTrackingStart = true)
         {
             SetID = setID;
             ISI = isi ?? Modular.Interconnect.Sets.Sets.Instance;
@@ -117,7 +126,10 @@ namespace MosaicLib.WPF.Tools.Sets
             if (_maximumItemsPerIteration != DefaultMaximumItemsPerIteration)
                 MaximumItemsPerIteration = _maximumItemsPerIteration;
 
-            System.Threading.SynchronizationContext.Current.Post((o) => AttemptToStartTracking(), this);
+            if (allowDelayedTrackingStart)
+                System.Threading.SynchronizationContext.Current.Post((o) => AttemptToStartTracking(), this);
+            else
+                AttemptToStartTracking();
         }
 
         public ISetsInterconnection ISI { get; private set; }
@@ -154,35 +166,55 @@ namespace MosaicLib.WPF.Tools.Sets
         public IEventHandlerNotificationList<ISetDelta> SetDeltasEventNotificationList { get { return _setDeltasEventNotificationList;} }
         private EventHandlerNotificationList<ISetDelta> _setDeltasEventNotificationList = new EventHandlerNotificationList<ISetDelta>();
 
-        public SetTracker AddSetDeltasEventHandler(EventHandlerDelegate<ISetDelta> handler, Action<ISetDelta> setPrimingDelegate = null)
+        public SetTracker AddSetDeltasEventHandler(EventHandlerDelegate<ISetDelta> handler, Action<ISetDelta> setPrimingDelegate = null, bool delayPriming = false)
         {
-            if (_trackingSet != null && setPrimingDelegate != null)
+            if (!delayPriming || setPrimingDelegate == null)
             {
-                var trackingSetSeqNumRangeInfo = _trackingSet.ItemListSeqNumRangeInfo;
+                AttemptToStartTracking();
 
-                SetDelta<MosaicLib.Logging.ILogMessage> syntheticInitializationSetDelta = new SetDelta<MosaicLib.Logging.ILogMessage>()
+                if (_trackingSet != null && setPrimingDelegate != null)
                 {
-                    SetID = _trackingSet.SetID,
-                    ClearSetAtStart = true,
-                    SourceSetCapacity = _trackingSet.Capacity,
-                    SourceUpdateState = _trackingSet.UpdateState,
-                    addRangeItemList = new List<SetDeltaAddContiguousRangeItem<MosaicLib.Logging.ILogMessage>>()
-                     {
-                         new SetDeltaAddContiguousRangeItem<MosaicLib.Logging.ILogMessage>()
-                         {
-                             RangeStartIndex = 0,
-                             RangeStartSeqNum = trackingSetSeqNumRangeInfo.First,
-                             rangeObjectList = _trackingSet.SafeToSet<MosaicLib.Logging.ILogMessage>().ToList(),      // log messages are never sparse so we only need one contiguous range item for all of the current messages.
-                         }
-                     }
-                };
+                    var syntheticInitializationSetDelta = _trackingSet.GenerateInitializerSetDelta();
 
-                setPrimingDelegate(syntheticInitializationSetDelta);
+                    setPrimingDelegate(syntheticInitializationSetDelta);
+                }
+
+                SetDeltasEventNotificationList.OnNotify += handler;
+            }
+            else
+            {
+                int entryCount = pendingAddSetDeltasEventHandlersWithPrimingList.Count;
+
+                pendingAddSetDeltasEventHandlersWithPrimingList.Add(Tuple.Create(handler, setPrimingDelegate));
+
+                if (entryCount == 0)
+                    System.Threading.SynchronizationContext.Current.Post((o) => HandlePendingAddDeltasEventHandlersWithPriming(), this);
             }
 
-            SetDeltasEventNotificationList.OnNotify += handler;
-
             return this;
+        }
+
+        private List<Tuple<EventHandlerDelegate<ISetDelta>, Action<ISetDelta>>> pendingAddSetDeltasEventHandlersWithPrimingList = new List<Tuple<EventHandlerDelegate<ISetDelta>, Action<ISetDelta>>>();
+
+        private void HandlePendingAddDeltasEventHandlersWithPriming()
+        {
+            if (pendingAddSetDeltasEventHandlersWithPrimingList.Count > 0)
+            {
+                AttemptToStartTracking();
+
+                var syntheticInitializationSetDelta = _trackingSet.GenerateInitializerSetDelta();
+
+                pendingAddSetDeltasEventHandlersWithPrimingList.DoForEach(t => InnerAddSetDeltasEventHandler(t.Item1, t.Item2, syntheticInitializationSetDelta));
+                pendingAddSetDeltasEventHandlersWithPrimingList.Clear();
+            }
+        }
+
+        private void InnerAddSetDeltasEventHandler(EventHandlerDelegate<ISetDelta> handler, Action<ISetDelta> setPrimingDelegate, ISetDelta primingSetDelta)
+        {
+            if (_trackingSet != null && setPrimingDelegate != null)
+                setPrimingDelegate(primingSetDelta);
+
+            SetDeltasEventNotificationList.OnNotify += handler;
         }
 
         public void AttemptToStartTracking()
@@ -292,7 +324,7 @@ namespace MosaicLib.WPF.Tools.Sets
 
             rootSetTracker = SetTracker.GetSetTracker(setID);
 
-            rootSetTracker.AddSetDeltasEventHandler(HandleOnNotifySetDeltasEvent, setPrimingDelegate: primingSetDelta => HandleOnNotifySetDeltasEvent(rootSetTracker, primingSetDelta));
+            rootSetTracker.AddSetDeltasEventHandler(HandleOnNotifySetDeltasEvent, setPrimingDelegate: primingSetDelta => HandleOnNotifySetDeltasEvent(rootSetTracker, primingSetDelta), delayPriming: true);
         }
 
         private SetID setID;
@@ -391,7 +423,7 @@ namespace MosaicLib.WPF.Tools.Sets
 
             GroupArray = referenceGroupArray.SafeToArray();
 
-            rootSetTracker.AddSetDeltasEventHandler(HandleOnNotifySetDeltasEvent, setPrimingDelegate: primingSetDelta => HandleOnNotifySetDeltasEvent(rootSetTracker, primingSetDelta));
+            rootSetTracker.AddSetDeltasEventHandler(HandleOnNotifySetDeltasEvent, setPrimingDelegate: primingSetDelta => HandleOnNotifySetDeltasEvent(rootSetTracker, primingSetDelta), delayPriming: true);
         }
 
         private SetID setID;
@@ -450,6 +482,113 @@ namespace MosaicLib.WPF.Tools.Sets
 
     #endregion
 
+    #region FilteredSubSetTracker
+
+    public class FilteredSubSetTracker<TItemType> : DependencyObject
+    {
+        public FilteredSubSetTracker(string setName, int maximumCapacity = 1000, bool allowItemsToBeRemoved = true, Func<TItemType, bool> filterDelegate = null)
+            : this(new SetID(setName, generateUUIDForNull: false), maximumCapacity: maximumCapacity, allowItemsToBeRemoved: allowItemsToBeRemoved, filterDelegate: filterDelegate)
+        { }
+
+        public FilteredSubSetTracker(SetID setID = null, int maximumCapacity = 1000, bool allowItemsToBeRemoved = true, Func<TItemType, bool> filterDelegate = null)
+        {
+            this.setID = setID;
+            this.allowItemsToBeRemoved = allowItemsToBeRemoved;
+            this.maximumCapacity = maximumCapacity;
+            this.filterDelegate = filterDelegate;
+
+            if (setID != null)
+            {
+                HandleNewSetID(setID);
+                SetName = setID.Name;
+            }
+        }
+
+        private bool allowItemsToBeRemoved;
+        private int maximumCapacity;
+        private SetID setID;
+
+        private void HandleNewSetID(SetID setID)
+        {
+            if (handleOnNotifySetDeltasEventHandler == null)
+                handleOnNotifySetDeltasEventHandler = HandleOnNotifySetDeltasEvent;
+
+            // if we had a prior rootSetTracker, unhook our HandleOnNotifySetDeltasEvent from it
+            if (rootSetTracker != null)
+                rootSetTracker.SetDeltasEventNotificationList.OnNotify -= handleOnNotifySetDeltasEventHandler;
+
+            rootSetTracker = SetTracker.GetSetTracker(setID);
+
+            applyDeltasConfig = new ApplyDeltasConfig<TItemType>(allowItemsToBeRemoved: allowItemsToBeRemoved, addItemFilter: filterDelegate);
+
+            adjustableSet = new AdjustableTrackingSet<TItemType>(rootSetTracker.TrackingSet, maximumCapacity, applyDeltasConfig);
+            Set = adjustableSet;
+
+            // Add our HandleOnNotifySetDeltasEvent handler to it and prime the local set using a synthetic set deltas from the source set that contains the full contents of the source set.
+            rootSetTracker.AddSetDeltasEventHandler(handleOnNotifySetDeltasEventHandler, setPrimingDelegate: primingSetDelta => adjustableSet.ApplyDeltas(primingSetDelta), delayPriming: true);
+
+            setRebuiltNotificationList.Notify();
+
+            if (adjustableSet.Count > 0)
+                newItemsAddedNotificationList.Notify();
+        }
+
+        private EventHandlerDelegate<ISetDelta> handleOnNotifySetDeltasEventHandler;
+
+        private void HandleOnNotifySetDeltasEvent(object source, ISetDelta eventArgs)
+        {
+            if (rootSetTracker == null)
+            { }
+            else
+            {
+                long entryLastItemSeqNum = adjustableSet.ItemListSeqNumRangeInfo.Last;
+
+                if (eventArgs != null)
+                {
+                    adjustableSet.ApplyDeltas(eventArgs);
+                }
+
+                if (adjustableSet.ItemListSeqNumRangeInfo.Last != entryLastItemSeqNum)
+                    newItemsAddedNotificationList.Notify();
+            }
+        }
+
+        private SetTracker rootSetTracker;
+        private ApplyDeltasConfig<TItemType> applyDeltasConfig;
+        private AdjustableTrackingSet<TItemType> adjustableSet;
+
+        private Func<TItemType, bool> filterDelegate = null;
+
+        private static DependencyPropertyKey SetPropertyKey = DependencyProperty.RegisterReadOnly("Set", typeof(ITrackingSet<MosaicLib.Logging.ILogMessage>), typeof(AdjustableLogMessageSetTracker), new PropertyMetadata(null));
+        public static DependencyProperty SetNameProperty = DependencyProperty.Register("SetName", typeof(string), typeof(AdjustableLogMessageSetTracker), new PropertyMetadata(null, HandleSetNamePropertyChanged));
+
+        public ITrackingSet<TItemType> Set { get { return adjustableSet; } set { SetValue(SetPropertyKey, value); } }
+        public string SetName { get { return (string)GetValue(SetNameProperty); } set { SetValue(SetNameProperty, value); } }
+
+        private static void HandleSetNamePropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            FilteredSubSetTracker<TItemType> me = d as FilteredSubSetTracker<TItemType>;
+
+            if (me != null)
+            {
+                SetID entrySetID = me.setID;
+
+                me.setID = new SetID((string)e.NewValue, generateUUIDForNull: false);
+
+                if (!me.setID.Equals(entrySetID))
+                    me.HandleNewSetID(me.setID);
+            }
+        }
+
+        public event BasicNotificationDelegate SetRebuilt { add { setRebuiltNotificationList.OnNotify += value; } remove { setRebuiltNotificationList.OnNotify -= value; } }
+        public event BasicNotificationDelegate NewItemsAdded { add { newItemsAddedNotificationList.OnNotify += value; } remove { newItemsAddedNotificationList.OnNotify -= value; } }
+
+        private BasicNotificationList setRebuiltNotificationList = new BasicNotificationList();
+        private BasicNotificationList newItemsAddedNotificationList = new BasicNotificationList();
+    }
+
+    #endregion
+
     #region AdjustableLogMessageSetTracker
 
     /// <summary>
@@ -503,7 +642,7 @@ namespace MosaicLib.WPF.Tools.Sets
 
             RegenerateAdjustableSet();
 
-            rootSetTracker.AddSetDeltasEventHandler(handleOnNotifySetDeltasEventHandler, setPrimingDelegate: primingSetDelta => setCollector.ApplyDeltas(primingSetDelta));
+            rootSetTracker.AddSetDeltasEventHandler(handleOnNotifySetDeltasEventHandler, setPrimingDelegate: primingSetDelta => setCollector.ApplyDeltas(primingSetDelta), delayPriming: true);
         }
 
         private EventHandlerDelegate<ISetDelta> handleOnNotifySetDeltasEventHandler;
@@ -549,13 +688,9 @@ namespace MosaicLib.WPF.Tools.Sets
             {
                 if (!regenerateSetsAfterUnpaused)
                 {
-                    int itemsAdded = 0;
-
                     if (totalCollectedAddItems > 0)
                     {
                         collectedSetDeltaListWhilePaused.DoForEach(collectedSetDelta => setCollector.ApplyDeltas(collectedSetDelta));
-
-                        itemsAdded += totalCollectedAddItems;
 
                         ClearCollectedSetDeltas();
                     }
@@ -563,13 +698,14 @@ namespace MosaicLib.WPF.Tools.Sets
                     if (eventArgs != null)
                     {
                         setCollector.ApplyDeltas(eventArgs);
-                        itemsAdded = eventArgs.TotalAddedItemCount;
                     }
+
+                    long entryLastItemSeqNum = adjustableSet.ItemListSeqNumRangeInfo.Last;
 
                     adjustableSet.PerformUpdateIteration();
                     TotalCount = setCollector.Count;
 
-                    if (itemsAdded > 0)
+                    if (adjustableSet.ItemListSeqNumRangeInfo.Last != entryLastItemSeqNum)
                         newItemsAddedNotificationList.Notify();
                 }
                 else
@@ -612,8 +748,6 @@ namespace MosaicLib.WPF.Tools.Sets
         private MosaicLib.Logging.LogGate logGate = DefaultLogGate;
         private string filterString = null;
         private Func<MosaicLib.Logging.ILogMessage, bool> addItemFilter = null;
-
-        // properties to add: FilterString, EnabledSources and update ResetAdjustableSet to correctly implement these various filter options.
 
         private static DependencyPropertyKey SetPropertyKey = DependencyProperty.RegisterReadOnly("Set", typeof(ITrackingSet<MosaicLib.Logging.ILogMessage>), typeof(AdjustableLogMessageSetTracker), new PropertyMetadata(null));
         private static DependencyPropertyKey TotalCountPropertyKey = DependencyProperty.RegisterReadOnly("TotalCount", typeof(int), typeof(AdjustableLogMessageSetTracker), new PropertyMetadata(0));
@@ -787,6 +921,885 @@ namespace MosaicLib.WPF.Tools.Sets
 
         private BasicNotificationList setRebuiltNotificationList = new BasicNotificationList();
         private BasicNotificationList newItemsAddedNotificationList = new BasicNotificationList();
+    }
+
+    #endregion
+
+    #region E039 related Set tracker objects
+
+    namespace E039
+    {
+        /// <summary>
+        /// This class is used as the root DependencyObject for bindable observation of objects in a set of IE039Objects that is generally
+        /// maintained by an IE039TableUpdater (such as an E039BasicTablePart).  
+        /// <para/>This object supports the IE039TableTypeDictionaryFactory interface which is used to obtain access to IE039TableTypeDictionary instances for a given object "Type"
+        /// From the resulting IE039TableTypeDictionary the client can obtain individual E039ObjectTracker instances for given object "Name" values.  These objects provide a 
+        /// simple Object Dependency Property that can be used to observe the contents of the object with the resulting Type and Name.  In addition these objects also support
+        /// access to E039LinkToObjectTracker factory objects and E039LinksFromObjectsTracker factories.  These two factories are used to create link to/from tracker objects
+        /// for a given LinkKey.  These trackers then report the Object/Objects at the other end of the name link from/to the original E039ObjectTracker object.
+        /// <para/>This object and the related tracker DependencyObjects are designed to support clean use from XAML using binding statements with paths such as:
+        /// <code>E039TableSetTracker[loc][loc_03].E039LinksFromObjectsTrackerFactory[From].FirstObject</code> and
+        /// <code>E039TableSetTracker[item][item_01].Object</code>
+        /// <para/>See remarks section below for more details.
+        /// </summary>
+        /// <remarks>
+        /// Instances of this class are constructed from a SetID which defines the set that they will observe (using a corresonding SetTracker instance)
+        /// <para/>Like the SetTracker, this class supports a static GetE039TableSetTracker factory method to simplify shared use of this object type.
+        /// <para/>
+        /// <para/>It is expected that the use of this top level objects and the sub-objects it supports use with will be combined with use of custom controls, templates, and value converters
+        /// to produce useful and expressive visualization of the contents of the underlying E039 object tables.
+        /// </remarks>
+        public class E039TableSetTracker : DependencyObject, IE039TablePerTypeDictionaryFactory
+        {
+            #region Constant values (DefaultUpdateRate)
+
+            /// <summary>Gives the default update rate for set trackers (5.0 Hz)</summary>
+            public const double DefaultUpdateRate = 5.0;
+
+            #endregion
+
+            #region E039TableSetTracker static factory method(s) [GetE039TableSetTracker]
+
+            public static E039TableSetTracker GetE039TableSetTracker(string setName, ISetsInterconnection isi = null, double defaultUpdateRate = DefaultUpdateRate)
+            {
+                return GetE039TableSetTracker(new SetID(setName, generateUUIDForNull: false), isi: isi, defaultUpdateRate: defaultUpdateRate);
+            }
+
+            public static E039TableSetTracker GetE039TableSetTracker(SetID setID, ISetsInterconnection isi = null, double defaultUpdateRate = DefaultUpdateRate)
+            {
+                E039TableSetTracker setTracker = null;
+                string setName = setID.Name.Sanitize();
+
+                if (!setID.UUID.IsNullOrEmpty())
+                    setTracker = setUUIDToTrackerDictionary.SafeTryGetValue(setID.UUID);
+                else
+                    setTracker = setNameToTrackerDictionary.SafeTryGetValue(setName);
+
+                if (setTracker == null && !setName.IsNullOrEmpty())
+                {
+                    setTracker = new E039TableSetTracker(setID, isi: isi, defaultUpdateRate: defaultUpdateRate);
+
+                    if (!setNameToTrackerDictionary.ContainsKey(setName))
+                        setNameToTrackerDictionary[setName] = setTracker;
+
+                    if (!setID.UUID.IsNullOrEmpty())
+                        setUUIDToTrackerDictionary[setID.UUID] = setTracker;
+                }
+
+                return setTracker;
+            }
+
+            private static Dictionary<string, E039TableSetTracker> setNameToTrackerDictionary = new Dictionary<string, E039TableSetTracker>();
+            private static Dictionary<string, E039TableSetTracker> setUUIDToTrackerDictionary = new Dictionary<string, E039TableSetTracker>();
+
+            #endregion
+
+            #region Construction
+
+            public E039TableSetTracker(string setName, ISetsInterconnection isi = null, double defaultUpdateRate = DefaultUpdateRate)
+                : this(new SetID(setName, generateUUIDForNull: false), isi: isi, defaultUpdateRate: defaultUpdateRate)
+            { }
+
+            public E039TableSetTracker(SetID setID, ISetsInterconnection isi = null, double defaultUpdateRate = DefaultUpdateRate)
+            {
+                var setTracker = SetTracker.GetSetTracker(setID, isi: isi, defaultUpdateRate: defaultUpdateRate, defaultMaximumItemsPerIteration: 0);
+
+                if (setTracker.MaximumItemsPerIteration != 0)
+                    setTracker = new SetTracker(setID, isi: isi, defaultUpdateRate: defaultUpdateRate, defaultMaximumItemsPerIteration: 0);
+
+                var setTrackerTracker = new SetTrackerTracker()
+                {
+                    setID = setID,
+                    setTracker = setTracker,
+                };
+
+                setNameToSetTrackerTrackerDictionary[setID.Name] = setTrackerTracker;
+
+                setTracker.AddSetDeltasEventHandler((sender, setDelta) => HandleOnNotifySetDeltasEvent(setTrackerTracker, setDelta), setDelta => HandleOnNotifySetDeltasEvent(setTrackerTracker, setDelta), delayPriming: true);
+            }
+
+            #endregion
+
+            #region public interface (TypeNames, E039TableTypeDictionaryFactory, IE039TableTypeDictionary this[typeName], GetObjectTracker)
+
+            //public IList<string> TypeNames { get { return typeNameToTableTypeDictionary.Keys.ConvertToReadOnly(); } }
+
+            public IE039TablePerTypeDictionary this[string typeName] { get { return GetTableTypeDictionary(typeName); } }
+
+            /// <summary>
+            /// Requests that this table set tracker explicitly create an E039ObjectTracker for the given E039ObjectID <paramref name="objID"/>.
+            /// The caller can indicate if this object is intended for temporary use (can be reclaimed when desired) or if it is for perminant use (suitable for shared use).
+            /// If the caller indicates that it is for temproary use then the client is responsible for calling Dispose on the returned object when the client is done using.  
+            /// <para/>The use of such temporary use objects is most useful when using such a tracker to bind to an object that is itself only temporary.
+            /// </summary>
+            public E039ObjectTracker GetObjectTracker(E039ObjectID objID, bool forTemporaryUse = false) { return CreateE039ObjectTracker(GetInnerObjectTracker(objID, null), forSharedUse: !forTemporaryUse); }
+
+            #endregion
+
+            #region Support helper methods for subordinate types
+
+            internal E039LinkToObjectTracker HandleGetLinkToObjectTracker(E039ObjectTracker objTracker, string linkKey)
+            {
+                var innerObjTracker = objTracker.innerObjectTracker;
+
+                var linkToTracker = objTracker.linkToObjectTrackerByLinkKeyDictionary.SafeTryGetValue(linkKey);
+
+                if (linkToTracker == null)
+                {
+                    linkToTracker = new E039LinkToObjectTracker()
+                    {
+                        tableSetTracker = this,
+                        e039ObjectTracker = objTracker,
+                        linkKey = linkKey,
+                    };
+
+                    objTracker.linkToObjectTrackerByLinkKeyDictionary[linkKey] = linkToTracker;
+                    objTracker.linkToObjectTrackerArray = objTracker.linkToObjectTrackerByLinkKeyDictionary.Values.ToArray();
+
+                    ServiceInnerObjectTracker(innerObjTracker, forceUpdateLinksToList: true);
+                }
+
+                return linkToTracker;
+            }
+
+            internal E039LinksFromObjectsTracker HandleGetLinksFromObjectsTracker(E039ObjectTracker objTracker, string linkKey)
+            {
+                var innerObjTracker = objTracker.innerObjectTracker;
+
+                var linksFromTracker = objTracker.linksFromObjectsTrackerByLinkKeyDictionary.SafeTryGetValue(linkKey);
+
+                if (linksFromTracker == null)
+                {
+                    linksFromTracker = new E039LinksFromObjectsTracker()
+                    {
+                        tableSetTracker = this,
+                        e039ObjectTracker = objTracker,
+                        linkKey = linkKey,
+                    };
+
+                    objTracker.linksFromObjectsTrackerByLinkKeyDictionary[linkKey] = linksFromTracker;
+                    objTracker.linksFromObjectsTrackerArray = objTracker.linksFromObjectsTrackerByLinkKeyDictionary.Values.ToArray();
+
+                    ServiceInnerObjectTracker(innerObjTracker, forceUpdateLinksFromList: true);
+                }
+
+                return linksFromTracker;
+            }
+
+            internal void HandleDispose(E039ObjectTracker objTracker)
+            {
+                if (!objTracker.DisposeRequested)
+                {
+                    objTracker.DisposeRequested = true;
+
+                    // unhook both sets of LinkTrackers from the underling innerObjectTrackers that they are observing.  This is done by telling them that the links are empty.
+                    foreach (var linkToTracker in objTracker.linkToObjectTrackerArray)
+                        HandleLinkUpdate(linkToTracker, E039Link.Empty);
+
+                    foreach (var linksFromTracker in objTracker.linksFromObjectsTrackerArray)
+                        HandleLinksUpdate(linksFromTracker, Utils.Collections.EmptyArrayFactory<E039Link>.Instance);
+
+                    var innerObjTracker = objTracker.innerObjectTracker;
+                    innerObjTracker.attachedObjectTrackerList.Remove(objTracker);
+
+                    NoteTouched(innerObjTracker);
+                }
+            }
+
+            #endregion
+
+            #region HandleOnNotifySetDeltasEvent and related fields
+
+            private Dictionary<string, SetTrackerTracker> setNameToSetTrackerTrackerDictionary = new Dictionary<string, SetTrackerTracker>();
+            private Dictionary<string, E039TableTypeDictionary> typeNameToTableTypeDictionary = new Dictionary<string, E039TableTypeDictionary>();
+
+            private List<InnerObjectTracker> touchedInnerObjectTrackerList = new List<InnerObjectTracker>();
+
+            private void HandleOnNotifySetDeltasEvent(SetTrackerTracker setTrackerTracker, ISetDelta setDelta)
+            {
+                if (setDelta == null)
+                    return;
+
+                if (setDelta.RemoveRangeItems != null)
+                {
+                    foreach (var removeRangeItem in setDelta.RemoveRangeItems)
+                    {
+                        long seqNum = removeRangeItem.RangeStartSeqNum;
+                        long lastRangeSeqNum = seqNum + removeRangeItem.Count;
+                        for (; seqNum <= lastRangeSeqNum; seqNum++)
+                        {
+                            InnerObjectTracker innerObjTracker = null;
+
+                            if (!setTrackerTracker.currentItemInnerObjTrackerListSortedBySeqNum.TryGetValue(seqNum, out innerObjTracker))
+                                continue;
+
+                            setTrackerTracker.currentItemInnerObjTrackerListSortedBySeqNum.Remove(seqNum);
+
+                            if (innerObjTracker != null)
+                            {
+                                innerObjTracker.prevPair = innerObjTracker.pair;
+                                innerObjTracker.pair = default(ItemSeqNumAndE039ObjectPair);
+
+                                // these will only remain set if the object has actually been deleted.  Otherwise these values will be updated when the replacement object is added.
+                                innerObjTracker.objLinksToListTouched = true;
+                                innerObjTracker.objLinksFromListTouched = true;
+
+                                NoteTouched(innerObjTracker);
+                            }
+                        }
+                    }
+                }
+
+                if (setDelta.AddRangeItems != null)
+                {
+                    foreach (var addRangeItem in setDelta.AddRangeItems)
+                    {
+                        long seqNum = addRangeItem.RangeStartSeqNum;
+
+                        foreach (var addObject in addRangeItem.RangeObjects)
+                        {
+                            IE039Object addE039Object = addObject as IE039Object;
+                            E039ObjectID addE039ObjectID = (addE039Object != null) ? addE039Object.ID : null;
+
+                            if (addE039ObjectID != null && addE039ObjectID.Type != null && addE039ObjectID.Name != null)    // it is "ok" if they are both empty
+                            {
+                                var pair = new ItemSeqNumAndE039ObjectPair() { ItemSeqNum = seqNum, Object = addE039Object };
+
+                                E039TableTypeDictionary tableTypeDictionary = setTrackerTracker.typeDictionary.SafeTryGetValue(addE039ObjectID.Type);
+                                if (tableTypeDictionary == null)
+                                {
+                                    tableTypeDictionary = GetTableTypeDictionary(addE039ObjectID.Type);
+
+                                    setTrackerTracker.typeDictionary[addE039ObjectID.Type] = tableTypeDictionary;
+                                }
+
+                                InnerObjectTracker innerObjTracker = GetInnerObjectTracker(addE039ObjectID, tableTypeDictionary);
+
+                                // if needed update the innerObjectTracker's objectID and publish it to the attached object trackers since we now know the UUID (if any) for this object
+                                if (!addE039ObjectID.Equals(innerObjTracker.objectID))
+                                {
+                                    innerObjTracker.objectID = addE039ObjectID;
+                                    foreach (var objTrackers in innerObjTracker.attachedObjectTrackerList)
+                                        objTrackers.ObjectID = addE039ObjectID;
+                                }
+
+                                if (innerObjTracker.pair.Object != null)
+                                    innerObjTracker.prevPair = innerObjTracker.pair;
+
+                                IE039Object prevObj = innerObjTracker.prevPair.Object;
+
+                                innerObjTracker.pair = pair;
+
+                                NoteTouched(innerObjTracker);
+
+                                IList<E039Link> linksToOtherObjectsList = addE039Object.LinksToOtherObjectsList;
+                                IList<E039Link> linksFromOtherObjectsList = addE039Object.LinksFromOtherObjectsList;
+
+                                innerObjTracker.objLinksToListTouched = (prevObj == null || !linksToOtherObjectsList.IsEqualTo(prevObj.LinksToOtherObjectsList));
+                                innerObjTracker.objLinksFromListTouched = (prevObj == null || !linksFromOtherObjectsList.IsEqualTo(prevObj.LinksFromOtherObjectsList));
+
+                                setTrackerTracker.currentItemInnerObjTrackerListSortedBySeqNum.Add(innerObjTracker.pair.ItemSeqNum, innerObjTracker);
+                            }
+
+                            seqNum++;
+                        }
+                    }
+                }
+
+                ServiceTouchedItems();
+            }
+
+            #endregion
+
+            #region Service methods: ServiceTouchedItems, ServiceTouchedInnerObjectTrackerList, ServiceInnerObjectTracker
+
+            private void ServiceTouchedItems()
+            {
+                while (ServiceTouchedInnerObjectTrackerList())
+                { }
+            }
+
+            private bool ServiceTouchedInnerObjectTrackerList()
+            {
+                int iterationTouchedCount = touchedInnerObjectTrackerList.Count;
+
+                if (iterationTouchedCount <= 0)
+                    return false;
+
+                for (int index = 0; index < iterationTouchedCount; index++)
+                    ServiceInnerObjectTracker(touchedInnerObjectTrackerList[index]);
+
+                touchedInnerObjectTrackerList.RemoveRange(0, iterationTouchedCount);
+
+                return true;
+            }
+
+            private void ServiceInnerObjectTracker(InnerObjectTracker innerObjTracker, bool forceUpdateLinksToList = false, bool forceUpdateLinksFromList = false)
+            {
+                innerObjTracker.touched = false;
+
+                var pair = innerObjTracker.pair;
+
+                // handle updates to the links to list for this object
+                if (innerObjTracker.objLinksToListTouched || forceUpdateLinksToList)
+                {
+                    innerObjTracker.objLinksToListTouched = false;
+                    var linksToOthersList = ((pair.Object != null) ? pair.Object.LinksToOtherObjectsList : null) ?? Utils.Collections.ReadOnlyIList<E039Link>.Empty;
+
+                    foreach (var objTracker in innerObjTracker.attachedObjectTrackerList)
+                    {
+                        foreach (var linkToTracker in objTracker.linkToObjectTrackerArray)
+                        {
+                            E039Link e039Link = linksToOthersList.FirstOrDefault(link => link.Key == linkToTracker.linkKey);
+                            HandleLinkUpdate(linkToTracker, e039Link);
+                        }
+                    }
+                }
+
+                // handle updates to the links from list for this object
+                if (innerObjTracker.objLinksFromListTouched || forceUpdateLinksFromList)
+                {
+                    innerObjTracker.objLinksFromListTouched = false;
+                    var linksFromOthersList = ((pair.Object != null) ? pair.Object.LinksFromOtherObjectsList : null) ?? Utils.Collections.ReadOnlyIList<E039Link>.Empty;
+
+                    foreach (var objTracker in innerObjTracker.attachedObjectTrackerList)
+                    {
+                        foreach (var linksFromTracker in objTracker.linksFromObjectsTrackerArray)
+                        {
+                            E039Link[] e039LinksArray = linksFromOthersList.Where(link => link.Key == linksFromTracker.linkKey).ToArray();
+                            HandleLinksUpdate(linksFromTracker, e039LinksArray);
+                        }
+                    }
+                }
+
+                // publish this new pair to all of the attached trackers
+                foreach (var objTracker in innerObjTracker.attachedObjectTrackerList)
+                    objTracker.ItemSeqNumAndE039ObjectPair = pair;
+
+                foreach (var linksToThis in innerObjTracker.attachedLinksToObjectTrackerList)
+                    linksToThis.ItemSeqNumAndE039ObjectPair = pair;
+
+                foreach (var linksFromThis in innerObjTracker.attachedLinksFromObjectsTrackerList)
+                    linksFromThis.ProcessItemSeqNumAndE039ObjectPairUpdate(innerObjTracker, pair);
+
+                // check if it is time to remove this inner object tracker (aka no one is using it any more)
+                if (innerObjTracker.pair.Object == null && !innerObjTracker.AreAnyAttachementsActive)
+                {
+                    if (innerObjTracker.prevPair.Object != null && !innerObjTracker.prevPair.Object.Flags.IsSet(E039ObjectFlags.IsFinal))
+                    {
+                        releaseOfNonFinalObjectCount++;
+                    }
+
+                    innerObjTracker.tableTypeDictionary.objNameToTrackerDictionary.Remove(innerObjTracker.objectID.Name);
+
+                    innerObjectTrackerFreeList.Release(ref innerObjTracker);
+                }
+            }
+
+            private static volatile int releaseOfNonFinalObjectCount = 0;
+
+            #endregion
+
+            #region HandleLinkUpdate (linkTo and linksFrom variants)
+
+            private void HandleLinkUpdate(E039LinkToObjectTracker linkToObjectTracker, E039Link e039Link)
+            {
+                if (!linkToObjectTracker.Link.Equals(e039Link))
+                {
+                    var unlinkFromInnerOT = linkToObjectTracker.linkToInnerObjectTracker;
+
+                    if (unlinkFromInnerOT != null)
+                    {
+                        unlinkFromInnerOT.attachedLinksToObjectTrackerList.Remove(linkToObjectTracker);
+                        NoteTouched(unlinkFromInnerOT);      // in case this object now needs to be removed
+                    }
+
+                    if (!e039Link.IsEmpty)
+                    {
+                        var linkToInnerOT = GetInnerObjectTracker(e039Link.ToID, null);
+
+                        linkToObjectTracker.linkToInnerObjectTracker = linkToInnerOT;
+                        linkToInnerOT.attachedLinksToObjectTrackerList.Add(linkToObjectTracker);
+
+                        linkToObjectTracker.Link = e039Link;
+                        linkToObjectTracker.ItemSeqNumAndE039ObjectPair = linkToInnerOT.pair;
+                    }
+                }
+            }
+
+            private void HandleLinksUpdate(E039LinksFromObjectsTracker linksFromObjectsTracker, E039Link [] e039LinkArrayIn)
+            {
+                var e039LinkArrayInLength = e039LinkArrayIn.Length;
+                var linksFromArray = linksFromObjectsTracker.Links;
+
+                // if the incomming link array length is not equal to either the current Links array length or the linkedInnerObjectTrackerArray length then rebuild the arrays from scratch
+                if (e039LinkArrayInLength != linksFromArray.Length || e039LinkArrayInLength != linksFromObjectsTracker.linkedFromInnerObjectTrackerArray.Length)
+                {
+                    foreach (var unlinkFromInnerOT in linksFromObjectsTracker.linkedFromInnerObjectTrackerArray)
+                    {
+                        unlinkFromInnerOT.attachedLinksFromObjectsTrackerList.Remove(linksFromObjectsTracker);
+                        NoteTouched(unlinkFromInnerOT);      // in case this object now needs to be removed
+                    }
+
+                    var linkedFromInnerOTArray = e039LinkArrayIn.Select(link => GetInnerObjectTracker(link.FromID, null)).ToArray();
+                    linksFromObjectsTracker.linkedFromInnerObjectTrackerArray = linkedFromInnerOTArray;
+                    linkedFromInnerOTArray.DoForEach(linkedFromInnerOT => linkedFromInnerOT.attachedLinksFromObjectsTrackerList.Add(linksFromObjectsTracker));
+
+                    linksFromObjectsTracker.Links = e039LinkArrayIn.SafeToArray();
+                    linksFromObjectsTracker.PairArray = linkedFromInnerOTArray.Select(linkedFromInnerOT => linkedFromInnerOT.pair).ToArray();
+                }
+                else if (!linksFromArray.IsEqualTo(e039LinkArrayIn))
+                {
+                    var newLinkArray = new E039Link[e039LinkArrayInLength];
+                    var newPairArray = new ItemSeqNumAndE039ObjectPair[e039LinkArrayInLength];
+                    var currentPairArray = linksFromObjectsTracker.PairArray;
+
+                    for (int index = 0; index < e039LinkArrayInLength; index++)
+                    {
+                        var newLink = e039LinkArrayIn[index];
+                        var currentLink = linksFromArray[index];
+                        var currentPair = currentPairArray[index];
+
+                        if (!newLink.Equals(currentLink))
+                        {
+                            var unlinkFromInnerOT = linksFromObjectsTracker.linkedFromInnerObjectTrackerArray[index];
+                            if (unlinkFromInnerOT != null)
+                            {
+                                unlinkFromInnerOT.attachedLinksFromObjectsTrackerList.Remove(linksFromObjectsTracker);
+                                NoteTouched(unlinkFromInnerOT);      // in case this object now needs to be removed
+                            }
+
+                            var linkToInnerOT = GetInnerObjectTracker(newLink.FromID, null);
+                            linksFromObjectsTracker.linkedFromInnerObjectTrackerArray[index] = linkToInnerOT;
+                            linkToInnerOT.attachedLinksFromObjectsTrackerList.Add(linksFromObjectsTracker);
+
+                            newLinkArray[index] = newLink;
+                            newPairArray[index] = linkToInnerOT.pair;
+                        }
+                        else
+                        {
+                            newLinkArray[index] = currentLink;
+                            newPairArray[index] = currentPair;
+                        }
+                    }
+
+                    linksFromObjectsTracker.PairArray = newPairArray;
+                    linksFromObjectsTracker.Links = newLinkArray;
+                }
+            }
+
+            #endregion
+
+            #region NoteTouched, GetInnerObjectTracker, GetTableTypeDictionary, CreateE039ObjectTracker
+
+            /// <summary>
+            /// This method is called repeatedly on <paramref name="innerObjTracker"/> instances to report that they have been changed and will need to be serviced.
+            /// If the given object has not already been marked as touched then this method marks it touched and adds it to the touchedInnerObjectTrackerList.
+            /// Otherwise this method does nothing.
+            /// </summary>
+            private void NoteTouched(InnerObjectTracker innerObjTracker)
+            {
+                if (!innerObjTracker.touched)
+                {
+                    innerObjTracker.touched = true;
+                    touchedInnerObjectTrackerList.Add(innerObjTracker);
+                }
+            }
+
+            internal InnerObjectTracker GetInnerObjectTracker(E039ObjectID objID, E039TableTypeDictionary tableTypeDictionary, bool createIfNeeded = true)
+            {
+                if (tableTypeDictionary == null)
+                {
+                    tableTypeDictionary = GetTableTypeDictionary(objID.Type, createIfNeeded: createIfNeeded);
+
+                    if (tableTypeDictionary == null)
+                        return null;
+                }
+
+                InnerObjectTracker objTracker = tableTypeDictionary.objNameToTrackerDictionary.SafeTryGetValue(objID.Name);
+
+                if (objTracker == null && createIfNeeded)
+                {
+                    objTracker = innerObjectTrackerFreeList.Get();
+
+                    objTracker.tableSetTracker = this;
+                    objTracker.tableTypeDictionary = tableTypeDictionary;
+                    objTracker.objectID = objID;
+
+                    tableTypeDictionary.objNameToTrackerDictionary[objID.Name] = objTracker;
+                }
+
+                return objTracker;
+            }
+
+            internal E039TableTypeDictionary GetTableTypeDictionary(string typeName, bool createIfNeeded = true)
+            {
+                var tableTypeDictionary = typeNameToTableTypeDictionary.SafeTryGetValue(typeName);
+
+                if (tableTypeDictionary == null && createIfNeeded)
+                {
+                    tableTypeDictionary = new E039TableTypeDictionary() { tableSetTracker = this, TypeName = typeName };
+                    typeNameToTableTypeDictionary[typeName] = tableTypeDictionary;
+                }
+
+                return tableTypeDictionary;
+            }
+
+            internal E039ObjectTracker CreateE039ObjectTracker(InnerObjectTracker innerObjTracker, bool forSharedUse = true)
+            {
+                var objTracker = innerObjTracker.sharedObjectTracker;
+
+                if (objTracker == null || !forSharedUse)
+                {
+                    objTracker = new E039ObjectTracker(this) 
+                    {
+                        isSharedInstance = forSharedUse,
+                        innerObjectTracker = innerObjTracker, 
+                        ObjectID = innerObjTracker.objectID, 
+                        ItemSeqNumAndE039ObjectPair = innerObjTracker.pair 
+                    };
+
+                    innerObjTracker.attachedObjectTrackerList.Add(objTracker);
+
+                    if (forSharedUse)
+                        innerObjTracker.sharedObjectTracker = objTracker;
+                }
+
+                return objTracker;
+            }
+
+            #endregion
+
+            #region internal classes: SetTrackerTracker, E039TableTypeDictionary, InnerObjectTracker
+
+            /// <summary>
+            /// This is the set of information that is needed to distribute incoming set deltas for a given SetID.
+            /// </summary>
+            internal class SetTrackerTracker
+            {
+                public SetID setID;
+                public SetTracker setTracker;
+                public Dictionary<string, E039TableTypeDictionary> typeDictionary = new Dictionary<string, E039TableTypeDictionary>();
+
+                public SortedList<long, InnerObjectTracker> currentItemInnerObjTrackerListSortedBySeqNum = new SortedList<long, InnerObjectTracker>();
+            }
+
+            /// <summary>
+            /// This is the internal table of all InnerObjectTrackers that are known for a given TypeName.
+            /// It is also used to implment the externally usable IE039TableTypeDictionary
+            /// </summary>
+            internal class E039TableTypeDictionary : IE039TablePerTypeDictionary
+            {
+                public E039TableSetTracker tableSetTracker;
+
+                public Dictionary<string, InnerObjectTracker> objNameToTrackerDictionary = new Dictionary<string, InnerObjectTracker>();
+
+                public string TypeName { get; internal set; }
+
+                public IList<E039ObjectID> ObjectIDs { get { return objNameToTrackerDictionary.Values.Select(tracker => tracker.objectID).ConvertToReadOnly(); } }
+                public IList<IE039Object> Objects { get { return objNameToTrackerDictionary.Values.Select(tracker => tracker.pair.Object).ConvertToReadOnly(); } }
+                public E039ObjectTracker this[string objectName] 
+                { 
+                    get { return tableSetTracker.CreateE039ObjectTracker(tableSetTracker.GetInnerObjectTracker(new E039ObjectID(objectName, TypeName, assignUUID: false), this)); } 
+                }
+
+                public E039ObjectTracker GetObjectTracker(string objectName, bool forTemporaryUse = false)
+                {
+                    return tableSetTracker.CreateE039ObjectTracker(tableSetTracker.GetInnerObjectTracker(new E039ObjectID(objectName, TypeName, assignUUID: false), this), forSharedUse: !forTemporaryUse); 
+                }
+            }
+
+            /// <summary>
+            /// This is the internal version of an object tracker.  In addition to retaining information about the object that is useful for recombining remove/add set delta records into single update records,
+            /// It also serves as the hub for all object publication work.  All entities that are tracking a given object actually retain a reference to one of these objects and register their interest
+            /// using one of the attachedYYYTrackerLists.  Then when the touched inner object trackers are being serviced, the updated object (pairs) will be passed to the attached trackers accordingly.
+            /// <para/>Given its high usage ratio and its relative volatility in this class, instances of these object are used with a free list (innerObjectTrackerFreeList).
+            /// </summary>
+            internal class InnerObjectTracker
+            {
+                public E039TableSetTracker tableSetTracker;
+                public E039TableTypeDictionary tableTypeDictionary;
+                public E039ObjectID objectID;
+
+                public ItemSeqNumAndE039ObjectPair pair;
+                public ItemSeqNumAndE039ObjectPair prevPair;
+
+                public bool touched;
+                public bool objLinksToListTouched, objLinksFromListTouched;
+
+                /// <summary>This is the list of E039ObjectTrackers that are attached to this InnerObjectTracker</summary>
+                public List<E039ObjectTracker> attachedObjectTrackerList = new List<E039ObjectTracker>();
+
+                /// <summary>This is the object tracker instance that will be used for this objectID when a client does not mind using a shared one (one that cannot be disposed and reclaimed later)</summary>
+                public E039ObjectTracker sharedObjectTracker;
+
+                /// <summary>This is the list of E039LinkToObjectTracker that are linked to, and attachd to, this InnerObjectTracker</summary>
+                public List<E039LinkToObjectTracker> attachedLinksToObjectTrackerList = new List<E039LinkToObjectTracker>();
+
+                /// <summary>This is the list of E039LinksFromObjectsTracker that are linked from, and attachd to, this InnerObjectTracker</summary>
+                public List<E039LinksFromObjectsTracker> attachedLinksFromObjectsTrackerList = new List<E039LinksFromObjectsTracker>();
+
+                /// <summary>Returns true if there are any attachments to this inner object tracker</summary>
+                public bool AreAnyAttachementsActive { get { return (attachedObjectTrackerList.Count > 0 || attachedLinksToObjectTrackerList.Count > 0 || attachedLinksFromObjectsTrackerList.Count > 0); } }
+
+                public void Clear()
+                {
+                    tableSetTracker = null;
+                    tableTypeDictionary = null;
+                    objectID = E039ObjectID.Empty;
+
+                    pair = prevPair = default(ItemSeqNumAndE039ObjectPair);
+
+                    touched = objLinksToListTouched = objLinksFromListTouched = false;
+
+                    if (AreAnyAttachementsActive)
+                    {
+                        attachedObjectTrackerList.Clear();
+                        attachedLinksToObjectTrackerList.Clear();
+                        attachedLinksFromObjectsTrackerList.Clear();
+                    }
+                }
+            }
+
+            // add free list for inner object trackers - try to decrease the GC load when objects frequently go in and out of use.
+            internal BasicFreeList<InnerObjectTracker> innerObjectTrackerFreeList = new BasicFreeList<InnerObjectTracker>() { FactoryDelegate = () => new InnerObjectTracker(), ClearDelegate = item => item.Clear(), MaxItemsToKeep = 100 };
+
+            #endregion
+        }
+
+        /// <summary>
+        /// Proxy interface applied to a E039TableSetTracker so that it can be used to produce IE039TableTypeDictionary instances for given typeName values.
+        /// <para/>Provies a single string index property to obtain an IE039TableTypeDictionary intance for a given typeName
+        /// </summary>
+        public interface IE039TablePerTypeDictionaryFactory
+        {
+            IE039TablePerTypeDictionary this[string typeName] { get; }
+        }
+
+        /// <summary>
+        /// This is the public interface for a dictionary of objects that is maintained by a source E039TableSetTracker.
+        /// This interface is also used as a factory for E039ObjectTrackers using the object's objectName
+        /// </summary>
+        public interface IE039TablePerTypeDictionary
+        {
+            string TypeName { get; }
+            //IList<E039ObjectID> ObjectIDs { get; }
+            //IList<IE039Object> Objects { get; }
+            E039ObjectTracker this[string objectName] { get; }
+            E039ObjectTracker GetObjectTracker(string objectName, bool forTemporaryUse = false);
+        }
+
+        /// <summary>
+        /// DependencyObject class used to allow a client to observe an IE039Object, based on its E039ObjectID.
+        /// <para/>Supports the following DependencyPropertyKeys:
+        /// <para/>ObjectID: gives E039ObjectID of the object that this tracker is tracking
+        /// <para/>Object: gives the current IE039Object for the given key or null if the object has been deleted.
+        /// </summary>
+        public class E039ObjectTracker : DependencyObject, IDisposable
+        {
+            internal E039ObjectTracker(E039TableSetTracker tableSetTracker) 
+            {
+                this.tableSetTracker = tableSetTracker;
+                E039LinkToObjectTrackerFactory = new LinkToObjectTrackerFactory() { objTracker = this, tableSetTracker = tableSetTracker };
+                E039LinksFromObjectsTrackerFactory = new LinksFromObjectsTrackerFactory { objTracker = this, tableSetTracker = tableSetTracker };
+            }
+
+            private E039TableSetTracker tableSetTracker;
+            internal E039TableSetTracker.InnerObjectTracker innerObjectTracker;
+            internal bool isSharedInstance;
+
+            internal ItemSeqNumAndE039ObjectPair ItemSeqNumAndE039ObjectPair
+            {
+                set
+                {
+                    if (ObjectItemSeqNum != value.ItemSeqNum)
+                    {
+                        ObjectItemSeqNum = value.ItemSeqNum;
+                        Object = value.Object;
+                    }
+                }
+            }
+
+            internal long ObjectItemSeqNum { get; set; }
+
+            private static readonly DependencyPropertyKey ObjectIDPropertyKey = DependencyProperty.RegisterReadOnly("ObjectID", typeof(E039ObjectID), typeof(E039ObjectTracker), new PropertyMetadata(E039ObjectID.Empty));
+            private static readonly DependencyPropertyKey ObjectPropertyKey = DependencyProperty.RegisterReadOnly("Object", typeof(IE039Object), typeof(E039ObjectTracker), new PropertyMetadata(null));
+
+            public E039ObjectID ObjectID { get { return _objectID; } internal set { SetValue(ObjectIDPropertyKey, _objectID = value); } }
+            public E039ObjectID _objectID = E039ObjectID.Empty;
+
+            public IE039Object Object { get { return _object; } private set { SetValue(ObjectPropertyKey, _object = value); } }
+            private IE039Object _object = null;
+
+            public IE039LinkToObjectTrackerFactory E039LinkToObjectTrackerFactory { get; private set; }
+            public IE039LinksFromObjectsTrackerFactory E039LinksFromObjectsTrackerFactory { get; private set; }
+
+            internal Dictionary<string, E039LinkToObjectTracker> linkToObjectTrackerByLinkKeyDictionary = new Dictionary<string, E039LinkToObjectTracker>();
+            internal Dictionary<string, E039LinksFromObjectsTracker> linksFromObjectsTrackerByLinkKeyDictionary = new Dictionary<string, E039LinksFromObjectsTracker>();
+
+            internal E039LinkToObjectTracker [] linkToObjectTrackerArray = Utils.Collections.EmptyArrayFactory<E039LinkToObjectTracker>.Instance;
+            internal E039LinksFromObjectsTracker[] linksFromObjectsTrackerArray = Utils.Collections.EmptyArrayFactory<E039LinksFromObjectsTracker>.Instance;
+
+            public void Dispose() 
+            {
+                if (!isSharedInstance)
+                    tableSetTracker.HandleDispose(this); 
+            }
+            internal bool DisposeRequested { get; set; }
+
+            private struct LinkToObjectTrackerFactory : IE039LinkToObjectTrackerFactory
+            {
+                public E039ObjectTracker objTracker;
+                public E039TableSetTracker tableSetTracker;
+                public E039LinkToObjectTracker this[string linkKey] { get { return tableSetTracker.HandleGetLinkToObjectTracker(objTracker, linkKey); } }
+            }
+
+            private struct LinksFromObjectsTrackerFactory : IE039LinksFromObjectsTrackerFactory
+            {
+                public E039ObjectTracker objTracker;
+                public E039TableSetTracker tableSetTracker;
+                public E039LinksFromObjectsTracker this[string linkKey] { get { return tableSetTracker.HandleGetLinksFromObjectsTracker(objTracker, linkKey); } }
+            }
+        }
+
+        /// <summary>
+        /// Proxy interface applied to a object tracker so that it can be used to produce E039LinkToObjectTracker instances for given linkKey values.
+        /// </summary>
+        public interface IE039LinkToObjectTrackerFactory
+        {
+            E039LinkToObjectTracker this[string linkKey] { get; }
+        }
+
+        /// <summary>
+        /// Proxy interface applied to a object tracker so that it can be used to produce E039LinksFromsObjectTracker instances for given linkKey values.
+        /// </summary>
+        public interface IE039LinksFromObjectsTrackerFactory
+        {
+            E039LinksFromObjectsTracker this[string linkKey] { get; }
+        }
+
+        /// <summary>
+        /// DependencyObject class used to allow a client to observe an IE039Object that has been linked to from a given source object (a specific one in its LinksToOtherObjectsList for a given link name)
+        /// <para/>Supports the following DependencyPropertyKeys:
+        /// <para/>Link: gives current LinkTo E039Link that matches the given linkKey from the source object against which this tracker was created.
+        /// <para/>Object: gives the IE039Object this LinkTo Link is currently referencing, or null if the LinkTo Link is not established or if the target object is not currently available.
+        /// </summary>
+        public class E039LinkToObjectTracker : DependencyObject
+        {
+            internal E039LinkToObjectTracker() {}
+
+            internal string linkKey;
+            internal E039ObjectTracker e039ObjectTracker;
+            internal E039TableSetTracker tableSetTracker;
+
+            internal E039TableSetTracker.InnerObjectTracker linkToInnerObjectTracker;
+
+            internal ItemSeqNumAndE039ObjectPair ItemSeqNumAndE039ObjectPair
+            {
+                set
+                {
+                    if (ObjectItemSeqNum != value.ItemSeqNum)
+                    {
+                        ObjectItemSeqNum = value.ItemSeqNum;
+                        Object = value.Object;
+                    }
+                }
+            }
+
+            internal long ObjectItemSeqNum { get; set; }
+ 
+            private static readonly DependencyPropertyKey LinkPropertyKey = DependencyProperty.RegisterReadOnly("Link", typeof(E039Link), typeof(E039LinkToObjectTracker), new PropertyMetadata(E039Link.Empty));
+            private static readonly DependencyPropertyKey ObjectPropertyKey = DependencyProperty.RegisterReadOnly("Object", typeof(IE039Object), typeof(E039LinkToObjectTracker), new PropertyMetadata(null));
+
+            public E039Link Link { get { return _link; } internal set { SetValue(LinkPropertyKey, _link = value); } }
+            private E039Link _link = E039Link.Empty;
+ 
+            public IE039Object Object { get { return _object; } private set { SetValue(ObjectPropertyKey, _object = value); } }
+            private IE039Object _object = null;
+        }
+
+        /// <summary>
+        /// DependencyObject class used to allow a client to observe the set of IE039Objects that have links to a specific object (those in its LinksFromOtherObjectsList with a given link name)
+        /// <para/>Supports the following DependencyPropertyKeys:
+        /// <para/>Links: gives the set of LinkFrom E039Links that match the given linkKey from the source object against which this tracker was created.
+        /// <para/>Objects: gives the set of IE039Objects the LinkFrom Links are currently referenceing.  This array may contain nulls if the corresonding LinkFrom link is not established or if the corresonding target object cannot currently be found.
+        /// </summary>
+        public class E039LinksFromObjectsTracker : DependencyObject
+        {
+            internal E039LinksFromObjectsTracker() { }
+
+            internal string linkKey;
+            internal E039ObjectTracker e039ObjectTracker;
+            internal E039TableSetTracker tableSetTracker;
+
+            internal E039TableSetTracker.InnerObjectTracker[] linkedFromInnerObjectTrackerArray = Utils.Collections.EmptyArrayFactory < E039TableSetTracker.InnerObjectTracker>.Instance;
+
+            internal void ProcessItemSeqNumAndE039ObjectPairUpdate(E039TableSetTracker.InnerObjectTracker innerObjTracer, ItemSeqNumAndE039ObjectPair pairIn)
+            {
+                if (linkedFromInnerObjectTrackerArray.Any(item => Object.ReferenceEquals(item, innerObjTracer)))
+                {
+                    int objectArrayLen = linkedFromInnerObjectTrackerArray.Length;
+                    IE039Object[] newObjArray = new IE039Object[objectArrayLen];
+                    IE039Object[] currentObjArray = Objects;
+
+                    for (int index = 0; index < objectArrayLen; index++)
+                    {
+                        var indexedInnerObjTracker = linkedFromInnerObjectTrackerArray.SafeAccess(index);
+                        var indexedPair = _pairArray.SafeAccess(index);
+
+                        if (object.ReferenceEquals(indexedInnerObjTracker, innerObjTracer) && indexedPair.ItemSeqNum != pairIn.ItemSeqNum)
+                        {
+                            _pairArray.SafePut(index, pairIn);
+                            newObjArray[index] = pairIn.Object;
+                        }
+                        else
+                        {
+                            newObjArray[index] = currentObjArray.SafeAccess(index);
+                        }
+                    }
+
+                    Objects = newObjArray;
+                    FirstObject = newObjArray.SafeAccess(0);
+                }
+            }
+
+            internal ItemSeqNumAndE039ObjectPair[] PairArray 
+            {
+                get { return _pairArray; }
+                set
+                {
+                    if (_pairArray.Length != value.Length || !_pairArray.Zip(value, (a, b) => (a.ItemSeqNum == b.ItemSeqNum)).All(a => a))
+                    {
+                        _pairArray = value ?? Utils.Collections.EmptyArrayFactory<ItemSeqNumAndE039ObjectPair>.Instance;
+                        Objects = _pairArray.Select(pair => pair.Object).ToArray();
+                        FirstObject = _pairArray.FirstOrDefault().Object;
+                    }
+                }
+            }
+            private ItemSeqNumAndE039ObjectPair[] _pairArray = Utils.Collections.EmptyArrayFactory<ItemSeqNumAndE039ObjectPair>.Instance;
+
+            private static readonly DependencyPropertyKey LinksPropertyKey = DependencyProperty.RegisterReadOnly("Links", typeof(E039Link []), typeof(E039LinksFromObjectsTracker), new PropertyMetadata(Utils.Collections.EmptyArrayFactory<E039Link>.Instance));
+            private static readonly DependencyPropertyKey ObjectsPropertyKey = DependencyProperty.RegisterReadOnly("Objects", typeof(IE039Object []), typeof(E039LinksFromObjectsTracker), new PropertyMetadata(Utils.Collections.EmptyArrayFactory<IE039Object>.Instance));
+            private static readonly DependencyPropertyKey FirstObjectPropertyKey = DependencyProperty.RegisterReadOnly("FirstObject", typeof(IE039Object), typeof(E039LinksFromObjectsTracker), new PropertyMetadata(null));
+
+            public E039Link[] Links { get { return _links; } internal set { SetValue(LinksPropertyKey, _links = value ?? Utils.Collections.EmptyArrayFactory<E039Link>.Instance); } }
+            private E039Link[] _links = Utils.Collections.EmptyArrayFactory<E039Link>.Instance;
+
+            public IE039Object[] Objects { get { return _objects; } private set { SetValue(ObjectsPropertyKey, _objects = value ?? Utils.Collections.EmptyArrayFactory<IE039Object>.Instance); } }
+            private IE039Object[] _objects = Utils.Collections.EmptyArrayFactory<IE039Object>.Instance;
+
+            public IE039Object FirstObject { get { return _firstObject; } private set { SetValue(FirstObjectPropertyKey, _firstObject = value); } }
+            public IE039Object _firstObject;
+        }
+
+        /// <summary>
+        /// Internal object used to distribute ItemSeqNums with corresonding IE039Object instances.
+        /// </summary>
+        internal struct ItemSeqNumAndE039ObjectPair
+        {
+            public long ItemSeqNum { get; set; }
+            public IE039Object Object { get; set; }
+        }
     }
 
     #endregion

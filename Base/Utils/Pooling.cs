@@ -36,7 +36,7 @@ namespace MosaicLib.Utils.Pooling
     /// <para/>NOTE: this type is NOT thread safe.  The client must make certain that only one thread attempts to make use of any given instance of this class at a time.
     /// </summary>
     /// <typeparam name="TItemType">Gives the type of object maintained by the list.  Must be a reference type (class)</typeparam>
-    class BasicFreeList<TItemType> where TItemType : class
+    public class BasicFreeList<TItemType> where TItemType : class
     {
         /// <summary>
         /// Constructor.  Sets MaxItemsToKeep to default to 10.  Sets WillDispose to true if TItemType is IDisposable
@@ -91,11 +91,12 @@ namespace MosaicLib.Utils.Pooling
         }
 
         /// <summary>
-        /// This method attempt to return the given item to the free list. 
-        /// If the given item is null then the method has no effect.
-        /// If the free list is no full then the item will be added to the back of the free list, optionally being cleared using the ClearDelegate first.
-        /// If the free list is no full then the item will be discarded.  
-        /// Before discarding, If TItemType is IDisposable then the item will be disposed using the Fcns.DisposeOfGivenObject first.
+        /// This method attempt to return the given <paramref name="item"/> to the free list. 
+        /// If the given <paramref name="item"/> is null then the method has no effect.
+        /// If the free list is no full then the <paramref name="item"/> will be added to the back of the free list, optionally being cleared using the ClearDelegate first.
+        /// If the free list is no full then the <paramref name="item"/> will be discarded.  
+        /// Before discarding, If TItemType is IDisposable then the <paramref name="item"/> will be disposed using the Fcns.DisposeOfGivenObject first.
+        /// <para/>This method requires reference access to the given <paramref name="item"/> and the reference will be assigned to null before the method returns.
         /// </summary>
         public void Release(ref TItemType item)
         {
@@ -119,6 +120,19 @@ namespace MosaicLib.Utils.Pooling
         }
 
         /// <summary>
+        /// This method attempt to return the given <paramref name="item"/> to the free list. 
+        /// If the given <paramref name="item"/> is null then the method has no effect.
+        /// If the free list is no full then the <paramref name="item"/> will be added to the back of the free list, optionally being cleared using the ClearDelegate first.
+        /// If the free list is no full then the <paramref name="item"/> will be discarded.  
+        /// Before discarding, If TItemType is IDisposable then the <paramref name="item"/> will be disposed using the Fcns.DisposeOfGivenObject first.
+        /// <para/>This method does not require reference access to the given <paramref name="item"/> and the caller given value will not be assigned to null.
+        /// </summary>
+        public void ReleaseGivenItem(TItemType item)
+        {
+            Release(ref item);
+        }
+
+        /// <summary>
         /// This is the actual free list that is used to hold onto the items that have been Released and that are available to be given out by Get calls.
         /// </summary>
         private List<TItemType> freeList = new List<TItemType>();
@@ -134,20 +148,26 @@ namespace MosaicLib.Utils.Pooling
     {
         /// <summary>Method allows caller to obtain a free object from the pool.  Returned object will either be newly created for will have been returned to the pool when its reference count was decremented to zero.</summary>
         ObjectType GetFreeObjectFromPool();
+
         /// <summary>
         /// Returns the given object to the pool.  Has no effect if given the null value.  Generally the object should have been acquired from the pool.  
         /// <para/>The caller is required to pass the last variable/handle to theObject to this method by reference and this method will set the referenced variable/handle to null to complete the return of the object.
         /// If the pool is already full then the object will be dropped or disposed (as appropriate) using Fcns.DisposeOfObject
         /// </summary>
         void ReturnObjectToPool(ref ObjectType objRef);
+
         /// <summary>Returns the maximum number of pool objects that may be retained in the pool.  Additional objects will be dropped (and will be collected by the GC).</summary>
         int Capacity { get; }
+
         /// <summary>Returns the current number of object in the pool.</summary>
         int Count { get; }
+
         /// <summary>Releases all objects from the pool and disables the return of objects to the pool.  Subsequent calls to GetFreeObjectFromPool will explicitly create objects and will not associate them with the pool.</summary>
         void Shutdown();
+
         /// <summary>Restarts the pool if it has been Shutdown since it was constructed or since the last time it was Started.</summary>
-        void StartIfNeeded();
+        IBasicObjectPool<ObjectType> StartIfNeeded();
+
         /// <summary>Returns true if the pool is enabled</summary>
         bool IsPoolEnabled { get; }
     }
@@ -180,6 +200,13 @@ namespace MosaicLib.Utils.Pooling
         /// is being used by more than one thread at a time.
         /// </summary>
         public System.Func<ObjectType> ObjectFactoryDelegate { get; set; }
+
+        /// <summary>
+        /// Optional delegate.  
+        /// When non-null this delegate will be used to "Clear" items that are being returned to the list.  
+        /// Items that are discarded when the list is full may not be "Clear"ed.
+        /// </summary>
+        public Action<ObjectType> ObjectClearDelegate { get; set; }
 
         #endregion
 
@@ -217,6 +244,8 @@ namespace MosaicLib.Utils.Pooling
 
             if (objRefCopy != null)
             {
+                if (ObjectClearDelegate != null)
+                    ObjectClearDelegate(objRefCopy);
 
                 lock (freeObjectStackMutex)
                 {
@@ -260,7 +289,7 @@ namespace MosaicLib.Utils.Pooling
         }
 
         /// <summary>Restarts the pool if it has been Shutdown since it was constructed or since the last time it was Started.</summary>
-        public void StartIfNeeded()
+        public IBasicObjectPool<ObjectType> StartIfNeeded()
         {
             lock (freeObjectStackMutex)
             {
@@ -272,6 +301,8 @@ namespace MosaicLib.Utils.Pooling
                     poolIsEnabled = true;
                 }
             }
+
+            return this;
         }
 
         /// <summary>Returns true if the pool is enabled</summary>

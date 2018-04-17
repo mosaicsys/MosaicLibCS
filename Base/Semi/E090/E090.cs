@@ -332,117 +332,34 @@ namespace MosaicLib.Semi.E090
 
     #region E090SubstLocObserver and E090SubstObserver objects
 
-    public class E090SubstLocObserver : ISequencedObjectSourceObserver<IE039Object>
+    public class E090SubstLocObserver : E039.E039ObjectObserverWithInfoExtraction<E090SubstLocInfo>
     {
         public E090SubstLocObserver(ISequencedObjectSource<IE039Object, int> objLocPublisher, bool alsoObserveContents = true)
+            : base(objLocPublisher, (obj) => new E090SubstLocInfo(obj))
         {
-            objLocObserver = new SequencedRefObjectSourceObserver<IE039Object, int>(objLocPublisher);
             AlsoObserveContents = alsoObserveContents;
-            Update(forceUpdate: true);
-        }
 
-        public IE039Object Object { get { return objLocObserver.Object; } }
-        public E090SubstLocInfo Info { get; private set; }
+            if (AlsoObserveContents)
+                base.Add((obj) => UpdateContainsObject(obj));
+        }
 
         public bool AlsoObserveContents { get; private set; }
 
+        private void UpdateContainsObject(IE039Object obj)
+        {
+            ContainsObject = Info.GetContainedE039Object();
+            ContainsSubstInfo = new E090SubstInfo(ContainsObject);
+        }
+
         public IE039Object ContainsObject { get; private set; }
         public E090SubstInfo ContainsSubstInfo { get; private set; }
-
-        public bool IsUpdateNeeded { get { return objLocObserver.IsUpdateNeeded; } set { objLocObserver.IsUpdateNeeded = value; } }
-
-        bool ISequencedSourceObserver.Update()
-        {
-            return this.Update(forceUpdate: false);
-        }
-
-        public bool Update(bool forceUpdate = false)
-        {
-            bool didUpdate = objLocObserver.Update();
-
-            if (didUpdate || forceUpdate)
-            {
-                Info = new E090SubstLocInfo(Object);
-
-                if (AlsoObserveContents)
-                {
-                    ContainsObject = Info.GetContainedE039Object();
-                    ContainsSubstInfo = new E090SubstInfo(ContainsObject);
-                }
-            }
-
-            return didUpdate;
-        }
-
-        /// <summary>Returns true if the sequence number has been incremented or has been explicitly set</summary>
-        public bool HasBeenSet { get { return objLocObserver.HasBeenSet; } }
-
-        /// <summary>Returns the current sequence number.  May return zero if sequence number is set to skip zero and Increment is in progress on another thread.</summary>
-        public int SequenceNumber { get { return objLocObserver.SequenceNumber; } }
-
-        /// <summary>Returns the current sequence number read as a volatile (no locking) - May return zero if sequence number is set to skip zero and Increment is in progress on another thread</summary>
-        public int VolatileSequenceNumber { get { return objLocObserver.VolatileSequenceNumber; } }
-
-        public ISequencedObjectSourceObserver<IE039Object> UpdateInline()
-        {
-            Update();
-            return this;
-        }
-
-        ISequencedSourceObserver ISequencedSourceObserver.UpdateInline()
-        {
-            Update();
-            return this;
-        }
-
-        private SequencedRefObjectSourceObserver<IE039Object, int> objLocObserver;
     }
 
-    public class E090SubstObserver : ISequencedObjectSourceObserver<IE039Object>
+    public class E090SubstObserver : E039.E039ObjectObserverWithInfoExtraction<E090SubstInfo>
     {
-        public E090SubstObserver(ISequencedObjectSource<IE039Object, int> objLocPublisher)
-        {
-            objObserver = new SequencedRefObjectSourceObserver<IE039Object, int>(objLocPublisher);
-            Info = new E090SubstInfo(Object);
-        }
-
-        public IE039Object Object { get { return objObserver.Object; } }
-        public E090SubstInfo Info { get; private set; }
-
-        public bool IsUpdateNeeded { get { return objObserver.IsUpdateNeeded; } set { objObserver.IsUpdateNeeded = value; } }
-
-        public bool Update()
-        {
-            bool didUpdate = objObserver.Update();
-
-            if (didUpdate)
-                Info = new E090SubstInfo(Object);
-
-            return didUpdate;
-        }
-
-        /// <summary>Returns true if the sequence number has been incremented or has been explicitly set</summary>
-        public bool HasBeenSet { get { return objObserver.HasBeenSet; } }
-
-        /// <summary>Returns the current sequence number.  May return zero if sequence number is set to skip zero and Increment is in progress on another thread.</summary>
-        public int SequenceNumber { get { return objObserver.SequenceNumber; } }
-
-        /// <summary>Returns the current sequence number read as a volatile (no locking) - May return zero if sequence number is set to skip zero and Increment is in progress on another thread</summary>
-        public int VolatileSequenceNumber { get { return objObserver.VolatileSequenceNumber; } }
-
-        public ISequencedObjectSourceObserver<IE039Object> UpdateInline()
-        {
-            Update();
-            return this;
-        }
-
-        ISequencedSourceObserver ISequencedSourceObserver.UpdateInline()
-        {
-            Update();
-            return this;
-        }
-
-        private SequencedRefObjectSourceObserver<IE039Object, int> objObserver;
+        public E090SubstObserver(ISequencedObjectSource<IE039Object, int> objPublisher)
+            : base(objPublisher, (obj) => new E090SubstInfo(obj))
+        { }
     }
     #endregion
 
@@ -457,7 +374,6 @@ namespace MosaicLib.Semi.E090
         public E090SubstLocInfo(IE039Object obj)
             : this()
         {
-            Obj = obj;
             ObjID = (obj != null) ? obj.ID : E039ObjectID.Empty;
             LinkToSubst = (obj != null) ? obj.LinksToOtherObjectsList.FirstOrDefault(link => (link.Key == "Contains")) : default(E039Link);
             SrcLinksToHere = (obj != null) ? obj.LinksFromOtherObjectsList.Where(link => (link.Key == "SrcLoc")).ToArray() : emptyLinkArray;
@@ -467,14 +383,11 @@ namespace MosaicLib.Semi.E090
         public E090SubstLocInfo(E090SubstLocInfo other)
             : this()
         {
-            Obj = other.Obj;
             ObjID = other.ObjID;
             LinkToSubst = other.LinkToSubst;
             SrcLinksToHere = other.SrcLinksToHere.MakeCopyOf(mapNullToEmpty: false);
             DestLinksToHere = other.DestLinksToHere.MakeCopyOf(mapNullToEmpty: false);
         }
-
-        private IE039Object Obj { get; set; }
 
         /// <summary>Gives the E039ObjectID of the object from which this structure was created, or E039ObjectID.Empty if the default constructor was used.</summary>
         public E039ObjectID ObjID { get { return _objID ?? E039ObjectID.Empty; } set { _objID = value; } }
@@ -554,7 +467,6 @@ namespace MosaicLib.Semi.E090
         public E090SubstInfo(IE039Object obj) 
             : this()
         {
-            Obj = obj;
             _objID = (obj != null) ? obj.ID : null;
 
             INamedValueSet attributes = (obj != null) ? obj.Attributes : NamedValueSet.Empty;
@@ -572,7 +484,6 @@ namespace MosaicLib.Semi.E090
         public E090SubstInfo(E090SubstInfo other)
             : this()
         {
-            Obj = other.Obj;
             _objID = other._objID;
 
             SPS = other.SPS;
@@ -600,8 +511,6 @@ namespace MosaicLib.Semi.E090
 
             return nvs;
         }
-
-        private IE039Object Obj { get; set; }
 
         /// <summary>Gives the E039ObjectID of the object from which this structure was created, or E039ObjectID.Empty if the default constructor was used.</summary>
         public E039ObjectID ObjID { get { return _objID ?? E039ObjectID.Empty; } set { _objID = value; } }

@@ -53,6 +53,12 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
         public DateTime LastDateTime { get; set; }
         public int FirstEventBlockStartOffset { get; set; }
         public int LastEventBlockStartOffset { get; set; }
+        /// <summary>
+        /// When non-zero, this value sets the intended cadence interval for enabled TimeStamp and Group events.  
+        /// This logic is implemented by tracking changes in the file delta time stamp reported in the corresponding time stamp blocks and then enabling/disabling timestamp and group related events so as to generally attempt to maintain the
+        /// desired cadence of such events.  All TS and Group DBB related events are enabled/disabled on TS block boundaries.
+        /// <para/>Note: all FullGroup related events are reportable regardless of configured update cadence interval or the block's possition in the cadence interval.
+        /// </summary>
         public double NominalMinimumGroupAndTimeStampUpdateInterval { get; set; }
         /// <summary>When non-zero this mask will be used to skip reading contents from rows that do not have any of the indicated user row flag bits set</summary>
         public UInt64 FileIndexUserRowFlagBitsMask { get; set; }
@@ -491,6 +497,8 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
         public IGroupInfo[] GroupInfoArray { get; private set; }
         public IGroupPointInfo[] GroupPointInfoArray { get; private set; }
         public IOccurrenceInfo[] OccurrenceInfoArray { get; private set; }
+
+        /// <summary>Note: this array only consists of the known, non-null IVAs and is only intended for use with IVI.Set array centric methods.  This array does not provide indexing using any enumeration scheme that is correlated to other set element orderings used here.</summary>
         public IValueAccessor[] GroupPointIVAArray { get; private set; }
 
         public IDictionary<string, IGroupInfo> GroupInfoDictionary { get; private set; }
@@ -815,7 +823,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
 
                 gi.GroupPointInfoList = new ReadOnlyIList<IGroupPointInfo>(gpiArray);
                 gi.GroupPointInfoArray = gpiArray;
-                gi.GroupPointIVAArray = gpiArray.Select(gpi => gpi.IVA).WhereIsNotDefault().ToArray();
+                gi.GroupPointIVAArray = gpiArray.Select(gpi => gpi.IVA).ToArray();      // preserve IVA ordering relative to other indexed group point objects.  Do not filter out nulls here.
             }
 
             MetaDataArray = mddNVSList.ToArray();
@@ -910,10 +918,9 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
 
             FilteredGroupInfoArray = GroupInfoArray.Where(gi => filterSpec.GroupFilterDelegate(gi)).ToArray();
 
-            ResetIVAs();
+            ResetTimers(filterSpec);
 
-            lastDbbTimeStamp = Double.NegativeInfinity;
-            lastGroupOrTSUpdateEventTimeStamp = Double.NegativeInfinity;
+            ResetIVAs();
 
             SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = ProcessContentEvent.ReadingStart });
 
@@ -937,6 +944,9 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
             int currentFilteredScanRowIndex = 0;
             currentScanRow = filteredFileIndexRowArray.SafeAccess(currentFilteredScanRowIndex);
             nextScanRow = filteredFileIndexRowArray.SafeAccess(currentFilteredScanRowIndex + 1);
+
+            //List<Tuple<double, bool>> cadenceTriggerEvalList = new List<Tuple<double, bool>>();
+            //List<double> cadenceTriggerTimeList = new List<double>();
 
             if (currentScanRow != null)
             {
@@ -962,9 +972,23 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                     {
                         lastDbbTimeStamp = dbb.fileDeltaTimeStamp;
 
-                        if ((dbb.fileDeltaTimeStamp >= filterSpec.FirstFileDeltaTimeStamp) 
-                            && (dbb.fileOffsetToStartOfBlock >= filterSpec.FirstEventBlockStartOffset) 
-                            && ((dbb.fileDeltaTimeStamp - lastGroupOrTSUpdateEventTimeStamp) >= filterSpec.NominalMinimumGroupAndTimeStampUpdateInterval))
+                        if (!haveStartConditionsBeenReached)
+                        {
+                            haveStartConditionsBeenReached = (dbb.fileDeltaTimeStamp >= filterSpec.FirstFileDeltaTimeStamp && dbb.fileOffsetToStartOfBlock >= filterSpec.FirstEventBlockStartOffset);
+                            if (!isCadenceIntervalEnabled)
+                                enableReportingCadenceIntervalEventsForThisTimeStamp = true;
+                        }
+
+                        if (haveStartConditionsBeenReached && isCadenceIntervalEnabled)
+                        {
+                            enableReportingCadenceIntervalEventsForThisTimeStamp = intervalCadenceTimer.GetIsTriggered(new QpcTimeStamp(dbb.fileDeltaTimeStamp));
+
+                            //cadenceTriggerEvalList.Add(Tuple.Create(dbb.fileDeltaTimeStamp, enableReportingCadenceIntervalEventsForThisTimeStamp));
+                            //if (enableReportingCadenceIntervalEventsForThisTimeStamp)
+                            //    cadenceTriggerTimeList.Add(dbb.fileDeltaTimeStamp);
+                        }
+
+                        if (enableReportingCadenceIntervalEventsForThisTimeStamp)
                         {
                             SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = ProcessContentEvent.NewTimeStamp, DataBlockBuffer = LastTimeStampUpdateDBB });
                             lastGroupOrTSUpdateEventTimeStamp = dbb.fileDeltaTimeStamp;
@@ -1006,16 +1030,34 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
             SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = ProcessContentEvent.ReadingEnd, FileDeltaTimeStamp = lastDbbTimeStamp });
         }
 
+        private void ResetTimers(ReadAndProcessFilterSpec filterSpec)
+        {
+            haveStartConditionsBeenReached = false;
+            enableReportingCadenceIntervalEventsForThisTimeStamp = false;
+
+            isCadenceIntervalEnabled = (filterSpec.NominalMinimumGroupAndTimeStampUpdateInterval > 0.0);
+
+            lastDbbTimeStamp = Double.NegativeInfinity;
+            lastGroupOrTSUpdateEventTimeStamp = Double.NegativeInfinity;
+
+            if (isCadenceIntervalEnabled)
+                intervalCadenceTimer = new QpcTimer() { TriggerIntervalInSec = filterSpec.NominalMinimumGroupAndTimeStampUpdateInterval, AutoReset = true }.Reset(QpcTimeStamp.Zero, triggerImmediately: true);
+            else
+                intervalCadenceTimer = default(QpcTimer);
+        }
+
+        private bool haveStartConditionsBeenReached;
+        private bool enableReportingCadenceIntervalEventsForThisTimeStamp;
+
+        private bool isCadenceIntervalEnabled;
         private double lastDbbTimeStamp;
         private double lastGroupOrTSUpdateEventTimeStamp;
+        private QpcTimer intervalCadenceTimer;
 
         private void ResetIVAs()
         {
             foreach (IValueAccessor iva in GroupPointIVAArray ?? emptyIVAArray)
-            {
-                if (iva != null)
-                    iva.Reset();
-            }
+                iva.Reset();
         }
 
         private static IValueAccessor[] emptyIVAArray = EmptyArrayFactory<IValueAccessor>.Instance;
@@ -1215,15 +1257,9 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
             if (!dbb.IsValid)
                 return;
 
-            bool startReached = (dbb.fileDeltaTimeStamp >= filterSpec.FirstFileDeltaTimeStamp);
-            bool intervalEnabled = (filterSpec.NominalMinimumGroupAndTimeStampUpdateInterval != 0.0);
-            bool intervalReached = (startReached && (!intervalEnabled || (dbb.fileDeltaTimeStamp - lastGroupOrTSUpdateEventTimeStamp) >= filterSpec.NominalMinimumGroupAndTimeStampUpdateInterval));
-            if (intervalReached)
-                lastGroupOrTSUpdateEventTimeStamp = dbb.fileDeltaTimeStamp;
-
             if (decodeIndex == dbb.payloadLength)
             {
-                if (startReached && intervalReached)
+                if (enableReportingCadenceIntervalEventsForThisTimeStamp)
                     SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = (ProcessContentEvent.Group | ProcessContentEvent.EmptyGroup), GroupInfo = gi, SeqNum = seqNumU8, DataBlockBuffer = dbb });
 
                 return;
@@ -1241,7 +1277,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                 for (int gpiIndex = 0; gpiIndex < numPoints; gpiIndex++)
                 {
                     IGroupPointInfo gpi = gi.GroupPointInfoList[gpiIndex];
-                    IValueAccessor iva = (lgi != null ? lgi.GroupPointIVAArray[gpiIndex] : null);
+                    IValueAccessor iva = (lgi ?? emptyLGI).GroupPointIVAArray.SafeAccess(gpiIndex);
 
                     gpi.VC = DecodeGroupPointValue(gpi, dbb, ref decodeIndex);
                     if (!dbb.IsValid)
@@ -1258,14 +1294,14 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                 if (ivaSetPendingCount > 0)
                     IVI.Set(GroupPointIVAArray);
 
-                if (startReached)
+                if (haveStartConditionsBeenReached)
                 {
-                    if ((groupBlockFlagBits & GroupBlockFlagBits.IsStartOfFullGroup) != 0)
+                    if ((groupBlockFlagBits & GroupBlockFlagBits.IsStartOfFullGroup) != GroupBlockFlagBits.None)
                     {
                         SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = (ProcessContentEvent.Group | ProcessContentEvent.StartOfFullGroup), GroupInfo = gi, SeqNum = seqNumU8, DataBlockBuffer = dbb });
                         lastGroupOrTSUpdateEventTimeStamp = dbb.fileDeltaTimeStamp;
                     }
-                    else if (intervalReached)
+                    else if (enableReportingCadenceIntervalEventsForThisTimeStamp)
                     {
                         SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = (ProcessContentEvent.Group), GroupInfo = gi, SeqNum = seqNumU8, DataBlockBuffer = dbb });
                     }
@@ -1286,7 +1322,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                     if (dbb.payloadDataArray.GetBit(gpiIndex + bitIndexOffset))
                     {
                         IGroupPointInfo gpi = gi.GroupPointInfoList[gpiIndex];
-                        IValueAccessor iva = (lgi != null ? lgi.GroupPointIVAArray[gpiIndex] : null);
+                        IValueAccessor iva = (lgi ?? emptyLGI).GroupPointIVAArray.SafeAccess(gpiIndex);
 
                         ValueContainer pointVC = DecodeGroupPointValue(gpi, dbb, ref decodeIndex);
 
@@ -1299,7 +1335,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                         {
                             iva.VC = pointVC;
                             if (iva.IsSetPending)
-                                ivaSetPendingCount ++;
+                                ivaSetPendingCount++;
                         }
                     }
                 }
@@ -1307,10 +1343,12 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                 if (ivaSetPendingCount > 0)
                     IVI.Set(GroupPointIVAArray);
 
-                if (startReached && intervalReached)
+                if (enableReportingCadenceIntervalEventsForThisTimeStamp)
                     SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = (ProcessContentEvent.Group | ProcessContentEvent.PartialGroup), GroupInfo = gi, SeqNum = seqNumU8, DataBlockBuffer = dbb });
             }
         }
+
+        private static readonly LocalGroupInfo emptyLGI = new LocalGroupInfo(new MetaDataCommonInfoBase());
 
         private ValueContainer DecodeGroupPointValue(IGroupPointInfo gpi, DataBlockBuffer dbb, ref int decodeIndex)
         {

@@ -29,7 +29,6 @@ using System.Linq;
 using System.Runtime.Serialization;
 
 using MosaicLib.Modular.Common;
-using MosaicLib.Modular.Common.CustomSerialization;
 using MosaicLib.Utils;
 
 // Modular.Interconnect is the general namespace for tools that help interconnect Modular Parts without requiring that that have pre-existing knowledge of each-other's classes and instances.
@@ -37,10 +36,10 @@ using MosaicLib.Utils;
 //  
 // Modular.Interconnect.Sets provides a group of tools that are used to define containers for storing and propagating sets of objects, typically immutable ones.
 //
-// The basic concept here is a that an Interconnect Set is a way to group a sequence of client provided objects and to track the client's additions to the set and removal of items from the set
-// in such a way that these changes can be easily, and efficiently, replicated using delta sets.
+// The basic concept here is a that an Interconnect Set is a way to group a sequence of client provided objects and to track the client's additions to the set and removals from the set
+// in such a way that these changes can be easily, and efficiently, replicated using set deltas (an externally usable representation of such removals and additions).
 //
-// In order to accomplish this each Set will only offer limited means to change it.  The client can add new items on the end (append) and remove items from anywhere in the set.  
+// In order to accomplish this each Set will only offer limited means to change it.  The client can add new items on the end of the set (append) and remove items from anywhere in the set.  
 // The client cannot replace or add items in the middle of the set.
 //
 // Sets are heavily Generics based in that the client needs to specify the type of the items that are placed in a given set for most concrete set types.  
@@ -49,10 +48,10 @@ using MosaicLib.Utils;
 //
 // There are a few types of set implementation objects.  The first is the "Reference" type of set.  This is a concrete object that is used by a client to define a set contents, to optionally
 // support making ongoing changes to the set contents.  Reference sets represent the original, canonical, version of a Set and is the only one that a client can directly manipulates the 
-// contents of.  The second is the "Copy" set.  A copy set can be made from any other type of Interconnect Set and it will represent a snapshot into the contents of the set, from which it was
-// copied, taken at the time it was copied.  Copy set contents do not chnage after the copy has been made, even if the source of the copy's contents change thereafter.  Finally there is the
-// "Tracking" set.  This is a hybird between a "Reference" set and a "Copy" set.  Tracking sets are intended to capture the logic required to convert between set representation and delta 
-// representation and are the primary means used to replicate set contents from one tracking set to another, typically through some IPC means such as Interconnect.WCF (in progress).
+// contents of.  The second is the "Copy" set.  A copy set can be made from any other type of Interconnect Set and it will represent a snapshot into the contents of that set, 
+// taken at the time it was copied.  Copy set contents do not chnage after the copy has been made, even if the source of the copy's contents change thereafter.  Finally there is the
+// "Tracking" set.  This is a hybird between a "Reference" set and a "Copy" set.  Tracking sets are intended to capture the logic required to convert between set representation and set delta 
+// representation.  Set deltas are the primary means used to replicate set contents from one tracking set to another, typically through some IPC means such as Interconnect.Remoting.
 // This information is available to the client in the SetType property.
 //
 // Each Reference set is given a SetID that includes a Name and a UUID that is assigned when the set is created.  
@@ -71,7 +70,7 @@ using MosaicLib.Utils;
 // indicates that the Tracking set needs to start another incremental update cycle.
 //
 // Each set represents an ordered group of items, each one of which caries a unique Int64 sequence number.  
-// The root Reference set is the only set that assigned these sequence numbers to an item.
+// The root Reference set is generally the only set that assigned these sequence numbers to an item.
 // The ordered group is confined to allow new items to be added/appended onto the end of the sequence, each with a newly assigned Int64 sequence number.  
 // Items may be removed from the set in any order but new ones can only be added to the end of the set and items cannot be replaced or inserted in the middle.
 // Combined this makes certain that the list of item sequence numbers is always monotonically increasing from one end of the sequence to the other.  There may be gaps
@@ -89,16 +88,30 @@ using MosaicLib.Utils;
 // It does this by only removing items when it gets full.  It also needs to handle set reset, either by resetting itself or by forcing new items to be appended by using an incoming 
 // ItemSeqNum offset.
 //
-// Subscriber model:
-// A) various providers create and register named IReferenceSet objects.  These are the Set objects that can be "subscribed" to.
-// B) external WCF client is asked to subscribe to a given Name and/or UUID (a SetID containing one or the other).  call is Generic on TObjectType
-// C) WCF client creates incomming tracking set (will do deserialization) and asks Server to create a subscription for this SetID (passing a integer subscription key to use)
-// -) client creates a tracking set for the caller, from the internal one it created, and returns this (subscription is an action).  
-// -) subscribe is an action that returns the typed tracking set as an object in the TrackingSet NamedValue, passed as an object, in the completed action's ActionState.
-// -) Client casts resulting value to the correct ITrackingSet<> type that they wish to use.
-// D) Server asks Interconnect.Sets.Instance for the ITrackableSet to use and then creates another tracking set that it keeps to use to track and serialize the deltas to the client
-// E) Server starts generating and sending deltas with serialized items to the client.
-// F) Client starts accepting these deltas and passing them to the corresponding tracking sets (by index).
+// Generally intended remote subscription model:
+// A) A Reference set is generic (templatized) on a specific item type.
+// B) All of the Tracking set implementation objects that are created from a reference set are also generic on the same type as the reference set.
+// C) Tracking sets know if the type they are generic on support being ISerializable or if the corresponding type has been marked with the DataContract attributes.  
+//      Tracking sets that have not been so marked cannot be used to serialize or deserialize the SetDelta objects that they are used to create.
+//      When such a TrackingSet knows that its item type is serializable (data contract or otherwise), it will create a simple JSON data contract serialization helper
+//      which can be used to generate serialized versions of SetDelta instances from this set into a stream and which can be used to deserialize such SetDelta instances from
+//      a suitable stream.
+// D) When used with Remoting, the Client side Set replication remoting message stream tool creates a Tracking set of the client indicated type and SetID and locally registers it as a reference set
+//      with the indicates ISetsInterconnection instance (usually Sets.Instance).
+// E) At the Server side when the message stream is initialized it finds the registered reference set from the given SetID and creates a new tracking set to track it with.
+// F) On each available instance it generates a SetDelta using this local tracking set, serializes it into a remoting message and then sends the remoting message to the client side.
+// G) The Client side receives each such serialized SetDelta message, and applies them to the locally created tracking set as if it were a locally created reference set.
+//
+// in this way the contents of an original reference set can be incrementally replicated to a remote client where additional logic (such as a WPF Gui) can subscribe to,
+// and incrementally process the set contents.  For example this technique is currently in use to capture log messages into a reference set using the SetLogMessageHandler LMH type.
+// Then the GUI can subscribe (locally or remotely) to the resulting set and reconstruct the set of log messages for display.  In addition the AdjustableTrackingSet can similarly
+// be used in combination with an underlying TrackingSet to implement common filtering techniques.  
+// 
+// It is also worth noting here that single threaded GUIs can use Tracking sets to convert asynchronous updates to a reference set into synchronously deliverable set contents and 
+// set delta contents in that the existing operation of a tracking set in generating such set deltas is pull driven using a client's thread.
+//
+// This portion of Modular.Interconnect envisions that such set use models will also be useful for many other replication, and subscription types of uses, especially involving
+// GUI and visualization of such set contents.
 
 namespace MosaicLib.Modular.Interconnect.Sets
 {
@@ -211,34 +224,37 @@ namespace MosaicLib.Modular.Interconnect.Sets
             if (set != null && set.SetID != null)
             {
                 string setUUID = set.SetID.UUID;
-                string setName = set.SetID.Name.MapNullToEmpty();
+                string setName = set.SetID.Name;
 
                 lock (mutex)
                 {
                     if (!setUUID.IsNullOrEmpty())
                         uuidToSetDictionary[setUUID] = set;
 
-                    List<ITrackableSet> listOfSets = nameToListOfSetsDictionary.SafeTryGetValue(setName);
-
-                    if (listOfSets == null)
-                        nameToListOfSetsDictionary[setName] = (listOfSets = new List<ITrackableSet>());
-
-                    switch (howToHandleDuplicateSetNames)
+                    if (!setName.IsNullOrEmpty())
                     {
-                        case DuplicateSetNameRegistrationBehavior.None: 
-                            if (listOfSets.Count == 0) 
-                                listOfSets.Add(set); 
+                        List<ITrackableSet> listOfSets = nameToListOfSetsDictionary.SafeTryGetValue(setName);
+
+                        if (listOfSets == null)
+                            nameToListOfSetsDictionary[setName] = (listOfSets = new List<ITrackableSet>());
+
+                        switch (howToHandleDuplicateSetNames)
+                        {
+                            case DuplicateSetNameRegistrationBehavior.None:
+                                if (listOfSets.Count == 0)
+                                    listOfSets.Add(set);
                                 break;
-                        case DuplicateSetNameRegistrationBehavior.Replace:
-                            if (listOfSets.Count > 0)
-                                listOfSets.Clear();
-                            listOfSets.Add(set); 
-                            break;
-                        case DuplicateSetNameRegistrationBehavior.Add:
-                            listOfSets.Add(set); 
-                            break;
-                        default:
-                            break;
+                            case DuplicateSetNameRegistrationBehavior.Replace:
+                                if (listOfSets.Count > 0)
+                                    listOfSets.Clear();
+                                listOfSets.Add(set);
+                                break;
+                            case DuplicateSetNameRegistrationBehavior.Add:
+                                listOfSets.Add(set);
+                                break;
+                            default:
+                                break;
+                        }
                     }
                 }
             }
@@ -254,20 +270,23 @@ namespace MosaicLib.Modular.Interconnect.Sets
             if (set != null && set.SetID != null)
             {
                 string setUUID = set.SetID.UUID;
-                string setName = set.SetID.Name.MapNullToEmpty();
+                string setName = set.SetID.Name;
 
                 lock (mutex)
                 {
                     if (!setUUID.IsNullOrEmpty())
                         uuidToSetDictionary.Remove(setUUID);
 
-                    List<ITrackableSet> listOfSets = nameToListOfSetsDictionary.SafeTryGetValue(setName);
-                    if (listOfSets != null)
+                    if (!setName.IsNullOrEmpty())
                     {
-                        listOfSets.Remove(set);
+                        List<ITrackableSet> listOfSets = nameToListOfSetsDictionary.SafeTryGetValue(setName);
+                        if (listOfSets != null)
+                        {
+                            listOfSets.Remove(set);
 
-                        if (listOfSets.Count == 0)
-                            nameToListOfSetsDictionary.Remove(setName);
+                            if (listOfSets.Count == 0)
+                                nameToListOfSetsDictionary.Remove(setName);
+                        }
                     }
                 }
             }
@@ -280,7 +299,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
         /// </summary>
         public ITrackableSet FindSetByUUID(string uuid)
         {
-            ITrackableSet set = null;
+            ITrackableSet set;
 
             lock (mutex)
             {
@@ -365,6 +384,9 @@ namespace MosaicLib.Modular.Interconnect.Sets
         /// <summary>Converts the Set's contents to an Array of objects and returns it.</summary>
         object[] ToArray();
 
+        /// <summary>Generates and returns the contents of this set as an array of ItemAndSeqNum{object} elements.</summary>
+        ItemAndSeqNum<object>[] ToItemAndSeqNumArray();
+
         /// <summary>Gives the currently configured capacity for this set.</summary>
         int Capacity { get; }
     }
@@ -379,11 +401,35 @@ namespace MosaicLib.Modular.Interconnect.Sets
         /// <summary>Generates and returns the contents of this set as an array of TObjectType items.</summary>
         new TObjectType[] ToArray();
 
+        /// <summary>Generates and returns the contents of this set as an array of ItemAndSeqNum{TObjectType} elements.</summary>
+        new ItemAndSeqNum<TObjectType>[] ToItemAndSeqNumArray();
+
         /// <summary>Generates and returns a Copy type set derived from the current set.</summary>
         SetBase<TObjectType> CreateCopy();
 
         /// <summary>Returns the count of the number of items that are currently in the set.</summary>
         new int Count { get; }
+    }
+
+    /// <summary>
+    /// This struct allows the caller to obtain a set of structs that give the caller access to both the individual items and each of the item sequence numbers that they have been assigned in the set.
+    /// </summary>
+    public struct ItemAndSeqNum<TObjectType>
+    {
+        /// <summary>Gives the item's sequence number in the set which was assigned when the item was added to the set.</summary>
+        public long ItemSeqNum { get; set; }
+
+        /// <summary>Gives the item in this pair</summary>
+        public TObjectType Item { get; set; }
+
+        /// <summary>Debug and logging helper method</summary>
+        public override string ToString()
+        {
+            if (Item != null)
+                return "ItemSeqNum:{0} Item:[{1}]".CheckedFormat(ItemSeqNum, Item);
+            else
+                return "ItemSeqNum:{0} [ItemIsNull]".CheckedFormat(ItemSeqNum);
+        }
     }
 
     /// <summary>This interface extends ISet.  It adds a method that allows the caller to create correctly typed ITrackingSet objects from the current set (typically an IReferenceSet or another ITrackingSet).</summary>
@@ -415,6 +461,15 @@ namespace MosaicLib.Modular.Interconnect.Sets
         /// <summary>If the predicate is given as a non-null value then this method removes all items from the set for which the given predicate returns true.  Then adds (appends) the given set of items to the set, performing additional capacity limit pruning as required.</summary>
         void RemoveAndAdd(Func<TObjectType, bool> itemsToRemoveMatchPredicate, params TObjectType[] itemsToAdd);
 
+        /// <summary>
+        /// Removes the given set of items (referenced by their sequence numbers) and adds the given set of <paramref name="itemsToAdd"/>.  
+        /// If any items are added then this method returns the sequence number of the first added item.  
+        /// Following added item sequence numbers are sequentially assigned.
+        /// If no items are added then this method returns the sequence number that will be assigned to the next item that is added to the set.
+        /// <para/>It is highly recommended that the <paramref name="removeSeqNumSetArray"/> be given in sorted order.
+        /// </summary>
+        Int64 RemoveBySeqNumsAndAddItems(Int64[] removeSeqNumSetArray, params TObjectType[] itemsToAdd);
+
         /// <summary>Tells the set to change its SetChangability to be Fixed.</summary>
         ISet<TObjectType> SetFixed();
 
@@ -441,11 +496,11 @@ namespace MosaicLib.Modular.Interconnect.Sets
         ITrackingSet PerformUpdateIteration(int maxDeltaItemCount = 0);
 
         /// <summary>
-        /// Performs an update iteration and generates the corresponding ISetDelta object.
-        /// When non-zero maxDeltaItemCount is used to specify the maximum number of incremental set changes that can be applied per iteration.
-        /// When includeSerializedItems is true, the generated ISetDelta will include both the original items and serialized versions of them (uses JSON DataContract serialization).
+        /// Performs an update iteration and optionally generates the corresponding ISetDelta object.
+        /// When non-zero <paramref name="maxDeltaItemCount"/> is used to specify the maximum number of incremental set changes that can be applied per iteration.
+        /// When <paramref name="generateSetDelta"/> is false the method will return null.  When <paramref name="generateSetDelta"/> is true, the method will attempt to create and return an ISetDelta to represent the incremental update deltas.  If there are not such changes the method returns null
         /// </summary>
-        /// <exception cref="SetUseException">Thrown includeSerialiedItems is true and TObjectType is not known to support use with DataContract serialization</exception>
+        /// <exception cref="SetUseException">When called on an <seealso cref="AdjustableTrackingSet{TObjectType}"/> the instance will throw this exception type</exception>
         ISetDelta PerformUpdateIteration(int maxDeltaItemCount, bool generateSetDelta);
 
         /// <summary>
@@ -454,6 +509,12 @@ namespace MosaicLib.Modular.Interconnect.Sets
         /// </summary>
         /// <exception cref="SetUseException">Thrown if the SetID in the given setDelta does not match this set's SetID or the given setDelta does not already contain deserialized items and TObjectType is not known to support use with DataContract serialization</exception>
         ITrackingSet ApplyDeltas(ISetDelta setDelta);
+
+        /// <summary>
+        /// Generate and return a SetDelta that gives the entire current contents of the tracking set in a single set delta.  
+        /// This is used for initializing new derived sets that are updated incrementally using set deltas if the root tracking set is already in use (and thus cannot be replaced)
+        /// </summary>
+        ISetDelta GenerateInitializerSetDelta(int maxItemsPerRangeItem = 100);
 
         /// <summary>Accepts an ISetDelta object and serializes it into the given <paramref name="intoStream"/>.  Currently uses JSON DataContract serialization.</summary>
         /// <exception cref="SetUseException">Thrown if the SetID in the given setDelta does not match this set's SetID or if TObjectType is not known to support use with DataContract serialization</exception>
@@ -473,12 +534,18 @@ namespace MosaicLib.Modular.Interconnect.Sets
         : ISet<TObjectType>, ITrackingSet
     {
         /// <summary>
-        /// Performs an update iteration and generates the corresponding ISetDelta object.
-        /// When non-zero maxDeltaItemCount is used to specify the maximum number of incremental set changes that can be applied per iteration.
-        /// When includeSerializedItems is true, the generated ISetDelta will include both the original items and serialized versions of them (uses JSON DataContract serialization).
+        /// Performs an update iteration and optionally generates the corresponding ISetDelta object.
+        /// When non-zero <paramref name="maxDeltaItemCount"/> is used to specify the maximum number of incremental set changes that can be applied per iteration.
+        /// When <paramref name="generateSetDelta"/> is false the method will return null.  When <paramref name="generateSetDelta"/> is true, the method will attempt to create and return an ISetDelta to represent the incremental update deltas.  If there are not such changes the method returns null
         /// </summary>
-        /// <exception cref="SetUseException">Thrown includeSerialiedItems is true and TObjectType is not known to support use with DataContract serialization</exception>
+        /// <exception cref="SetUseException">When called on an <seealso cref="AdjustableTrackingSet{TObjectType}"/> the instance will throw this exception type</exception>
         new ISetDelta<TObjectType> PerformUpdateIteration(int maxDeltaItemCount, bool generateSetDelta);
+
+        /// <summary>
+        /// Generate and return a SetDelta that gives the entire current contents of the tracking set in a single set delta.  
+        /// This is used for initializing new derived sets that are updated incrementally using set deltas if the root tracking set is already in use (and thus cannot be replaced)
+        /// </summary>
+        new ISetDelta<TObjectType> GenerateInitializerSetDelta(int maxItemsPerRangeItem = 100);
     }
 
     #endregion
@@ -686,6 +753,20 @@ namespace MosaicLib.Modular.Interconnect.Sets
     {
         /// <summary>Basic constructor</summary>
         public SetUseException(string message) : base(message) { }
+    }
+
+    #endregion
+
+    #region SetID extension methods
+
+    /// <summary>partial static class contains (more) Extension Methods</summary>
+    public static partial class ExtensionMethods
+    {
+        /// <summary>Returns true if the given <paramref name="setID"/> is null or is Empty</summary>
+        public static bool IsNullOrEmpty(this SetID setID)
+        {
+            return (setID == null || setID.IsEmpty);
+        }
     }
 
     #endregion
@@ -906,17 +987,20 @@ namespace MosaicLib.Modular.Interconnect.Sets
             return new ItemContainer(nextItemSeqNum++, item);
         }
 
-        /// <summary>Sequence number source counter for this SetBase's SeqNum values.</summary>
-        private Int64 nextSetSeqNum = 1;
+        /// <summary>returns the item sequence number that will be used for the next newly created item.</summary>
+        protected Int64 PeekNextItemSeqNum { get { return nextItemSeqNum; } }
 
         /// <summary>
         /// This method is used any time the contents of the set has changed and the set needs give the outside world a shorthand notation to know that its contents may have changed.
         /// This method sets the SetBase's SeqNum to nextSetSeqNum and increments nextSetSeqNum.
         /// </summary>
-        protected void AssignNewSeqNum()
+        protected void AssignNewSetSeqNum()
         {
             SeqNum = nextSetSeqNum++;
         }
+
+        /// <summary>Sequence number source counter for this SetBase's SeqNum values.</summary>
+        private Int64 nextSetSeqNum = 1;
 
         /// <summary>This is the SetBase's storage for its ItemListSeqNumRangeInfo property</summary>
         protected SeqNumRangeInfo itemListSeqNumRangeInfo = new SeqNumRangeInfo();
@@ -999,6 +1083,15 @@ namespace MosaicLib.Modular.Interconnect.Sets
         object[] ISet.ToArray()
         {
             return (this.ToArray() as object []);
+        }
+
+        /// <summary>Generates and returns the contents of this set as an array of ItemAndSeqNum{object} elements.</summary>
+        ItemAndSeqNum<object>[] ISet.ToItemAndSeqNumArray()
+        {
+            using (ScopedLock sc = new ScopedLock(itemContainerListMutex))
+            {
+                return itemContainerList.Select((itemContainer) => new ItemAndSeqNum<object>() { ItemSeqNum = itemContainer.SeqNum, Item = itemContainer.Item}).ToArray();
+            }
         }
 
         #endregion
@@ -1107,7 +1200,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
             {
                 InnerRemoveAll(null, true);
 
-                AssignNewSeqNum();
+                AssignNewSetSeqNum();
             }
         }
 
@@ -1158,7 +1251,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
             {
                 InnerAdd(item);
 
-                AssignNewSeqNum();
+                AssignNewSetSeqNum();
             }
         }
 
@@ -1174,7 +1267,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
             {
                 bool returnValue = InnerRemoveFirst((listItem) => Object.ReferenceEquals(listItem, item));
 
-                AssignNewSeqNum();
+                AssignNewSetSeqNum();
 
                 return returnValue;
             }
@@ -1202,6 +1295,15 @@ namespace MosaicLib.Modular.Interconnect.Sets
             using (ScopedLock sc = new ScopedLock(itemContainerListMutex))
             {
                 return itemContainerList.Select((itemContainer) => itemContainer.Item).ToArray();
+            }
+        }
+
+        /// <summary>Generates and returns the contents of this set as an array of ItemAndSeqNum{TObjectType} elements.</summary>
+        public ItemAndSeqNum<TObjectType>[] ToItemAndSeqNumArray()
+        {
+            using (ScopedLock sc = new ScopedLock(itemContainerListMutex))
+            {
+                return itemContainerList.Select((itemContainer) => new ItemAndSeqNum<TObjectType>() { ItemSeqNum = itemContainer.SeqNum, Item = itemContainer.Item }).ToArray();
             }
         }
 
@@ -1265,7 +1367,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
         {
             addedItemContainerList = addedItemContainerList ?? new List<ItemContainer>();
 
-            int addItemArrayLength = addItemArray.Length;
+            int addItemArrayLength = addItemArray.SafeLength();
 
             try
             {
@@ -1494,17 +1596,19 @@ namespace MosaicLib.Modular.Interconnect.Sets
 
                         if (trialIndexSeqNum > rangeEndSeqNum)
                             break;
-                        else if (trialIndexSeqNum >= rangeStartSeqNum)
+
+                        if (trialIndexSeqNum >= rangeStartSeqNum)
                         {
                             itemContainer.LastIndexOfItemInList = scanIndex;
                             itemContainer.RemovedFromSetPosition = InnerConvertToRemovedFromSetPosition(scanIndex);
+                            removedItemContainerList.Add(itemContainer);
 
                             itemContainerList.RemoveAt(scanIndex);
-
-                            removedItemContainerList.Add(itemContainer);
                         }
                         else
+                        {
                             scanIndex++;
+                        }
                     }
                     else
                     {
@@ -1522,23 +1626,112 @@ namespace MosaicLib.Modular.Interconnect.Sets
         }
 
         /// <summary>
+        /// Attempts to remove, and optionally report the removal, of the items in the set that are in the given <paramref name="seqNumsToRemoveSetArray"/>.
+        /// If requested, this method will report both the removal of any such maching item and will report the overall SetCount and Array property changed events as appropriate.
+        /// </summary>
+        protected void InnerRemoveSeqNumSet(Int64 [] seqNumsToRemoveSetArray, bool processNoteItemsRemoved)
+        {
+            seqNumsToRemoveSetArray = seqNumsToRemoveSetArray ?? Utils.Collections.EmptyArrayFactory<long>.Instance;
+
+            if (seqNumsToRemoveSetArray.Length == 0 || itemContainerList.Count == 0)
+                return;
+
+            removedItemContainerList = removedItemContainerList ?? new List<ItemContainer>();
+
+            try
+            {
+                int scanIndex = 0;
+                ItemContainer scanItemContainer = itemContainerList.SafeAccess(scanIndex);
+                long scanItemSeqNum = (scanItemContainer != null) ? scanItemContainer.SeqNum : 0;
+
+                int itemContainerListCount = itemContainerList.Count;
+
+                foreach (var seqNumToRemove in seqNumsToRemoveSetArray)
+                {
+                    // try advancing the scan one element to see if the next one is also the next to remove
+                    if (seqNumToRemove != scanItemSeqNum)
+                    {
+                        bool goUp = (seqNumToRemove > scanItemSeqNum);
+                        int tryNextIdx = goUp ? scanIndex + 1 : scanIndex - 1;
+                        ItemContainer tryNextItemContainer = itemContainerList.SafeAccess(tryNextIdx);
+                        if (tryNextItemContainer != null && (goUp ? (seqNumToRemove >= tryNextItemContainer.SeqNum) : (seqNumToRemove <= tryNextItemContainer.SeqNum)))
+                        {
+                            scanIndex = tryNextIdx;
+                            scanItemContainer = tryNextItemContainer;
+                            scanItemSeqNum = scanItemContainer.SeqNum;
+                        }
+                    }
+
+                    // if moving one up or one down was not enough to find seqNumToRemove then do binary search from the current scanIdx toward the appropriate end of the set
+                    if (seqNumToRemove != scanItemSeqNum)
+                    {
+                        bool goUp = (seqNumToRemove > scanItemSeqNum);
+                        bool canMove = (goUp ? (scanIndex + 1 < itemContainerListCount) : (scanIndex > 0));
+
+                        if (canMove)
+                        {
+                            int tryNextIdx = (goUp) ? InnerFindIndexForSeqNum(seqNumToRemove, searchRangeStartIndex: scanIndex) : InnerFindIndexForSeqNum(seqNumToRemove, searchRangeEndIndex: scanIndex);
+                            ItemContainer tryNextItemContainer = itemContainerList.SafeAccess(tryNextIdx);
+                            if (tryNextItemContainer != null)
+                            {
+                                scanIndex = tryNextIdx;
+                                scanItemContainer = tryNextItemContainer;
+                                scanItemSeqNum = scanItemContainer.SeqNum;
+                            }
+                        }
+                    }
+
+                    // if the scanItemContainer is valid and its seqNum matches the next one then just remove this element and continue
+                    if (scanItemContainer != null && seqNumToRemove == scanItemSeqNum)
+                    {
+                        scanItemContainer.LastIndexOfItemInList = scanIndex;
+                        scanItemContainer.RemovedFromSetPosition = InnerConvertToRemovedFromSetPosition(scanIndex);
+                        removedItemContainerList.Add(scanItemContainer);
+
+                        itemContainerList.RemoveAt(scanIndex);
+                        itemContainerListCount--;
+
+                        if (itemContainerListCount == 0)
+                            break;
+
+                        scanIndex = scanIndex.Clip(0, itemContainerListCount - 1);
+
+                        scanItemContainer = itemContainerList.SafeAccess(scanIndex);
+                        scanItemSeqNum = (scanItemContainer != null) ? scanItemContainer.SeqNum : 0;
+                    }
+
+                    // otherwise the given seqNumToRemove was not found.
+                }
+            }
+            finally
+            {
+                if (processNoteItemsRemoved && removedItemContainerList.Count > 0)
+                {
+                    InnerNoteItemsRemoved(removedItemContainerList, true);
+                }
+            }
+        }
+
+        /// <summary>
         /// This method is given an itemSeqNum and attempts to find the index into the set's contents of the first item that has the given sequence number or which has sequence number that 
         /// is larger than the given one.
         /// If the list is empty this method returns -1.  
         /// If the given seq number is larger than the last sequence number in the set then this method returns the set count (one past the last valid index).
         /// </summary>
-        protected int InnerFindIndexForSeqNum(Int64 findItemSeqNum)
+        protected int InnerFindIndexForSeqNum(Int64 findItemSeqNum, int searchRangeStartIndex = 0, int searchRangeEndIndex = int.MaxValue)
         {
             if (itemContainerList.Count == 0)
                 return -1;
 
-            int firstIndex = 0;
+            int firstIndex = searchRangeStartIndex;
             Int64 firstSeqNum = itemContainerList[firstIndex].SeqNum;
 
             if (findItemSeqNum <= firstSeqNum)
                 return firstIndex;
 
             int lastIndex = itemContainerList.Count - 1;
+            if (lastIndex > searchRangeEndIndex)
+                lastIndex = searchRangeEndIndex;
             Int64 lastSeqNum = itemContainerList[lastIndex].SeqNum;
 
             if (findItemSeqNum > lastSeqNum)
@@ -1853,7 +2046,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
                 thisSetIsRegisteredWith = registerSelfWithSetsInstance;
             }
 
-            AssignNewSeqNum();
+            AssignNewSetSeqNum();
 
             AddExplicitDisposeAction(() => 
                 {
@@ -1890,7 +2083,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
             {
                 InnerAdd(addItemsArray);
 
-                AssignNewSeqNum();
+                AssignNewSetSeqNum();
             }
 
             return this;
@@ -1910,7 +2103,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
             {
                 bool removeResult = InnerRemoveFirst(matchPredicate);
 
-                AssignNewSeqNum();
+                AssignNewSetSeqNum();
 
                 return removeResult; 
             }
@@ -1930,7 +2123,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
             {
                 bool removeResult = InnerRemoveAll(matchPredicate, true);
 
-                AssignNewSeqNum();
+                AssignNewSetSeqNum();
 
                 return removeResult;
             }
@@ -1947,7 +2140,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
             {
                 InnerRemoveRange(index, 1, true);
 
-                AssignNewSeqNum();
+                AssignNewSetSeqNum();
             }
         }
 
@@ -1965,10 +2158,33 @@ namespace MosaicLib.Modular.Interconnect.Sets
                 if (itemsToRemoveMatchPredicate != null)
                     InnerRemoveAll(itemsToRemoveMatchPredicate, true);
 
-                if (itemsToAdd != null)
-                    InnerAdd(itemsToAdd);
+                InnerAdd(itemsToAdd);
 
-                AssignNewSeqNum();
+                AssignNewSetSeqNum();
+            }
+        }
+
+        /// <summary>
+        /// Removes the given set of items (referenced by their sequence numbers) and adds the given set of <paramref name="itemsToAdd"/>.  
+        /// If any items are added then this method returns the sequence number of the first added item.  
+        /// Following added item sequence numbers are sequentially assigned.
+        /// If no items are added then this method returns the sequence number that will be assigned to the next item that is added to the set.
+        /// </summary>
+        public Int64 RemoveBySeqNumsAndAddItems(Int64[] removeSeqNumSetArray, params TObjectType[] itemsToAdd)
+        {
+            ThrowOnFixedOrDoesNotHaveAMutex();
+
+            lock (itemContainerListMutex)
+            {
+                InnerRemoveSeqNumSet(removeSeqNumSetArray, true);
+
+                Int64 nextItemSeqNum = PeekNextItemSeqNum;
+
+                InnerAdd(itemsToAdd);
+
+                AssignNewSetSeqNum();
+
+                return nextItemSeqNum;
             }
         }
 
@@ -1981,7 +2197,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
                 {
                     Changeability = SetChangeability.Fixed;
 
-                    AssignNewSeqNum();
+                    AssignNewSetSeqNum();
                 }
             }
 
@@ -2129,11 +2345,10 @@ namespace MosaicLib.Modular.Interconnect.Sets
         }
 
         /// <summary>
-        /// Performs an update iteration and generates the corresponding ISetDelta object.
-        /// When non-zero maxDeltaItemCount is used to specify the maximum number of incremental set changes that can be applied per iteration.
-        /// When includeSerializedItems is true, the generated ISetDelta will include both the original items and serialized versions of them (uses JSON DataContract serialization).
+        /// Performs an update iteration and optionally generates the corresponding ISetDelta object.
+        /// When non-zero <paramref name="maxDeltaItemCount"/> is used to specify the maximum number of incremental set changes that can be applied per iteration.
+        /// When <paramref name="generateSetDelta"/> is false the method will return null.  When <paramref name="generateSetDelta"/> is true, the method will attempt to create and return an ISetDelta to represent the incremental update deltas.  If there are not such changes the method returns null
         /// </summary>
-        /// <exception cref="SetUseException">Thrown includeSerialiedItems is true and TObjectType is not known to support use with DataContract serialization</exception>
         public virtual ISetDelta<TObjectType> PerformUpdateIteration(int maxDeltaItemCount, bool generateSetDelta)
         {
             SetDelta<TObjectType> setDelta = null;
@@ -2216,7 +2431,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
                     InnerNoteItemsAdded(addedItemContainerList, true);
             }
 
-            AssignNewSeqNum();
+            AssignNewSetSeqNum();
 
             if (!IsUpdateNeeded)
             {
@@ -2240,6 +2455,10 @@ namespace MosaicLib.Modular.Interconnect.Sets
             if (regionEndIdx < 0)
             {
                 // there is nothing that can be removed
+            }
+            else if (regionStartIdx >= lastSetCopy.itemContainerList.Count)
+            {
+                // The first item already comes after the last item in the lastSetCopy - remove to end
             }
             else if (itemContainerList[regionStartIdx].SeqNum != lastSetCopy.itemContainerList[regionStartIdx].SeqNum)
             {
@@ -2271,10 +2490,12 @@ namespace MosaicLib.Modular.Interconnect.Sets
             }
 
             int removalCount = 0;
+            long removalStartSeqNum = itemContainerList[regionStartIdx].SeqNum;
 
             // Find a run of elements at the removalScanIndex, until we find one tht has the same sequence number as the starting index position in the lastSetCopy's list.
             //  Any element in the current list that comes after the end of the lastSetCopy list needs to be removed.
             while ((removalScanIndex + removalCount) < itemContainerList.Count
+                   && (itemContainerList[removalScanIndex + removalCount].SeqNum == (removalStartSeqNum + removalCount))
                    && ((removalScanIndex >= lastSetCopy.itemContainerList.Count) || (itemContainerList[removalScanIndex + removalCount].SeqNum != lastSetCopy.itemContainerList[removalScanIndex].SeqNum)))
             {
                 removalCount++;
@@ -2384,6 +2605,63 @@ namespace MosaicLib.Modular.Interconnect.Sets
             return this;
         }
 
+        ISetDelta ITrackingSet.GenerateInitializerSetDelta(int maxItemsPerRangeItem)
+        {
+            return GenerateInitializerSetDelta(maxItemsPerRangeItem: maxItemsPerRangeItem);
+        }
+
+        /// <summary>
+        /// Generate and return a SetDelta that gives the entire current contents of the tracking set in a single set delta.  
+        /// This is used for initializing new derived sets that are updated incrementally using set deltas if the root tracking set is already in use (and thus cannot be replaced)
+        /// </summary>
+        public ISetDelta<TObjectType> GenerateInitializerSetDelta(int maxItemsPerRangeItem = 100)
+        {
+            // the following code needs to be moved to the TrackingSet where it can generate a synthetic initialization SetDelta of the correct form.
+            //  using the actual set contents and items.  
+            SetDelta<TObjectType> setDelta = new SetDelta<TObjectType>()
+            {
+                SetID = SetID,
+                ClearSetAtStart = true,
+                SourceSetCapacity = Capacity,
+                SourceUpdateState = UpdateState,
+            };
+
+            int currentSetCount = itemContainerList.Count;
+
+            for (int addScanIndex = 0; addScanIndex < currentSetCount; )
+            {
+                ItemContainer itemContainer = itemContainerList[addScanIndex];
+                Int64 seqNum = itemContainer.SeqNum;
+                SetDeltaAddContiguousRangeItem<TObjectType> addContigRangeItem = new SetDeltaAddContiguousRangeItem<TObjectType>() { RangeStartIndex = addScanIndex, RangeStartSeqNum = seqNum };
+
+                addContigRangeItem.rangeObjectList.Add(itemContainer.Item);
+
+                setDelta.addRangeItemList.Add(addContigRangeItem);
+
+                addScanIndex++;
+                seqNum++;
+
+                while (addScanIndex < currentSetCount && (maxItemsPerRangeItem == 0 || addContigRangeItem.rangeObjectList.Count < maxItemsPerRangeItem))
+                {
+                    itemContainer = lastSetCopy.itemContainerList[addScanIndex];
+
+                    if (seqNum == itemContainer.SeqNum)
+                    {
+                        addContigRangeItem.rangeObjectList.Add(itemContainer.Item);
+                        addScanIndex++;
+                        seqNum++;
+                    }
+                    else
+                    {
+                        // the next item is no longer contiguous
+                        break;
+                    }
+                }
+            }
+
+            return setDelta;
+        }
+
         /// <summary>
         /// This method processes the given setDelta removes each of the ISetDeltaRemoveRangeItem from the set (if allowRemove is true) 
         /// and then adds each of the ISetDeltaAddContiguousRangeItem to it.
@@ -2465,7 +2743,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
                 if (haveAddedItems)
                     InnerNoteItemsAdded(addedItemContainerList, true);
 
-                AssignNewSeqNum();
+                AssignNewSetSeqNum();
             }
 
             return setDelta;

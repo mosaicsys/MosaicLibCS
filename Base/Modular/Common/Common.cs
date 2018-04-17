@@ -852,7 +852,7 @@ namespace MosaicLib.Modular.Common
                     case ContainerStorageType.F8: o = null; u.f64 = (double)((object)value); return this;
                     case ContainerStorageType.TimeSpan: o = null; u.TimeSpan = (TimeSpan)((object)value); return this;
                     case ContainerStorageType.DateTime: o = null; u.DateTime = (DateTime)((object)value); return this;
-                    case ContainerStorageType.String: o = value; u = default(Union); return this;
+                    case ContainerStorageType.String: o = ((value != null) ? ((System.Object)value).ToString() : null); u = default(Union); return this;
                     case ContainerStorageType.INamedValueSet: o = (value as INamedValueSet).ConvertToReadOnly(mapNullToEmpty: true); u = default(Union); return this;
                     case ContainerStorageType.INamedValue: o = (value as INamedValue).ConvertToReadOnly(mapNullToEmpty: true); u = default(Union); return this;
                     case ContainerStorageType.Object: o = value; u = default(Union); return this;

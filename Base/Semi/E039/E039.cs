@@ -29,6 +29,7 @@ using MosaicLib;
 using MosaicLib.Modular.Action;
 using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Interconnect;
+using MosaicLib.Modular.Interconnect.Sets;
 using MosaicLib.Modular.Interconnect.Values;
 using MosaicLib.Modular.Part;
 using MosaicLib.Modular.Persist;
@@ -185,13 +186,35 @@ namespace MosaicLib.Semi.E039
         /// </summary>
         public class RemoveObject : ObjIDBase
         {
+            /// <summary>
+            /// Normal constructor.  Caller provides a non-null <paramref name="objID"/> and an optional <paramref name="removeLinkedToOtherObjectsFilter"/>.
+            /// When performed as part of an Update operation, this item will attempt to remove the object specified by the <paramref name="objID"/>.  
+            /// <para/>If the <paramref name="removeLinkedToOtherObjectsFilter"/> is non-null, it will be used as a filter on the given object (and sub-objects as appropriate)
+            /// After the current object has been removed, the objects to which it had been linked with links that this filter matches will be reviewed.
+            /// For each such object, if no links to that object remain that match the given filter then the originally linked to object will also be removed.
+            /// <para/>For example if the filter matches the link key Contains and a SubstLoc object is removed which contains a standalone Substrate object then
+            /// the Substate object will be checked to see if it is the target of any Contains links (after removing the SubstLoc object) and if not then it will
+            /// also be removed.
+            /// </summary>
             public RemoveObject(E039ObjectID objID, E039LinkFilter removeLinkedToOtherObjectsFilter = null)
                 : base(objID) 
             {
                 RemoveLinkedToOtherObjectsFilter = removeLinkedToOtherObjectsFilter;
             }
 
-            public RemoveObject(IE039Object obj, E039LinkFilter removeLinkedToOtherObjectsFilter = null) : this(obj.ID, removeLinkedToOtherObjectsFilter) { }
+            /// <summary>
+            /// Alternate constructor.  Caller provides a non-null <paramref name="obj"/>, from which an E039ObjectID is obtained, and an optional <paramref name="removeLinkedToOtherObjectsFilter"/>.
+            /// When performed as part of an Update operation, this item will attempt to remove the object specified by the obtained E039ObjectID.  
+            /// <para/>If the <paramref name="removeLinkedToOtherObjectsFilter"/> is non-null, it will be used as a filter on the given object (and sub-objects as appropriate)
+            /// After the current object has been removed, the objects to which it had been linked with links that this filter matches will be reviewed.
+            /// For each such object, if no links to that object remain that match the given filter then the originally linked to object will also be removed.
+            /// <para/>For example if the filter matches the link key Contains and a SubstLoc object is removed which contains a standalone Substrate object then
+            /// the Substate object will be checked to see if it is the target of any Contains links (after removing the SubstLoc object) and if not then it will
+            /// also be removed.
+            /// </summary>
+            public RemoveObject(IE039Object obj, E039LinkFilter removeLinkedToOtherObjectsFilter = null) 
+                : this(obj.ID, removeLinkedToOtherObjectsFilter) 
+            { }
 
             /// <summary>
             /// When this delegate is non-null, it will be used as a filter on the given object (and sub-objects as appropriate).  
@@ -260,6 +283,11 @@ namespace MosaicLib.Semi.E039
             public bool FailIfTestConditionsNotMet { get; private set; }
 
             public bool TestConditionsMet { get; set; }
+
+            public override string ToString()
+            {
+                return "{0} TestAttributes:{1}{2}".CheckedFormat(base.ToString(), TestAttributeSet.SafeToStringSML(), TestConditionsMet ? " ConditionsMet" : "");
+            }
         }
 
         public class SyncPersist : SyncPublication
@@ -304,7 +332,7 @@ namespace MosaicLib.Semi.E039
 
             public override string ToString()
             {
-                return "{0} {1}".CheckedFormat(base.ToString(), Attributes);
+                return "{0} {1}".CheckedFormat(base.ToString(), Attributes.SafeToStringSML());
             }
         }
 
@@ -532,7 +560,7 @@ namespace MosaicLib.Semi.E039
     /// <summary>
     /// (read only) Interface supported by published E039Object instances.
     /// </summary>
-    public interface IE039Object
+    public interface IE039Object : IEquatable<IE039Object>
     {
         E039ObjectID ID { get; }
         E039ObjectFlags Flags { get; }
@@ -552,6 +580,9 @@ namespace MosaicLib.Semi.E039
     [DataContract(Namespace = Constants.E039NameSpace, Name = "Link")]
     public struct E039Link : IEquatable<E039Link>
     {
+        /// <summary>Simply returns a default E039Link.  Provided for consistancy with other E039 related object types</summary>
+        public static E039Link Empty { get { return default(E039Link); } }
+
         public E039Link(E039ObjectID fromID, E039ObjectID toID, string key)
             : this()
         {
@@ -709,6 +740,10 @@ namespace MosaicLib.Semi.E039
     [DataContract(Namespace = Constants.E039NameSpace, Name = "ObjInst")]
     public class E039Object : IE039Object
     {
+        /// <summary>Returns an empty IE039Object instance</summary>
+        public static IE039Object Empty { get { return _empty; } }
+        private static readonly IE039Object _empty = new E039Object();
+
         public E039Object()
         {
             ID = E039ObjectID.Empty;
@@ -766,9 +801,27 @@ namespace MosaicLib.Semi.E039
         private IList<E039Link> _linksFromOtherObjectsList = null;
 
         [DataMember(Name = "LinksOut", Order = 400, IsRequired = false, EmitDefaultValue = false)]
-        private List<E039Link> SerializationHelperForLinksToOtherObjectsList { get { return (_linksToOtherObjectsList == null ? null : new List<E039Link>(_linksToOtherObjectsList)); } set { _linksToOtherObjectsList = (value != null && value.Count > 0) ? new ReadOnlyIList<E039Link>(value) : null; } }
+        private List<E039Link> SerializationHelperForLinksToOtherObjectsList 
+        { 
+            get { return (_linksToOtherObjectsList == null ? null : new List<E039Link>(_linksToOtherObjectsList)); } 
+            set { _linksToOtherObjectsList = (value != null && value.Count > 0) ? new ReadOnlyIList<E039Link>(value) : null; } 
+        }
 
         private static readonly IList<E039Link> _emptyLinkList = ReadOnlyIList<E039Link>.Empty;
+
+        /// <summary>
+        /// Returns true if this object's ID, Flags, Attributes, LinksToOtherObjectsList and LinksFromOtherObjectsList are all Equal to the <paramref name="other"/>'s
+        /// </summary>
+        public bool Equals(IE039Object other)
+        {
+            return (other != null
+                    && ID.Equals(other.ID)
+                    && Flags == other.Flags
+                    && Attributes.MapNullToEmpty().Equals(other.Attributes.MapEmptyToNull())
+                    && LinksToOtherObjectsList.IsEqualTo(other.LinksToOtherObjectsList)
+                    && LinksFromOtherObjectsList.IsEqualTo(other.LinksFromOtherObjectsList)
+                );
+        }
 
         public override string ToString()
         {
@@ -819,6 +872,8 @@ namespace MosaicLib.Semi.E039
             _objectIVI = other._objectIVI;
             ObjectIVAPrefix = other.ObjectIVAPrefix;
 
+            _isi = other._isi;
+
             PersistStorageAdapterFactory = other.PersistStorageAdapterFactory ?? ((PersistentObjectFileRingConfig config, Logging.IBasicLogger log) => 
                 {
                     return new DataContractPersistentXmlTextFileRingStorageAdapter<E039PersistFileContents>("psa.{0}".CheckedFormat(config.FileBaseName), config)
@@ -843,6 +898,8 @@ namespace MosaicLib.Semi.E039
         public IValuesInterconnection ObjectIVI { get { return _objectIVI ?? _partBaseIVI ?? Values.Instance; } set { _objectIVI = value; } }
         public string ObjectIVAPrefix { get; set; }
 
+        public ISetsInterconnection ISI { get { return _isi ?? Sets.Instance; } set { _isi = value; } }
+
         public Func<PersistentObjectFileRingConfig, Logging.IBasicLogger, IPersistentStorage<E039PersistFileContents>> PersistStorageAdapterFactory { get; set; }
 
         /// <summary>
@@ -854,6 +911,7 @@ namespace MosaicLib.Semi.E039
         public E039TableTypeSetPersistSpecItem [] TypeSetPersistSpecItemArray { get; set; }
 
         private IValuesInterconnection _partBaseIVI, _objectIVI;
+        private ISetsInterconnection _isi;
 
         private static readonly E039TableTypeSetPersistSpecItem [] _emptyPersistSpecItemArray = EmptyArrayFactory<E039TableTypeSetPersistSpecItem>.Instance;
     }
@@ -878,16 +936,31 @@ namespace MosaicLib.Semi.E039
                 TypeNameMatchRuleSet = new MatchRuleSet(MatchType.None);
             }
 
-            if (other != null && other.PersistObjFileRingConfig != null)
-                PersistObjFileRingConfig = new PersistentObjectFileRingConfig(other.PersistObjFileRingConfig, testValues: testPersistValues);
+            if (other != null)
+            {
+                if (other.PersistObjFileRingConfig != null)
+                    PersistObjFileRingConfig = new PersistentObjectFileRingConfig(other.PersistObjFileRingConfig, testValues: testPersistValues);
 
-            PersistWriteHoldoff = (other != null && other.PersistWriteHoldoff != default(TimeSpan)) ? other.PersistWriteHoldoff : fallbackPersistWriteHoldoff;
+                PersistWriteHoldoff = (other.PersistWriteHoldoff != default(TimeSpan)) ? other.PersistWriteHoldoff : fallbackPersistWriteHoldoff;
+
+                ReferenceSetID = other.ReferenceSetID;
+                ReferenceSetCapacity = other.ReferenceSetCapacity;
+            }
         }
 
         public string SetName { get; set; }
         public MatchRuleSet TypeNameMatchRuleSet { get; set; }
         public PersistentObjectFileRingConfig PersistObjFileRingConfig { get; set; }
         public TimeSpan PersistWriteHoldoff { get; set; }
+        public SetID ReferenceSetID { get; set; }
+        public int ReferenceSetCapacity { get; set; }
+
+        public E039TableTypeSetPersistSpecItem CreateDefaultSetID(string partID, string uuid = null, bool generateUUIDForNull = true, int capacity = 200) 
+        { 
+            ReferenceSetID = new SetID("{0}.{1}".CheckedFormat(partID, SetName), uuid: uuid, generateUUIDForNull: generateUUIDForNull);
+            ReferenceSetCapacity = capacity;
+            return this;
+        }
     }
 
     public class E039BasicTablePart : SimpleActivePartBase, IE039TableObserver, IE039TableUpdater
@@ -1007,6 +1080,8 @@ namespace MosaicLib.Semi.E039
         }
 
         E039BasicTablePartConfig Config { get; set; }
+
+        /// <summary>IVI to be used when creating object IVA's - this behavior is triggered based on the object's tracker has the E039ObjectFlags.CreateIVA flag set (generally only used for object types that bound for display by name.</summary>
         IValuesInterconnection ObjectIVI { get; set; }
 
         static readonly E039ObjectID[] emptyE039ObjectIDArray = EmptyArrayFactory<E039ObjectID>.Instance;
@@ -1173,6 +1248,7 @@ namespace MosaicLib.Semi.E039
                     link.FromID = objectTracker.ObjID;
             }
 
+            // This test MUST come before the SetAttributes test as this is also a SetAttributes update item.
             if (updateItem is E039UpdateItem.TestAndSetAttributes)
                 return InnerPerformTestAndSetAttributesUpdateItem(objectTracker, updateItem as E039UpdateItem.TestAndSetAttributes);
 
@@ -1582,6 +1658,8 @@ namespace MosaicLib.Semi.E039
 
             recentlyTouchedObjectTrackerList.Clear();
 
+            // rebuild ReadOnlyILists<E039Link> for LinksFromOtherObjectsList and LinksToOtherObjectsList for objects that have been touched and which flaged that they needed to have one or both lists rebuilt
+            // Note: this will not touch any new objects as we are only rebuilding the lists for objects that have already been marked as touched.
             foreach (var ot in touchedOTArray)
                 InnerHandleChangedLinksIfNeeded(ot);
 
@@ -1591,6 +1669,53 @@ namespace MosaicLib.Semi.E039
             // sweep through all of the just published objects and do an upstream linked object publish if the upstream object has a lower seqNum than than the last published one for the object we just published.
             foreach (var ot in touchedOTArray)
                 InnerRecursivePublishThroughLinksFromOtherObjects(ot, ot.lastPublishedSeqNum, firstLevel: true);
+
+            // build up the list of active ReferenceSetUpdateCollectors and add all of the touched items lastReferenceSetItemSeqNum into their corresponding removedSetItemSeqNumLists and add the new items to their corresonding addedSetItemTrackersLists
+            foreach (var ot in touchedOTArray)
+            {
+                var setUpdateCollector = ot.typeSetTracker.referenceSetUpdateCollector;
+                if (setUpdateCollector != null)
+                {
+                    if (!activeSetUpdateCollectorHashSet.Contains(setUpdateCollector))
+                    {
+                        activeSetUpdateCollectorHashSet.Add(setUpdateCollector);
+                        activeSetUpdateCollectorList.Add(setUpdateCollector);
+                    }
+
+                    if (ot.lastReferenceSetItemSeqNum != 0)
+                        setUpdateCollector.removedSetItemSeqNumList.Add(ot.lastReferenceSetItemSeqNum);
+
+                    if (ot.lastPublishedObj != null && !ot.obj.Flags.IsSet(E039ObjectFlags.IsFinal))
+                        setUpdateCollector.addedSetItemTrackersLists.Add(ot);
+                    else
+                        ot.lastReferenceSetItemSeqNum = 0;
+                }
+            }
+
+            int activeSetUpdateCollectorListCount = activeSetUpdateCollectorList.Count;
+            if (activeSetUpdateCollectorListCount > 0)
+            {
+                // distribute the set updates into their respective sets now.
+                for (int idx = 0; idx < activeSetUpdateCollectorListCount; idx++)
+                {
+                    var setUpdateTracker = activeSetUpdateCollectorList[idx];
+
+                    setUpdateTracker.removedSetItemSeqNumList.Sort(seqNumComparer);
+
+                    long[] sortedRemovedItemSeqNumArray = setUpdateTracker.removedSetItemSeqNumList.ToArray();
+                    E039Object[] addedObjectsArray = setUpdateTracker.addedSetItemTrackersLists.Select(ot => ot.lastPublishedObj).ToArray();
+
+                    long firstAddedItemSeqNum = setUpdateTracker.referenceSet.RemoveBySeqNumsAndAddItems(sortedRemovedItemSeqNumArray, addedObjectsArray);
+
+                    // update the lastReferenceSetItemSeqNum values for the touched ObjectTrackers (if any)
+                    setUpdateTracker.addedSetItemTrackersLists.DoForEach(ot => { ot.lastReferenceSetItemSeqNum = firstAddedItemSeqNum++; });
+
+                    setUpdateTracker.Clear();
+                }
+
+                activeSetUpdateCollectorHashSet.Clear();
+                activeSetUpdateCollectorList.Clear();
+            }
         }
 
         /// <summary>
@@ -1687,6 +1812,8 @@ namespace MosaicLib.Semi.E039
 
         #endregion
 
+        #region internal fields (persistHelperPart, typeSetTrackerArray, uuidToObjectTrackerDictionary, typeNameToTypeTableTrackerDictionary, recentlyTouchedObjectTrackerList)
+
         PersistHelper persistHelperPart;
 
         TypeSetTracker[] typeSetTrackerArray = null;
@@ -1697,6 +1824,30 @@ namespace MosaicLib.Semi.E039
         List<ObjectTracker> recentlyTouchedObjectTrackerList = new List<ObjectTracker>();
 
         static readonly ObjectTracker emptyObjectTracker = new ObjectTracker(E039ObjectID.Empty, null);
+
+        #endregion
+
+        #region ReferenceSetUpdateCollector and related fields
+
+        HashSet<ReferenceSetUpdateCollector> activeSetUpdateCollectorHashSet = new HashSet<ReferenceSetUpdateCollector>();
+        List<ReferenceSetUpdateCollector> activeSetUpdateCollectorList = new List<ReferenceSetUpdateCollector>();
+        static readonly IComparer<long> seqNumComparer = Comparer<long>.Default;
+
+        private class ReferenceSetUpdateCollector
+        {
+            public IReferenceSet<E039Object> referenceSet;
+
+            public List<long> removedSetItemSeqNumList = new List<long>();
+            public List<ObjectTracker> addedSetItemTrackersLists = new List<ObjectTracker>();
+
+            public void Clear()
+            {
+                removedSetItemSeqNumList.Clear();
+                addedSetItemTrackersLists.Clear();
+            }
+        }
+
+        #endregion
 
         #region support fields for asynchronous methods
 
@@ -1772,7 +1923,7 @@ namespace MosaicLib.Semi.E039
             E039ObjectID id = ot.ObjID;
 
             if (ot.flags.IsSet(E039ObjectFlags.CreateIVA) && ot.objIVA == null)
-                ot.objIVA = Config.ObjectIVI.GetValueAccessor<E039Object>("{0}{1}.{2}".CheckedFormat(Config.ObjectIVAPrefix, id.Type, id.Name));
+                ot.objIVA = ObjectIVI.GetValueAccessor<E039Object>("{0}{1}.{2}".CheckedFormat(Config.ObjectIVAPrefix, id.Type, id.Name));
         }
 
         TypeTableTracker FindTypeTableTrackerForType(string typeName, bool createIfNeeded = false)
@@ -1884,6 +2035,8 @@ namespace MosaicLib.Semi.E039
 
             public IValueAccessor<E039Object> objIVA = null;
 
+            public long lastReferenceSetItemSeqNum;
+
             public void Publish(ulong assignedObjSeqNumValue, bool publicationTriggeredByLinkedObject = false)
             {
                 ulong seqNum = assignedObjSeqNumValue;
@@ -1933,6 +2086,12 @@ namespace MosaicLib.Semi.E039
 
                     fileContents = null;
                 }
+
+                if (!typeSetPersistSpecItem.ReferenceSetID.IsNullOrEmpty() && typeSetPersistSpecItem.ReferenceSetCapacity > 0)
+                {
+                    referenceSet = new ReferenceSet<E039Object>(typeSetPersistSpecItem.ReferenceSetID, capacity: typeSetPersistSpecItem.ReferenceSetCapacity, registerSelf: true);
+                    referenceSetUpdateCollector = new ReferenceSetUpdateCollector() { referenceSet = referenceSet };
+                }
             }
 
             public TypeTableTracker FindTypeTableTracker(string typeName, bool createIfNeeded = false)
@@ -1971,6 +2130,9 @@ namespace MosaicLib.Semi.E039
 
             /// <summary>Returns true if no Write action is active and the lastPublishedSeqNum is not equal to the last successfully saved sequence number.</summary>
             public bool IsWritePending { get { return (!IsWriteActive && lastPublishedSeqNum != lastSucceededSaveActionSeqNum); } }
+
+            public ReferenceSet<E039Object> referenceSet;
+            public ReferenceSetUpdateCollector referenceSetUpdateCollector;
         }
 
         private void ServicePersistWrites(bool startPendingWritesNow = false)
@@ -2067,11 +2229,10 @@ namespace MosaicLib.Semi.E039
 
     #endregion
 
-    #region E039PersistFileContents (for use with externally provided DCA factories)
-
+    #region E039TableDeltaEventHandler (et. al.)
     #endregion
 
-    #region E039PersistFileContents
+    #region E039PersistFileContents (may be used with externally provided DCA factories)
 
     [DataContract(Namespace = Constants.E039NameSpace)]
     public class E039PersistFileContents : IPersistSequenceable
@@ -2136,6 +2297,120 @@ namespace MosaicLib.Semi.E039
             public E039PersistObjectInstanceSet(IEnumerable<E039Object> itemIter) 
                 : base(itemIter) 
             { }
+        }
+    }
+
+    #endregion
+
+    #region E039ObjectObserverWithInfoExtraction, IE039DerivedObjectObserverHelper, E039ObjectDerivedObjectInfoExtractionHelper
+
+    public class E039ObjectObserverWithInfoExtraction<TObjectInfoType> : ISequencedObjectSourceObserver<IE039Object>
+    {
+        public E039ObjectObserverWithInfoExtraction(ISequencedObjectSource<IE039Object, int> objLocPublisher, Func<IE039Object, TObjectInfoType> infoFactoryDelegate)
+        {
+            objLocObserver = new SequencedRefObjectSourceObserver<IE039Object, int>(objLocPublisher);
+            this.infoFactoryDelegate = infoFactoryDelegate;
+
+            Update(forceUpdate: true);
+        }
+
+        protected SequencedRefObjectSourceObserver<IE039Object, int> objLocObserver;
+        protected Func<IE039Object, TObjectInfoType> infoFactoryDelegate;
+
+        public IE039Object Object { get { return objLocObserver.Object; } }
+        public TObjectInfoType Info { get; protected set; }
+
+        public virtual bool IsUpdateNeeded 
+        { 
+            get { return objLocObserver.IsUpdateNeeded; } 
+            set { objLocObserver.IsUpdateNeeded = value; } 
+        }
+
+        bool ISequencedSourceObserver.Update()
+        {
+            return this.Update(forceUpdate: false);
+        }
+
+        public virtual bool Update(bool forceUpdate = false)
+        {
+            bool didUpdate = objLocObserver.Update();
+
+            if (didUpdate || forceUpdate)
+            {
+                Info = infoFactoryDelegate(Object);
+                UpdateAndGetObjectUpdateActionArray().DoForEach(objectUpdateAction => objectUpdateAction(Object));
+            }
+
+            return didUpdate;
+        }
+
+        private List<Action<IE039Object>> objectUpdateActionList = null;
+        private Action<IE039Object>[] objectUpdateActionArray = null;
+        private Action<IE039Object>[] UpdateAndGetObjectUpdateActionArray()
+        {
+            return (objectUpdateActionArray ?? (objectUpdateActionArray = objectUpdateActionList.SafeToArray()));
+        }
+
+        public virtual E039ObjectObserverWithInfoExtraction<TObjectInfoType> Add(params Action<IE039Object> [] objectUpdateActionParamsArray)
+        {
+            objectUpdateActionArray = null;
+            (objectUpdateActionList ?? (objectUpdateActionList = new List<Action<IE039Object>>())).AddRange(objectUpdateActionParamsArray);
+
+            UpdateAndGetObjectUpdateActionArray().DoForEach(objectUpdateAction => objectUpdateAction(Object));
+
+            return this;
+        }
+
+        public virtual E039ObjectObserverWithInfoExtraction<TObjectInfoType> Add(params IE039DerivedObjectObserverHelper[] objectObserverHelpersParamsArray)
+        {
+            return Add(objectObserverHelpersParamsArray.Select(helper => (Action<IE039Object>) helper.UpdateFrom).ToArray());
+        }
+
+        #region region ISequencedObjectSourceObserver<IE039Object>, ISequencedSourceObserver remaining methods and properties
+
+        /// <summary>Returns true if the sequence number has been incremented or has been explicitly set</summary>
+        public bool HasBeenSet { get { return objLocObserver.HasBeenSet; } }
+
+        /// <summary>Returns the current sequence number.  May return zero if sequence number is set to skip zero and Increment is in progress on another thread.</summary>
+        public int SequenceNumber { get { return objLocObserver.SequenceNumber; } }
+
+        /// <summary>Returns the current sequence number read as a volatile (no locking) - May return zero if sequence number is set to skip zero and Increment is in progress on another thread</summary>
+        public int VolatileSequenceNumber { get { return objLocObserver.VolatileSequenceNumber; } }
+
+        public ISequencedObjectSourceObserver<IE039Object> UpdateInline()
+        {
+            Update();
+            return this;
+        }
+
+        ISequencedSourceObserver ISequencedSourceObserver.UpdateInline()
+        {
+            Update();
+            return this;
+        }
+
+        #endregion
+    }
+
+    public interface IE039DerivedObjectObserverHelper
+    {
+        void UpdateFrom(IE039Object updateFromObject);
+    }
+
+    public class E039ObjectDerivedObjectInfoExtractionHelper<TDerivedObjectInfoType> : IE039DerivedObjectObserverHelper
+    {
+        public E039ObjectDerivedObjectInfoExtractionHelper(Func<IE039Object, TDerivedObjectInfoType> infoFactoryDelegate)
+        {
+            this.infoFactoryDelegate = infoFactoryDelegate;
+        }
+
+        private Func<IE039Object, TDerivedObjectInfoType> infoFactoryDelegate;
+
+        public TDerivedObjectInfoType Info { get; private set; }
+
+        void IE039DerivedObjectObserverHelper.UpdateFrom(IE039Object updateFromObject)
+        {
+            Info = infoFactoryDelegate(updateFromObject);
         }
     }
 

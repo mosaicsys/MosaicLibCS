@@ -47,7 +47,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
             {
                 System.Diagnostics.Process currentProcess = System.Diagnostics.Process.GetCurrentProcess();
 
-                appName = System.IO.Path.GetFileNameWithoutExtension(currentProcess.MainModule.ModuleName);
+                appName = System.IO.Path.GetFileName(currentProcess.MainModule.ModuleName);
 
                 bool stopProcessingArgs = false;
 
@@ -76,8 +76,12 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
                         { }
                         else if ((ss.MatchToken("end:", requireTokenEnd: false) || ss.MatchToken("e:", requireTokenEnd: false)) && ss.ParseValue(out endDeltaTime))
                         { }
+                        else if ((ss.MatchToken("interval:", requireTokenEnd: false) || ss.MatchToken("i:", requireTokenEnd: false)) && ss.ParseValue(out nominalUpdateInterval))
+                        {}
                         else if (ss.ParseValue(out argSelect) && ss.IsAtEnd)
+                        {
                             select |= argSelect;
+                        }
                         else switch (arg)
                             {
                                 case "-?":
@@ -127,7 +131,10 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
             ListIndex = 0x0200,
             ListGroupInfo = 0x0400,
             ListOccurrenceInfo = 0x0800,
+            ListOccurrences = 0x1000,
+            ListMessages = 0x2000,
             Debug = 0x10000,
+            MapBool = 0x20000,
 
             io = IncludeOccurrences,
             ie = IncludeExtras,
@@ -140,7 +147,10 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
             li = ListIndex,
             lgi = ListGroupInfo,
             loi = ListOccurrenceInfo,
+            lo = ListOccurrences,
+            lm = ListMessages,
             d = Debug,
+            mb = MapBool,
         }
 
         private static Select select = Select.None;
@@ -152,9 +162,15 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
 
         private static void WriteUsage()
         {
-            Console.WriteLine("Usage: {0} [-IncludeOccurrences | -IncludeExtras | -Sparse | -NoData | -r1 | -r5 | -r10 | -start:deltaTime | -end:deltaTime |  -group:name | -tag:tag] [fileName.mdrf] ...".CheckedFormat(appName));
-            Console.WriteLine("       {0} [-List | -ListIndex | -ListGroupInfo | -ListOccurrenceInfo] [fileName.mdrf] ...".CheckedFormat(appName));
-            Console.WriteLine("       Also accepts alternates -io, -ie, -s, -nd, -l, -li, -lgi, -loi, -s:dt, -e:dt, -g:name, and -t:tag".CheckedFormat(appName));
+            Console.WriteLine("Usage: {0} [-IncludeOccurrences | -IncludeExtras".CheckedFormat(appName));
+            Console.WriteLine("       | -Sparse | -NoData | -HeaderAndDataOnly | -MapBool | -group:name | -tag:tag");
+            Console.WriteLine("       | -interval:interval | -start:deltaTime | -end:deltaTime] [fileName.mdrf] ...");
+            Console.WriteLine("   or: {0} [-List | -ListIndex | -ListGroupInfo | -ListOccurrenceInfo] [fileName.mdrf] ...".CheckedFormat(appName));
+            Console.WriteLine("   or: {0} [-ListOccurrences | -ListMessages] [fileName.mdrf] ...".CheckedFormat(appName));
+            Console.WriteLine(" Also accepts: -io, -ie, -s, -nd, -hado, -mb, -g:name, -t:tag, -s:dt, -e:dt, -i:interval");
+            Console.WriteLine("               -l, -li, -lgi, -loi");
+            Console.WriteLine("               -lo, -lm");
+            Console.WriteLine();
         }
 
         private static void ProcessFileNameArg(string arg)
@@ -195,6 +211,12 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
                     return;
                 }
 
+                if (select.IsAnySet(Select.ListOccurrences | Select.ListMessages))
+                {
+                    ListOccurrencesAndMessages(currentReader);
+                    return;
+                }
+
                 string noExtensionPath = mdrfFilePath.RemoveSuffixIfNeeded(".mdrf");
                 if (!fileNameTag.IsNullOrEmpty())
                     noExtensionPath = "{0}_{1}".CheckedFormat(noExtensionPath, fileNameTag);
@@ -208,13 +230,13 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
 
                 using (System.IO.StreamWriter sw = new System.IO.StreamWriter(csvPath))
                 {
-                    bool headerOnly = select.IsSet(Select.HeaderAndDataOnly);
+                    bool headerAndDataOnly = select.IsSet(Select.HeaderAndDataOnly);
 
                     Func<IGroupInfo, bool> groupFilterDelegate = (selectedGroupList.IsNullOrEmpty() ? (Func<IGroupInfo, bool>)((IGroupInfo gi) => true) : ((IGroupInfo gi) => selectedGroupList.Any(grpName => gi.Name.Contains(grpName))));
 
                     IGroupInfo[] FilteredGroupInfoArray = currentReader.GroupInfoArray.Where(gi => groupFilterDelegate(gi)).ToArray();
 
-                    if (!headerOnly)
+                    if (!headerAndDataOnly)
                     {
                         sw.CheckedWriteLine("$File.Path,{0}{1}", System.IO.Path.GetFullPath(mdrfFilePath), currentReader.FileIndexInfo.FileWasProperlyClosed ? "" : ",NotProperlyClosed");
 
@@ -309,9 +331,24 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
                         foreach (IGroupInfo gi in pceData.FilteredGroupInfoArray)
                         {
                             if (gi.Touched || !select.IsSet(Select.Sparse))
-                                gi.GroupPointInfoArray.Select(gpi => ((gpi.VC.cvt.IsString() || gpi.VC.IsObject || gpi.VC.IsNullOrEmpty) ? gpi.VC.ToString() : gpi.VC.ValueAsObject.SafeToString()).Replace(',', '|')).DoForEach(s => sw.CheckedWrite(",{0}", s));
+                            {
+                                foreach (var gpiVC in gi.GroupPointInfoArray.Select(gpi => gpi.VC))
+                                {
+                                    string gpiVCStr;
+                                    if (gpiVC.cvt == ContainerStorageType.Boolean && select.IsSet(Select.MapBool))
+                                        gpiVCStr = gpiVC.GetValue<int>(rethrow: false).ToString();
+                                    else if (gpiVC.cvt.IsString() || gpiVC.IsObject || gpiVC.IsNullOrEmpty)
+                                        gpiVCStr = gpiVC.ToString();
+                                    else
+                                        gpiVCStr = gpiVC.ValueAsObject.SafeToString();
+
+                                    sw.CheckedWrite(",{0}", gpiVCStr.Replace(',', '|'));
+                                }
+                            }
                             else
+                            {
                                 sw.CheckedWrite(new string(',', gi.GroupPointInfoArray.SafeLength()));
+                            }
 
                             gi.Touched = false;
                         }
@@ -426,6 +463,43 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
             }
 
             Console.WriteLine();
+        }
+
+        public static void ListOccurrencesAndMessages(PartsLib.Tools.MDRF.Reader.MDRFFileReader reader)
+        {
+            Console.WriteLine("File: '{0}' size: {1} kB{2}", Path.GetFileName(reader.FilePath), reader.FileLength * (1.0 / 1024), reader.FileIndexInfo.FileWasProperlyClosed ? "" : " NotProperlyClosed");
+
+            int lineCount = 0;
+            bool listMessages = select.IsSet(Select.ListMessages);
+            bool listOccurrences = select.IsSet(Select.ListOccurrences);
+
+            ReadAndProcessFilterSpec filterSpec = new ReadAndProcessFilterSpec()
+            {
+                EventHandlerDelegate = (sender, pceData) => ProcessContentEventHandlerDelegate2(sender, pceData, ref lineCount),
+                PCEMask = ProcessContentEvent.None.Set(ProcessContentEvent.Occurrence, listOccurrences).Set(ProcessContentEvent.Message | ProcessContentEvent.Error, listMessages),
+            };
+
+            currentReader.ReadAndProcessContents(filterSpec);
+
+            Console.WriteLine();
+        }
+
+        private static void ProcessContentEventHandlerDelegate2(object sender, ProcessContentEventData pceData, ref int lineCount)
+        {
+            switch (pceData.PCE)
+            {
+                case ProcessContentEvent.Occurrence:
+                    Console.WriteLine("{0:d5} ts:{1:f3} {2:o} {3} {4} {5}".CheckedFormat(++lineCount, pceData.FileDeltaTimeStamp, pceData.UTCDateTime.ToLocalTime(), pceData.PCE, pceData.OccurrenceInfo.Name, pceData.VC));
+                    return;
+
+                case ProcessContentEvent.Error:
+                case ProcessContentEvent.Message:
+                    Console.WriteLine("{0:d5} ts:{1:f3} {2:o} {3} {4}".CheckedFormat(++lineCount, pceData.FileDeltaTimeStamp, pceData.UTCDateTime.ToLocalTime(), pceData.PCE, pceData.MessageInfo.Message));
+                    return;
+
+                default:
+                    return;
+            }
         }
 
         private static string GetClippedGPIListString(IGroupInfo gi, int clipAfterLength = 60)

@@ -845,6 +845,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
     /// <summary>
     /// This enumeration defines a (small) set of flag bits and values that are used to decode and interpret the contents of Group data blocks.
     /// <para/>None, HasUpdateMask (0x01), IsStartOfFullGroup (0x80), IsEmptyGroup (0x100 - not included in group blocks)
+    /// <para/>NOTE: This enum is recorded in the file as a byte.  As such all enum members with values beyond the 0xff bit mask range cannot actually be recorded in the file and are thus only used as internal flags.
     /// </summary>
     [Flags]
     public enum GroupBlockFlagBits : int

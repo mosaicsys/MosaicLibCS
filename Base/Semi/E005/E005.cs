@@ -424,6 +424,7 @@ namespace MosaicLib.Semi.E005
     [DataContract(Namespace = Constants.SemiNameSpace)]
     public enum MF : byte
     {
+        [EnumMember]
         Wafer = 1,
         [EnumMember]
         Cassette = 2,

@@ -143,7 +143,8 @@ namespace MosaicLib.PartsLib.Tools.Performance
                     FileIndexUserRowFlagBits = statisticsGroupsFileIndexUserRowFlagBits,
                     GroupBehaviorOptions = MDRF.Writer.GroupBehaviorOptions.UseVCHasBeenSetForTouched | MDRF.Writer.GroupBehaviorOptions.IncrSeqNumOnTouched,
                     GroupPointInfoArray = new [] 
-                    { 
+                    {
+                        linkUpGPI,
                         opStatGPI,
                         rxBytesGPI, txBytesGPI, 
                         rxUnicastPktsGPI, txUnicastPktsGPI, 
@@ -163,6 +164,7 @@ namespace MosaicLib.PartsLib.Tools.Performance
             public string name;
             public MDRF.Writer.GroupInfo groupInfo;
 
+            public MDRF.Writer.GroupPointInfo linkUpGPI = new MDRF.Writer.GroupPointInfo() { Name = "linkUp", Comment = "", ValueCST = ContainerStorageType.Boolean, VC = new ValueContainer(false) };
             public MDRF.Writer.GroupPointInfo opStatGPI = new MDRF.Writer.GroupPointInfo() { Name = "opState", Comment = "", ValueCST = ContainerStorageType.None, VC = ValueContainer.Empty };
             public MDRF.Writer.GroupPointInfo rxBytesGPI = new MDRF.Writer.GroupPointInfo() { Name = "rxBytes", Comment = "", ValueCST = ContainerStorageType.Int64, VC = new ValueContainer(0L) };
             public MDRF.Writer.GroupPointInfo txBytesGPI = new MDRF.Writer.GroupPointInfo() { Name = "txBytes", Comment = "", ValueCST = ContainerStorageType.Int64, VC = new ValueContainer(0L) };
@@ -208,18 +210,21 @@ namespace MosaicLib.PartsLib.Tools.Performance
                 }
 
                 OperationalStatus opStat = netIface.OperationalStatus;
+                bool linkUp = (opStat == OperationalStatus.Up);
                 long speed = netIface.Speed;
 
-                if (lastOpStat != opStat || lastSpeed != speed)
+                if (lastLinkUp != linkUp || lastOpStat != opStat || lastSpeed != speed)
                 {
                     deltaType |= DeltaType.Status;
+                    lastLinkUp = linkUp;
                     lastOpStat = opStat;
                     lastSpeed = speed;
                 }
 
                 var ipStats = netIface.GetIPv4Statistics();
 
-                opStatGPI.VC = new ValueContainer(opStat);
+                linkUpGPI.VC = ValueContainer.Empty.SetValue(linkUp);
+                opStatGPI.VC = ValueContainer.Empty.SetValue(opStat);
                 rxBytesGPI.VC = ValueContainer.Empty.SetValue<long>(ipStats.BytesReceived, ContainerStorageType.Int64, false);
                 txBytesGPI.VC = ValueContainer.Empty.SetValue<long>(ipStats.BytesSent, ContainerStorageType.Int64, false);
                 rxUnicastPktsGPI.VC = ValueContainer.Empty.SetValue<long>(ipStats.UnicastPacketsReceived, ContainerStorageType.Int64, false);
@@ -277,6 +282,7 @@ namespace MosaicLib.PartsLib.Tools.Performance
                     return new ValueContainer(new NamedValueSet()
                     {
                         { "IfaceName", name },
+                        { "LinkUp", lastLinkUp },
                         { "OpStat", lastOpStat },
                         { "Speed", lastSpeed },
                     });
@@ -288,6 +294,7 @@ namespace MosaicLib.PartsLib.Tools.Performance
             private NetworkInterfaceType lastNetIfaceType;
             private bool lastSupportsMCast;
 
+            private bool lastLinkUp;
             private OperationalStatus lastOpStat;
             private long lastSpeed;
         }

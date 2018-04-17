@@ -574,7 +574,19 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        #region IList<TItemType> methods (ConvertToReadOnly, ConvertToWriteable)
+        #region IList<TItemType>, IEnumerable<TItemType> methods (ConvertToReadOnly, ConvertToWriteable)
+
+        /// <summary>
+        /// Extension method either returns the given <paramref name="iSetIn"/> (if it is alread a ReadOnlyIList instance) or returns a new ReadOnlyIList{TItemType} if the given <paramref name="iSetIn"/>, or null if the given <paramref name="iSetIn"/> is null and <paramref name="mapNullToEmpty"/> is false.
+        /// </summary>
+        public static IList<TItemType> ConvertToReadOnly<TItemType>(this IEnumerable<TItemType> iSetIn, bool mapNullToEmpty = true)
+        {
+            ReadOnlyIList<TItemType> roIList = iSetIn as ReadOnlyIList<TItemType>;
+
+            return roIList ?? ((iSetIn != null || mapNullToEmpty) ? new ReadOnlyIList<TItemType>(iSetIn) : null);
+        }
+
+        // NOTE: supporting ConvertToReadOnly for ICollection appears to produce a possible conflict with the corresonding version that can be applied to INamedValueSet instances.
 
         /// <summary>
         /// Extension method either returns the given <paramref name="iListIn"/> (if it is alread a ReadOnlyIList instance) or returns a new ReadOnlyIList{TItemType} if the given <paramref name="iListIn"/>, or null if the given <paramref name="iListIn"/> is null and <paramref name="mapNullToEmpty"/> is false.
@@ -857,6 +869,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Returns true if the given <paramref name="value"/> contains the given <paramref name="test"/> pattern (by bit mask test).  Eqivilant to <paramref name="value"/>.IsMatch(<paramref name="test"/>, <paramref name="test"/>)
         /// <para/>This extension method is intended for use with enumerations (especially Flag enumerations) and integer value types.  Use with unsupported types will simply return false;
+        /// <para/>Note: this method is based on the corresponding IsMatch ExtensionMethod.  The IsSet, IsAnySet, IsClear and IsMatch methods are convenience methods.  They may not coded in a manner that can be efficiently inlined, and as such the underlying direct bit test methods should be used in cases where performance is critical
         /// </summary>
         public static bool IsSet<TValueType>(this TValueType value, TValueType test) where TValueType : struct
         {
@@ -866,6 +879,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Returns true if the given value anded with the given mask is not zero:  return ((value &amp; mask) != default(value)).
         /// <para/>This extension method is intended for use with enumerations (especially Flag enumerations) and integer value types.  Use with unsupported types will simply return false;
+        /// <para/>Note: this method is based on the corresponding IsMatch ExtensionMethod.  The IsSet, IsAnySet, IsClear and IsMatch methods are convenience methods.  They may not coded in a manner that can be efficiently inlined, and as such the underlying direct bit test methods should be used in cases where performance is critical
         /// </summary>
         public static bool IsAnySet<TValueType>(this TValueType value, TValueType mask)
         {
@@ -875,6 +889,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Returns true if the given <paramref name="value"/> does not contain any part (bit) from the given <paramref name="test"/> pattern (by bit mask test).  Eqivilant to <paramref name="value"/>.IsMatch(<paramref name="test"/>, default(<typeparamref name="TValueType"/>))
         /// <para/>This extension method is intended for use with enumerations (especially Flag enumerations) and integer value types.  Use with unsupported types will simply return false;
+        /// <para/>Note: this method is based on the corresponding IsMatch ExtensionMethod.  The IsSet, IsAnySet, IsClear and IsMatch methods are convenience methods.  They may not coded in a manner that can be efficiently inlined, and as such the underlying direct bit test methods should be used in cases where performance is critical
         /// </summary>
         public static bool IsClear<TValueType>(this TValueType value, TValueType test) where TValueType : struct
         {
@@ -884,6 +899,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Returns true if the given value bit anded with the given mask is equal to the given match:  return ((value &amp; mask) == match).
         /// <para/>This extension method is intended for use with enumerations (especially Flag enumerations) and integer value types.  Use with unsupported types will simply return false;
+        /// <para/>Note: The IsSet, IsAnySet, IsClear and IsMatch methods are convenience methods.  They may not coded in a manner that can be efficiently inlined, and as such the underlying direct bit test methods should be used in cases where performance is critical
         /// </summary>
         public static bool IsMatch<TValueType>(this TValueType value, TValueType mask, TValueType match)
         {
@@ -951,6 +967,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// For Enum derived <typeparamref name="TValueType"/> types, this method accepts the given startingValue and pattern and returns startingValue &amp; ~pattern.
         /// <para/>This extension method is intended for use with enumerations (especially Flag enumerations) and integer value types.  Use with unsupported types will simply return default(startingValue);
+        /// <para/>Note: These Clear and Set extension methods are convenience methods.  They may not coded in a manner that can be efficiently inlined, and as such the underlying direct bit test methods should be used in cases where performance is critical
         /// </summary>
         public static TValueType Clear<TValueType>(this TValueType startingValue, TValueType pattern) where TValueType : struct
         {
@@ -960,6 +977,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// For Enum derived <typeparamref name="TValueType"/> types, this method accepts the given startingValue and pattern and returns either startingValue | pattern (setPattern: true) or startingValue &amp; ~pattern (setPattern: false) depending on the given value of setPattern.
         /// <para/>This extension method is intended for use with enumerations (especially Flag enumerations) and integer value types.  Use with unsupported types will simply return default(startingValue);
+        /// <para/>Note: These Clear and Set extension methods are convenience methods.  They may not coded in a manner that can be efficiently inlined, and as such the underlying direct bit test methods should be used in cases where performance is critical
         /// </summary>
         public static TValueType Set<TValueType>(this TValueType startingValue, TValueType pattern, bool setPattern = true) where TValueType : struct
         {
@@ -1436,7 +1454,10 @@ namespace MosaicLib.Utils
         public static IEnumerable<TItemType> WhereIsNotDefault<TItemType>(this IEnumerable<TItemType> set, IEqualityComparer<TItemType> eqCmp = null)
         {
             eqCmp = eqCmp ?? EqualityComparer<TItemType>.Default;
-            return (set ?? Collections.EmptyArrayFactory<TItemType>.Instance).Where(item => !eqCmp.Equals(item, default(TItemType)));
+
+            var defaultForTItemType = default(TItemType);
+
+            return (set ?? Collections.EmptyArrayFactory<TItemType>.Instance).Where(item => !eqCmp.Equals(item, defaultForTItemType));
         }
 
         #endregion
@@ -1590,7 +1611,46 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        //---------------------------
+        #region Assembly and DebuggableAttribute related
+
+        /// <summary>
+        /// Returns the set of DebuggableAttribute.DebuggingModes flags as the merge of the DebuggableAttributes.DebuggingModes for each of the Assemblies in the given set.
+        /// </summary>
+        public static IEnumerable<DebuggableAttribute.DebuggingModes> GetDebuggingModes(this IEnumerable<Assembly> assemblySet, bool includeInheritedAttributes = false)
+        {
+            return assemblySet.SafeToArray().Select(assembly => assembly.GetDebuggingMode(includeInheritedAttributes: includeInheritedAttributes));
+        }
+
+        /// <summary>
+        /// Returns the (merged) DebuggableAttribute.DebuggingModes flags from the given <paramref name="assembly"/>.
+        /// </summary>
+        public static DebuggableAttribute.DebuggingModes GetDebuggingMode(this Assembly assembly, bool includeInheritedAttributes = false)
+        {
+            if (assembly != null)
+                return assembly.GetCustomAttributes(inherit: includeInheritedAttributes).MapNullToEmpty().OfType<DebuggableAttribute>().Select(attrib => attrib.DebuggingFlags).MergeDebuggingFlags();
+            else
+                return default(DebuggableAttribute.DebuggingModes);
+        }
+
+        /// <summary>
+        /// Returns the bitwise or of the given <paramref name="debuggableModeSet"/> debugging mode flags.
+        /// </summary>
+        public static DebuggableAttribute.DebuggingModes MergeDebuggingFlags(this IEnumerable<DebuggableAttribute.DebuggingModes> debuggableModeSet)
+        {
+            return debuggableModeSet.Aggregate(default(DebuggableAttribute.DebuggingModes), (mode1, mode2) => mode1 | mode2);
+        }
+
+        /// <summary>
+        /// Returns true if the given <paramref name="debuggingFlags"/> has the DebuggingFlags.Default (isJITTrackingEnabled) or DebuggingFlags.DisableOptimizations (isJITOptimizerDisabled) flag set.
+        /// <para/><paramref name="checkDebuggingFlagMask"/> can be used to change the DebuggingFlags that this method will check for.
+        /// </summary>
+        public static bool IsDebuggingEnabled(this DebuggableAttribute.DebuggingModes debuggingFlags, DebuggableAttribute.DebuggingModes checkDebuggingFlagMask = (DebuggableAttribute.DebuggingModes.Default | DebuggableAttribute.DebuggingModes.DisableOptimizations))
+        {
+            return debuggingFlags.IsAnySet(checkDebuggingFlagMask);
+        }
+
+        #endregion
+
         #region Exception related methods (ToString)
 
         /// <summary>
@@ -1762,7 +1822,7 @@ namespace MosaicLib.Utils
             if (lhs == null || rhs == null || lhs.Length != rhs.Length)
                 return false;
 
-            return lhs.SafeToArray<object>().SequenceEqual(rhs.SafeToArray<object>());
+            return lhs.SafeToSet().SequenceEqual(rhs.SafeToSet());
         }
 
 
