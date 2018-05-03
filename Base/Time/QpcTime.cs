@@ -313,7 +313,7 @@ namespace MosaicLib.Time
             /// <summary>When this behavior is selected the timer will never trigger and each time the ElapsedTimer is obtained the timer will reset itself. [0x08]</summary>
             IntervalMeasurementTimer = 0x08,
 
-            /// <summary>Selects that both ElapsedTimeIsZeroWhenStopped and ZeroTriggerIntervaleRunsTimer will be enabled.<para/>This default value must be selected explicitly when desired [0x06]</summary>
+            /// <summary>Selects that both ElapsedTimeIsZeroWhenStopped and ZeroTriggerIntervalRunsTimer will be enabled.<para/>This default value must be selected explicitly when desired [0x06]</summary>
             NewDefault = (Behavior.ElapsedTimeIsZeroWhenStopped | Behavior.ZeroTriggerIntervalRunsTimer),
 
             /// <summary>Selects that AutoReset, ElapsedTimeIsZeroWhenStopped, and ZeroTriggerIntervalRunsTimer will be enabled. [0x07]</summary>

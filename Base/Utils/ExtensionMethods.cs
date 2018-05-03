@@ -1651,6 +1651,20 @@ namespace MosaicLib.Utils
 
         #endregion
 
+        #region ISequencedSourceObserver (UpdateInline)
+
+        /// <summary>Calls <paramref name="observer"/>.Update() and returns the <paramref name="observer"/> in order to support call chaining</summary>
+        public static TObserverType UpdateInline<TObserverType>(this TObserverType observer) 
+            where TObserverType : ISequencedSourceObserver
+        {
+            if (observer != null)
+                observer.Update();
+
+            return observer;
+        }
+
+        #endregion
+
         #region Exception related methods (ToString)
 
         /// <summary>

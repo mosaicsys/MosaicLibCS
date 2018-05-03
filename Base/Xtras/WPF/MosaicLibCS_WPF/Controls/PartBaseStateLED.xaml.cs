@@ -19,10 +19,12 @@
  * limitations under the License.
  */
 
+using System.ComponentModel;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using System.ComponentModel;
+
 using MosaicLib.Modular.Part;
 using MosaicLib.Utils;
 
@@ -46,17 +48,21 @@ namespace MosaicLib.WPF.Controls
             lastBorderWidth = ellipse.StrokeThickness;
         }
 
-        private static readonly DependencyProperty partBaseStateDP = DependencyProperty.Register("PartBaseState", typeof(IBaseState), typeof(PartBaseStateLED));
-        private static readonly DependencyProperty actionInfoDP = DependencyProperty.Register("ActionInfo", typeof(IActionInfo), typeof(PartBaseStateLED));
-        private static readonly DependencyProperty borderWidthDP = DependencyProperty.Register("BorderWidth", typeof(double ?), typeof(PartBaseStateLED));
-        private static readonly DependencyProperty highlightColorDP = DependencyProperty.Register("HighlightColor", typeof(Color), typeof(PartBaseStateLED));
-        private static readonly DependencyProperty includeConnectionStateDP = DependencyProperty.Register("IncludeConnectionState", typeof(bool?), typeof(PartBaseStateLED));
+        public static readonly DependencyProperty PartBaseStateProperty = DependencyProperty.Register("PartBaseState", typeof(IBaseState), typeof(PartBaseStateLED));
+        public static readonly DependencyProperty ActionInfoProperty = DependencyProperty.Register("ActionInfo", typeof(IActionInfo), typeof(PartBaseStateLED));
+        public static readonly DependencyProperty HighlightColorProperty = DependencyProperty.Register("HighlightColor", typeof(Color), typeof(PartBaseStateLED));
+        public static readonly DependencyProperty IncludeConnectionStateProperty = DependencyProperty.Register("IncludeConnectionState", typeof(bool), typeof(PartBaseStateLED));
+        public static readonly DependencyProperty BorderWidthProperty = DependencyProperty.Register("BorderWidth", typeof(double), typeof(PartBaseStateLED), new PropertyMetadata(0.0, HandleBorderWidthPropertyChanged));
+        public static new readonly DependencyProperty BorderThicknessProperty = DependencyProperty.Register("BorderThickness", typeof(Thickness), typeof(PartBaseStateLED), new PropertyMetadata(new Thickness(0), HandleBorderThicknessPropertyChanged));
+        public static readonly DependencyProperty ColorListProperty = DependencyProperty.Register("ColorList", typeof(string), typeof(PartBaseStateLED), new PropertyMetadata(defaultColorListString, HandleColorListPropertyChanged));
 
-        public IBaseState PartBaseState { get { return (IBaseState)GetValue(partBaseStateDP); } set { SetValue(partBaseStateDP, value); } }
-        public IActionInfo ActionInfo { get { return (IActionInfo)GetValue(actionInfoDP); } set { SetValue(actionInfoDP, value); } }
-        public double? BorderWidth { get { return (double?)GetValue(borderWidthDP); } set { SetValue(borderWidthDP, value); } }
-        public Color HighlightColor { get { return (Color)GetValue(highlightColorDP); } set { SetValue(highlightColorDP, value); } }
-        public bool? IncludeConnectionState { get { return (bool?)GetValue(borderWidthDP); } set { SetValue(borderWidthDP, value); } }
+        public IBaseState PartBaseState { get { return (IBaseState)GetValue(PartBaseStateProperty); } set { SetValue(PartBaseStateProperty, value); } }
+        public IActionInfo ActionInfo { get { return (IActionInfo)GetValue(ActionInfoProperty); } set { SetValue(ActionInfoProperty, value); } }
+        public Color HighlightColor { get { return (Color)GetValue(HighlightColorProperty); } set { SetValue(HighlightColorProperty, value); } }
+        public bool IncludeConnectionState { get { return (bool)GetValue(IncludeConnectionStateProperty); } set { SetValue(IncludeConnectionStateProperty, value); } }
+        public double BorderWidth { get { return (double)GetValue(BorderWidthProperty); } set { SetValue(BorderWidthProperty, value); } }
+        public new Thickness BorderThickness { get { return (Thickness)GetValue(BorderThicknessProperty); } set { SetValue(BorderThicknessProperty, value); } }
+        public string ColorList { get { return (string)GetValue(ColorListProperty); } set { SetValue(ColorListProperty, value); } }
 
         private RadialGradientBrush ellipseRGB = null;
         private GradientStop ellipseRGB_GS1 = null;
@@ -66,7 +72,9 @@ namespace MosaicLib.WPF.Controls
         private IActionInfo lastActionInfo;
         private double lastBorderWidth;
         private Color lastHighlightColor;
-        private bool lastIncludeConnectionState;
+        private bool lastIncludeConnectionState = true;
+        private System.Windows.Media.Brush lastBorderBrush = solidBlackBrush;
+        private Colors colors = defaultColors;
 
         /// <summary>
         /// Callback from WPF to tell us that one of the dependency properties has been changed.
@@ -74,61 +82,110 @@ namespace MosaicLib.WPF.Controls
         /// </summary>
         protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)
         {
-            if (e.Property == partBaseStateDP)
+            if (e.Property == PartBaseStateProperty)
                 lastPartBaseState = (IBaseState)e.NewValue;
-            else if (e.Property == actionInfoDP)
+            else if (e.Property == ActionInfoProperty)
                 lastActionInfo = (IActionInfo)e.NewValue;
-            else if (e.Property == borderWidthDP)
-                lastBorderWidth = ((double?)e.NewValue).MapDefaultTo(1).GetValueOrDefault();
-            else if (e.Property == highlightColorDP)
+            else if (e.Property == HighlightColorProperty)
                 lastHighlightColor = (Color)e.NewValue;
-            else if (e.Property == includeConnectionStateDP)
-                lastIncludeConnectionState = ((bool?)e.NewValue).GetValueOrDefault();
+            else if (e.Property == IncludeConnectionStateProperty)
+                lastIncludeConnectionState = (bool)e.NewValue;
+            else if (e.Property == BorderBrushProperty)
+                lastBorderBrush = (Brush)e.NewValue;
 
             Update();
 
             base.OnPropertyChanged(e);
         }
 
+        private static void HandleBorderWidthPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            PartBaseStateLED me = d as PartBaseStateLED;
+            if (me != null)
+            {
+                double selectedWidth = (double)e.NewValue;
+
+                if (me.lastBorderWidth != selectedWidth)
+                {
+                    me.lastBorderWidth = selectedWidth;
+                    me.Update();
+                }
+            }
+        }
+
+        private static void HandleBorderThicknessPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            PartBaseStateLED me = d as PartBaseStateLED;
+            if (me != null)
+            {
+                Thickness selectedThickness = (Thickness)e.NewValue;
+                double selectedWidth = (selectedThickness.Bottom + selectedThickness.Top + selectedThickness.Left + selectedThickness.Right) * 0.25;
+
+                if (me.lastBorderWidth != selectedWidth)
+                {
+                    me.lastBorderWidth = selectedWidth;
+                    me.Update();
+                }
+            }
+        }
+
+        private static void HandleColorListPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            PartBaseStateLED me = d as PartBaseStateLED;
+            if (me != null)
+            {
+                string selectedColorsListString = (string)e.NewValue;
+
+                if (me.colors.colorListString != selectedColorsListString)
+                {
+                    me.colors = new Colors(selectedColorsListString);
+                    me.Update();
+                }
+            }
+        }
+
+
         private void Update()
         {
-            string toolTipMesg = "{0}".CheckedFormat(lastPartBaseState);
+            string toolTipMesg = (lastPartBaseState != null) ? "{0}".CheckedFormat(lastPartBaseState) : "[Part BaseState is null]";
 
             Color color;
 
+            bool connectionStateIsApplicable = lastIncludeConnectionState && (lastPartBaseState != null) ? (lastPartBaseState.ConnState != ConnState.NotApplicable && lastPartBaseState.ConnState != ConnState.Undefined) : false;
+
             if (lastPartBaseState == null)
-                color = uninitializedColor;
+                color = colors.nullStateColor;
             else if (lastPartBaseState.IsFaulted())
-                color = errorColor;
+                color = colors.errorColor;
             else if (lastPartBaseState.IsUninitialized())
-                color = uninitializedColor;
+                color = colors.uninitializedColor;
             else if (lastPartBaseState.IsOffline())
-                color = offlineColor;
-            else if (lastPartBaseState.UseState == UseState.AttemptOnline || lastPartBaseState.IsConnecting)
-                color = initializingColor;
-            else if (lastIncludeConnectionState && !lastPartBaseState.IsConnected)
-                color = disconnectedColor;
-            else if (lastPartBaseState.IsOnline || lastPartBaseState.IsConnected)
+                color = colors.offlineColor;
+            else if (lastPartBaseState.UseState == UseState.AttemptOnline || (connectionStateIsApplicable && lastPartBaseState.IsConnecting))
+                color = colors.initializingColor;
+            else if (connectionStateIsApplicable && !lastPartBaseState.IsConnected)
+                color = colors.disconnectedColor;
+            else if (lastPartBaseState.IsOnline || (connectionStateIsApplicable && lastPartBaseState.IsConnected))
             {
                 if (lastPartBaseState.IsBusy)
                 {
-                    color = busyColor;
-                    toolTipMesg = "Busy, {0}".CheckedFormat(lastActionInfo);
+                    color = colors.busyColor;
+                    toolTipMesg = (lastActionInfo != null) ? "Busy, {0}".CheckedFormat(lastActionInfo) : "Busy";
                 }
-                else if (lastActionInfo != null && lastActionInfo.ActionState.Failed)
+                else if ((lastActionInfo != null) && lastActionInfo.ActionState.Failed)
                 {
-                    color = actionFailedColor;
+                    color = colors.actionFailedColor;
                     toolTipMesg = "{0}".CheckedFormat(lastActionInfo);
                 }
                 else
                 {
-                    color = idleColor;
-                    toolTipMesg = "Idle, {0}".CheckedFormat(lastActionInfo);
+                    color = colors.idleColor;
+                    toolTipMesg = (lastActionInfo != null) ? "Idle, {0}".CheckedFormat(lastActionInfo) : "Idle";
                 }
             }
             else
             {
-                color = undefinedStateColor;
+                color = colors.undefinedStateColor;
             }
 
             UpdateAndSetColor(color);
@@ -141,24 +198,81 @@ namespace MosaicLib.WPF.Controls
 
         private void UpdateAndSetColor(Color currentColor)
         {
-            if (ellipse != null && ellipse.StrokeThickness != lastBorderWidth)
-                ellipse.StrokeThickness = lastBorderWidth;
+            if (ellipse != null)
+            {
+                if (ellipse.StrokeThickness != lastBorderWidth)
+                    ellipse.StrokeThickness = lastBorderWidth;
+
+                if (ellipse.Stroke != lastBorderBrush)
+                    ellipse.Stroke = lastBorderBrush;
+            }
+
             if (ellipseRGB_GS2 != null && ellipseRGB_GS1.Color != currentColor)
                 ellipseRGB_GS2.Color = currentColor;
+
             if (ellipseRGB_GS1 != null && ellipseRGB_GS2.Color != lastHighlightColor)
                 ellipseRGB_GS1.Color = lastHighlightColor;
         }
 
-        private static TypeConverter colorConverter = TypeDescriptor.GetConverter (typeof (Color));
+        private static TypeConverter colorConverter = TypeDescriptor.GetConverter(typeof (Color));
 
-        private Color uninitializedColor = (Color)colorConverter.ConvertFrom("Goldenrod");
-        private Color initializingColor = (Color)colorConverter.ConvertFrom("Gold");
-        private Color idleColor = (Color) colorConverter.ConvertFrom("DarkGreen");
-        private Color busyColor = (Color)colorConverter.ConvertFrom("Lime");
-        private Color errorColor = (Color)colorConverter.ConvertFrom("Red");
-        private Color offlineColor = (Color)colorConverter.ConvertFrom("DarkGray");
-        private Color disconnectedColor = (Color)colorConverter.ConvertFrom("DarkRed");
-        private Color undefinedStateColor = (Color)colorConverter.ConvertFrom("Pink");
-        private Color actionFailedColor = (Color)colorConverter.ConvertFrom("Orange");
+        private static readonly Color blackColor = (Color)colorConverter.ConvertFrom("Black");
+        private static readonly Brush solidBlackBrush = new SolidColorBrush(blackColor);
+
+        private const string defaultColorListString = "LightGray,Goldenrod,Gold,DarkGreen,Lime,Red,DarkGray,DarkRed,Pink,Orange";
+        private static readonly string[] defaultColorListStringArray = defaultColorListString.Split(',');
+        private static readonly Color[] defaultColorsArray = defaultColorListStringArray.Select(colorName => (Color)colorConverter.ConvertFrom(colorName)).ToArray();
+        private static readonly Colors defaultColors = new Colors(defaultColorListString);
+
+        private static readonly Color defaultFallbackColor = (Color)colorConverter.ConvertFrom("LightGray");
+
+        private class Colors
+        {
+            public Colors(string colorListString = defaultColorListString)
+            {
+                this.colorListString = colorListString;
+
+                string[] colorListStringArray = colorListString.Split(',', ' ')
+                    .Select(colorName => colorName.Trim())
+                    .Select((colorName, index) => colorName.MapNullOrEmptyTo(defaultColorListStringArray.SafeAccess(index, "")))
+                    .ToArray();
+
+                colorsArray = colorListStringArray.Select(colorName =>
+                {
+                    try
+                    {
+                        return (Color)colorConverter.ConvertFrom(colorName);
+                    }
+                    catch { return defaultFallbackColor; }
+                }).ToArray();
+
+                int stateIndex = 0;
+
+                nullStateColor = colorsArray.SafeAccess(stateIndex++, defaultFallbackColor);
+                uninitializedColor = colorsArray.SafeAccess(stateIndex++, defaultFallbackColor);
+                initializingColor = colorsArray.SafeAccess(stateIndex++, defaultFallbackColor);
+                idleColor = colorsArray.SafeAccess(stateIndex++, defaultFallbackColor);
+                busyColor = colorsArray.SafeAccess(stateIndex++, defaultFallbackColor);
+                errorColor = colorsArray.SafeAccess(stateIndex++, defaultFallbackColor);
+                offlineColor = colorsArray.SafeAccess(stateIndex++, defaultFallbackColor);
+                disconnectedColor = colorsArray.SafeAccess(stateIndex++, defaultFallbackColor);
+                undefinedStateColor = colorsArray.SafeAccess(stateIndex++, defaultFallbackColor);
+                actionFailedColor = colorsArray.SafeAccess(stateIndex++, defaultFallbackColor);
+            }
+
+            public string colorListString;
+            public Color[] colorsArray;
+
+            public Color nullStateColor;
+            public Color uninitializedColor;
+            public Color initializingColor;
+            public Color idleColor;
+            public Color busyColor;
+            public Color errorColor;
+            public Color offlineColor;
+            public Color disconnectedColor;
+            public Color undefinedStateColor;
+            public Color actionFailedColor;
+        }
     }
 }

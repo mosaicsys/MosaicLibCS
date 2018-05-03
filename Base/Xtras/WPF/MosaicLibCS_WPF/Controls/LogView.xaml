@@ -49,10 +49,10 @@
         <ListView x:Name="listView" ItemsSource="{Binding ElementName=LogViewMainControl, Path=LogMessageSetTracker.Set}" ScrollViewer.VerticalScrollBarVisibility="Visible" MinHeight="75">
             <ListView.View>
                 <GridView>
-                    <GridViewColumn Header="Date" Width="100" DisplayMemberBinding="{Binding EmittedDateTime, StringFormat={}{0:HH:mm:ss.ffffff}, Mode=OneWay}"/>
+                    <GridViewColumn Header="Date" Width="90" DisplayMemberBinding="{Binding EmittedDateTime, StringFormat={}{0:HH:mm:ss.fff}, Mode=OneWay}"/>
                     <GridViewColumn Header="Type" Width="60" DisplayMemberBinding="{Binding MesgType, Mode=OneWay}"/>
                     <GridViewColumn Header="Source" Width="120" DisplayMemberBinding="{Binding LoggerName, Mode=OneWay}"/>
-                    <GridViewColumn Header="Mesg" Width="440" DisplayMemberBinding="{Binding Converter={StaticResource LogContentCombiningConverter}, Mode=OneWay}"/>
+                    <GridViewColumn Header="Mesg" Width="450" DisplayMemberBinding="{Binding Converter={StaticResource LogContentCombiningConverter}, Mode=OneWay}"/>
                 </GridView>
             </ListView.View>
             <ListView.Resources>

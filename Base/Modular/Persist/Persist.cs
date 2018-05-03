@@ -153,7 +153,11 @@ namespace MosaicLib.Modular.Persist
         OnAnyFailedLoad = 2,
 
         /// <summary>When this flag is set, if an Auto Save is triggered and it succeeds then the Load is marked as having succeeded.</summary>
+        [Obsolete("Please change to the use of the correctly spelled version (2018-04-21)")]
         SuccessfullSaveMakesLoadSucceed = 0x8000,
+
+        /// <summary>When this flag is set, if an Auto Save is triggered and it succeeds then the Load is marked as having succeeded.</summary>
+        SuccessfulSaveMakesLoadSucceed = 0x8000,
     }
 
     /// <summary>
@@ -829,7 +833,7 @@ namespace MosaicLib.Modular.Persist
         /// if a matching condition is found, it calls the private variant of Save passing it the current Object, noThrow, a AutoSave specic "methodName"
         /// and indicates that the LastException should not be updated by the Save method.  This method represents the common "sub-expression" for two
         /// paths out the bottom of Load (failed with throw and failed without throw).
-        /// Returns true if an AutoSave was performed and it succeeded and AutoSaveConditions includes the SuccessfullSaveMakesLoadSucceed flag.
+        /// Returns true if an AutoSave was performed and it succeeded and AutoSaveConditions includes the SuccessfulSaveMakesLoadSucceed flag.
         /// Returns false otherwise.
         /// </summary>
         private bool AttemptAutoSaveAfterFailedLoad(int existingFileCount)
@@ -845,7 +849,7 @@ namespace MosaicLib.Modular.Persist
                 autoSaveCompletedSuccessfully = Save(Object, false, "AutoSave-OnAnyFailedLoad", false);
             }
 
-            if (autoSaveCompletedSuccessfully && (AutoSaveConditions & AutoSaveConditions.SuccessfullSaveMakesLoadSucceed) != AutoSaveConditions.None)
+            if (autoSaveCompletedSuccessfully && (AutoSaveConditions & AutoSaveConditions.SuccessfulSaveMakesLoadSucceed) != AutoSaveConditions.None)
             {
                 LastExecption = null;
                 return true;

@@ -57,6 +57,8 @@ namespace MosaicLib.Modular.Config
 
         public TimeSpan MinSyncInterval { get; set; }
 
+        public TimeSpan MinLookAtLaterInterval { get; set; }
+
         public IValuesInterconnection PartBaseIVI { get; set; }
 
         public IValuesInterconnection IVI { get; set; }
@@ -83,13 +85,18 @@ namespace MosaicLib.Modular.Config
         /// <summary>mapping definition used to map from native CKA names to mapped IVA names.  Only names that can be mapped both ways will be included.</summary>
         public IMapNameFromTo CKAMapNameFromTo { get; set; }
 
+        /// <summary>Selects the action logging config to be used by the ConfigBridge</summary>
+        public ActionLoggingConfig ActionLoggingConfig { get; set; }
+
         public ConfigIVIBridgeConfig(string partID)
         {
             PartID = partID;
             MinSyncInterval = (0.2).FromSeconds();
+            MinLookAtLaterInterval = (10.0).FromSeconds();
             IssueLogMesgType = Logging.MesgType.Error;
             ValueUpdateTraceLogMesgType = Logging.MesgType.Debug;
             UseEnsureExists = true;
+            ActionLoggingConfig = ActionLoggingConfig.Debug_Debug_Trace_Trace;
         }
 
         public ConfigIVIBridgeConfig(ConfigIVIBridgeConfig other)
@@ -97,6 +104,7 @@ namespace MosaicLib.Modular.Config
             PartID = other.PartID;
 
             MinSyncInterval = other.MinSyncInterval.Clip(TimeSpan.Zero, TimeSpan.FromSeconds(0.2));
+            MinLookAtLaterInterval = other.MinLookAtLaterInterval;
 
             IssueLogMesgType = other.IssueLogMesgType;
             ValueUpdateTraceLogMesgType = other.ValueUpdateTraceLogMesgType;
@@ -115,6 +123,8 @@ namespace MosaicLib.Modular.Config
                 CKAPropagateKeyMatchRuleSet = new MatchRuleSet(other.CKAPropagateKeyMatchRuleSet);
             CKAPropagateFilterPredicate = other.CKAPropagateFilterPredicate;
             CKAMapNameFromTo = other.CKAMapNameFromTo;
+
+            ActionLoggingConfig = other.ActionLoggingConfig;
         }
     }
 
@@ -135,9 +145,11 @@ namespace MosaicLib.Modular.Config
         #region Construction and related fields/properties
 
         public ConfigIVIBridge(ConfigIVIBridgeConfig config)
-            : base(config.PartID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion1.Build(waitTimeLimit: TimeSpan.FromSeconds((config.MinSyncInterval != TimeSpan.Zero) ? 0.05: 0.2), partBaseIVI : config.PartBaseIVI))
+            : base(config.PartID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion1.Build(waitTimeLimit: TimeSpan.FromSeconds((config.MinSyncInterval != TimeSpan.Zero) ? 0.05: 0.2), partBaseIVI : config.PartBaseIVI, automaticallyIncAndDecBusyCountAroundActionInvoke: false))
         {
             BridgeConfig = new ConfigIVIBridgeConfig(config);
+
+            ActionLoggingReference.Config = BridgeConfig.ActionLoggingConfig;
 
             useNominalSyncHoldoffTimer = (BridgeConfig.MinSyncInterval != TimeSpan.Zero);
             if (useNominalSyncHoldoffTimer)
@@ -221,6 +233,18 @@ namespace MosaicLib.Modular.Config
         bool useNominalSyncHoldoffTimer = false;
         QpcTimer nominalSyncHoldoffTimer = new QpcTimer();
 
+        Dictionary<string, AttemptToAddSyncItemForIVAInfo> lookAtLaterDictionary = new Dictionary<string, AttemptToAddSyncItemForIVAInfo>();
+        bool useLookAtLaterTimer = false;
+        QpcTimer lookAtLaterTimer = new QpcTimer();
+
+        private struct AttemptToAddSyncItemForIVAInfo
+        {
+            public string ivaNativeName;
+            public string mappedFromIVAName;
+            public string mappedToCKAKeyName;
+            public IValueAccessor iva;
+        }
+
         private void ServiceBridge()
         {
             if (useNominalSyncHoldoffTimer)
@@ -235,7 +259,7 @@ namespace MosaicLib.Modular.Config
                 // check for new IVI additions
                 foreach (string ivaNativeName in iviValueNamesArray)
                 {
-                    if (ivaNameToSyncItemDictionary.ContainsKey(ivaNativeName))
+                    if (ivaNameToSyncItemDictionary.ContainsKey(ivaNativeName) || lookAtLaterDictionary.ContainsKey(ivaNativeName))
                         continue;
 
                     bool propagateIVAName = BridgeConfig.IVAPropagateNameMatchRuleSet.MatchesAny(ivaNativeName);
@@ -250,21 +274,47 @@ namespace MosaicLib.Modular.Config
                     // check if we should add a sync item for this key or if we should indicate that we have seen it and that it will not be synced
                     if (propagateIVAName)
                     {
-                        IValueAccessor iva = IVI.GetValueAccessor(ivaNativeName);
-                        IConfigKeyAccess cka = Config.GetConfigKeyAccess(new ConfigKeyAccessSpec() 
-                                                                            { 
-                                                                                Key = mappedToCKAKeyName,
-                                                                                Flags = new ConfigKeyAccessFlags() { MayBeChanged = true, EnsureExists = BridgeConfig.UseEnsureExists, DefaultProviderName = BridgeConfig.DefaultConfigKeyProviderName }, 
-                                                                            }
-                                                                         , iva.VC);
+                        var attemptToAddSyncItemInfo = new AttemptToAddSyncItemForIVAInfo()
+                        {
+                            ivaNativeName = ivaNativeName,
+                            mappedFromIVAName = mappedFromIVAName,
+                            mappedToCKAKeyName = mappedToCKAKeyName,
+                            iva = IVI.GetValueAccessor(ivaNativeName),
+                        };
 
-                        AddSyncItemAndPerformInitialPropagation(iva, cka, ivaNativeName, null, mappedFromIVAName, mappedToCKAKeyName);
+                        if (!AttemptToAddSyncItemForIVA(attemptToAddSyncItemInfo, requireUpdateNeeded: false))
+                        {
+                            lookAtLaterDictionary[ivaNativeName] = attemptToAddSyncItemInfo;
+
+                            Log.Debug.Emit("IVA [{0}] has been added to look at later list", attemptToAddSyncItemInfo.iva);
+
+                            useLookAtLaterTimer = !BridgeConfig.MinLookAtLaterInterval.IsZero();
+                            if (useLookAtLaterTimer)
+                                lookAtLaterTimer.StartIfNeeded(BridgeConfig.MinLookAtLaterInterval);
+                        }
                     }
                     else
                     {
                         ivaNameToSyncItemDictionary[ivaNativeName] = null;
                     }
                 }
+            }
+
+            // if we have lookAtLater items and the corresponding timer has triggered then 
+            if (lookAtLaterDictionary.Count > 0 && (!useLookAtLaterTimer || lookAtLaterTimer.IsTriggered))
+            {
+                foreach (var item in lookAtLaterDictionary.Values.ToArray())
+                {
+                    if (AttemptToAddSyncItemForIVA(item, requireUpdateNeeded: true))
+                    {
+                        Log.Debug.Emit("IVA [{0}] has been removed from the look at later list", item.iva);
+
+                        lookAtLaterDictionary.Remove(item.ivaNativeName);
+                    }
+                }
+
+                if (lookAtLaterDictionary.Count == 0)
+                    lookAtLaterTimer.Stop();
             }
 
             // service CKA table addition:
@@ -358,6 +408,38 @@ namespace MosaicLib.Modular.Config
             // update lastConfigSeqNum as a whole
             if (!lastConfigSeqNums.Equals(configSeqNum))
                 lastConfigSeqNums = configSeqNum;
+        }
+
+        /// <summary>
+        /// This method contains the work required to verify that an IVA is ready for a corresponding CKA before attempting to find and/or create the CKA.
+        /// This method returns true if it created and added a sync item for the IVA/CKA pair, otherwise it returns false.
+        /// if the requireUpdateNeeded flag is true then the method will only attempt to even check if the IVA is ready if its IsUpdateNeeded flag is set (aka it has been set since we last checked)
+        /// </summary>
+        private bool AttemptToAddSyncItemForIVA(AttemptToAddSyncItemForIVAInfo item, bool requireUpdateNeeded = true)
+        {
+            if (requireUpdateNeeded && !item.iva.IsUpdateNeeded)
+                return false;
+
+            item.iva.Update();
+
+            // we only attempt to propagate items to config that have been explicitly set and which currently have a non-empty value.
+            if (item.iva.HasValueBeenSet && !item.iva.VC.IsEmpty)
+            {
+                IConfigKeyAccess cka = Config.GetConfigKeyAccess(new ConfigKeyAccessSpec()
+                {
+                    Key = item.mappedToCKAKeyName,
+                    Flags = new ConfigKeyAccessFlags() { MayBeChanged = true, EnsureExists = BridgeConfig.UseEnsureExists, DefaultProviderName = BridgeConfig.DefaultConfigKeyProviderName },
+                }
+                                                                 , item.iva.VC);
+
+                AddSyncItemAndPerformInitialPropagation(item.iva, cka, item.ivaNativeName, null, item.mappedFromIVAName, item.mappedToCKAKeyName);
+
+                return true;
+            }
+            else
+            {
+                return false;
+            }
         }
 
         private SyncItem AddSyncItemAndPerformInitialPropagation(IValueAccessor iva, IConfigKeyAccess cka, string ivaLookupName, string ivaFromCkaMappedName, string ckaFromIvaMappedName, string ckaLookupKeyName)

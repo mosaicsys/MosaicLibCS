@@ -1583,8 +1583,6 @@ namespace MosaicLib.WPF.Tools.Sets
         public interface IE039TablePerTypeDictionary
         {
             string TypeName { get; }
-            //IList<E039ObjectID> ObjectIDs { get; }
-            //IList<IE039Object> Objects { get; }
             E039ObjectTracker this[string objectName] { get; }
             E039ObjectTracker GetObjectTracker(string objectName, bool forTemporaryUse = false);
         }

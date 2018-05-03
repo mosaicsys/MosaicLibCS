@@ -672,14 +672,8 @@ namespace MosaicLib.Modular.Part
             timeStamp = rhs.TimeStamp;
         }
 
-        /// <summary>Sets the part as Simulated and possibly puts it in an Online state.</summary>
-        public BaseState SetSimulated(bool online) 
-        { 
-            return SetSimulated(online, true); 
-        }
-
         /// <summary>Sets the part as Simulator and allows it to be put in an Online state and/or to have its IsPrimaryPart property set.</summary>
-        public BaseState SetSimulated(bool online, bool primary)
+        public BaseState SetSimulated(bool online, bool primary = true)
 		{
 			IsSimulated = true;
 			IsPrimaryPart = primary;
@@ -695,10 +689,12 @@ namespace MosaicLib.Modular.Part
             return this;
 		}
 
-        /// <summary>Sets the UseState and ActionName and sets the contained TimeStamp to Now.</summary>
-        public BaseState SetState(UseState useState, string actionName)
+        /// <summary>Sets the UseState and ActionName and sets the contained TimeStamp to Now.  If the current ConnState is default(Undefined) and <paramref name="autoInitializeConnStateIfNeeded"/> is true then the ConnState will be set to <paramref name="autoInitializeConnStateTo"/> which defaults to NotApplicable</summary>
+        public BaseState SetState(UseState useState, string actionName, bool autoInitializeConnStateIfNeeded = true, ConnState autoInitializeConnStateTo = ConnState.NotApplicable)
         {
             this.useState = useState;
+            if (autoInitializeConnStateIfNeeded && this.connState == default(ConnState))
+                this.connState = autoInitializeConnStateTo;
             this.actionName = actionName;
             timeStamp.SetToNow();
             return this;
@@ -1285,6 +1281,16 @@ namespace MosaicLib.Modular.Part
             privateBaseState.SetState(rhs, reason);
             if (publish)
                 PublishBaseState(reason);
+        }
+
+        #endregion
+
+        #region ToString support
+
+        /// <summary>Debugging and Logging helper</summary>
+        public override string ToString()
+        {
+            return "PartID:[{0}] BaseState:[{1}]".CheckedFormat(PartID, BaseState);
         }
 
         #endregion

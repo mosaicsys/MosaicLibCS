@@ -75,19 +75,31 @@ namespace MosaicLib.Semi.E039
         INotificationObject<IE039Object> GetPublisher(E039ObjectID objID);
     }
 
+    /// <summary>
+    /// Helper extension methods
+    /// </summary>
     public static partial class ExtensionMethods
     {
+        /// <summary>
+        /// This method is a shorthand for table.GetPublisher(link.ToID);
+        /// </summary>
         public static INotificationObject<IE039Object> GetLinkToPublisher(this IE039TableObserver table, E039Link link)
         {
             return table.GetPublisher(link.ToID);
         }
 
+        /// <summary>
+        /// This method is a shorthand for table.GetPublisher(link.FromID);
+        /// </summary>
         public static INotificationObject<IE039Object> GetLinkFromPublisher(this IE039TableObserver table, E039Link link)
         {
             return table.GetPublisher(link.FromID);
         }
     }
 
+    /// <summary>
+    /// This structure contains the set of counter and sequence number values that are used to indicate (and count) when specific types of table changes or publications take place.
+    /// </summary>
     public struct E039TableSeqNums : IEquatable<E039TableSeqNums>
     {
         /// <summary>
@@ -96,13 +108,28 @@ namespace MosaicLib.Semi.E039
         public ulong TableChangeSeqNum;
 
         /// <summary>
+        /// Gives the total number of objects that have been added
+        /// </summary>
+        public ulong AddedItemsCount;
+
+        /// <summary>
+        /// Gives the total number of objects that have been removed.
+        /// </summary>
+        public ulong RemovedItemsCount;
+
+        /// <summary>
         /// Gives the sequence number assigned to the most recent object content publication.
         /// </summary>
         public ulong PublishedObjectSeqNum;
 
+        /// <summary>
+        /// Returns true if this object and the given other object have the same contents
+        /// </summary>
         public bool Equals(E039TableSeqNums other)
         {
             return (TableChangeSeqNum == other.TableChangeSeqNum
+                    && AddedItemsCount == other.AddedItemsCount
+                    && RemovedItemsCount == other.RemovedItemsCount
                     && PublishedObjectSeqNum == other.PublishedObjectSeqNum);
         }
     }
@@ -230,6 +257,10 @@ namespace MosaicLib.Semi.E039
         /// <summary>Adds the indicated link from the identified FromID object to the identified ToID object</summary>
         public class AddLink : LinkBase
         {
+            /// <summary>
+            /// Normal constructor.  Adds the indicated <paramref name="link"/> between the objects identified by its FromID and ToID and using its specified Key.
+            /// optional parameters may be used to initialize the AutoUnlinkFromPriorByTypeStr and IfNeeded properties
+            /// </summary>
             public AddLink(E039Link link, bool autoUnlinkFromPriorByTypeStr = false, bool ifNeeded = false)
                 : base(link) 
             {
@@ -237,33 +268,62 @@ namespace MosaicLib.Semi.E039
                 IfNeeded = ifNeeded;
             }
 
+            /// <summary>
+            /// When true this option requests that the link operation look at the target object (based on ToID) and if it finds a linkFrom link with the same
+            /// Key as this link, it asks the prior object that was linked to this link's target object to unlink from it.  
+            /// This has the effect of allowing this operation to move the link from a prior from object to the new from object in one step and can be done without
+            /// the client needing to explicitly finding the prior from object's ID.
+            /// </summary>
             public bool AutoUnlinkFromPriorByTypeStr { get; private set; }
+
+            /// <summary>
+            /// When true this option selects that the link request may be redundant and should be ignored if it is.  
+            /// This may be the case if the link's ToID is empty and the link already exists (either to another object or not), or if the link already exists to the requested ToID object.
+            /// </summary>
             public bool IfNeeded { get; private set; }
 
+            /// <summary>
+            /// Debugging and logging helper method
+            /// </summary>
             public override string ToString()
             {
+                StringBuilder sb = new StringBuilder(base.ToString());
+
                 if (AutoUnlinkFromPriorByTypeStr)
-                    return "{0} AutoUnlinkFromPrior".CheckedFormat(base.ToString());
-                else
-                    return base.ToString();
+                    sb.Append(" AutoUnlinkFromPrior");
+
+                if (IfNeeded)
+                    sb.Append(" IfNeeded");
+
+                return sb.ToString();
             }
         }
 
         /// <summary>Removes the given link between the identified FromID object and the identified ToID object</summary>
         public class RemoveLink : LinkBase
         {
+            /// <summary>
+            /// Normal constructor.  Caller provides the contents of the <paramref name="link"/> to be removed
+            /// </summary>
             public RemoveLink(E039Link link) : base(link) { }
         }
 
         /// <summary>Merges the given set of Attributes into the object identified using the given ObjID, using the given MergeBehavior</summary>
         public class SetAttributes : ObjIDAndAttributeBase
         {
+            /// <summary>
+            /// Normal Constructor.  Caller specifies the <paramref name="objID"/> of the object to apply this change to, the set of <paramref name="attributes"/> to change,
+            /// and the <paramref name="mergeBehavior"/> to be used when merging the given <paramref name="attributes"/> in with the target object's current attribute values.
+            /// </summary>
             public SetAttributes(E039ObjectID objID, INamedValueSet attributes, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate)
                 : base(objID, attributes)
             {
                 MergeBehavior = mergeBehavior;
             }
 
+            /// <summary>
+            /// Defines the merge behavior that is to be used when merging the corresponding attributes into the target object's current attribute values.
+            /// </summary>
             public NamedValueMergeBehavior MergeBehavior { get; private set; }
         }
 
@@ -290,7 +350,7 @@ namespace MosaicLib.Semi.E039
             }
         }
 
-        public class SyncPersist : SyncPublication
+        public class SyncPersist : ObjIDBase
         {
             public SyncPersist(E039ObjectID objID = null, TimeSpan? waitTimeLimit = null, bool failOnWaitTimeLimitReached = false)
                 : base(objID)
@@ -306,6 +366,54 @@ namespace MosaicLib.Semi.E039
         public class SyncPublication : ObjIDBase
         {
             public SyncPublication(E039ObjectID objID = null) : base(objID) { }
+        }
+
+        public class SyncExternal : E039UpdateItem
+        {
+            /// <summary>Normal constructor.</summary>
+            /// <param name="syncPublicationFirst">When true this causes the part to run a SyncPublication operation before creating and running the external sync action.  Defaults to true.</param>
+            /// <param name="waitTimeLimit">
+            /// Used to define the time limit that the table updater uses to determine how long it will block for any given external sync action to complete.
+            /// When this value is null it will be replaced with the ExternalSyncTimeLimit value from the table update parts configuration.
+            /// When the resulting value is null or zero, the table update part will wait indifinitly for each external sync action to complete.
+            /// Defaults to null.
+            /// </param>
+            /// <param name="failOnWaitTimeLimitReached">When true, the corresponding Update action will fail if the underlying external sync action time limit was reached.  Defaults to false.</param>
+            /// <param name="failIfExternalSyncFactoryIsNotOnline">When true, the corresponding Update actin will fail if there is an external sync factory object, but it is not currently online.  Defaults to true.</param>
+            /// <param name="failIfNoExternalSyncFactoryDefined">When true, the corresponding Update action will fail if there is no configured external sync factory object.  Defaults to false.</param>
+            /// <param name="requestCancelOnTimeLimitReached">When true, a running external sync action will have its cancel requested if the time limit is reached before the action completed.  Defaults to true.</param>
+            public SyncExternal(bool syncPublicationFirst = true, TimeSpan? waitTimeLimit = null, bool failOnWaitTimeLimitReached = false, bool failIfExternalSyncFactoryIsNotOnline = true, bool failIfNoExternalSyncFactoryDefined = false, bool requestCancelOnTimeLimitReached = true)
+            {
+                SyncPublicationFirst = syncPublicationFirst;
+                WaitTimeLimit = waitTimeLimit;
+                FailOnWaitTimeLimitReached = failOnWaitTimeLimitReached;
+                FailIfExternalSyncFactoryIsNotOnline = failIfExternalSyncFactoryIsNotOnline;
+                FailIfNoExternalSyncFactoryDefined = failIfNoExternalSyncFactoryDefined;
+                RequestCancelOnTimeLimitReached = requestCancelOnTimeLimitReached;
+            }
+
+            /// <summary>When true this causes the part to run a SyncPublication operation before creating and running the external sync action.  Defaults to true.</summary>
+            public bool SyncPublicationFirst { get; private set; }
+
+            /// <summary>
+            /// Used to define the time limit that the table updater uses to determine how long it will block for any given external sync action to complete.
+            /// When this value is null it will be replaced with the ExternalSyncTimeLimit value from the table update parts configuration.
+            /// When the resulting value is null or zero, the table update part will wait indifinitly for each external sync action to complete.
+            /// Defaults to null.
+            /// </summary>
+            public TimeSpan? WaitTimeLimit { get; private set; }
+
+            /// <summary>When true, the corresponding Update action will fail if the underlying external sync action time limit was reached.  Defaults to false.</summary>
+            public bool FailOnWaitTimeLimitReached { get; private set; }
+
+            /// <summary>When true, the corresponding Update actin will fail if there is an external sync factory object, but it is not currently online.  Defaults to true.</summary>
+            public bool FailIfExternalSyncFactoryIsNotOnline { get; private set; }
+
+            /// <summary>When true, the corresponding Update action will fail if there is no configured external sync factory object.  Defaults to false.</summary>
+            public bool FailIfNoExternalSyncFactoryDefined { get; private set; }
+
+            /// <summary>When true, a running external sync action will have its cancel requested if the time limit is reached before the action completed.  Defaults to true.</summary>
+            public bool RequestCancelOnTimeLimitReached { get; private set; }
         }
 
         public class LinkBase : E039UpdateItem
@@ -358,17 +466,27 @@ namespace MosaicLib.Semi.E039
 
         public static List<E039UpdateItem> AddSetAttributesItem(this List<E039UpdateItem> updateList, E039ObjectID objID = null, IE039Object obj = null, INamedValueSet attributes = null, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate)
         {
-            updateList.Add(new E039UpdateItem.SetAttributes(objID: objID.GetID(obj), attributes: attributes, mergeBehavior: mergeBehavior));
+            IE039Object getObjIDFromObj = obj;
+            objID = objID ?? ((getObjIDFromObj != null) ? getObjIDFromObj.ID : E039ObjectID.Empty);
+
+            updateList.Add(new E039UpdateItem.SetAttributes(objID: objID, attributes: attributes, mergeBehavior: mergeBehavior));
 
             return updateList;
         }
-
-        private static E039ObjectID GetID(this E039ObjectID objID, IE039Object getObjIDFromObj)
-        {
-            return objID ?? (getObjIDFromObj != null ? getObjIDFromObj.ID : E039ObjectID.Empty);
-        }
     }
 
+    #endregion
+
+    #region IE039ExternalSyncFactory
+
+    /// <summary>
+    /// The IE039TableUpdater uses this interface to support the use of the E039TableUpdateItem.ExternalSync object.
+    /// </summary>
+    public interface IE039ExternalSyncFactory : IPartBase
+    {
+        IClientFacet Sync();
+    }
+    
     #endregion
 
     #region E039ToStringSelect
@@ -395,7 +513,7 @@ namespace MosaicLib.Semi.E039
         /// <summary>FullName | UUID [0x03]</summary>
         DefaultObjIDSelect = (FullName | UUID),
 
-        /// <summary>DefaultObjIDSelect | Attributes | LinkedShortIDs [0x17]</summary>
+        /// <summary>DefaultObjIDSelect(FullName | UUID) | Attributes | LinkedShortIDs [0x17]</summary>
         DefaultObjSelect = (DefaultObjIDSelect | Attributes | LinkedShortIDs),
     }
 
@@ -442,7 +560,7 @@ namespace MosaicLib.Semi.E039
         {
             Name = name;
             Type = type;
-            FullName = (!name.IsNullOrEmpty() || !type.IsNullOrEmpty()) ? "{0}:{1}".CheckedFormat(Type, Name) : string.Empty;
+            FullName = GenerateFullName(type, name);
             UUID = uuid;
             TableObserver = tableObserver;
         }
@@ -490,7 +608,13 @@ namespace MosaicLib.Semi.E039
         [OnDeserialized]
         void OnDeserialized(StreamingContext sc)
         {
-            FullName = "{0}:{1}".CheckedFormat(Type, Name);
+            FullName = GenerateFullName(Type, Name);
+        }
+
+        /// <summary>If either the given <paramref name="type"/> or the given <paramref name="name"/> are non-null and non-empty then this method returns the string <paramref name="type"/>:<paramref name="name"/>.  Otherwise it return the empty string.</summary>
+        public static string GenerateFullName(string type, string name)
+        {
+            return (!name.IsNullOrEmpty() || !type.IsNullOrEmpty()) ? "{0}:{1}".CheckedFormat(type, name) : string.Empty;
         }
 
         /// <summary>Returns the reference Empty E039ObjectID</summary>
@@ -562,14 +686,25 @@ namespace MosaicLib.Semi.E039
     /// </summary>
     public interface IE039Object : IEquatable<IE039Object>
     {
+        /// <summary>Gives the object ID (Name and Type) of this object</summary>
         E039ObjectID ID { get; }
+
+        /// <summary>Gives the flag values that are associated with this object</summary>
         E039ObjectFlags Flags { get; }
 
+        /// <summary>Gives all of the attribute values that result from initial values combined with the accumulated set of Update calls that have been applied to this object's attribute values.</summary>
         INamedValueSet Attributes { get; }
 
-        IList<E039Link> LinksFromOtherObjectsList { get; }
+        /// <summary>Gives the current set of E039Link objects that link from this object</summary>
         IList<E039Link> LinksToOtherObjectsList { get; }
 
+        /// <summary>Gives the current set of E039Link objects that link to this object</summary>
+        IList<E039Link> LinksFromOtherObjectsList { get; }
+
+        /// <summary>Returns true if this object is equal to the Empty object.</summary>
+        bool IsEmpty { get; }
+
+        /// <summary>Variant of normal ToString method that supports selectable output using the <paramref name="toStringSelect"/> parameter</summary>
         string ToString(E039ToStringSelect toStringSelect);
     }
 
@@ -597,6 +732,10 @@ namespace MosaicLib.Semi.E039
 
         public E039Link(E039Link other)
             : this(other.FromID, other.ToID, other.Key)
+        { }
+
+        public E039Link(E039ObjectID fromID, string key)
+            : this(fromID, E039ObjectID.Empty, key)
         { }
 
         /// <summary>Identifies the object that is the source of the link (the "from" end)</summary>
@@ -679,7 +818,7 @@ namespace MosaicLib.Semi.E039
         [EnumMember]
         None = 0x00,
 
-        /// <summary>Client usable: Flag indicates that the object cannot as a side effect of a final link to it being removed [0x0010]</summary>
+        /// <summary>Client usable: Flag indicates that the object shall not be removed as a side effect of a final link to it being removed [0x0010]</summary>
         [EnumMember]
         Pinned = 0x10,
 
@@ -731,6 +870,59 @@ namespace MosaicLib.Semi.E039
 
             return fallbackValue;
         }
+
+        /// <summary>
+        /// Returns true if the given <paramref name="obj"/> is null or if it IsEmpty
+        /// </summary>
+        public static bool IsNullOrEmpty(this IE039Object obj)
+        {
+            return (obj == null || obj.IsEmpty);
+        }
+
+        /// <summary>
+        /// Returns the first link with the given <paramref name="linkKey"/> key from the given <paramref name="obj"/>'s LinksToOtherObjectsList
+        /// </summary>
+        public static E039Link FindFirstLinkTo(this IE039Object obj, string linkKey)
+        {
+            if (obj != null)
+                return obj.LinksToOtherObjectsList.FirstOrDefault(link => link.Key == linkKey);
+            else
+                return default(E039Link);
+        }
+
+        /// <summary>
+        /// Returns the set of links with the given <paramref name="linkKey"/> key from the given <paramref name="obj"/>'s LinksToOtherObjectsList
+        /// </summary>
+        public static IEnumerable<E039Link> FindLinksTo(this IE039Object obj, string linkKey)
+        {
+            if (obj != null)
+                return obj.LinksToOtherObjectsList.Where(link => link.Key == linkKey);
+            else
+                return Utils.Collections.EmptyArrayFactory<E039Link>.Instance;
+        }
+
+
+        /// <summary>
+        /// Returns the first link with the given <paramref name="linkKey"/> key from the given <paramref name="obj"/>'s LinksFromOtherObjectsList
+        /// </summary>
+        public static E039Link FindFirstLinkFrom(this IE039Object obj, string linkKey)
+        {
+            if (obj != null)
+                return obj.LinksFromOtherObjectsList.FirstOrDefault(link => link.Key == linkKey);
+            else
+                return default(E039Link);
+        }
+
+        /// <summary>
+        /// Returns the set of links with the given <paramref name="linkKey"/> key from the given <paramref name="obj"/>'s LinksFromOtherObjectsList
+        /// </summary>
+        public static IEnumerable<E039Link> FindLinksFrom(this IE039Object obj, string linkKey)
+        {
+            if (obj != null)
+                return obj.LinksFromOtherObjectsList.Where(link => link.Key == linkKey);
+            else
+                return Utils.Collections.EmptyArrayFactory<E039Link>.Instance;
+        }
     }
 
     #endregion
@@ -766,6 +958,7 @@ namespace MosaicLib.Semi.E039
             Attributes = attributes.MapNullToEmpty().ConvertToReadOnly();
         }
 
+        /// <summary>Gives the object ID (Name and Type) of this object</summary>
         public E039ObjectID ID
         {
             get { return _id; }
@@ -784,17 +977,22 @@ namespace MosaicLib.Semi.E039
         [DataMember(Order = 110, IsRequired = false, EmitDefaultValue = false)]
         internal string UUID { get; set; }
 
+        /// <summary>Gives the flag values that are associated with this object</summary>
         public E039ObjectFlags Flags { get; internal set; }
 
         [DataMember(Order = 200, Name = "Flags", IsRequired = false, EmitDefaultValue = false)]
         private string FlagsSerializationHelper { get { return Flags.ToString(); } set { Flags = value.TryParse<E039ObjectFlags>(); } }
 
+        /// <summary>Gives all of the attribute values that result from initial values combined with the accumulated set of Update calls that have been applied to this object's attribute values.  This property is used for serialization/deserialization</summary>
         [DataMember(Order = 300, Name = "Attribs", IsRequired = false, EmitDefaultValue = false)]
         public NamedValueSet Attributes { get; internal set; }
 
         INamedValueSet IE039Object.Attributes { get { return this.Attributes.ConvertToReadOnly(); } }
 
+        /// <summary>Gives the current set of E039Link objects that link from this object</summary>
         public IList<E039Link> LinksToOtherObjectsList { get { return _linksToOtherObjectsList ?? _emptyLinkList; } internal set { _linksToOtherObjectsList = (value != null && value.Count > 0) ? value : null; } }
+
+        /// <summary>Gives the current set of E039Link objects that link to this object</summary>
         public IList<E039Link> LinksFromOtherObjectsList { get { return _linksFromOtherObjectsList ?? _emptyLinkList; } internal set { _linksFromOtherObjectsList = (value != null && value.Count > 0) ? value : null; } }
 
         private IList<E039Link> _linksToOtherObjectsList = null;
@@ -809,6 +1007,9 @@ namespace MosaicLib.Semi.E039
 
         private static readonly IList<E039Link> _emptyLinkList = ReadOnlyIList<E039Link>.Empty;
 
+        /// <summary>Returns true if this object is equal to the Empty object.</summary>
+        public bool IsEmpty { get { return this.Equals(Empty); } }
+
         /// <summary>
         /// Returns true if this object's ID, Flags, Attributes, LinksToOtherObjectsList and LinksFromOtherObjectsList are all Equal to the <paramref name="other"/>'s
         /// </summary>
@@ -817,17 +1018,19 @@ namespace MosaicLib.Semi.E039
             return (other != null
                     && ID.Equals(other.ID)
                     && Flags == other.Flags
-                    && Attributes.MapNullToEmpty().Equals(other.Attributes.MapEmptyToNull())
+                    && Attributes.MapNullToEmpty().Equals(other.Attributes.MapNullToEmpty())
                     && LinksToOtherObjectsList.IsEqualTo(other.LinksToOtherObjectsList)
                     && LinksFromOtherObjectsList.IsEqualTo(other.LinksFromOtherObjectsList)
                 );
         }
 
+        /// <summary>Debug and Logging helper.  Returns ToString(E039ToStringSelect.DefaultObjSelect) [DefaultObjIDSelect(FullName | UUID) | Attributes | LinkedShortIDs]</summary>
         public override string ToString()
         {
             return ToString(E039ToStringSelect.DefaultObjSelect);
         }
 
+        /// <summary>Variant of normal ToString method that supports selectable output using the <paramref name="toStringSelect"/> parameter</summary>
         public string ToString(E039ToStringSelect toStringSelect)
         {
             StringBuilder sb = new StringBuilder();
@@ -863,6 +1066,8 @@ namespace MosaicLib.Semi.E039
         {
             PartID = partID;
             ObjectIVAPrefix = "{0}.".CheckedFormat(partID);
+
+            ExternalSyncTimeLimit = (0.2).FromSeconds();
         }
 
         public E039BasicTablePartConfig(E039BasicTablePartConfig other, bool testPersitValues = true)
@@ -880,7 +1085,7 @@ namespace MosaicLib.Semi.E039
                     {
                         SuccessEmitter = log.Debug,
                         IssueEmitter = log.Debug,
-                        AutoSaveConditions = AutoSaveConditions.SuccessfullSaveMakesLoadSucceed,
+                        AutoSaveConditions = AutoSaveConditions.SuccessfulSaveMakesLoadSucceed,
                     };
                 });
 
@@ -890,6 +1095,9 @@ namespace MosaicLib.Semi.E039
             defaultPersistWriteHoldoff = DefaultTypeSetSpec.PersistWriteHoldoff;
 
             TypeSetPersistSpecItemArray = (other.TypeSetPersistSpecItemArray ?? _emptyPersistSpecItemArray).Select(item => new E039TableTypeSetPersistSpecItem(item, fallbackPersistWriteHoldoff: defaultPersistWriteHoldoff, testPersistValues: testPersitValues)).ToArray();
+
+            ExternalSyncFactory = other.ExternalSyncFactory;
+            ExternalSyncTimeLimit = other.ExternalSyncTimeLimit;
         }
 
         public string PartID { get; private set; }
@@ -909,6 +1117,12 @@ namespace MosaicLib.Semi.E039
         public E039TableTypeSetPersistSpecItem DefaultTypeSetSpec { get; set; }
 
         public E039TableTypeSetPersistSpecItem [] TypeSetPersistSpecItemArray { get; set; }
+
+        /// <summary>Defines the factory object that is used to create external Sync actions which are used when the table client requests an external sync as part of a set of update itmes.</summary>
+        public IE039ExternalSyncFactory ExternalSyncFactory { get; set; }
+
+        /// <summary>Defines the fallback time limit that is to be used when a extenal sync update item does not explicitly specify the use of a specific time limit.  When both the client provided value and this value are null, or when the resulting time limit is zero, the table updater will wait indifinitly</summary>
+        public TimeSpan ? ExternalSyncTimeLimit { get; set; }
 
         private IValuesInterconnection _partBaseIVI, _objectIVI;
         private ISetsInterconnection _isi;
@@ -941,7 +1155,7 @@ namespace MosaicLib.Semi.E039
                 if (other.PersistObjFileRingConfig != null)
                     PersistObjFileRingConfig = new PersistentObjectFileRingConfig(other.PersistObjFileRingConfig, testValues: testPersistValues);
 
-                PersistWriteHoldoff = (other.PersistWriteHoldoff != default(TimeSpan)) ? other.PersistWriteHoldoff : fallbackPersistWriteHoldoff;
+                PersistWriteHoldoff = other.PersistWriteHoldoff.MapDefaultTo(fallbackPersistWriteHoldoff);
 
                 ReferenceSetID = other.ReferenceSetID;
                 ReferenceSetCapacity = other.ReferenceSetCapacity;
@@ -951,10 +1165,21 @@ namespace MosaicLib.Semi.E039
         public string SetName { get; set; }
         public MatchRuleSet TypeNameMatchRuleSet { get; set; }
         public PersistentObjectFileRingConfig PersistObjFileRingConfig { get; set; }
+
+        /// <summary>Defines the nominal minimum period of time from a new table update to when the persist engine is told to write the changes to the table.  For non-default spec items, a zero value here will be replaced with the value from the default spec item.</summary>
         public TimeSpan PersistWriteHoldoff { get; set; }
+
+        /// <summary>If this SetID and the related Set Capacity is non-zero then a ReferenceSet will be created and registered for this SetID and all published objects will also be added to/updated in the resulting reference set.</summary>
         public SetID ReferenceSetID { get; set; }
+
+        /// <summary>If this Capacity is non-zero and the related SetID is non-empty then this value will define the capacity of the reference set that will be created.  This capacity must be large enough to hold all of the objects that may eventually be added to the corresponding TableTypeSet.</summary>
         public int ReferenceSetCapacity { get; set; }
 
+        /// <summary>
+        /// This method may be used to set both the ReferenceSetID and the ReferenceSetCapacity using the given <paramref name="partID"/>. 
+        /// The Set name will be generated as PartID.SetName.  
+        /// Other optional parameters may be used to control the generation of a UUID for the resulting SetID and to define the resulting set's capacity.
+        /// </summary>
         public E039TableTypeSetPersistSpecItem CreateDefaultSetID(string partID, string uuid = null, bool generateUUIDForNull = true, int capacity = 200) 
         { 
             ReferenceSetID = new SetID("{0}.{1}".CheckedFormat(partID, SetName), uuid: uuid, generateUUIDForNull: generateUUIDForNull);
@@ -974,6 +1199,7 @@ namespace MosaicLib.Semi.E039
 
             Config = new E039BasicTablePartConfig(config, testPersitValues: true);
             ObjectIVI = Config.ObjectIVI;
+            ExternalSyncFactory = Config.ExternalSyncFactory;
 
             persistHelperPart = new PersistHelper("{0}.ph".CheckedFormat(PartID));
 
@@ -1084,6 +1310,8 @@ namespace MosaicLib.Semi.E039
         /// <summary>IVI to be used when creating object IVA's - this behavior is triggered based on the object's tracker has the E039ObjectFlags.CreateIVA flag set (generally only used for object types that bound for display by name.</summary>
         IValuesInterconnection ObjectIVI { get; set; }
 
+        IE039ExternalSyncFactory ExternalSyncFactory { get; set; }
+
         static readonly E039ObjectID[] emptyE039ObjectIDArray = EmptyArrayFactory<E039ObjectID>.Instance;
 
         #endregion
@@ -1097,32 +1325,30 @@ namespace MosaicLib.Semi.E039
 
         IE039Object[] IE039TableObserver.GetObjects(E039TypeFilter typeFilter, E039InstanceFilter instanceFilter)
         {
-            IE039Object[] objArray = null;
-
-            typeFilter = typeFilter ?? _allTypesFilter;
-            instanceFilter = instanceFilter ?? _allInstancesFilter;
-
             lock (externalDicationaryMutex)
             {
-                objArray = externalTypeToObjectNameDictionaryDictionary.Where(kvp => typeFilter(kvp.Key)).SelectMany(kvp => kvp.Value.Values.Select(ot => ot.volatileLastPublishedIObj).Where(o => ((o != null) && instanceFilter(o)))).ToArray();
+                return InnerGetTypeAndInstanceFilteredSet(typeFilter, instanceFilter).ToArray();
             }
-
-            return objArray;
         }
 
-        private static readonly E039TypeFilter _allTypesFilter = ((typeStr) => true);
-        private static readonly E039InstanceFilter _allInstancesFilter = ((objInst) => true);
-
         int IE039TableObserver.GetObjectCount(E039TypeFilter typeFilter, E039InstanceFilter instanceFilter)
+        {
+            lock (externalDicationaryMutex)
+            {
+                return InnerGetTypeAndInstanceFilteredSet(typeFilter, instanceFilter).Count();
+            }
+        }
+
+        private IEnumerable<IE039Object> InnerGetTypeAndInstanceFilteredSet(E039TypeFilter typeFilter, E039InstanceFilter instanceFilter)
         {
             typeFilter = typeFilter ?? _allTypesFilter;
             instanceFilter = instanceFilter ?? _allInstancesFilter;
 
-            lock (externalDicationaryMutex)
-            {
-                return externalTypeToObjectNameDictionaryDictionary.Where(kvp => typeFilter(kvp.Key)).SelectMany(kvp => kvp.Value.Values.Select(ot => ot.volatileLastPublishedIObj).Where(o => ((o != null) && instanceFilter(o)))).Count();
-            }
+            return externalTypeToObjectNameDictionaryDictionary.Where(kvp => typeFilter(kvp.Key)).SelectMany(kvp => kvp.Value.Values.Select(ot => ot.volatileLastPublishedIObj).Where(o => ((o != null) && instanceFilter(o))));
         }
+
+        private static readonly E039TypeFilter _allTypesFilter = ((typeStr) => true);
+        private static readonly E039InstanceFilter _allInstancesFilter = ((objInst) => true);
 
         INotificationObject<IE039Object> IE039TableObserver.GetPublisher(E039ObjectID objSpec) 
         {
@@ -1268,17 +1494,16 @@ namespace MosaicLib.Semi.E039
             }
 
             if (updateItem is E039UpdateItem.SyncPublication)
-            {
-                InnerPublishTouchedObjectTrackers();
-                return string.Empty;
-            }
+                return InnerPerformSyncPublicationUpdateItem();
 
             if (updateItem is E039UpdateItem.SyncPersist)
                 return InnerPerformSyncPersistUpdateItem(action, updateItem as E039UpdateItem.SyncPersist, ref addedPendingSyncOperation);
 
+            if (updateItem is E039UpdateItem.SyncExternal)
+                return InnerPerformSyncExternalUpdateItem(updateItem as E039UpdateItem.SyncExternal);
+
             return "UpdateItem type '{0}' was not recognized".CheckedFormat(updateItem.GetType());
         }
-
 
         string InnerPerformTestAndSetAttributesUpdateItem(ObjectTracker ot, E039UpdateItem.TestAndSetAttributes updateItem)
         {
@@ -1330,7 +1555,7 @@ namespace MosaicLib.Semi.E039
 
             LinkTrackerPair ltp = ot.linkTrackerPairsToOtherObjectsDictionary.SafeTryGetValue(linkKeyStr);
 
-            if (ltp != null && addLink.Link.ToID.IsEmpty && addLink.IfNeeded)
+            if (ltp != null && (addLink.Link.ToID.IsEmpty || ltp.Link.ToID.Equals(link.ToID)) && addLink.IfNeeded)
                 return string.Empty;        // we are adding a link key that already exists and the caller provided target is empty and the caller indicated to add the link if needed.  So do nothing.
 
             if (ltp != null && (ltp.ObjectTracker != null || !ltp.Link.IsToIDEmpty))
@@ -1440,6 +1665,9 @@ namespace MosaicLib.Semi.E039
             {
                 ot = FindObjectTrackerForID(objID, createIfNeeded: true, initialFlags: updateItem.Flags);
                 ot.obj = new E039Object(objID, clientFlags, updateItem.Attributes);
+
+                seqNums.AddedItemsCount++;
+                seqNums.TableChangeSeqNum = GetNextSeqNum();
             }
             else
             {
@@ -1554,6 +1782,7 @@ namespace MosaicLib.Semi.E039
                     uuidToObjectTrackerDictionary.Remove(objID.UUID);
 
                 // indicate that a table change has happened
+                seqNums.RemovedItemsCount++;
                 seqNums.TableChangeSeqNum = GetNextSeqNum();
 
                 // recursively add the potentialObjectTrackersToRemoveListPerPass to the objectTrackersToRemoveList if none of their remaining links from other objects now match the given filter)
@@ -1566,10 +1795,16 @@ namespace MosaicLib.Semi.E039
             }
         }
 
+        string InnerPerformSyncPublicationUpdateItem()
+        {
+            InnerPublishTouchedObjectTrackers();
+            return string.Empty;
+        }
+
         string InnerPerformSyncPersistUpdateItem(IProviderFacet action, E039UpdateItem.SyncPersist updateItem, ref bool addedPendingSyncOperation)
         {
             if (addedPendingSyncOperation)
-                return "Only one SyncPersist update items may be used in any given Update action";
+                return "Only one SyncPersist update item may be used in any given Update action";
 
             // validate syncPersist settings
 
@@ -1598,7 +1833,7 @@ namespace MosaicLib.Semi.E039
             }
 
             // fill in the rest of the construction here
-            PendingSyncOperation pendingSyncOperation = new PendingSyncOperation()
+            PendingSyncPersistOperation pendingSyncOperation = new PendingSyncPersistOperation()
             {
                 action = action,
                 qpcTimeStamp = QpcTimeStamp.Now,
@@ -1607,11 +1842,64 @@ namespace MosaicLib.Semi.E039
                 relevantTypeSetTrackerArray = relevantTypeSetTrackerArray,
             };
 
-            pendingSyncOperationList.Add(pendingSyncOperation);
+            pendingSyncPersistOperationList.Add(pendingSyncOperation);
 
             addedPendingSyncOperation = true;
 
             return string.Empty;
+        }
+
+        string InnerPerformSyncExternalUpdateItem(E039UpdateItem.SyncExternal updateItem)
+        {
+            string ec = string.Empty;
+
+            if (ec.IsNullOrEmpty() && updateItem.SyncPublicationFirst)
+                ec = InnerPerformSyncPublicationUpdateItem();
+
+            if (ec.IsNullOrEmpty())
+            {
+                if (ExternalSyncFactory != null)
+                {}
+                else if (updateItem.FailIfNoExternalSyncFactoryDefined)
+                    ec = "No External Sync Factory has been defined";
+                else
+                    return string.Empty;        // we simply return in this case as there is no ExternalSyncFactory to use.
+            }
+
+            if (ec.IsNullOrEmpty())
+            {
+                IBaseState externalSyncFactoryBaseState = ExternalSyncFactory.BaseState;
+
+                if (externalSyncFactoryBaseState.IsOnline)
+                { }
+                else if (updateItem.FailIfExternalSyncFactoryIsNotOnline)
+                    ec = "External Sync Factory is not online [{0}, {1}]".CheckedFormat(ExternalSyncFactory.PartID, externalSyncFactoryBaseState);
+                else
+                    return string.Empty;        // we simply return in this case as the external sync factory is not usable right now.
+            }
+
+            if (ec.IsNullOrEmpty())
+            {
+                TimeSpan? waitTimeLimit = updateItem.WaitTimeLimit ?? Config.ExternalSyncTimeLimit;
+
+                IClientFacet syncAction = ExternalSyncFactory.Sync().StartInline();
+
+                // if the resulting wait time limit is null or zero then we use an indifinite wait, otherwise we use the given time limit as the time limit to use when waiting for the external sync action to complete.
+                if ((waitTimeLimit ?? TimeSpan.Zero).IsZero())
+                    ec = syncAction.WaitUntilComplete();
+                else if (syncAction.WaitUntilComplete(waitTimeLimit ?? TimeSpan.Zero))
+                    ec = syncAction.ActionState.ResultCode;
+                else 
+                {
+                    if (updateItem.RequestCancelOnTimeLimitReached)
+                        syncAction.RequestCancel();
+
+                    if (updateItem.FailOnWaitTimeLimitReached)
+                        ec = "SyncAction did not complete within the specified time limit [{0:f3} sec]".CheckedFormat((waitTimeLimit ?? TimeSpan.Zero).TotalSeconds);
+                }
+            }
+
+            return ec;
         }
 
         /// <summary>
@@ -1773,9 +2061,9 @@ namespace MosaicLib.Semi.E039
 
         void ServicePendingSyncOperations()
         {
-            if (pendingSyncOperationList.Count > 0)
+            if (pendingSyncPersistOperationList.Count > 0)
             {
-                foreach (var pendingSyncOp in pendingSyncOperationList)
+                foreach (var pendingSyncOp in pendingSyncPersistOperationList.ToArray())
                 {
                     if (!pendingSyncOp.action.ActionState.IsComplete)
                     {
@@ -1787,18 +2075,12 @@ namespace MosaicLib.Semi.E039
                     }
 
                     if (pendingSyncOp.action.ActionState.IsComplete)
-                        completedPendingSyncOperationList.Add(pendingSyncOp);
+                        pendingSyncPersistOperationList.Remove(pendingSyncOp);      // this is safe since the foreach captured the list contents as an array.
                 }
-            }
-
-            if (completedPendingSyncOperationList.Count > 0)
-            {
-                completedPendingSyncOperationList.DoForEach(syncOp => pendingSyncOperationList.Remove(syncOp));
-                completedPendingSyncOperationList.Clear();
             }
         }
 
-        class PendingSyncOperation
+        class PendingSyncPersistOperation
         {
             public E039UpdateItem.SyncPersist syncUpdateItem;
             public QpcTimeStamp qpcTimeStamp;
@@ -1807,8 +2089,7 @@ namespace MosaicLib.Semi.E039
             public TypeSetTracker[] relevantTypeSetTrackerArray;
         }
 
-        List<PendingSyncOperation> pendingSyncOperationList = new List<PendingSyncOperation>();
-        List<PendingSyncOperation> completedPendingSyncOperationList = new List<PendingSyncOperation>();
+        List<PendingSyncPersistOperation> pendingSyncPersistOperationList = new List<PendingSyncPersistOperation>();
 
         #endregion
 
@@ -1968,6 +2249,9 @@ namespace MosaicLib.Semi.E039
 
         ulong seqNumGenerator = 0;
 
+        /// <summary>
+        /// increments the seqNumGenerator value and returns it.
+        /// </summary>
         ulong GetNextSeqNum()
         {
             return ++seqNumGenerator;
@@ -1979,7 +2263,12 @@ namespace MosaicLib.Semi.E039
                 seqNumsPublisher.Object = lastPublishedSeqNums = seqNums;
         }
 
-        E039TableSeqNums seqNums, lastPublishedSeqNums;
+        /// <summary>This is the reference copy for the sequence number information that this part publishes.</summary>
+        E039TableSeqNums seqNums;
+
+        /// <summary>This is a copy of the last sequence number that this part has published.</summary>
+        E039TableSeqNums lastPublishedSeqNums;
+
         GuardedNotificationValueObject<E039TableSeqNums> seqNumsPublisher = new GuardedNotificationValueObject<E039TableSeqNums>(default(E039TableSeqNums));
 
         private class LinkTrackerPair
@@ -2092,6 +2381,8 @@ namespace MosaicLib.Semi.E039
                     referenceSet = new ReferenceSet<E039Object>(typeSetPersistSpecItem.ReferenceSetID, capacity: typeSetPersistSpecItem.ReferenceSetCapacity, registerSelf: true);
                     referenceSetUpdateCollector = new ReferenceSetUpdateCollector() { referenceSet = referenceSet };
                 }
+
+                saveHoldoffTimer = new QpcTimer() { TriggerInterval = typeSetPersistSpecItem.PersistWriteHoldoff, SelectedBehavior = QpcTimer.Behavior.ZeroTriggerIntervalRunsTimer };
             }
 
             public TypeTableTracker FindTypeTableTracker(string typeName, bool createIfNeeded = false)
@@ -2160,11 +2451,17 @@ namespace MosaicLib.Semi.E039
                     tst.lastIssuedSaveAction = null;
                 }
 
-                if (!tst.IsWritePending)
-                    continue;
+                if (tst.IsWritePending)
+                {
+                    tst.saveHoldoffTimer.StartIfNeeded();
 
-                if (tst.saveHoldoffTimer.StartIfNeeded().IsTriggered || startPendingWritesNow)
-                    UpdateFileContentsAndOptionallyIssueWrite(tst, issueWrite: true);
+                    if (tst.saveHoldoffTimer.IsTriggered || startPendingWritesNow)
+                        UpdateFileContentsAndOptionallyIssueWrite(tst, issueWrite: true);
+                }
+                else
+                {
+                    tst.saveHoldoffTimer.StopIfNeeded();
+                }
             }
         }
 
@@ -2377,7 +2674,7 @@ namespace MosaicLib.Semi.E039
         /// <summary>Returns the current sequence number read as a volatile (no locking) - May return zero if sequence number is set to skip zero and Increment is in progress on another thread</summary>
         public int VolatileSequenceNumber { get { return objLocObserver.VolatileSequenceNumber; } }
 
-        public ISequencedObjectSourceObserver<IE039Object> UpdateInline()
+        ISequencedObjectSourceObserver<IE039Object> ISequencedObjectSourceObserver<IE039Object>.UpdateInline()
         {
             Update();
             return this;
