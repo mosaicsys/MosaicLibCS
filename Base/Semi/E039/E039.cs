@@ -1454,7 +1454,7 @@ namespace MosaicLib.Semi.E039
             ObjectTracker objectTracker = null;
             E039Link link = default(E039Link);
 
-            if (updateItem is E039UpdateItem.ObjIDBase)
+            if (updateItem is E039UpdateItem.ObjIDBase && !(updateItem is E039UpdateItem.SyncPersist))
             {
                 E039ObjectID objID = (updateItem as E039UpdateItem.ObjIDBase).ObjID;
                 objectTracker = FindObjectTrackerForID(objID);
@@ -2370,11 +2370,7 @@ namespace MosaicLib.Semi.E039
                 setConfig = typeSetPersistSpecItem;
 
                 if (setConfig.PersistObjFileRingConfig != null)
-                {
                     persistFileRingAdapter = partConfig.PersistStorageAdapterFactory(setConfig.PersistObjFileRingConfig, log);
-
-                    fileContents = null;
-                }
 
                 if (!typeSetPersistSpecItem.ReferenceSetID.IsNullOrEmpty() && typeSetPersistSpecItem.ReferenceSetCapacity > 0)
                 {
@@ -2395,6 +2391,7 @@ namespace MosaicLib.Semi.E039
                 {
                     ttt = new TypeTableTracker() { typeName = typeName, typeSetTracker = this };
                     typeNameToTypeTableTrackerDictionary[typeName] = ttt;
+                    typeTableTrackerArray = null;       // will be rebuilt next time we go to save this typeSetTracker
                 }
 
                 return ttt;
@@ -2403,13 +2400,13 @@ namespace MosaicLib.Semi.E039
             public E039TableTypeSetPersistSpecItem setConfig;
 
             public Dictionary<string, TypeTableTracker> typeNameToTypeTableTrackerDictionary = new Dictionary<string, TypeTableTracker>();
-            public TypeTableTracker [] typeTableTrackerArray = null;
+            public TypeTableTracker [] typeTableTrackerArray;
 
             public ulong lastPublishedSeqNum;
             public QpcTimer saveHoldoffTimer;
 
-            public IPersistentStorage<E039PersistFileContents> persistFileRingAdapter = null;
-            public E039PersistFileContents fileContents = null;
+            public IPersistentStorage<E039PersistFileContents> persistFileRingAdapter;
+            public E039PersistFileContents fileContents;
 
             public IBasicAction lastIssuedSaveAction;
             public ulong lastIssuedSaveActionSeqNum;
@@ -2473,15 +2470,18 @@ namespace MosaicLib.Semi.E039
             if (tst.typeTableTrackerArray == null)
                 tst.typeTableTrackerArray = tst.typeNameToTypeTableTrackerDictionary.Values.ToArray();
 
+            int numTypes = tst.typeTableTrackerArray.Length;
+
             foreach (var ttt in tst.typeTableTrackerArray)
             {
                 if (ttt.objectTrackerArray == null)
                     ttt.objectTrackerArray = ttt.objectTrackerDictionary.Values.ToArray();
             }
 
-            if (tst.fileContents == null)
+            if (tst.fileContents == null || tst.fileContents.TypeTableSet.SafeCount() != numTypes)
             {
-                // rebuild fileContents (typeiclly after a type or an object has been added to the table)
+                // rebuild fileContents (on first save attempt and/or after a type has been added to the tableset)
+
                 E039PersistTypeTable[] typeTableArray = tst.typeTableTrackerArray.Select(ttt => new E039PersistTypeTable() { Type = ttt.typeName, ObjectInstanceSet = new E039PersistObjectInstanceSet(ttt.objectTrackerArray.Select(ot => ot.lastPublishedObj)) }).ToArray();
                 E039PersistTypeTableSet typeTableSet = new E039PersistTypeTableSet(typeTableArray);
 
@@ -2490,15 +2490,23 @@ namespace MosaicLib.Semi.E039
             else
             {
                 // perform inplace replacement of the objects to be serialized (to minimize garbage generation)
-                int numTypes = tst.typeTableTrackerArray.Length;
                 for (int typeIdx = 0; typeIdx < numTypes; typeIdx++)
                 {
                     var ttt = tst.typeTableTrackerArray[typeIdx];
                     var persistTypeTable = tst.fileContents.TypeTableSet[typeIdx];
 
                     int numObjs = ttt.objectTrackerArray.Length;
-                    for (int objIdx = 0; objIdx < numObjs; objIdx++)
-                        persistTypeTable.ObjectInstanceSet[objIdx] = ttt.objectTrackerArray[objIdx].lastPublishedObj;
+
+                    // if this type's number of objects have changed then simply replace the ObjectInstanceSet (less code than manually growing or shrinking it)
+                    if (persistTypeTable.ObjectInstanceSet.SafeCount() != numObjs)
+                        persistTypeTable.ObjectInstanceSet = new E039PersistObjectInstanceSet(ttt.objectTrackerArray.Select(ot => ot.lastPublishedObj));
+                    else
+                    {
+                        // otherwise just replace all of the current objects in the ObjectInstanceSet with the set of last published objects from the internal table set trees.
+                        //  This is safe since the last published objects are all effectively immutable.
+                        for (int objIdx = 0; objIdx < numObjs; objIdx++)
+                            persistTypeTable.ObjectInstanceSet[objIdx] = ttt.objectTrackerArray[objIdx].lastPublishedObj;
+                    }
                 }
             }
 
