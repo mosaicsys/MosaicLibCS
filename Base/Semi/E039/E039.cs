@@ -108,6 +108,11 @@ namespace MosaicLib.Semi.E039
         public ulong TableChangeSeqNum;
 
         /// <summary>
+        /// Gives the total number of type tables that have been added
+        /// </summary>
+        public ulong AddedTypeCount;
+
+        /// <summary>
         /// Gives the total number of objects that have been added
         /// </summary>
         public ulong AddedItemsCount;
@@ -128,6 +133,7 @@ namespace MosaicLib.Semi.E039
         public bool Equals(E039TableSeqNums other)
         {
             return (TableChangeSeqNum == other.TableChangeSeqNum
+                    && AddedTypeCount == other.AddedTypeCount
                     && AddedItemsCount == other.AddedItemsCount
                     && RemovedItemsCount == other.RemovedItemsCount
                     && PublishedObjectSeqNum == other.PublishedObjectSeqNum);
@@ -1068,6 +1074,9 @@ namespace MosaicLib.Semi.E039
             ObjectIVAPrefix = "{0}.".CheckedFormat(partID);
 
             ExternalSyncTimeLimit = (0.2).FromSeconds();
+
+            this.ActionLoggingConfig = ActionLoggingConfig.Debug_Debug_Trace_Trace;
+            PersistHelperActionLoggingConfig = ActionLoggingConfig.Trace_Trace_Trace_Trace;
         }
 
         public E039BasicTablePartConfig(E039BasicTablePartConfig other, bool testPersitValues = true)
@@ -1098,6 +1107,9 @@ namespace MosaicLib.Semi.E039
 
             ExternalSyncFactory = other.ExternalSyncFactory;
             ExternalSyncTimeLimit = other.ExternalSyncTimeLimit;
+
+            ActionLoggingConfig = other.ActionLoggingConfig;
+            PersistHelperActionLoggingConfig = other.PersistHelperActionLoggingConfig;
         }
 
         public string PartID { get; private set; }
@@ -1123,6 +1135,9 @@ namespace MosaicLib.Semi.E039
 
         /// <summary>Defines the fallback time limit that is to be used when a extenal sync update item does not explicitly specify the use of a specific time limit.  When both the client provided value and this value are null, or when the resulting time limit is zero, the table updater will wait indifinitly</summary>
         public TimeSpan ? ExternalSyncTimeLimit { get; set; }
+
+        public ActionLoggingConfig ActionLoggingConfig { get; set; }
+        public ActionLoggingConfig PersistHelperActionLoggingConfig { get; set; }
 
         private IValuesInterconnection _partBaseIVI, _objectIVI;
         private ISetsInterconnection _isi;
@@ -1195,13 +1210,14 @@ namespace MosaicLib.Semi.E039
         public E039BasicTablePart(E039BasicTablePartConfig config)
             : base(config.PartID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion1.Build(automaticallyIncAndDecBusyCountAroundActionInvoke: false, partBaseIVI: config.PartBaseIVI))
         {
-            ActionLoggingReference.Config = ActionLoggingConfig.Debug_Error_Trace_Trace;
-
             Config = new E039BasicTablePartConfig(config, testPersitValues: true);
+
+            ActionLoggingReference.Config = Config.ActionLoggingConfig ?? ActionLoggingConfig.Debug_Debug_Trace_Trace;
+
             ObjectIVI = Config.ObjectIVI;
             ExternalSyncFactory = Config.ExternalSyncFactory;
 
-            persistHelperPart = new PersistHelper("{0}.ph".CheckedFormat(PartID));
+            persistHelperPart = new PersistHelper("{0}.ph".CheckedFormat(PartID), Config);
 
             // build the configured set of typeSetTrackers and ask all that support persistence to load their fileContents (but do not process these yet).
             E039TableTypeSetPersistSpecItem [] effectiveTypeSetPersistSpecItemArray = Config.TypeSetPersistSpecItemArray.Concat(new[] { Config.DefaultTypeSetSpec }).ToArray();
@@ -1656,6 +1672,10 @@ namespace MosaicLib.Semi.E039
 
             // if the caller did not provide a UUID then they do not want the item to carry one.
 
+            // if the caller did not define the ObjID's TableObserver to be this one then update the TableObserver to refer to this one.
+            if (!object.ReferenceEquals(objID.TableObserver, this))
+                objID = new E039ObjectID(objID, this);
+
             ObjectTracker ot = FindObjectTrackerForID(objID);
 
             if (ot != null && !updateItem.IfNeeded)
@@ -1777,6 +1797,7 @@ namespace MosaicLib.Semi.E039
 
                 // remove the object from the internal dictionaries
                 ot.typeTableTracker.objectTrackerDictionary.Remove(objID.Name);
+                ot.typeTableTracker.objectTrackerArray = null;   // trigger a rebuild for this portion of the persist file
 
                 if (idHasUUID)
                     uuidToObjectTrackerDictionary.Remove(objID.UUID);
@@ -2228,6 +2249,7 @@ namespace MosaicLib.Semi.E039
                         externalTypeToObjectNameDictionaryDictionary[typeName] = new Dictionary<string, ObjectTracker>();
                 }
 
+                seqNums.AddedTypeCount++;
                 seqNums.TableChangeSeqNum = GetNextSeqNum();
             }
             
@@ -2294,7 +2316,10 @@ namespace MosaicLib.Semi.E039
         {
             public ObjectTracker(E039ObjectID objID, IE039TableObserver tableObserver)
             {
-                ObjID = new E039ObjectID(objID, tableObserver);
+                if (Object.ReferenceEquals(objID.TableObserver, tableObserver))
+                    ObjID = objID;
+                else
+                    ObjID = new E039ObjectID(objID, tableObserver);
             }
 
             public void AssignUUID(string uuid)
@@ -2521,13 +2546,20 @@ namespace MosaicLib.Semi.E039
 
         private class PersistHelper : SimpleActivePartBase
         {
-            public PersistHelper(string partID)
+            public PersistHelper(string partID, E039BasicTablePartConfig config)
                 : base(partID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion1.Build(automaticallyIncAndDecBusyCountAroundActionInvoke: false, simpleActivePartBehaviorOptions: SimpleActivePartBehaviorOptions.None, simplePartBaseSettings: SimplePartBaseSettings.DefaultVersion0.Build(setBaseStatePublicationValueNameToNull : true)))
-            { }
-
-            public IBasicAction SavePersist<TValueSetType>(IPersistentStorage<TValueSetType> persistStorageObject) where TValueSetType : class, IPersistSequenceable, new()
             {
-                return new BasicActionImpl(actionQ, () => { persistStorageObject.Save(allowThrow: true); return string.Empty; }, CurrentMethodName, ActionLoggingReference);
+                ActionLoggingReference.Config = config.PersistHelperActionLoggingConfig ?? config.ActionLoggingConfig ?? ActionLoggingConfig.Trace_Trace_Trace_Trace;
+            }
+
+            public IBasicAction SavePersist<TValueSetType>(IPersistentStorage<TValueSetType> persistStorageObject) 
+                where TValueSetType : class, IPersistSequenceable, new()
+            {
+                return new BasicActionImpl(actionQ, () => 
+                { 
+                    persistStorageObject.Save(allowThrow: true); 
+                    return string.Empty; 
+                }, CurrentMethodName, ActionLoggingReference);
             }
         }
     }

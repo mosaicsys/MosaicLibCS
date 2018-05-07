@@ -1124,10 +1124,11 @@ namespace MosaicLib.WPF.Tools.Sets
                 {
                     foreach (var removeRangeItem in setDelta.RemoveRangeItems)
                     {
-                        long seqNum = removeRangeItem.RangeStartSeqNum;
-                        long lastRangeSeqNum = seqNum + removeRangeItem.Count;
-                        for (; seqNum <= lastRangeSeqNum; seqNum++)
+                        long rangeStartSeqNum = removeRangeItem.RangeStartSeqNum;
+                        foreach (var offset in Enumerable.Range(0, removeRangeItem.Count))
                         {
+                            long seqNum = rangeStartSeqNum + offset;
+
                             InnerObjectTracker innerObjTracker = null;
 
                             if (!setTrackerTracker.currentItemInnerObjTrackerListSortedBySeqNum.TryGetValue(seqNum, out innerObjTracker))
@@ -1312,6 +1313,8 @@ namespace MosaicLib.WPF.Tools.Sets
                     {
                         unlinkFromInnerOT.attachedLinksToObjectTrackerList.Remove(linkToObjectTracker);
                         NoteTouched(unlinkFromInnerOT);      // in case this object now needs to be removed
+
+                        linkToObjectTracker.linkToInnerObjectTracker = null;
                     }
 
                     if (!e039Link.IsEmpty)
