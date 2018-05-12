@@ -95,6 +95,27 @@ namespace MosaicLib.Semi.E039
         {
             return table.GetPublisher(link.FromID);
         }
+
+        /// <summary>
+        /// tableObserver helper method.  Attempts to obtain the object for a given <paramref name="objID"/>.  
+        /// First attempts to obtain the publisher for the <paramref name="objID"/> and then attempts to obtain the Object from the publisher.
+        /// </summary>
+        public static IE039Object GetObject(this IE039TableObserver tableObserver, E039ObjectID objID, IE039Object fallbackValue = null)
+        {
+            return ((tableObserver != null) ? tableObserver.GetPublisher(objID).GetObject(fallbackValue: null) : null) ?? fallbackValue;
+        }
+
+        /// <summary>
+        /// Object Publisher helper method.  Attempts to obtain the object for a given <paramref name="publisher"/>.  
+        /// If the <paramref name="publisher"/> is non-null and it contains a non-null Object then this method returns that value.
+        /// Otherwise it returns the given <paramref name="fallbackValue"/>
+        /// </summary>
+        public static IE039Object GetObject(this IObjectSource<IE039Object> publisher, IE039Object fallbackValue = null)
+        {
+            IE039Object obj = (publisher != null) ? publisher.Object : null;
+
+            return obj ?? fallbackValue;
+        }
     }
 
     /// <summary>
@@ -2641,26 +2662,58 @@ namespace MosaicLib.Semi.E039
 
     #region E039ObjectObserverWithInfoExtraction, IE039DerivedObjectObserverHelper, E039ObjectDerivedObjectInfoExtractionHelper
 
+    /// <summary>
+    /// This is a base class that is used to help create Observer pattern derived types for different types of E039Object.  
+    /// </summary>
     public class E039ObjectObserverWithInfoExtraction<TObjectInfoType> : ISequencedObjectSourceObserver<IE039Object>
     {
-        public E039ObjectObserverWithInfoExtraction(ISequencedObjectSource<IE039Object, int> objLocPublisher, Func<IE039Object, TObjectInfoType> infoFactoryDelegate)
+        /// <summary>Standard constructor</summary>
+        public E039ObjectObserverWithInfoExtraction(ISequencedObjectSource<IE039Object, int> objPublisher, Func<IE039Object, TObjectInfoType> infoFactoryDelegate = null)
         {
-            objLocObserver = new SequencedRefObjectSourceObserver<IE039Object, int>(objLocPublisher);
-            this.infoFactoryDelegate = infoFactoryDelegate;
+            ObjPublisher = objPublisher;
+            objObserver = new SequencedRefObjectSourceObserver<IE039Object, int>(ObjPublisher);
+            this.infoFactoryDelegate = infoFactoryDelegate ?? (obj => default(TObjectInfoType));
 
             Update(forceUpdate: true);
         }
 
-        protected SequencedRefObjectSourceObserver<IE039Object, int> objLocObserver;
+        /// <summary>
+        /// "Copy" constructor.  
+        /// <para/>Note: this constructor implicitly Updates the constructed observer so it may not give the same property values (Info, Object, ID) if a new object has been published since the <paramref name="other"/> observer was last Updated.
+        /// <para/>Note: this copy constructor does not copy the <paramref name="other"/>'s UpdateAndGetObjectUpdateActionArray.  Any desired object update actions for this new observer must be added explicitly.
+        /// </summary>
+        protected E039ObjectObserverWithInfoExtraction(E039ObjectObserverWithInfoExtraction<TObjectInfoType> other)
+        {
+            ObjPublisher = other.ObjPublisher;
+            objObserver = new SequencedRefObjectSourceObserver<IE039Object, int>(ObjPublisher);
+            this.infoFactoryDelegate = other.infoFactoryDelegate;
+
+            Update(forceUpdate: true);
+        }
+
+        /// <summary>Gives access to the object publisher instance from which this observer was constructed.  Used during copy construction.</summary>
+        public ISequencedObjectSource<IE039Object, int> ObjPublisher { get; private set; }
+
+        /// <summary>This gives the SequenceRefObjectSourceObserver that is used by this aggregate observer</summary>
+        protected SequencedRefObjectSourceObserver<IE039Object, int> objObserver;
+
+        /// <summary>This is the factory delegate function that was provided during original construction.  It is used to generate the Info object's contents after each Update operation.</summary>
         protected Func<IE039Object, TObjectInfoType> infoFactoryDelegate;
 
-        public IE039Object Object { get { return objLocObserver.Object; } }
+        /// <summary>Gives the last Object instance that was observered from the publisher when this object was last Updated, or null if there is no such object.</summary>
+        public IE039Object Object { get { return objObserver.Object; } }
+
+        /// <summary>Gives the E039ObjectID of the last Object instance that was observed from the publisher, or E039ObjectID.Empty if there is no such object.</summary>
+        public E039ObjectID ID { get { return (objObserver.Object ?? E039Object.Empty).ID; } }
+
+        /// <summary>Gives the <typeparamref name="TObjectInfoType"/> object produced by the infoFactoryDelegate</summary>
         public TObjectInfoType Info { get; protected set; }
 
+        /// <summary>get/set: equivalent to the IsUpdateNeeded flag for the underlying sequenced object source observer.  returns true when source's seq number does not match seq number during last update.  May be set to true to indicate that an update is needed.</summary>
         public virtual bool IsUpdateNeeded 
         { 
-            get { return objLocObserver.IsUpdateNeeded; } 
-            set { objLocObserver.IsUpdateNeeded = value; } 
+            get { return objObserver.IsUpdateNeeded; } 
+            set { objObserver.IsUpdateNeeded = value; } 
         }
 
         bool ISequencedSourceObserver.Update()
@@ -2668,14 +2721,23 @@ namespace MosaicLib.Semi.E039
             return this.Update(forceUpdate: false);
         }
 
+        /// <summary>
+        /// Updates the Object and Info from the publisher.  
+        /// <paramref name="forceUpdate"/> may be used to force updating the Info and any added update actions even when the underlying sequenced object source observer has already observed the most recently published object instance.
+        /// Returns true if the underlying sequenced object source obsrver's Update method indicated that the update was needed.
+        /// </summary>
         public virtual bool Update(bool forceUpdate = false)
         {
-            bool didUpdate = objLocObserver.Update();
+            bool didUpdate = objObserver.Update();
 
             if (didUpdate || forceUpdate)
             {
-                Info = infoFactoryDelegate(Object);
-                UpdateAndGetObjectUpdateActionArray().DoForEach(objectUpdateAction => objectUpdateAction(Object));
+                var o = Object;
+
+                Info = infoFactoryDelegate(o);
+
+                foreach (var updateAction in UpdateAndGetObjectUpdateActionArray())
+                    updateAction(o);
             }
 
             return didUpdate;
@@ -2688,16 +2750,21 @@ namespace MosaicLib.Semi.E039
             return (objectUpdateActionArray ?? (objectUpdateActionArray = objectUpdateActionList.SafeToArray()));
         }
 
-        public virtual E039ObjectObserverWithInfoExtraction<TObjectInfoType> Add(params Action<IE039Object> [] objectUpdateActionParamsArray)
+        /// <summary>Allows the caller to add a set of object update action's to this observer</summary>
+        public virtual E039ObjectObserverWithInfoExtraction<TObjectInfoType> Add(params Action<IE039Object>[] objectUpdateActionParamsArray)
         {
-            objectUpdateActionArray = null;
-            (objectUpdateActionList ?? (objectUpdateActionList = new List<Action<IE039Object>>())).AddRange(objectUpdateActionParamsArray);
+            if (objectUpdateActionParamsArray != null)
+            {
+                objectUpdateActionArray = null;
+                (objectUpdateActionList ?? (objectUpdateActionList = new List<Action<IE039Object>>())).AddRange(objectUpdateActionParamsArray);
 
-            UpdateAndGetObjectUpdateActionArray().DoForEach(objectUpdateAction => objectUpdateAction(Object));
+                objectUpdateActionParamsArray.DoForEach(objectUpdateAction => objectUpdateAction(Object));
+            }
 
             return this;
         }
 
+        /// <summary>Allows the caller to add a set of object observer helper instances to this observer.  Internally adds object update actions for each of the curresponding helper's UpdateFrom methods.</summary>
         public virtual E039ObjectObserverWithInfoExtraction<TObjectInfoType> Add(params IE039DerivedObjectObserverHelper[] objectObserverHelpersParamsArray)
         {
             return Add(objectObserverHelpersParamsArray.Select(helper => (Action<IE039Object>) helper.UpdateFrom).ToArray());
@@ -2706,13 +2773,13 @@ namespace MosaicLib.Semi.E039
         #region region ISequencedObjectSourceObserver<IE039Object>, ISequencedSourceObserver remaining methods and properties
 
         /// <summary>Returns true if the sequence number has been incremented or has been explicitly set</summary>
-        public bool HasBeenSet { get { return objLocObserver.HasBeenSet; } }
+        public bool HasBeenSet { get { return objObserver.HasBeenSet; } }
 
         /// <summary>Returns the current sequence number.  May return zero if sequence number is set to skip zero and Increment is in progress on another thread.</summary>
-        public int SequenceNumber { get { return objLocObserver.SequenceNumber; } }
+        public int SequenceNumber { get { return objObserver.SequenceNumber; } }
 
         /// <summary>Returns the current sequence number read as a volatile (no locking) - May return zero if sequence number is set to skip zero and Increment is in progress on another thread</summary>
-        public int VolatileSequenceNumber { get { return objLocObserver.VolatileSequenceNumber; } }
+        public int VolatileSequenceNumber { get { return objObserver.VolatileSequenceNumber; } }
 
         ISequencedObjectSourceObserver<IE039Object> ISequencedObjectSourceObserver<IE039Object>.UpdateInline()
         {
@@ -2729,20 +2796,25 @@ namespace MosaicLib.Semi.E039
         #endregion
     }
 
+    /// <summary>Interface supported by objects that are usable with <seealso cref="E039ObjectObserverWithInfoExtraction{TObjectInfoType}"/> class.</summary>
     public interface IE039DerivedObjectObserverHelper
     {
+        /// <summary>This methods is called each time the hosting observer's UpdateMethod is called when needed, or is called with the forceUpdate parameter set to true.  This method is passed the most recently observed Object.</summary>
         void UpdateFrom(IE039Object updateFromObject);
     }
 
+    /// <summary>Helper class that can be used to attach additional types of Info object observers to an existing <seealso cref="E039ObjectObserverWithInfoExtraction{TObjectInfoType}"/> object</summary>
     public class E039ObjectDerivedObjectInfoExtractionHelper<TDerivedObjectInfoType> : IE039DerivedObjectObserverHelper
     {
+        /// <summary>Constructor.  Caller provides the <paramref name="infoFactoryDelegate"/> that is to be used to generate the Info property contents from each newly observed object.</summary>
         public E039ObjectDerivedObjectInfoExtractionHelper(Func<IE039Object, TDerivedObjectInfoType> infoFactoryDelegate)
         {
-            this.infoFactoryDelegate = infoFactoryDelegate;
+            this.infoFactoryDelegate = infoFactoryDelegate ?? (obj => default(TDerivedObjectInfoType));
         }
 
         private Func<IE039Object, TDerivedObjectInfoType> infoFactoryDelegate;
 
+        /// <summary>Gives the <typeparamref name="TDerivedObjectInfoType"/> generated using the constructed infoFactoryDelegate from the last observed object.</summary>
         public TDerivedObjectInfoType Info { get; private set; }
 
         void IE039DerivedObjectObserverHelper.UpdateFrom(IE039Object updateFromObject)

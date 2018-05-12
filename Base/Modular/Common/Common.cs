@@ -4704,13 +4704,19 @@ namespace MosaicLib.Modular.Common
         /// <summary>Merge by adding new items from the rhs into the lhs only if the lhs does not already contains an element with the same name. [0x01]</summary>
         AddNewItems = 0x01,
 
-        /// <summary>Merge by updating only each item in the lhs that is also in the rhs by replacing the lhs item's value the corresponding rhs item's value. [0x02]</summary>
+        /// <summary>Merge by replacing the values for selected items in the lhs with the values of corresondingly named items in the rhs. [0x02]</summary>
         UpdateExistingItems = 0x02,
 
-        /// <summary>Select to remove empty items (and any matching named value in the from set) from the resulting set [0x04]</summary>
+        /// <summary>
+        /// Select to remove items from the lhs when a corresondingly named item is found in the rhs that has the empty value (also called a keyword item) [0x04]
+        /// <para/>The two variants of Remove are provided to support two different means of selecting which lhs items are to be removed so that the caller has control of any potential ambiguity in the use of keyword and/or null update/add items in the rhs
+        /// </summary>
         RemoveEmpty = 0x04,
 
-        /// <summary>Select to remove null items (and any matching named value in the from set) from the resulting set [0x08]</summary>
+        /// <summary>
+        /// Select to remove items from the lhs when a corresondingly named item if found in the rhs that has been given the value of null [0x08]
+        /// <para/>The two variants of Remove are provided to support two different means of selecting which lhs items are to be removed so that the caller has control of any potential ambiguity in the use of keyword and/or null update/add items in the rhs
+        /// </summary>
         RemoveNull = 0x08,
 
         /// <summary>Select to request that the merge operation will concatinate the contents of corresonding list objects.  This behavior is only useful when combined with Update [0x10]</summary>

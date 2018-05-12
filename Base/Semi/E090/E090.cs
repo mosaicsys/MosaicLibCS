@@ -67,14 +67,49 @@ namespace MosaicLib.Semi.E090
 
     #region E090StateUpdateBehavior flags
 
+    /// <summary>
+    /// Flags that are used to control the behavior of the various E090 Update related ExtensionMethods provided here.
+    /// <para/>None (0x00), AutoInProcess (0x01), AllowReturnToNeedsProcessing (0x02), AutoUpdateSTS (0x04), All (0x07)
+    /// </summary>
     [Flags]
     public enum E090StateUpdateBehavior : int
     {
+        /// <summary>Placeholder default value [0x00]</summary>
         None = 0x00,
+        
+        /// <summary>Deprecated: Automatically add a transition to InProcess when the current state is NeedsProcessing and the targetSPS is a terminal state [0x01]</summary>
+        [Obsolete("This function has been deprecated as the desired behavior can only be accomplished when generating the final events for external delivery.  This behavior cannot reliably by applied using E039 Update items. (2018-05-10)")]
         AutoInProcess = 0x01,
+        
+        /// <summary>Include this flag to support requested transitions from InProcess back to NeedsProcessing [0x02]</summary>
         AllowReturnToNeedsProcessing = 0x02,
+
+        /// <summary>Include this flag to support adding automatic transitions for the STS based on the location and the SPS</summary>
         AutoUpdateSTS = 0x04,
-        All = (AutoInProcess | AllowReturnToNeedsProcessing | AutoUpdateSTS),
+
+        /// <summary>The use of this flag causes the E090 SPS related logic to primarily update the PendingSPS rather than the main SPS property.  This allows the E090 SPS system to be given a sequence of values and delays performing the final SPS complete transition until the user explicitly requests it or until the substrate reaches its destination (at which point it is safe to lock down the final SPS value).</summary>
+        UsePendingSPS = 0x08,
+
+        /// <summary>The use of this flag causes each E090 SPS state update operation to append the given non-Undefined SPS value to the SPSList attribute.</summary>
+        UseSPSList = 0x10,
+
+        /// <summary>
+        /// The use of this flag causes each E090 SPS state update operation to append the current substrate location to the SPSLocList attribute whenever a new SPS value is appendended to the SPSList.
+        /// <para/>Note: if this flag is not used uniformly with the UseSPSList flag, then the SPSLocList attribute may end up being shorter than the SPSList attribute itself.
+        /// </summary>
+        UseSPSLocList = 0x20,
+
+        /// <summary>The use of this flag requests that any corresponding E090 create, of update method should also include an external sync operation.</summary>
+        AddExternalSyncItem = 0x40,
+
+        /// <summary>Synonym for AllV1: (AllowReturnToNeedsProcessing | AutoUpdateSTS) [0x06]</summary>
+        All = AllV1,
+
+        /// <summary>(AllowReturnToNeedsProcessing | AutoUpdateSTS) [0x06]</summary>
+        AllV1 = (AllowReturnToNeedsProcessing | AutoUpdateSTS),
+
+        /// <summary>(AllowReturnToNeedsProcessing | AutoUpdateSTS | UsePendingSPS | UseSPSList | UseSPSLocList) [0x7e]</summary>
+        AllV2 = (AllowReturnToNeedsProcessing | AutoUpdateSTS | UsePendingSPS | UseSPSList | UseSPSLocList),
     }
 
     #endregion
@@ -86,11 +121,11 @@ namespace MosaicLib.Semi.E090
     /// </summary>
     public static partial class ExtensionMethods
     {
-        public static string CreateE090SubstLoc(this IE039TableUpdater tableUpdater, string substLocName, Action<E039UpdateItem.AddObject> addedObjectDelegate, INamedValueSet attributes = null, E039ObjectFlags flags = E039ObjectFlags.None, bool addSyncExternalItem = false)
+        public static string CreateE090SubstLoc(this IE039TableUpdater tableUpdater, string substLocName, Action<E039UpdateItem.AddObject> addedObjectDelegate, INamedValueSet attributes = null, E039ObjectFlags flags = E039ObjectFlags.Pinned, bool addSyncExternalItem = false, int instanceNum = 0)
         {
             E039UpdateItem.AddObject addObjectUpdateItem;
 
-            string ec = tableUpdater.CreateE090SubstLoc(substLocName, out addObjectUpdateItem, attributes: attributes, flags: flags, addSyncExternalItem: addSyncExternalItem);
+            string ec = tableUpdater.CreateE090SubstLoc(substLocName, out addObjectUpdateItem, attributes: attributes, flags: flags, addSyncExternalItem: addSyncExternalItem, instanceNum: instanceNum);
 
             if (addedObjectDelegate != null)
                 addedObjectDelegate(addObjectUpdateItem);
@@ -98,9 +133,9 @@ namespace MosaicLib.Semi.E090
             return ec;
         }
 
-        public static string CreateE090SubstLoc(this IE039TableUpdater tableUpdater, string substLocName, out E039UpdateItem.AddObject addObjectUpdateItem, INamedValueSet attributes = null, E039ObjectFlags flags = E039ObjectFlags.None, bool addSyncExternalItem = false)
+        public static string CreateE090SubstLoc(this IE039TableUpdater tableUpdater, string substLocName, out E039UpdateItem.AddObject addObjectUpdateItem, INamedValueSet attributes = null, E039ObjectFlags flags = E039ObjectFlags.Pinned, bool addSyncExternalItem = false, int instanceNum = 0)
         {
-            E039UpdateItem[] updateItemArray = new List<E039UpdateItem>().GenerateCreateE090SubstLocItems(substLocName, out addObjectUpdateItem, attributes: attributes, flags: flags, addSyncExternalItem: addSyncExternalItem).ToArray();
+            E039UpdateItem[] updateItemArray = new List<E039UpdateItem>().GenerateCreateE090SubstLocItems(substLocName, out addObjectUpdateItem, attributes: attributes, flags: flags, addSyncExternalItem: addSyncExternalItem, instanceNum: instanceNum).ToArray();
 
             return tableUpdater.Update(updateItemArray).Run();
         }
@@ -124,24 +159,37 @@ namespace MosaicLib.Semi.E090
             return tableUpdater.Update(updateItemArray).Run();
         }
 
-        public static string NoteSubstMoved(this IE039TableUpdater table, IE039Object substObj, IE039Object toLocObj, E090StateUpdateBehavior updateBehavior = E090StateUpdateBehavior.All, bool addSyncExternalItem = false)
+        public static string NoteSubstMoved(this IE039TableUpdater tableUpdater, IE039Object substObj, IE039Object toLocObj, E090StateUpdateBehavior updateBehavior = E090StateUpdateBehavior.AllV1, bool addSyncExternalItem = false)
         {
-            E039ObjectID substObjID = (substObj != null) ? substObj.ID : E039ObjectID.Empty;
             E039ObjectID toLocObjID = (toLocObj != null) ? toLocObj.ID : E039ObjectID.Empty;
+
+            return tableUpdater.NoteSubstMoved(substObj, toLocObjID, updateBehavior: updateBehavior, addSyncExternalItem: addSyncExternalItem);
+        }
+
+        public static string NoteSubstMoved(this IE039TableUpdater tableUpdater, IE039Object substObj, E039ObjectID toLocObjID, E090StateUpdateBehavior updateBehavior = E090StateUpdateBehavior.AllV1, bool addSyncExternalItem = false)
+        {
+            E090SubstInfo substInfo = new E090SubstInfo(substObj);
+
+            return tableUpdater.NoteSubstMoved(substInfo, toLocObjID, updateBehavior: updateBehavior, addSyncExternalItem: addSyncExternalItem);
+        }
+
+        public static string NoteSubstMoved(this IE039TableUpdater tableUpdater, E090SubstInfo substInfo, E039ObjectID toLocObjID, E090StateUpdateBehavior updateBehavior = E090StateUpdateBehavior.AllV1, bool addSyncExternalItem = false)
+        {
+            E039ObjectID substObjID = substInfo.ObjID;
 
             string ec = null;
             using (var eeTrace = new Logging.EnterExitTrace(logger, "{0}: obj '{1}' '{2}'".CheckedFormat(Fcns.CurrentMethodName, substObjID, toLocObjID)))
             {
                 List<E039UpdateItem> updateItemList = new List<E039UpdateItem>();
 
-                ec = updateItemList.GenerateE090UpdateItems(substObj, toLocObjID: toLocObjID, updateBehavior: updateBehavior, addSyncExternalItem: addSyncExternalItem);
+                ec = updateItemList.GenerateE090UpdateItems(substInfo, toLocObjID: toLocObjID, updateBehavior: updateBehavior, addSyncExternalItem: addSyncExternalItem);
 
                 if (ec.IsNullOrEmpty())
                 {
                     if (updateItemList.Count > 0)
-                        ec = table.Update(updateItemList.ToArray()).Run();
+                        ec = tableUpdater.Update(updateItemList.ToArray()).Run();
                     else
-                        logger.Debug.Emit("{0}: nothing to do: obj '{0}' is already at '{1}'", substObj.ID, toLocObjID);
+                        logger.Debug.Emit("{0}: nothing to do: obj '{0}' is already at '{1}'", substObjID, toLocObjID);
                 }
 
                 eeTrace.ExtraMessage = ec;
@@ -150,29 +198,46 @@ namespace MosaicLib.Semi.E090
             return ec;
         }
 
-        public static string SetSubstProcState(this IE039TableUpdater table, IE039Object substObj, SubstProcState targetSPS, E090StateUpdateBehavior updateBehavior = E090StateUpdateBehavior.All, bool addSyncExternalItem = false)
+        public static string SetSubstProcState(this IE039TableUpdater tableUpdater, IE039Object substObj, SubstProcState spsParam, E090StateUpdateBehavior updateBehavior = E090StateUpdateBehavior.AllV1, bool addSyncExternalItem = false)
         {
-            E039ObjectID substObjID = (substObj != null) ? substObj.ID : default(E039ObjectID);
+            E090SubstInfo substInfo = new E090SubstInfo(substObj);
+
+            return tableUpdater.SetSubstProcState(substInfo, spsParam: spsParam, updateBehavior: updateBehavior, addSyncExternalItem: addSyncExternalItem);
+        }
+
+        public static string SetSubstProcState(this IE039TableUpdater tableUpdater, E090SubstInfo substInfo, SubstProcState spsParam, E090StateUpdateBehavior updateBehavior = E090StateUpdateBehavior.AllV1, bool addSyncExternalItem = false)
+        {
+            E039ObjectID substObjID = substInfo.ObjID;
 
             string ec = null;
-            using (var eeTrace = new Logging.EnterExitTrace(logger, "{0}: obj '{1}' {2}".CheckedFormat(Fcns.CurrentMethodName, substObjID, targetSPS)))
+            using (var eeTrace = new Logging.EnterExitTrace(logger, "{0}: obj '{1}' {2}".CheckedFormat(Fcns.CurrentMethodName, substObjID, spsParam)))
             {
                 List<E039UpdateItem> updateItemList = new List<E039UpdateItem>();
 
-                ec = updateItemList.GenerateE090UpdateItems(substObj, targetSPS: targetSPS, updateBehavior: updateBehavior, addSyncExternalItem: addSyncExternalItem);
+                ec = updateItemList.GenerateE090UpdateItems(substInfo, spsParam: spsParam, updateBehavior: updateBehavior, addSyncExternalItem: addSyncExternalItem);
 
                 if (ec.IsNullOrEmpty())
                 {
                     if (updateItemList.Count > 0)
-                        ec = table.Update(updateItemList.ToArray()).Run();
+                        ec = tableUpdater.Update(updateItemList.ToArray()).Run();
                     else
-                        logger.Debug.Emit("{0}: nothing to do: obj '{0}' sps is already {1}", substObj.ID, targetSPS);
+                        logger.Debug.Emit("{0}: nothing to do: obj '{0}' sps is already {1}", substObjID, spsParam);
                 }
 
                 eeTrace.ExtraMessage = ec;
             }
 
             return ec;
+        }
+
+        public static string SetPendingSubstProcState(this IE039TableUpdater tableUpdater, IE039Object substObj, SubstProcState spsParam, E090StateUpdateBehavior updateBehavior = E090StateUpdateBehavior.AllV2, bool addSyncExternalItem = false)
+        {
+            return tableUpdater.SetSubstProcState(substObj, spsParam: spsParam, updateBehavior: updateBehavior | E090StateUpdateBehavior.UsePendingSPS, addSyncExternalItem: addSyncExternalItem);
+        }
+
+        public static string SetPendingSubstProcState(this IE039TableUpdater tableUpdater, E090SubstInfo substInfo, SubstProcState spsParam, E090StateUpdateBehavior updateBehavior = E090StateUpdateBehavior.AllV2, bool addSyncExternalItem = false)
+        {
+            return tableUpdater.SetSubstProcState(substInfo, spsParam: spsParam, updateBehavior: updateBehavior | E090StateUpdateBehavior.UsePendingSPS, addSyncExternalItem: addSyncExternalItem);
         }
 
         public static E039UpdateItem.AddObject GenerateCreateE090SubstLocItems(this string substLocName, List<E039UpdateItem> updateItemList, INamedValueSet attributes = null, E039ObjectFlags flags = E039ObjectFlags.None, bool addIfNeeded = false, bool addSyncExternalItem = false)
@@ -184,9 +249,12 @@ namespace MosaicLib.Semi.E090
             return addObjectItem;
         }
 
-        public static List<E039UpdateItem> GenerateCreateE090SubstLocItems(this List<E039UpdateItem> updateItemList, string substLocName, out E039UpdateItem.AddObject addObjectUpdateItem, INamedValueSet attributes = null, E039ObjectFlags flags = E039ObjectFlags.None, bool addIfNeeded = false, bool addSyncExternalItem = false)
+        public static List<E039UpdateItem> GenerateCreateE090SubstLocItems(this List<E039UpdateItem> updateItemList, string substLocName, out E039UpdateItem.AddObject addObjectUpdateItem, INamedValueSet attributes = null, E039ObjectFlags flags = E039ObjectFlags.None, bool addIfNeeded = false, bool addSyncExternalItem = false, int instanceNum = 0)
         {
             E039ObjectID substLocObjID = new E039ObjectID(substLocName, Constants.SubstrateLocationObjectType, assignUUID: true);
+
+            if (instanceNum != 0)
+                attributes = attributes.ConvertToWriteable().SetValue("InstanceNum", instanceNum);
 
             updateItemList.Add(addObjectUpdateItem = new E039UpdateItem.AddObject(substLocObjID, attributes: attributes, flags: flags, ifNeeded: addIfNeeded));
             updateItemList.Add(new E039UpdateItem.AddLink(new E039Link(substLocObjID, E039ObjectID.Empty, Constants.ContainsLinkKey), ifNeeded: addIfNeeded));
@@ -224,108 +292,126 @@ namespace MosaicLib.Semi.E090
             return updateItemList;
         }
 
-        public static string GenerateE090UpdateItems(this List<E039UpdateItem> updateItemList, IE039Object substObj, SubstProcState targetSPS = SubstProcState.Undefined, E039ObjectID toLocObjID = null, E090StateUpdateBehavior updateBehavior = E090StateUpdateBehavior.None, bool addSyncExternalItem = false)
+        public static string GenerateE090UpdateItems(this List<E039UpdateItem> updateItemList, IE039Object substObj, SubstProcState spsParam = SubstProcState.Undefined, E039ObjectID toLocObjID = null, E090StateUpdateBehavior updateBehavior = E090StateUpdateBehavior.None, bool addSyncExternalItem = false)
         {
-            if (substObj == null || updateItemList == null)
+            E090SubstInfo substInfo = new E090SubstInfo(substObj);
+
+            return updateItemList.GenerateE090UpdateItems(substInfo, spsParam: spsParam, toLocObjID: toLocObjID, updateBehavior: updateBehavior, addSyncExternalItem: addSyncExternalItem);
+        }
+
+        public static string GenerateE090UpdateItems(this List<E039UpdateItem> updateItemList, E090SubstInfo substInfo, SubstProcState spsParam = SubstProcState.Undefined, E039ObjectID toLocObjID = null, E090StateUpdateBehavior updateBehavior = E090StateUpdateBehavior.None, bool addSyncExternalItem = false)
+        {
+            if (substInfo.Obj == null || updateItemList == null)
                 return "{0}: given invalid or null parameter".CheckedFormat(Fcns.CurrentMethodName);
+
+            if (!substInfo.Obj.IsSubstrate())
+                return "{0}: given non-Substrate obj [{1}]".CheckedFormat(Fcns.CurrentMethodName, substInfo.Obj);
 
             toLocObjID = toLocObjID ?? E039ObjectID.Empty;
 
-            E090SubstInfo currentSubstInfo = new E090SubstInfo(substObj);
-
-            if (!substObj.IsSubstrate())
-                return "{0}: given non substrate obj '{1}'".CheckedFormat(Fcns.CurrentMethodName, substObj.ID);
+            var currentSubstInfo = substInfo;
 
             if (!currentSubstInfo.IsValid)
-                return "{0}: given unusable obj: {1}".CheckedFormat(Fcns.CurrentMethodName, currentSubstInfo);
+                return "{0}: given unusable obj.  derived Substrate Info is not valid: [{1}]".CheckedFormat(Fcns.CurrentMethodName, currentSubstInfo);
 
-            bool currentIsNeedsProcessing = (currentSubstInfo.SPS == SubstProcState.NeedsProcessing);
-            bool currentIsInProcess = (currentSubstInfo.SPS == SubstProcState.InProcess);
+            // first generate any required location move update item and update the currentLocID accordingly
+            string currentLocID = currentSubstInfo.LocID;
 
-            bool updateSPS = (targetSPS != SubstProcState.Undefined && targetSPS != currentSubstInfo.SPS);
-
-            E039ObjectID fromLocObjID = currentSubstInfo.LocsLinkedToHere.FirstOrDefault().FromID;
-
-            bool updateLocID = (!toLocObjID.IsEmpty && toLocObjID.Name != currentSubstInfo.LocID);
-
-            if (updateLocID && fromLocObjID.IsEmpty)
-                logger.Debug.Emit("{0}: attempt to move {1} issue: from location '{2}' object is not usable", Fcns.CurrentMethodName, substObj.ID, currentSubstInfo.LocID);
-
-            SubstState inferredTargetSTS = currentSubstInfo.GetInferredSTS(updateLocID ? toLocObjID.Name : null, sps: updateSPS ? (SubstProcState ?) targetSPS : null);
-            bool updateSTS = (inferredTargetSTS != currentSubstInfo.STS && updateBehavior.IsSet(E090StateUpdateBehavior.AutoUpdateSTS));
-
-            // general pattern:
-
-            // generate AtWork STS and/or related locationChanged transition
-
-            if (inferredTargetSTS == SubstState.AtWork)
+            if (!toLocObjID.IsEmpty)
             {
-                if (updateSTS)
-                    updateItemList.AddSetAttributesItem(obj: substObj, attributes: new NamedValueSet() { { "SubstState", inferredTargetSTS } });
+                E039ObjectID fromLocObjID = currentSubstInfo.LocsLinkedToHere.FirstOrDefault().FromID;
 
-                if (updateLocID)
-                    updateItemList.Add(new E039UpdateItem.AddLink(new E039Link(toLocObjID, substObj.ID, Constants.ContainsLinkKey), autoUnlinkFromPriorByTypeStr: true));
-            }
+                if (fromLocObjID.IsEmpty)
+                    logger.Debug.Emit("{0}: Issue with attempt to move [{1}]: current location [{2}] is unknown", Fcns.CurrentMethodName, currentSubstInfo.ObjID, currentLocID);
 
-            // generate InProcess transition if needed
-            // and then generate Final SPS transition if needed
-            if (updateSPS)
-            {
-                bool addInProcessSPSTranstion = false;
-                bool addToTargetSPSTransition = false;
-
-                switch (targetSPS)
+                if (toLocObjID.Name != currentLocID)
                 {
-                    case SubstProcState.NeedsProcessing:
-                        addToTargetSPSTransition = (currentIsInProcess && updateBehavior.IsSet(E090StateUpdateBehavior.AllowReturnToNeedsProcessing));
-                        break;
-                    case SubstProcState.InProcess:
-                        addToTargetSPSTransition = currentIsNeedsProcessing;
-                        break;
-                    case SubstProcState.Lost:
-                    case SubstProcState.Skipped:
-                        addToTargetSPSTransition = currentIsNeedsProcessing || currentIsInProcess;
-                        break;
-                    case SubstProcState.Processed:
-                    case SubstProcState.Aborted:
-                    case SubstProcState.Stopped:
-                    case SubstProcState.Rejected:
-                        if (currentIsInProcess)
-                            addToTargetSPSTransition = true;
-                        else if (currentIsNeedsProcessing && updateBehavior.IsSet(E090StateUpdateBehavior.AutoInProcess))
-                        {
-                            addInProcessSPSTranstion = true;
-                            addToTargetSPSTransition = true;
-                        }
-                        break;
-
-                    default:
-                        break;
-                }
-
-                if (addToTargetSPSTransition)
-                {
-                    if (addInProcessSPSTranstion)
-                        updateItemList.AddSetAttributesItem(obj: substObj, attributes: new NamedValueSet() { { "SubstProcState", SubstProcState.InProcess } });
-                    updateItemList.AddSetAttributesItem(obj: substObj, attributes: new NamedValueSet() { { "SubstProcState", targetSPS } });
-                }
-                else
-                {
-                    return "{0}: cannot set obj '{0}' to sps:{1} [from:{2}]".CheckedFormat(Fcns.CurrentMethodName, substObj.ID, targetSPS, currentSubstInfo.STS);
+                    updateItemList.Add(new E039UpdateItem.AddLink(new E039Link(toLocObjID, currentSubstInfo.ObjID, Constants.ContainsLinkKey), autoUnlinkFromPriorByTypeStr: true));
+                    currentLocID = toLocObjID.Name;
                 }
             }
 
-            // generate AtSource or AtDestination STS and/or related locationChanged transition
-            if (inferredTargetSTS == SubstState.AtSource || inferredTargetSTS == SubstState.AtDestination)
-            {
-                if (updateLocID)
-                    updateItemList.Add(new E039UpdateItem.AddLink(new E039Link(toLocObjID, substObj.ID, Constants.ContainsLinkKey), autoUnlinkFromPriorByTypeStr: true));
+            // the following logic will create the attribute update NVS if needed.  If it ends up being non-empty then an UpdateItem will be added for it.
+            NamedValueSet attribUpdateNVS = null;
+            NamedValueMergeBehavior attribUpdateNVSMergeBehavior = NamedValueMergeBehavior.AddAndUpdate;
 
-                if (updateSTS)
-                    updateItemList.AddSetAttributesItem(obj: substObj, attributes: new NamedValueSet() { { "SubstState", inferredTargetSTS } });
+            // next apply any change in the SPS and/or PendingSPS
+
+            if (spsParam != SubstProcState.Undefined)
+            {
+                attribUpdateNVS = attribUpdateNVS ?? new NamedValueSet();
+
+                bool usePendingSPSBehavior = updateBehavior.IsSet(E090StateUpdateBehavior.UsePendingSPS);
+
+                var setSPS = SubstProcState.Undefined;
+                var setPendingSPS = SubstProcState.Undefined;
+
+                if (!usePendingSPSBehavior)
+                {
+                    string ec = GetSPSTransitionDenyReason(currentSubstInfo.SPS, spsParam, allowReturnToNeedsProcessing: updateBehavior.IsSet(E090StateUpdateBehavior.AllowReturnToNeedsProcessing));
+
+                    if (!ec.IsNullOrEmpty())
+                        logger.Debug.Emit("{0}: Issue with attempt to set SPS for [{1}, @{2}]: {3}", Fcns.CurrentMethodName, currentSubstInfo.ObjID, currentLocID, ec);
+
+                    if (spsParam != currentSubstInfo.SPS)
+                        setSPS = spsParam;
+                }
+                else if (usePendingSPSBehavior)
+                {
+                    var nextPendingSPS = currentSubstInfo.InferredSPS.MergeWith(spsParam);
+
+                    if (nextPendingSPS != currentSubstInfo.PendingSPS)
+                        setPendingSPS = nextPendingSPS;
+
+                    if (setPendingSPS != SubstProcState.Undefined && setPendingSPS != SubstProcState.NeedsProcessing && currentSubstInfo.SPS == SubstProcState.NeedsProcessing)
+                        setSPS = setPendingSPS;
+                }
+
+                if (setSPS != SubstProcState.Undefined)
+                {
+                    attribUpdateNVS.Add("SubstProcState", setSPS);
+                    currentSubstInfo.SPS = setSPS;
+                }
+
+                if (setPendingSPS != SubstProcState.Undefined)
+                {
+                    attribUpdateNVS.Add("PendingSPS", setPendingSPS);
+                    currentSubstInfo.PendingSPS = setPendingSPS;
+                }
+
+                if (updateBehavior.IsSet(E090StateUpdateBehavior.UseSPSList))
+                {
+                    attribUpdateNVSMergeBehavior |= NamedValueMergeBehavior.AppendLists;
+                    attribUpdateNVS.Add("SPSList", new[] { spsParam.ToString() });
+
+                    if (updateBehavior.IsSet(E090StateUpdateBehavior.UseSPSLocList))
+                        attribUpdateNVS.Add("SPSLocList", new[] { currentLocID });
+                }
             }
 
-            if (addSyncExternalItem)
+            if (updateBehavior.IsSet(E090StateUpdateBehavior.AutoUpdateSTS))
+            {
+                attribUpdateNVS = attribUpdateNVS ?? new NamedValueSet();
+
+                SubstState inferredNextSTS = currentSubstInfo.GetInferredSTS(currentLocID, sps: currentSubstInfo.InferredSPS);
+
+                if (inferredNextSTS != currentSubstInfo.STS)
+                {
+                    attribUpdateNVS.Add("SubstState", inferredNextSTS);
+
+                    var inferredSPS = currentSubstInfo.InferredSPS;
+                    if (inferredNextSTS == SubstState.AtDestination && currentSubstInfo.SPS != inferredSPS)
+                    {
+                        attribUpdateNVS.Add("SubstProcState", inferredSPS);
+                        currentSubstInfo.SPS = inferredSPS;
+                    }
+                }
+            }
+
+            if (!attribUpdateNVS.IsNullOrEmpty())
+                updateItemList.AddSetAttributesItem(objID: currentSubstInfo.ObjID, attributes: attribUpdateNVS, mergeBehavior: attribUpdateNVSMergeBehavior);
+
+            if (addSyncExternalItem || updateBehavior.IsSet(E090StateUpdateBehavior.AddExternalSyncItem))
                 updateItemList.Add(new E039UpdateItem.SyncExternal());
 
             return string.Empty;
@@ -348,18 +434,104 @@ namespace MosaicLib.Semi.E090
         }
 
         private static Logging.ILogger logger = new Logging.Logger("E090.ExtensionMethods");
+
+        /// <summary>
+        /// Accepts a current <paramref name="startingSPS"/> and a <paramref name="mergeWithSPS"/>.  Returns the value between the two that has the higher priority.
+        /// <para/>Priority (from least to greatest): NeedsProcessing, InProcess, Processed, Stopped, Rejected, Skipped, Aborted, Lost
+        /// </summary>
+        public static SubstProcState MergeWith(this SubstProcState startingSPS, SubstProcState mergeWithSPS)
+        {
+            switch (startingSPS)
+            {
+                case SubstProcState.NeedsProcessing: if (mergeWithSPS.IsInProcess() || mergeWithSPS.IsProcessingComplete()) return mergeWithSPS; break;
+                case SubstProcState.InProcess: if (mergeWithSPS.IsProcessingComplete()) return mergeWithSPS; break;
+                case SubstProcState.Processed: if (mergeWithSPS.IsProcessingComplete()) return mergeWithSPS; break;
+                case SubstProcState.Stopped: if (mergeWithSPS == SubstProcState.Rejected || mergeWithSPS == SubstProcState.Skipped || mergeWithSPS == SubstProcState.Aborted || mergeWithSPS == SubstProcState.Lost) return mergeWithSPS; break;
+                case SubstProcState.Rejected: if (mergeWithSPS == SubstProcState.Skipped || mergeWithSPS == SubstProcState.Aborted || mergeWithSPS == SubstProcState.Lost) return mergeWithSPS; break;
+                case SubstProcState.Skipped: if (mergeWithSPS == SubstProcState.Aborted || mergeWithSPS == SubstProcState.Lost) return mergeWithSPS; break;
+                case SubstProcState.Aborted: if (mergeWithSPS == SubstProcState.Lost) return mergeWithSPS; break;
+                case SubstProcState.Lost: break;
+                case SubstProcState.Undefined:
+                default:
+                    return mergeWithSPS;
+            }
+
+            return startingSPS;
+        }
+
+        public static string GetSPSTransitionDenyReason(SubstProcState currentSPS, SubstProcState toSPS, bool requireInProcessBeforeProcessComplete = false, bool allowReturnToNeedsProcessing = false)
+        {
+            string reason = null;
+
+            if (toSPS != currentSPS && currentSPS != SubstProcState.Undefined)
+            {
+                switch (toSPS)
+                {
+                    case SubstProcState.NeedsProcessing:
+                        if (!currentSPS.IsInProcess())
+                            reason = "Transition is not allowed";
+                        else if (!allowReturnToNeedsProcessing)
+                            reason = "Transition is not enabled";
+                        break;
+
+                    case SubstProcState.InProcess:
+                        if (!currentSPS.IsNeedsProcessing())
+                            reason = "Transition is not allowed";
+                        break;
+
+                    case SubstProcState.Lost:
+                        break;
+
+                    case SubstProcState.Skipped:
+                        if (!currentSPS.IsNeedsProcessing() && !currentSPS.IsInProcess())
+                            reason = "Transition is not allowed";
+                        break;
+
+                    case SubstProcState.Processed:
+                    case SubstProcState.Aborted:
+                    case SubstProcState.Stopped:
+                    case SubstProcState.Rejected:
+                        if (!(currentSPS.IsInProcess() || (!requireInProcessBeforeProcessComplete && currentSPS.IsNeedsProcessing())))
+                            reason = "Transition is not allowed";
+                        break;
+
+                    default:
+                        return "Current SubstProcState is not valid";
+                }
+            }
+
+            return (reason.IsNullOrEmpty() ? "" : "{0} [from:{1}, to:{2}]".CheckedFormat(reason, currentSPS, toSPS));
+        }
     }
 
     #endregion
 
     #region E090SubstLocObserver and E090SubstObserver objects
 
+    /// <summary>
+    /// Observer helper object for use with Substrate Location object publishers.  
+    /// </summary>
     public class E090SubstLocObserver : E039.E039ObjectObserverWithInfoExtraction<E090SubstLocInfo>
     {
+        /// <summary>Normal constructor.  Caller provides the object publisher instance to observe from.  If the optional <paramref name="alsoObserveContents"/> is given as false then the ContainsObject and ContainsSubstInfo properties will not be updated and will remain in their initial default states.</summary>
         public E090SubstLocObserver(ISequencedObjectSource<IE039Object, int> objLocPublisher, bool alsoObserveContents = true)
             : base(objLocPublisher, (obj) => new E090SubstLocInfo(obj))
         {
             AlsoObserveContents = alsoObserveContents;
+
+            if (AlsoObserveContents)
+                base.Add((obj) => UpdateContainsObject(obj));
+        }
+
+        /// <summary>
+        /// "Copy" constructor.  
+        /// <para/>Note: this constructor implicitly Updates the constructed observer so it may not give the same property values (Info, Object, ID, ...) if a new object has been published since the <paramref name="other"/> observer was last Updated.
+        /// <para/>Note: this copy constructor does not copy the <paramref name="other"/>'s UpdateAndGetObjectUpdateActionArray.  Any desired object update actions for this new observer must be added explicitly.
+        /// </summary>
+        public E090SubstLocObserver(E090SubstLocObserver other)
+            : base(other)
+        {
+            AlsoObserveContents = other.AlsoObserveContents;
 
             if (AlsoObserveContents)
                 base.Add((obj) => UpdateContainsObject(obj));
@@ -393,10 +565,23 @@ namespace MosaicLib.Semi.E090
         public E090SubstInfo ContainsSubstInfo { get; private set; }
     }
 
+    /// <summary>
+    /// Observer helper object for use with Substrate object publishers
+    /// </summary>
     public class E090SubstObserver : E039.E039ObjectObserverWithInfoExtraction<E090SubstInfo>
     {
+        /// <summary>Normal constructor.  Caller provides the object publisher instance to observe from.</summary>
         public E090SubstObserver(ISequencedObjectSource<IE039Object, int> objPublisher)
             : base(objPublisher, (obj) => new E090SubstInfo(obj))
+        { }
+
+        /// <summary>
+        /// "Copy" constructor.  
+        /// <para/>Note: this constructor implicitly Updates the constructed observer so it may not give the same property values (Info, Object, ID) if a new object has been published since the <paramref name="other"/> observer was last Updated.
+        /// <para/>Note: this copy constructor does not copy the <paramref name="other"/>'s UpdateAndGetObjectUpdateActionArray.  Any desired object update actions for this new observer must be added explicitly.
+        /// </summary>
+        public E090SubstObserver(E090SubstObserver other)
+            : base(other)
         { }
     }
     #endregion
@@ -409,29 +594,51 @@ namespace MosaicLib.Semi.E090
     /// </summary>
     public struct E090SubstLocInfo : IEquatable<E090SubstLocInfo>
     {
-        /// <summary>Normal constructor - attempts to decode the contents from the given e039 object <paramref name="obj"/></summary>
+        /// <summary>Normal constructor.  Caller must provide a non-empty Substrate Location type <paramref name="obj"/> [SubstLoc]</summary>
         public E090SubstLocInfo(IE039Object obj)
             : this()
         {
-            ObjID = (obj != null) ? obj.ID : E039ObjectID.Empty;
-            LinkToSubst = obj.FindFirstLinkTo(Constants.ContainsLinkKey);
-            SrcLinksToHere = obj.FindLinksFrom(Constants.SourceLocationLinkKey).ToArray();
-            DestLinksToHere = obj.FindLinksFrom(Constants.DestinationLocationLinkKey).ToArray();
+            Obj = obj;
+            ObjID = (Obj != null) ? Obj.ID : E039ObjectID.Empty;
+
+            INamedValueSet attributes = (Obj != null) ? Obj.Attributes : NamedValueSet.Empty;
+            InstanceNum = attributes["InstanceNum"].VC.GetValue<int>(rethrow: false);
+
+            LinkToSubst = Obj.FindFirstLinkTo(Constants.ContainsLinkKey);
+            SrcLinksToHere = Obj.FindLinksFrom(Constants.SourceLocationLinkKey).ToArray();
+            DestLinksToHere = Obj.FindLinksFrom(Constants.DestinationLocationLinkKey).ToArray();
         }
 
         /// <summary>Copy constructor</summary>
         public E090SubstLocInfo(E090SubstLocInfo other)
             : this()
         {
+            Obj = other.Obj;
             ObjID = other.ObjID;
+            InstanceNum = other.InstanceNum;
+
             LinkToSubst = other.LinkToSubst;
             SrcLinksToHere = other.SrcLinksToHere.MakeCopyOf(mapNullToEmpty: false);
             DestLinksToHere = other.DestLinksToHere.MakeCopyOf(mapNullToEmpty: false);
         }
 
+        /// <summary>Used to update the given <paramref name="nvs"/> to contain Attribute values for the properties in this object that represent Attribute values.</summary>
+        public NamedValueSet UpdateAttributeValues(NamedValueSet nvs)
+        {
+            nvs.ConditionalSetValue("InstanceNum", InstanceNum != 0, InstanceNum);
+
+            return nvs;
+        }
+
+        /// <summary>Gives the original object that this info object was constructed from, or null for the default constructor.</summary>
+        public IE039Object Obj { get; private set; }
+
         /// <summary>Gives the E039ObjectID of the object from which this structure was created, or E039ObjectID.Empty if the default constructor was used.</summary>
         public E039ObjectID ObjID { get { return _objID ?? E039ObjectID.Empty; } set { _objID = value; } }
         private E039ObjectID _objID;
+
+        /// <summary>When non-zero, this property gives the instance number for this location.  This is typically used when the location is part of a set of locations that can be indexed.  In this case this property may be used to determine the location's index in the set.</summary>
+        public int InstanceNum { get; set; }
 
         /// <summary>Gives the "Contains" link</summary>
         public E039Link LinkToSubst { get; set; }
@@ -485,11 +692,13 @@ namespace MosaicLib.Semi.E090
         public bool IsEmpty { get { return this.Equals(Empty); } }
 
         /// <summary>
-        /// Returns true if the contents of this object match the contentents of the given <paramref name="other"/> object
+        /// Returns true if the contents of this object match the contentents of the given <paramref name="other"/> object.
+        /// <para/>NOTE: this test does not look at the contents of the Obj property.
         /// </summary>
         public bool Equals(E090SubstLocInfo other)
         {
             return (ObjID.Equals(other.ObjID)
+                    && InstanceNum == other.InstanceNum
                     && LinkToSubst.Equals(other.LinkToSubst)
                     && SrcLinksToHere.IsEqualTo(other.SrcLinksToHere)
                     && DestLinksToHere.IsEqualTo(other.DestLinksToHere)
@@ -503,6 +712,9 @@ namespace MosaicLib.Semi.E090
                 return "E090SubstLocInfo Empty";
 
             StringBuilder sb = new StringBuilder("E090SubstLocInfo {0} {1}".CheckedFormat(ObjID.ToString(E039ToStringSelect.FullName), SLS));
+
+            if (InstanceNum != 0)
+                sb.CheckedAppendFormat(" InstNum:{0}", InstanceNum);
 
             if (!LinkToSubst.IsToIDEmpty)
                 sb.CheckedAppendFormat(" Contains:{0}", LinkToSubst.ToID.ToString(E039ToStringSelect.FullName));
@@ -519,35 +731,46 @@ namespace MosaicLib.Semi.E090
 
     /// <summary>
     /// This is a helper object that is generally used to extract Substrate related information from an Substrate IE039Object.
-    /// <para/>This includes information obtained from the "SubstProcState" (SPS), "SubstState" (STS), "LotID", and "SubstUsage" attributes as well as information
-    /// that is derived fromt he "Contains", "SrcLoc" and "DestLoc" links to/from this object.
+    /// <para/>This includes information obtained from the "SubstProcState" (SPS), "SubstState" (STS), "LotID", and "SubstUsage" attributes,
+    /// information from optional "PendingSPS", "SPSList", and "SPSLocList" attrubutes, 
+    /// and information that is derived from the "Contains", "SrcLoc" and "DestLoc" links to/from this object.
     /// </summary>
     public struct E090SubstInfo : IEquatable<E090SubstInfo>
     {
+        /// <summary>Normal constructor.  Caller must provide a non-empty Substrate type <paramref name="obj"/> [Substrate]</summary>
         public E090SubstInfo(IE039Object obj) 
             : this()
         {
-            _objID = (obj != null) ? obj.ID : null;
+            Obj = obj;
+            _objID = (Obj != null) ? Obj.ID : null;
 
-            INamedValueSet attributes = (obj != null) ? obj.Attributes : NamedValueSet.Empty;
+            INamedValueSet attributes = (Obj != null) ? Obj.Attributes : NamedValueSet.Empty;
             
             SPS = attributes["SubstProcState"].VC.GetValue(rethrow: false, defaultValue: SubstProcState.Undefined);
             STS = attributes["SubstState"].VC.GetValue(rethrow: false, defaultValue: SubstState.Undefined);
+            PendingSPS = attributes["PendingSPS"].VC.GetValue<SubstProcState>(rethrow: false, defaultValue: SubstProcState.Undefined);
+            SPSList = (attributes["SPSList"].VC.GetValue<ReadOnlyIList<string>>(rethrow: false) ?? ReadOnlyIList<string>.Empty).Select(str => str.TryParse<SubstProcState>()).ToArray();
+            SPSLocList = (attributes["SPSLocList"].VC.GetValue<IList<string>>(rethrow: false) ?? ReadOnlyIList<string>.Empty);
             LotID = attributes["LotID"].VC.GetValue<string>(rethrow: false).MapNullToEmpty();
             SubstUsageStr = attributes["SubstUsage"].VC.GetValue<string>(rethrow: false).MapNullToEmpty();
 
-            LocsLinkedToHere = obj.FindLinksFrom(Constants.ContainsLinkKey).ToArray();
-            LinkToSrc = obj.FindFirstLinkTo(Constants.SourceLocationLinkKey);
-            LinkToDest = obj.FindFirstLinkTo(Constants.DestinationLocationLinkKey);
+            LocsLinkedToHere = Obj.FindLinksFrom(Constants.ContainsLinkKey).ToArray();
+            LinkToSrc = Obj.FindFirstLinkTo(Constants.SourceLocationLinkKey);
+            LinkToDest = Obj.FindFirstLinkTo(Constants.DestinationLocationLinkKey);
         }
 
+        /// <summary>Copy constructor</summary>
         public E090SubstInfo(E090SubstInfo other)
             : this()
         {
+            Obj = other.Obj;
             _objID = other._objID;
 
             SPS = other.SPS;
             STS = other.STS;
+            PendingSPS = other.PendingSPS;
+            SPSList = other.SPSList.MakeCopyOf();
+            SPSLocList = other.SPSLocList.ConvertToReadOnly();
             LotID = other.LotID;
             SubstUsageStr = other.SubstUsageStr;
 
@@ -558,19 +781,23 @@ namespace MosaicLib.Semi.E090
 
         private static readonly E039Link[] emptyLinkArray = EmptyArrayFactory<E039Link>.Instance;
 
+        /// <summary>Used to update the given <paramref name="nvs"/> to contain Attribute values for the properties in this object that represent Attribute values.</summary>
         public NamedValueSet UpdateAttributeValues(NamedValueSet nvs)
         {
             nvs.SetValue("SubstProcState", SPS);
             nvs.SetValue("SubstState", STS);
 
-            if (!LotID.IsNullOrEmpty() || nvs.Contains("LotID"))
-                nvs.SetValue("LotID", LotID);
-
-            if (!SubstUsageStr.IsNullOrEmpty() || nvs.Contains("SubstUsage"))
-                nvs.SetValue("SubstUsage", SubstUsageStr);
+            nvs.ConditionalSetValue("PendingSPS", PendingSPS != SubstProcState.Undefined, PendingSPS);
+            nvs.ConditionalSetValue("SPSList", !SPSList.IsNullOrEmpty(), (SPSList ?? EmptyArrayFactory<SubstProcState>.Instance).Select(sps => sps.ToString()));
+            nvs.ConditionalSetValue("SPSLocList", !SPSLocList.IsNullOrEmpty(), SPSLocList);
+            nvs.ConditionalSetValue("LotID", !LotID.IsNullOrEmpty() || nvs.Contains("LotID"), LotID);
+            nvs.ConditionalSetValue("SubstUsage", !SubstUsageStr.IsNullOrEmpty() || nvs.Contains("SubstUsage"), SubstUsageStr);
 
             return nvs;
         }
+
+        /// <summary>Gives the original object that this info object was constructed from, or null for the default constructor.</summary>
+        public IE039Object Obj { get; private set; }
 
         /// <summary>Gives the E039ObjectID of the object from which this structure was created, or E039ObjectID.Empty if the default constructor was used.</summary>
         public E039ObjectID ObjID { get { return _objID ?? E039ObjectID.Empty; } set { _objID = value; } }
@@ -581,6 +808,18 @@ namespace MosaicLib.Semi.E090
 
         /// <summary>From SubstProcState attribute</summary>
         public SubstProcState SPS { get; set; }
+
+        /// <summary>Optional, From PendingSPS attribute.  Undefined if the substrate does not have this attributes.</summary>
+        public SubstProcState PendingSPS { get; set; }
+
+        /// <summary>This property returns the SPS that is inferred by merging the SPS with the PendingSPS (if any)</summary>
+        public SubstProcState InferredSPS { get { return SPS.MergeWith(PendingSPS); } }
+
+        /// <summary>Optional, an accumlation of SPS attributes that have been assigned to this substrate.  Empty if the substrate does not have this attributes.</summary>
+        public SubstProcState [] SPSList { get; set; }
+
+        /// <summary>Optional, an accumlation of the locations at which SPS values have been assigned to this substrate.  Empty if the substrate does not have this attributes.</summary>
+        public IList<string> SPSLocList { get; set; }
 
         /// <summary>From LotID attribute</summary>
         public string LotID { get; set; }
@@ -608,7 +847,7 @@ namespace MosaicLib.Semi.E090
         public E039Link LinkToDest { get; set; }
 
         /// <summary>Gives an empty E090SubstInfo object to be used as a default value.</summary>
-        public static E090SubstInfo Empty { get { return new E090SubstInfo() { LotID = "", SubstUsageStr = "", STS = SubstState.Undefined, SPS = SubstProcState.Undefined, LocsLinkedToHere = emptyLinkArray }; } }
+        public static E090SubstInfo Empty { get { return new E090SubstInfo() { LotID = "", SubstUsageStr = "", STS = SubstState.Undefined, SPS = SubstProcState.Undefined, PendingSPS = SubstProcState.Undefined, LocsLinkedToHere = emptyLinkArray, SPSList = EmptyArrayFactory<SubstProcState>.Instance, SPSLocList = ReadOnlyIList<string>.Empty }; } }
 
         /// <summary>Returns true if the contents are the same as the contents of the Empty E090SubstInfo object.</summary>
         public bool IsEmpty { get { return this.Equals(Empty); } }
@@ -617,16 +856,20 @@ namespace MosaicLib.Semi.E090
         /// Gives the initial E090SubstInfo to be used with newly created E090 objects.
         /// <para/>Sets: LotID = "", SubstUsage = Product, STS = AtSource, and SPS = NeedsProcessing.
         /// </summary>
-        public static E090SubstInfo Initial { get { return new E090SubstInfo() { LotID = "", SubstUsage = SubstUsage.Product, STS = SubstState.AtSource, SPS = SubstProcState.NeedsProcessing }; } }
+        public static E090SubstInfo Initial { get { return new E090SubstInfo() { LotID = "", SubstUsage = SubstUsage.Product, STS = SubstState.AtSource, SPS = SubstProcState.NeedsProcessing, PendingSPS = SubstProcState.Undefined }; } }
 
         /// <summary>
         /// Returns true if this object's contents are equal to the contents of the given <paramref name="other"/> object.
+        /// <para/>NOTE: this test does not look at the contents of the Obj property.
         /// </summary>
         public bool Equals(E090SubstInfo other)
         {
             return (ObjID.Equals(other.ObjID)
                     && STS == other.STS
                     && SPS == other.SPS
+                    && PendingSPS == other.PendingSPS
+                    && SPSList.IsEqualTo(other.SPSList)
+                    && SPSLocList.IsEqualTo(other.SPSLocList)
                     && LotID == other.LotID
                     && SubstUsageStr == other.SubstUsageStr
                     && LocsLinkedToHere.IsEqualTo(other.LocsLinkedToHere)
@@ -645,28 +888,37 @@ namespace MosaicLib.Semi.E090
                 return (!ObjID.IsEmpty
                         && STS.IsValid() 
                         && SPS.IsValid() 
-                        && LocsLinkedToHere.SafeLength() == 1
+                        && (LocsLinkedToHere.SafeLength() == 1)
                         && !LinkToSrc.IsEmpty 
                         && !LinkToDest.IsEmpty); 
             } 
         }
 
         /// <summary>
-        /// Infers the appropriate STS from the given locID (or the current LocID if given null) as:
-        /// AtSource if NeedsProcessing and locID matches SrcLocID
-        /// AtDestination if ProcessingComlete and locID matches DestLocID
+        /// genertes inferred versions of given <paramref name="locID"/> and <paramref name="sps"/>.  
+        /// Uses these to obtain inferred STS as
+        /// AtSource if inferred sps is NeedsProcessing and inferred locID matches SrcLocID
+        /// AtDestination if inferred sps is ProcessingComplete and inferred locID matches DestLocID
         /// otherwise AtWork
         /// </summary>
         public SubstState GetInferredSTS(string locID = null, SubstProcState ? sps = null)
         {
-            locID = locID.MapNullOrEmptyTo(LocID);
+            return GetInferredSTS(locID.MapNullOrEmptyTo(LocID), sps ?? SPS.MergeWith(PendingSPS));
+        }
 
-            SubstProcState useSPS = sps ?? SPS;
-
-            if (useSPS.IsNeedsProcessing() && locID == LinkToSrc.ToID.Name)
+        /// <summary>
+        /// AtSource if given <paramref name="sps"/> is NeedsProcessing and given <paramref name="locID"/> matches SrcLocID
+        /// AtDestination if given <paramref name="sps"/> is ProcessingComplete and given <paramref name="locID"/> matches DestLocID
+        /// otherwise AtWork
+        /// </summary>
+        public SubstState GetInferredSTS(string locID, SubstProcState sps)
+        {
+            if (sps.IsNeedsProcessing() && locID == LinkToSrc.ToID.Name)
                 return SubstState.AtSource;
-            else if (useSPS.IsProcessingComplete() && locID == LinkToDest.ToID.Name)
-                return SubstState.AtDestination;
+            else if (sps.IsProcessingComplete() && locID == LinkToDest.ToID.Name)
+                return SubstState.AtDestination;            
+            else if (sps == SubstProcState.Skipped && locID == LinkToSrc.ToID.Name)
+                return SubstState.AtSource;
             else
                 return SubstState.AtWork;
         }
@@ -683,6 +935,9 @@ namespace MosaicLib.Semi.E090
                 return "E90SubstInfo Empty";
 
             StringBuilder sb = new StringBuilder("E90SubstInfo {0} {1} {2}".CheckedFormat(ObjID.ToString(E039ToStringSelect.FullName), STS, SPS));
+
+            if (PendingSPS != SubstProcState.Undefined)
+                sb.CheckedAppendFormat(" PendingSPS:{0}", PendingSPS);
 
             if (!LotID.IsNullOrEmpty())
                 sb.CheckedAppendFormat(" LotID:{0}", new ValueContainer(LotID));
@@ -710,7 +965,7 @@ namespace MosaicLib.Semi.E090
 
     #endregion
 
-    #region State and Event eunumerations and related extension methods
+    #region State and Event enumerations and related extension methods
 
     //-------------------------------------------------------------------
     // E090-0306

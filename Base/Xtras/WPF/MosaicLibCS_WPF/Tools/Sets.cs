@@ -202,10 +202,13 @@ namespace MosaicLib.WPF.Tools.Sets
             {
                 AttemptToStartTracking();
 
-                var syntheticInitializationSetDelta = _trackingSet.GenerateInitializerSetDelta();
+                if (_trackingSet != null)
+                {
+                    var syntheticInitializationSetDelta = _trackingSet.GenerateInitializerSetDelta();
 
-                pendingAddSetDeltasEventHandlersWithPrimingList.DoForEach(t => InnerAddSetDeltasEventHandler(t.Item1, t.Item2, syntheticInitializationSetDelta));
-                pendingAddSetDeltasEventHandlersWithPrimingList.Clear();
+                    pendingAddSetDeltasEventHandlersWithPrimingList.DoForEach(t => InnerAddSetDeltasEventHandler(t.Item1, t.Item2, syntheticInitializationSetDelta));
+                    pendingAddSetDeltasEventHandlersWithPrimingList.Clear();
+                }
             }
         }
 
@@ -225,8 +228,8 @@ namespace MosaicLib.WPF.Tools.Sets
 
                 if (foundReferenceSet != null)
                 {
-                    ReferenceSet = foundReferenceSet;
-                    TrackingSet = foundReferenceSet.CreateTrackingSet();
+                    ReferenceSet = foundReferenceSet;                           // also sets the DependencyPropertyKey.
+                    TrackingSet = foundReferenceSet.CreateTrackingSet();        // also sets the DependencyPropertyKey.
                 }
             }
 
