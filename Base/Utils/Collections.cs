@@ -32,463 +32,6 @@ namespace MosaicLib.Utils
 {
     namespace Collections
     {
-        #region LockedObjectListWithCachedArray
-
-        /// <summary>
-        /// Provides a thread safe container for storing a set of objects with a backing cached array for thread safe efficient atomic snapshot of the set contents.
-        /// This object is intended to be used in the following cases:
-        /// <list type="number">
-        /// <item>Where logic frequently iterates through the items in a list but where the contents are rarely changed.  Use of conversion of list contents to a cached Array decreases access/iteration cost and minimizes garbage generation.</item>
-        /// <item>Where list content changes may be made on multiple threads with list iteration performed on a single thread.  Use of conversion of list contents to an array allows iterating thread to take a snapshot of the list contents before each iteration method and then iterate without needing to lock or otherwise concern itself with changeable list contents during a single iteration phase.</item>
-        /// </list>
-        /// Examples of these cases include delegate and event lists as well as any generic list of items that are iterated through much more frequently than the set of such items changes.
-        /// </summary>  
-        /// <typeparam name="ObjectType">ObjectType may be any reference or value object.  Use is expected to be based on reference object types but does not require it.</typeparam>
-        /// <remarks>
-        /// Based on the use of a locked list of the objects and a volatile handle to an array of objects that is (re)obtained from the list when needed
-        /// </remarks>
-        public class LockedObjectListWithCachedArray<ObjectType> : IList<ObjectType>, ICollection<ObjectType>, IEnumerable<ObjectType>, IList, ICollection, IEnumerable
-        {
-            /// <summary>Default contstructor</summary>
-            public LockedObjectListWithCachedArray() { }
-
-            /// <summary>Collection based constructor.  Sets up the list to contain the given collection of objects.</summary>
-            public LockedObjectListWithCachedArray(IEnumerable<ObjectType> collection)
-            {
-                AddRange(collection);
-            }
-
-            #region Public methods and properties (IndexOf, Insert, RemoveAt, Add, Remove, Clear, AddRange, Contains, this[int index], Count, IsEmpty, Array)
-
-            /// <summary>
-            /// Searches for the specified <paramref name="item"/> in the list and returns the zero-based index of the first occurrence, or -1 if the <paramref name="item"/> was not found.
-            /// Re-entrant and thread safe using leaf lock on list contents.
-            /// <para/>Supports call chaining
-            /// </summary>
-            public int IndexOf(ObjectType item)
-            {
-                lock (listMutex)
-                {
-                    return objectList.IndexOf(item);
-                }
-            }
-
-            /// <summary>
-            /// Adds the given object instance to the list.  
-            /// Re-entrant and thread safe using leaf lock on list contents.
-            /// Triggers array rebuild on next use.
-            /// <para/>Supports call chaining
-            /// </summary>
-            public LockedObjectListWithCachedArray<ObjectType> Add(ObjectType d)
-            {
-                lock (listMutex)
-                {
-                    NoteMainListHasBeenChanged();
-                    objectList.Add(d);
-                }
-
-                return this;
-            }
-
-            /// <summary>
-            /// Inserts the given <paramref name="item"/> into this list at the given <paramref name="index"/>.  The inserted item will be placed before any prior item at the specified location.
-            /// Re-entrant and thread safe using leaf lock on list contents.
-            /// Triggers array rebuild on next use.
-            /// <para/>Supports call chaining
-            /// </summary>
-            /// <exception cref="System.ArgumentOutOfRangeException">index is less than 0, or it is greater or equal to the Count.</exception>
-            public LockedObjectListWithCachedArray<ObjectType> Insert(int index, ObjectType item)
-            {
-                lock (listMutex)
-                {
-                    NoteMainListHasBeenChanged();
-                    objectList.Insert(index, item);
-                }
-
-                return this;
-            }
-
-            /// <summary>
-            /// Removes the the item that is at the given <paramref name="index"/> position from the list's current contents.
-            /// Re-entrant and thread safe using leaf lock on list contents.
-            /// Triggers array rebuild on next use.
-            /// <para/>Supports call chaining
-            /// </summary>
-            /// <exception cref="System.ArgumentOutOfRangeException">index is less than 0, or it is greater or equal to the Count.</exception>
-            public LockedObjectListWithCachedArray<ObjectType> RemoveAt(int index)
-            {
-                lock (listMutex)
-                {
-                    NoteMainListHasBeenChanged();
-                    objectList.RemoveAt(index);
-                }
-
-                return this;
-            }
-
-            /// <summary>
-            /// Removes the first instance of given object <paramref name="item"/> from the list.  
-            /// Re-entrant and thread safe using leaf lock on list contents.
-            /// Triggers array rebuild on next use.
-            /// <para/>Supports call chaining
-            /// </summary>
-            public LockedObjectListWithCachedArray<ObjectType> Remove(ObjectType item)
-            {
-                lock (listMutex)
-                {
-                    NoteMainListHasBeenChanged();
-                    objectList.Remove(item);
-                }
-
-                return this;
-            }
-
-            /// <summary>
-            /// Removes all objects from the list.  
-            /// Re-entrant and thread safe using leaf lock on list contents.
-            /// Triggers array rebuild on next use.
-            /// <para/>Supports call chaining
-            /// </summary>
-            public LockedObjectListWithCachedArray<ObjectType> Clear()
-            {
-                lock (listMutex)
-                {
-                    NoteMainListHasBeenChanged();
-                    objectList.Clear();
-                }
-
-                return this;
-            }
-
-            /// <summary>
-            /// Adds the given <paramref name="collection"/> of objects to the end of the list.
-            /// Re-entrant and thread safe using leaf lock on list contents.
-            /// Triggers array rebuild on next use.
-            /// <para/>Supports call chaining
-            /// </summary>
-            public LockedObjectListWithCachedArray<ObjectType> AddRange(IEnumerable<ObjectType> collection)
-            {
-                lock (listMutex)
-                {
-                    NoteMainListHasBeenChanged();
-                    objectList.AddRange(collection);
-                }
-
-                return this;
-            }
-
-            /// <summary>
-            /// returns true if the given <paramref name="item"/> is found in the list.
-            /// </summary>
-            public bool Contains(ObjectType item)
-            {
-                lock (listMutex)
-                {
-                    return objectList.Contains(item);
-                }
-            }
-
-            /// <summary>
-            /// Gets or sets the element at the specified index. 
-            /// Re-entrant and thread safe using leaf lock on list contents.
-            /// Use of setter triggers array rebuild on next use.
-            /// <para/>Supports call chaining
-            /// </summary>
-            /// <param name="index">The zero-based index of the element to get or set.</param>
-            /// <exception cref="System.ArgumentOutOfRangeException">index is less than 0, or it is greater or equal to the Count.</exception>
-            public ObjectType this[int index]
-            {
-                get
-                {
-                    // the following logic is designed to decrease the risk that the Array will be regenerated many times if a client is getting and setting array elements frequently.
-                    if (!rebuildVolatileObjectArray)
-                        return Array[index];
-
-                    lock (listMutex)
-                    {
-                        return objectList[index];
-                    }
-                }
-                set
-                {
-                    lock (listMutex)
-                    {
-                        NoteMainListHasBeenChanged();
-                        objectList[index] = value;
-                    }
-                }
-            }
-
-            /// <summary>
-            ///  Gets the number of elements actually contained in this list using the Length of the Array property
-            /// </summary>
-            public int Count { get { return Array.Length; } }
-
-            /// <summary>Returns true if the Array property is currently empty (returns a zero length array).</summary>
-            public bool IsEmpty { get { return (Count == 0); } }
-
-            /// <summary>
-            /// Returns the most recently generated copy of the Array version of the underlying list of objects.  Will return a fixed empty array when the list is empty.
-            /// Implementation guarantees that returned value will include effects of any change made to the list by the thread that is requesting this array.
-            /// Changes made by other threads produce race conditions where the side effects of the change on another thread may, or may not, be visible in the array contents
-            /// until the thread reading this property invokes it entirely after another thread in question's Add or Remove method has returned from that method invocation.
-            /// This method does not attempt to lock or update the underlying Array value unless it knows that at least one change has been completed to the list contents.
-            /// <para/>Also note that the caller must clone the returned array if the caller intends to change its contents as the returned array may be shared by multiple callers.
-            /// </summary>
-            /// <remarks>
-            /// If any change to the list has been recorded via the rebuild flag then this property will lock access to the list, 
-            /// generate the array version of it and then retain the Array version for later requests until the list contents have been changed again.
-            /// Use of locked access to list during rebuild prevents the risk that the list may change contents while the rebuild is taking place.
-            /// </remarks>
-            public ObjectType[] Array
-            {
-                get
-                {
-                    ObjectType[] array = volatileObjectArray;
-
-                    if (rebuildVolatileObjectArray)
-                    {
-                        lock (listMutex)
-                        {
-                            rebuildVolatileObjectArray = false;
-
-                            array = objectList.ToArray();
-
-                            volatileObjectArray = array;
-                        }
-                    }
-
-                    return array;
-                }
-            }
-
-            /// <summary>
-            /// Returns the most recently generated copy of the ReadOnlyIList version of the underlying list of objects.  Will return a fixed empty ReadOnlyIList when the list is empty.
-            /// Implementation guarantees that returned value will include effects of any change made to the list by the thread that is requesting this read only list.
-            /// Changes made by other threads produce race conditions where the side effects of the change on another thread may, or may not, be visible in the read only list contents
-            /// until the thread reading this property invokes it entirely after another thread in question's Add or Remove method has returned from that method invocation.
-            /// This method does not attempt to lock or update the underlying read only list value unless it knows that at least one change has been completed to the list contents.
-            /// </summary>
-            /// <remarks>
-            /// If any change to the list has been recorded via the rebuild flag then this property will lock access to the list, 
-            /// generate the new read only list version of it and then retain the generated read only list version for later requests until the main list contents have been changed again.
-            /// Use of locked access to list during rebuild prevents the risk that the list may change contents while the rebuild is taking place.
-            /// </remarks>
-            public ReadOnlyIList<ObjectType> ReadOnlyIList
-            {
-                get
-                {
-                    ReadOnlyIList<ObjectType> readOnlyIList = volatileReadOnlyIList;
-
-                    if (rebuildVolatileReadOnlyIList)
-                    {
-                        lock (listMutex)
-                        {
-                            rebuildVolatileReadOnlyIList = false;
-
-                            readOnlyIList = new ReadOnlyIList<ObjectType>(objectList);
-
-                            volatileReadOnlyIList = readOnlyIList;
-                        }
-                    }
-
-                    return readOnlyIList;
-                }
-            }
-
-
-            #endregion
-
-            #region Private fields
-
-            /// <summary>mutex used to guard/sequence access to the underlying list so that both changes and access to the list are performed atomically.</summary>
-            private readonly object listMutex = new object();
-
-            /// <summary>underlying reference list of delegates, access to this list must only be made while owning the corresponding mutex.</summary>
-            private List<ObjectType> objectList = new List<ObjectType>();
-
-            /// <summary>volatile handle to the array of delegates produced during the last rebuild operation.</summary>
-            private volatile ObjectType[] volatileObjectArray = EmptyArrayFactory<ObjectType>.Instance;
-
-            private volatile ReadOnlyIList<ObjectType> volatileReadOnlyIList = ReadOnlyIList<ObjectType>.Empty;
-
-            /// <summary>
-            /// This method is used to record that a change has been made to the list that shall trigger rebuilding of any/all of the dependent volatile cached versions that are derived from the underlying list.
-            /// </summary>
-            private void NoteMainListHasBeenChanged()
-            {
-                rebuildVolatileObjectArray = true;
-                rebuildVolatileReadOnlyIList = true;
-            }
-
-            /// <summary>volatile boolean used to flag that a rebuild is required during the next access to the Array property.</summary>
-            private volatile bool rebuildVolatileObjectArray = true;
-
-            /// <summary>volatile boolean used to flag that a rebuild is required during the next access to the ReadOnlyILIst property.</summary>
-            private volatile bool rebuildVolatileReadOnlyIList = true;
-
-            #endregion
-            
-            #region IList, ICollection, IEnumerable implementations
-
-            void IList<ObjectType>.Insert(int index, ObjectType item)
-            {
-                Insert(index, item);
-            }
-
-            void IList<ObjectType>.RemoveAt(int index)
-            {
-                RemoveAt(index);
-            }
-
-            bool ICollection<ObjectType>.Remove(ObjectType item)
-            {
-                lock (listMutex)
-                {
-                    NoteMainListHasBeenChanged();
-                    return objectList.Remove(item);
-                }
-            }
-
-            void ICollection<ObjectType>.Add(ObjectType item)
-            {
-                Add(item);
-            }
-
-            void ICollection<ObjectType>.Clear()
-            {
-                Clear();
-            }
-
-            void ICollection<ObjectType>.CopyTo(ObjectType[] array, int arrayIndex)
-            {
-                lock (listMutex)
-                {
-                    objectList.CopyTo(array, arrayIndex);
-                }
-            }
-
-            bool ICollection<ObjectType>.IsReadOnly
-            {
-                get { return false; }
-            }
-
-            IEnumerator<ObjectType> IEnumerable<ObjectType>.GetEnumerator()
-            {
-                return new ArrayEnumerator<ObjectType>(Array);
-            }
-
-            IEnumerator IEnumerable.GetEnumerator()
-            {
-                return new ArrayEnumerator<ObjectType>(Array);
-            }
-
-            int IList.Add(object value)
-            {
-                lock (listMutex)
-                {
-                    NoteMainListHasBeenChanged();
-                    return (objectList as IList).Add(value);
-                }
-            }
-
-            void IList.Clear()
-            {
-                Clear();
-            }
-
-            bool IList.Contains(object value)
-            {
-                lock (listMutex)
-                {
-                    return (objectList as IList).Contains(value);
-                }
-            }
-
-            int IList.IndexOf(object value)
-            {
-                lock (listMutex)
-                {
-                    return (objectList as IList).IndexOf(value);
-                }
-            }
-
-            void IList.Insert(int index, object value)
-            {
-                lock (listMutex)
-                {
-                    NoteMainListHasBeenChanged();
-                    (objectList as IList).Insert(index, value);
-                }
-            }
-
-            bool IList.IsFixedSize
-            {
-                get { lock (listMutex) { return (objectList as IList).IsFixedSize; } }
-            }
-
-            bool IList.IsReadOnly
-            {
-                get { return false; }
-            }
-
-            void IList.Remove(object value)
-            {
-                lock (listMutex)
-                {
-                    NoteMainListHasBeenChanged();
-                    (objectList as IList).Remove(value);
-                }
-            }
-
-            void IList.RemoveAt(int index)
-            {
-                lock (listMutex)
-                {
-                    NoteMainListHasBeenChanged();
-                    (objectList as IList).RemoveAt(index);
-                }
-            }
-
-            object IList.this[int index]
-            {
-                get
-                {
-                    return this[index];
-                }
-                set
-                {
-                    lock (listMutex)
-                    {
-                        NoteMainListHasBeenChanged();
-                        (objectList as IList)[index] = value;
-                    }
-                }
-            }
-
-            void ICollection.CopyTo(Array array, int index)
-            {
-                lock (listMutex)
-                {
-                    (objectList as IList).CopyTo(array, index);
-                }
-            }
-
-            bool ICollection.IsSynchronized
-            {
-                get { return true; }
-            }
-
-            object ICollection.SyncRoot
-            {
-                get { return listMutex; }
-            } 
-           
-            #endregion
-        }
-
-        #endregion
-
         #region SimpleLockedQueue
 
         /// <summary>
@@ -726,7 +269,7 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        #region ReadOnlyIList
+        #region ReadOnlyIList, ArrayEnumerator
 
         /// <summary>
         /// This class is a local replacement for the System.Collections.ObjectModel.ReadOnlyCollection as the native one simply provides a read-only facade on the underlying mutable IList from which it is constructed.
@@ -995,8 +538,7 @@ namespace MosaicLib.Utils
 
             /// <summary>Releases all resources used by this enumerator (currently this is a no-op).</summary>
             public void Dispose()
-            {
-            }
+            { }
 
             /// <summary>Advances the enumerator's position.  On the first call to this method the position is advanced to the first element.  After the enumerable contents have been used up the position is advanced to one after the last element.  Returns true if the current position is valid (aka the enumerator has not run off the end of the array)</summary>
             public bool MoveNext()
@@ -1027,6 +569,891 @@ namespace MosaicLib.Utils
                 index = 0;
                 current = default(TItemType);
             }
+        }
+
+        #endregion
+
+        #region collection classes with cached arrays (LockedObjectListWithCachedArray, IListWithCachedArray, IDictionaryWithCachedArrays)
+
+        /// <summary>
+        /// Provides a thread safe container for storing a set of objects with a backing cached array for thread safe efficient atomic snapshot of the set contents.
+        /// This object is intended to be used in the following cases:
+        /// <list type="number">
+        /// <item>Where logic frequently iterates through the items in a list but where the contents are rarely changed.  Use of conversion of list contents to a cached Array decreases access/iteration cost and minimizes garbage generation.</item>
+        /// <item>Where list content changes may be made on multiple threads with list iteration performed on a single thread.  Use of conversion of list contents to an array allows iterating thread to take a snapshot of the list contents before each iteration method and then iterate without needing to lock or otherwise concern itself with changeable list contents during a single iteration phase.</item>
+        /// </list>
+        /// Examples of these cases include delegate and event lists as well as any generic list of items that are iterated through much more frequently than the set of such items changes.
+        /// </summary>  
+        /// <typeparam name="ObjectType">ObjectType may be any reference or value object.  Use is expected to be based on reference object types but does not require it.</typeparam>
+        /// <remarks>
+        /// Based on the use of a locked list of the objects and a volatile handle to an array of objects that is (re)obtained from the list when needed
+        /// </remarks>
+        public class LockedObjectListWithCachedArray<ObjectType> : IList<ObjectType>, ICollection<ObjectType>, IEnumerable<ObjectType>, IList, ICollection, IEnumerable
+        {
+            #region Constructors
+
+            /// <summary>Default contstructor</summary>
+            public LockedObjectListWithCachedArray() { }
+
+            /// <summary>Collection based constructor.  Sets up the list to contain the given <paramref name="collection"/> of objects.</summary>
+            public LockedObjectListWithCachedArray(IEnumerable<ObjectType> collection)
+            {
+                AddRange(collection);
+            }
+
+            #endregion
+
+            #region Public methods and properties (IndexOf, Insert, RemoveAt, Add, Remove, Clear, AddRange, Contains, this[int index], Count, IsEmpty, Array)
+
+            /// <summary>
+            /// Searches for the specified <paramref name="item"/> in the list and returns the zero-based index of the first occurrence, or -1 if the <paramref name="item"/> was not found.
+            /// Re-entrant and thread safe using leaf lock on list contents.
+            /// <para/>Supports call chaining
+            /// </summary>
+            public int IndexOf(ObjectType item)
+            {
+                lock (listMutex)
+                {
+                    return objectList.IndexOf(item);
+                }
+            }
+
+            /// <summary>
+            /// Adds the given object instance to the list.  
+            /// Re-entrant and thread safe using leaf lock on list contents.
+            /// Triggers array rebuild on next use.
+            /// <para/>Supports call chaining
+            /// </summary>
+            public LockedObjectListWithCachedArray<ObjectType> Add(ObjectType d)
+            {
+                lock (listMutex)
+                {
+                    NoteMainListHasBeenChanged();
+                    objectList.Add(d);
+                }
+
+                return this;
+            }
+
+            /// <summary>
+            /// Inserts the given <paramref name="item"/> into this list at the given <paramref name="index"/>.  The inserted item will be placed before any prior item at the specified location.
+            /// Re-entrant and thread safe using leaf lock on list contents.
+            /// Triggers array rebuild on next use.
+            /// <para/>Supports call chaining
+            /// </summary>
+            /// <exception cref="System.ArgumentOutOfRangeException">index is less than 0, or it is greater or equal to the Count.</exception>
+            public LockedObjectListWithCachedArray<ObjectType> Insert(int index, ObjectType item)
+            {
+                lock (listMutex)
+                {
+                    NoteMainListHasBeenChanged();
+                    objectList.Insert(index, item);
+                }
+
+                return this;
+            }
+
+            /// <summary>
+            /// Removes the the item that is at the given <paramref name="index"/> position from the list's current contents.
+            /// Re-entrant and thread safe using leaf lock on list contents.
+            /// Triggers array rebuild on next use.
+            /// <para/>Supports call chaining
+            /// </summary>
+            /// <exception cref="System.ArgumentOutOfRangeException">index is less than 0, or it is greater or equal to the Count.</exception>
+            public LockedObjectListWithCachedArray<ObjectType> RemoveAt(int index)
+            {
+                lock (listMutex)
+                {
+                    NoteMainListHasBeenChanged();
+                    objectList.RemoveAt(index);
+                }
+
+                return this;
+            }
+
+            /// <summary>
+            /// Removes the first instance of given object <paramref name="item"/> from the list.  
+            /// Re-entrant and thread safe using leaf lock on list contents.
+            /// Triggers array rebuild on next use.
+            /// <para/>Supports call chaining
+            /// </summary>
+            public LockedObjectListWithCachedArray<ObjectType> Remove(ObjectType item)
+            {
+                lock (listMutex)
+                {
+                    NoteMainListHasBeenChanged();
+                    objectList.Remove(item);
+                }
+
+                return this;
+            }
+
+            /// <summary>
+            /// Removes all objects from the list.  
+            /// Re-entrant and thread safe using leaf lock on list contents.
+            /// Triggers array rebuild on next use.
+            /// <para/>Supports call chaining
+            /// </summary>
+            public LockedObjectListWithCachedArray<ObjectType> Clear()
+            {
+                lock (listMutex)
+                {
+                    NoteMainListHasBeenChanged();
+                    objectList.Clear();
+                }
+
+                return this;
+            }
+
+            /// <summary>
+            /// Adds the given <paramref name="collection"/> of objects to the end of the list.
+            /// Re-entrant and thread safe using leaf lock on list contents.
+            /// Triggers array rebuild on next use.
+            /// <para/>Supports call chaining
+            /// </summary>
+            public LockedObjectListWithCachedArray<ObjectType> AddRange(IEnumerable<ObjectType> collection)
+            {
+                lock (listMutex)
+                {
+                    NoteMainListHasBeenChanged();
+                    objectList.AddRange(collection);
+                }
+
+                return this;
+            }
+
+            /// <summary>
+            /// returns true if the given <paramref name="item"/> is found in the list.
+            /// </summary>
+            public bool Contains(ObjectType item)
+            {
+                lock (listMutex)
+                {
+                    return objectList.Contains(item);
+                }
+            }
+
+            /// <summary>
+            /// Gets or sets the element at the specified index. 
+            /// Re-entrant and thread safe using leaf lock on list contents.
+            /// Use of setter triggers array rebuild on next use.
+            /// <para/>Supports call chaining
+            /// </summary>
+            /// <param name="index">The zero-based index of the element to get or set.</param>
+            /// <exception cref="System.ArgumentOutOfRangeException">index is less than 0, or it is greater or equal to the Count.</exception>
+            public ObjectType this[int index]
+            {
+                get
+                {
+                    // the following logic is designed to decrease the risk that the Array will be regenerated many times if a client is getting and setting array elements frequently.
+                    if (!rebuildVolatileObjectArray)
+                        return Array[index];
+
+                    lock (listMutex)
+                    {
+                        return objectList[index];
+                    }
+                }
+                set
+                {
+                    lock (listMutex)
+                    {
+                        NoteMainListHasBeenChanged();
+                        objectList[index] = value;
+                    }
+                }
+            }
+
+            /// <summary>
+            ///  Gets the number of elements actually contained in this list using the Length of the Array property
+            /// </summary>
+            public int Count { get { return Array.Length; } }
+
+            #endregion
+
+            #region IsEmpty, Array, ReadOnlyIList
+
+            /// <summary>Returns true if the Array property is currently empty (returns a zero length array).</summary>
+            public bool IsEmpty { get { return (Count == 0); } }
+
+            /// <summary>
+            /// Returns the most recently generated copy of the Array version of the underlying list of objects.  Will return a fixed empty array when the list is empty.
+            /// Implementation guarantees that returned value will include effects of any change made to the list by the thread that is requesting this array.
+            /// Changes made by other threads produce race conditions where the side effects of the change on another thread may, or may not, be visible in the array contents
+            /// until the thread reading this property invokes it entirely after another thread in question's Add or Remove method has returned from that method invocation.
+            /// This method does not attempt to lock or update the underlying Array value unless it knows that at least one change has been completed to the list contents.
+            /// <para/>Also note that the caller must clone the returned array if the caller intends to change its contents as the returned array may be shared by multiple callers.
+            /// </summary>
+            /// <remarks>
+            /// If any change to the list has been recorded via the rebuild flag then this property will lock access to the list, 
+            /// generate the array version of it and then retain the Array version for later requests until the list contents have been changed again.
+            /// Use of locked access to list during rebuild prevents the risk that the list may change contents while the rebuild is taking place.
+            /// </remarks>
+            public ObjectType[] Array
+            {
+                get
+                {
+                    ObjectType[] array = volatileObjectArray;
+
+                    if (rebuildVolatileObjectArray)
+                    {
+                        lock (listMutex)
+                        {
+                            rebuildVolatileObjectArray = false;
+
+                            array = objectList.ToArray();
+
+                            volatileObjectArray = array;
+                        }
+                    }
+
+                    return array;
+                }
+            }
+
+            /// <summary>
+            /// Returns the most recently generated copy of the ReadOnlyIList version of the underlying list of objects.  Will return a fixed empty ReadOnlyIList when the list is empty.
+            /// Implementation guarantees that returned value will include effects of any change made to the list by the thread that is requesting this read only list.
+            /// Changes made by other threads produce race conditions where the side effects of the change on another thread may, or may not, be visible in the read only list contents
+            /// until the thread reading this property invokes it entirely after another thread in question's Add or Remove method has returned from that method invocation.
+            /// This method does not attempt to lock or update the underlying read only list value unless it knows that at least one change has been completed to the list contents.
+            /// </summary>
+            /// <remarks>
+            /// If any change to the list has been recorded via the rebuild flag then this property will lock access to the list, 
+            /// generate the new read only list version of it and then retain the generated read only list version for later requests until the main list contents have been changed again.
+            /// Use of locked access to list during rebuild prevents the risk that the list may change contents while the rebuild is taking place.
+            /// </remarks>
+            public ReadOnlyIList<ObjectType> ReadOnlyIList
+            {
+                get
+                {
+                    ReadOnlyIList<ObjectType> readOnlyIList = volatileReadOnlyIList;
+
+                    if (rebuildVolatileReadOnlyIList)
+                    {
+                        lock (listMutex)
+                        {
+                            rebuildVolatileReadOnlyIList = false;
+
+                            readOnlyIList = new ReadOnlyIList<ObjectType>(objectList);
+
+                            volatileReadOnlyIList = readOnlyIList;
+                        }
+                    }
+
+                    return readOnlyIList;
+                }
+            }
+            
+            #endregion
+
+            #region Private fields
+
+            /// <summary>mutex used to guard/sequence access to the underlying list so that both changes and access to the list are performed atomically.</summary>
+            private readonly object listMutex = new object();
+
+            /// <summary>underlying reference list of delegates, access to this list must only be made while owning the corresponding mutex.</summary>
+            private List<ObjectType> objectList = new List<ObjectType>();
+
+            /// <summary>volatile handle to the array of delegates produced during the last rebuild operation.</summary>
+            private volatile ObjectType[] volatileObjectArray = EmptyArrayFactory<ObjectType>.Instance;
+
+            private volatile ReadOnlyIList<ObjectType> volatileReadOnlyIList = ReadOnlyIList<ObjectType>.Empty;
+
+            /// <summary>
+            /// This method is used to record that a change has been made to the list that shall trigger rebuilding of any/all of the dependent volatile cached versions that are derived from the underlying list.
+            /// </summary>
+            private void NoteMainListHasBeenChanged()
+            {
+                rebuildVolatileObjectArray = true;
+                rebuildVolatileReadOnlyIList = true;
+            }
+
+            /// <summary>volatile boolean used to flag that a rebuild is required during the next access to the Array property.</summary>
+            private volatile bool rebuildVolatileObjectArray = true;
+
+            /// <summary>volatile boolean used to flag that a rebuild is required during the next access to the ReadOnlyILIst property.</summary>
+            private volatile bool rebuildVolatileReadOnlyIList = true;
+
+            #endregion
+            
+            #region IList, ICollection, IEnumerable implementations
+
+            void IList<ObjectType>.Insert(int index, ObjectType item)
+            {
+                Insert(index, item);
+            }
+
+            void IList<ObjectType>.RemoveAt(int index)
+            {
+                RemoveAt(index);
+            }
+
+            bool ICollection<ObjectType>.Remove(ObjectType item)
+            {
+                lock (listMutex)
+                {
+                    NoteMainListHasBeenChanged();
+                    return objectList.Remove(item);
+                }
+            }
+
+            void ICollection<ObjectType>.Add(ObjectType item)
+            {
+                Add(item);
+            }
+
+            void ICollection<ObjectType>.Clear()
+            {
+                Clear();
+            }
+
+            void ICollection<ObjectType>.CopyTo(ObjectType[] array, int arrayIndex)
+            {
+                lock (listMutex)
+                {
+                    objectList.CopyTo(array, arrayIndex);
+                }
+            }
+
+            bool ICollection<ObjectType>.IsReadOnly
+            {
+                get { return false; }
+            }
+
+            IEnumerator<ObjectType> IEnumerable<ObjectType>.GetEnumerator()
+            {
+                return new ArrayEnumerator<ObjectType>(Array);
+            }
+
+            IEnumerator IEnumerable.GetEnumerator()
+            {
+                return new ArrayEnumerator<ObjectType>(Array);
+            }
+
+            int IList.Add(object value)
+            {
+                lock (listMutex)
+                {
+                    NoteMainListHasBeenChanged();
+                    return (objectList as IList).Add(value);
+                }
+            }
+
+            void IList.Clear()
+            {
+                Clear();
+            }
+
+            bool IList.Contains(object value)
+            {
+                lock (listMutex)
+                {
+                    return (objectList as IList).Contains(value);
+                }
+            }
+
+            int IList.IndexOf(object value)
+            {
+                lock (listMutex)
+                {
+                    return (objectList as IList).IndexOf(value);
+                }
+            }
+
+            void IList.Insert(int index, object value)
+            {
+                lock (listMutex)
+                {
+                    NoteMainListHasBeenChanged();
+                    (objectList as IList).Insert(index, value);
+                }
+            }
+
+            bool IList.IsFixedSize
+            {
+                get { lock (listMutex) { return (objectList as IList).IsFixedSize; } }
+            }
+
+            bool IList.IsReadOnly
+            {
+                get { return false; }
+            }
+
+            void IList.Remove(object value)
+            {
+                lock (listMutex)
+                {
+                    NoteMainListHasBeenChanged();
+                    (objectList as IList).Remove(value);
+                }
+            }
+
+            void IList.RemoveAt(int index)
+            {
+                lock (listMutex)
+                {
+                    NoteMainListHasBeenChanged();
+                    (objectList as IList).RemoveAt(index);
+                }
+            }
+
+            object IList.this[int index]
+            {
+                get
+                {
+                    return this[index];
+                }
+                set
+                {
+                    lock (listMutex)
+                    {
+                        NoteMainListHasBeenChanged();
+                        (objectList as IList)[index] = value;
+                    }
+                }
+            }
+
+            void ICollection.CopyTo(Array array, int index)
+            {
+                lock (listMutex)
+                {
+                    (objectList as IList).CopyTo(array, index);
+                }
+            }
+
+            bool ICollection.IsSynchronized
+            {
+                get { return true; }
+            }
+
+            object ICollection.SyncRoot
+            {
+                get { return listMutex; }
+            } 
+           
+            #endregion
+        }
+
+        /// <summary>
+        /// This is a helper generic list type collection that supports automatic generation and reuse of an array.  
+        /// This cached array is generally used for efficient iterations on the collection's contents when the frequency of the use of such iteration is much greater than the frequency of collection content changes.
+        /// Any time the list contents are changed the cached array will be regenerated on next use.  
+        /// Thereafter the array will be retained and reused.
+        /// <para/>Please NOTE: this list collection object is not thread safe.  
+        /// For cases where the collection is accessed from multiple threads please use the LockedObjectListWithCachedArray collection instead.
+        /// </summary>
+        public class IListWithCachedArray<TItemType> : IList<TItemType>, ICollection<TItemType>, IEnumerable<TItemType>, IEnumerable
+        {
+            #region Private fields and related private methods
+
+            private List<TItemType> list;
+            private TItemType [] _array = null;
+            private ReadOnlyIList<TItemType> _readOnlyIList = null;
+
+            /// <summary>Clears all cached copies of this list's contents.  (sets _array and _readOnlyIList to null)</summary>
+            private void NoteContentsChanged() 
+            { 
+                _array = null;
+                _readOnlyIList = null;
+            }
+
+            #endregion
+
+            #region Constructor
+
+            /// <summary>Default Constructor.</summary>
+            public IListWithCachedArray()
+            {
+                list = new List<TItemType>();
+            }
+
+            /// <summary>Content Constructor.  Caller provides an non-null <paramref name="collection"/> which is used to initialize the contents of this object.</summary>
+            public IListWithCachedArray(IEnumerable<TItemType> collection)
+            {
+                list = new List<TItemType>(collection);
+            }
+
+            #endregion
+
+            #region Custom public properties (Array, ReadOnlyIList)
+
+            /// <summary>
+            /// If necessary generates an array from the current list contents and returns it, retaining the resulting array instance until the
+            /// list contents are next changed.
+            /// <para/>Please note: The use pattern supported here generally expects that the client code which obtains this array will NOT
+            /// change its contents.  Any failure to follow this expected pattern may cause unexpected behavior in the client code and in this class
+            /// (as it uses the resulting array in some cases).
+            /// </summary>
+            public TItemType[] Array
+            {
+                get 
+                {
+                    return _array ?? (_array = list.ToArray());
+                }
+            }
+
+            /// <summary>
+            /// If necessary generates a ReadOnlyIList instance fromthe current list contents and returns it, retainging the resulting read only list until this
+            /// list's contents are next changed.
+            /// </summary>
+            public ReadOnlyIList<TItemType> ReadOnlyIList
+            {
+                get
+                {
+                    return _readOnlyIList ?? (_readOnlyIList = new ReadOnlyIList<TItemType>(list));
+                }
+            }
+
+            #endregion
+
+            #region List like methods (AddRange)
+
+            /// <summary>Adds the given <paramref name="collection"/> of objects to this list.</summary>
+            public void AddRange(IEnumerable<TItemType> collection)
+            {
+                list.AddRange(collection);
+                NoteContentsChanged();
+            }
+
+            #endregion
+
+            #region IList<TItemType>
+
+            /// <summary>Attempt to find the given item in this collection and returns its index, or -1 if it was not found.</summary>
+            public int IndexOf(TItemType item)
+            {
+                return list.IndexOf(item);
+            }
+
+            /// <summary>Attempts to insert the given <paramref name="item"/> at the given <paramref name="index"/></summary>
+            /// <exception cref="System.ArgumentOutOfRangeException">thrown if the given <paramref name="index"/> is not valid for the current collection contents.</exception>
+            public void Insert(int index, TItemType item)
+            {
+                list.Insert(index, item);
+                NoteContentsChanged();
+            }
+
+            /// <summary>Attempts to remove the item at the given <paramref name="index"/></summary>
+            /// <exception cref="System.ArgumentOutOfRangeException">thrown if the given <paramref name="index"/> is not valid for the current collection contents.</exception>
+            public void RemoveAt(int index)
+            {
+                list.RemoveAt(index);
+                NoteContentsChanged();
+            }
+
+            /// <summary>Attempts to get (or set) the collection item at the given <paramref name="index"/></summary>
+            /// <exception cref="System.ArgumentOutOfRangeException">thrown if the given <paramref name="index"/> is not valid for the current collection contents.</exception>
+            public TItemType this[int index]
+            {
+                get
+                {
+                    return list[index];
+                }
+                set
+                {
+                    list[index] = value;
+                    NoteContentsChanged();
+                }
+            }
+
+            /// <summary>Appends the given <paramref name="item"/> to the current collection</summary>
+            public void Add(TItemType item)
+            {
+                list.Add(item);
+                NoteContentsChanged();
+            }
+
+            /// <summary>Removes all of the items from this collection.</summary>
+            public void Clear()
+            {
+                list.Clear();
+                NoteContentsChanged();
+            }
+
+            /// <summary>Returns true if this collection currently contains the given <paramref name="item"/>.  Exact behavior is implemented using the underlying List{TItemType}'s Contains method.</summary>
+            public bool Contains(TItemType item)
+            {
+                return list.Contains(item);
+            }
+
+            /// <summary>Copies this collection's contents to the given <paramref name="array"/> starting at the given <paramref name="arrayIndex"/>.</summary>
+            /// <exception cref="System.ArgumentNullException">thrown if the given <paramref name="array"/> is null.</exception>
+            /// <exception cref="System.ArgumentOutOfRangeException">thrown if the given <paramref name="arrayIndex"/> is not valid for the given <paramref name="array"/>.</exception>
+            /// <exception cref="System.ArgumentException">thrown if the contents of this collection cannot be copied to the given <paramref name="array"/> at the given <paramref name="arrayIndex"/> offset because the target array length is not large enough.</exception>
+            public void CopyTo(TItemType[] array, int arrayIndex)
+            {
+                list.CopyTo(array, arrayIndex);
+            }
+
+            /// <summary>Returns the current collection's item count.</summary>
+            public int Count
+            {
+                get { return list.Count; }
+            }
+
+            /// <summary>Returns false</summary>
+            public bool IsReadOnly
+            {
+                get { return false; }
+            }
+
+            /// <summary>Attempts to remove the first occurrence of the given <paramref name="item"/> from this collection.  Returns true if an occurrence of the given <paramref name="item"/> was found and removed, or false otherwise.</summary>
+            public bool Remove(TItemType item)
+            {
+                bool wasRemoved = list.Remove(item);
+
+                NoteContentsChanged();
+
+                return wasRemoved;
+            }
+
+            #endregion
+
+            #region IEnumerable<TItemType>
+
+            /// <summary>Returns an enumerator for the Array (Uses ArrayEnumerator{TItemType})</summary>
+            public IEnumerator<TItemType> GetEnumerator()
+            {
+                return new ArrayEnumerator<TItemType>(Array);
+            }
+
+            #endregion
+
+            #region IEnumerable
+
+            IEnumerator IEnumerable.GetEnumerator()
+            {
+                return Array.GetEnumerator();
+            }
+
+            #endregion
+        }
+
+        /// <summary>
+        /// This is a helper generic dictionary type collection that supports automatic generation and reuse of an array of the collection's keys and/or of its values.
+        /// These cached arrays are generally used for efficient iterations on the collection's contents when the frequency of the use of such iteration is much greater than the frequency of collection content changes.
+        /// <para/>Please NOTE: this list collection object is not thread safe.  
+        /// </summary>
+        public class IDictionaryWithCachedArrays<TKeyType, TValueType> : IDictionary<TKeyType, TValueType>, IEnumerable<KeyValuePair<TKeyType, TValueType>>, IEnumerable
+        {
+            #region Private fields and related private methods
+
+            private Dictionary<TKeyType, TValueType> dictionary;
+            private TKeyType [] _keyArray = null;
+            private TValueType [] _valueArray = null;
+            private KeyValuePair<TKeyType, TValueType> [] _keyValuePairArray = null;
+
+            /// <summary>Clears all cached copies of this list's contents.  (sets _keyArray, _valueArray, and _keyValuePairArray to null)</summary>
+            private void NoteContentsChanged() 
+            { 
+                _keyArray = null;
+                _valueArray = null;
+                _keyValuePairArray = null;
+            }
+
+            #endregion
+
+            #region Constructor
+
+            /// <summary>Default constructor.  Caller can provide an optional <paramref name="copyContentsFrom"/> dictionary to be copied and an optional <paramref name="comparer"/> instance to use.</summary>
+            public IDictionaryWithCachedArrays(IDictionary<TKeyType, TValueType> copyContentsFrom = null, IEqualityComparer<TKeyType> comparer = null)
+            {
+                if (copyContentsFrom != null && comparer != null)
+                    dictionary = new Dictionary<TKeyType, TValueType>(copyContentsFrom, comparer);
+                else if (copyContentsFrom != null)
+                    dictionary = new Dictionary<TKeyType, TValueType>(copyContentsFrom);
+                else if (comparer != null)
+                    dictionary = new Dictionary<TKeyType, TValueType>(comparer);
+                else
+                    dictionary = new Dictionary<TKeyType, TValueType>();
+            }
+
+            #endregion
+
+            #region Custom public properties (KeyArray, ValueArray, KeyValuePairArray)
+
+            /// <summary>
+            /// If necessary generates an array from the current collection of key contents and returns it, retaining the resulting array instance until the
+            /// collection contents are next changed.
+            /// <para/>Please note: The use pattern supported here generally expects that the client code which obtains this array will NOT
+            /// change its contents.  Any failure to follow this expected pattern may cause unexpected behavior in the client code and in this class
+            /// (as it uses the resulting array in some cases).
+            /// </summary>
+            public TKeyType[] KeyArray
+            {
+                get 
+                {
+                    return _keyArray ?? (_keyArray = dictionary.Keys.ToArray());
+                }
+            }
+
+            /// <summary>
+            /// If necessary generates an array from the current collection of value contents and returns it, retaining the resulting array instance until the
+            /// collection contents are next changed.
+            /// <para/>Please note: The use pattern supported here generally expects that the client code which obtains this array will NOT
+            /// change its contents.  Any failure to follow this expected pattern may cause unexpected behavior in the client code and in this class
+            /// (as it uses the resulting array in some cases).
+            /// </summary>
+            public TValueType[] ValueArray
+            {
+                get
+                {
+                    return _valueArray ?? (_valueArray = dictionary.Values.ToArray());
+                }
+            }
+
+            /// <summary>
+            /// If necessary generates an array from the current collection of key value pairs and returns it, retaining the resulting array instance until the
+            /// collection contents are next changed.
+            /// <para/>Please note: The use pattern supported here generally expects that the client code which obtains this array will NOT
+            /// change its contents.  Any failure to follow this expected pattern may cause unexpected behavior in the client code and in this class
+            /// (as it uses the resulting array in some cases).
+            /// </summary>
+            public KeyValuePair<TKeyType, TValueType>[] KeyValuePairArray
+            {
+                get
+                {
+                    return _keyValuePairArray ?? (_keyValuePairArray = dictionary.ToArray());
+                }
+            }
+
+            #endregion
+
+            #region IDictionary<TKeyType, TValueType>
+
+            /// <summary>Attempts to add the given <paramref name="value"/> indexed in the collection under the given <paramref name="key"/></summary>
+            /// <exception cref="System.ArgumentNullException">thrown if the given <paramref name="key"/> is null.</exception>
+            /// <exception cref="System.ArgumentException">thrown if the colletion already contains a value for the given <paramref name="key"/>.</exception>
+            public void Add(TKeyType key, TValueType value)
+            {
+                dictionary.Add(key, value);
+                NoteContentsChanged();
+            }
+
+            /// <summary>Returns true if the colletion currently contains a value for the given <paramref name="key"/></summary>
+            /// <exception cref="System.ArgumentNullException">thrown if the given <paramref name="key"/> is null.</exception>
+            public bool ContainsKey(TKeyType key)
+            {
+                return dictionary.ContainsKey(key);
+            }
+
+            /// <summary>Returns a ICollection{TKeyType} for the keys that are currently in this collection</summary>
+            public ICollection<TKeyType> Keys
+            {
+                get { return dictionary.Keys; }
+            }
+
+            /// <summary>Attempts to remove the given <paramref name="key"/> from this collection.  Returns true if the <paramref name="key"/> was found was removed, or false otherwise</summary>
+            /// <exception cref="System.ArgumentNullException">thrown if the given <paramref name="key"/> is null.</exception>
+            public bool Remove(TKeyType key)
+            {
+                bool wasRemoved = dictionary.Remove(key);
+
+                if (wasRemoved)
+                    NoteContentsChanged();
+
+                return wasRemoved;
+            }
+
+            /// <summary>Attempts to find and produce (out) the <paramref name="value"/> for the given <paramref name="key"/>.  Returns true if the <paramref name="key"/> was found.  Returns false if the <paramref name="key"/> was not found, in which case the <paramref name="value"/> will have been set to the default value for <typeparamref name="TValueType"/></summary>
+            /// <exception cref="System.ArgumentNullException">thrown if the given <paramref name="key"/> is null.</exception>
+            public bool TryGetValue(TKeyType key, out TValueType value)
+            {
+                return dictionary.TryGetValue(key, out value);
+            }
+
+            /// <summary>Returns a ICollection{TValueType} for the values that are currently in this collection</summary>
+            public ICollection<TValueType> Values
+            {
+                get { return dictionary.Values; }
+            }
+
+            /// <summary>Attempts to get (or set) the collection's value for the given <paramref name="key"/></summary>
+            /// <exception cref="System.ArgumentNullException">thrown if the given <paramref name="key"/> is null.</exception>
+            /// <exception cref="System.Collections.Generic.KeyNotFoundException">thrown by the getter if the collection does not currently contains a value for the given <paramref name="key"/>.</exception>
+            public TValueType this[TKeyType key]
+            {
+                get
+                {
+                    return dictionary[key];
+                }
+                set
+                {
+                    dictionary[key] = value;
+                    NoteContentsChanged();
+                }
+            }
+
+            /// <summary>Removes all of the items from this collection.</summary>
+            public void Clear()
+            {
+                dictionary.Clear();
+                NoteContentsChanged();
+            }
+
+            /// <summary>Returns the number of key/value pairs currently in this collection</summary>
+            public int Count
+            {
+                get { return dictionary.Count; }
+            }
+
+            /// <summary>Returns false</summary>
+            public bool IsReadOnly
+            {
+                get { return false; }
+            }
+
+            #endregion
+
+            #region ICollection<KeyValuePair<TKeyType, TValueType>>
+
+            void ICollection<KeyValuePair<TKeyType, TValueType>>.Add(KeyValuePair<TKeyType, TValueType> item)
+            {
+                ((ICollection<KeyValuePair<TKeyType, TValueType>>)dictionary).Add(item);
+                NoteContentsChanged();
+            }
+
+            bool ICollection<KeyValuePair<TKeyType, TValueType>>.Contains(KeyValuePair<TKeyType, TValueType> item)
+            {
+                return ((ICollection<KeyValuePair<TKeyType, TValueType>>)dictionary).Contains(item);
+            }
+
+            void ICollection<KeyValuePair<TKeyType, TValueType>>.CopyTo(KeyValuePair<TKeyType, TValueType>[] array, int arrayIndex)
+            {
+                ((ICollection<KeyValuePair<TKeyType, TValueType>>)dictionary).CopyTo(array, arrayIndex);
+            }
+
+            bool ICollection<KeyValuePair<TKeyType, TValueType>>.Remove(KeyValuePair<TKeyType, TValueType> item)
+            {
+                bool wasRemoved = ((ICollection<KeyValuePair<TKeyType, TValueType>>)dictionary).Remove(item);
+
+                if (wasRemoved)
+                    NoteContentsChanged();
+
+                return wasRemoved;
+            }
+
+            #endregion
+
+            #region IEnumerable<KeyValuePair<TKeyType, TValueType>>
+
+            /// <summary>Returns an enumerator for the KeyValuePairArray (Uses ArrayEnumerator{KeyValuePair{TKeyType, TValueType}})</summary>
+            public IEnumerator<KeyValuePair<TKeyType, TValueType>> GetEnumerator()
+            {
+                return new ArrayEnumerator<KeyValuePair<TKeyType, TValueType>>(KeyValuePairArray);
+            }
+
+            #endregion
+
+            #region IEnumerator
+
+            IEnumerator IEnumerable.GetEnumerator()
+            {
+                return KeyValuePairArray.GetEnumerator();
+            }
+
+            #endregion
         }
 
         #endregion

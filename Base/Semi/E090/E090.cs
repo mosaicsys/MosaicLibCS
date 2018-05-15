@@ -121,11 +121,11 @@ namespace MosaicLib.Semi.E090
     /// </summary>
     public static partial class ExtensionMethods
     {
-        public static string CreateE090SubstLoc(this IE039TableUpdater tableUpdater, string substLocName, Action<E039UpdateItem.AddObject> addedObjectDelegate, INamedValueSet attributes = null, E039ObjectFlags flags = E039ObjectFlags.Pinned, bool addSyncExternalItem = false, int instanceNum = 0)
+        public static string CreateE090SubstLoc(this IE039TableUpdater tableUpdater, string substLocName, Action<E039UpdateItem.AddObject> addedObjectDelegate, INamedValueSet attributes = null, E039ObjectFlags flags = E039ObjectFlags.Pinned, bool addSyncExternalItem = false, int instanceNum = 0, bool addIfNeeded = true)
         {
             E039UpdateItem.AddObject addObjectUpdateItem;
 
-            string ec = tableUpdater.CreateE090SubstLoc(substLocName, out addObjectUpdateItem, attributes: attributes, flags: flags, addSyncExternalItem: addSyncExternalItem, instanceNum: instanceNum);
+            string ec = tableUpdater.CreateE090SubstLoc(substLocName, out addObjectUpdateItem, attributes: attributes, flags: flags, addSyncExternalItem: addSyncExternalItem, instanceNum: instanceNum, addIfNeeded: addIfNeeded);
 
             if (addedObjectDelegate != null)
                 addedObjectDelegate(addObjectUpdateItem);
@@ -133,9 +133,21 @@ namespace MosaicLib.Semi.E090
             return ec;
         }
 
-        public static string CreateE090SubstLoc(this IE039TableUpdater tableUpdater, string substLocName, out E039UpdateItem.AddObject addObjectUpdateItem, INamedValueSet attributes = null, E039ObjectFlags flags = E039ObjectFlags.Pinned, bool addSyncExternalItem = false, int instanceNum = 0)
+        public static string CreateE090SubstLoc(this IE039TableUpdater tableUpdater, string substLocName, Action<E039ObjectID> addedObjectIDDelegate, INamedValueSet attributes = null, E039ObjectFlags flags = E039ObjectFlags.Pinned, bool addSyncExternalItem = false, int instanceNum = 0, bool addIfNeeded = true)
         {
-            E039UpdateItem[] updateItemArray = new List<E039UpdateItem>().GenerateCreateE090SubstLocItems(substLocName, out addObjectUpdateItem, attributes: attributes, flags: flags, addSyncExternalItem: addSyncExternalItem, instanceNum: instanceNum).ToArray();
+            E039UpdateItem.AddObject addObjectUpdateItem;
+
+            string ec = tableUpdater.CreateE090SubstLoc(substLocName, out addObjectUpdateItem, attributes: attributes, flags: flags, addSyncExternalItem: addSyncExternalItem, instanceNum: instanceNum, addIfNeeded: addIfNeeded);
+
+            if (addedObjectIDDelegate != null && addObjectUpdateItem.AddedObjectPublisher != null)
+                addedObjectIDDelegate((addObjectUpdateItem.AddedObjectPublisher.Object ?? E039Object.Empty).ID);
+
+            return ec;
+        }
+
+        public static string CreateE090SubstLoc(this IE039TableUpdater tableUpdater, string substLocName, out E039UpdateItem.AddObject addObjectUpdateItem, INamedValueSet attributes = null, E039ObjectFlags flags = E039ObjectFlags.Pinned, bool addSyncExternalItem = false, int instanceNum = 0, bool addIfNeeded = true)
+        {
+            E039UpdateItem[] updateItemArray = new List<E039UpdateItem>().GenerateCreateE090SubstLocItems(substLocName, out addObjectUpdateItem, attributes: attributes, flags: flags, addSyncExternalItem: addSyncExternalItem, instanceNum: instanceNum, addIfNeeded: addIfNeeded).ToArray();
 
             return tableUpdater.Update(updateItemArray).Run();
         }
@@ -148,6 +160,18 @@ namespace MosaicLib.Semi.E090
 
             if (addedObjectDelegate != null)
                 addedObjectDelegate(addObjectUpdateItem);
+
+            return ec;
+        }
+
+        public static string CreateE090Subst(this IE039TableUpdater tableUpdater, string substName, Action<E039ObjectID> addedObjectIDDelegate, E039ObjectID srcSubstLocObjID, E039ObjectID destSubstLocObjID = null, E090SubstInfo? initialE090SubstrateObjState = null, INamedValueSet attributes = null, E039ObjectFlags flags = E039ObjectFlags.None, bool addSyncExternalItem = false)
+        {
+            E039UpdateItem.AddObject addObjectUpdateItem;
+
+            string ec = tableUpdater.CreateE090Subst(substName, out addObjectUpdateItem, srcSubstLocObjID, destSubstLocObjID: destSubstLocObjID, initialE090SubstrateObjState: initialE090SubstrateObjState, attributes: attributes, flags: flags, addSyncExternalItem: addSyncExternalItem);
+
+            if (addedObjectIDDelegate != null && addObjectUpdateItem.AddedObjectPublisher != null)
+                addedObjectIDDelegate((addObjectUpdateItem.AddedObjectPublisher.Object ?? E039Object.Empty).ID);
 
             return ec;
         }

@@ -880,7 +880,7 @@ namespace MosaicLib.Semi.E039
 
         /// <summary>
         /// Attempts to obtain, and return, the object identified by the given <paramref name="objID"/> using the TableObserver that the <paramref name="objID"/> references.
-        /// <para/>Note:  This EM is only suitable for use with <paramref name="objID"/> instances that have been obtained from a TableObserver (or a publishder that it created)
+        /// <para/>Note:  This EM is only suitable for use with <paramref name="objID"/> instances that have been obtained from a TableObserver (or a publisher that it created)
         /// or where the id's was constructed with a reference to the appropriate tableObserver for which the id is expected to be known.
         /// <para/>If the given <paramref name="objID"/>'s TableObserver property is null or if no matching object is found in the given table then this method returns the <paramref name="fallbackValue"/>.
         /// </summary>
@@ -893,6 +893,26 @@ namespace MosaicLib.Semi.E039
                 INotificationObject<IE039Object> publisher = tableObserver.GetPublisher(objID);
                 if (publisher != null)
                     return publisher.Object ?? fallbackValue;
+            }
+
+            return fallbackValue;
+        }
+
+        /// <summary>
+        /// Attempts to obtain, and return, the object publisher for the object identified by the given <paramref name="objID"/> using the TableObserver that the <paramref name="objID"/> references.
+        /// <para/>Note:  This EM is only suitable for use with <paramref name="objID"/> instances that have been obtained from a TableObserver (or a publisher that it created)
+        /// or where the id's was constructed with a reference to the appropriate tableObserver for which the id is expected to be known.
+        /// <para/>If the given <paramref name="objID"/>'s TableObserver property is null or if no matching object is found in the given table then this method returns the <paramref name="fallbackValue"/>.
+        /// </summary>
+        public static INotificationObject<IE039Object> GetPublisher(this E039ObjectID objID, INotificationObject<IE039Object> fallbackValue = null)
+        {
+            IE039TableObserver tableObserver = ((objID != null) ? objID.TableObserver : null);
+
+            if (tableObserver != null)
+            {
+                INotificationObject<IE039Object> publisher = tableObserver.GetPublisher(objID);
+                if (publisher != null)
+                    return publisher;
             }
 
             return fallbackValue;
@@ -1705,6 +1725,7 @@ namespace MosaicLib.Semi.E039
             if (ot == null)
             {
                 ot = FindObjectTrackerForID(objID, createIfNeeded: true, initialFlags: updateItem.Flags);
+
                 ot.obj = new E039Object(objID, clientFlags, updateItem.Attributes);
 
                 seqNums.AddedItemsCount++;
@@ -1818,7 +1839,6 @@ namespace MosaicLib.Semi.E039
 
                 // remove the object from the internal dictionaries
                 ot.typeTableTracker.objectTrackerDictionary.Remove(objID.Name);
-                ot.typeTableTracker.objectTrackerArray = null;   // trigger a rebuild for this portion of the persist file
 
                 if (idHasUUID)
                     uuidToObjectTrackerDictionary.Remove(objID.UUID);
@@ -2217,7 +2237,6 @@ namespace MosaicLib.Semi.E039
             // Add the ObjectTracker to the various dictionaries
 
             ttt.objectTrackerDictionary[id.Name] = ot;
-            ttt.objectTrackerArray = null;      // will be rebuilt next time we go to save this typeSetTracker
 
             bool idHasUUID = !id.UUID.IsNullOrEmpty();
 
@@ -2401,8 +2420,8 @@ namespace MosaicLib.Semi.E039
         {
             public string typeName;
 
-            public Dictionary<string, ObjectTracker> objectTrackerDictionary = new Dictionary<string, ObjectTracker>();
-            public ObjectTracker [] objectTrackerArray;
+            public IDictionaryWithCachedArrays<string, ObjectTracker> objectTrackerDictionary = new IDictionaryWithCachedArrays<string, ObjectTracker>();
+            public ObjectTracker[] ObjectTrackerArray { get { return objectTrackerDictionary.ValueArray; } }
 
             public ulong lastPublishedSeqNum;
 
@@ -2437,7 +2456,6 @@ namespace MosaicLib.Semi.E039
                 {
                     ttt = new TypeTableTracker() { typeName = typeName, typeSetTracker = this };
                     typeNameToTypeTableTrackerDictionary[typeName] = ttt;
-                    typeTableTrackerArray = null;       // will be rebuilt next time we go to save this typeSetTracker
                 }
 
                 return ttt;
@@ -2445,8 +2463,8 @@ namespace MosaicLib.Semi.E039
 
             public E039TableTypeSetPersistSpecItem setConfig;
 
-            public Dictionary<string, TypeTableTracker> typeNameToTypeTableTrackerDictionary = new Dictionary<string, TypeTableTracker>();
-            public TypeTableTracker [] typeTableTrackerArray;
+            public IDictionaryWithCachedArrays<string, TypeTableTracker> typeNameToTypeTableTrackerDictionary = new IDictionaryWithCachedArrays<string, TypeTableTracker>();
+            public TypeTableTracker[] TypeTableTrackerArray { get { return typeNameToTypeTableTrackerDictionary.ValueArray; } }
 
             public ulong lastPublishedSeqNum;
             public QpcTimer saveHoldoffTimer;
@@ -2513,22 +2531,13 @@ namespace MosaicLib.Semi.E039
             // generate or update the fileContents as needed immediately prior to writing.  
             // This cannot be done while any prior write for this object tree is already in progress.
 
-            if (tst.typeTableTrackerArray == null)
-                tst.typeTableTrackerArray = tst.typeNameToTypeTableTrackerDictionary.Values.ToArray();
-
-            int numTypes = tst.typeTableTrackerArray.Length;
-
-            foreach (var ttt in tst.typeTableTrackerArray)
-            {
-                if (ttt.objectTrackerArray == null)
-                    ttt.objectTrackerArray = ttt.objectTrackerDictionary.Values.ToArray();
-            }
+            int numTypes = tst.TypeTableTrackerArray.Length;
 
             if (tst.fileContents == null || tst.fileContents.TypeTableSet.SafeCount() != numTypes)
             {
                 // rebuild fileContents (on first save attempt and/or after a type has been added to the tableset)
 
-                E039PersistTypeTable[] typeTableArray = tst.typeTableTrackerArray.Select(ttt => new E039PersistTypeTable() { Type = ttt.typeName, ObjectInstanceSet = new E039PersistObjectInstanceSet(ttt.objectTrackerArray.Select(ot => ot.lastPublishedObj)) }).ToArray();
+                E039PersistTypeTable[] typeTableArray = tst.TypeTableTrackerArray.Select(ttt => new E039PersistTypeTable() { Type = ttt.typeName, ObjectInstanceSet = new E039PersistObjectInstanceSet(ttt.ObjectTrackerArray.Select(ot => ot.lastPublishedObj)) }).ToArray();
                 E039PersistTypeTableSet typeTableSet = new E039PersistTypeTableSet(typeTableArray);
 
                 tst.fileContents = new E039PersistFileContents() { TypeTableSet = typeTableSet };
@@ -2538,20 +2547,20 @@ namespace MosaicLib.Semi.E039
                 // perform inplace replacement of the objects to be serialized (to minimize garbage generation)
                 for (int typeIdx = 0; typeIdx < numTypes; typeIdx++)
                 {
-                    var ttt = tst.typeTableTrackerArray[typeIdx];
+                    var ttt = tst.TypeTableTrackerArray[typeIdx];
                     var persistTypeTable = tst.fileContents.TypeTableSet[typeIdx];
 
-                    int numObjs = ttt.objectTrackerArray.Length;
+                    int numObjs = ttt.ObjectTrackerArray.Length;
 
                     // if this type's number of objects have changed then simply replace the ObjectInstanceSet (less code than manually growing or shrinking it)
                     if (persistTypeTable.ObjectInstanceSet.SafeCount() != numObjs)
-                        persistTypeTable.ObjectInstanceSet = new E039PersistObjectInstanceSet(ttt.objectTrackerArray.Select(ot => ot.lastPublishedObj));
+                        persistTypeTable.ObjectInstanceSet = new E039PersistObjectInstanceSet(ttt.ObjectTrackerArray.Select(ot => ot.lastPublishedObj));
                     else
                     {
                         // otherwise just replace all of the current objects in the ObjectInstanceSet with the set of last published objects from the internal table set trees.
                         //  This is safe since the last published objects are all effectively immutable.
                         for (int objIdx = 0; objIdx < numObjs; objIdx++)
-                            persistTypeTable.ObjectInstanceSet[objIdx] = ttt.objectTrackerArray[objIdx].lastPublishedObj;
+                            persistTypeTable.ObjectInstanceSet[objIdx] = ttt.ObjectTrackerArray[objIdx].lastPublishedObj;
                     }
                 }
             }
