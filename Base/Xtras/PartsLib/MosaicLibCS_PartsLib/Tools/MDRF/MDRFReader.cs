@@ -909,6 +909,8 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
         private FileIndexRowBase currentScanRow = null;
         private FileIndexRowBase nextScanRow = null;
 
+        private bool stopReadingRequestHasBeenTriggered = false;
+
         public void ReadAndProcessContents(ReadAndProcessFilterSpec filterSpec)
         {
             filterSpec = new ReadAndProcessFilterSpec(filterSpec);      // make a clone of the given value so that the caller can re-use, and changed, there copy while we use ours.
@@ -921,6 +923,8 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
             ResetTimers(filterSpec);
 
             ResetIVAs();
+
+            stopReadingRequestHasBeenTriggered = false;
 
             SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = ProcessContentEvent.ReadingStart });
 
@@ -952,7 +956,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
             {
                 SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = ProcessContentEvent.RowStart, Row = currentScanRow, FileDeltaTimeStamp = currentScanRow.FirstBlockDeltaTimeStamp });
 
-                for (; ; )
+                while (!stopReadingRequestHasBeenTriggered)
                 {
                     DataBlockBuffer dbb;
                     if (isFirstBlock)
@@ -1108,18 +1112,30 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                 bool currentIsGroupOrGroupSetStart = ((pce & ProcessContentEvent.Group) != 0 || pce == ProcessContentEvent.GroupSetStart);
                 if (lastWasGroupOrGroupSetStart && !currentIsGroupOrGroupSetStart && (filterSpec.PCEMask & ProcessContentEvent.GroupSetEnd) != 0)
                 {
-                    filterSpec.EventHandlerDelegate(this, new ProcessContentEventData(eventData) { PCE = ProcessContentEvent.GroupSetEnd, GroupInfoArray = GroupInfoArray, FilteredGroupInfoArray = FilteredGroupInfoArray });
+                    InnerSignalEventAndCheckForStopRequest(filterSpec, new ProcessContentEventData(eventData) { PCE = ProcessContentEvent.GroupSetEnd, GroupInfoArray = GroupInfoArray, FilteredGroupInfoArray = FilteredGroupInfoArray });
                 }
                 else if (!lastWasGroupOrGroupSetStart && currentIsGroupOrGroupSetStart && (filterSpec.PCEMask & ProcessContentEvent.GroupSetStart) != 0)
                 {
-                    filterSpec.EventHandlerDelegate(this, new ProcessContentEventData(eventData) { PCE = ProcessContentEvent.GroupSetStart, GroupInfoArray = GroupInfoArray, FilteredGroupInfoArray = FilteredGroupInfoArray });
+                    InnerSignalEventAndCheckForStopRequest(filterSpec, new ProcessContentEventData(eventData) { PCE = ProcessContentEvent.GroupSetStart, GroupInfoArray = GroupInfoArray, FilteredGroupInfoArray = FilteredGroupInfoArray });
                 }
 
                 lastEventPCE = pce;
             }
 
             if ((filterSpec.PCEMask & pce) != 0)
+                InnerSignalEventAndCheckForStopRequest(filterSpec, eventData);
+        }
+
+        private void InnerSignalEventAndCheckForStopRequest(ReadAndProcessFilterSpec filterSpec, ProcessContentEventData eventData)
+        {
+            try
+            {
                 filterSpec.EventHandlerDelegate(this, eventData);
+            }
+            catch (MDRFStopReadingRequestException)
+            {
+                stopReadingRequestHasBeenTriggered = true;
+            }
         }
 
         private void ProcessContents(DataBlockBuffer dbb, ReadAndProcessFilterSpec filterSpec)
@@ -1658,6 +1674,17 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
         private static readonly FileIndexInfo emptyFileIndexInfo = new FileIndexInfo();
 
         #endregion
+    }
+
+    /// <summary>
+    /// Throw this exception from your EventHandlerDelegate to ask the reader to stop reading. 
+    /// Note: the use of this exception sets a flag in the reader that it looks at the next time it advances to the next block in the file.
+    /// As such it will generally continue to invoke your EventHanderDelegate even after you have thrown the first MDRFStopReadingRequestException.
+    /// Throwing this exception addtional times will have no additional effect in this case.
+    /// </summary>
+    public class MDRFStopReadingRequestException : System.Exception
+    {
+        public MDRFStopReadingRequestException() { }
     }
 }
 

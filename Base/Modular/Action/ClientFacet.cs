@@ -359,11 +359,13 @@ namespace MosaicLib.Modular.Action
         }
 
         /// <summary>
-        /// Call chainable version of setter for IClientFacet's NamedParamValues property
+        /// Call chainable version of setter for IClientFacet's NamedParamValues property.  
+        /// If <paramref name="namedParamValues"/> is null and <paramref name="ifNotNull"/> is true then this method makes no change.
         /// </summary>
-        public static TClientFacetType SetNamedParamValues<TClientFacetType>(this TClientFacetType action, INamedValueSet namedParamValues) where TClientFacetType : IClientFacet
+        public static TClientFacetType SetNamedParamValues<TClientFacetType>(this TClientFacetType action, INamedValueSet namedParamValues, bool ifNotNull = false) where TClientFacetType : IClientFacet
         {
-            action.NamedParamValues = namedParamValues;
+            if (namedParamValues != null || !ifNotNull)
+                action.NamedParamValues = namedParamValues;
             return action;
         }
 

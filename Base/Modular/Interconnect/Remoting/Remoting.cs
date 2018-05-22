@@ -36,6 +36,10 @@ using MosaicLib.Time;
 using MosaicLib.Utils;
 using MosaicLib.Utils.Collections;
 
+//!!!!! Please NOTE: There are significant functional changes planed for the internal design and operation of the Remoting infrastructure.
+// As such it is not currently recommended to make use of any capabilities beyond the top level publically available ones and these public interfaces
+// are currently more likely than not to change as part of this planed capability extension for future versions of the this library.
+
 // Please NOTE: All of the code portions in the following namespace (and the namespaces under it) are currently very early in their development cycle.  
 // They are passing basic unit tests but they have not been fully tested at this point.
 // In addition each related usage interface (API) is in a early stage and may be modified somewhat in subsequent preview releases.
@@ -577,7 +581,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
 
         private MessageStreamTools.IActionRelayMessageStreamTool actionRelayStreamTool = null;
 
-        private void Release(bool releaseBufferPool = false)
+        private void Release(bool releaseBufferPool = false, bool setConnStateToDisconnectedIfNeeded = true)
         {
             QpcTimeStamp qpcNow = QpcTimeStamp.Now;
 
@@ -586,35 +590,52 @@ namespace MosaicLib.Modular.Interconnect.Remoting
 
             messageStreamToolTrackerArray.DoForEach(mstt => mstt.Release());
             messageStreamToolTrackerArray = null;
+            actionRelayStreamTool = null;
 
             if (releaseBufferPool)
                 Fcns.DisposeOfObject(ref bufferPool);
+
+            if (BaseState.ConnState.IsConnectedOrConnecting() && setConnStateToDisconnectedIfNeeded)
+                SetBaseState(ConnState.Disconnected, CurrentMethodName);
         }
 
         protected override string PerformGoOnlineAction(bool andInitialize)
+        {
+            TimeSpan maxSessionConnectWaitTime = Config.ConfigNVS["MaxSessionConnectWaitTime"].VC.GetValue(rethrow: false, defaultValue: (5.0).FromSeconds());
+            TimeSpan maxSessionCloseWaitTime = Config.ConfigNVS["MaxSessionCloseWaitTime"].VC.GetValue(rethrow: false, defaultValue: (1.0).FromSeconds());
+
+            string ec = InnerPerformGoOnlineAction(andInitialize, CurrentActionDescription, maxSessionConnectWaitTime, maxSessionCloseWaitTime);
+
+            return ec;
+        }
+
+        private string InnerPerformGoOnlineAction(bool andInitialize, string currentActionDescription, TimeSpan maxSessionConnectWaitTime, TimeSpan maxSessionCloseWaitTime)
         {
             string ec = string.Empty;
 
             try
             {
                 if (andInitialize && BaseState.IsOnlineOrAttemptOnline)
-                    ec = PerformGoOfflineAction();
+                    ec = InnerPerformGoOfflineAction(currentActionDescription, maxSessionCloseWaitTime);
 
                 if (session == null || transport == null || messageStreamToolTrackerArray.IsNullOrEmpty())
                 {
+                    Fcns.DisposeOfObject(ref session);
                     session = new Sessions.ConnectionSession(PartID, Config.ConfigNVS, hostNotifier: this, bufferPool: bufferPool, initialSessionStateCode: Sessions.SessionStateCode.ClientSessionInitial, issueEmitter: Log.Debug, stateEmitter: Log.Debug, traceEmitter: traceLogger.Trace);
                     session.HandleInboundMessageDelegate = HandleInboundMessage;
 
                     sessionConfig = session.Config;
 
+                    Fcns.DisposeOfObject(ref transport);
                     transport = Transport.TransportConnectionFactory.Instance.CreateClientConnection(Config.ConfigNVS, session);
 
+                    actionRelayStreamTool = null;
                     messageStreamToolTrackerArray = Config.StreamToolsConfigArray.Select((stc, index) => new MessageStreamToolTracker() { stream = index, messageStreamToolConfig = stc, messageStreamTool = CreateStreamTool(index, stc) }).ToArray();
                 }
 
                 session.SetState(QpcTimeStamp.Now, Sessions.SessionStateCode.RequestTransportConnect, CurrentActionDescription);
 
-                QpcTimer waitTimer = new QpcTimer() { TriggerIntervalInSec = 5.0 }.Start();
+                QpcTimer waitTimer = new QpcTimer() { TriggerInterval = maxSessionConnectWaitTime }.Start();
 
                 while (ec.IsNullOrEmpty())
                 {
@@ -632,6 +653,11 @@ namespace MosaicLib.Modular.Interconnect.Remoting
                         ec = "Session connection not complete within {0:f1} seconds [{1}]".CheckedFormat(waitTimer.ElapsedTimeInSeconds, session.State);
                 }
 
+                if (ec.IsNullOrEmpty())
+                    SetBaseState(ConnState.Connected, "{0} succeeded".CheckedFormat(currentActionDescription));
+                else
+                    SetBaseState(ConnState.ConnectFailed, "{0} failed: {1}".CheckedFormat(currentActionDescription, ec));
+
                 return ec;
             }
             catch (System.Exception ex)
@@ -648,6 +674,14 @@ namespace MosaicLib.Modular.Interconnect.Remoting
 
         protected override string PerformGoOfflineAction()
         {
+            TimeSpan maxSessionCloseWaitTime = Config.ConfigNVS["MaxSessionCloseWaitTime"].VC.GetValue(rethrow: false, defaultValue: (1.0).FromSeconds());
+
+            string ec = InnerPerformGoOfflineAction(CurrentActionDescription, maxSessionCloseWaitTime);
+            return ec;
+        }
+
+        private string InnerPerformGoOfflineAction(string actionDescription, TimeSpan maxSessionCloseWaitTime)
+        {
             string ec = string.Empty;
 
             if (session != null)
@@ -656,8 +690,6 @@ namespace MosaicLib.Modular.Interconnect.Remoting
                     session.SetState(QpcTimeStamp.Now, Sessions.SessionStateCode.FinalCloseRequested, CurrentActionDescription);
                 else if (session.State.StateCode == Sessions.SessionStateCode.ConnectionClosed)
                     session.SetState(QpcTimeStamp.Now, Sessions.SessionStateCode.Terminated, CurrentActionDescription);
-
-                TimeSpan maxSessionCloseWaitTime = Config.ConfigNVS["MaxSessionCloseWaitTime"].VC.GetValue(rethrow: false, defaultValue: (1.0).FromSeconds());
 
                 QpcTimer waitTimeLimitTimer = new QpcTimer() { TriggerInterval = maxSessionCloseWaitTime }.Start();
 
@@ -677,7 +709,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             Release();
 
             if (!ec.IsNullOrEmpty())
-                Log.Debug.Emit("{0} failed: {1}", CurrentActionDescription, ec);
+                Log.Debug.Emit("{0} failed: {1}", actionDescription, ec);
 
             return ec;
         }
@@ -691,6 +723,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
                 if (actionRelayStreamTool != null)
                 {
                     actionRelayStreamTool.RelayServiceAction(ss.Rest, action);
+                    InnerServiceBackground(QpcTimeStamp.Now);
                     return null;
                 }
                 else
@@ -707,6 +740,25 @@ namespace MosaicLib.Modular.Interconnect.Remoting
                 else
                     return "Invalid or unsupported Sync request format [{0}]".CheckedFormat(action.ParamValue);
             }
+            else if (ss.MatchToken("FaultInjection"))
+            {
+                switch (ss.ExtractToken())
+                {
+                    case "GoToOnlineFailure":
+                        Release();
+                        SetBaseState(UseState.OnlineFailure, "By explicit request [{0}]".CheckedFormat(action.ParamValue)); 
+                        return "";
+
+                    case "ManuallyTriggerAutoReconnectAttempt": 
+                        manuallyTriggerAutoReconnectAttempt = true;  
+                        return "";
+
+                    default: 
+                        return base.PerformServiceAction(action);      // we expect this to fail with the standard error message...
+                }
+            }
+
+            // Todo: add InternalRemoteSessionManagement message stream tool
 
             return base.PerformServiceAction(action);
         }
@@ -735,10 +787,10 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             return string.Empty;
         }
 
+        private bool manuallyTriggerAutoReconnectAttempt = false;
+
         protected override void PerformMainLoopService()
         {
-            /// Todo: review how to implement auto reconnect following session failure.
-
             QpcTimeStamp qpcNow = QpcTimeStamp.Now;
 
             InnerServiceBackground(qpcNow);
@@ -751,11 +803,22 @@ namespace MosaicLib.Modular.Interconnect.Remoting
                 messageStreamToolTrackerArray.DoForEach(mstt => mstt.messageStreamTool.ResetState(qpcNow));
             }
 
-            if ((BaseState.UseState == UseState.OnlineFailure || BaseState.UseState == UseState.AttemptOnlineFailed) && sessionConfig != null && sessionConfig.AutoReconnectHoldoff != null && (qpcNow - BaseState.TimeStamp) > sessionConfig.AutoReconnectHoldoff)
+            bool triggerAutoReconnectAttempt = (BaseState.UseState == UseState.OnlineFailure || BaseState.UseState == UseState.AttemptOnlineFailed)
+                                             && ((sessionConfig != null && sessionConfig.AutoReconnectHoldoff != null && (qpcNow - BaseState.TimeStamp) > sessionConfig.AutoReconnectHoldoff)
+                                                || manuallyTriggerAutoReconnectAttempt);
+            if (triggerAutoReconnectAttempt)
             {
-                Log.Error.Emit("AutoReconnect from failed session is not supported");
+                TimeSpan maxSessionAutoReconnectWaitTime = Config.ConfigNVS["MaxSessionAutoReconnectWaitTime"].VC.GetValue(rethrow: false, defaultValue: (1.0).FromSeconds());
+                TimeSpan maxSessionAutoReconnectCloseWaitTime = Config.ConfigNVS["MaxSessionAutoReconnectCloseWaitTime"].VC.GetValue(rethrow: false, defaultValue: (1.0).FromSeconds());
 
-                PerformGoOfflineAction();
+                SetBaseState(UseState.AttemptOnline, "Starting Client AutoReconnect Attempt");
+
+                string ec = InnerPerformGoOnlineAction(true, "Client AutoReconnect Attempt", maxSessionAutoReconnectWaitTime, maxSessionAutoReconnectCloseWaitTime);
+
+                if (ec.IsNullOrEmpty())
+                    SetBaseState(UseState.Online, "Client AutoReconnect complete");
+                else
+                    SetBaseState(UseState.AttemptOnlineFailed, "Client AutoReconnect failed: {0}".CheckedFormat(ec));
             }
         }
 

@@ -1368,7 +1368,7 @@ namespace MosaicLib.Modular.Part
 
 	#endregion
 
-    #region IClientFacet ExtentionMethods (StartPartInline, StopPartInline, RunGoOnlineActionInline, RunGoOfflineActionInline)
+    #region IClientFacet ExtentionMethods (StartPartInline, StopPartInline, RunGoOnlineActionInline, RunGoOfflineActionInline, RunServiceActionInline)
 
     /// <summary>Standard extension methods wrapper class/namespace</summary>
     public static partial class ExtentionMethods
@@ -1389,12 +1389,20 @@ namespace MosaicLib.Modular.Part
             return part;
         }
 
-        /// <summary>Creates and runs a GoOnline(andInitialize) action on the given part.  Returns the given part to support call chaining.</summary>
+        /// <summary>Creates and runs a GoOnline(<paramref name="andInitialize"/>) action on the given part.  Returns the given part to support call chaining.</summary>
         public static TPartType RunGoOnlineActionInline<TPartType>(this TPartType part, bool andInitialize = true) where TPartType : IActivePartBase
         {
-            part.CreateGoOnlineAction(andInitialize).RunInline();
+            string ec = part.RunGoOnlineAction(andInitialize);
 
             return part;
+        }
+
+        /// <summary>Creates and runs a GoOnline(<paramref name="andInitialize"/>) action on the given part and returns the resulting result code.</summary>
+        public static string RunGoOnlineAction<TPartType>(this TPartType part, bool andInitialize = true) where TPartType : IActivePartBase
+        {
+            string ec = part.CreateGoOnlineAction(andInitialize).Run();
+
+            return ec;
         }
 
         /// <summary>Creates and runs a GoOffline action on the given part.  Returns the given part to support call chaining.</summary>
@@ -1403,6 +1411,30 @@ namespace MosaicLib.Modular.Part
             part.CreateGoOfflineAction().RunInline();
 
             return part;
+        }
+
+        /// <summary>Creates and runs a GoOffline action on the given part and returns the resulting result code.</summary>
+        public static string RunGoOfflineAction<TPartType>(this TPartType part) where TPartType : IActivePartBase
+        {
+            string ec = part.CreateGoOfflineAction().Run();
+
+            return ec;
+        }
+
+        /// <summary>Creates and runs a Service action on the given part.  Returns the given part to support call chaining.</summary>
+        public static TPartType RunServiceActionInline<TPartType>(this TPartType part, string serviceName, INamedValueSet namedParamValues = null) where TPartType : IActivePartBase
+        {
+            part.RunServiceAction(serviceName, namedParamValues);
+
+            return part;
+        }
+
+        /// <summary>Creates and runs a Service action on the given part and returns the resulting result code.</summary>
+        public static string RunServiceAction<TPartType>(this TPartType part, string serviceName, INamedValueSet namedParamValues = null) where TPartType : IActivePartBase
+        {
+            string ec = part.CreateServiceAction(serviceName).SetNamedParamValues(namedParamValues, ifNotNull: true).Run();
+
+            return ec;
         }
     }
 

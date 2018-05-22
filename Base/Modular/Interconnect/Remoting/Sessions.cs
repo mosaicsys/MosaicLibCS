@@ -257,7 +257,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
 
     public interface ITransportConnectionSessionFacet : ITransportSessionFacetBase
     {
-        string SessionUUID { get; set; }
+        string SessionUUID { get; }
         INamedValueSet HostParamsNVS { get; }
 
         SessionState State { get; }
@@ -299,7 +299,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
             HostParamsNVS = hostParamsNVS.ConvertToReadOnly();
             HostNotifier = hostNotifier ?? NullNotifier.Instance;
 
-            SessionName = "{0}.sm_{0:x4}".CheckedFormat(HostName, instanceNum & 0xffff);
+            SessionName = "{0}.sm_{1:x4}".CheckedFormat(HostName, instanceNum & 0xffff);
 
             TraceEmitter = traceEmitter ?? Logging.NullMesgEmitter.Instance;
             StateEmitter = stateEmitter ?? TraceEmitter;
@@ -525,7 +525,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
             IssueEmitter = issueEmitter ?? StateEmitter;
 
             BufferPool = bufferPool ?? new Buffers.BufferPool(bufferStateEmitter: stateEmitter);
-            SessionName = "{0}.cs_{0:x4}".CheckedFormat(HostName, instanceNum & 0xffff);
+            SessionName = "{0}.cs_{1:x4}".CheckedFormat(HostName, instanceNum & 0xffff);
             SessionUUID = assignUUID ? Guid.NewGuid().ToString() : string.Empty;
 
             if ((Config = sessionConfig) == null)

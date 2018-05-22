@@ -2916,6 +2916,11 @@ namespace MosaicLib.Modular.Common
         /// <para/>Support call chaining
         /// </summary>
         INamedValueSet BuildDictionary();
+
+        /// <summary>
+        /// Returns an enumerable set of the Names (Keys) in this NVS instance.  
+        /// </summary>
+        IEnumerable<string> Names { get; }
     }
 
     /// <summary>
@@ -3504,6 +3509,18 @@ namespace MosaicLib.Modular.Common
         INamedValueSet INamedValueSet.BuildDictionary()
         {
             return this.BuildDictionary();
+        }
+
+
+        /// <summary>
+        /// Returns an enumerable set of the Names (Keys) in this NVS instance.  
+        /// </summary>
+        public IEnumerable<string> Names 
+        {
+            get
+            {
+                return GetEnumerable().Select(nv => nv.Name);
+            }
         }
 
         #endregion
