@@ -1347,7 +1347,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
 
         private void GenerateAndAddManagementBufferToSendNowList(QpcTimeStamp qpcTimeStamp, ManagementType managementType, NamedValueSet nvs = null, bool serviceTransmitter = true)
         {
-            nvs = nvs.ConvertToWriteable();
+            nvs = nvs.ConvertToWritable();
 
             nvs.SetValue("Type", managementType);
 

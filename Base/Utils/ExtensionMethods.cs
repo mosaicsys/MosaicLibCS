@@ -244,7 +244,7 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        #region Other Array, IList, List, IEnumerable related extension methods (IsNullOrEmpty, IsEmpty, MapNullToEmpty, SafeLength, SafeCount, SetAll, Clear, SafeAccess, SafeToArray, SafeTakeFirst, SafeTakeLast, SafeAddSet, SafeAddItems, ConditionalAddItems)
+        #region Other Array, IList, List, IEnumerable, and ICollection related extension methods (IsNullOrEmpty, IsEmpty, MapNullToEmpty, SafeLength, SafeCount, SetAll, Clear, SafeAccess, SafeToArray, SafeTakeFirst, SafeTakeLast, SafeAddSet, SafeAddItems, ConditionalAddItems, SafeContains)
 
         /// <summary>
         /// Extension method returns true if the given array is null or its Length is zero.
@@ -335,19 +335,11 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Extension method either returns the given <paramref name="readOnlyIListIn"/> (if it is not null) or returns a new empty List{TItemType} if the given <paramref name="readOnlyIListIn"/> is null.
+        /// Extension method either returns the given <paramref name="iSetIn"/> (if it is not null) or returns an empty enumerable instance (derived from array) if the given <paramref name="iSetIn"/> is null.
         /// </summary>
-        public static ReadOnlyIList<TItemType> MapNullToEmpty<TItemType>(this ReadOnlyIList<TItemType> readOnlyIListIn)
+        public static IEnumerable<TItemType> MapNullToEmpty<TItemType>(this IEnumerable<TItemType> iSetIn)
         {
-            return readOnlyIListIn ?? ReadOnlyIList<TItemType>.Empty;
-        }
-
-        /// <summary>
-        /// Extension method returns the given <paramref name="readOnlyIListIn"/> is non-empty otherwise this method returns null.
-        /// </summary>
-        public static ReadOnlyIList<TItemType> MapEmptyToNull<TItemType>(this ReadOnlyIList<TItemType> readOnlyIListIn)
-        {
-            return (readOnlyIListIn.SafeCount() != 0) ? readOnlyIListIn : null;
+            return iSetIn ?? EmptyArrayFactory<TItemType>.Instance;
         }
 
         /// <summary>
@@ -588,41 +580,12 @@ namespace MosaicLib.Utils
                 return list;
         }
 
-        #endregion
-
-        #region IList<TItemType>, IEnumerable<TItemType> methods (ConvertToReadOnly, ConvertToWriteable)
-
         /// <summary>
-        /// Extension method either returns the given <paramref name="iSetIn"/> (if it is alread a ReadOnlyIList instance) or returns a new ReadOnlyIList{TItemType} if the given <paramref name="iSetIn"/>, or null if the given <paramref name="iSetIn"/> is null and <paramref name="mapNullToEmpty"/> is false.
+        /// Extension method returns true if the given <paramref name="set"/> is non-null and it Contains the given <paramref name="item"/>
         /// </summary>
-        public static IList<TItemType> ConvertToReadOnly<TItemType>(this IEnumerable<TItemType> iSetIn, bool mapNullToEmpty = true)
+        public static bool SafeContains<TItemType>(this ICollection<TItemType> set, TItemType item)
         {
-            ReadOnlyIList<TItemType> roIList = iSetIn as ReadOnlyIList<TItemType>;
-
-            return roIList ?? ((iSetIn != null || mapNullToEmpty) ? new ReadOnlyIList<TItemType>(iSetIn) : null);
-        }
-
-        // NOTE: supporting ConvertToReadOnly for ICollection appears to produce a possible conflict with the corresonding version that can be applied to INamedValueSet instances.
-
-        /// <summary>
-        /// Extension method either returns the given <paramref name="iListIn"/> (if it is alread a ReadOnlyIList instance) or returns a new ReadOnlyIList{TItemType} if the given <paramref name="iListIn"/>, or null if the given <paramref name="iListIn"/> is null and <paramref name="mapNullToEmpty"/> is false.
-        /// </summary>
-        public static IList<TItemType> ConvertToReadOnly<TItemType>(this IList<TItemType> iListIn, bool mapNullToEmpty = true)
-        {
-            ReadOnlyIList<TItemType> roIList = iListIn as ReadOnlyIList<TItemType>;
-
-            return roIList ?? ((iListIn != null || mapNullToEmpty) ? new ReadOnlyIList<TItemType>(iListIn) : null);
-        }
-
-        /// <summary>
-        /// Extension method either returns the given <paramref name="iListIn"/> (if it is not IsReadOnly) or returns a new List{TItemType} if the given <paramref name="iListIn"/> is non-empty, or null if the given <paramref name="iListIn"/> is null and <paramref name="mapNullToEmpty"/> is false.
-        /// </summary>
-        public static IList<TItemType> ConvertToWritable<TItemType>(this IList<TItemType> iListIn, bool mapNullToEmpty = true)
-        {
-            if (iListIn != null)
-                return !iListIn.IsReadOnly ? iListIn : new List<TItemType>(iListIn);
-            else
-                return mapNullToEmpty ? new List<TItemType>() : null;
+            return (set != null && set.Contains(item));
         }
 
         #endregion
@@ -1227,6 +1190,12 @@ namespace MosaicLib.Utils
         /// <summary>Returns the Max of the given TimeSpan values</summary>
         public static TimeSpan Max(this TimeSpan a, params TimeSpan[] more) { return a.Concat(more).Max(); }
 
+        /// <summary>Blocks the current thread for the specified <paramref name="timeSpan"/></summary>
+        public static void Sleep(this TimeSpan timeSpan)
+        {
+            System.Threading.Thread.Sleep(timeSpan);
+        }
+
         #endregion
 
         #region DateTime related (Age, Min, Max)
@@ -1394,7 +1363,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// If <paramref name="condition"/> is true then this method returns an enumeable with the given itesm concatinated onto the end of the given <paramref name="set"/>.
+        /// If <paramref name="condition"/> is true then this method returns an enumeable with the given  set of items (<paramref name="itemsParamArray"/>) concatinated onto the end of the given <paramref name="set"/>.
         /// Otherwise this method returns the given <paramref name="set"/> unmodified.
         /// </summary>
         public static IEnumerable<TItem> ConditionalConcatItems<TItem>(this IEnumerable<TItem> set, bool condition, params TItem [] itemsParamArray)
@@ -1402,7 +1371,19 @@ namespace MosaicLib.Utils
             if (!condition || itemsParamArray.IsNullOrEmpty())
                 return set;
             else
-                return (set ?? EmptyArrayFactory<TItem>.Instance).Concat(itemsParamArray);
+                return (set ?? EmptyArrayFactory<TItem>.Instance).Concat(itemsParamArray.MapNullToEmpty());
+        }
+
+        /// <summary>
+        /// If <paramref name="condition"/> is true then this method returns an enumeable with the given sets of items (<paramref name="concatWithItemsSet"/>) concatinated onto the end of the given <paramref name="set"/>.
+        /// Otherwise this method returns the given <paramref name="set"/> unmodified.
+        /// </summary>
+        public static IEnumerable<TItem> ConditionalConcatItems<TItem>(this IEnumerable<TItem> set, bool condition, IEnumerable<TItem> concatWithItemsSet)
+        {
+            if (!condition || concatWithItemsSet.IsNullOrEmpty())
+                return set;
+            else
+                return (set ?? EmptyArrayFactory<TItem>.Instance).Concat(concatWithItemsSet.MapNullToEmpty());
         }
 
         private static IEnumerable<TItem> InnerConcat<TItem>(TItem item, IEnumerable<TItem> set)

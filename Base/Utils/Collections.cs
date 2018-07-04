@@ -24,9 +24,11 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Runtime.Serialization;
 
 using MosaicLib;
 using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
 
 namespace MosaicLib.Utils
 {
@@ -331,7 +333,13 @@ namespace MosaicLib.Utils
             [NonSerialized]
             private ReadOnlyCollection<TItemType> _rocOfItems = null;
 
-            private ReadOnlyCollection<TItemType> ROCOfItems { get { return _rocOfItems = (_rocOfItems ?? new ReadOnlyCollection<TItemType>(itemsArray)); } }
+            private ReadOnlyCollection<TItemType> ROCOfItems { get { return _rocOfItems ?? (_rocOfItems = new ReadOnlyCollection<TItemType>(itemsArray)); } }
+
+            /// <summary>Returns the count of the number of items that are in this set</summary>
+            public int Count
+            {
+                get { return itemsArray.Length; }
+            }
 
             #region IList, ICollection, IEnumerable implementations
 
@@ -380,11 +388,6 @@ namespace MosaicLib.Utils
             void ICollection<TItemType>.CopyTo(TItemType[] array, int arrayIndex)
             {
                 ROCOfItems.CopyTo(array, arrayIndex);
-            }
-
-            int ICollection<TItemType>.Count
-            {
-                get { return itemsArray.Length; }
             }
 
             bool ICollection<TItemType>.IsReadOnly
@@ -469,11 +472,6 @@ namespace MosaicLib.Utils
                 (ROCOfItems as IList).CopyTo(array, index);
             }
 
-            int ICollection.Count
-            {
-                get { return itemsArray.Length; }
-            }
-
             bool ICollection.IsSynchronized
             {
                 get { return false; }
@@ -487,11 +485,178 @@ namespace MosaicLib.Utils
             #endregion
         }
 
+        #endregion
+
+        #region ReadOnlyIDictionary
+
+        public class ReadOnlyIDictionary<TKey, TValue> : IDictionary<TKey, TValue>
+        {
+            /// <summary>
+            /// Constructs the contents of this item from the set of explicitly defined items (<paramref name="firstItem"/> followed by 0 or <paramref name="moreItemsArray"/> items).
+            /// </summary>
+            public ReadOnlyIDictionary(KeyValuePair<TKey, TValue> firstItem, params KeyValuePair<TKey, TValue>[] moreItemsArray)
+            {
+                itemsArray = firstItem.Concat(moreItemsArray.MapNullToEmpty()).ToArray();
+            }
+
+            /// <summary>
+            /// Constructs the contents of this item based on the contents of the given <paramref name="sourceDictionary"/>.  
+            /// If the given <paramref name="sourceDictionary"/> is null then this method will be constructed as an empty list.
+            /// </summary>
+            public ReadOnlyIDictionary(IDictionary<TKey, TValue> sourceDictionary)
+            {
+                ReadOnlyIDictionary<TKey, TValue> sourceAaROID = sourceDictionary as ReadOnlyIDictionary<TKey, TValue>;
+
+                itemsArray = (sourceAaROID != null) ? sourceAaROID.itemsArray : sourceDictionary.SafeToArray(fallbackArray: emptyArray);
+            }
+
+            /// <summary>
+            /// Constructs the contents of this item based on the contents of the given <paramref name="sourceItemCollection"/>.  
+            /// If the given <paramref name="sourceItemCollection"/> is null then this method will be constructed as an empty list.
+            /// </summary>
+            public ReadOnlyIDictionary(ICollection<KeyValuePair<TKey, TValue>> sourceItemCollection = null)
+            {
+                ReadOnlyIDictionary<TKey, TValue> sourceAaROID = sourceItemCollection as ReadOnlyIDictionary<TKey, TValue>;
+
+                itemsArray = (sourceAaROID != null) ? sourceAaROID.itemsArray : sourceItemCollection.SafeToArray(fallbackArray: emptyArray);
+            }
+
+            /// <summary>
+            /// Constructs the contents of this item based on the contents of the given <paramref name="sourceItemSet"/>.  
+            /// If the given <paramref name="sourceItemSet"/> is null then this method will be constructed as an empty list.
+            /// </summary>
+            public ReadOnlyIDictionary(IEnumerable<KeyValuePair<TKey, TValue>> sourceItemSet)
+            {
+                ReadOnlyIDictionary<TKey, TValue> sourceAaROID = sourceItemSet as ReadOnlyIDictionary<TKey, TValue>;
+
+                itemsArray = (sourceAaROID != null) ? sourceAaROID.itemsArray : sourceItemSet.SafeToArray(fallbackArray: emptyArray);
+            }
+
+            /// <summary>
+            /// Helper static getter - returns a singleton (static) empty ReadOnlyIList{TItemType}.
+            /// </summary>
+            public static ReadOnlyIDictionary<TKey, TValue> Empty { get { return _empty; } }
+            private static readonly ReadOnlyIDictionary<TKey, TValue> _empty = new ReadOnlyIDictionary<TKey, TValue>();
+
+            private KeyValuePair<TKey, TValue>[] itemsArray;
+            private static readonly KeyValuePair<TKey, TValue>[] emptyArray = EmptyArrayFactory<KeyValuePair<TKey, TValue>>.Instance;
+
+            [NonSerialized]
+            private IDictionary<TKey, TValue> _dOfItems = null;
+
+            [NonSerialized]
+            private ReadOnlyIList<TKey> _rolOfKeys = null;
+
+            [NonSerialized]
+            private ReadOnlyIList<TValue> _rolOfValues = null;
+
+            private IDictionary<TKey, TValue> DOfItems { get { return _dOfItems ?? (_dOfItems = new Dictionary<TKey, TValue>(itemsArray.SafeLength()).SafeAddRange(itemsArray)); } }
+            private ReadOnlyIList<TKey> ROLOfKeys { get { return _rolOfKeys ?? (_rolOfKeys = new ReadOnlyIList<TKey>(itemsArray.Select(item => item.Key))); } }
+            private ReadOnlyIList<TValue> ROLOfValues { get { return _rolOfValues ?? (_rolOfValues = new ReadOnlyIList<TValue>(itemsArray.Select(item => item.Value))); } }
+
+            /// <summary>Returns the count of the number of items that are in this set</summary>
+            public int Count
+            {
+                get { return itemsArray.Length; }
+            }
+
+            #region IDictionary, ICollection, IEnumerable implementations
+
+            void IDictionary<TKey, TValue>.Add(TKey key, TValue value)
+            {
+                throw new System.NotSupportedException("{0}.{1} cannot be used.  collection is read-only".CheckedFormat(Fcns.CurrentClassLeafName, Fcns.CurrentMethodName));
+            }
+
+            bool IDictionary<TKey, TValue>.ContainsKey(TKey key)
+            {
+                return DOfItems.ContainsKey(key);
+            }
+
+            ICollection<TKey> IDictionary<TKey, TValue>.Keys
+            {
+                get { return ROLOfKeys; }
+            }
+
+            bool IDictionary<TKey, TValue>.Remove(TKey key)
+            {
+                throw new System.NotSupportedException("{0}.{1} cannot be used.  collection is read-only".CheckedFormat(Fcns.CurrentClassLeafName, Fcns.CurrentMethodName));
+            }
+
+            bool IDictionary<TKey, TValue>.TryGetValue(TKey key, out TValue value)
+            {
+                return DOfItems.TryGetValue(key, out value);
+            }
+
+            ICollection<TValue> IDictionary<TKey, TValue>.Values
+            {
+                get { return ROLOfValues; }
+            }
+
+            TValue IDictionary<TKey, TValue>.this[TKey key]
+            {
+                get
+                {
+                    return DOfItems[key];
+                }
+                set
+                {
+                    throw new System.NotSupportedException("{0}.{1} cannot be used.  collection is read-only".CheckedFormat(Fcns.CurrentClassLeafName, Fcns.CurrentMethodName));
+                }
+            }
+
+            void ICollection<KeyValuePair<TKey, TValue>>.Add(KeyValuePair<TKey, TValue> item)
+            {
+                throw new System.NotSupportedException("{0}.{1} cannot be used.  collection is read-only".CheckedFormat(Fcns.CurrentClassLeafName, Fcns.CurrentMethodName));
+            }
+
+            void ICollection<KeyValuePair<TKey, TValue>>.Clear()
+            {
+                throw new System.NotSupportedException("{0}.{1} cannot be used.  collection is read-only".CheckedFormat(Fcns.CurrentClassLeafName, Fcns.CurrentMethodName));
+            }
+
+            bool ICollection<KeyValuePair<TKey, TValue>>.Contains(KeyValuePair<TKey, TValue> item)
+            {
+                return DOfItems.Contains(item);
+            }
+
+            void ICollection<KeyValuePair<TKey, TValue>>.CopyTo(KeyValuePair<TKey, TValue>[] array, int arrayIndex)
+            {
+                itemsArray.CopyTo(array, arrayIndex);
+            }
+
+            bool ICollection<KeyValuePair<TKey, TValue>>.IsReadOnly
+            {
+                get { return true; }
+            }
+
+            bool ICollection<KeyValuePair<TKey, TValue>>.Remove(KeyValuePair<TKey, TValue> item)
+            {
+                throw new System.NotSupportedException("{0}.{1} cannot be used.  collection is read-only".CheckedFormat(Fcns.CurrentClassLeafName, Fcns.CurrentMethodName));
+            }
+
+            public IEnumerator<KeyValuePair<TKey, TValue>> GetEnumerator()
+            {
+                return new ArrayEnumerator<KeyValuePair<TKey, TValue>>(itemsArray);
+            }
+
+            IEnumerator IEnumerable.GetEnumerator()
+            {
+                return new ArrayEnumerator<KeyValuePair<TKey, TValue>>(itemsArray);
+            }
+
+            #endregion
+        }
+
+        #endregion
+
+        #region ArrayEnumerator
+
         /// <summary>
         /// IEnumerator{TItemType} struct that supports enumerating through an array.
         /// </summary>
         public struct ArrayEnumerator<TItemType> : IEnumerator<TItemType>, IDisposable, IEnumerator
         {
+            /// <summary>Constructor.  Sets the array on which this enumerator will enumerate.  Accepts a null array as the same as an empty array.</summary>
             public ArrayEnumerator(TItemType[] array)
             {
                 this.array = array;
@@ -1454,6 +1619,520 @@ namespace MosaicLib.Utils
             }
 
             #endregion
+        }
+
+        #endregion
+
+        #region TokenSet
+
+        /// <summary>
+        /// An ITokenSet{TItemType} is a form of ICollection{TItemType} that supports RW and RO rendering, and supports slightly optimized cloning and Contains methods by directly containing the first few tokens in the object and only
+        /// adding an actual list of tokens after the set contains more than the fixed base number.
+        /// </summary>
+        public interface ITokenSet<TItemType> : ICollection<TItemType>, IEquatable<ITokenSet<TItemType>>
+        { }
+
+        /// <summary>
+        /// A TokenSet{<typeparamref name="TItemType"/>} is a form of ICollection{<typeparamref name="TItemType"/>} that supports RW and RO rendering, along with a slighly optimized behavior for cloning and the Contains method.
+        /// It internally makes use of a small number of fixed token locations that overflow into the explicit use of a list which is only allocated when needed.
+        /// <para/>Currently this set is optimized for between 0 and 3 tokens.
+        /// <para/>This class implicilty uses default(<typeparamref name="TItemType"/>) to indicate when a token position is empty.
+        /// As such you cannot Add default values to the set.
+        /// </summary>
+        [Serializable]
+        public class TokenSet<TItemType> : ITokenSet<TItemType>
+        {
+            private static readonly EqualityComparer<TItemType> defaultEqualityComparer = EqualityComparer<TItemType>.Default;
+            private static bool Equals(TItemType a, TItemType b) { return defaultEqualityComparer.Equals(a, b); }
+            private static bool IsDefault(TItemType item) { return Equals(item, default(TItemType)); }
+
+            /// <summary>
+            /// This property returns the sigleton Empty, readonly TokenSet{<typeparamref name="TItemType"/>}.
+            /// </summary>
+            public static TokenSet<TItemType> Empty { get { return _empty; } }
+            private static TokenSet<TItemType> _empty = new TokenSet<TItemType>(asReadOnly: true);
+
+            /// <summary>Constructs a new TokenSet with the given <paramref name="firstItem"/>, and optional <paramref name="moreItemParamsArray"/> item parameters</summary>
+            public TokenSet(TItemType firstItem, params TItemType[] moreItemParamsArray)
+            {
+                token1 = firstItem;
+                token2 = moreItemParamsArray.SafeAccess(0);
+                token3 = moreItemParamsArray.SafeAccess(1);
+
+                if (moreItemParamsArray.SafeLength() > 2)
+                    moreTokens = new List<TItemType>(moreItemParamsArray.Skip(2).WhereIsNotDefault());
+            }
+
+            /// <summary>Constructs a new TokenSet from the given <paramref name="otherSet"/> ICollection{<typeparamref name="TItemType"/>}, or the empty set if <paramref name="otherSet"/> is null</summary>
+            public TokenSet(ICollection<TItemType> otherSet, bool asReadOnly = false)
+            {
+                if (otherSet != null)
+                {
+                    var otherArray = otherSet.SafeToArray();
+
+                    token1 = otherArray.SafeAccess(0);
+                    token2 = otherArray.SafeAccess(1);
+                    token3 = otherArray.SafeAccess(2);
+
+                    if (otherArray.SafeLength() > 3)
+                        moreTokens = new List<TItemType>(otherArray.Skip(3));
+                }
+
+                if (asReadOnly)
+                    IsReadOnly = true;
+            }
+
+            /// <summary>Constructs a new TokenSet from the given <paramref name="otherSet"/>, or the empty set if <paramref name="otherSet"/> is null</summary>
+            public TokenSet(TokenSet<TItemType> otherSet = null, bool asReadOnly = false)
+            {
+                if (otherSet != null)
+                {
+                    token1 = otherSet.token1;
+                    token2 = otherSet.token2;
+                    token3 = otherSet.token3;
+
+                    if (!otherSet.moreTokens.IsNullOrEmpty())
+                        moreTokens = new List<TItemType>(otherSet.moreTokens);
+                }
+
+                if (asReadOnly)
+                    IsReadOnly = true;
+            }
+
+            /// <summary>Returns the count of the number of tokens in the set</summary>
+            public int Count
+            {
+                get
+                {
+                    return ((!IsDefault(token1)).MapToInt()
+                            + (!IsDefault(token2)).MapToInt()
+                            + (!IsDefault(token3)).MapToInt()
+                            + moreTokens.SafeCount()
+                            );
+                }
+            }
+
+            /// <summary>Getter returns true if the list is read only.  Setter may be used to set the list to be read-only, but may not be used to set a read/only set to be read/write</summary>
+            public bool IsReadOnly 
+            { 
+                get { return isReadOnly; }
+                set
+                {
+                    if (value && !isReadOnly)
+                        isReadOnly = true;
+                    else if (!value && isReadOnly)
+                        ThrowIfIsReadOnly("Setting the IsReadOnly property to false");
+                }
+            }
+
+            /// <summary>Adds the given <paramref name="item"/> to this set.  This value is added into the first available local token location or it is added to the backing list if the local token locations are all non-default.</summary>
+            /// <exception cref="System.NotSupportedException">Thrown if this method is called on a IsReadyOnly instance</exception>
+            public void Add(TItemType item)
+            {
+                ThrowIfIsReadOnly("Add");
+
+                if (IsDefault(item))
+                    return;
+
+                if (IsDefault(token1))
+                    token1 = item;
+                else if (IsDefault(token2))
+                    token2 = item;
+                else if (IsDefault(token3))
+                    token3 = item;
+                else if (moreTokens == null)
+                    moreTokens = new List<TItemType>() { item };
+                else
+                    moreTokens.Add(item);
+            }
+
+            /// <summary>Removes all of the added tokens from the set</summary>
+            /// <exception cref="System.NotSupportedException">Thrown if this method is called on a IsReadyOnly instance</exception>
+            public void Clear()
+            {
+                ThrowIfIsReadOnly("Clear");
+
+                token1 = default(TItemType);
+                token2 = default(TItemType);
+                token3 = default(TItemType);
+                moreTokens = null;
+            }
+
+            /// <summary>
+            /// Returns true if the set currently contains the given item (using object.Equals based equality comparison)
+            /// </summary>
+            public bool Contains(TItemType item)
+            {
+                if (IsDefault(item))
+                    return false;
+
+                return (Equals(token1, item)
+                        || Equals(token2, item)
+                        || Equals(token3, item)
+                        || moreTokens.SafeContains(item)
+                        );
+            }
+
+            /// <summary>
+            /// Copies the set's contents into the given <paramref name="array"/> starting at the given <paramref name="arrayIndex"/>.
+            /// </summary>
+            public void CopyTo(TItemType[] array, int arrayIndex)
+            {
+                if (!IsDefault(token1))
+                    array[arrayIndex++] = token1;
+
+                if (!IsDefault(token2))
+                    array[arrayIndex++] = token2;
+
+                if (!IsDefault(token3))
+                    array[arrayIndex++] = token3;
+
+                if (!moreTokens.IsNullOrEmpty())
+                    moreTokens.CopyTo(array, arrayIndex);
+            }
+
+            /// <summary>
+            /// Attempts to remove the first occurrence of the given <paramref name="item"/> if found in the set.
+            /// Returns true if an occurrence was found and removed, or false if no such occurrence was found.
+            /// </summary>
+            /// <exception cref="System.NotSupportedException">Thrown if this method is called on a IsReadyOnly instance</exception>
+            public bool Remove(TItemType item)
+            {
+                ThrowIfIsReadOnly("Remove");
+
+                if (IsDefault(item))
+                    return false;
+
+                if (Equals(token1, item))
+                {
+                    token1 = default(TItemType);
+                    return true;
+                }
+                else if (Equals(token2, item))
+                {
+                    token2 = default(TItemType);
+                    return true;
+                }
+                else if (Equals(token3, item))
+                {
+                    token3 = default(TItemType);
+                    return true;
+                }
+                else if (moreTokens != null)
+                {
+                    return moreTokens.Remove(item);
+                }
+
+                return false;
+            }
+
+            public IEnumerable<TItemType> GetEnumerable()
+            {
+                return (EmptyArrayFactory<TItemType>.Instance
+                        .ConditionalConcatItems(!IsDefault(token1), token1)
+                        .ConditionalConcatItems(!IsDefault(token2), token2)
+                        .ConditionalConcatItems(!IsDefault(token3), token3)
+                        .ConditionalConcatItems(!moreTokens.IsNullOrEmpty(), moreTokens)
+                        );
+            }
+
+            public IEnumerator<TItemType> GetEnumerator()
+            {
+                return GetEnumerable().GetEnumerator();
+            }
+
+            IEnumerator IEnumerable.GetEnumerator()
+            {
+                return this.GetEnumerator();
+            }
+
+            /// <summary>
+            /// Determine if this TokenSet has the same set of tokens (by object.Equals equality) as the given <paramref name="other"/> set contains.  Ignores the two sets IsReadOnly values.
+            /// </summary>
+            public bool Equals(ITokenSet<TItemType> other)
+            {
+                return this.Equals(other, compareReadOnly: false);
+            }
+
+            /// <summary>
+            /// Determine if this TokenSet has the same set of tokens (by object.Equals equality) as the given <paramref name="other"/> set contains.  Optinally compares the two sets IsReadOnly values for equality.
+            /// </summary>
+            public bool Equals(ITokenSet<TItemType> other, bool compareReadOnly)
+            {
+                if (other == null)
+                    return false;
+
+                if (compareReadOnly && (isReadOnly != other.IsReadOnly))
+                    return false;
+
+                TokenSet<TItemType> otherAsTS = other as TokenSet<TItemType>;
+
+                // if this set has matching occupied local token values and both sets do not have moreTokens lists then return true
+                if (otherAsTS != null && Equals(token1, otherAsTS.token1) && Equals(token2, otherAsTS.token2) && Equals(token3, otherAsTS.token3) && moreTokens == null && otherAsTS.moreTokens == null)
+                    return true;
+
+                return this.SequenceEqual(other);
+            }
+
+            [NonSerialized]
+            private bool isReadOnly;
+
+            private TItemType token1, token2, token3;
+            private List<TItemType> moreTokens;
+
+            public override string ToString()
+            {
+                if (Count == 0)
+                    return "TokenSet:[Empty]";
+                else
+                    return "TokenSet:[{0}]".CheckedFormat(string.Join(", ", this.Select(item => item.SafeToString())));
+            }
+
+            /// <summary>
+            /// All deserialized TokenSets are immedaitely set to be ReadOnly
+            /// </summary>
+            [OnDeserialized]
+            private void OnDeserialized(StreamingContext context)
+            {
+                isReadOnly = true;
+            }
+
+            /// <summary>
+            /// This method checks if the item IsReadOnly and then throws a NotSupportedException if it is.
+            /// The exception message is the given reasonPrefix + " is not supported when this object IsReadOnly property has been set"
+            /// </summary>
+            /// <exception cref="System.NotSupportedException">thrown if the item has been set to IsReadOnly</exception>
+            private void ThrowIfIsReadOnly(string reasonPrefix)
+            {
+                if (IsReadOnly)
+                    throw new System.NotSupportedException(reasonPrefix + " is not supported when this object's IsReadOnly property has been set");
+            }
+        }
+
+        #endregion
+    }
+
+    /// <summary>
+    /// static class of static methods that are used with KeyValuePair instances.
+    /// </summary>
+    public static class KVP
+    {
+        /// <summary>Typed KeyValuePair construction helper method</summary>
+        public static KeyValuePair<TKey, TValue> Create<TKey, TValue>(TKey key, TValue value) { return new KeyValuePair<TKey, TValue>(key, value); }
+    }
+
+    public static partial class ExtensionMethods
+    {
+        #region ReadOnlyIList<TItemType>, IList<TItemType>, and IEnumerable<TItemType> methods (ConvertToReadOnly, ConvertToWritable)
+
+        /// <summary>
+        /// Extension method either returns the given <paramref name="iSetIn"/> (if it is already a ReadOnlyIList instance) or returns a new ReadOnlyIList{TItemType} of the given <paramref name="iSetIn"/>, or null if the given <paramref name="iSetIn"/> is null and <paramref name="mapNullToEmpty"/> is false.
+        /// </summary>
+        public static ReadOnlyIList<TItemType> ConvertToReadOnly<TItemType>(this IEnumerable<TItemType> iSetIn, bool mapNullToEmpty = true)
+        {
+            ReadOnlyIList<TItemType> roIList = iSetIn as ReadOnlyIList<TItemType>;
+
+            if (roIList != null)
+                return roIList;
+
+            if (iSetIn == null)
+                return mapNullToEmpty ? ReadOnlyIList<TItemType>.Empty : null;
+
+            return new ReadOnlyIList<TItemType>(iSetIn);
+        }
+
+        // NOTE: supporting ConvertToReadOnly for ICollection appears to produce a possible conflict with the corresonding version that can be applied to INamedValueSet instances.
+
+        /// <summary>
+        /// Extension method either returns the given <paramref name="iListIn"/> (if it is already a ReadOnlyIList instance) or returns a new ReadOnlyIList{TItemType} of the given <paramref name="iListIn"/>, or null if the given <paramref name="iListIn"/> is null and <paramref name="mapNullToEmpty"/> is false.
+        /// </summary>
+        public static ReadOnlyIList<TItemType> ConvertToReadOnly<TItemType>(this IList<TItemType> iListIn, bool mapNullToEmpty = true)
+        {
+            ReadOnlyIList<TItemType> roIList = iListIn as ReadOnlyIList<TItemType>;
+
+            if (roIList != null)
+                return roIList;
+
+            if (iListIn == null && !mapNullToEmpty)
+                return null;
+
+            if (iListIn.IsNullOrEmpty())
+                return ReadOnlyIList<TItemType>.Empty;
+
+            return new ReadOnlyIList<TItemType>(iListIn);
+        }
+
+        /// <summary>
+        /// Extension method either returns the given <paramref name="iListIn"/> (if it is not IsReadOnly) or returns a new List{TItemType} of the given <paramref name="iListIn"/> is non-empty, or null if the given <paramref name="iListIn"/> is null and <paramref name="mapNullToEmpty"/> is false.
+        /// </summary>
+        public static IList<TItemType> ConvertToWritable<TItemType>(this IList<TItemType> iListIn, bool mapNullToEmpty = true)
+        {
+            if (iListIn != null)
+                return !iListIn.IsReadOnly ? iListIn : new List<TItemType>(iListIn);
+            else
+                return mapNullToEmpty ? new List<TItemType>() : null;
+        }
+
+        #endregion
+
+        #region ReadOnlyIList<TItemType> methods (MapNullToEmpty, MapEmptyToNull)
+
+        /// <summary>
+        /// Extension method either returns the given <paramref name="readOnlyIListIn"/> (if it is not null) or returns an empty ReadOnlyIList{TItemType} if the given <paramref name="readOnlyIListIn"/> is null.
+        /// </summary>
+        public static ReadOnlyIList<TItemType> MapNullToEmpty<TItemType>(this ReadOnlyIList<TItemType> readOnlyIListIn)
+        {
+            return readOnlyIListIn ?? ReadOnlyIList<TItemType>.Empty;
+        }
+
+        /// <summary>
+        /// Extension method returns the given <paramref name="readOnlyIListIn"/> is non-empty otherwise this method returns null.
+        /// </summary>
+        public static ReadOnlyIList<TItemType> MapEmptyToNull<TItemType>(this ReadOnlyIList<TItemType> readOnlyIListIn)
+        {
+            return (readOnlyIListIn.SafeCount() != 0) ? readOnlyIListIn : null;
+        }
+
+        #endregion
+
+        #region IDictionary<TKey, TValue>, ReadOnlyIDictionary<TKey,TValue> (ConvertToReadOnly, ConvertToWritable)
+
+        /// <summary>
+        /// Extension method either returns the given <paramref name="iDictionaryIn"/> (if it is already a ReadOnlyIDictionary instance) or returns a new ReadOnlyIDictionary{TKey, TValue} of the given <paramref name="iDictionaryIn"/>, or null if the given <paramref name="iDictionaryIn"/> is null and <paramref name="mapNullToEmpty"/> is false.
+        /// </summary>
+        public static ReadOnlyIDictionary<TKey, TValue> ConvertToReadOnly<TKey, TValue>(this IDictionary<TKey, TValue> iDictionaryIn, bool mapNullToEmpty = true)
+        {
+            ReadOnlyIDictionary<TKey, TValue> roIDictionary = iDictionaryIn as ReadOnlyIDictionary<TKey, TValue>;
+
+            if (roIDictionary != null)
+                return roIDictionary;
+
+            if (iDictionaryIn == null && !mapNullToEmpty)
+                return null;
+
+            if (iDictionaryIn == null || iDictionaryIn.Count <= 0)
+                return ReadOnlyIDictionary<TKey, TValue>.Empty;
+
+            return new ReadOnlyIDictionary<TKey, TValue>(iDictionaryIn);
+        }
+
+        /// <summary>
+        /// Extension method either returns the given <paramref name="iDictionaryIn"/> (if it is not IsReadOnly) or returns a new Dictionary{TKey, TValue} of the given <paramref name="iDictionaryIn"/> is non-empty, or null if the given <paramref name="iDictionaryIn"/> is null and <paramref name="mapNullToEmpty"/> is false.
+        /// </summary>
+        public static IDictionary<TKey, TValue> ConvertToWritable<TKey, TValue>(this IDictionary<TKey, TValue> iDictionaryIn, bool mapNullToEmpty = true)
+        {
+            if (iDictionaryIn != null)
+                return !iDictionaryIn.IsReadOnly ? iDictionaryIn : new Dictionary<TKey, TValue>(iDictionaryIn);
+            else
+                return mapNullToEmpty ? new Dictionary<TKey, TValue>() : null;
+        }
+
+        #endregion
+
+        #region ReadOnlyIDictionary<TKey,TValue> methods (MapNullToEmpty, MapEmptyToNull)
+
+        /// <summary>
+        /// Extension method either returns the given <paramref name="readOnlyIDictionaryIn"/> (if it is not null) or returns an empty ReadOnlyIDictionary{TKey, TValue} if the given <paramref name="readOnlyIDictionaryIn"/> is null.
+        /// </summary>
+        public static ReadOnlyIDictionary<TKey, TValue> MapNullToEmpty<TKey, TValue>(this ReadOnlyIDictionary<TKey, TValue> readOnlyIDictionaryIn)
+        {
+            return readOnlyIDictionaryIn ?? ReadOnlyIDictionary<TKey, TValue>.Empty;
+        }
+
+        /// <summary>
+        /// Extension method returns the given <paramref name="readOnlyIDictionaryIn"/> is non-empty otherwise this method returns null.
+        /// </summary>
+        public static ReadOnlyIDictionary<TKey, TValue> MapEmptyToNull<TKey, TValue>(this ReadOnlyIDictionary<TKey, TValue> readOnlyIDictionaryIn)
+        {
+            return (readOnlyIDictionaryIn.SafeCount() != 0) ? readOnlyIDictionaryIn : null;
+        }
+
+        #endregion
+
+        #region IDictionary<TKey, TValue> (SafeAddItems, SafeAddRange, SafeSetValueForKey)
+
+        /// <summary>Adds (using SafeSetKeyValue) the given <paramref name="firstItem"/> and any following <paramref name="moreItemsArray"/> to the given <paramref name="dictionary"/> and returns it (to support call chaining)</summary>
+        public static IDictionary<TKey, TValue> SafeAddItems<TKey, TValue>(this IDictionary<TKey, TValue> dictionary, KeyValuePair<TKey, TValue> firstItem, params KeyValuePair<TKey, TValue>[] moreItemsArray)
+        {
+            dictionary.SafeSetKeyValue(firstItem);
+
+            if (!moreItemsArray.IsNullOrEmpty())
+                moreItemsArray.DoForEach(item => dictionary.SafeSetKeyValue(item));
+
+            return dictionary;
+        }
+
+        /// <summary>Adds (using SafeSetKeyValue)  the given <paramref name="itemSet"/> set of items to the given <paramref name="dictionary"/> and returns it (to support call chaining)</summary>
+        public static IDictionary<TKey, TValue> SafeAddRange<TKey, TValue>(this IDictionary<TKey, TValue> dictionary, IEnumerable<KeyValuePair<TKey, TValue>> itemSet)
+        {
+            if (itemSet != null)
+                itemSet.DoForEach(item => dictionary.SafeSetKeyValue(item));
+
+            return dictionary;
+        }
+
+        /// <summary>If the given <paramref name="dictionary"/> is non-null and the given <paramref name="kvp"/>'s Key is non-null then uses the TKey indexed setter to set the key's value in the dictionary.  Returns the given <paramref name="dictionary"/> to support call chaining.</summary>
+        public static IDictionary<TKey, TValue> SafeSetKeyValue<TKey, TValue>(this IDictionary<TKey, TValue> dictionary, KeyValuePair<TKey, TValue> kvp)
+        {
+            if (dictionary != null && kvp.Key != null)
+                dictionary[kvp.Key] = kvp.Value;
+
+            return dictionary;
+        }
+
+        #endregion
+
+        #region ITokenSet<TItemType> (MapNullToEmpty, MapEmtpyToNull, ConverToReadOnly, ConvertToWritable)
+
+        /// <summary>
+        /// Extension method either returns the given <paramref name="setIn"/> (if it is not null) or returns an empty ITokenSet{TItemType} if the given <paramref name="setIn"/> is null.
+        /// </summary>
+        public static ITokenSet<TItemType> MapNullToEmpty<TItemType>(this ITokenSet<TItemType> setIn)
+        {
+            return setIn ?? TokenSet<TItemType>.Empty;
+        }
+
+        /// <summary>
+        /// Extension method returns the given <paramref name="setIn"/> is non-empty otherwise this method returns null.
+        /// </summary>
+        public static ITokenSet<TItemType> MapEmptyToNull<TItemType>(this ITokenSet<TItemType> setIn)
+        {
+            return (setIn.SafeCount() != 0) ? setIn : null;
+        }
+
+        /// <summary>
+        /// Extension method either returns the given <paramref name="iSetIn"/> (if it is already a TokenSet instance) or returns a new TokenSet{TItemType} of the given <paramref name="iSetIn"/>, or null if the given <paramref name="iSetIn"/> is null and <paramref name="mapNullToEmpty"/> is false.
+        /// </summary>
+        public static TokenSet<TItemType> ConvertToReadOnly<TItemType>(this ITokenSet<TItemType> iSetIn, bool mapNullToEmpty = true)
+        {
+            TokenSet<TItemType> set = iSetIn as TokenSet<TItemType>;
+
+            if (set != null && set.IsReadOnly)
+                return set;
+
+            if (iSetIn == null && !mapNullToEmpty)
+                return null;
+
+            if (iSetIn.IsNullOrEmpty())
+                return TokenSet<TItemType>.Empty;
+
+            return new TokenSet<TItemType>(iSetIn, asReadOnly: true);
+        }
+
+        /// <summary>
+        /// Extension method either returns the given <paramref name="iSetIn"/> (if it is not IsReadOnly) or returns a new TokenSet{TItemType} of the given <paramref name="iSetIn"/> is non-empty, or null if the given <paramref name="iSetIn"/> is null and <paramref name="mapNullToEmpty"/> is false.
+        /// </summary>
+        public static TokenSet<TItemType> ConvertToWritable<TItemType>(this ITokenSet<TItemType> iSetIn, bool mapNullToEmpty = true)
+        {
+            TokenSet<TItemType> set = iSetIn as TokenSet<TItemType>;
+
+            if (set != null && !set.IsReadOnly)
+                return set;
+
+            if (iSetIn != null)
+                return new TokenSet<TItemType>(iSetIn);
+            else
+                return mapNullToEmpty ? new TokenSet<TItemType>() : null;
         }
 
         #endregion

@@ -758,8 +758,6 @@ namespace MosaicLib.Modular.Interconnect.Remoting
                 }
             }
 
-            // Todo: add InternalRemoteSessionManagement message stream tool
-
             return base.PerformServiceAction(action);
         }
 

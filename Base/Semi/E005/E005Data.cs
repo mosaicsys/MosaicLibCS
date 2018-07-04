@@ -308,7 +308,7 @@ namespace MosaicLib.Semi.E005.Data
 
         public static NamedValueSet ConvertFromE005Data(this NamedValueSet nvs, byte[] byteArray, ref int startIndex, ref string ec)
         {
-            nvs = nvs.ConvertToWriteable(mapNullToEmpty: true);
+            nvs = nvs.ConvertToWritable(mapNullToEmpty: true);
 
             {
                 int nvsListNumElements;

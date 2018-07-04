@@ -816,7 +816,7 @@ namespace MosaicLib.Modular.Config
             public Action<TConfigValueSet, Logging.IMesgEmitter, Logging.IMesgEmitter> UpdateMemberFromKeyAccessAction { get; set; }
         }
 
-        /// <remarks>Non-null elements in this array correspond to fully vetted writeable value set items.</remarks>
+        /// <remarks>Non-null elements in this array correspond to fully vetted writable value set items.</remarks>
         KeySetupInfo[] keySetupInfoArray = null;
 
         #endregion

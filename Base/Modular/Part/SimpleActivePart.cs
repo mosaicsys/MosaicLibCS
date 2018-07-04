@@ -1319,6 +1319,7 @@ namespace MosaicLib.Modular.Part
         /// <summary>
         /// Most generic version of WaitForSomethingToDo.  caller provides IWaitable object and waitTimeLimit.
         /// <para/>True if the object was signaled or false if the timeout caused flow to return to the caller.
+        /// <para/>This version is virtual so it can be overriden in drived classes.
         /// </summary>
         protected virtual bool WaitForSomethingToDo(Utils.IWaitable waitable, TimeSpan useWaitTimeLimit)
 		{

@@ -36,8 +36,11 @@ using MosaicLib.Utils.Collections;
 
 namespace MosaicLib.Semi.E090
 {
-    #region Constants (type names)
+    #region Constants (type names) and Settings
 
+    /// <summary>
+    /// Static class used as namespace for E090 specific global constant values.  (primarily string constants such as type names)
+    /// </summary>
     public static class Constants
     {
         /// <summary>SubstrateObjectType = "Substrate"</summary>
@@ -46,7 +49,8 @@ namespace MosaicLib.Semi.E090
         /// <summary>SubstrateLocationObjectType = "SubstLoc"</summary>
         public const string SubstrateLocationObjectType = "SubstLoc";
 
-        // public const string SubstrateBatchLocationObjectType = "BatchLoc";       // not supported yet
+        [Obsolete("not supported yet (2018-05-31)")]
+        public const string SubstrateBatchLocationObjectType = "BatchLoc";
 
         /// <summary>Gives the link key used for links from a substrate location to the substrate it contains, if any (Contains)</summary>
         public const string ContainsLinkKey = "Contains";
@@ -60,6 +64,9 @@ namespace MosaicLib.Semi.E090
         /// <summary>E039 attribute name used for SubstrateProcessingState: "SubstProcState"</summary>
         public const string SubstrateProcessingStateAttributeName = "SubstProcState";
 
+        /// <summary>E039 attribute name used for the optional Pending SubstrateProcessingState value: "PendingSPS"</summary>
+        public const string PendingSubstrateProcessingStateAttributeName = "PendingSPS";
+
         /// <summary>E039 attribute name used for SubstrateTransportState: "SubstState"</summary>
         public const string SubstrateTransportStateAttributeName = "SubstState";
 
@@ -69,6 +76,29 @@ namespace MosaicLib.Semi.E090
         /// <summary>E039 attribute name used for Usage: "SubstUsage"</summary>
         public const string SubstrateUsageAttributeName = "SubstUsage";
 
+        /// <summary>E039 attribute name used for optional SubstrateJobRequestState: "SJRS"</summary>
+        public const string SubstrateJobRequestStateAttributeName = "SJRS";
+
+        /// <summary>E039 attribute name used for optional SubstrateJobState: "SJS"</summary>
+        public const string SubstrateJobStateAttributeName = "SJS";
+
+        /// <summary>E039 attribute name used for list of accumulated SubstProcState (SPS) values (when enabled) - includes both assigned SPS and assigned pending SPS values: "SPSList"</summary>
+        public const string SPSListAttributeName = "SPSList";
+
+        /// <summary>E039 attribute name used for list of accumulated SubstLocID Names at which the SPSList had an SPS value appended (when enabled): "SPSLocList"</summary>
+        public const string SPSLocListAttributeName = "SPSLocList";
+
+        /// <summary>E039 attribute name used for list of accumulated DateTime.Now.ToString("o") values at which the SPSList had an SPS value appended (when enabled): "SPSDateTimeList"</summary>
+        public const string SPSDateTimeListAttributeName = "SPSDateTimeList";
+    }
+
+    /// <summary>
+    /// Static class that is used to hold static (global) settings that are used by the E090 specific extension methods to configure their behavior.  
+    /// The choice of these setting values are client code specific and are synchronized with correct operation of client code.  
+    /// As such there is not built in logic that can be used to obtain their values from modular config.
+    /// </summary>
+    public static class Settings
+    {
         /// <summary>Static get/set property used to control the maximum length of any generated SPSList or SPSLocList.  Once either list reaches this length limit concatination will stop.  Default: 50.  Setter clips given value to be between 0 and 1000.</summary>
         public static int MaximumSPSListLength { get { return _maximumSPSListLength; } set { _maximumSPSListLength = value.Clip(0, 1000); } }
         private static int _maximumSPSListLength = DefaultMaximumSPSListLength;
@@ -76,11 +106,25 @@ namespace MosaicLib.Semi.E090
         /// <summary>Defines the default value for the MaximumSPSListLength (50)</summary>
         public const int DefaultMaximumSPSListLength = 50;
 
-        /// <summary>E039 attribute name used for optional SubstrateJobRequestState: "SJRS"</summary>
-        public const string SubstrateJobRequestStateAttributeName = "SJRS";
+        /// <summary>This value is used to globally add specific features to the updateBehavior parameter values used in NoteSubstMoved calls.  Defaults to None.</summary>
+        public static E090StateUpdateBehavior NoteSubstMovedUpdateBehaviorAdditions { get { return _noteSubstMovedUpdateBehaviorAdditions; } set { _noteSubstMovedUpdateBehaviorAdditions = value; } }
+        private static E090StateUpdateBehavior _noteSubstMovedUpdateBehaviorAdditions = E090StateUpdateBehavior.None;
 
-        /// <summary>E039 attribute name used for optional SubstrateJobState: "SJS"</summary>
-        public const string SubstrateJobStateAttributeName = "SJS";
+        /// <summary>This value is used to globally add specific features to the updateBehavior parameter values used with SetSubstProcState, and SetPendingSubstProcState calls.  This property cannot be used to set the UsePendingSPS as it is removed (bitwise) from any value that is given to the setter.  Defaults to None.</summary>
+        public static E090StateUpdateBehavior SetSubstProcStateUpdateBehaviorAdditions { get { return _setSubstProcStateUpdateBehaviorAdditions; } set { _setSubstProcStateUpdateBehaviorAdditions = (value & ~(E090StateUpdateBehavior.UsePendingSPS)); } }
+        private static E090StateUpdateBehavior _setSubstProcStateUpdateBehaviorAdditions = E090StateUpdateBehavior.None;
+
+        /// <summary>This value is used to globally add specific features to the updateBehavior parameter values used with all direct, or indirect, GenerateE090UpdateItems calls (including NoteSubstMoved, SetSubstProcState, and SetPendingSubstProcState calls).  This property cannot be used to set the UsePendingSPS as it is removed (bitwise) from any value that is given to the setter.  Defaults to None.</summary>
+        public static E090StateUpdateBehavior GenerateE090UpdateItemsBehaviorAdditions { get { return _generateE090UpdateItemsBehaviorAdditions; } set { _generateE090UpdateItemsBehaviorAdditions = (value & ~(E090StateUpdateBehavior.UsePendingSPS)); } }
+        private static E090StateUpdateBehavior _generateE090UpdateItemsBehaviorAdditions = E090StateUpdateBehavior.None;
+
+        public static void ResetToDefaults()
+        {
+            MaximumSPSListLength = DefaultMaximumSPSListLength;
+            NoteSubstMovedUpdateBehaviorAdditions = E090StateUpdateBehavior.None;
+            SetSubstProcStateUpdateBehaviorAdditions = E090StateUpdateBehavior.None;
+            GenerateE090UpdateItemsBehaviorAdditions = E090StateUpdateBehavior.None;
+        }
     }
 
     #endregion
@@ -89,7 +133,10 @@ namespace MosaicLib.Semi.E090
 
     /// <summary>
     /// Flags that are used to control the behavior of the various E090 Update related ExtensionMethods provided here.
-    /// <para/>None (0x00), AutoInProcess (0x01), AllowReturnToNeedsProcessing (0x02), AutoUpdateSTS (0x04), All (0x07)
+    /// <para/>None (0x00), AllowReturnToNeedsProcessing (0x02), AutoUpdateSTS (0x04), UsePendingSPS (0x08), UseSPSList (0x10), UseSPSLocList (0x20), UseSPSDateTimeList (0x40), 
+    /// AddSPSMoved (0x100), AddSPSCreated (0x200), AddSPSRemoved (0x400),
+    /// AddExternalSyncItem (0x1000)
+    /// StandardSPSUpdate (0x06), BasicSPSLists (0x30)
     /// </summary>
     [Flags]
     public enum E090StateUpdateBehavior : int
@@ -104,35 +151,64 @@ namespace MosaicLib.Semi.E090
         /// <summary>Include this flag to support requested transitions from InProcess back to NeedsProcessing [0x02]</summary>
         AllowReturnToNeedsProcessing = 0x02,
 
-        /// <summary>Include this flag to support adding automatic transitions for the STS based on the location and the SPS</summary>
+        /// <summary>Include this flag to support adding automatic transitions for the STS based on the location and the SPS [0x04]</summary>
         AutoUpdateSTS = 0x04,
 
-        /// <summary>The use of this flag causes the E090 SPS related logic to primarily update the PendingSPS rather than the main SPS property.  This allows the E090 SPS system to be given a sequence of values and delays performing the final SPS complete transition until the user explicitly requests it or until the substrate reaches its destination (at which point it is safe to lock down the final SPS value).</summary>
+        /// <summary>The use of this flag causes the E090 SPS related logic to primarily update the PendingSPS rather than the main SPS property.  This allows the E090 SPS system to be given a sequence of values and delays performing the final SPS complete transition until the user explicitly requests it or until the substrate reaches its destination (at which point it is safe to lock down the final SPS value). [0x08]</summary>
         UsePendingSPS = 0x08,
 
-        /// <summary>The use of this flag causes each E090 SPS state update operation to append the given non-Undefined SPS value to the SPSList attribute.</summary>
+        /// <summary>The use of this flag causes each E090 SPS state update operation to append the given non-Undefined SPS value to the SPSList attribute. [0x10]</summary>
         UseSPSList = 0x10,
 
         /// <summary>
         /// The use of this flag causes each E090 SPS state update operation to append the current substrate location to the SPSLocList attribute whenever a new SPS value is appendended to the SPSList.
         /// <para/>Note: if this flag is not used uniformly with the UseSPSList flag, then the SPSLocList attribute may end up being shorter than the SPSList attribute itself.
+        /// [0x20]
         /// </summary>
         UseSPSLocList = 0x20,
 
-        /// <summary>The use of this flag requests that any corresponding E090 create, of update method should also include an external sync operation.</summary>
-        AddExternalSyncItem = 0x40,
+        /// <summary>
+        /// The use of this flag causes each E090 SPS update operation to append the current DateTime value to the SPSDateTimeList attribute whenever a new SPS value is appended to the SPSList.
+        /// <para/>Note: if this flag is not used uniformly with the UseSPSList flag, then the SPSLocList attribute may end up being shorter than the SPSList attribute itself.
+        /// [0x40]
+        /// </summary>
+        UseSPSDateTimeList = 0x40,
 
-        /// <summary>Synonym for AllV1: (AllowReturnToNeedsProcessing | AutoUpdateSTS) [0x06]</summary>
-        All = AllV1,
+        /// <summary>The use of this flag causes each E090 substrate move to record SPS.Moved in its SPSList (et. al.). [0x100]</summary>
+        AddSPSMoved = 0x100,
+
+        /// <summary>The use of this flag causes an E090 substrate creation to record SPS.Added in its SPSList (et. al.) [0x200]</summary>
+        AddSPSCreated = 0x200,
+
+        /// <summary>The use of this flag causes an E090 substrate removal to record SPS.Removed in its SPSList (et. al.) [0x400]</summary>
+        AddSPSRemoved = 0x400,
+
+        /// <summary>The use of this flag requests that any corresponding E090 create, of update method should also include an external sync operation. [0x1000]</summary>
+        AddExternalSyncItem = 0x1000,
 
         /// <summary>(AllowReturnToNeedsProcessing | AutoUpdateSTS) [0x06]</summary>
+        [Obsolete("Please switch to using other enumeration combination values (2018-05-30)")]
+        All = (AllowReturnToNeedsProcessing | AutoUpdateSTS),
+
+        /// <summary>(AllowReturnToNeedsProcessing | AutoUpdateSTS) [0x06]</summary>
+        [Obsolete("Please switch to using other enumeration combination values (2018-05-30)")]
         AllV1 = (AllowReturnToNeedsProcessing | AutoUpdateSTS),
 
-        /// <summary>(AllowReturnToNeedsProcessing | AutoUpdateSTS | UsePendingSPS | UseSPSList | UseSPSLocList) [0x7e]</summary>
+        /// <summary>(AllowReturnToNeedsProcessing | AutoUpdateSTS | UsePendingSPS | UseSPSList | UseSPSLocList) [0x3e]</summary>
+        [Obsolete("Please switch to using other enumeration combination values (2018-05-30)")]
         AllV2 = (AllowReturnToNeedsProcessing | AutoUpdateSTS | UsePendingSPS | UseSPSList | UseSPSLocList),
 
-        /// <summary>(UseSPSList | UseSPSLocList) [0x60]</summary>
-        SPSLists = (UseSPSList | UseSPSLocList),
+        /// <summary>(AllowReturnToNeedsProcessing | AutoUpdateSTS) [0x06]</summary>
+        StandardSPSUpdate = (AllowReturnToNeedsProcessing | AutoUpdateSTS),
+
+        /// <summary>(AllowReturnToNeedsProcessing | AutoUpdateSTS | UsePendingSPS) [0x0e]</summary>
+        PendingSPSUpdate = (AllowReturnToNeedsProcessing | AutoUpdateSTS | UsePendingSPS),
+
+        /// <summary>(AutoUpdateSTS | UsePendingSPS) [0x0c]</summary>
+        StandardMoveUpdate = (AutoUpdateSTS | UsePendingSPS),
+
+        /// <summary>(UseSPSList | UseSPSLocList) [0x30]</summary>
+        BasicSPSLists = (UseSPSList | UseSPSLocList),
     }
 
     #endregion
@@ -216,28 +292,35 @@ namespace MosaicLib.Semi.E090
             return tableUpdater.Update(updateItemArray).Run();
         }
 
-        public static string NoteSubstMoved(this IE039TableUpdater tableUpdater, IE039Object substObj, IE039Object toLocObj, E090StateUpdateBehavior updateBehavior = E090StateUpdateBehavior.AllV1, bool addSyncExternalItem = false)
+        public static string RemoveE090Subst(this IE039TableUpdater tableUpdater, E090SubstInfo currentSubstInfo, E090StateUpdateBehavior updateBehavior = E090StateUpdateBehavior.None, bool addSyncExternalItem = false)
+        {
+            E039UpdateItem[] updateItemArray = new List<E039UpdateItem>().GenerateRemoveE090SubstItems(currentSubstInfo: currentSubstInfo, updateBehavior: updateBehavior, addSyncExternalItem: addSyncExternalItem).ToArray();
+
+            return tableUpdater.Update(updateItemArray).Run();
+        }
+
+        public static string NoteSubstMoved(this IE039TableUpdater tableUpdater, IE039Object substObj, IE039Object toLocObj, E090StateUpdateBehavior updateBehavior = E090StateUpdateBehavior.StandardMoveUpdate, bool addSyncExternalItem = false)
         {
             E039ObjectID toLocObjID = (toLocObj != null) ? toLocObj.ID : E039ObjectID.Empty;
 
             return tableUpdater.NoteSubstMoved(substObj, toLocObjID, updateBehavior: updateBehavior, addSyncExternalItem: addSyncExternalItem);
         }
 
-        public static string NoteSubstMoved(this IE039TableUpdater tableUpdater, IE039Object substObj, E039ObjectID toLocObjID, E090StateUpdateBehavior updateBehavior = E090StateUpdateBehavior.AllV1, bool addSyncExternalItem = false)
+        public static string NoteSubstMoved(this IE039TableUpdater tableUpdater, IE039Object substObj, E039ObjectID toLocObjID, E090StateUpdateBehavior updateBehavior = E090StateUpdateBehavior.StandardMoveUpdate, bool addSyncExternalItem = false)
         {
             E090SubstInfo currentSubstInfo = new E090SubstInfo(substObj);
 
             return tableUpdater.NoteSubstMoved(currentSubstInfo, toLocObjID, updateBehavior: updateBehavior, addSyncExternalItem: addSyncExternalItem);
         }
 
-        public static string NoteSubstMoved(this IE039TableUpdater tableUpdater, E090SubstObserver substObs, E039ObjectID toLocObjID, E090StateUpdateBehavior updateBehavior = E090StateUpdateBehavior.AllV1, bool addSyncExternalItem = false)
+        public static string NoteSubstMoved(this IE039TableUpdater tableUpdater, E090SubstObserver substObs, E039ObjectID toLocObjID, E090StateUpdateBehavior updateBehavior = E090StateUpdateBehavior.StandardMoveUpdate, bool addSyncExternalItem = false)
         {
             string ec = tableUpdater.NoteSubstMoved(substObs.UpdateInline().Info, toLocObjID, updateBehavior: updateBehavior, addSyncExternalItem: addSyncExternalItem);
             substObs.Update();
             return ec;
         }
 
-        public static string NoteSubstMoved(this IE039TableUpdater tableUpdater, E090SubstInfo currentSubstInfo, E039ObjectID toLocObjID, E090StateUpdateBehavior updateBehavior = E090StateUpdateBehavior.AllV1, bool addSyncExternalItem = false)
+        public static string NoteSubstMoved(this IE039TableUpdater tableUpdater, E090SubstInfo currentSubstInfo, E039ObjectID toLocObjID, E090StateUpdateBehavior updateBehavior = E090StateUpdateBehavior.StandardMoveUpdate, bool addSyncExternalItem = false)
         {
             E039ObjectID substObjID = currentSubstInfo.ObjID;
 
@@ -246,7 +329,12 @@ namespace MosaicLib.Semi.E090
             {
                 List<E039UpdateItem> updateItemList = new List<E039UpdateItem>();
 
-                ec = updateItemList.GenerateE090UpdateItems(currentSubstInfo, toLocObjID: toLocObjID, updateBehavior: updateBehavior, addSyncExternalItem: addSyncExternalItem);
+                updateBehavior |= Settings.NoteSubstMovedUpdateBehaviorAdditions;
+
+                if (updateBehavior.IsSet(E090StateUpdateBehavior.AddSPSMoved))
+                    ec = updateItemList.GenerateE090UpdateItems(currentSubstInfo, toLocObjID: toLocObjID, spsParam: SubstProcState.Moved, updateBehavior: updateBehavior, addSyncExternalItem: addSyncExternalItem);
+                else
+                    ec = updateItemList.GenerateE090UpdateItems(currentSubstInfo, toLocObjID: toLocObjID, updateBehavior: updateBehavior, addSyncExternalItem: addSyncExternalItem);
 
                 if (ec.IsNullOrEmpty())
                 {
@@ -262,14 +350,14 @@ namespace MosaicLib.Semi.E090
             return ec;
         }
 
-        public static string SetSubstProcState(this IE039TableUpdater tableUpdater, IE039Object substObj, SubstProcState spsParam, E090StateUpdateBehavior updateBehavior = E090StateUpdateBehavior.AllV1, bool addSyncExternalItem = false)
+        public static string SetSubstProcState(this IE039TableUpdater tableUpdater, IE039Object substObj, SubstProcState spsParam, E090StateUpdateBehavior updateBehavior = E090StateUpdateBehavior.StandardSPSUpdate, bool addSyncExternalItem = false)
         {
             E090SubstInfo currentSubstInfo = new E090SubstInfo(substObj);
 
             return tableUpdater.SetSubstProcState(currentSubstInfo, spsParam: spsParam, updateBehavior: updateBehavior, addSyncExternalItem: addSyncExternalItem);
         }
 
-        public static string SetSubstProcState(this IE039TableUpdater tableUpdater, E090SubstObserver substObs, SubstProcState spsParam, E090StateUpdateBehavior updateBehavior = E090StateUpdateBehavior.AllV1, bool addSyncExternalItem = false)
+        public static string SetSubstProcState(this IE039TableUpdater tableUpdater, E090SubstObserver substObs, SubstProcState spsParam, E090StateUpdateBehavior updateBehavior = E090StateUpdateBehavior.StandardSPSUpdate, bool addSyncExternalItem = false)
         {
             string ec = tableUpdater.SetSubstProcState(substObs.UpdateInline().Info, spsParam: spsParam, updateBehavior: updateBehavior, addSyncExternalItem: addSyncExternalItem);
 
@@ -278,7 +366,7 @@ namespace MosaicLib.Semi.E090
             return ec;
         }
 
-        public static string SetSubstProcState(this IE039TableUpdater tableUpdater, E090SubstInfo currentSubstInfo, SubstProcState spsParam, E090StateUpdateBehavior updateBehavior = E090StateUpdateBehavior.AllV1, bool addSyncExternalItem = false)
+        public static string SetSubstProcState(this IE039TableUpdater tableUpdater, E090SubstInfo currentSubstInfo, SubstProcState spsParam, E090StateUpdateBehavior updateBehavior = E090StateUpdateBehavior.StandardSPSUpdate, bool addSyncExternalItem = false)
         {
             E039ObjectID substObjID = currentSubstInfo.ObjID;
 
@@ -286,6 +374,8 @@ namespace MosaicLib.Semi.E090
             using (var eeTrace = new Logging.EnterExitTrace(logger, "{0}: obj '{1}' {2}".CheckedFormat(Fcns.CurrentMethodName, substObjID, spsParam)))
             {
                 List<E039UpdateItem> updateItemList = new List<E039UpdateItem>();
+
+                updateBehavior |= Settings.SetSubstProcStateUpdateBehaviorAdditions;
 
                 ec = updateItemList.GenerateE090UpdateItems(currentSubstInfo, spsParam: spsParam, updateBehavior: updateBehavior, addSyncExternalItem: addSyncExternalItem);
 
@@ -303,12 +393,12 @@ namespace MosaicLib.Semi.E090
             return ec;
         }
 
-        public static string SetPendingSubstProcState(this IE039TableUpdater tableUpdater, IE039Object substObj, SubstProcState spsParam, E090StateUpdateBehavior updateBehavior = E090StateUpdateBehavior.AllV2, bool addSyncExternalItem = false)
+        public static string SetPendingSubstProcState(this IE039TableUpdater tableUpdater, IE039Object substObj, SubstProcState spsParam, E090StateUpdateBehavior updateBehavior = E090StateUpdateBehavior.PendingSPSUpdate, bool addSyncExternalItem = false)
         {
             return tableUpdater.SetSubstProcState(substObj, spsParam: spsParam, updateBehavior: updateBehavior | E090StateUpdateBehavior.UsePendingSPS, addSyncExternalItem: addSyncExternalItem);
         }
 
-        public static string SetPendingSubstProcState(this IE039TableUpdater tableUpdater, E090SubstObserver substObs, SubstProcState spsParam, E090StateUpdateBehavior updateBehavior = E090StateUpdateBehavior.AllV2, bool addSyncExternalItem = false)
+        public static string SetPendingSubstProcState(this IE039TableUpdater tableUpdater, E090SubstObserver substObs, SubstProcState spsParam, E090StateUpdateBehavior updateBehavior = E090StateUpdateBehavior.PendingSPSUpdate, bool addSyncExternalItem = false)
         {
             string ec = tableUpdater.SetPendingSubstProcState(substObs.UpdateInline().Info, spsParam: spsParam, updateBehavior: updateBehavior, addSyncExternalItem: addSyncExternalItem);
 
@@ -317,7 +407,7 @@ namespace MosaicLib.Semi.E090
             return ec;
         }
 
-        public static string SetPendingSubstProcState(this IE039TableUpdater tableUpdater, E090SubstInfo currentSubstInfo, SubstProcState spsParam, E090StateUpdateBehavior updateBehavior = E090StateUpdateBehavior.AllV2, bool addSyncExternalItem = false)
+        public static string SetPendingSubstProcState(this IE039TableUpdater tableUpdater, E090SubstInfo currentSubstInfo, SubstProcState spsParam, E090StateUpdateBehavior updateBehavior = E090StateUpdateBehavior.PendingSPSUpdate, bool addSyncExternalItem = false)
         {
             return tableUpdater.SetSubstProcState(currentSubstInfo, spsParam: spsParam, updateBehavior: updateBehavior | E090StateUpdateBehavior.UsePendingSPS, addSyncExternalItem: addSyncExternalItem);
         }
@@ -367,12 +457,12 @@ namespace MosaicLib.Semi.E090
             return ec;
         }
 
-        public static List<E039UpdateItem> GenerateCreateE090SubstLocItems(this List<E039UpdateItem> updateItemList, string substLocName, out E039UpdateItem.AddObject addObjectUpdateItem, INamedValueSet attributes = null, E039ObjectFlags flags = E039ObjectFlags.None, bool addIfNeeded = false, bool addSyncExternalItem = false, int instanceNum = 0)
+        public static List<E039UpdateItem> GenerateCreateE090SubstLocItems(this List<E039UpdateItem> updateItemList, string substLocName, out E039UpdateItem.AddObject addObjectUpdateItem, INamedValueSet attributes = null, E039ObjectFlags flags = E039ObjectFlags.None, bool addIfNeeded = false, bool addSyncExternalItem = false, int instanceNum = 0, bool assignUUID = false)
         {
-            E039ObjectID substLocObjID = new E039ObjectID(substLocName, Constants.SubstrateLocationObjectType, assignUUID: true);
+            E039ObjectID substLocObjID = new E039ObjectID(substLocName, Constants.SubstrateLocationObjectType, assignUUID: assignUUID);
 
             if (instanceNum != 0)
-                attributes = attributes.ConvertToWriteable().SetValue("InstanceNum", instanceNum);
+                attributes = attributes.ConvertToWritable().SetValue("InstanceNum", instanceNum);
 
             updateItemList.Add(addObjectUpdateItem = new E039UpdateItem.AddObject(substLocObjID, attributes: attributes, flags: flags, ifNeeded: addIfNeeded));
             updateItemList.Add(new E039UpdateItem.AddLink(new E039Link(substLocObjID, E039ObjectID.Empty, Constants.ContainsLinkKey), ifNeeded: addIfNeeded));
@@ -382,9 +472,9 @@ namespace MosaicLib.Semi.E090
             return updateItemList;
         }
 
-        public static List<E039UpdateItem> GenerateCreateE090SubstItems(this List<E039UpdateItem> updateItemList, string substName, out E039UpdateItem.AddObject addObjectUpdateItem, E039ObjectID srcSubstLocObjID, E039ObjectID destSubstLocObjID = null, E090SubstInfo? initialE090SubstrateObjState = null, INamedValueSet attributes = null, E039ObjectFlags flags = E039ObjectFlags.None, bool addSyncExternalItem = false)
+        public static List<E039UpdateItem> GenerateCreateE090SubstItems(this List<E039UpdateItem> updateItemList, string substName, out E039UpdateItem.AddObject addObjectUpdateItem, E039ObjectID srcSubstLocObjID, E039ObjectID destSubstLocObjID = null, E090SubstInfo? initialE090SubstrateObjState = null, INamedValueSet attributes = null, E039ObjectFlags flags = E039ObjectFlags.None, bool addSyncExternalItem = false, bool assignUUID = true)
         {
-            E039ObjectID substObjID = new E039ObjectID(substName, Constants.SubstrateObjectType, assignUUID: true);
+            E039ObjectID substObjID = new E039ObjectID(substName, Constants.SubstrateObjectType, assignUUID: assignUUID);
 
             E090SubstInfo useInitialState = initialE090SubstrateObjState ?? E090SubstInfo.Initial;
 
@@ -420,7 +510,37 @@ namespace MosaicLib.Semi.E090
             }
 
             if (!createAtLocID.IsEmpty)
-                updateItemList.Add(new E039UpdateItem.AddLink(new E039Link(createAtLocID, substObjID, Constants.ContainsLinkKey)));
+            {
+                var containsLink = new E039Link(createAtLocID, substObjID, Constants.ContainsLinkKey);
+                updateItemList.Add(new E039UpdateItem.AddLink(containsLink));
+
+                var createUpdateBehavior = Settings.NoteSubstMovedUpdateBehaviorAdditions | Settings.GenerateE090UpdateItemsBehaviorAdditions;
+
+                if (createUpdateBehavior.IsSet(E090StateUpdateBehavior.AddSPSCreated))
+                {
+                    var pseudoCurrentState = useInitialState;
+
+                    pseudoCurrentState.ObjID = substObjID;
+                    pseudoCurrentState.LocsLinkedToHere = new[] { containsLink };
+
+                    updateItemList.GenerateE090UpdateItems(pseudoCurrentState, spsParam: SubstProcState.Created);
+                }
+            }
+
+            if (addSyncExternalItem)
+                updateItemList.Add(new E039UpdateItem.SyncExternal());
+
+            return updateItemList;
+        }
+
+        public static List<E039UpdateItem> GenerateRemoveE090SubstItems(this List<E039UpdateItem> updateItemList, E090SubstInfo currentSubstInfo, E090StateUpdateBehavior updateBehavior = E090StateUpdateBehavior.None, bool addSyncExternalItem = false)
+        {
+            updateBehavior |= Settings.GenerateE090UpdateItemsBehaviorAdditions;
+
+            if (updateBehavior.IsSet(E090StateUpdateBehavior.AddSPSRemoved))
+                updateItemList.GenerateE090UpdateItems(currentSubstInfo: currentSubstInfo, spsParam: SubstProcState.Removed, updateBehavior: updateBehavior);
+
+            updateItemList.Add(new E039UpdateItem.RemoveObject(currentSubstInfo.ObjID));
 
             if (addSyncExternalItem)
                 updateItemList.Add(new E039UpdateItem.SyncExternal());
@@ -437,10 +557,12 @@ namespace MosaicLib.Semi.E090
 
         public static string GenerateE090UpdateItems(this List<E039UpdateItem> updateItemList, E090SubstInfo currentSubstInfo, SubstProcState spsParam = SubstProcState.Undefined, E039ObjectID toLocObjID = null, E090StateUpdateBehavior updateBehavior = E090StateUpdateBehavior.None, bool addSyncExternalItem = false)
         {
-            if (currentSubstInfo.Obj == null || updateItemList == null)
+            updateBehavior |= Settings.GenerateE090UpdateItemsBehaviorAdditions;
+
+            if (updateItemList == null)
                 return "{0}: given invalid or null parameter".CheckedFormat(Fcns.CurrentMethodName);
 
-            if (!currentSubstInfo.Obj.IsSubstrate())
+            if (currentSubstInfo.Obj != null && !currentSubstInfo.Obj.IsSubstrate())
                 return "{0}: given non-Substrate obj [{1}]".CheckedFormat(Fcns.CurrentMethodName, currentSubstInfo.Obj);
 
             toLocObjID = toLocObjID ?? E039ObjectID.Empty;
@@ -472,8 +594,10 @@ namespace MosaicLib.Semi.E090
             // next apply any change in the SPS and/or PendingSPS
 
             bool clearPendingSPS = false;
+            bool spsIsPsuedoStateValue = spsParam.IsPseudoState();
+            bool addToSPSLists = spsIsPsuedoStateValue;
 
-            if (spsParam != SubstProcState.Undefined)
+            if (spsParam != SubstProcState.Undefined && !spsIsPsuedoStateValue)
             {
                 attribUpdateNVS = attribUpdateNVS ?? new NamedValueSet();
 
@@ -555,14 +679,31 @@ namespace MosaicLib.Semi.E090
                     currentSubstInfo.PendingSPS = setPendingSPS;
                 }
 
-                if (updateBehavior.IsSet(E090StateUpdateBehavior.UseSPSList) && currentSubstInfo.SPSList.Length < Constants.MaximumSPSListLength && currentSubstInfo.SPSLocList.Count < Constants.MaximumSPSListLength)
+                addToSPSLists = true;
+            }
+
+            // optionally add the given spsParam value to the SPSList (and optinally update the SPSLocList and SPSDateTimeList)
+
+            if (addToSPSLists)
+            {
+                var maximumSPSListLength = Settings.MaximumSPSListLength;
+
+                if (updateBehavior.IsSet(E090StateUpdateBehavior.UseSPSList) 
+                    && currentSubstInfo.SPSList.SafeLength() < maximumSPSListLength 
+                    && currentSubstInfo.SPSLocList.SafeCount() < maximumSPSListLength 
+                    && currentSubstInfo.SPSDateTimeList.SafeCount() < maximumSPSListLength)
                 {
+                    attribUpdateNVS = attribUpdateNVS ?? new NamedValueSet();
+
                     attribUpdateNVSMergeBehavior |= NamedValueMergeBehavior.AppendLists;        // turn on AppendLists mode to the current NVS merge behavior
 
-                    attribUpdateNVS.SetValue("SPSList", new[] { spsParam.ToString() });
+                    attribUpdateNVS.SetValue(Constants.SPSListAttributeName, new ReadOnlyIList<string>(spsParam.ToString()));
 
                     if (updateBehavior.IsSet(E090StateUpdateBehavior.UseSPSLocList))
-                        attribUpdateNVS.SetValue("SPSLocList", new[] { currentLocID });
+                        attribUpdateNVS.SetValue(Constants.SPSLocListAttributeName, new ReadOnlyIList<string>(currentLocID));
+
+                    if (updateBehavior.IsSet(E090StateUpdateBehavior.UseSPSDateTimeList))
+                        attribUpdateNVS.SetValue(Constants.SPSDateTimeListAttributeName, new ReadOnlyIList<string>(DateTime.Now.ToString("o")));
                 }
             }
 
@@ -783,7 +924,7 @@ namespace MosaicLib.Semi.E090
         /// <summary>When true this option selects that the ContainsObject and ContainsSubstInfo properties shall be set based on the object identified by the location's "Contains" link's ToID</summary>
         public bool AlsoObserveContents { get; private set; }
 
-        private void UpdateContainsObject(IE039Object obj)
+        protected virtual void UpdateContainsObject(IE039Object obj)
         {
             ContainsObject = Info.GetContainedE039Object();
             ContainsSubstInfo = new E090SubstInfo(ContainsObject);
@@ -975,7 +1116,7 @@ namespace MosaicLib.Semi.E090
     /// <summary>
     /// This is a helper object that is generally used to extract Substrate related information from an Substrate IE039Object.
     /// <para/>This includes information obtained from the "SubstProcState" (SPS), "SubstState" (STS), "LotID", and "SubstUsage" attributes,
-    /// information from optional "PendingSPS", "SPSList", and "SPSLocList" attrubutes, 
+    /// information from optional "PendingSPS", "SPSList", "SPSLocList", and "SPSDateTimeList" attrubutes, 
     /// and information that is derived from the "Contains", "SrcLoc" and "DestLoc" links to/from this object.
     /// Now also includes use of optional SubstrateJobRequestState (SJRS) and SubsrateJobState (SJS) attibutes.
     /// </summary>
@@ -990,13 +1131,11 @@ namespace MosaicLib.Semi.E090
 
             INamedValueSet attributes = (Obj != null) ? Obj.Attributes : NamedValueSet.Empty;
             
-            SPS = attributes["SubstProcState"].VC.GetValue(rethrow: false, defaultValue: SubstProcState.Undefined);
-            STS = attributes["SubstState"].VC.GetValue(rethrow: false, defaultValue: SubstState.Undefined);
-            PendingSPS = attributes["PendingSPS"].VC.GetValue<SubstProcState>(rethrow: false, defaultValue: SubstProcState.Undefined);
-            SPSList = (attributes["SPSList"].VC.GetValue<ReadOnlyIList<string>>(rethrow: false) ?? ReadOnlyIList<string>.Empty).Select(str => str.TryParse<SubstProcState>()).ToArray();
-            SPSLocList = (attributes["SPSLocList"].VC.GetValue<IList<string>>(rethrow: false) ?? ReadOnlyIList<string>.Empty);
-            LotID = attributes["LotID"].VC.GetValue<string>(rethrow: false).MapNullToEmpty();
-            SubstUsageStr = attributes["SubstUsage"].VC.GetValue<string>(rethrow: false).MapNullToEmpty();
+            SPS = attributes[Constants.SubstrateProcessingStateAttributeName].VC.GetValue(rethrow: false, defaultValue: SubstProcState.Undefined);
+            STS = attributes[Constants.SubstrateTransportStateAttributeName].VC.GetValue(rethrow: false, defaultValue: SubstState.Undefined);
+            PendingSPS = attributes[Constants.PendingSubstrateProcessingStateAttributeName].VC.GetValue<SubstProcState>(rethrow: false, defaultValue: SubstProcState.Undefined);
+            LotID = attributes[Constants.LotIDAttributeName].VC.GetValue<string>(rethrow: false).MapNullToEmpty();
+            SubstUsageStr = attributes[Constants.SubstrateUsageAttributeName].VC.GetValue<string>(rethrow: false).MapNullToEmpty();
 
             LocsLinkedToHere = Obj.FindLinksFrom(Constants.ContainsLinkKey).ToArray();
             LinkToSrc = Obj.FindFirstLinkTo(Constants.SourceLocationLinkKey);
@@ -1004,6 +1143,9 @@ namespace MosaicLib.Semi.E090
 
             SJRS = attributes[Constants.SubstrateJobRequestStateAttributeName].VC.GetValue<SubstrateJobRequestState>(rethrow: false);
             SJS = attributes[Constants.SubstrateJobStateAttributeName].VC.GetValue<SubstrateJobState>(rethrow: false);
+
+            _deriveListsFromAttributes = attributes.ConvertToReadOnly();
+            // actual lists/arrays will be extracted and retained from these attributes on request.
         }
 
         /// <summary>Copy constructor</summary>
@@ -1016,8 +1158,6 @@ namespace MosaicLib.Semi.E090
             SPS = other.SPS;
             STS = other.STS;
             PendingSPS = other.PendingSPS;
-            SPSList = other.SPSList.MakeCopyOf();
-            SPSLocList = other.SPSLocList.ConvertToReadOnly();
             LotID = other.LotID;
             SubstUsageStr = other.SubstUsageStr;
 
@@ -1027,6 +1167,13 @@ namespace MosaicLib.Semi.E090
 
             SJRS = other.SJRS;
             SJS = other.SJS;
+
+            // only make copies of the items that have been derived and/or obtained already in the other copy from object.
+            _deriveListsFromAttributes = other._deriveListsFromAttributes;
+            _spsList = other._spsList.MakeCopyOf(mapNullToEmpty: false);
+            _spsLocList = other._spsLocList;
+            _spsDateTimeList = other._spsDateTimeList.MakeCopyOf(mapNullToEmpty: false);
+            _zippedItemArray = other._zippedItemArray.MakeCopyOf(mapNullToEmpty: false);
         }
 
         private static readonly E039Link[] emptyLinkArray = EmptyArrayFactory<E039Link>.Instance;
@@ -1034,14 +1181,15 @@ namespace MosaicLib.Semi.E090
         /// <summary>Used to update the given <paramref name="nvs"/> to contain Attribute values for the properties in this object that represent Attribute values.</summary>
         public NamedValueSet UpdateAttributeValues(NamedValueSet nvs)
         {
-            nvs.SetValue("SubstProcState", SPS);
-            nvs.SetValue("SubstState", STS);
+            nvs.SetValue(Constants.SubstrateProcessingStateAttributeName, SPS);
+            nvs.SetValue(Constants.SubstrateTransportStateAttributeName, STS);
 
-            nvs.ConditionalSetValue("PendingSPS", PendingSPS != SubstProcState.Undefined, PendingSPS);
-            nvs.ConditionalSetValue("SPSList", !SPSList.IsNullOrEmpty(), (SPSList ?? EmptyArrayFactory<SubstProcState>.Instance).Select(sps => sps.ToString()));
-            nvs.ConditionalSetValue("SPSLocList", !SPSLocList.IsNullOrEmpty(), SPSLocList);
-            nvs.ConditionalSetValue("LotID", !LotID.IsNullOrEmpty() || nvs.Contains("LotID"), LotID);
-            nvs.ConditionalSetValue("SubstUsage", !SubstUsageStr.IsNullOrEmpty() || nvs.Contains("SubstUsage"), SubstUsageStr);
+            nvs.ConditionalSetValue(Constants.PendingSubstrateProcessingStateAttributeName, PendingSPS != SubstProcState.Undefined, PendingSPS);
+            nvs.ConditionalSetValue(Constants.SPSListAttributeName, !SPSList.IsNullOrEmpty(), (SPSList ?? EmptyArrayFactory<SubstProcState>.Instance).Select(sps => sps.ToString()));
+            nvs.ConditionalSetValue(Constants.SPSLocListAttributeName, !SPSLocList.IsNullOrEmpty(), SPSLocList);
+            nvs.ConditionalSetValue(Constants.SPSDateTimeListAttributeName, !SPSDateTimeList.IsNullOrEmpty(), (SPSDateTimeList ?? EmptyArrayFactory<DateTime>.Instance).Select(dt => dt.ToString("o")));
+            nvs.ConditionalSetValue(Constants.LotIDAttributeName, !LotID.IsNullOrEmpty() || nvs.Contains("LotID"), LotID);
+            nvs.ConditionalSetValue(Constants.SubstrateUsageAttributeName, !SubstUsageStr.IsNullOrEmpty() || nvs.Contains("SubstUsage"), SubstUsageStr);
             nvs.ConditionalSetValue(Constants.SubstrateJobRequestStateAttributeName, SJRS != SubstrateJobRequestState.None, SJRS);
             nvs.ConditionalSetValue(Constants.SubstrateJobStateAttributeName, SJS != SubstrateJobState.Initial, SJS);
 
@@ -1066,12 +1214,6 @@ namespace MosaicLib.Semi.E090
 
         /// <summary>This property returns the SPS that is inferred by merging the SPS with the PendingSPS (if any)</summary>
         public SubstProcState InferredSPS { get { return SPS.MergeWith(PendingSPS); } }
-
-        /// <summary>Optional, an accumlation of SPS attributes that have been assigned to this substrate.  Empty if the substrate does not have this attributes.</summary>
-        public SubstProcState [] SPSList { get; set; }
-
-        /// <summary>Optional, an accumlation of the locations at which SPS values have been assigned to this substrate.  Empty if the substrate does not have this attributes.</summary>
-        public IList<string> SPSLocList { get; set; }
 
         /// <summary>From LotID attribute</summary>
         public string LotID { get; set; }
@@ -1114,8 +1256,93 @@ namespace MosaicLib.Semi.E090
         /// <summary>Gives the SJS SubstrateJobState attribute value.  The corresponding attribute will only be included/used if this value is not Initial</summary>
         public SubstrateJobState SJS { get; set; }
 
+        private INamedValueSet _deriveListsFromAttributes;
+
+        /// <summary>Optional, an accumlation of SPS attributes that have been assigned to this substrate.  Empty if the substrate does not have this attributes.</summary>
+        public SubstProcState[] SPSList { get { return _spsList ?? (_spsList = GetSPSListFromSavedAttributes()); } set { _spsList = value; } }
+        private SubstProcState[] _spsList;
+
+        /// <summary>Optional, an accumlation of the locations at which SPS values have been assigned to this substrate.  Empty if the substrate does not have this attributes.</summary>
+        public IList<string> SPSLocList { get { return _spsLocList ?? (_spsLocList = GetSPSLocListFromSavedAttributes()); } set { _spsLocList = value.ConvertToReadOnly(); } }
+        private ReadOnlyIList<string> _spsLocList;
+
+        /// <summary>Optional, an accumulation of the DateTime's (local time on "o" format) at which SPS values have been appended to the SPSList.  Empty if the substrate does not have this attribute.</summary>
+        public DateTime[] SPSDateTimeList { get { return _spsDateTimeList ?? (_spsDateTimeList = GetSPSDateTimeListFromSavedAttributes()); } set { _spsDateTimeList = value; } }
+        private DateTime[] _spsDateTimeList;
+
+        /// <summary>
+        /// This is the per item representation for the zip up of the SPSList, SPSLocList and SPSDateTimeList
+        /// </summary>
+        public struct Item : IEquatable<Item>
+        {
+            /// <summary>SubstProcState (SPS) from SPSList for this zipped item</summary>
+            public SubstProcState SPS { get; set; }
+
+            /// <summary>string Loc name from SPSLocList for this zipped item</summary>
+            public string Loc { get; set; }
+
+            /// <summary>DateTime from SPSDateTimeList for this zipped item</summary>
+            public DateTime DateTime { get; set; }
+
+            /// <summary>Debugging and logging helper method.</summary>
+            public override string ToString()
+            {
+                return "sps:{0} loc:{1} {2}".CheckedFormat(SPS, Loc, DateTime.ToString("o"));
+            }
+
+            /// <summary>Returns true if this and the given <paramref name="other"/> have the same contents.</summary>
+            public bool Equals(Item other)
+            {
+                return (SPS == other.SPS
+                        && Loc == other.Loc
+                        && DateTime == other.DateTime
+                        );
+            }
+        }
+
+        /// <summary>
+        /// This is the zipped representation list for the combination of the SPSList, the SPSLocList and the SPSDateTimeList.  It is only useful if the three lists are appending in a uniform manner.
+        /// <para/>Note: this is only populated when construting an E090SubstInfo object from a corresponding Substrate IE039Object.  This is never used when generating attribute values for a new IE039Object.
+        /// </summary>
+        public Item[] ZippedItemArray { get { return _zippedItemArray ?? (_zippedItemArray = GetZippedItemArraySavedAttributes()); } }
+        private Item[] _zippedItemArray;
+
+        private SubstProcState[] GetSPSListFromSavedAttributes()
+        {
+            INamedValueSet attributes = _deriveListsFromAttributes.MapNullToEmpty();
+            return (attributes[Constants.SPSListAttributeName].VC.GetValue<ReadOnlyIList<string>>(rethrow: false) ?? ReadOnlyIList<string>.Empty).Select(str => str.TryParse<SubstProcState>()).ToArray();
+        }
+
+        private ReadOnlyIList<string> GetSPSLocListFromSavedAttributes()
+        {
+            INamedValueSet attributes = _deriveListsFromAttributes.MapNullToEmpty();
+            return (attributes[Constants.SPSLocListAttributeName].VC.GetValue<ReadOnlyIList<string>>(rethrow: false) ?? ReadOnlyIList<string>.Empty);
+        }
+
+        private DateTime[] GetSPSDateTimeListFromSavedAttributes()
+        {
+            INamedValueSet attributes = _deriveListsFromAttributes.MapNullToEmpty();
+            return (attributes[Constants.SPSDateTimeListAttributeName].VC.GetValue<ReadOnlyIList<string>>(rethrow: false) ?? ReadOnlyIList<string>.Empty).Select(str => { try { return DateTime.ParseExact(str, "o", null); } catch { return default(DateTime); } }).ToArray();
+        }
+
+        private Item[] GetZippedItemArraySavedAttributes()
+        {
+            var spsList = SPSList;
+            if (!spsList.IsNullOrEmpty())
+            {
+                var spsLocList = SPSLocList;
+                var spsDateTimeList = SPSDateTimeList;
+
+                return SPSList.Select((sps, index) => new Item() { SPS = sps, Loc = spsLocList.SafeAccess(index).MapNullToEmpty(), DateTime = spsDateTimeList.SafeAccess(index) }).ToArray();
+            }
+            else
+            {
+                return EmptyArrayFactory<Item>.Instance;
+            }
+        }
+
         /// <summary>Gives an empty E090SubstInfo object to be used as a default value.</summary>
-        public static E090SubstInfo Empty { get { return new E090SubstInfo() { LotID = "", SubstUsageStr = "", STS = SubstState.Undefined, SPS = SubstProcState.Undefined, PendingSPS = SubstProcState.Undefined, LocsLinkedToHere = emptyLinkArray, SPSList = EmptyArrayFactory<SubstProcState>.Instance, SPSLocList = ReadOnlyIList<string>.Empty }; } }
+        public static E090SubstInfo Empty { get { return new E090SubstInfo() { LotID = "", SubstUsageStr = "", STS = SubstState.Undefined, SPS = SubstProcState.Undefined, PendingSPS = SubstProcState.Undefined, LocsLinkedToHere = emptyLinkArray, SPSList = EmptyArrayFactory<SubstProcState>.Instance, SPSLocList = ReadOnlyIList<string>.Empty, SPSDateTimeList = EmptyArrayFactory<DateTime>.Instance }; } }
 
         /// <summary>Returns true if the contents are the same as the contents of the Empty E090SubstInfo object.</summary>
         public bool IsEmpty { get { return this.Equals(Empty); } }
@@ -1136,8 +1363,6 @@ namespace MosaicLib.Semi.E090
                     && STS == other.STS
                     && SPS == other.SPS
                     && PendingSPS == other.PendingSPS
-                    && SPSList.IsEqualTo(other.SPSList)
-                    && SPSLocList.IsEqualTo(other.SPSLocList)
                     && LotID == other.LotID
                     && SubstUsageStr == other.SubstUsageStr
                     && _locID == other._locID
@@ -1146,6 +1371,10 @@ namespace MosaicLib.Semi.E090
                     && LinkToDest.Equals(other.LinkToDest)
                     && SJRS == other.SJRS
                     && SJS == other.SJS
+                    && SPSList.IsEqualTo(other.SPSList)
+                    && SPSLocList.IsEqualTo(other.SPSLocList)
+                    && SPSDateTimeList.IsEqualTo(other.SPSDateTimeList)
+                    // do not explicitly compare the ZippedItemArray as it is generated on demand from other values that are already being compared here.
                 );
         }
 
@@ -1180,6 +1409,7 @@ namespace MosaicLib.Semi.E090
         /// <summary>
         /// AtSource if given <paramref name="sps"/> is NeedsProcessing and given <paramref name="locID"/> matches SrcLocID
         /// AtDestination if given <paramref name="sps"/> is ProcessingComplete and given <paramref name="locID"/> matches DestLocID
+        /// AtSource if given <paramref name="sps"/> is Skipped and given <paramref name="locID"/> matches SrcLocID but does not match DestLocID
         /// otherwise AtWork
         /// </summary>
         public SubstState GetInferredSTS(string locID, SubstProcState sps)
@@ -1189,7 +1419,7 @@ namespace MosaicLib.Semi.E090
             else if (sps.IsProcessingComplete() && locID == LinkToDest.ToID.Name)
                 return SubstState.AtDestination;            
             else if (sps == SubstProcState.Skipped && locID == LinkToSrc.ToID.Name)
-                return SubstState.AtSource;
+                return SubstState.AtSource; // skipped at source is only used if the source and destination locations are different, otherwise the value will typcially be Skipped AtDestination
             else
                 return SubstState.AtWork;
         }
@@ -1255,19 +1485,19 @@ namespace MosaicLib.Semi.E090
     [DataContract(Namespace = MosaicLib.Constants.E090NameSpace)]
     public enum SubstState : int
     {
-        /// <summary>0: Substrate is located at its "source" location, where it was originally received.  If the source and destination are the same location then we destinguish source from destination based on whether it has been processed.</summary>
+        /// <summary>Substrate is located at its "source" location, where it was originally received.  If the source and destination are the same location then we destinguish source from destination based on whether it has been processed. [0]</summary>
         [EnumMember]
         AtSource = 0,
 
-        /// <summary>1: Substrate is out in the tool (essentially it is neither AtSource nor AtDestination).</summary>
+        /// <summary>Substrate is out in the tool (essentially it is neither AtSource nor AtDestination). [1]</summary>
         [EnumMember]
         AtWork = 1,
 
-        /// <summary>2: Substrate is located at its "destination" location.  If the source and destination are the same location then we destinguish source from destination based on whether it has been processed.</summary>
+        /// <summary>Substrate is located at its "destination" location.  If the source and destination are the same location then we destinguish source from destination based on whether it has been processed. [2]</summary>
         [EnumMember]
         AtDestination = 2,
 
-        /// <summary>-1: Local default value to use when there is no valid value.</summary>
+        /// <summary>Local default value to use when there is no valid value. [-1]</summary>
         [EnumMember]
         Undefined = -1,
     }
@@ -1275,46 +1505,58 @@ namespace MosaicLib.Semi.E090
     /// <summary>
     /// SubstProcState: Substrate Processing State (SPS)
     /// Gives a summary of if the substrate has been processed and, if it was not processed successfully, why.
-    /// <para/>NeedsProcessing = 0, InProcess = 1, Processed = 2, Aborted = 3, Stopped = 4, Rejected = 5, Lost = 6, Skipped = 7, Undefined = -1
+    /// <para/>NeedsProcessing = 0, InProcess = 1, Processed = 2, Aborted = 3, Stopped = 4, Rejected = 5, Lost = 6, Skipped = 7, Undefined = -1, Created = -2, Moved = -3, Removed = -4
     /// </summary>
     [DataContract(Namespace = MosaicLib.Constants.E090NameSpace)]
     public enum SubstProcState : int
     {
-        /// <summary>0: Substrate has not been fully processed yet.  This is the default state for newly created substrates.</summary>
+        /// <summary>Substrate has not been fully processed yet.  This is the default state for newly created substrates. [0]</summary>
         [EnumMember]
         NeedsProcessing = 0,
 
-        /// <summary>1: Substrate is being processed.  Substrate properties are being changed or measured by the equipment.</summary>
+        /// <summary>Substrate is being processed.  Substrate properties are being changed or measured by the equipment. [1]</summary>
         [EnumMember]
         InProcess = 1,
 
-        /// <summary>2: Substrate has been processed successfully.  No more processing will take place while the Substrate remains in this equipment.</summary>
+        /// <summary>Substrate has been processed successfully.  No more processing will take place while the Substrate remains in this equipment. [2]</summary>
         [EnumMember]
         Processed = 2,
 
-        /// <summary>3: Processing of this substrate was aborted during processing.  Additional information may be required to determine this substrate's final state.</summary>
+        /// <summary>Processing of this substrate was aborted during processing.  Additional information may be required to determine this substrate's final state. [3]</summary>
         [EnumMember]
         Aborted = 3,
 
-        /// <summary>4: Processing of this Substrate was stopped during processing.  Additional information may be required to determine this substrate's final state.</summary>
+        /// <summary>Processing of this Substrate was stopped during processing.  Additional information may be required to determine this substrate's final state. [4]</summary>
         [EnumMember]
         Stopped = 4,
 
-        /// <summary>5: The Substrate has completed all processing steps but one or more of them may have had an issue during processing.  Additional information may be required to determine this substrate's final state.</summary>
+        /// <summary>The Substrate has completed all processing steps but one or more of them may have had an issue during processing.  Additional information may be required to determine this substrate's final state. [5]</summary>
         [EnumMember]
         Rejected = 5,
 
-        /// <summary>6: The Substrate has been lost by the equipment, or was manually removed by an external entity/decision authority, and its loss/removal has been reported to the equipment.</summary>
+        /// <summary>The Substrate has been lost by the equipment, or was manually removed by an external entity/decision authority, and its loss/removal has been reported to the equipment. [6]</summary>
         [EnumMember]
         Lost = 6,
 
-        /// <summary>7: As directed by a suitable decision authority, the equipment has been told to skip processing for this substrate.</summary>
+        /// <summary>As directed by a suitable decision authority, the equipment has been told to skip processing for this substrate. [7]</summary>
         [EnumMember]
         Skipped = 7,
 
-        /// <summary>-1: Local default value to use when there is no valid value.</summary>
+        /// <summary>Local default value to use when there is no valid value. [-1]</summary>
         [EnumMember]
         Undefined = -1,
+
+        /// <summary>PseudoSPS value: Optionally added to SPSList when substrate has been created. [-2]</summary>
+        [EnumMember]
+        Created = -2,
+
+        /// <summary>PseudoSPS value: Optionally added to SPSList when substrate has been moved to a new location. [-3]</summary>
+        [EnumMember]
+        Moved = -3,
+
+        /// <summary>PseudoSPS value: Optionally added to SPSList when substrate has been removed. [-4]</summary>
+        [EnumMember]
+        Removed = -4,
     }
 
     /// <summary>
@@ -1507,15 +1749,15 @@ namespace MosaicLib.Semi.E090
 
         [EnumMember]
         Mask = 3,
-        /// <summary>-1: Local default value to use when there is no valid value.</summary>
 
+        /// <summary>Local default value to use when there is no valid value. [-1]</summary>
         [EnumMember]
         Undefined = -1,
     }
 
     /// <summary>
     /// Substrate Usage enumeration:
-    /// <para>Product (0), Test (1), Filler (2), Undefined (-1)</para>
+    /// <para>Product (0), Test (1), Filler (2), Undefined (-1), Other (-2)</para>
     /// </summary>
     [DataContract(Namespace = MosaicLib.Constants.E090NameSpace)]
     public enum SubstUsage : sbyte
@@ -1529,7 +1771,7 @@ namespace MosaicLib.Semi.E090
         [EnumMember]
         Filler = 2,
 
-        /// <summary>-1: Local default value to use when there is no valid value.</summary>
+        /// <summary>Local default value to use when there is no valid value. [-1]</summary>
         [EnumMember]
         Undefined = -1,
 
@@ -1581,6 +1823,20 @@ namespace MosaicLib.Semi.E090
                     return includeSkipped;
                 default:
                     return false;
+            }
+        }
+
+        /// <summary>
+        /// Returns true if the give <paramref name="sps"/> value is one of the pseudo SPS values (Added, Moved, Removed)
+        /// </summary>
+        public static bool IsPseudoState(this SubstProcState sps)
+        {
+            switch (sps)
+            {
+                case SubstProcState.Created: return true;
+                case SubstProcState.Moved: return true;
+                case SubstProcState.Removed: return true;
+                default: return false;
             }
         }
 
@@ -1653,7 +1909,7 @@ namespace MosaicLib.Semi.E090
     [DataContract(Namespace = MosaicLib.Constants.E090NameSpace)]
     public enum SubstrateJobRequestState : int
     {
-        /// <summary>This is the default value.  It indicates that the job engine is not currently making any request for this substrate [0]</summary>
+        /// <summary>This is the default value.  It indicates that the job engine is not currently making any request for this substrate.  By default any external entity should hold the substrate in its current state and may report Held for the SJS [0]</summary>
         [EnumMember]
         None = 0,
 
@@ -1682,7 +1938,7 @@ namespace MosaicLib.Semi.E090
     /// This is a target agnostic representation for what the substrate routing and processing engine indicates that it is doing and has done with a given substrate.
     /// Generally this state is intended to react to changes in the substrate's corresponding SubstrateJobRequestState value.  However once this state reaches a terminal
     /// value it will no longer change.
-    /// <para/>Initial (0), WaitingForStart (1), Running (2), Processed (3), Rejected (4), Skipped (5), Pausing (6), Paused (7), Stopping (8), Stopped (9), Aborting (10), Aborted (11), Lost (12), Returned (13)
+    /// <para/>Initial (0), WaitingForStart (1), Running (2), Processed (3), Rejected (4), Skipped (5), Pausing (6), Paused (7), Stopping (8), Stopped (9), Aborting (10), Aborted (11), Lost (12), Returning (13), Returned (14), Held (15), RoutingAlarm(16)
     /// </summary>
     [DataContract(Namespace = MosaicLib.Constants.E090NameSpace)]
     public enum SubstrateJobState : int
@@ -1711,7 +1967,7 @@ namespace MosaicLib.Semi.E090
         [EnumMember]
         Skipped = 5,
 
-        /// <summary>Indicates that the substrate routing and processing engine has been asked to pause normal processing for this substrate but that the completion conditions for pausing have not been reached yet. [6]</summary>
+        /// <summary>Indicates that the substrate routing and processing engine has been asked to pause normal processing for this substrate but that the completion conditions for paused have not been reached yet. [6]</summary>
         [EnumMember]
         Pausing = 6,
 
@@ -1727,7 +1983,7 @@ namespace MosaicLib.Semi.E090
         [EnumMember]
         Stopped = 9,
 
-        /// <summary>Indicates that the substrate routing and processing engine has been asked to abort normal processing for this substrate but that the completion conditions for aborting have not been reached yet [10]</summary>
+        /// <summary>Indicates that the substrate routing and processing engine has been asked to abort normal processing for this substrate but that the completion conditions for aborted have not been reached yet [10]</summary>
         [EnumMember]
         Aborting = 10,
 
@@ -1739,9 +1995,21 @@ namespace MosaicLib.Semi.E090
         [EnumMember]
         Lost = 12,
 
-        /// <summary>Indicates that the substrate routing and processing engine has completed the return related activities for this substrate.  Generally a PendingSPS of Stopped will be applied to it if it has reached InProcess and the substrate will be returned to its Destination, or Source, location.  Final STS will be AtDestination, or AtSource, correspondingly. [13]</summary>
+        /// <summary>Indicates that the substrate routing and processing engine has been asked to return the substrate but that the completion conditions for returned have not been reached yet [13]</summary>
         [EnumMember]
-        Returned = 13,
+        Returning = 13,
+
+        /// <summary>Indicates that the substrate routing and processing engine has completed the return related activities for this substrate.  Generally a PendingSPS of Stopped will be applied to it if it has reached InProcess and the substrate will be returned to its Destination, or Source, location.  Final STS will be AtDestination, or AtSource, correspondingly. [14]</summary>
+        [EnumMember]
+        Returned = 14,
+
+        /// <summary>Indicates that the substrate routing and processing engine is not being asked to make any changes to a substrate and that substrate is not in its initial source location. [15]</summary>
+        [EnumMember]
+        Held = 15,
+
+        /// <summary>Indicates that the substrate routing engine has encountered an error with this substrate that requires manual intervention to confirm and/or guide what the next steps shall be. [16]</summary>
+        [EnumMember]
+        RoutingAlarm = 16,
     }
 
     public static partial class ExtensionMethods

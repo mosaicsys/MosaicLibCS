@@ -58,7 +58,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
     {
         public virtual NamedValueSet AddValues(NamedValueSet nvs) 
         {
-            nvs = nvs.ConvertToWriteable();
+            nvs = nvs.ConvertToWritable();
 
             nvs.SetValue("ToolTypeStr", ToolTypeStr);
 
@@ -120,7 +120,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
         public override NamedValueSet AddValues(NamedValueSet nvs) 
         {
-            nvs = base.AddValues(nvs).ConvertToWriteable();
+            nvs = base.AddValues(nvs).ConvertToWritable();
 
             Sets.SetID setID = SetID ?? Sets.SetID.Empty;
 
@@ -220,7 +220,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
         public override NamedValueSet AddValues(NamedValueSet nvs)
         {
-            nvs = base.AddValues(nvs).ConvertToWriteable();
+            nvs = base.AddValues(nvs).ConvertToWritable();
 
             nvs.ConditionalSetValue("RemoteIVIName", !RemoteIVIName.IsNullOrEmpty(), RemoteIVIName);
             nvs.SetValue("IVIRelayDirection", IVIRelayDirection);

@@ -98,6 +98,9 @@
     <Compile Include="MosaicLibCSBase.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Semi\E005\E005Data.cs" />
+    <Compile Include="Semi\E090\E090SubstrateRouting.cs" />
+    <Compile Include="Semi\E090\E090SubstrateScheduling.cs" />
+    <Compile Include="Semi\E090\E090SubstrateTestingTools.cs" />
     <Compile Include="Serial\AutoEchoWrapper.cs" />
     <Compile Include="Serial\ComSerialIO.cs" />
     <Compile Include="Serial\SerialIO.cs" />

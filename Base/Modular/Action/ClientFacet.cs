@@ -438,7 +438,26 @@ namespace MosaicLib.Modular.Action
         {
             TimeSpan useSpinInterval = (spinInterval ?? (0.1).FromSeconds()).Clip(spinIntervalClipRangeMinValue, spinIntervalClipRangeMaxValue);
 
-            isWaitLimitReachedDelegate = isWaitLimitReachedDelegate ?? (() => false);
+            Func<string> spinEarlyExitCodeDelegate = null;
+            if (isWaitLimitReachedDelegate != null) 
+                spinEarlyExitCodeDelegate = () => (isWaitLimitReachedDelegate() ? "" : null);
+
+            actionSetArray.WaitUntilSetComplete(spinEarlyExitCodeDelegate: spinEarlyExitCodeDelegate, spinInterval: spinInterval, completionType: completionType);
+
+            return actionSetArray;
+        }
+
+        /// <summary>
+        /// Blocks the caller until the given <paramref name="actionSetArray"/> completes (based on the chosen <paramref name="completionType"/>) or the <paramref name="spinEarlyExitCodeDelegate"/> returns a non-null string (typically based on a timer expiring, cancel requested, part shutdown requested, ...).
+        /// This evaluation takes place in a spin loop with the spin's wait period given using the <paramref name="spinInterval"/> value.  
+        /// If the caller does not provide a spinInterval then 0.1 seconds will be used.  The any given <paramref name="spinInterval"/> value will be clipped to be between 0.001 seconds and 0.5 seconds
+        /// </summary>
+        public static string WaitUntilSetComplete<TClientFacetType>(this TClientFacetType[] actionSetArray, Func<string> spinEarlyExitCodeDelegate = null, TimeSpan? spinInterval = null, WaitForSetCompletionType completionType = WaitForSetCompletionType.All)
+            where TClientFacetType : IClientFacet
+        {
+            TimeSpan useSpinInterval = (spinInterval ?? (0.1).FromSeconds()).Clip(spinIntervalClipRangeMinValue, spinIntervalClipRangeMaxValue);
+
+            spinEarlyExitCodeDelegate = spinEarlyExitCodeDelegate ?? (() => null);
 
             IClientFacet firstAction = actionSetArray.FirstOrDefault();
 
@@ -446,40 +465,111 @@ namespace MosaicLib.Modular.Action
             {
                 for (; ; )
                 {
-                    if (completionType == WaitForSetCompletionType.Any && actionSetArray.Any(a => a.ActionState.IsComplete))
-                        break;
-                    else if (completionType == WaitForSetCompletionType.AllOrAnyFailure && actionSetArray.Any(a => a.ActionState.Failed))
-                        break;
+                    IClientFacet firstWaitableAction = null;
 
-                    IClientFacet firstWaitableAction = actionSetArray.FirstOrDefault(a => !a.ActionState.IsComplete);
-                    if (firstWaitableAction == null)
-                        break;      // all items have completed
+                    switch (completionType)
+                    {
+                        case WaitForSetCompletionType.Any:
+                            {
+                                var firstCompleteAction = actionSetArray.FirstOrDefault(a => a.ActionState.IsComplete);
+                                if (firstCompleteAction != null)
+                                    return firstCompleteAction.ActionState.ResultCode;
 
-                    if (isWaitLimitReachedDelegate())
-                        break;
+                                firstWaitableAction = actionSetArray.FirstOrDefault(a => !a.ActionState.IsComplete);
+                            }
+                            break;
 
-                    firstWaitableAction.WaitUntilComplete(useSpinInterval);
+                        case WaitForSetCompletionType.All:
+                            firstWaitableAction = actionSetArray.FirstOrDefault(a => !a.ActionState.IsComplete);
+                            if (firstWaitableAction == null)
+                            {
+                                var firstFailedAction = actionSetArray.FirstOrDefault(a => a.ActionState.Failed);
+                                if (firstFailedAction != null)
+                                    return firstFailedAction.ActionState.ResultCode;
+                                else
+                                    return "";
+                            }
+                            break;
+
+                        case WaitForSetCompletionType.AllOrAnyFailure:
+                            {
+                                // NOTE: in the following case the order of evaluation is important as the ActionStates of incomplete actions may change between the evaluation of the firstWaitableAction and of the firstFailedAction
+                                firstWaitableAction = actionSetArray.FirstOrDefault(a => !a.ActionState.IsComplete);
+                                var firstFailedAction = actionSetArray.FirstOrDefault(a => a.ActionState.Failed);
+                                if (firstFailedAction != null)
+                                    return firstFailedAction.ActionState.ResultCode;
+                                else if (firstWaitableAction == null)
+                                    return "";
+                            }
+
+                            break;
+                    }
+
+                    string earlyExitCode = spinEarlyExitCodeDelegate();
+                    if (earlyExitCode != null)
+                        return earlyExitCode;
+
+                    if (firstWaitableAction != null)
+                        firstWaitableAction.WaitUntilComplete(useSpinInterval);
+                    else
+                        spinIntervalClipRangeMinValue.Sleep();
                 }
             }
 
-            return actionSetArray;
+            return "";      // there were no actions to run
+        }
+
+        /// <summary>
+        /// Attempts to Start each of the given <paramref name="actionSetArray"/> of actions and then waits for them to complete.
+        /// If some or all of them are started, gets the exitCode that results from passing the corresponding set of parameters to WaitUntilSetComplete for the set of successfully started actions.
+        /// Then returns either the non-empty exit code from WaitUntilSetComplete, or the first non-empty failure code from attempting to start the actions, or the empty string to indicate success.
+        /// </summary>
+        public static string RunSet<TClientFacetType>(this TClientFacetType[] actionSetArray, Func<string> spinEarlyExitCodeDelegate = null, TimeSpan? spinInterval = null, WaitForSetCompletionType completionType = WaitForSetCompletionType.All)
+            where TClientFacetType : IClientFacet
+        {
+            int successfullyStartedCount = 0;
+            string firstStartFailureEC = null;
+            foreach (var a in actionSetArray)
+            {
+                var ec = a.Start();
+                if (ec.IsNullOrEmpty())
+                    successfullyStartedCount++;
+                else
+                    firstStartFailureEC = firstStartFailureEC ?? ec;
+            }
+
+            if (successfullyStartedCount > 0)
+            {
+                string waitResultEC = null;
+                if (firstStartFailureEC == null)
+                    waitResultEC = actionSetArray.WaitUntilSetComplete(spinEarlyExitCodeDelegate: spinEarlyExitCodeDelegate, spinInterval: spinInterval, completionType: completionType);
+                else
+                    waitResultEC = actionSetArray.Take(successfullyStartedCount).ToArray().WaitUntilSetComplete(spinEarlyExitCodeDelegate: spinEarlyExitCodeDelegate, spinInterval: spinInterval, completionType: completionType);
+
+                if (!waitResultEC.IsNullOrEmpty())
+                    return waitResultEC;
+            }
+
+            return firstStartFailureEC ?? "";
         }
 
         /// <summary>
         /// This enumeration is used with the IEnumerable variant of the WaitUntilComplete extension methods.  
         /// It determines if the WaitUntilComplete method is intended to wait for 
-        /// <para/>All: all of the given actions in the set to be complete before returning,
-        /// <para/>Any: any of the given actions in the set to be complete before returning, or
-        /// <para/>AllOrAnyFailure: all of the given actions succeeded, or any of the actions failed before returning.
         /// </summary>
         public enum WaitForSetCompletionType
         {
+            /// <summary>Wait completes normally when all actions have been completed</summary>
             All,
+
+            /// <summary>Wait completes normally when any action has been completed</summary>
             Any,
+
+            /// <summary>Wait completes normally when all actions have succeeded or any action has failed (whichever comes first)</summary>
             AllOrAnyFailure,
         }
 
-        private static readonly TimeSpan spinIntervalClipRangeMinValue = (0.001).FromSeconds();
+        private static readonly TimeSpan spinIntervalClipRangeMinValue = (1.0).FromMilliseconds();
         private static readonly TimeSpan spinIntervalClipRangeMaxValue = (0.5).FromSeconds(); 
     }
 

@@ -3732,7 +3732,7 @@ namespace MosaicLib.Modular.Common
         private void ThrowIfIsReadOnly(string reasonPrefix)
         {
             if (IsReadOnly)
-                throw new System.NotSupportedException(reasonPrefix + " is not supported when this object IsReadOnly property has been set to true");
+                throw new System.NotSupportedException(reasonPrefix + " is not supported when this object's IsReadOnly property has been set to true");
         }
 
         private bool isReadOnly;
@@ -4192,7 +4192,7 @@ namespace MosaicLib.Modular.Common
         private void ThrowIfIsReadOnly(string reasonPrefix)
         {
             if (IsReadOnly)
-                throw new System.NotSupportedException(reasonPrefix + " is not supported when this object IsReadOnly property has been set");
+                throw new System.NotSupportedException(reasonPrefix + " is not supported when this object's IsReadOnly property has been set");
         }
 
         private bool isReadOnly;
@@ -4348,13 +4348,25 @@ namespace MosaicLib.Modular.Common
             return new NamedValue(iNv, asReadOnly: true);
         }
 
+        [Obsolete("Please replace use of this method with its new, now correctly spelled, variant (2018-07-04)")]
+        public static NamedValueSet ConvertToWriteable(this INamedValueSet iNvSet, bool mapNullToEmpty = true)
+        {
+            return iNvSet.ConvertToWritable(mapNullToEmpty: mapNullToEmpty);
+        }
+
+        [Obsolete("Please replace use of this method with its new, now correctly spelled, variant (2018-07-04)")]
+        public static NamedValue ConvertToWriteable(this INamedValue iNv, bool mapNullToEmpty = true)
+        {
+            return iNv.ConvertToWritable(mapNullToEmpty: mapNullToEmpty);
+        }
+
         /// <summary>
         /// Converts the given INamedValueSet iNvSet to a read/write NamedValueSet by cloning if needed.
-        /// If the given iNvSet is null then this method returns a new writeable NamedValueSet or null, based on the value of the given <paramref name="mapNullToEmpty"/> parameter.
+        /// If the given iNvSet is null then this method returns a new writable NamedValueSet or null, based on the value of the given <paramref name="mapNullToEmpty"/> parameter.
         /// If the given iNvSet value is not null and it is !IsReadonly then return the given value.
         /// Otherwise this method constructs and returns a new readwrite NamedValueSet copy the given nvSet.
         /// </summary>
-        public static NamedValueSet ConvertToWriteable(this INamedValueSet iNvSet, bool mapNullToEmpty = true)
+        public static NamedValueSet ConvertToWritable(this INamedValueSet iNvSet, bool mapNullToEmpty = true)
         {
             if (iNvSet == null)
                 return mapNullToEmpty ? new NamedValueSet() : null;
@@ -4371,7 +4383,7 @@ namespace MosaicLib.Modular.Common
         /// If the given <paramref name="iNv"/> !IsReadonly and is already a NamedValue then this method returns it casted but otherwise unchanged.
         /// Otherwise this method constructs and returns a new readonly NamedValue copy of the given <paramref name="iNv"/>.
         /// </summary>
-        public static NamedValue ConvertToWriteable(this INamedValue iNv, bool mapNullToEmpty = true)
+        public static NamedValue ConvertToWritable(this INamedValue iNv, bool mapNullToEmpty = true)
         {
             if (iNv == null)
                 return mapNullToEmpty ? new NamedValue() : null;
@@ -4405,7 +4417,7 @@ namespace MosaicLib.Modular.Common
         /// If <paramref name="vc"/> contains a list of strings then this method generates and returns a new keyword NVS.
         /// If <paramref name="vc"/> contains a list of VCs then this method converts each to a NV and then generates and returns an NVS.
         /// Otherwise this method generats an NVS containing a single NV created from the given <paramref name="vc"/> and returns it.
-        /// <para/>Note: For each of the above cases the resulting INamedValueSet or NamedValueSet is converted to be writeable or readonly and null/not based on the <paramref name="asReadOnly"/> and <paramref name="mapNullToEmpty"/> parameter values.
+        /// <para/>Note: For each of the above cases the resulting INamedValueSet or NamedValueSet is converted to be writable or readonly and null/not based on the <paramref name="asReadOnly"/> and <paramref name="mapNullToEmpty"/> parameter values.
         /// </summary>
         public static NamedValueSet ConvertToNamedValueSet(this ValueContainer vc, bool asReadOnly = false, bool rethrow = false, bool mapNullToEmpty = true)
         {
@@ -4441,7 +4453,7 @@ namespace MosaicLib.Modular.Common
             if (asReadOnly)
                 return invs.ConvertToReadOnly(mapNullToEmpty: mapNullToEmpty);
             else
-                return invs.ConvertToWriteable(mapNullToEmpty: mapNullToEmpty);
+                return invs.ConvertToWritable(mapNullToEmpty: mapNullToEmpty);
         }
 
         /// <summary>
@@ -4451,7 +4463,7 @@ namespace MosaicLib.Modular.Common
         /// If the given <paramref name="vc"/> contains a list of VCs then this method generates and returns a NamedValue from it (with Name from first element as a string and values from the rest)
         /// If the given <paramref name="vc"/> is Empty then this method returns an empty NamedValue.
         /// Otherwise this method creates a keyword NamedValue from the given <paramref name="vc"/>'s contents interpreted as a string.
-        /// <para/>Note: For each of the above cases the resulting INamedValueSet or NamedValueSet is converted to be writeable or readonly and null/not based on the <paramref name="asReadOnly"/> and <paramref name="mapNullToEmpty"/> parameter values.
+        /// <para/>Note: For each of the above cases the resulting INamedValueSet or NamedValueSet is converted to be writable or readonly and null/not based on the <paramref name="asReadOnly"/> and <paramref name="mapNullToEmpty"/> parameter values.
         /// </summary>
         public static NamedValue ConvertToNamedValue(this ValueContainer vc, bool asReadOnly = false, bool rethrow = false, bool mapNullToEmpty = true)
         {
@@ -4503,7 +4515,7 @@ namespace MosaicLib.Modular.Common
             if (asReadOnly)
                 return inv.ConvertToReadOnly(mapNullToEmpty: mapNullToEmpty);
             else
-                return inv.ConvertToWriteable(mapNullToEmpty: mapNullToEmpty);
+                return inv.ConvertToWritable(mapNullToEmpty: mapNullToEmpty);
         }
 
         /// <summary>
@@ -4580,10 +4592,10 @@ namespace MosaicLib.Modular.Common
         /// <param name="mergeBehavior">Defines the merge behavior that will be used for this merge when the rhs and lhs contain NV items with the same name but different values.  Defaults to NamedValueMergeBehavior.AddAndUpdate</param>
         public static NamedValueSet MergeWith(this INamedValueSet lhs, INamedValueSet rhs, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate)
         {
-            NamedValueSet lhsRW = lhs.ConvertToWriteable(mapNullToEmpty: false);
+            NamedValueSet lhsRW = lhs.ConvertToWritable(mapNullToEmpty: false);
 
             if (((mergeBehavior & NamedValueMergeBehavior.Replace) != NamedValueMergeBehavior.None))
-                return rhs.ConvertToWriteable(mapNullToEmpty: true);
+                return rhs.ConvertToWritable(mapNullToEmpty: true);
 
             return lhsRW.MergeWith(rhs as IEnumerable<INamedValue>, mergeBehavior: mergeBehavior);
         }
@@ -4598,7 +4610,7 @@ namespace MosaicLib.Modular.Common
         /// <param name="mergeBehavior">Defines the merge behavior that will be used for this merge when the rhs and lhs contain NV items with the same name but different values.</param>
         public static NamedValueSet MergeWith(this INamedValueSet lhs, IEnumerable<INamedValue> rhsSet, NamedValueMergeBehavior mergeBehavior)
         {
-            NamedValueSet lhsRW = lhs.ConvertToWriteable(mapNullToEmpty: false);
+            NamedValueSet lhsRW = lhs.ConvertToWritable(mapNullToEmpty: false);
 
             bool add = mergeBehavior.IsAddSelected();
             bool update = mergeBehavior.IsUpdateSelected();

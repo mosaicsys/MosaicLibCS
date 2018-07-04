@@ -458,7 +458,11 @@ namespace MosaicLib.Modular.Interconnect.Sets
         /// <summary>Removes the item at the given index in the set.</summary>
         void RemoveAt(int index);
 
-        /// <summary>If the predicate is given as a non-null value then this method removes all items from the set for which the given predicate returns true.  Then adds (appends) the given set of items to the set, performing additional capacity limit pruning as required.</summary>
+        /// <summary>
+        /// Combination method.  If a non-null <paramref name="itemsToRemoveMatchPredicate"/> predicate is given then this method first removes all items from the set for which the given predicate returns true.  
+        /// Then this method adds (appends) the given set of <paramref name="itemsToAdd"/> to the set, performing additional capacity limit triggered pruning as required.
+        /// Pass null for the <paramref name="itemsToRemoveMatchPredicate"/> allows this method to be used as a form of AddRange
+        /// </summary>
         void RemoveAndAdd(Func<TObjectType, bool> itemsToRemoveMatchPredicate, params TObjectType[] itemsToAdd);
 
         /// <summary>
@@ -2145,8 +2149,9 @@ namespace MosaicLib.Modular.Interconnect.Sets
         }
 
         /// <summary>
-        /// Combination method: Removes all of the items for which the given itemsToRemoveMatchPredicate returns true (or all items if the predicate is passed as null),
-        /// and then adds the 0 or more items to add.
+        /// Combination method.  If a non-null <paramref name="itemsToRemoveMatchPredicate"/> predicate is given then this method first removes all items from the set for which the given predicate returns true.  
+        /// Then this method adds (appends) the given set of <paramref name="itemsToAdd"/> to the set, performing additional capacity limit triggered pruning as required.
+        /// Pass null for the <paramref name="itemsToRemoveMatchPredicate"/> allows this method to be used as a form of AddRange
         /// </summary>
         /// <exception cref="System.NotSupportedException">Thrown if the set's Changeability has been set to Fixed.</exception>
         public void RemoveAndAdd(Func<TObjectType, bool> itemsToRemoveMatchPredicate, params TObjectType[] itemsToAdd)

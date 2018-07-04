@@ -1189,6 +1189,9 @@ namespace MosaicLib.Semi.E039
             TimeSpan defaultPersistWriteHoldoff = (0.1).FromSeconds();
             DefaultTypeSetSpec = new E039TableTypeSetPersistSpecItem(other.DefaultTypeSetSpec, fallbackPersistWriteHoldoff: defaultPersistWriteHoldoff, thisIsDefaultItem: true, testPersistValues: testPersitValues);
 
+            DefaultFallbackReferenceSet = other.DefaultFallbackReferenceSet;
+            DefaultFallbackReferenceHistorySet = other.DefaultFallbackReferenceHistorySet;
+
             defaultPersistWriteHoldoff = DefaultTypeSetSpec.PersistWriteHoldoff;
 
             TypeSetPersistSpecItemArray = (other.TypeSetPersistSpecItemArray ?? _emptyPersistSpecItemArray).Select(item => new E039TableTypeSetPersistSpecItem(item, fallbackPersistWriteHoldoff: defaultPersistWriteHoldoff, testPersistValues: testPersitValues)).ToArray();
@@ -1198,6 +1201,12 @@ namespace MosaicLib.Semi.E039
 
             ActionLoggingConfig = other.ActionLoggingConfig;
             PersistHelperActionLoggingConfig = other.PersistHelperActionLoggingConfig;
+        }
+
+        internal void SetupForUse()
+        {
+            DefaultTypeSetSpec.SetupForUse();
+            TypeSetPersistSpecItemArray.DoForEach(item => item.SetupForUse());
         }
 
         public string PartID { get; private set; }
@@ -1215,6 +1224,19 @@ namespace MosaicLib.Semi.E039
         /// This spec is forced to use the name "DefaultPersistSet" and MatchRuleSet(MatchType.None) during cloning.
         /// </summary>
         public E039TableTypeSetPersistSpecItem DefaultTypeSetSpec { get; set; }
+
+        /// <summary>
+        /// This property may be used by the client code to give the table manager the actual set to use for all types that do not already have a reference set specified by their corresponding spec item entry.
+        /// If this property is non-null and a tableset's spec item does not specify a type set specific reference set to use then the table set will use this reference set to record and the current object states.
+        /// If a type's corresponding type set spec has a specified reference set then it will use that one.  If both this and the type specific spec do not specify reference sets then no reference set will be used for that type.
+        /// </summary>
+        public IReferenceSet<E039Object> DefaultFallbackReferenceSet { get; set; }
+
+        /// <summary>
+        /// This property may be used by the client code to give the table manager the actual set to use for all types that do not already have a reference history set specified by their corresponding spec item entry.
+        /// If this property is non-null and a tableset's spec item does not specify a type set specific reference history set to use then the table set will use this reference history set to record and the current object states.
+        /// </summary>
+        public IReferenceSet<E039Object> DefaultFallbackReferenceHistorySet { get; set; }
 
         public E039TableTypeSetPersistSpecItem [] TypeSetPersistSpecItemArray { get; set; }
 
@@ -1262,6 +1284,8 @@ namespace MosaicLib.Semi.E039
 
                 ReferenceSetID = other.ReferenceSetID;
                 ReferenceSetCapacity = other.ReferenceSetCapacity;
+                ReferenceSet = other.ReferenceSet;
+                ReferenceHistorySet = other.ReferenceHistorySet;
             }
         }
 
@@ -1289,6 +1313,27 @@ namespace MosaicLib.Semi.E039
             ReferenceSetCapacity = capacity;
             return this;
         }
+
+        /// <summary>
+        /// This property may be used by the client code to give the table manager the actual set to use (as externally constructed and/or registered) rather than using cofiguration parameters
+        /// to define how the table part shall create the set.
+        /// </summary>
+        public IReferenceSet<E039Object> ReferenceSet { get; set; }
+
+        /// <summary>
+        /// This property may be used by the client code to give the table manager the reference history set to use (as externally constructed, configured and optionally registered)
+        /// </summary>
+        public IReferenceSet<E039Object> ReferenceHistorySet { get; set; }
+
+        /// <summary>
+        /// This method is used by the table part to make any post clone changes that are needed before the configuration contents can be used.
+        /// At present this is the place where the ReferenceSet is created if the client specified the use of one but did not give the instance to use.
+        /// </summary>
+        internal void SetupForUse()
+        {
+            if (ReferenceSet == null && !ReferenceSetID.IsNullOrEmpty() && ReferenceSetCapacity > 0)
+                ReferenceSet = new ReferenceSet<E039Object>(ReferenceSetID, capacity: ReferenceSetCapacity, registerSelf: true);
+        }
     }
 
     public class E039BasicTablePart : SimpleActivePartBase, IE039TableObserver, IE039TableUpdater
@@ -1299,6 +1344,7 @@ namespace MosaicLib.Semi.E039
             : base(config.PartID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion1.Build(automaticallyIncAndDecBusyCountAroundActionInvoke: false, partBaseIVI: config.PartBaseIVI))
         {
             Config = new E039BasicTablePartConfig(config, testPersitValues: true);
+            Config.SetupForUse();
 
             ActionLoggingReference.Config = Config.ActionLoggingConfig ?? ActionLoggingConfig.Debug_Debug_Trace_Trace;
 
@@ -2083,7 +2129,7 @@ namespace MosaicLib.Semi.E039
                         setUpdateCollector.removedSetItemSeqNumList.Add(ot.lastReferenceSetItemSeqNum);
 
                     if (ot.lastPublishedObj != null && !ot.obj.Flags.IsSet(E039ObjectFlags.IsFinal))
-                        setUpdateCollector.addedSetItemTrackersLists.Add(ot);
+                        setUpdateCollector.addedSetItemTrackersList.Add(ot);
                     else
                         ot.lastReferenceSetItemSeqNum = 0;
                 }
@@ -2097,15 +2143,22 @@ namespace MosaicLib.Semi.E039
                 {
                     var setUpdateTracker = activeSetUpdateCollectorList[idx];
 
-                    setUpdateTracker.removedSetItemSeqNumList.Sort(seqNumComparer);
+                    E039Object[] addedObjectsArray = setUpdateTracker.addedSetItemTrackersList.Select(ot => ot.lastPublishedObj).ToArray();
 
-                    long[] sortedRemovedItemSeqNumArray = setUpdateTracker.removedSetItemSeqNumList.ToArray();
-                    E039Object[] addedObjectsArray = setUpdateTracker.addedSetItemTrackersLists.Select(ot => ot.lastPublishedObj).ToArray();
+                    if (setUpdateTracker.referenceSet != null)
+                    {
+                        setUpdateTracker.removedSetItemSeqNumList.Sort(seqNumComparer);
 
-                    long firstAddedItemSeqNum = setUpdateTracker.referenceSet.RemoveBySeqNumsAndAddItems(sortedRemovedItemSeqNumArray, addedObjectsArray);
+                        long[] sortedRemovedItemSeqNumArray = setUpdateTracker.removedSetItemSeqNumList.ToArray();
 
-                    // update the lastReferenceSetItemSeqNum values for the touched ObjectTrackers (if any)
-                    setUpdateTracker.addedSetItemTrackersLists.DoForEach(ot => { ot.lastReferenceSetItemSeqNum = firstAddedItemSeqNum++; });
+                        long firstAddedItemSeqNum = setUpdateTracker.referenceSet.RemoveBySeqNumsAndAddItems(sortedRemovedItemSeqNumArray, addedObjectsArray);
+
+                        // update the lastReferenceSetItemSeqNum values for the touched ObjectTrackers (if any)
+                        setUpdateTracker.addedSetItemTrackersList.DoForEach(ot => { ot.lastReferenceSetItemSeqNum = firstAddedItemSeqNum++; });
+                    }
+
+                    if (setUpdateTracker.referenceHistorySet != null)
+                        setUpdateTracker.referenceHistorySet.RemoveAndAdd(null, addedObjectsArray);
 
                     setUpdateTracker.Clear();
                 }
@@ -2226,14 +2279,18 @@ namespace MosaicLib.Semi.E039
         private class ReferenceSetUpdateCollector
         {
             public IReferenceSet<E039Object> referenceSet;
+            public IReferenceSet<E039Object> referenceHistorySet;
 
             public List<long> removedSetItemSeqNumList = new List<long>();
-            public List<ObjectTracker> addedSetItemTrackersLists = new List<ObjectTracker>();
+            public List<ObjectTracker> addedSetItemTrackersList = new List<ObjectTracker>();
 
+            /// <summary>
+            /// Clears the removedSetItemSeqNumList and the addedSetItemTrackersList
+            /// </summary>
             public void Clear()
             {
                 removedSetItemSeqNumList.Clear();
-                addedSetItemTrackersLists.Clear();
+                addedSetItemTrackersList.Clear();
             }
         }
 
@@ -2484,11 +2541,11 @@ namespace MosaicLib.Semi.E039
                 if (setConfig.PersistObjFileRingConfig != null)
                     persistFileRingAdapter = partConfig.PersistStorageAdapterFactory(setConfig.PersistObjFileRingConfig, log);
 
-                if (!typeSetPersistSpecItem.ReferenceSetID.IsNullOrEmpty() && typeSetPersistSpecItem.ReferenceSetCapacity > 0)
-                {
-                    referenceSet = new ReferenceSet<E039Object>(typeSetPersistSpecItem.ReferenceSetID, capacity: typeSetPersistSpecItem.ReferenceSetCapacity, registerSelf: true);
-                    referenceSetUpdateCollector = new ReferenceSetUpdateCollector() { referenceSet = referenceSet };
-                }
+                var referenceSetToUse = typeSetPersistSpecItem.ReferenceSet ?? partConfig.DefaultFallbackReferenceSet;
+                var referenceHistorySetToUse = typeSetPersistSpecItem.ReferenceHistorySet ?? partConfig.DefaultFallbackReferenceHistorySet;
+
+                if (referenceSetToUse != null || referenceHistorySetToUse != null)
+                    referenceSetUpdateCollector = new ReferenceSetUpdateCollector() { referenceSet = referenceSetToUse, referenceHistorySet = referenceHistorySetToUse };
 
                 saveHoldoffTimer = new QpcTimer() { TriggerInterval = typeSetPersistSpecItem.PersistWriteHoldoff, SelectedBehavior = QpcTimer.Behavior.ZeroTriggerIntervalRunsTimer };
             }
@@ -2530,7 +2587,6 @@ namespace MosaicLib.Semi.E039
             /// <summary>Returns true if no Write action is active and the lastPublishedSeqNum is not equal to the last successfully saved sequence number.</summary>
             public bool IsWritePending { get { return (!IsWriteActive && lastPublishedSeqNum != lastSucceededSaveActionSeqNum); } }
 
-            public ReferenceSet<E039Object> referenceSet;
             public ReferenceSetUpdateCollector referenceSetUpdateCollector;
         }
 
