@@ -199,6 +199,7 @@ namespace MosaicLib.PartsLib.Common.LPM.Sim
             return this;
         }
 
+        [Obsolete("This method is being deprecated.  It will be removed in the future (2018-06-22)")]
         public bool IsEqualTo(LPMSimPartConfigBase rhs)
         {
             return (LPMName == rhs.LPMName

@@ -67,7 +67,7 @@ namespace MosaicLib.WPF.Converters
             if (lm != null && targetType == typeof(string))
             {
                 if (lm.NamedValueSet == null && lm.Data == null)
-                    return lm.Mesg;
+                    return lm.MesgEscaped;
 
                 LogMessageContentCombiningSelection selection = LogMessageContentCombiningSelection.Default;
                 if (parameter != null && parameter is LogMessageContentCombiningSelection)
@@ -79,9 +79,9 @@ namespace MosaicLib.WPF.Converters
                 bool addData = (selection.IsSet(LogMessageContentCombiningSelection.IncludeDataInHex) && lm.Data != null);
 
                 if (!addNVS && !addData)
-                    return lm.Mesg;
+                    return lm.MesgEscaped;
 
-                StringBuilder sb = new StringBuilder(lm.Mesg);
+                StringBuilder sb = new StringBuilder(lm.MesgEscaped);
 
                 if (addNVS)
                 {

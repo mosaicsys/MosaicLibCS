@@ -3,7 +3,7 @@
  *  @brief 
  * 
  * Copyright (c) Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2011 Mosaic Systems Inc., All rights reserved
+ * Copyright (c) 2018 Mosaic Systems Inc., All rights reserved
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -64,9 +64,17 @@ namespace MosaicLib.WPF.Controls
 
         public static DependencyProperty SetNameProperty = DependencyProperty.Register("SetName", typeof(string), typeof(LogView), new PropertyMetadata(null, HandleSetNamePropertyChanged));
         public static DependencyProperty EnabledSourcesProperty = DependencyProperty.Register("EnabledSources", typeof(object), typeof(LogView), new PropertyMetadata(null, HandleEnabledSourcesPropertyChanged));
+        public static DependencyProperty DateColumnWidthProperty = DependencyProperty.Register("DateColumnWidth", typeof(double), typeof(LogView), new PropertyMetadata(90.0));
+        public static DependencyProperty TypeColumnWidthProperty = DependencyProperty.Register("TypeColumnWidth", typeof(double), typeof(LogView), new PropertyMetadata(60.0));
+        public static DependencyProperty SourceColumnWidthProperty = DependencyProperty.Register("SourceColumnWidth", typeof(double), typeof(LogView), new PropertyMetadata(120.0));
+        public static DependencyProperty MesgColumnWidthProperty = DependencyProperty.Register("MesgColumnWidth", typeof(double), typeof(LogView), new PropertyMetadata(450.0));
 
         public string SetName { get { return (string)GetValue(SetNameProperty); } set { SetValue(SetNameProperty, value); } }
         public object EnabledSources { get { return (string)GetValue(EnabledSourcesProperty); } set { SetValue(EnabledSourcesProperty, value); } }
+        public double DateColumnWidth { get { return (double)GetValue(DateColumnWidthProperty); } set { SetValue(DateColumnWidthProperty, value); } }
+        public double TypeColumnWidth { get { return (double)GetValue(TypeColumnWidthProperty); } set { SetValue(TypeColumnWidthProperty, value); } }
+        public double SourceColumnWidth { get { return (double)GetValue(SourceColumnWidthProperty); } set { SetValue(SourceColumnWidthProperty, value); } }
+        public double MesgColumnWidth { get { return (double)GetValue(MesgColumnWidthProperty); } set { SetValue(MesgColumnWidthProperty, value); } }
 
         private static void HandleSetNamePropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {

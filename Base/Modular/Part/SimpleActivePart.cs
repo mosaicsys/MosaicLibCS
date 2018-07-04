@@ -1368,7 +1368,7 @@ namespace MosaicLib.Modular.Part
 
 	#endregion
 
-    #region IClientFacet ExtentionMethods (StartPartInline, StopPartInline, RunGoOnlineActionInline, RunGoOfflineActionInline, RunServiceActionInline)
+    #region IClientFacet ExtentionMethods (StartPartInline, StopPartInline, RunGoOnlineActionInline, RunGoOnlineAction, RunGoOfflineActionInline, RunGoOfflineAction, RunServiceActionInline, RunServiceAction)
 
     /// <summary>Standard extension methods wrapper class/namespace</summary>
     public static partial class ExtentionMethods

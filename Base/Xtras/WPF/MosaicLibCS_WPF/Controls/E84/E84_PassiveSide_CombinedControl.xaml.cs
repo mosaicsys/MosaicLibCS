@@ -1,5 +1,5 @@
 ﻿//-------------------------------------------------------------------
-/*! @file E84_PassiveSide_CombinedControl.cs
+/*! @file E84_PassiveSide_CombinedControl.xaml.cs
  *  @brief
  * 
  * Copyright (c) Mosaic Systems Inc.

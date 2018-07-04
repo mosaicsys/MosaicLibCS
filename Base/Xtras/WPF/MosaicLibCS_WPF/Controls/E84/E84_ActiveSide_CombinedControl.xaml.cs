@@ -1,5 +1,5 @@
 ﻿//-------------------------------------------------------------------
-/*! @file E84_ActiveSide_CombinedControl.cs
+/*! @file E84_ActiveSide_CombinedControl.xaml.cs
  *  @brief
  * 
  * Copyright (c) Mosaic Systems Inc.

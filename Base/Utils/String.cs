@@ -565,6 +565,18 @@ namespace MosaicLib.Utils
             return sb;
         }
 
+        /// <summary>
+        /// If the given <paramref name="sb"/> StringBuilder is not empty then this method appends the <paramref name="delimiter"/>
+        /// and then it returns the results of calling <paramref name="sb"/>.CheckedAppendFormat(<paramref name="fmt"/>, <paramref name="args"/>);
+        /// </summary>
+        public static StringBuilder CheckedAppendFormatWithDelimiter(this StringBuilder sb, string delimiter, string fmt, params object[] args)
+        {
+            if (sb.Length > 0 && delimiter != null)
+                sb.Append(delimiter);
+
+            return sb.CheckedAppendFormat(fmt, args);
+        }
+
         /// <summary>Invokes System.Text.StringBuilder.AppendFormat with the given args within a try/catch pattern.</summary>
         public static StringBuilder CheckedAppendFormat(this StringBuilder sb, IFormatProvider provider, string fmt, params object[] args)
         {
@@ -1096,6 +1108,16 @@ namespace MosaicLib.Utils
             public static bool IsNullOrAny(this MatchRuleSet set)
             {
                 return (set == null || set.IsAny);
+            }
+
+            /// <summary>
+            /// When the given value of <paramref name="set"/> is neither null nor empty, this method returns the passed <paramref name="set"/> value.
+            /// Otherwise this method returns the given <paramref name="replaceNullOrEmptyWith"/>
+            /// <para/>Supports call chaining
+            /// </summary>
+            public static MatchRuleSet MapNullOrEmptyTo(this MatchRuleSet set, MatchRuleSet replaceNullOrEmptyWith)
+            {
+                return (!set.IsNullOrEmpty() ? set : replaceNullOrEmptyWith);
             }
 
             /// <summary>

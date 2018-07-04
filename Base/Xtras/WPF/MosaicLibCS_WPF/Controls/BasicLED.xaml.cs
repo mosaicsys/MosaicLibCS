@@ -1,5 +1,5 @@
 ﻿//-------------------------------------------------------------------
-/*! @file BasicLED.cs
+/*! @file BasicLED.xaml.cs
  *  @brief
  * 
  * Copyright (c) Mosaic Systems Inc.

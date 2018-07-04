@@ -315,11 +315,11 @@ namespace MosaicLib.WPF.Tools.Sets
     public class SetNewestItemPicker<TItemType, TKeyType> : DependencyObject
             where TKeyType : IEquatable<TKeyType>
     {
-        public SetNewestItemPicker(string setName, Func<TItemType, TKeyType> keySelector, TKeyType keyValue)
-            : this(new SetID(setName, generateUUIDForNull: false), keySelector, keyValue)
+        public SetNewestItemPicker(string setName, Func<TItemType, TKeyType> keySelector, TKeyType keyValue, bool delayPriming = true)
+            : this(new SetID(setName, generateUUIDForNull: false), keySelector, keyValue, delayPriming)
         { }
 
-        public SetNewestItemPicker(SetID setID, Func<TItemType, TKeyType> keySelector, TKeyType keyValue)
+        public SetNewestItemPicker(SetID setID, Func<TItemType, TKeyType> keySelector, TKeyType keyValue, bool delayPriming = true)
         {
             this.setID = setID;
             this.keySelector = keySelector;
@@ -327,7 +327,7 @@ namespace MosaicLib.WPF.Tools.Sets
 
             rootSetTracker = SetTracker.GetSetTracker(setID);
 
-            rootSetTracker.AddSetDeltasEventHandler(HandleOnNotifySetDeltasEvent, setPrimingDelegate: primingSetDelta => HandleOnNotifySetDeltasEvent(rootSetTracker, primingSetDelta), delayPriming: true);
+            rootSetTracker.AddSetDeltasEventHandler(HandleOnNotifySetDeltasEvent, setPrimingDelegate: primingSetDelta => HandleOnNotifySetDeltasEvent(rootSetTracker, primingSetDelta), delayPriming: delayPriming);
         }
 
         private SetID setID;
@@ -342,27 +342,19 @@ namespace MosaicLib.WPF.Tools.Sets
         /// </summary>
         private void HandleOnNotifySetDeltasEvent(object source, ISetDelta eventArgs)
         {
-            Modular.Interconnect.Sets.SetDelta<TItemType> setDelta = eventArgs as Modular.Interconnect.Sets.SetDelta<TItemType>;
-
-            if (setDelta != null)
+            if (eventArgs != null)
             {
                 TItemType lastMatchedItem = default(TItemType);
                 int matchCount = 0;
 
-                var addRangeItemList = setDelta.addRangeItemList;
-                int addRangeItemListCount = addRangeItemList.SafeCount();
+                var addRangeItemSet = eventArgs.AddRangeItems;
 
-                for (int addRangeIdx = 0; addRangeIdx < addRangeItemListCount; addRangeIdx++)
+                foreach (var addRangeItem in addRangeItemSet)
                 {
-                    var addRangeItem = addRangeItemList[addRangeIdx];
+                    var rangeItemSet = addRangeItem.RangeObjects;
 
-                    var rangeItemList = addRangeItem.rangeObjectList;
-                    int rangeItemListCount = rangeItemList.SafeCount();
-
-                    for (int rangeItemIdx = 0; rangeItemIdx < rangeItemListCount; rangeItemIdx++)
+                    foreach (TItemType testItem in rangeItemSet.SafeToSet<TItemType>())
                     {
-                        TItemType testItem = rangeItemList[rangeItemIdx];
-
                         TKeyType testItemKey = keySelector(testItem);
 
                         if (keyValue.Equals(testItemKey))
@@ -402,8 +394,8 @@ namespace MosaicLib.WPF.Tools.Sets
         /// </summary>
         /// <exception cref="System.ArgumentNullException">Will be thrown if any of the given values in the <paramref name="groupKeyValuesArray"/> are null or are otherwise incompatible with the use of the Dictionary.Add method</exception>
         /// <exception cref="System.ArgumentException">Will be thrown if there are any duplicates in the given <paramref name="groupKeyValuesArray"/>, or if the Dictionary.Add method believes that they are duplicates.</exception>
-        public SetNewestItemGroupPicker(string setName, Func<TItemType, TKeyType> keySelector, TKeyType[] groupKeyValuesArray)
-            : this(new SetID(setName, generateUUIDForNull: false), keySelector, groupKeyValuesArray)
+        public SetNewestItemGroupPicker(string setName, Func<TItemType, TKeyType> keySelector, TKeyType[] groupKeyValuesArray, bool delayPriming = true)
+            : this(new SetID(setName, generateUUIDForNull: false), keySelector, groupKeyValuesArray, delayPriming)
         { }
 
         /// <summary>
@@ -412,7 +404,7 @@ namespace MosaicLib.WPF.Tools.Sets
         /// </summary>
         /// <exception cref="System.ArgumentNullException">Will be thrown if any of the given values in the <paramref name="groupKeyValuesArray"/> are null or are otherwise incompatible with the use of the Dictionary.Add method</exception>
         /// <exception cref="System.ArgumentException">Will be thrown if there are any duplicates in the given <paramref name="groupKeyValuesArray"/>, or if the Dictionary.Add method believes that they are duplicates.</exception>
-        public SetNewestItemGroupPicker(SetID setID, Func<TItemType, TKeyType> keySelector, TKeyType[] groupKeyValuesArray)
+        public SetNewestItemGroupPicker(SetID setID, Func<TItemType, TKeyType> keySelector, TKeyType[] groupKeyValuesArray, bool delayPriming = true)
         {
             this.setID = setID;
             this.keySelector = keySelector;
@@ -424,9 +416,9 @@ namespace MosaicLib.WPF.Tools.Sets
 
             referenceGroupArray = new TItemType[maxGroupIndex = groupKeyValuesArray.Length];
 
-            GroupArray = referenceGroupArray.SafeToArray();
+            GroupArray = referenceGroupArray.MakeCopyOf();
 
-            rootSetTracker.AddSetDeltasEventHandler(HandleOnNotifySetDeltasEvent, setPrimingDelegate: primingSetDelta => HandleOnNotifySetDeltasEvent(rootSetTracker, primingSetDelta), delayPriming: true);
+            rootSetTracker.AddSetDeltasEventHandler(HandleOnNotifySetDeltasEvent, setPrimingDelegate: primingSetDelta => HandleOnNotifySetDeltasEvent(rootSetTracker, primingSetDelta), delayPriming: delayPriming);
         }
 
         private SetID setID;
@@ -441,25 +433,18 @@ namespace MosaicLib.WPF.Tools.Sets
 
         private void HandleOnNotifySetDeltasEvent(object source, ISetDelta eventArgs)
         {
-            Modular.Interconnect.Sets.SetDelta<TItemType> setDelta = eventArgs as Modular.Interconnect.Sets.SetDelta<TItemType>;
-
-            if (setDelta != null)
+            if (eventArgs != null)
             {
                 int matchCount = 0;
 
-                var addRangeItemList = setDelta.addRangeItemList;
-                int addRangeItemListCount = addRangeItemList.SafeCount();
+                var addRangeItemSet = eventArgs.AddRangeItems;
 
-                for (int addRangeIdx = 0; addRangeIdx < addRangeItemListCount; addRangeIdx++)
+                foreach (var addRangeItem in addRangeItemSet)
                 {
-                    var addRangeItem = addRangeItemList[addRangeIdx];
+                    var rangeItemSet = addRangeItem.RangeObjects;
 
-                    var rangeItemList = addRangeItem.rangeObjectList;
-                    int rangeItemListCount = rangeItemList.SafeCount();
-
-                    for (int rangeItemIdx = 0; rangeItemIdx < rangeItemListCount; rangeItemIdx++)
+                    foreach (TItemType testItem in rangeItemSet.SafeToSet<TItemType>())
                     {
-                        TItemType testItem = rangeItemList[rangeItemIdx];
                         TKeyType testItemKey = keySelector(testItem);
 
                         int groupIdx = keyToIndexDictionary.SafeTryGetValue(testItemKey, fallbackValue: -1);
@@ -473,13 +458,13 @@ namespace MosaicLib.WPF.Tools.Sets
                 }
 
                 if (matchCount > 0)
-                    GroupArray = referenceGroupArray.SafeToArray();
+                    GroupArray = referenceGroupArray.MakeCopyOf();
             }
         }
 
-        private static DependencyPropertyKey GroupPropertyKey = DependencyProperty.RegisterReadOnly("GroupArray", typeof(TItemType[]), typeof(SetNewestItemGroupPicker<TItemType, TKeyType>), new PropertyMetadata(null));
+        private static DependencyPropertyKey GroupArrayPropertyKey = DependencyProperty.RegisterReadOnly("GroupArray", typeof(TItemType[]), typeof(SetNewestItemGroupPicker<TItemType, TKeyType>), new PropertyMetadata(null));
 
-        public TItemType [] GroupArray { get { return _groupArray; } set { SetValue(GroupPropertyKey, _groupArray = value); } }
+        public TItemType [] GroupArray { get { return _groupArray; } set { SetValue(GroupArrayPropertyKey, _groupArray = value); } }
         private TItemType [] _groupArray;
     }
 
@@ -487,6 +472,11 @@ namespace MosaicLib.WPF.Tools.Sets
 
     #region FilteredSubSetTracker
 
+    /// <summary>
+    /// This tool is constructed to find a given SetTracker (by name/setID) and then to monitor the resulting stream of SetDelta additions and retain a filtered set of the tracked items.
+    /// <para/>Produced (read-only) DependencyPropertyKeys: Set
+    /// <para/>DependencyProperties: SetName (get/set)
+    /// </summary>
     public class FilteredSubSetTracker<TItemType> : DependencyObject
     {
         public FilteredSubSetTracker(string setName, int maximumCapacity = 1000, bool allowItemsToBeRemoved = true, Func<TItemType, bool> filterDelegate = null)
@@ -524,36 +514,45 @@ namespace MosaicLib.WPF.Tools.Sets
 
             applyDeltasConfig = new ApplyDeltasConfig<TItemType>(allowItemsToBeRemoved: allowItemsToBeRemoved, addItemFilter: filterDelegate);
 
-            adjustableSet = new AdjustableTrackingSet<TItemType>(rootSetTracker.TrackingSet, maximumCapacity, applyDeltasConfig);
-            Set = adjustableSet;
+            adjustableSet = (rootSetTracker.TrackingSet != null) ? new AdjustableTrackingSet<TItemType>(rootSetTracker.TrackingSet, maximumCapacity, applyDeltasConfig) : null;
+
+            if (adjustableSet != null)
+                Set = adjustableSet;
 
             // Add our HandleOnNotifySetDeltasEvent handler to it and prime the local set using a synthetic set deltas from the source set that contains the full contents of the source set.
-            rootSetTracker.AddSetDeltasEventHandler(handleOnNotifySetDeltasEventHandler, setPrimingDelegate: primingSetDelta => adjustableSet.ApplyDeltas(primingSetDelta), delayPriming: true);
+            rootSetTracker.AddSetDeltasEventHandler(handleOnNotifySetDeltasEventHandler, setPrimingDelegate: primingSetDelta => handleOnNotifySetDeltasEventHandler(rootSetTracker, primingSetDelta), delayPriming: true);
 
-            setRebuiltNotificationList.Notify();
+            if (adjustableSet != null)
+            {
+                setRebuiltNotificationList.Notify();
 
-            if (adjustableSet.Count > 0)
-                newItemsAddedNotificationList.Notify();
+                if (adjustableSet.Count > 0)
+                    newItemsAddedNotificationList.Notify();
+            }
         }
 
         private EventHandlerDelegate<ISetDelta> handleOnNotifySetDeltasEventHandler;
 
         private void HandleOnNotifySetDeltasEvent(object source, ISetDelta eventArgs)
         {
-            if (rootSetTracker == null)
-            { }
-            else
+            if (rootSetTracker == null || rootSetTracker.TrackingSet == null)
+                return;
+
+            if (adjustableSet == null)
             {
-                long entryLastItemSeqNum = adjustableSet.ItemListSeqNumRangeInfo.Last;
+                adjustableSet = new AdjustableTrackingSet<TItemType>(rootSetTracker.TrackingSet, maximumCapacity, applyDeltasConfig);
+                Set = adjustableSet;
 
-                if (eventArgs != null)
-                {
-                    adjustableSet.ApplyDeltas(eventArgs);
-                }
-
-                if (adjustableSet.ItemListSeqNumRangeInfo.Last != entryLastItemSeqNum)
-                    newItemsAddedNotificationList.Notify();
+                setRebuiltNotificationList.Notify();
             }
+
+            long entryLastItemSeqNum = adjustableSet.ItemListSeqNumRangeInfo.Last;
+
+            if (eventArgs != null)
+                adjustableSet.ApplyDeltas(eventArgs);
+
+            if (adjustableSet.ItemListSeqNumRangeInfo.Last != entryLastItemSeqNum)
+                newItemsAddedNotificationList.Notify();
         }
 
         private SetTracker rootSetTracker;
@@ -562,8 +561,8 @@ namespace MosaicLib.WPF.Tools.Sets
 
         private Func<TItemType, bool> filterDelegate = null;
 
-        private static DependencyPropertyKey SetPropertyKey = DependencyProperty.RegisterReadOnly("Set", typeof(ITrackingSet<MosaicLib.Logging.ILogMessage>), typeof(AdjustableLogMessageSetTracker), new PropertyMetadata(null));
-        public static DependencyProperty SetNameProperty = DependencyProperty.Register("SetName", typeof(string), typeof(AdjustableLogMessageSetTracker), new PropertyMetadata(null, HandleSetNamePropertyChanged));
+        private static DependencyPropertyKey SetPropertyKey = DependencyProperty.RegisterReadOnly("Set", typeof(ITrackingSet<TItemType>), typeof(FilteredSubSetTracker<TItemType>), new PropertyMetadata(null));
+        public static DependencyProperty SetNameProperty = DependencyProperty.Register("SetName", typeof(string), typeof(FilteredSubSetTracker<TItemType>), new PropertyMetadata(null, HandleSetNamePropertyChanged));
 
         public ITrackingSet<TItemType> Set { get { return adjustableSet; } set { SetValue(SetPropertyKey, value); } }
         public string SetName { get { return (string)GetValue(SetNameProperty); } set { SetValue(SetNameProperty, value); } }

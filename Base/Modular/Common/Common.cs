@@ -1130,7 +1130,7 @@ namespace MosaicLib.Modular.Common
 
         /// <summary>
         /// Typed GetValue method.  
-        /// This method decodes the TValueType to get the corresponding ContainerStorageType.
+        /// This method decodes the TValueType to get the corresponding ContainerStorageType and isNullable.
         /// If the contained value type matches this decoded ContainerStorageType then this method simply transfers the value from the corresponding storage field to the value.
         /// Otherwise the method uses the System.Convert.ChangeType method to attempt to convert the contained value into the desired TValueType type.
         /// If this transfer or conversion is successful then this method returns the transfered/converted value.  
@@ -1190,7 +1190,7 @@ namespace MosaicLib.Modular.Common
         /// Otherwise if isNullable is false then the method uses the System.Convert.ChangeType method to attempt to convert the contained value into the desired TValueType type.
         /// If this transfer or conversion used and is successful then this method and returns the transfered/converted value.  
         /// If this transfer/conversion is not used or is not successful then this method returns the given defaultValue (which defaults to default(TValueType)).
-        /// If rethrow is true and the method encounters any excpetions then it will rethrow the exception.
+        /// If rethrow is true and the method encounters any exceptions then it will rethrow the exception.
         /// </summary>
         public TValueType GetValue<TValueType>(ContainerStorageType decodedValueType, bool isNullable = false, bool rethrow = true, TValueType defaultValue = default(TValueType))
         {
@@ -1204,7 +1204,7 @@ namespace MosaicLib.Modular.Common
         /// Otherwise if allowTypeChangeAttempt is true and valueTypeIsNullable is false then the method uses the System.Convert.ChangeType method to attempt to convert the contained value into the desired TValueType type.
         /// If this transfer or conversion used and is successful then this method and returns the transfered/converted value.  
         /// If this transfer/conversion is not used or is not successful then this method returns the given defaultValue (which defaults to default(TValueType)).  
-        /// If rethrow is true and the method encounters any excpetions then it will rethrow the exception.
+        /// If rethrow is true and the method encounters any exceptions then it will rethrow the exception.
         /// </summary>
         public TValueType GetValue<TValueType>(ContainerStorageType decodedValueType, bool isNullable, bool rethrow, bool allowTypeChangeAttempt, TValueType defaultValue = default(TValueType))
         {
@@ -1482,22 +1482,59 @@ namespace MosaicLib.Modular.Common
         /// Otherwise the method uses the System.Convert.ChangeType method to attempt to convert the contained value into the desired TValueType type.
         /// If this transfer or conversion is successful then this method and assigns the transfered/converted value and returns true.  
         /// If this transfer/conversion is not successful then this method assigns the given defaultValue (which defaults to default(TValueType)) and returns false.  
-        /// If rethrow is true and the method encounters any excpetions then it will rethrow the exception.
+        /// If rethrow is true and the method encounters any exceptions then it will rethrow the exception.
         /// </summary>
+        /// <remarks>Currently this signature is believed to be somewhat cumbersome and and the usage of the rethrow flag is at best odd.  This method may be deprecated in the future</remarks>
         public bool TryGetValue<TValueType>(out TValueType result, ContainerStorageType decodedValueType, bool isNullable = false, bool rethrow = true, TValueType defaultValue = default(TValueType))
         {
-            result = defaultValue;
             try
             {
                 result = GetValue<TValueType>(decodedValueType, isNullable, rethrow, defaultValue: defaultValue);
-                return (LastGetValueException == null);
+
+                if (LastGetValueException == null)
+                    return true;
+
+                result = defaultValue;
+
+                return false;
             }
             catch (System.Exception ex)
             {
+                result = defaultValue;
+
                 if (LastGetValueException == null)
                     LastGetValueException = ex;
+
                 if (rethrow)
                     throw;
+
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Typed TryGetValue method.  
+        /// Internally this method makes use of the corresponding GetValue{TValueType} method passing it the relevant parameters.
+        /// If the contained value type matches this decoded ContainerStorageType then this method simply transfers the value from the corresponding storage field to the <paramref name="result"/> and returns true.
+        /// Otherwise the method uses the System.Convert.ChangeType method to attempt to convert the contained value into the desired TValueType type.
+        /// If this transfer or conversion is successful then this method assigns the transfered/converted value to the <paramref name="result"/> out property and returns true.  
+        /// In all other cases this method assigns the out <paramref name="result"/> from the given <paramref name="defaultValue"/> and returns false.
+        /// </summary>
+        public bool TryGetValue<TValueType>(out TValueType result, TValueType defaultValue = default(TValueType), bool allowTypeChangeAttempt = true)
+        {
+            try
+            {
+                result = GetValue<TValueType>(rethrow: true, defaultValue: defaultValue, allowTypeChangeAttempt: allowTypeChangeAttempt);
+
+                return true;
+            }
+            catch (System.Exception ex)
+            {
+                result = defaultValue;
+
+                if (LastGetValueException == null)
+                    LastGetValueException = ex;
+
                 return false;
             }
         }

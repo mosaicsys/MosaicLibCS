@@ -75,20 +75,42 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
     /// <summary>
     /// This class plays two roles.  
     /// First it is the default singleton Instance manager for obtaining an ITransportConnectionFactory.
-    /// Second it provides the basic connectionType based dictionary of factory objects for the supported connection types and provides the means to add new supported types so that they can be used by clients of this class.
+    /// Second it provides the basic ConnectionType based dictionary of factory objects for the supported connection types and provides the means to add new supported types so that they can be used by clients of this class.
+    /// <para/>Initially known transport (ConnectionType) types: UDP, UDPv4, UDPv6, TCP, TCPv4, TCPv6, DefaultPatchPanel
     /// </summary>
     public class TransportConnectionFactory : ITransportConnectionFactory
     {
         public static ITransportConnectionFactory Instance { get { return singletonInstanceHelper.Instance; } }
         private static SingletonHelperBase<ITransportConnectionFactory> singletonInstanceHelper = new SingletonHelperBase<ITransportConnectionFactory>(SingletonInstanceBehavior.AutoConstructIfNeeded, () => new TransportConnectionFactory());
 
-        internal TransportConnectionFactory() {}
+        internal TransportConnectionFactory() 
+        {
+            ResetContents();
+        }
+
+        public ITransportConnectionFactory this[string connectionType]
+        {
+            get
+            {
+                lock (mutex)
+                {
+                    return typeDictionary[connectionType.Sanitize()];
+                }
+            }
+            set 
+            {
+                lock (mutex)
+                {
+                    typeDictionary[connectionType.Sanitize()] = value;
+                }
+            }
+        }
 
         public TransportConnectionFactory Add(string connectionType, ITransportConnectionFactory connectionFactoryForType) 
         {
             lock (mutex)
             {
-                typeDictionary[connectionType.Sanitize()] = connectionFactoryForType;
+                typeDictionary.Add(connectionType.Sanitize(), connectionFactoryForType);
             }
 
             return this;
@@ -151,21 +173,39 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
         }
 
         private object mutex = new object();
-        private Dictionary<string, ITransportConnectionFactory> typeDictionary = new Dictionary<string,ITransportConnectionFactory>()
+        private Dictionary<string, ITransportConnectionFactory> typeDictionary;
+
+        /// <summary>
+        /// Resets the internal dictionary's contents to construction default.
+        /// <para/>Supports call chaining.
+        /// </summary>
+        public TransportConnectionFactory ResetContents()
         {
-            { "UDP", new Details.UDPTransportConnectionFactory() },
-            { "UDPv4", new Details.UDPTransportConnectionFactory() },
-            { "UDPv6", new Details.UDPTransportConnectionFactory() },
-            { "TCP", new Details.TCPTransportConnectionFactory() },
-            { "TCPv4", new Details.TCPTransportConnectionFactory() },
-            { "TCPv6", new Details.TCPTransportConnectionFactory() },
-            { "DefaultPatchPanel", new Details.PatchPanelTransportConnectionFactory() },
-        };
+            lock (mutex)
+            {
+                typeDictionary = new Dictionary<string, ITransportConnectionFactory>()
+                {
+                    { "UDP", new Details.UDPTransportConnectionFactory() },
+                    { "UDPv4", new Details.UDPTransportConnectionFactory() },
+                    { "UDPv6", new Details.UDPTransportConnectionFactory() },
+                    { "TCP", new Details.TCPTransportConnectionFactory() },
+                    { "TCPv4", new Details.TCPTransportConnectionFactory() },
+                    { "TCPv6", new Details.TCPTransportConnectionFactory() },
+                    { "DefaultPatchPanel", new Details.PatchPanelTransportConnectionFactory() },
+                };
+            }
+
+            return this;
+        }
     }
 
+    /// <summary>
+    /// Gives the role that has been assigned to a transport instance.
+    /// <para/>Client (0), Server
+    /// </summary>
     public enum TransportRole : int
     {
-        Client,
+        Client = 0,
         Server,
     }
 
@@ -405,6 +445,19 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
             Logging.IMesgEmitter trace;
             UdpClient udpPort;
             Socket udpSocket;
+
+            #region ToString
+
+            /// <summary>Debugging helper method</summary>
+            public override string ToString()
+            {
+                if (IsClient && ConnectionSession != null)
+                    return "{0} ConnectionSessionState:{1}".CheckedFormat(logger.Name, ConnectionSession.State);
+                else
+                    return "{0}".CheckedFormat(logger.Name);
+            }
+
+            #endregion
 
             public int Service(QpcTimeStamp qpcTimeStamp)
             {
@@ -865,6 +918,19 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
 
                 return count;
             }
+
+            #region ToString
+
+            /// <summary>Debugging helper method</summary>
+            public override string ToString()
+            {
+                if (IsClient && ClientSession != null)
+                    return "{0} ConnectionSessionState:{1} ConnectionTrackerState:{2}".CheckedFormat(logger.Name, ClientSession.State, String.Join(",", connectionTrackerList.Select(ct => ct.State)));
+                else
+                    return "{0} ConnectionTrackerStates:{1}".CheckedFormat(logger.Name, String.Join(",", connectionTrackerList.Select(ct => ct.State)));
+            }
+
+            #endregion
 
             #region tcpListener Accept Tracking and handling
 
@@ -1752,7 +1818,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
 
                 InstanceNum = instanceNumGen.Increment();
                 Role = role;
-                InstanceName = "Test{0}_{1:d2}".CheckedFormat(Role, InstanceNum);
+                InstanceName = "{0}{1}_{2:d2}".CheckedFormat(Fcns.CurrentClassLeafName, Role, InstanceNum);
 
                 logger = new Logging.Logger(InstanceName);
                 traceLogger = new Logging.Logger("{0}.Trace".CheckedFormat(logger.Name), groupName: Logging.LookupDistributionGroupName, initialInstanceLogGate: connParamsNVS["Transport.TraceLogger.InitialInstanceLogGate"].VC.GetValue(rethrow: false, defaultValue: Logging.LogGate.Debug));
@@ -1832,6 +1898,19 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
             Logging.Logger logger;
             Logging.Logger traceLogger;
             Logging.IMesgEmitter traceEmitter;
+
+            #endregion
+
+            #region ToString
+
+            /// <summary>Debugging helper method</summary>
+            public override string ToString()
+            {
+                if (IsClient && ConnectionSession != null)
+                    return "{0} ConnectionSessionState:{1} LocalPort:[{2}] ConnectedToPort:[{3}]".CheckedFormat(InstanceName, ConnectionSession.State, LocalPort, ConnectedToPort);
+                else
+                    return "{0} LocalPort:[{1}]".CheckedFormat(InstanceName, LocalPort);
+            }
 
             #endregion
 

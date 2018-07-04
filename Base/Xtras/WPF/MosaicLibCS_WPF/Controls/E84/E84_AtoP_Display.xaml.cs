@@ -1,5 +1,5 @@
 ﻿//-------------------------------------------------------------------
-/*! @file E84_AtoP_Display.cs
+/*! @file E84_AtoP_Display.xaml.cs
  *  @brief
  * 
  * Copyright (c) Mosaic Systems Inc.

@@ -60,7 +60,12 @@ namespace MosaicLib.Modular.Part
 		
         /// <summary>part is online but it requires initialization before it can be used normally. (3)</summary>
         [EnumMember]
+        [Obsolete("Please switch to using the correctly spelled version (2018-05-23)")]
         OnlineUnintialized = 3,
+
+        /// <summary>part is online but it requires initialization before it can be used normally. (3)</summary>
+        [EnumMember]
+        OnlineUninitialized = 3,
 		
         /// <summary>part is online (4)</summary>
         [EnumMember]
@@ -152,17 +157,24 @@ namespace MosaicLib.Modular.Part
     /// </summary>
     public static class BaseStateFcns
     {
-        /// <summary>Returns true if the given UseState value is any of the Online states.</summary>
-        public static bool IsOnline(this UseState useState, bool acceptAttemptOnline = false, bool acceptUninitialized = true)
+        /// <summary>
+        /// Returns true if the given UseState value is any of the Online states.
+        /// <para/>Accepts Online, OnlineBusy
+        /// <para/>Accepts OnlineUninitialized if <paramref name="acceptUninitialized"/> is true
+        /// <para/>Accepts OnlineFailure if <paramref name="acceptOnlineFailure"/> is true
+        /// <para/>Accepts AttemptOnline if <paramref name="acceptAttemptOnline"/> is true
+        /// </summary>
+        public static bool IsOnline(this UseState useState, bool acceptAttemptOnline = false, bool acceptUninitialized = true, bool acceptOnlineFailure = true)
         {
             switch (useState)
             {
-                case UseState.OnlineUnintialized:
+                case UseState.OnlineUninitialized:
                     return acceptUninitialized;
                 case UseState.Online:
                 case UseState.OnlineBusy:
-                case UseState.OnlineFailure:
                     return true;
+                case UseState.OnlineFailure:
+                    return acceptOnlineFailure;
                 case UseState.AttemptOnline:
                     return acceptAttemptOnline;
                 default:
@@ -212,6 +224,9 @@ namespace MosaicLib.Modular.Part
 	/// </remarks>
 	public interface IBaseState : IEquatable<IBaseState>
 	{
+        /// <summary>gives the PartID of the part that created this base state, or null if a part did not create this object</summary>
+        string PartID { get; }
+
         /// <summary>return true if the part is simulated</summary>
 		bool IsSimulated { get; }
 
@@ -257,6 +272,11 @@ namespace MosaicLib.Modular.Part
         /// <summary>Returns true if the given rhs is non-null and if the contents of this and the given rhs IBaseState are equal to each other.</summary>
         [Obsolete("Please replace with the use of the corresponding IEquateable<>.Equals method (2017-03-10)")]
         bool IsEqualTo(IBaseState rhs);
+
+        /// <summary>
+        /// Gives selectable ToString output
+        /// </summary>
+        string ToString(BaseState.ToStringSelect toStringSelect);
 	}
 
 	/// <summary>
@@ -572,6 +592,10 @@ namespace MosaicLib.Modular.Part
 
         #region IBaseState interface
 
+        /// <summary>gives the PartID of the part that created this base state, or null if a part did not create this object</summary>
+        [DataMember(Order = 90, EmitDefaultValue = false, IsRequired = false)]
+        public string PartID { get; set; }
+
         /// <summary>return true if the part is simulated</summary>
         [DataMember(Order = 100, EmitDefaultValue = false, IsRequired = false)]
         public bool IsSimulated { get; private set; }
@@ -624,6 +648,7 @@ namespace MosaicLib.Modular.Part
         public bool Equals(IBaseState other)
         {
             return (other != null
+                && PartID == other.PartID
                 && IsSimulated == other.IsSimulated
                 && IsPrimaryPart == other.IsPrimaryPart
                 && UseState == other.UseState
@@ -661,15 +686,16 @@ namespace MosaicLib.Modular.Part
         }
 
         /// <summary>Copy constructor</summary>
-        public BaseState(IBaseState rhs) 
+        public BaseState(IBaseState other) 
             : this()
         {
-            IsSimulated = rhs.IsSimulated;
-            IsPrimaryPart = rhs.IsPrimaryPart;
-            useState = rhs.UseState;
-            connState = rhs.ConnState;
-            actionName = rhs.ActionName;
-            timeStamp = rhs.TimeStamp;
+            PartID = other.PartID;
+            IsSimulated = other.IsSimulated;
+            IsPrimaryPart = other.IsPrimaryPart;
+            useState = other.UseState;
+            connState = other.ConnState;
+            actionName = other.ActionName;
+            timeStamp = other.TimeStamp;
         }
 
         /// <summary>Sets the part as Simulator and allows it to be put in an Online state and/or to have its IsPrimaryPart property set.</summary>
@@ -751,22 +777,59 @@ namespace MosaicLib.Modular.Part
 
         /// <summary>Provides a print/log/debug suitable string representation of the contents of this state object.</summary>
         public override string ToString()
+        {
+            return ToString(ToStringSelect.All);
+        }
+
+        /// <summary>Provides a print/log/debug suitable string representation of the contents of this state object.</summary>
+        public string ToString(ToStringSelect toStringSelect)
 		{
-            bool includeActionName = (IsBusy && (!actionName.IsNullOrEmpty()));
-            bool includeReason = (!reason.IsNullOrEmpty());
-            bool includeConnState = (connState != ConnState.NotApplicable);
+            bool includePartID = toStringSelect.IsSet(ToStringSelect.PartID) && !PartID.IsNullOrEmpty();
+            bool includeUseState = toStringSelect.IsSet(ToStringSelect.UseState);
+            bool includeActionName = toStringSelect.IsSet(ToStringSelect.ActionName) && (IsBusy && (!actionName.IsNullOrEmpty()));
+            bool includeReason = toStringSelect.IsSet(ToStringSelect.Reason) && (!reason.IsNullOrEmpty());
+            bool includeConnState = toStringSelect.IsSet(ToStringSelect.ConnState) && (connState != ConnState.NotApplicable);
 
             StringBuilder sb = new StringBuilder();
-            sb.CheckedAppendFormat("use:{0}", useState);
+
+            if (includePartID)
+                sb.CheckedAppendFormat("partID:{0}", PartID);
+
+            if (toStringSelect.IsSet(ToStringSelect.UseState))
+                sb.CheckedAppendFormatWithDelimiter(", ", "use:{0}", useState);
+            else if (toStringSelect.IsSet(ToStringSelect.UseStateNoPrefix))
+                sb.CheckedAppendFormatWithDelimiter(", ", "{0}", useState);
+
             if (includeActionName)
-                sb.CheckedAppendFormat(", action:{0}", actionName);
+                sb.CheckedAppendFormatWithDelimiter(", ", "action:{0}", actionName);
+
             if (includeConnState)
-                sb.CheckedAppendFormat(", conn:{0}", connState);
+                sb.CheckedAppendFormatWithDelimiter(", ", "conn:{0}", connState);
+            
             if (includeReason)
-                sb.CheckedAppendFormat(", reason:[{0}]", reason);
+                sb.CheckedAppendFormatWithDelimiter(", ", "reason:[{0}]", reason);
 
             return sb.ToString();
 		}
+
+        /// <summary>
+        /// Used to select which parts to include when using the customized version of the BaseState ToString method
+        /// <para/>None (0x00), PartID (0x01), UseState (0x02), ActionName (0x04), ConnState (0x08), Reason (0x10), UseStateNoPrefix (0x20), All (0x1f), AllExceptPartID (0x3c)
+        /// </summary>
+        [Flags]
+        public enum ToStringSelect : int
+        {
+            None = 0x00,
+            PartID = 0x01,
+            UseState = 0x02,
+            ActionName = 0x04,
+            ConnState = 0x08,
+            Reason = 0x10,
+            UseStateNoPrefix = 0x20,
+
+            All = (PartID | UseState | ActionName | ConnState | Reason),
+            AllForPart = (UseStateNoPrefix | ActionName | ConnState | Reason),
+        }
 
 		#endregion
     }
@@ -999,6 +1062,7 @@ namespace MosaicLib.Modular.Part
             BaseStatePublishedNotificationList = new EventHandlerNotificationList<IBaseState>(this);
             BaseStateChangeEmitter = Log.Emitter(Logging.MesgType.Trace);
 
+            privateBaseState.PartID = PartID;
             publishedBaseState.Object = PrivateBaseState;
 
             settings = settings.SetupForUse();
@@ -1290,7 +1354,7 @@ namespace MosaicLib.Modular.Part
         /// <summary>Debugging and Logging helper</summary>
         public override string ToString()
         {
-            return "PartID:[{0}] BaseState:[{1}]".CheckedFormat(PartID, BaseState);
+            return "PartID:[{0}] BaseState:[{1}]".CheckedFormat(PartID, BaseState.ToString(Part.BaseState.ToStringSelect.AllForPart));
         }
 
         #endregion

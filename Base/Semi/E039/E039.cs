@@ -486,11 +486,10 @@ namespace MosaicLib.Semi.E039
 
     public static partial class ExtensionMethods
     {
-        public static bool IsNullOrEmpty(this E039ObjectID objID)
-        {
-            return objID == null || objID.IsEmpty;
-        }
-
+        /// <summary>
+        /// List{E039UpdateItem} helper method.  Adds a SetAttribute item to the given <paramref name="updateList"/> using the given parameters.  
+        /// If <paramref name="objID"/> is null and <paramref name="obj"/> is non-null then the E039ObjectID used is obtained from the given <paramref name="obj"/>'s ID.
+        /// </summary>
         public static List<E039UpdateItem> AddSetAttributesItem(this List<E039UpdateItem> updateList, E039ObjectID objID = null, IE039Object obj = null, INamedValueSet attributes = null, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate)
         {
             IE039Object getObjIDFromObj = obj;
@@ -576,11 +575,19 @@ namespace MosaicLib.Semi.E039
         /// public explicit constructor.  
         /// Allows caller to specify the <paramref name="name"/> and <paramref name="type"/> to be used.  
         /// If the optional <paramref name="assignUUID"/> parameter is explicitly set to true then this constructor will generate and retain a new non-empty UUID.
-        /// Table is always set to null using this constructor.
         /// </summary>
         public E039ObjectID(string name, string type, bool assignUUID = false, IE039TableObserver tableObserver = null)
             : this(name, type, assignUUID ? Guid.NewGuid().ToString() : null, tableObserver)
         {}
+
+        /// <summary>
+        /// public explicit constructor.  
+        /// Allows caller to specify the <paramref name="name"/> and <paramref name="type"/> to be used and the <paramref name="tableObserver"/> to be saved for later GetPublisher calls
+        /// Using this constructor will not assign a uuid.
+        /// </summary>
+        public E039ObjectID(string name, string type, IE039TableObserver tableObserver)
+            : this(name, type, false, tableObserver)
+        { }
 
         /// <summary>Custom constructor for use by E039 internals.  Gives caller access to assign all of the critical properties of an E039ObjectID</summary>
         internal E039ObjectID(string name, string type, string uuid, IE039TableObserver tableObserver)
@@ -923,7 +930,47 @@ namespace MosaicLib.Semi.E039
         /// </summary>
         public static bool IsNullOrEmpty(this IE039Object obj)
         {
-            return (obj == null || obj.IsEmpty);
+            return ((obj == null) || obj.IsEmpty);
+        }
+
+        /// <summary>
+        /// If the given <paramref name="obj"/> param is passed as null then this method returns E039Object.Empty, otherwise it returns the given <paramref name="obj"/> value.
+        /// </summary>
+        public static IE039Object MapNullToEmpty(this IE039Object obj)
+        {
+            return ((obj != null) ? obj : E039Object.Empty);
+        }
+
+        /// <summary>
+        /// If the given <paramref name="obj"/> is non-null and IsEmpty then this method returns null, otherwise it returns the given <paramref name="obj"/> value.
+        /// </summary>
+        public static IE039Object MapEmptyToNull(this IE039Object obj)
+        {
+            return ((obj != null) && obj.IsEmpty ? null : obj);
+        }
+
+        /// <summary>
+        /// Returns true if the given <paramref name="objID"/> is null or if it IsEmpty
+        /// </summary>
+        public static bool IsNullOrEmpty(this E039ObjectID objID)
+        {
+            return ((objID == null) || objID.IsEmpty);
+        }
+
+        /// <summary>
+        /// If the given <paramref name="objID"/> param is passed as null then this method returns E039ObjectID.Empty otherwise it returns the value of <paramref name="objID"/>
+        /// </summary>
+        public static E039ObjectID MapNullToEmpty(this E039ObjectID objID)
+        {
+            return ((objID != null) ? objID : E039ObjectID.Empty);
+        }
+
+        /// <summary>
+        /// If the given <paramref name="objID"/> is non-null and IsEmpty then this method returns null, otherwise it returns the given <paramref name="objID"/> value.
+        /// </summary>
+        public static E039ObjectID MapEmptyToNull(this E039ObjectID objID)
+        {
+            return ((objID != null) && objID.IsEmpty ? null : objID);
         }
 
         /// <summary>
@@ -2676,11 +2723,16 @@ namespace MosaicLib.Semi.E039
     /// </summary>
     public class E039ObjectObserverWithInfoExtraction<TObjectInfoType> : ISequencedObjectSourceObserver<IE039Object>
     {
-        /// <summary>Standard constructor</summary>
+        /// <summary>
+        /// Standard constructor.  If <paramref name="infoFactoryDelegate"/> is null then this object will assign Info to default{TObjectInfoType} each time this observer is updated.
+        /// </summary>
         public E039ObjectObserverWithInfoExtraction(ISequencedObjectSource<IE039Object, int> objPublisher, Func<IE039Object, TObjectInfoType> infoFactoryDelegate = null)
         {
             ObjPublisher = objPublisher;
-            objObserver = new SequencedRefObjectSourceObserver<IE039Object, int>(ObjPublisher);
+
+            if (ObjPublisher != null)
+                objObserver = new SequencedRefObjectSourceObserver<IE039Object, int>(ObjPublisher);
+
             this.infoFactoryDelegate = infoFactoryDelegate ?? (obj => default(TObjectInfoType));
 
             Update(forceUpdate: true);
@@ -2692,37 +2744,32 @@ namespace MosaicLib.Semi.E039
         /// <para/>Note: this copy constructor does not copy the <paramref name="other"/>'s UpdateAndGetObjectUpdateActionArray.  Any desired object update actions for this new observer must be added explicitly.
         /// </summary>
         protected E039ObjectObserverWithInfoExtraction(E039ObjectObserverWithInfoExtraction<TObjectInfoType> other)
-        {
-            ObjPublisher = other.ObjPublisher;
-            objObserver = new SequencedRefObjectSourceObserver<IE039Object, int>(ObjPublisher);
-            this.infoFactoryDelegate = other.infoFactoryDelegate;
-
-            Update(forceUpdate: true);
-        }
+            : this((other != null) ? other.ObjPublisher : null, (other != null) ? other.infoFactoryDelegate : null)
+        { }
 
         /// <summary>Gives access to the object publisher instance from which this observer was constructed.  Used during copy construction.</summary>
         public ISequencedObjectSource<IE039Object, int> ObjPublisher { get; private set; }
 
-        /// <summary>This gives the SequenceRefObjectSourceObserver that is used by this aggregate observer</summary>
+        /// <summary>This gives the SequenceRefObjectSourceObserver that is used by this aggregate observer.  NOTE: This field may be null.</summary>
         protected SequencedRefObjectSourceObserver<IE039Object, int> objObserver;
 
         /// <summary>This is the factory delegate function that was provided during original construction.  It is used to generate the Info object's contents after each Update operation.</summary>
         protected Func<IE039Object, TObjectInfoType> infoFactoryDelegate;
 
         /// <summary>Gives the last Object instance that was observered from the publisher when this object was last Updated, or null if there is no such object.</summary>
-        public IE039Object Object { get { return objObserver.Object; } }
+        public IE039Object Object { get { return (objObserver != null) ? objObserver.Object : null; } }
 
         /// <summary>Gives the E039ObjectID of the last Object instance that was observed from the publisher, or E039ObjectID.Empty if there is no such object.</summary>
-        public E039ObjectID ID { get { return (objObserver.Object ?? E039Object.Empty).ID; } }
+        public E039ObjectID ID { get { return (Object ?? E039Object.Empty).ID; } }
 
         /// <summary>Gives the <typeparamref name="TObjectInfoType"/> object produced by the infoFactoryDelegate</summary>
         public TObjectInfoType Info { get; protected set; }
 
         /// <summary>get/set: equivalent to the IsUpdateNeeded flag for the underlying sequenced object source observer.  returns true when source's seq number does not match seq number during last update.  May be set to true to indicate that an update is needed.</summary>
         public virtual bool IsUpdateNeeded 
-        { 
-            get { return objObserver.IsUpdateNeeded; } 
-            set { objObserver.IsUpdateNeeded = value; } 
+        {
+            get { return (objObserver != null) && objObserver.IsUpdateNeeded; } 
+            set { if (objObserver != null) objObserver.IsUpdateNeeded = value; } 
         }
 
         bool ISequencedSourceObserver.Update()
@@ -2737,7 +2784,7 @@ namespace MosaicLib.Semi.E039
         /// </summary>
         public virtual bool Update(bool forceUpdate = false)
         {
-            bool didUpdate = objObserver.Update();
+            bool didUpdate = (objObserver != null) ? objObserver.Update() : false;
 
             if (didUpdate || forceUpdate)
             {
@@ -2782,13 +2829,13 @@ namespace MosaicLib.Semi.E039
         #region region ISequencedObjectSourceObserver<IE039Object>, ISequencedSourceObserver remaining methods and properties
 
         /// <summary>Returns true if the sequence number has been incremented or has been explicitly set</summary>
-        public bool HasBeenSet { get { return objObserver.HasBeenSet; } }
+        public bool HasBeenSet { get { return (objObserver != null) && objObserver.HasBeenSet; } }
 
         /// <summary>Returns the current sequence number.  May return zero if sequence number is set to skip zero and Increment is in progress on another thread.</summary>
-        public int SequenceNumber { get { return objObserver.SequenceNumber; } }
+        public int SequenceNumber { get { return (objObserver != null) ? objObserver.SequenceNumber : 0; } }
 
         /// <summary>Returns the current sequence number read as a volatile (no locking) - May return zero if sequence number is set to skip zero and Increment is in progress on another thread</summary>
-        public int VolatileSequenceNumber { get { return objObserver.VolatileSequenceNumber; } }
+        public int VolatileSequenceNumber { get { return (objObserver != null) ? objObserver.VolatileSequenceNumber : 0; } }
 
         ISequencedObjectSourceObserver<IE039Object> ISequencedObjectSourceObserver<IE039Object>.UpdateInline()
         {

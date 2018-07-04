@@ -335,6 +335,22 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
+        /// Extension method either returns the given <paramref name="readOnlyIListIn"/> (if it is not null) or returns a new empty List{TItemType} if the given <paramref name="readOnlyIListIn"/> is null.
+        /// </summary>
+        public static ReadOnlyIList<TItemType> MapNullToEmpty<TItemType>(this ReadOnlyIList<TItemType> readOnlyIListIn)
+        {
+            return readOnlyIListIn ?? ReadOnlyIList<TItemType>.Empty;
+        }
+
+        /// <summary>
+        /// Extension method returns the given <paramref name="readOnlyIListIn"/> is non-empty otherwise this method returns null.
+        /// </summary>
+        public static ReadOnlyIList<TItemType> MapEmptyToNull<TItemType>(this ReadOnlyIList<TItemType> readOnlyIListIn)
+        {
+            return (readOnlyIListIn.SafeCount() != 0) ? readOnlyIListIn : null;
+        }
+
+        /// <summary>
         /// Extension method returns the Length from the given <paramref name="array"/> or zero if the given <paramref name="array"/> is null
         /// </summary>
         public static int SafeLength<ItemType>(this ItemType[] array)

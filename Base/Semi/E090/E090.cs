@@ -144,6 +144,16 @@ namespace MosaicLib.Semi.E090
     /// </summary>
     public static partial class ExtensionMethods
     {
+        public static E039ObjectID CreateE090SubstID(this string substName, bool assignUUID = false, IE039TableObserver tableObserver = null)
+        {
+            return new E039ObjectID(substName, Constants.SubstrateObjectType, assignUUID: assignUUID, tableObserver: tableObserver);
+        }
+
+        public static E039ObjectID CreateE090SubstLocID(this string substLocName, IE039TableObserver tableObserver = null)
+        {
+            return new E039ObjectID(substLocName, Constants.SubstrateLocationObjectType, tableObserver: tableObserver);
+        }
+
         public static string CreateE090SubstLoc(this IE039TableUpdater tableUpdater, string substLocName, Action<E039UpdateItem.AddObject> addedObjectDelegate, INamedValueSet attributes = null, E039ObjectFlags flags = E039ObjectFlags.Pinned, bool addSyncExternalItem = false, int instanceNum = 0, bool addIfNeeded = true)
         {
             E039UpdateItem.AddObject addObjectUpdateItem;
@@ -764,10 +774,8 @@ namespace MosaicLib.Semi.E090
         /// <para/>Note: this copy constructor does not copy the <paramref name="other"/>'s UpdateAndGetObjectUpdateActionArray.  Any desired object update actions for this new observer must be added explicitly.
         /// </summary>
         public E090SubstLocObserver(E090SubstLocObserver other)
-            : base(other)
+            : this((other != null) ? other.ObjPublisher : null, (other != null) ? other.AlsoObserveContents : false)
         {
-            AlsoObserveContents = other.AlsoObserveContents;
-
             if (AlsoObserveContents)
                 base.Add((obj) => UpdateContainsObject(obj));
         }
@@ -816,7 +824,7 @@ namespace MosaicLib.Semi.E090
         /// <para/>Note: this copy constructor does not copy the <paramref name="other"/>'s UpdateAndGetObjectUpdateActionArray.  Any desired object update actions for this new observer must be added explicitly.
         /// </summary>
         public E090SubstObserver(E090SubstObserver other)
-            : base(other)
+            : this((other != null) ? other.ObjPublisher : null)
         { }
     }
     #endregion

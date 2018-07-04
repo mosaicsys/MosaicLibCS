@@ -1,5 +1,5 @@
 ﻿//-------------------------------------------------------------------
-/*! @file PartBaseStateLED.cs
+/*! @file PartBaseStateLED.xaml.cs
  *  @brief
  * 
  * Copyright (c) Mosaic Systems Inc.

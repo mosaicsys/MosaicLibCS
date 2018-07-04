@@ -1,5 +1,5 @@
 ﻿//-------------------------------------------------------------------
-/*! @file E84_PtoA_Control.cs
+/*! @file E84_PtoA_Control.xaml.cs
  *  @brief
  * 
  * Copyright (c) Mosaic Systems Inc.

@@ -356,6 +356,11 @@ namespace MosaicLib.PartsLib.Common.Motion
     /// </summary>
     public class PointToPointTrajectory : TrajectoryBase
     {
+        public PointToPointTrajectory()
+        {
+            TrajectoryEndIsTimeBased = true;
+        }
+
         public AxisMeasurements InitialMeasurements { get; set; }
         public AxisMeasurements FinalMeasurements { get; set; }
         public TrajectorySettings TrajectorySettings { get; set; }
@@ -384,11 +389,12 @@ namespace MosaicLib.PartsLib.Common.Motion
                 // accel and decel distances are already to large - need to recalculate shorter accel and decel times.
                 double accelOverDecel = accel/decel;
 
-                accelTime = Math.Sqrt(totalPositionDelta / (0.5 * accel * (1.0 + accelOverDecel)));
+                accelTime = Math.Sqrt(totalDistance / (0.5 * accel * (1.0 + accelOverDecel)));
                 decelTime = accelOverDecel * accelTime;
 
                 accelDistance = (0.5 * accel * accelTime * accelTime);
                 decelDistance = (0.5 * decel * decelTime * decelTime);
+                cruiseDistance = 0.0;
             }
             else
             {
@@ -419,7 +425,7 @@ namespace MosaicLib.PartsLib.Common.Motion
             phase1_Accel = new AxisTarget() { TimeSpanInTrajectory = phase1StartTimeSpan, TimeStamp = InitialMeasurements.TimeStamp + phase1StartTimeSpan, Position = InitialMeasurements.Position, Velocity = 0.0, Acceleration = accel };
             phase2_Cruise = new AxisTarget() { TimeSpanInTrajectory = phase2StartTimeSpan, TimeStamp = InitialMeasurements.TimeStamp + phase2StartTimeSpan, Position = InitialMeasurements.Position + accelDistance, Velocity = cruiseVelocity, Acceleration = 0.0 };
             phase3_Decel = new AxisTarget() { TimeSpanInTrajectory = phase3StartTimeSpan, TimeStamp = InitialMeasurements.TimeStamp + phase3StartTimeSpan, Position = InitialMeasurements.Position + accelDistance + cruiseDistance, Velocity = cruiseVelocity, Acceleration = decel };
-            phase4_EndHold = new AxisTarget() { TimeSpanInTrajectory = phase4StartTimeSpan, TimeStamp = InitialMeasurements.TimeStamp + phase4StartTimeSpan, Position = InitialMeasurements.Position + accelDistance + cruiseDistance + decelDistance, Velocity = 0.0, Acceleration = 0.0 };
+            phase4_EndHold = new AxisTarget() { TimeSpanInTrajectory = phase4StartTimeSpan, TimeStamp = InitialMeasurements.TimeStamp + phase4StartTimeSpan, Position = FinalMeasurements.Position, Velocity = 0.0, Acceleration = 0.0 };
 
             FirstPhaseStartTimeStamp = InitialMeasurements.TimeStamp;
             TrajectoryRunTimeSpan = phase4_EndHold.TimeSpanInTrajectory;
