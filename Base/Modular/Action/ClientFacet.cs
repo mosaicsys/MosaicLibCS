@@ -448,11 +448,37 @@ namespace MosaicLib.Modular.Action
         }
 
         /// <summary>
+        /// Returns the ActionState from the first failed icf's of the given set, the ActionState from the last successfull icf if all of them succeeded, or the given <paramref name="fallbackValue"/>.
+        /// </summary>
+        public static IActionState GetFirstFailureOrAllSuccessState(this IClientFacet[] actionSetArray, IActionState fallbackValue = null)
+        {
+            int numThatHaveNotCompleted = 0;
+            IActionState lastSuccess = null;
+
+            foreach (var icf in actionSetArray)
+            {
+                var actionState = icf.ActionState;
+
+                if (!actionState.IsComplete)
+                    numThatHaveNotCompleted++;
+                else if (actionState.Failed)
+                    return actionState;
+                else
+                    lastSuccess = actionState;
+            }
+
+            if (numThatHaveNotCompleted == 0)
+                return lastSuccess;
+
+            return fallbackValue;
+        }
+
+        /// <summary>
         /// Blocks the caller until the given <paramref name="actionSetArray"/> completes (based on the chosen <paramref name="completionType"/>) or the <paramref name="spinEarlyExitCodeDelegate"/> returns a non-null string (typically based on a timer expiring, cancel requested, part shutdown requested, ...).
         /// This evaluation takes place in a spin loop with the spin's wait period given using the <paramref name="spinInterval"/> value.  
         /// If the caller does not provide a spinInterval then 0.1 seconds will be used.  The any given <paramref name="spinInterval"/> value will be clipped to be between 0.001 seconds and 0.5 seconds
         /// </summary>
-        public static string WaitUntilSetComplete<TClientFacetType>(this TClientFacetType[] actionSetArray, Func<string> spinEarlyExitCodeDelegate = null, TimeSpan? spinInterval = null, WaitForSetCompletionType completionType = WaitForSetCompletionType.All)
+        public static string WaitUntilSetComplete<TClientFacetType>(this TClientFacetType[] actionSetArray, Func<string> spinEarlyExitCodeDelegate, TimeSpan? spinInterval = null, WaitForSetCompletionType completionType = WaitForSetCompletionType.All)
             where TClientFacetType : IClientFacet
         {
             TimeSpan useSpinInterval = (spinInterval ?? (0.1).FromSeconds()).Clip(spinIntervalClipRangeMinValue, spinIntervalClipRangeMaxValue);

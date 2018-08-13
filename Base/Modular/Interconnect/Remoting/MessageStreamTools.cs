@@ -42,7 +42,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 {
     #region IMessageStreamTool
 
-    public interface IMessageStreamTool : Sessions.IServiceable
+    public interface IMessageStreamTool : IServiceable
     {
         void ResetState(QpcTimeStamp qpcTimeStamp);
         void HandleInboundMessage(QpcTimeStamp qpcTimeStamp, Messages.Message mesg);

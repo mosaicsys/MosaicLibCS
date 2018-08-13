@@ -29,6 +29,7 @@ using MosaicLib.File;
 using MosaicLib.Modular.Config;
 using MosaicLib.Time;
 using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
 
 namespace MosaicLib
 {
@@ -443,7 +444,17 @@ namespace MosaicLib
                         System.IO.Directory.CreateDirectory(activeFileDirPath);
                     }
 
-					// establish the open mode.  if we are supposed to advance to a new file
+                    bool fileExists = System.IO.File.Exists(activeFilePath);
+
+                    if (!fileExists)
+                    {
+                        System.IO.File.WriteAllBytes(activeFilePath, EmptyArrayFactory<byte>.Instance); // this makes certain the file has been created
+
+                        // this needs to be here to prevent Win32 "tunneling" from preservering the creation time from the file we just deleted
+                        System.IO.File.SetCreationTime(activeFilePath, DateTime.Now);
+                    }
+
+                    // establish the open mode.  if we are supposed to advance to a new file
 					//	 then make certain that we truncate the old file if it is still there.
 					bool append = !isAdvanceNeeded;
 

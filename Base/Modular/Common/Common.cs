@@ -3685,6 +3685,7 @@ namespace MosaicLib.Modular.Common
 
         /// <summary>
         /// This method can be used on a newly created NamedValueSet to set its IsReadOnly property to true while also supporting call chaining.
+        /// If the target NamedValueSet is already IsReadOnly then this method has no effect.
         /// </summary>
         /// <remarks>Use the ConvertToReadOnly extension method to convert INamedValueSet objects to be ReadOnly.</remarks>
         public NamedValueSet MakeReadOnly()

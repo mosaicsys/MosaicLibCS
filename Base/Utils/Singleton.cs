@@ -73,10 +73,12 @@ namespace MosaicLib.Utils
     /// </summary>
     public enum SingletonInstanceBehavior
     {
-        /// <summary>First use of Instance property will automatically construct the instance using default constructor.  Instance cannot be provided externally.</summary>
+        /// <summary>
+        /// First use of Instance property will automatically construct the instance using default constructor, or instance factory delegate (as appropriate).  Instance cannot be provided externally.
+        /// </summary>
         AutoConstruct = 0,
 
-        /// <summary>First use of Instance property will automatically construct the instance using default constructor if the Instance has not been assigned by that point.  Instance may be provided externally or it may be automatically constructed.  Instance may be explicitly assigned to null to remove the previously obtained instance and it may be set to be non-null if there is no currently defined instance.  To replace the instance, set it to null and then to the next value or use the getter to create one automatically.</summary>
+        /// <summary>First use of Instance property will automatically construct the instance using default constructor, or instance factory delegate (as appropriate), if the Instance has not been assigned by that point.  Instance may be provided externally or it may be automatically constructed.  Instance may be explicitly assigned to null to remove the previously obtained instance and it may be set to be non-null if there is no currently defined instance.  To replace the instance, set it to null and then to the next value or use the getter to create one automatically.</summary>
         AutoConstructIfNeeded,
 
         /// <summary>Instance property is manually assigned.  It must be assigned non-null value prior to first use of Instance property by Singleton user/client code.</summary>

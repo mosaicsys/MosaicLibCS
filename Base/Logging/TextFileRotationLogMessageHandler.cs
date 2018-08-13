@@ -24,6 +24,7 @@ using System;
 
 using MosaicLib;
 using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
 
 namespace MosaicLib
 {
@@ -64,7 +65,7 @@ namespace MosaicLib
 					if (config.nameUsesDateAndTime)
 						dirMgrConfig.fileNamePattern = File.DirectoryFileRotationManager.FileNamePattern.ByDate;
 					else
-						dirMgrConfig.fileNamePattern = File.DirectoryFileRotationManager.FileNamePattern.Numeric4DecimalDigits;
+                        dirMgrConfig.fileNamePattern = File.DirectoryFileRotationManager.FileNamePattern.Numeric4DecimalDigits;
 
 					dirMgrConfig.excludeFileNamesSet = config.excludeFileNamesSet;
 
@@ -215,42 +216,52 @@ namespace MosaicLib
                 /// </summary>
                 /// <returns>true if an active file name could be determined and the ostream could be successfully opened to append to it.</returns>
 				protected bool ActivateFile()
-				{
-					bool isAdvanceNeeded = dirMgr.IsFileAdvanceNeeded();
-					activeFilePath = (isAdvanceNeeded ? dirMgr.AdvanceToNextActiveFile() : dirMgr.PathToActiveFile);
+                {
+                    bool isAdvanceNeeded = dirMgr.IsFileAdvanceNeeded();
+                    activeFilePath = (isAdvanceNeeded ? dirMgr.AdvanceToNextActiveFile() : dirMgr.PathToActiveFile);
 
-					if (string.IsNullOrEmpty(activeFilePath))
-						return false;
+                    if (string.IsNullOrEmpty(activeFilePath))
+                        return false;
 
                     bool fileExists = System.IO.File.Exists(activeFilePath);
 
-					// establish the open mode.  if we are supposed to advance to a new file
-					//	 then make certain that we truncate the old file if it is still there.
-					bool append = !isAdvanceNeeded;
-					
-					ostream = new System.IO.StreamWriter(activeFilePath, append, System.Text.Encoding.ASCII);
+                    if (!fileExists)
+                    {
+                        System.IO.File.WriteAllBytes(activeFilePath, EmptyArrayFactory<byte>.Instance); // this makes certain the file has been created
 
-					handledLogMessageCounter = 0;
+                        // this needs to be here to prevent Win32 "tunneling" from preservering the creation time from the file we just deleted
+                        System.IO.File.SetCreationTime(activeFilePath, DateTime.Now);
+                    }
 
-					if (ostream != null && !ostream.BaseStream.CanWrite)
-						CloseFile();
+                    // establish the open mode.  if we are supposed to advance to a new file
+                    //	 then make certain that we truncate the old file if it is still there.
+                    bool append = !isAdvanceNeeded;
+
+                    ostream = new System.IO.StreamWriter(activeFilePath, append, System.Text.Encoding.ASCII);
+
+                    handledLogMessageCounter = 0;
+
+                    if (ostream != null && !ostream.BaseStream.CanWrite)
+                        CloseFile();
 
                     bool addHeader = (isAdvanceNeeded || !fileExists);
 
                     if (ostream != null && addHeader)
                     {
-                        GenerateAndProduceHeaderLines(config.fileHeaderLines, 
-                                                      config.fileHeaderLinesDelegate, 
+                        GenerateAndProduceHeaderLines(config.fileHeaderLines,
+                                                      config.fileHeaderLinesDelegate,
                                                       (lm) =>
-                                                        {
-                                                            lineFmt.FormatLogMessageToOstream(lm, ostream);
-                                                            handledLogMessageCounter++;
-                                                        }
+                                                      {
+                                                          lineFmt.FormatLogMessageToOstream(lm, ostream);
+                                                          handledLogMessageCounter++;
+                                                      }
                         );
                     }
 
-					return (ostream != null);
-				}
+                    dirMgr.RefreshActiveFileInfo();
+
+                    return (ostream != null);
+                }
 
 				const int MaxMessagesToHandleBeforeRescan = 100;
 

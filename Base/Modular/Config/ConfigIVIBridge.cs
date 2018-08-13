@@ -30,6 +30,7 @@ using MosaicLib.Modular.Action;
 using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Config.Attributes;
 using MosaicLib.Modular.Interconnect;
+using MosaicLib.Modular.Interconnect.Sets;
 using MosaicLib.Modular.Interconnect.Values;
 using MosaicLib.Modular.Part;
 using MosaicLib.Utils;
@@ -63,6 +64,7 @@ namespace MosaicLib.Modular.Config
 
         public IValuesInterconnection IVI { get; set; }
         public IConfig Config { get; set; }
+        public IReferenceSet<ConfigKeyAccessCopy> ReferenceSet { get; set; }
 
         public Logging.MesgType IssueLogMesgType { get; set; }
         public Logging.MesgType ValueUpdateTraceLogMesgType { get; set; }
@@ -114,6 +116,7 @@ namespace MosaicLib.Modular.Config
             PartBaseIVI = other.PartBaseIVI ?? other.IVI ?? Modular.Interconnect.Values.Values.Instance;
             IVI = other.IVI ?? Modular.Interconnect.Values.Values.Instance;
             Config = other.Config ?? Modular.Config.Config.Instance;
+            ReferenceSet = other.ReferenceSet;
 
             if (other.IVAPropagateNameMatchRuleSet != null)
                 IVAPropagateNameMatchRuleSet = new MatchRuleSet(other.IVAPropagateNameMatchRuleSet);
@@ -160,6 +163,7 @@ namespace MosaicLib.Modular.Config
 
             IVI = BridgeConfig.IVI;         // BridgeConfig Copy constructor converts passed nulls to singleton instance
             Config = BridgeConfig.Config;   // BridgeConfig Copy constructor converts passed nulls to singleton instance
+            ReferenceSet = BridgeConfig.ReferenceSet;
 
             IVI.NotificationList.AddItem(this);
             Config.ChangeNotificationList.AddItem(this);
@@ -176,6 +180,7 @@ namespace MosaicLib.Modular.Config
         private ConfigIVIBridgeConfig BridgeConfig { get; set; }
         private IValuesInterconnection IVI { get; set; }
         private IConfig Config { get; set; }
+        private IReferenceSet<ConfigKeyAccessCopy> ReferenceSet { get; set; }
 
         private Logging.IMesgEmitter IssueEmitter { get; set; }
         private Logging.IMesgEmitter ValueTraceEmitter { get; set; }
@@ -201,7 +206,7 @@ namespace MosaicLib.Modular.Config
 
         #endregion
 
-        #region SimpleActivePartBase override methods
+        #region SimpleActivePartBase override methods (PerformGoOnlineAction, PerformServiceAction, PerformMainLoopService)
 
         protected override string PerformGoOnlineAction(bool andInitialize)
         {
@@ -212,12 +217,70 @@ namespace MosaicLib.Modular.Config
             return rc;
         }
 
-        protected override string PerformServiceAction(string serviceName)
+        protected override string PerformServiceAction(IProviderActionBase<string, NullObj> ipf)
         {
-            if (serviceName == "Sync")
-                return PerformSync();
+            string serviceName = ipf.ParamValue;
+            INamedValueSet nvp = ipf.NamedParamValues;
 
-            return base.PerformServiceAction(serviceName);
+            switch (serviceName)
+            {
+                case "Sync": 
+                    return PerformSync();
+
+                case "SetKey":
+                    {
+                        string key = nvp["key"].VC.GetValue<string>(rethrow: true);
+                        ValueContainer value = nvp["value"].VC;
+                        string comment = nvp["comment"].VC.GetValue<string>(rethrow: false, defaultValue: null).MapNullTo("{0} operation has been performed using the {1} part".CheckedFormat(serviceName, PartID));
+                        bool? ensureExists = nvp["ensureExists"].VC.GetValue<bool?>(rethrow: false);
+
+                        IConfigKeyAccess icka = Config.GetConfigKeyAccess(key, ensureExists: ensureExists, defaultValue: value);
+
+                        if (icka == null)
+                            return "Internal: GetConfigKeyAccess generated null ICKA for key '{0}'".CheckedFormat(key);
+
+                        if (!icka.IsUsable)
+                            return "Key lookup for '{0}' gave error: {1}".CheckedFormat(key, icka.ResultCode);
+
+                        string ec = icka.SetValue(value, commentStr: comment);
+
+                        ServiceBridge();
+
+                        return ec.MapNullTo("[Internal: final ec was null]");
+                    }
+
+                case "SetKeys":
+                    {
+                        string [] keys = nvp["keys"].VC.GetValue<string []>(rethrow: true);
+                        ValueContainer [] values = nvp["values"].VC.GetValue<ValueContainer []>(rethrow: true);
+                        string comment = nvp["comment"].VC.GetValue<string>(rethrow: false, defaultValue: null).MapNullTo("{0} operation has been performed using the {1} part".CheckedFormat(serviceName, PartID));
+                        bool? ensureExists = nvp["ensureExists"].VC.GetValue<bool?>(rethrow: false);
+
+                        if (keys.SafeLength() != values.SafeLength())
+                            return "Given keys and values were not the same length";
+
+                        if (keys.SafeLength() == 0)
+                            return "No keys were given to change";
+
+                        IConfigKeyAccess[] ickaArray = keys.Select((key, idx) => Config.GetConfigKeyAccess(key, ensureExists: ensureExists, defaultValue: values[idx])).ToArray(); 
+
+                        if (ickaArray.Any(icka => icka == null))
+                            return "Internal: GetConfigKeyAccess generated null ICKA for one or more keys in [{0}]".CheckedFormat(string.Join(",", keys));
+
+                        var notFoundKeys = ickaArray.Where(icka => !icka.IsUsable).Select(icka => icka.Key).ToArray();
+                        if (!notFoundKeys.IsNullOrEmpty())
+                            return "Key lookup for keys '{0}' failed".CheckedFormat(string.Join(",", notFoundKeys));
+
+                        string ec = Config.SetValues(ickaArray.Select((icka, idx) => KVP.Create(icka, values[idx])).ToArray(), comment);
+
+                        ServiceBridge();
+
+                        return ec.MapNullTo("[Internal: final ec was null]");
+                    }
+
+                default: 
+                    return base.PerformServiceAction(serviceName);
+            }
         }
 
         protected override void PerformMainLoopService()
@@ -370,14 +433,15 @@ namespace MosaicLib.Modular.Config
                     {
                         ValueContainer vc = syncItem.iva.Update().VC;
 
-                        if (!vc.IsEqualTo(syncItem.cka.VC))
+                        if (!vc.IsEqualTo(syncItem.icka.VC))
                         {
-                            ValueTraceEmitter.Emit("Propagating iva change '{0}' to cka '{1}'", syncItem.iva, syncItem.cka);
-                            syncItem.cka.SetValue(vc, "{0}: Propagating value change from iva '{1}'".CheckedFormat(PartID, syncItem.iva), autoUpdate: false);
+                            ValueTraceEmitter.Emit("Propagating iva change '{0}' to cka '{1}'", syncItem.iva, syncItem.icka);
+                            syncItem.icka.SetValue(vc, "{0}: Propagating value change from iva '{1}'".CheckedFormat(PartID, syncItem.iva), autoUpdate: false);
+                            syncItem.UpdateCopyInSet(ReferenceSet);
                         }
                         else
                         {
-                            ValueTraceEmitter.Emit("iva '{0}' updated, value matches cka '{1}'", syncItem.iva, syncItem.cka);
+                            ValueTraceEmitter.Emit("iva '{0}' updated, value matches cka '{1}'", syncItem.iva, syncItem.icka);
                         }
                     }
                 }
@@ -388,18 +452,19 @@ namespace MosaicLib.Modular.Config
             {
                 foreach (SyncItem syncItem in syncItemArray)
                 {
-                    if (syncItem.cka.UpdateValue())
+                    if (syncItem.icka.UpdateValue())
                     {
-                        ValueContainer vc = syncItem.cka.VC;
+                        ValueContainer vc = syncItem.icka.VC;
 
                         if (!vc.IsEqualTo(syncItem.iva.VC))
                         {
-                            ValueTraceEmitter.Emit("Propagating cka change '{0}' to iva '{1}'", syncItem.cka, syncItem.iva);
+                            ValueTraceEmitter.Emit("Propagating cka change '{0}' to iva '{1}'", syncItem.icka, syncItem.iva);
                             syncItem.iva.Set(vc);
+                            syncItem.UpdateCopyInSet(ReferenceSet);
                         }
                         else
                         {
-                            ValueTraceEmitter.Emit("cka '{0}' updated, value matches iva '{1}'", syncItem.cka, syncItem.iva);
+                            ValueTraceEmitter.Emit("cka '{0}' updated, value matches iva '{1}'", syncItem.icka, syncItem.iva);
                         }
                     }
                 }
@@ -444,7 +509,7 @@ namespace MosaicLib.Modular.Config
 
         private SyncItem AddSyncItemAndPerformInitialPropagation(IValueAccessor iva, IConfigKeyAccess cka, string ivaLookupName, string ivaFromCkaMappedName, string ckaFromIvaMappedName, string ckaLookupKeyName)
         {
-            SyncItem syncItem = new SyncItem() { iva = iva, cka = cka, ivaLookupName = ivaLookupName, ivaFromCkaMappedName = ivaFromCkaMappedName, ckaFromIvaMappedName = ckaFromIvaMappedName, ckaLookupKeyName = ckaLookupKeyName };
+            SyncItem syncItem = new SyncItem() { iva = iva, icka = cka, ivaLookupName = ivaLookupName, ivaFromCkaMappedName = ivaFromCkaMappedName, ckaFromIvaMappedName = ckaFromIvaMappedName, ckaLookupKeyName = ckaLookupKeyName };
 
             syncItemList.Add(syncItem);
             syncItemArray = null;
@@ -478,6 +543,8 @@ namespace MosaicLib.Modular.Config
                 cka.SetValue(vc, "{0}: Propagating initial value from iva '{1}'".CheckedFormat(PartID, iva));
             }
 
+            syncItem.UpdateCopyInSet(ReferenceSet);
+
             return syncItem;
         }
 
@@ -496,7 +563,23 @@ namespace MosaicLib.Modular.Config
             public string ckaLookupKeyName;        // this is the name that was looked up to get the cka.
 
             public IValueAccessor iva;             // the IVA for this sync item
-            public IConfigKeyAccess cka;           // the CKA for this sync item
+            public IConfigKeyAccess icka;          // the ICKA for this sync item
+
+            public ConfigKeyAccessCopy ckac;       // the last published ckac to the reference set for this item  
+            public long ckacLastPublishedSeqNumInSet;
+
+            public void UpdateCopyInSet(IReferenceSet<ConfigKeyAccessCopy> referenceSet)
+            {
+                if (referenceSet != null)
+                {
+                    ckac = new ConfigKeyAccessCopy(icka);
+
+                    if (ckacLastPublishedSeqNumInSet != 0)
+                        ckacLastPublishedSeqNumInSet = referenceSet.RemoveBySeqNumsAndAddItems(new[] { ckacLastPublishedSeqNumInSet }, ckac);
+                    else
+                        ckacLastPublishedSeqNumInSet = referenceSet.RemoveBySeqNumsAndAddItems(EmptyArrayFactory<long>.Instance, ckac);
+                }
+            }
         }
 
         Dictionary<string, SyncItem> ivaNameToSyncItemDictionary = new Dictionary<string, SyncItem>();

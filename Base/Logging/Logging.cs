@@ -118,37 +118,46 @@ namespace MosaicLib
             /// <summary>used as a gate to suppress passing all mesg types.  [0]</summary>
             [EnumMember]
 			None = 0,
+
             /// <summary>used to record occurrence of setup related (ctor) issues that may prevent use of the affected entity.  [1]</summary>
             [EnumMember]
             Fatal = 1,
+
             /// <summary>used to record occurrence of unexpected failures that might prevent future actions from operating correctly.  [2]</summary>
             [EnumMember]
             Error = 2,
+
             /// <summary>used to record occurrence of unexpected failures which are not expected to prevent future actions from operating correctly.  [3]</summary>
             [EnumMember]
             Warning = 3,
+
             /// <summary>used to record occurrence of significant milestones and/or changes during normal operation of the system.  [4]</summary>
             [EnumMember]
             Signif = 4,
+
             /// <summary>used to record occurrence of relatively insignificant items.  [5]</summary>
             [EnumMember]
             Info = 5,
+
             /// <summary>used to record occurrence of information that is intended to provide an even more detailed view.  [6]</summary>
             [EnumMember]
             Debug = 6,
+
+            [EnumMember]
+            [Obsolete("The use of this MesgType element has been deprecated and will be removed in a future release.  Please replace its use with the use of the ArrayLength element. (2018-08-12)")]
+            Max = 7,
+
             /// <summary>used to record occurrence of very frequent events such as those used to track data transfer, flow of control, construction and destruction, etc...  [7]</summary>
             [EnumMember]
-            Trace = 7,			
-            /// <summary>
-            /// Defines the last MesgType member that represents an actual message type.  Used to size arrays that may be indexed by a MesgType (cast as an Int32)
-            /// <para/>Max = Trace [7]
-            /// </summary>
+            Trace = 7,		
+	
+            /// <summary>used as a level to permit passing all mesg types.  [8]</summary>
             [EnumMember]
-            Max = Trace,
+            All = 8,
 
-            /// <summary>used as a level to permit passing all mesg types.  [Max + 1 = 8]</summary>
+            /// <summary>used as the array length of arrays that shall generally be indexable by the useful individual MesgType values (Fatal..Trace, aka 1..7).  [ArraySize = All = 8]</summary>
             [EnumMember]
-            All,
+            ArraySize = 8,
         }
 
         private static readonly MesgType[] allMesgTypesArray = new MesgType[] { MesgType.Fatal, MesgType.Error, MesgType.Warning, MesgType.Signif, MesgType.Info, MesgType.Debug, MesgType.Trace };
@@ -1676,7 +1685,7 @@ namespace MosaicLib
             /// Preallocated array of IMesgEmitters that have been created.  Allows this caller to create only the emitters that are actually used
             /// but also allows it to reuse each emitter type without effort.
             /// </summary>
-            private IMesgEmitter[] emitters = new IMesgEmitter[((int)MesgType.Max) + 1];
+            private IMesgEmitter[] emitters = new IMesgEmitter[(int)MesgType.ArraySize];
 
             /// <summary>
             /// per type IMesgEmitter cached results to further improve the code paths for the high usage direct message type IMesgEmitter properies

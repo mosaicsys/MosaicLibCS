@@ -343,7 +343,10 @@ namespace MosaicLib.Utils
 
             #region IList, ICollection, IEnumerable implementations
 
-            int IList<TItemType>.IndexOf(TItemType item)
+            /// <summary>
+            /// returns the (zero based) index of the first element in this collection that is EqualityComparer{TItemType}.Default.Equals to the given <paramref name="item"/> value.  Returns -1 if no such collection element is found.
+            /// </summary>
+            public int IndexOf(TItemType item)
             {
                 return ROCOfItems.IndexOf(item);
             }
@@ -358,7 +361,12 @@ namespace MosaicLib.Utils
                 throw new System.NotSupportedException("{0}.{1} cannot be used.  collection is read-only".CheckedFormat(Fcns.CurrentClassLeafName, Fcns.CurrentMethodName));
             }
 
-            TItemType IList<TItemType>.this[int index]
+            /// <summary>
+            /// Getter returns the <paramref name="index"/> selected item from the collection.  Setter is not supported for this read-only collection object.
+            /// </summary>
+            /// <exception cref="System.ArgumentOutOfRangeException">if the given value of <paramref name="index"/> is less than zero or is greater or equal to the collection Count</exception>
+            /// <exception cref="System.NotSupportedException">if the client attempts to use the indexed setter.</exception>
+            public TItemType this[int index]
             {
                 get
                 {
@@ -380,17 +388,29 @@ namespace MosaicLib.Utils
                 throw new System.NotSupportedException("{0}.{1} cannot be used.  collection is read-only".CheckedFormat(Fcns.CurrentClassLeafName, Fcns.CurrentMethodName));
             }
 
-            bool ICollection<TItemType>.Contains(TItemType item)
+            /// <summary>
+            /// Returns true if the collection contains an element that is EqualityComparer{TItemType}.Default.Equals to the given <paramref name="item"/> value, or false otherwise.
+            /// </summary>
+            public bool Contains(TItemType item)
             {
                 return ROCOfItems.Contains(item);
             }
 
-            void ICollection<TItemType>.CopyTo(TItemType[] array, int arrayIndex)
+            /// <summary>
+            /// Attempts to copy the set contents to the given <paramref name="array"/> starting at the given <paramref name="arrayIndex"/> starting offset.
+            /// </summary>
+            /// <exception cref="System.ArgumentNullException">is thrown if the given <paramref name="array"/> is null.</exception>
+            /// <exception cref="System.ArgumentOutOfRangeException">is thrown if the given <paramref name="arrayIndex"/> is negative.</exception>
+            /// <exception cref="System.ArgumentException">is thrown if the collection's contents to not fit in the given <paramref name="array"/> starting at the given <paramref name="arrayIndex"/> position.</exception>
+            public void CopyTo(TItemType[] array, int arrayIndex)
             {
                 ROCOfItems.CopyTo(array, arrayIndex);
             }
 
-            bool ICollection<TItemType>.IsReadOnly
+            /// <summary>
+            /// Returns true.
+            /// </summary>
+            public bool IsReadOnly
             {
                 get { return true; }
             }
@@ -400,7 +420,10 @@ namespace MosaicLib.Utils
                 throw new System.NotSupportedException("{0}.{1} cannot be used.  collection is read-only".CheckedFormat(Fcns.CurrentClassLeafName, Fcns.CurrentMethodName));
             }
 
-            IEnumerator<TItemType> IEnumerable<TItemType>.GetEnumerator()
+            /// <summary>
+            /// Returns an enumerator that can be used to enumerate through the elements of this collection.
+            /// </summary>
+            public IEnumerator<TItemType> GetEnumerator()
             {
                 return new ArrayEnumerator<TItemType>(itemsArray);
             }

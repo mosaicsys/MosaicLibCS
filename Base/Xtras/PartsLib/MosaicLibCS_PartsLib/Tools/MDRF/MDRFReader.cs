@@ -593,7 +593,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
 
                 HostName = setupAndLibNVS["HostName"].VC.GetValue<string>(false).MapNullToEmpty();
 
-                SetupInfo.ClientNVS.ConvertFromE005Data(fileHeaderDbb.payloadDataArray, ref decodeIndex, ref ec);
+                SetupInfo.ClientNVS = new NamedValueSet().ConvertFromE005Data(fileHeaderDbb.payloadDataArray, ref decodeIndex, ref ec);
             }
 
             // attempt to decode the first DateTimeInfo

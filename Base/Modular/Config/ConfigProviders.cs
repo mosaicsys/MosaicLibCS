@@ -32,7 +32,9 @@ using Microsoft.Win32;
 
 using MosaicLib;
 using MosaicLib.Modular.Common;
+using MosaicLib.Modular.Interconnect.Sets;
 using MosaicLib.Modular.Persist;
+using MosaicLib.Time;
 using MosaicLib.Utils;
 using MosaicLib.Utils.Collections;
 using MosaicLib.Utils.StringMatching;
@@ -151,6 +153,17 @@ namespace MosaicLib.Modular.Config
         }
 
         #region AddRange and Add methods for KVP, explicit Name & Value 
+
+        /// <summary>
+        /// Dictionary construction helper method.  Adds the given set of INamedValues to the dictionary, prefixing each given name with the CommonKeyPrefix.
+        /// <para/>Method supports call chaining.
+        /// </summary>
+        public DictionaryConfigKeyProvider AddRange(IEnumerable<INamedValue> nameValueSetSource)
+        {
+            ConfigKeyAccessFlags flags = new ConfigKeyAccessFlags();
+
+            return AddRange(nameValueSetSource.Select(nv => new ConfigKeyAccessImpl(KeyPrefix + nv.Name, flags, null, this) { VC = nv.VC }));
+        }
 
         /// <summary>
         /// Dictionary construction helper method.  Adds the given set of name/value pairs to the dictionary, prefixing each given name with the CommonKeyPrefix.
@@ -394,7 +407,11 @@ namespace MosaicLib.Modular.Config
             return firstError ?? String.Empty;
         }
 
-        private string EnsureItemExists(IConfigKeyAccessSpec icks, ValueContainer initialValue, ref DictionaryKeyItem item, string commentStr)
+        /// <summary>
+        /// Creates a new ConfigKeyAccessImpl and corresponding DictionaryKeyItem from the given <paramref name="icks"/>, <paramref name="initialValue"/>, and <paramref name="commentStr"/>,
+        /// and then adds the dki to the keyItemDictionary.  Makes use of VerifyAndNoteItemAdded prior to adding the dki item to the keyItemDictionary and returns a non-empty string if the verify failed.
+        /// </summary>
+        protected string EnsureItemExists(IConfigKeyAccessSpec icks, ValueContainer initialValue, ref DictionaryKeyItem item, string commentStr)
         {
             ConfigKeyAccessImpl ckai = new ConfigKeyAccessImpl(icks, this) { VC = initialValue };
 
@@ -1619,6 +1636,117 @@ namespace MosaicLib.Modular.Config
     }
 
     #endregion
+
+    #endregion
+
+    #region SetTrackingConfigKeyProvider
+
+    public class SetTrackingConfigKeyProvider : DictionaryConfigKeyProvider, IConfigKeyServiceableProvider
+    {
+        public SetTrackingConfigKeyProvider(string name, IReferenceSet<ConfigKeyAccessCopy> referenceSet, bool createCKAIForAnyRequest = true)
+            : this(name, createCKAIForAnyRequest)
+        {
+            localTrackingSet = referenceSet.CreateTrackingSet();
+
+            Service(QpcTimeStamp.Zero, null);
+        }
+
+        public SetTrackingConfigKeyProvider(string name, ITrackingSet<ConfigKeyAccessCopy> referenceTrackingSet, bool createCKAIForAnyRequest = true)
+            : this(name, createCKAIForAnyRequest)
+        {
+            localTrackingSet = referenceTrackingSet.CreateTrackingSet();
+
+            Service(QpcTimeStamp.Zero, null);
+        }
+
+        private SetTrackingConfigKeyProvider(string name, bool createRootCKAForAnyRequest)
+            : base(name, isFixed: false, keysMayBeAddedUsingEnsureExistsOption: false)       // NOTE that this provider is not actually fixed.  However it does not allow the keys it knows about to be changed from outside the provider.
+        {
+            CreateCKAIForAnyRequest = createRootCKAForAnyRequest;
+        }
+
+        bool CreateCKAIForAnyRequest { get; set; }
+        ITrackingSet<ConfigKeyAccessCopy> localTrackingSet;
+
+        public override IConfigKeyAccess GetConfigKeyAccess(IConfigKeyAccessSpec keyAccessSpec, bool ensureExists, ValueContainer initialValue)
+        {
+            var icka = base.GetConfigKeyAccess(keyAccessSpec, ensureExists, initialValue);
+
+            if ((icka != null && icka.IsUsable) || !CreateCKAIForAnyRequest)
+                return icka;
+
+            DictionaryKeyItem dkItem = null;
+
+            EnsureItemExists(keyAccessSpec, ValueContainer.Empty, ref dkItem, "Key created speculatively [CreateRootCKAForAnyRequest is true]");
+
+            return dkItem.ckai;
+        }
+
+        public override string SetValues(KeyValuePair<IConfigKeyAccess, ValueContainer>[] keyAccessAndValuesPairArray, string commentStr)
+        {
+            return "{0} is not supported by this provider".CheckedFormat(Fcns.CurrentMethodName);
+        }
+
+        public int Service(QpcTimeStamp qpcTimeStamp, List<ConfigKeyProviderDeltaReport> deltaItemReportList)
+        {
+            var setDeltas = localTrackingSet.PerformUpdateIteration(maxDeltaItemCount: 0, generateSetDelta: true);
+            int deltaCount = 0;
+
+            foreach (var ckac in setDeltas.AddRangeItems.SelectMany(range => range.RangeObjects).WhereIsNotDefault())
+            {
+                string key = ckac.Key;
+
+                var priorCKAC = setCkacsByKeyDictionary.SafeTryGetValue(key);
+                setCkacsByKeyDictionary[key] = ckac;
+
+                var dkItem = keyItemDictionary.SafeTryGetValue(key);
+                bool addKey = (dkItem == null);
+
+                if (addKey)
+                {
+                    IConfigKeyAccessSpec ickas = new ConfigKeyAccessSpec(ckac);
+                    EnsureItemExists(ickas, ckac.VC, ref dkItem, "Added from source set".CheckedFormat(localTrackingSet.SetID));
+                }
+
+                if (dkItem != null)
+                {
+                    ConfigKeyProviderDeltaReport deltaItem = new ConfigKeyProviderDeltaReport()
+                    {
+                        RootCKA = dkItem.ckai,
+                        KeyAdded = addKey,
+                    };
+
+                    if (!addKey && !ckac.VC.Equals(dkItem.ckai.VC))
+                    {
+                        dkItem.ckai.VC = ckac.VC;
+                        dkItem.ckai.CurrentSeqNum = dkItem.seqNumGen.IncrementSkipZero();
+                        dkItem.ckai.ValueSeqNum = dkItem.ckai.CurrentSeqNum;
+                        deltaItem.ValueChanged = true;
+                    }
+
+                    if (!addKey && !ckac.KeyMetaData.IsNullOrEmpty() && (priorCKAC == null || !priorCKAC.KeyMetaData.Equals(ckac.KeyMetaData)))
+                    {
+                        dkItem.ckai.KeyMetaData = dkItem.ckai.KeyMetaData.MergeWith(ckac.KeyMetaData, mergeBehavior: NamedValueMergeBehavior.AddAndUpdate);
+                        dkItem.ckai.IncrementMetaDataSeqNum();
+                        dkItem.ckai.MetaDataSeqNum = dkItem.ckai.CurrentMetaDataSeqNum;
+                        deltaItem.MetaDataChanged = true;
+                    }
+
+                    if (deltaItem.KeyAdded || deltaItem.ValueChanged || deltaItem.MetaDataChanged)
+                    {
+                        if (deltaItemReportList != null)
+                            deltaItemReportList.Add(deltaItem);
+
+                        deltaCount++;
+                    }
+                }
+            }
+
+            return deltaCount;
+        }
+
+        Dictionary<string, ConfigKeyAccessCopy> setCkacsByKeyDictionary = new Dictionary<string, ConfigKeyAccessCopy>();
+    }
 
     #endregion
 }

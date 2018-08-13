@@ -217,7 +217,7 @@ namespace MosaicLib.Semi.E039
         /// </summary>
         public class AddObject : ObjIDAndAttributeBase
         {
-            public AddObject(E039ObjectID objID, INamedValueSet attributes = null, E039ObjectFlags flags = E039ObjectFlags.None, bool ifNeeded = false, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.None) 
+            public AddObject(E039ObjectID objID, INamedValueSet attributes = null, E039ObjectFlags flags = E039ObjectFlags.None, bool ifNeeded = false, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate) 
                 : base(objID, attributes) 
             {
                 Flags = flags;
@@ -772,7 +772,7 @@ namespace MosaicLib.Semi.E039
             : this(fromID, E039ObjectID.Empty, key)
         { }
 
-        /// <summary>Identifies the object that is the source of the link (the "from" end)</summary>
+        /// <summary>Identifies the object that is the source of the link (the "from" end), or E039ObjectID.Empty if the source of the link has not been set to a valid non-null value.</summary>
         public E039ObjectID FromID { get { return _fromID ?? E039ObjectID.Empty; } set { _fromID = value; } }
 
         // We are currently not peristing the FromID since it is known by context in a serialized object body.
@@ -783,7 +783,7 @@ namespace MosaicLib.Semi.E039
         [DataMember(Order = 100, IsRequired = false, EmitDefaultValue = false)]
         public string Key { get; set; }
 
-        /// <summary>identifies the object that is the target of the link (the "to" end)</summary>
+        /// <summary>identifies the object that is the target of the link (the "to" end), or E039ObjectID.Empty if the target of the link has not been set to a valid non-null value.</summary>
         public E039ObjectID ToID { get { return _toID ?? E039ObjectID.Empty; } set { _toID = value; toName = value.Name; toType = value.Type; } }
 
         // [DataMember(Name = "ToID", Order = 200, IsRequired = false, EmitDefaultValue = false)]

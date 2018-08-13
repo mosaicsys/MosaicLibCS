@@ -53,7 +53,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
         }
 
         /// <summary>Gives the client provided meta data NVS that the client would like included in the file.  May be used to give file level context information for use by tools that read MDRF files.</summary>
-        public NamedValueSet ClientNVS { get; set; }
+        public INamedValueSet ClientNVS { get; set; }
 
         /// <summary>Gives the path to the directory that an MDRFWriter shall create its MDRF file within.</summary>
         public string DirPath { get; set; }
@@ -115,7 +115,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
         {
             if (other == null)
             {
-                ClientNVS = new NamedValueSet();
+                ClientNVS = NamedValueSet.Empty;
 
                 DirPath = string.Empty;
                 ClientName = string.Empty;

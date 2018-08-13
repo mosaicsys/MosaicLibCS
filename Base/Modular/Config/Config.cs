@@ -31,6 +31,7 @@ using System.Collections;
 
 using MosaicLib;
 using MosaicLib.Modular.Common;
+using MosaicLib.Time;
 using MosaicLib.Utils;
 using MosaicLib.Utils.Collections;
 using MosaicLib.Utils.StringMatching;
@@ -43,7 +44,8 @@ namespace MosaicLib.Modular.Config
     /// This struct contains values that define specific details about how a client wants to access a specific config key.
     /// <para/>Supported concepts include ReadOnlyOnce (default), MayBeChanged, Optional, Required (default), Silent, EnsureExists, DefaultProvider
     /// </summary>
-    public struct ConfigKeyAccessFlags
+    [DataContract(Namespace=Constants.ConfigNameSpace)]
+    public struct ConfigKeyAccessFlags : IEquatable<ConfigKeyAccessFlags>
     {
         /// <summary>Copy constructor.  Often used with property initializers.</summary>
         public ConfigKeyAccessFlags(ConfigKeyAccessFlags other) 
@@ -57,29 +59,49 @@ namespace MosaicLib.Modular.Config
             DefaultProviderName = other.DefaultProviderName;
         }
 
+        /// <summary>
+        /// Returns true if this object has the same contents as the given <paramref name="other"/> one contains.
+        /// </summary>
+        public bool Equals(ConfigKeyAccessFlags other)
+        {
+            return (MayBeChanged == other.MayBeChanged
+                    && IsOptional == other.IsOptional
+                    && silenceIssues == other.silenceIssues
+                    && SilenceLogging == other.SilenceLogging
+                    && EnsureExists == other.EnsureExists
+                    && DefaultProviderName == other.DefaultProviderName
+                    );
+        }
+
         /// <summary>Flag value indicates that the config key is Required and that it will only be read once, typically early in the application launch cycle.  If it its value is changed later, the application must be restarted to begin using the new (latest) value.</summary>
         public bool ReadOnlyOnce { get { return !MayBeChanged; } set { MayBeChanged = !value; } }
 
         /// <summary>Value that indicates that the config key may accept changes during Update calls.</summary>
+        [DataMember(Order = 100, EmitDefaultValue = false, IsRequired = false)]
         public bool MayBeChanged { get; set; }
 
         /// <summary>Flag value indicates that the config key is optional.  No error or siginficant issue should be reported on an attempt to ready this key when it is not present.</summary>
+        [DataMember(Order = 200, EmitDefaultValue = false, IsRequired = false)]
         public bool IsOptional { get; set; }
 
         /// <summary>Flag value indicates that the config key is Required.  An Issue log message will be generated if no provider supports this key.</summary>
         public bool IsRequired { get { return !IsOptional; } set { IsOptional = !value; } }
 
         /// <summary>Set this flag to true to block emitting issue messages for this config key</summary>
+        [DataMember(Order = 300, EmitDefaultValue = false, IsRequired = false)]
         public bool SilenceIssues { get { return (silenceIssues || SilenceLogging); } set { silenceIssues = value; } }
         private bool silenceIssues;
 
         /// <summary>Set this flag to prevent any logging related to this config key access</summary>
+        [DataMember(Order = 400, EmitDefaultValue = false, IsRequired = false)]
         public bool SilenceLogging { get; set; }
 
         /// <summary>When true, this property indicates that the client would like the config instance or provider instance to attempt to create the key if it does not already exist.</summary>
+        [DataMember(Order = 500, EmitDefaultValue = false, IsRequired = false)]
         public bool? EnsureExists { get; set; }
 
         /// <summary>When non-empty and when EnsureExists is selected, this property allows the client to indicate the name of the default provider which the client would like to use to create the key if it does not already exist.</summary>
+        [DataMember(Order = 600, EmitDefaultValue = false, IsRequired = false)]
         public string DefaultProviderName { get; set; }
 
         [Obsolete("Use of this property is no longer supported.  Please use the ConfigKeyAccessSpec.MetaData property instead (2017-11-11)")]
@@ -105,19 +127,33 @@ namespace MosaicLib.Modular.Config
     /// This object is used both at the provider level to define characteristics of this provider in general.  
     /// It is also used to annotate each key served by the provider to indicate key specific details/status as given by the provider (or the IConfig on which the key is being accessed)
     /// </remarks>
-    public struct ConfigKeyProviderFlags
+    [DataContract(Namespace = Constants.ConfigNameSpace)]
+    public struct ConfigKeyProviderFlags : IEquatable<ConfigKeyProviderFlags>
     {
         /// <summary>Copy constructor.  Often used with property initializers</summary>
         public ConfigKeyProviderFlags(ConfigKeyProviderFlags rhs)
             : this()
         {
             IsFixed = rhs.IsFixed;
-            IsPersisted = rhs.IsPersisted;
             keysMayBeAddedUsingEnsureExistsOption = rhs.keysMayBeAddedUsingEnsureExistsOption;
+            IsPersisted = rhs.IsPersisted;
             KeyWasNotFound = rhs.KeyWasNotFound;
         }
 
+        /// <summary>
+        /// Returns true if this object has the same contents as the given <paramref name="other"/> one contains.
+        /// </summary>
+        public bool Equals(ConfigKeyProviderFlags other)
+        {
+            return (IsFixed == other.IsFixed
+                    && keysMayBeAddedUsingEnsureExistsOption == other.keysMayBeAddedUsingEnsureExistsOption
+                    && IsPersisted == other.IsPersisted
+                    && KeyWasNotFound == other.KeyWasNotFound
+                    );
+        }
+
         /// <summary>Flag is set by a provider to indicate that the value will not change from its initial value.</summary>
+        [DataMember(Order = 100, EmitDefaultValue = false, IsRequired = false)]
         public bool IsFixed { get; set; }
 
         /// <summary>Flag is set by a provider to indicate that the value may be change using the SetValue(s) method(s).</summary>
@@ -127,12 +163,16 @@ namespace MosaicLib.Modular.Config
         /// Provider level flag indicates if the provider allows keys to be added by using the GetConfigKeyAccess's ensureExists option.  This flag is only supported by providers that are not fixed.
         /// </summary>
         public bool KeysMayBeAddedUsingEnsureExistsOption { get { return (keysMayBeAddedUsingEnsureExistsOption && !IsFixed); } set { keysMayBeAddedUsingEnsureExistsOption = value; } }
+
+        [DataMember(Order = 200, Name = "KeysMayBeAddedUsingEnsureExistsOption", EmitDefaultValue = false, IsRequired = false)]
         private bool keysMayBeAddedUsingEnsureExistsOption;
 
         /// <summary>The provider sets this to true if changes to a key will be peristed.</summary>
+        [DataMember(Order = 300, EmitDefaultValue = false, IsRequired = false)]
         public bool IsPersisted { get; set; }
 
         /// <summary>Flags is set by the provider in individual IConfigKeyAccess items to indicate that the requested key was not found</summary>
+        [DataMember(Order = 400, EmitDefaultValue = false, IsRequired = false)]
         public bool KeyWasNotFound { get; set; }
 
         /// <summary>ToString override for debugging and logging</summary>
@@ -298,11 +338,28 @@ namespace MosaicLib.Modular.Config
 
             return false;
         }
+
+        /// <summary>
+        /// Attempts to service the given <paramref name="config"/> instance using its optional IServiceable interface.  
+        /// Has no effect if the given <paramref name="config"/> instance is null of if it does not implement the IServiceable interface
+        /// </summary>
+        public static int SafeService(this IConfig config, QpcTimeStamp qpcTimeStamp = default(QpcTimeStamp))
+        {
+            return (config as IServiceable).SafeService(qpcTimeStamp);
+        }
+
+        /// <summary>
+        /// This method uses the IServiceable.QueueServiceWorkItem method to request that the given <paramref name="iConfig"/> instance will have its Service method called later by a thread pool thread.
+        /// </summary>
+        public static void QueueServiceWorkItem(this IConfig iConfig, bool passQpcAtTimeOfCall = true)
+        {
+            (iConfig as IServiceable).QueueServiceWorkItem(passQpcAtTimeOfCall: passQpcAtTimeOfCall);
+        }
     }
 
     #endregion
 
-    #region IConfig, IConfigSubscrition, IConfigKeyGetSet, KeyMatchType
+    #region IConfig, IConfigSubscrition, ConfigSubscriptionSeqNums, IConfigKeyGetSet, ConfigKeyFilterPredicate
 
     /// <summary>
     /// Top level interface specification for Modular config key specific methods.
@@ -516,13 +573,16 @@ namespace MosaicLib.Modular.Config
         /// </summary>
         IConfigKeyProviderInfo ProviderInfo { get; }
 
+        /// <summary>Gives the client access to the name of the profvider for this key, or the empty string if this ICKA object does not have a specific provider.</summary>
+        string ProviderName { get; }
+
         /// <summary>Gives the client access to the set of Flags from the key's provider.  Used to indicate Fixed keys and when the KeyWasNotFound</summary>
         ConfigKeyProviderFlags ProviderFlags { get; }
 
-        /// <summary>Returns a readonly copy of the key metadata INamedValueSet for this key as defined by the provider.</summary>
+        /// <summary>Returns a readonly copy of the key metadata INamedValueSet for this key as defined by the provider, or null if there is no associated provider</summary>
         INamedValueSet ProviderMetaData { get; }
 
-        /// <summary>Optional.  Gives a user oriented description of the key's purpose, use, and valid values.</summary>
+        [Obsolete("This property has been moved to IConfigKeyAccess.  Please use the version defined there.  (2018-07-10)")]
         string Description { get; }
     }
 
@@ -613,6 +673,9 @@ namespace MosaicLib.Modular.Config
         /// Gives the sequence number of the root ConfigKey MetaData for this key (as created and maintained by the provider)
         /// </summary>
         int CurrentMetaDataSeqNum { get; }
+
+        /// <summary>Gives a user oriented description of the key's purpose, use, and valid values.  Optional.  Obtained using the "Description" item in the key's MetaData (if any).  Returns the empty string if no such item exists in the keys meta data.</summary>
+        new string Description { get;  }
     }
 
     /// <summary>
@@ -749,6 +812,29 @@ namespace MosaicLib.Modular.Config
         /// </summary>
         /// <remarks>At the IConfigKeyProvider level this method will be invoked for each sub-set of keys that share the same original provider</remarks>
         string SetValues(KeyValuePair<IConfigKeyAccess, ValueContainer>[] keyAccessAndValuesPairArray, string commentStr);
+    }
+
+    /// <summary>
+    /// Optional interface implemented by certain providers that is used to allow them to detect and report changes in key values and/or key meta data.
+    /// </summary>
+    public interface IConfigKeyServiceableProvider
+    {
+        /// <summary>
+        /// Suitable providers implement this method to support being serviceable.  
+        /// This method is generally used to detect if config key values and/or meta-data have changed from external sources so that such changes can be captured and reported via Config through normal means.
+        /// </summary>
+        int Service(QpcTimeStamp qpcTimeStamp, List<ConfigKeyProviderDeltaReport> deltaItemReportList);
+    }
+
+    /// <summary>
+    /// struct used by sericeable providers to report the list of config keys that have been changed (if any) and to indicate what changed in each one during a specific service call.
+    /// </summary>
+    public struct ConfigKeyProviderDeltaReport
+    {
+        public IConfigKeyAccess RootCKA { get; set; }
+        public bool KeyAdded { get; set; }
+        public bool ValueChanged { get; set; }
+        public bool MetaDataChanged { get; set; }
     }
 
     #endregion
@@ -905,7 +991,7 @@ namespace MosaicLib.Modular.Config
     /// Provides common Logger and Trace logger.  
     /// Provides implementation methods/properties for most of the IConfigSubscription interface and for most of the IConfigKeyGetSet interface.
 	/// </summary>
-	public class ConfigBase : IConfig, IConfigInternal, IEnumerable
+	public class ConfigBase : IConfig, IConfigInternal, IEnumerable, IServiceable
     {
         #region Construction and loggers
 
@@ -953,11 +1039,9 @@ namespace MosaicLib.Modular.Config
         /// </summary>
         public void AddProvider(IConfigKeyProvider provider)
         {
-            // please note that the use of the mutex is not strictly required to protect the lockedProviderList but its use here is intended to indicate
-            // that the list of providers shall only be changed when no other thread is using or changing the list.
             lock (mutex)
             {
-                lockedProviderList.Add(provider);
+                providerList.Add(provider);
 
                 Logger.Debug.Emit("Added provider:'{0}' base flags:{1}", provider.Name, provider.BaseFlags);
             }
@@ -974,7 +1058,7 @@ namespace MosaicLib.Modular.Config
         {
             get
             {
-                return lockedProviderList.Array.Clone() as IConfigKeyProviderInfo [];
+                return providerList.Array.Clone() as IConfigKeyProviderInfo [];
             }
         }
 
@@ -1015,13 +1099,13 @@ namespace MosaicLib.Modular.Config
             } 
         }
 
-
         /// <summary>Returns the ChangeSeqNum property value from SeqNums</summary>
         public int ChangeSeqNum { get { return changeSeqNum.VolatileValue; } }
 
         /// <summary>This property is true when any ReadOnce config key's value is not Fixed and it has been changed and no longer matches the original value that was read for it.</summary>
         public bool ReadOnceConfigKeyHasBeenChangedSinceItWasRead { get; private set; }
 
+        private volatile bool isChangeNotificationPending = false;
         private BasicNotificationList changeNotificationList = new BasicNotificationList();
         private AtomicInt32 changeSeqNum = new AtomicInt32();
         private AtomicInt32 ensureExistsSeqNum = new AtomicInt32();
@@ -1029,16 +1113,16 @@ namespace MosaicLib.Modular.Config
         private AtomicInt32 keyMetaDataChangeSeqNum = new AtomicInt32();
 
         /// <summary>
-        /// Method used to bump the relevant change sequence number value(s) and Notify the items on the ChangeNotificationList.
+        /// Method used to bump the relevant change sequence number value(s) and post that a client notification is pending.
         /// <para/>This method now also updates the ReadOnceConfigKeyHasBeenChangedSinceItWasRead flag
         /// </summary>
-        protected void NotifyClientsOfChange(bool change = false, bool ensureExists = false, bool keyAdded = false, bool keyMetaDataChange = false)
+        protected void NoteClientVisibleChange(bool change = false, bool ensureExists = false, bool keyAdded = false, bool keyMetaDataChange = false)
         {
             int readOnceKeysThatHaveChangedCount = 0;
 
             if (change || ensureExists)
             {
-                foreach (IConfigKeyAccess changedKey in changedKeyDicationary.Values)
+                foreach (IConfigKeyAccess changedKey in changedKeyDicationary.ValueArray)
                 {
                     ConfigKeyAccessImpl readOnceCKAI = null;
                     if (readOnlyOnceKeyDictionary.TryGetValue(changedKey.Key ?? String.Empty, out readOnceCKAI) && readOnceCKAI != null && changedKey.ValueAsString != readOnceCKAI.ValueAsString)
@@ -1065,7 +1149,16 @@ namespace MosaicLib.Modular.Config
             if (keyMetaDataChange)
                 keyMetaDataChangeSeqNum.IncrementSkipZero();
 
-            changeNotificationList.Notify();
+            isChangeNotificationPending = true;
+        }
+
+        protected void AsyncServiceClientNotification()
+        {
+            if (isChangeNotificationPending)
+            {
+                isChangeNotificationPending = false;
+                changeNotificationList.Notify();
+            }
         }
 
         #endregion
@@ -1110,7 +1203,7 @@ namespace MosaicLib.Modular.Config
 
             lock (mutex)
             {
-                foreach (IConfigKeyProvider provider in lockedProviderList.Array)
+                foreach (IConfigKeyProvider provider in providerList.Array)
                 {
                     string[] providerKeysFound = provider.SearchForKeys(matchRuleSet, searchPredicate);
 
@@ -1151,6 +1244,57 @@ namespace MosaicLib.Modular.Config
         }
 
         private static readonly IConfigKeyAccessSpec emptyKeyAccessSpec = new ConfigKeyAccessSpec() { Key = String.Empty };
+
+        #endregion
+
+        #region IServiceable implementation
+
+        /// <summary>
+        /// Requests this config instance to service itself and each of the attached providers (those that support being serviced)
+        /// </summary>
+        public int Service(QpcTimeStamp qpcTimeStamp = default(QpcTimeStamp))
+        {
+            int deltaCount = 0;
+
+            lock (mutex)
+            {
+                foreach (var provider in providerList.Array)
+                {
+                    var serviceableProvider = provider as IConfigKeyServiceableProvider;
+                    deltaCount += (serviceableProvider != null) ? serviceableProvider.Service(qpcTimeStamp, deltaItemReportList) : 0;
+                }
+
+                if (deltaCount > 0 || deltaItemReportList.Count > 0)
+                {
+                    int valueChangeCount = 0, mdChangeCount = 0, keyAddedCount = 0;
+
+                    foreach (var deltaItem in deltaItemReportList)
+                    {
+                        keyAddedCount += deltaItem.KeyAdded.MapToInt();
+                        valueChangeCount += deltaItem.ValueChanged.MapToInt();
+                        mdChangeCount += deltaItem.MetaDataChanged.MapToInt();
+
+                        if (deltaItem.ValueChanged && !changedKeyDicationary.ContainsKey(deltaItem.RootCKA.Key))
+                            changedKeyDicationary.Add(deltaItem.RootCKA.Key, deltaItem.RootCKA);
+                    }
+
+                    deltaItemReportList.Clear();
+
+                    bool anyKeyAdded = (keyAddedCount != 0);
+                    bool anyValueChanged = (valueChangeCount != 0);
+                    bool anyMDChanged = (mdChangeCount != 0);
+
+                    if (anyKeyAdded | anyValueChanged || anyMDChanged)
+                        NoteClientVisibleChange(change: anyValueChanged, keyAdded: anyKeyAdded, keyMetaDataChange: anyMDChanged);
+                }
+            }
+
+            AsyncServiceClientNotification();
+
+            return deltaCount;
+        }
+
+        private List<ConfigKeyProviderDeltaReport> deltaItemReportList = new List<ConfigKeyProviderDeltaReport>();
 
         #endregion
 
@@ -1259,7 +1403,7 @@ namespace MosaicLib.Modular.Config
                     {
                         // no existing IConfigKeyAccess was found (ckaiRoot).  Search through the providers to see which one (if any) can provide an accessor for this (mapped) key.
 
-                        IConfigKeyProvider defaultProvider = defaultProvider = (!defaultProviderName.IsNullOrEmpty() ? lockedProviderList.Array.FirstOrDefault(p => p.Name == defaultProviderName) : null);
+                        IConfigKeyProvider defaultProvider = defaultProvider = (!defaultProviderName.IsNullOrEmpty() ? providerList.Array.FirstOrDefault(p => p.Name == defaultProviderName) : null);
                         IConfigKeyAccess ickaFromProvider = ((defaultProvider != null) ? defaultProvider.GetConfigKeyAccess(mappedKeyAccessSpec) : null);
 
                         if (ickaFromProvider != null)
@@ -1268,7 +1412,7 @@ namespace MosaicLib.Modular.Config
                         }
                         else
                         {
-                            foreach (IConfigKeyProvider provider in lockedProviderList.Array)
+                            foreach (IConfigKeyProvider provider in providerList.Array)
                             {
                                 ickaFromProvider = provider.GetConfigKeyAccess(mappedKeyAccessSpec);
 
@@ -1284,7 +1428,7 @@ namespace MosaicLib.Modular.Config
 
                         if (ickaFromProvider == null && ensureExists)
                         {
-                            IConfigKeyProvider provider = defaultProvider ?? lockedProviderList.Array.FirstOrDefault(p => p.BaseFlags.KeysMayBeAddedUsingEnsureExistsOption);
+                            IConfigKeyProvider provider = defaultProvider ?? providerList.Array.FirstOrDefault(p => p.BaseFlags.KeysMayBeAddedUsingEnsureExistsOption);
                             ValueContainer defaultValue = defaultValueIn ?? ValueContainer.Empty;
 
                             // NOTE: historically (unit test code) you can use EE for items with a Null default value, but not for items with a None default value.
@@ -1299,7 +1443,7 @@ namespace MosaicLib.Modular.Config
                                     if (!flags.SilenceLogging)
                                         Trace.Trace.Emit("{0}: created key '{1}' using provider '{2}'", methodName, mappedKeyAccessSpec.Key, provider.Name);
 
-                                    NotifyClientsOfChange(ensureExists: true);
+                                    NoteClientVisibleChange(ensureExists: true);
                                 }
                             }
                         }
@@ -1319,7 +1463,7 @@ namespace MosaicLib.Modular.Config
                                 if (ickaFromProvider.Flags.ReadOnlyOnce)
                                     readOnlyOnceKeyDictionary[mappedKey] = ckaiRoot;
 
-                                NotifyClientsOfChange(keyAdded: true, keyMetaDataChange: !keyAccessSpec.MetaData.IsNullOrEmpty());
+                                NoteClientVisibleChange(keyAdded: true, keyMetaDataChange: !keyAccessSpec.MetaData.IsNullOrEmpty());
                             }
                             else
                             {
@@ -1358,6 +1502,8 @@ namespace MosaicLib.Modular.Config
                 if (ickaReturn.IsUsable && !ickaReturn.Flags.SilenceLogging)
                     Trace.Trace.Emit("{0}: gave {1}", methodName, ickaAsStr);
 
+                AsyncServiceClientNotification();
+
                 return ickaReturn;
             }
         }
@@ -1381,7 +1527,7 @@ namespace MosaicLib.Modular.Config
                 ckaiRoot.MetaDataSeqNum = ckaiRoot.CurrentMetaDataSeqNum;       // merging is only done on the ckaiRoot so its MetaDataSeqNum (for cloaning) is always current.
 
                 if (notifyClients)
-                    NotifyClientsOfChange(keyMetaDataChange: true);
+                    NoteClientVisibleChange(keyMetaDataChange: true);
 
                 if (entryKeyMetaData.IsNullOrEmpty())
                     TraceEmitter.Emit("key '{0}' root instance MetaData is been initialized from '{1}'", ckaiRoot.Key, keyMetaDataToMergeIn.ToStringSML(traversalType: TraversalType.Flatten));
@@ -1497,7 +1643,7 @@ namespace MosaicLib.Modular.Config
         protected readonly object mutex = new object();
 
         /// <summary>Stores the list of Providers that have been added to this IConfig instance.</summary>
-        protected Utils.Collections.LockedObjectListWithCachedArray<IConfigKeyProvider> lockedProviderList = new Utils.Collections.LockedObjectListWithCachedArray<IConfigKeyProvider>();
+        protected Utils.Collections.IListWithCachedArray<IConfigKeyProvider> providerList = new Utils.Collections.IListWithCachedArray<IConfigKeyProvider>();
 
         /// <summary>
         /// This contains the set of keys and key access objects where the client has indicated that the key will be read only once.  
@@ -1514,10 +1660,10 @@ namespace MosaicLib.Modular.Config
         protected Dictionary<string, ConfigKeyAccessImpl> allKnownKeysDictionary = new Dictionary<string, ConfigKeyAccessImpl>();
 
         /// <summary>
-        /// This is the set of all key access objects for keys that have been used with SetValue(s).  
+        /// This is the set of all key access objects for keys that have been used with SetValue(s) or which have otherwise been observed to have had values assigned to them after construction. 
         /// This allows the engine to determine if any read once keys have been changed since they were first accessed.
         /// </summary>
-        protected Dictionary<string, IConfigKeyAccess> changedKeyDicationary = new Dictionary<string, IConfigKeyAccess>();
+        protected IDictionaryWithCachedArrays<string, IConfigKeyAccess> changedKeyDicationary = new IDictionaryWithCachedArrays<string, IConfigKeyAccess>();
 
         #endregion
 
@@ -1613,10 +1759,17 @@ namespace MosaicLib.Modular.Config
 
                         if (provider != null)
                         {
-                            string ec = provider.SetValues(localDictionaryOfListsOfItemsByProvider[providerInfo].ToArray(), commentStr);
+                            var kvpArray = localDictionaryOfListsOfItemsByProvider[providerInfo].ToArray();
+                            string ec = provider.SetValues(kvpArray, commentStr);
 
                             if (firstError == null && !string.IsNullOrEmpty(ec))
                                 firstError = ec;
+
+                            foreach (var kvp in kvpArray)
+                            {
+                                if (!changedKeyDicationary.ContainsKey(kvp.Key.Key))
+                                    changedKeyDicationary.Add(kvp.Key.Key, kvp.Key);
+                            }
                         }
                         else if (firstError != null)
                         {
@@ -1631,11 +1784,178 @@ namespace MosaicLib.Modular.Config
                 if (!silenceIssues && !success)
                     Logger.Debug.Emit("{0}: Failed: {1}", methodName, firstError);
 
-                NotifyClientsOfChange(change: true);
+                NoteClientVisibleChange(change: true);
             }
 
             return firstError ?? String.Empty;
         }
+
+        #endregion
+    }
+
+    #endregion
+
+    #region ConfigKeyAccessCopy
+
+    /// <summary>
+    /// This object is used as a serialization and replication helper.  
+    /// It allows the current contents of an existing ICKA to be captured and serialized.
+    /// <para/>Please note: once constructed, this object is read-only.  
+    /// None of the update or set centric methods are functional for objects of this type.
+    /// </summary>
+    [DataContract(Namespace = Constants.ConfigNameSpace)]
+    public class ConfigKeyAccessCopy : IConfigKeyAccess, IConfigKeyProviderInfo, IEquatable<IConfigKeyAccess>
+    {
+        public ConfigKeyAccessCopy(IConfigKeyAccess other)
+        {
+            _key = other.Key;
+            _flags = other.Flags;
+            _resultCode = other.ResultCode.MapEmptyToNull();
+            _vce.VC = other.VC;
+            _valueIsFixed = other.ValueIsFixed;
+            _isNotUsable = !other.IsUsable;
+            _doesNotHaveValue = !other.HasValue;
+            _keyMetaData = other.KeyMetaData.MapEmptyToNull().ConvertToReadOnly(mapNullToEmpty: false);
+            _valueSeqNum = other.ValueSeqNum;
+            _metaDataSeqNum = other.MetaDataSeqNum;
+
+            _providerName = other.ProviderName;
+            _providerFlags = other.ProviderFlags;
+            _providerMetaData = other.ProviderMetaData.MapEmptyToNull().ConvertToReadOnly(mapNullToEmpty: false);
+
+            var otherProviderInfo = other.ProviderInfo;
+            _providerInfoIsNull = (otherProviderInfo == null);
+            _providerKeyPrefix = (!_providerInfoIsNull ? otherProviderInfo.KeyPrefix : null).MapNullToEmpty();
+        }
+
+        /// <summary>
+        /// Returns true if this object has the same contents as the given <paramref name="other"/> one contains.  
+        /// The value of the CurrentSeqNum and CurrentMetaDataSeqNum properties are not checked for equality when using this method.
+        /// </summary>
+        public bool Equals(IConfigKeyAccess other)
+        {
+            return ExtensionMethods.Equals(this, other, compareCurrentSeqNums: false, compareKeyFlags: false);
+        }
+
+        /// <summary>
+        /// basic logging/debugging ToString implementation.  Returns ToString(ToStringDetailLevel.Nominal)
+        /// </summary>
+        public override string ToString()
+        {
+            return this.InternalCommonToStringWithDetailLevel(ToStringDetailLevel.Nominal);
+        }
+
+        /// <summary>
+        /// This method throws a NotSupportedException.
+        /// The exception message is the given reasonPrefix + " is not supported when this object IsReadOnly property has been set to true"
+        /// </summary>
+        /// <exception cref="System.NotSupportedException">thrown</exception>
+        private void ThrowNotSupportedException(string reasonPrefix)
+        {
+            throw new System.NotSupportedException(reasonPrefix + " is not supportedby this object");
+        }
+
+        #region Serializable parts
+
+        [DataMember(Order = 100, Name = "Key")]
+        private string _key;
+
+        [DataMember(Order = 200, Name = "Flags")]
+        private ConfigKeyAccessFlags _flags;
+
+        [DataMember(Order = 300, Name = "ResultCode", EmitDefaultValue=false, IsRequired=false)]
+        private string _resultCode;
+
+        [DataMember(Order = 400, Name = "VC")]
+        private ValueContainerEnvelope _vce = new ValueContainerEnvelope();
+
+        [DataMember(Order = 500, Name = "ValueIsFixed", EmitDefaultValue=false, IsRequired=false)]
+        private bool _valueIsFixed;
+
+        [DataMember(Order = 600, Name = "IsNotUsable", EmitDefaultValue=false, IsRequired=false)]
+        private bool _isNotUsable;
+
+        [DataMember(Order = 700, Name = "DoesNotHaveValue", EmitDefaultValue=false, IsRequired=false)]
+        private bool _doesNotHaveValue;
+    
+        [DataMember(Order = 800, Name = "KeyMetaData", EmitDefaultValue=false, IsRequired=false)]
+        private NamedValueSet _keyMetaData;
+
+        [DataMember(Order = 900, Name = "ValueSeqNum", EmitDefaultValue=true, IsRequired=false)]
+        private int _valueSeqNum;
+
+        [DataMember(Order = 1000, Name = "MetaDataSeqNum", EmitDefaultValue=true, IsRequired=false)]
+        private int _metaDataSeqNum;
+
+        [DataMember(Order = 1100, Name = "ProviderName", EmitDefaultValue=true, IsRequired=false)]
+        private string _providerName;
+
+        [DataMember(Order = 1200, Name = "ProviderFlags", EmitDefaultValue=true, IsRequired=false)]
+        private ConfigKeyProviderFlags _providerFlags;
+
+        [DataMember(Order = 1300, Name = "ProviderKeyPrefix", EmitDefaultValue=true, IsRequired=false)]
+        private string _providerKeyPrefix;
+
+        [DataMember(Order = 1400, Name = "ProviderMetaData", EmitDefaultValue=true, IsRequired=false)]
+        private NamedValueSet _providerMetaData;
+
+        [DataMember(Order = 1500, Name = "ProviderInfoIsNull", EmitDefaultValue = true, IsRequired = false)]
+        private bool _providerInfoIsNull;
+
+        /// <summary>This field is not serialized - it is only locally stored and maintained</summary>
+        private INamedValueSet _metaData;
+
+        /// <summary>
+        /// Deserialize helper method - marks the contained, non-null NVS objects as IsReadOnly if they were not already so (results from deserialization are not readonly by default)
+        /// </summary>
+        [OnDeserialized]
+        private void OnDeserialized(StreamingContext context)
+        {
+            if (_keyMetaData != null)
+                _keyMetaData.MakeReadOnly();
+
+            if (_providerMetaData != null)
+                _providerMetaData.MakeReadOnly();
+        }
+
+        #endregion
+
+        #region explicit IConfigKeyAccess implementation
+
+        public string Key { get { return _key.MapNullToEmpty(); }}
+        public ConfigKeyAccessFlags Flags { get { return _flags; } }
+        public string ResultCode { get { return this.InternalGenerateResultCode(_resultCode); } set { ThrowNotSupportedException("ResultCode setter"); } }
+        public bool ValueIsFixed { get { return _valueIsFixed; } }
+        public string ValueAsString { get { return this.InternalGetValueAsString(); } }
+        public ValueContainer VC { get { return _vce.VC; } }
+        public ValueContainer ValueContainer { get { return _vce.VC; } }
+        public INamedValueSet MetaData { get { return _metaData ?? this.InternalUpdateMetaData(ref _metaData); } }
+        public INamedValueSet KeyMetaData { get { return _keyMetaData.MapNullToEmpty(); } }
+        public bool IsUsable { get { return !_isNotUsable; } }
+        public bool HasValue { get { return !_doesNotHaveValue; } }
+        public bool IsUpdateNeeded { get { return false; } }
+        public bool UpdateValue(bool forceUpdate) { return false; }
+        public IConfigKeyAccess UpdateValueInline(bool forceUpdate) { return this; }
+        public string ToString(ToStringDetailLevel detailLevel) {return this.InternalCommonToStringWithDetailLevel(detailLevel); }
+        public int ValueSeqNum { get { return _valueSeqNum; } }
+        public int CurrentSeqNum { get { return _valueSeqNum; } }
+        public int MetaDataSeqNum { get { return _metaDataSeqNum; } }
+        public int CurrentMetaDataSeqNum { get { return _metaDataSeqNum; } }
+        public IConfigKeyProviderInfo ProviderInfo { get { return _providerInfoIsNull ? null : this; } }
+        public string ProviderName { get { return _providerName.MapNullToEmpty(); } }
+        public ConfigKeyProviderFlags ProviderFlags { get { return _providerFlags; } }
+        public INamedValueSet ProviderMetaData { get { return _providerMetaData.MapNullToEmpty(); } }
+
+        /// <summary>Gives a user oriented description of the key's purpose, use, and valid values.  Optional.  Obtained using the "Description" item in the key's MetaData (if any).  Returns the empty string if no such item exists in the keys meta data.</summary>
+        public string Description { get { return this.InternalGetDesciption(); } }
+    
+        #endregion
+
+        #region explicit IConfigKeyProviderInfo implementation
+
+        string IConfigKeyProviderInfo.Name { get { return _providerName.MapNullToEmpty(); } }
+        ConfigKeyProviderFlags IConfigKeyProviderInfo.BaseFlags { get { return _providerFlags; } }
+        string IConfigKeyProviderInfo.KeyPrefix { get { return _providerKeyPrefix.MapNullToEmpty(); } }
 
         #endregion
     }
@@ -1724,12 +2044,15 @@ namespace MosaicLib.Modular.Config
                     ProviderFlags = _provider.BaseFlags;
                     ProviderMetaData = _provider.ProviderMetaData;
                 }
+                else
+                {
+                    ProviderFlags = default(ConfigKeyProviderFlags);
+                    ProviderMetaData = NamedValueSet.Empty;
+                }
                 _metaData = null;
             } 
         }
         private IConfigKeyProvider _provider;
-
-        private string ProviderName { get { return ((Provider != null) ? Provider.Name : String.Empty); } }
 
         #region IConfigKeyAccess Members
 
@@ -1745,21 +2068,24 @@ namespace MosaicLib.Modular.Config
         /// </summary>
         public IConfigKeyProviderInfo ProviderInfo { get { return Provider; } }
 
+        /// <summary>Gives the client access to the name of the profvider for this key, or the empty string if this ICKA object does not have a specific provider.</summary>
+        public string ProviderName { get { return ((ProviderInfo != null) ? ProviderInfo.Name : String.Empty); } }
+
         /// <summary>Gives the client access to the set of Flags from the key's provider.  Used to indicate Fixed keys and when the KeyWasNotFound</summary>
         public ConfigKeyProviderFlags ProviderFlags { get; internal set; }
 
         /// <summary>Returns a readonly copy of the key metadata INamedValueSet for this key as defined by the provider.</summary>
         public INamedValueSet ProviderMetaData { get; internal set; }
 
-        /// <summary>Optional.  Gives a user oriented description of the key's purpose, use, and valid values.</summary>
-        public string Description { get { return MetaData["Description"].VC.GetValue<string>(false) ?? String.Empty; } }
+        /// <summary>Gives a user oriented description of the key's purpose, use, and valid values.  Optional.  Obtained using the "Description" item in the key's MetaData (if any).  Returns the empty string if no such item exists in the keys meta data.</summary>
+        public string Description { get { return this.InternalGetDesciption(); } }
 
         /// <summary>
         /// Empty when access is valid, last Update call succeeded, and client has not assigned any other error.  
         /// Not empty when an issue has been recorded in one of these steps.
         /// Setter clears the error from the last Update call but not for errors recorded when the access object was constructed.
         /// </summary>
-        public string ResultCode { get { return (ProviderFlags.KeyWasNotFound ? "Key was not found" : null) ?? resultCode ?? String.Empty; } set { resultCode = value; } }
+        public string ResultCode { get { return this.InternalGenerateResultCode(resultCode); } set { resultCode = value; } }
 
         private string resultCode;
 
@@ -1767,20 +2093,7 @@ namespace MosaicLib.Modular.Config
         public bool ValueIsFixed { get { return (Flags.ReadOnlyOnce || ProviderFlags.IsFixed || ProviderFlags.KeyWasNotFound); } }
 
         /// <summary>Returns the current value of the key as a string (i.e. as it is stored and handled by the configuration system).  May be null, such as when the key was not found.</summary>
-        public string ValueAsString
-        {
-            get 
-            {
-                if (vc.cvt == ContainerStorageType.String)
-                    return vc.GetValue<string>(ContainerStorageType.String, false, false);
-                else if (vc.cvt.IsReferenceType())
-                    return vc.GetValue<string>(ContainerStorageType.String, false, false);
-                else if (vc.IsNullOrNone)       // special case so that an empty container gives back ValueAsString as just null rather than "None"
-                    return null;
-                else
-                    return vc.ToString();
-            }
-        }
+        public string ValueAsString { get { return this.InternalGetValueAsString(); } }
 
         /// <summary>Returns the current value of the key in a ValueContainer as the provider last read (or saved) it.  May contain None, such as when the key was not found.</summary>
         public ValueContainer VC
@@ -1801,12 +2114,14 @@ namespace MosaicLib.Modular.Config
         /// <summary>Returns a combined version of the key's meta data and the provider's meta data.  Filtering is generally performed against the contents of this property.</summary>
         public INamedValueSet MetaData 
         {
-            get { return _metaData ?? (_metaData = new NamedValueSet(NamedValueSet.Empty, subSets: new [] {KeyMetaData.MapEmptyToNull(), ProviderMetaData}.Where(nvs => nvs != null), asReadOnly: true)); } 
+            get { return _metaData ?? this.InternalUpdateMetaData(ref _metaData); } 
         }
+
         private INamedValueSet _metaData = null;
 
         /// <summary>Returns the most recently updated copy of the key's meta</summary>
         public INamedValueSet KeyMetaData { get { return _keyMetaData ?? NamedValueSet.Empty; } set { _keyMetaData = value.ConvertToReadOnly(mapNullToEmpty: false); _metaData = null; } }
+
         protected INamedValueSet _keyMetaData;
 
         /// <summary>True if this KeyAccess object is usable (ResultCode is empty)</summary>
@@ -1877,7 +2192,7 @@ namespace MosaicLib.Modular.Config
         /// </summary>
         public override string ToString()
         {
-            return ToString(ToStringDetailLevel.Nominal);
+            return this.InternalCommonToStringWithDetailLevel(ToStringDetailLevel.Nominal);
         }
 
         /// <summary>
@@ -1888,23 +2203,181 @@ namespace MosaicLib.Modular.Config
         /// </summary>
         public string ToString(ToStringDetailLevel detailLevel)
         {
-            string metaDataStr = (MetaData ?? NamedValueSet.Empty).ToStringSML(traversalType: TraversalType.Flatten);
+            return this.InternalCommonToStringWithDetailLevel(detailLevel);
+        }
+
+        #endregion
+    }
+
+    public static partial class ExtensionMethods
+    {
+        /// <summary>
+        /// Returns true if the given <paramref name="icka"/> has the same effective contents as the given <paramref name="other"/> does.
+        /// </summary>
+        public static bool Equals(this IConfigKeyAccess icka, IConfigKeyAccess other, bool compareCurrentSeqNums = false, bool compareKeyFlags = true)
+        {
+            if (object.ReferenceEquals(icka, other))
+                return true;
+
+            if (icka == null || other == null)
+                return false;
+
+            bool eq = (icka.Key == other.Key
+                        && (!compareKeyFlags || icka.Flags.Equals(other.Flags))
+                        && icka.ResultCode == other.ResultCode
+                        && icka.ValueIsFixed == other.ValueIsFixed
+                        && icka.VC.Equals(other.VC)
+                        && icka.KeyMetaData.Equals(other.KeyMetaData)
+                        && icka.IsUsable == other.IsUsable
+                        && icka.HasValue == other.HasValue
+                        && icka.ValueSeqNum == other.ValueSeqNum
+                        && icka.MetaDataSeqNum == other.MetaDataSeqNum
+                        && (!compareCurrentSeqNums || (icka.CurrentSeqNum == other.CurrentSeqNum))
+                        && (!compareCurrentSeqNums || (icka.CurrentMetaDataSeqNum == other.CurrentMetaDataSeqNum))
+                        && Equals((IConfigKeyAccessProviderInfo) icka, (IConfigKeyAccessProviderInfo) other)
+                        );
+
+            return eq;
+        }
+
+        /// <summary>
+        /// Returns true if the given <paramref name="ickapi"/> has the same effective contents as the given <paramref name="other"/> does.
+        /// </summary>
+        public static bool Equals(this IConfigKeyAccessProviderInfo ickapi, IConfigKeyAccessProviderInfo other)
+        {
+            if (object.ReferenceEquals(ickapi, other))
+                return true;
+
+            if (ickapi == null || other == null)
+                return false;
+
+            bool eq = (ickapi.ProviderName == other.ProviderName
+                        && ickapi.ProviderFlags.Equals(other.ProviderFlags)
+                        && ickapi.ProviderMetaData.Equals(other.ProviderMetaData)
+                        && Equals(ickapi.ProviderInfo, other.ProviderInfo)
+                        );
+
+            return eq;
+        }
+
+        /// <summary>
+        /// Returns true if the given <paramref name="ickpi"/> has the same effective contents as the given <paramref name="other"/> does.
+        /// </summary>
+        public static bool Equals(this IConfigKeyProviderInfo ickpi, IConfigKeyProviderInfo other)
+        {
+            if (object.ReferenceEquals(ickpi, other))
+                return true;
+
+            if (ickpi == null || other == null)
+                return false;
+
+            bool eq = (ickpi.Name == other.Name
+                        && ickpi.BaseFlags.Equals(other.BaseFlags)
+                        && ickpi.KeyPrefix == other.KeyPrefix
+                        && ickpi.ProviderMetaData.Equals(other.ProviderMetaData)
+                        );
+
+            return eq;
+        }
+
+        /// <summary>
+        /// returns a string represenation of this key access object using the requested level of detail
+        /// </summary>
+        /// <summary>
+        /// returns a string represenation of this key access object using the requested level of detail
+        /// </summary>
+        internal static string InternalCommonToStringWithDetailLevel(this IConfigKeyAccess icka, ToStringDetailLevel detailLevel)
+        {
+            string metaDataStr = (icka.MetaData ?? NamedValueSet.Empty).ToStringSML(traversalType: TraversalType.Flatten);
+            string providerName = (icka.ProviderInfo != null) ? icka.ProviderInfo.Name : "[NoProviderSpecified]";
 
             switch (detailLevel)
             {
                 case ToStringDetailLevel.ReferenceInfoOnly:
-                    return Fcns.CheckedFormat("key:'{0}' flags:{1} md:{2} {3}", Key, Flags, metaDataStr, ProviderName, ProviderFlags);
-                case ToStringDetailLevel.Nominal:
+                    return Fcns.CheckedFormat("key:'{0}' flags:{1} md:{2} pName:{3} pFlags:{4}", icka.Key, icka.Flags, metaDataStr, providerName, icka.ProviderFlags);
+
                 case ToStringDetailLevel.Full:
-                default:
-                    if (IsUsable)
-                        return Fcns.CheckedFormat("key:'{0}' Value:{1} flags:{2} md:{3} {4}", Key, VC, Flags, metaDataStr, ProviderFlags);
+                    if (icka.IsUsable)
+                        return Fcns.CheckedFormat("key:'{0}' Value:{1} flags:{2} md:{3} pName:{4} pFlags:{5}", icka.Key, icka.VC, icka.Flags, metaDataStr, providerName, icka.ProviderFlags);
                     else
-                        return Fcns.CheckedFormat("key:'{0}' Value:{1} flags:{2} md:{3} {4} ec:'{5}'", Key, VC, Flags, metaDataStr, ProviderFlags, ResultCode);
+                        return Fcns.CheckedFormat("key:'{0}' Value:{1} flags:{2} md:{3} pName:{4} pFlags:{5} ec:'{6}'", icka.Key, icka.VC, icka.Flags, metaDataStr, providerName, icka.ProviderFlags, icka.ResultCode);
+
+                case ToStringDetailLevel.Nominal:
+                default:
+                    if (icka.IsUsable)
+                        return Fcns.CheckedFormat("key:'{0}' Value:{1} flags:{2} md:{3} pFlags:{4}", icka.Key, icka.VC, icka.Flags, metaDataStr, icka.ProviderFlags);
+                    else
+                        return Fcns.CheckedFormat("key:'{0}' Value:{1} flags:{2} md:{3} pFlags:{4} ec:'{5}'", icka.Key, icka.VC, icka.Flags, metaDataStr, icka.ProviderFlags, icka.ResultCode);
             }
         }
 
-        #endregion
+        /// <summary>
+        /// Returns the (optinal) string value of the "Description" item from the given <paramref name="icka"/>'s MetaData.
+        /// </summary>
+        internal static string InternalGetDesciption(this IConfigKeyAccess icka)
+        {
+            return icka.MetaData["Description"].VC.GetValue<string>(rethrow: false).MapNullToEmpty();
+        }
+
+        /// <summary>
+        /// Used to generate the merged meta data for a given key.
+        /// </summary>
+        internal static INamedValueSet InternalUpdateMetaData(this IConfigKeyAccess icka, ref INamedValueSet _metaData)
+        {
+            return (_metaData = new NamedValueSet(NamedValueSet.Empty, subSets: new [] {icka.KeyMetaData.MapEmptyToNull(), icka.ProviderMetaData}.Where(nvs => nvs != null), asReadOnly: true));
+        }
+
+        internal static string InternalGenerateResultCode(this IConfigKeyAccess icka, string _resultCode)
+        {
+            return (icka.ProviderFlags.KeyWasNotFound ? "Key was not found" : null) ?? _resultCode ?? String.Empty;
+        }
+
+        /// <summary>Returns the current value of the key as a string (i.e. as it is stored and handled by the configuration system).  May be null, such as when the key was not found.</summary>
+        internal static string InternalGetValueAsString(this IConfigKeyAccess icka)
+        {
+            if (icka.VC.cvt == ContainerStorageType.String)
+                return icka.VC.GetValue<string>(ContainerStorageType.String, false, false);
+            else if (icka.VC.cvt.IsReferenceType())
+                return icka.VC.GetValue<string>(ContainerStorageType.String, false, false);
+            else if (icka.VC.IsNullOrNone)       // special case so that an empty container gives back ValueAsString as just null rather than "None"
+                return null;
+            else
+                return icka.VC.ToString();
+        }
+    }
+
+    #endregion
+
+    #region DCASerialization
+
+    public static class DCASerialization
+    {
+        /// <summary>
+        /// Accepts the given <paramref name="icka"/>, converts it to a ConfigKeyAccessCopy (by casting or copy construction) and then returns the JSON serialized version of its contents using a DataContractJsonSerializer.
+        /// </summary>
+        /// <param name="icka"></param>
+        /// <returns></returns>
+        public static string SerializeToJSONString(this IConfigKeyAccess icka)
+        {
+            ConfigKeyAccessCopy ckac = (icka as ConfigKeyAccessCopy) ?? new ConfigKeyAccessCopy(icka);
+
+            DataContractJsonAdapter<ConfigKeyAccessCopy> jsonDCS = new DataContractJsonAdapter<ConfigKeyAccessCopy>();
+
+            return jsonDCS.ConvertObjectToString(ckac);
+        }
+
+        /// <summary>
+        /// Attempts to deserialize the given <paramref name="jsonString"/> as a ConfigKeyAccessCopy using a DataContractJsonSerializer and then returns it.  If the given string is null then this method returns null.
+        /// </summary>
+        public static ConfigKeyAccessCopy DeserializeConfigKeyAccessCopyFromJSON(string jsonString)
+        {
+            DataContractJsonAdapter<ConfigKeyAccessCopy> jsonDCS = new DataContractJsonAdapter<ConfigKeyAccessCopy>();
+
+            if (jsonString != null)
+                return jsonDCS.ReadObject(jsonString);
+            else
+                return null;
+        }
     }
 
     #endregion

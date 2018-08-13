@@ -54,6 +54,9 @@ namespace MosaicLib.WPF.Interconnect
         internal WPFValueAccessor(IValueAccessor iva)
         {
             ValueAccessor = iva;
+
+            if (iva != null && iva.HasValueBeenSet)
+                NotifyValueHasBeenUpdated();
         }
 
         /// <summary>Retains the IValueAccessor instance to which this object is connected.</summary>

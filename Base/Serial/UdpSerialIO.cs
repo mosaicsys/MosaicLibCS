@@ -687,7 +687,7 @@ namespace MosaicLib.SerialIO
 
         private void ThreadEntryPoint()
         {
-            using (var eeTrace = new Logging.EnterExitTrace(Trace, "ThreadEntryPoint"))
+            using (var eeTrace = new Logging.EnterExitTrace(Logger, "ThreadEntryPoint", mesgType: Logging.MesgType.Debug))
             {
                 rebuildTablesFromUserTable = true;
 

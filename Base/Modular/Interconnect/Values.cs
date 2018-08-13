@@ -172,7 +172,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <summary>Provides an IBasicNotificationList instance that will be Notified after each Set operation has been completed.</summary>
         IBasicNotificationList NotificationList { get; }
 
-        /// <summary>Proides a sequence number that counts the total number of table-wide Set operations that have been performed.</summary>
+        /// <summary>Proides a sequence number that counts the total number of table-wide Set operations that have been performed.  The returned value is only zero when the table is in its initial unmodified state.  After this the sequence number generation will skip zero.</summary>
         UInt32 GlobalSeqNum { get; }
     }
 
@@ -983,7 +983,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <summary>Provides an IBasicNotificationList instance that will be Notified after each Set operation has been completed.</summary>
         public IBasicNotificationList NotificationList { get { return notificationList; } }
 
-        /// <summary>Proides a sequence number that counts the total number of table-wide Set operations that have been performed.</summary>
+        /// <summary>Proides a sequence number that counts the total number of table-wide Set operations that have been performed.  The returned value is only zero when the table is in its initial unmodified state.  After this the sequence number generation will skip zero.</summary>
         public UInt32 GlobalSeqNum { get { return globalSeqNum; } }
 
         #endregion
@@ -3057,6 +3057,21 @@ namespace MosaicLib.Modular.Interconnect.Values
         }
 
         private static readonly IValueAccessor[] emptyIVAArray = EmptyArrayFactory<IValueAccessor>.Instance;
+
+        /// <summary>
+        /// This extension method allows the caller to check if the given <paramref name="iva"/>'s IsSetPending property is true and, if so, call Set() on it.
+        /// Returns true if Set was called, or false otherwise.
+        /// </summary>
+        public static bool SetIfNeeded(this IValueAccessor iva)
+        {
+            if (iva != null && iva.IsSetPending)
+            {
+                iva.Set();
+                return true;
+            }
+
+            return false;
+        }
 
         /// <summary>
         /// This extension method allows the caller to set the given <paramref name="iva"/>'s VC to from the given <paramref name="valueAsObject"/> value.  

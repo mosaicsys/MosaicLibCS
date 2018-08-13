@@ -550,6 +550,9 @@ namespace MosaicLib.Modular.Interconnect.Sets
         /// This is used for initializing new derived sets that are updated incrementally using set deltas if the root tracking set is already in use (and thus cannot be replaced)
         /// </summary>
         new ISetDelta<TObjectType> GenerateInitializerSetDelta(int maxItemsPerRangeItem = 100);
+
+        /// <summary>Provides a Generic ITrackingSet{TObjectType} factory method.  Returned value is an ITrackingSet{TObjectType} that can be used to track this tracking set asynchronosly.</summary>
+        new ITrackingSet<TObjectType> CreateTrackingSet();
     }
 
     #endregion
@@ -2773,8 +2776,14 @@ namespace MosaicLib.Modular.Interconnect.Sets
             }
         }
 
-        /// <summary>Creates and returns a tracking set that can be used to track this reference set.</summary>
-        public ITrackingSet CreateTrackingSet()
+        /// <summary>Creates and returns a tracking set that can be used to track this tracking set set.</summary>
+        ITrackingSet ITrackableSet.CreateTrackingSet()
+        {
+            return CreateTrackingSet();
+        }
+
+        /// <summary>Creates and returns a tracking set that can be used to track this tracking set set.</summary>
+        public ITrackingSet<TObjectType> CreateTrackingSet()
         {
             using (ScopedLock sc = new ScopedLock(itemContainerListMutex))
             {

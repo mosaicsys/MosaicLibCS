@@ -159,19 +159,6 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
         public bool CanAcceptOutboundMessages { get { return StateCode.CanAcceptOutboundMessages(); } }
     }
 
-    /// <summary>
-    /// This interface is used by all of the servicable layers under remoting.  
-    /// This allows type agnostic runtime hierarchy while supporting part based threading of the object type tree that is constructed at runtime to support each remoting interface.
-    /// </summary>
-    public interface IServiceable
-    {
-        /// <summary>
-        /// This method services the underlying object and returns the count of the number of things that it did.  The result must only be zero if the Service method did not find any work to do.
-        /// The expectation is that hierarchical layers of service methods can safely report to the top level if any work was done without needing to use any intermediate if statements provided that the layers in the middle return the sum of the results from that level and below it.
-        /// </summary>
-        int Service(QpcTimeStamp qpcTimeStamp);
-    }
-
     public interface IMessageSessionFacet : IServiceable
     {
         string SessionName { get; }

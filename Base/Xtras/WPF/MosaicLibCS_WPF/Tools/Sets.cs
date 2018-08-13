@@ -64,7 +64,7 @@ namespace MosaicLib.WPF.Tools.Sets
     /// <para/>Supported DependencyProperties: UpdateRate, MaximumItemsPerIteration
     /// <para/>Supported events: NotifyOnSetUpdateList (IBasicNotificationList), SetDeltasEventNotificationList (IEventHandlerNotificationList{ISetDelta})
     /// </summary>
-    public class SetTracker : DependencyObject
+    public class SetTracker : DependencyObject, IServiceable
     {
         /// <summary>Gives the default update rate for set trackers (5.0 Hz)</summary>
         public const double DefaultUpdateRate = 5.0;
@@ -194,6 +194,14 @@ namespace MosaicLib.WPF.Tools.Sets
             return this;
         }
 
+        /// <summary>
+        /// Caller passes temporary control to the target object's IServiceable.Service method.  Calls the underlying UpdateSet(useNullNotify: false) method and returns the result mapped to 1 (true)/0 (false).
+        /// </summary>
+        public virtual int Service(QpcTimeStamp qpcTimeStamp = default(QpcTimeStamp))
+        {
+            return UpdateSet(useNullNotify: false).MapToInt();
+        }
+
         private List<Tuple<EventHandlerDelegate<ISetDelta>, Action<ISetDelta>>> pendingAddSetDeltasEventHandlersWithPrimingList = new List<Tuple<EventHandlerDelegate<ISetDelta>, Action<ISetDelta>>>();
 
         private void HandlePendingAddDeltasEventHandlersWithPriming()
@@ -241,14 +249,23 @@ namespace MosaicLib.WPF.Tools.Sets
 
         QpcTimer relookupHoldoffTimer = new QpcTimer() { TriggerIntervalInSec = 1.0, AutoReset = true }.Start();
 
-        public bool UpdateSet(bool forceFullUpdate = false)
+        public bool UpdateSet(bool forceFullUpdate = false, bool useNullNotify = true)
         {
             if (_trackingSet == null)
             {
-                if (relookupHoldoffTimer.IsTriggered)
+                if (relookupHoldoffTimer.IsTriggered || forceFullUpdate)
                     AttemptToStartTracking();
+
+                if (_trackingSet == null)
+                {
+                    if (useNullNotify)
+                        _setDeltasEventNotificationList.Notify(null);
+
+                    return false;
+                }
             }
-            else if (_trackingSet.IsUpdateNeeded || _trackingSet.IsUpdateInProgress || forceFullUpdate)
+
+            if (_trackingSet.IsUpdateNeeded || _trackingSet.IsUpdateInProgress || forceFullUpdate)
             {
                 var setDelta = _trackingSet.PerformUpdateIteration(forceFullUpdate ? 0 : _maximumItemsPerIteration, generateSetDelta: true);
 
@@ -257,10 +274,13 @@ namespace MosaicLib.WPF.Tools.Sets
 
                 return true;
             }
+            else
+            {
+                if (useNullNotify)
+                    _setDeltasEventNotificationList.Notify(null);
 
-            _setDeltasEventNotificationList.Notify(null);
-
-            return false;
+                return false;
+            }
         }
 
         private SetID _setID;

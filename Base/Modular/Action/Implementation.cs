@@ -59,6 +59,14 @@ namespace MosaicLib.Modular.Action
             ActionLoggingStyleSelect = actionLoggingStyleSelect ?? other.ActionLoggingStyleSelect;
         }
 
+        /// <summary>
+        /// Debugging and logging helper method.
+        /// </summary>
+        public override string ToString()
+        {
+            return "Done:{0} Error:{1} State:{2} Update:{3}{4}".CheckedFormat(DoneMesgType, ErrorMesgType, StateMesgType, UpdateMesgType, (ActionLoggingStyleSelect == Action.ActionLoggingStyleSelect.None) ? "" : " {0}".CheckedFormat(ActionLoggingStyleSelect));
+        }
+
         /// <summary>Gives the Logging.MesgType that is to be used for successfull Action Completion messages.</summary>
         public Logging.MesgType DoneMesgType { get; protected set; }
 

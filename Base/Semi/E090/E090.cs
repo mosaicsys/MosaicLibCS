@@ -230,11 +230,11 @@ namespace MosaicLib.Semi.E090
             return new E039ObjectID(substLocName, Constants.SubstrateLocationObjectType, tableObserver: tableObserver);
         }
 
-        public static string CreateE090SubstLoc(this IE039TableUpdater tableUpdater, string substLocName, Action<E039UpdateItem.AddObject> addedObjectDelegate, INamedValueSet attributes = null, E039ObjectFlags flags = E039ObjectFlags.Pinned, bool addSyncExternalItem = false, int instanceNum = 0, bool addIfNeeded = true)
+        public static string CreateE090SubstLoc(this IE039TableUpdater tableUpdater, string substLocName, Action<E039UpdateItem.AddObject> addedObjectDelegate, INamedValueSet attributes = null, E039ObjectFlags flags = E039ObjectFlags.Pinned, bool addSyncExternalItem = false, int instanceNum = 0, bool addIfNeeded = true, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate)
         {
             E039UpdateItem.AddObject addObjectUpdateItem;
 
-            string ec = tableUpdater.CreateE090SubstLoc(substLocName, out addObjectUpdateItem, attributes: attributes, flags: flags, addSyncExternalItem: addSyncExternalItem, instanceNum: instanceNum, addIfNeeded: addIfNeeded);
+            string ec = tableUpdater.CreateE090SubstLoc(substLocName, out addObjectUpdateItem, attributes: attributes, flags: flags, addSyncExternalItem: addSyncExternalItem, instanceNum: instanceNum, addIfNeeded: addIfNeeded, mergeBehavior: mergeBehavior);
 
             if (addedObjectDelegate != null)
                 addedObjectDelegate(addObjectUpdateItem);
@@ -242,11 +242,11 @@ namespace MosaicLib.Semi.E090
             return ec;
         }
 
-        public static string CreateE090SubstLoc(this IE039TableUpdater tableUpdater, string substLocName, Action<E039ObjectID> addedObjectIDDelegate, INamedValueSet attributes = null, E039ObjectFlags flags = E039ObjectFlags.Pinned, bool addSyncExternalItem = false, int instanceNum = 0, bool addIfNeeded = true)
+        public static string CreateE090SubstLoc(this IE039TableUpdater tableUpdater, string substLocName, Action<E039ObjectID> addedObjectIDDelegate, INamedValueSet attributes = null, E039ObjectFlags flags = E039ObjectFlags.Pinned, bool addSyncExternalItem = false, int instanceNum = 0, bool addIfNeeded = true, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate)
         {
             E039UpdateItem.AddObject addObjectUpdateItem;
 
-            string ec = tableUpdater.CreateE090SubstLoc(substLocName, out addObjectUpdateItem, attributes: attributes, flags: flags, addSyncExternalItem: addSyncExternalItem, instanceNum: instanceNum, addIfNeeded: addIfNeeded);
+            string ec = tableUpdater.CreateE090SubstLoc(substLocName, out addObjectUpdateItem, attributes: attributes, flags: flags, addSyncExternalItem: addSyncExternalItem, instanceNum: instanceNum, addIfNeeded: addIfNeeded, mergeBehavior: mergeBehavior);
 
             if (addedObjectIDDelegate != null && addObjectUpdateItem.AddedObjectPublisher != null)
                 addedObjectIDDelegate((addObjectUpdateItem.AddedObjectPublisher.Object ?? E039Object.Empty).ID);
@@ -254,9 +254,9 @@ namespace MosaicLib.Semi.E090
             return ec;
         }
 
-        public static string CreateE090SubstLoc(this IE039TableUpdater tableUpdater, string substLocName, out E039UpdateItem.AddObject addObjectUpdateItem, INamedValueSet attributes = null, E039ObjectFlags flags = E039ObjectFlags.Pinned, bool addSyncExternalItem = false, int instanceNum = 0, bool addIfNeeded = true)
+        public static string CreateE090SubstLoc(this IE039TableUpdater tableUpdater, string substLocName, out E039UpdateItem.AddObject addObjectUpdateItem, INamedValueSet attributes = null, E039ObjectFlags flags = E039ObjectFlags.Pinned, bool addSyncExternalItem = false, int instanceNum = 0, bool addIfNeeded = true, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate)
         {
-            E039UpdateItem[] updateItemArray = new List<E039UpdateItem>().GenerateCreateE090SubstLocItems(substLocName, out addObjectUpdateItem, attributes: attributes, flags: flags, addSyncExternalItem: addSyncExternalItem, instanceNum: instanceNum, addIfNeeded: addIfNeeded).ToArray();
+            E039UpdateItem[] updateItemArray = new List<E039UpdateItem>().GenerateCreateE090SubstLocItems(substLocName, out addObjectUpdateItem, attributes: attributes, flags: flags, addSyncExternalItem: addSyncExternalItem, instanceNum: instanceNum, addIfNeeded: addIfNeeded, mergeBehavior: mergeBehavior).ToArray();
 
             return tableUpdater.Update(updateItemArray).Run();
         }
@@ -457,14 +457,14 @@ namespace MosaicLib.Semi.E090
             return ec;
         }
 
-        public static List<E039UpdateItem> GenerateCreateE090SubstLocItems(this List<E039UpdateItem> updateItemList, string substLocName, out E039UpdateItem.AddObject addObjectUpdateItem, INamedValueSet attributes = null, E039ObjectFlags flags = E039ObjectFlags.None, bool addIfNeeded = false, bool addSyncExternalItem = false, int instanceNum = 0, bool assignUUID = false)
+        public static List<E039UpdateItem> GenerateCreateE090SubstLocItems(this List<E039UpdateItem> updateItemList, string substLocName, out E039UpdateItem.AddObject addObjectUpdateItem, INamedValueSet attributes = null, E039ObjectFlags flags = E039ObjectFlags.None, bool addIfNeeded = false, bool addSyncExternalItem = false, int instanceNum = 0, bool assignUUID = false, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate)
         {
             E039ObjectID substLocObjID = new E039ObjectID(substLocName, Constants.SubstrateLocationObjectType, assignUUID: assignUUID);
 
             if (instanceNum != 0)
                 attributes = attributes.ConvertToWritable().SetValue("InstanceNum", instanceNum);
 
-            updateItemList.Add(addObjectUpdateItem = new E039UpdateItem.AddObject(substLocObjID, attributes: attributes, flags: flags, ifNeeded: addIfNeeded));
+            updateItemList.Add(addObjectUpdateItem = new E039UpdateItem.AddObject(substLocObjID, attributes: attributes, flags: flags, ifNeeded: addIfNeeded, mergeBehavior: mergeBehavior));
             updateItemList.Add(new E039UpdateItem.AddLink(new E039Link(substLocObjID, E039ObjectID.Empty, Constants.ContainsLinkKey), ifNeeded: addIfNeeded));
             if (addSyncExternalItem)
                 updateItemList.Add(new E039UpdateItem.SyncExternal());

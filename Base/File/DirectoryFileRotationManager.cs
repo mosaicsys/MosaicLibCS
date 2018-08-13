@@ -276,6 +276,14 @@ namespace MosaicLib.File
 		}
 
         /// <summary>
+        /// Method allows client to explicitly trigger work to refresh the information about the current active file.
+        /// </summary>
+        public void RefreshActiveFileInfo()
+        {
+            MaintainActiveFileInfo(true);
+        }
+
+        /// <summary>
         /// Updates and returns the path to the next active file which the client should create and then use.
         /// If a prior file with the same name already exists it will have been deleted.  
         /// Returns empty path if the advance attempt failed (old file could not be deleted)
@@ -313,6 +321,8 @@ namespace MosaicLib.File
 		{
             /// <summary>{prefix}YYYYMMDD_hhmmssnn{suffix}</summary>
 			ByDate,
+            /// <summary>{prefix}n{suffix}</summary>
+            Numeric1DecimalDigit,
             /// <summary>{prefix}nn{suffix}</summary>
             Numeric2DecimalDigits,
             /// <summary>{prefix}nnn{suffix}</summary>
@@ -486,7 +496,8 @@ namespace MosaicLib.File
 				switch (config.fileNamePattern)
 				{
 				case FileNamePattern.ByDate:				numFileNumberDigits = 0; break;
-				case FileNamePattern.Numeric2DecimalDigits:	numFileNumberDigits = 2; maxFileNumber = 100; break;
+                case FileNamePattern.Numeric1DecimalDigit: numFileNumberDigits = 1; maxFileNumber = 10; break;
+                case FileNamePattern.Numeric2DecimalDigits: numFileNumberDigits = 2; maxFileNumber = 100; break;
 				case FileNamePattern.Numeric3DecimalDigits:	numFileNumberDigits = 3; maxFileNumber = 1000; break;
 				case FileNamePattern.Numeric4DecimalDigits:	numFileNumberDigits = 4; maxFileNumber = 10000; break;
 				default: SetSetupFaultCode("Setup Failure: Invalid file name pattern in configuration"); break;
@@ -703,7 +714,8 @@ namespace MosaicLib.File
 				}
 				break;
 
-			case FileNamePattern.Numeric2DecimalDigits:
+            case FileNamePattern.Numeric1DecimalDigit:
+            case FileNamePattern.Numeric2DecimalDigits:
 			case FileNamePattern.Numeric3DecimalDigits:
 			case FileNamePattern.Numeric4DecimalDigits:
 				{

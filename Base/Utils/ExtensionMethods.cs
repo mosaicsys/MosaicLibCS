@@ -218,7 +218,7 @@ namespace MosaicLib.Utils
 
         /// <summary>
         /// Extension method version of Array.Copy with copy length clipped to prevent exceptions
-        /// Returns the number of bytes copied (or 0 if none where)
+        /// Returns the number of elements copied (or 0 if none where)
         /// </summary>
         public static int SafeCopyFrom<ItemType>(this ItemType[] copyIntoArray, ItemType[] copyFromArray, int copyFromIndex = 0, int copyLengthLimitIn = int.MaxValue)
         {
@@ -227,7 +227,7 @@ namespace MosaicLib.Utils
 
         /// <summary>
         /// Extension method version of Array.Copy with copy length clipped to prevent exceptions.
-        /// Returns the number of bytes copied (or 0 if none where)
+        /// Returns the number of array elements copied (or 0 if none where)
         /// </summary>
         public static int SafeCopyFrom<ItemType>(this ItemType[] copyIntoArray, int copyToIndex, ItemType[] copyFromArray, int copyFromIndex = 0, int copyLengthLimitIn = int.MaxValue)
         {
@@ -240,6 +240,36 @@ namespace MosaicLib.Utils
                 System.Array.Copy(copyFromArray, copyFromIndex, copyIntoArray, copyToIndex, copyLength);
 
             return copyLength;
+        }
+
+        /// <summary>
+        /// Extension method attempts to copy elements from the given <paramref name="copyFromSet"/> into the given array until either all of the set elements have been copied or the length limit of the array has been reached.
+        /// Returns the number of set elements copied (or 0 if none where).
+        /// </summary>
+        public static int SafeCopyFrom<ItemType>(this ItemType[] copyIntoArray, IEnumerable<ItemType> copyFromSet)
+        {
+            int intoArrayLength = copyIntoArray.SafeLength();
+            ICollection<ItemType> copyFromCollection = copyFromSet as ICollection<ItemType>;
+
+            if (intoArrayLength <= 0 || copyFromSet == null)
+                return 0;
+            
+            if (copyFromCollection != null)
+            {
+                int fromSetCount = copyFromCollection.Count;
+                if (fromSetCount <= intoArrayLength)
+                {
+                    copyFromCollection.CopyTo(copyIntoArray, 0);
+                    return fromSetCount;
+                }
+            }
+
+            int didCount = 0;
+
+            foreach (var nextElement in copyFromSet.Take(intoArrayLength))
+                copyIntoArray[didCount++] = nextElement;
+
+            return didCount;
         }
 
         #endregion
@@ -1412,7 +1442,7 @@ namespace MosaicLib.Utils
         /// If <paramref name="fromFront"/> is set to true then the filter will end as soon as the first non-matching element is found.
         /// If <paramref name="filterPredicate"/> is null and <paramref name="mapNullFilterPredicateToAll"/> is true then this method will remove and return all of the elements in the list.
         /// </summary>
-        public static IEnumerable<TItemType> FilterAndRemove<TItemType>(this List<TItemType> list, Func<TItemType, bool> filterPredicate = null, bool consecutive = false, bool fromFront = false, bool mapNullFilterPredicateToAll = true)
+        public static IEnumerable<TItemType> FilterAndRemove<TItemType>(this IList<TItemType> list, Func<TItemType, bool> filterPredicate = null, bool consecutive = false, bool fromFront = false, bool mapNullFilterPredicateToAll = true)
         {
             if (filterPredicate == null && mapNullFilterPredicateToAll)
                 filterPredicate = (item => true);
@@ -1480,6 +1510,17 @@ namespace MosaicLib.Utils
         public static string GetTypeDigestName(this Type type, bool recursive = true)
         {
             return type.ToString().MapNullToEmpty().GetTypeDigestName(recursive: recursive);
+        }
+
+        /// <summary>
+        /// This generic extension method attempts to obtain and return the Type Digest Name from the Type of the given <paramref name="instance"/>.
+        /// </summary>
+        public static string GetInstanceTypeDigestName<TItemType>(this TItemType instance, bool recursive = true, string fallbackValue = "")
+        {
+            if (instance != null)
+                return instance.GetType().GetTypeDigestName(recursive: recursive);
+            else
+                return fallbackValue;
         }
 
         /// <summary>
