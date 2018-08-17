@@ -252,16 +252,12 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Buffers
     public class Buffer : IEquatable<Buffer>
     {
         /// <summary>
-        /// Constructs a buffer of the requested <paramref name="bufferSize"/>.  
-        /// If the requested size is at or below <paramref name="automaticallyAddMinimumHeaderSizeAtOrBelow"/> then the actual buffer byteArray size will be increased by the headerCount.
+        /// Constructs a buffer of the requested <paramref name="bufferSize"/>.
         /// </summary>
-        public Buffer(int bufferSize, int automaticallyAddMinimumHeaderSizeAtOrBelow = 4000, BufferPool bufferPool = null, Logging.IMesgEmitter stateEmitter = null)
+        public Buffer(int bufferSize, BufferPool bufferPool = null, Logging.IMesgEmitter stateEmitter = null)
             : this(stateEmitter)
         {
             this.bufferPool = bufferPool;
-
-            if (bufferSize <= automaticallyAddMinimumHeaderSizeAtOrBelow)
-                bufferSize += BufferHeaderV1.MinimumSize;
 
             byteArray = new byte [bufferSize];
             byteArraySize = bufferSize;
@@ -503,14 +499,14 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Buffers
     /// </summary>
     public class BufferPool
     {
-        /// <summary>Default buffer size (1024 - 24 == 1000)</summary>
-        const int defaultBufferSize = (1024 - 26);
+        /// <summary>Default buffer size 1024.  Nominal default usable size is 1024 - 26 == 998)</summary>
+        const int defaultBufferSize = 1024;
 
         /// <summary>
         /// Constructor.
-        /// <para/>defaultBufferSize == 1024-24 == 1000
+        /// <para/>defaultBufferSize == 1024.  Usable space is 1024-26 == 998
         /// </summary>
-        public BufferPool(int maxTotalSpaceInBytes = 1024000, int bufferSize = defaultBufferSize, int automaticallyAddHeaderSizeAtOrBelow = 4000, bool clearBufferContentsOnRelease = false, Logging.IMesgEmitter bufferStateEmitter = null, INamedValueSet configNVS = null, string configNVSKeyPrefix = "BufferPool.")
+        public BufferPool(int maxTotalSpaceInBytes = 1024000, int bufferSize = defaultBufferSize, bool clearBufferContentsOnRelease = false, Logging.IMesgEmitter bufferStateEmitter = null, INamedValueSet configNVS = null, string configNVSKeyPrefix = "BufferPool.")
         {
             if (configNVS != null)
             {
@@ -519,7 +515,6 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Buffers
             }
 
             MaxTotalSpaceInBytes = maxTotalSpaceInBytes;
-            AutomaticallyAddHeaderSizeAtOrBelow = automaticallyAddHeaderSizeAtOrBelow;
             ChangeBufferSize(QpcTimeStamp.Now, bufferSize);
             _bufferSize = bufferSize;
             ClearBufferContentsOnRelease = clearBufferContentsOnRelease;
@@ -543,6 +538,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Buffers
 
         public int MaxTotalSpaceInBytes { get; private set; }
         public int BufferSize { get { return _bufferSize; } set { if (_bufferSize != value) ChangeBufferSize(QpcTimeStamp.Now, value); } }
+        [Obsolete("This property is no longer used (2018-08-16)")]
         public int AutomaticallyAddHeaderSizeAtOrBelow { get; private set; }
         public bool ClearBufferContentsOnRelease { get; private set; }
         public Logging.IMesgEmitter BufferStateEmitter { get; set; }
@@ -581,7 +577,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Buffers
             }
             else
             {
-                Buffer buffer = new Buffer(bufferSize: BufferSize, automaticallyAddMinimumHeaderSizeAtOrBelow: AutomaticallyAddHeaderSizeAtOrBelow, bufferPool: this, stateEmitter: BufferStateEmitter)
+                Buffer buffer = new Buffer(bufferSize: BufferSize, bufferPool: this, stateEmitter: BufferStateEmitter)
                                 .SetState(qpcTimeStamp, BufferState.Created, reason ?? "BufferPool.{0}.2".CheckedFormat(Fcns.CurrentMethodName));
 
                 return buffer;
