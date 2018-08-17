@@ -87,6 +87,12 @@ namespace MosaicLib.Modular.Part
         GoOnlineFailureSetsUseStateToAttemptOnlineFailed = 8,
 
         /// <summary>
+        /// This option may only be combined with GoOnlineUpdatesBaseUseState.  When selected, if the derived classes PerformGoOnlineAction method explicitly changes the Base UseState from the pre-entry assigned value of AttemptOnline
+        /// the outer state handling code will leave the derived classes value unchanged.  When not enabled, the outer method will still override the custom value and replace it with the value as determined by the outer value.
+        /// </summary>
+        AcceptCustomChangeFromAttemptOnlineState = 16,
+
+        /// <summary>
         /// Selects that execution of GoOnline and GoOffline actions using base class will succeed and will automatically update the BaseUseState.
         /// <para/>(BasePerformMethodsSucceed | GoOnlineUpdatesBaseUseState | GoOfflineUpdatesBaseUseState | GoOnlineFailureSetsUseStateToAttemptOnlineFailed)
         /// </summary>
@@ -954,8 +960,14 @@ namespace MosaicLib.Modular.Part
 
             if (setBaseUseState)
             {
-                if (result == string.Empty || action.ActionState.Succeeded)
+                if (BaseState.UseState != UseState.AttemptOnline && settings.CheckFlag(GoOnlineAndGoOfflineHandling.AcceptCustomChangeFromAttemptOnlineState))
+                {
+                    Log.Trace.Emit("{0}: PerformGoOnlineAction explicitly changed the UseState to '{1}' [will not overwrite here]", description, BaseState.UseState);
+                }
+                else if (result == string.Empty || action.ActionState.Succeeded)
+                {
                     SetBaseState(UseState.Online, "{0} Completed".CheckedFormat(description), true);
+                }
                 else 
                 {
                     UseState nextUseState = settings.CheckFlag(GoOnlineAndGoOfflineHandling.GoOnlineFailureSetsUseStateToAttemptOnlineFailed) ? UseState.AttemptOnlineFailed : UseState.Online;

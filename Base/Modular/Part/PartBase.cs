@@ -314,11 +314,15 @@ namespace MosaicLib.Modular.Part
         }
 
         /// <summary>
-        /// Returns true if the given baseState is non-null and its UseState is Initial or its ConnState is Initial
+        /// Returns true if the given <paramref name="baseState"/> is non-null and its UseState is Initial or its ConnState is Initial
+        /// <para/>If <paramref name="includeOnlineUninitialized"/> is true then this method will also return true if the given <paramref name="baseState"/>'s UseState is OnlineUnititialized.
         /// </summary>
-        public static bool IsUninitialized(this IBaseState baseState)
+        public static bool IsUninitialized(this IBaseState baseState, bool includeOnlineUninitialized = true)
         {
-            return (baseState != null && (baseState.UseState == UseState.Initial || baseState.ConnState == ConnState.Initial));
+            if (baseState == null)
+                return false;
+
+            return (baseState.UseState == UseState.Initial || baseState.ConnState == ConnState.Initial || (includeOnlineUninitialized && baseState.UseState == UseState.OnlineUninitialized));
         }
 
         /// <summary>
