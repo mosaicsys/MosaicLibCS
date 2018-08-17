@@ -1729,6 +1729,10 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
         IDataContractAdapter<PushItemData> dataDCA = new DataContractJsonAdapter<PushItemData>();
 
+        /// <summary>
+        /// The type of item that is being pushed.
+        /// <para/>None (0), Register, EndCurrentRegistrationPass, InitiatorUpdate, AcceptorUpdate.
+        /// </summary>
         public enum PushItemType : byte
         {
             None = 0,
@@ -1749,6 +1753,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
             HasInlineVC = 0x10,
             UseShortID = 0x20,
             UseIntID = 0x40,
+            UseByteID = 0x80,
         }
 
         public class PushItem
@@ -1757,6 +1762,12 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
             public PushItemType itemType;
             public PushItemFlags itemFlags;
+            /// <summary>
+            /// Please note: the sign of this value is generally used as a debugging clue of which end assigned the number.  
+            /// Generally clients assign this as possitive values and servers assign this as negative values.
+            /// However it is important to note that at the protocol level the sign of this field is ignored.  
+            /// The message processing engine knows which direction the message is going in based on the PushItemType being either InitiatorUpdate (from IVA's registering end), or AcceptorUpdate (from IVAs other end).
+            /// </summary>
             public int idPlusOne;
             public ValueContainer inlineVC;
             public int itemLength;
@@ -1766,23 +1777,27 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
             public void WritePartsInto(System.IO.BinaryWriter bw)
             {
+                // the following id size decode logic is expected to be used exactly once per push item.
                 if ((itemFlags & (PushItemFlags.UseIntID | PushItemFlags.UseShortID)) == 0)
                 {
                     if (!idPlusOne.IsInRange(-32768, 32767))
                         itemFlags |= PushItemFlags.UseIntID;
                     else if (!idPlusOne.IsInRange(-128, 127))
                         itemFlags |= PushItemFlags.UseShortID;
+                    else
+                        itemFlags |= PushItemFlags.UseByteID;
                 }
 
                 bw.Write(unchecked((byte)itemType));
                 bw.Write(unchecked((byte)itemFlags));
 
-                if ((itemFlags & PushItemFlags.UseIntID) != 0)
-                    bw.Write(idPlusOne);
-                else if ((itemFlags & PushItemFlags.UseIntID) != 0)
-                    bw.Write(unchecked((short) idPlusOne));
-                else
-                    bw.Write(unchecked((sbyte)idPlusOne));
+                switch (itemFlags & (PushItemFlags.UseIntID | PushItemFlags.UseShortID | PushItemFlags.UseByteID))
+                {
+                    case PushItemFlags.UseByteID: bw.Write(unchecked((sbyte)idPlusOne)); break;
+                    case PushItemFlags.UseShortID: bw.Write(unchecked((short)idPlusOne)); break;
+                    case PushItemFlags.UseIntID: bw.Write(idPlusOne); break;
+                    default: bw.Write(idPlusOne); break;
+                }
 
                 if (ItemFlagsHasInlineVC)
                 {
@@ -1817,12 +1832,13 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
                 itemType = unchecked((PushItemType)br.ReadByte());
                 itemFlags = unchecked((PushItemFlags)br.ReadByte());
 
-                if ((itemFlags & PushItemFlags.UseIntID) != 0)
-                    idPlusOne = br.ReadInt32();
-                else if ((itemFlags & PushItemFlags.UseIntID) != 0)
-                    idPlusOne = br.ReadInt16();
-                else
-                    idPlusOne = br.ReadSByte();
+                switch (itemFlags & (PushItemFlags.UseIntID | PushItemFlags.UseShortID | PushItemFlags.UseByteID))
+                {
+                    case PushItemFlags.UseByteID: idPlusOne = br.ReadSByte(); break;
+                    case PushItemFlags.UseShortID: idPlusOne = br.ReadInt16(); break;
+                    case PushItemFlags.UseIntID: idPlusOne = br.ReadInt32(); break;
+                    default: idPlusOne = br.ReadInt32(); break;
+                }
 
                 if (ItemFlagsHasInlineVC)
                 {
