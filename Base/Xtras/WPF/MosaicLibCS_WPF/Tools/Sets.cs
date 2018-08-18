@@ -1044,8 +1044,6 @@ namespace MosaicLib.WPF.Tools.Sets
 
             #region public interface (TypeNames, E039TableTypeDictionaryFactory, IE039TableTypeDictionary this[typeName], GetObjectTracker)
 
-            //public IList<string> TypeNames { get { return typeNameToTableTypeDictionary.Keys.ConvertToReadOnly(); } }
-
             public IE039TablePerTypeDictionary this[string typeName] { get { return GetTableTypeDictionary(typeName); } }
 
             /// <summary>

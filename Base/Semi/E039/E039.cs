@@ -772,21 +772,45 @@ namespace MosaicLib.Semi.E039
             : this(fromID, E039ObjectID.Empty, key)
         { }
 
+        public E039Link SetupForSerialization(bool forRemoteUse = false)
+        {
+            E039Link setupTarget = this;
+
+            var fromID = setupTarget.FromID;
+            var toID = setupTarget.ToID;
+
+            setupTarget.fromName = (forRemoteUse) ? fromID.Name : null;
+            setupTarget.fromType = (forRemoteUse) ? fromID.Type : null;
+            setupTarget.fromUUID = (forRemoteUse) ? fromID.UUID.MapEmptyToNull() : null;
+            setupTarget.toName = toID.Name;
+            setupTarget.toType = toID.Type;
+            setupTarget.toUUID = (forRemoteUse) ? toID.UUID.MapEmptyToNull() : null;
+
+            return setupTarget;
+        }
+
         /// <summary>Identifies the object that is the source of the link (the "from" end), or E039ObjectID.Empty if the source of the link has not been set to a valid non-null value.</summary>
         public E039ObjectID FromID { get { return _fromID ?? E039ObjectID.Empty; } set { _fromID = value; } }
 
         // We are currently not peristing the FromID since it is known by context in a serialized object body.
-        // [DataMember(Name = "FromID", Order = 10, IsRequired = false, EmitDefaultValue = false)]
         private E039ObjectID _fromID;
+
+        [DataMember(Name = "FromName", Order = 10, IsRequired = false, EmitDefaultValue = false)]
+        private string fromName;
+
+        [DataMember(Name = "FromType", Order = 20, IsRequired = false, EmitDefaultValue = false)]
+        private string fromType;
+
+        [DataMember(Name = "FromUUID", Order = 30, IsRequired = false, EmitDefaultValue = false)]
+        private string fromUUID;
 
         /// <summary>identifies the Key that is used to identify this "type" of the link (client specified terminology)</summary>
         [DataMember(Order = 100, IsRequired = false, EmitDefaultValue = false)]
         public string Key { get; set; }
 
         /// <summary>identifies the object that is the target of the link (the "to" end), or E039ObjectID.Empty if the target of the link has not been set to a valid non-null value.</summary>
-        public E039ObjectID ToID { get { return _toID ?? E039ObjectID.Empty; } set { _toID = value; toName = value.Name; toType = value.Type; } }
+        public E039ObjectID ToID { get { return _toID ?? E039ObjectID.Empty; } set { _toID = value; } }
 
-        // [DataMember(Name = "ToID", Order = 200, IsRequired = false, EmitDefaultValue = false)]
         private E039ObjectID _toID;
 
         [DataMember(Name = "ToName", Order = 300, IsRequired = false, EmitDefaultValue = false)]
@@ -795,10 +819,17 @@ namespace MosaicLib.Semi.E039
         [DataMember(Name = "ToType", Order = 400, IsRequired = false, EmitDefaultValue = false)]
         private string toType;
 
+        [DataMember(Name = "ToUUID", Order = 500, IsRequired = false, EmitDefaultValue = false)]
+        private string toUUID;
+
         [OnDeserialized]
         void OnDeserialized(StreamingContext sc)
         {
-            _toID = new E039ObjectID(toName, toType, assignUUID: false);
+            if (!fromName.IsNullOrEmpty() || !fromType.IsNullOrEmpty() || !fromUUID.IsNullOrEmpty())
+                _fromID = new E039ObjectID(fromName, fromType, uuid: fromUUID, tableObserver: null);
+
+            if (!toName.IsNullOrEmpty() || !toType.IsNullOrEmpty() || !toUUID.IsNullOrEmpty())
+                _toID = new E039ObjectID(toName, toType, uuid: toUUID, tableObserver: null);
         }
 
         /// <summary>Returns true if the FromID, ToID, and Key are empty.</summary>
@@ -1023,6 +1054,10 @@ namespace MosaicLib.Semi.E039
 
     #region E039Object (for publication and internal use)
 
+    /// <summary>
+    /// primary IE039Object implementation class.  Also used for (most?) E039 related serialization purposes.
+    /// This object supports mutability within this assembly and is immutable for all code outside of this assembly (property setters are defined to be internal)
+    /// </summary>
     [DataContract(Namespace = Constants.E039NameSpace, Name = "ObjInst")]
     public class E039Object : IE039Object
     {
@@ -1030,29 +1065,47 @@ namespace MosaicLib.Semi.E039
         public static IE039Object Empty { get { return _empty; } }
         private static readonly IE039Object _empty = new E039Object();
 
+        /// <summary>
+        /// Default constructor - generates an empty object.  Recommend using E039Object.Empty singleton instance in place of this where possible.
+        /// </summary>
         public E039Object()
         {
             ID = E039ObjectID.Empty;
         }
 
-        public E039Object(IE039Object other, E039ObjectID alternateID = null)
+        /// <summary>
+        /// "Copy" constructor.  Includes optional parameters that may be used to modify the copy in specific ways.
+        /// </summary>
+        public E039Object(IE039Object other, E039ObjectID alternateID = null, bool serializeForRemoteUse = false)
         {
             ID = alternateID ?? other.ID;
+
+            if (serializeForRemoteUse)
+                Type = ID.Type;
+
             Flags = other.Flags;
-            Attributes = other.Attributes.ConvertToReadOnly();
+            Attributes = other.Attributes;
 
             LinksFromOtherObjectsList = other.LinksFromOtherObjectsList;
             LinksToOtherObjectsList = other.LinksToOtherObjectsList;
+            SerializeForRemoteUse = serializeForRemoteUse;
         }
 
-        public E039Object(E039ObjectID id, E039ObjectFlags flags, INamedValueSet attributes)
+        public E039Object(E039ObjectID id, E039ObjectFlags flags, INamedValueSet attributes, IList<E039Link> linksToOtherObjectsList = null, IList<E039Link> linksFromOtherObjectsList = null)
         {
             ID = id;
             Flags = flags;
-            Attributes = attributes.MapNullToEmpty().ConvertToReadOnly();
+            Attributes = attributes;
+
+            LinksToOtherObjectsList = linksToOtherObjectsList;
+            LinksFromOtherObjectsList = linksFromOtherObjectsList;
         }
 
-        /// <summary>Gives the object ID (Name and Type) of this object</summary>
+        /// <summary>
+        /// Gives the object ID (Name and Type) of this object.
+        /// For deserialized objects this property getter will return a valid value if the object was serialized with a non-null Type or null if it was not (the default).
+        /// To prompt an object to populate this property getter on deserialize, the object must be obtained using a copy constructor with the serializeWithType parameter set to true.
+        /// </summary>
         public E039ObjectID ID
         {
             get { return _id; }
@@ -1065,11 +1118,16 @@ namespace MosaicLib.Semi.E039
         }
         private E039ObjectID _id;
 
+        private bool SerializeForRemoteUse { get; set; }
+
         [DataMember(Order = 100, IsRequired = false, EmitDefaultValue = false)]
         internal string Name { get; set; }
 
         [DataMember(Order = 110, IsRequired = false, EmitDefaultValue = false)]
         internal string UUID { get; set; }
+
+        [DataMember(Order = 120, IsRequired = false, EmitDefaultValue = false)]
+        internal string Type { get; set; }
 
         /// <summary>Gives the flag values that are associated with this object</summary>
         public E039ObjectFlags Flags { get; internal set; }
@@ -1077,17 +1135,20 @@ namespace MosaicLib.Semi.E039
         [DataMember(Order = 200, Name = "Flags", IsRequired = false, EmitDefaultValue = false)]
         private string FlagsSerializationHelper { get { return Flags.ToString(); } set { Flags = value.TryParse<E039ObjectFlags>(); } }
 
-        /// <summary>Gives all of the attribute values that result from initial values combined with the accumulated set of Update calls that have been applied to this object's attribute values.  This property is used for serialization/deserialization</summary>
-        [DataMember(Order = 300, Name = "Attribs", IsRequired = false, EmitDefaultValue = false)]
-        public NamedValueSet Attributes { get; internal set; }
+        /// <summary>
+        /// Gives all of the attribute values that result from initial values combined with the accumulated set of Update calls that have been applied to this object's attribute values.  
+        /// This property is used for serialization/deserialization.
+        /// </summary>
+        public INamedValueSet Attributes { get { return _attributes ?? NamedValueSet.Empty; } internal set { _attributes = value.MapEmptyToNull().ConvertToReadOnly(mapNullToEmpty: false); } }
 
-        INamedValueSet IE039Object.Attributes { get { return this.Attributes.ConvertToReadOnly(); } }
+        [DataMember(Order = 300, Name = "Attribs", IsRequired = false, EmitDefaultValue = false)]
+        private NamedValueSet _attributes = null;
 
         /// <summary>Gives the current set of E039Link objects that link from this object</summary>
-        public IList<E039Link> LinksToOtherObjectsList { get { return _linksToOtherObjectsList ?? _emptyLinkList; } internal set { _linksToOtherObjectsList = (value != null && value.Count > 0) ? value : null; } }
+        public IList<E039Link> LinksToOtherObjectsList { get { return _linksToOtherObjectsList ?? _emptyLinkList; } internal set { _linksToOtherObjectsList = value.MapEmptyToNull().ConvertToReadOnly(mapNullToEmpty: false); } }
 
         /// <summary>Gives the current set of E039Link objects that link to this object</summary>
-        public IList<E039Link> LinksFromOtherObjectsList { get { return _linksFromOtherObjectsList ?? _emptyLinkList; } internal set { _linksFromOtherObjectsList = (value != null && value.Count > 0) ? value : null; } }
+        public IList<E039Link> LinksFromOtherObjectsList { get { return _linksFromOtherObjectsList ?? _emptyLinkList; } internal set { _linksFromOtherObjectsList = value.MapEmptyToNull().ConvertToReadOnly(mapNullToEmpty: false); } }
 
         private IList<E039Link> _linksToOtherObjectsList = null;
         private IList<E039Link> _linksFromOtherObjectsList = null;
@@ -1095,14 +1156,31 @@ namespace MosaicLib.Semi.E039
         [DataMember(Name = "LinksOut", Order = 400, IsRequired = false, EmitDefaultValue = false)]
         private List<E039Link> SerializationHelperForLinksToOtherObjectsList 
         { 
-            get { return (_linksToOtherObjectsList == null ? null : new List<E039Link>(_linksToOtherObjectsList)); } 
-            set { _linksToOtherObjectsList = (value != null && value.Count > 0) ? new ReadOnlyIList<E039Link>(value) : null; } 
+            get { return ((_linksToOtherObjectsList != null) ? new List<E039Link>(_linksToOtherObjectsList.Select(link => link.SetupForSerialization(forRemoteUse: SerializeForRemoteUse))) : null); } 
+            set { _linksToOtherObjectsList = value.ConvertToReadOnly(mapNullToEmpty: false); } 
+        }
+
+        [DataMember(Name = "LinksIn", Order = 500, IsRequired = false, EmitDefaultValue = false)]
+        private List<E039Link> SerializationHelperForLinksFromOtherObjectsList
+        {
+            get { return ((SerializeForRemoteUse && (_linksFromOtherObjectsList != null)) ? new List<E039Link>(_linksFromOtherObjectsList.Select(link => link.SetupForSerialization(forRemoteUse: SerializeForRemoteUse))) : null); }
+            set { _linksFromOtherObjectsList = value.ConvertToReadOnly(mapNullToEmpty: false); }
         }
 
         private static readonly IList<E039Link> _emptyLinkList = ReadOnlyIList<E039Link>.Empty;
 
         /// <summary>Returns true if this object is equal to the Empty object.</summary>
         public bool IsEmpty { get { return this.Equals(Empty); } }
+
+        [OnDeserialized]
+        private void OnDeserialized(StreamingContext sc)
+        {
+            if (!Type.IsNullOrEmpty())
+                _id = new E039ObjectID(Name, Type, UUID, tableObserver: null);
+
+            if (_attributes != null)
+                _attributes.MakeReadOnly();
+        }
 
         /// <summary>
         /// Returns true if this object's ID, Flags, Attributes, LinksToOtherObjectsList and LinksFromOtherObjectsList are all Equal to the <paramref name="other"/>'s
@@ -1403,6 +1481,7 @@ namespace MosaicLib.Semi.E039
                             ObjectTracker ot = FindObjectTrackerForID(objID, createIfNeeded: true, initialFlags: loadedObject.Flags);
 
                             ot.obj = new E039Object(loadedObject, objID);
+                            ot.objAttributesWorking = loadedObject.Attributes.ConvertToWritable();
 
                             foreach (var loadedLink in loadedObject.LinksToOtherObjectsList)
                             {
@@ -1658,7 +1737,7 @@ namespace MosaicLib.Semi.E039
         string InnerPerformTestAndSetAttributesUpdateItem(ObjectTracker ot, E039UpdateItem.TestAndSetAttributes updateItem)
         {
             INamedValueSet testAttributes = updateItem.TestAttributeSet;
-            INamedValueSet objAttributes = ot.obj.Attributes;
+            INamedValueSet objAttributes = ot.objAttributesWorking;
 
             INamedValue firstMismatch = testAttributes.FirstOrDefault(testNV => !objAttributes[testNV.Name].VC.Equals(testNV.VC));
             bool testConditionsMet = (firstMismatch == null);
@@ -1680,8 +1759,8 @@ namespace MosaicLib.Semi.E039
             if (attributes == null)
                 return "Attributes parameter cannot be null";
 
-            ot.obj.Attributes = ot.obj.Attributes.MergeWith(attributes, updateItem.MergeBehavior);
-
+            ot.obj.Attributes = (ot.objAttributesWorking = ot.objAttributesWorking.MergeWith(attributes, updateItem.MergeBehavior));
+            
             InnerMarkedTouchedIfNeeded(ot);
 
             return string.Empty;
@@ -1820,6 +1899,7 @@ namespace MosaicLib.Semi.E039
                 ot = FindObjectTrackerForID(objID, createIfNeeded: true, initialFlags: updateItem.Flags);
 
                 ot.obj = new E039Object(objID, clientFlags, updateItem.Attributes);
+                ot.objAttributesWorking = updateItem.Attributes.ConvertToWritable();
 
                 seqNums.AddedItemsCount++;
                 seqNums.TableChangeSeqNum = GetNextSeqNum();
@@ -1854,7 +1934,7 @@ namespace MosaicLib.Semi.E039
                 // merge in attributes
                 if (updateItem.MergeBehavior != NamedValueMergeBehavior.None && !updateItem.Attributes.IsNullOrEmpty())
                 {
-                    ot.obj.Attributes = ot.obj.Attributes.MergeWith(updateItem.Attributes, updateItem.MergeBehavior);
+                    ot.obj.Attributes = (ot.objAttributesWorking = ot.objAttributesWorking.MergeWith(updateItem.Attributes, updateItem.MergeBehavior));
                 }
             }
 
@@ -2143,7 +2223,8 @@ namespace MosaicLib.Semi.E039
                 {
                     var setUpdateTracker = activeSetUpdateCollectorList[idx];
 
-                    E039Object[] addedObjectsArray = setUpdateTracker.addedSetItemTrackersList.Select(ot => ot.lastPublishedObj).ToArray();
+                    // clone the touched objects to be published so that we can enable their serializeWithType option.  This will allow the derserialized versions to fully reconsitute their E039ObjectID on deserialization (using the annotated OnDeserialized method).
+                    E039Object[] addedObjectsArray = setUpdateTracker.addedSetItemTrackersList.Select(ot => new E039Object(ot.lastPublishedObj, serializeForRemoteUse: true)).ToArray();
 
                     if (setUpdateTracker.referenceSet != null)
                     {
@@ -2484,6 +2565,7 @@ namespace MosaicLib.Semi.E039
             public bool touched;
 
             public E039Object obj;
+            public NamedValueSet objAttributesWorking;
 
             public ulong lastPublishedSeqNum;
             public E039Object lastPublishedObj;        // used for serialization and IVA publication.  Each instance must be treated as being immutable (read only) once it has been published.
