@@ -1,0 +1,81 @@
+﻿<!--
+ * @file Window1.xaml
+ *  @brief
+ * 
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2018 Mosaic Systems Inc.
+ * All rights reserved.
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * 
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ -->
+<Window x:Class="RemotingTool.Window1"
+    Title="Window1" 
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:Controls="clr-namespace:MosaicLib.WPF.Controls;assembly=MosaicLibCS_WPF" 
+    xmlns:conv="clr-namespace:MosaicLib.WPF.Converters;assembly=MosaicLibCS_WPF" 
+    x:Name="OuterWindow"
+    Height="700" Width="1300">
+    <Window.Resources>
+        <conv:VCToStringSMLConverter x:Key="VCToStringSMLConverter"/>
+        <conv:ObjectToStringConverter x:Key="ObjectToStringConverter"/>
+        <conv:SetToStringConverter x:Key="SetToStringConverter"/>
+    </Window.Resources>
+    <Grid>
+        <TabControl Margin="6" Name="MainTabControl">
+            <TabItem Header="Remote Client">
+                <GroupBox Header="Remoting.Client" Height="210" HorizontalAlignment="Left" Margin="10,17,0,0" VerticalAlignment="Top" Width="342">
+                    <Grid>
+                        <Controls:PartBaseStateLED BorderWidth="1" Height="20" Width="20" HorizontalAlignment="Left" Margin="13,12,0,0" PartBaseState="{Binding Path=[Remoting.Client.BaseState].ValueAsObject}" ActionInfo="{Binding Path=[Remoting.Client.ActionInfo].ValueAsObject}" IncludeConnectionState="True" VerticalAlignment="Top" />
+                        <TextBox Height="23" Margin="46,10,9.778,0" Text="{Binding Tag, RelativeSource={RelativeSource Self}}" ToolTip="{Binding Tag, RelativeSource={RelativeSource Self}}" Tag="{Binding Path=[Remoting.Client.BaseState].ValueAsObject, Mode=OneWay}" VerticalAlignment="Top" IsReadOnly="True" IsUndoEnabled="False" />
+                        <Label Content="NVS" Height="24" HorizontalAlignment="Left" Margin="7,48,0,0" VerticalAlignment="Top" Width="34" />
+                        <TextBox Height="82" IsReadOnly="True" Margin="46,38,9.778,0" Text="{Binding Tag, RelativeSource={RelativeSource Self}}" ToolTip="{Binding Tag, RelativeSource={RelativeSource Self}}" Tag="{Binding Path=[Remoting.Client.ConfigNVS].VC, Converter={StaticResource VCToStringSMLConverter}, Mode=OneWay}" VerticalAlignment="Top"  IsUndoEnabled="False" TextWrapping="Wrap" ScrollViewer.VerticalScrollBarVisibility="Auto" />
+                        <!--<Label Content="Rate" Height="24" HorizontalAlignment="Left" Margin="7,95,0,0" VerticalAlignment="Top" Width="34" />-->
+                        <!--<TextBox Height="23" HorizontalAlignment="Left" IsReadOnly="False" Margin="46,96,0,0" Text="{Binding Path=[AvgCmdRateInHz].ValueAsDouble, Mode=OneWay, StringFormat=f2, FallbackValue=[empty]}" IsUndoEnabled="False" VerticalAlignment="Top" Width="65" />-->
+                        <Button Click="RCButton_Clicked" Content="Connect" Tag="GoOnline" Height="23" HorizontalAlignment="Left" Margin="13,136,0,0" VerticalAlignment="Top" Width="75"  />
+                        <Button Click="RCButton_Clicked" Content="Disconnect" Tag="GoOffline" Height="23" HorizontalAlignment="Left" Margin="94,136,0,0" VerticalAlignment="Top" Width="75" />
+                        <Button Click="RCButton_Clicked" Content="Remote Ping" Tag="Ping" Height="23" HorizontalAlignment="Left" Margin="176,136,0,0" VerticalAlignment="Top" Width="75" />
+                    </Grid>
+                </GroupBox>
+            </TabItem>
+            <TabItem Header="Remote IVI">
+                <Controls:IVIView x:Name="iviView" NameColumnWidth="300" SeqNumColumnWidth="60" ValueColumnWidth="600"/>
+            </TabItem>
+            <TabItem Header="Remote Logs">
+                <Controls:LogView x:Name="logView" SetName="LogMessageHistory"  MesgColumnWidth="950"/>
+            </TabItem>
+            <TabItem Header="E039">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
+                        <Label Content="SetName:" Margin="3,3,3,3"/>
+                        <Label MinWidth="200" Content="{Binding E039ObjectSetTracker.SetID.Name, ElementName=OuterWindow, Converter={StaticResource VCToStringSMLConverter}, FallbackValue=----}" BorderBrush="Black" BorderThickness="1"/>
+                    </StackPanel>
+                    <ListView x:Name="e039ListView" ItemsSource="{Binding E039ObjectSetTracker.TrackingSet, ElementName=OuterWindow}" ScrollViewer.VerticalScrollBarVisibility="Auto" IsSynchronizedWithCurrentItem="False">
+                        <ListView.View>
+                            <GridView>
+                                <GridViewColumn Header="Type" Width="100" DisplayMemberBinding="{Binding ID.Type, Mode=OneWay}"/>
+                                <GridViewColumn Header="Name" Width="100" DisplayMemberBinding="{Binding ID.Name, Mode=OneWay}"/>
+                                <GridViewColumn Header="Attributes" Width="300" DisplayMemberBinding="{Binding Attributes, Converter={StaticResource VCToStringSMLConverter}, Mode=OneWay}"/>
+                                <GridViewColumn Header="Links To" Width="300" DisplayMemberBinding="{Binding LinksToOtherObjectsList, Converter={StaticResource SetToStringConverter}, Mode=OneWay}"/>
+                                <GridViewColumn Header="Links From" Width="300" DisplayMemberBinding="{Binding LinksFromOtherObjectsList, Converter={StaticResource SetToStringConverter}, Mode=OneWay}"/>
+                            </GridView>
+                        </ListView.View>
+                    </ListView>
+                </DockPanel>
+            </TabItem>
+            <TabItem Header="Local Logs">
+                <Controls:LogView SetName="LocalLogMessageHistory" MesgColumnWidth="950"/>
+            </TabItem>
+        </TabControl>
+    </Grid>
+</Window>

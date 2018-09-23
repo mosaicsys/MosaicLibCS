@@ -39,7 +39,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
 {
     /// <summary>
     /// This enum gives the current summary state for a given client session.
-    /// <para/>None (0), Opening, Reopening, Active, Idle, IdleWithPendingWork, CloseRequested, Closed, ConnectionLost, Terminated
+    /// <para/>None (0), ClientSessionInitial, ServerSessionInitial, Active, Idle, IdleWithPendingWork, RequestTransportConnect, RequestTransportReconnect, RequestSessionOpen, RequestSessionResume, CloseRequested, ConnectionClosed, Terminated
     /// </summary>
     public enum SessionStateCode : int
     {
@@ -73,11 +73,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
         /// <summary>State that covers Client Resume Requests.  Session will then periodically post Session Reopen requests.</summary>
         RequestSessionResume,
 
-        /// <summary>The Session client has requested that the session be closed.  CloseRequestReason will be non-empty.</summary>
-        CloseRequested,
-
         /// <summary>The Session client has requested that the session be closed (perminantly).  CloseRequestReason will be non-empty.</summary>
-        FinalCloseRequested,
+        CloseRequested,
 
         /// <summary>The transport layer has indicated that the session has been closed, either by request, or due to an error.  Auto-reconnect attempts may occur from this state.</summary>
         ConnectionClosed,
@@ -98,7 +95,6 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
                     return true;
 
                 case SessionStateCode.CloseRequested:
-                case SessionStateCode.FinalCloseRequested:
                     return includeClosingStates;
 
                 case SessionStateCode.ServerSessionInitial:
@@ -111,6 +107,34 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
                 case SessionStateCode.ConnectionClosed:
                 case SessionStateCode.Terminated:
                 default: 
+                    return false;
+            }
+        }
+
+        public static bool IsClosing(this SessionStateCode stateCode)
+        {
+            switch (stateCode)
+            {
+                case SessionStateCode.CloseRequested:
+                    return true;
+
+                default:
+                    return false;
+            }
+
+        }
+
+        public static bool IsConnecting(this SessionStateCode stateCode)
+        {
+            switch (stateCode)
+            {
+                case SessionStateCode.ServerSessionInitial:
+                case SessionStateCode.RequestTransportConnect:
+                case SessionStateCode.RequestTransportReconnect:
+                case SessionStateCode.RequestSessionOpen:
+                case SessionStateCode.RequestSessionResume:
+                    return true;
+                default:
                     return false;
             }
         }
@@ -142,18 +166,22 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
     {
         public SessionStateCode StateCode { get; set; }
         public QpcTimeStamp TimeStamp { get; set; }
+        public string Reason { get; set; }
 
         public override string ToString()
         {
-            return "{0}".CheckedFormat(StateCode);
+            return "{0} [{1}]".CheckedFormat(StateCode, Reason.MapNullOrEmptyTo("NoReasonGiven"));
         }
 
         public bool Equals(SessionState other)
         {
             return (StateCode == other.StateCode
-                    && TimeStamp == other.TimeStamp);
+                    && TimeStamp == other.TimeStamp
+                    && Reason == other.Reason);
         }
 
+        public bool IsConnecting { get { return StateCode.IsConnecting(); } }
+        public bool IsClosing { get { return StateCode.IsClosing(); } }
         public bool IsConnected(bool includeConnectingStates = false, bool includeClosingStates = false) { return StateCode.IsConnected(includeConnectingStates: includeConnectingStates, includeClosingStates: includeClosingStates); }
         public bool IsPerminantlyClosed { get { return StateCode.IsPerminantlyClosed(); } }
         public bool CanAcceptOutboundMessages { get { return StateCode.CanAcceptOutboundMessages(); } }
@@ -417,7 +445,12 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
                         return session;
                     }
 
-                    IssueEmitter.Emit("{0}: Could not find matching session for uuid:'{2}', ep:'{1}'", Fcns.CurrentMethodName, sessionUUID, transportEndpoint);
+                    string reason = "Could not find matching session for uuid:'{0}', ep:'{1}'".CheckedFormat(sessionUUID, transportEndpoint);
+                    IssueEmitter.Emit("{0}: {1}", Fcns.CurrentMethodName, reason);
+
+                    var buffer = ConnectionSession.GenerateManagementBuffer(qpcTimeStamp, ManagementType.NoteSessionTerminated, HostName, sessionUUID, null, reason, Transport.TransportRole.Server, BufferPool, true);
+
+                    (newConnectionHandleOutboundBuffersDelegate ?? HandleOutboundBuffersDelegate)(qpcTimeStamp, transportEndpoint, buffer);
                 }
             }
             else
@@ -518,7 +551,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
             if ((Config = sessionConfig) == null)
                 new NamedValueSetAdapter<SessionConfig>() { IssueEmitter = IssueEmitter, ValueNoteEmitter = TraceEmitter, ValueSet = Config = new SessionConfig() }.Setup().Set(HostParamsNVS, merge: true);
 
-            State = new SessionState() { StateCode = initialSessionStateCode, TimeStamp = QpcTimeStamp.Now };
+            State = new SessionState() { StateCode = initialSessionStateCode, TimeStamp = QpcTimeStamp.Now, Reason = "Construction" };
             lastRecvActivityTimeStamp = lastSendActivityTimeStamp = State.TimeStamp;
         }
 
@@ -544,9 +577,15 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
         public string RemoteName { get { return _remoteName ?? "[RemoteNameIsNull]"; } private set { _remoteName = value; } }
         private string _remoteName = null;
 
-        public HandleMessageDelegate HandleInboundMessageDelegate { get; set; }     // messages that are delivered to the next level up in the protocol stack
+        /// <summary>
+        /// Delegate that is used to pass fully received stream messages to the next level up: typically to the stream handler
+        /// </summary>
+        public HandleMessageDelegate HandleInboundMessageDelegate { get; set; }
 
-        public HandleBuffersDelegate HandleOutboundBuffersDelegate { get; set; }    // buffers that are to be delivired to the transport layer.
+        /// <summary>
+        /// Delegate that is used to pass outbound buffers to the transport layer to be queued for delivery.
+        /// </summary>
+        public HandleBuffersDelegate HandleOutboundBuffersDelegate { get; set; }
 
         public void HandleTransportException(QpcTimeStamp qpcTimeStamp, object transportEndpoint, System.Exception ex, bool endpointClosed = false)
         {
@@ -578,7 +617,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
 
             TimeSpan entryStateAge = (entryState.TimeStamp != QpcTimeStamp.Zero) ? (qpcTimeStamp - entryState.TimeStamp) : TimeSpan.Zero;
 
-            State = new Sessions.SessionState() { StateCode = stateCode, TimeStamp = qpcTimeStamp };
+            State = new SessionState() { StateCode = stateCode, TimeStamp = qpcTimeStamp, Reason = reason ?? "SetState was not given a reason" };
 
             string closeRequestReason = string.Empty;
 
@@ -590,7 +629,6 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
                     break;
 
                 case SessionStateCode.CloseRequested:
-                case SessionStateCode.FinalCloseRequested:
                     closeRequestReason = reason;            // update CloseRequestReason - used by transport to determine when to close a connection
                     break;
 
@@ -633,7 +671,15 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
                         TimeSpan stateAge = (qpcTimeStamp - State.TimeStamp);
 
                         if (stateAge > Config.SessionExpirationPeriod)
-                            SetState(qpcTimeStamp, SessionStateCode.CloseRequested, "Session has expired after {0:f3} seconds".CheckedFormat(stateAge.TotalSeconds));
+                        {
+                            string reason = "Session has expired after {0:f3} seconds".CheckedFormat(stateAge.TotalSeconds);
+
+                            StateEmitter.Emit("{0} [sending termination message]", reason);
+
+                            GenerateAndAddManagementBufferToSendNowList(qpcTimeStamp, ManagementType.NoteSessionTerminated, reason: reason);
+
+                            SetState(qpcTimeStamp, SessionStateCode.Terminated, reason);
+                        }
                     }
 
                     break;
@@ -641,6 +687,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
                 case SessionStateCode.Active:
                     count += ServiceOutgoingMessageList(qpcTimeStamp);
                     count += ServiceTransmitter(qpcTimeStamp);
+                    count += ServiceHeldOutOfOrderBufferList(qpcTimeStamp, checkForStaleBuffers: true);     // used to get rid of stale held out of order buffers.
 
                     if (count == 0)
                     {
@@ -683,21 +730,11 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
 
                     if (count == 0)
                     {
+                        TimeSpan txAge = (qpcTimeStamp - lastSendActivityTimeStamp);
                         TimeSpan stateAge = (qpcTimeStamp - State.TimeStamp);
 
-                        if (TransportRole == Transport.TransportRole.Client && stateAge > Config.NormalRetransmitHoldoffPeriod)
-                            SetState(qpcTimeStamp, SessionStateCode.ConnectionClosed, "Client wait while {0} expired after {1:f3} seconds".CheckedFormat(StateCode, stateAge.TotalSeconds));
-
-                        // Server session can stay in this state until they are removed due to inactivity
-                    }
-                    break;
-
-                case SessionStateCode.FinalCloseRequested:
-                    count += ServiceTransmitter(qpcTimeStamp, enableRetransmission: true, enableMessageSending: false);
-
-                    if (count == 0)
-                    {
-                        TimeSpan stateAge = (qpcTimeStamp - State.TimeStamp);
+                        if (txAge >= Config.ShortRetransmitHoldoffPeriod && stateAge >= Config.ShortRetransmitHoldoffPeriod)
+                            GenerateAndAddManagementBufferToSendNowList(qpcTimeStamp, ManagementType.RequestCloseSession, reason: "Close request retransmit: {0}".CheckedFormat(State.Reason));
 
                         if (stateAge > Config.NormalRetransmitHoldoffPeriod)
                             SetState(qpcTimeStamp, SessionStateCode.Terminated, "Client wait while {0} expired after {1:f3} seconds".CheckedFormat(StateCode, stateAge.TotalSeconds));
@@ -764,7 +801,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
 
             SetState(qpcTimeStamp, SessionStateCode.CloseRequested, faultReason);
 
-            GenerateAndAddManagementBufferToSendNowList(qpcTimeStamp, ManagementType.NoteSessionTerminated, new NamedValueSet() { { "Reason", faultReason } }, serviceTransmitter: serviceTransmitter);
+            GenerateAndAddManagementBufferToSendNowList(qpcTimeStamp, ManagementType.NoteSessionTerminated, reason: faultReason, serviceTransmitter: serviceTransmitter);
         }
 
         #region Outbound messages - distribution to streams and early buffer preperation
@@ -963,14 +1000,14 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
 
         private void AddBufferToMessageAccumulation(QpcTimeStamp qpcTimeStamp, Buffers.Buffer buffer)
         {
-            ushort stream = buffer.header.MessageStream;
+            var stream = buffer.header.MessageStream;
 
-            InboundPerMessageStreamHandler streamHandler = (stream < inboundPerMessageStreamHandlerArray.Length) ? inboundPerMessageStreamHandlerArray[stream] : null;
+            InboundPerMessageStreamHandler streamHandler = inboundPerMessageStreamHandlerArray.SafeAccess(stream);
 
             if (streamHandler == null)
             {
                 int currentMaxStream = inboundPerMessageStreamHandlerArray.Length;
-                inboundPerMessageStreamHandlerList.AddRange(Enumerable.Range(currentMaxStream, stream + 1 - currentMaxStream).Select(addingStream => new InboundPerMessageStreamHandler() { stream = unchecked((ushort) addingStream) }));
+                inboundPerMessageStreamHandlerList.AddRange(Enumerable.Range(currentMaxStream, stream + 1 - currentMaxStream).Select(addingStream => new InboundPerMessageStreamHandler() { stream = unchecked((ushort)addingStream) }));
                 inboundPerMessageStreamHandlerArray = inboundPerMessageStreamHandlerList.ToArray();
 
                 streamHandler = inboundPerMessageStreamHandlerArray[stream];
@@ -989,7 +1026,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
 
             foreach (var streamHandler in inboundPerMessageStreamHandlerArray)
             {
-                ushort stream = streamHandler.stream;
+                var stream = streamHandler.stream;
                 List<Buffers.Buffer> inboundBufferAccumulationList = streamHandler.bufferAccumulationList;
                 int listCount = inboundBufferAccumulationList.Count;
 
@@ -1164,7 +1201,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
 
                     NamedValueSet nvs = new NamedValueSet() 
                     { 
-                        { "HeldBufferSeqNums", heldOutOfOrderBuffersList.Values.Take(Config.MaxHeldBufferSeqNumsToIncludeInStatusUpdate).Select(buffer => buffer.SeqNum).ToArray() } 
+                        { Constants.HeldBufferSeqNumsAttributeName, heldOutOfOrderBuffersList.Values.Take(Config.MaxHeldBufferSeqNumsToIncludeInStatusUpdate).Select(buffer => buffer.SeqNum).ToArray() } 
                     };
 
                     GenerateAndAddManagementBufferToSendNowList(qpcTimeStamp, ManagementType.Status, nvs, serviceTransmitter: false);
@@ -1318,7 +1355,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
         {
             int count = 0;
 
-            ulong [] heldBuffersSeqNumsArray = statusNVS["HeldBufferSeqNums"].VC.GetValue<ulong []>(rethrow: false);
+            // note: the following will produce a null array if the corresponding attribute is not pressent.
+            ulong[] heldBuffersSeqNumsArray = statusNVS[Constants.HeldBufferSeqNumsAttributeName].VC.GetValue<ulong[]>(rethrow: false);
 
             if (!heldBuffersSeqNumsArray.IsNullOrEmpty())
             {
@@ -1332,25 +1370,36 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
             return count;
         }
 
-        private void GenerateAndAddManagementBufferToSendNowList(QpcTimeStamp qpcTimeStamp, ManagementType managementType, NamedValueSet nvs = null, bool serviceTransmitter = true)
+        public static Buffers.Buffer GenerateManagementBuffer(QpcTimeStamp qpcTimeStamp, ManagementType managementType, string hostName, string sessionUUID, NamedValueSet nvs, string reason, Transport.TransportRole transportRole, BufferPool bufferPool, bool setState)
         {
             nvs = nvs.ConvertToWritable();
 
             nvs.SetValue("Type", managementType);
+            nvs.ConditionalSetValue("Reason", reason != null, reason);
 
             if (managementType != ManagementType.Status)
             {
                 if (!nvs.Contains("Name"))
-                    nvs.SetValue("Name", HostName);
+                    nvs.SetValue("Name", hostName);
 
                 if (!nvs.Contains("SessionUUID"))
-                    nvs.SetValue("SessionUUID", SessionUUID);
+                    nvs.SetValue("SessionUUID", sessionUUID);
 
-                if ((managementType == ManagementType.RequestResumeSession || TransportRole == Transport.TransportRole.Server) && !nvs.Contains("BufferSize"))
-                    nvs.SetValue("BufferSize", BufferPool.BufferSize);
+                if ((managementType == ManagementType.RequestResumeSession || transportRole == Transport.TransportRole.Server) && !nvs.Contains("BufferSize"))
+                    nvs.SetValue("BufferSize", bufferPool.BufferSize);
             }
 
-            Buffers.Buffer managementBuffer = BufferPool.Acquire(qpcTimeStamp).Update(purposeCode: PurposeCode.Management, buildPayloadDataFromE005NVS: nvs);
+            Buffers.Buffer managementBuffer = bufferPool.Acquire(qpcTimeStamp).Update(purposeCode: PurposeCode.Management, buildPayloadDataFromE005NVS: nvs);
+
+            if (setState)
+               managementBuffer.SetState(qpcTimeStamp, BufferState.ReadyToSend, "generated management buffer {0}".CheckedFormat(nvs.SafeToStringSML()));
+
+            return managementBuffer;
+        }
+
+        public void GenerateAndAddManagementBufferToSendNowList(QpcTimeStamp qpcTimeStamp, ManagementType managementType, NamedValueSet nvs = null, bool serviceTransmitter = true, string reason = null)
+        {
+            Buffers.Buffer managementBuffer = GenerateManagementBuffer(qpcTimeStamp, managementType, HostName, SessionUUID, nvs, reason, TransportRole, BufferPool, setState: false);
 
             managementBuffer.SetState(qpcTimeStamp, BufferState.ReadyToSend, "Adding management buffer to send now list {0}".CheckedFormat(nvs.SafeToStringSML()));
 
@@ -1454,7 +1503,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
                 case PurposeCode.MessageStart:
                 case PurposeCode.MessageMiddle:
                 case PurposeCode.MessageEnd:
-                    if (State.IsConnected(includeConnectingStates: false))
+                    if (State.IsConnected(includeConnectingStates: false, includeClosingStates: true))
                     {
                         if (bufferSeqNum != 0)
                         {
@@ -1493,9 +1542,13 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
                             HandleSessionProtocolViolation(qpcTimeStamp, "received message buffer with zero SeqNum [state:{0} buffer:{1}]".CheckedFormat(State, buffer));
                         }
                     }
-                    else
+                    else if (State.StateCode != SessionStateCode.Terminated)
                     {
                         HandleSessionProtocolViolation(qpcTimeStamp, "received message buffer while session is not connected [state:{0} buffer:{1}]".CheckedFormat(State, buffer));
+                    }
+                    else
+                    {
+                        TraceEmitter.Emit("received message buffer while session is terminated [state:{0} buffer:{1}]", State, buffer);
                     }
                     break;
 
@@ -1528,6 +1581,10 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
                             case ManagementType.RequestResumeSession:
                                 switch (State.StateCode)
                                 {
+                                    case SessionStateCode.ServerSessionInitial:
+                                    case SessionStateCode.Active:
+                                    case SessionStateCode.Idle:
+                                    case SessionStateCode.IdleWithPendingWork:
                                     case SessionStateCode.ConnectionClosed:
                                         count += ProcessServerSessionResume(qpcTimeStamp, remoteName, sessionUUID, bufferNVS);
                                         break;
@@ -1554,6 +1611,22 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
 
                                             count++;
                                         break;
+                                }
+                                break;
+
+                            case ManagementType.RequestCloseSession:
+                                {
+                                    ValueContainer reasonVC = bufferNVS["Reason"].VC;
+
+                                    string reason = "Received request to close session {0}".CheckedFormat(reasonVC.ToStringSML());
+
+                                    SetState(qpcTimeStamp, SessionStateCode.CloseRequested, reason);
+
+                                    GenerateAndAddManagementBufferToSendNowList(qpcTimeStamp, ManagementType.NoteSessionTerminated, reason: reason);
+
+                                    SetState(qpcTimeStamp, SessionStateCode.Terminated, reason);
+
+                                    count++;
                                 }
                                 break;
 
@@ -1618,6 +1691,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
             if (RemoteName == remoteName && SessionUUID == sessionUUID && BufferPool.BufferSize == bufferSize)
             {
                 GenerateAndAddManagementBufferToSendNowList(qpcTimeStamp, ManagementType.SessionRequestAcceptedResponse);
+
                 SetState(qpcTimeStamp, SessionStateCode.Active, Fcns.CurrentMethodName);
             }
             else
@@ -1724,6 +1798,18 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
         }
 
         #endregion
+    }
+
+    #endregion
+
+    #region Constants
+
+    public static partial class Constants
+    {
+        /// <summary>
+        /// Attribute name for HeldBufferSeqNums ("HeldBufferSeqNums")
+        /// </summary>
+        public const string HeldBufferSeqNumsAttributeName = "HeldBufferSeqNums";
     }
 
     #endregion

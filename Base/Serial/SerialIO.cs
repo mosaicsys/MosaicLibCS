@@ -821,7 +821,7 @@ namespace MosaicLib.SerialIO
         /// <param name="allowThrow">Set to true to allow this method to throw an exception if the given portConfig.SpecStr cannot be understood.  Set to false to force the method to construct and return a NullPort instead.</param>
 		/// <returns>The created SerialIO.Port object as an IPort.  Throws an InvalidPortConfigSpecStr exception if the required concrete type cannot be determined from the portConfig.SpecStr.</returns>
         /// <exception cref="InvalidPortConfigSpecStrException">thrown if the required concrete type cannot be determined from the portConfig.SpecStr and the allowThrow property is true</exception>
-        public static IPort CreatePort(PortConfig portConfig, bool allowThrow = true)
+        public static IPort CreatePort(this PortConfig portConfig, bool allowThrow = true)
 		{
 			bool success = true;
 			Utils.StringScanner specScan = new StringScanner(portConfig.SpecStr);
@@ -886,7 +886,7 @@ namespace MosaicLib.SerialIO
 		}
 	}
 
-	#endregion
+    #endregion
 
 	//-----------------------------------------------------------------
 }

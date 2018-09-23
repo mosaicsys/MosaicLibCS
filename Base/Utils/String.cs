@@ -52,7 +52,7 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        #region static String value mapping functions
+        #region static String value mapping functions (MapNullToEmpty, MabNullOrEmptyTo, MapEmptyTo, MapNullTo, MapEmptyToNull)
 
         /// <summary>Maps the given string value to the empty string if it is null</summary>
 		/// <param name="s">The string to test for null and optionally map</param>
@@ -100,7 +100,7 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        #region static String Ascii predicate method(s)
+        #region static String Ascii predicate method(s) (IsBasicAscii)
 
         /// <summary>
         /// Returns true if all of the characters in this string have char values from 32 to 127, or the string is empty.  valueForNull is returned if the given string is null.
@@ -209,7 +209,7 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        #region static String Ascii escape methods
+        #region static String Ascii escape methods (GenerateJSONVersion, GenerateLoggingVersion, GenerateQuotableVersion, GenerateSquareBracketEscapedVersion, GenerateEscapedVersion, EscapeAndAppend)
 
         /// <summary>
         /// Generate and return a "JSON escaped" version of given string s.
@@ -456,7 +456,7 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        #region static String [] methods
+        #region static String [] methods (Equals)
 
         /// <summary>Returns true if both lists have the same contents.  Returns false if they do not.</summary>
         public static bool Equals(this String[] a, String[] b)
@@ -581,6 +581,18 @@ namespace MosaicLib.Utils
             }
 
             return sb;
+        }
+
+        /// <summary>
+        /// If the given <paramref name="sb"/> StringBuilder is not empty then this method appends the <paramref name="delimiter"/>
+        /// and then it appends the given <paramref name="str"/>;
+        /// </summary>
+        public static StringBuilder AppendWithDelimiter(this StringBuilder sb, string delimiter, string str)
+        {
+            if (sb.Length > 0 && delimiter != null)
+                sb.Append(delimiter);
+
+            return sb.Append(str);
         }
 
         /// <summary>
@@ -772,7 +784,7 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        #region string prefix add/remote tools
+        #region string prefix add/remote tools (AddPrefixIfNeeded, RemovePrefixIfNeeded, AddSuffixIfNeeded, RemoveSuffixIfNeeded)
 
         /// <summary>
         /// This takes the given from string value and adds the given prefix string value if the from string does not already start with the prefix string.
@@ -780,12 +792,12 @@ namespace MosaicLib.Utils
         /// If prefix is null or empty or from already starts with prefix then this method returns from.
         /// Otherwise this method returns prefix + from.
         /// </summary>
-        public static string AddPrefixIfNeeded(this string from, string prefix)
+        public static string AddPrefixIfNeeded(this string from, string prefix, StringComparison comparisonType = StringComparison.CurrentCulture)
         {
             if (from.IsNullOrEmpty())
                 return prefix;
 
-            if (prefix.IsNullOrEmpty() || from.StartsWith(prefix))
+            if (prefix.IsNullOrEmpty() || from.StartsWith(prefix, comparisonType))
                 return from;
 
             return prefix + from;
@@ -797,12 +809,12 @@ namespace MosaicLib.Utils
         /// If from does not start with prefix then this method returns from.
         /// Otherwise this method returns from.SubString(prefix.Length).
         /// </summary>
-        public static string RemovePrefixIfNeeded(this string from, string prefix)
+        public static string RemovePrefixIfNeeded(this string from, string prefix, StringComparison comparisonType = StringComparison.CurrentCulture)
         {
             if (from.IsNullOrEmpty() || prefix.IsNullOrEmpty())
                 return from;
 
-            if (!from.StartsWith(prefix))
+            if (!from.StartsWith(prefix, comparisonType))
                 return from;
 
             return from.Substring(prefix.Length);
@@ -814,12 +826,12 @@ namespace MosaicLib.Utils
         /// If suffix is null or empty or from already ends with suffix then this method returns from.
         /// Otherwise this method returns from + suffix.
         /// </summary>
-        public static string AddSuffixIfNeeded(this string from, string suffix)
+        public static string AddSuffixIfNeeded(this string from, string suffix, StringComparison comparisonType = StringComparison.CurrentCulture)
         {
             if (from.IsNullOrEmpty())
                 return suffix;
 
-            if (suffix.IsNullOrEmpty() || from.EndsWith(suffix))
+            if (suffix.IsNullOrEmpty() || from.EndsWith(suffix, comparisonType))
                 return from;
 
             return from + suffix;
@@ -831,12 +843,12 @@ namespace MosaicLib.Utils
         /// If from does not start with suffix then this method returns from.
         /// Otherwise this method returns from.Substring(0, from.Length - suffix.Length).
         /// </summary>
-        public static string RemoveSuffixIfNeeded(this string from, string suffix)
+        public static string RemoveSuffixIfNeeded(this string from, string suffix, StringComparison comparisonType = StringComparison.CurrentCulture)
         {
             if (from.IsNullOrEmpty() || suffix.IsNullOrEmpty())
                 return from;
 
-            if (!from.EndsWith(suffix))
+            if (!from.EndsWith(suffix, comparisonType))
                 return from;
 
             return from.Substring(0, from.Length - suffix.Length);

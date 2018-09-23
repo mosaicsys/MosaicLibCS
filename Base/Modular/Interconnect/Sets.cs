@@ -2299,7 +2299,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
         /// <summary>This field contains the copy set that was last obtained by this set from its source set.</summary>
         private SetBase<TObjectType> lastSetCopy = null;
 
-        /// <summary>Contains the SeqNum from the trackingSourceSet from the last time we obtained</summary>
+        /// <summary>Contains the SeqNum from the trackingSourceSet from the last time we obtained a set copy</summary>
         private Int64 lastSetCopySeqNum = 0;
 
         /// <summary>Gives a local copy of the lastSetCopy.SeqNumRangeInfo taken when the last set copy was made.</summary>

@@ -40,6 +40,7 @@ namespace MosaicLib.WPF.Common
 
     /// <summary>
     /// This enumeration is used with some Config.Logging keys to configure how standard logging is setup when using this AppSetup helper class
+    /// <para/>Disabled (0x00), IncludeAlways (0x01), IncludeWhenDebuggerAttached (0x02), NonQueued (0x04)
     /// </summary>
     [Flags]
     public enum LogMessageHandlerSettingFlags : int
@@ -116,9 +117,9 @@ namespace MosaicLib.WPF.Common
         /// </summary>
         public enum FileRingLogMessageHandlerType
         {
+            None = 0,
             TextFileRotationDirectoryLogMessageHandler,
             TextFileDateTreeDirectoryLogMessageHandler,
-            None,
         }
 
         /// <summary>
@@ -248,6 +249,18 @@ namespace MosaicLib.WPF.Common
         }
 
         /// <summary>
+        /// Basic HandleOnStartup method signature.  Caller provides logBaseName.  
+        /// Program's command line arguments will be obtained from the given StartupEventArgs value.  These will be used with the (optional) initial setup of Modular.Config.
+        /// appLogger will be assigned to a new logger (this is expected to be used by the client in calls to later HandleYYY methods).
+        /// <para/>See the description and remarks for the full HandleOnStartup method variant for more details.
+        /// </summary>
+        public static void HandleOnStartup(StartupEventArgs e, ref Logging.Logger appLogger, INamedValueSet nvs)
+        {
+            string[] args = (e != null) ? e.Args : null;
+            HandleOnStartup(ref args, ref appLogger, nvs: nvs);
+        }
+
+        /// <summary>
         /// Full HandleOnStartup method signature.
         /// argsRef line arguments string array will be used with the (optional) initial setup of Modular.Config.  This array will be replaced with one that has the consumed parameters removed from it.
         /// appLogger will be assigned to a new logger (this is expected to be used by the client in calls to later HandleYYY methods).
@@ -256,8 +269,47 @@ namespace MosaicLib.WPF.Common
         /// </summary>
         public static void HandleOnStartup(ref string[] argsRef, ref Logging.Logger appLogger, string logBaseName = null, bool addWPFLMH = false, bool addSetLMH = false, bool enableUEH = true)
         {
+            HandleOnStartup(ref argsRef, ref appLogger, new NamedValueSet()
+            {
+                { "logBaseName", logBaseName },
+                { "addWPFLMH", addWPFLMH },
+                { "addSetLMH", addSetLMH },
+                { "enableUEH", enableUEH },
+            });
+        }
+        
+        /// <summary>
+        /// Full HandleOnStartup method signature.
+        /// <paramref name="argsRef"/> line arguments string array will be used with the (optional) initial setup of Modular.Config.  
+        /// If this parameter is non-null, it will be processed to extract the key=value items it contains, and will be replaced with a new array that has the consumed key=value items removed from it.
+        /// <paramref name="appLogger"/> will be assigned to a new logger (this is expected to be used by the client in calls to later HandleYYY methods).
+        /// <paramref name="nvs"/> is used to pass all directly caller configurable values that are supported by this method (see remarks section below)
+        /// </summary>
+        /// <remarks>
+        /// logBaseName: optional name used in the default log file names that are generated.  Also used to name the main thread if it has not already been named.
+        /// addWPFLMH: no longer supported - ignored
+        /// addSetLMH: pass as true to enable creating a set based log message handler.
+        /// enableUEH: if true, this method will install an unhandled exception handler, if none has already been established.  Set to false to disable this behavior.
+        /// providerSelect: set to StandardProviderSelect value to override the default behavior of StandardProviderSelect.All.  This value will be ignored if there are already any providers registered with Config.Instance when this method is called.  If the given argsRef array value is null then MainArgs will be excluded from this value.
+        /// uehFileWritePath: may be used to override the config key value (Config.UnhandledExceptionEventHandler.FilePath), and/or its initial value.  Must be non-empty to enable setting up an UEH.
+        /// mainLoggerType: may be used to override the config key value (Config.Logging.MainLogger.Type), and/or its initial value.  When neither this parameter, nor the configuration key are found to give a valid FileRingLogMessageHandlerType value, the static DefaultMainLoggerType is used.
+        /// diagTraceLMHSettingFlags, setLMHSettingFlags: may be used to override the corresponding config key values (Config.Logging.DiagnosticTrace/Set), and/or their initial values. (LogMessageHandlerSettingFlags)
+        /// setName, setCapacity, setLogGate: may be used to override the corresponding config key values (Config.Logging.Set.Name/Capacity/LogGate), and/or their initial values.
+        /// appEventMesgType: may be used to define the MesgType to be used for App Event messages.  When present, this key's value is used to set the AppEventMesgType.
+        /// traceLoggingGroupName: may be used to override the config key value (Config.Logging.TraceRing.LGID) and/or its initial value.
+        /// traceRingLinkFromDefaultGroup, traceRingLinkToDefaultGroup: when present these boolean values control the corresponding function without regard to the contents of the corresponding modular config values.
+        /// </remarks>
+        public static void HandleOnStartup(ref string[] argsRef, ref Logging.Logger appLogger, INamedValueSet nvs = null)
+        {
             System.Reflection.Assembly callerAssy = CallerAssembly;
-            logBaseName = logBaseName ?? callerAssy.GetAssemblyNameFromFullName();
+
+            nvs = nvs.MapNullToEmpty();
+
+            string logBaseName = nvs["logBaseName"].VC.GetValue<string>(rethrow: false)
+                                ?? callerAssy.GetAssemblyNameFromFullName();
+            bool addWPFLMH = nvs["addWPFLMH"].VC.GetValue<bool?>(rethrow: false) ?? false;
+            bool addSetLMH = nvs["addSetLMH"].VC.GetValue<bool?>(rethrow: false) ?? false;
+            bool enableUEH = nvs["enableUEH"].VC.GetValue<bool?>(rethrow: false) ?? true;
 
             System.Diagnostics.Process currentProcess = System.Diagnostics.Process.GetCurrentProcess();
             System.Threading.Thread currentThread = System.Threading.Thread.CurrentThread;
@@ -269,15 +321,23 @@ namespace MosaicLib.WPF.Common
 
             IConfig config = Config.Instance;
 
-            if (argsRef != null && config.Providers.IsNullOrEmpty())
-                config.AddStandardProviders(ref argsRef);
+            StandardProviderSelect providerSelect = nvs["providerSelect"].VC.GetValue<StandardProviderSelect>(rethrow: false, defaultValue: StandardProviderSelect.All);
+            if (argsRef == null)
+                providerSelect &= ~StandardProviderSelect.MainArgs;
+
+            if (providerSelect != StandardProviderSelect.None && config.Providers.IsNullOrEmpty())
+                config.AddStandardProviders(ref argsRef, providerSelect: providerSelect);
 
             if (enableUEH && UnhandledExceptionEventHandler != null)
             {
-                uehFileWritePath = config.GetConfigKeyAccessOnce("Config.UnhandledExceptionEventHandler.FilePath", silenceLogging: true).GetValue(uehFileWritePath);
+                uehFileWritePath = nvs["uehFileWritePath"].VC.GetValue<string>(rethrow: false)
+                                    ?? config.GetConfigKeyAccessOnce("Config.UnhandledExceptionEventHandler.FilePath", silenceLogging: true).GetValue(uehFileWritePath);
 
-                AppDomain currentDomain = AppDomain.CurrentDomain;
-                currentDomain.UnhandledException += UnhandledExceptionEventHandler;
+                if (!uehFileWritePath.IsNullOrEmpty())
+                {
+                    AppDomain currentDomain = AppDomain.CurrentDomain;
+                    currentDomain.UnhandledException += UnhandledExceptionEventHandler;
+                }
             }
 
             int ringQueueSize = 500;
@@ -285,7 +345,9 @@ namespace MosaicLib.WPF.Common
             Logging.ListMesgEmitter issueListEmitter = new Logging.ListMesgEmitter() { MesgType = Logging.MesgType.Error };
             Logging.ListMesgEmitter valuesListEmitter = new Logging.ListMesgEmitter() { MesgType = Logging.MesgType.Debug };
 
-            FileRingLogMessageHandlerType mainLoggerType = config.GetConfigKeyAccessOnce("Config.Logging.MainLogger.Type").GetValue<FileRingLogMessageHandlerType>(DefaultMainLoggerType);
+            FileRingLogMessageHandlerType mainLoggerType = nvs["mainLoggerType"].VC.GetValue<FileRingLogMessageHandlerType?>(rethrow: false)
+                ?? config.GetConfigKeyAccessOnce("Config.Logging.MainLogger.Type").GetValue<FileRingLogMessageHandlerType?>()
+                ?? DefaultMainLoggerType;
 
             Logging.FileRotationLoggingConfig fileRotationRingConfig = new Logging.FileRotationLoggingConfig(logBaseName.MapNullToEmpty() + "LogFile")
             {
@@ -336,23 +398,22 @@ namespace MosaicLib.WPF.Common
                     break;
             }
 
-            LogMessageHandlerSettingFlags diagTraceLMHSettingFlags = config.GetConfigKeyAccessOnce("Config.Logging.DiagnosticTrace").GetValue(LogMessageHandlerSettingFlags.IncludeWhenDebuggerAttached);
-            //LogMessageHandlerSettingFlags wpfLMHSettingFlags = config.GetConfigKeyAccessOnce("Config.Logging.WPF").GetValue(addWPFLMH ? LogMessageHandlerSettingFlags.IncludeAlways : LogMessageHandlerSettingFlags.Disabled);
-            LogMessageHandlerSettingFlags setLMHSettingFlags = config.GetConfigKeyAccessOnce("Config.Logging.Set").GetValue(addSetLMH ? LogMessageHandlerSettingFlags.IncludeAlways : LogMessageHandlerSettingFlags.Disabled);
+            LogMessageHandlerSettingFlags diagTraceLMHSettingFlags = nvs["diagTraceLMHSettingFlags"].VC.GetValue<LogMessageHandlerSettingFlags?>(rethrow: false) 
+                                                                    ?? config.GetConfigKeyAccessOnce("Config.Logging.DiagnosticTrace").GetValue(LogMessageHandlerSettingFlags.IncludeWhenDebuggerAttached);
+            LogMessageHandlerSettingFlags setLMHSettingFlags = nvs["setLMHSettingFlags"].VC.GetValue<LogMessageHandlerSettingFlags?>(rethrow: false) 
+                                                                    ?? config.GetConfigKeyAccessOnce("Config.Logging.Set").GetValue(addSetLMH ? LogMessageHandlerSettingFlags.IncludeAlways : LogMessageHandlerSettingFlags.Disabled);
 
             bool addDiagTraceLMH = diagTraceLMHSettingFlags.IsSet(LogMessageHandlerSettingFlags.IncludeAlways) || diagTraceLMHSettingFlags.IsSet(LogMessageHandlerSettingFlags.IncludeWhenDebuggerAttached) && System.Diagnostics.Debugger.IsAttached;
-            //addWPFLMH = wpfLMHSettingFlags.IsSet(LogMessageHandlerSettingFlags.IncludeAlways) || wpfLMHSettingFlags.IsSet(LogMessageHandlerSettingFlags.IncludeWhenDebuggerAttached) && System.Diagnostics.Debugger.IsAttached;
             addSetLMH = setLMHSettingFlags.IsSet(LogMessageHandlerSettingFlags.IncludeAlways) || setLMHSettingFlags.IsSet(LogMessageHandlerSettingFlags.IncludeWhenDebuggerAttached) && System.Diagnostics.Debugger.IsAttached;
 
             Logging.ILogMessageHandler diagTraceLMH = addDiagTraceLMH ? Logging.CreateDiagnosticTraceLogMessageHandler(logGate: Logging.LogGate.Debug) : null;
-            //Logging.ILogMessageHandler wpfLMH = addWPFLMH ? MosaicLib.WPF.Logging.WpfLogMessageHandlerToolBase.Instance : null;
 
             Logging.ILogMessageHandler setLMH = null;
             if (addSetLMH)
             {
-                string setName = config.GetConfigKeyAccessOnce("Config.Logging.Set.Name").GetValue("LogMessageHistory");
-                int setCapacity = config.GetConfigKeyAccessOnce("Config.Logging.Set.Capacity").GetValue(1000);
-                Logging.LogGate setLogGate = config.GetConfigKeyAccessOnce("Config.Logging.Set.LogGate").GetValue(Logging.LogGate.Debug);
+                string setName = nvs["setName"].VC.GetValue<string>(rethrow: false) ?? config.GetConfigKeyAccessOnce("Config.Logging.Set.Name").GetValue("LogMessageHistory");
+                int setCapacity = nvs["setCapacity"].VC.GetValue<int?>(rethrow: false) ?? config.GetConfigKeyAccessOnce("Config.Logging.Set.Capacity").GetValue(1000);
+                Logging.LogGate setLogGate = nvs["setLogGate"].VC.GetValue<Logging.LogGate?>(rethrow: false) ?? config.GetConfigKeyAccessOnce("Config.Logging.Set.LogGate").GetValue(Logging.LogGate.Debug);
 
                 if (!setName.IsNullOrEmpty())
                     setLMH = new MosaicLib.Logging.Handlers.SetLogMessageHandler(setName, capacity: setCapacity, logGate: setLogGate);
@@ -364,25 +425,26 @@ namespace MosaicLib.WPF.Common
             if (mainLMHnoQ != null)
                 mainLMHList.Add(mainLMHnoQ);
 
-            if (diagTraceLMH != null && diagTraceLMHSettingFlags.IsClear(LogMessageHandlerSettingFlags.NonQueued))
-                mainLMHList.Add(diagTraceLMH);
-            else if (diagTraceLMH != null)
-                Logging.AddLogMessageHandlerToDefaultDistributionGroup(diagTraceLMH);
+            if (diagTraceLMH != null)
+            {
+                if (diagTraceLMHSettingFlags.IsClear(LogMessageHandlerSettingFlags.NonQueued))
+                    mainLMHList.Add(diagTraceLMH);
+                else
+                    Logging.AddLogMessageHandlerToDefaultDistributionGroup(diagTraceLMH);
+            }
 
-            //if (wpfLMH != null && wpfLMHSettingFlags.IsClear(LogMessageHandlerSettingFlags.NonQueued))
-            //    mainLMHList.Add(wpfLMH);
-            //else if (wpfLMH != null)
-            //    Logging.AddLogMessageHandlerToDefaultDistributionGroup(wpfLMH);
-
-            if (setLMH != null && setLMHSettingFlags.IsClear(LogMessageHandlerSettingFlags.NonQueued))
-                mainLMHList.Add(setLMH);
-            else if (setLMH != null)
-                Logging.AddLogMessageHandlerToDefaultDistributionGroup(setLMH);
+            if (setLMH != null)
+            {
+                if (setLMHSettingFlags.IsClear(LogMessageHandlerSettingFlags.NonQueued))
+                    mainLMHList.Add(setLMH);
+                else
+                    Logging.AddLogMessageHandlerToDefaultDistributionGroup(setLMH);
+            }
 
             Logging.ILogMessageHandler mainLMHQueueLMH = new Logging.Handlers.QueueLogMessageHandler("lmhMainSet.q", mainLMHList.ToArray(), maxQueueSize: maxQueueSize);
             Logging.AddLogMessageHandlerToDefaultDistributionGroup(mainLMHQueueLMH);
 
-            string traceLoggingGroupName = config.GetConfigKeyAccessOnce("Config.Logging.TraceRing.LGID", silenceLogging: true).GetValue("LGID.Trace");
+            string traceLoggingGroupName = nvs["traceLoggingGroupName"].VC.GetValue<string>(rethrow: false) ?? config.GetConfigKeyAccessOnce("Config.Logging.TraceRing.LGID", silenceLogging: true).GetValue("LGID.Trace");
             bool traceRingEnable = config.GetConfigKeyAccessOnce("Config.Logging.TraceRing.Enable").GetValue(!traceLoggingGroupName.IsNullOrEmpty());
 
             if (traceRingEnable)
@@ -405,8 +467,8 @@ namespace MosaicLib.WPF.Common
 
                 Logging.MapLoggersToDistributionGroup(Logging.LoggerNameMatchType.Regex, @"(\.Data|\.Trace)", traceLoggingGroupName);
 
-                bool traceRingLinkFromDefaultGroup = config.GetConfigKeyAccessOnce("Config.Logging.TraceRing.LinkFromDefaultGroup").GetValue(true);
-                bool traceRingLinkToDefaultGroup = config.GetConfigKeyAccessOnce("Config.Logging.TraceRing.LinkToDefaultGroup", silenceLogging: true).GetValue(false);
+                bool traceRingLinkFromDefaultGroup = nvs["traceRingLinkFromDefaultGroup"].VC.GetValue<bool?>(rethrow: false) ?? config.GetConfigKeyAccessOnce("Config.Logging.TraceRing.LinkFromDefaultGroup").GetValue(true);
+                bool traceRingLinkToDefaultGroup = nvs["traceRingLinkToDefaultGroup"].VC.GetValue<bool?>(rethrow: false) ?? config.GetConfigKeyAccessOnce("Config.Logging.TraceRing.LinkToDefaultGroup", silenceLogging: true).GetValue(false);
 
                 if (traceRingLinkFromDefaultGroup)
                     Logging.LinkDistributionToGroup(Logging.DefaultDistributionGroupName, traceLoggingGroupName);
@@ -415,10 +477,11 @@ namespace MosaicLib.WPF.Common
                     Logging.LinkDistributionToGroup(traceLoggingGroupName, Logging.DefaultDistributionGroupName);
             }
 
+            if (nvs.Contains("appEventMesgType"))
+                AppEventMesgType = nvs["appEventMesgType"].VC.GetValue<Logging.MesgType?>(rethrow: false) ?? Logging.MesgType.None;
+
             appLogger = new Logging.Logger("AppLogger");
-            Logging.LogMessage lm = appLogger.GetLogMessage(AppEventMesgType, "App Starting");
-            lm.NamedValueSet = new NamedValueSet() { { "AppEvent", "OnStartup" } };
-            appLogger.EmitLogMessage(ref lm);
+            appLogger.Emitter(AppEventMesgType).EmitWith("App Starting", nvs: new NamedValueSet() { { "AppEvent", "OnStartup" } });
 
             // emit the config messages obtained above.
             Logging.Logger appLoggerCopy = appLogger;
@@ -434,10 +497,7 @@ namespace MosaicLib.WPF.Common
         /// </summary>
         public static void HandleOnDeactivated(Logging.ILogger appLogger)
         {
-            Logging.LogMessage lm = appLogger.GetLogMessage(AppEventMesgType, "App Deactivated");
-            lm.NamedValueSet = new NamedValueSet() { { "AppEvent", "OnDeactivated" } };
-
-            appLogger.EmitLogMessage(ref lm);
+            appLogger.Emitter(AppEventMesgType).EmitWith("App Deactivated", nvs: new NamedValueSet() { { "AppEvent", "OnDeactivated" } });
         }
 
         /// <summary>
@@ -446,9 +506,7 @@ namespace MosaicLib.WPF.Common
         /// </summary>
         public static void HandleOnExit(Logging.ILogger appLogger)
         {
-            Logging.LogMessage lm = appLogger.GetLogMessage(AppEventMesgType, "App Stopping");
-            lm.NamedValueSet = new NamedValueSet() { { "AppEvent", "OnExit" } };
-            appLogger.EmitLogMessage(ref lm);
+            appLogger.Emitter(AppEventMesgType).EmitWith("App Stopping", nvs: new NamedValueSet() { { "AppEvent", "OnExit" } });
 
             Logging.ShutdownLogging();
         }

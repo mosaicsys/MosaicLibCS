@@ -212,7 +212,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                     return "{0} has already been assigned a process spec".CheckedFormat(substID.FullName);
 
                 st = new TestSubstrateAndProcessTracker();
-                st.Setup(EcsParts.E039TableUpdater, substID, Log, processSpec);
+                st.Setup(EcsParts, substID, Log, processSpec);
 
                 trackerDictionary[substID.FullName] = st;
                 SubstrateSchedulerTool.Add(st);
@@ -297,8 +297,10 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
             if (substrateStateTally.total > 0)
             {
-                if (substrateStateTally.sjsRunning > 0)
-                    nextBusyReason = "Substrates at in process";
+                if (substrateStateTally.sjsWaitingForStart > 0)
+                    nextBusyReason = "Substrates are waiting for start";
+                else if (substrateStateTally.sjsRunning > 0)
+                    nextBusyReason = "Substrates are in process";
                 else if (substrateStateTally.stsAtWork > substrateStateTally.sjsPaused)
                     nextBusyReason = "Unpaused substrates are at work";
             }
@@ -358,23 +360,34 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
     public class TestSubstrateAndProcessTracker : SubstrateAndProcessTrackerBase<ProcessSpecBase<ProcessStepSpecBase>, ProcessStepSpecBase>
     {
-        public override void Setup(IE039TableUpdater e039TableUpdater, E039ObjectID substID, Logging.IBasicLogger logger, ProcessSpecBase<ProcessStepSpecBase> processSpec, bool useExternalSync = false)
+        public void Setup(TestECSParts ecsParts, E039ObjectID substID, Logging.IBasicLogger logger, ProcessSpecBase<ProcessStepSpecBase> processSpec)
         {
-            base.Setup(e039TableUpdater, substID, logger, processSpec, useExternalSync);
+            ECSParts = ecsParts;
+
+            base.Setup(ECSParts.E039TableUpdater, substID, logger, processSpec);
 
             srcLocNameList = new ReadOnlyIList<string>(Info.LinkToSrc.ToID.Name);
             destLocNameList = new ReadOnlyIList<string>(Info.LinkToDest.ToID.Name);
+            robotArmsLocNameList = new ReadOnlyIList<string>(ECSParts.SRM.R1ArmALocID.Name, ECSParts.SRM.R1ArmBLocID.Name);
+
+            FinalizeSPSAtEndOfLastStep = true;
         }
 
+        public override void Setup(IE039TableUpdater e039TableUpdater, E039ObjectID substID, Logging.IBasicLogger logger, ProcessSpecBase<ProcessStepSpecBase> processSpec)
+        {
+            throw new System.InvalidOperationException("This method can no longer be used directly - use the ECSParts variant in stead");
+        }
+
+        public TestECSParts ECSParts { get; set; }
         public IClientFacet CurrentStationProcessICF { get; set; }
         public bool FinalizeSPSAtEndOfLastStep { get; set; }
 
-        private ReadOnlyIList<string> srcLocNameList, destLocNameList;
+        private ReadOnlyIList<string> srcLocNameList, destLocNameList, robotArmsLocNameList;
 
-        public Func<IClientFacet> GeneratePendingRunProcessActionAndCorrespondingDelegate(string nextLocName, TestECSParts ecsParts, INotifyable hostingPartNotifier, string autoReleaseKey = null, string autoAcquireKey = null)
+        public Func<IClientFacet> GeneratePendingRunProcessActionAndCorrespondingDelegate(string nextLocName, INotifyable hostingPartNotifier, string autoReleaseKey = null, string autoAcquireKey = null)
         {
-            var station = ecsParts.GetStationEnum(nextLocName);
-            var part = ecsParts.GetPart(station);
+            var station = ECSParts.GetStationEnum(nextLocName);
+            var part = ECSParts.GetPart(station);
 
             if (part != null)
             {
@@ -405,10 +418,10 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             switch (station)
             {
                 case TestStationEnum.PM3Input:
-                    pendingICF = ecsParts.PM3.RunProcess(SubstID, stepSpec, autoReleaseTransferPermissionLocNameAtStart: autoReleaseKey, autoAcquireTransferPermissionLocNameAtEnd: autoAcquireKey);  
+                    pendingICF = ECSParts.PM3.RunProcess(SubstID, stepSpec, autoReleaseTransferPermissionLocNameAtStart: autoReleaseKey, autoAcquireTransferPermissionLocNameAtEnd: autoAcquireKey);  
                     break;
                 case TestStationEnum.PM4:
-                    pendingICF = ecsParts.PM4.RunProcess(SubstID, stepSpec, autoReleaseTransferPermissionLocNameAtStart: autoReleaseKey, autoAcquireTransferPermissionLocNameAtEnd: autoAcquireKey);
+                    pendingICF = ECSParts.PM4.RunProcess(SubstID, stepSpec, autoReleaseTransferPermissionLocNameAtStart: autoReleaseKey, autoAcquireTransferPermissionLocNameAtEnd: autoAcquireKey);
                     break;
                 default:
                     SetSubstrateJobState(SubstrateJobState.Aborting, "'{0}' is not a valid process location [{1}]".CheckedFormat(nextLocName, Fcns.CurrentMethodName));
@@ -465,10 +478,10 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                     Add(new ProcessStepTrackerResultItem<ProcessStepSpecBase>() { LocName = currentLoc, StepSpec = stepSpec, StepResult = new ProcessStepResultBase() });
                     break;
                 case TestStationEnum.PM1:
-                    icf = ecsParts.PM1.RunProcess(SubstID, stepSpec).StartInline();
+                    icf = ecsParts.PM1.RunProcess(SubstID, stepSpec);
                     break;
                 case TestStationEnum.PM2:
-                    icf = ecsParts.PM2.RunProcess(SubstID, stepSpec).StartInline();
+                    icf = ecsParts.PM2.RunProcess(SubstID, stepSpec);
                     break;
                 case TestStationEnum.PM3Input:
                 case TestStationEnum.PM4:
@@ -493,7 +506,12 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
         public int Service()
         {
             IClientFacet icf = CurrentStationProcessICF;
-            IActionState actionState = icf.ActionState;
+            IActionState actionState = (icf != null ? icf.ActionState : null);
+
+            string currentLoc = Info.LocID;
+
+            var station = ECSParts.GetStationEnum(currentLoc);
+            bool currentLocIsPM4 = station == TestStationEnum.PM4;
 
             if (icf != null && actionState.IsComplete)
             {
@@ -506,14 +524,24 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                 if (stepResult != null && stepResult.SPS == SubstProcState.Processed && stepResult.ResultCode.IsNullOrEmpty() && actionState.Failed)
                     Logger.Debug.Emit("Note: {0} gave non-failure stepResult sps:{1}", icf.ToString(ToStringSelect.MesgDetailAndState), stepResult.SPS);
 
-                Add(new ProcessStepTrackerResultItem<ProcessStepSpecBase>() { LocName = Info.LocID, StepSpec = NextStepSpec, StepResult = stepResult }, autoLatchFinalSPS: false);
-
-                if (NextStepSpec == null && FinalizeSPSAtEndOfLastStep && (Info.SPS != Info.InferredSPS))
-                    E039TableUpdater.SetSubstProcState(Info, Info.InferredSPS, addSyncExternalItem: UseExternalSync);
+                Add(new ProcessStepTrackerResultItem<ProcessStepSpecBase>() { LocName = Info.LocID, StepSpec = NextStepSpec, StepResult = stepResult }, autoLatchFinalSPS: FinalizeSPSAtEndOfLastStep && !currentLocIsPM4);
 
                 CurrentStationProcessICF = null;
 
                 return 1;
+            }
+            else if (icf == null && FinalizeSPSAtEndOfLastStep && NextStepSpec == null && !Info.SPS.IsProcessingComplete())
+            {
+                if (station != TestStationEnum.PM4)
+                {
+                    var finalSPS = GetFinalSPS();
+                    if (Info.SPS != finalSPS)
+                    {
+                        Logger.Debug.Emit("Setting Subst:'{0}' final SPS to {1} [at loc:{2}]", Info.ObjID.Name, finalSPS, currentLoc);
+                        E039TableUpdater.SetSubstProcState(Info, finalSPS);
+                        return 1;
+                    }
+                }
             }
 
             return 0;
@@ -531,48 +559,53 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
                 switch (Info.SJS)
                 {
-                    case SubstrateJobState.Initial:
-                    case SubstrateJobState.Held:
-                        return ReadOnlyIList<string>.Empty;
-
-                    case SubstrateJobState.WaitingForStart:
-                    case SubstrateJobState.Running:
-                        if (stepSpec == null)
+                    case E090.SubstrateJobState.WaitingForStart:
+                        if (stepSpec != null)
                         {
-                            if (Info.STS.IsAtSource() && inferredSPS.IsNeedsProcessing())
-                            {
-                                E039TableUpdater.SetSubstProcState(SubstObserver.Info, SubstProcState.Processed, addSyncExternalItem: UseExternalSync);
-                                return destLocNameList;
-                            }
-                            else if (Info.STS.IsAtDestination())
-                            {
-                                return ReadOnlyIList<string>.Empty;
-                            }
-                            else if (inferredSPS.IsProcessingComplete(includeLost: false, includeSkipped: false))
-                            {
-                                return destLocNameList;
-                            }
+                            // tell the caller where the substrate needs to be next in order to be able to start processing - this allows the caller to delay the running transition until the next process location is ready/empty if desired.
+                            return stepSpec.UsableLocNameList;
                         }
-                        
+                        else
+                        {
+                            // if there are no (more) processing steps then just directly give the destination location.
+                            return destLocNameList;
+                        }
+
+                    case E090.SubstrateJobState.Running:
                         if (stepSpec != null)
                         {
                             return stepSpec.UsableLocNameList;
                         }
+                        else if (Info.STS.IsAtDestination())
+                        {
+                            return ReadOnlyIList<string>.Empty;
+                        }
+                        else if (inferredSPS.IsProcessingComplete(includeLost: false, includeSkipped: false))
+                        {
+                            return destLocNameList;
+                        }
+                        else if (Info.STS.IsAtSource() && inferredSPS.IsNeedsProcessing())
+                        {
+                            Logger.Debug.Emit("{0} marking '{1}' Processed [AtSource, NeedsProcessing, Recipe has no process steps]", Fcns.CurrentMethodName, Info.ObjID.Name);
+                            E039TableUpdater.SetSubstProcState(SubstObserver, SubstProcState.Processed);
+                            return destLocNameList;
+                        }
+                        else if (inferredSPS.IsProcessStepComplete())
+                        {
+                            bool atPM4 = Info.LocID == ECSParts.PM4.OutputLocID.Name;
 
-                        break;
+                            return atPM4 ? robotArmsLocNameList : destLocNameList;
+                        }
+                        else
+                        {
+                            // For cases that this code does not directly recognize.  Just leave the wafer in its current location (aka strand it)
+                            return ReadOnlyIList<string>.Empty;
+                        }
 
                     default:
-                        {
-                            if (inferredSPS.IsNeedsProcessing())
-                                return srcLocNameList;
-
-                            if (inferredSPS.IsProcessingComplete(includeLost: false, includeSkipped: false))
-                                return destLocNameList;
-                        }
-                        break;
+                        // in the future this code may need to split out and handle the Returning, Pausing, Stopping and Aborting cases.  for now all such cases strand the wafer in its current location.
+                        return ReadOnlyIList<string>.Empty;
                 }
-
-                return null;
             }
         }
     }
@@ -702,7 +735,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             {
                 deltaCount += st.Service();
 
-                if (st.CurrentStationProcessICF == null)
+                if (st.CurrentStationProcessICF == null && st.Info.LocID != ECSPart.PM4.OutputLocID.Name)
                 {
                     trackersInProcessList.Remove(st);       // this is safe when iterating on the List.Array.
                     deltaCount++;
@@ -806,7 +839,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                             {
                                 srmItemList.Add(new TransferPermissionRequestItem(TransferPermissionRequestItemSettings.Acquire, nextMoveToLocName));
                                 srmItemList.Add(new MoveSubstrateItem(st.SubstID, nextMoveToLocName));
-                                srmItemList.Add(new RunActionItem(icfFactoryDelegate: st.GeneratePendingRunProcessActionAndCorrespondingDelegate(nextMoveToLocName, ECSPart, HostingPartNotifier, autoReleaseKey: nextMoveToLocName), runActionBehavior: RunActionBehaviorFlags.OnlyStartAction));
+                                srmItemList.Add(new RunActionItem(icfFactoryDelegate: st.GeneratePendingRunProcessActionAndCorrespondingDelegate(nextMoveToLocName, HostingPartNotifier, autoReleaseKey: nextMoveToLocName), runActionBehavior: RunActionBehaviorFlags.OnlyStartAction));
                                 if (st.CurrentStationProcessICF != null)
                                     trackersInProcessList.Add(st);
                             }
@@ -828,7 +861,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                                 {
                                     srmItemList.Add(new TransferPermissionRequestItem(TransferPermissionRequestItemSettings.Acquire, nextMoveToLocName));
                                     srmItemList.Add(new MoveOrSwapSubstrateItem(st.SubstID, nextMoveToLocName));
-                                    srmItemList.Add(new RunActionItem(icfFactoryDelegate: st.GeneratePendingRunProcessActionAndCorrespondingDelegate(nextMoveToLocName, ECSPart, HostingPartNotifier, autoReleaseKey: nextMoveToLocName), runActionBehavior: RunActionBehaviorFlags.OnlyStartAction));
+                                    srmItemList.Add(new RunActionItem(icfFactoryDelegate: st.GeneratePendingRunProcessActionAndCorrespondingDelegate(nextMoveToLocName, HostingPartNotifier, autoReleaseKey: nextMoveToLocName), runActionBehavior: RunActionBehaviorFlags.OnlyStartAction));
                                     if (st.CurrentStationProcessICF != null)
                                         trackersInProcessList.Add(st);
                                 }
@@ -957,7 +990,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
     public class TestSRM : SimpleActivePartBase, ISubstrateRoutingManager
     {
         public TestSRM(TestSRMConfig config)
-            : base(config.PartID)
+            : base(config.PartID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion1)
         {
             Config = new TestSRMConfig(config);
             var ecsParts = Config.ECSParts;
@@ -1493,7 +1526,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
     /// </summary>
     public interface ISimpleExampleProcessModuleEngine : IActivePartBase, ITransferPermissionRequest
     {
-        IClientFacet RunProcess(E039ObjectID substID, IProcessStepSpec stepSpec, SubstProcState resultingSPS = SubstProcState.Processed, string autoReleaseTransferPermissionLocNameAtStart = null, string autoAcquireTransferPermissionLocNameAtEnd = null);
+        IClientFacet RunProcess(E039ObjectID substID, IProcessStepSpec stepSpec, SubstProcState resultingSPS = SubstProcState.ProcessStepCompleted, string autoReleaseTransferPermissionLocNameAtStart = null, string autoAcquireTransferPermissionLocNameAtEnd = null);
         E039ObjectID LocID { get; }
     }
 
@@ -1574,7 +1607,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                 PublishStateIfNeeded();
         }
 
-        public IClientFacet RunProcess(E039ObjectID substID, IProcessStepSpec stepSpec, SubstProcState resultingSPS = SubstProcState.Processed, string autoReleaseTransferPermissionLocNameAtStart = null, string autoAcquireTransferPermissionLocNameAtEnd = null)
+        public IClientFacet RunProcess(E039ObjectID substID, IProcessStepSpec stepSpec, SubstProcState resultingSPS = SubstProcState.ProcessStepCompleted, string autoReleaseTransferPermissionLocNameAtStart = null, string autoAcquireTransferPermissionLocNameAtEnd = null)
         {
             StringBuilder sb = new StringBuilder(CurrentMethodName);
             sb.CheckedAppendFormat("({0}, {1}, sps:{2}", substID.FullName, stepSpec, resultingSPS);
@@ -1692,7 +1725,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
             if (entryEngineState == EngineState.RunningProcess && currentProcessTracker != null)
             {
-                E039TableUpdater.SetPendingSubstProcState(currentProcessTracker.SubstObserver, SubstProcState.Processed.MergeWith(currentProcessTracker.ResultingSPS));
+                E039TableUpdater.SetPendingSubstProcState(currentProcessTracker.SubstObserver, SubstProcState.ProcessStepCompleted.MergeWith(currentProcessTracker.ResultingSPS));
                 currentProcessTracker.CompleteRequest("");
 
                 if (currentProcessTracker.AutoAcquireTransferPermissionLocNameAtEnd != null)
@@ -1763,7 +1796,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
         int NumStations { get; }
         TimeSpan BeltMoveTime { get; }
 
-        IClientFacet RunProcess(E039ObjectID substID, IProcessStepSpec stepSpec, SubstProcState resultingSPS = SubstProcState.Processed, string autoReleaseTransferPermissionLocNameAtStart = null, string autoAcquireTransferPermissionLocNameAtEnd = null);
+        IClientFacet RunProcess(E039ObjectID substID, IProcessStepSpec stepSpec, SubstProcState resultingSPS = SubstProcState.ProcessStepCompleted, string autoReleaseTransferPermissionLocNameAtStart = null, string autoAcquireTransferPermissionLocNameAtEnd = null);
 
         E039ObjectID[] StationLocIDArray { get; }
         E039ObjectID[] BeltLocIDArray { get; }
@@ -1855,7 +1888,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                 transferPermissionStatePublisher.Object = lastPublishedTransferPermissionState = transferPermissionState.ConvertToReadOnly();
         }
 
-        public IClientFacet RunProcess(E039ObjectID substID, IProcessStepSpec stepSpec, SubstProcState resultingSPS = SubstProcState.Processed, string autoReleaseTransferPermissionLocNameAtStart = null, string autoAcquireTransferPermissionLocNameAtEnd = null)
+        public IClientFacet RunProcess(E039ObjectID substID, IProcessStepSpec stepSpec, SubstProcState resultingSPS = SubstProcState.ProcessStepCompleted, string autoReleaseTransferPermissionLocNameAtStart = null, string autoAcquireTransferPermissionLocNameAtEnd = null)
         {
             StringBuilder sb = new StringBuilder(CurrentMethodName);
             sb.CheckedAppendFormat("({0}, {1}, sps:{2}", substID.FullName, stepSpec, resultingSPS);
@@ -2023,7 +2056,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                     var pt = ptBySubstFullNameDictionary.SafeTryGetValue(processStationLocObserver.ContainsSubstInfo.ObjID.FullName);
 
                     if (pt != null)
-                        E039TableUpdater.SetPendingSubstProcState(pt.SubstObserver, SubstProcState.Processed.MergeWith(pt.ResultingSPS));
+                        E039TableUpdater.SetPendingSubstProcState(pt.SubstObserver, SubstProcState.ProcessStepCompleted.MergeWith(pt.ResultingSPS));
                 }
             }
 

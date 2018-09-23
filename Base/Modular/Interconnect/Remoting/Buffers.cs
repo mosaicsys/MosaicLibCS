@@ -171,6 +171,9 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Buffers
         /// <summary>Indicates sender's acceptance of a prior open or resume ression request.  Required keys: Type, Name, SessionUUID, BufferSize</summary>
         SessionRequestAcceptedResponse,
 
+        /// <summary>Indicates sender's (typically only clients send this) desire to close the session now.  Once received this is perminent.  Receiver sends back a NoteSessionTerminated.</summary>
+        RequestCloseSession,
+
         /// <summary>Indicates that the session has been terminated.  Required keys: Type, Reason, optional keys: Name, SessionUUID (generally included)</summary>
         NoteSessionTerminated,
 

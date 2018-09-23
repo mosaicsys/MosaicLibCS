@@ -35,6 +35,7 @@ using MosaicLib.Modular.Part;
 using MosaicLib.Time;
 using MosaicLib.Utils;
 using MosaicLib.Utils.Collections;
+using MosaicLib.Modular.Common.CustomSerialization;
 
 // Please note: see comments in for MosaicLib.Modular.Interconnect.Remoting in Remoting.cs
 
@@ -44,9 +45,77 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
     public interface IMessageStreamTool : IServiceable
     {
-        void ResetState(QpcTimeStamp qpcTimeStamp);
+        void ResetState(QpcTimeStamp qpcTimeStamp, ResetType resetType, string reason = null);
         void HandleInboundMessage(QpcTimeStamp qpcTimeStamp, Messages.Message mesg);
         Messages.Message ServiceAndGenerateNextMessageToSend(QpcTimeStamp qpcTimeStamp);
+    }
+
+    /// <summary>
+    /// This enum defines the different types of Resets being done to a message stream tool.  
+    /// <para/>None (0), ClientConstruction, ServerConstruction, MessageDeliveryFailure
+    /// </summary>
+    public enum ResetType : int
+    {
+        None = 0,
+        ClientConstruction,
+        ServerConstruction,
+        ClientMessageDeliveryFailure,
+        ServerMessageDeliveryFailure,
+        ClientSessionLost,
+        ServerSessionLost,
+        ClientSessionClosed,
+        ServerSessionClosed,
+        ServerSessionTerminated,
+        ClientReleased,
+    }
+
+    /// <summary>
+    /// Extension Methods
+    /// </summary>
+    public static partial class ExtensionMethods
+    {
+        /// <summary>
+        /// Returns true if the given <paramref name="resetType"/> is ClientConstruction or ServerConstruction (based on given values of <paramref name="includeClientTypes"/> and <paramref name="includeServerTypes"/>)
+        /// </summary>
+        public static bool IsConstruction(this ResetType resetType, bool includeClientTypes = true, bool includeServerTypes = true)
+        {
+            return (includeClientTypes && resetType == ResetType.ClientConstruction)
+                    || (includeServerTypes && resetType == ResetType.ServerConstruction);
+        }
+
+        /// <summary>
+        /// Returns true if the given <paramref name="resetType"/> is ClientSessionClosed or ServerSessionClosed (based on given values of <paramref name="includeClientTypes"/> and <paramref name="includeServerTypes"/>)
+        /// </summary>
+        public static bool IsClose(this ResetType resetType, bool includeClientTypes = true, bool includeServerTypes = true)
+        {
+            return (includeClientTypes && resetType == ResetType.ClientSessionClosed)
+                    || (includeServerTypes && (resetType == ResetType.ServerSessionClosed || resetType == ResetType.ServerSessionTerminated));
+        }
+
+        /// <summary>
+        /// Returns true if the given <paramref name="resetType"/> is a failure code (based on given values of <paramref name="includeClientTypes"/> and <paramref name="includeServerTypes"/>)
+        /// </summary>
+        public static bool IsFailure(this ResetType resetType, bool includeClientTypes = true, bool includeServerTypes = true)
+        {
+            return (includeClientTypes && (resetType == ResetType.ClientSessionLost || resetType == ResetType.ClientMessageDeliveryFailure))
+                    || (includeServerTypes && (resetType == ResetType.ServerSessionLost || resetType == ResetType.ServerMessageDeliveryFailure));
+        }
+
+        /// <summary>
+        /// Returns true if the given <paramref name="resetType"/> is ClientSessionClosed
+        /// </summary>
+        public static bool IsClientClose(this ResetType resetType)
+        {
+            return resetType.IsClose(includeClientTypes: true, includeServerTypes: false);
+        }
+
+        /// <summary>
+        /// Returns true if the given <paramref name="resetType"/> is a client failure code (ClientMessageDeliveryFailure, ClientSessionLost, ClientSessionTimedOut)
+        /// </summary>
+        public static bool IsClientFailure(this ResetType resetType)
+        {
+            return resetType.IsFailure(includeClientTypes: true, includeServerTypes: false);
+        }
     }
 
     #endregion
@@ -117,6 +186,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
         public int MaximumItemsPerMessage { get; set; }
         public TimeSpan MinimumUpdateInterval { get; set; }
         internal virtual string SetItemTypeStr { get; set; }
+        public bool ClearClientSetOnCloseOrFailure { get; set; }
 
         public override NamedValueSet AddValues(NamedValueSet nvs) 
         {
@@ -129,6 +199,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
             nvs.ConditionalSetValue("MaximumItemsPerMessage", MaximumItemsPerMessage != 0, MaximumItemsPerMessage);
             nvs.ConditionalSetValue("MinimumUpdateInterval", MinimumUpdateInterval != TimeSpan.Zero, MinimumUpdateInterval);
             nvs.SetValue("SetItemTypeStr", SetItemTypeStr);
+            nvs.ConditionalSetKeyword("ClearClientSetOnCloseOrFailure", ClearClientSetOnCloseOrFailure);
 
             return nvs;
         }
@@ -141,6 +212,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
             MaximumItemsPerMessage = nvs["MaximumItemsPerMessage"].VC.GetValue<int>(rethrow: false);
             MinimumUpdateInterval = nvs["MinimumUpdateInterval"].VC.GetValue<TimeSpan>(rethrow: false);
             SetItemTypeStr = nvs["SetItemTypeStr"].VC.GetValue<string>(rethrow: false).MapNullToEmpty();
+            ClearClientSetOnCloseOrFailure = nvs.Contains("ClearClientSetOnCloseOrFailure");
 
             return this;
         }
@@ -217,6 +289,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
         public string ServerToClientToNamePrefix { get; set; }
         public INamedValueSet ServerToClientMetaDataFilterNVS { get; set; }
         public INamedValueSet ClientToServerMetaDataFilterNVS { get; set; }
+        public bool ResetClientSideIVAsOnCloseOrFailure { get; set; }
 
         public override NamedValueSet AddValues(NamedValueSet nvs)
         {
@@ -230,6 +303,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
             nvs.ConditionalSetValue("ServerToClientToNamePrefix", !ServerToClientToNamePrefix.IsNullOrEmpty(), ServerToClientToNamePrefix);
             nvs.ConditionalSetValue("ServerToClientMetaDataFilterNVS", !ServerToClientMetaDataFilterNVS.IsNullOrEmpty(), ServerToClientMetaDataFilterNVS);
             nvs.ConditionalSetValue("ClientToServerMetaDataFilterNVS", !ClientToServerMetaDataFilterNVS.IsNullOrEmpty(), ClientToServerMetaDataFilterNVS);
+            nvs.ConditionalSetKeyword("ResetClientSideIVAsOnCloseOrFailure", ResetClientSideIVAsOnCloseOrFailure);
 
             return nvs;
         }
@@ -246,6 +320,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
             ServerToClientToNamePrefix = nvs["ServerToClientToNamePrefix"].VC.GetValue<string>(rethrow: false).MapNullToEmpty();
             ServerToClientMetaDataFilterNVS = nvs["ServerToClientMetaDataFilterNVS"].VC.GetValue<INamedValueSet>(rethrow: false);
             ClientToServerMetaDataFilterNVS = nvs["ClientToServerMetaDataFilterNVS"].VC.GetValue<INamedValueSet>(rethrow: false);
+            ResetClientSideIVAsOnCloseOrFailure = nvs.Contains("ResetClientSideIVAsOnCloseOrFailure");
 
             return this;
         }
@@ -283,6 +358,183 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
     #endregion
 
+    #region InitialMessageStreamTool
+
+    /// <summary>
+    /// This message stream tool is used for message based communications between the client and the server.  
+    /// Initially it is used to carry the ServerInfoNVS from the server to the client on session setup.
+    /// </summary>
+    public class BaseMessageStreamTool : MessageStreamToolBase, IMessageStreamTool
+    {
+        #region Construction and related fields/properties
+
+        /// <summary>
+        /// Client construction
+        /// </summary>
+        public BaseMessageStreamTool(string hostPartID, int stream, INotifyable hostNotifier, Buffers.BufferPool bufferPool)
+            : base("Base", hostPartID, stream, hostNotifier, bufferPool, isClientSideIn: true)
+        {
+            ResetState(QpcTimeStamp.Now, ResetType.ClientConstruction);
+        }
+
+        /// <summary>
+        /// Constructor used by RemotingServer
+        /// </summary>
+        public BaseMessageStreamTool(string hostPartID, int stream, INotifyable hostNotifier, Buffers.BufferPool bufferPool, Messages.Message streamSetupMessage, INamedValueSet streamSetupMessageNVS)
+            : base("Base", hostPartID, stream, hostNotifier, bufferPool, isClientSideIn: false)
+        {
+            ResetState(QpcTimeStamp.Now, ResetType.ServerConstruction);
+        }
+
+        /// <summary>
+        /// This property is set by the RemotingServer on the server side and is set by this instance on the client side.  
+        /// On the server side this tool monitors this property for changes and will re-send its contents as needed on any change.
+        /// </summary>
+        public INamedValueSet ServerInfoNVS { get {return _serverInfoNVS; } set { _serverInfoNVS = value.ConvertToReadOnly(); _serverInfoNVSSendPending = true; } }
+        private NamedValueSet _serverInfoNVS = null;
+        private bool _serverInfoNVSSendPending = false;
+
+        /// <summary>
+        /// This property is generally set by the RemotingClient on the client side.  When a new ServerInfoNVS is received, this delegate will be passed the received value, if the delegate is non-null
+        /// </summary>
+        public Action<INamedValueSet> HandleNewServerInfoNVSDelegate { get; set; }
+
+        #endregion
+
+        #region MessageStreamToolBase implementation
+
+        public override void InnerHandleResetState(QpcTimeStamp qpcTimeStamp, ResetType resetType, string reason)
+        { }
+
+        #endregion
+
+        #region Config
+
+        public class Config : MessageStreamToolConfigBase
+        {
+            public static readonly string toolTypeStr = "Base";
+            public override string ToolTypeStr { get { return toolTypeStr; } }
+
+            public override MessageStreamToolConfigBase MakeCopyOfThis(bool deepCopy = true) { return (MessageStreamToolConfigBase)this.MemberwiseClone(); }
+        }
+
+        #endregion
+
+        #region Receiver (HandleInboundMessage)
+
+        public void HandleInboundMessage(QpcTimeStamp qpcTimeStamp, Messages.Message mesg)
+        {
+            try
+            {
+                using (var mesgIStream = mesg.MessageReadingStream)
+                {
+                    PushItem pushItem = pushItemDCA.ReadObject(mesgIStream);
+
+                    if (pushItem.ServerInfoNVS != null)
+                    {
+                        _serverInfoNVS = pushItem.ServerInfoNVS.ConvertToReadOnly();
+
+                        logger.Debug.EmitWith("Received ServerInfoNVS", nvs: _serverInfoNVS);
+
+                        Action<INamedValueSet> handleNewServerInfoNVSDelegate = HandleNewServerInfoNVSDelegate;
+                        if (handleNewServerInfoNVSDelegate != null)
+                            HandleNewServerInfoNVSDelegate(_serverInfoNVS);
+                    }
+                }
+            }
+            catch (System.Exception ex)
+            {
+                logger.Debug.Emit("{0}: encountered unexpected exception while generating message: {1}", Fcns.CurrentMethodName, ex.ToString(ExceptionFormat.TypeAndMessageAndStackTrace));
+            }
+        }
+        #endregion
+
+        #region Transmitter (ServiceAndGenerateNextMessageToSend)
+
+        public Messages.Message ServiceAndGenerateNextMessageToSend(QpcTimeStamp qpcTimeStamp)
+        {
+            Service(qpcTimeStamp);
+
+            Messages.Message mesg = null;
+
+            if (sendSetupMessage)
+            {
+                logger.Trace.Emit("Sending setup message");
+
+                mesg = new Messages.Message(BufferPool).Update(buildPayloadDataFromNVS: new Config().AddValues(null), orInFlags: BufferHeaderFlags.MessageContainsStreamSetup);
+                sendSetupMessage = false;
+            }
+            else
+            {
+                try
+                {
+                    if (_serverInfoNVSSendPending && isServerSide)
+                    {
+                        logger.Trace.EmitWith("Sending ServerInfoNVS", nvs: _serverInfoNVS);
+
+                        PushItem pushItem = new PushItem()
+                        {
+                            ServerInfoNVS = _serverInfoNVS,
+                        };
+
+                        mesg = new Messages.Message(BufferPool);
+
+                        using (var mesgOStream = mesg.MessageBuildingStream)
+                        {
+                            pushItemDCA.WriteObject(pushItem, mesgOStream);
+                        }
+
+                        _serverInfoNVSSendPending = false;
+                    }
+                }
+                catch (System.Exception ex)
+                {
+                    logger.Debug.Emit("{0}: encountered unexpected exception while generating message: {1}", Fcns.CurrentMethodName, ex.ToString(ExceptionFormat.TypeAndMessageAndStackTrace));
+                    mesg = null; // discard any partial message we were building
+                }
+            }
+
+            return mesg;
+        }
+
+        #endregion
+
+        #region Serialization (pushItemDCA and PushItem class)
+
+        IDataContractAdapter<PushItem> pushItemDCA = new DataContractJsonAdapter<PushItem>();
+
+        [DataContract(Namespace = Constants.ModularInterconnectNameSpace)]
+        public class PushItem
+        {
+            [DataMember(Order = 100, IsRequired = false, EmitDefaultValue = false)]
+            public NamedValueSet ServerInfoNVS { get; set; }
+
+            [OnDeserialized]
+            private void OnDeserialized(StreamingContext context)
+            {
+                if (ServerInfoNVS != null)
+                    ServerInfoNVS.MakeReadOnly();
+            }
+
+            public override string ToString()
+            {
+                StringBuilder sb = new StringBuilder();
+
+                if (ServerInfoNVS != null)
+                    sb.CheckedAppendFormatWithDelimiter(" ", "ServerInfoNVS:{0}", ServerInfoNVS.ToStringSML());
+
+                if (sb.Length > 0)
+                    return sb.ToString();
+
+                return "[Empty]";
+            }
+        }
+
+        #endregion
+    }
+
+    #endregion
+
     #region ActionRelayMessageStreamTool
 
     public class ActionRelayMessageStreamTool : MessageStreamToolBase, IMessageStreamTool, IActionRelayMessageStreamTool
@@ -293,32 +545,34 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
         /// </summary>
         public readonly static string PingRequestServiceName = "$RemotingServicePing$";
 
-        #region Construction, Release, related fields
+        #region Construction and related fields
 
+        /// <summary>
+        /// Constructor used by RemotingClient
+        /// </summary>
         public ActionRelayMessageStreamTool(string hostPartID, int stream, INotifyable hostNotifier, Buffers.BufferPool bufferPool, ActionRelayMessageStreamToolConfig config)
-            : base("ActionRelay", hostPartID, stream, hostNotifier, bufferPool)
+            : base("ActionRelay", hostPartID, stream, hostNotifier, bufferPool, isClientSideIn: true)
         {
             Config = config;
             IPartsInterconnection = config.LocalIPartsInterconnection ?? Parts.Parts.Instance;
-            isClientSide = true;
 
-            ResetState(QpcTimeStamp.Now);
+            ResetState(QpcTimeStamp.Now, ResetType.ClientConstruction);
         }
 
+        /// <summary>
+        /// Constructor used by RemotingServer
+        /// </summary>
         public ActionRelayMessageStreamTool(string hostPartID, int stream, INotifyable hostNotifier, Buffers.BufferPool bufferPool, Messages.Message streamSetupMessage, INamedValueSet streamSetupMessageNVS, Parts.IPartsInterconnection iPartsInterconnection)
-            : base("ActionRelay", hostPartID, stream, hostNotifier, bufferPool)
+            : base("ActionRelay", hostPartID, stream, hostNotifier, bufferPool, isClientSideIn: false)
         {
             (Config = new ActionRelayMessageStreamToolConfig()).ApplyValues(streamSetupMessageNVS);
             IPartsInterconnection = iPartsInterconnection ?? Parts.Parts.Instance;
 
-            isClientSide = false;
-
-            ResetState(QpcTimeStamp.Now);
+            ResetState(QpcTimeStamp.Now, ResetType.ServerConstruction);
         }
 
         public ActionRelayMessageStreamToolConfig Config { get; private set; }
         public Parts.IPartsInterconnection IPartsInterconnection { get; private set; }
-        public readonly bool isClientSide;
 
         #endregion
 
@@ -350,11 +604,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
         }
 
         ulong providerFacetActionIDGen = 0;
-        Dictionary<ulong, ProviderActionTracker> providerFacetActionDictionary = null;
-        ProviderActionTracker[] providerFacetActionTrackerArray = Utils.Collections.EmptyArrayFactory<ProviderActionTracker>.Instance;
-
-        Dictionary<ulong, ClientActionTracker> clientFacetActionDictionary = null;
-        ClientActionTracker[] clientFacetActionTrackerArray = Utils.Collections.EmptyArrayFactory<ClientActionTracker>.Instance;
+        IDictionaryWithCachedArrays<ulong, ProviderActionTracker> providerFacetActionDictionary = new IDictionaryWithCachedArrays<ulong,ProviderActionTracker>();
+        IDictionaryWithCachedArrays<ulong, ClientActionTracker> clientFacetActionDictionary = new IDictionaryWithCachedArrays<ulong,ClientActionTracker>();
 
         #endregion
 
@@ -389,33 +640,20 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
             };
 
             providerFacetActionDictionary[actionID] = at;
-            providerFacetActionTrackerArray = providerFacetActionDictionary.Values.ToArray();
 
             pendingPushItemList.Add(at.pushItem);
         }
 
         #endregion
 
-        #region ResetState
+        #region InnerHandleResetState
 
-        public bool sendSetupMessage = false;
-
-        public void ResetState(QpcTimeStamp qpcTimeStamp)
+        public override void InnerHandleResetState(QpcTimeStamp qpcTimeStamp, ResetType resetType, string reason)
         {
-            Service(qpcTimeStamp);
+            providerFacetActionDictionary.ValueArray.DoForEach(item => item.ipf.CompleteRequest("{0}: message stream state has been reset [{1}]".CheckedFormat(logger.Name, reason)));
 
-            providerFacetActionTrackerArray.DoForEach(item => item.ipf.CompleteRequest("{0}: message stream state has been reset".CheckedFormat(logger.Name)));
-
-            providerFacetActionDictionary = new Dictionary<ulong, ProviderActionTracker>();
-            clientFacetActionDictionary = new Dictionary<ulong, ClientActionTracker>();
-
-            providerFacetActionTrackerArray = providerFacetActionDictionary.Values.ToArray();
-            clientFacetActionTrackerArray = clientFacetActionDictionary.Values.ToArray();
-
-            if (isClientSide)
-            {
-                sendSetupMessage = true;
-            }
+            providerFacetActionDictionary.Clear();
+            clientFacetActionDictionary.Clear();
         }
 
         #endregion
@@ -548,7 +786,10 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
             IActionState initialActionState = ActionStateCopy.Empty;
 
             if (partID == PingRequestServiceName)
+            {
+                logger.Debug.Emit("Responding to ping request");
                 initialActionState = new ActionStateCopy(ActionStateCode.Complete, string.Empty, request.namedParamValues);
+            }
 
             IActivePartBase part = (!initialActionState.IsComplete) ? IPartsInterconnection.FindPart(partID, throwOnNotFound: false) : null;
             string failureCode = string.Empty;
@@ -559,7 +800,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
             {
                 IClientFacet icf = (cat.icf = part.CreateServiceAction(ss.Rest, request.namedParamValues));
 
-                initialActionState = icf.ActionState.ConvertToActionStateCopy();
+                initialActionState = icf.ActionState.ConvertToActionStateCopy(autoRemoveResultCode: true);
 
                 failureCode = icf.Start();
             }
@@ -574,11 +815,10 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
                 cat.isComplete = initialActionState.IsComplete;
 
                 cat.pushItem.itemType = PushItemType.Update;
-                cat.pushItem.actionState = initialActionState.ConvertToActionStateCopy();
+                cat.pushItem.actionState = initialActionState.ConvertToActionStateCopy(autoRemoveResultCode: true);
                 cat.pushItem.pending = true;
 
                 clientFacetActionDictionary[actionID] = cat;        // if the other end re-uses actionID values then the prior ones will be lost.
-                clientFacetActionTrackerArray = clientFacetActionDictionary.Values.ToArray();
 
                 pendingPushItemList.Add(cat.pushItem);
             }
@@ -667,6 +907,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
             if (sendSetupMessage)
             {
+                logger.Trace.Emit("Sending setup message");
+
                 mesg = new Messages.Message(BufferPool).Update(buildPayloadDataFromNVS: Config.AddValues(null), orInFlags: BufferHeaderFlags.MessageContainsStreamSetup);
                 sendSetupMessage = false;
             }
@@ -743,11 +985,11 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
             return mesg;
         }
 
-        public int Service(QpcTimeStamp qpcTimeStamp)
+        public override int Service(QpcTimeStamp qpcTimeStamp)
         {
             int count = 0;
 
-            foreach (var at in providerFacetActionTrackerArray)
+            foreach (var at in providerFacetActionDictionary.ValueArray)
             {
                 if (!at.pushItem.pending && at.ipf != null && !at.cancelHasBeenRequested && at.ipf.IsCancelRequestActive)
                 {
@@ -761,7 +1003,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
                 }
             }
 
-            foreach (var at in clientFacetActionTrackerArray)
+            foreach (var at in clientFacetActionDictionary.ValueArray)
             {
                 if (at.icf != null)
                 {
@@ -771,7 +1013,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
                     {
                         at.lastActionState = actionState;
                         at.pushItem.itemType = PushItemType.Update;
-                        at.pushItem.actionState = actionState.ConvertToActionStateCopy();
+                        at.pushItem.actionState = actionState.ConvertToActionStateCopy(autoRemoveResultCode: true);
                         at.pushItem.pending = true;
                         at.isComplete = actionState.IsComplete;
                         count++;
@@ -874,43 +1116,37 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
     {
         #region Construction and related fields
 
+        /// <summary>
+        /// Constructor used by RemotingClient
+        /// </summary>
         public SetRelayMessageStreamTool(string hostPartID, int stream, INotifyable hostNotifier, Buffers.BufferPool bufferPool, SetRelayMessageStreamToolConfigBase config)
-            : base ("SetRelay.Rx", hostPartID, stream, hostNotifier, bufferPool)
+            : base ("SetRelay.Rx", hostPartID, stream, hostNotifier, bufferPool, isClientSideIn: true)
         {
             Config = config;
             sets = Config.LocalISetsInstance ?? Sets.Sets.Instance;
 
-            isClient = true;
-            isServer = false;
-
             trackingSet = config.CreateReferenceTrackingSet();
 
-            ResetState(QpcTimeStamp.Now);
+            ResetState(QpcTimeStamp.Now, ResetType.ClientConstruction);
         }
 
+        /// <summary>
+        /// Constructor used by RemotingServer
+        /// </summary>
         public SetRelayMessageStreamTool(string hostPartID, int stream, INotifyable hostNotifier, Buffers.BufferPool bufferPool, Messages.Message streamSetupMessage, INamedValueSet streamSetupMessageNVS, Sets.ISetsInterconnection iSetsInstance)
-            : base("SetRelay.Tx", hostPartID, stream, hostNotifier, bufferPool)
+            : base("SetRelay.Tx", hostPartID, stream, hostNotifier, bufferPool, isClientSideIn: false)
         {
             (Config = new SetRelayMessageStreamToolConfigBase()).ApplyValues(streamSetupMessageNVS);
             sets = iSetsInstance ?? Sets.Sets.Instance;
 
-            isServer = true;
-            isClient = false;
-
             QpcTimeStamp qpcNow = QpcTimeStamp.Now;
 
-            ResetState(qpcNow);
+            ResetState(qpcNow, ResetType.ServerConstruction);
 
             CheckForSets(qpcNow, forceRunNow: true);
         }
 
         public SetRelayMessageStreamToolConfigBase Config { get; private set; }
-
-        /// <summary>Client requests that set is propagated from server to client.  Client receives set updates</summary>
-        public readonly bool isClient;
-
-        /// <summary>Server finds set, generates tracking set, and uses it to generate and send incremental set deltas</summary>
-        public readonly bool isServer;
 
         Sets.ITrackingSet trackingSet;
 
@@ -920,17 +1156,24 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
         #endregion
 
-        #region ResetState
+        #region InnerHandleResetState
 
-        public bool sendSetupMessage = false;
+        public bool clientSetupComplete = false;
 
-        public void ResetState(QpcTimeStamp qpcTimeStamp)
+        public override void InnerHandleResetState(QpcTimeStamp qpcTimeStamp, ResetType resetType, string reason)
         {
-            if (isClient)
+            if (isClientSide)
             {
-                sendSetupMessage = true;
+                clientSetupComplete = false;
+
+                if (Config.ClearClientSetOnCloseOrFailure && (resetType.IsClientFailure() || resetType.IsClientClose()))
+                {
+                    logger.Debug.Emit("Clearing set [{0}]", reason);
+                    trackingSet.ApplyDeltas(new Sets.SetDelta<object>() { ClearSetAtStart = true, SetID = trackingSet.SetID });
+                }
+
             }
-            else if (isServer)
+            else if (isServerSide)
             {
                 // force server to look up the set again - this path may be used in some error cases.
                 trackingSet = null;
@@ -945,7 +1188,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
         public void HandleInboundMessage(QpcTimeStamp qpcTimeStamp, Messages.Message mesg)
         {
-            if (isClient)
+            if (isClientSide)
             {
                 try
                 {
@@ -953,6 +1196,12 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
                     trackingSet.ApplyDeltas(setDelta);
 
                     errorHoldoffTimer.StopIfNeeded();
+
+                    if (!clientSetupComplete)
+                    {
+                        logger.Debug.Emit("{0}: client setup is complete for TrackingSet {1} [initial count:{2}]", Fcns.CurrentMethodName, trackingSet.SetID, trackingSet.Count);
+                        clientSetupComplete = true;
+                    }
                 }
                 catch (System.Exception ex)
                 {
@@ -982,7 +1231,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
         {
             Messages.Message mesg = null;
 
-            if (isServer)
+            if (isServerSide)
             {
                 if (trackingSet == null)
                     CheckForSets(qpcTimeStamp);
@@ -1009,23 +1258,15 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
                     }
                 }
             }
-            else if (isClient && sendSetupMessage)
+            else if (isClientSide && sendSetupMessage)
             {
+                logger.Trace.Emit("Sending setup message");
+
                 mesg = new Messages.Message(BufferPool).Update(buildPayloadDataFromNVS: Config.AddValues(null), orInFlags: BufferHeaderFlags.MessageContainsStreamSetup);
                 sendSetupMessage = false;
             }
             
             return mesg;
-        }
-
-        public int Service(QpcTimeStamp qpcTimeStamp)
-        {
-            if (isServer && trackingSet == null)
-            {
-                return CheckForSets(qpcTimeStamp);
-            }
-
-            return 0;
         }
 
         #endregion
@@ -1056,12 +1297,17 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
                 updateIntervalTimer.Reset(triggerImmediately: true);
             }
 
-            if (referenceSet == null && forceRunNow)
+            if (referenceSet == null)
             {
-                logger.Debug.Emit("Was not able to find reference set with id {0}", Config.SetID);
+                if (forceRunNow)
+                    logger.Debug.Emit("Was not able to find reference set with id {0}", Config.SetID);
+            }
+            else
+            {
+                logger.Debug.Emit("Found reference set {0}{1}", referenceSet.SetID, (forceRunNow ? "" : " [while waiting]"));
             }
 
-            return 0;
+            return (referenceSet != null) ? 1 : 0;
         }
 
         #endregion
@@ -1073,14 +1319,16 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
     public class IVIRelayMessageStreamTool : MessageStreamToolBase, IMessageStreamTool
     {
-        #region Construction, Release, related fields
+        #region Construction and related fields
 
+        /// <summary>
+        /// Constructor used by RemotingClient
+        /// </summary>
         public IVIRelayMessageStreamTool(string hostPartID, int stream, INotifyable hostNotifier, Buffers.BufferPool bufferPool, IVIRelayMessageStreamToolConfig config)
-            : base("IVIRelay", hostPartID, stream, hostNotifier, bufferPool)
+            : base("IVIRelay", hostPartID, stream, hostNotifier, bufferPool, isClientSideIn: true)
         {
             Config = config;
             ivi = Config.ClientIVI ?? Values.Values.Instance;
-            isClientSide = true;
 
             switch (Config.IVIRelayDirection)
             {
@@ -1095,15 +1343,17 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
             localMetaDataFilterNVS = Config.ClientToServerMetaDataFilterNVS.ConvertToReadOnly();
             mdKeywordFilterArray = localMetaDataFilterNVS.Select(nv => nv.Name).ToArray();
 
-            ResetState(QpcTimeStamp.Now);
+            ResetState(QpcTimeStamp.Now, ResetType.ClientConstruction);
         }
 
+        /// <summary>
+        /// Constructor used by RemotingServer
+        /// </summary>
         public IVIRelayMessageStreamTool(string hostPartID, int stream, INotifyable hostNotifier, Buffers.BufferPool bufferPool, Messages.Message streamSetupMessage, INamedValueSet streamSetupMessageNVS, IIVIRegistration iIVIRegistration, IValuesInterconnection defaultIVI)
-            : base("IVIRelay", hostPartID, stream, hostNotifier, bufferPool)
+            : base("IVIRelay", hostPartID, stream, hostNotifier, bufferPool, isClientSideIn: false)
         {
             (Config = new IVIRelayMessageStreamToolConfig()).ApplyValues(streamSetupMessageNVS);
             IIVIRegistration = iIVIRegistration ?? Values.IVIRegistration.Instance;
-            isClientSide = false;
 
             if (Config.RemoteIVIName.IsNullOrEmpty())
                 ivi = defaultIVI ?? Values.Values.Instance;
@@ -1122,12 +1372,11 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
             localMetaDataFilterNVS = Config.ServerToClientMetaDataFilterNVS.ConvertToReadOnly();
             mdKeywordFilterArray = localMetaDataFilterNVS.Select(nv => nv.Name).ToArray();
 
-            ResetState(QpcTimeStamp.Now);
+            ResetState(QpcTimeStamp.Now, ResetType.ServerConstruction);
         }
 
         public IVIRelayMessageStreamToolConfig Config { get; private set; }
         public IIVIRegistration IIVIRegistration { get; private set; }
-        public readonly bool isClientSide;
         public readonly bool isInitiator, isAcceptor, waitBeforeRegistration;
 
         private readonly IValuesInterconnection ivi;
@@ -1162,11 +1411,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
         QpcTimer checkForNewValueNamesIntervalTimer = new QpcTimer() { TriggerIntervalInSec = 0.2, AutoReset = true };
 
         Dictionary<string, IVATracker> stringToIVATrackerDictionary = new Dictionary<string, IVATracker>();
-        List<IVATracker> locallyAssignedIVATrackerList = new List<IVATracker>();
-        List<IVATracker> remotelyAssignedIVATrackerList = new List<IVATracker>();
-
-        IVATracker[] locallyAssignedIVATrackerArray = Utils.Collections.EmptyArrayFactory<IVATracker>.Instance;
-        IVATracker[] remotelyAssignedIVATrackerArray = Utils.Collections.EmptyArrayFactory<IVATracker>.Instance;
+        IListWithCachedArray<IVATracker> locallyAssignedIVATrackerList = new IListWithCachedArray<IVATracker>();
+        IListWithCachedArray<IVATracker> remotelyAssignedIVATrackerList = new IListWithCachedArray<IVATracker>();
 
         IValueAccessor[] locallyAssignedUpdateIVAArray = Utils.Collections.EmptyArrayFactory<IValueAccessor>.Instance;
         IValueAccessor[] remotelyAssignedUpdateIVAArray = Utils.Collections.EmptyArrayFactory<IValueAccessor>.Instance;
@@ -1175,45 +1421,40 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
         private void UpdateTrackerArrays(bool forceRebuildArrays = false)
         {
-            if (locallyAssignedIVATrackerArray.Length != locallyAssignedIVATrackerList.Count || forceRebuildArrays)
+            if (locallyAssignedUpdateIVAArray.Length != locallyAssignedIVATrackerList.Count || forceRebuildArrays)
             {
-                locallyAssignedIVATrackerArray = locallyAssignedIVATrackerList.ToArray();
-                locallyAssignedUpdateIVAArray = new IValueAccessor[locallyAssignedIVATrackerArray.Length];
-                locallyAssignedUpdateIVATrackerArray = new IVATracker[locallyAssignedIVATrackerArray.Length];
+                locallyAssignedUpdateIVAArray = new IValueAccessor[locallyAssignedIVATrackerList.Count];
+                locallyAssignedUpdateIVATrackerArray = new IVATracker[locallyAssignedIVATrackerList.Count];
             }
 
-            if (remotelyAssignedIVATrackerArray.Length != remotelyAssignedIVATrackerList.Count || forceRebuildArrays)
+            if (remotelyAssignedUpdateIVAArray.Length != remotelyAssignedIVATrackerList.Count || forceRebuildArrays)
             {
-                remotelyAssignedIVATrackerArray = remotelyAssignedIVATrackerList.ToArray();
-                remotelyAssignedUpdateIVAArray = new IValueAccessor[remotelyAssignedIVATrackerArray.Length];
-                remotelyAssignedUpdateIVATrackerArray = new IVATracker[remotelyAssignedIVATrackerArray.Length];
+                remotelyAssignedUpdateIVAArray = new IValueAccessor[remotelyAssignedIVATrackerList.Count];
+                remotelyAssignedUpdateIVATrackerArray = new IVATracker[remotelyAssignedIVATrackerList.Count];
             }
         }
 
         #endregion
 
-        #region ResetState
+        #region InnerHandleResetState
 
-        public bool sendSetupMessage = false;
-
-        public void ResetState(QpcTimeStamp qpcTimeStamp)
+        public override void InnerHandleResetState(QpcTimeStamp qpcTimeStamp, ResetType resetType, string reason)
         {
-            Service(qpcTimeStamp);
+            if (Config.ResetClientSideIVAsOnCloseOrFailure && (resetType.IsClientFailure() || resetType.IsClientClose()))
+            {
+                logger.Debug.Emit("Clearing server assigned IVAs [{0}]", reason);
+                remotelyAssignedIVATrackerList.Array.DoForEach(ivaTracker => ivaTracker.iva.Reset());
+            }
 
             localIVILastProcessedValueNamesArrayLength = 0;
             enableInitiatingRegistration = isInitiator && !waitBeforeRegistration;
             checkForNewValueNamesIntervalTimer.Reset(triggerImmediately: true);
 
-            stringToIVATrackerDictionary = new Dictionary<string, IVATracker>();
-            locallyAssignedIVATrackerList = new List<IVATracker>();
-            remotelyAssignedIVATrackerList = new List<IVATracker>();
+            stringToIVATrackerDictionary.Clear();
+            locallyAssignedIVATrackerList.Clear();
+            remotelyAssignedIVATrackerList.Clear();
 
             UpdateTrackerArrays();
-
-            if (isClientSide)
-            {
-                sendSetupMessage = true;
-            }
         }
 
         #endregion
@@ -1291,7 +1532,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
                                     if (pushItem.ItemFlagsHasInlineVC)
                                         iva.Set(pushItem.inlineVC);
                                     else if ((pushItem.itemFlags & PushItemFlags.HasVCE) != 0)
-                                        iva.Set((pushItem.data.vce != null) ? pushItem.data.vce.VC : default(ValueContainer));
+                                        iva.Set(pushItem.data.GetVC());
 
                                     IVATracker ivaTracker = new IVATracker()
                                     {
@@ -1340,7 +1581,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
                                         updateArraysNeeded = false;
                                     }
 
-                                    IVATracker ivaTracker = ((pushItem.itemType == PushItemType.InitiatorUpdate) ? remotelyAssignedIVATrackerArray : locallyAssignedIVATrackerArray).SafeAccess(id);
+                                    IVATracker ivaTracker = ((pushItem.itemType == PushItemType.InitiatorUpdate) ? remotelyAssignedIVATrackerList.Array : locallyAssignedIVATrackerList.Array).SafeAccess(id);
 
                                     if (ivaTracker != null && pushItem.data != null)
                                     {
@@ -1354,7 +1595,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
                                         }
                                         else if ((pushItem.itemFlags & PushItemFlags.HasVCE) != 0)
                                         {
-                                            iva.SetIfDifferent((data.vce != null) ? data.vce.VC : default(ValueContainer));
+                                            iva.SetIfDifferent(data.GetVC());
                                             ivaTracker.lastValueSeqNum = iva.ValueSeqNum;
                                         }
 
@@ -1416,6 +1657,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
             if (sendSetupMessage)
             {
+                logger.Trace.Emit("Sending setup message");
+
                 mesg = new Messages.Message(BufferPool).Update(buildPayloadDataFromNVS: Config.AddValues(null), orInFlags: BufferHeaderFlags.MessageContainsStreamSetup);
                 sendSetupMessage = false;
             }
@@ -1492,7 +1735,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
             return mesg;
         }
 
-        public int Service(QpcTimeStamp qpcTimeStamp)
+        public override int Service(QpcTimeStamp qpcTimeStamp)
         {
             int count = 0;
 
@@ -1501,12 +1744,10 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
             if (isInitiator)
             {
-                int itemCount = locallyAssignedIVATrackerArray.Length;
                 int updateCount = 0;
 
-                for (int idx = 0; idx < itemCount; idx++)
+                foreach (var ivaTracker in locallyAssignedIVATrackerList.Array)
                 {
-                    IVATracker ivaTracker = locallyAssignedIVATrackerArray[idx];
                     IValueAccessor iva = ivaTracker.iva;
 
                     if (iva.IsUpdateNeeded && !ivaTracker.pushItem.pending)
@@ -1529,12 +1770,10 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
             if (isAcceptor)
             {
-                int itemCount = remotelyAssignedIVATrackerArray.Length;
                 int updateCount = 0;
 
-                for (int idx = 0; idx < itemCount; idx++)
+                foreach (var ivaTracker in remotelyAssignedIVATrackerList.Array)
                 {
-                    IVATracker ivaTracker = remotelyAssignedIVATrackerArray[idx];
                     IValueAccessor iva = ivaTracker.iva;
 
                     if (iva.IsUpdateNeeded && !ivaTracker.pushItem.pending && !ivaTracker.isDuplicate)
@@ -1593,7 +1832,10 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
                 else
                 {
                     pushItem.itemFlags |= PushItemFlags.HasVCE;
-                    pushItemData.vce = (ivaTracker.lastValueSeqNum != ivaValueSeqNum) ? new ValueContainerEnvelope() { VC = iva.VC } : null;
+                    if (ivaTracker.lastValueSeqNum != ivaValueSeqNum)
+                        pushItemData.SetFrom(iva.VC);
+                    else
+                        pushItemData.ClearContainedValue();
                     pushItem.inlineVC = default(ValueContainer);
                 }
             }
@@ -1669,12 +1911,14 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
                         data = new PushItemData()
                         {
                             suffixName = suffixName,
-                            vce = (!useInlineVC ? (new ValueContainerEnvelope() { VC = vc }) : null),
                             mdNVS = mdNVS,
                         },
                         pending = true,
                     },
                 };
+
+                if (!useInlineVC)
+                    ivaTracker.pushItem.data.SetFrom(vc);
 
                 pendingPushItemList.Add(ivaTracker.pushItem);
 
@@ -1917,22 +2161,50 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
                 StringBuilder sb = new StringBuilder();
                 if (suffixName != null)
                     sb.CheckedAppendFormat("suffix:'{0}'", suffixName);
-                if (sb.Length > 0)
-                    sb.Append(" ");
                 if (vce != null)
-                    sb.CheckedAppendFormat("vce:{0}", vce);
-                if (sb.Length > 0)
-                    sb.Append(" ");
+                    sb.CheckedAppendFormatWithDelimiter(" ", "vce:{0}", vce);
                 if (mdNVS != null)
-                    sb.CheckedAppendFormat("md:{0}", mdNVS.ToStringSML());
-                if (sb.Length > 0)
-                    sb.Append(" ");
+                    sb.CheckedAppendFormatWithDelimiter(" ", "md:{0}", mdNVS.ToStringSML());
                 if (failureCode != null)
-                    sb.CheckedAppendFormat("failureCode:'{0}'", failureCode);
+                    sb.CheckedAppendFormatWithDelimiter(" ", "failureCode:'{0}'", failureCode);
                 if (sb.Length == 0)
                     sb.Append("[Empty]");
 
                 return sb.ToString();
+            }
+
+            /// <summary>
+            /// This method attempts to generate a new VCE for the value contained in the given <paramref name="vc"/>
+            /// </summary>
+            public void SetFrom(ValueContainer vc)
+            {
+                try
+                {
+                    vce = new ValueContainerEnvelope() { VC = vc };
+                }
+                catch (System.Exception ex)
+                {
+                    vce = new ValueContainerEnvelope() { VC = ValueContainer.Create(ex.ToString(ExceptionFormat.TypeAndMessage)) };
+                }
+            }
+
+            /// <summary>
+            /// This method checks if the data includes a vce, and if so returns the vce.VC, otherwise this method returns ValueContainer.Empty
+            /// </summary>
+            public ValueContainer GetVC()
+            {
+                if (vce != null)
+                    return vce.VC;
+                else
+                    return ValueContainer.Empty;
+            }
+
+            /// <summary>
+            /// Clears the contained vce.
+            /// </summary>
+            public void ClearContainedValue()
+            {
+                vce = null;
             }
         }
 
@@ -1943,9 +2215,9 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
     #region MessageStreamToolBase
 
-    public abstract class MessageStreamToolBase : DisposableBase
+    public abstract class MessageStreamToolBase : DisposableBase, IServiceable
     {
-        public MessageStreamToolBase(string loggingSourceStrPart, string hostPartID, int stream, INotifyable hostNotifier, Buffers.BufferPool bufferPool)
+        public MessageStreamToolBase(string loggingSourceStrPart, string hostPartID, int stream, INotifyable hostNotifier, Buffers.BufferPool bufferPool, bool isClientSideIn)
         {
             logger = new Logging.Logger("{0}.{1}.s{2}".CheckedFormat(hostPartID, loggingSourceStrPart, stream), groupName: Logging.LookupDistributionGroupName);
 
@@ -1954,13 +2226,55 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
             HostNotifier = hostNotifier;
             BufferPool = bufferPool;
 
+            isClientSide = isClientSideIn;
+            isServerSide = !isClientSideIn;
+
             AddExplicitDisposeAction(Release);
         }
+
+        /// <summary>Client initiates message stream tool creation in the server.  Different tools have different directionalities of communication based on type and configuration.</summary>
+        public readonly bool isClientSide;
+
+        /// <summary>Server create message stream tool by client request.  Different tools have different directionalities of communication based on type and configuration.</summary>
+        public readonly bool isServerSide;
 
         public virtual void Release()
         {
             Fcns.DisposeOfObject(ref memoryStream);
         }
+
+        public void ResetState(QpcTimeStamp qpcTimeStamp, ResetType resetType, string reason = null)
+        {
+            reason = (reason.IsNullOrEmpty() ? resetType.ToString() : "{0}:{1}".CheckedFormat(resetType, reason));
+
+            if (resetType.IsFailure())
+            {
+                if (!sendSetupMessage)
+                    logger.Info.Emit("{0}: {1}", Fcns.CurrentMethodName, reason);
+                else
+                    logger.Debug.Emit("{0}: {1}", Fcns.CurrentMethodName, reason);
+            }
+            else if (resetType.IsClose())
+                logger.Debug.Emit("{0}: {1}", Fcns.CurrentMethodName, reason);
+            else
+                logger.Trace.Emit("{0}: {1}", Fcns.CurrentMethodName, reason);
+
+            Service(qpcTimeStamp);
+
+            InnerHandleResetState(qpcTimeStamp, resetType, reason);
+
+            if (isClientSide)
+                sendSetupMessage = true;
+        }
+
+        public bool sendSetupMessage = false;
+
+        public virtual int Service(QpcTimeStamp tsNow) 
+        { 
+            return 0; 
+        }
+
+        public abstract void InnerHandleResetState(QpcTimeStamp qpcTimeStamp, ResetType resetType, string reason);
 
         public Logging.Logger logger;
 

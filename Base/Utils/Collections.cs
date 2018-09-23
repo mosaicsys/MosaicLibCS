@@ -1304,6 +1304,36 @@ namespace MosaicLib.Utils
                 NoteContentsChanged();
             }
 
+            /// <summary>
+            /// sweeps through the contents evaluating the given <paramref name="match"/> predicate.  Removes all items from the list for which match returns true.
+            /// </summary>
+            /// <exception cref="System.ArgumentNullException">thrown if the given <paramref name="match"/> is null.</exception>
+            public int RemoveAll(Predicate<TItemType> match)
+            {
+                if (match == null)
+                    throw new System.ArgumentNullException("match");
+
+                int remoteCount = 0;
+                for (int idx = 0; idx < list.Count; )
+                {
+                    TItemType item = list[idx];
+                    if (match(item))
+                    {
+                        list.RemoveAt(idx);
+                        remoteCount++;
+                    }
+                    else
+                    {
+                        idx++;
+                    }
+                }
+
+                if (remoteCount > 0)
+                    NoteContentsChanged();
+
+                return remoteCount;
+            }
+
             #endregion
 
             #region IList<TItemType>

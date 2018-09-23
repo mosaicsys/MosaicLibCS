@@ -118,6 +118,22 @@ namespace MosaicLib.Semi.E090
         public static E090StateUpdateBehavior GenerateE090UpdateItemsBehaviorAdditions { get { return _generateE090UpdateItemsBehaviorAdditions; } set { _generateE090UpdateItemsBehaviorAdditions = (value & ~(E090StateUpdateBehavior.UsePendingSPS)); } }
         private static E090StateUpdateBehavior _generateE090UpdateItemsBehaviorAdditions = E090StateUpdateBehavior.None;
 
+        /// <summary>
+        /// Returns true if E090 has been configured to use the AddExternalSyncItem update behavior.  
+        /// <para/>If <paramref name="checkNoteSubstrateMovedAdditions"/> is true then this check includes the current value of the NoteSubstMovedUpdateBehaviorAdditions selected behavior
+        /// <para/>If <paramref name="checkSetSubstProcStateAdditions"/> is true then this check includes the current value of the SetSubstProcStateUpdateBehaviorAdditions selected behavior
+        /// <para/>If <paramref name="checkGenerateUpdateItemAdditions"/> is true then this check includes the current value of the GenerateE090UpdateItemsBehaviorAdditions selected behavior
+        /// </summary>
+        public static bool GetUseExternalSync(bool checkNoteSubstrateMovedAdditions = false, bool checkSetSubstProcStateAdditions = true, bool checkGenerateUpdateItemAdditions = true)
+        {
+            var bitUnion = (checkNoteSubstrateMovedAdditions ? _noteSubstMovedUpdateBehaviorAdditions : E090StateUpdateBehavior.None)
+                           | (checkSetSubstProcStateAdditions ? _setSubstProcStateUpdateBehaviorAdditions : E090StateUpdateBehavior.None)
+                           | (checkGenerateUpdateItemAdditions ? _generateE090UpdateItemsBehaviorAdditions : E090StateUpdateBehavior.None)
+                           ;
+
+            return bitUnion.IsSet(E090StateUpdateBehavior.AddExternalSyncItem);
+        }
+
         public static void ResetToDefaults()
         {
             MaximumSPSListLength = DefaultMaximumSPSListLength;
@@ -371,7 +387,7 @@ namespace MosaicLib.Semi.E090
             E039ObjectID substObjID = currentSubstInfo.ObjID;
 
             string ec = null;
-            using (var eeTrace = new Logging.EnterExitTrace(logger, "{0}: obj '{1}' {2}".CheckedFormat(Fcns.CurrentMethodName, substObjID, spsParam)))
+            using (var eeTrace = new Logging.EnterExitTrace(logger, "{0}: obj '{1}' {2} [{3}]".CheckedFormat(Fcns.CurrentMethodName, substObjID, spsParam, updateBehavior)))
             {
                 List<E039UpdateItem> updateItemList = new List<E039UpdateItem>();
 
@@ -396,6 +412,15 @@ namespace MosaicLib.Semi.E090
         public static string SetPendingSubstProcState(this IE039TableUpdater tableUpdater, IE039Object substObj, SubstProcState spsParam, E090StateUpdateBehavior updateBehavior = E090StateUpdateBehavior.PendingSPSUpdate, bool addSyncExternalItem = false)
         {
             return tableUpdater.SetSubstProcState(substObj, spsParam: spsParam, updateBehavior: updateBehavior | E090StateUpdateBehavior.UsePendingSPS, addSyncExternalItem: addSyncExternalItem);
+        }
+
+        public static string SetPendingSubstProcState(this IE039TableUpdater tableUpdater, E090SubstLocObserver substLocObs, SubstProcState spsParam, E090StateUpdateBehavior updateBehavior = E090StateUpdateBehavior.PendingSPSUpdate, bool addSyncExternalItem = false)
+        {
+            string ec = tableUpdater.SetPendingSubstProcState(substLocObs.UpdateInline().ContainsSubstInfo, spsParam: spsParam, updateBehavior: updateBehavior, addSyncExternalItem: addSyncExternalItem);
+
+            substLocObs.Update();
+
+            return ec;
         }
 
         public static string SetPendingSubstProcState(this IE039TableUpdater tableUpdater, E090SubstObserver substObs, SubstProcState spsParam, E090StateUpdateBehavior updateBehavior = E090StateUpdateBehavior.PendingSPSUpdate, bool addSyncExternalItem = false)
@@ -594,10 +619,10 @@ namespace MosaicLib.Semi.E090
             // next apply any change in the SPS and/or PendingSPS
 
             bool clearPendingSPS = false;
-            bool spsIsPsuedoStateValue = spsParam.IsPseudoState();
-            bool addToSPSLists = spsIsPsuedoStateValue;
+            bool spsIsPsuedoStateValueCreatedMovedOrRemoved = spsParam.IsPseudoState(includeCreatedMovedAndRemoved: true, includeProcessStepCompleted: false);
+            bool addToSPSLists = spsIsPsuedoStateValueCreatedMovedOrRemoved;
 
-            if (spsParam != SubstProcState.Undefined && !spsIsPsuedoStateValue)
+            if (spsParam != SubstProcState.Undefined && !spsIsPsuedoStateValueCreatedMovedOrRemoved)
             {
                 attribUpdateNVS = attribUpdateNVS ?? new NamedValueSet();
 
@@ -619,7 +644,7 @@ namespace MosaicLib.Semi.E090
                             clearPendingSPS = true;
                     }
 
-                    string ec = GetSPSTransitionDenyReason(currentSubstInfo.InferredSPS, mergedSPSParam, allowReturnToNeedsProcessing: updateBehavior.IsSet(E090StateUpdateBehavior.AllowReturnToNeedsProcessing));
+                    string ec = GetSPSTransitionDenyReason(currentSubstInfo.SPS, mergedSPSParam, allowReturnToNeedsProcessing: updateBehavior.IsSet(E090StateUpdateBehavior.AllowReturnToNeedsProcessing));
 
                     if (!ec.IsNullOrEmpty())
                         logger.Debug.Emit("{0}: Issue with attempt to set SPS for [{1}, @{2}]: {3}", Fcns.CurrentMethodName, currentSubstInfo.ObjID, currentLocID, ec);
@@ -645,6 +670,7 @@ namespace MosaicLib.Semi.E090
                             case SubstProcState.Rejected:
                             case SubstProcState.Stopped:
                             case SubstProcState.Aborted:
+                            case SubstProcState.ProcessStepCompleted:
                                 setSPS = SubstProcState.InProcess;
                                 break;
                             case SubstProcState.Skipped:
@@ -823,70 +849,82 @@ namespace MosaicLib.Semi.E090
 
         /// <summary>
         /// Accepts a current <paramref name="startingSPS"/> and a <paramref name="mergeWithSPS"/>.  Returns the value between the two that has the higher priority.
-        /// <para/>Priority (from least to greatest): NeedsProcessing, InProcess, Processed, Stopped, Rejected, Skipped, Aborted, Lost
+        /// <para/>Priority (from least to greatest): NeedsProcessing, InProcess, ProcessStepCompleted, Processed, Stopped, Rejected, Skipped, Aborted, Lost
         /// </summary>
         public static SubstProcState MergeWith(this SubstProcState startingSPS, SubstProcState mergeWithSPS)
         {
             switch (startingSPS)
             {
-                case SubstProcState.NeedsProcessing: if (mergeWithSPS.IsInProcess() || mergeWithSPS.IsProcessingComplete()) return mergeWithSPS; break;
-                case SubstProcState.InProcess: if (mergeWithSPS.IsProcessingComplete()) return mergeWithSPS; break;
+                case SubstProcState.NeedsProcessing: if (mergeWithSPS.IsInProcess() || mergeWithSPS.IsProcessingComplete() || mergeWithSPS.IsProcessStepComplete()) return mergeWithSPS; break;
+                case SubstProcState.InProcess: if (mergeWithSPS.IsProcessingComplete() || mergeWithSPS.IsProcessStepComplete()) return mergeWithSPS; break;
+                case SubstProcState.ProcessStepCompleted: if (mergeWithSPS.IsProcessingComplete()) return mergeWithSPS; break;
                 case SubstProcState.Processed: if (mergeWithSPS.IsProcessingComplete()) return mergeWithSPS; break;
                 case SubstProcState.Stopped: if (mergeWithSPS == SubstProcState.Rejected || mergeWithSPS == SubstProcState.Skipped || mergeWithSPS == SubstProcState.Aborted || mergeWithSPS == SubstProcState.Lost) return mergeWithSPS; break;
                 case SubstProcState.Rejected: if (mergeWithSPS == SubstProcState.Skipped || mergeWithSPS == SubstProcState.Aborted || mergeWithSPS == SubstProcState.Lost) return mergeWithSPS; break;
                 case SubstProcState.Skipped: if (mergeWithSPS == SubstProcState.Aborted || mergeWithSPS == SubstProcState.Lost) return mergeWithSPS; break;
                 case SubstProcState.Aborted: if (mergeWithSPS == SubstProcState.Lost) return mergeWithSPS; break;
                 case SubstProcState.Lost: break;
-                case SubstProcState.Undefined:
-                default:
-                    return mergeWithSPS;
+                case SubstProcState.Created: return SubstProcState.Undefined;
+                case SubstProcState.Moved: return SubstProcState.Undefined;
+                case SubstProcState.Removed: return SubstProcState.Undefined;
+                case SubstProcState.Undefined: return mergeWithSPS;
+                default: return SubstProcState.Undefined;
             }
 
             return startingSPS;
         }
 
+        /// <summary>
+        /// Note: this is only intended to be applied to the E090 visible SPS value and captures the known permitted transitions for that value.  As such it does not contemplate transitions between pseudo states (except for an initial transition from Undefined)
+        /// </summary>
         public static string GetSPSTransitionDenyReason(SubstProcState currentSPS, SubstProcState toSPS, bool requireInProcessBeforeProcessComplete = false, bool allowReturnToNeedsProcessing = false)
         {
-            string reason = null;
+            bool transitionIsPermitted = false;
 
-            if (toSPS != currentSPS && currentSPS != SubstProcState.Undefined)
+            if (toSPS == currentSPS || currentSPS == SubstProcState.Undefined)
+                transitionIsPermitted = true;
+            else
             {
                 switch (toSPS)
                 {
                     case SubstProcState.NeedsProcessing:
-                        if (!currentSPS.IsInProcess())
-                            reason = "Transition is not allowed";
-                        else if (!allowReturnToNeedsProcessing)
-                            reason = "Transition is not enabled";
+                        if (currentSPS.IsInProcess() && allowReturnToNeedsProcessing)
+                            transitionIsPermitted = true;
                         break;
 
                     case SubstProcState.InProcess:
-                        if (!currentSPS.IsNeedsProcessing())
-                            reason = "Transition is not allowed";
+                        if (currentSPS.IsNeedsProcessing())
+                            transitionIsPermitted = true;
                         break;
 
                     case SubstProcState.Lost:
+                        transitionIsPermitted = true;
                         break;
 
                     case SubstProcState.Skipped:
-                        if (!currentSPS.IsNeedsProcessing() && !currentSPS.IsInProcess())
-                            reason = "Transition is not allowed";
+                        if (currentSPS.IsNeedsProcessing())
+                            transitionIsPermitted = true;
                         break;
 
                     case SubstProcState.Processed:
                     case SubstProcState.Aborted:
                     case SubstProcState.Stopped:
                     case SubstProcState.Rejected:
-                        if (!(currentSPS.IsInProcess() || (!requireInProcessBeforeProcessComplete && currentSPS.IsNeedsProcessing())))
-                            reason = "Transition is not allowed";
+                        if (currentSPS.IsInProcess())
+                            transitionIsPermitted = true;
+                        else if (!requireInProcessBeforeProcessComplete && currentSPS.IsNeedsProcessing())
+                            transitionIsPermitted = true;
                         break;
 
                     default:
-                        return "Current SubstProcState is not valid";
+                        return "{0} failed: toSPS is not valid [{1}]".CheckedFormat(Fcns.CurrentMethodName, toSPS);
                 }
             }
 
-            return (reason.IsNullOrEmpty() ? "" : "{0} [from:{1}, to:{2}]".CheckedFormat(reason, currentSPS, toSPS));
+            if (transitionIsPermitted)
+                return string.Empty;
+            else
+                return "Transition is not allowed [from:{0}, to:{1}]".CheckedFormat(currentSPS, toSPS);
         }
     }
 
@@ -1505,7 +1543,10 @@ namespace MosaicLib.Semi.E090
     /// <summary>
     /// SubstProcState: Substrate Processing State (SPS)
     /// Gives a summary of if the substrate has been processed and, if it was not processed successfully, why.
-    /// <para/>NeedsProcessing = 0, InProcess = 1, Processed = 2, Aborted = 3, Stopped = 4, Rejected = 5, Lost = 6, Skipped = 7, Undefined = -1, Created = -2, Moved = -3, Removed = -4
+    /// This enumeration is divided into values that follow the E090 standard and other values that are used internally (typically as a PendingSPS) but which are not generally visible outside of this namespace.
+    /// <para/>NeedsProcessing = 0, InProcess = 1, Processed = 2, Aborted = 3, Stopped = 4, Rejected = 5, Lost = 6, Skipped = 7, 
+    /// <para/>Undefined = -1, 
+    /// <para/>PseudoSPS values: Created = -2, Moved = -3, Removed = -4, ProcessStepCompleted = -5
     /// </summary>
     [DataContract(Namespace = MosaicLib.Constants.E090NameSpace)]
     public enum SubstProcState : int
@@ -1557,6 +1598,10 @@ namespace MosaicLib.Semi.E090
         /// <summary>PseudoSPS value: Optionally added to SPSList when substrate has been removed. [-4]</summary>
         [EnumMember]
         Removed = -4,
+
+        /// <summary>PseudoSPS value: Used as PendingSPS value to indicate that a processing step has been completed, typically at a process module location.  The use of this PendingSPS indicates that the current process step was completed successfully.  If this was the last processing step then the PendingSPS and the final SPS may be set to Processed to indicate normal and successful completion of all processing steps. [-5]</summary>
+        [EnumMember]
+        ProcessStepCompleted = -5,
     }
 
     /// <summary>
@@ -1802,6 +1847,9 @@ namespace MosaicLib.Semi.E090
         /// <summary>Returns true if the given <paramref name="sps"/> value is InProcess</summary>
         public static bool IsInProcess(this SubstProcState sps) { return (sps == SubstProcState.InProcess); }
 
+        /// <summary>Returns true if the given <paramref name="sps"/> value is ProcessStepCompleted</summary>
+        public static bool IsProcessStepComplete(this SubstProcState sps) { return (sps == SubstProcState.ProcessStepCompleted); }
+
         /// <summary>
         /// Returns true if the given <paramref name="sps"/> value is any of the known processing complete values, or false otherwise.
         /// <para/>Processed, Aborted, Stopped, or Rejected.
@@ -1827,15 +1875,16 @@ namespace MosaicLib.Semi.E090
         }
 
         /// <summary>
-        /// Returns true if the give <paramref name="sps"/> value is one of the pseudo SPS values (Added, Moved, Removed)
+        /// Returns true if the give <paramref name="sps"/> value is one of the pseudo SPS values, Added, Moved, or Removed, if <paramref name="includeCreatedMovedAndRemoved"/> is true, or ProcessStepCompleted if <paramref name="includeProcessStepCompleted"/> is true.
         /// </summary>
-        public static bool IsPseudoState(this SubstProcState sps)
+        public static bool IsPseudoState(this SubstProcState sps, bool includeCreatedMovedAndRemoved = true, bool includeProcessStepCompleted = true)
         {
             switch (sps)
             {
-                case SubstProcState.Created: return true;
-                case SubstProcState.Moved: return true;
-                case SubstProcState.Removed: return true;
+                case SubstProcState.Created: return includeCreatedMovedAndRemoved;
+                case SubstProcState.Moved: return includeCreatedMovedAndRemoved;
+                case SubstProcState.Removed: return includeCreatedMovedAndRemoved;
+                case SubstProcState.ProcessStepCompleted: return includeProcessStepCompleted;
                 default: return false;
             }
         }

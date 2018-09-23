@@ -162,22 +162,22 @@ namespace MosaicLib.WPF.Interconnect
             // Any WVA DP update loop will terminate in the OnPropertyChanged method below which just sets the corresonding IVA to the final value.
 
             if (setContainerDP)
-                SetValue(vcDP, ivaVC);
+                SetValue(VCProperty, ivaVC);
 
             if (setObjectDP)
-                SetValue(valueAsObjectDP, valueAsObject);
+                SetValue(ValueAsObjectProperty, valueAsObject);
 
             if (setDoubleDP)
-                SetValue(valueAsDoubleDP, valueAsDouble);
+                SetValue(ValueAsDoubleProperty, valueAsDouble);
 
             if (setBooleanDP)
-                SetValue(valueAsBooleanDP, valueAsBoolean);
+                SetValue(ValueAsBooleanProperty, valueAsBoolean);
 
             if (setInt32DP)
-                SetValue(valueAsInt32DP, valueAsInt32);
+                SetValue(ValueAsInt32Property, valueAsInt32);
 
             if (setStringDP)
-                SetValue(valueAsStringDP, valueAsString);
+                SetValue(ValueAsStringProperty, valueAsString);
 
             inNotifyValueHasBeenUpdated = false;
         }
@@ -198,7 +198,7 @@ namespace MosaicLib.WPF.Interconnect
         /// </summary>
         protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)
         {
-            if (e.Property == vcDP || e.Property == valueAsObjectDP || e.Property == valueAsDoubleDP || e.Property == valueAsBooleanDP || e.Property == valueAsInt32DP || e.Property == valueAsStringDP)
+            if (e.Property == VCProperty || e.Property == ValueAsObjectProperty || e.Property == ValueAsDoubleProperty || e.Property == ValueAsBooleanProperty || e.Property == ValueAsInt32Property || e.Property == ValueAsStringProperty)
             {
                 ValueContainer newValueVC = new ValueContainer().SetFromObject(e.NewValue);
 
@@ -217,17 +217,17 @@ namespace MosaicLib.WPF.Interconnect
                     lastVC = newValueVC;
                 }
 
-                if (e.Property == vcDP)
+                if (e.Property == VCProperty)
                     lastVC = newValueVC;
-                else if (e.Property == valueAsObjectDP)
+                else if (e.Property == ValueAsObjectProperty)
                     lastValueAsObject = e.NewValue;
-                else if (e.Property == valueAsDoubleDP)
+                else if (e.Property == ValueAsDoubleProperty)
                     lastValueAsDouble = e.NewValue as double?;
-                else if (e.Property == valueAsBooleanDP)
+                else if (e.Property == ValueAsBooleanProperty)
                     lastValueAsBoolean = e.NewValue as bool?;
-                else if (e.Property == valueAsInt32DP)
+                else if (e.Property == ValueAsInt32Property)
                     lastValueAsInt32 = e.NewValue as Int32?;
-                else if (e.Property == valueAsStringDP)
+                else if (e.Property == ValueAsStringProperty)
                     lastValueAsString = e.NewValue as String;
             }
             else
@@ -236,12 +236,12 @@ namespace MosaicLib.WPF.Interconnect
             }
         }
 
-        private static System.Windows.DependencyProperty vcDP = System.Windows.DependencyProperty.Register("VC", typeof(ValueContainer), typeof(WPFValueAccessor));
-        private static System.Windows.DependencyProperty valueAsObjectDP = System.Windows.DependencyProperty.Register("ValueAsObject", typeof(System.Object), typeof(WPFValueAccessor));
-        private static System.Windows.DependencyProperty valueAsDoubleDP = System.Windows.DependencyProperty.Register("ValueAsDouble", typeof(System.Double?), typeof(WPFValueAccessor));
-        private static System.Windows.DependencyProperty valueAsBooleanDP = System.Windows.DependencyProperty.Register("ValueAsBoolean", typeof(System.Boolean?), typeof(WPFValueAccessor));
-        private static System.Windows.DependencyProperty valueAsInt32DP = System.Windows.DependencyProperty.Register("ValueAsInt32", typeof(System.Int32?), typeof(WPFValueAccessor));
-        private static System.Windows.DependencyProperty valueAsStringDP = System.Windows.DependencyProperty.Register("ValueAsString", typeof(System.String), typeof(WPFValueAccessor));
+        public static readonly System.Windows.DependencyProperty VCProperty = System.Windows.DependencyProperty.Register("VC", typeof(ValueContainer), typeof(WPFValueAccessor));
+        public static readonly System.Windows.DependencyProperty ValueAsObjectProperty = System.Windows.DependencyProperty.Register("ValueAsObject", typeof(System.Object), typeof(WPFValueAccessor));
+        public static readonly System.Windows.DependencyProperty ValueAsDoubleProperty = System.Windows.DependencyProperty.Register("ValueAsDouble", typeof(System.Double?), typeof(WPFValueAccessor));
+        public static readonly System.Windows.DependencyProperty ValueAsBooleanProperty = System.Windows.DependencyProperty.Register("ValueAsBoolean", typeof(System.Boolean?), typeof(WPFValueAccessor));
+        public static readonly System.Windows.DependencyProperty ValueAsInt32Property = System.Windows.DependencyProperty.Register("ValueAsInt32", typeof(System.Int32?), typeof(WPFValueAccessor));
+        public static readonly System.Windows.DependencyProperty ValueAsStringProperty = System.Windows.DependencyProperty.Register("ValueAsString", typeof(System.String), typeof(WPFValueAccessor));
 
         public override string ToString()
         {

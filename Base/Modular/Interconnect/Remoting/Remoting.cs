@@ -35,6 +35,7 @@ using MosaicLib.Modular.Part;
 using MosaicLib.Time;
 using MosaicLib.Utils;
 using MosaicLib.Utils.Collections;
+using MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools;
 
 //!!!!! Please NOTE: There are significant functional changes planed for the internal design and operation of the Remoting infrastructure.
 // As such it is not currently recommended to make use of any capabilities beyond the top level publically available ones and these public interfaces
@@ -49,6 +50,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting
     public interface IRemoting
     {
         IClientFacet Sync(SyncFlags syncFlags = default(SyncFlags));
+
+        INotificationObject<INamedValueSet> ServerInfoNVSPublisher { get; }
     }
 
     [Flags]
@@ -61,11 +64,13 @@ namespace MosaicLib.Modular.Interconnect.Remoting
     {
         public string PartID { get; set; }
         public INamedValueSet ConfigNVS { get; set; }
+        public INamedValueSet ServerInfoNVS { get; set; }
         public IConfig IConfig { get; set; }
         public IIVIRegistration IIVIRegistration { get; set; }
         public IValuesInterconnection DefaultIVI { get; set; }
         public ISetsInterconnection ISetsInterconnection { get; set; }
         public IPartsInterconnection IPartsInterconnection { get; set; }
+        public IValuesInterconnection PartIVI { get; set; }
 
         public RemotingServerConfig MakeCopyOfThis(bool deepCopy = true) 
         {
@@ -73,11 +78,13 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             {
                 PartID = PartID,
                 ConfigNVS = ConfigNVS.ConvertToReadOnly(mapNullToEmpty: true),
+                ServerInfoNVS = ServerInfoNVS.ConvertToReadOnly(mapNullToEmpty: true),
                 IConfig = IConfig,
                 IIVIRegistration = IIVIRegistration,
                 DefaultIVI = DefaultIVI,
                 ISetsInterconnection = ISetsInterconnection,
                 IPartsInterconnection = IPartsInterconnection,
+                PartIVI = PartIVI,
             };
         }
     }
@@ -87,6 +94,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
         public string PartID { get; set; }
         public INamedValueSet ConfigNVS { get; set; }
         public MessageStreamTools.MessageStreamToolConfigBase[] StreamToolsConfigArray { get; set; }
+        public IValuesInterconnection PartIVI { get; set; }
 
         public RemotingClientConfig MakeCopyOfThis(bool deepCopy = true) 
         {
@@ -95,6 +103,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
                 PartID = PartID,
                 ConfigNVS = ConfigNVS.ConvertToReadOnly(mapNullToEmpty: true),
                 StreamToolsConfigArray = StreamToolsConfigArray.SafeToArray(mapNullToEmpty: true),
+                PartIVI = PartIVI,
             };
         }
     }
@@ -102,7 +111,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
     public class RemotingServer : SimpleActivePartBase, IRemoting
     {
         public RemotingServer(RemotingServerConfig config)
-            : base(config.PartID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion1.Build(automaticallyIncAndDecBusyCountAroundActionInvoke: false))
+            : base(config.PartID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion1.Build(automaticallyIncAndDecBusyCountAroundActionInvoke: false, partBaseIVI: config.PartIVI))
         {
             Config = config.MakeCopyOfThis();
             traceLogger = new Logging.Logger(PartID + ".Trace", groupName: Logging.LookupDistributionGroupName, initialInstanceLogGate: Config.ConfigNVS["TraceLogger.InitialInstanceLogGate"].VC.GetValue(rethrow: false, defaultValue: Logging.LogGate.Debug));
@@ -112,7 +121,12 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             AddMainThreadStoppingAction(Release);
 
             ActionLoggingReference.Config = ActionLoggingConfig.Debug_Debug_Trace_Trace;
+
+            _serverInfoNVSPublisher = new InterlockedNotificationRefObject<INamedValueSet>(Config.ServerInfoNVS);
         }
+
+        public INotificationObject<INamedValueSet> ServerInfoNVSPublisher { get { return _serverInfoNVSPublisher; } }
+        private InterlockedNotificationRefObject<INamedValueSet> _serverInfoNVSPublisher;
 
         private RemotingServerConfig Config { get; set; }
 
@@ -124,61 +138,63 @@ namespace MosaicLib.Modular.Interconnect.Remoting
 
         private class ClientSessionTracker
         {
-            public string uuid;
+            /// <summary>Generally this is the same as the session.SessionName</summary>
             public string clientName;
+            /// <summary>Generally this is the same as the session.SessionUUID</summary>
+            public string uuid;
             public Sessions.IMessageSessionFacet session;
 
-            public List<MessageStreamToolTracker> messageStreamToolTrackerList = new List<MessageStreamToolTracker>();
-            public MessageStreamToolTracker[] messageStreamToolTrackerArray = Utils.Collections.EmptyArrayFactory<MessageStreamToolTracker>.Instance;
+            public IListWithCachedArray<MessageStreamToolTracker> messageStreamToolTrackerList = new IListWithCachedArray<MessageStreamToolTracker>();
 
             public MessageStreamTools.IActionRelayMessageStreamTool actionRelayStreamTool;
 
-            public void UpdateArrays(bool forceFullUpdate = false)
-            {
-                if (messageStreamToolTrackerArray.Length != messageStreamToolTrackerList.Count || forceFullUpdate)
-                    messageStreamToolTrackerArray = messageStreamToolTrackerList.ToArray();
-            }
-
             public void Release()
             {
-                UpdateArrays();
+                var messageStreamToolTrackerArray = messageStreamToolTrackerList.Array.WhereIsNotDefault().ToArray();
 
                 messageStreamToolTrackerList.Clear();
 
                 messageStreamToolTrackerArray.DoForEach(mstt => mstt.Release());
+            }
 
-                UpdateArrays();
+            public override string ToString()
+            {
+                return "CST {0} uuid:{1}".CheckedFormat(clientName, uuid);
             }
         }
 
-        private List<ClientSessionTracker> clientSessionTrackerList = new List<ClientSessionTracker>();
-        private ClientSessionTracker[] clientSessionTrackerArray = Utils.Collections.EmptyArrayFactory<ClientSessionTracker>.Instance;
-        private Sessions.IMessageSessionFacet[] clientSessionArray = Utils.Collections.EmptyArrayFactory<Sessions.IMessageSessionFacet>.Instance;
+        private IListWithCachedArray<ClientSessionTracker> clientSessionTrackerList = new IListWithCachedArray<ClientSessionTracker>();
         private Dictionary<string, ClientSessionTracker> uuidToClientSessionTrackerDictionary = new Dictionary<string, ClientSessionTracker>();
         private Dictionary<string, ClientSessionTracker> clientNameToClientSessionTrackerDictionary = new Dictionary<string, ClientSessionTracker>();
 
-        public void UpdateArrays(bool forceFullUpdate = false, bool recursive = true)
+        private void AddClientSessionTracker(ClientSessionTracker cst)
         {
-            if (clientSessionTrackerArray.Length != clientSessionTrackerList.Count || forceFullUpdate)
+            clientSessionTrackerList.Add(cst);
+            uuidToClientSessionTrackerDictionary[cst.uuid] = cst;
+            clientNameToClientSessionTrackerDictionary[cst.clientName] = cst;
+        }
+
+        private ClientSessionTracker[] RemoveAndReturnPerminentlyClosedSessions()
+        {
+            List<ClientSessionTracker> removeCSTList = new List<ClientSessionTracker>();
+
+            for (int idx = 0; idx < clientSessionTrackerList.Count; )
             {
-                clientSessionTrackerArray = clientSessionTrackerList.ToArray();
-                clientSessionArray = clientSessionTrackerArray.Select(cst => cst.session).ToArray();
-
-                uuidToClientSessionTrackerDictionary.Clear();
-                clientNameToClientSessionTrackerDictionary.Clear();
-
-                foreach (var cst in clientSessionTrackerArray)
+                var cst = clientSessionTrackerList[idx];
+                if (cst.session.State.IsPerminantlyClosed)
                 {
-                    uuidToClientSessionTrackerDictionary[cst.uuid] = cst;
-                    clientNameToClientSessionTrackerDictionary[cst.clientName] = cst;
+                    removeCSTList.Add(cst);
+                    clientSessionTrackerList.RemoveAt(idx);
+                    uuidToClientSessionTrackerDictionary.Remove(cst.uuid);
+                    clientNameToClientSessionTrackerDictionary.Remove(cst.clientName);
+                }
+                else
+                {
+                    idx++;
                 }
             }
 
-            if (recursive)
-            {
-                foreach (var cst in clientSessionTrackerArray)
-                    cst.UpdateArrays(forceFullUpdate: forceFullUpdate);
-            }
+            return removeCSTList.ToArray();
         }
 
         private class MessageStreamToolTracker
@@ -196,12 +212,14 @@ namespace MosaicLib.Modular.Interconnect.Remoting
 
         private void Release()
         {
-            UpdateArrays(recursive: false);
+            var clientSessionTrackerArray = clientSessionTrackerList.Array;
 
             clientSessionTrackerList.Clear();
+            
             clientSessionTrackerArray.DoForEach(cst => cst.Release());
 
-            UpdateArrays(recursive: false);
+            uuidToClientSessionTrackerDictionary.Clear();
+            clientNameToClientSessionTrackerDictionary.Clear();
 
             Fcns.DisposeOfObject(ref transport);
             Fcns.DisposeOfObject(ref sessionManager);
@@ -241,14 +259,14 @@ namespace MosaicLib.Modular.Interconnect.Remoting
         {
             string ec = string.Empty;
 
-            UpdateArrays();
+            var clientSessionArray = clientSessionTrackerList.Array.Select(cst => cst.session).ToArray();
 
             foreach (var session in clientSessionArray)
             {
                 if (session.State.IsConnected(includeConnectingStates: true, includeClosingStates: true))
-                    session.SetState(QpcTimeStamp.Now, Sessions.SessionStateCode.FinalCloseRequested, CurrentActionDescription);
+                    session.SetState(QpcTimeStamp.Now, Sessions.SessionStateCode.CloseRequested, "Server {0}".CheckedFormat(CurrentActionDescription));
                 else if (session.State.StateCode == Sessions.SessionStateCode.ConnectionClosed)
-                    session.SetState(QpcTimeStamp.Now, Sessions.SessionStateCode.Terminated, CurrentActionDescription);
+                    session.SetState(QpcTimeStamp.Now, Sessions.SessionStateCode.Terminated, "Server {0} [{1}]".CheckedFormat(CurrentActionDescription, session.State.StateCode));
             }
 
             TimeSpan maxSessionCloseWaitTime = Config.ConfigNVS["MaxSessionCloseWaitTime"].VC.GetValue(rethrow: false, defaultValue: (1.0).FromSeconds());
@@ -264,6 +282,19 @@ namespace MosaicLib.Modular.Interconnect.Remoting
                 {
                     ec = "Client Session close time limit reached after {0:f3} seconds [{1}]".CheckedFormat(waitTimeLimitTimer.ElapsedTimeInSeconds, String.Join(", ", clientSessionArray.Select(session => session.State)));
                     break;
+                }
+            }
+
+            {
+                QpcTimeStamp now = QpcTimeStamp.Now;
+                var actionDescription = CurrentActionDescription;
+
+                foreach (var cst in clientSessionTrackerList.Array)
+                {
+                    if (ec.IsNullOrEmpty())
+                        cst.messageStreamToolTrackerList.Array.WhereIsNotDefault().DoForEach(mss => mss.messageStreamTool.ResetState(now, MessageStreamTools.ResetType.ServerSessionClosed));
+                    else
+                        cst.messageStreamToolTrackerList.Array.WhereIsNotDefault().DoForEach(mss => mss.messageStreamTool.ResetState(now, MessageStreamTools.ResetType.ServerSessionLost, "{0} failed: {1}".CheckedFormat(actionDescription, ec)));
                 }
             }
 
@@ -348,26 +379,31 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             if (sessionManager != null)
                 count += sessionManager.Service(qpcTimeStamp);
 
-            foreach (var cst in clientSessionTrackerArray)
+            foreach (var cst in clientSessionTrackerList.Array)
             {
-                count += cst.messageStreamToolTrackerArray.Sum(mstt => InnerServiceStream(qpcTimeStamp, cst, mstt));
+                count += cst.messageStreamToolTrackerList.Array.Sum(mstt => InnerServiceStream(qpcTimeStamp, cst, mstt));
             }
 
             int perminantelyClosedCount = 0;
 
-            foreach (var cs in clientSessionArray)
+            foreach (var cst in clientSessionTrackerList.Array)
             {
-                count += cs.Service(qpcTimeStamp);
-                perminantelyClosedCount += cs.State.IsPerminantlyClosed.MapToInt();
+                var session = cst.session;
+                count += session.Service(qpcTimeStamp);
+                perminantelyClosedCount += session.State.IsPerminantlyClosed.MapToInt();
             }
 
             if (perminantelyClosedCount > 0)
             {
-                ClientSessionTracker[] removeCSTArray = clientSessionTrackerArray.Where(cst => cst.session.State.IsPerminantlyClosed).ToArray();
+                ClientSessionTracker[] removeCSTArray = RemoveAndReturnPerminentlyClosedSessions();
 
-                clientSessionTrackerList.RemoveAll(cst => cst.session.State.IsPerminantlyClosed);
-
-                UpdateArrays();
+                foreach (var cst in removeCSTArray)
+                {
+                    if (cst.session.State.StateCode == Sessions.SessionStateCode.Terminated)
+                        cst.messageStreamToolTrackerList.Array.WhereIsNotDefault().DoForEach(mss => mss.messageStreamTool.ResetState(qpcTimeStamp, MessageStreamTools.ResetType.ServerSessionTerminated, cst.session.State.ToString()));
+                    else
+                        cst.messageStreamToolTrackerList.Array.WhereIsNotDefault().DoForEach(mss => mss.messageStreamTool.ResetState(qpcTimeStamp, MessageStreamTools.ResetType.ServerSessionLost, cst.session.State.ToString()));
+                }
 
                 Log.Debug.Emit("Removed perminently closed clients: {0}", String.Join(", ", removeCSTArray.Select(cst => cst.clientName)));
 
@@ -389,55 +425,57 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             // generate a delegate that binds the ClientSessionTracker so that we can correctly route inbound messages
             session.HandleInboundMessageDelegate = ((qts, stream, message) => HandleInboundMessage(qts, cst, stream, message));
 
-            clientSessionTrackerList.Add(cst);
+            AddClientSessionTracker(cst);
 
-            UpdateArrays();
-
-            Log.Debug.Emit("");
+            Log.Debug.Emit("New client session added [{0} {1}]", session.SessionName, session.SessionUUID);
         }
 
-        private int InnerServiceStream(QpcTimeStamp qpcTimeStamp, ClientSessionTracker cst, MessageStreamToolTracker stt)
+        /// <summary>
+        /// NOTE: this method can be called with null mstt in some cases.
+        /// </summary>
+        private int InnerServiceStream(QpcTimeStamp qpcTimeStamp, ClientSessionTracker cst, MessageStreamToolTracker mstt)
         {
             int count = 0;
 
             var session = cst.session;
 
-            if (session != null && session.State.IsConnected())
+            if (session != null && session.State.IsConnected() && mstt != null)
             {
-                if (stt.lastGeneratedMessage != null)
+                if (mstt.lastGeneratedMessage != null)
                 {
-                    if (stt.lastGeneratedMessage.State == Messages.MessageState.Delivered)
+                    if (mstt.lastGeneratedMessage.State == Messages.MessageState.Delivered)
                     {
-                        stt.lastGeneratedMessage.ReturnBuffersToPool(qpcTimeStamp);
-                        stt.lastGeneratedMessage = null;
+                        mstt.lastGeneratedMessage.ReturnBuffersToPool(qpcTimeStamp);
+                        mstt.lastGeneratedMessage = null;
                         count++;
                     }
-                    else if (stt.lastGeneratedMessage.State == Messages.MessageState.Failed)
+                    else if (mstt.lastGeneratedMessage.State == Messages.MessageState.Failed)
                     {
-                        Log.Debug.Emit("Message send for client {0} stream {1} failed [{2}]", cst.clientName, stt.stream, stt.messageStreamTool.GetType().GetTypeDigestName());
+                        string reason = mstt.lastGeneratedMessage.Reason;
+                        Log.Debug.Emit("Message send for client {0} stream {1} failed [{2}, reason:{3}]", cst.clientName, mstt.stream, mstt.messageStreamTool.GetType().GetTypeDigestName(), reason);
 
                         // do not return message to buffer pool as its buffers are not in a known state anymore.
-                        stt.lastGeneratedMessage = null;
+                        mstt.lastGeneratedMessage = null;
 
-                        stt.messageStreamTool.ResetState(qpcTimeStamp);
+                        mstt.messageStreamTool.ResetState(qpcTimeStamp, MessageStreamTools.ResetType.ServerMessageDeliveryFailure, reason);
 
                         count++;
                     }
                 }
 
-                if (stt.lastGeneratedMessage == null)
+                if (mstt.lastGeneratedMessage == null)
                 {
-                    var nextMesg = stt.messageStreamTool.ServiceAndGenerateNextMessageToSend(qpcTimeStamp);
+                    var nextMesg = mstt.messageStreamTool.ServiceAndGenerateNextMessageToSend(qpcTimeStamp);
                     if (nextMesg != null)
                     {
-                        session.HandleOutboundMessage(qpcTimeStamp, unchecked((ushort)stt.stream), nextMesg);
-                        stt.lastGeneratedMessage = nextMesg;
+                        session.HandleOutboundMessage(qpcTimeStamp, unchecked((ushort)mstt.stream), nextMesg);
+                        mstt.lastGeneratedMessage = nextMesg;
                         count++;
                     }
                 }
                 else
                 {
-                    count += stt.messageStreamTool.Service(qpcTimeStamp);
+                    count += mstt.messageStreamTool.Service(qpcTimeStamp);
                 }
             }
 
@@ -446,9 +484,24 @@ namespace MosaicLib.Modular.Interconnect.Remoting
 
         private void HandleInboundMessage(QpcTimeStamp qpcTimeStamp, ClientSessionTracker cst, ushort stream, Messages.Message message)
         {
-            MessageStreamToolTracker stt = cst.messageStreamToolTrackerArray.SafeAccess(stream);
+            MessageStreamToolTracker stt = cst.messageStreamToolTrackerList.Array.SafeAccess(stream);
 
-            if (stt != null && stt.messageStreamTool != null)
+            bool isConnected = cst.session.State.IsConnected();
+            bool isConnecting = !isConnected && cst.session.State.IsConnecting;
+
+            if (!isConnected)
+            {
+                if (isConnecting)
+                {
+                    Log.Warning.Emit("{0}: invalid inbound message for client '{1}' stream {2}: session is {3} [while connecting]", CurrentMethodName, cst.clientName, cst.session.State);
+                    // handle protocol violation
+                }
+                else
+                {
+                    Log.Debug.Emit("{0}: ignoring inbound message for client '{1}' stream {2}: session is {3}", CurrentMethodName, cst.clientName, cst.session.State);
+                }
+            }
+            else if (stt != null && stt.messageStreamTool != null)
             {
                 stt.messageStreamTool.HandleInboundMessage(qpcTimeStamp, message);
             }
@@ -470,8 +523,6 @@ namespace MosaicLib.Modular.Interconnect.Remoting
 
                     if (mstt.messageStreamTool is MessageStreamTools.IActionRelayMessageStreamTool)
                         cst.actionRelayStreamTool = mstt.messageStreamTool as MessageStreamTools.IActionRelayMessageStreamTool;
-
-                    cst.UpdateArrays();
                 }
                 else
                 {
@@ -491,7 +542,9 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             
             MessageStreamTools.IMessageStreamTool messageStreamTool = null;
 
-            if (toolTypeStr == MessageStreamTools.ActionRelayMessageStreamToolConfig.toolTypeStr)
+            if (toolTypeStr == MessageStreamTools.BaseMessageStreamTool.Config.toolTypeStr)
+                messageStreamTool = new MessageStreamTools.BaseMessageStreamTool(PartID, mstt.stream, this, bufferPool, message, messageNVS) { ServerInfoNVS = Config.ServerInfoNVS };
+            else if (toolTypeStr == MessageStreamTools.ActionRelayMessageStreamToolConfig.toolTypeStr)
                 messageStreamTool = new MessageStreamTools.ActionRelayMessageStreamTool(PartID, mstt.stream, this, bufferPool, message, messageNVS, Config.IPartsInterconnection);
             else if (toolTypeStr == MessageStreamTools.SetRelayMessageStreamToolConfigBase.toolTypeStr)
                 messageStreamTool = new MessageStreamTools.SetRelayMessageStreamTool(PartID, mstt.stream, this, bufferPool, message, messageNVS, Config.ISetsInterconnection);
@@ -540,7 +593,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
     public class RemotingClient : SimpleActivePartBase, IRemoting
     {
         public RemotingClient(RemotingClientConfig config)
-            : base(config.PartID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion1.Build(automaticallyIncAndDecBusyCountAroundActionInvoke: false))
+            : base(config.PartID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion1.Build(automaticallyIncAndDecBusyCountAroundActionInvoke: false, partBaseIVI: config.PartIVI))
         {
             Config = config.MakeCopyOfThis();
             traceLogger = new Logging.Logger(PartID + ".Trace", groupName: Logging.LookupDistributionGroupName, initialInstanceLogGate: Config.ConfigNVS["TraceLogger.InitialInstanceLogGate"].VC.GetValue(rethrow: false, defaultValue: Logging.LogGate.Debug));
@@ -550,9 +603,22 @@ namespace MosaicLib.Modular.Interconnect.Remoting
 
             bufferPool = new BufferPool(configNVS: config.ConfigNVS, bufferStateEmitter: traceLogger.Trace);
 
-            AddMainThreadStoppingAction(() => Release(releaseBufferPool: true));
+            AddMainThreadStoppingAction(() => Release(releaseBufferPool: true, releaseMSTTs: true));
 
             ActionLoggingReference.Config = ActionLoggingConfig.Debug_Debug_Trace_Trace;
+
+            _serverInfoNVSPublisher = new InterlockedNotificationRefObject<INamedValueSet>();
+            serverInfoNVSIVA = (config.PartIVI ?? Interconnect.Values.Values.Instance).GetValueAccessor("{0}.ServerInfoNVS".CheckedFormat(PartID));
+        }
+
+        public INotificationObject<INamedValueSet> ServerInfoNVSPublisher { get { return _serverInfoNVSPublisher; } }
+        private InterlockedNotificationRefObject<INamedValueSet> _serverInfoNVSPublisher;
+        private IValueAccessor serverInfoNVSIVA;
+
+        private void InnerHandleServerInfoNVS(INamedValueSet nvs)
+        {
+            _serverInfoNVSPublisher.Object = nvs.ConvertToReadOnly(mapNullToEmpty: true);
+            serverInfoNVSIVA.Set(nvs.ConvertToReadOnly(mapNullToEmpty: false));
         }
 
         private Logging.IBasicLogger traceLogger;
@@ -570,27 +636,37 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             public MessageStreamTools.IMessageStreamTool messageStreamTool;
             public Messages.Message lastGeneratedMessage;
 
-            public void Release()
+            public void Clear(QpcTimeStamp now, bool releaseMSTT = false)
             {
-                Fcns.DisposeOfObject(ref messageStreamTool);
+                if (messageStreamTool != null)
+                {
+                    messageStreamTool.ResetState(now, ResetType.ClientSessionClosed, "MSTT has been cleared");
+                    if (releaseMSTT)
+                        Fcns.DisposeOfObject(ref messageStreamTool);
+                }
+
                 lastGeneratedMessage = null;        // the message can only be safely "released" if it has been delivered.
             }
         }
 
-        private MessageStreamToolTracker[] messageStreamToolTrackerArray;
+        private MessageStreamToolTracker[] messageStreamToolTrackerArray = EmptyArrayFactory<MessageStreamToolTracker>.Instance;
 
         private MessageStreamTools.IActionRelayMessageStreamTool actionRelayStreamTool = null;
 
-        private void Release(bool releaseBufferPool = false, bool setConnStateToDisconnectedIfNeeded = true)
+        private void Release(bool releaseBufferPool = false, bool releaseMSTTs = false, bool setConnStateToDisconnectedIfNeeded = true)
         {
             QpcTimeStamp qpcNow = QpcTimeStamp.Now;
 
             Fcns.DisposeOfObject(ref transport);
             Fcns.DisposeOfObject(ref session);
 
-            messageStreamToolTrackerArray.DoForEach(mstt => mstt.Release());
-            messageStreamToolTrackerArray = null;
-            actionRelayStreamTool = null;
+            messageStreamToolTrackerArray.DoForEach(mstt => mstt.Clear(qpcNow, releaseMSTT: releaseMSTTs));
+
+            if (releaseMSTTs)
+            {
+                messageStreamToolTrackerArray = EmptyArrayFactory<MessageStreamToolTracker>.Instance;
+                actionRelayStreamTool = null;
+            }
 
             if (releaseBufferPool)
                 Fcns.DisposeOfObject(ref bufferPool);
@@ -616,9 +692,9 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             try
             {
                 if (andInitialize && BaseState.IsOnlineOrAttemptOnline)
-                    ec = InnerPerformGoOfflineAction(currentActionDescription, maxSessionCloseWaitTime);
+                    ec = InnerPerformGoOfflineAction(currentActionDescription, maxSessionCloseWaitTime);        // this does a Release...
 
-                if (session == null || transport == null || messageStreamToolTrackerArray.IsNullOrEmpty())
+                if (session == null || transport == null || session.State.IsClosing || session.State.IsPerminantlyClosed)
                 {
                     Fcns.DisposeOfObject(ref session);
                     session = new Sessions.ConnectionSession(PartID, Config.ConfigNVS, hostNotifier: this, bufferPool: bufferPool, initialSessionStateCode: Sessions.SessionStateCode.ClientSessionInitial, issueEmitter: Log.Debug, stateEmitter: Log.Debug, traceEmitter: traceLogger.Trace);
@@ -628,12 +704,18 @@ namespace MosaicLib.Modular.Interconnect.Remoting
 
                     Fcns.DisposeOfObject(ref transport);
                     transport = Transport.TransportConnectionFactory.Instance.CreateClientConnection(Config.ConfigNVS, session);
-
-                    actionRelayStreamTool = null;
-                    messageStreamToolTrackerArray = Config.StreamToolsConfigArray.Select((stc, index) => new MessageStreamToolTracker() { stream = index, messageStreamToolConfig = stc, messageStreamTool = CreateStreamTool(index, stc) }).ToArray();
                 }
 
-                session.SetState(QpcTimeStamp.Now, Sessions.SessionStateCode.RequestTransportConnect, CurrentActionDescription);
+                // only create message stream tools once (especially important with set relay tool
+                if (session != null && transport != null && messageStreamToolTrackerArray.IsNullOrEmpty())
+                {
+                    actionRelayStreamTool = null;
+                    var adjustedStreamToolConfigArray = new MessageStreamTools.BaseMessageStreamTool.Config().Concat<MessageStreamToolConfigBase>(Config.StreamToolsConfigArray).ToArray();
+                    messageStreamToolTrackerArray = adjustedStreamToolConfigArray.Select((stc, index) => new MessageStreamToolTracker() { stream = index, messageStreamToolConfig = stc, messageStreamTool = CreateStreamTool(index, stc) }).ToArray();
+                }
+
+                if (!session.State.IsConnected(includeClosingStates: true))
+                    session.SetState(QpcTimeStamp.Now, Sessions.SessionStateCode.RequestTransportConnect, currentActionDescription);
 
                 QpcTimer waitTimer = new QpcTimer() { TriggerInterval = maxSessionConnectWaitTime }.Start();
 
@@ -687,11 +769,15 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             if (session != null)
             {
                 if (session.State.IsConnected(includeConnectingStates: true, includeClosingStates: true))
-                    session.SetState(QpcTimeStamp.Now, Sessions.SessionStateCode.FinalCloseRequested, CurrentActionDescription);
+                    session.SetState(QpcTimeStamp.Now, Sessions.SessionStateCode.CloseRequested, "Client {0}".CheckedFormat(actionDescription));
                 else if (session.State.StateCode == Sessions.SessionStateCode.ConnectionClosed)
-                    session.SetState(QpcTimeStamp.Now, Sessions.SessionStateCode.Terminated, CurrentActionDescription);
+                    session.SetState(QpcTimeStamp.Now, Sessions.SessionStateCode.Terminated, "Client {0} [{1}]".CheckedFormat(actionDescription, session.State.StateCode));
+
+                session.GenerateAndAddManagementBufferToSendNowList(QpcTimeStamp.Now, ManagementType.RequestCloseSession, reason: actionDescription);
 
                 QpcTimer waitTimeLimitTimer = new QpcTimer() { TriggerInterval = maxSessionCloseWaitTime }.Start();
+
+                InnerServiceBackground(QpcTimeStamp.Now);
 
                 while (session.State.StateCode != Sessions.SessionStateCode.Terminated)
                 {
@@ -703,6 +789,15 @@ namespace MosaicLib.Modular.Interconnect.Remoting
                         ec = "Session close time limit reached after {0:f3} seconds [{1}]".CheckedFormat(waitTimeLimitTimer.ElapsedTimeInSeconds, session.State);
                         break;
                     }
+                }
+
+                {
+                    QpcTimeStamp now = QpcTimeStamp.Now;
+
+                    if (ec.IsNullOrEmpty())
+                        messageStreamToolTrackerArray.DoForEach(mss => mss.messageStreamTool.ResetState(now, MessageStreamTools.ResetType.ClientSessionClosed));
+                    else
+                        messageStreamToolTrackerArray.DoForEach(mss => mss.messageStreamTool.ResetState(now, MessageStreamTools.ResetType.ClientSessionLost, "{0} failed: {1}".CheckedFormat(actionDescription, ec)));
                 }
             }
 
@@ -793,12 +888,15 @@ namespace MosaicLib.Modular.Interconnect.Remoting
 
             InnerServiceBackground(qpcNow);
 
-            if (BaseState.IsOnlineOrAttemptOnline && (session == null || session.State.IsPerminantlyClosed))
+            if (BaseState.IsOnlineOrAttemptOnline && BaseState.UseState != UseState.OnlineFailure && (session == null || session.State.IsPerminantlyClosed))
             {
                 Sessions.SessionState sessionState = (session != null ? session.State : default(Sessions.SessionState));
 
-                SetBaseState(useState: UseState.OnlineFailure, reason: "Session was {0}".CheckedFormat(sessionState));
-                messageStreamToolTrackerArray.DoForEach(mstt => mstt.messageStreamTool.ResetState(qpcNow));
+                string reason = "Session was {0}".CheckedFormat(sessionState);
+
+                SetBaseState(useState: UseState.OnlineFailure, reason: reason);
+
+                messageStreamToolTrackerArray.DoForEach(mstt => mstt.messageStreamTool.ResetState(qpcNow, MessageStreamTools.ResetType.ClientSessionLost, reason));
             }
 
             bool triggerAutoReconnectAttempt = (BaseState.UseState == UseState.OnlineFailure || BaseState.UseState == UseState.AttemptOnlineFailed)
@@ -811,7 +909,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
 
                 SetBaseState(UseState.AttemptOnline, "Starting Client AutoReconnect Attempt");
 
-                string ec = InnerPerformGoOnlineAction(true, "Client AutoReconnect Attempt", maxSessionAutoReconnectWaitTime, maxSessionAutoReconnectCloseWaitTime);
+                string ec = InnerPerformGoOnlineAction(false, "Client AutoReconnect Attempt", maxSessionAutoReconnectWaitTime, maxSessionAutoReconnectCloseWaitTime);
 
                 if (ec.IsNullOrEmpty())
                     SetBaseState(UseState.Online, "Client AutoReconnect complete");
@@ -829,14 +927,22 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             if (session != null)
                 count += session.Service(qpcTimeStamp);
 
-            if (messageStreamToolTrackerArray != null)
-                count += messageStreamToolTrackerArray.Sum(mstt => InnerServiceStream(qpcTimeStamp, mstt));
+            count += messageStreamToolTrackerArray.Sum(mstt => InnerServiceStream(qpcTimeStamp, mstt));
 
             NoteWorkCount(count);
         }
 
         private MessageStreamTools.IMessageStreamTool CreateStreamTool(int stream, MessageStreamTools.MessageStreamToolConfigBase messageStreamToolConfig)
         {
+            MessageStreamTools.BaseMessageStreamTool.Config baseMSTConfig = messageStreamToolConfig as MessageStreamTools.BaseMessageStreamTool.Config;
+
+            if (baseMSTConfig != null)
+            {
+                var tool = new MessageStreamTools.BaseMessageStreamTool(PartID, stream, this, bufferPool) { HandleNewServerInfoNVSDelegate = InnerHandleServerInfoNVS };
+
+                return tool;
+            }
+
             MessageStreamTools.ActionRelayMessageStreamToolConfig actionRelayConfig = messageStreamToolConfig as MessageStreamTools.ActionRelayMessageStreamToolConfig;
 
             if (actionRelayConfig != null)
@@ -857,12 +963,9 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             if (setRelayConfig != null)
                 return new MessageStreamTools.SetRelayMessageStreamTool(PartID, stream, this, bufferPool, setRelayConfig);
 
-#if (false)
-            MessageStreamTools.ConfigProxyProviderMessageStreamToolConfig configProxyConfig = messageStreamToolConfig as MessageStreamTools.ConfigProxyProviderMessageStreamToolConfig;
-            if (configProxyConfig != null)
-            {
-            }
-#endif
+            //MessageStreamTools.ConfigProxyProviderMessageStreamToolConfig configProxyConfig = messageStreamToolConfig as MessageStreamTools.ConfigProxyProviderMessageStreamToolConfig;
+            //if (configProxyConfig != null)
+            //{ }
 
             Log.Error.Emit("Cannot create message stream tool for stream {0}: '{1}' is not not recognized or supported by this part", stream, messageStreamToolConfig);
 
@@ -885,12 +988,14 @@ namespace MosaicLib.Modular.Interconnect.Remoting
                     }
                     else if (stt.lastGeneratedMessage.State == Messages.MessageState.Failed)
                     {
-                        Log.Debug.Emit("Message send for stream {0} failed [{1}]", stt.stream, stt.messageStreamToolConfig.GetType().GetTypeDigestName());
+                        string reason = stt.lastGeneratedMessage.Reason;
+
+                        Log.Debug.Emit("Message send for stream {0} failed [{1}, reason:{2}]", stt.stream, stt.messageStreamToolConfig.GetType().GetTypeDigestName(), reason);
 
                         // do not return message to buffer pool as its buffers are not in a known state anymore.
                         stt.lastGeneratedMessage = null;
 
-                        stt.messageStreamTool.ResetState(qpcTimeStamp);
+                        stt.messageStreamTool.ResetState(qpcTimeStamp, MessageStreamTools.ResetType.ClientMessageDeliveryFailure, reason);
 
                         count++;
                     }

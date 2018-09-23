@@ -1277,12 +1277,16 @@ namespace MosaicLib.Modular.Interconnect.Values
             /// Setter sets IsSetPending if the given value is not equal to the current one.
             /// <para/>This is a value object and as such this property can only be assigned an entire ValueContainer.
             /// </summary>
+            /// <remarks>
+            /// Logic for IsSetPending is specifically designed to block needing to run further vc.IsEqualTo(value) tests once IsSetPending is already true.
+            /// </remarks>
             public ValueContainer VC 
             { 
                 get { return vc; } 
                 set 
                 {
-                    IsSetPending |= !vc.IsEqualTo(value);
+                    if (!IsSetPending)
+                        IsSetPending = !vc.IsEqualTo(value);
                     vc = value; 
                 } 
             }

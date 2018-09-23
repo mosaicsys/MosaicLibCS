@@ -11,6 +11,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExtractMDRFtoCSV", "Extract
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PerformanceMonitorHost", "PerformanceMonitorHost\PerformanceMonitorHost.csproj", "{03FFA146-8474-4D9E-AF2E-9B26283BAA97}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MosaicLibCS_WPF", "..\WPF\MosaicLibCS_WPF\MosaicLibCS_WPF.csproj", "{865BD965-5184-4758-A8B7-BD6189E46732}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RemotingTool", "RemotingTool\RemotingTool.csproj", "{4C2FC8BD-45FF-4518-A947-1CE110863214}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -33,6 +37,14 @@ Global
 		{03FFA146-8474-4D9E-AF2E-9B26283BAA97}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{03FFA146-8474-4D9E-AF2E-9B26283BAA97}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{03FFA146-8474-4D9E-AF2E-9B26283BAA97}.Release|Any CPU.Build.0 = Release|Any CPU
+		{865BD965-5184-4758-A8B7-BD6189E46732}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{865BD965-5184-4758-A8B7-BD6189E46732}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{865BD965-5184-4758-A8B7-BD6189E46732}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{865BD965-5184-4758-A8B7-BD6189E46732}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4C2FC8BD-45FF-4518-A947-1CE110863214}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4C2FC8BD-45FF-4518-A947-1CE110863214}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4C2FC8BD-45FF-4518-A947-1CE110863214}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4C2FC8BD-45FF-4518-A947-1CE110863214}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

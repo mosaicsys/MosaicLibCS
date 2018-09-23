@@ -473,8 +473,8 @@ namespace MosaicLib.Modular.Part
 	/// This class defines the following sub-classes for local use and for use by derived classes:
 	///		BasicActionImpl, StringActionImpl.
 	///		
-	/// INotifyable interface allows class instance to become the receiver for a BasicNotification event.  This behavior sets the mThreadWakeupNotifier so that
-	/// the thread will wakeup whenever the object is signaled/Notified.
+	/// INotifyable interface allows class instance to become the receiver for a BasicNotification event.  
+    /// This behavior sets the mThreadWakeupNotifier so that the thread will wakeup whenever the object is signaled/Notified.
 	/// </remarks>
 	public abstract class SimpleActivePartBase : SimplePartBase, IActivePartBase, INotifyable
 	{
@@ -933,7 +933,7 @@ namespace MosaicLib.Modular.Part
 		#region INotifyable Members
 
         /// <summary>Implementation method for the INotifyable interface.  Requests that the Part's thread wakeup if it is waiting on the threadWakeupNotifier.</summary>
-		public void Notify()
+		public virtual void Notify()
 		{
 			threadWakeupNotifier.Notify();
 		}
@@ -956,7 +956,29 @@ namespace MosaicLib.Modular.Part
                 SetBaseState(UseState.AttemptOnline, "{0} Started".CheckedFormat(description), true);
             }
 
-            string result = PerformGoOnlineAction(action);
+            string result;
+
+            try
+            {
+                result = PerformGoOnlineAction(action);
+            }
+            catch (System.Exception ex)
+            {
+                if (setBaseUseState && BaseState.UseState == UseState.AttemptOnline && settings.CheckFlag(GoOnlineAndGoOfflineHandling.GoOnlineFailureSetsUseStateToAttemptOnlineFailed))
+                {
+                    result = "Derived class PerformGoOnlineAction method threw exception: {0}".CheckedFormat(ex.ToString(ExceptionFormat.TypeAndMessageAndStackTrace));
+
+                    SetBaseState(UseState.AttemptOnlineFailed, "{0} failed: {1}".CheckedFormat(description, result));
+
+                    return result;
+                }
+                else
+                {
+                    Log.Trace.Emit("{0}: Derived class PerformGoOnlineAction method threw exception: {1} [rethrowing]", description, ex.ToString(ExceptionFormat.TypeAndMessageAndStackTrace));
+
+                    throw;
+                }
+            }
 
             if (setBaseUseState)
             {

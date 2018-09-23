@@ -206,10 +206,13 @@ namespace MosaicLib.WPF.Tools.Sets
 
         private void HandlePendingAddDeltasEventHandlersWithPriming()
         {
+            UpdateSet(forceFullUpdate: true, useNullNotify: false);
+        }
+
+        private void ServicePendingAddDeltasPrimingList()
+        {
             if (pendingAddSetDeltasEventHandlersWithPrimingList.Count > 0)
             {
-                AttemptToStartTracking();
-
                 if (_trackingSet != null)
                 {
                     var syntheticInitializationSetDelta = _trackingSet.GenerateInitializerSetDelta();
@@ -228,7 +231,7 @@ namespace MosaicLib.WPF.Tools.Sets
             SetDeltasEventNotificationList.OnNotify += handler;
         }
 
-        public void AttemptToStartTracking()
+        public void AttemptToStartTracking(bool servicePendingAddDeltasPrimingList = true)
         {
             if (_referenceSet == null)
             {
@@ -240,6 +243,9 @@ namespace MosaicLib.WPF.Tools.Sets
                     TrackingSet = foundReferenceSet.CreateTrackingSet();        // also sets the DependencyPropertyKey.
                 }
             }
+
+            if (servicePendingAddDeltasPrimingList)
+                ServicePendingAddDeltasPrimingList();
 
             if (sharedDispatcherTimerToken == null)
             {
@@ -1140,34 +1146,22 @@ namespace MosaicLib.WPF.Tools.Sets
                 if (setDelta == null)
                     return;
 
+                if (setDelta.ClearSetAtStart)
+                {
+                    var allItemsSeqNumArray = setTrackerTracker.currentItemInnerObjTrackerListSortedBySeqNum.Keys.ToArray();
+
+                    foreach (var itemSeqNum in allItemsSeqNumArray)
+                        RemoveItemBySeqNumIfPresent(setTrackerTracker, itemSeqNum);
+                }
+
                 if (setDelta.RemoveRangeItems != null)
                 {
                     foreach (var removeRangeItem in setDelta.RemoveRangeItems)
                     {
                         long rangeStartSeqNum = removeRangeItem.RangeStartSeqNum;
+
                         foreach (var offset in Enumerable.Range(0, removeRangeItem.Count))
-                        {
-                            long seqNum = rangeStartSeqNum + offset;
-
-                            InnerObjectTracker innerObjTracker = null;
-
-                            if (!setTrackerTracker.currentItemInnerObjTrackerListSortedBySeqNum.TryGetValue(seqNum, out innerObjTracker))
-                                continue;
-
-                            setTrackerTracker.currentItemInnerObjTrackerListSortedBySeqNum.Remove(seqNum);
-
-                            if (innerObjTracker != null)
-                            {
-                                innerObjTracker.prevPair = innerObjTracker.pair;
-                                innerObjTracker.pair = default(ItemSeqNumAndE039ObjectPair);
-
-                                // these will only remain set if the object has actually been deleted.  Otherwise these values will be updated when the replacement object is added.
-                                innerObjTracker.objLinksToListTouched = true;
-                                innerObjTracker.objLinksFromListTouched = true;
-
-                                NoteTouched(innerObjTracker);
-                            }
-                        }
+                            RemoveItemBySeqNumIfPresent(setTrackerTracker, rangeStartSeqNum + offset);
                     }
                 }
 
@@ -1228,6 +1222,28 @@ namespace MosaicLib.WPF.Tools.Sets
                 }
 
                 ServiceTouchedItems();
+            }
+
+            private void RemoveItemBySeqNumIfPresent(SetTrackerTracker setTrackerTracker, long itemSeqNum)
+            {
+                InnerObjectTracker innerObjTracker = setTrackerTracker.currentItemInnerObjTrackerListSortedBySeqNum.SafeTryGetValue(itemSeqNum);
+
+                if (setTrackerTracker.currentItemInnerObjTrackerListSortedBySeqNum.TryGetValue(itemSeqNum, out innerObjTracker))
+                {
+                    setTrackerTracker.currentItemInnerObjTrackerListSortedBySeqNum.Remove(itemSeqNum);
+
+                    if (innerObjTracker != null)
+                    {
+                        innerObjTracker.prevPair = innerObjTracker.pair;
+                        innerObjTracker.pair = default(ItemSeqNumAndE039ObjectPair);
+
+                        // these will only remain set if the object has actually been deleted.  Otherwise these values will be updated when the replacement object is added.
+                        innerObjTracker.objLinksToListTouched = true;
+                        innerObjTracker.objLinksFromListTouched = true;
+
+                        NoteTouched(innerObjTracker);
+                    }
+                }
             }
 
             #endregion

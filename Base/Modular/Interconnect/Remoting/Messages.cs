@@ -80,6 +80,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Messages
 
         public MessageState State { get; private set; }
         public QpcTimeStamp TimeStamp { get; private set; }
+        public string Reason { get; private set; }
 
         public BufferHeaderFlags FirstBufferFlags 
         { 
@@ -94,8 +95,11 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Messages
         {
             MessageState entryState = State;
 
+            reason = reason ?? "NoReasonGiven";
+
             State = state;
             TimeStamp = qpcTimeStamp;
+            Reason = reason;
 
             Logging.IMesgEmitter emitterToUse = StateEmitter;
 
@@ -117,7 +121,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Messages
             }
 
             if (emitterToUse.IsEnabled)
-                emitterToUse.Emit("Message_{0:x4} State changed to {1} [from: {2}, reason: {3}]", instanceNum & 0x0ffff, state, entryState, reason ?? "NoReasonGiven");
+                emitterToUse.Emit("Message_{0:x4} State changed to {1} [from: {2}, reason: {3}]", instanceNum & 0x0ffff, state, entryState, reason);
 
             return this;
         }
@@ -294,7 +298,14 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Messages
             }
         }
 
+        /// <summary>
+        /// Returns an System.IO.Stream that can be used to writing payload bytes into this message.  Generally this is used with a serialization helper object.
+        /// </summary>
         public System.IO.Stream MessageBuildingStream { get { return new BufferListWriteStream(this); } }
+
+        /// <summary>
+        /// Returns a System.IO.Stream that can be used to read the payload bytes that are in this message.  Generally this is used with a serialization helper object.
+        /// </summary>
         public System.IO.Stream MessageReadingStream { get { return new BufferListReadStream(this); } }
 
         private class BufferListReadStream : System.IO.Stream

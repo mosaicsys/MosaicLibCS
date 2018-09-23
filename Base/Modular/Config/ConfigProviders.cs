@@ -152,38 +152,43 @@ namespace MosaicLib.Modular.Config
             BaseFlags = new ConfigKeyProviderFlags() { IsFixed = isFixed, KeysMayBeAddedUsingEnsureExistsOption = keysMayBeAddedUsingEnsureExistsOption };
         }
 
-        #region AddRange and Add methods for KVP, explicit Name & Value 
+        #region AddRange and Add methods for KVP, explicit Name & Value, INamedValue, set of INamedValue
 
         /// <summary>
         /// Dictionary construction helper method.  Adds the given set of INamedValues to the dictionary, prefixing each given name with the CommonKeyPrefix.
         /// <para/>Method supports call chaining.
         /// </summary>
-        public DictionaryConfigKeyProvider AddRange(IEnumerable<INamedValue> nameValueSetSource)
+        public DictionaryConfigKeyProvider AddRange(IEnumerable<INamedValue> setOfNamedValues, ConfigKeyAccessFlags flags = default(ConfigKeyAccessFlags))
         {
-            ConfigKeyAccessFlags flags = new ConfigKeyAccessFlags();
+            setOfNamedValues.DoForEach(item => Add(item, flags: flags));
 
-            return AddRange(nameValueSetSource.Select(nv => new ConfigKeyAccessImpl(KeyPrefix + nv.Name, flags, null, this) { VC = nv.VC }));
+            return this;
         }
 
         /// <summary>
         /// Dictionary construction helper method.  Adds the given set of name/value pairs to the dictionary, prefixing each given name with the CommonKeyPrefix.
         /// <para/>Method supports call chaining.
         /// </summary>
-        public DictionaryConfigKeyProvider AddRange(IEnumerable<KeyValuePair<string, ValueContainer>> nameValuePairSource)
+        public DictionaryConfigKeyProvider AddRange(IEnumerable<KeyValuePair<string, ValueContainer>> nameValuePairSource, ConfigKeyAccessFlags flags = default(ConfigKeyAccessFlags))
         {
-            ConfigKeyAccessFlags flags = new ConfigKeyAccessFlags();
-
             return AddRange(nameValuePairSource.Select((kvp) => new ConfigKeyAccessImpl(KeyPrefix + kvp.Key, flags, null, this) { VC = kvp.Value }));
+        }
+
+        /// <summary>
+        /// Dictionary construction helper method.  Adds the given INamedValue <paramref name="inv"/> as a key/value pair to the dictionary, prefixing the inv.Name with the CommonKeyPrefix.
+        /// <para/>Method supports call chaining.
+        /// </summary>
+        public DictionaryConfigKeyProvider Add(INamedValue inv, ConfigKeyAccessFlags flags = default(ConfigKeyAccessFlags))
+        {
+            return Add(inv.Name, inv.VC, flags: flags);
         }
 
         /// <summary>
         /// Dictionary construction helper method.  Adds the given name/vc ValueContainer pair to the dictionary, prefixing the name with the CommonKeyPrefix.
         /// <para/>Method supports call chaining.
         /// </summary>
-        public DictionaryConfigKeyProvider Add(string name, ValueContainer vc = default(ValueContainer))
+        public DictionaryConfigKeyProvider Add(string name, ValueContainer vc = default(ValueContainer), ConfigKeyAccessFlags flags = default(ConfigKeyAccessFlags))
         {
-            ConfigKeyAccessFlags flags = new ConfigKeyAccessFlags();
-
             return Add(new ConfigKeyAccessImpl(KeyPrefix + name, flags, null, this) { VC = vc });
         }
 
@@ -191,10 +196,8 @@ namespace MosaicLib.Modular.Config
         /// Dictionary construction helper method.  Adds the given name/value pair to the dictionary, prefixing the name with the CommonKeyPrefix.
         /// <para/>Method supports call chaining.
         /// </summary>
-        public DictionaryConfigKeyProvider Add(string name, object value)
+        public DictionaryConfigKeyProvider Add(string name, object value, ConfigKeyAccessFlags flags = default(ConfigKeyAccessFlags))
         {
-            ConfigKeyAccessFlags flags = new ConfigKeyAccessFlags();
-
             return Add(new ConfigKeyAccessImpl(KeyPrefix + name, flags, null, this) { VC = new ValueContainer(value) });
         }
 
@@ -448,6 +451,21 @@ namespace MosaicLib.Modular.Config
                 return String.Empty; 
             else
                 return "{0} only supports Fixed value keys".CheckedFormat(Name);
+        }
+    }
+
+    /// <summary>
+    /// Extension Methods
+    /// </summary>
+    public static partial class ExtensionMethods
+    {
+        /// <summary>
+        /// Adds each of the INamedValues in the given <paramref name="nvs"/> to the given DictionaryConfigKeyProvider <paramref name="dckp"/>.
+        /// </summary>
+        public static DictionaryConfigKeyProvider Add(this DictionaryConfigKeyProvider dckp, INamedValueSet nvs, ConfigKeyAccessFlags flags = default(ConfigKeyAccessFlags))
+        {
+            dckp.AddRange(nvs, flags);
+            return dckp;
         }
     }
 

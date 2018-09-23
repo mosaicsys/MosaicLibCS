@@ -64,34 +64,57 @@ namespace MosaicLib.WPF.Converters
         {
             MosaicLib.Logging.ILogMessage lm = value as MosaicLib.Logging.ILogMessage;
 
-            if (lm != null && targetType == typeof(string))
+            if (lm != null && ((targetType == typeof(string)) || (targetType == typeof(object))))
             {
                 if (lm.NamedValueSet == null && lm.Data == null)
                     return lm.MesgEscaped;
 
                 LogMessageContentCombiningSelection selection = LogMessageContentCombiningSelection.Default;
-                if (parameter != null && parameter is LogMessageContentCombiningSelection)
-                    selection = (LogMessageContentCombiningSelection)parameter;
+                if (parameter != null)
+                    selection = ValueContainer.CreateFromObject(parameter).GetValue<LogMessageContentCombiningSelection>(rethrow: true);
                 
-                selection = selection.MapDefaultTo(LogMessageContentCombiningSelection.IncludeNonEmptyNVSAndDataInHex);
+                selection = selection.MapDefaultTo(LogMessageContentCombiningSelection.IncludeNonEmptyNVSAndNonNullDataInHex);
 
                 bool addNVS = ((selection.IsSet(LogMessageContentCombiningSelection.IncludeNonEmptyNVS) && !lm.NamedValueSet.IsNullOrEmpty()) || (selection.IsSet(LogMessageContentCombiningSelection.IncludeNVS) && lm.NamedValueSet != null));
-                bool addData = (selection.IsSet(LogMessageContentCombiningSelection.IncludeDataInHex) && lm.Data != null);
+                bool addData = (selection.IsSet(LogMessageContentCombiningSelection.IncludeNonNullDataInHex) && lm.Data != null);
+                bool addThreadIDs = selection.IsSet(LogMessageContentCombiningSelection.IncludeThreadIDs);
+                bool addThreadName = (selection.IsSet(LogMessageContentCombiningSelection.IncludeNonEmptyThreadName) && !lm.ThreadName.IsNullOrEmpty());
+                bool excludeMesg = selection.IsSet(LogMessageContentCombiningSelection.ExcludeMesg);
 
-                if (!addNVS && !addData)
+                if (!addNVS && !addData && !excludeMesg)
                     return lm.MesgEscaped;
 
-                StringBuilder sb = new StringBuilder(lm.MesgEscaped);
+                StringBuilder sb = new StringBuilder(!excludeMesg ? lm.MesgEscaped : string.Empty);
 
                 if (addNVS)
                 {
-                    sb.Append(" ");
-                    sb.Append(lm.NamedValueSet.ToStringSML());
+                    sb.AppendWithDelimiter(" ", lm.NamedValueSet.SafeToStringSML());
                 }
 
                 if (addData)
                 {
-                    sb.CheckedAppendFormat(" Data:[{0}]", ByteArrayTranscoders.HexStringTranscoder.Encode(lm.Data));
+                    if (!excludeMesg)
+                        sb.CheckedAppendFormatWithDelimiter(" ", "Data:[{0}]", ByteArrayTranscoders.HexStringTranscoder.Encode(lm.Data));
+                    else
+                        sb.AppendWithDelimiter(" ", ByteArrayTranscoders.HexStringTranscoder.Encode(lm.Data));
+                }
+
+                if (addThreadIDs)
+                {
+                    if (!excludeMesg)
+                        sb.AppendWithDelimiter(" ", "Thread:");
+
+                    sb.CheckedAppendFormat("{0:d4}/${1:x4}", lm.ThreadID, lm.Win32ThreadID);
+
+                    if (addThreadName)
+                        sb.CheckedAppendFormatWithDelimiter(" ", "'{0}'", lm.ThreadName);
+                }
+                else if (addThreadName)
+                {
+                    if (!excludeMesg)
+                        sb.CheckedAppendFormatWithDelimiter(" ", "ThreadName:'{0}'", lm.ThreadName);
+                    else
+                        sb.CheckedAppendFormatWithDelimiter(" ", "'{0}'", lm.ThreadName);
                 }
 
                 return sb.ToString();
@@ -108,16 +131,24 @@ namespace MosaicLib.WPF.Converters
 
     /// <summary>
     /// Selection control values for use with the LogContentCombiningConverter.
-    /// <para/>Default (0x00), IncludeNVS (0x01), IncludeNonEmptyNVS (0x02), IncludeDataInHex (0x04), IncludeNonEmptyNVSAndDataInHex (0x06)
+    /// <para/>Default (0x00), ExcludeMesg (0x01), IncludeNVS (0x02), IncludeNonEmptyNVS (0x04), IncludeNonNullDataInHex (0x08), IncludeThreadIDs (0x10), IncludeNonEmptyThreadName (0x20)
+    /// IncludeNonEmptyNVSAndDataInHex (0x06)
     /// <para/>Default will be processed as IncludeNonEmptyNVSAndDataInHex.
     /// </summary>
     [Flags]
     public enum LogMessageContentCombiningSelection : int
     {
         Default = 0x00,
-        IncludeNVS = 0x01,
-        IncludeNonEmptyNVS = 0x02,
-        IncludeDataInHex = 0x04,
-        IncludeNonEmptyNVSAndDataInHex = 0x06,
+        ExcludeMesg = 0x01,
+        IncludeNVS = 0x02,
+        IncludeNonEmptyNVS = 0x04,
+        IncludeNonNullDataInHex = 0x08,
+        IncludeThreadIDs = 0x10,
+        IncludeNonEmptyThreadName = 0x20,
+        IncludeNonEmptyNVSAndNonNullDataInHex = (IncludeNonEmptyNVS | IncludeNonNullDataInHex),
+        IncludeOnlyNonEmptyNVSAndNonNullDataInHex = (ExcludeMesg | IncludeNonEmptyNVS | IncludeNonNullDataInHex),
+        IncludeOnlyNonEmptyNVS = (ExcludeMesg | IncludeNonEmptyNVS),
+        IncludeOnlyNonNullDataInHex = (ExcludeMesg | IncludeNonNullDataInHex),
+        IncludeOnlyTheadIDsAndNonEmptyThreadName = (ExcludeMesg | IncludeNonEmptyThreadName | IncludeThreadIDs),
     }
 }

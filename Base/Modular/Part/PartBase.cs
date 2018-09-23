@@ -1322,9 +1322,13 @@ namespace MosaicLib.Modular.Part
         }
 
         /// <summary>Variant SetBaseState which allows caller to set the connState</summary>
-        protected void SetBaseState(ConnState connState, string reason, bool publish = true)
+        protected void SetBaseState(ConnState connState, string reason, bool publish = true, bool updateBaseStateReason = true)
         {
-            privateBaseState.SetState(privateBaseState.UseState, connState, reason);
+            if (updateBaseStateReason)
+                privateBaseState.SetState(privateBaseState.UseState, connState, reason);
+            else
+                privateBaseState.SetState(privateBaseState.UseState, connState);
+
             if (publish)
                 PublishBaseState(reason);
         }

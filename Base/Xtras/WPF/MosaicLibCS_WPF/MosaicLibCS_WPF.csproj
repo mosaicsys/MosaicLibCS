@@ -87,12 +87,16 @@
     <Compile Include="Controls\E84\E84_PtoA_Display.xaml.cs">
       <DependentUpon>E84_PtoA_Display.xaml</DependentUpon>
     </Compile>
+    <Compile Include="Controls\IVIView.xaml.cs">
+      <DependentUpon>IVIView.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Controls\LogView.xaml.cs">
       <DependentUpon>LogView.xaml</DependentUpon>
     </Compile>
     <Compile Include="Controls\PartBaseStateLED.xaml.cs">
       <DependentUpon>PartBaseStateLED.xaml</DependentUpon>
     </Compile>
+    <Compile Include="Converters\CommonConverters.cs" />
     <Compile Include="Converters\LoggingConverters.cs" />
     <Compile Include="Converters\RadioButtonConverter.cs" />
     <Compile Include="Extensions\ButtonIsPressedObserver.cs" />
@@ -138,6 +142,10 @@
     <Page Include="Controls\E84\E84_PtoA_Display.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Controls\IVIView.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="Controls\LogView.xaml">
       <Generator>MSBuild:Compile</Generator>

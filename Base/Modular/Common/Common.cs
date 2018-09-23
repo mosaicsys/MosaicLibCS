@@ -442,7 +442,7 @@ namespace MosaicLib.Modular.Common
         /// </summary>
         public static DecodedTypeInfo GetDecodedTypeInfo<TValueType>()
         {
-            return GetDecodedTypeInfo(typeof(TValueType));
+            return DecodedTypeInfo.GetDecodedTypeInfo<TValueType>();
         }
 
         /// <summary>
@@ -451,52 +451,7 @@ namespace MosaicLib.Modular.Common
         /// </summary>
         public static DecodedTypeInfo GetDecodedTypeInfo(Type type)
         {
-            DecodedTypeInfo dti = default(DecodedTypeInfo);
-
-            if (decodedTypeInfoDictionary.TryGetValue(type, out dti))
-                return dti;
-
-            dti.isNullable = (type.IsGenericType && (type.GetGenericTypeDefinition() == typeof(System.Nullable<>)));
-
-            Type valueType = type;
-
-            // for nullable types extract the underlying type.
-            if (dti.isNullable)
-                valueType = Nullable.GetUnderlyingType(type);
-
-            // all well known value types types are only reachable using the dictionary used above.  The following list is only used to support types that cannot easily be pre-known (and thus added to the dictionary)
-            if (iListOfStringType.IsAssignableFrom(valueType) || stringEnumerableType.IsAssignableFrom(valueType))
-            {
-                dti.isNullable = false;
-                dti.cst = ContainerStorageType.IListOfString;
-            }
-            else if (iListOfVCType.IsAssignableFrom(valueType) || vcEnumerableType.IsAssignableFrom(valueType))
-            {
-                dti.isNullable = false;
-                dti.cst = ContainerStorageType.IListOfVC;
-            }
-            else if (iNamedValueSetType.IsAssignableFrom(valueType))
-            {
-                dti.isNullable = false;
-                dti.cst = ContainerStorageType.INamedValueSet;
-            }
-            else if (iNamedValueType.IsAssignableFrom(valueType))
-            {
-                dti.isNullable = false;
-                dti.cst = ContainerStorageType.INamedValue;
-            }
-            else if (valueType.IsEnum)
-            {
-                dti.isNullable = false;
-                dti.cst = ContainerStorageType.String;
-            }
-            else
-            {
-                dti.isNullable = false;     // this flag is not useful when used with reference types
-                dti.cst = ContainerStorageType.Object;
-            }
-
-            return dti;
+            return DecodedTypeInfo.GetDecodedTypeInfo(type);
         }
 
         private static readonly Dictionary<Type, DecodedTypeInfo> decodedTypeInfoDictionary = GenerateDecodedTypeDictionary();
@@ -611,14 +566,82 @@ namespace MosaicLib.Modular.Common
             }
         }
 
+        /// <summary>
+        /// Gives the ContainerStorageType (cst) and the isNullable value for the type from which this object was generated.
+        /// </summary>
         public struct DecodedTypeInfo
         {
             public ContainerStorageType cst;
             public bool isNullable;
+            public bool isEnum;
 
             public override string ToString()
             {
                 return "{0}{1}".CheckedFormat(cst, isNullable ? " Nullable" : "");
+            }
+
+            /// <summary>
+            /// Accepts a given <typeparamref name="TValueType"/> and attempts to generate an apporpriate ContainerStorageType (and isNullable) value as the best container storage type to use with the given Type.
+            /// Unrecognized type default as ContainerStorageType.Object.
+            /// </summary>
+            public static DecodedTypeInfo GetDecodedTypeInfo<TValueType>()
+            {
+                return GetDecodedTypeInfo(typeof(TValueType));
+            }
+
+            /// <summary>
+            /// Accepts a given <paramref name="type"/> and attempts to generate an apporpriate ContainerStorageType (and isNullable) value as the best container storage type to use with the given Type.
+            /// Unrecognized type default as ContainerStorageType.Object.
+            /// </summary>
+            public static DecodedTypeInfo GetDecodedTypeInfo(Type type)
+            {
+                DecodedTypeInfo dti = default(DecodedTypeInfo);
+
+                if (decodedTypeInfoDictionary.TryGetValue(type, out dti))
+                    return dti;
+
+                dti.isNullable = (type.IsGenericType && (type.GetGenericTypeDefinition() == typeof(System.Nullable<>)));
+
+                Type valueType = type;
+
+                // for nullable types extract the underlying type.
+                if (dti.isNullable)
+                    valueType = Nullable.GetUnderlyingType(type);
+
+                // all well known value types types are only reachable using the dictionary used above.  The following list is only used to support types that cannot easily be pre-known (and thus added to the dictionary)
+                if (iListOfStringType.IsAssignableFrom(valueType) || stringEnumerableType.IsAssignableFrom(valueType))
+                {
+                    dti.isNullable = false;
+                    dti.cst = ContainerStorageType.IListOfString;
+                }
+                else if (iListOfVCType.IsAssignableFrom(valueType) || vcEnumerableType.IsAssignableFrom(valueType))
+                {
+                    dti.isNullable = false;
+                    dti.cst = ContainerStorageType.IListOfVC;
+                }
+                else if (iNamedValueSetType.IsAssignableFrom(valueType))
+                {
+                    dti.isNullable = false;
+                    dti.cst = ContainerStorageType.INamedValueSet;
+                }
+                else if (iNamedValueType.IsAssignableFrom(valueType))
+                {
+                    dti.isNullable = false;
+                    dti.cst = ContainerStorageType.INamedValue;
+                }
+                else if (valueType.IsEnum)
+                {
+                    dti.isEnum = true;
+                    // leave isNullable from above
+                    dti.cst = ContainerStorageType.String;
+                }
+                else
+                {
+                    dti.isNullable = false;     // this flag is not useful when used with reference types
+                    dti.cst = ContainerStorageType.Object;
+                }
+
+                return dti;
             }
         }
 
@@ -899,7 +922,7 @@ namespace MosaicLib.Modular.Common
                 {
                     case ContainerStorageType.None: o = null; cvt = ContainerStorageType.None; return this;
                     case ContainerStorageType.Object: o = (System.Object)value; cvt = ContainerStorageType.Object; return this;
-                    case ContainerStorageType.String: o = ((value != null) ? ((System.Object)value).ToString() : null); return this;
+                    case ContainerStorageType.String: o = (value as System.String) ?? ((value != null) ? ((System.Object)value).ToString() : null); return this;
                     case ContainerStorageType.Boolean: if (value is bool) { u.b = (bool)((System.Object)value); return this; } break;
                     case ContainerStorageType.Binary: if (value is byte) { u.bi = (byte)((System.Object)value); return this; } break;
                     case ContainerStorageType.SByte: if (value is sbyte) { u.i8 = (sbyte)((System.Object)value); return this; } break;
@@ -1145,7 +1168,7 @@ namespace MosaicLib.Modular.Common
             try
             {
                 // if the stored type is exactly what the caller is asking for and it is one of the supported types then simply return it.
-                if (dti.cst == cvt)
+                if (dti.cst == cvt && !dti.isEnum)
                 {
                     switch (dti.cst)
                     {
@@ -1175,7 +1198,7 @@ namespace MosaicLib.Modular.Common
             }
 
             // fall through to the prior version of GetValue that handles all of the special cases.
-            return GetValue<TValueType>(dti.cst, dti.isNullable, rethrow: rethrow, allowTypeChangeAttempt: allowTypeChangeAttempt, defaultValue: defaultValue);
+            return GetValue<TValueType>(dti.cst, dti.isNullable, rethrow: rethrow, allowTypeChangeAttempt: allowTypeChangeAttempt, defaultValue: defaultValue, isEnumIn: dti.isEnum);
         }
 
         /// <summary>
@@ -1206,34 +1229,38 @@ namespace MosaicLib.Modular.Common
         /// If this transfer/conversion is not used or is not successful then this method returns the given defaultValue (which defaults to default(TValueType)).  
         /// If rethrow is true and the method encounters any exceptions then it will rethrow the exception.
         /// </summary>
-        public TValueType GetValue<TValueType>(ContainerStorageType decodedValueType, bool isNullable, bool rethrow, bool allowTypeChangeAttempt, TValueType defaultValue = default(TValueType))
+        public TValueType GetValue<TValueType>(ContainerStorageType decodedValueType, bool isNullable, bool rethrow, bool allowTypeChangeAttempt, TValueType defaultValue = default(TValueType), bool? isEnumIn = null)
         {
             Type TValueTypeType = typeof(TValueType);
             TValueType value;
+
+            bool isEnum = isEnumIn ?? TValueTypeType.IsEnum;
 
             LastGetValueException = null;
 
             try
             {
-                if (TValueTypeType.IsEnum)
+                if (isEnum)
                 {
-                    if (!rethrow && IsNullOrEmpty)
+                    if ((!rethrow || isNullable) && IsNullOrEmpty)
                         value = defaultValue;
                     else
                     {
+                        Type inferredEnumType = (!isNullable ? TValueTypeType : Nullable.GetUnderlyingType(TValueTypeType));
+
                         // convert the integer and string conversion types seperately
                         switch (cvt)
                         {
-                            case ContainerStorageType.I1: value = (TValueType)System.Enum.ToObject(TValueTypeType, u.i8); break;
-                            case ContainerStorageType.I2: value = (TValueType)System.Enum.ToObject(TValueTypeType, u.i16); break;
-                            case ContainerStorageType.I4: value = (TValueType)System.Enum.ToObject(TValueTypeType, u.i32); break;
-                            case ContainerStorageType.I8: value = (TValueType)System.Enum.ToObject(TValueTypeType, u.i64); break;
-                            case ContainerStorageType.U1: value = (TValueType)System.Enum.ToObject(TValueTypeType, u.u8); break;
-                            case ContainerStorageType.U2: value = (TValueType)System.Enum.ToObject(TValueTypeType, u.u16); break;
-                            case ContainerStorageType.U4: value = (TValueType)System.Enum.ToObject(TValueTypeType, u.u32); break;
-                            case ContainerStorageType.U8: value = (TValueType)System.Enum.ToObject(TValueTypeType, u.u64); break;
+                            case ContainerStorageType.I1: value = (TValueType)System.Enum.ToObject(inferredEnumType, u.i8); break;
+                            case ContainerStorageType.I2: value = (TValueType)System.Enum.ToObject(inferredEnumType, u.i16); break;
+                            case ContainerStorageType.I4: value = (TValueType)System.Enum.ToObject(inferredEnumType, u.i32); break;
+                            case ContainerStorageType.I8: value = (TValueType)System.Enum.ToObject(inferredEnumType, u.i64); break;
+                            case ContainerStorageType.U1: value = (TValueType)System.Enum.ToObject(inferredEnumType, u.u8); break;
+                            case ContainerStorageType.U2: value = (TValueType)System.Enum.ToObject(inferredEnumType, u.u16); break;
+                            case ContainerStorageType.U4: value = (TValueType)System.Enum.ToObject(inferredEnumType, u.u32); break;
+                            case ContainerStorageType.U8: value = (TValueType)System.Enum.ToObject(inferredEnumType, u.u64); break;
                             default:
-                                value = (TValueType)System.Enum.Parse(TValueTypeType, ValueAsObject.SafeToString().MapNullToEmpty(), false);
+                                value = (TValueType)System.Enum.Parse(inferredEnumType, ValueAsObject.SafeToString().MapNullToEmpty(), false);
                                 break;
                         }
                     }
@@ -2164,17 +2191,19 @@ namespace MosaicLib.Modular.Common
                                 nvsGetValue = (vc.o as INamedValueSet).ConvertToReadOnly() ?? NamedValueSet.Empty;
                             else
                             {
+                                var oType = vc.o.GetType();
+
                                 try
                                 {
-                                    CustomSerialization.ITypeSerializerItem tsi = CustomSerialization.CustomSerialization.Instance.GetCustomTypeSerializerItemFor(vc.o.GetType());
+                                    CustomSerialization.ITypeSerializerItem tsi = CustomSerialization.CustomSerialization.Instance.GetCustomTypeSerializerItemFor(oType);
                                     if (tsi != null)
                                         tavcGetValue = tsi.Serialize(vc.o);
                                     else
-                                        oGetValue = vc.o;
+                                        sGetValue = "Failed to obtain a valid Custom TypeSerializerItem for type '{0}' [{1}]".CheckedFormat(oType.GetTypeDigestName(), vc.o);
                                 }
-                                catch
+                                catch (System.Exception ex)
                                 {
-                                    oGetValue = vc.o;
+                                    sGetValue = "Serialization failed for type '{0}' value '{1}': {2}".CheckedFormat(oType.GetTypeDigestName(), vc.o, ex.ToString(ExceptionFormat.TypeAndMessage));
                                 }
                             }
                         }

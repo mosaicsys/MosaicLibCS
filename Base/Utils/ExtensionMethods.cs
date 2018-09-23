@@ -243,31 +243,36 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Extension method attempts to copy elements from the given <paramref name="copyFromSet"/> into the given array until either all of the set elements have been copied or the length limit of the array has been reached.
+        /// Extension method attempts to copy elements from the given <paramref name="copyFromSet"/> into the given array, starting at the given <paramref name="copyToIndex"/>, 
+        /// until either all of the set elements have been copied or the length limit of the array has been reached.
         /// Returns the number of set elements copied (or 0 if none where).
         /// </summary>
-        public static int SafeCopyFrom<ItemType>(this ItemType[] copyIntoArray, IEnumerable<ItemType> copyFromSet)
+        public static int SafeCopyFrom<ItemType>(this ItemType[] copyIntoArray, IEnumerable<ItemType> copyFromSet, int copyToIndex = 0)
         {
-            int intoArrayLength = copyIntoArray.SafeLength();
-            ICollection<ItemType> copyFromCollection = copyFromSet as ICollection<ItemType>;
+            int maxArrayPutCount = (copyIntoArray.SafeLength() - copyToIndex);
 
-            if (intoArrayLength <= 0 || copyFromSet == null)
+            if (maxArrayPutCount <= 0 || copyFromSet == null)
                 return 0;
-            
-            if (copyFromCollection != null)
+
+            // case where the given set is actually an ICollection and its total count is less than or equal to the maxArrayPutCount;
+            ICollection<ItemType> copyFromSetAsCollection = copyFromSet as ICollection<ItemType>;
+            if (copyFromSetAsCollection != null)
             {
-                int fromSetCount = copyFromCollection.Count;
-                if (fromSetCount <= intoArrayLength)
+                int copyFromSetAsCollectionCount = copyFromSetAsCollection.Count;
+                if (copyFromSetAsCollectionCount <= maxArrayPutCount)
                 {
-                    copyFromCollection.CopyTo(copyIntoArray, 0);
-                    return fromSetCount;
+                    copyFromSetAsCollection.CopyTo(copyIntoArray, copyToIndex);
+                    return copyFromSetAsCollectionCount;
                 }
             }
 
+            // case where the given set is not a collection or the collection count is longer than the space in the copyToArray
             int didCount = 0;
-
-            foreach (var nextElement in copyFromSet.Take(intoArrayLength))
-                copyIntoArray[didCount++] = nextElement;
+            foreach (var nextElement in copyFromSet.Take(maxArrayPutCount))
+            {
+                copyIntoArray[copyToIndex++] = nextElement;
+                didCount++;
+            }
 
             return didCount;
         }
@@ -863,7 +868,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// If the given <paramref name="value"/> is not zero then this method returns (1.0 / <paramref name="value"/>).  
+        /// If the given <paramref name="value"/> is not zero then this method returns (1.0f / <paramref name="value"/>).  
         /// Otherwise this method returns the given <paramref name="fallbackValue"/>.
         /// </summary>
         public static float SafeOneOver(this float value, float fallbackValue = 0.0f)

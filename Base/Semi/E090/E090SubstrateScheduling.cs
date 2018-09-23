@@ -145,7 +145,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
 
         public override string ToString()
         {
-            if (StepSpec != null && StepResult != null && StepResult.ResultCode.IsNullOrEmpty() && StepResult.SPS == SubstProcState.Processed)
+            if (StepSpec != null && StepResult != null && StepResult.ResultCode.IsNullOrEmpty() && (StepResult.SPS == SubstProcState.Processed || StepResult.SPS == SubstProcState.ProcessStepCompleted))
                 return "Step {0} completed successfully at loc:{1} [{2}]".CheckedFormat(StepSpec.StepNum, LocName, StepResult.SPS);
             else if (StepSpec != null && StepResult != null)
                 return "Step {0} failed at loc:{1} [{2} {3}]".CheckedFormat(StepSpec.StepNum, LocName, StepResult.SPS, StepResult.ResultCode);
@@ -167,7 +167,6 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
         E039ObjectID SubstID { get; }
         IE039TableUpdater E039TableUpdater { get; }
         Logging.IBasicLogger Logger { get; }
-        bool UseExternalSync { get; }
 
         E090SubstObserver SubstObserver { get; }
         E090SubstInfo Info { get; }
@@ -247,9 +246,9 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
         where TProcessSpecType : IProcessSpec<TProcessStepSpecType>
         where TProcessStepSpecType : IProcessStepSpec
     {
-        public virtual void Setup(IE039TableUpdater e039TableUpdater, E039ObjectID substID, Logging.IBasicLogger logger, TProcessSpecType processSpec, bool useExternalSync = false)
+        public virtual void Setup(IE039TableUpdater e039TableUpdater, E039ObjectID substID, Logging.IBasicLogger logger, TProcessSpecType processSpec)
         {
-            base.Setup(e039TableUpdater, substID, logger, useExternalSync: useExternalSync);
+            base.Setup(e039TableUpdater, substID, logger);
             ProcessSpec = processSpec;
 
             remainingStepSpecList = new List<TProcessStepSpecType>(ProcessSpec.Steps);
@@ -264,24 +263,26 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
             if (autoAdvanceRemainingStepSpecList && remainingStepSpecList.Count > 0)
                 remainingStepSpecList.RemoveAt(0);
 
-            if (NextStepSpec != null)
+            if (!autoAdvanceRemainingStepSpecList)
+            { }
+            else if (NextStepSpec != null)
             {
                 Logger.Debug.Emit("Completed {0} for {1}: Next Step: [{2}]", trackerResultItem, SubstID.FullName, NextStepSpec);
             }
             else
             {
                 if (autoLatchFinalSPS)
-                {
-                    E039TableUpdater.SetSubstProcState(SubstObserver.Info, GetFinalSPS(), addSyncExternalItem: UseExternalSync);
-                }
+                    E039TableUpdater.SetSubstProcState(SubstObserver, GetFinalSPS());
 
-                Logger.Debug.Emit("Completed {0} for {1}: No more steps.", trackerResultItem, SubstID.FullName);
+                Logger.Debug.Emit("Completed {0} for {1}: No more steps. [inferredSPS:{2}]", trackerResultItem, SubstID.FullName, SubstObserver.Info.InferredSPS);
             }
         }
 
         protected virtual SubstProcState GetFinalSPS()
         {
-            return trackerStepResultList.Aggregate(SubstObserver.Info.InferredSPS, (a, b) => a.MergeWith(b.StepResult.SPS));
+            var finalSPS = trackerStepResultList.Aggregate(SubstObserver.Info.InferredSPS, (a, b) => a.MergeWith(b.StepResult.SPS));
+
+            return (finalSPS.IsProcessStepComplete() ? SubstProcState.Processed : finalSPS);
         }
 
         public virtual IList<ProcessStepTrackerResultItem<TProcessStepSpecType>> TrackerStepResultList { get { return trackerStepResultList; } }
@@ -363,10 +364,10 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
     /// </summary>
     public class ProcessStepResultBase : IProcessStepResult
     {
-        public ProcessStepResultBase(string resultCode = "", SubstProcState sps = SubstProcState.Undefined, SubstProcState fallbackFailedSPS = SubstProcState.Rejected)
+        public ProcessStepResultBase(string resultCode = "", SubstProcState sps = SubstProcState.Undefined, SubstProcState fallbackFailedSPS = SubstProcState.Rejected, SubstProcState defaultSucceededSPS = SubstProcState.ProcessStepCompleted)
         {
             ResultCode = resultCode.MapNullToEmpty();
-            SPS = (sps != SubstProcState.Undefined) ? sps : (ResultCode.IsNullOrEmpty() ? SubstProcState.Processed : fallbackFailedSPS);
+            SPS = (sps != SubstProcState.Undefined) ? sps : (ResultCode.IsNullOrEmpty() ? defaultSucceededSPS : fallbackFailedSPS);
         }
 
         public string ResultCode { get; private set; }
@@ -378,12 +379,11 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
     /// </summary>
     public class SubstrateTrackerBase : ISubstrateTrackerBase
     {
-        public virtual void Setup(IE039TableUpdater e039TableUpdater, E039ObjectID substID, Logging.IBasicLogger logger, bool useExternalSync = false)
+        public virtual void Setup(IE039TableUpdater e039TableUpdater, E039ObjectID substID, Logging.IBasicLogger logger)
         {
             SubstID = substID.MapNullToEmpty();
             E039TableUpdater = e039TableUpdater;
             Logger = logger;
-            UseExternalSync = useExternalSync;
 
             var substPublisher = E039TableUpdater.GetPublisher(SubstID);
 
@@ -449,9 +449,12 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
 
             if (enableInfoTriggeredRules)
             {
-                if (stInfo.SJRS == SubstrateJobRequestState.Return && (stsIsAtSource || stsIsAtDestination))
+                if (stInfo.SJRS == SubstrateJobRequestState.Return)
                 {
-                    nextSJS = SubstrateJobState.Returned;
+                    if (stsIsAtSource || stsIsAtDestination)
+                        nextSJS = SubstrateJobState.Returned;
+                    else
+                        nextSJS = SubstrateJobState.Returning;
                 }
                 else if (stsIsAtSource)
                 {
@@ -675,7 +678,8 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
 
             if (updateItemList.Count > 0)
             {
-                if (UseExternalSync)
+                // check settings to see if we need to explicitly add an external sync item
+                if (E090.Settings.GetUseExternalSync(checkNoteSubstrateMovedAdditions: false, checkSetSubstProcStateAdditions: true, checkGenerateUpdateItemAdditions: true))
                     updateItemList.Add(syncExternal);
 
                 E039TableUpdater.Update(updateItemList.ToArray()).Run();
@@ -687,7 +691,6 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
         public E039ObjectID SubstID { get; private set; }
         public IE039TableUpdater E039TableUpdater { get; private set; }
         public Logging.IBasicLogger Logger { get; private set; }
-        public bool UseExternalSync { get; private set; }
 
         public E090SubstObserver SubstObserver { get; private set; }
         public E090SubstInfo Info { get { return SubstObserver.Info; } }
@@ -723,10 +726,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
                 {
                     _substrateJobRequestState = value;
 
-                    if (UseExternalSync)
-                        E039TableUpdater.Update(new E039UpdateItem.SetAttributes(SubstID, new NamedValueSet() { { "SJRS", value } }), syncExternal).Run();
-                    else
-                        E039TableUpdater.Update(new E039UpdateItem.SetAttributes(SubstID, new NamedValueSet() { { "SJRS", value } })).Run();
+                    E039TableUpdater.Update(new E039UpdateItem.SetAttributes(SubstID, new NamedValueSet() { { "SJRS", value } })).Run();
                 }
             }
         }
@@ -750,9 +750,9 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
         public int spsNeedsProcessing;
         public int spsInProcess;
         public int spsProcessed, spsStopped, spsRejected, spsAborted, spsSkipped, spsLost;
-        public int spsOther;
+        public int spsProcessStepCompleted, spsOther;
 
-        public int sjsWaitingForStart, sjsRunning, sjsProcessed, sjsRejected, sjsSkipped, sjsPausing, sjsPaused, sjsStopping, sjsStopped, sjsAborting, sjsAborted, sjsLost, sjsReturned, sjsOther;
+        public int sjsWaitingForStart, sjsRunning, sjsProcessed, sjsRejected, sjsSkipped, sjsPausing, sjsPaused, sjsStopping, sjsStopped, sjsAborting, sjsAborted, sjsLost, sjsReturning, sjsReturned, sjsHeld, sjsRoutingAlarm, sjsOther;
 
         public void Add(SubstrateTrackerBase st)
         {
@@ -788,6 +788,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
                 case SubstProcState.Aborted: spsAborted++; break;
                 case SubstProcState.Skipped: spsSkipped++; break;
                 case SubstProcState.Lost: spsLost++; break;
+                case SubstProcState.ProcessStepCompleted: spsProcessStepCompleted++; break;
                 default: spsOther++; break;
             }
 
@@ -805,7 +806,10 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
                 case SubstrateJobState.Aborting: sjsAborting++; break;
                 case SubstrateJobState.Aborted: sjsAborted++; break;
                 case SubstrateJobState.Lost: sjsLost++; break;
+                case SubstrateJobState.Returning: sjsReturning++; break;
                 case SubstrateJobState.Returned: sjsReturned++; break;
+                case SubstrateJobState.Held: sjsHeld++; break;
+                case SubstrateJobState.RoutingAlarm: sjsRoutingAlarm++; break;
                 default: sjsOther++; break;
             }
         }
@@ -848,6 +852,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
             {
                 { "NeedsProcessing", spsNeedsProcessing },
                 { "InProcess", spsInProcess },
+                { "ProcessStepCompleted", spsProcessStepCompleted },
                 { "Processed", spsProcessed },
                 { "Rejected", spsRejected },
                 { "Stopped", spsStopped },
@@ -874,7 +879,10 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
                 { "Aborting", sjsAborting },
                 { "Aborted", sjsAborted },
                 { "Lost", sjsLost },
+                { "Returning", sjsReturning },
                 { "Returned", sjsReturned },
+                { "Held", sjsHeld },
+                { "RoutingAlarm", sjsRoutingAlarm },
                 { "Other", sjsOther },
             });
         }

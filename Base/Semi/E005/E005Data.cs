@@ -413,6 +413,7 @@ namespace MosaicLib.Semi.E005.Data
                         else if (oType == typeof(ulong[])) { byteArrayBuilder.AppendWithIH(ItemFormatCode.U8, 8, vc.o as ulong[]); return; }
                         else if (oType == typeof(float[])) { byteArrayBuilder.AppendWithIH(ItemFormatCode.F4, 4, vc.o as float[]); return; }
                         else if (oType == typeof(double[])) { byteArrayBuilder.AppendWithIH(ItemFormatCode.F8, 8, vc.o as double[]); return; }
+                        else if (oType == typeof(BiArray)) {  byteArrayBuilder.AppendWithIH(ItemFormatCode.Bi, 1, (vc.o as BiArray).SafeToArray()) ; return; }
                     }
 
                     break;
@@ -424,7 +425,6 @@ namespace MosaicLib.Semi.E005.Data
         }
 
         public static readonly ValueContainer[] emptyVCArray = EmptyArrayFactory<ValueContainer>.Instance;
-
 
         public static void AppendWithIH(this List<byte> byteArrayBuilder, INamedValueSet nvs)
         {
@@ -875,13 +875,12 @@ namespace MosaicLib.Semi.E005.Data
                     break;
 
                 case ItemFormatCode.Bi: 
-                    // NOTE: only the numElements == 1 case is unique relative to U1 format.  both array representations would be represented in the vc as Object storage types and thus cannot be destinguished
                     if (ibNumElements == 1)
                         vc.SetValue(byteArray[localStartIndex], ContainerStorageType.Binary, false);
                     else if (ibNumElements == 0)
-                        vc.SetFromObject(emptyU1Array);
+                        vc.SetFromObject(BiArray.Empty);
                     else
-                        vc.SetFromObject(Enumerable.Range(0, ibNumElements).Select(idxOffset => byteArray[localStartIndex + idxOffset]).ToArray());
+                        vc.SetFromObject(new BiArray(Enumerable.Range(0, ibNumElements).Select(idxOffset => byteArray[localStartIndex + idxOffset]).ToArray()));
                     break;
 
                 case ItemFormatCode.I1:
@@ -994,7 +993,6 @@ namespace MosaicLib.Semi.E005.Data
         }
 
         private static readonly bool[] emptyBoArray = EmptyArrayFactory<bool>.Instance;
-        private static readonly byte[] emptyBiArray = EmptyArrayFactory<byte>.Instance;
         private static readonly sbyte[] emptyI1Array = EmptyArrayFactory<sbyte>.Instance;
         private static readonly short[] emptyI2Array = EmptyArrayFactory<short>.Instance;
         private static readonly int[] emptyI4Array = EmptyArrayFactory<int>.Instance;
@@ -1007,6 +1005,35 @@ namespace MosaicLib.Semi.E005.Data
         private static readonly double[] emptyF8Array = EmptyArrayFactory<double>.Instance;
 
         #endregion
+    }
+
+    #endregion
+
+    #region BiArray: Byte array variant for use with Bi type.
+
+    /// <summary>
+    /// This class is a variant on ReadOnlyIList{byte} that is used when deserializing from Bi arrays and which may be used by a client to force serialization of a Bi array type.
+    /// </summary>
+    public class BiArray : ReadOnlyIList<byte>
+    {
+        /// <summary>
+        /// Singleton Empty BiArray instance.
+        /// </summary>
+        public static new BiArray Empty { get { return _empty; } }
+        private static readonly BiArray _empty = new BiArray();
+
+        /// <summary>
+        /// Constructs this instance as a read only set of bytes copied from the given <paramref name="copyFromArray"/>.  Will result in an empty array if given null.
+        /// </summary>
+        public BiArray(byte[] copyFromArray = null) : base(copyFromArray) { }
+
+        /// <summary>
+        /// Returns a byte array generated from the contents of the given <paramref name="biArray"/> instance, or the empty array if the given <paramref name="biArray"/> was null.
+        /// </summary>
+        public static implicit operator byte[](BiArray biArray)
+        {
+            return biArray.SafeToArray();
+        }
     }
 
     #endregion

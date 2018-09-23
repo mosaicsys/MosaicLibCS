@@ -1243,6 +1243,8 @@ namespace MosaicLib.Semi.E039
 
             this.ActionLoggingConfig = ActionLoggingConfig.Debug_Debug_Trace_Trace;
             PersistHelperActionLoggingConfig = ActionLoggingConfig.Trace_Trace_Trace_Trace;
+            PersistFileWrittenMesgType = Logging.MesgType.Debug;
+            PersistFileWriteFailedMesgType = Logging.MesgType.Debug;
         }
 
         public E039BasicTablePartConfig(E039BasicTablePartConfig other, bool testPersitValues = true)
@@ -1279,6 +1281,8 @@ namespace MosaicLib.Semi.E039
 
             ActionLoggingConfig = other.ActionLoggingConfig;
             PersistHelperActionLoggingConfig = other.PersistHelperActionLoggingConfig;
+            PersistFileWrittenMesgType = other.PersistFileWrittenMesgType;
+            PersistFileWriteFailedMesgType = other.PersistFileWriteFailedMesgType;
         }
 
         internal void SetupForUse()
@@ -1326,6 +1330,8 @@ namespace MosaicLib.Semi.E039
 
         public ActionLoggingConfig ActionLoggingConfig { get; set; }
         public ActionLoggingConfig PersistHelperActionLoggingConfig { get; set; }
+        public Logging.MesgType PersistFileWrittenMesgType { get; set;  }
+        public Logging.MesgType PersistFileWriteFailedMesgType { get; set; }
 
         private IValuesInterconnection _partBaseIVI, _objectIVI;
         private ISetsInterconnection _isi;
@@ -2687,11 +2693,11 @@ namespace MosaicLib.Semi.E039
                     if (tst.lastIssuedSaveAction.ActionState.Succeeded)
                     {
                         tst.lastSucceededSaveActionSeqNum = tst.lastIssuedSaveActionSeqNum;
-                        Log.Debug.Emit("Persist File '{0}' writen [wroteSeqNum:{1}, lastPublishedSeqNum:{1}]", tst.persistFileRingAdapter.LastObjectFilePath, tst.lastSucceededSaveActionSeqNum, tst.lastPublishedSeqNum);
+                        Log.Emitter(Config.PersistFileWrittenMesgType).Emit("Persist File '{0}' written [wroteSeqNum:{1}, lastPublishedSeqNum:{1}]", tst.persistFileRingAdapter.LastObjectFilePath, tst.lastSucceededSaveActionSeqNum, tst.lastPublishedSeqNum);
                     }
                     else
                     {
-                        Log.Debug.Emit("Persist File '{0}' write failed: {1}", tst.persistFileRingAdapter.LastObjectFilePath, tst.persistFileRingAdapter.LastExecption.ToString(ExceptionFormat.TypeAndMessage));
+                        Log.Emitter(Config.PersistFileWriteFailedMesgType).Emit("Persist File '{0}' write failed: {1}", tst.persistFileRingAdapter.LastObjectFilePath, tst.persistFileRingAdapter.LastExecption.ToString(ExceptionFormat.TypeAndMessage));
                     }
 
                     tst.lastIssuedSaveAction = null;

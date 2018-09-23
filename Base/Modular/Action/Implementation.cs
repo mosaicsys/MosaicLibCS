@@ -526,9 +526,12 @@ namespace MosaicLib.Modular.Action
         /// Please note that the namedValues are not deep-cloned by this operation.  
         /// NVL cloning is done on entry to the ActionImpl class and from there it requred that the IActionState users do not modify the contents of these shared objects.
         /// </remarks>
-        public ActionStateCopy(IActionState other) 
+        public ActionStateCopy(IActionState other, bool autoRemoveResultCode = true) 
             : base(other) 
-        { }
+        {
+            if (autoRemoveResultCode && StateCode != ActionStateCode.Complete)
+                resultCode = null;
+        }
 
         /// <summary>
         /// This property is only used for DataContract serialization/deserialization.
@@ -575,12 +578,12 @@ namespace MosaicLib.Modular.Action
         /// Allows the caller to pass an IActionState instance and get back an ActionStateCopy from it.  
         /// This is done by casting if the underlying object is already an ActionStateCopy, otherwise this done using a copy constructor.
         /// </summary>
-        public static ActionStateCopy ConvertToActionStateCopy(this IActionState actionStateIn)
+        public static ActionStateCopy ConvertToActionStateCopy(this IActionState actionStateIn, bool autoRemoveResultCode = true)
         {
             ActionStateCopy actionState = actionStateIn as ActionStateCopy;
 
             if (actionState == null && actionStateIn != null)
-                actionState = new ActionStateCopy(actionStateIn);
+                actionState = new ActionStateCopy(actionStateIn, autoRemoveResultCode: autoRemoveResultCode);
 
             return actionState;
         }
@@ -1114,7 +1117,7 @@ namespace MosaicLib.Modular.Action
                 lock (actionStateMutex) 
                 {
                     if (iActionState == null)
-                        iActionState = new ActionStateCopy(actionState);
+                        iActionState = new ActionStateCopy(actionState, autoRemoveResultCode: false);
                         
                     return iActionState;
                 } 

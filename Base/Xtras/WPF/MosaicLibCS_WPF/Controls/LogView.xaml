@@ -10,7 +10,8 @@
     <!--<UserControl.MinWidth>800</UserControl.MinWidth>-->
     <UserControl.Resources>
         <conv:LogGateStringConverter x:Key="LogGateStringConverter" />
-        <conv:LogMessageContentCombiningConverter x:Key="LogContentCombiningConverter" />
+        <conv:LogMessageContentCombiningConverter x:Key="LogMessageContentCombiningConverter" />
+        <conv:VCToStringSMLConverter x:Key="VCToStringSMLConverter"/>
     </UserControl.Resources>
     <DockPanel>
         <GroupBox Name="logViewControlsGB" DockPanel.Dock="Bottom" Header="Log View Controls" Margin="0,0,0,0">
@@ -52,11 +53,47 @@
                     <GridViewColumn Header="Date" Width="{Binding DateColumnWidth, ElementName=LogViewMainControl}" DisplayMemberBinding="{Binding EmittedDateTime, StringFormat={}{0:HH:mm:ss.fff}, Mode=OneWay}"/>
                     <GridViewColumn Header="Type" Width="{Binding TypeColumnWidth, ElementName=LogViewMainControl}" DisplayMemberBinding="{Binding MesgType, Mode=OneWay}"/>
                     <GridViewColumn Header="Source" Width="{Binding SourceColumnWidth, ElementName=LogViewMainControl}" DisplayMemberBinding="{Binding LoggerName, Mode=OneWay}"/>
-                    <GridViewColumn Header="Mesg" Width="{Binding MesgColumnWidth, ElementName=LogViewMainControl}" DisplayMemberBinding="{Binding Converter={StaticResource LogContentCombiningConverter}, Mode=OneWay}"/>
+                    <GridViewColumn Header="Mesg" Width="{Binding MesgColumnWidth, ElementName=LogViewMainControl}" DisplayMemberBinding="{Binding Converter={StaticResource LogMessageContentCombiningConverter}, Mode=OneWay}"/>
                 </GridView>
             </ListView.View>
-            <ListView.Resources>
+            <ListView.ItemContainerStyle>
                 <Style TargetType="{x:Type ListViewItem}">
+                    <Setter Property="ToolTipService.InitialShowDelay" Value="2000"/>
+                    <Setter Property="ToolTipService.BetweenShowDelay" Value="5000"/>
+                    <Setter Property="ToolTipService.ShowDuration" Value="30000"/>
+                    <Setter Property="ToolTip">
+                        <Setter.Value>
+                            <Grid MinWidth="500" MaxWidth="800" MaxHeight="500" Tag="{Binding}">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="60"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Label Grid.Row="0" Grid.Column="0" Content="Source"/>
+                                <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding Path=Tag.LoggerName, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type Grid}}, Mode=OneWay}" IsReadOnly="True" IsUndoEnabled="False" VerticalAlignment="Center"/>
+                                <Label Grid.Row="1" Grid.Column="0" Content="Type"/>
+                                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Path=Tag.MesgType, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type Grid}}, Mode=OneWay}" IsReadOnly="True" IsUndoEnabled="False" VerticalAlignment="Center"/>
+                                <Label Grid.Row="2" Grid.Column="0" Content="Date" VerticalAlignment="Center"/>
+                                <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding Path=Tag.EmittedDateTime, StringFormat={}{0:yyyy/MM/dd HH:mm:ss.fff}, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type Grid}}, Mode=OneWay}" IsReadOnly="True" IsUndoEnabled="False" VerticalAlignment="Center"/>
+                                <Label Grid.Row="3" Grid.Column="0" Content="Mesg"/>
+                                <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding Path=Tag.MesgEscaped, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type Grid}}, Mode=OneWay}" IsReadOnly="True" IsUndoEnabled="False" VerticalAlignment="Center" TextWrapping="Wrap"/>
+                                <Label Grid.Row="4" Grid.Column="0" Content="NVS"/>
+                                <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding Tag, ConverterParameter=IncludeOnlyNonEmptyNVS, Converter={StaticResource LogMessageContentCombiningConverter}, Mode=OneWay, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type Grid}}}" IsReadOnly="True" IsUndoEnabled="False" VerticalAlignment="Center" TextWrapping="Wrap"/>
+                                <Label Grid.Row="5" Grid.Column="0" Content="Data"/>
+                                <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding Tag, ConverterParameter=IncludeOnlyNonNullDataInHex, Converter={StaticResource LogMessageContentCombiningConverter}, Mode=OneWay, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type Grid}}}" IsReadOnly="True" IsUndoEnabled="False" VerticalAlignment="Center" TextWrapping="Wrap"/>
+                                <Label Grid.Row="6" Grid.Column="0" Content="Thread"/>
+                                <TextBox Grid.Row="6" Grid.Column="1" Text="{Binding Tag, ConverterParameter=IncludeOnlyTheadIDsAndNonEmptyThreadName, Converter={StaticResource LogMessageContentCombiningConverter}, Mode=OneWay, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type Grid}}}" IsReadOnly="True" IsUndoEnabled="False" VerticalAlignment="Center" TextWrapping="Wrap"/>
+                            </Grid>
+                        </Setter.Value>
+                    </Setter>
                     <Style.Triggers>
                         <DataTrigger Binding="{Binding MesgType}" Value="Fatal">
                             <Setter Property="Background" Value="Red" />
@@ -75,7 +112,7 @@
                         </DataTrigger>
                     </Style.Triggers>
                 </Style>
-            </ListView.Resources>
+            </ListView.ItemContainerStyle>
         </ListView>
     </DockPanel>
 </UserControl>
