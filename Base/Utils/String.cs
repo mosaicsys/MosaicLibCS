@@ -59,7 +59,7 @@ namespace MosaicLib.Utils
 		/// <returns>The given string s if it was not null or the empty string if it was.</returns>
 		public static string MapNullToEmpty(this string s) 
         { 
-            return ((s == null) ? string.Empty : s); 
+            return (s ?? string.Empty); 
         }
 
 		/// <summary>Maps the given string s value to the given mappedS value if the given s is null or empty</summary>
