@@ -1956,6 +1956,20 @@ namespace MosaicLib.Utils
             get { return (new System.Diagnostics.StackFrame(1).GetMethod().DeclaringType).GetTypeLeafName(); } 
         }
 
+        /// <summary>Creates a StackFrame for the caller and returns the Name of the current methods ReflectedType</summary>
+        public static string CurrentReflectedClassName
+        {
+            [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+            get { return new System.Diagnostics.StackFrame(1).GetMethod().ReflectedType.ToString(); }
+        }
+
+        /// <summary>Creates a StackFrame for the caller and returns the Leaf Name of the current methods ReflectedType (The token at the end of any sequence of dot seperated tokens)</summary>
+        public static string CurrentReflectedClassLeafName
+        {
+            [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+            get { return (new System.Diagnostics.StackFrame(1).GetMethod().ReflectedType.ToString()).Split('.').SafeLast(); }
+        }
+
         /// <summary>
         /// Attemts to obtain and return the filename (without extension) from the ModuleName of the Current Process's MainModule.
         /// </summary>

@@ -134,6 +134,7 @@
     <Compile Include="Utils\Interlocks.cs" />
     <Compile Include="Utils\Notification.cs" />
     <Compile Include="Utils\ObjID.cs" />
+    <Compile Include="Utils\LifetimeTracking.cs" />
     <Compile Include="Utils\ParseUtils.cs" />
     <Compile Include="Utils\Pooling.cs" />
     <Compile Include="Utils\Singleton.cs" />
