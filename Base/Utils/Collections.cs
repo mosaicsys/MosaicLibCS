@@ -278,10 +278,10 @@ namespace MosaicLib.Utils
         /// <para/>Note: This object is intended as a utility storage class.  All interfaces are implemented explicitly so the caller can only make use of this object's contents by casting it to one of the supported interfaces.
         /// </summary>
         [Serializable]
-        public class ReadOnlyIList<TItemType> : IList<TItemType>, ICollection<TItemType>, IEnumerable<TItemType>, IList, ICollection, IEnumerable
+        public class ReadOnlyIList<TItemType> : IList<TItemType>, ICollection<TItemType>, IEnumerable<TItemType>, IList, ICollection, IEnumerable, IEquatable<IList<TItemType>>
         {
             /// <summary>
-            /// Constructs the contents of this item from the set of explicitly defined items (<paramref name="firstItem"/> followed by 0 or <paramref name="moreItemsArray"/> items).
+            /// Constructs the contents of this instance from the set of explicitly defined items (<paramref name="firstItem"/> followed by 0 or <paramref name="moreItemsArray"/> items).
             /// </summary>
             public ReadOnlyIList(TItemType firstItem, params TItemType[] moreItemsArray)
             {
@@ -289,7 +289,7 @@ namespace MosaicLib.Utils
             }
 
             /// <summary>
-            /// Constructs the contents of this item based on the contents of the given <paramref name="sourceItemList"/>.  
+            /// Constructs the contents of this instance based on the contents of the given <paramref name="sourceItemList"/>.  
             /// If the given <paramref name="sourceItemList"/> is null then this method will be constructed as an empty list.
             /// </summary>
             public ReadOnlyIList(IList<TItemType> sourceItemList)
@@ -300,7 +300,7 @@ namespace MosaicLib.Utils
             }
 
             /// <summary>
-            /// Constructs the contents of this item based on the contents of the given <paramref name="sourceItemCollection"/>.  
+            /// Constructs the contents of this instance based on the contents of the given <paramref name="sourceItemCollection"/>.  
             /// If the given <paramref name="sourceItemCollection"/> is null then this method will be constructed as an empty list.
             /// </summary>
             public ReadOnlyIList(ICollection<TItemType> sourceItemCollection = null)
@@ -311,7 +311,7 @@ namespace MosaicLib.Utils
             }
 
             /// <summary>
-            /// Constructs the contents of this item based on the contents of the given <paramref name="sourceItemSet"/>.  
+            /// Constructs the contents of this instance based on the contents of the given <paramref name="sourceItemSet"/>.  
             /// If the given <paramref name="sourceItemSet"/> is null then this method will be constructed as an empty list.
             /// </summary>
             public ReadOnlyIList(IEnumerable<TItemType> sourceItemSet)
@@ -503,6 +503,18 @@ namespace MosaicLib.Utils
             object ICollection.SyncRoot
             {
                 get { return null; }
+            }
+
+            #endregion
+
+            #region IEquatable implementation
+
+            /// <summary>
+            /// IEquatable implementation method.  Returns true if the contents of this object are equal (Object.Equals) with the contents of the given other list.
+            /// </summary>
+            public bool Equals(IList<TItemType> other)
+            {
+                return (this.IsEqualTo(other));
             }
 
             #endregion

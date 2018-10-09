@@ -117,6 +117,11 @@ namespace MosaicLib.Modular.Part
         /// action has been completed.
         /// </summary>
         PerformActionPublishesActionInfo = 1,
+
+        /// <summary>
+        /// When this behavior is enabled, the MainThreadFcn exception handler will change the UseState MainThreadFailed to indicate that the part's main thread has ended.
+        /// </summary>
+        UseMainThreadFailedState = 2,
     }
 
     /// <summary>
@@ -903,16 +908,16 @@ namespace MosaicLib.Modular.Part
 		public virtual IStringParamAction CreateServiceAction() { return CreateServiceAction(string.Empty); }
 
         /// <summary>
-        /// Method creates a Service Action with the Param preconfigured with the given value.
+        /// Method creates a Service Action with the Param preconfigured with the given <paramref name="serviceName"/> value.
         /// </summary>
-		public virtual IStringParamAction CreateServiceAction(string paramValue) 
+        public virtual IStringParamAction CreateServiceAction(string serviceName) 
 		{
-			IStringParamAction action = new StringActionImpl(actionQ, paramValue, PerformServiceAction, "Service", ActionLoggingReference) as IStringParamAction;
+            IStringParamAction action = new StringActionImpl(actionQ, serviceName, PerformServiceAction, "Service", ActionLoggingReference) as IStringParamAction;
 			return action;
 		}
 
         /// <summary>
-        /// Method creates a Service Action with the serviceName and NamedParamValues preconfigured with the given values.
+        /// Method creates a Service Action using the <paramref name="serviceName"/> and <paramref name="namedParamValues"/> as the param value and NamedParamValues.
         /// </summary>
         public virtual IStringParamAction CreateServiceAction(string serviceName, INamedValueSet namedParamValues)
         {
@@ -925,7 +930,6 @@ namespace MosaicLib.Modular.Part
         // provide default CreateServiceAction method that creates one that will fail
         //	when it is run.  Sub-class may override the given DoRunServiceAction method
         //	to implement the ability to run services
-
 
 		#endregion
 
@@ -1135,7 +1139,12 @@ namespace MosaicLib.Modular.Part
 
                     Log.Debug.Emit("{0} failed with unexpected {1}", Fcns.CurrentMethodName, ex.ToString(ExceptionFormat.Full));
 
-                    entryExitTrace.ExtraMessage = "Caught unexpected {0}".CheckedFormat(ex.ToString(ExceptionFormat.TypeAndMessage));
+                    var mesg = "Caught unexpected {0}".CheckedFormat(ex.ToString(ExceptionFormat.TypeAndMessage));
+
+                    if (settings.SimpleActivePartBehaviorOptions.IsSet(SimpleActivePartBehaviorOptions.UseMainThreadFailedState))
+                        SetBaseState(UseState.MainThreadFailed, mesg);
+
+                    entryExitTrace.ExtraMessage = mesg;
                 }
 
                 try

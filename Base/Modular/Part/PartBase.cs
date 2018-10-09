@@ -94,6 +94,10 @@ namespace MosaicLib.Modular.Part
         /// <summary>part has been shutdown prior to application exit. (10)</summary>
         [EnumMember]
         Shutdown = 10,
+
+        /// <summary>The main thread exception handler recorded that the main thread has ended because of an unhandled exception. (11)</summary>
+        [EnumMember]
+        MainThreadFailed = 11,
 	}
 
 	/// <summary>

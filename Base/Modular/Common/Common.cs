@@ -21,12 +21,12 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.ServiceModel;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Formatters.Binary;
 using System.Runtime.Serialization.Json;
 using System.Runtime.InteropServices;
-using System.Linq;
 using System.Collections;
 using System.Reflection;
 using System.Text;
@@ -34,6 +34,7 @@ using System.Text;
 using MosaicLib.Modular.Reflection.Attributes;
 using MosaicLib.Utils;
 using MosaicLib.Utils.Collections;
+using MosaicLib.Semi.E005.Data;
 
 namespace MosaicLib.Modular.Common
 {
@@ -1701,6 +1702,9 @@ namespace MosaicLib.Modular.Common
                         if (o is System.Array && other.o is System.Array)
                             return Utils.Fcns.Equals(o as System.Array, other.o as System.Array);
 
+                        if (o is BiArray && other.o is BiArray)
+                            return ((o as BiArray) ?? BiArray.Empty).Equals(other.o as BiArray ?? BiArray.Empty);
+
                         return System.Object.Equals(o, other.o);
                     }
                 default: return false;
@@ -1835,6 +1839,7 @@ namespace MosaicLib.Modular.Common
                 if (oType == typeof(ulong[])) { return "[U8_Array{0}]".CheckedFormat(String.Concat((o as ulong[]).Select(v => " {0}".CheckedFormat(v)))); }
                 if (oType == typeof(float[])) { return "[F4_Array{0}]".CheckedFormat(String.Concat((o as float[]).Select(v => " {0}".CheckedFormat(v)))); }
                 if (oType == typeof(double[])) { return "[F8_Array{0}]".CheckedFormat(String.Concat((o as double[]).Select(v => " {0}".CheckedFormat(v)))); }
+                if (oType == typeof(BiArray)) { return "[Bi_Array{0}]".CheckedFormat(String.Concat((o as BiArray).Select(v => " {0}".CheckedFormat(v)))); }
             }
 
             if (cvt == ContainerStorageType.Object)
@@ -2087,6 +2092,60 @@ namespace MosaicLib.Modular.Common
 
     #endregion
 
+    #region BiArray: Byte array variant for use with Bi type.
+
+    /// <summary>
+    /// This class is a variant on ReadOnlyIList{byte} that is used when deserializing from Bi arrays and which may be used by a client to force serialization of a byte array type using the Bi type.
+    /// </summary>
+    public class BiArray : ReadOnlyIList<byte>
+    {
+        /// <summary>
+        /// Singleton Empty BiArray instance.
+        /// </summary>
+        public static new BiArray Empty { get { return _empty; } }
+        private static readonly BiArray _empty = new BiArray();
+
+        /// <summary>
+        /// Constructs this instance as a read only set of bytes copied from the given <paramref name="copyFromArray"/>.  Will result in an empty array if given null.
+        /// </summary>
+        public BiArray(byte[] copyFromArray = null)
+            : base(copyFromArray)
+        { }
+
+        /// <summary>
+        /// Constructs the contents of this instance from the set of explicitly defined items (<paramref name="firstItem"/> followed by 0 or <paramref name="moreItemsArray"/> items).
+        /// </summary>
+        public BiArray(byte firstItem, params byte[] moreItemsArray)
+            : base(firstItem, moreItemsArray)
+        { }
+
+        /// <summary>
+        /// Constructs the contents of this instance based on the contents of the given <paramref name="sourceItemSet"/>.  
+        /// If the given <paramref name="sourceItemSet"/> is null then this method will be constructed as an empty list.
+        /// </summary>
+        public BiArray(IEnumerable<byte> sourceItemSet)
+            : base(sourceItemSet)
+        { }
+
+        /// <summary>
+        /// Returns a byte array generated from the contents of the given <paramref name="biArray"/> instance, or the empty array if the given <paramref name="biArray"/> was null.
+        /// </summary>
+        public static implicit operator byte[] (BiArray biArray)
+        {
+            return biArray.SafeToArray();
+        }
+
+        /// <summary>
+        /// Debugging and logging assistant.
+        /// </summary>
+        public override string ToString()
+        {
+            return "[BiArray{0}]".CheckedFormat(String.Concat(this.Select(b => " {0}".CheckedFormat(b))));
+        }
+    }
+
+    #endregion
+
     #region ValueContainerEnvelope - DataContract envelope for ValueContainer
 
     /// <summary>
@@ -2189,6 +2248,10 @@ namespace MosaicLib.Modular.Common
                                 nviGetValue = (vc.o as INamedValue).ConvertToReadOnly() ?? NamedValue.Empty;
                             else if (vc.o is INamedValueSet)
                                 nvsGetValue = (vc.o as INamedValueSet).ConvertToReadOnly() ?? NamedValueSet.Empty;
+                            else if (vc.o is System.Array)
+                                vceArrayHelper = new VCEArrayHelper(vc.o as System.Array);
+                            else if (vc.o is System.Array || vc.o is BiArray)
+                                vceArrayHelper = new VCEArrayHelper(vc.o as BiArray);
                             else
                             {
                                 var oType = vc.o.GetType();
@@ -2247,6 +2310,7 @@ namespace MosaicLib.Modular.Common
             oGetValue = null;
             nviGetValue = null;
             nvsGetValue = null;
+            vceArrayHelper = null;
             sGetValue = null;
             slGetValue = null;
             tavcGetValue = null;
@@ -2264,6 +2328,9 @@ namespace MosaicLib.Modular.Common
 
         [NonSerialized]
         private NamedValueSet nvsGetValue;
+
+        [NonSerialized]
+        private VCEArrayHelper vceArrayHelper;
 
         [NonSerialized]
         private string sGetValue;
@@ -2291,6 +2358,9 @@ namespace MosaicLib.Modular.Common
 
         [DataMember(EmitDefaultValue = false, IsRequired = false)]
         private NamedValueSet nvs { get { return nvsGetValue; } set { VC = ValueContainer.Create(value); } }
+
+        [DataMember(EmitDefaultValue = false, IsRequired = false)]
+        private VCEArrayHelper array { get { return vceArrayHelper; } set { VC = value.VC; } }
 
         [DataMember(EmitDefaultValue = false, IsRequired = false)]
         private string s { get { return sGetValue; } set { VC = new ValueContainer() { cvt = ContainerStorageType.String, o = value }; } }
@@ -2368,6 +2438,124 @@ namespace MosaicLib.Modular.Common
         {
             return VC.ToStringSML();
         }
+    }
+
+    /// <summary>
+    /// This class is used to support serializing arrays in value container envelopes.  
+    /// It prevents the VCE from having a lot more nullable properties that need to be traversed when serializing VCs where array serialization is relatively rare.
+    /// </summary>
+    [DataContract(Name = "VCEAH", Namespace = Constants.ModularNameSpace), Serializable]
+    public class VCEArrayHelper
+    {
+        public VCEArrayHelper(System.Array array) 
+        {
+            if (array != null)
+            {
+                Type arrayType = array.GetType();
+            if (arrayType == typeof(bool[]))
+                bo = array as bool[];
+            else if (arrayType == typeof(sbyte[]))
+                i1 = array as sbyte[];
+            else if (arrayType == typeof(short[]))
+                i2 = array as short[];
+            else if (arrayType == typeof(int[]))
+                i4 = array as int[];
+            else if (arrayType == typeof(long[]))
+                i8 = array as long[];
+            else if (arrayType == typeof(byte[]))
+                u1 = array as byte[];
+            else if (arrayType == typeof(ushort[]))
+                u2 = array as ushort[];
+            else if (arrayType == typeof(uint[]))
+                u4 = array as uint[];
+            else if (arrayType == typeof(ulong[]))
+                u8 = array as ulong[];
+            else if (arrayType == typeof(float[]))
+                f4 = array as float[];
+            else if (arrayType == typeof(double[]))
+                f8 = array as double[];
+            }
+        }
+
+        public VCEArrayHelper(BiArray biArray)
+        {
+            if (biArray != null)
+                bi = biArray;
+        }
+
+        public ValueContainer VC { get; private set; }
+
+        [NonSerialized]
+        private bool[] bo;
+
+        [NonSerialized]
+        private sbyte[] i1;
+
+        [NonSerialized]
+        private short[] i2;
+
+        [NonSerialized]
+        private int[] i4;
+
+        [NonSerialized]
+        private long[] i8;
+
+        [NonSerialized]
+        private byte[] u1;
+
+        [NonSerialized]
+        private ushort[] u2;
+
+        [NonSerialized]
+        private uint[] u4;
+
+        [NonSerialized]
+        private ulong[] u8;
+
+        [NonSerialized]
+        private float[] f4;
+
+        [NonSerialized]
+        private double[] f8;
+
+        [NonSerialized]
+        private BiArray bi;
+
+        [DataMember(EmitDefaultValue = false, IsRequired = false)]
+        private bool[] Bo { get { return bo; } set { VC = ValueContainer.Create(value); } }
+
+        [DataMember(EmitDefaultValue = false, IsRequired = false)]
+        private sbyte[] I1 { get { return i1; } set { VC = ValueContainer.Create(value); } }
+
+        [DataMember(EmitDefaultValue = false, IsRequired = false)]
+        private short[] I2 { get { return i2; } set { VC = ValueContainer.Create(value); } }
+
+        [DataMember(EmitDefaultValue = false, IsRequired = false)]
+        private int[] I4 { get { return i4; } set { VC = ValueContainer.Create(value); } }
+
+        [DataMember(EmitDefaultValue = false, IsRequired = false)]
+        private long[] I8 { get { return i8; } set { VC = ValueContainer.Create(value); } }
+
+        [DataMember(EmitDefaultValue = false, IsRequired = false)]
+        private byte[] U1 { get { return u1; } set { VC = ValueContainer.Create(value); } }
+
+        [DataMember(EmitDefaultValue = false, IsRequired = false)]
+        private ushort[] U2 { get { return u2; } set { VC = ValueContainer.Create(value); } }
+
+        [DataMember(EmitDefaultValue = false, IsRequired = false)]
+        private uint[] U4 { get { return u4; } set { VC = ValueContainer.Create(value); } }
+
+        [DataMember(EmitDefaultValue = false, IsRequired = false)]
+        private ulong[] U8 { get { return u8; } set { VC = ValueContainer.Create(value); } }
+
+        [DataMember(EmitDefaultValue = false, IsRequired = false)]
+        private float[] F4 { get { return f4; } set { VC = ValueContainer.Create(value); } }
+
+        [DataMember(EmitDefaultValue = false, IsRequired = false)]
+        private double[] F8 { get { return f8; } set { VC = ValueContainer.Create(value); } }
+
+        [DataMember(EmitDefaultValue = false, IsRequired = false)]
+        private byte [] Bi { get { return ((bi != null) ? bi.ToArray() : null); } set { VC = ValueContainer.Create(new BiArray(value)); } }
     }
 
     namespace Details

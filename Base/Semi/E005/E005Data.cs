@@ -1009,35 +1009,6 @@ namespace MosaicLib.Semi.E005.Data
 
     #endregion
 
-    #region BiArray: Byte array variant for use with Bi type.
-
-    /// <summary>
-    /// This class is a variant on ReadOnlyIList{byte} that is used when deserializing from Bi arrays and which may be used by a client to force serialization of a Bi array type.
-    /// </summary>
-    public class BiArray : ReadOnlyIList<byte>
-    {
-        /// <summary>
-        /// Singleton Empty BiArray instance.
-        /// </summary>
-        public static new BiArray Empty { get { return _empty; } }
-        private static readonly BiArray _empty = new BiArray();
-
-        /// <summary>
-        /// Constructs this instance as a read only set of bytes copied from the given <paramref name="copyFromArray"/>.  Will result in an empty array if given null.
-        /// </summary>
-        public BiArray(byte[] copyFromArray = null) : base(copyFromArray) { }
-
-        /// <summary>
-        /// Returns a byte array generated from the contents of the given <paramref name="biArray"/> instance, or the empty array if the given <paramref name="biArray"/> was null.
-        /// </summary>
-        public static implicit operator byte[](BiArray biArray)
-        {
-            return biArray.SafeToArray();
-        }
-    }
-
-    #endregion
-
     #region IValueContainerBuilder interface and related classes and methods
 
     /// <summary>
@@ -1240,8 +1211,7 @@ namespace MosaicLib.Semi.E005.Data
         /// <exception cref="SetValueException">thrown if ElementType is not a supported type</exception>
         public ArrayValueBuilder()
             : this(new TypeConversionSettings())
-        {
-        }
+        { }
 
         /// <summary>
         /// Constructor.  TypeConversionSettings set to given value.
@@ -1258,16 +1228,17 @@ namespace MosaicLib.Semi.E005.Data
 
             if (array.Length == 1)
             {
-                if (typeof(ElementType) != typeof(byte))
-                    return new ValueContainer(array[0]);
-                else if (TypeConversionSettings.ByteIsBinary)
-                    return ValueContainer.Create(array[0], ContainerStorageType.Binary, false);
+                if (typeof(ElementType) == typeof(byte) && TypeConversionSettings.ByteIsBinary)
+                    return ValueContainer.Create(array[0], ContainerStorageType.Binary);
                 else
-                    return ValueContainer.Create(array[0], ContainerStorageType.Byte, false);
+                    return ValueContainer.Create(array[0]);
             }
             else
             {
-                return new ValueContainer(array);
+                if (typeof(ElementType) == typeof(byte) && TypeConversionSettings.ByteIsBinary)
+                    return new ValueContainer(new BiArray((byte [])(System.Object) array));
+                else
+                    return new ValueContainer(array);
             }
         }
     }

@@ -97,6 +97,7 @@ namespace MosaicLib.WPF.Controls
         public static DependencyProperty PauseProperty = DependencyProperty.Register("Pause", typeof(bool), typeof(IVIView), new PropertyMetadata(false, HandlePausePropertyChanged));
         public static DependencyProperty IVANameFilterStringProperty = DependencyProperty.Register("IVANameFilterString", typeof(string), typeof(IVIView), new PropertyMetadata(string.Empty, HandleIVANameFilterStringPropertyChanged));
         public static DependencyPropertyKey ItemsPropertyKey = DependencyProperty.RegisterReadOnly("Items", typeof(ObservableCollection<IVAWrapper>), typeof(IVIView), new PropertyMetadata(null));
+        public static DependencyProperty ControlsVisibilityProperty = DependencyProperty.Register("ControlsVisibility", typeof(Visibility), typeof(IVIView), new PropertyMetadata(Visibility.Visible));
 
         public string IVIName { get { return (string)GetValue(IVINameProperty); } set { SetValue(IVINameProperty, _ivaName = value); } }
         public double NameColumnWidth { get { return (double)GetValue(NameColumnWidthProperty); } set { SetValue(NameColumnWidthProperty, value); } }
@@ -105,6 +106,7 @@ namespace MosaicLib.WPF.Controls
         public bool Pause { get { return (bool)GetValue(PauseProperty); } set { SetValue(PauseProperty, _isPaused = value); } }
         public string IVANameFilterString { get { return (string)GetValue(IVANameFilterStringProperty); } set { SetValue(IVANameFilterStringProperty, _ivaNameFilterString = value); } }
         public ObservableCollection<IVAWrapper> Items { get { return _items; } set { SetValue(ItemsPropertyKey, _items = value);  } }
+        public Visibility ControlsVisibility { get { return (Visibility)GetValue(ControlsVisibilityProperty); } set { SetValue(ControlsVisibilityProperty, value); } }
 
         private string _ivaName = string.Empty;
         private bool _isPaused;

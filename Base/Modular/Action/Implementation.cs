@@ -861,7 +861,9 @@ namespace MosaicLib.Modular.Action
         /// <param name="actionQ">Defines the ActionQueue that this action will be enqueued to each time it is started.</param>
         /// <param name="method">Defines the client provided delegate that will be invoked when the Action transitions to the ActionStateCode.Issued state.</param>
         /// <param name="logging">Provides the ActionLogging information that is used to define and customize the logging for this Action.</param>
-        public ActionImplBase(ActionQueue actionQ, ActionMethodDelegateStrResult method, ActionLogging logging) 
+        /// <param name="mesg">When this is non-null it will be used to replace the given logging instance's Mesg with a new instance constructed using the given message</param>
+        /// <param name="mesgDetails">When this is non-null and if the mesg is non-null it will be used to replace the given logging instance's MesgDetail with a new instance constructed using the given message details</param>
+        public ActionImplBase(ActionQueue actionQ, ActionMethodDelegateStrResult method, ActionLogging logging, string mesg = null, string mesgDetails = null) 
 			: this(actionQ, null, false
 					, delegate(IProviderActionBase<ParamType, ResultType> action, out string resultCode) 
 							{ 
@@ -869,7 +871,7 @@ namespace MosaicLib.Modular.Action
 								if (resultCode == null) 
 									resultCode = string.Empty; 
 							}
-					, logging) 
+                    , logging, mesg, mesgDetails) 
 		{}
 
         /// <summary>Constructor for use with more complete action method delegate: ActionMethodDelegateActionArgStrResult{ParamType, ResultType}.  Uses adapter delegate to become a FullActionMethodDelegate{ParamType, ResultType}</summary>
@@ -878,13 +880,15 @@ namespace MosaicLib.Modular.Action
         /// <param name="paramValueIsFixed">Set to true if the Action's ParamValue cannot be changed after the Action has been created.</param>
         /// <param name="method">Defines the client provided delegate that will be invoked when the Action transitions to the ActionStateCode.Issued state.</param>
         /// <param name="logging">Provides the ActionLogging information that is used to define and customize the logging for this Action.</param>
-        public ActionImplBase(ActionQueue actionQ, object paramValueObj, bool paramValueIsFixed, ActionMethodDelegateActionArgStrResult<ParamType, ResultType> method, ActionLogging logging)
+        /// <param name="mesg">When this is non-null it will be used to replace the given logging instance's Mesg with a new instance constructed using the given message</param>
+        /// <param name="mesgDetails">When this is non-null and if the mesg is non-null it will be used to replace the given logging instance's MesgDetail with a new instance constructed using the given message details</param>
+        public ActionImplBase(ActionQueue actionQ, object paramValueObj, bool paramValueIsFixed, ActionMethodDelegateActionArgStrResult<ParamType, ResultType> method, ActionLogging logging, string mesg = null, string mesgDetails = null)
 			: this(actionQ, paramValueObj, paramValueIsFixed
 					, delegate(IProviderActionBase<ParamType, ResultType> action, out string resultCode) 
 							{ 
 								resultCode = method(action); 
 							}
-					, logging) 
+					, logging, mesg, mesgDetails) 
 		{}
 
         /// <summary>Constructor for use with full action method delegate: FullActionMethodDelegate{ParamType, ResultType}.</summary>
@@ -893,11 +897,16 @@ namespace MosaicLib.Modular.Action
         /// <param name="paramValueIsFixed">Set to true if the Action's ParamValue cannot be changed after the Action has been created.</param>
         /// <param name="method">Defines the client provided delegate that will be invoked when the Action transitions to the ActionStateCode.Issued state.</param>
         /// <param name="logging">Provides the ActionLogging information that is used to define and customize the logging for this Action.</param>
-        public ActionImplBase(ActionQueue actionQ, object paramValueObj, bool paramValueIsFixed, FullActionMethodDelegate<ParamType, ResultType> method, ActionLogging logging)
+        /// <param name="mesg">When this is non-null it will be used to replace the given logging instance's Mesg with a new instance constructed using the given message</param>
+        /// <param name="mesgDetails">When this is non-null and if the mesg is non-null it will be used to replace the given logging instance's MesgDetail with a new instance constructed using the given message details</param>
+        public ActionImplBase(ActionQueue actionQ, object paramValueObj, bool paramValueIsFixed, FullActionMethodDelegate<ParamType, ResultType> method, ActionLogging logging, string mesg = null, string mesgDetails = null)
 		{
 			this.actionQ = actionQ;
 			this.method = method;
-			this.logging = logging;
+            if (mesg == null)
+                this.logging = logging;
+            else
+                this.logging = new ActionLogging(mesg, mesgDetails.MapNullToEmpty(), logging);
 
 			string ec = null;
 			if (paramValueObj != null)

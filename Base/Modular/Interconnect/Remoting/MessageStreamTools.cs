@@ -828,17 +828,22 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
         private string HandleInboundCancelRequest(ulong actionID)
         {
-            ProviderActionTracker pat = providerFacetActionDictionary.SafeTryGetValue(actionID);
-            IProviderFacet ipf = ((pat != null) ? pat.ipf : null);
+            ClientActionTracker cat = clientFacetActionDictionary.SafeTryGetValue(actionID);
+            IClientFacet icf = (cat != null) ? cat.icf : null;
 
-            if (ipf != null)
+            if (icf != null)
             {
-                IActionState ipfActionState = ipf.ActionState;
+                IActionState icfActionState = icf.ActionState;
 
-                if (!ipfActionState.IsCancelRequested)
-                    ipf.RequestCancel();
+                if (!icfActionState.IsCancelRequested)
+                {
+                    logger.Debug.Emit("{0}: requesting cancel for id:{1} [action:{2}, state:{3}]", Fcns.CurrentMethodName, actionID, icf.ToString(ToStringSelect.MesgAndDetail), icfActionState);
+                    icf.RequestCancel();
+                }
                 else
+                {
                     logger.Debug.Emit("{0}: redundant request for id:{1} [ignored]", Fcns.CurrentMethodName, actionID);
+                }
 
                 return string.Empty;
             }
@@ -863,18 +868,31 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
                 if (!updateActionState.IsComplete)
                 {
-                    logger.Debug.Emit("{0}: note received action state update id:{1} '{2}' state:{3}", Fcns.CurrentMethodName, actionID, pat.requestStr, updateActionState);
-
-                    if (updateNVS != null && !updateNVS.Equals(currentActionState.NamedValues))
+                    if (!updateNVS.IsNullOrEmpty() && !updateNVS.Equals(currentActionState.NamedValues))
+                    {
+                        logger.Debug.Emit("{0}: note received action state update id:{1} '{2}' stateCode:{3} nvs:{4}", Fcns.CurrentMethodName, actionID, pat.requestStr, updateActionState.StateCode, updateActionState.NamedValues.SafeToStringSML());
                         ipf.UpdateNamedValues(updateNVS);
-                    // else - we cannot reflect all action state changes back into the provider facet as some would violate the state model of the parent action.  As such they just get logged as debug messages.
+                    }
+                    else
+                    {
+                        logger.Debug.Emit("{0}: note received action state update id:{1} '{2}' stateCode:{3}", Fcns.CurrentMethodName, actionID, pat.requestStr, updateActionState.StateCode);
+                        // else - we cannot reflect all action state changes back into the provider facet as some would violate the state model of the parent action.  As such they just get logged as debug messages.
+                    }
                 }
                 else
                 {
-                    if (updateNVS != null)
+                    if (!updateNVS.IsNullOrEmpty())
+                    {
+                        logger.Debug.Emit("{0}: note received action state update id:{1} '{2}' stateCode:{3} rc:'{4}' nvs:{5}", Fcns.CurrentMethodName, actionID, pat.requestStr, updateActionState.StateCode, updateActionState.ResultCode, updateActionState.NamedValues.SafeToStringSML());
                         ipf.CompleteRequest(updateActionState.ResultCode, updateNVS);
+                    }
                     else
+                    {
+                        logger.Debug.Emit("{0}: note received action state update id:{1} '{2}' stateCode:{3} rc:'{4}'", Fcns.CurrentMethodName, actionID, pat.requestStr, updateActionState.StateCode, updateActionState.ResultCode);
                         ipf.CompleteRequest(updateActionState.ResultCode);
+                    }
+
+                    providerFacetActionDictionary.Remove(pat.actionID);
                 }
 
                 return string.Empty;
@@ -989,6 +1007,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
         {
             int count = 0;
 
+            // check for and propagate cancel requests from the provider facet side to the client facet side.
             foreach (var at in providerFacetActionDictionary.ValueArray)
             {
                 if (!at.pushItem.pending && at.ipf != null && !at.cancelHasBeenRequested && at.ipf.IsCancelRequestActive)
@@ -1000,16 +1019,22 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
                     count++;
 
                     pendingPushItemList.Add(at.pushItem);
+
+                    logger.Debug.Emit("{0}: note requesting cancel for id:{1} '{2}' ", Fcns.CurrentMethodName, at.actionID, at.requestStr);
                 }
             }
 
+            // check for and propagate client facet side state changes back to the provider facet side
             foreach (var at in clientFacetActionDictionary.ValueArray)
             {
                 if (at.icf != null)
                 {
+                    if (at.pushItem.pending)
+                        continue;
+
                     IActionState actionState = at.icf.ActionState;
 
-                    if (!at.pushItem.pending && !object.ReferenceEquals(actionState, at.lastActionState))
+                    if (!object.ReferenceEquals(actionState, at.lastActionState))
                     {
                         at.lastActionState = actionState;
                         at.pushItem.itemType = PushItemType.Update;
@@ -1019,6 +1044,12 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
                         count++;
 
                         pendingPushItemList.Add(at.pushItem);
+                    }
+                    else if (at.lastActionState.IsComplete)
+                    {
+                        // this action has completed and the related push item is no longer pending (ak the message was generated) - remove it from the client facet action tracker dictionary.
+                        clientFacetActionDictionary.Remove(at.actionID);
+                        count++;
                     }
                 }
             }

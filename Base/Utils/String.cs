@@ -40,14 +40,22 @@ namespace MosaicLib.Utils
     /// <remarks>These methods are now also Extension Methods</remarks>
     public static partial class Fcns
     {
-        #region static IsNullOrEmpty method
+        #region static IsNullOrEmpty, IsNeitherNullNorEmpty methods
 
         /// <summary>
-        /// Extension method version of String.IsNullOrEmpty(s).  Returns true if the given string is null or is String.Empty.  Returns false otherwise.
+        /// Extension method version of String.IsNullOrEmpty(s).  Returns true if, and only if, the given string <paramref name="s"/> is null or is String.Empty.
         /// </summary>
         public static bool IsNullOrEmpty(this string s)
         {
             return string.IsNullOrEmpty(s);
+        }
+
+        /// <summary>
+        /// Returns true if, and only if, the given string <paramref name="s"/> is neither null nor empty.
+        /// </summary>
+        public static bool IsNeitherNullNorEmpty(this string s)
+        {
+            return !string.IsNullOrEmpty(s);
         }
 
         #endregion

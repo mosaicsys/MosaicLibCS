@@ -12,7 +12,7 @@
         <conv:VCToStringSMLConverter x:Key="VCToStringSMLConverter"/>
     </UserControl.Resources>
     <DockPanel>
-        <GroupBox Name="IVIViewControlsGB" DockPanel.Dock="Bottom" Header="IVI View Controls" Margin="0,0,0,0">
+        <GroupBox Name="IVIViewControlsGB" DockPanel.Dock="Bottom" Header="IVI View Controls" Visibility="{Binding ElementName=IVIViewMainControl, Path=ControlsVisibility}" Margin="0,0,0,0">
             <WrapPanel Orientation="Horizontal">
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="13,0,0,0" ToolTip="When checked this prevents IVA changes or additions from being made to the filterable set">
                     <CheckBox Content="Pause" IsChecked="{Binding ElementName=IVIViewMainControl, Path=Pause, Mode=TwoWay, FallbackValue=false}" VerticalAlignment="Center"/>

@@ -503,13 +503,13 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Buffers
     public class BufferPool
     {
         /// <summary>Default buffer size 1024.  Nominal default usable size is 1024 - 26 == 998)</summary>
-        const int defaultBufferSize = 1024;
+        public const int DefaultBufferSize = 1024;
 
         /// <summary>
         /// Constructor.
         /// <para/>defaultBufferSize == 1024.  Usable space is 1024-26 == 998
         /// </summary>
-        public BufferPool(int maxTotalSpaceInBytes = 1024000, int bufferSize = defaultBufferSize, bool clearBufferContentsOnRelease = false, Logging.IMesgEmitter bufferStateEmitter = null, INamedValueSet configNVS = null, string configNVSKeyPrefix = "BufferPool.")
+        public BufferPool(int maxTotalSpaceInBytes = 1024000, int bufferSize = DefaultBufferSize, bool clearBufferContentsOnRelease = false, Logging.IMesgEmitter bufferStateEmitter = null, INamedValueSet configNVS = null, string configNVSKeyPrefix = "BufferPool.")
         {
             if (configNVS != null)
             {

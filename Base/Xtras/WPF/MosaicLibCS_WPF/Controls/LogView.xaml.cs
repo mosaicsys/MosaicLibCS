@@ -51,13 +51,16 @@ namespace MosaicLib.WPF.Controls
             LogMessageSetTracker = new AdjustableLogMessageSetTracker() { LogGate = MosaicLib.Logging.LogGate.Info };
 
             LogMessageSetTracker.NewItemsAdded += PostAttemptToScrollToBottom;
-            LogMessageSetTracker.SetRebuilt += () => 
-                                                { 
-                                                    if (!LogMessageSetTracker.Pause) 
-                                                        PostAttemptToScrollToBottom(); 
+            LogMessageSetTracker.SetRebuilt += () =>
+                                                {
+                                                    if (!LogMessageSetTracker.Pause)
+                                                        PostAttemptToScrollToBottom();
                                                 };
 
             IsVisibleChanged += LogView_IsVisibleChanged;
+
+            SetBinding(LogGateProperty, new Binding() { Source = LogMessageSetTracker, Path = new PropertyPath(AdjustableLogMessageSetTracker.LogGateProperty), Mode = BindingMode.TwoWay });
+            SetBinding(FilterStringProperty, new Binding() { Source = LogMessageSetTracker, Path = new PropertyPath(AdjustableLogMessageSetTracker.FilterStringProperty), Mode = BindingMode.TwoWay });
 
             InitializeComponent();
         }
@@ -68,6 +71,9 @@ namespace MosaicLib.WPF.Controls
         public static DependencyProperty TypeColumnWidthProperty = DependencyProperty.Register("TypeColumnWidth", typeof(double), typeof(LogView), new PropertyMetadata(60.0));
         public static DependencyProperty SourceColumnWidthProperty = DependencyProperty.Register("SourceColumnWidth", typeof(double), typeof(LogView), new PropertyMetadata(120.0));
         public static DependencyProperty MesgColumnWidthProperty = DependencyProperty.Register("MesgColumnWidth", typeof(double), typeof(LogView), new PropertyMetadata(450.0));
+        public static DependencyProperty LogGateProperty = DependencyProperty.Register("LogGate", typeof(MosaicLib.Logging.LogGate), typeof(LogView), new PropertyMetadata(AdjustableLogMessageSetTracker.DefaultLogGate));
+        public static DependencyProperty FilterStringProperty = DependencyProperty.Register("FilterString", typeof(string), typeof(LogView), new PropertyMetadata(""));
+        public static DependencyProperty ControlsVisibilityProperty = DependencyProperty.Register("ControlsVisibility", typeof(Visibility), typeof(LogView), new PropertyMetadata(Visibility.Visible));
 
         public string SetName { get { return (string)GetValue(SetNameProperty); } set { SetValue(SetNameProperty, value); } }
         public object EnabledSources { get { return (string)GetValue(EnabledSourcesProperty); } set { SetValue(EnabledSourcesProperty, value); } }
@@ -75,6 +81,9 @@ namespace MosaicLib.WPF.Controls
         public double TypeColumnWidth { get { return (double)GetValue(TypeColumnWidthProperty); } set { SetValue(TypeColumnWidthProperty, value); } }
         public double SourceColumnWidth { get { return (double)GetValue(SourceColumnWidthProperty); } set { SetValue(SourceColumnWidthProperty, value); } }
         public double MesgColumnWidth { get { return (double)GetValue(MesgColumnWidthProperty); } set { SetValue(MesgColumnWidthProperty, value); } }
+        public MosaicLib.Logging.LogGate LogGate { get { return (MosaicLib.Logging.LogGate)GetValue(LogGateProperty); } set { SetValue(LogGateProperty, value); } }
+        public string FilterString { get { return (string)GetValue(FilterStringProperty); } set { SetValue(FilterStringProperty, value); } }
+        public Visibility ControlsVisibility { get { return (Visibility)GetValue(ControlsVisibilityProperty); } set { SetValue(ControlsVisibilityProperty, value); } }
 
         private static void HandleSetNamePropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
@@ -122,7 +131,7 @@ namespace MosaicLib.WPF.Controls
             AttemptToScrollTo(ScrollTo.Bottom);
         }
 
-        private void AttemptToScrollTo(ScrollTo scrollTo)
+        public void AttemptToScrollTo(ScrollTo scrollTo)
         {
             if (listView.Items.Count > 0)
             {
@@ -132,7 +141,7 @@ namespace MosaicLib.WPF.Controls
             }
         }
 
-        private enum ScrollTo
+        public enum ScrollTo
         {
             Top,
             Bottom

@@ -83,6 +83,7 @@ namespace RemotingTool
                 RemoteLogMessageSetName = "LogMessageHistory";
                 RemoteLogMessageSetCapacity = 5000;
                 RemoteLogMessageSetMaximumItemsPerMessage = 100;
+                BufferSize = MosaicLib.Modular.Interconnect.Remoting.Buffers.BufferPool.DefaultBufferSize;
             }
 
             [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
@@ -111,6 +112,9 @@ namespace RemotingTool
 
             [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
             public int RemoteLogMessageSetMaximumItemsPerMessage { get; set; }
+
+            [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
+            public int BufferSize { get; set; }
         }
 
         ConfigValues config = new ConfigValues();
@@ -143,6 +147,7 @@ namespace RemotingTool
                     { "IPAddress", config.IPAddress }, 
                     { "Transport.TraceLogger.InitialInstanceLogGate", config.TraceSelect }, 
                     { "AutoReconnectHoldoff", config.AutoReconnectHoldoff },
+                    { "BufferPool.BufferSize", config.BufferSize },
                 },
                 StreamToolsConfigArray = new MessageStreamToolConfigBase[] 
                 { 

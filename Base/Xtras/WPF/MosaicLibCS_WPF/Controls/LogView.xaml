@@ -14,7 +14,7 @@
         <conv:VCToStringSMLConverter x:Key="VCToStringSMLConverter"/>
     </UserControl.Resources>
     <DockPanel>
-        <GroupBox Name="logViewControlsGB" DockPanel.Dock="Bottom" Header="Log View Controls" Margin="0,0,0,0">
+        <GroupBox Name="logViewControlsGB" DockPanel.Dock="Bottom" Header="Log View Controls" Visibility="{Binding ElementName=LogViewMainControl, Path=ControlsVisibility}" Margin="0,0,0,0">
             <WrapPanel Orientation="Horizontal">
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <Button Content="Clear" VerticalAlignment="Center" Click="HandleClearButton_Click" Margin="0,0,0,0" ToolTip="Clears displayed messages"/>
@@ -27,7 +27,7 @@
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="13,0,0,0" ToolTip="Selects the most detailed message type to show.  Includes all types above it.">
                     <Label Content="Type:" VerticalAlignment="Center"/>
-                    <ComboBox MinWidth="100" SelectedValuePath="Content" SelectedValue="{Binding ElementName=LogViewMainControl, Path=LogMessageSetTracker.LogGate, Mode=TwoWay, FallbackValue=Info, Converter={StaticResource LogGateStringConverter}}" Margin="0,0,0,0" VerticalAlignment="Center">
+                    <ComboBox MinWidth="100" SelectedValuePath="Content" SelectedValue="{Binding ElementName=LogViewMainControl, Path=LogGate, Mode=TwoWay, FallbackValue=Info, Converter={StaticResource LogGateStringConverter}}" Margin="0,0,0,0" VerticalAlignment="Center">
                         <ComboBoxItem Content="Error"/>
                         <ComboBoxItem Content="Warning"/>
                         <ComboBoxItem Content="Signif"/>
@@ -38,7 +38,7 @@
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="13,0,0,0" ToolTip="Live filter text.  Applies to Type, Source, and/or Mesg contents (excluding NVS and Data).">
                     <Label Content="Filter:" VerticalAlignment="Center"/>
-                    <TextBox Text="{Binding ElementName=LogViewMainControl, Path=LogMessageSetTracker.FilterString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="120" VerticalAlignment="Center"/>
+                    <TextBox Text="{Binding ElementName=LogViewMainControl, Path=FilterString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="120" VerticalAlignment="Center"/>
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="13,0,0,0">
                     <Label Content="Counts (view,total):" VerticalAlignment="Center"/>
