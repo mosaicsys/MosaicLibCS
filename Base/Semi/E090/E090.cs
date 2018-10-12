@@ -1130,10 +1130,21 @@ namespace MosaicLib.Semi.E090
         /// <summary>Debugging and logging helper</summary>
         public override string ToString()
         {
+            return ToString(includeSubstLocID: true);
+        }
+
+        /// <summary>Debugging and logging helper</summary>
+        public string ToString(bool includeSubstLocID)
+        {
             if (IsEmpty)
                 return "E090SubstLocInfo Empty";
 
-            StringBuilder sb = new StringBuilder("E090SubstLocInfo {0} {1}".CheckedFormat(ObjID.ToString(E039ToStringSelect.FullName), SLS));
+            StringBuilder sb = new StringBuilder("E090SubstLocInfo");
+
+            if (includeSubstLocID)
+                sb.CheckedAppendFormat(" {0}", ObjID.ToString(E039ToStringSelect.FullName));
+
+            sb.CheckedAppendFormat(" {0}", SLS);
 
             if (InstanceNum != 0)
                 sb.CheckedAppendFormat(" InstNum:{0}", InstanceNum);
@@ -1470,10 +1481,21 @@ namespace MosaicLib.Semi.E090
         /// <summary>Debugging and logging helper</summary>
         public override string ToString()
         {
+            return ToString(includeSubstID: true);
+        }
+
+        /// <summary>Debugging and logging helper</summary>
+        public string ToString(bool includeSubstID)
+        {
             if (IsEmpty)
                 return "E90SubstInfo Empty";
 
-            StringBuilder sb = new StringBuilder("E90SubstInfo {0} {1} {2}".CheckedFormat(ObjID.ToString(E039ToStringSelect.FullName), STS, SPS));
+            StringBuilder sb = new StringBuilder("E90SubstInfo");
+
+            if (includeSubstID)
+                sb.CheckedAppendFormat(" {0}", ObjID.ToString(E039ToStringSelect.FullName));
+
+            sb.CheckedAppendFormat(" {0} {1}", STS, SPS);
 
             if (PendingSPS != SubstProcState.Undefined)
                 sb.CheckedAppendFormat(" PendingSPS:{0}", PendingSPS);

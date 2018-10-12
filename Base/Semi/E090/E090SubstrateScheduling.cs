@@ -175,6 +175,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
         bool IsUpdateNeeded { get; }
         bool UpdateIfNeeded(bool forceUpdate = false);
 
+        bool IsDropRequested { get; }
         string DropRequestReason { get; set; }
 
         IJobTrackerLinkage JobTrackerLinkage { get; set; }
@@ -208,9 +209,24 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
     public interface IJobTrackerLinkage
     {
         /// <summary>
+        /// Returns the "identity" of the job that has been linked to this substrate
+        /// </summary>
+        string ID { get; }
+
+        /// <summary>
         /// Set to indicate that a dependent substrate's observer has been updated, cleared by the related Job Tracker entity once it has processed the change.
         /// </summary>
         bool SubstrateTrackerHasBeenUpdated { get; set; }
+
+        /// <summary>
+        /// Returns true if the corresponding job has had its DropRequestReason set to a non-empty value.
+        /// </summary>
+        bool IsDropRequested { get; }
+
+        /// <summary>
+        /// When non-empty, this string indicates the reason why this Job object is requesting that it be removed from the system.
+        /// </summary>
+        string DropRequestReason { get; }
     }
 
     /// <summary>
@@ -401,14 +417,26 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
 
             if (DropRequestReason.IsNullOrEmpty())
             {
-                string nextDropReasonRequest = null;
+                string nextDropReasonRequest = String.Empty;
 
-                if (SubstObserver.Object == null)
+                if (SubstObserver.Info.SPS.IsProcessingComplete() && SubstObserver.Info.STS != SubstState.AtWork)
+                {
+                    if (JobTrackerLinkage == null)
+                        nextDropReasonRequest = "Substrate processing done and no Job was linked to it";
+                    else if (JobTrackerLinkage.IsDropRequested)
+                        nextDropReasonRequest = "Substrate processing done and linked Job is requesting to be dropped [{0}]".CheckedFormat(JobTrackerLinkage.DropRequestReason);
+                }
+                else if (SubstObserver.Object == null)
                     nextDropReasonRequest = "Substrate Object has been removed unexpectedly";
                 else if (SubstObserver.Object.IsEmpty)
                     nextDropReasonRequest = "Substrate Object has been emptied unexpectedly";
-                else if (SubstObserver.Object.Flags.IsFinal() && JobTrackerLinkage == null)
-                    nextDropReasonRequest = "Substrate Object has been removed normally and there are no Jobs that are linked to it";
+                else if (SubstObserver.Object.Flags.IsFinal())
+                {
+                    if (JobTrackerLinkage == null)
+                        nextDropReasonRequest = "Substrate Object has been removed and no Job was linked to it";
+                    else if (JobTrackerLinkage.IsDropRequested)
+                        nextDropReasonRequest = "Substrate Object has been removed and linked Job is requesting to be dropped [{0}]".CheckedFormat(JobTrackerLinkage.DropRequestReason);
+                }
 
                 if (DropRequestReason != nextDropReasonRequest)
                 {
@@ -696,7 +724,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
         public E090SubstInfo Info { get { return SubstObserver.Info; } }
         public QpcTimeStamp LastUpdateTimeStamp { get; set; }
 
-        public virtual bool IsUpdateNeeded { get { return SubstObserver.IsUpdateNeeded; } }
+        public virtual bool IsUpdateNeeded { get { return SubstObserver.IsUpdateNeeded; } set { SubstObserver.IsUpdateNeeded = value; } }
         public virtual bool UpdateIfNeeded(bool forceUpdate = false)
         {
             if (!IsUpdateNeeded && !forceUpdate)
@@ -707,15 +735,60 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
             {
                 if (JobTrackerLinkage != null && !JobTrackerLinkage.SubstrateTrackerHasBeenUpdated)
                     JobTrackerLinkage.SubstrateTrackerHasBeenUpdated = true;
+
                 LastUpdateTimeStamp = QpcTimeStamp.Now;
             }
 
             return changed;
         }
 
-        public string DropRequestReason { get; set; }
+        public bool IsDropRequested { get { return !DropRequestReason.IsNullOrEmpty(); } }
+        public string DropRequestReason
+        {
+            get { return _dropReasonRequest; }
+            set
+            {
+                var entryDropReasonRequest = _dropReasonRequest;
 
-        public IJobTrackerLinkage JobTrackerLinkage { get; set; }
+                _dropReasonRequest = value.MapNullToEmpty();
+
+                IsUpdateNeeded = true;
+
+                if (_dropReasonRequest != entryDropReasonRequest)
+                {
+                    if (entryDropReasonRequest.IsNullOrEmpty())
+                        Logger.Trace.Emit("{0}: Drop reason requested as '{1}' [{2}]", SubstID.FullName, _dropReasonRequest, SubstObserver.Info.ToString(includeSubstID: false));
+                    else
+                        Logger.Trace.Emit("{0}: Drop reason request changed to '{1}' [from:'{2}', {3}]", SubstID.FullName, _dropReasonRequest, entryDropReasonRequest, SubstObserver.Info.ToString(includeSubstID: false));
+                }
+            }
+        }
+        private string _dropReasonRequest = String.Empty;
+
+        public IJobTrackerLinkage JobTrackerLinkage
+        {
+            get { return _jobTrackerLinkage; }
+            set
+            {
+                var entryLinkageID = (_jobTrackerLinkage != null) ? _jobTrackerLinkage.ID : null;
+
+                _jobTrackerLinkage = value;
+                var newLinkageID = (_jobTrackerLinkage != null) ? _jobTrackerLinkage.ID : null;
+
+                IsUpdateNeeded = true;
+
+                if (entryLinkageID != newLinkageID)
+                {
+                    if (!newLinkageID.IsNullOrEmpty() && entryLinkageID.IsNullOrEmpty())
+                        Logger.Trace.Emit("{0}: Linkage added to job id:{1}", SubstID.FullName, newLinkageID);
+                    else if (newLinkageID.IsNullOrEmpty() && !entryLinkageID.IsNullOrEmpty())
+                        Logger.Trace.Emit("{0}: Linkage removed from job id:{1}", SubstID.FullName, entryLinkageID);
+                    else
+                        Logger.Trace.Emit("{0}: Linkage changed to job id:{1} [from:{2}]", SubstID.FullName, newLinkageID, entryLinkageID);
+                }
+            }
+        }
+        private IJobTrackerLinkage _jobTrackerLinkage = null;
 
         public SubstrateJobRequestState SubstrateJobRequestState
         {

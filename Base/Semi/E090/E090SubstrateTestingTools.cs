@@ -279,9 +279,9 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                 return;
             }
 
-            if (trackerDictionary.ValueArray.Any(tracker => !tracker.DropRequestReason.IsNullOrEmpty()))
+            if (trackerDictionary.ValueArray.Any(tracker => tracker.IsDropRequested))
             {
-                var dropTrackerSet = trackerDictionary.ValueArray.Where(tracker => !tracker.DropRequestReason.IsNullOrEmpty()).ToArray();
+                var dropTrackerSet = trackerDictionary.ValueArray.Where(tracker => tracker.IsDropRequested).ToArray();
 
                 foreach (var dropTracker in dropTrackerSet)
                 {
