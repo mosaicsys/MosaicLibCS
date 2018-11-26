@@ -160,7 +160,7 @@ namespace MosaicLib.Utils
 
         internal object CreatedInPool { get; set; }
 
-        /// <summary>Provides a message emitter that may be used to record a Trace of the Notification and Wait useage of this object</summary>
+        /// <summary>Provides a message emitter that may be used to record a Trace of the Notification and Wait usage of this object</summary>
         public Logging.IMesgEmitter TraceEmitter { get { return traceEmitter ?? Logging.NullEmitter; } set { traceEmitter = value; } }
         private Logging.IMesgEmitter traceEmitter = null;
 

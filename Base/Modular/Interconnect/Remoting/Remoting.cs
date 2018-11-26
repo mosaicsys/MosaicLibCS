@@ -26,17 +26,20 @@ using System.Linq;
 
 using MosaicLib.Modular.Action;
 using MosaicLib.Modular.Common;
+using MosaicLib.Modular.Common.Attributes;
 using MosaicLib.Modular.Config;
 using MosaicLib.Modular.Interconnect.Parts;
 using MosaicLib.Modular.Interconnect.Remoting.Buffers;
+using MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools;
 using MosaicLib.Modular.Interconnect.Sets;
 using MosaicLib.Modular.Interconnect.Values;
 using MosaicLib.Modular.Part;
 using MosaicLib.Time;
 using MosaicLib.Utils;
 using MosaicLib.Utils.Collections;
-using MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools;
+using MosaicLib.Utils.Tools;
 
+// Todo: remove these comments once their purpose has been resolved.
 //!!!!! Please NOTE: There are significant functional changes planed for the internal design and operation of the Remoting infrastructure.
 // As such it is not currently recommended to make use of any capabilities beyond the top level publically available ones and these public interfaces
 // are currently more likely than not to change as part of this planed capability extension for future versions of the this library.
@@ -111,24 +114,30 @@ namespace MosaicLib.Modular.Interconnect.Remoting
     public class RemotingServer : SimpleActivePartBase, IRemoting
     {
         public RemotingServer(RemotingServerConfig config)
-            : base(config.PartID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion1.Build(automaticallyIncAndDecBusyCountAroundActionInvoke: false, partBaseIVI: config.PartIVI))
+            : base(config.PartID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion2.Build(automaticallyIncAndDecBusyCountAroundActionInvoke: false, partBaseIVI: config.PartIVI))
         {
             Config = config.MakeCopyOfThis();
             traceLogger = new Logging.Logger(PartID + ".Trace", groupName: Logging.LookupDistributionGroupName, initialInstanceLogGate: Config.ConfigNVS["TraceLogger.InitialInstanceLogGate"].VC.GetValue(rethrow: false, defaultValue: Logging.LogGate.Debug));
 
-            bufferPool = new BufferPool(configNVS: Config.ConfigNVS, bufferStateEmitter: traceLogger.Trace);
+            bufferPool = new BufferPool(PartID + ".bp", configNVS: Config.ConfigNVS, bufferStateEmitter: traceLogger.Trace);
 
             AddMainThreadStoppingAction(Release);
 
             ActionLoggingReference.Config = ActionLoggingConfig.Debug_Debug_Trace_Trace;
 
             _serverInfoNVSPublisher = new InterlockedNotificationRefObject<INamedValueSet>(Config.ServerInfoNVS);
+
+            EventAndPerformanceRecording = new EventAndPerformanceRecording(PartID, config.PartIVI);
         }
+
+        public readonly string MyUUID = Guid.NewGuid().ToString();
 
         public INotificationObject<INamedValueSet> ServerInfoNVSPublisher { get { return _serverInfoNVSPublisher; } }
         private InterlockedNotificationRefObject<INamedValueSet> _serverInfoNVSPublisher;
 
         private RemotingServerConfig Config { get; set; }
+
+        private IEventAndPerformanceRecording EventAndPerformanceRecording { get; set; }
 
         private Logging.IBasicLogger traceLogger;
 
@@ -140,8 +149,11 @@ namespace MosaicLib.Modular.Interconnect.Remoting
         {
             /// <summary>Generally this is the same as the session.SessionName</summary>
             public string clientName;
-            /// <summary>Generally this is the same as the session.SessionUUID</summary>
+            /// <summary>Generally this is the same as the session.ClientUUID</summary>
             public string uuid;
+            /// <summary>Generally this is the same as the session.ClientInstanceNum</summary>
+            public ulong instanceNum;
+
             public Sessions.IMessageSessionFacet session;
 
             public IListWithCachedArray<MessageStreamToolTracker> messageStreamToolTrackerList = new IListWithCachedArray<MessageStreamToolTracker>();
@@ -159,7 +171,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
 
             public override string ToString()
             {
-                return "CST {0} uuid:{1}".CheckedFormat(clientName, uuid);
+                return "CST {0} uuid:{1} instNum:".CheckedFormat(clientName, uuid, instanceNum);
             }
         }
 
@@ -236,9 +248,14 @@ namespace MosaicLib.Modular.Interconnect.Remoting
 
                 if (sessionManager == null || transport == null)
                 {
-                    sessionManager = new Sessions.SessionManager(PartID, Config.ConfigNVS, hostNotifier: this, handleNewSessionDelegate: HandleNewSession, bufferPool: bufferPool, stateEmitter: Log.Debug, issueEmitter: Log.Debug, traceEmitter: traceLogger.Trace);
+                    sessionManager = new Sessions.SessionManager(PartID, MyUUID, Config.ConfigNVS, hostNotifier: this, handleNewSessionDelegate: HandleNewSession, bufferPool: bufferPool, stateEmitter: Log.Debug, issueEmitter: Log.Debug, traceEmitter: traceLogger.Trace)
+                    {
+                        EventAndPerformanceRecording = EventAndPerformanceRecording,
+                    };
 
                     transport = Transport.TransportConnectionFactory.Instance.CreateServerConnection(Config.ConfigNVS, sessionManager);
+
+                    sessionManager.TransportTypeFeatures = transport.TransportTypeFeatures;
                 }
 
                 return ec;
@@ -276,7 +293,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             while (!clientSessionArray.All(session => session.State.IsPerminantlyClosed))
             {
                 WaitForSomethingToDo();
-                InnerServiceBackground(QpcTimeStamp.Now);
+                InnerServiceBackground();
 
                 if (waitTimeLimitTimer.IsTriggered)
                 {
@@ -306,9 +323,9 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             return ec;
         }
 
-        protected override string PerformServiceAction(Action.IProviderActionBase<string, NullObj> action)
+        protected override string PerformServiceActionEx(IProviderFacet ipf, string serviceName, INamedValueSet npv)
         {
-            StringScanner ss = new StringScanner(action.ParamValue);
+            StringScanner ss = new StringScanner(serviceName);
 
             if (ss.MatchToken("Remote"))
             {
@@ -323,7 +340,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
                     if (cst.actionRelayStreamTool == null)
                         return "Remote client '{0}' does not support remote actions".CheckedFormat(clientIdToken);
 
-                    cst.actionRelayStreamTool.RelayServiceAction(ss.Rest, action);
+                    cst.actionRelayStreamTool.RelayServiceAction(ss.Rest, ipf);
                     return null;
                 }
             }
@@ -334,10 +351,10 @@ namespace MosaicLib.Modular.Interconnect.Remoting
                 if (ss.IsAtEnd || ss.ParseValue<SyncFlags>(out syncFlags))
                     return PerformSync(syncFlags);
                 else
-                    return "Invalid or unsupported Sync request format [{0}]".CheckedFormat(action.ParamValue);
+                    return "Invalid or unsupported Sync request format [{0}]".CheckedFormat(serviceName);
             }
 
-            return base.PerformServiceAction(action);
+            return base.PerformServiceActionEx(ipf, serviceName, npv);
         }
 
         public IClientFacet Sync(SyncFlags syncFlags = default(SyncFlags))
@@ -359,18 +376,20 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             if (!BaseState.IsOnline)
                 return "Part is not online: {0}".CheckedFormat(BaseState);
 
-            InnerServiceBackground(QpcTimeStamp.Now);
+            InnerServiceBackground();
 
             return string.Empty;
         }
 
         protected override void PerformMainLoopService()
         {
-            InnerServiceBackground(QpcTimeStamp.Now);
+            InnerServiceBackground();
         }
 
-        private void InnerServiceBackground(QpcTimeStamp qpcTimeStamp)
+        private void InnerServiceBackground(QpcTimeStamp qpcTimeStamp = default(QpcTimeStamp))
         {
+            qpcTimeStamp = qpcTimeStamp.MapDefaultToNow();
+
             int count = 0;
 
             if (transport != null)
@@ -411,6 +430,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             }
 
             NoteWorkCount(count);
+
+            EventAndPerformanceRecording.Service(qpcTimeStamp);
         }
 
         private void HandleNewSession(QpcTimeStamp qpcTimeStamp, Sessions.IMessageSessionFacet session)
@@ -419,7 +440,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             {
                 session = session,
                 clientName = session.SessionName,
-                uuid = session.SessionUUID,
+                uuid = session.ClientUUID,
+                instanceNum = session.ClientInstanceNum,
             };
 
             // generate a delegate that binds the ClientSessionTracker so that we can correctly route inbound messages
@@ -427,7 +449,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
 
             AddClientSessionTracker(cst);
 
-            Log.Debug.Emit("New client session added [{0} {1}]", session.SessionName, session.SessionUUID);
+            Log.Debug.Emit("New client session added [{0} {1} {2}]", session.SessionName, session.ClientUUID, session.ClientInstanceNum);
         }
 
         /// <summary>
@@ -526,7 +548,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
                 }
                 else
                 {
-                    /// Todo: review if we should send an error message back for this cast.
+                    /// Todo: review if we should send an error message back for this case.
                     Log.Debug.Emit("{0}: failed to create stream tool for client '{1}' stream {2}: {3}", CurrentMethodName, cst.clientName, failureCode);
                 }
             }
@@ -593,7 +615,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
     public class RemotingClient : SimpleActivePartBase, IRemoting
     {
         public RemotingClient(RemotingClientConfig config)
-            : base(config.PartID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion1.Build(automaticallyIncAndDecBusyCountAroundActionInvoke: false, partBaseIVI: config.PartIVI))
+            : base(config.PartID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion2.Build(automaticallyIncAndDecBusyCountAroundActionInvoke: false, partBaseIVI: config.PartIVI))
         {
             Config = config.MakeCopyOfThis();
             traceLogger = new Logging.Logger(PartID + ".Trace", groupName: Logging.LookupDistributionGroupName, initialInstanceLogGate: Config.ConfigNVS["TraceLogger.InitialInstanceLogGate"].VC.GetValue(rethrow: false, defaultValue: Logging.LogGate.Debug));
@@ -601,7 +623,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             if (Config.StreamToolsConfigArray.IsNullOrEmpty())
                 throw new System.ArgumentOutOfRangeException("Config.StreamToolsConfigArray", "Must contain at least one StreamToolConfigBase derived instance");
 
-            bufferPool = new BufferPool(configNVS: config.ConfigNVS, bufferStateEmitter: traceLogger.Trace);
+            bufferPool = new BufferPool(PartID + ".bp", configNVS: config.ConfigNVS, bufferStateEmitter: traceLogger.Trace);
 
             AddMainThreadStoppingAction(() => Release(releaseBufferPool: true, releaseMSTTs: true));
 
@@ -609,7 +631,11 @@ namespace MosaicLib.Modular.Interconnect.Remoting
 
             _serverInfoNVSPublisher = new InterlockedNotificationRefObject<INamedValueSet>();
             serverInfoNVSIVA = (config.PartIVI ?? Interconnect.Values.Values.Instance).GetValueAccessor("{0}.ServerInfoNVS".CheckedFormat(PartID));
+
+            EventAndPerformanceRecording = new EventAndPerformanceRecording(PartID, config.PartIVI);
         }
+
+        public readonly string MyUUID = Guid.NewGuid().ToString();
 
         public INotificationObject<INamedValueSet> ServerInfoNVSPublisher { get { return _serverInfoNVSPublisher; } }
         private InterlockedNotificationRefObject<INamedValueSet> _serverInfoNVSPublisher;
@@ -628,6 +654,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
         private Transport.ITransportConnection transport;
         private Sessions.ConnectionSession session;
         private Sessions.SessionConfig sessionConfig;
+        private IEventAndPerformanceRecording EventAndPerformanceRecording { get; set; }
 
         private class MessageStreamToolTracker
         {
@@ -680,42 +707,60 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             TimeSpan maxSessionConnectWaitTime = Config.ConfigNVS["MaxSessionConnectWaitTime"].VC.GetValue(rethrow: false, defaultValue: (5.0).FromSeconds());
             TimeSpan maxSessionCloseWaitTime = Config.ConfigNVS["MaxSessionCloseWaitTime"].VC.GetValue(rethrow: false, defaultValue: (1.0).FromSeconds());
 
-            string ec = InnerPerformGoOnlineAction(andInitialize, CurrentActionDescription, maxSessionConnectWaitTime, maxSessionCloseWaitTime);
+            string ec = InnerPerformGoOnlineAction(andInitialize, CurrentActionDescription, maxSessionConnectWaitTime, maxSessionCloseWaitTime, forAutoReconnect: false);
+
+            if (!ec.IsNullOrEmpty() && session != null)
+            {
+                switch (session.State.TerminationReasonCode)
+                {
+                    case Sessions.TerminationReasonCode.BufferSizesDoNotMatch: 
+                        SetBaseState(UseState.FailedToOffline, "Connection rejected [{0}, {1}]".CheckedFormat(session.State.TerminationReasonCode, session.State.Reason)); 
+                        return ec;
+                    default:
+                        break;
+                }
+
+                Release(setConnStateToDisconnectedIfNeeded: false);
+            }
 
             return ec;
         }
 
-        private string InnerPerformGoOnlineAction(bool andInitialize, string currentActionDescription, TimeSpan maxSessionConnectWaitTime, TimeSpan maxSessionCloseWaitTime)
+        private string InnerPerformGoOnlineAction(bool andInitialize, string currentActionDescription, TimeSpan maxSessionConnectWaitTime, TimeSpan maxSessionCloseWaitTime, bool forAutoReconnect = false)
         {
             string ec = string.Empty;
 
             try
             {
-                if (andInitialize && BaseState.IsOnlineOrAttemptOnline)
-                    ec = InnerPerformGoOfflineAction(currentActionDescription, maxSessionCloseWaitTime);        // this does a Release...
+                if (andInitialize && BaseState.IsOnlineOrAttemptOnline && !forAutoReconnect)
+                    ec = InnerPerformGoOfflineAction(currentActionDescription, maxSessionCloseWaitTime, forAutoReconnect: forAutoReconnect);        // this does a Release...
+                else
+                    Release(setConnStateToDisconnectedIfNeeded: false);
 
-                if (session == null || transport == null || session.State.IsClosing || session.State.IsPerminantlyClosed)
                 {
                     Fcns.DisposeOfObject(ref session);
-                    session = new Sessions.ConnectionSession(PartID, Config.ConfigNVS, hostNotifier: this, bufferPool: bufferPool, initialSessionStateCode: Sessions.SessionStateCode.ClientSessionInitial, issueEmitter: Log.Debug, stateEmitter: Log.Debug, traceEmitter: traceLogger.Trace);
-                    session.HandleInboundMessageDelegate = HandleInboundMessage;
+                    session = new Sessions.ConnectionSession(PartID, MyUUID, MyUUID, null, Config.ConfigNVS, hostNotifier: this, bufferPool: bufferPool, initialSessionStateCode: Sessions.SessionStateCode.ClientSessionInitial, issueEmitter: Log.Debug, stateEmitter: Log.Debug, traceEmitter: traceLogger.Trace, ivi: settings.simplePartBaseSettings.PartBaseIVI)
+                        {
+                            EventAndPerformanceRecording = EventAndPerformanceRecording,
+                            HandleInboundMessageDelegate = HandleInboundMessage,
+                        };
 
                     sessionConfig = session.Config;
 
                     Fcns.DisposeOfObject(ref transport);
                     transport = Transport.TransportConnectionFactory.Instance.CreateClientConnection(Config.ConfigNVS, session);
+
+                    session.TransportTypeFeatures = transport.TransportTypeFeatures;
                 }
 
-                // only create message stream tools once (especially important with set relay tool
-                if (session != null && transport != null && messageStreamToolTrackerArray.IsNullOrEmpty())
+                if (messageStreamToolTrackerArray.IsNullOrEmpty())
                 {
                     actionRelayStreamTool = null;
                     var adjustedStreamToolConfigArray = new MessageStreamTools.BaseMessageStreamTool.Config().Concat<MessageStreamToolConfigBase>(Config.StreamToolsConfigArray).ToArray();
                     messageStreamToolTrackerArray = adjustedStreamToolConfigArray.Select((stc, index) => new MessageStreamToolTracker() { stream = index, messageStreamToolConfig = stc, messageStreamTool = CreateStreamTool(index, stc) }).ToArray();
                 }
 
-                if (!session.State.IsConnected(includeClosingStates: true))
-                    session.SetState(QpcTimeStamp.Now, Sessions.SessionStateCode.RequestTransportConnect, currentActionDescription);
+                session.SetState(QpcTimeStamp.Now, Sessions.SessionStateCode.RequestTransportConnect, currentActionDescription);
 
                 QpcTimer waitTimer = new QpcTimer() { TriggerInterval = maxSessionConnectWaitTime }.Start();
 
@@ -723,7 +768,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
                 {
                     WaitForSomethingToDo();
 
-                    InnerServiceBackground(QpcTimeStamp.Now);
+                    InnerServiceBackground(serviceConnStateUpdates: !forAutoReconnect);
 
                     if (session.State.IsConnected())
                         break;
@@ -762,7 +807,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             return ec;
         }
 
-        private string InnerPerformGoOfflineAction(string actionDescription, TimeSpan maxSessionCloseWaitTime)
+        private string InnerPerformGoOfflineAction(string actionDescription, TimeSpan maxSessionCloseWaitTime, bool forAutoReconnect = false)
         {
             string ec = string.Empty;
 
@@ -777,12 +822,12 @@ namespace MosaicLib.Modular.Interconnect.Remoting
 
                 QpcTimer waitTimeLimitTimer = new QpcTimer() { TriggerInterval = maxSessionCloseWaitTime }.Start();
 
-                InnerServiceBackground(QpcTimeStamp.Now);
+                InnerServiceBackground(serviceConnStateUpdates: !forAutoReconnect);
 
                 while (session.State.StateCode != Sessions.SessionStateCode.Terminated)
                 {
                     WaitForSomethingToDo();
-                    InnerServiceBackground(QpcTimeStamp.Now);
+                    InnerServiceBackground(serviceConnStateUpdates: !forAutoReconnect);
 
                     if (waitTimeLimitTimer.IsTriggered)
                     {
@@ -809,16 +854,16 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             return ec;
         }
 
-        protected override string PerformServiceAction(Action.IProviderActionBase<string, NullObj> action)
+        protected override string PerformServiceActionEx(IProviderFacet ipf, string serviceName, INamedValueSet npv)
         {
-            StringScanner ss = new StringScanner(action.ParamValue);
+            StringScanner ss = new StringScanner(serviceName);
 
             if (ss.MatchToken("Remote"))
             {
                 if (actionRelayStreamTool != null)
                 {
-                    actionRelayStreamTool.RelayServiceAction(ss.Rest, action);
-                    InnerServiceBackground(QpcTimeStamp.Now);
+                    actionRelayStreamTool.RelayServiceAction(ss.Rest, ipf);
+                    InnerServiceBackground();
                     return null;
                 }
                 else
@@ -833,7 +878,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
                 if (ss.IsAtEnd || ss.ParseValue<SyncFlags>(out syncFlags))
                     return PerformSync(syncFlags);
                 else
-                    return "Invalid or unsupported Sync request format [{0}]".CheckedFormat(action.ParamValue);
+                    return "Invalid or unsupported Sync request format [{0}]".CheckedFormat(serviceName);
             }
             else if (ss.MatchToken("FaultInjection"))
             {
@@ -841,19 +886,23 @@ namespace MosaicLib.Modular.Interconnect.Remoting
                 {
                     case "GoToOnlineFailure":
                         Release();
-                        SetBaseState(UseState.OnlineFailure, "By explicit request [{0}]".CheckedFormat(action.ParamValue)); 
+                        SetBaseState(UseState.OnlineFailure, "By explicit request [{0}]".CheckedFormat(serviceName)); 
                         return "";
 
                     case "ManuallyTriggerAutoReconnectAttempt": 
                         manuallyTriggerAutoReconnectAttempt = true;  
+
+                        if (BaseState.IsConnectedOrConnecting)
+                            SetBaseState(ConnState.Disconnected, serviceName);
+
                         return "";
 
-                    default: 
-                        return base.PerformServiceAction(action);      // we expect this to fail with the standard error message...
+                    default:
+                        return base.PerformServiceActionEx(ipf, serviceName, npv);      // we expect this to fail with the standard error message...
                 }
             }
 
-            return base.PerformServiceAction(action);
+            return base.PerformServiceActionEx(ipf, serviceName, npv);
         }
 
         public IClientFacet Sync(SyncFlags syncFlags = default(SyncFlags)) 
@@ -875,7 +924,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             if (!BaseState.IsOnline)
                 return "Part is not online: {0}".CheckedFormat(BaseState);
 
-            InnerServiceBackground(QpcTimeStamp.Now);
+            InnerServiceBackground();
 
             return string.Empty;
         }
@@ -907,19 +956,39 @@ namespace MosaicLib.Modular.Interconnect.Remoting
                 TimeSpan maxSessionAutoReconnectWaitTime = Config.ConfigNVS["MaxSessionAutoReconnectWaitTime"].VC.GetValue(rethrow: false, defaultValue: (1.0).FromSeconds());
                 TimeSpan maxSessionAutoReconnectCloseWaitTime = Config.ConfigNVS["MaxSessionAutoReconnectCloseWaitTime"].VC.GetValue(rethrow: false, defaultValue: (1.0).FromSeconds());
 
-                SetBaseState(UseState.AttemptOnline, "Starting Client AutoReconnect Attempt");
-
-                string ec = InnerPerformGoOnlineAction(false, "Client AutoReconnect Attempt", maxSessionAutoReconnectWaitTime, maxSessionAutoReconnectCloseWaitTime);
+                string ec = InnerPerformGoOnlineAction(false, "Client AutoReconnect Attempt", maxSessionAutoReconnectWaitTime, maxSessionAutoReconnectCloseWaitTime, forAutoReconnect: true);
 
                 if (ec.IsNullOrEmpty())
+                {
                     SetBaseState(UseState.Online, "Client AutoReconnect complete");
-                else
-                    SetBaseState(UseState.AttemptOnlineFailed, "Client AutoReconnect failed: {0}".CheckedFormat(ec));
+                    PublishActionInfo(ActionInfo.EmptyActionInfo);
+                }
+                else 
+                {
+                    var terminationReasonCode = (session != null) ? session.State.TerminationReasonCode : default(Sessions.TerminationReasonCode);
+
+                    switch (terminationReasonCode)
+                    {
+                        case Sessions.TerminationReasonCode.BufferSizesDoNotMatch: 
+                            SetBaseState(UseState.FailedToOffline, "Connection rejected [{0}, {1}]".CheckedFormat(session.State.TerminationReasonCode, session.State.Reason));
+                            break;
+                        default:
+                            if (BaseState.UseState != UseState.AttemptOnlineFailed)
+                                SetBaseState(UseState.AttemptOnlineFailed, "Client AutoReconnect failed: {0}".CheckedFormat(ec));
+                            break;
+                    }
+
+                    Release(setConnStateToDisconnectedIfNeeded: false);
+                }
+
+                InnerServiceBackground();
             }
         }
 
-        private void InnerServiceBackground(QpcTimeStamp qpcTimeStamp)
+        private void InnerServiceBackground(QpcTimeStamp qpcTimeStamp = default(QpcTimeStamp), bool serviceConnStateUpdates = true)
         {
+            qpcTimeStamp = qpcTimeStamp.MapDefaultToNow();
+
             int count = 0;
             if (transport != null)
                 count += transport.Service(qpcTimeStamp);
@@ -930,6 +999,113 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             count += messageStreamToolTrackerArray.Sum(mstt => InnerServiceStream(qpcTimeStamp, mstt));
 
             NoteWorkCount(count);
+
+            EventAndPerformanceRecording.Service(qpcTimeStamp);
+
+            if (serviceConnStateUpdates)
+            {
+                ConnState nextConnState = BaseState.ConnState;
+                string nextConnStateReason = null;
+                bool updateBaseStateReason = true;
+
+                switch (BaseState.UseState)
+                {
+                    case UseState.Offline:
+                    case UseState.FailedToOffline:
+                    case UseState.Shutdown:
+                    case UseState.Stopped:
+                    case UseState.MainThreadFailed:
+                    case UseState.Initial:
+                    default:
+                        nextConnState = ConnState.Disconnected;
+                        nextConnStateReason = "Part UseState is {0}".CheckedFormat(BaseState.UseState);
+                        updateBaseStateReason = false;
+                        break;
+                    case UseState.Online:
+                    case UseState.OnlineBusy:
+                    case UseState.OnlineUninitialized:
+                    case UseState.OnlineFailure:
+                    case UseState.AttemptOnlineFailed:
+                        if (session != null)
+                        {
+                            Sessions.SessionState sessionState = session.State;
+                            var sessionStateAge = sessionState.TimeStamp.Age(qpcTimeStamp);
+                            var lastDeliveredKeepAliveBufferAge = qpcTimeStamp - session.lastDeliveredKeepAliveBufferTimeStamp;
+
+                            switch (sessionState.StateCode)
+                            {
+                                case Sessions.SessionStateCode.ClientSessionInitial:
+                                    break;
+
+                                case Sessions.SessionStateCode.RequestTransportConnect:
+                                case Sessions.SessionStateCode.RequestSessionOpen:
+                                    nextConnState = ConnState.Connecting;
+                                    nextConnStateReason = "Session is {0}".CheckedFormat(sessionState.StateCode);
+                                    break;
+
+                                case Sessions.SessionStateCode.Active:
+                                    nextConnState = ConnState.Connected;
+                                    nextConnStateReason = "Session is {0}".CheckedFormat(sessionState.StateCode);
+                                    break;
+
+                                case Sessions.SessionStateCode.Idle:
+                                    if (sessionStateAge < sessionConfig.ConnectionDegradedHoldoff || sessionConfig.ConnectionDegradedHoldoff.IsZero())
+                                    {
+                                        nextConnState = ConnState.Connected;
+                                        nextConnStateReason = "Session is {0}".CheckedFormat(sessionState.StateCode);
+                                    }
+                                    else if (!sessionConfig.NominalKeepAliveSendInterval.IsZero() && lastDeliveredKeepAliveBufferAge >= sessionConfig.NominalKeepAliveSendInterval && lastDeliveredKeepAliveBufferAge > sessionConfig.ConnectionDegradedHoldoff)
+                                    {
+                                        nextConnState = ConnState.ConnectionDegraded;
+                                        nextConnStateReason = "Session is {0} (keepalive is degraded)".CheckedFormat(sessionState.StateCode);
+                                    }
+                                    else
+                                    {
+                                        nextConnState = ConnState.Connected;
+                                        nextConnStateReason = "Session is {0}".CheckedFormat(sessionState.StateCode);
+                                    }
+                                    break;
+
+                                case Sessions.SessionStateCode.IdleWithPendingWork:
+                                    if (sessionStateAge >= sessionConfig.ConnectionDegradedHoldoff && !sessionConfig.ConnectionDegradedHoldoff.IsZero())
+                                    {
+                                        nextConnState = ConnState.ConnectionDegraded;
+                                        nextConnStateReason = "Session is {0}".CheckedFormat(sessionState.StateCode);
+                                    }
+                                    break;
+
+                                case Sessions.SessionStateCode.CloseRequested:
+                                case Sessions.SessionStateCode.ConnectionClosed:
+                                    nextConnState = ConnState.Disconnected;
+                                    nextConnStateReason = "Session is {0}".CheckedFormat(sessionState.StateCode);
+                                    break;
+
+                                case Sessions.SessionStateCode.Terminated:
+                                    nextConnState = ConnState.ConnectionFailed;
+                                    nextConnStateReason = "Session is {0}".CheckedFormat(sessionState);
+                                    break;
+
+                                default:
+                                    nextConnState = ConnState.ConnectionFailed;
+                                    nextConnStateReason = "Session is {0}".CheckedFormat(sessionState.StateCode);
+                                    break;
+                            }
+                        }
+                        else
+                        {
+                            nextConnState = ConnState.ConnectionFailed;
+                            nextConnStateReason = "Part UseState is {0} with no defined session".CheckedFormat(BaseState.UseState);
+                            updateBaseStateReason = false;
+                        }
+
+                        break;
+                }
+
+                if ((nextConnState != BaseState.ConnState && nextConnStateReason != null) || (updateBaseStateReason && nextConnStateReason != BaseState.Reason))
+                {
+                    SetBaseState(nextConnState, nextConnStateReason, updateBaseStateReason: updateBaseStateReason);
+                }
+            }
         }
 
         private MessageStreamTools.IMessageStreamTool CreateStreamTool(int stream, MessageStreamTools.MessageStreamToolConfigBase messageStreamToolConfig)
@@ -1053,6 +1229,297 @@ namespace MosaicLib.Modular.Interconnect.Remoting
         }
 
         #endregion
+    }
+
+    public interface IEventAndPerformanceRecording : IServiceable
+    {
+        void RecordReceived(params Buffers.Buffer[] bufferParamsArray);
+        void RecordReceived(Messages.Message message);
+        void RecordReceived(ManagementType managementType);
+
+        void RecordSent(params Buffers.Buffer [] bufferParamsArray);
+        void RecordSending(ManagementType managementType);
+        void RecordDelivered(Messages.Message message);
+        void RecordDelivered(Buffers.Buffer buffer);
+
+        void RecordEvent(RecordEventType eventType, int count = 1);
+    }
+
+    public enum RecordEventType : int
+    {
+        None = 0,
+        UnexpectedNonManagementBuffersGivenToSessionManager,
+        BufferReceivedOutOfOrder,
+        OldBufferReceivedOutOfOrder,
+        OldResentBufferRecieved,
+        TransportException,
+        TransportExceptionClosedSession,
+    }
+
+    public class EventAndPerformanceRecording : IEventAndPerformanceRecording
+    {
+        public EventAndPerformanceRecording(string hostPartID, IValuesInterconnection ivi)
+        {
+            IVI = ivi ?? Values.Values.Instance;
+
+            lastSendSampleIVA = IVI.GetValueAccessor<INamedValueSet>(hostPartID + ".Send.LastSample").Set(NamedValueSet.Empty);
+            recentSendRatesIVA = IVI.GetValueAccessor<INamedValueSet>(hostPartID + ".SendRates.Recent").Set(NamedValueSet.Empty);
+            avgSendRatesIVA = IVI.GetValueAccessor<INamedValueSet>(hostPartID + ".SendRates.Avg").Set(NamedValueSet.Empty);
+            totalSentIVA = IVI.GetValueAccessor<INamedValueSet>(hostPartID + ".Sent.Total").Set(NamedValueSet.Empty);
+
+            lastReceiveSampleIVA = IVI.GetValueAccessor<INamedValueSet>(hostPartID + ".Receive.LastSample").Set(NamedValueSet.Empty);
+            recentReceiveRatesIVA = IVI.GetValueAccessor<INamedValueSet>(hostPartID + ".ReceiveRates.Recent").Set(NamedValueSet.Empty);
+            avgReceiveRatesIVA = IVI.GetValueAccessor<INamedValueSet>(hostPartID + ".ReceiveRates.Avg").Set(NamedValueSet.Empty);
+            totalReceivedIVA = IVI.GetValueAccessor<INamedValueSet>(hostPartID + ".Received.Total").Set(NamedValueSet.Empty);
+
+            counterValuesIVA = IVI.GetValueAccessor<INamedValueSet>(hostPartID + ".Counters").Set(NamedValueSet.Empty);
+
+            rateCounterSetNVSA = new NamedValueSetAdapter<RateCounterSet>() { ItemAccess = Reflection.Attributes.ItemAccess.GetOnly }.Setup();
+            counterValuesNVSA = new NamedValueSetAdapter<CounterValues>() { ItemAccess = Reflection.Attributes.ItemAccess.GetOnly }.Setup();
+
+            ivaArray = new[] { lastSendSampleIVA, recentSendRatesIVA, avgSendRatesIVA, totalSentIVA, lastReceiveSampleIVA, recentReceiveRatesIVA, avgReceiveRatesIVA, totalReceivedIVA, counterValuesIVA };
+        }
+
+        IValuesInterconnection IVI { get; set; }
+
+        const int shortHistoryLength = 5;  // 5 seconds
+        const int fullHistoryLength = 30;   // 30 seconds
+        MovingAverageTool<RateCounterSet> avgSendRateCounterSetTool = new MovingAverageTool<RateCounterSet>(nominalUpdateInterval: (1.0).FromSeconds(), maxAveragingHistoryLength: fullHistoryLength) { AutoService = false };
+        MovingAverageTool<RateCounterSet> avgReceiveRateCounterSetTool = new MovingAverageTool<RateCounterSet>(nominalUpdateInterval: (1.0).FromSeconds(), maxAveragingHistoryLength: fullHistoryLength) { AutoService = false };
+
+        IValueAccessor<INamedValueSet> lastSendSampleIVA, recentSendRatesIVA, avgSendRatesIVA, totalSentIVA;
+        IValueAccessor<INamedValueSet> lastReceiveSampleIVA, recentReceiveRatesIVA, avgReceiveRatesIVA, totalReceivedIVA;
+        NamedValueSetAdapter<RateCounterSet> rateCounterSetNVSA;
+        
+        CounterValues counterValues = new CounterValues();
+
+        IValueAccessor<INamedValueSet> counterValuesIVA;
+        NamedValueSetAdapter<CounterValues> counterValuesNVSA;
+
+        IValueAccessor[] ivaArray;
+
+        public class CounterValues
+        {
+            [NamedValueSetItem]
+            public ulong ResentBuffersTx;
+
+            [NamedValueSetItem]
+            public ulong ResentBuffersRx;
+
+            [NamedValueSetItem]
+            public ulong BuffersRcvdOutOfOrder;
+
+            [NamedValueSetItem]
+            public ulong KeepAliveBuffersTx;
+
+            [NamedValueSetItem]
+            public ulong StatusBuffersTx;
+
+            [NamedValueSetItem]
+            public ulong OtherMgmtBuffersTx;
+
+            [NamedValueSetItem]
+            public ulong OtherUnexpected;
+
+            // [NamedValueSetItem]
+            public ulong TransportExceptions;
+
+            // [NamedValueSetItem]
+            public ulong TransportExceptionClosedSessions;
+
+            // [NamedValueSetItem]
+            public ulong NonMgmtBuffersToSessionMgr;
+        }
+
+        public int Service(QpcTimeStamp qpcTimeStamp)
+        {
+            avgSendRateCounterSetTool.Service(qpcTimeStamp);
+
+            int count = 0;
+
+            if (avgSendRateCounterSetTool.HasNewAvg)
+            {
+                count++;
+
+                avgReceiveRateCounterSetTool.AddRecordedValuesToHistory(qpcTimeStamp);
+
+                lastSendSampleIVA.Value = rateCounterSetNVSA.Get(avgSendRateCounterSetTool.GetAvg(1), asReadOnly: true);
+                recentSendRatesIVA.Value = rateCounterSetNVSA.Get(avgSendRateCounterSetTool.GetAvg(shortHistoryLength), asReadOnly: true);
+                avgSendRatesIVA.Value = rateCounterSetNVSA.Get(avgSendRateCounterSetTool.GetAvg(), asReadOnly: true);
+                totalSentIVA.Value = rateCounterSetNVSA.Get(avgSendRateCounterSetTool.Totalizer.ComputeAverage(1), asReadOnly: true);
+
+                lastReceiveSampleIVA.Value = rateCounterSetNVSA.Get(avgReceiveRateCounterSetTool.GetAvg(1), asReadOnly: true);
+                recentReceiveRatesIVA.Value = rateCounterSetNVSA.Get(avgReceiveRateCounterSetTool.GetAvg(shortHistoryLength), asReadOnly: true);
+                avgReceiveRatesIVA.Value = rateCounterSetNVSA.Get(avgReceiveRateCounterSetTool.GetAvg(), asReadOnly: true);
+                totalReceivedIVA.Value = rateCounterSetNVSA.Get(avgReceiveRateCounterSetTool.Totalizer.ComputeAverage(1), asReadOnly: true);
+
+                counterValuesIVA.Value = counterValuesNVSA.Get(counterValues, asReadOnly: true);
+
+                IVI.Set(ivaArray);
+            }
+
+            return count;
+        }
+
+        public void RecordReceived(params Buffers.Buffer[] bufferParamsArray)
+        {
+            RateCounterSet tcs = new RateCounterSet();
+
+            foreach (var buffer in bufferParamsArray)
+            {
+                if (buffer == null)
+                    continue;
+
+                tcs.Buffers++;
+                tcs.Bytes += buffer.byteCount;
+
+                if (buffer.PurposeCode == PurposeCode.Ack)
+                    tcs.Acks++;
+
+                if ((buffer.Flags & BufferHeaderFlags.BufferIsBeingResent) != 0)
+                    counterValues.ResentBuffersRx++;
+            }
+
+            avgReceiveRateCounterSetTool.RecordValues(tcs);
+        }
+
+        public void RecordReceived(Messages.Message message)
+        {
+            avgReceiveRateCounterSetTool.RecordValues(new RateCounterSet() { Messages = 1 });
+        }
+
+        public void RecordReceived(ManagementType managementType)
+        {
+            //switch (managementType)
+            //{
+            //    case ManagementType.KeepAlive: counterValues.KeepAliveBuffersTx++; break;
+            //    case ManagementType.Status: counterValues.StatusBuffersTx++; break;
+            //    default: counterValues.OtherMgmtBuffersRx++; break;
+            //}
+        }
+
+        public void RecordSent(params Buffers.Buffer[] bufferParamsArray)
+        {
+            RateCounterSet tcs = new RateCounterSet();
+
+            foreach (var buffer in bufferParamsArray)
+            {
+                if (buffer == null)
+                    continue;
+
+                if (buffer.SeqNum == 0)     // only record buffers with no sequence number in the outbound byte and buffer counts.  Wait for delivery for the rest.
+                {
+                    tcs.Buffers++;
+                    tcs.Bytes += buffer.byteCount;
+                }
+
+                if (buffer.PurposeCode == PurposeCode.Ack)
+                    tcs.Acks++;
+
+                if ((buffer.Flags & BufferHeaderFlags.BufferIsBeingResent) != 0)
+                    counterValues.ResentBuffersTx++;
+            }
+
+            avgSendRateCounterSetTool.RecordValues(tcs);
+        }
+
+        public void RecordSending(ManagementType managementType)
+        {
+            switch (managementType)
+            {
+                case ManagementType.KeepAlive: counterValues.KeepAliveBuffersTx++; break;
+                case ManagementType.Status: counterValues.StatusBuffersTx++; break;
+                default: counterValues.OtherMgmtBuffersTx++; break;
+            }
+        }
+
+        public void RecordDelivered(Messages.Message message)
+        {
+            avgSendRateCounterSetTool.RecordValues(new RateCounterSet() { Messages = 1, MesgDelay = message.SendPostedTimeStamp.Age.TotalSeconds });
+        }
+
+        public void RecordDelivered(Buffers.Buffer buffer)
+        {
+            avgSendRateCounterSetTool.RecordValues(new RateCounterSet() { Buffers = 1, Bytes = buffer.byteCount, BufDelay = buffer.SendPostedTimeStamp.Age.TotalSeconds });
+        }
+
+        public void RecordEvent(RecordEventType eventType, int count = 1)
+        {
+            switch (eventType)
+            {
+                case RecordEventType.UnexpectedNonManagementBuffersGivenToSessionManager: counterValues.OtherUnexpected++; counterValues.NonMgmtBuffersToSessionMgr++; break;
+                case RecordEventType.BufferReceivedOutOfOrder: counterValues.BuffersRcvdOutOfOrder++; break;
+                case RecordEventType.OldBufferReceivedOutOfOrder: counterValues.OtherUnexpected++; break;
+                case RecordEventType.OldResentBufferRecieved: counterValues.ResentBuffersRx++; break;
+                case RecordEventType.TransportException: counterValues.OtherUnexpected++; counterValues.TransportExceptions++; break;
+                case RecordEventType.TransportExceptionClosedSession: counterValues.OtherUnexpected++; counterValues.TransportExceptionClosedSessions++; break;
+                default: break;
+            }
+        }
+    }
+
+    public class RateCounterSet : IRequiredMovingAverageValuesOperations<RateCounterSet>
+    {
+        [NamedValueSetItem]
+        public double Bytes;
+
+        [NamedValueSetItem]
+        public double Buffers;
+
+        [NamedValueSetItem]
+        public double Messages;
+
+        [NamedValueSetItem]
+        public double Acks;
+
+        [NamedValueSetItem]
+        public double BufDelay;
+
+        [NamedValueSetItem]
+        public double MesgDelay;
+
+        [NamedValueSetItem]
+        public int Samples;
+
+        /// <summary>
+        /// The moving average tool calls
+        /// </summary>
+        public RateCounterSet Add(RateCounterSet other)
+        {
+            Bytes += other.Bytes;
+            Buffers += other.Buffers;
+            Messages += other.Messages;
+            Acks += other.Acks;
+            BufDelay += other.BufDelay;
+            MesgDelay += other.MesgDelay;
+            Samples += Math.Max(1, other.Samples);
+
+            return this;
+        }
+
+        public RateCounterSet ComputeAverage(int sampleCount)
+        {
+            var oneOverSampleCount = ((double)sampleCount).SafeOneOver();
+
+            // BufDelay and MesgDelay are divided by 
+            double entryBuffers = Buffers;
+            double entryMessages = Messages;
+
+            Bytes = Math.Round(Bytes * oneOverSampleCount, 0);
+            Buffers = Math.Round(Buffers * oneOverSampleCount, 2);
+            Messages = Math.Round(Messages * oneOverSampleCount, 2);
+            Acks = Math.Round(Acks * oneOverSampleCount, 2);
+
+            BufDelay = Math.Round(BufDelay * entryBuffers.SafeOneOver(), 3);
+            MesgDelay = Math.Round(MesgDelay * entryMessages.SafeOneOver(), 3);
+
+            return this;
+        }
+
+        public RateCounterSet MakeCopyOfThis(bool deepCopy = true)
+        {
+            return (RateCounterSet) this.MemberwiseClone();
+        }
     }
 }
 

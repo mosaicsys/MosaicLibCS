@@ -545,7 +545,7 @@ namespace MosaicLib.SerialIO.Modbus
         //--------------------------------------------------------------------------
         #region FCInfo - Function Code docoder and helper object
 
-        ///<summary>Gives decoded useage information about a given Modbus function code.</summary>
+        ///<summary>Gives decoded usage information about a given Modbus function code.</summary>
         public struct FCInfo
         {
             /// <summary>Gives the constructed function code</summary>

@@ -55,6 +55,7 @@ namespace MosaicLib.WPF.Controls
         public static readonly DependencyProperty BorderWidthProperty = DependencyProperty.Register("BorderWidth", typeof(double), typeof(PartBaseStateLED), new PropertyMetadata(0.0, HandleBorderWidthPropertyChanged));
         public static new readonly DependencyProperty BorderThicknessProperty = DependencyProperty.Register("BorderThickness", typeof(Thickness), typeof(PartBaseStateLED), new PropertyMetadata(new Thickness(0), HandleBorderThicknessPropertyChanged));
         public static readonly DependencyProperty ColorListProperty = DependencyProperty.Register("ColorList", typeof(string), typeof(PartBaseStateLED), new PropertyMetadata(defaultColorListString, HandleColorListPropertyChanged));
+        public static new readonly DependencyProperty ToolTipProperty = DependencyProperty.Register("ToolTip", typeof(object), typeof(PartBaseStateLED), new PropertyMetadata(null, HandleToolTipPropertyChanged));
 
         public IBaseState PartBaseState { get { return (IBaseState)GetValue(PartBaseStateProperty); } set { SetValue(PartBaseStateProperty, value); } }
         public IActionInfo ActionInfo { get { return (IActionInfo)GetValue(ActionInfoProperty); } set { SetValue(ActionInfoProperty, value); } }
@@ -63,6 +64,7 @@ namespace MosaicLib.WPF.Controls
         public double BorderWidth { get { return (double)GetValue(BorderWidthProperty); } set { SetValue(BorderWidthProperty, value); } }
         public new Thickness BorderThickness { get { return (Thickness)GetValue(BorderThicknessProperty); } set { SetValue(BorderThicknessProperty, value); } }
         public string ColorList { get { return (string)GetValue(ColorListProperty); } set { SetValue(ColorListProperty, value); } }
+        public new object ToolTip { get { return GetValue(ToolTipProperty); } set { SetValue(ToolTipProperty, value); } }
 
         private RadialGradientBrush ellipseRGB = null;
         private GradientStop ellipseRGB_GS1 = null;
@@ -144,6 +146,28 @@ namespace MosaicLib.WPF.Controls
             }
         }
 
+        private static void HandleToolTipPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            var me = d as PartBaseStateLED;
+
+            if (me != null)
+            {
+                if (me.locallySettingToolTip)
+                {
+                    // locally assigned tool tip values are not handled here.
+                }
+                else
+                {
+                    if (!me.externallyProvidedToolTipIsActive)
+                        me.externallyProvidedToolTipIsActive = true;    // suppress locally assigned values from this point on
+
+                    me.ellipse.ToolTip = e.NewValue;
+                }
+            }
+        }
+
+        private bool externallyProvidedToolTipIsActive = false;
+        private bool locallySettingToolTip = false;
 
         private void Update()
         {
@@ -163,9 +187,9 @@ namespace MosaicLib.WPF.Controls
                 color = colors.offlineColor;
             else if (lastPartBaseState.UseState == UseState.AttemptOnline || (connectionStateIsApplicable && lastPartBaseState.IsConnecting))
                 color = colors.initializingColor;
-            else if (connectionStateIsApplicable && !lastPartBaseState.IsConnected)
+            else if (connectionStateIsApplicable && !lastPartBaseState.ConnState.IsConnected(acceptConnectionDegraded: true))
                 color = colors.disconnectedColor;
-            else if (lastPartBaseState.IsOnline || (connectionStateIsApplicable && lastPartBaseState.IsConnected))
+            else if (lastPartBaseState.IsOnline || (connectionStateIsApplicable && lastPartBaseState.ConnState.IsConnected(acceptConnectionDegraded: true)))
             {
                 if (lastPartBaseState.IsBusy)
                 {
@@ -182,6 +206,11 @@ namespace MosaicLib.WPF.Controls
                     color = colors.idleColor;
                     toolTipMesg = (lastActionInfo != null) ? "Idle, {0}".CheckedFormat(lastActionInfo) : "Idle";
                 }
+
+                if (connectionStateIsApplicable && lastPartBaseState.ConnState == ConnState.ConnectionDegraded)
+                {
+                    color = colors.connectionDegradedColor;
+                }
             }
             else
             {
@@ -190,11 +219,15 @@ namespace MosaicLib.WPF.Controls
 
             UpdateAndSetColor(color);
 
-            if (ellipse != null)
+            if (!externallyProvidedToolTipIsActive && ellipse != null && toolTipMesg != lastToolTipMesg)
             {
-                ellipse.ToolTip = toolTipMesg;
+                locallySettingToolTip = true;
+                ToolTip = ellipse.ToolTip = (lastToolTipMesg = toolTipMesg);
+                locallySettingToolTip = false;
             }
         }
+
+        private string lastToolTipMesg = null;
 
         private void UpdateAndSetColor(Color currentColor)
         {
@@ -219,7 +252,7 @@ namespace MosaicLib.WPF.Controls
         private static readonly Color blackColor = (Color)colorConverter.ConvertFrom("Black");
         private static readonly Brush solidBlackBrush = new SolidColorBrush(blackColor);
 
-        private const string defaultColorListString = "LightGray,Goldenrod,Gold,DarkGreen,Lime,Red,DarkGray,DarkRed,Pink,Orange";
+        private const string defaultColorListString = "LightGray,Goldenrod,Gold,DarkGreen,Lime,Red,DarkGray,DarkRed,Pink,DarkOrange,Orange";
         private static readonly string[] defaultColorListStringArray = defaultColorListString.Split(',');
         private static readonly Color[] defaultColorsArray = defaultColorListStringArray.Select(colorName => (Color)colorConverter.ConvertFrom(colorName)).ToArray();
         private static readonly Colors defaultColors = new Colors(defaultColorListString);
@@ -258,6 +291,7 @@ namespace MosaicLib.WPF.Controls
                 disconnectedColor = colorsArray.SafeAccess(stateIndex++, defaultFallbackColor);
                 undefinedStateColor = colorsArray.SafeAccess(stateIndex++, defaultFallbackColor);
                 actionFailedColor = colorsArray.SafeAccess(stateIndex++, defaultFallbackColor);
+                connectionDegradedColor = colorsArray.SafeAccess(stateIndex++, defaultFallbackColor);
             }
 
             public string colorListString;
@@ -273,6 +307,7 @@ namespace MosaicLib.WPF.Controls
             public Color disconnectedColor;
             public Color undefinedStateColor;
             public Color actionFailedColor;
+            public Color connectionDegradedColor;
         }
     }
 }

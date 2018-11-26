@@ -149,7 +149,7 @@ namespace MosaicLib.Modular.Action
         /// <summary>Standard constructor for creating a reference ActionLogging object (from which others are created)</summary>
         public ActionLogging(Logging.IBasicLogger logger, ActionLoggingConfig config)
 		{
-            this.mesg = String.Empty;
+            Mesg = String.Empty;
             MesgDetail = String.Empty;
             this.logger = logger;
             this.config = config;
@@ -159,7 +159,7 @@ namespace MosaicLib.Modular.Action
         /// <summary>Common constructor used by other public ones.</summary>
         protected ActionLogging(string mesg, string mesgDetails, Logging.IBasicLogger logger, ActionLoggingConfig config, Logging.IMesgEmitter doneEmitter, Logging.IMesgEmitter errorEmitter, Logging.IMesgEmitter stateEmitter, Logging.IMesgEmitter updateEmitter)
         {
-            this.mesg = mesg;
+            Mesg = mesg;
             MesgDetail = mesgDetails;
             this.logger = logger;
             this.config = config;
@@ -177,10 +177,10 @@ namespace MosaicLib.Modular.Action
         volatile Logging.IMesgEmitter doneEmitter, errorEmitter, stateEmitter, updateEmitter;
 
         /// <summary>Typically used to give the name of the Action</summary>
-        public string Mesg { get { return mesg; } set { mesg = value; } }
+        public string Mesg { get { return mesg; } set { mesg = value.MapNullToEmpty(); } }
 
         /// <summary>Typically updated to contain the string version of the ParamValue or other per instance details for a specific Action instance.</summary>
-        public string MesgDetail { get { return mesgDetail; } set { mesgDetail = value; eMesgDetail = mesgDetail.GenerateEscapedVersion(); } }
+        public string MesgDetail { get { return mesgDetail; } set { mesgDetail = value.MapNullToEmpty(); eMesgDetail = mesgDetail.GenerateEscapedVersion(); } }
 
         /// <summary>Gives the, optinal, Logging.IBasicLogger that shall be used as the base for the Emitters according to the corresponding Config values.  When set to null the Emitters are explicitly set to the Logging.NullEmitter.</summary>
         public Logging.IBasicLogger Logger { get { return logger; } set { logger = value; UpdateEmitters(); } }
@@ -863,7 +863,8 @@ namespace MosaicLib.Modular.Action
         /// <param name="logging">Provides the ActionLogging information that is used to define and customize the logging for this Action.</param>
         /// <param name="mesg">When this is non-null it will be used to replace the given logging instance's Mesg with a new instance constructed using the given message</param>
         /// <param name="mesgDetails">When this is non-null and if the mesg is non-null it will be used to replace the given logging instance's MesgDetail with a new instance constructed using the given message details</param>
-        public ActionImplBase(ActionQueue actionQ, ActionMethodDelegateStrResult method, ActionLogging logging, string mesg = null, string mesgDetails = null) 
+        /// <param name="doNotCloneLogging">When this parameter is false, the given logging object will be treated as a reference copy and a clone will be made of it, otherwise the given instance will be used verbatim</param>
+        public ActionImplBase(ActionQueue actionQ, ActionMethodDelegateStrResult method, ActionLogging logging, string mesg = null, string mesgDetails = null, bool doNotCloneLogging = false) 
 			: this(actionQ, null, false
 					, delegate(IProviderActionBase<ParamType, ResultType> action, out string resultCode) 
 							{ 
@@ -871,7 +872,7 @@ namespace MosaicLib.Modular.Action
 								if (resultCode == null) 
 									resultCode = string.Empty; 
 							}
-                    , logging, mesg, mesgDetails) 
+                    , logging, mesg, mesgDetails, doNotCloneLogging) 
 		{}
 
         /// <summary>Constructor for use with more complete action method delegate: ActionMethodDelegateActionArgStrResult{ParamType, ResultType}.  Uses adapter delegate to become a FullActionMethodDelegate{ParamType, ResultType}</summary>
@@ -882,13 +883,14 @@ namespace MosaicLib.Modular.Action
         /// <param name="logging">Provides the ActionLogging information that is used to define and customize the logging for this Action.</param>
         /// <param name="mesg">When this is non-null it will be used to replace the given logging instance's Mesg with a new instance constructed using the given message</param>
         /// <param name="mesgDetails">When this is non-null and if the mesg is non-null it will be used to replace the given logging instance's MesgDetail with a new instance constructed using the given message details</param>
-        public ActionImplBase(ActionQueue actionQ, object paramValueObj, bool paramValueIsFixed, ActionMethodDelegateActionArgStrResult<ParamType, ResultType> method, ActionLogging logging, string mesg = null, string mesgDetails = null)
+        /// <param name="doNotCloneLogging">When this parameter is false, the given logging object will be treated as a reference copy and a clone will be made of it, otherwise the given instance will be used verbatim</param>
+        public ActionImplBase(ActionQueue actionQ, object paramValueObj, bool paramValueIsFixed, ActionMethodDelegateActionArgStrResult<ParamType, ResultType> method, ActionLogging logging, string mesg = null, string mesgDetails = null, bool doNotCloneLogging = false)
 			: this(actionQ, paramValueObj, paramValueIsFixed
 					, delegate(IProviderActionBase<ParamType, ResultType> action, out string resultCode) 
 							{ 
 								resultCode = method(action); 
 							}
-					, logging, mesg, mesgDetails) 
+                    , logging, mesg, mesgDetails, doNotCloneLogging) 
 		{}
 
         /// <summary>Constructor for use with full action method delegate: FullActionMethodDelegate{ParamType, ResultType}.</summary>
@@ -896,17 +898,26 @@ namespace MosaicLib.Modular.Action
         /// <param name="paramValueObj">Gives the initial value that is to be assigned to the Action's ParamValue, or null if no value is to be so assigned.</param>
         /// <param name="paramValueIsFixed">Set to true if the Action's ParamValue cannot be changed after the Action has been created.</param>
         /// <param name="method">Defines the client provided delegate that will be invoked when the Action transitions to the ActionStateCode.Issued state.</param>
-        /// <param name="logging">Provides the ActionLogging information that is used to define and customize the logging for this Action.</param>
+        /// <param name="loggingIn">Provides the ActionLogging information that is used to define and customize the logging for this Action.</param>
         /// <param name="mesg">When this is non-null it will be used to replace the given logging instance's Mesg with a new instance constructed using the given message</param>
         /// <param name="mesgDetails">When this is non-null and if the mesg is non-null it will be used to replace the given logging instance's MesgDetail with a new instance constructed using the given message details</param>
-        public ActionImplBase(ActionQueue actionQ, object paramValueObj, bool paramValueIsFixed, FullActionMethodDelegate<ParamType, ResultType> method, ActionLogging logging, string mesg = null, string mesgDetails = null)
+        /// <param name="doNotCloneLogging">When this parameter is false, the given logging object will be treated as a reference copy and a clone will be made of it, otherwise the given instance will be used verbatim</param>
+        public ActionImplBase(ActionQueue actionQ, object paramValueObj, bool paramValueIsFixed, FullActionMethodDelegate<ParamType, ResultType> method, ActionLogging loggingIn, string mesg = null, string mesgDetails = null, bool doNotCloneLogging = false)
 		{
 			this.actionQ = actionQ;
 			this.method = method;
-            if (mesg == null)
-                this.logging = logging;
-            else
-                this.logging = new ActionLogging(mesg, mesgDetails.MapNullToEmpty(), logging);
+
+            var cloneLogging = !doNotCloneLogging;
+
+            var logging = cloneLogging ? new ActionLogging(loggingIn) : loggingIn;
+
+            this.logging = logging;
+
+            if (mesg != null || mesgDetails != null)
+            {
+                logging.Mesg = mesg;
+                logging.MesgDetail = mesgDetails;
+            }
 
 			string ec = null;
 			if (paramValueObj != null)
@@ -919,9 +930,9 @@ namespace MosaicLib.Modular.Action
 
 			this.paramValueIsFixed = paramValueIsFixed;
 
-			actionState.SetStateReady(logging);
+            actionState.SetStateReady(logging);
 			if (ec != null)
-				actionState.SetStateComplete(ec, logging);
+                actionState.SetStateComplete(ec, logging);
 
             NoteActionStateUpdated();
         }

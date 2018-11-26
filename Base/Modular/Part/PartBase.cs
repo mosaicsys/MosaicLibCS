@@ -41,7 +41,7 @@ namespace MosaicLib.Modular.Part
     /// Generic summary state for current usability of a part
     /// <para/>This enum provides a set of state codes that are helpfull in determining if a Part is usable and if not, then why, particularly whether the part is online or not.
     /// All Parts support a UseState but they may only use the specific subset of the defined state codes that are relevant for that part and its capabilities.
-    /// <para/>Undefined (0), Initial, AttemptOnline, OnlineUninitialized, Online, OnlineBusy, OnlineFailure, Offline, AttemptOnlineFailed, FailedToOffline, Shutdown
+    /// <para/>Undefined (0), Initial (1), AttemptOnline (2), OnlineUninitialized (3), Online (4), OnlineBusy (5), OnlineFailure (6), Offline (7), AttemptOnlineFailed (8), FailedToOffline (9), Shutdown (10), MainThreadFailed (11), Stopped (12)
     /// </summary>
     [DataContract(Namespace=Constants.ModularNameSpace)]
 	public enum UseState
@@ -91,21 +91,25 @@ namespace MosaicLib.Modular.Part
         [EnumMember]
         FailedToOffline = 9,
 
-        /// <summary>part has been shutdown prior to application exit. (10)</summary>
+        /// <summary>part has been shutdown prior to application exit.  Note: this state is not currently used by any SimpleActivePartBase related logic.  It is currently reserved for use by derived types. (10)</summary>
         [EnumMember]
         Shutdown = 10,
 
         /// <summary>The main thread exception handler recorded that the main thread has ended because of an unhandled exception. (11)</summary>
         [EnumMember]
         MainThreadFailed = 11,
-	}
+
+        /// <summary>The part was asked to stop and the main thread completed normally (see SimpleActivePartBehaviorOptions.MainThreadStopSetsStateToStoppedYYY related behavior options). (12)</summary>
+        [EnumMember]
+        Stopped = 12,
+    }
 
 	/// <summary>
     /// Generic summary state for current connection state of part for parts that support a single connection.
     /// <para/>This enum defines a set of state codes that are helpfull in determining if a Part is connected to some related entity (or not), especially when the Part
     /// either implements the connection itself or depends on such a connection for it correct operation.  All parts support a ConnState but they may only use a 
     /// specific subset of the defined state codes that are relevant for that part and its specific operation.
-    /// <para/>Undefined (0), Initial, NotApplicable, Connecting, ConnectionFailed, ConnectFailed, Disconnected, DisconnectedByOtherEnd
+    /// <para/>Undefined (0), Initial (1), NotApplicable (2), Connecting (3), WaitingForConnect (4), Connected (5), ConnectionFailed (6), ConnectFailed (7), Disconnected (8), DisconnectedByOtherEnd (9), ConnectionDegraded (10)
     /// </summary>
     [DataContract(Namespace = Constants.ModularNameSpace)]
     public enum ConnState
@@ -149,6 +153,10 @@ namespace MosaicLib.Modular.Part
         /// <summary>Connection has been explicitly stopped by the other end (9)</summary>
         [EnumMember]
         DisconnectedByOtherEnd = 9,
+
+        /// <summary>Connection to remote device is believed to be available but may not be operating correctly (10)</summary>
+        [EnumMember]
+        ConnectionDegraded = 10,
     }
 
 	#endregion
@@ -198,20 +206,20 @@ namespace MosaicLib.Modular.Part
             return (connState == ConnState.Connecting || connState == ConnState.WaitingForConnect);
         }
 
-        /// <summary>Returns true if the given ConnState value is any of the connected states (Connected)</summary>
-        public static bool IsConnected(this ConnState connState)
+        /// <summary>Returns true if the given ConnState value is any of the connected states (Connected, and optionally ConnectionDegraded)</summary>
+        public static bool IsConnected(this ConnState connState, bool acceptConnectionDegraded = true)
         {
-            return (connState == ConnState.Connected);
+            return (connState == ConnState.Connected || (connState == ConnState.ConnectionDegraded && acceptConnectionDegraded));
         }
 
         /// <summary>Returns true if the given ConnState value is IsConnected or is IsConnecting</summary>
-        public static bool IsConnectedOrConnecting(this ConnState connState)
+        public static bool IsConnectedOrConnecting(this ConnState connState, bool acceptConnectionDegraded = true)
         {
-            return (IsConnected(connState) || IsConnecting(connState));
+            return (IsConnected(connState, acceptConnectionDegraded: acceptConnectionDegraded) || IsConnecting(connState));
         }
     }
 
-       #endregion
+    #endregion
 
     //-----------------------------------------------------------------
 	#region IBaseState, IPartBase interface(s)
@@ -252,10 +260,10 @@ namespace MosaicLib.Modular.Part
 		/// <summary>reports the timestamp at which the new contents or state object was generated.</summary>
 		QpcTimeStamp TimeStamp { get; }
 
-		/// <summary>summary property reports true if the UseState is in an Online state</summary>
-		bool IsOnline { get; }
+        /// <summary>summary property reports true if the UseState is in an Online state (Online, OnlineBusy, OnlineUninitialized, or OnlineFailure).  The value of this property is derived from the UseState.IsOnline Extension Method with default parameters.</summary>
+        bool IsOnline { get; }
 
-        /// <summary>summary property reports true if the UseState is in an Online or AttemptOnline states</summary>
+        /// <summary>summary property reports true if the UseState is in an Online or AttemptOnline states (Online, OnlineBusy, OnlineUninitialized, OnlineFailure, or AttemptOnline).  The value of this property is derived from the UseState.IsOnline Extension Method with default parameters.</summary>
         bool IsOnlineOrAttemptOnline { get; }
 
         /// <summary>summary property reports true if the UseState indicates that the device is busy.  Details of functionality depends on internal part behavior.</summary>
@@ -267,7 +275,7 @@ namespace MosaicLib.Modular.Part
         /// <summary>summary property reports true if the ConnState indicates that the part's connection (if any) is connected.</summary>
 		bool IsConnected { get; }
 
-        /// <summary>summary property reports true if the ConnState indicates that the part's connection is connected or is making a connection</summary>
+        /// <summary>summary property reports true if the ConnState indicates that the part's connection is IsConnected or IsConnecting</summary>
 		bool IsConnectedOrConnecting { get; }
 
         /// <summary>returns true if either the UseState or the ConnState are not at their Undefined value.  Typically this means that the part has not be started or that it has not generated its initial value.</summary>
@@ -330,19 +338,19 @@ namespace MosaicLib.Modular.Part
         }
 
         /// <summary>
-        /// Returns true if the given baseState is non-null and its UseState is Offline or Shutdown
+        /// Returns true if the given baseState is non-null and its UseState is Offline, Shutdown, or Stopped
         /// </summary>
         public static bool IsOffline(this IBaseState baseState)
         {
-            return (baseState != null && (baseState.UseState == UseState.Offline || baseState.UseState == UseState.Shutdown));
+            return (baseState != null && (baseState.UseState == UseState.Offline || baseState.UseState == UseState.Shutdown || baseState.UseState == UseState.Stopped));
         }
 
         /// <summary>
         /// Returns true if the given baseState is null or its UseState is any Failure/Failed state or its ConnState is any Failed state.
-        /// <para/>Includes UseStates: AttemptOnlineFailed, FailedToOffline, OnlineFailure
-        /// <para/>includes ConnStates: ConnectFailed, ConnectionFailed
+        /// <para/>Includes UseStates: AttemptOnlineFailed, FailedToOffline, OnlineFailure, MainThreadFailed
+        /// <para/>includes ConnStates: ConnectFailed, ConnectionFailed (only evaluated if <paramref name="includeConnState"/> is true)
         /// </summary>
-        public static bool IsFaulted(this IBaseState baseState)
+        public static bool IsFaulted(this IBaseState baseState, bool includeConnState = true)
         {
             if (baseState == null)
                 return true;
@@ -352,16 +360,20 @@ namespace MosaicLib.Modular.Part
                 case UseState.AttemptOnlineFailed:
                 case UseState.FailedToOffline:
                 case UseState.OnlineFailure:
+                case UseState.MainThreadFailed:
                     return true;
                 default:
                     break;
             }
 
-            switch (baseState.ConnState)
+            if (includeConnState)
             {
-                case ConnState.ConnectFailed:
-                case ConnState.ConnectionFailed:
-                    return true;
+                switch (baseState.ConnState)
+                {
+                    case ConnState.ConnectFailed:
+                    case ConnState.ConnectionFailed:
+                        return true;
+                }
             }
 
             return false;
@@ -633,10 +645,10 @@ namespace MosaicLib.Modular.Part
 
         private double age;
 
-        /// <summary>summary property reports true if the UseState is in an Online state</summary>
+        /// <summary>summary property reports true if the UseState is in an Online state (Online, OnlineBusy, OnlineUninitialized, or OnlineFailure).  The value of this property is derived from the UseState.IsOnline Extension Method with default parameters.</summary>
         public bool IsOnline { get { return UseState.IsOnline(); } }
 
-        /// <summary>summary property reports true if the UseState is in an Online or AttemptOnline states</summary>
+        /// <summary>summary property reports true if the UseState is in an Online or AttemptOnline states (Online, OnlineBusy, OnlineUninitialized, OnlineFailure, or AttemptOnline).  The value of this property is derived from the UseState.IsOnline Extension Method with default parameters.</summary>
         public bool IsOnlineOrAttemptOnline { get { return UseState.IsOnline(acceptAttemptOnline: true); } }
 
         /// <summary>summary property reports true if the UseState indicates that the device is busy.  Details of functionality depends on internal part behavior.</summary>
@@ -644,8 +656,10 @@ namespace MosaicLib.Modular.Part
 
         /// <summary>summary property reports true if the ConnState indicates that the part is in the process of making a connection.</summary>
         public bool IsConnecting { get { return ConnState.IsConnecting(); } }
-        /// <summary>summary property reports true if the ConnState indicates that the part's connection (if any) is connected.</summary>
-        public bool IsConnected { get { return ConnState.IsConnected(); } }
+
+        /// <summary>summary property reports true if the ConnState indicates that the part's connection (if any) is connected (Connected, ConnectionDegraded).</summary>
+        public bool IsConnected { get { return ConnState.IsConnected(acceptConnectionDegraded: true); } }
+
         /// <summary>summary property reports true if the ConnState indicates that the part's connection is connected or is making a connection</summary>
         public bool IsConnectedOrConnecting { get { return (ConnState.IsConnectedOrConnecting()); } }
 
@@ -827,15 +841,26 @@ namespace MosaicLib.Modular.Part
         [Flags]
         public enum ToStringSelect : int
         {
+            /// <summary>Placeholder default.  [0x00]</summary>
             None = 0x00,
+
+            /// <summary>Include the PartID.  [0x01]</summary>
             PartID = 0x01,
+            /// <summary>Include use:UseState [0x02]</summary>
             UseState = 0x02,
+            /// <summary>Include action:ActionName when busy.  [0x04]</summary>
             ActionName = 0x04,
+            /// <summary>Include conn:ConnState.  [0x08]</summary>
             ConnState = 0x08,
+            /// <summary>Include reason:[Reason] when reason is present.  [0x10]</summary>
             Reason = 0x10,
+            /// <summary>Include UseState (with no prefix).  [0x20]</summary>
             UseStateNoPrefix = 0x20,
 
+            /// <summary>(PartID | UseState | ActionName | ConnState | Reason) [0x1f]</summary>
             All = (PartID | UseState | ActionName | ConnState | Reason),
+
+            /// <summary>(UseStateNoPrefix | ActionName | ConnState | Reason) [0x3c]</summary>
             AllForPart = (UseStateNoPrefix | ActionName | ConnState | Reason),
         }
 
@@ -974,6 +999,21 @@ namespace MosaicLib.Modular.Part
                     SimplePartBaseBehavior = SimplePartBaseBehavior.All,
                 }; 
             } 
+        }
+
+        /// <summary>
+        /// returns te second non-constructor default SimpleParstBaseSettings value (established under MosaicLibCS 0.1.6.1):
+        /// <para/>SimplePartBaseBehavior = SimplePartBaseBehavior.All (TreatPartAsBusyWhenQueueIsNotEmpty | TreatPartAsBusyWhenInternalPartBusyCountIsNonZero),
+        /// </summary>
+        public static SimplePartBaseSettings DefaultVersion2
+        {
+            get
+            {
+                return new SimplePartBaseSettings()
+                {
+                    SimplePartBaseBehavior = SimplePartBaseBehavior.All,
+                };
+            }
         }
     }
 
@@ -1177,8 +1217,11 @@ namespace MosaicLib.Modular.Part
 
             BaseState baseStateCopy = PrivateBaseState;
 
-            bool pushPartToBusyState = (settings.CheckFlag(SimplePartBaseBehavior.TreatPartAsBusyWhenQueueIsNotEmpty) && !AreAllActionQueuesEmpty)
-                                     || (settings.CheckFlag(SimplePartBaseBehavior.TreatPartAsBusyWhenInternalPartBusyCountIsNonZero) && internalPartBusyCounter.VolatileValue != 0)
+            lastCapturedAreAllActionQueuesEmpty = AreAllActionQueuesEmpty;
+            lastCapturedInternalPartBusyCounter = internalPartBusyCounter.VolatileValue;
+
+            bool pushPartToBusyState = (settings.CheckFlag(SimplePartBaseBehavior.TreatPartAsBusyWhenQueueIsNotEmpty) && !lastCapturedAreAllActionQueuesEmpty)
+                                     || (settings.CheckFlag(SimplePartBaseBehavior.TreatPartAsBusyWhenInternalPartBusyCountIsNonZero) && lastCapturedInternalPartBusyCounter != 0)
                                      ;
 
             if (pushPartToBusyState && baseStateCopy.UseState == UseState.Online)      // map idle state to busy state
@@ -1229,6 +1272,40 @@ namespace MosaicLib.Modular.Part
             if (BaseStatePublishedNotificationList != null)
                 BaseStatePublishedNotificationList.Notify(publishState);
         }
+
+        /// <summary>field used by both PublishBaseState and ServiceBusyConditionChangeDetection to determine when the service method might need to call PublishBaseState again.</summary>
+        protected bool lastCapturedAreAllActionQueuesEmpty = true;
+
+        /// <summary>field used by both PublishBaseState and ServiceBusyConditionChangeDetection to determine when the service method might need to call PublishBaseState again.</summary>
+        protected uint lastCapturedInternalPartBusyCounter = 0;
+
+        /// <summary>
+        /// This method is called periodically, typically by the main service thread. 
+        /// This method looks at the values that are used to determine background busyness (currently only the AreAllActionQueuesEmpty) and calls PublishBaseState if
+        /// the root condition was changed and the corresponding SimplePartBaseBehavior is enabled.
+        /// <para/>Derived class code may also need to call this method periodically based on the client code usage pattern.
+        /// </summary>
+        protected virtual void ServiceBusyConditionChangeDetection()
+        {
+            if (PrivateBaseState.UseState == UseState.Online && settings.CheckFlag(SimplePartBaseBehavior.TreatPartAsBusyWhenQueueIsNotEmpty))
+            {
+                bool capturedAllActionQueuesAreEmpty = AreAllActionQueuesEmpty;
+
+                if (!capturedAllActionQueuesAreEmpty)
+                    ServiceActionQueueCancelRequests();
+
+                if (capturedAllActionQueuesAreEmpty && !lastCapturedAreAllActionQueuesEmpty && publishedBaseState.VolatileObject.UseState == UseState.OnlineBusy)
+                    PublishBaseState("Action queue(s) are now empty");
+                else if (!capturedAllActionQueuesAreEmpty && lastCapturedAreAllActionQueuesEmpty && settings.CheckFlag(SimplePartBaseBehavior.TreatPartAsBusyWhenQueueIsNotEmpty) && publishedBaseState.VolatileObject.UseState == UseState.Online)
+                    PublishBaseState("Action queue(s) are no longer empty");
+            }
+        }
+
+        /// <summary>
+        /// A derived class should override this method so that it can be used to service each of the ActionQueue instance for cancel requests when they are not empty
+        /// </summary>
+        protected virtual void ServiceActionQueueCancelRequests()
+        {}
 
         /// <summary>
         /// Local internalPartBusyCounter atomic counter.  This counter may be used by the part to automatically push the use state from Online(Idle) to OnlineBusy whenver this counter is non-zero.

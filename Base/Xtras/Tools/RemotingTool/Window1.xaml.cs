@@ -68,6 +68,7 @@ namespace RemotingTool
         private List<IActivePartBase> partsList = new List<IActivePartBase>();
 
         private IValuesInterconnection IVI { get; set; }
+        private IValuesInterconnection RemoteIVI { get; set; }
         private WPFValueInterconnectAdapter WVIA { get; set; }
 
         public class ConfigValues
@@ -79,11 +80,12 @@ namespace RemotingTool
                 IPAddress = "127.0.0.1";
                 TraceSelect = null;
                 IVITableName = string.Empty;
-                AutoReconnectHoldoff = (5.0).FromSeconds();
+                AutoReconnectHoldoff = (10.0).FromSeconds();
                 RemoteLogMessageSetName = "LogMessageHistory";
                 RemoteLogMessageSetCapacity = 5000;
                 RemoteLogMessageSetMaximumItemsPerMessage = 100;
                 BufferSize = MosaicLib.Modular.Interconnect.Remoting.Buffers.BufferPool.DefaultBufferSize;
+                SessionExpirationPeriod = (1.0).FromMinutes();
             }
 
             [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
@@ -115,6 +117,9 @@ namespace RemotingTool
 
             [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
             public int BufferSize { get; set; }
+
+            [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
+            public TimeSpan SessionExpirationPeriod { get; set; }
         }
 
         ConfigValues config = new ConfigValues();
@@ -127,12 +132,14 @@ namespace RemotingTool
 
             new ConfigValueSetAdapter<ConfigValues>(configInstance) { ValueSet = config, SetupIssueEmitter = Logger.Error, ValueNoteEmitter = Logger.Debug }.Setup();
 
-            InitializeComponent();
-
             System.Reflection.Assembly currentExecAssy = System.Reflection.Assembly.GetExecutingAssembly();
             Title = currentExecAssy.FullName.Split(' ').SafeAccess(0).Trim(',');
 
             IVI = Values.Instance;
+            RemoteIVI = new ValuesInterconnection("RemoteIVI");
+
+            InitializeComponent();
+
             WVIA = new WPFValueInterconnectAdapter(IVI);
 
             // Remoting part
@@ -148,13 +155,14 @@ namespace RemotingTool
                     { "Transport.TraceLogger.InitialInstanceLogGate", config.TraceSelect }, 
                     { "AutoReconnectHoldoff", config.AutoReconnectHoldoff },
                     { "BufferPool.BufferSize", config.BufferSize },
+                    { "SessionExpirationPeriod", config.SessionExpirationPeriod },
                 },
                 StreamToolsConfigArray = new MessageStreamToolConfigBase[] 
                 { 
                     new ActionRelayMessageStreamToolConfig(),
                     new IVIRelayMessageStreamToolConfig()
                     {
-                        ClientIVI = IVI,
+                        ClientIVI = RemoteIVI,
                         RemoteIVIName = config.IVITableName,
                         IVIRelayDirection = IVIRelayDirection.FromServer,
                         ResetClientSideIVAsOnCloseOrFailure = true,
@@ -188,6 +196,7 @@ namespace RemotingTool
             //Values.Instance.GetValueAccessor("Normal").Set("This is not a test");
 
             E039ObjectSetTracker = SetTracker.GetSetTracker("E039ObjectSet");
+            var test = e039ListView;
         }
 
         private DependencyPropertyKey E039ObjectSetTrackerPropertyKey = DependencyProperty.RegisterReadOnly("E039ObjectSetTracker", typeof(SetTracker), typeof(Window1), new PropertyMetadata(null));
@@ -275,6 +284,7 @@ namespace RemotingTool
             switch ((string)(b.Tag))
             {
                 case "GoOnline": remotingClient.CreateGoOnlineAction(andInitialize: false).Start(); break;
+                case "GoOnlineAndInitialize": remotingClient.CreateGoOnlineAction(andInitialize: true).Start(); break;
                 case "GoOffline": remotingClient.CreateGoOfflineAction().Start(); break;
                 case "Ping": remotingClient.CreateServiceAction("Remote $RemotingServicePing$").Start(); break;
                 default: remotingClient.CreateServiceAction((string)(b.Tag)).Start(); break;

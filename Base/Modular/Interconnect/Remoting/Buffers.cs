@@ -165,9 +165,6 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Buffers
         /// <summary>Indicates sender's desire to start a new session using the current transport connection.  Required keys: Type, Name, SessionUUID</summary>
         RequestOpenSession,
 
-        /// <summary>Indicates sender's desire to resume a previously open session using the current transport connection.  Required keys: Type, Name, SessionUUID, BufferSize</summary>
-        RequestResumeSession,
-
         /// <summary>Indicates sender's acceptance of a prior open or resume ression request.  Required keys: Type, Name, SessionUUID, BufferSize</summary>
         SessionRequestAcceptedResponse,
 
@@ -179,6 +176,9 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Buffers
 
         /// <summary>Status update focused management payload.  Required keys: Type, supported keys: HeldBufferSeqNums</summary>
         Status,
+
+        /// <summary>Buffer used periodically to keep the acknowledgement system active and to verify that the connection is live when there is no other normal message traffic.</summary>
+        KeepAlive,
     }
 
     public static partial class ExtensionMethods
@@ -213,18 +213,40 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Buffers
     /// </summary>
     public enum BufferState : int
     {
+        /// <summary>Placeholder default value [0]</summary>
         None = 0,
+
+        /// <summary>Initial state for a buffer that has been newly constructed.</summary>
         Created,
+
+        /// <summary>State reached after obtaining a previously used buffer from a buffer pool</summary>
         Acquired,
+
+        /// <summary>State reached after calling the Clear method on a buffer (typically as part of returning it to a buffer pool)</summary>
         Clear,
+
+        /// <summary>State reached after posting a receive request with this buffer as the target in which to place any/all received bytes.</summary>
         ReceivePosted,
+
+        /// <summary>State reached after completing a receive into a ReceivePosted buffer.</summary>
         Received,
-        Data,
+
+        /// <summary>State manually set after obtaining a buffer and populating its contents for tranmission.  </summary>
         ReadyToSend,
+
+        /// <summary>State reached by the transmitter engine if the no acknowedgement has been received for this buffer within a dynamically determined time limit.  From this state retransmittions are performed.</summary>
         ReadyToResend,
+
+        /// <summary>State reached when the buffer has been given to the transport for transission.</summary>
         SendPosted,
+
+        /// <summary>State reached when the transport indicates that the buffer has been accepted by the underlying delivery mechanism.</summary>
         Sent,
+
+        /// <summary>State reached from Sent after the buffer's sequence number has been acknowledged by the remote end.</summary>
         Delivered,
+
+        /// <summary>Final state of a buffer that was returned to a buffer pool but which could not be retained there.</summary>
         Released,
     }
 
@@ -240,7 +262,21 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Buffers
             {
                 case BufferState.Acquired:
                 case BufferState.Created:
-                case BufferState.Data:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        /// <summary>
+        /// Returns true if the given <paramref name="state"/> is SendPosted or Sent
+        /// </summary>
+        public static bool IsDeliveryPending(this BufferState state)
+        {
+            switch (state)
+            {
+                case BufferState.SendPosted:
+                case BufferState.Sent:
                     return true;
                 default:
                     return false;
@@ -286,6 +322,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Buffers
 
         public BufferState State { get; private set; }
         public QpcTimeStamp TimeStamp { get; private set; }
+        public QpcTimeStamp SendPostedTimeStamp { get; private set; }
 
         public ulong SeqNum 
         { 
@@ -321,7 +358,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Buffers
 
             switch (state)
             {
-                case BufferState.SendPosted: CopyHeaderToByteArray(); break;
+                case BufferState.SendPosted: CopyHeaderToByteArray(); SendPostedTimeStamp = qpcTimeStamp; break;
                 case BufferState.Received: UpdateHeaderFromByteArray(); break;
                 default: break;
             }
@@ -509,8 +546,10 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Buffers
         /// Constructor.
         /// <para/>defaultBufferSize == 1024.  Usable space is 1024-26 == 998
         /// </summary>
-        public BufferPool(int maxTotalSpaceInBytes = 1024000, int bufferSize = DefaultBufferSize, bool clearBufferContentsOnRelease = false, Logging.IMesgEmitter bufferStateEmitter = null, INamedValueSet configNVS = null, string configNVSKeyPrefix = "BufferPool.")
+        public BufferPool(string name, int maxTotalSpaceInBytes = 1024000, int bufferSize = DefaultBufferSize, bool clearBufferContentsOnRelease = false, Logging.IMesgEmitter bufferStateEmitter = null, INamedValueSet configNVS = null, string configNVSKeyPrefix = "BufferPool.")
         {
+            Name = name;
+
             if (configNVS != null)
             {
                 maxTotalSpaceInBytes = configNVS["{0}MaxTotalSpaceInBytes".CheckedFormat(configNVSKeyPrefix)].VC.GetValue(defaultValue: maxTotalSpaceInBytes, rethrow: false);
@@ -527,6 +566,14 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Buffers
         }
 
         /// <summary>
+        /// Debug and logging helper method.
+        /// </summary>
+        public override string ToString()
+        {
+            return "{0} '{1}' BufferSize:{2} MaxTotalSpace:{3} NumFree:{4} MaxToRetain:{5}".CheckedFormat(Fcns.CurrentClassLeafName, Name, BufferSize, MaxTotalSpaceInBytes, bufferCount, MaxBuffersToRetain);
+        }
+
+        /// <summary>
         /// Use this method to "drain the pool".  This removes all of the buffers from the pool and Releases each of them.
         /// </summary>
         public void Drain(QpcTimeStamp qpcTimeStamp, string reason = null)
@@ -539,10 +586,9 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Buffers
             capturedBufferArray.Where(buffer => buffer != null).DoForEach(buffer => buffer.Release(qpcTimeStamp));
         }
 
+        public string Name { get; private set; }
         public int MaxTotalSpaceInBytes { get; private set; }
         public int BufferSize { get { return _bufferSize; } set { if (_bufferSize != value) ChangeBufferSize(QpcTimeStamp.Now, value); } }
-        [Obsolete("This property is no longer used (2018-08-16)")]
-        public int AutomaticallyAddHeaderSizeAtOrBelow { get; private set; }
         public bool ClearBufferContentsOnRelease { get; private set; }
         public Logging.IMesgEmitter BufferStateEmitter { get; set; }
 
@@ -552,13 +598,16 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Buffers
 
         private void ChangeBufferSize(QpcTimeStamp qpcTimeStamp, int value)
         {
-            Drain(qpcTimeStamp);
+            if (_bufferSize != value)
+            {
+                Drain(qpcTimeStamp);
 
-            _bufferSize = value.Clip(128, 16384);
+                _bufferSize = value.Clip(128, 16384);
 
-            MaxBuffersToRetain = Math.Max(5, MaxTotalSpaceInBytes / _bufferSize);
+                MaxBuffersToRetain = Math.Max(5, MaxTotalSpaceInBytes / _bufferSize);
 
-            bufferArray = new Buffer[MaxBuffersToRetain];
+                bufferArray = new Buffer[MaxBuffersToRetain];
+            }
         }
 
         private Buffer[] bufferArray;

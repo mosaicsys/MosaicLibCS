@@ -62,47 +62,6 @@ namespace MosaicLib.Modular.Config
             private ConfigKeyAccessFlags accessFlags = new ConfigKeyAccessFlags();
 
             /// <summary>
-            /// gives C# client get only access to the NamedValueSet that contains some of the values that are setable here.  
-            /// The getter will generate an NVS to contain the the merged contents of the AdditionalKeywords and the results from calling the GetDerivedTypeMetaDataToMerge contents.
-            /// </summary>
-            public INamedValueSet MetaData
-            {
-                get
-                {
-                    if (metaData == null)
-                    {
-                        INamedValueSet mergeWithNVS = GetDerivedTypeMetaDataToMerge();
-
-                        if (additionalKeywordsHasBeenSet || !mergeWithNVS.IsEmpty())
-                        {
-                            NamedValueSet nvs = new NamedValueSet();
-
-                            if (additionalKeywordsHasBeenSet)
-                                nvs.AddRange(AdditionalKeywords.Select(keyword => new NamedValue(keyword) { IsReadOnly = true }));
-
-                            if (!mergeWithNVS.IsNullOrEmpty())
-                                nvs = nvs.MergeWith(mergeWithNVS, NamedValueMergeBehavior.AddAndUpdate);
-
-                            metaData = nvs.ConvertToReadOnly();
-                        }
-                        else
-                        {
-                            metaData = NamedValueSet.Empty;
-                        }
-                    }
-
-                    return metaData;
-                }
-            }
-            private INamedValueSet metaData = null;
-
-            /// <summary>
-            /// Derived types may override this method implementation to allow them merge the returned meta-data into the per key meta-data that will be used with the key access objects generated here from this attribute.
-            /// <para/>Please note that this method should always return an INVS instance that has already been converted to be ReadOnly so that later layers where this is also done will not generate an excessive number of clones of the original one returned here.
-            /// </summary>
-            protected virtual INamedValueSet GetDerivedTypeMetaDataToMerge() { return null; }
-
-            /// <summary>
             /// This property is true when the config key's value will follow the MayBeChanged update behavior.  (defaults to false)
             /// </summary>
             public bool UpdateNormally { get { return accessFlags.MayBeChanged; } set { accessFlags.MayBeChanged = value; } }
@@ -132,15 +91,6 @@ namespace MosaicLib.Modular.Config
             /// In addition when using the EnsureExists feature, the provider named here will be asked to create the requested config key before consulting other providers.
             /// </summary>
             public string DefaultProviderName { get { return accessFlags.DefaultProviderName.MapNullToEmpty(); } set { accessFlags.DefaultProviderName = value; } }
-
-            /// <summary>
-            /// Allows the caller to specify a set of additional keywords to be included in the NamedValueSet that will be produced when using the MetaData property.
-            /// </summary>
-            public string[] AdditionalKeywords { get { return (additionalKeywords ?? emptyStringArray); } set { additionalKeywords = value; additionalKeywordsHasBeenSet = true; metaData = null; } }
-            private string [] additionalKeywords = null;
-            private bool additionalKeywordsHasBeenSet = false;
-
-            private static readonly string[] emptyStringArray = EmptyArrayFactory<string>.Instance;
         }
     }
 
@@ -293,13 +243,7 @@ namespace MosaicLib.Modular.Config
                 if (!DefaultProviderName.IsNullOrEmpty() && customAccessFlags.DefaultProviderName == null)
                     customAccessFlags.DefaultProviderName = DefaultProviderName;
 
-                INamedValueSet itemKeyMetaData = itemAttribute.MetaData.MapEmptyToNull();
-                INamedValueSet combindKeyMetaData = itemKeyMetaData;
-
-                if (combindKeyMetaData.IsNullOrEmpty())
-                    combindKeyMetaData = defaultNVS;
-                else if (!defaultNVS.IsNullOrEmpty())
-                    combindKeyMetaData = combindKeyMetaData.MergeWith(defaultNVS, KeyMetaDataMergeBehavior);
+                INamedValueSet combindKeyMetaData = itemAttribute.GetMergedMetaData(defaultNVS, KeyMetaDataMergeBehavior).MapEmptyToNull();
 
                 ValueContainer defaultValue = ((customAccessFlags.EnsureExists ?? false) ? GetDefaultValue(itemInfo) : ValueContainer.Empty);
 
@@ -343,6 +287,8 @@ namespace MosaicLib.Modular.Config
                 keySetupInfoArray[idx] = keySetupInfo;
             }
 
+            _ickaArray = keySetupInfoArray.Where(item => item != null).Select(item => item.KeyAccess).ToArray();
+
             // next link events - this initializes the Configuration Service Changed event callback handler and connects it to the Configuration Service.
             IBasicNotificationList notificationList = ConfigInstance.ChangeNotificationList;
             notificationList.AddItem(updateNotificationList);
@@ -358,12 +304,13 @@ namespace MosaicLib.Modular.Config
 
         /// <summary>
         /// This property will be true after the user commits an update to one or more dynamic configuration config key's values that this adapter is tracking.
+        /// It is generally cleared by calling the Update method.
         /// </summary>
         public bool IsUpdateNeeded
         {
             get 
             {
-                return (isUpdateNeeded || (ConfigInstance != null && !lastUpdateConfigChangeSeqNums.Equals(ConfigInstance.SeqNums))); 
+                return (isUpdateNeeded || _ickaArray.Any(icka => icka.IsUpdateNeeded)); 
             }
             internal set 
             { 
@@ -430,13 +377,9 @@ namespace MosaicLib.Modular.Config
         /// <summary>
         /// Gives the caller access to the set of IConfigKeyAccess items that this adapter has generated and uses to support its operation
         /// </summary>
-        public IConfigKeyAccess[] ICKAArray
-        {
-            get 
-            { 
-                return keySetupInfoArray.Where(item => item != null).Select(item => item.KeyAccess).ToArray(); 
-            }
-        }
+        public IConfigKeyAccess[] ICKAArray { get { return _ickaArray; } }
+
+        private IConfigKeyAccess[] _ickaArray = EmptyArrayFactory<IConfigKeyAccess>.Instance;
 
         #endregion
 

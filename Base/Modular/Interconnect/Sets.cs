@@ -502,7 +502,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
         /// <summary>
         /// Performs an update iteration and optionally generates the corresponding ISetDelta object.
         /// When non-zero <paramref name="maxDeltaItemCount"/> is used to specify the maximum number of incremental set changes that can be applied per iteration.
-        /// When <paramref name="generateSetDelta"/> is false the method will return null.  When <paramref name="generateSetDelta"/> is true, the method will attempt to create and return an ISetDelta to represent the incremental update deltas.  If there are not such changes the method returns null
+        /// When <paramref name="generateSetDelta"/> is false the method will return null.  When <paramref name="generateSetDelta"/> is true, the method will attempt to create and return an ISetDelta to represent the incremental update deltas.  If there are no such changes the method returns null.
         /// </summary>
         /// <exception cref="SetUseException">When called on an <seealso cref="AdjustableTrackingSet{TObjectType}"/> the instance will throw this exception type</exception>
         ISetDelta PerformUpdateIteration(int maxDeltaItemCount, bool generateSetDelta);
@@ -540,7 +540,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
         /// <summary>
         /// Performs an update iteration and optionally generates the corresponding ISetDelta object.
         /// When non-zero <paramref name="maxDeltaItemCount"/> is used to specify the maximum number of incremental set changes that can be applied per iteration.
-        /// When <paramref name="generateSetDelta"/> is false the method will return null.  When <paramref name="generateSetDelta"/> is true, the method will attempt to create and return an ISetDelta to represent the incremental update deltas.  If there are not such changes the method returns null
+        /// When <paramref name="generateSetDelta"/> is false the method will return null.  When <paramref name="generateSetDelta"/> is true, the method will attempt to create and return an ISetDelta to represent the incremental update deltas.  If there are no such changes the method returns null.
         /// </summary>
         /// <exception cref="SetUseException">When called on an <seealso cref="AdjustableTrackingSet{TObjectType}"/> the instance will throw this exception type</exception>
         new ISetDelta<TObjectType> PerformUpdateIteration(int maxDeltaItemCount, bool generateSetDelta);
@@ -1209,6 +1209,8 @@ namespace MosaicLib.Modular.Interconnect.Sets
 
                 AssignNewSetSeqNum();
             }
+
+            InnerNoteCollectionHasBeenCleared();
         }
 
         /// <summary>
@@ -1244,7 +1246,12 @@ namespace MosaicLib.Modular.Interconnect.Sets
         {
             ThrowIfHasItemContainerListMutex(true);
 
-            return itemContainerList.Select((itemContainer) => itemContainer.Item).GetEnumerator();
+            return InnerGetEnumerable().GetEnumerator();
+        }
+
+        protected IEnumerable<TObjectType> InnerGetEnumerable()
+        {
+            return itemContainerList.Select((itemContainer) => itemContainer.Item);
         }
 
         /// <summary>
@@ -1402,17 +1409,14 @@ namespace MosaicLib.Modular.Interconnect.Sets
                             itemContainerList.Add(itemContainer);
                         }
 
-                        InnerNoteItemsAdded(addedItemContainerList, false);
+                        InnerNoteItemsAdded(addedItemContainerList);
                     }
                 }
             }
             finally
             {
                 if (addedItemContainerList.Count > 0)
-                    InnerNoteItemsAdded(addedItemContainerList, false);
-
-                if (addItemArrayLength > 0)
-                    InnerNoteSetCountAndArrayPropertiesChanged();
+                    InnerNoteItemsAdded(addedItemContainerList);
             }
         }
 
@@ -1426,8 +1430,6 @@ namespace MosaicLib.Modular.Interconnect.Sets
         /// </summary>
         protected void InnerMakeSpacePriorToAdd(int numItemsToAdd)
         {
-            bool areThereAnyItemsToAdd = (numItemsToAdd > 0);
-
             int projectedRemainingCapacity = (_capacity - (itemContainerList.Count + numItemsToAdd));
             if (projectedRemainingCapacity < 0 && _capacity > 0)
             {
@@ -1446,7 +1448,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
 
                 itemContainerList.RemoveRange(0, numItemsToRemove);
 
-                InnerNoteItemsRemoved(removedItemContainerList, !areThereAnyItemsToAdd);
+                InnerNoteItemsRemoved(removedItemContainerList);
             }
         }
 
@@ -1478,7 +1480,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
 
             if (removedItemContainerList.Count > 0)
             {
-                InnerNoteItemsRemoved(removedItemContainerList, true);
+                InnerNoteItemsRemoved(removedItemContainerList);
                 return true;
             }
             else
@@ -1534,7 +1536,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
             if (removedItemContainerList.Count > 0)
             {
                 if (processNoteItemsRemoved)
-                    InnerNoteItemsRemoved(removedItemContainerList, true);
+                    InnerNoteItemsRemoved(removedItemContainerList);
 
                 return true;
             }
@@ -1572,7 +1574,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
             {
                 if (processNoteItemsRemoved && removedItemContainerList.Count > 0)
                 {
-                    InnerNoteItemsRemoved(removedItemContainerList, true);
+                    InnerNoteItemsRemoved(removedItemContainerList);
                 }
             }
         }
@@ -1627,7 +1629,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
             {
                 if (processNoteItemsRemoved && removedItemContainerList.Count > 0)
                 {
-                    InnerNoteItemsRemoved(removedItemContainerList, true);
+                    InnerNoteItemsRemoved(removedItemContainerList);
                 }
             }
         }
@@ -1713,9 +1715,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
             finally
             {
                 if (processNoteItemsRemoved && removedItemContainerList.Count > 0)
-                {
-                    InnerNoteItemsRemoved(removedItemContainerList, true);
-                }
+                    InnerNoteItemsRemoved(removedItemContainerList);
             }
         }
 
@@ -1768,46 +1768,32 @@ namespace MosaicLib.Modular.Interconnect.Sets
 
         /// <summary>This list is used to accumulate ItemContainers of items that have been added to the set since the last time it was passed to the InnerNoteItemsAdded method.</summary>
         protected List<ItemContainer> addedItemContainerList = null;
+
         /// <summary>This list is used to accumulate ItemContainers of items that have been removed from the set since the last time it was passed to the InnerNoteItemsRemoved method.</summary>
         protected List<ItemContainer> removedItemContainerList = null;
 
         /// <summary>
         /// This method processes the contents of the given list of ItemContainers that have been added to the set and uses the InnerNoteItemAdded method to support reporting
-        /// the appropriate CollectionChanged event for each one.  If the indicateOverallSetChanged parameter is true then this method also calls InnerNoteSetCountAndArrayPropertiesChanged
-        /// to report the corresponding PropertyChanged events.
+        /// the appropriate CollectionChanged event for each one.  
         /// </summary>
-        protected void InnerNoteItemsAdded(List<ItemContainer> addedItemContainerList, bool indicateOverallSetChanged)
+        protected void InnerNoteItemsAdded(List<ItemContainer> addedItemContainerList)
         {
             foreach (ItemContainer itemContainer in addedItemContainerList)
                 InnerNoteItemAdded(itemContainer);
 
             addedItemContainerList.Clear();
-
-            if (indicateOverallSetChanged)
-                InnerNoteSetCountAndArrayPropertiesChanged();
         }
 
         /// <summary>
         /// This method processes the contents of the given list of ItemContainers that have been removed from the set and uses the InnerNoteItemRemoved method to support reporting
-        /// the appropriate CollectionChanged event for each one.  If the indicateOverallSetChanged parameter is true then this method also calls InnerNoteSetCountAndArrayPropertiesChanged
-        /// to report the corresponding PropertyChanged events.
+        /// the appropriate CollectionChanged event for each one.
         /// </summary>
-        protected void InnerNoteItemsRemoved(List<ItemContainer> removedItemContainerList, bool indicateOverallSetChanged)
+        protected void InnerNoteItemsRemoved(List<ItemContainer> removedItemContainerList)
         {
             foreach (ItemContainer itemContainer in removedItemContainerList)
                 InnerNoteItemRemoved(itemContainer);
 
             removedItemContainerList.Clear();
-
-            if (indicateOverallSetChanged)
-                InnerNoteSetCountAndArrayPropertiesChanged();
-        }
-
-        /// <summary>This method calls the InnerNoteCountChanged and then the InnerNoteItemArrayChanged methods to support reporting the corresponding PropertyChanged events.</summary>
-        private void InnerNoteSetCountAndArrayPropertiesChanged()
-        {
-            InnerNoteCountChanged();
-            InnerNoteItemArrayChanged();
         }
 
         #endregion
@@ -1876,42 +1862,20 @@ namespace MosaicLib.Modular.Interconnect.Sets
 
         #region PropertyChanged and CollectionChanged event implementation
 
-        /// <summary>This method updates the itemListSeqNumRangeInfo Count to match the current set count and if PropertyChange events are in use, it generates a PropertyChanged event for the "Count" property</summary>
-        protected void InnerNoteCountChanged()
-        {
-            itemListSeqNumRangeInfo.Count = itemContainerList.Count;
-
-            if (propertyChangedIsInUse)
-            {
-                try
-                {
-                    propertyChanged(this, new PropertyChangedEventArgs("Count"));
-                }
-                catch { }
-            }
-        }
-
-        /// <summary>If PropertyChange events are in use, this method generates a PropertyChanged event for the "Item[]" property</summary>
-        protected void InnerNoteItemArrayChanged()
-        {
-            if (propertyChangedIsInUse)
-            {
-                try
-                {
-                    propertyChanged(this, new PropertyChangedEventArgs("Item[]"));
-                }
-                catch { }
-            }
-        }
-
         /// <summary>If CollectionChanged events are in use, this method generates a Reset type CollectionChanged event</summary>
-        protected void InnerNoteCollectionHasBeenReset()
+        protected void InnerNoteCollectionHasBeenCleared()
         {
-            if (collectionChangedEventIsInUse)
+            if (itemListSeqNumRangeInfo.Count != 0 || itemListSeqNumRangeInfo.First != itemListSeqNumRangeInfo.Last)
+            {
+                itemListSeqNumRangeInfo.Count = 0;
+                itemListSeqNumRangeInfo.First = itemListSeqNumRangeInfo.Last;
+            }
+
+            if (observableCollection != null)
             {
                 try
                 {
-                    collectionChanged(this, new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
+                    observableCollection.Clear();
                 }
                 catch { }
             }
@@ -1935,12 +1899,13 @@ namespace MosaicLib.Modular.Interconnect.Sets
             {
                 itemListSeqNumRangeInfo.First = itemListSeqNumRangeInfo.Last;
             }
+            itemListSeqNumRangeInfo.Count = itemContainerList.Count;
 
-            if (collectionChangedEventIsInUse)
+            if (observableCollection != null)
             {
                 try
                 {
-                    collectionChanged(this, new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Remove, itemContainer.Item, itemContainer.LastIndexOfItemInList));
+                    observableCollection.RemoveAt(itemContainer.LastIndexOfItemInList);
                 }
                 catch { }
             }
@@ -1955,12 +1920,13 @@ namespace MosaicLib.Modular.Interconnect.Sets
             itemListSeqNumRangeInfo.Last = itemContainer.SeqNum;
             if (itemContainer.LastIndexOfItemInList == 0)
                 itemListSeqNumRangeInfo.First = itemContainer.SeqNum;
+            itemListSeqNumRangeInfo.Count = itemContainerList.Count;
 
-            if (collectionChangedEventIsInUse)
+            if (observableCollection != null)
             {
                 try
                 {
-                    collectionChanged(this, new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, itemContainer.Item, itemContainer.LastIndexOfItemInList));
+                    observableCollection.Add(itemContainer.Item);
                 }
                 catch { }
             }
@@ -1975,21 +1941,17 @@ namespace MosaicLib.Modular.Interconnect.Sets
             add 
             {
                 ThrowIfHasItemContainerListMutex(true);
+                CreateObservableCollectionIfNeeded();
 
-                propertyChanged += value; 
-                propertyChangedIsInUse = true; 
+                if (observableCollection != null)
+                    ((INotifyPropertyChanged)observableCollection).PropertyChanged += value;
             }
             remove 
-            { 
-                propertyChanged -= value; 
+            {
+                if (observableCollection != null)
+                    ((INotifyPropertyChanged)observableCollection).PropertyChanged -= value;
             }
         }
-
-        /// <summary>Backing delegate storage for implementation of the PropertyChanged event</summary>
-        private event PropertyChangedEventHandler propertyChanged;
-
-        /// <summary>Flag that is set to true after a client has successfully added the first event handler to the PropertyChanged event's delegate list.</summary>
-        protected bool propertyChangedIsInUse = false;
 
         /// <summary>
         /// Protected common implementation for CollectionChanged events when they are supported by the derived type (implementation must override this to expose a public version...)
@@ -2000,21 +1962,25 @@ namespace MosaicLib.Modular.Interconnect.Sets
             add 
             {
                 ThrowIfHasItemContainerListMutex(true);
+                CreateObservableCollectionIfNeeded();
 
-                collectionChanged += value; 
-                collectionChangedEventIsInUse = true; 
+                if (observableCollection != null)
+                    observableCollection.CollectionChanged += value;
             }
             remove 
             { 
-                collectionChanged -= value; 
+                if (observableCollection != null)
+                    observableCollection.CollectionChanged -= value;
             }
         }
 
-        /// <summary>Backing delegate storage for implementation of the CollectionChanged event</summary>
-        private event NotifyCollectionChangedEventHandler collectionChanged;
+        private ObservableCollection<TObjectType> observableCollection = null;
 
-        /// <summary>Flag that is set to true after a client has successfully added the first event handler to the CollectionChanged event's delegate list.</summary>
-        protected bool collectionChangedEventIsInUse = false;
+        private void CreateObservableCollectionIfNeeded()
+        {
+            if (observableCollection == null)
+                observableCollection = new ObservableCollection<TObjectType>(InnerGetEnumerable());
+        }
 
         #endregion
     }
@@ -2355,7 +2321,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
         /// <summary>
         /// Performs an update iteration and optionally generates the corresponding ISetDelta object.
         /// When non-zero <paramref name="maxDeltaItemCount"/> is used to specify the maximum number of incremental set changes that can be applied per iteration.
-        /// When <paramref name="generateSetDelta"/> is false the method will return null.  When <paramref name="generateSetDelta"/> is true, the method will attempt to create and return an ISetDelta to represent the incremental update deltas.  If there are not such changes the method returns null
+        /// When <paramref name="generateSetDelta"/> is false the method will return null.  When <paramref name="generateSetDelta"/> is true, the method will attempt to create and return an ISetDelta to represent the incremental update deltas.  If there are no such changes the method returns null.
         /// </summary>
         public virtual ISetDelta<TObjectType> PerformUpdateIteration(int maxDeltaItemCount, bool generateSetDelta)
         {
@@ -2433,10 +2399,10 @@ namespace MosaicLib.Modular.Interconnect.Sets
                 bool haveAddedItems = (addedItemContainerList.Count > 0);
 
                 if (haveRemovedItems)
-                    InnerNoteItemsRemoved(removedItemContainerList, !haveAddedItems);
+                    InnerNoteItemsRemoved(removedItemContainerList);
 
                 if (haveAddedItems)
-                    InnerNoteItemsAdded(addedItemContainerList, true);
+                    InnerNoteItemsAdded(addedItemContainerList);
             }
 
             AssignNewSetSeqNum();
@@ -2746,10 +2712,10 @@ namespace MosaicLib.Modular.Interconnect.Sets
                 bool haveAddedItems = (addedItemContainerList.Count > 0);
 
                 if (haveRemovedItems)
-                    InnerNoteItemsRemoved(removedItemContainerList, !haveAddedItems);
+                    InnerNoteItemsRemoved(removedItemContainerList);
 
                 if (haveAddedItems)
-                    InnerNoteItemsAdded(addedItemContainerList, true);
+                    InnerNoteItemsAdded(addedItemContainerList);
 
                 AssignNewSetSeqNum();
             }
@@ -2876,40 +2842,6 @@ namespace MosaicLib.Modular.Interconnect.Sets
                 throw new SetUseException("{0} {1} cannot be used with an ISetDelta from {2}".CheckedFormat(SetID, SetType, setDelta.SetID));
             }
         }
-
-        /// The following classes are no longer useful as there is no existing library code that constructs them and as such they are of very limited value in client code.
-        /// See the corresonding Obsolete Attribute messages for details.
-#if (false)
-        /// <summary>Internal storage object for ISetDelta</summary>
-        [DataContract(Namespace = Constants.ModularInterconnectNameSpace)]
-        [Obsolete("Please change to using the corresponding type defined directly under the Sets namespace above (2018-03-23)")]
-        public class SetDelta : SetDelta<TObjectType>
-        {
-            /// <summary>Default constructor.</summary>
-            public SetDelta() { }
-
-            /// <summary>Copy constructor.</summary>
-            public SetDelta(ISetDelta other) : base(other) {}
-        }
-
-        /// <summary>Implementation class for ISetDeltaRemoveRangeItem</summary>
-        [DataContract(Namespace = Constants.ModularInterconnectNameSpace)]
-        [Obsolete("Please change to using the corresponding type defined directly under the Sets namespace above (2018-03-23)")]
-        public class SetDeltaRemoveRangeItem : Interconnect.Sets.SetDeltaRemoveRangeItem
-        {
-            public SetDeltaRemoveRangeItem() { }
-            public SetDeltaRemoveRangeItem(ISetDeltaRemoveRangeItem other) : base(other) { }
-        }
-
-        /// <summary>Implementation object for ISetDeltaAddContiguousRangeItem</summary>
-        [DataContract(Namespace = Constants.ModularInterconnectNameSpace)]
-        [Obsolete("Please change to using the corresponding type defined directly under the Sets namespace above (2018-03-23)")]
-        public class SetDeltaAddContiguousRangeItem : SetDeltaAddContiguousRangeItem<TObjectType>
-        {
-            public SetDeltaAddContiguousRangeItem() { }
-            public SetDeltaAddContiguousRangeItem(ISetDeltaAddContiguousRangeItem other) : base(other) { }
-        }
-#endif
 
         #endregion
     }

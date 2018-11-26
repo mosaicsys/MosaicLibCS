@@ -621,7 +621,15 @@ namespace MosaicLib.Time
 
     public static partial class ExtensionMethods
     {
-        #region QpcTimeStamp related (Age, Min, Max)
+        #region QpcTimeStamp related (MapDefaultToNow, Age, Min, Max)
+
+        /// <summary>
+        /// If the given <paramref name="qpcTimeStamp"/> value is non-zero (aka non-default) then this method returns its value, otherwise if it is zero then this method returns a new timestamp value obtained from QpcTimeStamp.Now.
+        /// </summary>
+        public static QpcTimeStamp MapDefaultToNow(this QpcTimeStamp qpcTimeStamp)
+        {
+            return !qpcTimeStamp.IsZero ? qpcTimeStamp : QpcTimeStamp.Now;
+        }
 
         /// <summary>
         /// Returns the Age of the given <paramref name="qpcTimeStamp"/>.  Caller can optionally provide the current timestamp against which the age is to be measured.

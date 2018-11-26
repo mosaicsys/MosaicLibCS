@@ -42,17 +42,17 @@
                         <TextBox Height="82" IsReadOnly="True" Margin="46,38,9.778,0" Text="{Binding Tag, RelativeSource={RelativeSource Self}}" ToolTip="{Binding Tag, RelativeSource={RelativeSource Self}}" Tag="{Binding Path=[Remoting.Client.ConfigNVS].VC, Converter={StaticResource VCToStringSMLConverter}, Mode=OneWay}" VerticalAlignment="Top"  IsUndoEnabled="False" TextWrapping="Wrap" ScrollViewer.VerticalScrollBarVisibility="Auto" />
                         <!--<Label Content="Rate" Height="24" HorizontalAlignment="Left" Margin="7,95,0,0" VerticalAlignment="Top" Width="34" />-->
                         <!--<TextBox Height="23" HorizontalAlignment="Left" IsReadOnly="False" Margin="46,96,0,0" Text="{Binding Path=[AvgCmdRateInHz].ValueAsDouble, Mode=OneWay, StringFormat=f2, FallbackValue=[empty]}" IsUndoEnabled="False" VerticalAlignment="Top" Width="65" />-->
-                        <Button Click="RCButton_Clicked" Content="Connect" Tag="GoOnline" Height="23" HorizontalAlignment="Left" Margin="13,136,0,0" VerticalAlignment="Top" Width="75"  />
+                        <Button Click="RCButton_Clicked" Content="Connect" Tag="GoOnlineAndInitialize" Height="23" HorizontalAlignment="Left" Margin="13,136,0,0" VerticalAlignment="Top" Width="75"  />
                         <Button Click="RCButton_Clicked" Content="Disconnect" Tag="GoOffline" Height="23" HorizontalAlignment="Left" Margin="94,136,0,0" VerticalAlignment="Top" Width="75" />
                         <Button Click="RCButton_Clicked" Content="Remote Ping" Tag="Ping" Height="23" HorizontalAlignment="Left" Margin="176,136,0,0" VerticalAlignment="Top" Width="75" />
                     </Grid>
                 </GroupBox>
             </TabItem>
             <TabItem Header="Remote IVI">
-                <Controls:IVIView x:Name="iviView" NameColumnWidth="300" SeqNumColumnWidth="60" ValueColumnWidth="600"/>
+                <Controls:IVIView x:Name="remoteIVIView" IVIName="RemoteIVI" NameColumnWidth="300" SeqNumColumnWidth="60" ValueColumnWidth="600"/>
             </TabItem>
             <TabItem Header="Remote Logs">
-                <Controls:LogView x:Name="logView" SetName="LogMessageHistory"  MesgColumnWidth="950"/>
+                <Controls:LogView x:Name="remoteLogView" SetName="LogMessageHistory"  MesgColumnWidth="950"/>
             </TabItem>
             <TabItem Header="E039">
                 <DockPanel>
@@ -72,6 +72,9 @@
                         </ListView.View>
                     </ListView>
                 </DockPanel>
+            </TabItem>
+            <TabItem Header="Local IVI">
+                <Controls:IVIView x:Name="localIVIView" NameColumnWidth="300" SeqNumColumnWidth="60" ValueColumnWidth="600"/>
             </TabItem>
             <TabItem Header="Local Logs">
                 <Controls:LogView SetName="LocalLogMessageHistory" MesgColumnWidth="950"/>

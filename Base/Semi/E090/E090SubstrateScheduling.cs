@@ -236,6 +236,10 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
     public class SubstLocObserverWithTrackerLookup<TSubstrateAndProcessTrackerType> 
         : E090SubstLocObserver
     {
+        public SubstLocObserverWithTrackerLookup(E039ObjectID substLocID, IDictionary<string, TSubstrateAndProcessTrackerType> fullNameToSubstTrackerDictionaryIn)
+            : this(substLocID.GetPublisher(), fullNameToSubstTrackerDictionaryIn)
+        { }
+
         public SubstLocObserverWithTrackerLookup(ISequencedObjectSource<IE039Object, int> objLocPublisher, IDictionary<string, TSubstrateAndProcessTrackerType> fullNameToSubstTrackerDictionaryIn)
             : base(objLocPublisher, alsoObserveContents: true)
         {
@@ -466,6 +470,8 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
             bool stsIsAtSource = sts.IsAtSource();
             bool stsIsAtDestination = sts.IsAtDestination();
             bool stsIsAtWork = sts.IsAtWork();
+            bool isAtSrcLoc = stInfo.LocID == stInfo.LinkToSrc.ToID.Name;
+            bool isAtDestLoc = stInfo.LocID == stInfo.LinkToDest.ToID.Name;
 
             SubstProcState sps = stInfo.SPS;
             bool spsIsNeedsProcessing = sps.IsNeedsProcessing();
@@ -479,7 +485,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
             {
                 if (stInfo.SJRS == SubstrateJobRequestState.Return)
                 {
-                    if (stsIsAtSource || stsIsAtDestination)
+                    if (stsIsAtSource || stsIsAtDestination || isAtSrcLoc || isAtDestLoc)
                         nextSJS = SubstrateJobState.Returned;
                     else
                         nextSJS = SubstrateJobState.Returning;
@@ -698,6 +704,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
                     break;
 
                 case SubstrateJobState.Returned:
+                case SubstrateJobState.Returning:
                 case SubstrateJobState.Held:
                 case SubstrateJobState.RoutingAlarm:
                 default:
@@ -971,6 +978,8 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
     /// </summary>
     public class SubstrateSchedulingException : System.Exception
     {
-        public SubstrateSchedulingException(string mesg, System.Exception innerException = null) : base(mesg, innerException) { }
+        public SubstrateSchedulingException(string mesg, System.Exception innerException = null) 
+            : base(mesg, innerException) 
+        { }
     }
 }

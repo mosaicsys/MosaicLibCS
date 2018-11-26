@@ -139,6 +139,8 @@
     <Compile Include="Utils\Pooling.cs" />
     <Compile Include="Utils\Singleton.cs" />
     <Compile Include="Utils\String.cs" />
+    <Compile Include="Utils\Tools\EventRateTools.cs" />
+    <Compile Include="Utils\Tools\SlewRateLimitTool.cs" />
     <Compile Include="Win32\Hooks.cs" />
     <Compile Include="Win32\Registry.cs" />
   </ItemGroup>

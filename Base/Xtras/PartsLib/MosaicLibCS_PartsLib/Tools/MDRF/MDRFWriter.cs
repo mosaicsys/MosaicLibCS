@@ -53,12 +53,13 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
         /// 1.0.3 (2017-04-01) : Added AdvanceOnDayBoundary option with 10 minute holdoff.  Changed default FileIndexNumRows to 2048 (from 1024).  Added optional enableAPILocking flat for MDRFWriter constructor to support MT use of public MDRFWriter api.  Added writeAll option to RecordOccurrence variants
         /// 1.0.4 (2017-04-04) : IMDRFWriter API Usability improvements.  Support for post construction addition of groups and occurrences to MDRFWriter objects.  GroupInfo refactored to make use of GroupBehaviorOptions to specify desired options/behavior.  Replaced WriteFileAdvanceBehavior with WriteBehavior which covers a larger set of options.  Added MDRFLogMessageHandlerAdapter to support LogDistribution output to an mdrf file.  Corrected issue with serialized format of QPCTime parameter in generated DateTimeBlock.
         /// 1.0.5 (2017-04-26) : MDRFWriter refactoring to move IVI/IVA logic so that each group defines the IVI used to create source IVAs (when enabled).  Refactored GroupBehaviorOptions members and added UseVCHasBeenSetForTouched flag to better support use in non-IVI cases.
+        /// 1.0.6 (2018-11-02) : MDRFRecordingEngine: set config.GroupDefinitionItemArray to the empty array to prevent engine from creating any groups.  The default null value still causes it to create the Default group.
         /// </remarks>
         public static readonly LibraryInfo LibInfo = new LibraryInfo()
         {
             Type = "Mosaic Data Recording File (MDRF)",
             Name = "Mosaic Data Recording Engine (MDRE) CS API",
-            Version = "1.0.5 (2017-04-26)",
+            Version = "1.0.6 (2018-11-02)",
         };
     }
 
@@ -2458,7 +2459,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
                 List<GroupInfo> groupInfoList = new List<GroupInfo>();
 
-                if (Config.GroupDefinitionItemArray.IsNullOrEmpty())
+                if (Config.GroupDefinitionItemArray == null)
                 {
                     IValueAccessor[] ivaArray = ivaNamesList.Select(name => Config.SourceIVI.GetValueAccessor(name)).ToArray();
                     groupInfoList.Add(new GroupInfo() 

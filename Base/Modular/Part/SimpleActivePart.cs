@@ -93,6 +93,11 @@ namespace MosaicLib.Modular.Part
         AcceptCustomChangeFromAttemptOnlineState = 16,
 
         /// <summary>
+        /// When this option is enabled, successful GoOnline(false) operations will set the UseState to OnlineUnintialized if the UseState was not Online when the operation was started.
+        /// </summary>
+        UseOnlineUnititializedState = 32,
+
+        /// <summary>
         /// Selects that execution of GoOnline and GoOffline actions using base class will succeed and will automatically update the BaseUseState.
         /// <para/>(BasePerformMethodsSucceed | GoOnlineUpdatesBaseUseState | GoOfflineUpdatesBaseUseState | GoOnlineFailureSetsUseStateToAttemptOnlineFailed)
         /// </summary>
@@ -101,27 +106,36 @@ namespace MosaicLib.Modular.Part
 
     /// <summary>
     /// This enumeration is used to define obtional behaviors for the overall part.
-    /// <para/>None (0), PerformActionPublishesActionInfo
+    /// <para/>None (0x00), PerformActionPublishesActionInfo (0x01), UseMainThreadFailedState (0x02), MainThreadStartSetsStateToOffline (0x04), MainThreadStopSetsStateToStoppedIfIsOnlineOrAttemptOnline (0x08),
+    /// MainThreadStopSetsStateToStoppedIfOffline (0x10), PerformMainLoopServiceCallsServiceBusyConditionChangeDetection (0x20)
     /// </summary>
     [Flags]
     public enum SimpleActivePartBehaviorOptions
     {
-        /// <summary>
-        /// Selects basic (default) handling.
-        /// </summary>
-        None = 0,
+        /// <summary>Selects basic (default) handling. [0x00]</summary>
+        None = 0x00,
 
         /// <summary>
         /// Requests that the part autotmatically creates a ActionInfo and a LastActionInfo IVA and that it generate and publishes information about the current action
         /// to the ActionInfo IVA at start and end of the CurrentAction and that it publish the final IActionInfo for the current action into the LastActionInfo when the current
-        /// action has been completed.
+        /// action has been completed.  [0x01]
         /// </summary>
-        PerformActionPublishesActionInfo = 1,
+        PerformActionPublishesActionInfo = 0x01,
 
-        /// <summary>
-        /// When this behavior is enabled, the MainThreadFcn exception handler will change the UseState MainThreadFailed to indicate that the part's main thread has ended.
-        /// </summary>
-        UseMainThreadFailedState = 2,
+        /// <summary>When this behavior is enabled, the MainThreadFcn exception handler will change the UseState MainThreadFailed to indicate that the part's main thread has ended. [0x02]</summary>
+        UseMainThreadFailedState = 0x02,
+
+        /// <summary>When this behavior is selected, the MainThreadFcn will set the UseState to Offline when the part is started.  [0x04]</summary>
+        MainThreadStartSetsStateToOffline = 0x04,
+
+        /// <summary>When this behavior is selected, the MainThreadFcn will set the UseState to Stopped when the part is stopped if the UseState is in an IsOnlineOrAttemptOnline state.  [0x08]</summary>
+        MainThreadStopSetsStateToStoppedIfIsOnlineOrAttemptOnline = 0x08,
+
+        /// <summary>When this behavior is selected, the MainThreadFcn will set the UseState to Stopped when the part is stopped if the UseState is Offline.  [0x10]</summary>
+        MainThreadStopSetsStateToStoppedIfOffline = 0x10,
+
+        /// <summary>When this behavior is selected, the PerformMainLoopService will call ServiceBusyConditionChangeDetection.  When not selected, only the MainThreadFcn will call this method. [0x20]</summary>
+        PerformMainLoopServiceCallsServiceBusyConditionChangeDetection = 0x20,
     }
 
     /// <summary>
@@ -375,6 +389,28 @@ namespace MosaicLib.Modular.Part
                 }; 
             } 
         }
+
+        /// <summary>
+        /// returns the second non-constructor default SimpleActivePartBaseSettings value (established under MosaicLibCS 0.1.6.1):
+        /// <para/>AutomaticallyIncAndDecBusyCountAroundActionInvoke = true,
+        /// <para/>GoOnlineAndGoOfflineHandling = GoOnlineAndGoOfflineHandling.All | GoOnlineAndGoOfflineHandling.UseOnlineUnititializedState | GoOnlineAndGoOfflineHandling.AcceptCustomChangeFromAttemptOnlineState,
+        /// <para/>SimpleActivePartBehaviorOptions = SimpleActivePartBehaviorOptions.PerformActionPublishesActionInfo | SimpleActivePartBehaviorOptions.MainThreadStartSetsStateToOffline | SimpleActivePartBehaviorOptions.MainThreadStopSetsStateToStoppedIfIsOnline | SimpleActivePartBehaviorOptions.MainThreadStopSetsStateToStoppedIfOffline | SimpleActivePartBehaviorOptions.UseMainThreadFailedState | SimpleActivePartBehaviorOptions.PerformMainLoopServiceCallsServiceBusyConditionChangeDetection,
+        /// <para/>SimplePartBaseSettings = SimplePartBaseSettings.DefaultVersion2 (SimplePartBaseBehavior = SimplePartBaseBehavior.All (TreatPartAsBusyWhenQueueIsNotEmpty | TreatPartAsBusyWhenInternalPartBusyCountIsNonZero)),
+        /// <para/>Please note: unless explicitly assigned by the client the default, unset, value of WaitTimeLimit will be replaced with 0.1 seconds by the Part when it uses this object's SetupForUse method.
+        /// </summary>
+        public static SimpleActivePartBaseSettings DefaultVersion2
+        {
+            get
+            {
+                return new SimpleActivePartBaseSettings()
+                {
+                    AutomaticallyIncAndDecBusyCountAroundActionInvoke = true,
+                    GoOnlineAndGoOfflineHandling = GoOnlineAndGoOfflineHandling.All | GoOnlineAndGoOfflineHandling.UseOnlineUnititializedState | GoOnlineAndGoOfflineHandling.AcceptCustomChangeFromAttemptOnlineState,
+                    SimpleActivePartBehaviorOptions = SimpleActivePartBehaviorOptions.PerformActionPublishesActionInfo | SimpleActivePartBehaviorOptions.MainThreadStartSetsStateToOffline | SimpleActivePartBehaviorOptions.MainThreadStopSetsStateToStoppedIfIsOnlineOrAttemptOnline | SimpleActivePartBehaviorOptions.MainThreadStopSetsStateToStoppedIfOffline | SimpleActivePartBehaviorOptions.UseMainThreadFailedState | SimpleActivePartBehaviorOptions.PerformMainLoopServiceCallsServiceBusyConditionChangeDetection,
+                    SimplePartBaseSettings = SimplePartBaseSettings.DefaultVersion2,
+                };
+            }
+        }
     }
 
     /// <summary>Standard extension methods wrapper class/namespace</summary>
@@ -490,16 +526,16 @@ namespace MosaicLib.Modular.Part
 		public class BasicActionImpl : ActionImplBase<NullObj, NullObj>, IBasicAction
 		{
             /// <summary>Constructor for use with simple action method delegate: ActionMethodDelegateStrResult.</summary>
-			public BasicActionImpl(ActionQueue actionQ, ActionMethodDelegateStrResult method, string mesg, ActionLogging loggingReference) 
-                : base(actionQ, method, new ActionLogging(mesg, loggingReference)) 
+            public BasicActionImpl(ActionQueue actionQ, ActionMethodDelegateStrResult method, string mesg, ActionLogging loggingReference, string mesgDetails = null)
+                : base(actionQ, method, loggingReference, mesg: mesg, mesgDetails: mesgDetails) 
             {}
             /// <summary>Constructor for use with more complete action method delegate: ActionMethodDelegateActionArgStrResult{NullObj, NullObj}.</summary>
-            public BasicActionImpl(ActionQueue actionQ, ActionMethodDelegateActionArgStrResult<NullObj, NullObj> method, string mesg, ActionLogging loggingReference) 
-                : base(actionQ, null, false, method, new ActionLogging(mesg, loggingReference)) 
+            public BasicActionImpl(ActionQueue actionQ, ActionMethodDelegateActionArgStrResult<NullObj, NullObj> method, string mesg, ActionLogging loggingReference, string mesgDetails = null)
+                : base(actionQ, null, false, method, loggingReference, mesg: mesg, mesgDetails: mesgDetails) 
             { }
             /// <summary>Constructor for use with full action method delegate: FullActionMethodDelegate{NullObj, NullObj}.</summary>
-            public BasicActionImpl(ActionQueue actionQ, FullActionMethodDelegate<NullObj, NullObj> method, string mesg, ActionLogging loggingReference) 
-                : base(actionQ, null, false, method, new ActionLogging(mesg, loggingReference)) 
+            public BasicActionImpl(ActionQueue actionQ, FullActionMethodDelegate<NullObj, NullObj> method, string mesg, ActionLogging loggingReference, string mesgDetails = null)
+                : base(actionQ, null, false, method, loggingReference, mesg: mesg, mesgDetails: mesgDetails) 
             { }
 		}
 
@@ -508,11 +544,11 @@ namespace MosaicLib.Modular.Part
 		{
             /// <summary>Constructor for use with more complete action method delegate: ActionMethodDelegateActionArgStrResult{ParamType, NullObj}.</summary>
             public ParamActionImplBase(ActionQueue actionQ, ParamType paramValue, ActionMethodDelegateActionArgStrResult<ParamType, NullObj> method, string mesg, ActionLogging loggingReference) 
-                : base(actionQ, paramValue, false, method, new ActionLogging(mesg, "{0}".CheckedFormat(paramValue), loggingReference)) 
+                : base(actionQ, paramValue, false, method, loggingReference, mesg: mesg, mesgDetails: "{0}".CheckedFormat(paramValue)) 
             { }
             /// <summary>Constructor for use with full action method delegate: FullActionMethodDelegate{ParamType, NullObj}.</summary>
             public ParamActionImplBase(ActionQueue actionQ, ParamType paramValue, FullActionMethodDelegate<ParamType, NullObj> method, string mesg, ActionLogging loggingReference) 
-                : base(actionQ, paramValue, false, method, new ActionLogging(mesg, "{0}".CheckedFormat(paramValue), loggingReference)) 
+                : base(actionQ, paramValue, false, method, loggingReference, mesg: mesg, mesgDetails: "{0}".CheckedFormat(paramValue)) 
             { }
 
             /// <summary>
@@ -953,7 +989,10 @@ namespace MosaicLib.Modular.Part
         private string OuterPerformGoOnlineAction(IProviderActionBase<bool, NullObj> action)
         {
             string description = action.ToString(ToStringSelect.MesgAndDetail);
+            bool andInitialize = action.ParamValue;
             bool setBaseUseState = settings.CheckFlag(GoOnlineAndGoOfflineHandling.GoOnlineUpdatesBaseUseState);
+
+            IBaseState entryBaseState = BaseState;
 
             if (setBaseUseState)
             {
@@ -992,7 +1031,10 @@ namespace MosaicLib.Modular.Part
                 }
                 else if (result == string.Empty || action.ActionState.Succeeded)
                 {
-                    SetBaseState(UseState.Online, "{0} Completed".CheckedFormat(description), true);
+                    if (andInitialize || entryBaseState.UseState == UseState.Online || entryBaseState.UseState == UseState.OnlineBusy || !settings.CheckFlag(GoOnlineAndGoOfflineHandling.UseOnlineUnititializedState))
+                        SetBaseState(UseState.Online, "{0} Completed".CheckedFormat(description), true);
+                    else
+                        SetBaseState(UseState.OnlineUninitialized, "{0} Completed (starting BaseState was {1})".CheckedFormat(description, entryBaseState.ToString(Part.BaseState.ToStringSelect.UseStateNoPrefix | Part.BaseState.ToStringSelect.ConnState)), true);
                 }
                 else 
                 {
@@ -1008,13 +1050,22 @@ namespace MosaicLib.Modular.Part
             return result;
         }
 
-		/// <summary>Provide passthrough PerformGoOnlingAction implementation.  Invokes PerformGoOnlineAction(action.Param)</summary>
+        /// <summary>Provide overridable virtual passthrough PerformGoOnlingAction implementation.  Invokes PerformGoOnlineActionEx(action, action.Param, action.NamedParamValues)</summary>
 		protected virtual string PerformGoOnlineAction(IProviderActionBase<bool, NullObj> action)
 		{
-			return PerformGoOnlineAction(action.ParamValue);
+			return PerformGoOnlineActionEx(action, action.ParamValue, action.NamedParamValues);
 		}
 
-		/// <summary>Stub method provides default GoOnlineAction.  Fails if BasePerformMethodsSucceed flag is not set in GoOnlineAndGoOfflineHandling property value.</summary>
+        /// <summary>
+        /// Provide overridable virtual passthrough PerformGoOnlingAction implementation.  Invokes PerformGoOnlineAction(andInitialize)
+        /// <para/>Note: alternate method name is choosen so that new signature will not generally overlap with derived part types that already have this signature pattern present
+        /// </summary>
+        protected virtual string PerformGoOnlineActionEx(IProviderFacet ipf, bool andInitialize, INamedValueSet npv)
+        {
+            return PerformGoOnlineAction(andInitialize);
+        }
+
+        /// <summary>Stub method provides overridable virtual default GoOnlineAction.  Fails if BasePerformMethodsSucceed flag is not set in GoOnlineAndGoOfflineHandling property value.</summary>
 		protected virtual string PerformGoOnlineAction(bool andInitialize)
 		{
             if (settings.CheckFlag(GoOnlineAndGoOfflineHandling.BasePerformMethodsSucceed))
@@ -1043,13 +1094,13 @@ namespace MosaicLib.Modular.Part
             return result;
         }
 
-		/// <summary>Provide passthrough PerformGoOfflineAction implementation.  Invokes PerformGoOfflineAction();</summary>
+        /// <summary>Provide overridable virtual passthrough PerformGoOfflineAction implementation.  Invokes PerformGoOfflineAction();</summary>
 		protected virtual string PerformGoOfflineAction(IProviderActionBase action)
 		{
 			return PerformGoOfflineAction();
 		}
 
-        /// <summary>Stub method provides default GoOfflineAction.  Fails if BasePerformMethodsSucceed flag is not set in GoOnlineAndGoOfflineHandling property value.</summary>
+        /// <summary>Stub method provides overridable virtual default GoOfflineAction.  Fails if BasePerformMethodsSucceed flag is not set in GoOnlineAndGoOfflineHandling property value.</summary>
         protected virtual string PerformGoOfflineAction()
 		{
             if (settings.CheckFlag(Part.GoOnlineAndGoOfflineHandling.BasePerformMethodsSucceed))
@@ -1062,16 +1113,28 @@ namespace MosaicLib.Modular.Part
             }
 		}
 
-		/// <summary>Provide passthrough PerformGoOfflineAction implementation.  Invokes PerformGoOfflineAction();</summary>
+        /// <summary>Provide overridable virtual passthrough PerformServiceAction implementation.  Invokes PerformServiceActionEx(action, action.ParamValue, action.NamedParamValues).</summary>
 		protected virtual string PerformServiceAction(IProviderActionBase<string, NullObj> action)
 		{
 			if (action == null)
 				return "SimpleActivePartBase::PerformServiceAction: given empty action pointer";
 
-			return PerformServiceAction(action.ParamValue);
+            return PerformServiceActionEx(action, action.ParamValue, action.NamedParamValues);
 		}
 
-		/// <summary>Stub method provides default ServiceAction.  Always fails.</summary>
+        /// <summary>
+        /// Provide overridable virtual passthrough PerformServiceAction implementation.  Invokes PerformServiceAction(serviceName).  
+        /// <para/>Note: alternate method name is choosen so that new signature will not generally overlap with derived part types that already have this signature pattern present
+        /// </summary>
+        protected virtual string PerformServiceActionEx(IProviderFacet ipf, string serviceName, INamedValueSet npv)
+        {
+            if (ipf == null)
+                return "SimpleActivePartBase::PerformServiceAction: given empty action pointer";
+
+            return PerformServiceAction(serviceName);
+        }
+
+        /// <summary>Stub method provides overridable virtual default ServiceAction.  Always fails.</summary>
 		/// <returns>"Action:Service(serviceName): there is no implementation for this requested service action."</returns>
 		protected virtual string PerformServiceAction(string serviceName)
 		{
@@ -1090,9 +1153,14 @@ namespace MosaicLib.Modular.Part
 		{
 			using (Logging.EnterExitTrace entryExitTrace = new Logging.EnterExitTrace(Log, "MainThreadFcn", Logging.MesgType.Debug))
             {
+                System.Exception exceptionDetected = null;
+
                 try
                 {
                     LogThreadInfo(Log.Debug);
+
+                    if (settings.CheckFlag(SimpleActivePartBehaviorOptions.MainThreadStartSetsStateToOffline))
+                        SetBaseState(UseState.Offline, "Part has been started");
 
                     // The following is the part's main loop:
                     //	Loop until the action queue has been disabled
@@ -1130,19 +1198,21 @@ namespace MosaicLib.Modular.Part
                         {
                             WaitForSomethingToDo(TimeSpan.Zero);
                         }
+
+                        if (!settings.CheckFlag(SimpleActivePartBehaviorOptions.PerformMainLoopServiceCallsServiceBusyConditionChangeDetection))
+                            ServiceBusyConditionChangeDetection();
                     }
                 }
                 catch (System.Exception ex)
                 {
+                    exceptionDetected = ex;
+
                     // disable the queue so that clients will not block indefinitely after this part's main thread has stopped processing actions.
                     actionQ.QueueEnable = false;
 
                     Log.Debug.Emit("{0} failed with unexpected {1}", Fcns.CurrentMethodName, ex.ToString(ExceptionFormat.Full));
 
                     var mesg = "Caught unexpected {0}".CheckedFormat(ex.ToString(ExceptionFormat.TypeAndMessage));
-
-                    if (settings.SimpleActivePartBehaviorOptions.IsSet(SimpleActivePartBehaviorOptions.UseMainThreadFailedState))
-                        SetBaseState(UseState.MainThreadFailed, mesg);
 
                     entryExitTrace.ExtraMessage = mesg;
                 }
@@ -1153,14 +1223,37 @@ namespace MosaicLib.Modular.Part
                 }
                 catch (System.Exception ex)
                 {
+                    if (exceptionDetected == null)
+                        exceptionDetected = ex;
+
                     Log.Debug.Emit("{0} failed during execution of stopping action list: {1}", Fcns.CurrentMethodName, ex.ToString(ExceptionFormat.Full));
 
                     if (entryExitTrace.ExtraMessage.IsNullOrEmpty())
                         entryExitTrace.ExtraMessage = "Caught unexpected {0} during stopping action list".CheckedFormat(ex.ToString(ExceptionFormat.TypeAndMessage));
                 }
 
-                if (entryExitTrace.ExtraMessage.IsNullOrEmpty())
-                    entryExitTrace.ExtraMessage = "Normal exit";
+                if (exceptionDetected == null)
+                {
+                    string mesg = "Normal exit";
+
+                    if (PrivateBaseState.IsOnlineOrAttemptOnline && settings.CheckFlag(SimpleActivePartBehaviorOptions.MainThreadStopSetsStateToStoppedIfIsOnlineOrAttemptOnline))
+                        SetBaseState(UseState.Stopped, (mesg = "Part stopped by request [from {0}]".CheckedFormat(PrivateBaseState.ToString(Part.BaseState.ToStringSelect.UseStateNoPrefix | Part.BaseState.ToStringSelect.ConnState))));
+                    else if (PrivateBaseState.UseState == UseState.Offline && settings.CheckFlag(SimpleActivePartBehaviorOptions.MainThreadStopSetsStateToStoppedIfOffline))
+                        SetBaseState(UseState.Stopped, (mesg = "Part stopped by request [from {0}]".CheckedFormat(PrivateBaseState.ToString(Part.BaseState.ToStringSelect.UseStateNoPrefix | Part.BaseState.ToStringSelect.ConnState))));
+
+                    if (entryExitTrace.ExtraMessage.IsNullOrEmpty())
+                        entryExitTrace.ExtraMessage = mesg;
+                }
+                else
+                {
+                    string mesg = "Caught unexpected {0}".CheckedFormat(exceptionDetected.ToString(ExceptionFormat.TypeAndMessage));
+
+                    if (settings.CheckFlag(SimpleActivePartBehaviorOptions.UseMainThreadFailedState))
+                        SetBaseState(UseState.MainThreadFailed, mesg);
+
+                    if (entryExitTrace.ExtraMessage.IsNullOrEmpty())
+                        entryExitTrace.ExtraMessage = mesg;
+                }
             }
 		}
 
@@ -1219,11 +1312,24 @@ namespace MosaicLib.Modular.Part
         protected bool HasStopBeenRequested { get { return (hasStopBeenRequested || (actionQ != null && !actionQ.QueueEnable)); } }
 
         /// <summary>
-        /// empty virtual base class method that can be overriden by derived classes to perform periodic service under control of the Part's main loop.
+        /// Base class method that can be overriden by derived classes to perform periodic service under control of the Part's main loop.
+        /// <para/>If the SimpleActivePartBehaviorOptions.PerformMainLoopServiceCallsServiceBusyConditionChangeDetection behavior is selected then this method calls ServiceBusyConditionChangeDetection();
         /// </summary>
 		protected virtual void PerformMainLoopService() 
 		{
+            if (settings.CheckFlag(SimpleActivePartBehaviorOptions.PerformMainLoopServiceCallsServiceBusyConditionChangeDetection))
+                ServiceBusyConditionChangeDetection();
 		}
+
+        /// <summary>
+        /// A derived class should override this method so that it can be used to service each of the ActionQueue instance for cancel requests when they are not empty
+        /// </summary>
+        protected override void ServiceActionQueueCancelRequests()
+        {
+            ActionQueue.ServiceCancelRequests();
+
+            base.ServiceActionQueueCancelRequests();
+        }
 
         /// <summary>
         /// Attempts to get and perform the next action from the actionQ by calling PerformAction on it.
@@ -1434,33 +1540,33 @@ namespace MosaicLib.Modular.Part
         }
 
         /// <summary>Creates and runs a GoOnline(<paramref name="andInitialize"/>) action on the given part.  Returns the given part to support call chaining.</summary>
-        public static TPartType RunGoOnlineActionInline<TPartType>(this TPartType part, bool andInitialize = true) where TPartType : IActivePartBase
+        public static TPartType RunGoOnlineActionInline<TPartType>(this TPartType part, bool andInitialize = true, INamedValueSet namedParamValues = null) where TPartType : IActivePartBase
         {
-            string ec = part.RunGoOnlineAction(andInitialize);
+            string ec = part.RunGoOnlineAction(andInitialize, namedParamValues: namedParamValues);
 
             return part;
         }
 
         /// <summary>Creates and runs a GoOnline(<paramref name="andInitialize"/>) action on the given part and returns the resulting result code.</summary>
-        public static string RunGoOnlineAction<TPartType>(this TPartType part, bool andInitialize = true) where TPartType : IActivePartBase
+        public static string RunGoOnlineAction<TPartType>(this TPartType part, bool andInitialize = true, INamedValueSet namedParamValues = null) where TPartType : IActivePartBase
         {
-            string ec = part.CreateGoOnlineAction(andInitialize).Run();
+            string ec = part.CreateGoOnlineAction(andInitialize).SetNamedParamValues(namedParamValues, ifNotNull: true).Run();
 
             return ec;
         }
 
         /// <summary>Creates and runs a GoOffline action on the given part.  Returns the given part to support call chaining.</summary>
-        public static TPartType RunGoOfflineActionInline<TPartType>(this TPartType part) where TPartType : IActivePartBase
+        public static TPartType RunGoOfflineActionInline<TPartType>(this TPartType part, INamedValueSet namedParamValues = null) where TPartType : IActivePartBase
         {
-            part.CreateGoOfflineAction().RunInline();
+            part.CreateGoOfflineAction().SetNamedParamValues(namedParamValues, ifNotNull: true).RunInline();
 
             return part;
         }
 
         /// <summary>Creates and runs a GoOffline action on the given part and returns the resulting result code.</summary>
-        public static string RunGoOfflineAction<TPartType>(this TPartType part) where TPartType : IActivePartBase
+        public static string RunGoOfflineAction<TPartType>(this TPartType part, INamedValueSet namedParamValues = null) where TPartType : IActivePartBase
         {
-            string ec = part.CreateGoOfflineAction().Run();
+            string ec = part.CreateGoOfflineAction().SetNamedParamValues(namedParamValues, ifNotNull: true).Run();
 
             return ec;
         }

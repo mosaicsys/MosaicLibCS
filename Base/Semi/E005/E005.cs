@@ -86,6 +86,10 @@ namespace MosaicLib.Semi.E005
         /// <summary>Under E041 Alarm annunciators are used simply to report exception conditions but they do not offer or support (recovery) action invocation by the decision authority. (103)</summary>
         [EnumMember]
         E041_Alarm = 103,
+
+        /// <summary>Interpretaion of this annunciator type is state and context dependant, especially in relation to when this annunciator is passed to a host.  May or may not have a known ALID. (104)</summary>
+        [EnumMember]
+        E041_Dynamic = 104,
     }
 
     /// <summary>

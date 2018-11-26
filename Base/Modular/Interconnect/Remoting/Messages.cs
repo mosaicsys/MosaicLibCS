@@ -80,6 +80,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Messages
 
         public MessageState State { get; private set; }
         public QpcTimeStamp TimeStamp { get; private set; }
+        public QpcTimeStamp SendPostedTimeStamp { get; private set; }
         public string Reason { get; private set; }
 
         public BufferHeaderFlags FirstBufferFlags 
@@ -115,6 +116,9 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Messages
                     break;
                 case MessageState.Failed:
                     emitterToUse = IssueEmitter;
+                    break;
+                case MessageState.SendPosted:
+                    SendPostedTimeStamp = qpcTimeStamp;
                     break;
                 default: 
                     break;
@@ -280,7 +284,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Messages
                 return "Message_{0:x4} {1} {2} {3} [{4}]".CheckedFormat(instanceNum & 0xffff, State, FirstBufferFlags, ByteCount, ByteArrayTranscoders.ByteStringTranscoder.Encode(ByteArray).GenerateSquareBracketEscapedVersion());
         }
 
-        public static readonly Buffers.BufferPool fallbackDefaultBufferPool = new BufferPool();
+        public static readonly Buffers.BufferPool fallbackDefaultBufferPool = new BufferPool("FallbackDefaultBufferPool");
 
         public Message Clear(QpcTimeStamp qpcTimeStamp)
         {

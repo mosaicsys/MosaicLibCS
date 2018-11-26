@@ -122,6 +122,85 @@ namespace MosaicLib.PartsLib.Common.Physics
 
     namespace UnitsOfMeasure
     {
+        #region Temperature (DegK, DegC, DegF)
+
+        namespace Temperature
+        {
+            /// <summary>Base class for temperature Unit of measure helper types.</summary>
+            public class Temperature : IComparable<Temperature>, IEquatable<Temperature>
+            {
+                public double Value { get; set; }
+                public TemperatureUnits Units { get; protected set; }
+                public Temperature ConvertToUnits(TemperatureUnits toUnits) { return new Temperature(this, toUnits); }
+
+                public Temperature(Temperature other) : this(other.Value, other.Units) { }
+                protected Temperature(double value, TemperatureUnits units) { Value = value; Units = units; }
+                protected Temperature(Temperature fromTemperature, TemperatureUnits toUnits) : this(fromTemperature.Value.ConvertUnits(fromTemperature.Units, toUnits), toUnits) { }
+
+                public override string ToString() { return "{0:g3} {1}".CheckedFormat(Value, Units); }
+
+                public static explicit operator double(Temperature value) { return value.Value; }
+                public static explicit operator TemperatureUnits(Temperature value) { return value.Units; }
+
+                public static Temperature operator +(Temperature a, Temperature b)
+                {
+                    return (a.Units == b.Units) ? (new Temperature(a.Value + b.Value, a.Units)) : (a + b.ConvertToUnits(a.Units));
+                }
+
+                public static Temperature operator -(Temperature a, Temperature b)
+                {
+                    return (a.Units == b.Units) ? (new Temperature(a.Value - b.Value, a.Units)) : (a - b.ConvertToUnits(a.Units));
+                }
+
+                public int CompareTo(Temperature other)
+                {
+                    return (Units == other.Units) ? Value.CompareTo(other.Value) : this.CompareTo(other.ConvertToUnits(Units));
+                }
+
+                public bool Equals(Temperature other)
+                {
+                    return (other != null && ((Units == other.Units && Value == other.Value) || (Units != other.Units && this.Equals(other.ConvertToUnits(Units)))));
+                }
+            }
+
+            /// <summary>Unit of measure helper type.  Represents a double value in TemperatureUnits.DegK.  implicit and explicit casts are used to convert between double and this UOM as well as between values with related UOMs</summary>
+            public class DegK : Temperature
+            {
+                private const TemperatureUnits units = TemperatureUnits.DegK;
+
+                public DegK(double value = 0.0) : base(value, units) { }
+                public DegK(Temperature fromTemperature) : base(fromTemperature, units) { }
+
+                public static explicit operator DegK(double value) { return new DegK(value); }
+            }
+
+            /// <summary>Unit of measure helper type.  Represents a double value in TemperatureUnits.DegC.  implicit and explicit casts are used to convert between double and this UOM as well as between values with related UOMs</summary>
+            public class DegC : Temperature
+            {
+                private const TemperatureUnits units = TemperatureUnits.DegC;
+
+                public DegC(double value = 0.0) : base(value, units) { }
+                public DegC(Temperature fromTemperature) : base(fromTemperature, units) { }
+
+                public static explicit operator DegC(double value) { return new DegC(value); }
+            }
+
+            /// <summary>Unit of measure helper type.  Represents a double value in TemperatureUnits.DegF.  implicit and explicit casts are used to convert between double and this UOM as well as between values with related UOMs</summary>
+            public class DegF : Temperature
+            {
+                private const TemperatureUnits units = TemperatureUnits.DegF;
+
+                public DegF(double value = 0.0) : base(value, units) { }
+                public DegF(Temperature fromTemperature) : base(fromTemperature, units) { }
+
+                public static explicit operator DegF(double value) { return new DegF(value); }
+            }
+        }
+
+        #endregion
+
+        #region Temperature (TemperatureUnits, Constants, ExtensionMethods - conversions)
+
         /// <summary>
         /// Temperature units of measure
         /// <para/>None (0), DegK (1), DegC (2), DegF (3)
@@ -198,27 +277,32 @@ namespace MosaicLib.PartsLib.Common.Physics
             }
 
             /// <summary>
-            /// Converts the given value measured in fromUOM TemperatureUnits into a value of the given toUOM TemperatureUnits and returns it.
+            /// Converts the given <paramref name="value"/> measured in <paramref name="fromUOM"/> TemperatureUnits into a value of the given <paramref name="toUOM"/> TemperatureUnits and returns it.
             /// </summary>
-            public static double ConvertUnits(this TemperatureUnits fromUOM, double value, TemperatureUnits toUOM)
-            {
-                return toUOM.ConvertUnits(fromUOM, value);
-            }
-
-            /// <summary>
-            /// Converts the given value measured in fromUOM TemperatureUnits into a value of the given toUOM TemperatureUnits and returns it.
-            /// </summary>
-            public static double ConvertUnits(this TemperatureUnits toUOM, TemperatureUnits fromUOM, double value)
+            public static double ConvertUnits(this double value, TemperatureUnits fromUOM, TemperatureUnits toUOM)
             {
                 if (fromUOM == toUOM)
                     return value;
 
-                //if (fromUOM == TemperatureUnits.DegF && toUOM == TemperatureUnits.DegC)
-                //    return value.ConvertDegFToDegC();
-                //else if (fromUOM == TemperatureUnits.DegC && toUOM == TemperatureUnits.DegF)
-                //    return value.ConvertDegCToDegF();
-
                 return toUOM.ConvertFromDegK(fromUOM.ConvertToDegK(value));
+            }
+
+            /// <summary>
+            /// Converts the given <paramref name="value"/> measured in <paramref name="fromUOM"/> TemperatureUnits into a value of the given <paramref name="toUOM"/> TemperatureUnits and returns it.
+            /// </summary>
+            [Obsolete("Please replace use of this method with the use of the less ambiguous value.ConvertUnits method that has a consistent signature accross the different UOM values (2018-11-11)")]
+            public static double ConvertUnits(this TemperatureUnits fromUOM, double value, TemperatureUnits toUOM)
+            {
+                return value.ConvertUnits(fromUOM, toUOM);
+            }
+
+            /// <summary>
+            /// Converts the given <paramref name="value"/> measured in <paramref name="fromUOM"/> TemperatureUnits into a value of the given <paramref name="toUOM"/> PressureUnits and returns it.
+            /// </summary>
+            [Obsolete("Please replace use of this method with the use of the less ambiguous value.ConvertUnits method that has a consistent signature accross the different UOM values (2018-11-11)")]
+            public static double ConvertUnits(this TemperatureUnits toUOM, TemperatureUnits fromUOM, double value)
+            {
+                return value.ConvertUnits(fromUOM, toUOM);
             }
 
             /// <summary>
@@ -238,9 +322,158 @@ namespace MosaicLib.PartsLib.Common.Physics
             }
         }
 
+        #endregion
+
+        #region Pressure (KPa, Torr, mTorr, Bar, mBar, PSI, Atm)
+
+        namespace Pressure
+        {
+            /// <summary>Base class for pressure Unit of measure helper types.</summary>
+            public class Pressure : IComparable<Pressure>, IEquatable<Pressure>
+            {
+                public double Value { get; set; }
+                public PressureUnits Units { get; protected set; }
+                public Pressure ConvertToUnits(PressureUnits toUnits) { return new Pressure(this, toUnits); }
+
+                public Pressure(Pressure other) : this(other.Value, other.Units) { }
+                protected Pressure(double value, PressureUnits units) { Value = value; Units = units; }
+                protected Pressure(Pressure fromPressure, PressureUnits units) : this(fromPressure.Value.ConvertUnits(fromPressure.Units, units), units) { }
+
+                public override string ToString() { return "{0:g6} {1}".CheckedFormat(Value, Units); }
+
+                public static explicit operator double(Pressure value) { return value.Value; }
+                public static explicit operator PressureUnits(Pressure value) { return value.Units; }
+
+                public static Pressure operator +(Pressure a, Pressure b)
+                {
+                    return (a.Units == b.Units) ? (new Pressure(a.Value + b.Value, a.Units)) : (a + b.ConvertToUnits(a.Units));
+                }
+
+                public static Pressure operator -(Pressure a, Pressure b)
+                {
+                    return (a.Units == b.Units) ? (new Pressure(a.Value - b.Value, a.Units)) : (a - b.ConvertToUnits(a.Units));
+                }
+
+                public int CompareTo(Pressure other)
+                {
+                    return (Units == other.Units) ? Value.CompareTo(other.Value) : this.CompareTo(other.ConvertToUnits(Units));
+                }
+
+                public bool Equals(Pressure other)
+                {
+                    return (other != null && ((Units == other.Units && Value == other.Value) || (Units != other.Units && this.Equals(other.ConvertToUnits(Units)))));
+                }
+            }
+
+            /// <summary>Unit of measure helper type.  Represents a double value in PressureUnits.kilopascal.  implicit and explicit casts are used to convert between double and this UOM as well as between values with related UOMs</summary>
+            public class KPa : Pressure
+            {
+                private const PressureUnits units = PressureUnits.kilopascals;
+
+                public KPa(double value) : base(value, units) { }
+                public KPa(Pressure fromPressure) : base(fromPressure, units) { }
+
+                public static explicit operator KPa(double value) { return new KPa(value); }
+            }
+
+            /// <summary>Unit of measure helper type.  Represents a double value in PressureUnits.pascal.  implicit and explicit casts are used to convert between double and this UOM as well as between values with related UOMs</summary>
+            public class Pascal : Pressure
+            {
+                private const PressureUnits units = PressureUnits.pascals;
+
+                public Pascal(double value) : base(value, units) { }
+                public Pascal(Pressure fromPressure) : base(fromPressure, units) { }
+
+                public static explicit operator Pascal(double value) { return new Pascal(value); }
+            }
+
+            /// <summary>Unit of measure helper type.  Represents a double value in PressureUnits.torr.  implicit and explicit casts are used to convert between double and this UOM as well as between values with related UOMs</summary>
+            public class Torr : Pressure
+            {
+                private const PressureUnits units = PressureUnits.torr;
+
+                public Torr(double value) : base(value, units) { }
+                public Torr(Pressure fromPressure) : base(fromPressure, units) { }
+
+                public static explicit operator Torr(double value) { return new Torr(value); }
+            }
+
+            /// <summary>Unit of measure helper type.  Represents a double value in PressureUnits.millitor.  implicit and explicit casts are used to convert between double and this UOM as well as between values with related UOMs</summary>
+            public class mTorr : Pressure
+            {
+                private const PressureUnits units = PressureUnits.millitorr;
+
+                public mTorr(double value) : base(value, units) { }
+                public mTorr(Pressure fromPressure) : base(fromPressure, units) { }
+
+                public static explicit operator mTorr(double value) { return new mTorr(value); }
+            }
+
+            /// <summary>Unit of measure helper type.  Represents a double value in PressureUnits.bar.  implicit and explicit casts are used to convert between double and this UOM as well as between values with related UOMs</summary>
+            public class Bar : Pressure
+            {
+                private const PressureUnits units = PressureUnits.bar;
+
+                public Bar(double value) : base(value, units) { }
+                public Bar(Pressure fromPressure) : base(fromPressure, units) { }
+
+                public static explicit operator Bar(double value) { return new Bar(value); }
+            }
+
+            /// <summary>Unit of measure helper type.  Represents a double value in PressureUnits.millibar.  implicit and explicit casts are used to convert between double and this UOM as well as between values with related UOMs</summary>
+            public class mBar : Pressure
+            {
+                private const PressureUnits units = PressureUnits.millibar;
+
+                public mBar(double value) : base(value, units) { }
+                public mBar(Pressure fromPressure) : base(fromPressure, units) { }
+
+                public static explicit operator mBar(double value) { return new mBar(value); }
+            }
+
+            /// <summary>Unit of measure helper type.  Represents a double value in PressureUnits.psi.  implicit and explicit casts are used to convert between double and this UOM as well as between values with related UOMs</summary>
+            public class PSI : Pressure
+            {
+                private const PressureUnits units = PressureUnits.psi;
+
+                public PSI(double value) : base(value, units) { }
+                public PSI(Pressure fromPressure) : base(fromPressure, units) { }
+
+                public static explicit operator PSI(double value) { return new PSI(value); }
+            }
+
+            /// <summary>Unit of measure helper type.  Represents a double value in PressureUnits.StandardAtmospheres.  implicit and explicit casts are used to convert between double and this UOM as well as between values with related UOMs</summary>
+            public class Atm : Pressure
+            {
+                public static Atm StandardValue { get { return new Atm(Constants.StdAtmInStdAtm); } }
+
+                private const PressureUnits units = PressureUnits.StandardAtmospheres;
+
+                public Atm(double value) : base(value, units) { }
+                public Atm(Pressure fromPressure) : base(fromPressure, units) { }
+
+                public static explicit operator Atm(double value) { return new Atm(value); }
+            }
+
+            /// <summary>Unit of measure helper type.  Represents a double value in PressureUnits.inchwc.  implicit and explicit casts are used to convert between double and this UOM as well as between values with related UOMs</summary>
+            public class InchWC : Pressure
+            {
+                private const PressureUnits units = PressureUnits.inchwc;
+
+                public InchWC(double value) : base(value, units) { }
+                public InchWC(Pressure fromPressure) : base(fromPressure, units) { }
+
+                public static explicit operator InchWC(double value) { return new InchWC(value); }
+            }
+        }
+        
+        #endregion
+
+        #region Pressure (PressureUnits, Contants, ExtensionMethods - conversions)
+
         /// <summary>
         /// Pressure units of measure
-        /// <para/>None (0), kilopascals (1), pascals (2), torr (3), millitor (4), bar (5), millibar (6), psi (7), StandardAtmospheres (8)
+        /// <para/>None (0), kilopascals (1), pascals (2), torr (3), millitorr (4), bar (5), millibar (6), psi (7), StandardAtmospheres (8)
         /// </summary>
         public enum PressureUnits : int
         {
@@ -270,6 +503,9 @@ namespace MosaicLib.PartsLib.Common.Physics
 
             /// <summary>Standard Atmospheres (8)</summary>
             StandardAtmospheres = 8,
+
+            /// <summary>Inch Water Column (9)</summary>
+            inchwc = 9,
         }
 
         public static partial class Constants
@@ -288,6 +524,9 @@ namespace MosaicLib.PartsLib.Common.Physics
 
             /// <summary>14.69595</summary>
             public const double StdAtmInPSI = 14.69595;
+
+            /// <summary>0.249082</summary>
+            public const double KPaPerInchWC = 0.249082;
         }
 
         public static partial class ExtensionMethods
@@ -315,6 +554,7 @@ namespace MosaicLib.PartsLib.Common.Physics
                     case PressureUnits.pascals: return valueInUserUnits * 0.001;
                     case PressureUnits.kilopascals: return valueInUserUnits;
                     case PressureUnits.StandardAtmospheres: return valueInUserUnits * (Constants.StdAtmInKPa / Constants.StdAtmInStdAtm);
+                    case PressureUnits.inchwc: return valueInUserUnits * Constants.KPaPerInchWC;
                     default: return 0.0;
                 }
             }
@@ -322,7 +562,7 @@ namespace MosaicLib.PartsLib.Common.Physics
             /// <summary>
             /// Converts the given valueInKPa in kilopascals into a value of the given toUOM PressureUnits and returns it.
             /// </summary>
-            public static double ConvertFromKPA(this PressureUnits toUOM, double valueInKPa)
+            public static double ConvertFromKPa(this PressureUnits toUOM, double valueInKPa)
             {
                 switch (toUOM)
                 {
@@ -334,30 +574,128 @@ namespace MosaicLib.PartsLib.Common.Physics
                     case PressureUnits.pascals: return valueInKPa * 1000.0;
                     case PressureUnits.kilopascals: return valueInKPa;
                     case PressureUnits.StandardAtmospheres: return valueInKPa * (Constants.StdAtmInStdAtm / Constants.StdAtmInKPa);
+                    case PressureUnits.inchwc: return valueInKPa * (1.0 / Constants.KPaPerInchWC);
                     default:
                         return 0.0;
                 }
             }
 
-            /// <summary>
-            /// Converts the given value measured in fromUOM PressureUnits into a value of the given toUOM PressureUnits and returns it.
-            /// </summary>
-            public static double ConvertUnits(this PressureUnits fromUOM, double value, PressureUnits toUOM)
+            [Obsolete("Please change to the use of the corresponding ConvertFromKPa extension method (2018-11-10)")]
+            public static double ConvertFromKPA(this PressureUnits toUOM, double valueInKPa)
             {
-                return fromUOM.ConvertUnits(toUOM, value);
+                return toUOM.ConvertFromKPa(valueInKPa);
             }
 
             /// <summary>
-            /// Converts the given value measured in fromUOM PressureUnits into a value of the given toUOM PressureUnits and returns it.
+            /// Converts the given <paramref name="value"/> measured in <paramref name="fromUOM"/> PressureUnits into a value of the given <paramref name="toUOM"/> PressureUnits and returns it.
             /// </summary>
-            public static double ConvertUnits(this PressureUnits fromUOM, PressureUnits toUOM, double value)
+            public static double ConvertUnits(this double value, PressureUnits fromUOM, PressureUnits toUOM)
             {
                 if (fromUOM == toUOM)
                     return value;
 
-                return toUOM.ConvertFromKPA(fromUOM.ConvertToKPa(value));
+                return toUOM.ConvertFromKPa(fromUOM.ConvertToKPa(value));
+            }
+
+            /// <summary>
+            /// Converts the given <paramref name="value"/> measured in <paramref name="fromUOM"/> PressureUnits into a value of the given <paramref name="toUOM"/> PressureUnits and returns it.
+            /// </summary>
+            [Obsolete("Please replace use of this method with the use of the less ambiguous value.ConvertUnits method that has a consistent signature accross the different UOM values (2018-11-11)")]
+            public static double ConvertUnits(this PressureUnits fromUOM, double value, PressureUnits toUOM)
+            {
+                return value.ConvertUnits(fromUOM, toUOM);
+            }
+
+            /// <summary>
+            /// Converts the given <paramref name="value"/> measured in <paramref name="fromUOM"/> PressureUnits into a value of the given <paramref name="toUOM"/> PressureUnits and returns it.
+            /// </summary>
+            [Obsolete("Please replace use of this method with the use of the less ambiguous value.ConvertUnits method that has a consistent signature accross the different UOM values (2018-11-11)")]
+            public static double ConvertUnits(this PressureUnits fromUOM, PressureUnits toUOM, double value)
+            {
+                return value.ConvertUnits(fromUOM, toUOM);
             }
         }
+
+        #endregion
+
+        #region VolumetricFlow (scms, sccm, slm)
+
+        namespace VolumetricFlow
+        {
+            /// <summary>Base class for pressure Unit of measure helper types.</summary>
+            public class VolumetricFlow : IComparable<VolumetricFlow>, IEquatable<VolumetricFlow>
+            {
+                public double Value { get; set; }
+                public VolumetricFlowUnits Units { get; protected set; }
+                public VolumetricFlow ConvertToUnits(VolumetricFlowUnits toUnits) { return new VolumetricFlow(this, toUnits); }
+
+                public VolumetricFlow(VolumetricFlow other) : this(other.Value, other.Units) { }
+                protected VolumetricFlow(double value, VolumetricFlowUnits units) { Value = value; Units = units; }
+                protected VolumetricFlow(VolumetricFlow fromFlow, VolumetricFlowUnits units) : this(fromFlow.Value.ConvertUnits(fromFlow.Units, units), units) { }
+
+                public override string ToString() { return "{0:g3} {1}".CheckedFormat(Value, Units); }
+
+                public static explicit operator double(VolumetricFlow value) { return value.Value; }
+                public static explicit operator VolumetricFlowUnits(VolumetricFlow value) { return value.Units; }
+
+                public static VolumetricFlow operator +(VolumetricFlow a, VolumetricFlow b)
+                {
+                    return (a.Units == b.Units) ? (new VolumetricFlow(a.Value + b.Value, a.Units)) : (a + b.ConvertToUnits(a.Units));
+                }
+
+                public static VolumetricFlow operator -(VolumetricFlow a, VolumetricFlow b)
+                {
+                    return (a.Units == b.Units) ? (new VolumetricFlow(a.Value - b.Value, a.Units)) : (a - b.ConvertToUnits(a.Units));
+                }
+
+                public int CompareTo(VolumetricFlow other)
+                {
+                    return (Units == other.Units) ? Value.CompareTo(other.Value) : this.CompareTo(other.ConvertToUnits(Units));
+                }
+
+                public bool Equals(VolumetricFlow other)
+                {
+                    return (other != null && ((Units == other.Units && Value == other.Value) || (Units != other.Units && this.Equals(other.ConvertToUnits(Units)))));
+                }
+            }
+
+            /// <summary>Unit of measure helper type.  Represents a double value in TemperatureUnits.scms.  implicit and explicit casts are used to convert between double and this UOM as well as between values with related UOMs</summary>
+            public class scms : VolumetricFlow
+            {
+                private const VolumetricFlowUnits units = VolumetricFlowUnits.scms;
+
+                public scms(double value) : base(value, units) { }
+                public scms(VolumetricFlow fromFlow) : base(fromFlow, units) { }
+
+                public static explicit operator scms(double value) { return new scms(value); }
+            }
+
+            /// <summary>Unit of measure helper type.  Represents a double value in TemperatureUnits.sccm.  implicit and explicit casts are used to convert between double and this UOM as well as between values with related UOMs</summary>
+            public class sccm : VolumetricFlow
+            {
+                private const VolumetricFlowUnits units = VolumetricFlowUnits.sccm;
+
+                public sccm(double value) : base(value, units) { }
+                public sccm(VolumetricFlow fromFlow) : base(fromFlow, units) { }
+
+                public static explicit operator sccm(double value) { return new sccm(value); }
+            }
+
+            /// <summary>Unit of measure helper type.  Represents a double value in TemperatureUnits.slm.  implicit and explicit casts are used to convert between double and this UOM as well as between values with related UOMs</summary>
+            public class slm : VolumetricFlow
+            {
+                private const VolumetricFlowUnits units = VolumetricFlowUnits.slm;
+
+                public slm(double value) : base(value, units) { }
+                public slm(VolumetricFlow fromFlow) : base(fromFlow, units) { }
+
+                public static explicit operator slm(double value) { return new slm(value); }
+            }
+        }
+        
+        #endregion
+
+        #region VolumetricFlow (VolumetricFlowUnits, Contants, ExtensionMethods - conversions)
 
         /// <summary>
         /// Volumetrc units of flow at Standard Atmospheric pressure (1.0)
@@ -418,23 +756,35 @@ namespace MosaicLib.PartsLib.Common.Physics
             }
 
             /// <summary>
-            /// Converts the given value measured in fromUOM PressureUnits into a value of the given toUOM PressureUnits and returns it.
+            /// Converts the given <paramref name="value"/> measured in <paramref name="fromUOM"/> VolumetricFlowUnits into a value of the given <paramref name="toUOM"/> VolumetricFlowUnits and returns it.
             /// </summary>
-            public static double ConvertUnits(this VolumetricFlowUnits fromUOM, double value, VolumetricFlowUnits toUOM)
-            {
-                return fromUOM.ConvertUnits(toUOM, value);
-            }
-
-            /// <summary>
-            /// Converts the given value measured in fromUOM PressureUnits into a value of the given toUOM PressureUnits and returns it.
-            /// </summary>
-            public static double ConvertUnits(this VolumetricFlowUnits fromUOM, VolumetricFlowUnits toUOM, double value)
+            public static double ConvertUnits(this double value, VolumetricFlowUnits fromUOM, VolumetricFlowUnits toUOM)
             {
                 if (fromUOM == toUOM)
                     return value;
 
                 return toUOM.ConvertFromSCMS(fromUOM.ConvertToSCMS(value));
             }
+
+            /// <summary>
+            /// Converts the given <paramref name="value"/> measured in <paramref name="fromUOM"/> VolumetricFlowUnits into a value of the given <paramref name="toUOM"/> VolumetricFlowUnits and returns it.
+            /// </summary>
+            [Obsolete("Please replace use of this method with the use of the less ambiguous value.ConvertUnits method that has a consistent signature accross the different UOM values (2018-11-11)")]
+            public static double ConvertUnits(this VolumetricFlowUnits fromUOM, double value, VolumetricFlowUnits toUOM)
+            {
+                return value.ConvertUnits(fromUOM, toUOM);
+            }
+
+            /// <summary>
+            /// Converts the given <paramref name="value"/> measured in <paramref name="fromUOM"/> TemperatureUnits into a value of the given <paramref name="toUOM"/> PressureUnits and returns it.
+            /// </summary>
+            [Obsolete("Please replace use of this method with the use of the newer ConvertToUnits method that has a consistent signature accross the different UOM values (2018-11-11)")]
+            public static double ConvertUnits(this VolumetricFlowUnits fromUOM, VolumetricFlowUnits toUOM, double value)
+            {
+                return value.ConvertUnits(fromUOM, toUOM);
+            }
         }
+
+        #endregion
     }
 }

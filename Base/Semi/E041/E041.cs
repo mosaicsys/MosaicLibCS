@@ -118,6 +118,13 @@ namespace MosaicLib.Semi.E041
         /// </summary>
         [EnumMember]
         Alarm = E005.ALCD.E041_Alarm,
+
+        /// <summary>
+        /// Interpretaion of this annunciator type is state and context dependant, especially in relation to when this annunciator is passed to a host.  May or may not have a known ALID.
+        /// Internally this annuciator is generally treated as an Attention type.
+        /// </summary>
+        [EnumMember]
+        Dynamic = E005.ALCD.E041_Dynamic,
     }
 
     /// <summary>
@@ -298,8 +305,15 @@ namespace MosaicLib.Semi.E041
         /// <summary>Gives the ANType of this Annunciator</summary>
         ANType ANType { get; }
 
-        /// <summary>Returns the non-zero sequence number that the ANManagerPart assigned to this spec during Registration.  Will be zero for client created spec objects.</summary>
+        /// <summary>This is now a proxy for the ANManagerTableRegistrationNum property.</summary>
+        [Obsolete("This property is being deprectated as its prior implementation is not easily unit testable.  Please change to the use of the ANManagerTableRegistrationNum value instead (2018-11-03)")]
         Int32 SpecID { get; }
+
+        /// <summary>When non-zero this indicates the position of the corresponding ANSource in the managers table of registered sources.</summary>
+        int ANManagerTableRegistrationNum { get; }
+
+        /// <summary>Carries information about this annunciator that was provided by the client when the registering the corresponding ANSource.</summary>
+        INamedValueSet MetaData { get; }
 
         /// <summary>
         /// Defaults to ALID_None.  When explicitly set to a possitive integer value this defines the ALID that the client would like to use with this annunciator.  
@@ -328,42 +342,54 @@ namespace MosaicLib.Semi.E041
         [DataMember(Order = 40)]
         public ANType ANType { get; set; }
 
-        /// <summary>Returns the non-zero sequence number that the ANManagerPart assigned to this spec during Registration.</summary>
-        [DataMember(Order = 50, IsRequired = false, EmitDefaultValue = false)]
-        public Int32 SpecID { get; internal set; }
+        /// <summary>This is now a proxy for the ANManagerTableRegistrationNum property.</summary>
+        public Int32 SpecID { get { return ANManagerTableRegistrationNum; } }
+
+        /// <summary>When non-zero this indicates the position of the corresponding ANSource in the managers table of registered sources.</summary>
+        [DataMember(Order = 60, Name="RegNum", IsRequired = false, EmitDefaultValue = false)]
+        public int ANManagerTableRegistrationNum { get; internal set; }
 
         /// <summary>
         /// Defaults to ALID_None.  When explicitly set to a possitive integer value this defines the ALID that the client would like to use with this annunciator.  
         /// When set to ALID_Lookup or ALID_OptLookup this requests that the IANManager attempt to find the ALID from the (possibly later) provided IE30ALIDHandlerFacet.  
         /// For ALID_Lookup the IANManager will emit an error message if no ALID was found for this ANName after the IE30ALIDHandlerFacet has been provided.
         /// </summary>
-        [DataMember(Order = 60, IsRequired = false, EmitDefaultValue = false)]
+        [DataMember(Order = 70, IsRequired = false, EmitDefaultValue = false)]
         public ANAlarmID ALID { get; set; }
 
         /// <summary>Returns true if this object's ALID was explicitly defined by the client (i.e. it is neither None, Lookup, nor OptLookup</summary>
         public bool HasALID { get { return ALID.IsDefined(); } }
 
+        /// <summary>Carries information about this annunciator that was provided by the client when the registering the corresponding ANSource.</summary>
+        public INamedValueSet MetaData { get { return _metaData.MapNullToEmpty(); } set { _metaData = value.MapEmptyToNull().ConvertToReadOnly(mapNullToEmpty: false); } }
+
+        [DataMember(Order = 80, Name = "MetaData", IsRequired = false, EmitDefaultValue = false)]
+        private NamedValueSet _metaData;
+
         /// <summary>Default constructor</summary>
         public ANSpec() { }
 
         /// <summary>Copy constructor</summary>
-        public ANSpec(IANSpec rhs)
+        public ANSpec(IANSpec other)
             : this()
         {
-            ANName = rhs.ANName;
-            Comment = rhs.Comment;
-            ANType = rhs.ANType;
-            ALID = rhs.ALID;
-            SpecID = rhs.SpecID;
+            ANName = other.ANName;
+            Comment = other.Comment;
+            ANType = other.ANType;
+            ANManagerTableRegistrationNum = other.ANManagerTableRegistrationNum;
+            ALID = other.ALID;
+            MetaData = other.MetaData;
         }
 
         /// <summary>Debugging and logging helper method</summary>
         public override string ToString()
         {
-            if (SpecID != 0)
-                return "ANSpec: {0} {1} SpecID:{2} ALID:{3}".CheckedFormat(ANName, ANType, SpecID, ALID);
+            string mdStr = (_metaData != null ? " MetaData:{0}".CheckedFormat(_metaData.SafeToStringSML()) : "");
+
+            if (ANManagerTableRegistrationNum != 0)
+                return "ANSpec: {0} {1} RegNum:{2} ALID:{3}{4}".CheckedFormat(ANName, ANType, ANManagerTableRegistrationNum, ALID, mdStr);
             else
-                return "ANSpec: {0} {1} ALID:{2}".CheckedFormat(ANName, ANType, ALID);
+                return "ANSpec: {0} {1} ALID:{2}{3}".CheckedFormat(ANName, ANType, ALID, mdStr);
         }
 
         /// <summary>
@@ -375,8 +401,10 @@ namespace MosaicLib.Semi.E041
                     && ANName == other.ANName
                     && Comment == other.Comment
                     && ANType == other.ANType
-                    && SpecID == other.SpecID
-                    && ALID == other.ALID);
+                    && ANManagerTableRegistrationNum == other.ANManagerTableRegistrationNum
+                    && ALID == other.ALID
+                    && MetaData.IsEqualTo(other.MetaData, compareReadOnly: false)
+                    );
         }
 
         /// <summary>
@@ -454,8 +482,11 @@ namespace MosaicLib.Semi.E041
         /// <summary>Gives the state of any Lookup operation that is required or is in progress for this AN source.</summary>
         ALIDLookupState ALIDLookupState { get; }
 
-        /// <summary>Returns true if this IANState has the same contents as the given rhs</summary>
-        bool IsEqualTo(IANState rhs);
+        /// <summary>This property allows the ANSource to record and propagate arbitrary values to consumers of ANState data such as the GUI, the decision authority, and the host interface, so as to support client specific customizations of how Annunciators are handled and connected to other entities.</summary>
+        INamedValueSet NamedValues { get; }
+
+        /// <summary>Returns true if this IANState has the same contents as the given <paramref name="other"/></summary>
+        bool IsEqualTo(IANState other, bool compareTimeStamp = true, bool compareDateTime = true);
     }
 
     /// <summary>
@@ -482,9 +513,19 @@ namespace MosaicLib.Semi.E041
         /// <summary>Returns true if this ANSeqAndTimeInfo has the same contents as the given <paramref name="other"/> ANSeqAndTimeInfo</summary>
         public bool Equals(ANSeqAndTimeInfo other)
         {
+            return IsEqualTo(other);
+        }
+
+        /// <summary>
+        /// Returns true if this ANSeqAndTimeInfo has the same contents as the given <paramref name="other"/> ANSeqAndTimeInfo.  
+        /// Set <paramref name="compareTimeStamp"/> to false to prevent comparing the actual TimeStamp values.  
+        /// Set <paramref name="compareDateTime"/> to false to prevent comparing the actual DateTime values.
+        /// </summary>
+        public bool IsEqualTo(ANSeqAndTimeInfo other, bool compareTimeStamp = true, bool compareDateTime = true)
+        {
             return (SeqNum == other.SeqNum
-                    && TimeStamp == other.TimeStamp
-                    && DateTime == other.DateTime);
+                    && (TimeStamp == other.TimeStamp || !compareTimeStamp)
+                    && (DateTime == other.DateTime || !compareDateTime));
         }
 
         /// <summary>
@@ -524,6 +565,7 @@ namespace MosaicLib.Semi.E041
             ActionAbortRequested = other.ActionAbortRequested;
             ALID = other.ALID;
             ALIDLookupState = other.ALIDLookupState;
+            NamedValues = other.NamedValues;
         }
 
         /// <summary>Gives the ANSpec for the annunciator that produced this state.</summary>
@@ -593,28 +635,39 @@ namespace MosaicLib.Semi.E041
         [DataMember(Order = 1200)]
         public ALIDLookupState ALIDLookupState { get; set; }
 
-        /// <summary>Returns true if this ANState has the same contents as the given <paramref name="other"/> IANState</summary>
-        public bool IsEqualTo(IANState other)
-        {
-            return Equals(other);
-        }
+        /// <summary>This property allows the ANSource to record and propagate arbitrary values to consumers of ANState data such as the GUI, the decision authority, and the host interface, so as to support client specific customizations of how Annunciators are handled and connected to other entities.</summary>
+        public INamedValueSet NamedValues { get { return _namedValues.MapNullToEmpty(); } set { _namedValues = value.MapEmptyToNull().ConvertToReadOnly(mapNullToEmpty: false); } }
+
+        [DataMember(Order = 1300, Name = "NamedValues", EmitDefaultValue = false, IsRequired = false)]
+        private NamedValueSet _namedValues;
 
         /// <summary>Returns true if this ANState has the same contents as the given <paramref name="other"/> IANState</summary>
         public bool Equals(IANState other)
+        {
+            return IsEqualTo(other);
+        }
+
+        /// <summary>
+        /// Returns true if this ANState has the same contents as the given <paramref name="other"/> IANState.
+        /// Set <paramref name="compareTimeStamp"/> to false to prevent comparing the actual SeqAndTimeInfo.TimeStamp values.  
+        /// Set <paramref name="compareDateTime"/> to false to prevent comparing the actual SeqAndTimeInfo.DateTime values.
+        /// </summary>
+        public bool IsEqualTo(IANState other, bool compareTimeStamp = true, bool compareDateTime = true)
         {
             return (other != null
                     && ANSpec.Equals(other.ANSpec)
                     && ANName == other.ANName
                     && ANSignalState == other.ANSignalState
                     && Reason == other.Reason
-                    && SeqAndTimeInfo.Equals(other.SeqAndTimeInfo)
-                    && LastTransitionToOnSeqAndTimeInfo.Equals(other.LastTransitionToOnSeqAndTimeInfo)
-                    && ActionList.IsEqualTo(other.ActionList)
+                    && SeqAndTimeInfo.IsEqualTo(other.SeqAndTimeInfo, compareTimeStamp: compareTimeStamp, compareDateTime: compareDateTime)
+                    && LastTransitionToOnSeqAndTimeInfo.IsEqualTo(other.LastTransitionToOnSeqAndTimeInfo, compareTimeStamp: compareTimeStamp, compareDateTime: compareDateTime)
+                    && ActionList.IsEqualTo(other.ActionList, compareReadOnly: false)
                     && SelectedActionName == other.SelectedActionName
                     && ActiveActionName == other.ActiveActionName
                     && ActionAbortRequested == other.ActionAbortRequested
                     && ALID == other.ALID
                     && ALIDLookupState == other.ALIDLookupState
+                    && NamedValues.IsEqualTo(other.NamedValues, compareReadOnly: false)
                     );
         }
 
@@ -622,8 +675,9 @@ namespace MosaicLib.Semi.E041
         public override string ToString()
         {
             string anSpecStr = (ANSpec != null ? ANSpec.ToString() : "NoANSpec");
+            string nvStr = (_namedValues != null ? " NamedValues:{0}".CheckedFormat(_namedValues.SafeToStringSML()) : "");
 
-            return "ANState {0} {1} {2} sel:{3}{4} alid:{5} reason:'{6}'".CheckedFormat(anSpecStr, ANSignalState, ActionList.ToString(false, true), SelectedActionName.MapNullOrEmptyTo("[None]"), ActionAbortRequested ? " AbortReq" : string.Empty, ALID, Reason);
+            return "ANState {0} {1} {2} sel:{3}{4} alid:{5} reason:'{6}'{7}".CheckedFormat(anSpecStr, ANSignalState, ActionList.ToString(false, true), SelectedActionName.MapNullOrEmptyTo("[None]"), ActionAbortRequested ? " AbortReq" : string.Empty, ALID, Reason, nvStr);
         }
 
         /// <summary>
@@ -666,6 +720,9 @@ namespace MosaicLib.Semi.E041
 
         /// <summary>This method is used to wait until the ANManagerPart has processed and delivered all side effects that relate to this ANSource</summary>
         void Sync();
+
+        /// <summary>Allows the caller to replace (or merge) the Anunciator's last published NamedValues with the given <paramref name="nvs"/> contents.</summary>
+        void SetNamedValues(INamedValueSet nvs, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.Replace);
     }
 
     /// <summary>
@@ -861,9 +918,9 @@ namespace MosaicLib.Semi.E041
         #region construction
 
         /// <summary>
-        /// Constructor.  partID is required.  e30ALIDHandlerFacet may be null
+        /// Constructor.  <paramref name="partID"/> is required.  <paramref name="e30ALIDHandlerFacet"/>, <paramref name="ivi"/>, <paramref name="iConfig"/>, and <paramref name="isi"/> are optional
         /// </summary>
-        public ANManagerPart(string partID, IE30ALIDHandlerFacet e30ALIDHandlerFacet = null, IValuesInterconnection ivi = null, IConfig iConfig = null) 
+        public ANManagerPart(string partID, IE30ALIDHandlerFacet e30ALIDHandlerFacet = null, IValuesInterconnection ivi = null, IConfig iConfig = null, ISetsInterconnection isi = null) 
             : base(partID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion1.Build(automaticallyIncAndDecBusyCountAroundActionInvoke: false))
         {
             ActionLoggingConfig = MosaicLib.Modular.Action.ActionLoggingConfig.Debug_Debug_Trace_Trace;
@@ -873,12 +930,14 @@ namespace MosaicLib.Semi.E041
             this.e30ALIDHandlerFacet = e30ALIDHandlerFacet;
             IVI = ivi ?? Values.Instance;
             IConfig = iConfig ?? Modular.Config.Config.Instance;
+            ISI = isi ?? Modular.Interconnect.Sets.Sets.Instance;
 
             SetupMainThreadStartingAndStoppingActions();
         }
 
         private IValuesInterconnection IVI { get; set; }
         private IConfig IConfig { get; set; }
+        private ISetsInterconnection ISI { get; set; }
 
         private IReferenceSet<ANState> anStateCurrentActiveSet;
         private IReferenceSet<ANState> anStateRecentlyClearedSet;
@@ -1037,11 +1096,11 @@ namespace MosaicLib.Semi.E041
             string methodName = "{0}({1}, {2})".CheckedFormat(Fcns.CurrentMethodName, sourceObjectID, anSpec);
 
             if (anSpec.ANType == ANType.Alarm)
-                throw new ANRegistrationException("{0} is not valid: ANType {1} is not compatible with this useage interface type".CheckedFormat(methodName, anSpec.ANType));
+                throw new ANRegistrationException("{0} is not valid: ANType {1} is not compatible with this usage interface type".CheckedFormat(methodName, anSpec.ANType));
 
             StartPartIfNeeded();
             
-            InternalANSpec anSpecCopy = new InternalANSpec(anSpec);
+            ANSpec anSpecCopy = new ANSpec(anSpec);
             ANSourceImpl sourceImpl = null;
             System.Exception ex = null;
 
@@ -1069,11 +1128,11 @@ namespace MosaicLib.Semi.E041
             string methodName = "{0}({1}, {2})".CheckedFormat(Fcns.CurrentMethodName, sourceObjectID, anSpec);
 
             if (anSpec.ANType == ANType.Alarm)
-                throw new ANRegistrationException("{0} is not valid: ANType {1} is not compatible with this useage interface type".CheckedFormat(methodName, anSpec.ANType));
+                throw new ANRegistrationException("{0} is not valid: ANType {1} is not compatible with this usage interface type".CheckedFormat(methodName, anSpec.ANType));
 
             StartPartIfNeeded();
 
-            InternalANSpec anSpecCopy = new InternalANSpec(anSpec);
+            ANSpec anSpecCopy = new ANSpec(anSpec);
             ANSourceImpl sourceImpl = null;
             System.Exception ex = null;
 
@@ -1101,11 +1160,11 @@ namespace MosaicLib.Semi.E041
             string methodName = "{0}({1}, {2})".CheckedFormat(Fcns.CurrentMethodName, sourceObjectID, anSpec);
 
             if (anSpec.ANType == ANType.Error)
-                throw new ANRegistrationException("{0} is not valid: ANType {1} is not compatible with this useage interface type".CheckedFormat(methodName, anSpec.ANType));
+                throw new ANRegistrationException("{0} is not valid: ANType {1} is not compatible with this usage interface type".CheckedFormat(methodName, anSpec.ANType));
 
             StartPartIfNeeded();
 
-            InternalANSpec anSpecCopy = new InternalANSpec(anSpec);
+            ANSpec anSpecCopy = new ANSpec(anSpec);
             ANSourceImpl sourceImpl = null;
             System.Exception ex = null;
 
@@ -1206,9 +1265,7 @@ namespace MosaicLib.Semi.E041
             return foundSourceTracking;
         }
 
-        private static AtomicInt32 anSpecSeqNumGenerator = new AtomicInt32();
-
-        private string PerformRegisterAnnunciatorSource(string sourceObjectID, InternalANSpec anSpecCopy, bool requiresService, ref ANSourceImpl sourceImpl, ref System.Exception ex)
+        private string PerformRegisterAnnunciatorSource(string sourceObjectID, ANSpec anSpecCopy, bool requiresService, ref ANSourceImpl sourceImpl, ref System.Exception ex)
         {
             try
             {
@@ -1223,8 +1280,7 @@ namespace MosaicLib.Semi.E041
 
                 // setup the new source, add a new tracking object for it, and return it.
 
-                anSpecCopy.SpecID = anSpecSeqNumGenerator.Increment();
-                anSpecCopy.ParentTableIndex = anSourceTracking.listIndex;
+                anSpecCopy.ANManagerTableRegistrationNum = anSourceTracking.listIndex + 1;
 
                 anSpecList.Add(anSpecCopy);
 
@@ -1315,27 +1371,27 @@ namespace MosaicLib.Semi.E041
         ///     Iterates through the set of active sources that are in the OnAndWaiting state and for which the SelectedActionName is enabled and attempts to select this 
         ///     action for each such source.  In some configurations, this may be used to Acknowledging all suitable sources quickly and thus remove them from the active set.
         /// </remarks>
-        protected override string PerformServiceAction(Modular.Action.IProviderActionBase<string, NullObj> action)
+        protected override string PerformServiceActionEx(Modular.Action.IProviderFacet ipf, string serviceName, INamedValueSet npv)
         {
             ANSourceTracking anSourceTracking = null;
             ANSourceImpl anSource = null;
 
-            if (action.NamedParamValues.Contains("ANName"))
+            if (npv.Contains("ANName"))
             {
-                anSourceTracking = FindANSourceTrackingByName(action.NamedParamValues["ANName"].VC.GetValue<string>(false), false);
+                anSourceTracking = FindANSourceTrackingByName(npv["ANName"].VC.GetValue<string>(false), false);
                 anSource = ((anSourceTracking != null) ? anSourceTracking.anSourceImpl : null);
             }
 
             string resultStr = null;
 
-            switch (action.ParamValue)
+            switch (serviceName)
             {
                 case "SetSelectedActionName":
                     {
                         if (anSource == null)
                             return "ANName param is missing or invalid";
 
-                        string selectedActionName = action.NamedParamValues["SelectedActionName"].VC.GetValue<string>(false);
+                        string selectedActionName = npv["SelectedActionName"].VC.GetValue<string>(false);
                         if (selectedActionName.IsNullOrEmpty())
                             return "SelectedActionName is missing or is invalid";
 
@@ -1374,7 +1430,7 @@ namespace MosaicLib.Semi.E041
 
                 case "SelectActionNameForAll":
                     {
-                        string selectedActionName = action.NamedParamValues["SelectedActionName"].VC.GetValue<string>(false);
+                        string selectedActionName = npv["SelectedActionName"].VC.GetValue<string>(false);
                         if (selectedActionName.IsNullOrEmpty())
                             return "SelectedActionName is missing or is invalid";
 
@@ -1407,7 +1463,7 @@ namespace MosaicLib.Semi.E041
                     break;
 
                 default:
-                    resultStr = base.PerformServiceAction(action);
+                    resultStr = base.PerformServiceActionEx(ipf, serviceName, npv);
                     break;
             }
 
@@ -1497,7 +1553,7 @@ namespace MosaicLib.Semi.E041
                     anStateIVA.Set(anStateCopy);
             }
 
-            public InternalANSpec anSpec;
+            public IANSpec anSpec;
 
             public ANSourceImpl anSourceImpl;
         }
@@ -1514,7 +1570,7 @@ namespace MosaicLib.Semi.E041
 
             public ANManagerPart ParentPart { get; set; }
             public ImmutableANStatePublicationDelegate ManagersImmutableANStatePublicationDelegate { get; set; }
-            public InternalANSpec ANSpec { get; set; }
+            public ANSpec ANSpec { get; set; }
             public string SourceObjectID { get; set; }
 
             public TimeSpan AcceptAlarmReasonChangeAfterTimeSpan { get; set; }
@@ -1826,6 +1882,25 @@ namespace MosaicLib.Semi.E041
                 ParentPart.CreateSyncActionForSource().Run();
             }
 
+
+            /// <summary>Allows the caller to replace (or merge) the Anunciator's last published NamedValues with the given <paramref name="nvs"/> contents.</summary>
+            void IANSourceBase.SetNamedValues(INamedValueSet nvs, NamedValueMergeBehavior mergeBehavior)
+            {
+                Logger.Trace.Emit("SetNamedValues({0}, {1}) called", nvs.SafeToStringSML(), mergeBehavior);
+
+                INamedValueSet entryNVS = ANState.NamedValues;
+
+                if (mergeBehavior == NamedValueMergeBehavior.Replace)
+                    ANState.NamedValues = nvs;
+                else
+                    ANState.NamedValues = ANState.NamedValues.MergeWith(nvs, mergeBehavior: mergeBehavior);
+
+                CloneAndPublishANStateToManager();
+
+                if (!entryNVS.Equals(ANState.NamedValues))
+                    Logger.Debug.Emit("NamedValues changed to {0}", ANState.NamedValues.SafeToStringSML());
+            }
+
             /// <summary>Posts and immediately clears this annunciator</summary>
             void IANOccurrence.SignalOccurrence(string reason)
             {
@@ -1974,22 +2049,6 @@ namespace MosaicLib.Semi.E041
             #endregion
         }
 
-        /// <summary>
-        /// Derived version of ANSpec that can be used to retain and deliver the assigned AN table index back into the manager as part of its handling of ANState updates (which reference these objects).
-        /// </summary>
-        private class InternalANSpec : ANSpec
-        {
-            public InternalANSpec() : base() { }
-            public InternalANSpec(IANSpec rhs) : base(rhs) { }
-            public InternalANSpec(InternalANSpec rhs) 
-                : base(rhs)
-            {
-                ParentTableIndex = rhs.ParentTableIndex;
-            }
-
-            public int ParentTableIndex { get; set; }
-        }
-
         ActionLogging syncActionLogging = null;
 
         /// <summary>
@@ -2021,9 +2080,9 @@ namespace MosaicLib.Semi.E041
             AddMainThreadStartingAction(() => 
             {
                 SetBaseState(UseState.Initial, "Main thread has been started");
-                anStateCurrentActiveSet = new ReferenceSet<ANState>(new SetID("{0}.ANStateCurrentlyActiveSet".CheckedFormat(PartID)), Config.ANStateCurrentlyActiveSetMaxCount, true);
-                anStateRecentlyClearedSet = new ReferenceSet<ANState>(new SetID("{0}.ANStateRecentlyClearedSet".CheckedFormat(PartID)), Config.ANStateRecentlyClearedSetMaxCount, true);
-                anStateHistorySet = new ReferenceSet<ANState>(new SetID("{0}.ANStateHistorySet".CheckedFormat(PartID)), Config.ANStateHistorySetMaxCount, true);
+                anStateCurrentActiveSet = new ReferenceSet<ANState>(new SetID("{0}.ANStateCurrentlyActiveSet".CheckedFormat(PartID)), Config.ANStateCurrentlyActiveSetMaxCount, registerSelfWithSetsInstance: ISI);
+                anStateRecentlyClearedSet = new ReferenceSet<ANState>(new SetID("{0}.ANStateRecentlyClearedSet".CheckedFormat(PartID)), Config.ANStateRecentlyClearedSetMaxCount, registerSelfWithSetsInstance: ISI);
+                anStateHistorySet = new ReferenceSet<ANState>(new SetID("{0}.ANStateHistorySet".CheckedFormat(PartID)), Config.ANStateHistorySetMaxCount, registerSelfWithSetsInstance: ISI);
             });
 
             AddMainThreadStoppingAction(() =>
@@ -2031,7 +2090,7 @@ namespace MosaicLib.Semi.E041
                 anStateCurrentActiveSet.UnregisterSelf();
                 anStateRecentlyClearedSet.UnregisterSelf();
                 anStateHistorySet.UnregisterSelf();
-                SetBaseState(UseState.Shutdown, "Main thread has been stopped");
+                SetBaseState(UseState.Stopped, "Main thread has been stopped");
             });
         }
 
@@ -2216,18 +2275,13 @@ namespace MosaicLib.Semi.E041
         }
 
         /// <summary>
-        /// Attempts to make use of the given anState's anSpec as an InternalANSpec to obtain the table index of the corresponding source.  
+        /// Attempts to make use of the given anState's anSpec to obtain the table index of the corresponding source.  
         /// Otherwise attempts to lookup the source using the given anState.Name property.  
-        /// Returns the corresponding ANSourceTracking object (if one was found), or null
+        /// Returns the corresponding ANSourceTracking object (if one was found), or null (if neither index nor name could be used to find the source)
         /// </summary>
         private ANSourceTracking FindAnSourceTrackingFromANState(ANState anState)
         {
-            InternalANSpec internalANSpec = anState.ANSpec as InternalANSpec;
-
-            if (internalANSpec != null)
-                return anSourceTrackingList.SafeAccess(internalANSpec.ParentTableIndex, null);
-            else
-                return FindANSourceTrackingByName(anState.ANName, false);
+            return anSourceTrackingList.SafeAccess(anState.ANSpec.ANManagerTableRegistrationNum - 1) ?? FindANSourceTrackingByName(anState.ANName, false);
         }
 
         #endregion

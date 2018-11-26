@@ -2283,7 +2283,7 @@ namespace MosaicLib.Modular.Interconnect.Values
                     continue;
                 }
 
-                IValueAccessor valueAccessor = IVI.GetValueAccessor(fullValueName, DefaultMetaData, DefaultMetaDataMergeBehavior);
+                IValueAccessor valueAccessor = IVI.GetValueAccessor(fullValueName, itemAttribute.GetMergedMetaData(DefaultMetaData, DefaultMetaDataMergeBehavior), DefaultMetaDataMergeBehavior);
 
                 ContainerStorageType useStorageType;
                 bool isNullable = false;
@@ -2815,7 +2815,8 @@ namespace MosaicLib.Modular.Interconnect.Values
                 item.IssueEmitter = IssueEmitter;
                 item.ValueNoteEmitter = ValueNoteEmitter;
                 item.EmitValueNoteNoChangeMessages = EmitValueNoteNoChangeMessages;
-                item.IVA = IVI.GetValueAccessor(item.NameAdjust.GenerateFullName(item.Name, memberName: null, paramsStrArray: baseNames), DefaultMetaData, DefaultMetaDataMergeBehavior);
+
+                item.IVA = IVI.GetValueAccessor(item.NameAdjust.GenerateFullName(item.Name, memberName: null, paramsStrArray: baseNames), item.GetMergedMetaData(DefaultMetaData, DefaultMetaDataMergeBehavior), DefaultMetaDataMergeBehavior);
             }
 
             setSpecificDelegateIVAItemArray = addedItemList.Where(item => item.HasValueSetterDelegate).ToArray();
@@ -2931,6 +2932,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         {
             string Name { get; }
             NameAdjust NameAdjust { get; }
+            INamedValueSet MetaData { get; }
             bool HasValueSetterDelegate { get; }
             bool HasValueGetterDelegate { get; }
             IValueAccessor IVA { get; set; }
@@ -2939,6 +2941,7 @@ namespace MosaicLib.Modular.Interconnect.Values
             bool EmitValueNoteNoChangeMessages { get; set; }
             void TransferFromDelegateToIVAValueContainer();
             void TransferFromIVAValueContainerToDelegate();
+            INamedValueSet GetMergedMetaData(INamedValueSet mergeWithMetaData, NamedValueMergeBehavior mergeBehavior);
         }
 
         protected class DelegateIVAItem<TValueType> : DelegateItemSpec<TValueType>, IDelegateIVAItem
@@ -3005,6 +3008,11 @@ namespace MosaicLib.Modular.Interconnect.Values
                 {
                     (IssueEmitter ?? Logging.NullEmitter).Emit("{0} failed on IVA {1}: {2}", Fcns.CurrentMethodName, IVA, ex.ToString(ExceptionFormat.TypeAndMessage));
                 }
+            }
+
+            public INamedValueSet GetMergedMetaData(INamedValueSet mergeWithMetaData, NamedValueMergeBehavior mergeBehavior)
+            {
+                return MetaData.MergeWith(mergeWithMetaData, mergeBehavior: mergeBehavior).ConvertToReadOnly();
             }
         }
 

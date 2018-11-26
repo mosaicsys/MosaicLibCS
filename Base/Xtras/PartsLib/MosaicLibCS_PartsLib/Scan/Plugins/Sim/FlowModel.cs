@@ -37,6 +37,7 @@ using MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel.Components;
 using MosaicLib.Time;
 using MosaicLib.Utils;
 using MosaicLib.Utils.Collections;
+using MosaicLib.Utils.Tools;
 
 using Physics = MosaicLib.PartsLib.Common.Physics;
 
@@ -502,10 +503,10 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             BistableValveConfig ICopyable<BistableValveConfig>.MakeCopyOfThis(bool deepCopy) { return new BistableValveConfig(this); }
 
             /// <summary>Defines the threshold pressure for (End1 - End2) below which the state transitions to State 1</summary>
-            public double State1PressureThreshold { get { return PressureUnits.ConvertFromKPA(state1PressureThresholdInKPa); } set { state1PressureThresholdInKPa = PressureUnits.ConvertToKPa(value); } }
+            public double State1PressureThreshold { get { return PressureUnits.ConvertFromKPa(state1PressureThresholdInKPa); } set { state1PressureThresholdInKPa = PressureUnits.ConvertToKPa(value); } }
 
             /// <summary>Defines the threshold pressure for (End1 - End2) above which the state transitions to State 2</summary>
-            public double State2PressureThreshold { get { return PressureUnits.ConvertFromKPA(state2PressureThresholdInKPa); } set { state2PressureThresholdInKPa = PressureUnits.ConvertToKPa(value); } }
+            public double State2PressureThreshold { get { return PressureUnits.ConvertFromKPa(state2PressureThresholdInKPa); } set { state2PressureThresholdInKPa = PressureUnits.ConvertToKPa(value); } }
 
             public double State1PercentOpen { get; set; }
             public double State2PercentOpen { get; set; }
@@ -552,7 +553,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             /// <summary>Gives the most recently observed pressure value in client specified PressureUnits.  Will have noise added if NoiseLevelInPercent is above zero.</summary>
             public double Value { get { return Config.ConvertValueUOM(servicedScaledValueStdUnits, outbound: true); } }
 
-            /// <summary>Gives the most recently observed differential pressure value (Pressure - Config.DifferentialReferencePPressure) in client specified PressureUnits.  Will have noise added if either Config.noise related parameter is above zero.</summary>
+            /// <summary>Gives the most recently observed differential pressure value (Pressure - Config.DifferentialReferencePPressure) in client specified PressureUnits.  Will have noise added if either Config.noise related parameter is above zero.  Config.InvertDifferentialReading can be used to invert the sign of the returned value.</summary>
             public double DifferentialValue { get { return Config.ConvertValueUOM(servicedScaledDifferentialValueStdUnits, outbound: true); } }
 
             /// <summary>Returns true if the last raw reading was outside of the stated min..max reading range.</summary>
@@ -654,9 +655,10 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                 double rPercent = rngValueM1P1 * Config.NoiseLevelInPercentOfCurrentValue;    // a number from -noiseLevelInPercent to +noiseLevelInPercent
                 double rGeometricNoiseGain = (100.0 + rPercent) * 0.01;            // a number from 1.0-rp  to 1.0+rp  rp is clipped to be no larger than 0.5
                 double clippedValueWithNoiseInStdUnits = clippedValueInStdUnits * rGeometricNoiseGain + (rngValueM1P1 * Config.NoiseLevelBase); // add in multaplicative noise and base noise 
+                double diffValueSignAdjGain = (!Config.InvertDifferentialReading ? 1.0 : -1.0);
 
                 servicedValueStdUnits = (gaugeIsOn ? clippedValueWithNoiseInStdUnits : Config.offValueInStdUnits);
-                servicedDifferentialValueStdUnits = (gaugeIsOn ? (servicedScaledValueStdUnits - Config.differentialReferenceValueInStdUnits).Clip(Config.minimumDifferentialValueInStdUnits, Config.maximumDifferentialValueInStdUnits) : Config.offDifferentialValueInStdUnits);
+                servicedDifferentialValueStdUnits = (gaugeIsOn ? ((servicedScaledValueStdUnits - Config.differentialReferenceValueInStdUnits) * diffValueSignAdjGain).Clip(Config.minimumDifferentialValueInStdUnits, Config.maximumDifferentialValueInStdUnits) : Config.offDifferentialValueInStdUnits);
                 servicedScaledValueStdUnits = servicedValueStdUnits * Config.ReadingGain;
                 servicedScaledDifferentialValueStdUnits = servicedDifferentialValueStdUnits * Config.ReadingGain;
 
@@ -707,6 +709,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             SensorFaultBelowMin = 0x02,
             TurnGaugeOffAboveMax = 0x04,
             SensorFaultWhenGaugeForcedOff = 0x08,
+            InvertDifferentialReading = 0x10,
         }
 
         public class GaugeConfig : FlowModel.ComponentConfig, ICopyable<GaugeConfig>
@@ -768,6 +771,9 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             /// <summary>Defines the desired gauge behavior</summary>
             public GaugeBehavior GaugeBehavior { get; set; }
 
+            /// <summary>Getter returns correspoinding flag setting from the GaugeBehavior property.  Setter sets/clears the corresponding flag setting in the GaugeBehavior property.</summary>
+            public bool InvertDifferentialReading { get { return GaugeBehavior.IsSet(GaugeBehavior.InvertDifferentialReading); } set { GaugeBehavior = GaugeBehavior.Set(GaugeBehavior.InvertDifferentialReading, value); } }
+
             /// <summary>Defines the initial GaugeMode</summary>
             public GaugeMode InitialGaugeMode { get; set; }
 
@@ -781,10 +787,10 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             public double OffDifferentialValue { get { return ConvertValueUOM(offDifferentialValueInStdUnits, outbound: true); } set { offDifferentialValueInStdUnits = ConvertValueUOM(value, inbound: true); } }
 
             /// <summary>Defines the minimum value that the gauge can read in client specified PressureUnits/VolumetricFlowUnits.</summary>
-            public double MinimumValue { get { return PressureUnits.ConvertFromKPA(minimumValueInStdUnits); } set { minimumValueInStdUnits = ConvertValueUOM(value, inbound: true); } }
+            public double MinimumValue { get { return PressureUnits.ConvertFromKPa(minimumValueInStdUnits); } set { minimumValueInStdUnits = ConvertValueUOM(value, inbound: true); } }
 
             /// <summary>Defines the maximum value that the gauge can read in client specified PressureUnits/VolumetricFlowUnits.</summary>
-            public double MaximumValue { get { return PressureUnits.ConvertFromKPA(maximumValueInStdUnits); } set { maximumValueInStdUnits = ConvertValueUOM(value, inbound: true); } }
+            public double MaximumValue { get { return PressureUnits.ConvertFromKPa(maximumValueInStdUnits); } set { maximumValueInStdUnits = ConvertValueUOM(value, inbound: true); } }
 
             /// <summary>Defines the minimum differential value that the gauge can read in client specified PressureUnits/VolumetricFlowUnits.</summary>
             public double MinimumDifferentialValue { get { return ConvertValueUOM(minimumDifferentialValueInStdUnits, outbound: true); } set { minimumDifferentialValueInStdUnits = ConvertValueUOM(value, inbound: true); } }
@@ -817,7 +823,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             {
                 switch (GaugeType)
                 {
-                    case GaugeType.Pressure: return (outbound ? PressureUnits.ConvertFromKPA(value) : inbound ? PressureUnits.ConvertToKPa(value) : 0.0);
+                    case GaugeType.Pressure: return (outbound ? PressureUnits.ConvertFromKPa(value) : inbound ? PressureUnits.ConvertToKPa(value) : 0.0);
                     case GaugeType.VolumetricFlow: return (outbound ? VolumetricFlowUnits.ConvertFromSCMS(value) : inbound ? VolumetricFlowUnits.ConvertToSCMS(value) : 0.0);
                     default: return 0.0;
                 }
@@ -827,6 +833,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             public static GaugeConfig ConvectronGaugeConfig { get { return new GaugeConfig(GaugeType.Pressure) { InitialGaugeMode = GaugeMode.AllwaysOn, PressureUnits = PressureUnits.torr, GaugeBehavior = GaugeBehavior.SensorFaultAboveMax, MaximumValue = 1000.0, MinimumValue = 1.0e-4, MaximumDifferentialValue = 100.0, MinimumDifferentialValue = -100.0, DifferentialReferenceValue = 760.0 }; } }
             public static GaugeConfig Baratron10TorrGaugeConfig { get { return new GaugeConfig(GaugeType.Pressure) { InitialGaugeMode = GaugeMode.AllwaysOn, PressureUnits = PressureUnits.torr, MaximumValue = 10.0, MinimumValue = 0.0, MaximumDifferentialValue = 10.0, MinimumDifferentialValue = -10.0, DifferentialReferenceValue = 0.0 }; } }
             public static GaugeConfig Baratron1TorrGaugeConfig { get { return new GaugeConfig(GaugeType.Pressure) { InitialGaugeMode = GaugeMode.AllwaysOn, PressureUnits = PressureUnits.torr, MaximumValue = 1.0, MinimumValue = 0.0, MaximumDifferentialValue = 1.0, MinimumDifferentialValue = -1.0, DifferentialReferenceValue = 0.0 }; } }
+            public static GaugeConfig Baratron10TorrAtmGaugeConfig { get { return new GaugeConfig(GaugeType.Pressure) { InitialGaugeMode = GaugeMode.AllwaysOn, PressureUnits = PressureUnits.torr, MaximumDifferentialValue = 10.0, MinimumDifferentialValue = -10.0, DifferentialReferenceValue = new Physics.UnitsOfMeasure.Pressure.Torr(Physics.UnitsOfMeasure.Pressure.Atm.StandardValue).Value }; } }
         }
 
         #endregion
@@ -843,29 +850,27 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                 if (Config.InitialControlMode != ControlMode.None)
                     ControlMode = Config.InitialControlMode;
 
-                setpointActuator = new ActuatorBase("{0}.spa".CheckedFormat(Name), new ActuatorConfig("Off", "Full", Config.FullScaleSetpointRampTime));
-                setpointActuatorState = setpointActuator.State;
+                setpointTool = new SlewRateLimitTool(Config.MinimumControlValue, Config.MaximumControlValue, Config.SetpointRampRatePerSec);
             }
 
-            private ActuatorBase setpointActuator;
-            private IActuatorState setpointActuatorState;
+            private SlewRateLimitTool setpointTool;
 
-            public double ControlReadback { get { return Config.FeedbackGauge.Value; } }
-            public double ControlReadbackInPercentOfFS { get { return ControlReadback * Config.OneOverFullScaleControlValue * 100.0; } }
+            public double ControlReadback { get { return !Config.ControllerBehavior.IsSet(ControllerBehavior.UseDifferentialGaugeReading) ? Config.FeedbackGauge.Value : Config.FeedbackGauge.DifferentialValue; } }
+            public double ControlReadbackInPercentOfFS { get { return ControlReadback * Config.OneOverControlValueRange * 100.0; } }
 
             public ControlMode ControlMode { get; set; } 
 
             public double ControlSetpoint { get; set; }
-            public double ControlSetpointInPercentOfFS { get { return ControlSetpoint * Config.OneOverFullScaleControlValue * 100.0; } set { ControlSetpoint = value * 0.01 * Config.FullScaleControlValue; } }
+            public double ControlSetpointInPercentOfFS { get { return (ControlSetpoint - Config.MinimumControlValue) * Config.OneOverControlValueRange * 100.0; } set { ControlSetpoint = (value * 0.01 * Config.ControlValueRange) + Config.MinimumControlValue; } }
 
-            public double SlewLimitedEffectiveControlSetpoint { get { return SlewLimitedEffectiveControlSetpointInPercentOfFS * Config.FullScaleControlValue * 0.01; } }
-            public double SlewLimitedEffectiveControlSetpointInPercentOfFS { get { return setpointActuatorState.PositionInPercent; } }
+            public double SlewLimitedEffectiveControlSetpoint { get { return setpointTool.Value; } }
+            public double SlewLimitedEffectiveControlSetpointInPercentOfFS { get { return (SlewLimitedEffectiveControlSetpoint - Config.MinimumControlValue) * Config.OneOverControlValueRange * 100.0; } }
 
             public double ControlOutputSetpoint { get; set; }
-            public double ControlOutputSetpointInPercentOfFS { get { return ControlOutputSetpoint * Config.OneOverFullScaleControlValue * 100.0; } set { ControlOutputSetpoint = value * 0.01 * Config.FullScaleControlValue; } }
+            public double ControlOutputSetpointInPercentOfFS { get { return (ControlOutputSetpoint - Config.MinimumOutputValue) * Config.OneOverOutputRange * 100.0; } set { ControlOutputSetpoint = (value * 0.01 * Config.OneOverOutputRange) + Config.MinimumOutputValue; } }
 
             public double ControlError { get; private set; }
-            public double ControlErrorInPercentOfFS { get { return ControlError * Config.OneOverFullScaleControlValue * 100.0; } }
+            public double ControlErrorInPercentOfFS { get { return (ControlError - Config.MinimumControlValue) * Config.OneOverControlValueRange * 100.0; } }
 
             public double IntegratedError { get; private set; }
 
@@ -907,9 +912,9 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             double effectiveControlSetpoint;
             double slewLimitedEffectiveControlSetpoint;
             double controlReadback;
-            double useForwardOutputPortionInPercent;
-            double useProportionalOutputPortionInPercent;
-            double useIntegratorOutputPortionInPercent;
+            double forwardOutputPortion;
+            double proportionalToErrorOutputPortion;
+            double integratedErrorOutputPortion;
             bool antiWindupTriggered;
             double lastSlewLimitedEffectiveControlSetpoint;
             double lastControlError;
@@ -919,19 +924,18 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             {
                 base.Service(servicePhase, measuredServiceInterval, timestampNow);
 
-                if (setpointActuator.Motion1To2Time != Config.FullScaleSetpointRampTime)
-                    setpointActuator.Motion1To2Time = setpointActuator.Motion2To1Time = Config.FullScaleSetpointRampTime;
+                if (setpointTool.MaxRatePerSec != Config.SetpointRampRatePerSec)
+                    setpointTool.MaxRatePerSec = Config.SetpointRampRatePerSec;
 
                 bool isForced = (forcedControlMode != ControlMode.None);
                 effectiveControlMode = isForced ? forcedControlMode : ControlMode;
                 
                 effectiveControlSetpoint = isForced ? forcedControlSetpoint : ControlSetpoint;
 
-                if (setpointActuatorState.TargetPositionInPercent != effectiveControlSetpoint)
-                    setpointActuator.SetTarget(effectiveControlSetpoint * Config.OneOverFullScaleControlValue * 100.0);
+                if (setpointTool.TargetValue != effectiveControlSetpoint)
+                    setpointTool.TargetValue = effectiveControlSetpoint;
 
-                setpointActuator.Service(measuredServiceInterval);
-                setpointActuatorState = setpointActuator.State;
+                setpointTool.Service(measuredServiceInterval);
 
                 slewLimitedEffectiveControlSetpoint = SlewLimitedEffectiveControlSetpoint;
 
@@ -941,22 +945,22 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
 
                 bool isControlModeNormal = (effectiveControlMode == ControlMode.Normal);
 
-                useForwardOutputPortionInPercent = (slewLimitedEffectiveControlSetpoint * Config.OneOverFullScaleControlValue * Config.ForwardGainInPercentPerFS).Clip(-Config.ForwardRangeInPercent, Config.ForwardRangeInPercent);
+                forwardOutputPortion = (slewLimitedEffectiveControlSetpoint * Config.ForwardOutputGain).Clip(Config.MinimumForwardOutputContribution, Config.MaximumForwardOutputContribution);
 
-                useProportionalOutputPortionInPercent = (ControlError * Config.OneOverFullScaleControlValue * Config.ProportionalGainInPercentPerFSError).Clip(-Config.ProportionalRangeInPercent, Config.ProportionalRangeInPercent);
+                proportionalToErrorOutputPortion = (ControlError * Config.ProportionalOutputGain).Clip(Config.MinimumPropertionalOutputContribution, Config.MaximumPropertionalOutputContribution);
 
                 double integrationPeriodInSeconds = measuredServiceInterval.Min(Config.IntegralMaxEffectiveDT).TotalSeconds;
                 double integrationPeriodErrorIncrement = ControlError * integrationPeriodInSeconds;
                 double nextIntegratedError = (IntegratedError + integrationPeriodErrorIncrement);
-                double nextUnclippedIntegratorOutputPortionInPercent = (nextIntegratedError * Config.OneOverFullScaleControlValue * Config.IntegralGainInPercentPerFSErrorSec);
-                useIntegratorOutputPortionInPercent = nextUnclippedIntegratorOutputPortionInPercent;
+                double nextUnclippedIntegratorOutputPortionInPercent = (nextIntegratedError * Config.IntegralOutputGain);
+                integratedErrorOutputPortion = nextUnclippedIntegratorOutputPortionInPercent;
 
                 bool antiWindUpSelected = Config.ControllerBehavior.IsSet(ControllerBehavior.AntiWindUp);
                 bool permitIntegrationWhileSlewing = Config.ControllerBehavior.IsSet(ControllerBehavior.PermitIntegrationWhileSlewing);
 
                 antiWindupTriggered = (antiWindUpSelected
-                                        && ((ControlOutput <= 0.0 && integrationPeriodErrorIncrement < 0.0)     // integrator would be attempting to further saturate the output below 0 %
-                                            || (ControlOutput >= 100.0 && integrationPeriodErrorIncrement > 0.0)    // integrator would be attempting to further saturate the output above 100 %
+                                        && ((ControlOutput <= Config.MinimumOutputValue && integrationPeriodErrorIncrement < 0.0)     // integrator would be attempting to further saturate the output below minimum output
+                                            || (ControlOutput >= Config.MaximumOutputValue && integrationPeriodErrorIncrement > 0.0)    // integrator would be attempting to further saturate the output above maximum output
                                             || (Math.Abs(Config.ControlValve.PercentOpenSetpoint - Config.ControlValve.PercentOpen) >= 10.0)  // the control valve is limiting the output setpoint effective rate of change
                                       ))
                                     || ((antiWindUpSelected && !permitIntegrationWhileSlewing) && (slewLimitedEffectiveControlSetpoint != lastSlewLimitedEffectiveControlSetpoint))
@@ -964,17 +968,19 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
 
                 if (isControlModeNormal)
                 {
-                    bool nextIntegratedOutputIsInRange = nextUnclippedIntegratorOutputPortionInPercent.IsInRange(-Config.IntegralRangeInPercent, Config.IntegralRangeInPercent);
+                    bool nextIntegratedOutputIsInRange = nextUnclippedIntegratorOutputPortionInPercent.IsInRange(Config.MinimumIntegralOutputContribution, Config.MaximumIntegralOutputContribution);
 
-                    if (nextIntegratedOutputIsInRange && !antiWindupTriggered && Config.IntegralGainInPercentPerFSErrorSec > 0.0)
+                    if (nextIntegratedOutputIsInRange && !antiWindupTriggered && Config.IntegralOutputGain != 0.0)
                     {
                         if (IntegratedError != nextIntegratedError)
                             IntegratedError = nextIntegratedError;
+
+                        integratedErrorOutputPortion = nextUnclippedIntegratorOutputPortionInPercent;
                     }
                     else
                     {
                         // either the integration term has reached its limit or the anitWindupLogic has triggered.  stop changing the IntegratedError term and simply set the integratorOutputPortion to the clipped value of the nextRawIntegratedOutput
-                        useIntegratorOutputPortionInPercent = nextUnclippedIntegratorOutputPortionInPercent.Clip(-Config.IntegralRangeInPercent, Config.IntegralRangeInPercent);
+                        integratedErrorOutputPortion = nextUnclippedIntegratorOutputPortionInPercent.Clip(Config.MinimumIntegralOutputContribution, Config.MaximumIntegralOutputContribution);
                     }
                 }
                 else
@@ -990,16 +996,16 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                     default: 
                     case ControlMode.None:
                     case ControlMode.Hold: break;
-                    case ControlMode.Normal: controlOutput = (useForwardOutputPortionInPercent + useProportionalOutputPortionInPercent + useIntegratorOutputPortionInPercent); break;
+                    case ControlMode.Normal: controlOutput = (Config.OutputOffset + forwardOutputPortion + proportionalToErrorOutputPortion + integratedErrorOutputPortion); break;
                     case ControlMode.Open: controlOutput = 100.0; break;
                     case ControlMode.Close: controlOutput = 0.0; break;
                     case ControlMode.Force: controlOutput = isForced ? forcedOutputSetpoint : ControlOutputSetpoint; break;
                 }
 
                 if (!Config.ControllerBehavior.IsSet(ControllerBehavior.UseConductanceLinearizedPercentOpenSetpoint))
-                    Config.ControlValve.PercentOpenSetpoint = ControlOutput = controlOutput.Clip(Config.MinimumControlOutputInPercent, Config.MaximumControlOutputInPercent, 0.0);
+                    Config.ControlValve.PercentOpenSetpoint = ControlOutput = controlOutput.Clip(Config.MinimumOutputValue, Config.MaximumOutputValue, 0.0);
                 else
-                    Config.ControlValve.ConductanceLinearizedPercentOpenSetpoint = ControlOutput = controlOutput.Clip(Config.MinimumControlOutputInPercent, Config.MaximumControlOutputInPercent, 0.0);
+                    Config.ControlValve.ConductanceLinearizedPercentOpenSetpoint = ControlOutput = controlOutput.Clip(Config.MinimumOutputValue, Config.MaximumOutputValue, 0.0);
 
                 lastSlewLimitedEffectiveControlSetpoint = slewLimitedEffectiveControlSetpoint;
                 lastControlError = ControlError;
@@ -1007,7 +1013,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
 
             public override string ToString()
             {
-                return "{0} {1} out:{2} %".CheckedFormat(base.ToString(), effectiveControlMode, ControlOutput);
+                return "{0} {1} setpoint:{2:g3} slewSP:{3:g3} readback:{4:g3} out:{5:g3}".CheckedFormat(base.ToString(), effectiveControlMode, ControlSetpoint, SlewLimitedEffectiveControlSetpoint, ControlReadback, ControlOutput);
             }
         }
 
@@ -1042,6 +1048,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             AntiWindUp = 0x01,
             PermitIntegrationWhileSlewing = 0x02,
             UseConductanceLinearizedPercentOpenSetpoint = 0x04,
+            UseDifferentialGaugeReading = 0x10,
         }
 
         public class ControllerConfig : FlowModel.ComponentConfig, ICopyable<ControllerConfig>
@@ -1050,11 +1057,14 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             {
                 ControllerBehavior = ControllerBehavior.AntiWindUp | ControllerBehavior.PermitIntegrationWhileSlewing;
                 InitialControlMode = ControlMode.Normal;
-                MinimumControlOutputInPercent = 0.0;
-                MaximumControlOutputInPercent = 100.0;
-                ForwardRangeInPercent = 100.0;
-                ProportionalRangeInPercent = 100.0;
-                IntegralRangeInPercent = 100.0;
+                SetpointRampRatePerSec = double.PositiveInfinity;
+                MinimumControlValue = 0.0;
+                MaximumControlValue = 100.0;
+                MinimumOutputValue = 0.0;
+                MaximumOutputValue = 100.0;
+                MaximumForwardOutputContribution = 100.0;
+                MaximumPropertionalOutputContribution = 100.0;
+                MaximumIntegralOutputContribution = 100.0;
                 IntegralMaxEffectiveDT = (0.1).FromSeconds();
             }
 
@@ -1062,55 +1072,115 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                 : base(other)
             {
                 ControllerType = other.ControllerType;
-                FeedbackGauge = other.FeedbackGauge;
+                _feedbackGauge = other._feedbackGauge;
                 ControlValve = other.ControlValve;
                 ControllerBehavior = other.ControllerBehavior;
                 InitialControlMode = other.InitialControlMode;
-                fullScaleControlValue = other.fullScaleControlValue;
-                OneOverFullScaleControlValue = (FullScaleControlValue != 0.0 ? 1.0 / FullScaleControlValue : 0.0);
-                FullScaleSetpointRampTime = other.FullScaleSetpointRampTime;
-                MinimumControlOutputInPercent = other.MinimumControlOutputInPercent;
-                MaximumControlOutputInPercent = other.MaximumControlOutputInPercent;
-                ForwardGainInPercentPerFS = other.ForwardGainInPercentPerFS;
-                ForwardRangeInPercent = other.ForwardRangeInPercent;
-                ProportionalGainInPercentPerFSError = other.ProportionalGainInPercentPerFSError;
-                ProportionalRangeInPercent = other.ProportionalRangeInPercent;
-                IntegralGainInPercentPerFSErrorSec = other.IntegralGainInPercentPerFSErrorSec;
-                IntegralRangeInPercent = other.IntegralRangeInPercent;
+                MinimumControlValue = other.MinimumControlValue;
+                MaximumControlValue = other.MaximumControlValue;
+                OneOverControlValueRange = other.ControlValueRange.SafeOneOver();
+                SetpointRampRatePerSec = other.SetpointRampRatePerSec;
+                MinimumOutputValue = other.MinimumOutputValue;
+                MaximumOutputValue = other.MaximumOutputValue;
+                OneOverOutputRange = other.OuputRange.SafeOneOver();
+                OutputOffset = other.OutputOffset;
+                MinimumForwardOutputContribution = other.MinimumForwardOutputContribution;
+                MaximumForwardOutputContribution = other.MaximumForwardOutputContribution;
+                ForwardOutputGain = other.ForwardOutputGain;
+                MinimumPropertionalOutputContribution = other.MinimumPropertionalOutputContribution;
+                MaximumPropertionalOutputContribution = other.MaximumPropertionalOutputContribution;
+                ProportionalOutputGain = other.ProportionalOutputGain;
+                MinimumIntegralOutputContribution = other.MinimumIntegralOutputContribution;
+                MaximumIntegralOutputContribution = other.MaximumIntegralOutputContribution;
+                IntegralOutputGain = other.IntegralOutputGain;
                 IntegralMaxEffectiveDT = other.IntegralMaxEffectiveDT;
             }
 
             ControllerConfig ICopyable<ControllerConfig>.MakeCopyOfThis(bool deepCopy) { return new ControllerConfig(this); }
 
             public ControllerType ControllerType { get; set; }
-            public Gauge FeedbackGauge { get; set; }
+            public Gauge FeedbackGauge 
+            { 
+                get { return _feedbackGauge; } 
+                set 
+                {
+                    _feedbackGauge = value;
+                    MinimumControlValue = (!UseDifferentialGuageReading ? value.Config.MinimumValue : value.Config.MinimumDifferentialValue);
+                    MaximumControlValue = (!UseDifferentialGuageReading ? value.Config.MaximumValue : value.Config.MaximumDifferentialValue);
+                } 
+            }
+            private Gauge _feedbackGauge;
             public Valve ControlValve { get; set; }
 
             public ControllerBehavior ControllerBehavior { get; set; }
+            public bool UseDifferentialGuageReading { get { return ControllerBehavior.IsSet(ControllerBehavior.UseDifferentialGaugeReading); } set { ControllerBehavior = ControllerBehavior.Set(ControllerBehavior.UseDifferentialGaugeReading, value); } }
 
             public ControlMode InitialControlMode { get; set; }
 
-            /// <summary>
-            /// If non-zero value is specified then the specified value is used for the controller, otherwise the given FeedbackGauge's configured MaximumValue is used.
-            /// </summary>
-            public double FullScaleControlValue { get { return fullScaleControlValue.MapDefaultTo(FeedbackGauge.Config.MaximumValue); } set { fullScaleControlValue = value; } }
-            private double fullScaleControlValue;
+            public double MinimumControlValue { get; set; }
+            public double MaximumControlValue { get; set; }
 
-            public double OneOverFullScaleControlValue { get; private set; }
-            public TimeSpan FullScaleSetpointRampTime { get; set; }
+            public double ControlValueRange { get { return (MaximumControlValue - MinimumControlValue); } }
+            public double OneOverControlValueRange { get; private set; }
 
-            public double MinimumControlOutputInPercent { get; set; }
-            public double MaximumControlOutputInPercent { get; set; }
+            // [Obsolete("Please replace use of this property with the use of the newer MinimumControlValue and MaximumControlValue properties (2018-11-11)")]
+            public double FullScaleControlValue { get { return (MaximumControlValue - MinimumControlValue); } set { MaximumControlValue = value; MinimumControlValue = 0.0; } }
 
-            public double ForwardGainInPercentPerFS { get; set; }
-            public double ForwardRangeInPercent { get; set; }
+            // [Obsolete("Please replace use of this property with the use of the newer OneOverControlValueRange property (2018-11-11)")]
+            public double OneOverFullScaleControlValue { get { return FullScaleControlValue.SafeOneOver(); } }
 
-            public double ProportionalGainInPercentPerFSError { get; set; }
-            public double ProportionalRangeInPercent { get; set; }
+            public double SetpointRampRatePerSec { get; set; }
 
-            public double IntegralGainInPercentPerFSErrorSec { get; set; }
-            public double IntegralRangeInPercent { get; set; }
+            [Obsolete("Please replace use of this property with the use of the newer SetpointRampRatePerSec property (2018-11-11)")]
+            public TimeSpan FullScaleSetpointRampTime 
+            { 
+                get { return ((MaximumControlValue - MinimumControlValue) * SetpointRampRatePerSec.SafeOneOver()).FromSeconds(); } 
+                set { SetpointRampRatePerSec = value.IsZero() ? double.PositiveInfinity : (MaximumControlValue - MinimumControlValue) * value.TotalSeconds.SafeOneOver(); } 
+            }
+
+            public double MinimumOutputValue { get; set; }
+            public double MaximumOutputValue { get; set; }
+            public double OuputRange { get { return MaximumOutputValue - MinimumOutputValue; } }
+            public double OneOverOutputRange { get; private set; }
+
+            public double OutputOffset { get; set; }
+
+            public double MinimumForwardOutputContribution { get; set; }
+            public double MaximumForwardOutputContribution { get; set; }
+            public double ForwardOutputGain { get; set; }
+
+            public double MinimumPropertionalOutputContribution { get; set; }
+            public double MaximumPropertionalOutputContribution { get; set; }
+            public double ProportionalOutputGain { get; set; }
+
+            public double MinimumIntegralOutputContribution { get; set; }
+            public double MaximumIntegralOutputContribution { get; set; }
+            public double IntegralOutputGain { get; set; }
             public TimeSpan IntegralMaxEffectiveDT { get; set; }
+
+            public double MinimumAndMaximumForwardOutput { set { MinimumForwardOutputContribution = -(MaximumForwardOutputContribution = value); } }
+            public double MinimumAndMaximumProportionalOutput { set { MinimumPropertionalOutputContribution = -(MaximumPropertionalOutputContribution = value); } }
+            public double MinimumAndMaximumIntegralOutput { set { MinimumIntegralOutputContribution = -(MaximumIntegralOutputContribution = value); } }
+
+            [Obsolete("Please replace use of this property with the use of the newer MinimumOutputValue property (2018-11-11)")]
+            public double MinimumControlOutputInPercent { get { return MinimumOutputValue; } set { MinimumOutputValue = value; } }
+            [Obsolete("Please replace use of this property with the use of the newer MinimumOutputValue property (2018-11-11)")]
+            public double MaximumControlOutputInPercent { get { return MaximumOutputValue; } set { MaximumOutputValue = value; } }
+
+            // [Obsolete("Please replace use of this property with the use of the newer ForwardOutputGain property (2018-11-11)")]
+            public double ForwardGainInPercentPerFS { get { return ForwardOutputGain * ControlValueRange; } set { ForwardOutputGain = value * ControlValueRange.SafeOneOver(); } }
+            // [Obsolete("Please replace use of this property with the use of the newer MinimumForwardOutputContribution and MaximumForwardOutputContribution properties (2018-11-11)")]
+            public double ForwardRangeInPercent { get { return (MaximumForwardOutputContribution - MinimumForwardOutputContribution) * 0.5; } set { MaximumForwardOutputContribution = value; MinimumForwardOutputContribution = -value; } }
+
+            // [Obsolete("Please replace use of this property with the use of the newer PropertaionOutputGain property (2018-11-11)")]
+            public double ProportionalGainInPercentPerFSError { get { return ProportionalOutputGain * ControlValueRange; } set { ProportionalOutputGain = value * ControlValueRange.SafeOneOver(); } }
+            // [Obsolete("Please replace use of this property with the use of the newer MinimumPropertionalOutputContribution and MaximumPropertionalOutputContribution properties (2018-11-11)")]
+            public double ProportionalRangeInPercent { get { return (MaximumPropertionalOutputContribution - MinimumPropertionalOutputContribution) * 0.5; } set { MaximumPropertionalOutputContribution = value; MinimumPropertionalOutputContribution = -value; } }
+
+            // [Obsolete("Please replace use of this property with the use of the newer IntegralOutputGain property (2018-11-11)")]
+            public double IntegralGainInPercentPerFSErrorSec { get { return IntegralOutputGain * ControlValueRange; } set { IntegralOutputGain = value * ControlValueRange.SafeOneOver(); } }
+            // [Obsolete("Please replace use of this property with the use of the newer MinimumIntegralOutputContribution and MaximumIntegralOutputContribution properties (2018-11-11)")]
+            public double IntegralRangeInPercent { get { return (MaximumIntegralOutputContribution - MinimumIntegralOutputContribution) * 0.5; } set { MaximumIntegralOutputContribution = value; MinimumIntegralOutputContribution = -value; } }
         }
 
         #endregion
@@ -1362,10 +1432,10 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             public double MaximumCompressionRatio { get; set; }
 
             /// <summary>Defines the minimum pressure that the pump can reach</summary>
-            public double NominalMinimumPressure { get { return PressureUnits.ConvertFromKPA(nominalMinimumPressureInKPa); } set { nominalMinimumPressureInKPa = PressureUnits.ConvertToKPa(value); } }
+            public double NominalMinimumPressure { get { return PressureUnits.ConvertFromKPa(nominalMinimumPressureInKPa); } set { nominalMinimumPressureInKPa = PressureUnits.ConvertToKPa(value); } }
 
             /// <summary>Defines the pressure at which the pump reaches its maximum compression ratio</summary>
-            public double MaximallyEfficientPressure { get { return PressureUnits.ConvertFromKPA(maximallyEfficientPressureInKPa); } set { maximallyEfficientPressureInKPa = PressureUnits.ConvertToKPa(value); } }
+            public double MaximallyEfficientPressure { get { return PressureUnits.ConvertFromKPa(maximallyEfficientPressureInKPa); } set { maximallyEfficientPressureInKPa = PressureUnits.ConvertToKPa(value); } }
 
             internal double nominalMinimumPressureInKPa, maximallyEfficientPressureInKPa;
 
@@ -1385,7 +1455,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             /// <summary>Gives the power consumed by this pump in Watts per percent of full spin speed</summary>
             public double PowerInWattsPerPercentOfFSSpeed { get; set; }
 
-            public double PowerInWattsPerPressureDelta { get { return PressureUnits.ConvertFromKPA(powerInWassPerPressureDeltaInKPa); } set { powerInWassPerPressureDeltaInKPa = PressureUnits.ConvertToKPa(value); } }
+            public double PowerInWattsPerPressureDelta { get { return PressureUnits.ConvertFromKPa(powerInWassPerPressureDeltaInKPa); } set { powerInWassPerPressureDeltaInKPa = PressureUnits.ConvertToKPa(value); } }
 
             internal double powerInWassPerPressureDeltaInKPa;
 
@@ -1516,7 +1586,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             public virtual bool IsSource { get { return Config.IsSource; } }
 
             /// <summary>Proxy get/set property for OriginalNode.Pressure</summary>
-            public double Pressure { get { return OriginalNode.PressureUnits.ConvertFromKPA(EffectiveNode.PressureInKPa); } set { EffectiveNode.PressureInKPa = OriginalNode.PressureUnits.ConvertToKPa(value); } }
+            public double Pressure { get { return OriginalNode.PressureUnits.ConvertFromKPa(EffectiveNode.PressureInKPa); } set { EffectiveNode.PressureInKPa = OriginalNode.PressureUnits.ConvertToKPa(value); } }
 
             /// <summary>Proxy get/set property for EffectiveNode.PressureInKPa</summary>
             public virtual double PressureInKPa { get { return EffectiveNode.PressureInKPa; } set { EffectiveNode.PressureInKPa = value; } }
@@ -1543,7 +1613,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             public bool IsSource { get { return (RadiusInM == 0.0); } }
 
             /// <summary>Sets the chamber to be a fixed pressure source chamber (IsSource == true, RadiusInM == 0.0) and sets its InitialPressure to the given value</summary>
-            public double FixedSourcePressure { get { return PressureUnits.ConvertFromKPA(FixedSourcePressureInKPa); } set { FixedSourcePressureInKPa = PressureUnits.ConvertToKPa(value); } }
+            public double FixedSourcePressure { get { return PressureUnits.ConvertFromKPa(FixedSourcePressureInKPa); } set { FixedSourcePressureInKPa = PressureUnits.ConvertToKPa(value); } }
 
             /// <summary>Sets the chamber to be a fixed pressure source chamber (IsSource == true, RadiusInM == 0.0) and sets its InitialPressureInKPa to the given value</summary>
             public double FixedSourcePressureInKPa { get { return IsSource ? InitialPressureInKPa : 0.0; } set { InitialPressureInKPa = value; RadiusInM = 0.0; } }
@@ -2496,7 +2566,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             public double NominalAreaInM2 { get { return (Math.PI * RadiusInM * RadiusInM); } }
             public double NominalVolumeInM3 { get { return NominalAreaInM2 * LengthInM; } }
 
-            public double InitialPressure { get { return PressureUnits.ConvertFromKPA(InitialPressureInKPa); } set { InitialPressureInKPa = PressureUnits.ConvertToKPa(value); } }
+            public double InitialPressure { get { return PressureUnits.ConvertFromKPa(InitialPressureInKPa); } set { InitialPressureInKPa = PressureUnits.ConvertToKPa(value); } }
             public double InitialPressureInKPa { get; set; }
 
             /// <summary>
@@ -2566,7 +2636,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             public PressureUnits PressureUnits { get; set; }
 
             /// <summary>gets/sets the node pressure in configured PressureUnits.</summary>
-            public double Pressure { get { return PressureUnits.ConvertFromKPA(PressureInKPa); } set { PressureInKPa = PressureUnits.ConvertToKPa(value); } }
+            public double Pressure { get { return PressureUnits.ConvertFromKPa(PressureInKPa); } set { PressureInKPa = PressureUnits.ConvertToKPa(value); } }
 
             public double PressureInKPa { get; set; }
 

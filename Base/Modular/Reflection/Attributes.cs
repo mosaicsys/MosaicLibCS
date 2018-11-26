@@ -83,6 +83,7 @@ namespace MosaicLib.Modular.Reflection
         /// This is the base class for all custom <see cref="ItemInfo"/> and TItemAttribute classes that may be used here.
         /// <para/>Provides a Name property and acts as the base class for attribute types that the AccessHelper can process.
         /// <para/>Name property defaults to null, NameAdjust property defaults to NameAdjust.Prefix0
+        /// <para/>AdditionalKeywords = empty string array.
         /// </summary>
         [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field, AllowMultiple = false)]
         public class AnnotatedItemAttributeBase : System.Attribute, IAnnotatedItemAttribute
@@ -144,6 +145,66 @@ namespace MosaicLib.Modular.Reflection
             public string GenerateFullName(string memberName, params string[] paramsStrArray)
             {
                 return NameAdjust.GenerateFullName(Name, memberName, paramsStrArray);
+            }
+
+            /// <summary>
+            /// gives C# client get only access to the NamedValueSet that contains some of the values that are selectable here.  
+            /// The getter will generate an NVS to contain the the merged contents of the AdditionalKeywords and the results from calling the GetDerivedTypeMetaDataToMerge contents.
+            /// </summary>
+            public INamedValueSet MetaData
+            {
+                get
+                {
+                    if (metaData == null)
+                        metaData = GetMergedMetaData();
+
+                    return metaData;
+                }
+            }
+            private INamedValueSet metaData = null;
+
+            /// <summary>
+            /// Derived types may override this method implementation to allow them merge the returned meta-data into the per key meta-data that will be used with the key access objects generated here from this attribute.
+            /// <para/>Please note that this method should always return an INVS instance that has already been converted to be ReadOnly so that later layers where this is also done will not generate an excessive number of clones of the original one returned here.
+            /// </summary>
+            protected virtual INamedValueSet GetDerivedTypeMetaDataToMerge() { return null; }
+
+            /// <summary>
+            /// Allows the caller to specify a set of additional keywords to be included in the NamedValueSet that will be produced when using the MetaData property.
+            /// </summary>
+            public string[] AdditionalKeywords { get { return (additionalKeywords ?? EmptyArrayFactory<string>.Instance); } set { additionalKeywords = value; additionalKeywordsHasBeenSet = true; metaData = null; } }
+            private string[] additionalKeywords = null;
+            private bool additionalKeywordsHasBeenSet = false;
+
+            /// <summary>
+            /// This method combines and returns the attribute meta data obtained from GetDerivedTypeMetaDataToMerge with any AdditionalKeywords and with any given <paramref name="mergeWithMetaData"/>.
+            /// </summary>
+            public INamedValueSet GetMergedMetaData(INamedValueSet mergeWithMetaData = null, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate)
+            {
+                INamedValueSet derivedTypeMetaDataToMerge = GetDerivedTypeMetaDataToMerge();
+
+                if (!additionalKeywordsHasBeenSet)
+                {
+                    if (!derivedTypeMetaDataToMerge.IsNullOrEmpty())
+                        return derivedTypeMetaDataToMerge.MergeWith(mergeWithMetaData, mergeBehavior: mergeBehavior);
+                    else
+                        return mergeWithMetaData ?? NamedValueSet.Empty;
+                }
+                else
+                {
+                    NamedValueSet nvs = new NamedValueSet();
+
+                    if (additionalKeywordsHasBeenSet)
+                        nvs.AddRange(AdditionalKeywords.Select(keyword => new NamedValue(keyword) { IsReadOnly = true }));
+
+                    if (!derivedTypeMetaDataToMerge.IsNullOrEmpty())
+                        nvs = nvs.MergeWith(derivedTypeMetaDataToMerge, mergeBehavior: NamedValueMergeBehavior.AddAndUpdate);
+
+                    if (mergeWithMetaData != null)
+                        nvs = nvs.MergeWith(mergeWithMetaData, mergeBehavior: mergeBehavior);
+
+                    return nvs.ConvertToReadOnly();
+                }
             }
         }
 

@@ -1026,7 +1026,6 @@ namespace MosaicLib.Semi.E039
                 return Utils.Collections.EmptyArrayFactory<E039Link>.Instance;
         }
 
-
         /// <summary>
         /// Returns the first link with the given <paramref name="linkKey"/> key from the given <paramref name="obj"/>'s LinksFromOtherObjectsList
         /// </summary>
@@ -1425,7 +1424,7 @@ namespace MosaicLib.Semi.E039
         #region Construction and related fields
 
         public E039BasicTablePart(E039BasicTablePartConfig config)
-            : base(config.PartID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion1.Build(automaticallyIncAndDecBusyCountAroundActionInvoke: false, partBaseIVI: config.PartBaseIVI))
+            : base(config.PartID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion1.Build(automaticallyIncAndDecBusyCountAroundActionInvoke: false, partBaseIVI: config.PartBaseIVI, simpleActivePartBehaviorOptions: SimpleActivePartBehaviorOptions.MainThreadStartSetsStateToOffline | SimpleActivePartBehaviorOptions.MainThreadStopSetsStateToStoppedIfIsOnlineOrAttemptOnline | SimpleActivePartBehaviorOptions.MainThreadStopSetsStateToStoppedIfOffline | SimpleActivePartBehaviorOptions.UseMainThreadFailedState, simplePartBaseSettings: SimplePartBaseSettings.DefaultVersion1.Build(simplePartBaseBehavior: SimplePartBaseBehavior.TreatPartAsBusyWhenInternalPartBusyCountIsNonZero)))
         {
             Config = new E039BasicTablePartConfig(config, testPersitValues: true);
             Config.SetupForUse();
@@ -2872,6 +2871,8 @@ namespace MosaicLib.Semi.E039
         /// </summary>
         public E039ObjectObserverWithInfoExtraction(ISequencedObjectSource<IE039Object, int> objPublisher, Func<IE039Object, TObjectInfoType> infoFactoryDelegate = null)
         {
+            AutoUpdateOnCast = true;
+
             ObjPublisher = objPublisher;
 
             if (ObjPublisher != null)
@@ -2890,6 +2891,9 @@ namespace MosaicLib.Semi.E039
         protected E039ObjectObserverWithInfoExtraction(E039ObjectObserverWithInfoExtraction<TObjectInfoType> other)
             : this((other != null) ? other.ObjPublisher : null, (other != null) ? other.infoFactoryDelegate : null)
         { }
+
+        /// <summary>For derived types that support implicit or explicit cast operators this property determines if that instance will automatically Update itself on use of any such cast operator (or not).  <para/>Defaults to true</summary>
+        public bool AutoUpdateOnCast { get; set; }
 
         /// <summary>Gives access to the object publisher instance from which this observer was constructed.  Used during copy construction.</summary>
         public ISequencedObjectSource<IE039Object, int> ObjPublisher { get; private set; }
@@ -2914,6 +2918,13 @@ namespace MosaicLib.Semi.E039
         {
             get { return (objObserver != null) && objObserver.IsUpdateNeeded; } 
             set { if (objObserver != null) objObserver.IsUpdateNeeded = value; } 
+        }
+
+        /// <summary>This method is called by dervied types when casting to obtain contents.  If AutoUpdateOnCast is true and the object IsUpdateNeeded then this method calls Update(false).</summary>
+        protected void UpdateOnCastIfNeeded()
+        {
+            if (IsUpdateNeeded && AutoUpdateOnCast)
+                Update(forceUpdate: false);
         }
 
         bool ISequencedSourceObserver.Update()

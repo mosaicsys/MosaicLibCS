@@ -2949,7 +2949,11 @@ namespace MosaicLib.Modular.Common
 
                 public ITypeSerializerItem AttemptToGenerateSerializationSpecItemFor(Type targetType, string targetTypeStr, string assemblyFileName)
                 {
-                    if (!targetType.GetCustomAttributes(typeof(DataContractAttribute), false).IsNullOrEmpty())
+                    bool hasDataContractAttribute = (!targetType.GetCustomAttributes(typeof(DataContractAttribute), false).IsNullOrEmpty());
+                    bool hasCollectionDataContractAttribute = (!targetType.GetCustomAttributes(typeof(CollectionDataContractAttribute), false).IsNullOrEmpty());
+                    bool hasSerializableAttribute = (!targetType.GetCustomAttributes(typeof(SerializableAttribute), false).IsNullOrEmpty());
+
+                    if (hasDataContractAttribute || hasCollectionDataContractAttribute || hasSerializableAttribute)
                         return new JsonDataContractTypeSerializerItem(targetType: targetType, targetTypeStr: targetTypeStr, assemblyFileName: assemblyFileName, factoryName: FactoryName);
                     else
                         return null;
@@ -4801,9 +4805,9 @@ namespace MosaicLib.Modular.Common
         }
 
         /// <summary>
-        /// This method operates on the given lhs NamedValueSet and uses AddAndUpdate merge behavior to merge the contents of the rhs into the lhs
-        /// <para/>If the given lhs IsReadonly then a new NamedValueSet created as a copy of the contents of the given lhs and this new one is used in its place and is returned.
-        /// <para/>This method supports call chaining by returning the lhs after any modification have been made.
+        /// This method operates on the given <paramref name="lhs"/> NamedValueSet and uses the given <paramref name="mergeBehavior"/> merge behavior to merge the contents of the <paramref name="rhs"/> into the <paramref name="lhs"/>
+        /// <para/>If the given <paramref name="lhs"/> IsReadonly then a new NamedValueSet created as a copy of the contents of the given lhs and this new one is used in its place and is returned.
+        /// <para/>This method supports call chaining by returning the <paramref name="lhs"/> after any modification have been made.
         /// </summary>
         /// <param name="lhs">Gives the object that the rhs NV items will be merged into</param>
         /// <param name="rhs">Gives the object that contains the NV items that will be merged into the lhs and which may be used to update corresonding items in the lhs</param>
@@ -5627,9 +5631,6 @@ namespace MosaicLib.Modular.Common
         /// </param>
         public NamedValueSetAdapter<TValueSet, TAttribute> Setup(params string[] baseNames)
         {
-            if (ValueSet == null)
-                throw new System.NullReferenceException("ValueSet property must be non-null before Setup can be called");
-
             // setup all of the static information
 
             for (int idx = 0; idx < NumItems; idx++)
@@ -5686,8 +5687,7 @@ namespace MosaicLib.Modular.Common
         }
 
         /// <summary>
-        /// Transfer the values from the ValueSet's annotated members to the corresponding set of IValueAccessors and then tell the IValuesInterconnection instance
-        /// to Set all of the IValueAccessors.
+        /// Processes the given nvs and extracts and assigns values to each of the adapters annotated ValueSet members from the correspondingly named values in the given nvs.
         /// <para/>The merge parameter determines if (false) all annotated items are set (even if they are not included in the given nvs), or if (true) only the items that are explicitly included in the given nvs are set.
         /// <para/>Supports call chaining.
         /// </summary>
@@ -5698,6 +5698,19 @@ namespace MosaicLib.Modular.Common
                 IssueEmitter.Emit("ValueSet property must be non-null before Set can be called");
                 return this;
             }
+
+            return Set(nvs, ValueSet, merge: merge);
+        }
+
+        /// <summary>
+        /// Processes the given nvs and extracts and assigns values to each of the adapters annotated <paramref name="valueSet"/> members from the correspondingly named values in the given nvs.
+        /// <para/>The merge parameter determines if (false) all annotated items are set (even if they are not included in the given nvs), or if (true) only the items that are explicitly included in the given nvs are set.
+        /// <para/>Supports call chaining.
+        /// </summary>
+        public NamedValueSetAdapter<TValueSet, TAttribute> Set(INamedValueSet nvs, TValueSet valueSet, bool merge = false)
+        {
+            if (valueSet == null)
+                throw new System.ArgumentNullException("valueSet");
 
             foreach (var iasi in itemAccessSetupInfoArray)
             {
@@ -5711,21 +5724,32 @@ namespace MosaicLib.Modular.Common
         }
 
         /// <summary>
-        /// Requests the IValuesInterconnection instance to update all of the adapter's IValueAccessor objects and then transfers the updated values
-        /// from those accessor objects to the corresponding annotated ValueSet members.
-        /// <para/>Supports call chaining.
+        /// Generates and returns an INamedValueSet with named values for each of the identified items in the adapter's ValueSet.
+        /// <para/>If requested using the optional asReadOnly parameter, the returned nvs will be set to be read-only.
         /// </summary>
         public INamedValueSet Get(bool asReadOnly = false)
         {
             if (ValueSet == null)
-                throw new System.NullReferenceException("ValueSet property must be non-null before Update can be called");
+                throw new System.NullReferenceException("ValueSet property must be non-null before Get can be called");
+
+            return Get(ValueSet, asReadOnly: asReadOnly);
+        }
+
+        /// <summary>
+        /// Generates and returns an INamedValueSet with named values for each of the identified items in the given <paramref name="valueSet"/>.
+        /// <para/>If requested using the optional <paramref name="asReadOnly"/> parameter, the returned nvs will be set to be read-only.
+        /// </summary>
+        public INamedValueSet Get(TValueSet valueSet, bool asReadOnly = false)
+        {
+            if (valueSet == null)
+                throw new System.ArgumentNullException("valueSet");
 
             NamedValueSet nvs = new NamedValueSet();
 
             foreach (var iasi in itemAccessSetupInfoArray)
             {
                 if (iasi != null && iasi.MemberToValueFunc != null)
-                    nvs.SetValue(iasi.NVSItemName, iasi.MemberToValueFunc(ValueSet, IssueEmitter, ValueNoteEmitter, rethrow: false));
+                    nvs.SetValue(iasi.NVSItemName, iasi.MemberToValueFunc(valueSet, IssueEmitter, ValueNoteEmitter, rethrow: false));
             }
 
             if (asReadOnly)
@@ -5824,8 +5848,8 @@ namespace MosaicLib.Modular.Common
         /// <summary>
         /// Constructor.  Requires name.  Accepts nameAdjust, getterDelegate, and setterDelegate.
         /// </summary>
-        public DelegateItemSpec(string name, NameAdjust nameAdjust = NameAdjust.Prefix0, Func<ValueContainer> getterDelegate = null, Action<ValueContainer> setterDelegate = null)
-            : base(name, nameAdjust: nameAdjust, getterDelegate: getterDelegate, setterDelegate: setterDelegate)
+        public DelegateItemSpec(string name, NameAdjust nameAdjust = NameAdjust.Prefix0, Func<ValueContainer> getterDelegate = null, Action<ValueContainer> setterDelegate = null, INamedValueSet metaData = null)
+            : base(name, nameAdjust: nameAdjust, getterDelegate: getterDelegate, setterDelegate: setterDelegate, metaData: metaData)
         { }
     }
 
@@ -5838,12 +5862,13 @@ namespace MosaicLib.Modular.Common
         /// <summary>
         /// Constructor.  Requires name.  Accepts nameAdjust, getterDelegate, and setterDelegate.
         /// </summary>
-        public DelegateItemSpec(string name, NameAdjust nameAdjust = NameAdjust.Prefix0, Func<TValueType> getterDelegate = null, Action<TValueType> setterDelegate = null)
+        public DelegateItemSpec(string name, NameAdjust nameAdjust = NameAdjust.Prefix0, Func<TValueType> getterDelegate = null, Action<TValueType> setterDelegate = null, INamedValueSet metaData = null)
         {
             Name = name;
             NameAdjust = nameAdjust;
             GetterDelegate = getterDelegate;
             SetterDelegate = setterDelegate;
+            MetaData = metaData;
         }
 
         /// <summary>
@@ -5855,6 +5880,7 @@ namespace MosaicLib.Modular.Common
             NameAdjust = other.NameAdjust;
             GetterDelegate = other.GetterDelegate;
             SetterDelegate = other.SetterDelegate;
+            _metaData = other._metaData;
         }
 
         /// <summary>Gives the item's "Name" this is generally used during a Setup method and is combined with the associated NameAdjust, and any strings that are given to Setup to produce an full name used with Modular.Interconnect.Values and/or Modular.Config</summary>
@@ -5875,20 +5901,26 @@ namespace MosaicLib.Modular.Common
         /// <summary>Returns true if the SetterDelegate is non-null</summary>
         public bool HasSetterDelegate { get { return (SetterDelegate != null); } }
 
+        /// <summary>Allows the item to specify the MetaData to be used (where supported)</summary>
+        public INamedValueSet MetaData { get { return _metaData.MapNullToEmpty(); } set { _metaData = value.MapEmptyToNull().ConvertToReadOnly(mapNullToEmpty: false); } }
+        private INamedValueSet _metaData = null;
+
         /// <summary>Debugging and logging helper</summary>
         public override string ToString()
         {
             string gsStr;
             if (HasGetterDelegate && HasSetterDelegate)
-                gsStr = "Getter,Setter";
+                gsStr = "Getter+Setter";
             else if (HasGetterDelegate && !HasSetterDelegate)
                 gsStr = "Getter";
             else if (!HasGetterDelegate && HasSetterDelegate)
                 gsStr = "Setter";
             else
-                gsStr = "Neither-Invalid";
+                gsStr = "NeitherGetterNorSetter-Invalid";
 
-            return "DIS Type:{0} Name:'{1}' NameAdj:{2} [{3}]".CheckedFormat(typeof(TValueType), Name, NameAdjust, gsStr);
+            string mdStr = (MetaData.IsNullOrEmpty() ? "" : " md:{0}".CheckedFormat(MetaData.ToStringSML()));
+
+            return "DIS Type:{0} Name:'{1}' NameAdj:{2} {3}{4}".CheckedFormat(typeof(TValueType), Name, NameAdjust, gsStr, mdStr);
         }
     }
 

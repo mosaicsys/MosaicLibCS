@@ -41,6 +41,18 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
 
     public interface ITransportConnection : IServiceable, IDisposable
     {
+        TransportTypeFeatures TransportTypeFeatures { get; }
+    }
+
+    [Flags]
+    public enum TransportTypeFeatures : int
+    {
+        Default = 0x00,
+        Stream = 0x01,
+        Message = 0x02,
+        Reliable = 0x04,
+        Server = 0x08,
+        Client = 0x10,
     }
 
     public interface ITransportConnectionFactory
@@ -285,6 +297,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
             {
                 ServerSession = sessionManager;
 
+                TransportTypeFeatures = TransportTypeFeatures.Message | TransportTypeFeatures.Server;
+
                 Service(QpcTimeStamp.Now);
             }
 
@@ -293,8 +307,12 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
             {
                 ConnectionSession = session;
 
+                TransportTypeFeatures = TransportTypeFeatures.Message | TransportTypeFeatures.Client;
+
                 Service(QpcTimeStamp.Now);
             }
+
+            public TransportTypeFeatures TransportTypeFeatures { get; private set; } 
 
             public UDPTransport(TransportRole role, INamedValueSet connParamsNVS, ITransportSessionFacetBase sessionBase)
             {
@@ -370,10 +388,10 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                     traceLogger = new Logging.Logger("{0}.Trace".CheckedFormat(logger.Name), groupName: Logging.LookupDistributionGroupName, initialInstanceLogGate: connParamsNVS["Transport.TraceLogger.InitialInstanceLogGate"].VC.GetValue(rethrow: false, defaultValue: Logging.LogGate.Debug));
                     trace = traceLogger.Trace;
 
-                    logger.Debug.Emit("LocalEndPoint: {0}", LocalEndPoint);
+                    logger.Trace.Emit("LocalEndPoint: {0}", LocalEndPoint);
 
                     if (IsClient)
-                        logger.Debug.Emit("ConnectsToEndPoint: {0}", ClientTargetIPEndPoint);
+                        logger.Trace.Emit("ConnectsToEndPoint: {0}", ClientTargetIPEndPoint);
 
                     {
                         int entryReceiveBufferSize = udpSocket.ReceiveBufferSize;
@@ -385,15 +403,15 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                             int adjustedReceiveBufferSize = udpSocket.ReceiveBufferSize;
 
                             if (adjustedReceiveBufferSize == requestReceiveBufferSize)
-                                logger.Debug.Emit("ReceiveBufferSize changed to: {0} [from:{1}]", adjustedReceiveBufferSize, entryReceiveBufferSize);
+                                logger.Trace.Emit("ReceiveBufferSize changed to: {0} [from:{1}]", adjustedReceiveBufferSize, entryReceiveBufferSize);
                             else if (adjustedReceiveBufferSize == entryReceiveBufferSize)
-                                logger.Debug.Emit("ReceiveBufferSize could not be changed to {0} [from:{0}]", requestReceiveBufferSize, entryReceiveBufferSize);
+                                logger.Trace.Emit("ReceiveBufferSize could not be changed to {0} [from:{0}]", requestReceiveBufferSize, entryReceiveBufferSize);
                             else
-                                logger.Debug.Emit("ReceiveBufferSize could not be changed to {0} [became:{1}, from:{2}]", requestReceiveBufferSize, adjustedReceiveBufferSize, entryReceiveBufferSize);
+                                logger.Trace.Emit("ReceiveBufferSize could not be changed to {0} [became:{1}, from:{2}]", requestReceiveBufferSize, adjustedReceiveBufferSize, entryReceiveBufferSize);
                         }
                         else
                         {
-                            logger.Debug.Emit("Default ReceiveBufferSize: {0}", entryReceiveBufferSize);
+                            logger.Trace.Emit("Default ReceiveBufferSize: {0}", entryReceiveBufferSize);
                         }
                     }
                 }
@@ -481,9 +499,10 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                     switch (ConnectionSession.State.StateCode)
                     {
                         case SessionStateCode.RequestTransportConnect:
-                        case SessionStateCode.RequestTransportReconnect:
                             ConnectionSession.NoteTransportIsConnected(qpcTimeStamp);
                             count++;
+                            break;
+                        default:
                             break;
                     }
                 }
@@ -575,9 +594,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                     }
                     catch (System.Exception ex)
                     {
-                        st.ex = ex ?? new System.Exception("Caught null exception");
-
-                        logger.Debug.Emit("{0} caught unexpected exception: {1}", Fcns.CurrentMethodName, ex.ToString(ExceptionFormat.TypeAndMessage));
+                        st.ex = ConvertExceptionIfNeededAndLog(ex, Fcns.CurrentMethodName);
                     }
 
                     st.done = true;
@@ -717,16 +734,40 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                     }
                     catch (System.Exception ex)
                     {
-                        rt.ex = ex ?? new System.Exception("Caught null exception");
-
-                        if (!IsDisposingOrDisposed && !inRelease)
-                            logger.Debug.Emit("{0} caught unexpected exception: {1}", Fcns.CurrentMethodName, ex.ToString(ExceptionFormat.TypeAndMessage));
+                        rt.ex = ConvertExceptionIfNeededAndLog(ex, Fcns.CurrentMethodName);
                     }
 
                     rt.done = true;
                 }
 
                 HostNotifier.Notify();
+            }
+
+            #endregion
+
+            #region exception mapping 
+
+            public System.Exception ConvertExceptionIfNeededAndLog(System.Exception ex, string callerMethodName)
+            {
+                ex = ex ?? new System.Exception("Given null exception");
+
+                System.Net.Sockets.SocketException se = ex as System.Net.Sockets.SocketException;
+                System.Net.Sockets.SocketError sError = unchecked((System.Net.Sockets.SocketError)(se != null ? se.ErrorCode : 0));
+
+                if (sError == SocketError.ConnectionReset)
+                {
+                    if (!IsDisposingOrDisposed && !inRelease)
+                        logger.Trace.Emit("{0} caught unexpected exception: {1} [mapping to SessionExceptionType.TrafficRejectedByRemoteEnd]", callerMethodName, ex.ToString(ExceptionFormat.TypeAndMessage));
+
+                    ex = new SessionException(ex.Message, ex, SessionExceptionType.TrafficRejectedByRemoteEnd);
+                }
+                else
+                {
+                    if (!IsDisposingOrDisposed && !inRelease)
+                        logger.Debug.Emit("{0} caught unexpected exception: {1}", callerMethodName, ex.ToString(ExceptionFormat.TypeAndMessage));
+                }
+
+                return ex;
             }
 
             #endregion
@@ -747,6 +788,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
             {
                 ServerSession = sessionManager;
 
+                TransportTypeFeatures = TransportTypeFeatures.Stream | TransportTypeFeatures.Reliable | TransportTypeFeatures.Server;
+
                 Service(QpcTimeStamp.Now);
             }
 
@@ -755,8 +798,12 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
             {
                 ClientSession = session;
 
+                TransportTypeFeatures = TransportTypeFeatures.Stream | TransportTypeFeatures.Reliable | TransportTypeFeatures.Client;
+
                 Service(QpcTimeStamp.Now);
             }
+
+            public TransportTypeFeatures TransportTypeFeatures { get; private set; } 
 
             public TCPTransport(TransportRole role, INamedValueSet connParamsNVS, ITransportSessionFacetBase sessionBase)
             {
@@ -771,6 +818,10 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                 HostNotifier = sessionBase.HostNotifier;
 
                 sessionBase.TransportParamsNVS = ConnParamsNVS;
+
+
+                minReceiveBufferSize = BufferPool.BufferSize * TcpBufferRunHeaderV1.maxBuffersInRun * TcpBufferRunHeaderV1.size;
+                minSendBufferSize = Math.Max(minReceiveBufferSize, sessionBase.Config.MaxBufferWriteAheadCount * BufferPool.BufferSize + TcpBufferRunHeaderV1.size);
 
                 try
                 {
@@ -848,9 +899,9 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                     if (IsClient)
                     {
                         if (IPAddress != null)
-                            logger.Debug.Emit("Connects to address:'{0}' port:{1}", IPAddress, Port);
+                            logger.Trace.Emit("Connects to address:'{0}' port:{1}", IPAddress, Port);
                         else
-                            logger.Debug.Emit("Connects to host:'{0}' port:{1}", HostName, Port);
+                            logger.Trace.Emit("Connects to host:'{0}' port:{1}", HostName, Port);
                     }
                 }
                 catch (System.Exception ex)
@@ -901,6 +952,9 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
             public EndPoint LocalEndPoint { get; private set; }
 
             public int NumConcurrentAccepts { get; private set; }
+
+            public int minReceiveBufferSize;
+            public int minSendBufferSize;
 
             Logging.Logger logger;
             Logging.Logger traceLogger;
@@ -967,7 +1021,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                         }
                     }
 
-                    while (postedAcceptList.Count < NumConcurrentAccepts)
+                    while (postedAcceptList.Count < NumConcurrentAccepts && !IsDisposingOrDisposed && !inRelease)
                     {
                         AcceptTracker at = new AcceptTracker() { tcpListener = tcpListener };
 
@@ -1009,6 +1063,11 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                 at.acceptedTcpClient.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, (int)KeepAlivePeriod.TotalSeconds);
                 at.acceptedTcpClient.LingerState = new LingerOption(false, 0);
 
+                if (at.acceptedTcpClient.ReceiveBufferSize < minReceiveBufferSize)
+                    at.acceptedTcpClient.ReceiveBufferSize = minReceiveBufferSize;
+                if (at.acceptedTcpClient.SendBufferSize < minSendBufferSize)
+                    at.acceptedTcpClient.SendBufferSize = minSendBufferSize;
+
                 ConnectionTracker ct = new ConnectionTracker()
                 {
                     bufferPool = BufferPool,
@@ -1029,7 +1088,9 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
             {
                 AcceptTracker at = (iar != null) ? (iar.AsyncState as AcceptTracker) : null;
 
-                if (at != null)
+                if (IsDisposingOrDisposed || inRelease)
+                { }
+                else if (at != null)
                 {
                     try
                     {
@@ -1110,6 +1171,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                 }
 
                 public byte[] incommingBufferRunHeaderByteArray = new byte[TcpBufferRunHeaderV1.size];
+                public int incommingBufferRunHeaderByteCount;
                 public TcpBufferRunHeaderV1 incommingBufferRunHeader;
                 public int[] bufferRunBufferLenArray;
 
@@ -1123,12 +1185,15 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                     ConnectionTrackerState entryState = State;
 
                     Logging.IMesgEmitter stateEmitter = emitter;
+
                     switch (state)
                     {
                         case ConnectionTrackerState.Ready:
                         case ConnectionTrackerState.WaitingForBufferRunHeader:
                         case ConnectionTrackerState.ReadyToIssueBufferReceives:
+                        case ConnectionTrackerState.ReissuePartiallyCompleteBufferRunHeader:
                         case ConnectionTrackerState.WaitingForPendingBufferReceives:
+                        case ConnectionTrackerState.ReissuePartiallyCompleteReceive:
                         case ConnectionTrackerState.ProcessReceivedBuffers:
                             stateEmitter = traceEmitter;
                             break;
@@ -1151,7 +1216,6 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                 public void Release(string reason)
                 {
                     SetState(TCPTransport.ConnectionTrackerState.Closed, reason ?? Fcns.CurrentMethodName);
-
 
                     Fcns.DisposeOfObject(ref tcpClient);
                     tcpSocket = null;
@@ -1198,11 +1262,17 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                 /// <summary>This state indicates that the connetion is ready to attempt to start receiving the next buffer run header.  Normally this state issues a BeginReceive for the buffer run header.</summary>
                 Ready,
 
+                /// <summary>Process partially complete reception of buffer run header and re-issue BeginRecieve for remaining buffers.</summary>
+                ReissuePartiallyCompleteBufferRunHeader,
+
                 /// <summary>Waiting for the next buffer run header (which will be signaled in relation to the IAsynchResult from the BRH BeginReceive).</summary>
                 WaitingForBufferRunHeader,
 
                 /// <summary>Process reception of buffer run header and issue BeginReceive for the individual buffers.</summary>
                 ReadyToIssueBufferReceives,
+
+                /// <summary>Process partially complete reception of expected buffers (from prior buffer run header) and re-issue BeginRecieve for remaining buffers.</summary>
+                ReissuePartiallyCompleteReceive,
 
                 /// <summary>Waiting for the BeginReceive for individual buffers to complete.</summary>
                 WaitingForPendingBufferReceives,
@@ -1228,6 +1298,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                 public Buffers.Buffer [] bufferArray;
                 public List<ArraySegment<byte>> bufferArraySegmentList;
                 public IAsyncResult iar;
+                public int expectedReadCount;
+                public int receivedByteCount;
             }
 
             int ServiceConnectionTrackers(QpcTimeStamp qpcTimeStamp)
@@ -1284,7 +1356,6 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                                     switch (ct.connectionSession.State.StateCode)
                                     {
                                         case SessionStateCode.RequestTransportConnect:
-                                        case SessionStateCode.RequestTransportReconnect:
                                             if (!ct.remoteHostName.IsNullOrEmpty() && ct.remoteIPAddress == null)
                                             {
                                                 ct.SetState(ConnectionTrackerState.WaitingForHostIPAddress, "issuing BeginGetHostAddresses({0}) ...".CheckedFormat(ct.remoteHostName));
@@ -1339,11 +1410,22 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                             case ConnectionTrackerState.Ready:
                                 {
                                     ct.incommingBufferRunHeaderByteArray.Clear();
+                                    ct.incommingBufferRunHeaderByteCount = 0;
                                     ct.incommingBufferRunHeader = TcpBufferRunHeaderV1.Empty;
 
                                     ct.SetState(ConnectionTrackerState.WaitingForBufferRunHeader, "issuing BeginReceive(BufferRunHeader)");
 
                                     ct.tcpSocket.BeginReceive(ct.incommingBufferRunHeaderByteArray, 0, TcpBufferRunHeaderV1.size, SocketFlags.None, HandleBufferRunHeaderBeginReceiveAsyncRequestCallback, ct);
+
+                                    count++;
+                                }
+                                break;
+
+                            case ConnectionTrackerState.ReissuePartiallyCompleteBufferRunHeader:
+                                {
+                                    ct.SetState(ConnectionTrackerState.WaitingForBufferRunHeader, "issuing BeginReceive(BufferRunHeader - remaining bytes)");
+
+                                    ct.tcpSocket.BeginReceive(ct.incommingBufferRunHeaderByteArray, ct.incommingBufferRunHeaderByteCount, TcpBufferRunHeaderV1.size - ct.incommingBufferRunHeaderByteCount, SocketFlags.None, HandleBufferRunHeaderBeginReceiveAsyncRequestCallback, ct);
 
                                     count++;
                                 }
@@ -1357,7 +1439,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                                     Buffers.Buffer[] bufferArray = ct.bufferRunBufferLenArray.Select(len => ct.bufferPool.Acquire(qpcTimeStamp, ct.State.ToString()).Update(byteCount: len)).ToArray();
                                     List<ArraySegment<byte>> bufferArraySegmentList = ct.bufferRunBufferLenArray.Zip(bufferArray, (len, buffer) => new ArraySegment<byte>(buffer.byteArray, 0, len)).ToList();
 
-                                    RecvTracker rt = new RecvTracker() { ct = ct, bufferArray = bufferArray, bufferArraySegmentList = bufferArraySegmentList };
+                                    RecvTracker rt = new RecvTracker() { ct = ct, bufferArray = bufferArray, bufferArraySegmentList = bufferArraySegmentList, expectedReadCount = ct.bufferRunBufferLenArray.Sum() };
 
                                     rt.bufferArray.DoForEach(buffer => buffer.SetState(qpcTimeStamp, Buffers.BufferState.ReceivePosted, ct.State.ToString()));
 
@@ -1368,6 +1450,38 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                                     rt.iar = ct.tcpSocket.BeginReceive(bufferArraySegmentList, SocketFlags.None, HandleBufferSegmentListBeginReceiveAsyncRequestCallback, rt);
 
                                     count++;
+                                }
+                                break;
+
+                            case ConnectionTrackerState.ReissuePartiallyCompleteReceive:
+                                {
+                                    var rt = ct.pendingRT;
+
+                                    List<ArraySegment<byte>> remainingBufferArraySegmentList = new List<ArraySegment<byte>>();
+
+                                    int skipCount = rt.receivedByteCount;
+
+                                    foreach (var t in ct.bufferRunBufferLenArray.Zip(rt.bufferArray, (len, buffer) => Tuple.Create(len, buffer)))
+                                    {
+                                        var bufferLen = t.Item1;
+                                        var buffer = t.Item2;
+
+                                        if (skipCount > bufferLen)
+                                            skipCount -= bufferLen;
+                                        else if (skipCount <= 0)
+                                            remainingBufferArraySegmentList.Add(new ArraySegment<byte>(buffer.byteArray, 0, bufferLen));
+                                        else
+                                        {
+                                            remainingBufferArraySegmentList.Add(new ArraySegment<byte>(buffer.byteArray, skipCount, bufferLen - skipCount));
+                                            skipCount = 0;
+                                        }
+                                    }
+
+                                    ct.SetState(ConnectionTrackerState.WaitingForPendingBufferReceives, "issuing BeingReceive(buffers - remaining bytes)");
+
+                                    rt.bufferArraySegmentList = remainingBufferArraySegmentList;
+
+                                    rt.iar = ct.tcpSocket.BeginReceive(rt.bufferArraySegmentList, SocketFlags.None, HandleBufferSegmentListBeginReceiveAsyncRequestCallback, rt);
                                 }
                                 break;
 
@@ -1448,7 +1562,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
             {
                 ConnectionTracker ct = (iar != null) ? (iar.AsyncState as ConnectionTracker) : null;
 
-                if (ct != null)
+                if (ct != null && ct.State != ConnectionTrackerState.Closed)
                 {
                     try
                     {
@@ -1487,7 +1601,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
             {
                 ConnectionTracker ct = (iar != null) ? (iar.AsyncState as ConnectionTracker) : null;
 
-                if (ct != null)
+                if (ct != null && ct.tcpClient != null)
                 {
                     try
                     {
@@ -1495,6 +1609,12 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
 
                         ct.tcpSocket = ct.tcpClient.Client;
                         ct.tcpSocket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, (int) KeepAlivePeriod.TotalSeconds);
+
+                        if (ct.tcpSocket.ReceiveBufferSize < minReceiveBufferSize)
+                            ct.tcpSocket.ReceiveBufferSize = minReceiveBufferSize;
+                        if (ct.tcpSocket.SendBufferSize < minSendBufferSize)
+                            ct.tcpSocket.SendBufferSize = minSendBufferSize;
+                        
                         ct.tcpClient.LingerState = new LingerOption(false, 0);
 
                         ct.localEndPoint = ct.tcpSocket.LocalEndPoint as IPEndPoint;
@@ -1514,18 +1634,25 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
             {
                 ConnectionTracker ct = (iar != null) ? (iar.AsyncState as ConnectionTracker) : null;
 
-                if (ct != null)
+                if (ct != null && ct.tcpSocket != null && ct.State != ConnectionTrackerState.Closed)
                 {
                     try
                     {
                         int readCount = ct.tcpSocket.EndReceive(iar);
 
-                        if (readCount != TcpBufferRunHeaderV1.size)
+                        ct.incommingBufferRunHeaderByteCount += readCount;
+
+                        if (ct.incommingBufferRunHeaderByteCount == 0)
                         {
-                            if (readCount == 0)
-                                ct.SetState(ConnectionTrackerState.Ready, "BRH EndReceive returned 0");
-                            else
-                                throw new TCPTransportProtocolViolation("Invalid Buffer run header: receive produced unexpected byte count: {0}".CheckedFormat(readCount));
+                            ct.SetState(ConnectionTrackerState.Ready, "BRH EndReceive returned 0");
+                        }
+                        else if (ct.incommingBufferRunHeaderByteCount < TcpBufferRunHeaderV1.size)
+                        {
+                            ct.SetState(ConnectionTrackerState.ReissuePartiallyCompleteBufferRunHeader, "EndReceive gave {0} bytes of partial BRH [now have {1} of {2}]".CheckedFormat(readCount, ct.incommingBufferRunHeaderByteCount, TcpBufferRunHeaderV1.size));
+                        }
+                        else if (readCount != TcpBufferRunHeaderV1.size)
+                        {
+                            throw new TCPTransportProtocolViolation("Invalid Buffer run header: receive produced unexpected total byte count: {0}, expected total:{1}, this readCount:{2}".CheckedFormat(ct.incommingBufferRunHeaderByteCount, TcpBufferRunHeaderV1.size, readCount));
                         }
                         else
                         {
@@ -1556,26 +1683,32 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                 RecvTracker rt = (iar != null) ? (iar.AsyncState as RecvTracker) : null;
                 ConnectionTracker ct = (rt != null) ? rt.ct : null;
 
-                if (ct != null)
+                if (ct != null && ct.tcpSocket != null && ct.State != ConnectionTrackerState.Closed)
                 {
                     try
                     {
                         int readCount = ct.tcpSocket.EndReceive(iar);
-                        int expectedReadCount = ct.bufferRunBufferLenArray.Sum();
-                        if (readCount != expectedReadCount)
-                            throw new TCPTransportProtocolViolation("Invalid Buffer delivery: EndReceive produced unexpected byte count: {0}, expecting: {1} [from brh:{2}]".CheckedFormat(readCount, expectedReadCount, ct.incommingBufferRunHeader));
 
-                        QpcTimeStamp tsNow = QpcTimeStamp.Now;
+                        rt.receivedByteCount += readCount;
 
-                        foreach (var buffer in rt.bufferArray)
+                        if (rt.receivedByteCount < rt.expectedReadCount)
+                            ct.SetState(ConnectionTrackerState.ReissuePartiallyCompleteReceive, "EndReceive gave {0} bytes of buffer data [now have {1} of {2}]".CheckedFormat(readCount, rt.receivedByteCount, rt.expectedReadCount));
+                        else if (rt.receivedByteCount != rt.expectedReadCount)
+                            throw new TCPTransportProtocolViolation("Invalid Buffer delivery: EndReceive produced unexpected byte count: {0}, expecting: {1} [from brh:{2}]".CheckedFormat(readCount, rt.expectedReadCount, ct.incommingBufferRunHeader));
+                        else
                         {
-                            buffer.SetState(tsNow, Buffers.BufferState.Received, "EndReceive completed");
+                            QpcTimeStamp tsNow = QpcTimeStamp.Now;
 
-                            if (!buffer.header.IsPurposeCodeValid)
-                                throw new TCPTransportProtocolViolation("Received invalid Buffer: PurposeCode {0} is not valid".CheckedFormat(buffer.header.PurposeCode));
+                            foreach (var buffer in rt.bufferArray)
+                            {
+                                buffer.SetState(tsNow, Buffers.BufferState.Received, "EndReceive completed");
+
+                                if (!buffer.header.IsPurposeCodeValid)
+                                    throw new TCPTransportProtocolViolation("Received invalid Buffer: PurposeCode {0} is not valid".CheckedFormat(buffer.header.PurposeCode));
+                            }
+
+                            ct.SetState(ConnectionTrackerState.ProcessReceivedBuffers, "a run of buffers have been received [total bytes:{0} buffers:{1}]".CheckedFormat(readCount, rt.bufferArray.Length));
                         }
-
-                        ct.SetState(ConnectionTrackerState.ProcessReceivedBuffers, "a run of buffers have been received [total bytes:{0} buffers:{1}]".CheckedFormat(readCount, rt.bufferArray.Length));
                     }
                     catch (System.Exception ex)
                     {
@@ -1641,26 +1774,29 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
 
             void InnerPostSendOneBufferRun(ConnectionTracker ct, Buffers.Buffer [] bufferArray, int offset, int count)
             {
-                Buffers.Buffer [] bufferSubArray = bufferArray.SafeSubArray(offset, count);
+                if (ct != null && ct.tcpSocket != null && !IsDisposingOrDisposed && !inRelease)
+                {
+                    Buffers.Buffer[] bufferSubArray = bufferArray.SafeSubArray(offset, count);
 
-                SendTracker st = new SendTracker() { ct = ct, bufferArray = bufferSubArray };
+                    SendTracker st = new SendTracker() { ct = ct, bufferArray = bufferSubArray };
 
-                st.brHeader = TcpBufferRunHeaderV1.EmptyWithMagic;
+                    st.brHeader = TcpBufferRunHeaderV1.EmptyWithMagic;
 
-                int [] bufferLenArray = (st.brHeader.BufferLenArray = bufferSubArray.Select(buffer => buffer.byteCount).ToArray());
+                    int[] bufferLenArray = (st.brHeader.BufferLenArray = bufferSubArray.Select(buffer => buffer.byteCount).ToArray());
 
-                ArraySegment<byte> brHeaderSegment = new ArraySegment<byte>(st.brHeader.MarshalStructToByteArray());
+                    ArraySegment<byte> brHeaderSegment = new ArraySegment<byte>(st.brHeader.MarshalStructToByteArray());
 
-                List<ArraySegment<byte>> bufferSegementList = brHeaderSegment.Concat(bufferSubArray.Select(buffer => new ArraySegment<byte>(buffer.byteArray, 0, buffer.byteCount))).ToList();
+                    List<ArraySegment<byte>> bufferSegementList = brHeaderSegment.Concat(bufferSubArray.Select(buffer => new ArraySegment<byte>(buffer.byteArray, 0, buffer.byteCount))).ToList();
 
-                st.totalByteCount = TcpBufferRunHeaderV1.size + bufferLenArray.Sum();
+                    st.totalByteCount = TcpBufferRunHeaderV1.size + bufferLenArray.Sum();
 
-                ct.postedSendList.Add(st);
+                    ct.postedSendList.Add(st);
 
-                if (traceLogger.Trace.IsEnabled)
-                    traceLogger.Trace.Emit("{0}: issuing BeginSend(Run {1})", Fcns.CurrentMethodName, st.brHeader);
+                    if (traceLogger.Trace.IsEnabled)
+                        traceLogger.Trace.Emit("{0}: issuing BeginSend(Run {1})", Fcns.CurrentMethodName, st.brHeader);
 
-                st.iar = ct.tcpSocket.BeginSend(bufferSegementList, SocketFlags.None, HandleConnectionBeginSendAsynchRequestCallback, st);
+                    st.iar = ct.tcpSocket.BeginSend(bufferSegementList, SocketFlags.None, HandleConnectionBeginSendAsynchRequestCallback, st);
+                }
             }
 
             private int ServiceConnectionSends(QpcTimeStamp qpcTimeStamp, ConnectionTracker ct)
@@ -1688,7 +1824,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                 SendTracker st = (iar != null) ? (iar.AsyncState as SendTracker) : null;
                 ConnectionTracker ct = (st != null) ? st.ct : null;
 
-                if (ct != null)
+                if (ct != null && ct.tcpSocket != null && ct.State != ConnectionTrackerState.Closed)
                 {
                     try
                     {
@@ -1801,6 +1937,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
             {
                 ServerSession = sessionManager;
 
+                TransportTypeFeatures = TransportTypeFeatures.Message | TransportTypeFeatures.Server;
+
                 Service(QpcTimeStamp.Now);
             }
 
@@ -1809,8 +1947,12 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
             {
                 ConnectionSession = session;
 
+                TransportTypeFeatures = TransportTypeFeatures.Message | TransportTypeFeatures.Client;
+
                 Service(QpcTimeStamp.Now);
             }
+
+            public TransportTypeFeatures TransportTypeFeatures { get; private set; } 
 
             public PatchPanelTransport(TransportRole role, INamedValueSet connParamsNVS, ITransportSessionFacetBase sessionBase, PatchPanel patchPanel, string serverPortName)
             {
@@ -1936,7 +2078,6 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                     switch (ConnectionSession.State.StateCode)
                     {
                         case SessionStateCode.RequestTransportConnect:
-                        case SessionStateCode.RequestTransportReconnect:
                             if (ConnectedToPort == null)
                                 ConnectedToPort = PatchPanel.FindPort(ServerPortName);
 
@@ -1946,6 +2087,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                                 count++;
                             }
 
+                            break;
+                        default:
                             break;
                     }
                 }

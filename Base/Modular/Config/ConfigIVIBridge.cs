@@ -217,11 +217,8 @@ namespace MosaicLib.Modular.Config
             return rc;
         }
 
-        protected override string PerformServiceAction(IProviderActionBase<string, NullObj> ipf)
+        protected override string PerformServiceActionEx(IProviderFacet ipf, string serviceName, INamedValueSet npv)
         {
-            string serviceName = ipf.ParamValue;
-            INamedValueSet nvp = ipf.NamedParamValues;
-
             switch (serviceName)
             {
                 case "Sync": 
@@ -229,10 +226,10 @@ namespace MosaicLib.Modular.Config
 
                 case "SetKey":
                     {
-                        string key = nvp["key"].VC.GetValue<string>(rethrow: true);
-                        ValueContainer value = nvp["value"].VC;
-                        string comment = nvp["comment"].VC.GetValue<string>(rethrow: false, defaultValue: null).MapNullTo("{0} operation has been performed using the {1} part".CheckedFormat(serviceName, PartID));
-                        bool? ensureExists = nvp["ensureExists"].VC.GetValue<bool?>(rethrow: false);
+                        string key = npv["key"].VC.GetValue<string>(rethrow: true);
+                        ValueContainer value = npv["value"].VC;
+                        string comment = npv["comment"].VC.GetValue<string>(rethrow: false, defaultValue: null).MapNullTo("{0} operation has been performed using the {1} part".CheckedFormat(serviceName, PartID));
+                        bool? ensureExists = npv["ensureExists"].VC.GetValue<bool?>(rethrow: false);
 
                         IConfigKeyAccess icka = Config.GetConfigKeyAccess(key, ensureExists: ensureExists, defaultValue: value);
 
@@ -251,10 +248,10 @@ namespace MosaicLib.Modular.Config
 
                 case "SetKeys":
                     {
-                        string [] keys = nvp["keys"].VC.GetValue<string []>(rethrow: true);
-                        ValueContainer [] values = nvp["values"].VC.GetValue<ValueContainer []>(rethrow: true);
-                        string comment = nvp["comment"].VC.GetValue<string>(rethrow: false, defaultValue: null).MapNullTo("{0} operation has been performed using the {1} part".CheckedFormat(serviceName, PartID));
-                        bool? ensureExists = nvp["ensureExists"].VC.GetValue<bool?>(rethrow: false);
+                        string [] keys = npv["keys"].VC.GetValue<string []>(rethrow: true);
+                        ValueContainer [] values = npv["values"].VC.GetValue<ValueContainer []>(rethrow: true);
+                        string comment = npv["comment"].VC.GetValue<string>(rethrow: false, defaultValue: null).MapNullTo("{0} operation has been performed using the {1} part".CheckedFormat(serviceName, PartID));
+                        bool? ensureExists = npv["ensureExists"].VC.GetValue<bool?>(rethrow: false);
 
                         if (keys.SafeLength() != values.SafeLength())
                             return "Given keys and values were not the same length";

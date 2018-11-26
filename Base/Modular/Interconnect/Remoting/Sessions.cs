@@ -28,10 +28,12 @@ using System.Net;
 using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Common.Attributes;
 using MosaicLib.Modular.Interconnect.Remoting.Buffers;
+using MosaicLib.Modular.Interconnect.Remoting.Messages;
 using MosaicLib.Semi.E005.Data;
 using MosaicLib.Time;
 using MosaicLib.Utils;
 using MosaicLib.Utils.Collections;
+using MosaicLib.Modular.Interconnect.Values;
 
 // Please note: see comments in for MosaicLib.Modular.Interconnect.Remoting in Remoting.cs
 
@@ -64,14 +66,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
         /// <summary>Requests that the transport layer open the session's connection.  Transport responds with NoteTransportConnected once the connection is complete.</summary>
         RequestTransportConnect,
 
-        /// <summary>Requests that the transport layer open the session's connection.  Transport responds with NoteTransportConnected once the connection is complete.</summary>
-        RequestTransportReconnect,
-
         /// <summary>State that covers Client Open Requests.  Session will then periodically post Session Open requests.</summary>
         RequestSessionOpen,
-
-        /// <summary>State that covers Client Resume Requests.  Session will then periodically post Session Reopen requests.</summary>
-        RequestSessionResume,
 
         /// <summary>The Session client has requested that the session be closed (perminantly).  CloseRequestReason will be non-empty.</summary>
         CloseRequested,
@@ -81,6 +77,32 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
 
         /// <summary>The transport layer has indicated that the session has been closed/terminated due to an error.  This state will not attempt any auto-reconnect.</summary>
         Terminated,
+    }
+
+    /// <summary>
+    /// This enumeration is used to provide programatically usable meaning in termination conditions.  This allows the remoting client to vary its reconnect timing logic accordingly.
+    /// </summary>
+    public enum TerminationReasonCode : int
+    {
+        /// <summary>Default placeholder - no reason code was provided</summary>
+        None = 0,
+
+        /// <summary>The Session was terminated because it was closed by request</summary>
+        ClosedByRequest,
+
+        /// <summary>Server's SessionManager's BufferSize does not match value included with client's RequestOpenSession managment request.</summary>
+        BufferSizesDoNotMatch,
+
+        /// <summary>SessionManager or ConnectedSession detected a protocol violation.</summary>
+        ProtocolViolation,
+
+        /// <summary>Session time limit reached while waiting for keepalive probe to be delivered.</summary>
+        SessionKeepAliveTimeLimitReached,
+
+        /// <summary>Session time limit reached while waiting for pending work (messages) to be delivered.</summary>
+        SessionPendingWorkTimeLimitReached,
+        ConnectWaitTimeLimitReached,
+        CloseRequestWaitTimeLimitReached,
     }
 
     public static partial class ExtensionMethods
@@ -99,9 +121,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
 
                 case SessionStateCode.ServerSessionInitial:
                 case SessionStateCode.RequestTransportConnect:
-                case SessionStateCode.RequestTransportReconnect:
                 case SessionStateCode.RequestSessionOpen:
-                case SessionStateCode.RequestSessionResume:
                     return includeConnectingStates;
 
                 case SessionStateCode.ConnectionClosed:
@@ -130,15 +150,16 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
             {
                 case SessionStateCode.ServerSessionInitial:
                 case SessionStateCode.RequestTransportConnect:
-                case SessionStateCode.RequestTransportReconnect:
                 case SessionStateCode.RequestSessionOpen:
-                case SessionStateCode.RequestSessionResume:
                     return true;
                 default:
                     return false;
             }
         }
 
+        /// <summary>
+        /// Returns true if the given <paramref name="stateCode"/> is Terminated (or any other perminantly closed state - tbd)
+        /// </summary>
         public static bool IsPerminantlyClosed(this SessionStateCode stateCode)
         {
             return (stateCode == SessionStateCode.Terminated);
@@ -162,27 +183,44 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
 
     public delegate void HandleMessageDelegate(QpcTimeStamp qpcTimeStamp, ushort stream, Messages.Message message);
 
-    public struct SessionState : IEquatable<SessionState>
+    public interface ISessionState : IEquatable<ISessionState>
+    {
+        SessionStateCode StateCode { get; }
+        QpcTimeStamp TimeStamp { get; }
+        TerminationReasonCode TerminationReasonCode { get; }
+        string Reason { get; }
+    }
+
+    public struct SessionState : ISessionState, IEquatable<ISessionState>
     {
         public SessionStateCode StateCode { get; set; }
         public QpcTimeStamp TimeStamp { get; set; }
+        public TerminationReasonCode TerminationReasonCode { get; set; }
         public string Reason { get; set; }
 
         public override string ToString()
         {
-            return "{0} [{1}]".CheckedFormat(StateCode, Reason.MapNullOrEmptyTo("NoReasonGiven"));
+            if (StateCode != SessionStateCode.Terminated || TerminationReasonCode == Sessions.TerminationReasonCode.None)
+                return "{0} [{1}]".CheckedFormat(StateCode, Reason.MapNullOrEmptyTo("NoReasonGiven"));
+            else
+                return "{0} [{1} {2}]".CheckedFormat(StateCode, TerminationReasonCode, Reason.MapNullOrEmptyTo("NoReasonGiven"));
         }
 
-        public bool Equals(SessionState other)
+        public bool Equals(ISessionState other)
         {
-            return (StateCode == other.StateCode
+            return (other != null 
+                    && StateCode == other.StateCode
                     && TimeStamp == other.TimeStamp
-                    && Reason == other.Reason);
+                    && TerminationReasonCode == other.TerminationReasonCode
+                    && Reason == other.Reason
+                    );
         }
 
         public bool IsConnecting { get { return StateCode.IsConnecting(); } }
         public bool IsClosing { get { return StateCode.IsClosing(); } }
         public bool IsConnected(bool includeConnectingStates = false, bool includeClosingStates = false) { return StateCode.IsConnected(includeConnectingStates: includeConnectingStates, includeClosingStates: includeClosingStates); }
+
+        /// <summary>Returns true if the contained StateCode is Terminated (or any other perminantly closed state - tbd)</summary>
         public bool IsPerminantlyClosed { get { return StateCode.IsPerminantlyClosed(); } }
         public bool CanAcceptOutboundMessages { get { return StateCode.CanAcceptOutboundMessages(); } }
     }
@@ -190,12 +228,13 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
     public interface IMessageSessionFacet : IServiceable
     {
         string SessionName { get; }
-        string SessionUUID { get; }
+        string ClientUUID { get; }
+        ulong ClientInstanceNum { get; }
 
         SessionState State { get; }
         ISequencedObjectSource<SessionState, int> StatePublisher { get; }
 
-        void SetState(QpcTimeStamp qpcTimeStamp, SessionStateCode stateCode, string reason);
+        void SetState(QpcTimeStamp qpcTimeStamp, SessionStateCode stateCode, string reason, TerminationReasonCode terminationReasonCode = TerminationReasonCode.None);
 
         void HandleOutboundMessage(QpcTimeStamp qpcTimeStamp, ushort stream, Messages.Message message);
         HandleMessageDelegate HandleInboundMessageDelegate { get; set; }
@@ -205,25 +244,38 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
     {
         public SessionConfig()
         {
+            ConnectWaitTimeLimit = (5.0).FromSeconds();
+            CloseRequestWaitTimeLimit = (1.25).FromSeconds();
             SessionExpirationPeriod = (5.0).FromMinutes();
-            MaxBufferWriteAheadCount = 4;
             ActiveToIdleHoldoff = (5.0).FromSeconds();
+            NominalKeepAliveSendInterval = (10.0).FromSeconds();
+            MaxBufferWriteAheadCount = 30;      // this is a reasonable default for 1k buffers since the socket buffer size should be significantly larger than 32k
             MaxOutOfOrderBufferHoldPeriod = (10.0).FromSeconds();
             MaxOutOfOrderBufferHoldCount = 100;
-            ShortRetransmitHoldoffPeriod = (0.100).FromSeconds();
-            NormalRetransmitHoldoffPeriod = (0.333).FromSeconds();
+            ShortRetransmitHoldoffPeriod = (0.200).FromSeconds();
+            NormalRetransmitHoldoffPeriod = (0.400).FromSeconds();
             MaxHeldBufferSeqNumsToIncludeInStatusUpdate = 20;
             ExplicitAckHoldoffPeriod = (0.020).FromSeconds();
+            ConnectionDegradedHoldoff = (5.0).FromSeconds();
         }
+
+        [NamedValueSetItem]
+        public TimeSpan ConnectWaitTimeLimit { get; set; }
+
+        [NamedValueSetItem]
+        public TimeSpan CloseRequestWaitTimeLimit { get; set; }
 
         [NamedValueSetItem]
         public TimeSpan SessionExpirationPeriod { get; set; }
 
         [NamedValueSetItem]
-        public int MaxBufferWriteAheadCount { get; set; }
+        public TimeSpan ActiveToIdleHoldoff { get; set; }
 
         [NamedValueSetItem]
-        public TimeSpan ActiveToIdleHoldoff { get; set; }
+        public TimeSpan NominalKeepAliveSendInterval { get; set; }
+
+        [NamedValueSetItem]
+        public int MaxBufferWriteAheadCount { get; set; }
 
         [NamedValueSetItem]
         public TimeSpan? AutoReconnectHoldoff { get; set; }
@@ -245,6 +297,9 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
 
         [NamedValueSetItem]
         public TimeSpan ExplicitAckHoldoffPeriod { get; set; }
+
+        [NamedValueSetItem]
+        public TimeSpan ConnectionDegradedHoldoff { get; set; }
     }
 
     #region Transport specific interfaces: HandleBuffersDelegate, ISessionTransportFacet, ISessionTransportFactoryFacet
@@ -258,6 +313,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
     public interface ITransportSessionFacetBase
     {
         string SessionName { get; }
+        SessionConfig Config { get; }
 
         INotifyable HostNotifier { get; }
         Buffers.BufferPool BufferPool { get; }
@@ -272,7 +328,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
 
     public interface ITransportConnectionSessionFacet : ITransportSessionFacetBase
     {
-        string SessionUUID { get; }
+        string ClientUUID { get; }
+        ulong ClientInstanceNum { get; }
         INamedValueSet HostParamsNVS { get; }
 
         SessionState State { get; }
@@ -294,9 +351,19 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
     /// </summary>
     public class SessionException : System.Exception
     {
-        public SessionException(string message, System.Exception innerException = null)
+        public SessionException(string message, System.Exception innerException = null, SessionExceptionType sessionExceptionType = default(SessionExceptionType))
             : base(message, innerException)
-        { }
+        {
+            SessionExceptionType = sessionExceptionType;
+        }
+
+        public SessionExceptionType SessionExceptionType { get; private set; }
+    }
+
+    public enum SessionExceptionType : int
+    {
+        Default = 0,
+        TrafficRejectedByRemoteEnd,
     }
 
     #endregion
@@ -308,7 +375,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
         public static AtomicUInt64 instanceNumGen = new AtomicUInt64();
         public readonly ulong instanceNum = instanceNumGen.Increment();
 
-        public SessionManager(string hostName, INamedValueSet hostParamsNVS, INotifyable hostNotifier, Logging.IMesgEmitter stateEmitter, HandleNewSessionDelegate handleNewSessionDelegate, Buffers.BufferPool bufferPool = null, Logging.IMesgEmitter issueEmitter = null, Logging.IMesgEmitter traceEmitter = null)
+        public SessionManager(string hostName, string hostUUID, INamedValueSet hostParamsNVS, INotifyable hostNotifier, Logging.IMesgEmitter stateEmitter, HandleNewSessionDelegate handleNewSessionDelegate, Buffers.BufferPool bufferPool = null, Logging.IMesgEmitter issueEmitter = null, Logging.IMesgEmitter traceEmitter = null)
         {
             HostName = hostName.MapNullToEmpty();
             HostParamsNVS = hostParamsNVS.ConvertToReadOnly();
@@ -321,14 +388,16 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
             IssueEmitter = issueEmitter ?? StateEmitter;
 
             HandleNewSessionDelegate = handleNewSessionDelegate;
-            BufferPool = bufferPool ?? new Buffers.BufferPool(bufferStateEmitter: traceEmitter, configNVS: hostParamsNVS, configNVSKeyPrefix: "Server.BufferPool.");
+            BufferPool = bufferPool ?? new Buffers.BufferPool(SessionName + ".dbp", bufferStateEmitter: traceEmitter, configNVS: hostParamsNVS, configNVSKeyPrefix: "Server.BufferPool.");
 
             new NamedValueSetAdapter<SessionConfig>() { IssueEmitter = IssueEmitter, ValueNoteEmitter = TraceEmitter, ValueSet = Config = new SessionConfig() }.Setup().Set(HostParamsNVS, merge: true);
         }
 
         public string HostName { get; private set; }
+        public string HostUUID { get; private set; }
         public INamedValueSet HostParamsNVS { get; private set; }
         public INotifyable HostNotifier { get; private set; }
+        public IEventAndPerformanceRecording EventAndPerformanceRecording { get; set; }
 
         public string SessionName { get; private set; }
 
@@ -341,6 +410,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
 
         public INamedValueSet TransportParamsNVS { get; set; }
 
+        public Transport.TransportTypeFeatures TransportTypeFeatures { get; set; }
+
         public HandleBuffersDelegate HandleOutboundBuffersDelegate { get; set; }
         public HandleBuffersDelegate HandleInboundBuffersDelegate { get { return HandleInboundBuffers; } }
 
@@ -348,12 +419,12 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
 
         public void HandleInboundBuffers(QpcTimeStamp qpcTimeStamp, object transportEndpoint, params Buffers.Buffer[] bufferParamsArray)
         {
-            ConnectionSession session = transportEPToClientSessionDictionary.SafeTryGetValue(transportEndpoint);
+            ITransportConnectionSessionFacet session = transportEPToClientSessionDictionary.SafeTryGetValue(transportEndpoint);
 
             if (session != null)
                 session.HandleInboundBuffers(qpcTimeStamp, transportEndpoint, bufferParamsArray);
             else
-                ProcessSessionLevelInboundBuffers(qpcTimeStamp, transportEndpoint, null, bufferParamsArray);        // passing null triggers this method to use the SessionManager's HandleOutboundBuffersDelegate
+                session = ProcessSessionLevelInboundBuffers(qpcTimeStamp, transportEndpoint, null, bufferParamsArray);        // passing null triggers this method to use the SessionManager's HandleOutboundBuffersDelegate
         }
 
         public void HandleTransportException(QpcTimeStamp qpcTimeStamp, object transportEndpoint, System.Exception ex, bool endpointClosed = false)
@@ -369,96 +440,120 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
 
         public ITransportConnectionSessionFacet ProcessSessionLevelInboundBuffers(QpcTimeStamp qpcTimeStamp, object transportEndpoint, HandleBuffersDelegate newConnectionHandleOutboundBuffersDelegate, params Buffers.Buffer[] bufferParamsArray)
         {
-            var firstBuffer = bufferParamsArray.SafeAccess(0);
-            Buffers.BufferHeaderV1 firstHeader = (firstBuffer != null) ? firstBuffer.header : default(Buffers.BufferHeaderV1);
-            INamedValueSet firstBufferNVS = (firstBuffer != null) ? firstBuffer.GetPayloadAsE005NVS(NamedValueSet.Empty) : NamedValueSet.Empty;
-            ManagementType managementType = firstBufferNVS["Type"].VC.GetValue<ManagementType>(rethrow: false);
+            Buffers.Buffer buffer = bufferParamsArray.SafeAccess(0);
 
-            if (firstBuffer == null)
-            {}
-            else if (firstHeader.PurposeCode != PurposeCode.Management)
+            while (buffer != null && buffer.PurposeCode == PurposeCode.Ack)
             {
-                IssueEmitter.Emit("{0}: received unexpected non-managment buffer {1} from ep:'{2}' [ignored]", Fcns.CurrentMethodName, firstBuffer, transportEndpoint);
-            }
-            else if (managementType == ManagementType.RequestOpenSession || managementType == ManagementType.RequestResumeSession)
-            {
-                int startAtIndex = firstHeader.Length;
-                string sessionUUID = firstBufferNVS["SessionUUID"].VC.GetValue<string>(rethrow: false);
-                string name = firstBufferNVS["Name"].VC.GetValue<string>(rethrow: false);
-
-                if (firstHeader.SeqNum == 0 && managementType == ManagementType.RequestOpenSession && !sessionUUID.IsNullOrEmpty())
-                {
-                    ConnectionSession newClientSession = new ConnectionSession(HostName, HostParamsNVS, HostNotifier, bufferPool: BufferPool, sessionConfig: Config, issueEmitter: IssueEmitter, stateEmitter: StateEmitter, traceEmitter: TraceEmitter)
-                    {
-                        TransportParamsNVS = TransportParamsNVS,
-                        TransportEndpoint = transportEndpoint,
-                        TransportRole = Transport.TransportRole.Server,
-                        HandleOutboundBuffersDelegate = newConnectionHandleOutboundBuffersDelegate ?? HandleOutboundBuffersDelegate,
-                        SessionName = name,
-                        SessionUUID = sessionUUID,
-                    };
-
-                    ConnectionSession[] strandedSessionsArray = sessionUUIDToClientSessionDictionary.SafeTryGetValue(sessionUUID).ConcatItems(transportEPToClientSessionDictionary.SafeTryGetValue(transportEndpoint)).Where(item => item != null).ToArray();
-                    if (!strandedSessionsArray.IsNullOrEmpty())
-                    {
-                        TraceEmitter.Emit("{0} {1} stranded {2} sessions [{3}]", Fcns.CurrentMethodName, managementType, strandedSessionsArray.Length, string.Join(",", strandedSessionsArray.Select(item => item.SessionName)));
-
-                        pendingDeadSessionList.SafeAddSet(strandedSessionsArray);
-                    }
-
-                    sessionUUIDToClientSessionDictionary[sessionUUID] = newClientSession;
-                    transportEPToClientSessionDictionary[transportEndpoint] = newClientSession;
-
-                    IPEndPoint ipEndPoint = (transportEndpoint as IPEndPoint);
-                    if (ipEndPoint != null)
-                    {
-                        IPAddress ipAddress = ipEndPoint.Address;
-
-                        List<ConnectionSession> clientSessionList = ipAddressToClientSessionListDictionary.SafeTryGetValue(ipAddress);
-                        if (clientSessionList == null)
-                            ipAddressToClientSessionListDictionary[ipEndPoint.Address] = (clientSessionList = new List<ConnectionSession>());
-
-                        if (!clientSessionList.Contains(newClientSession))
-                            clientSessionList.Add(newClientSession);
-                    }
-
-                    clientSessionArray = null;
-
-                    newClientSession.SetState(qpcTimeStamp, SessionStateCode.ServerSessionInitial, Fcns.CurrentMethodName);
-
-                    HandleNewSessionDelegate handleNewSessionDelegate = HandleNewSessionDelegate;
-                    if (handleNewSessionDelegate != null)
-                        handleNewSessionDelegate(qpcTimeStamp, newClientSession);
-
-                    newClientSession.HandleInboundBuffers(qpcTimeStamp, transportEndpoint, bufferParamsArray);
-
-                    return newClientSession;
-                }
-                else if (managementType == ManagementType.RequestResumeSession)
-                {
-                    ConnectionSession session = sessionUUIDToClientSessionDictionary.SafeTryGetValue(sessionUUID) ?? transportEPToClientSessionDictionary.SafeTryGetValue(transportEndpoint);
-
-                    if (session != null && sessionUUID == session.SessionUUID)
-                    {
-                        session.HandleInboundBuffers(qpcTimeStamp, transportEndpoint, bufferParamsArray);
-
-                        return session;
-                    }
-
-                    string reason = "Could not find matching session for uuid:'{0}', ep:'{1}'".CheckedFormat(sessionUUID, transportEndpoint);
-                    IssueEmitter.Emit("{0}: {1}", Fcns.CurrentMethodName, reason);
-
-                    var buffer = ConnectionSession.GenerateManagementBuffer(qpcTimeStamp, ManagementType.NoteSessionTerminated, HostName, sessionUUID, null, reason, Transport.TransportRole.Server, BufferPool, true);
-
-                    (newConnectionHandleOutboundBuffersDelegate ?? HandleOutboundBuffersDelegate)(qpcTimeStamp, transportEndpoint, buffer);
-                }
-            }
-            else
-            {
-                IssueEmitter.Emit("{0}: received buffer {1} with unexpected ManagementType:{2} from ep:'{3}'", Fcns.CurrentMethodName, firstBuffer, managementType, transportEndpoint);
+                bufferParamsArray = bufferParamsArray.Skip(1).ToArray();
+                buffer = bufferParamsArray.SafeAccess(0);
             }
 
-            return null;
+            ITransportConnectionSessionFacet session = ProcessSessionLevelInboundBuffer(qpcTimeStamp, transportEndpoint, newConnectionHandleOutboundBuffersDelegate, buffer);
+
+            bufferParamsArray = bufferParamsArray.Skip(1).ToArray();
+
+            if (session != null)
+                session.HandleInboundBuffers(qpcTimeStamp, transportEndpoint, bufferParamsArray);
+            else if (!bufferParamsArray.IsNullOrEmpty())
+                IssueEmitter.Emit("{0}: Ignoring additional buffers after first buffer did not produce a connection session [{1}, {2}]", Fcns.CurrentMethodName, buffer, string.Join(", ", bufferParamsArray.Select(b => b.ToString())));
+
+            return session;
+        }
+
+        private ITransportConnectionSessionFacet ProcessSessionLevelInboundBuffer(QpcTimeStamp qpcTimeStamp, object transportEndpoint, HandleBuffersDelegate newConnectionHandleOutboundBuffersDelegate, Buffers.Buffer buffer)
+        {
+            EventAndPerformanceRecording.RecordReceived(buffer);
+
+            switch (buffer.PurposeCode)
+            {
+                case PurposeCode.Management:
+                    {
+                        Buffers.BufferHeaderV1 bufferHeader = (buffer != null) ? buffer.header : default(Buffers.BufferHeaderV1);
+                        INamedValueSet bufferNVS = (buffer != null) ? buffer.GetPayloadAsE005NVS(NamedValueSet.Empty) : NamedValueSet.Empty;
+                        ManagementType managementType = bufferNVS["Type"].VC.GetValue<ManagementType>(rethrow: false);
+
+                        EventAndPerformanceRecording.RecordReceived(managementType);
+
+                        if (managementType == ManagementType.RequestOpenSession && bufferHeader.SeqNum == 0)
+                        {
+                            int startAtIndex = bufferHeader.Length;
+                            string clientUUID = bufferNVS["ClientUUID"].VC.GetValue<string>(rethrow: false);
+                            ulong clientInstanceNum = bufferNVS["ClientInstanceNum"].VC.GetValue<ulong>(rethrow: false);
+                            string name = bufferNVS["Name"].VC.GetValue<string>(rethrow: false);
+
+                            if (!clientUUID.IsNullOrEmpty() && clientInstanceNum != 0)
+                            {
+                                ConnectionSession newClientSession = new ConnectionSession(HostName, HostUUID, clientUUID, clientInstanceNum, HostParamsNVS, HostNotifier, bufferPool: BufferPool, sessionConfig: Config, issueEmitter: IssueEmitter, stateEmitter: StateEmitter, traceEmitter: TraceEmitter)
+                                {
+                                    TransportParamsNVS = TransportParamsNVS,
+                                    TransportEndpoint = transportEndpoint,
+                                    TransportRole = Transport.TransportRole.Server,
+                                    TransportTypeFeatures = TransportTypeFeatures,
+                                    HandleOutboundBuffersDelegate = newConnectionHandleOutboundBuffersDelegate ?? HandleOutboundBuffersDelegate,
+                                    SessionName = name,
+                                    EventAndPerformanceRecording = EventAndPerformanceRecording,
+                                };
+
+                                ConnectionSession[] strandedSessionsArray = clientUUIDToClientSessionDictionary.SafeTryGetValue(clientUUID).ConcatItems(transportEPToClientSessionDictionary.SafeTryGetValue(transportEndpoint)).Where(item => item != null).ToArray();
+                                if (!strandedSessionsArray.IsNullOrEmpty())
+                                {
+                                    TraceEmitter.Emit("{0} {1} stranded {2} sessions [{3}]", Fcns.CurrentMethodName, managementType, strandedSessionsArray.Length, string.Join(",", strandedSessionsArray.Select(item => item.SessionName)));
+
+                                    pendingDeadSessionList.SafeAddSet(strandedSessionsArray);
+                                }
+
+                                clientUUIDToClientSessionDictionary[clientUUID] = newClientSession;       // will need to filter and remove prior connected sessions for the same ClientUUID
+                                transportEPToClientSessionDictionary[transportEndpoint] = newClientSession;
+
+                                IPEndPoint ipEndPoint = (transportEndpoint as IPEndPoint);
+                                if (ipEndPoint != null)
+                                {
+                                    IPAddress ipAddress = ipEndPoint.Address;
+
+                                    List<ConnectionSession> clientSessionList = ipAddressToClientSessionListDictionary.SafeTryGetValue(ipAddress);
+                                    if (clientSessionList == null)
+                                        ipAddressToClientSessionListDictionary[ipEndPoint.Address] = (clientSessionList = new List<ConnectionSession>());
+
+                                    if (!clientSessionList.Contains(newClientSession))
+                                        clientSessionList.Add(newClientSession);
+                                }
+
+                                clientSessionArray = null;
+
+                                newClientSession.SetState(qpcTimeStamp, SessionStateCode.ServerSessionInitial, Fcns.CurrentMethodName);
+
+                                HandleNewSessionDelegate handleNewSessionDelegate = HandleNewSessionDelegate;
+                                if (handleNewSessionDelegate != null)
+                                    handleNewSessionDelegate(qpcTimeStamp, newClientSession);
+
+                                newClientSession.HandleInboundBuffers(qpcTimeStamp, transportEndpoint, buffer);
+
+                                return newClientSession;
+                            }
+                            else
+                            {
+                                IssueEmitter.Emit("{0}: received invalid buffer {1} with ManagementType:{2} from ep:'{3}': no valid SessionUUID found", Fcns.CurrentMethodName, buffer, managementType, transportEndpoint);
+                            }
+                        }
+                        else
+                        {
+                            IssueEmitter.Emit("{0}: received buffer {1} with unexpected ManagementType:{2} from ep:'{3}'", Fcns.CurrentMethodName, buffer, managementType, transportEndpoint);
+                        }
+                    }
+                    return null;
+
+                case PurposeCode.Ack:
+                    EventAndPerformanceRecording.RecordEvent(RecordEventType.UnexpectedNonManagementBuffersGivenToSessionManager);
+
+                    TraceEmitter.Emit("{0}: received unexpected Ack only buffer {1} from ep:'{2}' [ignored]", Fcns.CurrentMethodName, buffer, transportEndpoint);
+                    return null;
+
+                default:
+                    EventAndPerformanceRecording.RecordEvent(RecordEventType.UnexpectedNonManagementBuffersGivenToSessionManager);
+
+                    IssueEmitter.Emit("{0}: received unexpected non-managment buffer {1} from ep:'{2}' [ignored]", Fcns.CurrentMethodName, buffer, transportEndpoint);
+                    return null;
+            }
         }
 
         public int Service(QpcTimeStamp qpcTimeStamp)
@@ -471,7 +566,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
             return count;
         }
 
-        private Dictionary<string, ConnectionSession> sessionUUIDToClientSessionDictionary = new Dictionary<string, ConnectionSession>();
+        private Dictionary<string, ConnectionSession> clientUUIDToClientSessionDictionary = new Dictionary<string, ConnectionSession>();
         private Dictionary<object, ConnectionSession> transportEPToClientSessionDictionary = new Dictionary<object, ConnectionSession>();
         private Dictionary<IPAddress, List<ConnectionSession>> ipAddressToClientSessionListDictionary = new Dictionary<IPAddress, List<ConnectionSession>>();
         private List<ConnectionSession> pendingDeadSessionList = new List<ConnectionSession>();
@@ -496,8 +591,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
                     if (!session.State.IsPerminantlyClosed)
                         session.SetState(qpcTimeStamp, SessionStateCode.Terminated, "Session unexpectedly moved to pendingDeadSessionList");
 
-                    if (!session.SessionUUID.IsNullOrEmpty() && Object.ReferenceEquals(session, sessionUUIDToClientSessionDictionary.SafeTryGetValue(session.SessionUUID)))
-                        sessionUUIDToClientSessionDictionary.Remove(session.SessionUUID);
+                    if (!session.ClientUUID.IsNullOrEmpty() && Object.ReferenceEquals(session, clientUUIDToClientSessionDictionary.SafeTryGetValue(session.ClientUUID)))
+                        clientUUIDToClientSessionDictionary.Remove(session.ClientUUID);
 
                     if (session.TransportEndpoint != null && Object.ReferenceEquals(session, transportEPToClientSessionDictionary.SafeTryGetValue(session.TransportEndpoint)))
                         transportEPToClientSessionDictionary.Remove(session.TransportEndpoint);
@@ -531,12 +626,16 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
 
     public class ConnectionSession : IServiceable, IMessageSessionFacet, ITransportConnectionSessionFacet
     {
-        public static AtomicUInt64 instanceNumGen = new AtomicUInt64();
-        public readonly ulong instanceNum = instanceNumGen.Increment();
+        private static ulong localInstanceNumGen = 0;
 
-        public ConnectionSession(string hostName, INamedValueSet hostParamsNVS, INotifyable hostNotifier, Buffers.BufferPool bufferPool, bool assignUUID = true, SessionConfig sessionConfig = null, SessionStateCode initialSessionStateCode = SessionStateCode.None, Logging.IMesgEmitter issueEmitter = null, Logging.IMesgEmitter stateEmitter = null, Logging.IMesgEmitter traceEmitter = null)
+        public ConnectionSession(string hostName, string hostUUID, string clientUUID, ulong ? clientInstanceNum, INamedValueSet hostParamsNVS, INotifyable hostNotifier, Buffers.BufferPool bufferPool, SessionConfig sessionConfig = null, SessionStateCode initialSessionStateCode = SessionStateCode.None, Logging.IMesgEmitter issueEmitter = null, Logging.IMesgEmitter stateEmitter = null, Logging.IMesgEmitter traceEmitter = null, IValuesInterconnection ivi = null)
         {
+            IsClientSession = (initialSessionStateCode == SessionStateCode.ClientSessionInitial);
+
             HostName = hostName.MapNullToEmpty();
+            HostUUID = hostUUID;
+            ClientUUID = clientUUID;
+            ClientInstanceNum = clientInstanceNum ?? ++localInstanceNumGen;
             HostParamsNVS = hostParamsNVS.ConvertToReadOnly();
             HostNotifier = hostNotifier ?? NullNotifier.Instance;
 
@@ -544,20 +643,30 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
             StateEmitter = stateEmitter ?? TraceEmitter;
             IssueEmitter = issueEmitter ?? StateEmitter;
 
-            BufferPool = bufferPool ?? new Buffers.BufferPool(bufferStateEmitter: stateEmitter);
-            SessionName = "{0}.cs_{1:x4}".CheckedFormat(HostName, instanceNum & 0xffff);
-            SessionUUID = assignUUID ? Guid.NewGuid().ToString() : string.Empty;
+            SessionName = "{0}.cs_{1:x4}".CheckedFormat(HostName, ClientInstanceNum & 0xffff);
+
+            BufferPool = bufferPool ?? new Buffers.BufferPool(SessionName + ".dbp",  bufferStateEmitter: stateEmitter);
 
             if ((Config = sessionConfig) == null)
                 new NamedValueSetAdapter<SessionConfig>() { IssueEmitter = IssueEmitter, ValueNoteEmitter = TraceEmitter, ValueSet = Config = new SessionConfig() }.Setup().Set(HostParamsNVS, merge: true);
 
             State = new SessionState() { StateCode = initialSessionStateCode, TimeStamp = QpcTimeStamp.Now, Reason = "Construction" };
             lastRecvActivityTimeStamp = lastSendActivityTimeStamp = State.TimeStamp;
+
+            if (ivi != null && IsClientSession)
+                SessionStateIVA = ivi.GetValueAccessor<ISessionState>("{0}.SessionState".CheckedFormat(HostName)).Set((ISessionState) State);
         }
 
+        public bool IsClientSession { get; private set; }
         public string HostName { get; private set; }
+        public string HostUUID { get; private set; }
+        public string ClientUUID { get; private set; }
+        public ulong ClientInstanceNum { get; private set; }
         public INamedValueSet HostParamsNVS { get; private set; }
         public INotifyable HostNotifier { get; set; }
+        public IEventAndPerformanceRecording EventAndPerformanceRecording { get; set; }
+
+        public IValueAccessor<ISessionState> SessionStateIVA { get; private set; }
 
         public Logging.IMesgEmitter IssueEmitter { get; private set; }
         public Logging.IMesgEmitter StateEmitter { get; private set; }
@@ -567,12 +676,15 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
         public SessionConfig Config { get; internal set; }
 
         public string SessionName { get; set; }
-        public string SessionUUID { get; set; }
 
         public INamedValueSet TransportParamsNVS { get; set; }
         public object TransportEndpoint { get; set; }
         public Transport.TransportRole TransportRole { get; set; }
         public IPAddress IPAddress { get { IPEndPoint ipEP = TransportEndpoint as IPEndPoint; return (ipEP != null ? ipEP.Address : null); } }
+
+        public Transport.TransportTypeFeatures TransportTypeFeatures { get { return _transportTypeFeatures; } set { _transportTypeFeatures = value; transportIsReliable = value.IsSet(Transport.TransportTypeFeatures.Reliable); } }
+        private Transport.TransportTypeFeatures _transportTypeFeatures;
+        private bool transportIsReliable;
 
         public string RemoteName { get { return _remoteName ?? "[RemoteNameIsNull]"; } private set { _remoteName = value; } }
         private string _remoteName = null;
@@ -589,15 +701,28 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
 
         public void HandleTransportException(QpcTimeStamp qpcTimeStamp, object transportEndpoint, System.Exception ex, bool endpointClosed = false)
         {
+            SessionException sessionException = ex as SessionException;
+
             if (State.IsConnected(includeConnectingStates: true, includeClosingStates: true))
             {
-                IssueEmitter.Emit("{0} State:{1} note {2} for endPoint:{3}{4} ex:{5}", SessionName, StateCode, Fcns.CurrentMethodName, transportEndpoint, endpointClosed ? " Closed" : "", ex.ToString(ExceptionFormat.TypeAndMessage));
+                if (!State.IsConnecting || sessionException == null || sessionException.SessionExceptionType != SessionExceptionType.TrafficRejectedByRemoteEnd)
+                {
+                    IssueEmitter.Emit("{0} State:{1} note {2} for endPoint:{3}{4} ex:{5}", SessionName, StateCode, Fcns.CurrentMethodName, transportEndpoint, endpointClosed ? " Closed" : "", ex.ToString(ExceptionFormat.TypeAndMessage));
 
-                SetState(qpcTimeStamp, SessionStateCode.ConnectionClosed, "Encountered transport exception for {0}: {1}".CheckedFormat(transportEndpoint, ex.ToString(ExceptionFormat.TypeAndMessage)));
+                    SetState(qpcTimeStamp, SessionStateCode.ConnectionClosed, "Encountered transport exception for {0}: {1}".CheckedFormat(transportEndpoint, ex.ToString(ExceptionFormat.TypeAndMessage)));
+
+                    EventAndPerformanceRecording.RecordEvent(RecordEventType.TransportExceptionClosedSession);
+                }
+                else
+                {
+                    TraceEmitter.Emit("{0} State:{1} note {2} for endPoint:{3}{4} ex:{5} [Ignored]", SessionName, StateCode, Fcns.CurrentMethodName, transportEndpoint, endpointClosed ? " Closed" : "", ex.ToString(ExceptionFormat.TypeAndMessage));
+                    EventAndPerformanceRecording.RecordEvent(RecordEventType.TransportException);
+                }
             }
             else
             {
                 TraceEmitter.Emit("{0} State:{1} note ignoring {2} for endPoint:{3}{4} ex:{5}", SessionName, StateCode, Fcns.CurrentMethodName, transportEndpoint, endpointClosed ? " Closed" : "", ex.ToString(ExceptionFormat.TypeAndMessage));
+                EventAndPerformanceRecording.RecordEvent(RecordEventType.TransportException);
             }
         }
 
@@ -610,14 +735,14 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
 
         public string CloseRequestReason { get; protected set; }
 
-        public void SetState(QpcTimeStamp qpcTimeStamp, SessionStateCode stateCode, string reason)
+        public void SetState(QpcTimeStamp qpcTimeStamp, SessionStateCode stateCode, string reason, TerminationReasonCode terminationReasonCode = TerminationReasonCode.None)
         {
             SessionState entryState = State;
             Logging.IMesgEmitter useEmitter = StateEmitter;
 
             TimeSpan entryStateAge = (entryState.TimeStamp != QpcTimeStamp.Zero) ? (qpcTimeStamp - entryState.TimeStamp) : TimeSpan.Zero;
 
-            State = new SessionState() { StateCode = stateCode, TimeStamp = qpcTimeStamp, Reason = reason ?? "SetState was not given a reason" };
+            State = new SessionState() { StateCode = stateCode, TimeStamp = qpcTimeStamp, Reason = reason ?? "SetState was not given a reason", TerminationReasonCode = terminationReasonCode };
 
             string closeRequestReason = string.Empty;
 
@@ -628,13 +753,25 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
                     useEmitter = TraceEmitter;
                     break;
 
+                case SessionStateCode.RequestTransportConnect:
+                    if (entryState.StateCode == SessionStateCode.ClientSessionInitial)       // decrease number of normal state transition log messages for this case
+                        useEmitter = TraceEmitter;
+                    break;
+
+                case SessionStateCode.RequestSessionOpen:
+                    if (entryState.StateCode == SessionStateCode.RequestTransportConnect)       // decrease number of normal state transition log messages for this case
+                        useEmitter = TraceEmitter;
+                    break;
+
                 case SessionStateCode.CloseRequested:
                     closeRequestReason = reason;            // update CloseRequestReason - used by transport to determine when to close a connection
                     break;
 
                 case SessionStateCode.ConnectionClosed:
-                case SessionStateCode.Terminated:
                     closeRequestReason = "Session is {0}: {1}".CheckedFormat(stateCode, reason);            // update CloseRequestReason - used by transport to determine when to close a connection
+                    break;
+                case SessionStateCode.Terminated:
+                    closeRequestReason = "Session is {0}: {1}, {2}".CheckedFormat(stateCode, terminationReasonCode, reason);            // update CloseRequestReason - used by transport to determine when to close a connection
                     break;
 
                 default:
@@ -643,12 +780,28 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
 
             CloseRequestReason = closeRequestReason;
 
-            useEmitter.Emit("{0} State changed to {1} [from: {2}, reason: {3}]", SessionName, stateCode, entryState, reason ?? "NoReasonGiven");
+            if (SessionStateIVA != null)
+                SessionStateIVA.Set((ISessionState) State);
+
+            if (terminationReasonCode == TerminationReasonCode.None)
+                useEmitter.Emit("{0} State changed to {1} [from: {2}, reason: {3}]", SessionName, stateCode, entryState, reason ?? "NoReasonGiven");
+            else
+                useEmitter.Emit("{0} State changed to {1}, {2} [from: {3}, reason: {4}]", SessionName, stateCode, terminationReasonCode, entryState, reason ?? "NoReasonGiven");
+        }
+
+        public void TouchStateTime(QpcTimeStamp qpcTimeStamp, string reason)
+        {
+            SessionState entryState = State;
+            State = new SessionState() { StateCode = entryState.StateCode, TimeStamp = qpcTimeStamp, Reason = entryState.Reason };
+
+            TraceEmitter.Emit("{0} State Timestamp touched [state:{0}, reason:{1}]", StateCode, reason ?? "NoReasonGiven");
         }
 
         public int Service(QpcTimeStamp qpcTimeStamp)
         {
             int count = 0;
+
+            TimeSpan stateAge = (qpcTimeStamp - State.TimeStamp);
 
             switch (StateCode)
             {
@@ -658,70 +811,98 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
 
                 case SessionStateCode.Idle:
                 case SessionStateCode.IdleWithPendingWork:
-                    count += ServiceOutgoingMessageList(qpcTimeStamp);
-                    count += ServiceTransmitter(qpcTimeStamp);
-                    count += ServiceHeldOutOfOrderBufferList(qpcTimeStamp, checkForStaleBuffers: true);     // used to get rid of stale held out of order buffers.
-
-                    if (count > 0)
-                    {
-                        SetState(qpcTimeStamp, SessionStateCode.Active, "Session became active");
-                    }
-                    else 
-                    {
-                        TimeSpan stateAge = (qpcTimeStamp - State.TimeStamp);
-
-                        if (stateAge > Config.SessionExpirationPeriod)
-                        {
-                            string reason = "Session has expired after {0:f3} seconds".CheckedFormat(stateAge.TotalSeconds);
-
-                            StateEmitter.Emit("{0} [sending termination message]", reason);
-
-                            GenerateAndAddManagementBufferToSendNowList(qpcTimeStamp, ManagementType.NoteSessionTerminated, reason: reason);
-
-                            SetState(qpcTimeStamp, SessionStateCode.Terminated, reason);
-                        }
-                    }
-
-                    break;
-
                 case SessionStateCode.Active:
-                    count += ServiceOutgoingMessageList(qpcTimeStamp);
-                    count += ServiceTransmitter(qpcTimeStamp);
-                    count += ServiceHeldOutOfOrderBufferList(qpcTimeStamp, checkForStaleBuffers: true);     // used to get rid of stale held out of order buffers.
+                    var omCount = ServiceOutgoingMessageList(qpcTimeStamp);
+                    var txCount = ServiceTransmitter(qpcTimeStamp);
+                    var hmCount = ServiceHeldOutOfOrderBufferList(qpcTimeStamp, checkForStaleBuffers: true);     // used to get rid of stale held out of order buffers.
+                    var kaCount = ServiceSendingKeepAliveBuffers(qpcTimeStamp);
 
-                    if (count == 0)
+                    count += (omCount + txCount + hmCount + kaCount);
+
+                    TimeSpan lastValidAckTimeStampAge = qpcTimeStamp - lastRecvdValidAckBufferSeqNumTimeStamp;
+
+                    if (StateCode == SessionStateCode.Active && count == 0)
                     {
-                        int numPendingMessages = outboundPerMessageStreamHandlerArray.Sum(handler => handler.outboundMessageList.Count);
+                        int numStreamPendingMessages = outboundPerMessageStreamHandlerArray.Sum(handler => handler.outboundMessageList.Count);
 
-                        TimeSpan elapsed = (qpcTimeStamp - State.TimeStamp).Min(qpcTimeStamp - lastRecvActivityTimeStamp, qpcTimeStamp - lastSendActivityTimeStamp);
+                        // by default the elapsed is the min of the time in the current state (Active) and the time since we received the last valid ack.  
+                        // On the client side this typically works with keepalive to make sure that the age of the last valid received ack only grows if the server is not responding.
+
+                        TimeSpan elapsed = stateAge.Min(lastValidAckTimeStampAge);
+
+                        // on the server also compute the time since the last send and receive activity and consider the connection active if there is either recent send or receive activity.
+                        if (!IsClientSession)
+                            elapsed = elapsed.Min(qpcTimeStamp - lastRecvActivityTimeStamp, qpcTimeStamp - lastSendActivityTimeStamp);
+
                         if (elapsed > Config.ActiveToIdleHoldoff)
                         {
-                            SetState(qpcTimeStamp, (numPendingMessages > 0) ? SessionStateCode.IdleWithPendingWork : SessionStateCode.Idle, "No recent session activity detected");
+                            SetState(qpcTimeStamp, (numStreamPendingMessages > 0) ? SessionStateCode.IdleWithPendingWork : SessionStateCode.Idle, "No recent session activity detected");
                             count++;
                         }
                     }
+                    else if (StateCode != SessionStateCode.Active && omCount > 0)
+                    {
+                        SetState(qpcTimeStamp, SessionStateCode.Active, "Session became active (buffer transmitter)");
+                    }
+                    else if (StateCode != SessionStateCode.Active && (qpcTimeStamp - lastDeliveredMessageTimeStamp) <= (5.0).FromSeconds())
+                    {
+                        SetState(qpcTimeStamp, SessionStateCode.Active, "Session became active (message delivered here)");
+                    }
+                    else
+                    {
+                        int numStreamPendingMessages = outboundPerMessageStreamHandlerArray.Sum(handler => handler.outboundMessageList.Count);
+
+                        if (StateCode == SessionStateCode.IdleWithPendingWork && numStreamPendingMessages == 0)
+                            SetState(qpcTimeStamp, SessionStateCode.Idle, "There are no more pending messages");
+
+                        TimeSpan lastDeliveredKeepAliveBufferAge = lastDeliveredKeepAliveBufferTimeStamp.Age(qpcTimeStamp);
+
+                        string terminateSessionReason = string.Empty;
+                        TerminationReasonCode terminateSessionReasonCode = TerminationReasonCode.None;
+
+                        if (lastDeliveredKeepAliveBufferAge > Config.SessionExpirationPeriod && !Config.NominalKeepAliveSendInterval.IsZero() && IsClientSession)
+                        {
+                            terminateSessionReason = "Session timeout: KeepAlive buffer delivery failed after {0:f3} seconds".CheckedFormat(lastDeliveredKeepAliveBufferAge.TotalSeconds);
+                            terminateSessionReasonCode = TerminationReasonCode.SessionKeepAliveTimeLimitReached;
+                        }
+                        else if (StateCode == SessionStateCode.IdleWithPendingWork && stateAge > Config.SessionExpirationPeriod)
+                        {
+                            terminateSessionReason = "Session timeout: State has been {0} for {1:f3} seconds".CheckedFormat(StateCode, stateAge.TotalSeconds);
+                            terminateSessionReasonCode = TerminationReasonCode.SessionPendingWorkTimeLimitReached;
+                        }
+
+                        if (terminateSessionReason.IsNeitherNullNorEmpty() || terminateSessionReasonCode != TerminationReasonCode.None)
+                        {
+                            StateEmitter.Emit("{0} {1} [sending termination message]",terminateSessionReasonCode, terminateSessionReason);
+
+                            GenerateAndAddManagementBufferToSendNowList(qpcTimeStamp, ManagementType.NoteSessionTerminated, reason: terminateSessionReason, terminationReasonCode: terminateSessionReasonCode);
+
+                            SetState(qpcTimeStamp, SessionStateCode.Terminated, terminateSessionReason);
+                        }
+                    }
+
                     break;
 
                 case SessionStateCode.RequestTransportConnect:
-                case SessionStateCode.RequestTransportReconnect:
                     break;
 
                 case SessionStateCode.RequestSessionOpen:
-                case SessionStateCode.RequestSessionResume:
                     count += ServiceTransmitter(qpcTimeStamp);
 
-                    if (count == 0)
+                    if (stateAge > Config.NormalRetransmitHoldoffPeriod)
                     {
-                        TimeSpan stateAge = (qpcTimeStamp - State.TimeStamp);
+                        ManagementType managementType = ManagementType.RequestOpenSession;
 
-                        if (stateAge > Config.NormalRetransmitHoldoffPeriod)
-                        {
-                            ManagementType managementType = ((StateCode == SessionStateCode.RequestSessionOpen) ? ManagementType.RequestOpenSession : ManagementType.RequestResumeSession);
+                        TouchStateTime(qpcTimeStamp, "Resending {0} after {1:f3} seconds".CheckedFormat(managementType, stateAge.TotalSeconds));
 
-                            SetState(qpcTimeStamp, StateCode, "Resending {0} after {1:f3} seconds".CheckedFormat(managementType, stateAge.TotalSeconds));
+                        GenerateAndAddManagementBufferToSendNowList(qpcTimeStamp, managementType, serviceTransmitter: true);
 
-                            GenerateAndAddManagementBufferToSendNowList(qpcTimeStamp, managementType, serviceTransmitter: true);
-                        }
+                        count++;
+                    }
+                    else if (stateAge > Config.ConnectWaitTimeLimit)
+                    {
+                        SetState(qpcTimeStamp, SessionStateCode.Terminated, "Connection not accepted within {0:f3} seconds [{1}]".CheckedFormat(stateAge.TotalSeconds, StateCode), TerminationReasonCode.ConnectWaitTimeLimitReached);
+                        count++;
                     }
                     break;
 
@@ -731,31 +912,19 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
                     if (count == 0)
                     {
                         TimeSpan txAge = (qpcTimeStamp - lastSendActivityTimeStamp);
-                        TimeSpan stateAge = (qpcTimeStamp - State.TimeStamp);
 
                         if (txAge >= Config.ShortRetransmitHoldoffPeriod && stateAge >= Config.ShortRetransmitHoldoffPeriod)
                             GenerateAndAddManagementBufferToSendNowList(qpcTimeStamp, ManagementType.RequestCloseSession, reason: "Close request retransmit: {0}".CheckedFormat(State.Reason));
 
-                        if (stateAge > Config.NormalRetransmitHoldoffPeriod)
-                            SetState(qpcTimeStamp, SessionStateCode.Terminated, "Client wait while {0} expired after {1:f3} seconds".CheckedFormat(StateCode, stateAge.TotalSeconds));
+                        if (stateAge > Config.CloseRequestWaitTimeLimit)
+                            SetState(qpcTimeStamp, SessionStateCode.Terminated, "Close request not accepted witin {0:f3} seconds [{1}]".CheckedFormat(stateAge.TotalSeconds, StateCode), TerminationReasonCode.CloseRequestWaitTimeLimitReached);
                     }
                     break;
 
                 case SessionStateCode.ConnectionClosed:
                     {
-                        bool canAttemptAutoReconnect = (Config.AutoReconnectHoldoff != null);
-                        TimeSpan stateAge = (qpcTimeStamp - State.TimeStamp);
-
-                        if (!canAttemptAutoReconnect)
-                        {
-                            SetState(qpcTimeStamp, SessionStateCode.Terminated, "Connection has been closed and auto reconnect is not enabled");
-                            count++;
-                        }
-                        else if (stateAge >= (Config.AutoReconnectHoldoff ?? TimeSpan.Zero))
-                        {
-                            SetState(qpcTimeStamp, SessionStateCode.RequestTransportReconnect, "Attempting auto reconnect after {0:f3} seconds".CheckedFormat(stateAge.TotalSeconds));
-                            count++;
-                        }
+                        SetState(qpcTimeStamp, SessionStateCode.Terminated, "Connection has been closed", TerminationReasonCode.ClosedByRequest);
+                        count++;
                     }
                     break;
 
@@ -778,10 +947,6 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
                     SetState(qpcTimeStamp, SessionStateCode.RequestSessionOpen, "{0}[{1}]".CheckedFormat(Fcns.CurrentMethodName, transportEndpoint));
                     GenerateAndAddManagementBufferToSendNowList(qpcTimeStamp, ManagementType.RequestOpenSession, serviceTransmitter: true);
                     break;
-                case SessionStateCode.RequestTransportReconnect:
-                    SetState(qpcTimeStamp, SessionStateCode.RequestSessionResume, "{0}[{1}]".CheckedFormat(Fcns.CurrentMethodName, transportEndpoint));
-                    GenerateAndAddManagementBufferToSendNowList(qpcTimeStamp, ManagementType.RequestResumeSession, serviceTransmitter: true);
-                    break;
                 default:
                     TraceEmitter.Emit("{0}[{1}]: ignored in session state {2}", Fcns.CurrentMethodName, transportEndpoint, StateCode);
                     break;
@@ -793,15 +958,18 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
             SetState(qpcTimeStamp, SessionStateCode.ConnectionClosed, "{0}: {1}".CheckedFormat(Fcns.CurrentMethodName, failureCode));
         }
 
-        private void HandleSessionProtocolViolation(QpcTimeStamp qpcTimeStamp, string failureCode, bool serviceTransmitter = true)
+        private int HandleSessionProtocolViolation(QpcTimeStamp qpcTimeStamp, string failureCode, bool serviceTransmitter = true, TerminationReasonCode terminationReasonCode = TerminationReasonCode.ProtocolViolation)
         {
             IssueEmitter.Emit("{0} State:{1} note {2} failureCode:{3}", SessionName, StateCode, Fcns.CurrentMethodName, failureCode);
 
             string faultReason = "Session protocol violation: {0}".CheckedFormat(failureCode);
 
-            SetState(qpcTimeStamp, SessionStateCode.CloseRequested, faultReason);
+            SetState(qpcTimeStamp, SessionStateCode.Terminated, faultReason, terminationReasonCode);
 
-            GenerateAndAddManagementBufferToSendNowList(qpcTimeStamp, ManagementType.NoteSessionTerminated, reason: faultReason, serviceTransmitter: serviceTransmitter);
+            // make one attempt to send this message (this likely only works if the serviceTransmitter is passed as true)
+            GenerateAndAddManagementBufferToSendNowList(qpcTimeStamp, ManagementType.NoteSessionTerminated, reason: faultReason, serviceTransmitter: serviceTransmitter, terminationReasonCode: terminationReasonCode);
+
+            return 1;
         }
 
         #region Outbound messages - distribution to streams and early buffer preperation
@@ -877,6 +1045,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
             if (streamHandler == null)
             {
                 int currentMaxStream = outboundPerMessageStreamHandlerArray.Length;
+
                 outboundPerMessageStreamHandlerList.AddRange(Enumerable.Range(currentMaxStream, stream + 1 - currentMaxStream).Select(addingStream => new OutboundPerMessageStreamHandler() { stream = unchecked((ushort)addingStream) }));
                 outboundPerMessageStreamHandlerArray = outboundPerMessageStreamHandlerList.ToArray();
 
@@ -906,7 +1075,6 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
                         deliveredOrFailedCount++;
                     }
 
-
                     bool messageHasBeenAssignedLastBufferSeqNum = (message.LastBufferSeqNum != 0);
                     bool checkForBufferInBadState = false;
 
@@ -920,6 +1088,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
                             else if (message.LastBufferSeqNum <= maxDeliveredBufferSeqNum)
                             {
                                 message.SetState(qpcTimeStamp, Messages.MessageState.Delivered, "All buffers have been Delivered");
+                                EventAndPerformanceRecording.RecordDelivered(message);
                                 deliveredOrFailedCount++;
                             }
                             else if (message.LastBufferSeqNum <= maxSentBufferSeqNum)
@@ -941,6 +1110,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
                             else if (message.LastBufferSeqNum <= maxDeliveredBufferSeqNum)
                             {
                                 message.SetState(qpcTimeStamp, Messages.MessageState.Delivered, "All buffers have been Delivered");
+                                EventAndPerformanceRecording.RecordDelivered(message);
                                 deliveredOrFailedCount++;
                             }
                             else
@@ -950,6 +1120,9 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
                             break;
 
                         case Messages.MessageState.Delivered:
+                            deliveredOrFailedCount++;
+                            break;
+
                         case Messages.MessageState.Failed:
                             deliveredOrFailedCount++;
                             break;
@@ -982,6 +1155,52 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
             return count;
         }
 
+        Buffers.Buffer pendingKeepAliveBuffer;
+        QpcTimeStamp pendingKeepAliveBufferSendTimeStamp = QpcTimeStamp.Now;
+        public QpcTimeStamp lastDeliveredKeepAliveBufferTimeStamp = QpcTimeStamp.Now;
+
+        private int ServiceSendingKeepAliveBuffers(QpcTimeStamp qpcTimeStamp)
+        {
+            int count = 0;
+
+            if (IsClientSession && State.IsConnected())
+            {
+                if (pendingKeepAliveBuffer != null && !pendingKeepAliveBuffer.State.IsDeliveryPending())
+                {
+                    var elapsedDeliveryTime = pendingKeepAliveBufferSendTimeStamp.Age(qpcTimeStamp).TotalSeconds;
+
+                    if (pendingKeepAliveBuffer.State == BufferState.Delivered)
+                    {
+                        lastDeliveredKeepAliveBufferTimeStamp = qpcTimeStamp;
+                        TraceEmitter.Emit("KeepAlive buffer delivered [{0}, after:{1:f3} sec]", pendingKeepAliveBuffer, elapsedDeliveryTime);
+                        pendingKeepAliveBuffer.ReturnToPool(qpcTimeStamp, "keep alive delivery complete");
+                    }
+                    else
+                    {
+                        IssueEmitter.Emit("KeepAlive buffer was not delivered normally [{0}, after:{1:f3} sec]", pendingKeepAliveBuffer, elapsedDeliveryTime);
+                        pendingKeepAliveBuffer.ReturnToPool(qpcTimeStamp, "keep alive delivery failed");
+                    }
+
+                    pendingKeepAliveBuffer = null;
+
+                    count++;
+                }
+
+                if (pendingKeepAliveBuffer == null && (pendingKeepAliveBufferSendTimeStamp.Age(qpcTimeStamp) >= Config.NominalKeepAliveSendInterval))
+                {
+                    TraceEmitter.Emit("Sending KeepAlive buffer");
+
+                    pendingKeepAliveBuffer = GenerateAndAddManagementBufferToReadyToSendList(qpcTimeStamp, ManagementType.KeepAlive, reason: "nominal keep alive send interval reached", assignSeqNum: true);
+
+                    pendingKeepAliveBufferSendTimeStamp = qpcTimeStamp;
+
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
         #endregion
 
         #region Inbound stream based Message accumulation and delivery
@@ -997,6 +1216,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
 
         private List<InboundPerMessageStreamHandler> inboundPerMessageStreamHandlerList = new List<InboundPerMessageStreamHandler>();
         private InboundPerMessageStreamHandler [] inboundPerMessageStreamHandlerArray = EmptyArrayFactory<InboundPerMessageStreamHandler>.Instance;
+        private QpcTimeStamp lastDeliveredMessageTimeStamp = QpcTimeStamp.Now;
 
         private void AddBufferToMessageAccumulation(QpcTimeStamp qpcTimeStamp, Buffers.Buffer buffer)
         {
@@ -1062,8 +1282,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
                             }
                             else
                             {
-                                HandleSessionProtocolViolation(qpcTimeStamp, "{0}: found non-middle of message buffer in stream {1} accumulation list: {2}".CheckedFormat(Fcns.CurrentMethodName, stream, nextBuffer));
-                                count++;
+                                count += HandleSessionProtocolViolation(qpcTimeStamp, "{0}: found non-middle of message buffer in stream {1} accumulation list: {2}".CheckedFormat(Fcns.CurrentMethodName, stream, nextBuffer));
                                 break;
                             }
                         }
@@ -1073,13 +1292,15 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
                     }
                     else
                     {
-                        HandleSessionProtocolViolation(qpcTimeStamp, "{0}: found non-start of message buffer at head of stream {1} accumulation list: {2}".CheckedFormat(Fcns.CurrentMethodName, stream, firstBuffer));
+                        count += HandleSessionProtocolViolation(qpcTimeStamp, "{0}: found non-start of message buffer at head of stream {1} accumulation list: {2}".CheckedFormat(Fcns.CurrentMethodName, stream, firstBuffer));
                         count++;
                     }
 
                     if (runLength > 0)
                     {
                         Messages.Message receivedMessage = new Messages.Message(bufferSourcePool: BufferPool, stateEmitter: TraceEmitter, issueEmitter: IssueEmitter).SetState(qpcTimeStamp, Messages.MessageState.Received, Fcns.CurrentMethodName);
+
+                        EventAndPerformanceRecording.RecordReceived(receivedMessage);
 
                         receivedMessage.bufferList.AddRange(inboundBufferAccumulationList.Take(runLength));
                         inboundBufferAccumulationList.RemoveRange(0, runLength);
@@ -1092,14 +1313,15 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
                         {
                             handleInboundMessageDelegate(qpcTimeStamp, stream, receivedMessage);
                             streamHandler.lastActivityMessageTimeStamp = qpcTimeStamp;
+                            lastDeliveredMessageTimeStamp = qpcTimeStamp;
+
+                            count++;
                         }
                         else
                         {
-                            HandleSessionProtocolViolation(qpcTimeStamp, "{0}: could not deliver message on stream {1}, HandleInboundMessageDelegate is null: {2}".CheckedFormat(Fcns.CurrentMethodName, stream, receivedMessage));
+                            count += HandleSessionProtocolViolation(qpcTimeStamp, "{0}: could not deliver message on stream {1}, HandleInboundMessageDelegate is null: {2}".CheckedFormat(Fcns.CurrentMethodName, stream, receivedMessage));
                             receivedMessage.ReturnBuffersToPool(qpcTimeStamp);
                         }
-
-                        count++;
 
                         listCount = inboundBufferAccumulationList.Count;
                     }
@@ -1116,7 +1338,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
                 {
                     TimeSpan lastActivityAge = (qpcTimeStamp - streamHandler.lastActivityMessageTimeStamp);
                     if (lastActivityAge > Config.SessionExpirationPeriod)
-                        HandleSessionProtocolViolation(qpcTimeStamp, "{0}: stream {1} message accumulation appears to be stuck [buffer count:{2}, age:{3:f3}]".CheckedFormat(Fcns.CurrentMethodName, stream, listCount, lastActivityAge.TotalSeconds));
+                        count += HandleSessionProtocolViolation(qpcTimeStamp, "{0}: stream {1} message accumulation appears to be stuck [buffer count:{2}, age:{3:f3}]".CheckedFormat(Fcns.CurrentMethodName, stream, listCount, lastActivityAge.TotalSeconds));
                 }
             }
 
@@ -1158,7 +1380,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
 
         private NotifyOnBufferSetState notifyOnBufferSetState = new NotifyOnBufferSetState();
 
-        private int ServiceTransmitter(QpcTimeStamp qpcTimeStamp, bool enableRetransmission = true, bool enableMessageSending = true)
+        private int ServiceTransmitter(QpcTimeStamp qpcTimeStamp, bool enableRetransmission = true, bool enableMessageSending = true, bool requestSendAckNow = false)
         {
             int count = 0;
 
@@ -1192,7 +1414,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
                 }
             }
 
-            if (enableRetransmission)
+            if (enableRetransmission && !transportIsReliable)
             {
                 /// check for need to send a status update message about out of order buffers.
                 if (!firstOutOfOrderBufferReceivedTimeStamp.IsZero && ((qpcTimeStamp - firstOutOfOrderBufferReceivedTimeStamp) >= Config.ShortRetransmitHoldoffPeriod))
@@ -1300,7 +1522,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
             }
 
             // if there is nothing else to send and there is a new buffer seq num to acknowledge and enough time has elpased then send a simple ack buffer.
-            if (sendNowList.Count == 0 && (bufferAckSeqNumToSend != maxSentBufferAckSeqNum) && !sendBufferAckSeqNumAfterTimeStamp.IsZero && qpcTimeStamp >= sendBufferAckSeqNumAfterTimeStamp)
+            if (sendNowList.Count == 0 && (bufferAckSeqNumToSend != maxSentBufferAckSeqNum) && (requestSendAckNow || (!sendBufferAckSeqNumAfterTimeStamp.IsZero && qpcTimeStamp >= sendBufferAckSeqNumAfterTimeStamp)))
             {
                 Buffers.Buffer explicitAckBuffer = BufferPool.Acquire(qpcTimeStamp).Update(purposeCode: PurposeCode.Ack).SetState(qpcTimeStamp, BufferState.ReadyToSend, "Sending explicit ack");
                 sendNowList.Add(explicitAckBuffer);
@@ -1334,6 +1556,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
                     handleOutboundBuffersDelegate(qpcTimeStamp, TransportEndpoint, sendNowArray);
                 else
                     SetState(qpcTimeStamp, SessionStateCode.Terminated, "Attempt to send before HandleOutboundBuffersDelegate has been provided");
+
+                EventAndPerformanceRecording.RecordSent(sendNowArray);
 
                 sendNowList.Clear();
 
@@ -1370,7 +1594,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
             return count;
         }
 
-        public static Buffers.Buffer GenerateManagementBuffer(QpcTimeStamp qpcTimeStamp, ManagementType managementType, string hostName, string sessionUUID, NamedValueSet nvs, string reason, Transport.TransportRole transportRole, BufferPool bufferPool, bool setState)
+        public static Buffers.Buffer GenerateManagementBuffer(QpcTimeStamp qpcTimeStamp, ManagementType managementType, string hostName, string clientUUID, ulong clientInstanceNum, NamedValueSet nvs, string reason, Transport.TransportRole transportRole, BufferPool bufferPool, bool setState, TerminationReasonCode terminationReasonCode = TerminationReasonCode.None)
         {
             nvs = nvs.ConvertToWritable();
 
@@ -1382,12 +1606,18 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
                 if (!nvs.Contains("Name"))
                     nvs.SetValue("Name", hostName);
 
-                if (!nvs.Contains("SessionUUID"))
-                    nvs.SetValue("SessionUUID", sessionUUID);
+                if (!nvs.Contains("ClientUUID"))
+                    nvs.SetValue("ClientUUID", clientUUID);
 
-                if ((managementType == ManagementType.RequestResumeSession || transportRole == Transport.TransportRole.Server) && !nvs.Contains("BufferSize"))
+                if (!nvs.Contains("ClientInstanceNum"))
+                    nvs.SetValue("ClientInstanceNum", clientInstanceNum);
+
+                if (!nvs.Contains("BufferSize"))
                     nvs.SetValue("BufferSize", bufferPool.BufferSize);
             }
+
+            if (terminationReasonCode != TerminationReasonCode.None)
+                nvs.SetValue("TerminationReason", terminationReasonCode);
 
             Buffers.Buffer managementBuffer = bufferPool.Acquire(qpcTimeStamp).Update(purposeCode: PurposeCode.Management, buildPayloadDataFromE005NVS: nvs);
 
@@ -1397,16 +1627,39 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
             return managementBuffer;
         }
 
-        public void GenerateAndAddManagementBufferToSendNowList(QpcTimeStamp qpcTimeStamp, ManagementType managementType, NamedValueSet nvs = null, bool serviceTransmitter = true, string reason = null)
+        public Buffers.Buffer GenerateAndAddManagementBufferToSendNowList(QpcTimeStamp qpcTimeStamp, ManagementType managementType, NamedValueSet nvs = null, bool serviceTransmitter = true, string reason = null, TerminationReasonCode terminationReasonCode = TerminationReasonCode.None)
         {
-            Buffers.Buffer managementBuffer = GenerateManagementBuffer(qpcTimeStamp, managementType, HostName, SessionUUID, nvs, reason, TransportRole, BufferPool, setState: false);
+            Buffers.Buffer managementBuffer = GenerateManagementBuffer(qpcTimeStamp, managementType, HostName, ClientUUID, ClientInstanceNum, nvs, reason, TransportRole, BufferPool, setState: false, terminationReasonCode: terminationReasonCode);
 
             managementBuffer.SetState(qpcTimeStamp, BufferState.ReadyToSend, "Adding management buffer to send now list {0}".CheckedFormat(nvs.SafeToStringSML()));
 
             sendNowList.Add(managementBuffer);
 
+            EventAndPerformanceRecording.RecordSending(managementType);
+
             if (serviceTransmitter)
                 ServiceTransmitter(qpcTimeStamp, enableRetransmission: false, enableMessageSending: false);
+
+            return managementBuffer;
+        }
+
+        public Buffers.Buffer GenerateAndAddManagementBufferToReadyToSendList(QpcTimeStamp qpcTimeStamp, ManagementType managementType, NamedValueSet nvs = null, bool serviceTransmitter = true, string reason = null, bool assignSeqNum = true, TerminationReasonCode terminationReasonCode = TerminationReasonCode.None)
+        {
+            Buffers.Buffer managementBuffer = GenerateManagementBuffer(qpcTimeStamp, managementType, HostName, ClientUUID, ClientInstanceNum, nvs, reason, TransportRole, BufferPool, setState: false, terminationReasonCode: terminationReasonCode);
+
+            managementBuffer.SetState(qpcTimeStamp, BufferState.ReadyToSend, "Adding management buffer to send now list {0}".CheckedFormat(nvs.SafeToStringSML()));
+
+            if (assignSeqNum)
+                managementBuffer.Update(seqNum: ++bufferSeqNumGen);
+
+            readyToSendList.Add(managementBuffer);
+
+            EventAndPerformanceRecording.RecordSending(managementType);
+
+            if (serviceTransmitter)
+                ServiceTransmitter(qpcTimeStamp, enableRetransmission: false, enableMessageSending: false);
+
+            return managementBuffer;
         }
 
         #endregion
@@ -1420,6 +1673,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
             int count = 0;
 
             lastRecvActivityTimeStamp = qpcTimeStamp;
+
+            EventAndPerformanceRecording.RecordReceived(bufferParamsArray);
 
             foreach (var buffer in bufferParamsArray)
             {
@@ -1438,6 +1693,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
         public const ulong MaxAcceptableAckWindowWidth = 10000;
 
         ulong lastRecvdValidAckBufferSeqNum = 0;
+        QpcTimeStamp lastRecvdValidAckBufferSeqNumTimeStamp = QpcTimeStamp.Now;
 
         private int ProcessReceivedBufferAck(QpcTimeStamp qpcTimeStamp, Buffers.Buffer rxBuffer)
         {
@@ -1451,18 +1707,21 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
 
             if (ackBufferSeqNum - lastRecvdValidAckBufferSeqNum > MaxAcceptableAckWindowWidth)
             {
-                HandleSessionProtocolViolation(qpcTimeStamp, "{0}: Buffer's ack seq num {1} is out of valid range {2}..{3}: {4}".CheckedFormat(Fcns.CurrentMethodName, ackBufferSeqNum, lastRecvdValidAckBufferSeqNum, lastRecvdValidAckBufferSeqNum + MaxAcceptableAckWindowWidth, rxBuffer));
+                count += HandleSessionProtocolViolation(qpcTimeStamp, "{0}: Buffer's ack seq num {1} is out of valid range {2}..{3}: {4}".CheckedFormat(Fcns.CurrentMethodName, ackBufferSeqNum, lastRecvdValidAckBufferSeqNum, lastRecvdValidAckBufferSeqNum + MaxAcceptableAckWindowWidth, rxBuffer));
                 return count;
             }
 
             ulong entryLastRecvdValidAckBufferSeqNum = lastRecvdValidAckBufferSeqNum;
             lastRecvdValidAckBufferSeqNum = ackBufferSeqNum;
+            lastRecvdValidAckBufferSeqNumTimeStamp = qpcTimeStamp;
 
             string reason = Fcns.CurrentMethodName;
 
             foreach (var buffer in deliveryPendingList.FilterAndRemove(txBuffer => txBuffer.SeqNum <= lastRecvdValidAckBufferSeqNum))
             {
                 buffer.SetState(qpcTimeStamp, BufferState.Delivered, reason);
+
+                EventAndPerformanceRecording.RecordDelivered(buffer);
 
                 maxSentBufferSeqNum = Math.Max(buffer.SeqNum, maxSentBufferSeqNum);
                 maxSentBufferAckSeqNum = Math.Max(maxSentBufferAckSeqNum, buffer.header.AckSeqNum);
@@ -1486,12 +1745,135 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
 
         private int ProcessReceivedBuffer(QpcTimeStamp qpcTimeStamp, Buffers.Buffer buffer)
         {
+            ulong bufferSeqNum = buffer.SeqNum;
+
+            // decide what kind of buffer this is
+            SelectedBufferHandling bufferHandling;
+
+            if (buffer.PurposeCode == PurposeCode.Ack) // these buffers are used for expicit acks
+                bufferHandling = SelectedBufferHandling.BufferIsAckOnly;
+            else if (State.IsPerminantlyClosed)
+                bufferHandling = SelectedBufferHandling.SessionTerminated;
+            else if (bufferSeqNum == 0)
+                bufferHandling = SelectedBufferHandling.BufferIsSeqNumZero;
+            else if (!State.IsConnected(includeConnectingStates: false, includeClosingStates: true))
+                bufferHandling = SelectedBufferHandling.NotConnectedYet;
+            else if (bufferSeqNum == (lastRecvdValidBufferSeqNum + 1) || (lastRecvdValidBufferSeqNum == 0))
+                bufferHandling = SelectedBufferHandling.BufferIsInNormalOrder;
+            else if (bufferSeqNum > lastRecvdValidBufferSeqNum)
+                bufferHandling = SelectedBufferHandling.BufferIsOutOfOrderInTheFuture;
+            else
+                bufferHandling = SelectedBufferHandling.BufferIsOutOfOrderInThePast;
+
             int count = 0;
 
-            ulong bufferSeqNum = buffer.SeqNum;
+            switch (bufferHandling)
+            {
+                case SelectedBufferHandling.BufferIsAckOnly:
+                    TraceEmitter.Emit("Received explicit ack: {0}", buffer);
+                    break;
+
+                case SelectedBufferHandling.BufferIsSeqNumZero:
+
+                    if (buffer.PurposeCode == PurposeCode.Management)
+                        count += ProcessReceivedManagementBuffer(qpcTimeStamp, buffer);
+                    else
+                        count += HandleSessionProtocolViolation(qpcTimeStamp, "Recieved seqNumZero buffer and unsupported purpose. [state:{0} buffer:{1}]".CheckedFormat(State, buffer));
+
+                    break;
+
+                case SelectedBufferHandling.NotConnectedYet:
+                    if (buffer.PurposeCode == PurposeCode.Management)
+                        count += ProcessReceivedManagementBuffer(qpcTimeStamp, buffer);
+                    else
+                        count += HandleSessionProtocolViolation(qpcTimeStamp, "Recieved buffer and unsupported purpose while not connected. [state:{0} buffer:{1}]".CheckedFormat(State, buffer));
+
+                    break;
+
+                case SelectedBufferHandling.BufferIsInNormalOrder:
+                    lastRecvdValidBufferSeqNum = bufferSeqNum;
+
+                    if (sendBufferAckSeqNumAfterTimeStamp.IsZero)
+                        sendBufferAckSeqNumAfterTimeStamp = qpcTimeStamp + Config.ExplicitAckHoldoffPeriod;
+
+                    count += ProcessInOrderOrNoSeqNumBufferReceived(qpcTimeStamp, buffer);
+
+                    if (heldOutOfOrderBuffersList.Count > 0)
+                        count += ServiceHeldOutOfOrderBufferList(qpcTimeStamp, checkForStaleBuffers: false);
+
+                    break;
+
+                case SelectedBufferHandling.BufferIsOutOfOrderInTheFuture:
+                    if (firstOutOfOrderBufferReceivedTimeStamp.IsZero || firstOutOfOrderBufferReceivedTimeStamp > qpcTimeStamp)
+                        firstOutOfOrderBufferReceivedTimeStamp = qpcTimeStamp;
+
+                    if (heldOutOfOrderBuffersList.Count < Config.MaxOutOfOrderBufferHoldCount)
+                    {
+                        TraceEmitter.Emit("Received out of order buffer {0}", buffer);
+
+                        // out of order buffers that have sequence numbers will be saved for later processing or discard based on later reception of in order buffers.  This logic now includes processing of management buffers with sequence numbrers.
+                        heldOutOfOrderBuffersList.Add(bufferSeqNum, buffer);
+
+                        EventAndPerformanceRecording.RecordEvent(RecordEventType.BufferReceivedOutOfOrder);
+                    }
+                    else
+                    {
+                        TraceEmitter.Emit("Could not retain received out of order buffer {0}: held buffer list has reached maximum capacity [{1} >= {2}]", buffer, heldOutOfOrderBuffersList.Count, Config.MaxOutOfOrderBufferHoldCount);
+                    }                    
+                    count++;
+
+                    break;
+
+                case SelectedBufferHandling.BufferIsOutOfOrderInThePast:
+                    if ((buffer.Flags & BufferHeaderFlags.BufferIsBeingResent) != 0)
+                    {
+                        TraceEmitter.Emit("Resent buffer had already been received [{0}]", buffer);
+                        EventAndPerformanceRecording.RecordEvent(RecordEventType.OldResentBufferRecieved);
+                    }
+                    else
+                    {
+                        IssueEmitter.Emit("Non-Resent buffer appears to have already been received [{0}]", buffer);
+                        EventAndPerformanceRecording.RecordEvent(RecordEventType.OldBufferReceivedOutOfOrder);
+                    }
+                    count++;
+
+                    break;
+
+                case SelectedBufferHandling.SessionTerminated:
+                    TraceEmitter.Emit("received message buffer while session is terminated [state:{0} buffer:{1}]", State, buffer);
+                    count++;
+                    break;
+
+                default:
+                    break;
+            }
+
+            return count;
+        }
+
+        private enum SelectedBufferHandling : int
+        {
+            /// <summary>Buffer received Ack only buffer.  Normally these also have a zero seq num.</summary>
+            BufferIsAckOnly,
+            /// <summary>Buffer received with a non</summary>
+            BufferIsSeqNumZero,
+            /// <summary>Buffer received with a non-zero seq num before we have been connected.  This can only be a management buffer or an Ack.</summary>
+            NotConnectedYet,
+            /// <summary>Buffer has been received with a seqNum that is exactly one beyond the last valid received seq num</summary>
+            BufferIsInNormalOrder,
+            /// <summary>Buffer recieved with a seqNum that is more than one beyond the last valid received seq num</summary>
+            BufferIsOutOfOrderInTheFuture,
+            /// <summary>Buffer recieved with a seqNum that has already been received validly (in order) - this is usually due to unnecessary retransmit</summary>
+            BufferIsOutOfOrderInThePast,
+            /// <summary>Buffer received when session has already been terminated (aka Perminantly closed)</summary>
+            SessionTerminated,
+        }
+
+        private int ProcessInOrderOrNoSeqNumBufferReceived(QpcTimeStamp qpcTimeStamp, Buffers.Buffer buffer)
+        {
+            int count = 0;
+
             PurposeCode bufferPurposeCode = buffer.PurposeCode;
-            BufferHeaderFlags bufferHeaderFlags = buffer.Flags;
-            bool isResent = ((bufferHeaderFlags & BufferHeaderFlags.BufferIsBeingResent) != 0);
 
             switch (bufferPurposeCode)
             {
@@ -1499,228 +1881,148 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
                     TraceEmitter.Emit("Received explicit ack: {0}", buffer);
                     break;
 
+                case PurposeCode.Management:
+                    count += ProcessReceivedManagementBuffer(qpcTimeStamp, buffer);
+                    break;
+
                 case PurposeCode.Message:
                 case PurposeCode.MessageStart:
                 case PurposeCode.MessageMiddle:
                 case PurposeCode.MessageEnd:
-                    if (State.IsConnected(includeConnectingStates: false, includeClosingStates: true))
-                    {
-                        if (bufferSeqNum != 0)
-                        {
-                            if (bufferSeqNum == (lastRecvdValidBufferSeqNum + 1) || (lastRecvdValidBufferSeqNum == 0))
-                            {
-                                lastRecvdValidBufferSeqNum = bufferSeqNum;
-
-                                if (sendBufferAckSeqNumAfterTimeStamp.IsZero)
-                                    sendBufferAckSeqNumAfterTimeStamp = qpcTimeStamp + Config.ExplicitAckHoldoffPeriod;
-
-                                AddBufferToMessageAccumulation(qpcTimeStamp, buffer);
-                                count++;
-
-                                if (heldOutOfOrderBuffersList.Count > 0)
-                                    count += ServiceHeldOutOfOrderBufferList(qpcTimeStamp, checkForStaleBuffers: false);
-                            }
-                            else if (bufferSeqNum > lastRecvdValidBufferSeqNum)
-                            {
-                                if (firstOutOfOrderBufferReceivedTimeStamp.IsZero || firstOutOfOrderBufferReceivedTimeStamp > qpcTimeStamp)
-                                    firstOutOfOrderBufferReceivedTimeStamp = qpcTimeStamp;
-
-                                if (heldOutOfOrderBuffersList.Count < Config.MaxOutOfOrderBufferHoldCount)
-                                {
-                                    TraceEmitter.Emit("Received out of order buffer {0}", buffer);
-
-                                    heldOutOfOrderBuffersList.Add(bufferSeqNum, buffer);
-                                }
-                                else
-                                {
-                                    TraceEmitter.Emit("Could not retain received out of order buffer {0}: held buffer list has reached maximum capacity [{1} >= {2}]", buffer, heldOutOfOrderBuffersList.Count, Config.MaxOutOfOrderBufferHoldCount);
-                                }
-                            }
-                        }
-                        else
-                        {
-                            HandleSessionProtocolViolation(qpcTimeStamp, "received message buffer with zero SeqNum [state:{0} buffer:{1}]".CheckedFormat(State, buffer));
-                        }
-                    }
-                    else if (State.StateCode != SessionStateCode.Terminated)
-                    {
-                        HandleSessionProtocolViolation(qpcTimeStamp, "received message buffer while session is not connected [state:{0} buffer:{1}]".CheckedFormat(State, buffer));
-                    }
-                    else
-                    {
-                        TraceEmitter.Emit("received message buffer while session is terminated [state:{0} buffer:{1}]", State, buffer);
-                    }
-                    break;
-
-                case PurposeCode.Management:
-                    {
-                        TraceEmitter.Emit("Received management buffer: {0}", buffer);
-
-                        INamedValueSet bufferNVS = buffer.GetPayloadAsE005NVS(NamedValueSet.Empty);
-                        ManagementType managementType = bufferNVS["Type"].VC.GetValue<ManagementType>(rethrow: false);
-                        string remoteName = bufferNVS["Name"].VC.GetValue<string>(rethrow: false);
-                        string sessionUUID = bufferNVS["SessionUUID"].VC.GetValue<string>(rethrow: false);
-
-                        switch (managementType)
-                        {
-                            case ManagementType.RequestOpenSession:
-                                switch (State.StateCode)
-                                {
-                                    case SessionStateCode.ServerSessionInitial:
-                                        count += ProcessServerSessionInitialOpen(qpcTimeStamp, remoteName, sessionUUID, bufferNVS);
-                                        break;
-                                    default:
-                                        if (SessionUUID != sessionUUID && !State.IsConnected())
-                                            HandleSessionProtocolViolation(qpcTimeStamp, "Session State {0} does not accept buffer: {1}".CheckedFormat(State, buffer));
-
-                                        count++;
-                                        break;
-                                }
-                                break;
-
-                            case ManagementType.RequestResumeSession:
-                                switch (State.StateCode)
-                                {
-                                    case SessionStateCode.ServerSessionInitial:
-                                    case SessionStateCode.Active:
-                                    case SessionStateCode.Idle:
-                                    case SessionStateCode.IdleWithPendingWork:
-                                    case SessionStateCode.ConnectionClosed:
-                                        count += ProcessServerSessionResume(qpcTimeStamp, remoteName, sessionUUID, bufferNVS);
-                                        break;
-                                    default:
-                                        HandleSessionProtocolViolation(qpcTimeStamp, "Session State {0} does not accept buffer: {1}".CheckedFormat(State, buffer));
-                                        count++;
-                                        break;
-                                }
-                                break;
-
-                            case ManagementType.SessionRequestAcceptedResponse:
-                                switch (State.StateCode)
-                                {
-                                    case SessionStateCode.RequestSessionOpen:
-                                        count += ProcessClientSessionOpenAcceptance(qpcTimeStamp, bufferNVS);
-                                        break;
-                                    case SessionStateCode.RequestSessionResume:
-                                        SetState(qpcTimeStamp, SessionStateCode.Active, "Session resume request has been accepted");
-                                        count++;
-                                        break;
-                                    default:
-                                        if (SessionUUID != sessionUUID && !State.IsConnected())
-                                            HandleSessionProtocolViolation(qpcTimeStamp, "Session State {0} does not accept buffer: {1}".CheckedFormat(State, buffer));
-
-                                            count++;
-                                        break;
-                                }
-                                break;
-
-                            case ManagementType.RequestCloseSession:
-                                {
-                                    ValueContainer reasonVC = bufferNVS["Reason"].VC;
-
-                                    string reason = "Received request to close session {0}".CheckedFormat(reasonVC.ToStringSML());
-
-                                    SetState(qpcTimeStamp, SessionStateCode.CloseRequested, reason);
-
-                                    GenerateAndAddManagementBufferToSendNowList(qpcTimeStamp, ManagementType.NoteSessionTerminated, reason: reason);
-
-                                    SetState(qpcTimeStamp, SessionStateCode.Terminated, reason);
-
-                                    count++;
-                                }
-                                break;
-
-                            case ManagementType.NoteSessionTerminated:
-                                {
-                                    if (TraceEmitter.IsEnabled)
-                                        TraceEmitter.Emit("{0} Received buffer {1}, nvs:{2} in State {3}", SessionName, buffer, bufferNVS.ToStringSML(), State);
-
-                                    ValueContainer reasonVC = bufferNVS["Reason"].VC;
-
-                                    SetState(qpcTimeStamp, SessionStateCode.Terminated, "Received remote termination reason: {0}".CheckedFormat(reasonVC.ToStringSML()));
-                                }
-                                break;
-
-                            case ManagementType.Status:
-                                if (TraceEmitter.IsEnabled)
-                                    TraceEmitter.Emit("Received status update: {0}", bufferNVS.ToStringSML());
-
-                                count += ProcessTransmitterAspectsOfStatusUpdate(qpcTimeStamp, bufferNVS);
-                                break;
-
-                            default:
-                                HandleSessionProtocolViolation(qpcTimeStamp, "Received management buffer with unsupported contents: {0} {1}".CheckedFormat(buffer, bufferNVS.ToStringSML()));
-                                count++;
-                                break;
-                        }
-                    }
+                    AddBufferToMessageAccumulation(qpcTimeStamp, buffer);
+                    count++;
                     break;
 
                 default:
-                    HandleSessionProtocolViolation(qpcTimeStamp, "Recieved buffer with unsupported purpose: {1}".CheckedFormat(State, buffer));
-                    count++;
+                    count += HandleSessionProtocolViolation(qpcTimeStamp, "Recieved buffer with unsupported purpose: {1}".CheckedFormat(State, buffer));
                     break;
             }
 
             return count;
         }
 
-        private int ProcessServerSessionInitialOpen(QpcTimeStamp qpcTimeStamp, string remoteName, string sessionUUID, INamedValueSet bufferNVS)
+        private int ProcessReceivedManagementBuffer(QpcTimeStamp qpcTimeStamp, Buffers.Buffer buffer)
         {
-            if (!remoteName.IsNullOrEmpty() && !sessionUUID.IsNullOrEmpty())
+            int count = 0;
+
+            TraceEmitter.Emit("Received management buffer: {0}", buffer);
+
+            INamedValueSet bufferNVS = buffer.GetPayloadAsE005NVS(NamedValueSet.Empty);
+            ManagementType managementType = bufferNVS["Type"].VC.GetValue<ManagementType>(rethrow: false);
+            string remoteName = bufferNVS["Name"].VC.GetValue<string>(rethrow: false);
+            string clientUUID = bufferNVS["ClientUUID"].VC.GetValue<string>(rethrow: false);
+            ulong clientInstanceNum = bufferNVS["ClientInstanceNum"].VC.GetValue<ulong>(rethrow: false);
+
+            EventAndPerformanceRecording.RecordReceived(managementType);
+
+            switch (managementType)
             {
-                RemoteName = remoteName;
-                SessionUUID = sessionUUID;
+                case ManagementType.RequestOpenSession:
+                    switch (State.StateCode)
+                    {
+                        case SessionStateCode.ServerSessionInitial:
+                            count += ProcessServerSessionInitialOpen(qpcTimeStamp, remoteName, clientUUID, clientInstanceNum, bufferNVS);
+                            break;
+                        default:
+                            if ((ClientUUID != clientUUID || ClientInstanceNum != clientInstanceNum) && !State.IsConnected())
+                                count += HandleSessionProtocolViolation(qpcTimeStamp, "Session State {0} does not accept buffer: {1}".CheckedFormat(State, buffer));
+                            break;
+                    }
+                    break;
 
-                GenerateAndAddManagementBufferToSendNowList(qpcTimeStamp, ManagementType.SessionRequestAcceptedResponse);
+                case ManagementType.SessionRequestAcceptedResponse:
+                    switch (State.StateCode)
+                    {
+                        case SessionStateCode.RequestSessionOpen:
+                            count += ProcessClientSessionOpenAcceptance(qpcTimeStamp, bufferNVS);
+                            break;
+                        default:
+                            if ((ClientUUID != clientUUID || ClientInstanceNum != clientInstanceNum) && !State.IsConnected())
+                                count += HandleSessionProtocolViolation(qpcTimeStamp, "Session State {0} does not accept buffer: {1}".CheckedFormat(State, buffer));
+                            break;
+                    }
+                    break;
 
-                SetState(qpcTimeStamp, SessionStateCode.Active, Fcns.CurrentMethodName);
+                case ManagementType.RequestCloseSession:
+                    {
+                        ValueContainer reasonVC = bufferNVS["Reason"].VC;
+
+                        string reason = "Received request to close session {0}".CheckedFormat(reasonVC.ToStringSML());
+
+                        SetState(qpcTimeStamp, SessionStateCode.CloseRequested, reason);
+
+                        GenerateAndAddManagementBufferToSendNowList(qpcTimeStamp, ManagementType.NoteSessionTerminated, reason: reason, terminationReasonCode: TerminationReasonCode.ClosedByRequest);
+
+                        SetState(qpcTimeStamp, SessionStateCode.Terminated, reason);
+
+                        count++;
+                    }
+                    break;
+
+                case ManagementType.NoteSessionTerminated:
+                    {
+                        if (TraceEmitter.IsEnabled)
+                            TraceEmitter.Emit("{0} Received buffer {1}, nvs:{2} in State {3}", SessionName, buffer, bufferNVS.ToStringSML(), State);
+
+                        ValueContainer reasonVC = bufferNVS["Reason"].VC;
+                        var terminationReasonCode = bufferNVS["TerminationReason"].VC.GetValue<TerminationReasonCode>(rethrow: false);
+
+                        SetState(qpcTimeStamp, SessionStateCode.Terminated, "Received remote termination reason: {0}".CheckedFormat(reasonVC.ToStringSML()), terminationReasonCode);
+                    }
+                    break;
+
+                case ManagementType.Status:
+                    if (TraceEmitter.IsEnabled)
+                        TraceEmitter.Emit("Received status update: {0}", bufferNVS.ToStringSML());
+
+                    count += ProcessTransmitterAspectsOfStatusUpdate(qpcTimeStamp, bufferNVS);
+                    break;
+
+                case ManagementType.KeepAlive:
+                    count += ServiceTransmitter(qpcTimeStamp, enableRetransmission: true, enableMessageSending: true, requestSendAckNow: true);
+                    break;
+
+                default:
+                    count += HandleSessionProtocolViolation(qpcTimeStamp, "Received management buffer with unsupported contents: {0} {1}".CheckedFormat(buffer, bufferNVS.ToStringSML()));
+                    break;
             }
-            else
-            {
-                HandleSessionProtocolViolation(qpcTimeStamp, "RequestOpenSession failed: Name and/or SessionUUID are missing or invalid in: {0}".CheckedFormat(bufferNVS.ToStringSML()));
-            }
 
-            return 1;
+            return count;
         }
 
-        private int ProcessServerSessionResume(QpcTimeStamp qpcTimeStamp, string remoteName, string sessionUUID, INamedValueSet bufferNVS)
+        private int ProcessServerSessionInitialOpen(QpcTimeStamp qpcTimeStamp, string remoteName, string clientUUID, ulong clientInstanceNum, INamedValueSet bufferNVS)
         {
             int bufferSize = bufferNVS["BufferSize"].VC.GetValue<int>(rethrow: false);
 
-            if (RemoteName == remoteName && SessionUUID == sessionUUID && BufferPool.BufferSize == bufferSize)
+            if (!remoteName.IsNullOrEmpty() && !ClientUUID.IsNullOrEmpty() && ClientInstanceNum != 0 && BufferPool.BufferSize == bufferSize)
             {
+                RemoteName = remoteName;
+                ClientUUID = clientUUID;
+                ClientInstanceNum = clientInstanceNum;
+
                 GenerateAndAddManagementBufferToSendNowList(qpcTimeStamp, ManagementType.SessionRequestAcceptedResponse);
 
                 SetState(qpcTimeStamp, SessionStateCode.Active, Fcns.CurrentMethodName);
+
+                return 1;
             }
             else
             {
-                HandleSessionProtocolViolation(qpcTimeStamp, "RequestResumeSession failed: Name, SessionUUID, and/or BufferSize are missing, invalid, or incorrect in: {0}".CheckedFormat(bufferNVS.ToStringSML()));
+                return HandleSessionProtocolViolation(qpcTimeStamp, "RequestOpenSession failed: Name, ClientUUID, ClientInstanceNum, and/or BufferSize are missing, invalid, or incorrecct in: {0} [expected BufferSize:{1}]".CheckedFormat(bufferNVS.ToStringSML(), BufferPool.BufferSize), terminationReasonCode: TerminationReasonCode.BufferSizesDoNotMatch);
             }
-
-            return 1;
         }
 
         private int ProcessClientSessionOpenAcceptance(QpcTimeStamp qpcTimeStamp, INamedValueSet bufferNVS)
         {
-            int bufferSize = bufferNVS["BufferSize"].VC.GetValue<int>(rethrow: false);
+            var bufferSizeVC = bufferNVS["BufferSize"].VC;
+            int bufferSize = bufferSizeVC.GetValue<int>(rethrow: false);
 
-            if (bufferSize != 0)
+            if (bufferSize != BufferPool.BufferSize)
             {
-                int entryBufferSize = BufferPool.BufferSize;
-                if (BufferPool.BufferSize != bufferSize)
-                {
-                    BufferPool.BufferSize = bufferSize;
-                    StateEmitter.Emit("Changed BufferPool BufferSize to {0} to match server's value [from:{1}]", bufferSize, entryBufferSize);
-                }
+                return HandleSessionProtocolViolation(qpcTimeStamp, "SessionRequestAcceptedResponse is not valid: given BufferSize {0} does not match current value {1}".CheckedFormat(bufferSizeVC.ToStringSML(), BufferPool.BufferSize), terminationReasonCode: TerminationReasonCode.BufferSizesDoNotMatch);
+            }
 
-                SetState(qpcTimeStamp, SessionStateCode.Active, "Session open request has been accepted");
-            }
-            else
-            {
-                HandleSessionProtocolViolation(qpcTimeStamp, "SessionRequestAcceptedResponse is not valid: BufferSize is missing or invalid in: {0}".CheckedFormat(bufferNVS.ToStringSML()));
-            }
+            SetState(qpcTimeStamp, SessionStateCode.Active, "Session open request has been accepted");
 
             return 1;
         }
@@ -1746,10 +2048,11 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
 
                 lastRecvdValidBufferSeqNum = firstHeldBufferSeqNum;
 
-                AddBufferToMessageAccumulation(qpcTimeStamp, firstHeldBuffer);
+                count += ProcessInOrderOrNoSeqNumBufferReceived(qpcTimeStamp, firstHeldBuffer);
+
                 heldOutOfOrderBuffersList.RemoveAt(0);
 
-                TraceEmitter.Emit("Accepted held (out of order) buffer {0}", firstHeldBuffer);
+                TraceEmitter.Emit("Accepted and handled next held (out of order) buffer {0}", firstHeldBuffer);
 
                 count++;
             }

@@ -25,6 +25,7 @@ using System.Collections.Generic;
 
 using MosaicLib.Time;
 using MosaicLib.Utils;
+using MosaicLib.Utils.Tools;
 using MosaicLib.PartsLib.Scan.ScanEngine;
 
 namespace MosaicLib.PartsLib.Helpers
@@ -300,7 +301,7 @@ namespace MosaicLib.PartsLib.Helpers
             if (IsAtTarget || IsTargetNone || IsMovingToTarget)
                 return "{0} [{1:f0}%]".CheckedFormat(PosStateStr, PositionInPercent);
             else
-                return "{0}/{1} [{2:f0]}%]".CheckedFormat(TargetPosStr, PosStateStr, PositionInPercent);
+                return "{0}/{1} [{2:f0}%]".CheckedFormat(TargetPosStr, PosStateStr, PositionInPercent);
         }
     }
 
@@ -314,9 +315,13 @@ namespace MosaicLib.PartsLib.Helpers
         {
             Config = new ActuatorConfig(config);
 
+            initialState = initialState ?? Config.GetDefaultInitialActuatorState();
+
+            slewRateLimitTool = new SlewRateLimitTool(minValue: 0.0, maxValue: 100.0, initialValue: initialState.PositionInPercent, initialTarget: initialState.TargetPositionInPercent, maxRatePerSec: 0.0);
+
             UpdateMotionRates();
 
-            privateState = new ActuatorState(initialState ?? Config.GetDefaultInitialActuatorState());
+            privateState = new ActuatorState(initialState);
 
             logger = new Logging.Logger(name, Logging.LogGate.All);
 
@@ -365,54 +370,32 @@ namespace MosaicLib.PartsLib.Helpers
             double nextPositionInPercent = privateState.PositionInPercent;
             ActuatorPosition nextPosState = ActuatorPosition.None;
 
-            if (reset)
+            if (!reset)
             {
-                nextPositionInPercent = privateState.TargetPositionInPercent;
-                nextPosState = ActuatorPosition.InBetween;
-            }
-            else if (privateState.TargetPositionInPercent > privateState.PositionInPercent)
-            {
-                double dtPercent = dt.TotalSeconds * motion1To2PercentPerSecond;
-                if (motion1To2IsInstant || nextPositionInPercent + dtPercent > privateState.TargetPositionInPercent)
-                {
-                    nextPositionInPercent = privateState.TargetPositionInPercent;
-                }
-                else
-                {
-                    nextPositionInPercent += dtPercent;
+                slewRateLimitTool.TargetValue = privateState.TargetPositionInPercent;
+
+                bool moving = (slewRateLimitTool.Service(dt) > 0);
+
+                nextPositionInPercent = slewRateLimitTool.Value;
+
+                if (moving && nextPositionInPercent < privateState.TargetPositionInPercent)
                     nextPosState = ActuatorPosition.MovingToPos2;
-                }
-            }
-            else if (privateState.TargetPositionInPercent < privateState.PositionInPercent)
-            {
-                double dtPercent = dt.TotalSeconds * motion2To1PercentPerSecond;
-                if (motion2To1IsInstant || nextPositionInPercent - dtPercent < privateState.TargetPositionInPercent)
-                {
-                    nextPositionInPercent = privateState.TargetPositionInPercent;
-                }
-                else
-                {
-                    nextPositionInPercent -= dtPercent;
+                else if (moving && nextPositionInPercent > privateState.TargetPositionInPercent)
                     nextPosState = ActuatorPosition.MovingToPos1;
-                }
-            }
-            else if (privateState.TargetPositionInPercent != privateState.PositionInPercent)
-            {
-                nextPositionInPercent = privateState.TargetPositionInPercent;
-                nextPosState = ActuatorPosition.InBetween;
-            }
-
-            nextPositionInPercent = nextPositionInPercent.Clip(0.0, 100.0, privateState.TargetPositionInPercent);
-
-            // generate the next PosState value to publish
-            if (privateState.TargetPositionInPercent == nextPositionInPercent)
-            {
-                if (nextPositionInPercent <= 0.0)
+                else if (privateState.PositionInPercent <= 0.0)
                     nextPosState = ActuatorPosition.AtPos1;
-                else if (nextPositionInPercent >= 100.0)
+                else if (privateState.PositionInPercent >= 100.0)
                     nextPosState = ActuatorPosition.AtPos2;
                 else
                     nextPosState = ActuatorPosition.InBetween;
+            }
+            else
+            {
+                nextPositionInPercent = privateState.TargetPositionInPercent;
+
+                slewRateLimitTool.Reset(nextPositionInPercent);
+
+                nextPosState = ActuatorPosition.InBetween;
             }
 
             if (reset || (privateState.PosState != nextPosState && nextPosState != ActuatorPosition.None))
@@ -515,21 +498,17 @@ namespace MosaicLib.PartsLib.Helpers
 
         protected void UpdateMotionRates()
         {
-            motion1To2IsInstant = (Motion1To2Time <= TimeSpan.Zero);
-            motion2To1IsInstant = (Motion2To1Time <= TimeSpan.Zero);
+            bool motion1To2IsInstant = (Motion1To2Time <= TimeSpan.Zero);
+            bool motion2To1IsInstant = (Motion2To1Time <= TimeSpan.Zero);
 
-            motion1To2PercentPerSecond = (!motion1To2IsInstant ? 100.0 / Motion1To2Time.TotalSeconds : 0.0);
-            motion2To1PercentPerSecond = (!motion2To1IsInstant ? 100.0 / Motion2To1Time.TotalSeconds : 0.0);
+            slewRateLimitTool.MaxRisingRatePerSec = (!motion1To2IsInstant ? 100.0 / Motion1To2Time.TotalSeconds : double.PositiveInfinity);
+            slewRateLimitTool.MaxFallingRatePerSec = (!motion2To1IsInstant ? 100.0 / Motion2To1Time.TotalSeconds : double.PositiveInfinity);
         }
-
-        private double motion1To2PercentPerSecond;
-        private double motion2To1PercentPerSecond;
-        private bool motion1To2IsInstant;
-        private bool motion2To1IsInstant;
 
         public IActuatorState State { get; protected set; }
 
         protected ActuatorState privateState;
+        protected SlewRateLimitTool slewRateLimitTool;
         protected Logging.ILogger logger;
     }
 

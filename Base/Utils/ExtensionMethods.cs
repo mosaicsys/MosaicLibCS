@@ -1755,6 +1755,53 @@ namespace MosaicLib.Utils
         private static readonly IList<char> boxEscapeCharsList = new ReadOnlyIList<char>(new [] { '[', ']' });
 
         #endregion
+
+        #region LinkedList related methods (TryGetFirstNode, TryAddFirstNode) - these are generally designed as helper EMs for using a linked list as a free list.
+
+        /// <summary>
+        /// Helper extension method used to obtain, and/or create, a linked list node from the given <paramref name="linkedList"/>.  
+        /// If such a node could be obtained (or contructed) its Value will be set to the given <paramref name="value"/>.
+        /// </summary>
+        public static LinkedListNode<TItemType> TryGetFirstNode<TItemType>(this LinkedList<TItemType> linkedList, TItemType value = default(TItemType), bool createNewNodeIfNeeded = true)
+        {
+            LinkedListNode<TItemType> node = null;
+
+            if (linkedList != null && linkedList.Count > 0)
+            {
+                node = linkedList.First;
+                linkedList.RemoveFirst();
+            }
+
+            if (node != null)
+                node.Value = value;
+            else if (createNewNodeIfNeeded)
+                node = new LinkedListNode<TItemType>(value);
+
+            return node;
+        }
+
+        /// <summary>
+        /// Helper extension method used to attempt to conditionally add the given <paramref name="node"/> to the front of the given <paramref name="linkedList"/> and to clear the callers copy of <paramref name="node"/>.
+        /// If the <paramref name="maxNumberOfNodesToKeep"/> is non-zero and the given <paramref name="linkedList"/>'s Count it at least that large then the reference to the given <paramref name="node"/> will simply be discarded.
+        /// <para/>Supports call chaining.
+        /// </summary>
+        public static LinkedList<TItemType> TryInsertFirstNode<TItemType>(this LinkedList<TItemType> linkedList, ref LinkedListNode<TItemType> node, int maxNumberOfNodesToKeep = 10)
+        {
+            if (linkedList != null && node != null && (maxNumberOfNodesToKeep == 0 || linkedList.Count < maxNumberOfNodesToKeep))
+            {
+                try
+                {
+                    linkedList.AddFirst(node);
+                }
+                catch {}
+            }
+
+            node = null;
+
+            return linkedList;
+        }
+
+        #endregion
     }
 
     /// <summary>

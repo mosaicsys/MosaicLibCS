@@ -36,6 +36,8 @@ using MosaicLib.Utils.Collections;
 
 namespace MosaicLib.Semi.E090.SubstrateRouting
 {
+    #region ISubstrateRoutingManager
+
     /// <summary>
     /// A substrate routing manager is a part that supports this interface.
     /// </summary>
@@ -54,7 +56,7 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
     {
         INotificationObject<INamedValueSet> DetailsNVSPublisher { get; }
 
-        IClientFacet Sequence(params SubstrateRoutingItemBase [] itemParamsArray);
+        IClientFacet Sequence(params SubstrateRoutingItemBase[] itemParamsArray);
     }
 
     [Obsolete("Warning: this class is not currently in use. (2018-06-20)")]
@@ -84,6 +86,10 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
         public IList<string> SupportsSwapAtSubstLocNameList { get; set; }
         public bool SupportsSwapAtAllLocations { get; set; }
     }
+
+    #endregion
+
+    #region SubstrateRoutingItemBase, ApproachLocationItem, MoveSubstrateItem, SwapSubstratesItem, MoveOrSwapSubstrateItem, RunActionItem
 
     /// <summary>
     /// This is the required base class for all Subsrate Routing Items that can be Run using a <seealso cref="ISubstrateRoutingManager"/>
@@ -139,7 +145,7 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
     /// </summary>
     public class MoveSubstrateItem : SubstrateRoutingItemBase
     {
-        public MoveSubstrateItem(E039ObjectID substID, string toSubstLocName) 
+        public MoveSubstrateItem(E039ObjectID substID, string toSubstLocName)
         {
             SubstID = substID.MapNullToEmpty();
             ToSubstLocName = toSubstLocName;
@@ -226,7 +232,7 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
         {
             if (ICF == null && createICFMutex != null)
             {
-                lock (this)
+                lock (createICFMutex)
                 {
                     if (ICF == null && ICFFactoryDelegate != null)
                         return (ICF = ICFFactoryDelegate());
@@ -254,47 +260,9 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
         IgnoreFailures = 0x02,
     }
 
-    /// <summary>
-    /// When executed, this item can be used to acquire or release transfer permission for a set of one or more location names.
-    /// The settings are used to control the detail of how this item will be executed.
-    /// </summary>
-    public class TransferPermissionRequestItem : SubstrateRoutingItemBase
-    {
-        public TransferPermissionRequestItem(TransferPermissionRequestItemSettings settings, params string [] locNameParamsArray)
-        { 
-            Settings = settings;
-            LocNameList = locNameParamsArray.ConvertToReadOnly();
-        }
+    #endregion
 
-        public TransferPermissionRequestItemSettings Settings { get; private set; }
-        public ReadOnlyIList<string> LocNameList { get; private set; }
-    }
-
-    /// <summary>
-    /// Settings flags enum for TransferPermissionRequestItems
-    /// <para/>None (0x000), StartRequest (0x001), Acquire (0x010), AcquireOnlyIfNeeded (0x020), AutoReleaseAtEndOfSequence (0x040), Release (0x100), ReleaseIfNeeded (0x200)
-    /// </summary>
-    [Flags]
-    public enum TransferPermissionRequestItemSettings : int
-    {
-        /// <summary>Placeholder default [0x000]</summary>
-        None = 0x000,
-
-        /// <summary>Causes the current item to post the create and start the given request, but not to wait for its completion so that the following sequence items that do not need use to the permission can run in parallel with the corresponding request.</summary>
-        OnlyStartRequest = 0x001,
-
-        /// <summary>Requests that the item check the last published transfer permission token set, and that it only attempt to acquire the permission for the indicated location/token name (or empty string for parts that support it) if the token set does not already contain the indicated location/token name.</summary>
-        Acquire = 0x010,
-
-        /// <summary>Requests that the target part acquire and retain transfer permission for the indicated location/token name (or empty string for parts that support it).  If the permission has already been obtained for this location/token, the location/token is added to the token set anyways.</summary>
-        RecursiveAcquire = 0x020,
-
-        /// <summary>Requests that the explicitly acquired transfer permission will be released automatically at the end of the sequence if it has not been manually released by a prior item already</summary>
-        AutoReleaseAtEndOfSequence = 0x040,
-
-        /// <summary>Requests that the target part release one occurrence of the indicated location/token name (or empty string for parts that support it) from its transfer permission token set.</summary>
-        Release = 0x100,
-    }
+    #region ITransferPermissionRequest, TransferPermissionRequestType, EMs
 
     /// <summary>
     /// Public interface to be supported by parts that can be used with TransferPermissionRequestItems above.  
@@ -358,4 +326,599 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
             }
         }
     }
+    
+    #endregion
+
+    #region TransferPermissionRequestItem, TransferPermissionRequestItemSettings
+
+    /// <summary>
+    /// When executed, this item can be used to acquire or release transfer permission for a set of one or more location names.
+    /// The settings are used to control the detail of how this item will be executed.
+    /// </summary>
+    public class TransferPermissionRequestItem : SubstrateRoutingItemBase
+    {
+        public TransferPermissionRequestItem(TransferPermissionRequestItemSettings settings, params string[] locNameParamsArray)
+        {
+            Settings = settings;
+            LocNameList = locNameParamsArray.ConvertToReadOnly();
+        }
+
+        public TransferPermissionRequestItemSettings Settings { get; private set; }
+        public ReadOnlyIList<string> LocNameList { get; private set; }
+
+        public override string ToString()
+        {
+            return "{0} {1} LocName(s):{2}".CheckedFormat(Fcns.CurrentClassLeafName, Settings, String.Join(",", LocNameList));
+        }
+    }
+
+    /// <summary>
+    /// Settings flags enum for TransferPermissionRequestItems
+    /// <para/>None (0x000), StartRequest (0x001), Acquire (0x010), RecursiveAcquire (0x020), AutoReleaseAtEndOfSequence (0x040), Release (0x100), 
+    /// <para/>AcquireAndAutoReleaseAtEndOfSequence (0x060)
+    /// </summary>
+    [Flags]
+    public enum TransferPermissionRequestItemSettings : int
+    {
+        /// <summary>Placeholder default [0x000]</summary>
+        None = 0x000,
+
+        /// <summary>Causes the current item to post the create and start the given request, but not to wait for its completion so that the following sequence items that do not need use to the permission can run in parallel with the corresponding request. [0x001]</summary>
+        OnlyStartRequest = 0x001,
+
+        /// <summary>Requests that the item check the last published transfer permission token set, and that it only attempt to acquire the permission for the indicated location/token name (or empty string for parts that support it) if the token set does not already contain the indicated location/token name. [0x010]</summary>
+        Acquire = 0x010,
+
+        /// <summary>Requests that the target part acquire and retain transfer permission for the indicated location/token name (or empty string for parts that support it).  If the permission has already been obtained for this location/token, the location/token is added to the token set anyways. [0x020]</summary>
+        RecursiveAcquire = 0x020,
+
+        /// <summary>Requests that the explicitly acquired transfer permission will be released automatically at the end of the sequence if it has not been manually released by a prior item already [0x040]</summary>
+        AutoReleaseAtEndOfSequence = 0x040,
+
+        /// <summary>Requests that the target part release one occurrence of the indicated location/token name (or empty string for parts that support it) from its transfer permission token set. [0x100]</summary>
+        Release = 0x100,
+
+        /// <summary>
+        /// (Acquire | AutoReleaseAtEndOfSequence)
+        /// <para/>Requests that the item check the last published transfer permission token set, and that it only attempt to acquire the permission for the indicated location/token name (or empty string for parts that support it) if the token set does not already contain the indicated location/token name.
+        /// <para/>Also requests that the explicitly acquired transfer permission will be released automatically at the end of the sequence if it has not been manually released by a prior item already.
+        /// <para/>[0x060]
+        /// </summary>
+        AcquireAndAutoReleaseAtEndOfSequence = (Acquire | AutoReleaseAtEndOfSequence),
+    }
+
+    #endregion
+
+    #region SRMConfigBase, SRMBase
+
+    public class SRMConfigBase
+    {
+        public SRMConfigBase(string partID)
+        {
+            PartID = partID;
+        }
+
+        public SRMConfigBase(SRMConfigBase other)
+        {
+            PartID = other.PartID;
+            AutoLocNameToITPRDictionary = other.AutoLocNameToITPRDictionary.MapNullToEmpty();
+            ManualLocNameToITPRDictionary = other.ManualLocNameToITPRDictionary.MapNullToEmpty();
+        }
+
+        public string PartID { get; private set; }
+
+        /// <summary>This dictionary gives the set of locations (and ITRP instances) for which material movement operations will automatically perform acquire and release TPR operations.  Items in the manual set but not in this set will not have automatic acquire performed on them during such movement.  Items that are only in this list will be added to the manual list when the SRMBase is constructed.</summary>
+        public ReadOnlyIDictionary<string, ITransferPermissionRequest> AutoLocNameToITPRDictionary { get; set; }
+
+        /// <summary>This dictionary gives the set of locations (and ITRP instances) with which TransferPermissionRequestItem can be explicitly used in an SRMBase.  Internally the SRMBase will merge this set with the contents of the AutoLocNameToITPRDictionary so that all automatic locations can also be manually acquired and released.</summary>
+        public ReadOnlyIDictionary<string, ITransferPermissionRequest> ManualLocNameToITPRDictionary { get; set; }
+    }
+
+
+    /// <summary>
+    /// This is a useful base class for creating usage specific SRM types.  This class incorporates some of the common sequence execution framework logic 
+    /// </summary>
+    public class SRMBase<TSRMConfigType> : SimpleActivePartBase, ISubstrateRoutingManager
+        where TSRMConfigType : SRMConfigBase, ICopyable<TSRMConfigType>
+    {
+        public SRMBase(TSRMConfigType config, IE039TableUpdater e039TableUpdater, SimpleActivePartBaseSettings ? initialSettings = null)
+            : base(config.PartID, initialSettings: initialSettings ?? SimpleActivePartBaseSettings.DefaultVersion2)
+        {
+            Config = config.MakeCopyOfThis();
+
+            E039TableUpdater = e039TableUpdater;
+
+            AutoLocNameToITPRDictionary = Config.AutoLocNameToITPRDictionary;
+            ManualLocNameToITPRDictionary = Config.ManualLocNameToITPRDictionary;
+
+            bool autoITPRDictionaryIsEmpty = Config.AutoLocNameToITPRDictionary.IsNullOrEmpty();
+            bool manualITPRDictionaryIsEmpty = Config.ManualLocNameToITPRDictionary.IsNullOrEmpty();
+
+            if (!autoITPRDictionaryIsEmpty && manualITPRDictionaryIsEmpty)
+            {
+                // auto is non-empty and manual is empty - replace manual with auto so that we can do manual requests for all of the auto items.
+                ManualLocNameToITPRDictionary = AutoLocNameToITPRDictionary;
+            }
+            else if (!autoITPRDictionaryIsEmpty && !manualITPRDictionaryIsEmpty)
+            {
+                // both auto and manual are provided as non-empty - internally use the union of the auto with the manual set.  the manual set has priority (same name items replaces any one corresponding from the auto set)
+                ManualLocNameToITPRDictionary = new ReadOnlyIDictionary<string, ITransferPermissionRequest>(AutoLocNameToITPRDictionary.ConvertToWritable().SafeAddRange(ManualLocNameToITPRDictionary));
+            }
+        }
+
+        protected TSRMConfigType Config { get; private set; }
+
+        public IE039TableUpdater E039TableUpdater { get; private set; }
+        public ReadOnlyIDictionary<string, ITransferPermissionRequest> AutoLocNameToITPRDictionary { get; private set; }
+        public ReadOnlyIDictionary<string, ITransferPermissionRequest> ManualLocNameToITPRDictionary { get; private set; }
+
+        public INotificationObject<INamedValueSet> DetailsNVSPublisher { get { return detailsNVSPublisher; } }
+        protected InterlockedNotificationRefObject<INamedValueSet> detailsNVSPublisher = new InterlockedNotificationRefObject<INamedValueSet>(NamedValueSet.Empty);
+
+        public virtual IClientFacet Sequence(params SubstrateRoutingItemBase[] itemParamsArray)
+        {
+            return new BasicActionImpl(actionQ, ipf => PerformSequence(ipf, itemParamsArray), CurrentMethodName, ActionLoggingReference, mesgDetails: string.Join(",", itemParamsArray.Select(item => item.ToString())));
+        }
+
+        protected virtual string PerformSequence(IProviderFacet ipf, SubstrateRoutingItemBase[] itemArray)
+        {
+            string ec = string.Empty;
+
+            foreach (var item in itemArray)
+            {
+                if (item is MoveSubstrateItem)
+                    ec = PerformItem(ipf, (MoveSubstrateItem)item);
+                else if (item is SwapSubstratesItem)
+                    ec = PerformItem(ipf, (SwapSubstratesItem)item);
+                else if (item is MoveOrSwapSubstrateItem)
+                    ec = PerformItem(ipf, (MoveOrSwapSubstrateItem)item);
+                else if (item is ApproachLocationItem)
+                    ec = PerformItem(ipf, (ApproachLocationItem)item);
+                else if (item is RunActionItem)
+                    ec = PerformItem(ipf, (RunActionItem)item);
+                else if (item is TransferPermissionRequestItem)
+                    ec = PerformItem(ipf, (TransferPermissionRequestItem)item);
+                else
+                    ec = "Item type '{0}' is not supported".CheckedFormat(item.GetType());
+
+                if (!ec.IsNullOrEmpty())
+                    break;
+            }
+
+            if (ec.IsNullOrEmpty())
+                ec = ReleaseAcquiredEndOfSequenceTransferPermissionsIfNeeded(ipf);
+
+            if (!ec.IsNullOrEmpty())
+                NoteSequenceFailed(ipf);
+
+            return ec;
+        }
+
+        protected virtual string PerformItem(IProviderFacet ipf, MoveSubstrateItem item)
+        {
+            UpdateObservers();
+
+            var substID = item.SubstID.MapNullToEmpty();
+            var toLocName = item.ToSubstLocName.MapNullToEmpty();
+
+            var desc = "{0}[{1} -> {2}]".CheckedFormat(item.GetType().GetTypeLeafName(), substID.FullName, toLocName);
+
+            var substObs = new E090SubstObserver(substID);
+
+            if (!substObs.Info.IsValid)
+                return "{0} failed: given substrate ID is not valid".CheckedFormat(desc);
+
+            var substCurrentLocName = substObs.Info.LocID;
+            var fromLocObs = GetSubstLocObserver(substCurrentLocName);
+            if (fromLocObs == null)
+                return "{0} failed: given substrate's current location is not supported here [{1}]".CheckedFormat(desc, substCurrentLocName);
+
+            var toLocObs = GetSubstLocObserver(toLocName, SubstLocType.EmptyDestination);
+
+            if (toLocObs == null)
+                return "{0} failed: given move to location is not supported here [{1}]".CheckedFormat(desc, toLocName);
+
+            string ec = InnerPerformMoveSubstrate(ipf, substObs, fromLocObs, toLocObs, desc);
+
+            if (ec.IsNullOrEmpty())
+                ec = ReleaseAcquiredEndOfItemTransferPermissionsIfNeeded(ipf);
+
+            return ec;
+        }
+
+        protected virtual string InnerPerformMoveSubstrate(IProviderFacet ipf, E090SubstObserver substObs, E090SubstLocObserver fromLocObs, E090SubstLocObserver toLocObs, string desc)
+        {
+            return "{0}.{1} has not been implemented [{2}]".CheckedFormat(CurrentClassLeafName, CurrentMethodName, desc);
+        }
+
+        protected virtual string PerformItem(IProviderFacet ipf, SwapSubstratesItem item)
+        {
+            UpdateObservers();
+
+            var substID = item.SubstID.MapNullToEmpty();
+            var swapWithSubstID = item.SwapWithSubstID.MapNullToEmpty();
+
+            var desc = "{0}[{1} with {2}]".CheckedFormat(item.GetType().GetTypeLeafName(), substID.FullName, swapWithSubstID.FullName);
+
+            var substObs = new E090SubstObserver(substID);
+            var swapWithSubstObs = new E090SubstObserver(swapWithSubstID);
+
+            if (!substObs.Info.IsValid)
+                return "{0} failed: given substrate ID is not valid".CheckedFormat(desc);
+
+            if (!swapWithSubstObs.Info.IsValid)
+                return "{0} failed: given swap with substrate ID is not valid".CheckedFormat(desc);
+
+            var substCurrentLocName = substObs.Info.LocID;
+            var swapWithSubstCurrentLocName = swapWithSubstObs.Info.LocID;
+
+            var fromLocObs = GetSubstLocObserver(substCurrentLocName);
+            var swapAtLocObs = GetSubstLocObserver(swapWithSubstCurrentLocName);
+
+            if (fromLocObs == null)
+                return "{0} failed: given substrate's current location is not supported here [{1}]".CheckedFormat(desc, substCurrentLocName);
+
+            if (swapAtLocObs == null)
+                return "{0} failed: given swap with substrate's current location is not supported here [{1}]".CheckedFormat(desc, swapWithSubstCurrentLocName);
+
+            string ec = InnerPerformSwapSubstrates(ipf, substObs, fromLocObs, swapWithSubstObs, swapAtLocObs, desc);
+
+            if (ec.IsNullOrEmpty())
+                ec = ReleaseAcquiredEndOfItemTransferPermissionsIfNeeded(ipf);
+
+            return ec;
+        }
+
+        protected virtual string InnerPerformSwapSubstrates(IProviderFacet ipf, E090SubstObserver substObs, E090SubstLocObserver fromLocObs, E090SubstObserver swapWithSubstObs, E090SubstLocObserver swapAtLocObs, string desc)
+        {
+            return "{0}.{1} has not been implemented [{2}]".CheckedFormat(CurrentClassLeafName, CurrentMethodName, desc);
+        }
+
+        protected virtual string PerformItem(IProviderFacet ipf, MoveOrSwapSubstrateItem item)
+        {
+            UpdateObservers();
+
+            var substID = item.SubstID.MapNullToEmpty();
+            var toLocName = item.ToSubstLocName.MapNullToEmpty();
+
+            var desc = "{0}[{1} -> {2}]".CheckedFormat(item.GetType().GetTypeLeafName(), substID.FullName, toLocName);
+
+            var toLocObs = GetSubstLocObserver(toLocName);
+
+            var substObs = new E090SubstObserver(substID);
+            var substCurrentLocName = substObs.Info.LocID;
+            var fromLocObs = GetSubstLocObserver(substCurrentLocName);
+
+            if (!substObs.Info.IsValid)
+                return "{0} failed: given substrate ID is not valid".CheckedFormat(desc);
+
+            if (fromLocObs == null)
+                return "{0} failed: given substrate's current location is not supported here [{1}]".CheckedFormat(desc, substCurrentLocName);
+
+            if (toLocObs == null)
+                return "{0} failed: given move to/swap at location is not supported here [{1}]".CheckedFormat(desc, toLocName);
+
+            string ec;
+
+            if (toLocObs.IsUnoccupied)
+            {
+                ec = InnerPerformMoveSubstrate(ipf, substObs, fromLocObs, toLocObs, desc);
+            }
+            else
+            {
+                var swapWithSubstID = toLocObs.ContainsSubstInfo.ObjID;
+                var swapWithSubstObs = new E090SubstObserver(swapWithSubstID);
+
+                desc = "{0}[{1} with {2} @ {3}]".CheckedFormat(item.GetType().GetTypeLeafName(), substID.FullName, swapWithSubstID.FullName, toLocName);
+
+                ec = InnerPerformSwapSubstrates(ipf, substObs, fromLocObs, swapWithSubstObs, toLocObs, desc);
+            }
+
+            if (ec.IsNullOrEmpty())
+                ec = ReleaseAcquiredEndOfItemTransferPermissionsIfNeeded(ipf);
+
+            return ec;
+        }
+
+        protected virtual string PerformItem(IProviderFacet ipf, ApproachLocationItem item)
+        {
+            var desc = item.ToString();
+
+            var toLocName = item.ToSubstLocName;
+            E090SubstLocObserver toLocObs = null;
+
+            if (toLocName.IsNullOrEmpty() && !item.SubstID.IsEmpty)
+            {
+                var substObs = new E090SubstObserver(item.SubstID);
+
+                if (!substObs.Info.IsValid)
+                    return "{0} failed: given approach substrate ID is not valid [{1}]".CheckedFormat(desc, item.SubstID);
+
+                toLocName = substObs.Info.LocID;
+                toLocObs = GetSubstLocObserver(toLocName);
+
+                if (toLocObs == null)
+                    return "{0} failed: given approach substrate is not currently at a supported location [{1}]".CheckedFormat(desc, toLocName);
+            }
+            else
+            {
+                toLocObs = GetSubstLocObserver(item.ToSubstLocName);
+
+                if (toLocObs == null)
+                    return "{0} failed: given approach to location is not supported here [{1}]".CheckedFormat(desc, toLocName);
+            }
+
+            return InnerPerformApproach(ipf, item, toLocObs, desc);
+        }
+
+        protected virtual string InnerPerformApproach(IProviderFacet ipf, ApproachLocationItem item, E090SubstLocObserver toLocObs, string desc)
+        {
+            return "{0}.{1} has not been implemented [{2}]".CheckedFormat(CurrentClassLeafName, CurrentMethodName, desc);
+        }
+
+        protected virtual string PerformItem(IProviderFacet ipf, RunActionItem item)
+        {
+            bool onlyStartAction = item.Behavior.IsSet(RunActionBehaviorFlags.OnlyStartAction);
+            bool ignoreFailures = item.Behavior.IsSet(RunActionBehaviorFlags.IgnoreFailures);
+
+            IClientFacet icf = item.CreateICFIfNeeded();
+            string ec = string.Empty;
+
+            if (icf != null)
+                ec = icf.Start();
+            else
+                ec = "No IClientFacet was provided";
+
+            if (ec.IsNullOrEmpty() && icf != null && !onlyStartAction)
+                ec = WaitForCompletion(ipf, icf);
+
+            if (!ec.IsNullOrEmpty() && ignoreFailures)
+            {
+                if (icf != null)
+                    Log.Debug.Emit("Ignoring failure [icf:{0} ec:{1}]", icf, ec);
+                else
+                    Log.Debug.Emit("Ignoring failure [ec:{0}]", ec);
+
+                ec = string.Empty;
+            }
+
+            return ec;
+        }
+
+        protected virtual string PerformItem(IProviderFacet ipf, TransferPermissionRequestItem item)
+        {
+            var locNameList = (item.LocNameList ?? ReadOnlyIList<string>.Empty); 
+            var locNameArray = locNameList.ToArray();
+            var kvpArray = locNameList.Select(locName => KVP.Create(locName, ManualLocNameToITPRDictionary.SafeTryGetValue(locName))).ToArray();
+
+            if (kvpArray.Any(kvp => kvp.Value == null))
+                return "TransferPermissionRequestItem '{0}' is not supported for given location(s) [{1}]".CheckedFormat(item.Settings, String.Join(", ", kvpArray.Where(kvp => kvp.Value == null).Select(kvp => kvp.Key)));
+
+            string ec = WaitForPostedItemsComplete(ipf, locNameArray);
+
+            var isRecursiveAcquire = item.Settings.IsSet(TransferPermissionRequestItemSettings.RecursiveAcquire);
+            var isAcquireIfNeeded = !isRecursiveAcquire && item.Settings.IsSet(TransferPermissionRequestItemSettings.Acquire);
+            var autoReleaseAtEndOfSequence = (isAcquireIfNeeded | isRecursiveAcquire) && item.Settings.IsSet(TransferPermissionRequestItemSettings.AutoReleaseAtEndOfSequence);
+            var isReleaseIfNeeded = !isAcquireIfNeeded && !isRecursiveAcquire && item.Settings.IsSet(TransferPermissionRequestItemSettings.Release);
+            var onlyStartRequest = item.Settings.IsSet(TransferPermissionRequestItemSettings.OnlyStartRequest);
+
+            TransferPermissionRequestType requestType = TransferPermissionRequestType.None;
+            if (ec.IsNullOrEmpty())
+            {
+                if (isAcquireIfNeeded)
+                {
+                    requestType = TransferPermissionRequestType.Acquire;
+                    kvpArray = kvpArray.Where(kvp => !kvp.Value.TransferPermissionStatePublisher.Object.GetIsTransferPermitted(kvp.Key)).ToArray();
+                }
+                else if (isRecursiveAcquire)
+                {
+                    requestType = TransferPermissionRequestType.Acquire;
+                }
+                else if (isReleaseIfNeeded)
+                {
+                    requestType = TransferPermissionRequestType.Release;
+                    kvpArray = kvpArray.Where(kvp => kvp.Value.TransferPermissionStatePublisher.Object.GetIsTransferPermitted(kvp.Key)).ToArray();
+                }
+                else
+                {
+                    ec = "Internal: TransferPermissionRequestItem Settings '{0}' unrecognized or unsupported".CheckedFormat(item.Settings);
+                }
+            }
+
+            if (ec.IsNullOrEmpty())
+            {
+                if (onlyStartRequest)
+                {
+                    postedItemList.AddRange(kvpArray.Select(kvp => new PostedItem() { KVP = kvp, ICF = kvp.Value.TransferPermission(requestType, kvp.Key).StartInline() }));
+                }
+                else
+                {
+                    var icfArray = kvpArray.Select(kvp => kvp.Value.TransferPermission(requestType, kvp.Key).StartInline()).ToArray();
+                    ec = WaitForCompletion(ipf, icfArray);
+                }
+            }
+
+            // on release remove each item from the currentSequenceAutoReleaseKVPList whose name matches on of the locNames in the 
+            if (ec.IsNullOrEmpty() && isReleaseIfNeeded)
+            {
+                var releasedLocNameArray = kvpArray.Select(kvp => kvp.Key).ToArray();
+                currentSequenceAutoReleaseKVPList.FilterAndRemove(kvp => releasedLocNameArray.Contains(kvp.Key));
+            }
+
+            if (ec.IsNullOrEmpty() && autoReleaseAtEndOfSequence)
+            {
+                currentSequenceAutoReleaseKVPList.AddRange(kvpArray);
+            }
+
+            return ec;
+        }
+
+        protected virtual string WaitForPostedItemsComplete(IProviderFacet ipf, string[] locNameArray = null)
+        {
+            string ec = string.Empty;
+
+            if (postedItemList.Count > 0)
+            {
+                PostedItem [] filteredPostedItemArray = null;
+
+                if (locNameArray != null)
+                    filteredPostedItemArray = postedItemList.FilterAndRemove(item => locNameArray.Contains(item.KVP.Key)).ToArray();
+                else
+                {
+                    filteredPostedItemArray = postedItemList.ToArray();
+                    postedItemList.Clear();
+                }
+
+                ec = WaitForCompletion(ipf, filteredPostedItemArray.Select(item => item.ICF).ToArray());
+
+                if (ec.IsNullOrEmpty())
+                    currentSequenceAutoReleaseKVPList.AddRange(filteredPostedItemArray.Select(item => item.KVP));
+            }
+
+            return ec;
+        }
+
+        protected virtual string AcquireLocationTransferPermissionForThisItemIfNeeded(IProviderFacet ipf, params string[] locNameParamsArray)
+        {
+            string ec = WaitForPostedItemsComplete(ipf, locNameParamsArray);
+
+            if (ec.IsNullOrEmpty())
+            {
+                var neededKVPSet = locNameParamsArray.Select(locName => KVP.Create(locName, AutoLocNameToITPRDictionary.SafeTryGetValue(locName))).Where(kvp => kvp.Value != null && !kvp.Value.TransferPermissionStatePublisher.Object.GetIsTransferPermitted(kvp.Key)).ToArray();
+
+                currentItemAutoReleaseKVPList.AddRange(neededKVPSet);      // request each one to get released even if the acquire fails
+
+                var acquireICFArray = neededKVPSet.Select(kvp => kvp.Value.TransferPermission(TransferPermissionRequestType.Acquire, kvp.Key).StartInline()).ToArray();
+
+                ec = WaitForCompletion(ipf, acquireICFArray);
+            }
+
+            return ec;
+        }
+
+        protected virtual string ReleaseAcquiredEndOfItemTransferPermissionsIfNeeded(IProviderFacet ipf)
+        {
+            string ec = string.Empty;
+
+            if (currentItemAutoReleaseKVPList.Count > 0)
+            {
+                var releaseICFs = currentItemAutoReleaseKVPList.Select(kvp => kvp.Value.TransferPermission(TransferPermissionRequestType.Release, kvp.Key).StartInline()).ToArray();
+                currentItemAutoReleaseKVPList.Clear();
+
+                ec = WaitForCompletion(ipf, releaseICFs);
+            }
+
+            return ec;
+        }
+
+        protected virtual string ReleaseAcquiredEndOfSequenceTransferPermissionsIfNeeded(IProviderFacet ipf)
+        {
+            string ec = WaitForPostedItemsComplete(ipf);
+
+            if (currentItemAutoReleaseKVPList.Count > 0)
+            {
+                currentSequenceAutoReleaseKVPList.AddRange(currentItemAutoReleaseKVPList);
+                currentItemAutoReleaseKVPList.Clear();
+            }
+
+            if (currentSequenceAutoReleaseKVPList.Count > 0)
+            {
+                var releaseICFs = currentSequenceAutoReleaseKVPList.Select(kvp => kvp.Value.TransferPermission(TransferPermissionRequestType.Release, kvp.Key).StartInline()).ToArray();
+                currentSequenceAutoReleaseKVPList.Clear();
+
+                ec = WaitForCompletion(ipf, releaseICFs);
+            }
+
+            return ec;
+        }
+
+        protected virtual void NoteSequenceFailed(IProviderFacet ipf)
+        {
+            postedItemList.Clear();
+
+            currentItemAutoReleaseKVPList.Clear();
+            currentSequenceAutoReleaseKVPList.Clear();
+        }
+
+        protected struct PostedItem
+        {
+            public KeyValuePair<string, ITransferPermissionRequest> KVP { get; set; }
+            public IClientFacet ICF { get; set; }
+        }
+
+        protected List<PostedItem> postedItemList = new List<PostedItem>();
+        protected List<KeyValuePair<string, ITransferPermissionRequest>> currentItemAutoReleaseKVPList = new List<KeyValuePair<string, ITransferPermissionRequest>>();
+        protected List<KeyValuePair<string, ITransferPermissionRequest>> currentSequenceAutoReleaseKVPList = new List<KeyValuePair<string, ITransferPermissionRequest>>();
+
+        protected void SetAllSubstLocObservers(IEnumerable<E039ObjectID> substLocIDsSet)
+        {
+            SetAllSubstLocObservers(substLocIDsSet.Select(locID => new E090SubstLocObserver(locID)));
+        }
+
+        protected virtual void SetAllSubstLocObservers(IEnumerable<E090SubstLocObserver> substLocObserverSet)
+        {
+            allSubstLocObserverArray = substLocObserverSet.ToArray();
+            allSubstLocObserverArray.DoForEach(obs => { allSubstLocObserverByLocNameDictionary[obs.ID.Name] = obs; });
+        }
+
+        protected E090SubstLocObserver[] allSubstLocObserverArray = EmptyArrayFactory<E090SubstLocObserver>.Instance;
+        protected IDictionaryWithCachedArrays<string, E090SubstLocObserver> allSubstLocObserverByLocNameDictionary = new IDictionaryWithCachedArrays<string, E090SubstLocObserver>();
+
+        protected enum SubstLocType : int 
+        {
+            Normal,
+            EmptyDestination,
+        }
+
+        protected virtual E090SubstLocObserver GetSubstLocObserver(string locName, SubstLocType locType = SubstLocType.Normal)
+        {
+            return allSubstLocObserverByLocNameDictionary.SafeTryGetValue(locName);
+        }
+
+        protected virtual void UpdateObservers()
+        {
+            allSubstLocObserverArray.DoForEach(obs => obs.Update());
+        }
+
+        protected virtual string WaitForCompletion(IProviderFacet ipf, params IClientFacet[] icfParamsArray)
+        {
+            if (icfParamsArray.IsNullOrEmpty())
+                return string.Empty;
+
+            icfParamsArray.DoForEach(icf => icf.NotifyOnComplete.AddItem(this));
+
+            string ec = string.Empty;
+
+            for (; ;)
+            {
+                WaitForSomethingToDo();
+
+                if (icfParamsArray.All(icf => icf.ActionState.IsComplete))
+                    break;
+
+                if (HasStopBeenRequested)
+                {
+                    ec = "Part has been asked to stop";
+                    icfParamsArray.DoForEach(icf => icf.RequestCancel());
+                    break;
+                }
+
+                bool cancelRequest = (ipf != null && ipf.IsCancelRequestActive) || (CurrentAction != null && CurrentAction.IsCancelRequestActive);
+                if (cancelRequest && !icfParamsArray.All(icf => icf.IsCancelRequestActive))
+                    icfParamsArray.DoForEach(icf => icf.RequestCancel());
+            }
+
+            icfParamsArray.DoForEach(icf => icf.NotifyOnComplete.RemoveItem(this));
+
+            if (ec.IsNullOrEmpty())
+            {
+                var firstFailedICF = icfParamsArray.FirstOrDefault(icf => icf.ActionState.Failed);
+                ec = (firstFailedICF != null) ? firstFailedICF.ActionState.ResultCode : string.Empty;
+            }
+
+            return ec;
+        }
+    }
+    
+    #endregion
 }

@@ -53,22 +53,26 @@ namespace MosaicLib.PartsLib.Common.E084
     public struct E084ActiveTransferSimEngineState
     {
         public string StateStr { get; set; }
-        public bool IsReady { get; set; }
-        public bool IsReadyToLoad { get; set; }
-        public bool IsReadyToUnload { get; set; }
+        public string NotReadyReason { get; set; }
+        public string NotReadyToLoadReason { get; set; }
+        public string NotReadyToUnloadReason { get; set; }
+        public bool IsReady { get { return NotReadyReason.IsNullOrEmpty(); } }
+        public bool IsReadyToLoad { get { return NotReadyToLoadReason.IsNullOrEmpty(); } }
+        public bool IsReadyToUnload { get { return NotReadyToUnloadReason.IsNullOrEmpty(); } }
         public bool IsCycling { get; set; }
         public string TransferProgressStr { get; set; }
         public UInt64 TransferCount { get; set; }
 
-        public E084ActiveTransferSimEngineState(E084ActiveTransferSimEngineState rhs) : this()
+        [Obsolete("This struct copy constructor is vestigial and will be removed (2018-10-15)")]
+        public E084ActiveTransferSimEngineState(E084ActiveTransferSimEngineState other) : this()
         {
-            StateStr = rhs.StateStr;
-            IsReady = rhs.IsReady;
-            IsReadyToLoad = rhs.IsReadyToLoad;
-            IsReadyToUnload = rhs.IsReadyToUnload;
-            IsCycling = rhs.IsCycling;
-            TransferProgressStr = rhs.TransferProgressStr;
-            TransferCount = rhs.TransferCount;
+            StateStr = other.StateStr;
+            NotReadyReason = other.NotReadyReason;
+            NotReadyToLoadReason = other.NotReadyToLoadReason;
+            NotReadyToUnloadReason = other.NotReadyToUnloadReason;
+            IsCycling = other.IsCycling;
+            TransferProgressStr = other.TransferProgressStr;
+            TransferCount = other.TransferCount;
         }
 
         public override int GetHashCode()
@@ -76,20 +80,20 @@ namespace MosaicLib.PartsLib.Common.E084
             return base.GetHashCode();
         }
 
-        public override bool Equals(object obj)
+        public override bool Equals(object otherObj)
         {
-            if (obj == null || !(obj is E084ActiveTransferSimEngineState))
+            if (otherObj == null || !(otherObj is E084ActiveTransferSimEngineState))
                 return false;
 
-            E084ActiveTransferSimEngineState rhs = (E084ActiveTransferSimEngineState)obj;
+            E084ActiveTransferSimEngineState other = (E084ActiveTransferSimEngineState)otherObj;
 
-            return (StateStr == rhs.StateStr
-                    && IsReady == rhs.IsReady
-                    && IsReadyToLoad == rhs.IsReadyToLoad
-                    && IsReadyToUnload == rhs.IsReadyToUnload
-                    && IsCycling == rhs.IsCycling
-                    && TransferProgressStr == rhs.TransferProgressStr
-                    && TransferCount == rhs.TransferCount);
+            return (StateStr == other.StateStr
+                    && NotReadyReason == other.NotReadyReason
+                    && NotReadyToLoadReason == other.NotReadyToLoadReason
+                    && NotReadyToUnloadReason == other.NotReadyToUnloadReason
+                    && IsCycling == other.IsCycling
+                    && TransferProgressStr == other.TransferProgressStr
+                    && TransferCount == other.TransferCount);
         }
     }
 
@@ -278,8 +282,11 @@ namespace MosaicLib.PartsLib.Common.E084
 
             if (lastPresentPlacedInput != presentPlacedInput || forceUpdate)
             {
-                privateState.IsReadyToLoad = privateState.IsReady && presentPlacedInput.IsNeitherPresentNorPlaced();
-                privateState.IsReadyToUnload = privateState.IsReady && presentPlacedInput.IsProperlyPlaced();
+                var isReady = privateState.NotReadyReason.IsNullOrEmpty();
+                var isReadyToLoad = isReady && presentPlacedInput.IsNeitherPresentNorPlaced();
+                var isReadyToUnload = isReady && presentPlacedInput.IsProperlyPlaced();
+                privateState.NotReadyToLoadReason = isReadyToLoad ? "" : (isReady ? "Must be Empty: {0}".CheckedFormat(presentPlacedInput) : privateState.NotReadyReason);
+                privateState.NotReadyToUnloadReason = isReadyToUnload ? "" : (isReady ? "Must be properly placed: {0}".CheckedFormat(presentPlacedInput) : privateState.NotReadyReason);
 
                 lastPresentPlacedInput = presentPlacedInput;
 
@@ -299,7 +306,8 @@ namespace MosaicLib.PartsLib.Common.E084
 
             privateState.StateStr = (Utils.Fcns.CheckedFormat("{0} [{1}]", activity, reason));
             privateState.IsCycling = (enableAutoLoadIVA.Update().VC.GetValue<bool>(false) && enableAutoUnloadIVA.Update().VC.GetValue<bool>(false));
-            privateState.IsReady = (currentActivity == ActivitySelect.Ready);
+
+            privateState.NotReadyReason = ((currentActivity == ActivitySelect.Ready) ? "" : currentActivity.ToString());
             UpdateReadyToLoadAndUnload(true, false);
 
             if (entryActivity != currentActivity)

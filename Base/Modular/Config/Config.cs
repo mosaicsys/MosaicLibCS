@@ -2288,6 +2288,7 @@ namespace MosaicLib.Modular.Config
         /// </summary>
         internal static string InternalCommonToStringWithDetailLevel(this IConfigKeyAccess icka, ToStringDetailLevel detailLevel)
         {
+            string isUpdateNeededStr = icka.IsUpdateNeeded ? " UpdateNeeded" : "";
             string metaDataStr = (icka.MetaData ?? NamedValueSet.Empty).ToStringSML(traversalType: TraversalType.Flatten);
             string providerName = (icka.ProviderInfo != null) ? icka.ProviderInfo.Name : "[NoProviderSpecified]";
 
@@ -2298,16 +2299,16 @@ namespace MosaicLib.Modular.Config
 
                 case ToStringDetailLevel.Full:
                     if (icka.IsUsable)
-                        return Fcns.CheckedFormat("key:'{0}' Value:{1} flags:{2} md:{3} pName:{4} pFlags:{5}", icka.Key, icka.VC, icka.Flags, metaDataStr, providerName, icka.ProviderFlags);
+                        return Fcns.CheckedFormat("key:'{0}'{1} Value:{2} flags:{3} md:{4} pName:{5} pFlags:{6}", icka.Key, isUpdateNeededStr, icka.VC, icka.Flags, metaDataStr, providerName, icka.ProviderFlags);
                     else
-                        return Fcns.CheckedFormat("key:'{0}' Value:{1} flags:{2} md:{3} pName:{4} pFlags:{5} ec:'{6}'", icka.Key, icka.VC, icka.Flags, metaDataStr, providerName, icka.ProviderFlags, icka.ResultCode);
+                        return Fcns.CheckedFormat("key:'{0}'{1} Value:{2} flags:{3} md:{4} pName:{5} pFlags:{6} ec:'{7}'", icka.Key, isUpdateNeededStr, icka.VC, icka.Flags, metaDataStr, providerName, icka.ProviderFlags, icka.ResultCode);
 
                 case ToStringDetailLevel.Nominal:
                 default:
                     if (icka.IsUsable)
-                        return Fcns.CheckedFormat("key:'{0}' Value:{1} flags:{2} md:{3} pFlags:{4}", icka.Key, icka.VC, icka.Flags, metaDataStr, icka.ProviderFlags);
+                        return Fcns.CheckedFormat("key:'{0}'{1} Value:{2} flags:{3} md:{4} pFlags:{5}", icka.Key, isUpdateNeededStr, icka.VC, icka.Flags, metaDataStr, icka.ProviderFlags);
                     else
-                        return Fcns.CheckedFormat("key:'{0}' Value:{1} flags:{2} md:{3} pFlags:{4} ec:'{5}'", icka.Key, icka.VC, icka.Flags, metaDataStr, icka.ProviderFlags, icka.ResultCode);
+                        return Fcns.CheckedFormat("key:'{0}'{1} Value:{2} flags:{3} md:{4} pFlags:{5} ec:'{6}'", icka.Key, isUpdateNeededStr, icka.VC, icka.Flags, metaDataStr, icka.ProviderFlags, icka.ResultCode);
             }
         }
 

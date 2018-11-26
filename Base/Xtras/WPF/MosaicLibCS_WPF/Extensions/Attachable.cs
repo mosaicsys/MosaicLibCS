@@ -123,8 +123,8 @@ namespace MosaicLib.WPF.Extensions
                 }
                 else
                 {
-                    fwElem.SetValue(FrameworkElement.IsEnabledProperty, true);
-                    fwElem.SetValue(ToolTipService.ShowOnDisabledProperty, false);
+                    fwElem.ClearValue(FrameworkElement.IsEnabledProperty);
+                    fwElem.ClearValue(ToolTipService.ShowOnDisabledProperty);
                     fwElem.ClearValue(FrameworkElement.ToolTipProperty);
                 }
             }
