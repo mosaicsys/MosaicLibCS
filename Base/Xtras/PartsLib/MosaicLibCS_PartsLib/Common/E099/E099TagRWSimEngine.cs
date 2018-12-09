@@ -343,7 +343,7 @@ namespace MosaicLib.PartsLib.Common.E099.Sim
         { }
 
         protected E099TagRWSimEngine(string partID, IValuesInterconnection ivi)
-            : base(partID)
+            : base(partID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion2.Build(partBaseIVI: ivi))
         {
             ActionLoggingConfig = Modular.Action.ActionLoggingConfig.Info_Error_Trace_Trace;    // redefine the log levels for actions 
 
@@ -419,6 +419,8 @@ namespace MosaicLib.PartsLib.Common.E099.Sim
 
         protected override void PerformMainLoopService()
         {
+            ServiceBusyConditionChangeDetection();
+
             if (configAccessAdapter.IsUpdateNeeded)
             {
                 configAccessAdapter.Update();

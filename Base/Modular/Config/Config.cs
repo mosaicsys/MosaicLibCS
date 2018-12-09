@@ -2313,7 +2313,7 @@ namespace MosaicLib.Modular.Config
         }
 
         /// <summary>
-        /// Returns the (optinal) string value of the "Description" item from the given <paramref name="icka"/>'s MetaData.
+        /// Returns the (optional) string value of the "Description" item from the given <paramref name="icka"/>'s MetaData.
         /// </summary>
         internal static string InternalGetDesciption(this IConfigKeyAccess icka)
         {

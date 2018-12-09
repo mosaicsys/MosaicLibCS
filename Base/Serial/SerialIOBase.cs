@@ -55,7 +55,7 @@ namespace MosaicLib.SerialIO
         /// Prevent creating and publishing the base state if PortConfig does not explicilty provide a PartBaseIVI
         /// </remarks>
 		protected PortBase(PortConfig config, string partType)
-            : base(config.Name, partType, initialSettings: SimpleActivePartBaseSettings.DefaultVersion0.Build(automaticallyIncAndDecBusyCountAroundActionInvoke: false, maxActionsToInvokePerServiceLoop: 5, waitTimeLimit: config.SpinWaitTimeLimit, partBaseIVI: config.PartBaseIVI, setBaseStatePublicationValueNameToNull: (config.PartBaseIVI == null)))
+            : base(config.Name, partType, initialSettings: SimpleActivePartBaseSettings.DefaultVersion2.Build(disableBusyBehavior: true, maxActionsToInvokePerServiceLoop: 5, waitTimeLimit: config.SpinWaitTimeLimit, partBaseIVI: config.PartBaseIVI, disablePartBaseIVIUse : (config.PartBaseIVI == null)))
 		{ 
 			portConfig = config;
 

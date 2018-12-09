@@ -172,23 +172,31 @@ namespace MosaicLib.Modular.Part
         /// <summary>
         /// Returns true if the given UseState value is any of the Online states.
         /// <para/>Accepts Online, OnlineBusy
-        /// <para/>Accepts OnlineUninitialized if <paramref name="acceptUninitialized"/> is true
-        /// <para/>Accepts OnlineFailure if <paramref name="acceptOnlineFailure"/> is true
-        /// <para/>Accepts AttemptOnline if <paramref name="acceptAttemptOnline"/> is true
+        /// <para/>Accepts AttemptOnline if <paramref name="acceptAttemptOnline"/> is true (defaults to false)
+        /// <para/>Accepts OnlineUninitialized if <paramref name="acceptUninitialized"/> is true (defaults to true)
+        /// <para/>Accepts OnlineFailure if <paramref name="acceptOnlineFailure"/> is true (defaults to true)
+        /// <para/>Accepts AttemptOnlineFailed if <paramref name="acceptAttemptOnlineFailed"/> is true (defaults to false)
         /// </summary>
-        public static bool IsOnline(this UseState useState, bool acceptAttemptOnline = false, bool acceptUninitialized = true, bool acceptOnlineFailure = true)
+        public static bool IsOnline(this UseState useState, bool acceptAttemptOnline = false, bool acceptUninitialized = true, bool acceptOnlineFailure = true, bool acceptAttemptOnlineFailed = false)
         {
             switch (useState)
             {
                 case UseState.OnlineUninitialized:
                     return acceptUninitialized;
+
                 case UseState.Online:
                 case UseState.OnlineBusy:
                     return true;
+
                 case UseState.OnlineFailure:
                     return acceptOnlineFailure;
+
                 case UseState.AttemptOnline:
                     return acceptAttemptOnline;
+
+                case UseState.AttemptOnlineFailed:
+                    return acceptAttemptOnlineFailed;
+
                 default:
                     return false;
             }
@@ -955,6 +963,11 @@ namespace MosaicLib.Modular.Part
         public IValuesInterconnection PartBaseIVI { get; set; }
 
         /// <summary>
+        /// When set to true this behavior disables all part base class based IVI use for publication using IVAs created from the PartBaseIVI (or the default IVI): BaseState, ActionInfo, LastActionInfo, ...
+        /// </summary>
+        public bool DisablePartBaseIVIUse { get; set; }
+
+        /// <summary>
         /// Used to specify settings in relation to logging options for this part.
         /// </summary>
         public LoggingOptionSelect LoggingOptionSelect { get; set; }
@@ -1051,10 +1064,12 @@ namespace MosaicLib.Modular.Part
                                                     string baseStatePublicationValueName = null, 
                                                     bool setBaseStatePublicationValueNameToNull = false, 
                                                     IValuesInterconnection partBaseIVI = null,
-                                                    LoggingOptionSelect ? loggingOptionSelect = null
+                                                    LoggingOptionSelect ? loggingOptionSelect = null,
+                                                    bool disableBusyBehavior = false,
+                                                    bool disablePartBaseIVIUse = false
                                                     )
         {
-            if (simplePartBaseBehavior.HasValue)
+            if (simplePartBaseBehavior != null)
                 settings.SimplePartBaseBehavior = simplePartBaseBehavior.Value;
 
             if (baseStatePublicationValueName != null)
@@ -1068,6 +1083,12 @@ namespace MosaicLib.Modular.Part
 
             if (loggingOptionSelect != null)
                 settings.LoggingOptionSelect = loggingOptionSelect ?? default(LoggingOptionSelect);
+
+            if (disableBusyBehavior)
+                settings.SimplePartBaseBehavior = settings.SimplePartBaseBehavior & ~(SimplePartBaseBehavior.TreatPartAsBusyWhenQueueIsNotEmpty | SimplePartBaseBehavior.TreatPartAsBusyWhenInternalPartBusyCountIsNonZero);
+
+            if (disablePartBaseIVIUse)
+                settings.DisablePartBaseIVIUse = true;
 
             return settings;
         }
@@ -1196,9 +1217,9 @@ namespace MosaicLib.Modular.Part
 
         private void SetupBaseStatePublisherIVAIfNeeded()
         {
-            if (baseStatePublisherIVA == null && settings.BaseStatePublicationValueName != null)
+            if (baseStatePublisherIVA == null && !settings.DisablePartBaseIVIUse && settings.BaseStatePublicationValueName != null)
             {
-                if (settings.BaseStatePublicationValueName.IsNullOrEmpty())
+                if (settings.BaseStatePublicationValueName == string.Empty)
                     settings.BaseStatePublicationValueName = "{0}.BaseState".CheckedFormat(PartID);
 
                 baseStatePublisherIVA = (settings.PartBaseIVI ?? Values.Instance).GetValueAccessor(settings.BaseStatePublicationValueName);

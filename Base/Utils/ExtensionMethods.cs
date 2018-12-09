@@ -1233,7 +1233,7 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        #region DateTime related (Age, Min, Max)
+        #region DateTime related (Age, Min, Max, IsZero)
 
         /// <summary>
         /// Returns the Age of the given <paramref name="dateTime"/>.  Caller can optionally provide the current time, preferrably already in the same DateTimeKind as the given value.
@@ -1273,6 +1273,14 @@ namespace MosaicLib.Utils
         public static DateTime Max(this DateTime a, DateTime b, DateTime c) { return a.Max(b).Max(c); }
         /// <summary>Returns the Max of the given DateTime values</summary>
         public static DateTime Max(this DateTime a, params DateTime[] more) { return a.Concat(more).Max(); }
+
+        /// <summary>
+        /// Returns true if the given <paramref name="dateTime"/> value is equal to default(DateTime)
+        /// </summary>
+        public static bool IsZero(this DateTime dateTime)
+        {
+            return (dateTime == default(DateTime));
+        }
 
         #endregion
 

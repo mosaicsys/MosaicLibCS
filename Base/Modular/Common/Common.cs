@@ -5840,7 +5840,7 @@ namespace MosaicLib.Modular.Common
     #region DelegateItemSpec (variants)
 
     /// <summary>
-    /// This class is used by client code to define the relationship between a named item and optinal getter and/or setter delegates.
+    /// This class is used by client code to define the relationship between a named item and optional getter and/or setter delegates.
     /// <para/>This version is used with getter and/or setter delegates that are parameterized to produce/consume ValueContainer values.
     /// </summary>
     public class DelegateItemSpec : DelegateItemSpec<ValueContainer>
@@ -5854,7 +5854,7 @@ namespace MosaicLib.Modular.Common
     }
 
     /// <summary>
-    /// This class is used by client code to define the relationship between a named item and optinal getter and/or setter delegates.
+    /// This class is used by client code to define the relationship between a named item and optional getter and/or setter delegates.
     /// <para/>Supports all TValueTypes that are supported by ValueContainer
     /// </summary>
     public class DelegateItemSpec<TValueType>

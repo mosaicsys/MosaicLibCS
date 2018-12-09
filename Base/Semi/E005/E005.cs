@@ -79,7 +79,7 @@ namespace MosaicLib.Semi.E005
         [EnumMember]
         E041_Warning = 101,
 
-        /// <summary>Error annuciators are similar to Alarm annunciators except that they support (recovery) action invocation by the currently active decision authority. (102)</summary>
+        /// <summary>Error annunciators are similar to Alarm annunciators except that they support (recovery) action invocation by the currently active decision authority. (102)</summary>
         [EnumMember]
         E041_Error = 102,
 

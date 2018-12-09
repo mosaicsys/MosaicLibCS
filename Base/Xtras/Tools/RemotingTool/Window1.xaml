@@ -39,12 +39,15 @@
                         <Controls:PartBaseStateLED BorderWidth="1" Height="20" Width="20" HorizontalAlignment="Left" Margin="13,12,0,0" PartBaseState="{Binding Path=[Remoting.Client.BaseState].ValueAsObject}" ActionInfo="{Binding Path=[Remoting.Client.ActionInfo].ValueAsObject}" IncludeConnectionState="True" VerticalAlignment="Top" />
                         <TextBox Height="23" Margin="46,10,9.778,0" Text="{Binding Tag, RelativeSource={RelativeSource Self}}" ToolTip="{Binding Tag, RelativeSource={RelativeSource Self}}" Tag="{Binding Path=[Remoting.Client.BaseState].ValueAsObject, Mode=OneWay}" VerticalAlignment="Top" IsReadOnly="True" IsUndoEnabled="False" />
                         <Label Content="NVS" Height="24" HorizontalAlignment="Left" Margin="7,48,0,0" VerticalAlignment="Top" Width="34" />
-                        <TextBox Height="82" IsReadOnly="True" Margin="46,38,9.778,0" Text="{Binding Tag, RelativeSource={RelativeSource Self}}" ToolTip="{Binding Tag, RelativeSource={RelativeSource Self}}" Tag="{Binding Path=[Remoting.Client.ConfigNVS].VC, Converter={StaticResource VCToStringSMLConverter}, Mode=OneWay}" VerticalAlignment="Top"  IsUndoEnabled="False" TextWrapping="Wrap" ScrollViewer.VerticalScrollBarVisibility="Auto" />
+                        <TextBox Height="103" IsReadOnly="True" Margin="46,38,9.778,0" Text="{Binding Tag, RelativeSource={RelativeSource Self}}" ToolTip="{Binding Tag, RelativeSource={RelativeSource Self}}" Tag="{Binding Path=[Remoting.Client.ConfigNVS].VC, Converter={StaticResource VCToStringSMLConverter}, Mode=OneWay}" VerticalAlignment="Top"  IsUndoEnabled="False" TextWrapping="Wrap" ScrollViewer.VerticalScrollBarVisibility="Auto" />
                         <!--<Label Content="Rate" Height="24" HorizontalAlignment="Left" Margin="7,95,0,0" VerticalAlignment="Top" Width="34" />-->
                         <!--<TextBox Height="23" HorizontalAlignment="Left" IsReadOnly="False" Margin="46,96,0,0" Text="{Binding Path=[AvgCmdRateInHz].ValueAsDouble, Mode=OneWay, StringFormat=f2, FallbackValue=[empty]}" IsUndoEnabled="False" VerticalAlignment="Top" Width="65" />-->
-                        <Button Click="RCButton_Clicked" Content="Connect" Tag="GoOnlineAndInitialize" Height="23" HorizontalAlignment="Left" Margin="13,136,0,0" VerticalAlignment="Top" Width="75"  />
-                        <Button Click="RCButton_Clicked" Content="Disconnect" Tag="GoOffline" Height="23" HorizontalAlignment="Left" Margin="94,136,0,0" VerticalAlignment="Top" Width="75" />
-                        <Button Click="RCButton_Clicked" Content="Remote Ping" Tag="Ping" Height="23" HorizontalAlignment="Left" Margin="176,136,0,0" VerticalAlignment="Top" Width="75" />
+                        <StackPanel Orientation="Horizontal" Margin="13,146,9.778,0" Height="31" VerticalAlignment="Top" >
+                            <Button Click="RCButton_Clicked" Content="Connect" Tag="GoOnlineAndInitialize" Height="23" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3" />
+                            <Button Click="RCButton_Clicked" Content="Disconnect" Tag="GoOffline" Height="23" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3" />
+                            <Button Click="RCButton_Clicked" Content="Remote Ping" Tag="Ping" Height="23" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3" />
+                            <Button Click="RCButton_Clicked" Content="Remote Big Ping" Tag="BigPing" Height="23" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3" />
+                        </StackPanel>
                     </Grid>
                 </GroupBox>
             </TabItem>

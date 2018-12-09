@@ -48,7 +48,7 @@ namespace MosaicLib.SerialIO
         /// <param name="wrapperName">Gives the name that the wrapper is to use for the log messages that it creates</param>
         /// <param name="wrappedPort">Gives the IPort instance that the AEW is to implement auto echo for</param>
         public AutoEchoWrapper(string wrapperName, IPort wrappedPort)
-			: base(wrapperName, "AutoEchoWrapper")
+			: base(wrapperName, "AutoEchoWrapper", initialSettings: SimpleActivePartBaseSettings.DefaultVersion2.Build(disableBusyBehavior: true))
 		{
 			port = wrappedPort;
 

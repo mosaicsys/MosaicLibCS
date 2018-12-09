@@ -1396,21 +1396,23 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
                 /// Consider adding global buffer state change counts so that 
                 foreach (var buffer in deliveryPendingList)
                 {
-                    if (maxSentBufferSeqNum < buffer.SeqNum && buffer.State == BufferState.Sent)
+                    bool bufferHasBeenDelivered = (buffer.State == BufferState.Delivered);
+                    if (maxSentBufferSeqNum < buffer.SeqNum && (bufferHasBeenDelivered || buffer.State == BufferState.Sent))    // look at both cases as TCP stream moves some buffers directly to delivered (skipping sent state)
                     {
                         maxSentBufferSeqNum = buffer.SeqNum;
                         maxSentBufferAckSeqNum = Math.Max(maxSentBufferAckSeqNum, buffer.header.AckSeqNum);
                         count++;
                     }
-                    
-                    if (buffer.State == BufferState.Delivered)
+
+                    if (bufferHasBeenDelivered)
                         numDelivered++;
                 }
 
                 if (numDelivered > 0)
                 {
                     count += numDelivered;
-                    deliveryPendingList.RemoveAll(buffer => (buffer.State == BufferState.Delivered));
+
+                    deliveryPendingList.FilterAndRemove(buffer => (buffer.State == BufferState.Delivered)).DoForEach(buffer => EventAndPerformanceRecording.RecordDelivered(buffer));
                 }
             }
 
@@ -1676,13 +1678,20 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
 
             EventAndPerformanceRecording.RecordReceived(bufferParamsArray);
 
+            bool messageEndReceived = false;
+
             foreach (var buffer in bufferParamsArray)
             {
                 count += ProcessReceivedBufferAck(qpcTimeStamp, buffer);
                 count += ProcessReceivedBuffer(qpcTimeStamp, buffer);
+
+                messageEndReceived |= (buffer.PurposeCode == PurposeCode.Message || buffer.PurposeCode == PurposeCode.MessageEnd);
             }
 
             count += ServiceMessageAccumulationAndDelivery(qpcTimeStamp);
+
+            if (messageEndReceived)
+                count += ServiceTransmitter(qpcTimeStamp, enableRetransmission: false, enableMessageSending: false, requestSendAckNow: true);
         }
 
         /// <summary>

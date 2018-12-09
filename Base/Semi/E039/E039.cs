@@ -187,15 +187,23 @@ namespace MosaicLib.Semi.E039
     {
         /// <summary>
         /// Action factory method.  The resulting action may be used to perform the given update item on the table.
-        /// The resuling changes will be published at the completion of all of the update items, or as a side effect of running an explicit sync update item in the update item set.
+        /// The resulting changes will be published at the completion of all of the update items, or as a side effect of running an explicit sync update item in the update item set.
+        /// When the given <paramref name="logConfigSelect"/> is neither null nor empty, the resulting action's ActionLogging.Config will be selected from the dictionary of such objects from the part's configuration to allow the caller to customize action logging on a per update basis.
         /// </summary>
-        IBasicAction Update(E039UpdateItem updateItem);
+        IBasicAction Update(E039UpdateItem updateItem, string logConfigSelect = null);
 
         /// <summary>
-        /// Action factory method.  The resulting action may be used to perform the given sequence of update items on the table.
-        /// The resuling changes will be published at the completion of all of the update items, or as a side effect of running an explicit sync update item in the update item set.
+        /// Action factory method.  The resulting action may be used to perform the given sequence of update items on the corresponding table(s).
+        /// The resulting changes will be published at the completion of all of the update items, or as a side effect of running an explicit sync update item in the update item set.
         /// </summary>
         IBasicAction Update(params E039UpdateItem [] updateItems);
+
+        /// <summary>
+        /// Action factory method.  The resulting action may be used to perform the given update items on the corresponding table(s).
+        /// The resulting changes will be published at the completion of all of the update items, or as a side effect of running an explicit sync update item in the update item set.
+        /// When the given <paramref name="logConfigSelect"/> is neither null nor empty, the resulting action's ActionLogging.Config will be selected from the dictionary of such objects from the part's configuration to allow the caller to customize action logging on a per update basis.
+        /// </summary>
+        IBasicAction Update(E039UpdateItem[] updateItemsArray, string logConfigSelect = null);
     }
 
     /// <summary>
@@ -1241,7 +1249,7 @@ namespace MosaicLib.Semi.E039
             ExternalSyncTimeLimit = (0.2).FromSeconds();
 
             this.ActionLoggingConfig = ActionLoggingConfig.Debug_Debug_Trace_Trace;
-            PersistHelperActionLoggingConfig = ActionLoggingConfig.Trace_Trace_Trace_Trace;
+            PersistHelperActionLoggingConfig = new ActionLoggingConfig(ActionLoggingConfig.Trace_Trace_Trace_Trace, actionLoggingStyleSelect: ActionLoggingStyleSelect.IncludeRunTimeOnCompletion);
             PersistFileWrittenMesgType = Logging.MesgType.Debug;
             PersistFileWriteFailedMesgType = Logging.MesgType.Debug;
         }
@@ -1282,6 +1290,8 @@ namespace MosaicLib.Semi.E039
             PersistHelperActionLoggingConfig = other.PersistHelperActionLoggingConfig;
             PersistFileWrittenMesgType = other.PersistFileWrittenMesgType;
             PersistFileWriteFailedMesgType = other.PersistFileWriteFailedMesgType;
+
+            CustomActionLoggingConfigDict = other.CustomActionLoggingConfigDict;
         }
 
         internal void SetupForUse()
@@ -1331,6 +1341,8 @@ namespace MosaicLib.Semi.E039
         public ActionLoggingConfig PersistHelperActionLoggingConfig { get; set; }
         public Logging.MesgType PersistFileWrittenMesgType { get; set;  }
         public Logging.MesgType PersistFileWriteFailedMesgType { get; set; }
+
+        public ReadOnlyIDictionary<string, ActionLoggingConfig> CustomActionLoggingConfigDict { get; set; }
 
         private IValuesInterconnection _partBaseIVI, _objectIVI;
         private ISetsInterconnection _isi;
@@ -1419,12 +1431,18 @@ namespace MosaicLib.Semi.E039
         }
     }
 
+    /// <summary>
+    /// This is the default implementation object for the IE039TableObserver and IE039TableUpdator interfaces.
+    /// </summary>
     public class E039BasicTablePart : SimpleActivePartBase, IE039TableObserver, IE039TableUpdater
     {
         #region Construction and related fields
 
+        /// <summary>
+        /// Constructor - most behavior features are defined by the provided <paramref name="config"/> contents.
+        /// </summary>
         public E039BasicTablePart(E039BasicTablePartConfig config)
-            : base(config.PartID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion1.Build(automaticallyIncAndDecBusyCountAroundActionInvoke: false, partBaseIVI: config.PartBaseIVI, simpleActivePartBehaviorOptions: SimpleActivePartBehaviorOptions.MainThreadStartSetsStateToOffline | SimpleActivePartBehaviorOptions.MainThreadStopSetsStateToStoppedIfIsOnlineOrAttemptOnline | SimpleActivePartBehaviorOptions.MainThreadStopSetsStateToStoppedIfOffline | SimpleActivePartBehaviorOptions.UseMainThreadFailedState, simplePartBaseSettings: SimplePartBaseSettings.DefaultVersion1.Build(simplePartBaseBehavior: SimplePartBaseBehavior.TreatPartAsBusyWhenInternalPartBusyCountIsNonZero)))
+            : base(config.PartID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion2.Build(disableBusyBehavior: true, partBaseIVI: config.PartBaseIVI))
         {
             Config = new E039BasicTablePartConfig(config, testPersitValues: true);
             Config.SetupForUse();
@@ -1433,6 +1451,12 @@ namespace MosaicLib.Semi.E039
 
             ObjectIVI = Config.ObjectIVI;
             ExternalSyncFactory = Config.ExternalSyncFactory;
+
+            if (!Config.CustomActionLoggingConfigDict.IsNullOrEmpty())
+            {
+                customActionLoggingReferenceDict = new Dictionary<string, ActionLogging>();
+                customActionLoggingReferenceDict.SafeAddRange(Config.CustomActionLoggingConfigDict.Select(kvp => KVP.Create(kvp.Key, new ActionLogging(ActionLoggingReference) { Config = kvp.Value })));
+            }
 
             persistHelperPart = new PersistHelper("{0}.ph".CheckedFormat(PartID), Config);
 
@@ -1548,6 +1572,8 @@ namespace MosaicLib.Semi.E039
 
         static readonly E039ObjectID[] emptyE039ObjectIDArray = EmptyArrayFactory<E039ObjectID>.Instance;
 
+        Dictionary<string, ActionLogging> customActionLoggingReferenceDict = null;
+
         #endregion
 
         #region IE039TableObserver interface
@@ -1614,20 +1640,37 @@ namespace MosaicLib.Semi.E039
 
         #region IE039TableUpdater interface (action factory methods) and related implementation method(s)
 
-        IBasicAction IE039TableUpdater.Update(E039UpdateItem updateItem)
+        IBasicAction IE039TableUpdater.Update(E039UpdateItem updateItem, string logConfigSelect)
         {
-            string methodName = "{0}({1}:{2})".CheckedFormat(CurrentMethodName, (updateItem ?? E039UpdateItem.Empty).GetType(), updateItem);
+            StartPartIfNeeded();
 
-            return new BasicActionImpl(actionQ, (action) => PerformUpdates(action, firstUpdateItem: updateItem, updateItems: null), methodName, ActionLoggingReference);
+            string logConfigSelectStr = (logConfigSelect.IsNullOrEmpty() ? "" : " {0}".CheckedFormat(logConfigSelect));
+            string mesgDetails = "{0}:{1}{2}".CheckedFormat((updateItem ?? E039UpdateItem.Empty).GetType(), updateItem, logConfigSelectStr);
+
+            return new BasicActionImpl(actionQ, (action) => PerformUpdates(action, firstUpdateItem: updateItem, updateItems: null), "Update", GetSelectedActionLoggingReference(logConfigSelect), mesgDetails: mesgDetails);
         }
 
         IBasicAction IE039TableUpdater.Update(params E039UpdateItem [] updateItems)
         {
+            return ((IE039TableUpdater)this).Update(updateItems, logConfigSelect: null);
+        }
+
+        IBasicAction IE039TableUpdater.Update(E039UpdateItem[] updateItems, string logConfigSelect)
+        {
             StartPartIfNeeded();
 
-            string methodName = "{0}({1})".CheckedFormat(CurrentMethodName, String.Join(",", updateItems.Select(updateItem => "{0}:{1}".CheckedFormat((updateItem ?? E039UpdateItem.Empty).GetType().GetTypeLeafName(), updateItem)).ToArray()));
+            string itemsStr = String.Join(",", updateItems.Select(updateItem => "{0}:{1}".CheckedFormat((updateItem ?? E039UpdateItem.Empty).GetType().GetTypeLeafName(), updateItem)));
+            string mesgDetails = "{0}{1}{2}".CheckedFormat(itemsStr, (!itemsStr.IsNullOrEmpty() && !logConfigSelect.IsNullOrEmpty() ? " " : ""), logConfigSelect);
 
-            return new BasicActionImpl(actionQ, (action) => PerformUpdates(action, firstUpdateItem: null, updateItems: updateItems), methodName, ActionLoggingReference);
+            return new BasicActionImpl(actionQ, (action) => PerformUpdates(action, firstUpdateItem: null, updateItems: updateItems), "Update", GetSelectedActionLoggingReference(logConfigSelect), mesgDetails: mesgDetails);
+        }
+
+        private ActionLogging GetSelectedActionLoggingReference(string logConfigSelect)
+        {
+            if (logConfigSelect.IsNullOrEmpty() || customActionLoggingReferenceDict == null)
+                return ActionLoggingReference;
+            else
+                return customActionLoggingReferenceDict.SafeTryGetValue(logConfigSelect) ?? ActionLoggingReference;
         }
 
         string PerformUpdates(IProviderFacet action, E039UpdateItem firstUpdateItem, E039UpdateItem[] updateItems)
@@ -2767,7 +2810,7 @@ namespace MosaicLib.Semi.E039
         private class PersistHelper : SimpleActivePartBase
         {
             public PersistHelper(string partID, E039BasicTablePartConfig config)
-                : base(partID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion1.Build(automaticallyIncAndDecBusyCountAroundActionInvoke: false, simpleActivePartBehaviorOptions: SimpleActivePartBehaviorOptions.None, simplePartBaseSettings: SimplePartBaseSettings.DefaultVersion0.Build(setBaseStatePublicationValueNameToNull : true)))
+                : base(partID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion2.Build(disableBusyBehavior: true, disablePartBaseIVIUse: true, disablePartRegistration: true))
             {
                 ActionLoggingReference.Config = config.PersistHelperActionLoggingConfig ?? config.ActionLoggingConfig ?? ActionLoggingConfig.Trace_Trace_Trace_Trace;
             }
@@ -2913,6 +2956,9 @@ namespace MosaicLib.Semi.E039
         /// <summary>Gives the <typeparamref name="TObjectInfoType"/> object produced by the infoFactoryDelegate</summary>
         public TObjectInfoType Info { get; protected set; }
 
+        /// <summary>Gives the QpcTimeStamp from the last update that generated new Info contents (due to the update being needed or being forced).</summary>
+        public QpcTimeStamp LastUpdateTimeStamp { get; protected set; }
+
         /// <summary>get/set: equivalent to the IsUpdateNeeded flag for the underlying sequenced object source observer.  returns true when source's seq number does not match seq number during last update.  May be set to true to indicate that an update is needed.</summary>
         public virtual bool IsUpdateNeeded 
         {
@@ -2946,6 +2992,8 @@ namespace MosaicLib.Semi.E039
                 var o = Object;
 
                 Info = infoFactoryDelegate(o);
+
+                LastUpdateTimeStamp = QpcTimeStamp.Now;
 
                 foreach (var updateAction in UpdateAndGetObjectUpdateActionArray())
                     updateAction(o);

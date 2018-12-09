@@ -276,7 +276,7 @@ namespace MosaicLib.PartsLib.Scan.ScanEngine
         { }
 
         public ScanEnginePart(ScanEnginePartConfig config, params IScanEnginePlugin[] pluginParamsArray)
-            : base(config.Name, initialSettings: SimpleActivePartBaseSettings.DefaultVersion0.Build(waitTimeLimit: config.NominalServicePeriod, partBaseIVI: config.PartBaseIVI))
+            : base(config.Name, initialSettings: SimpleActivePartBaseSettings.DefaultVersion2.Build(waitTimeLimit: config.NominalServicePeriod, partBaseIVI: config.PartBaseIVI, disableBusyBehavior: true))
         {
             ActionLoggingConfig = Modular.Action.ActionLoggingConfig.Debug_Debug_Trace_Trace;    // redefine the log levels for actions
 

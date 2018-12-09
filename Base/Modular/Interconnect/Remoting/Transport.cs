@@ -777,6 +777,26 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
 
         #region TCPTransport
 
+        /// <summary>
+        /// This enum is used to control which TCPTransport opimizations the client would like to use.
+        /// <para/>None (0x00), EarlyMessageDelivery (0x01), EarlyBufferDelivery (0x02), OptimizedDefault (0x01), All (0xffffffff)
+        /// </summary>
+        [Flags]
+        public enum TCPOptimizations : uint
+        {
+            /// <summary>Select no optimizations (0x00)</summary>
+            None = 0x00,
+
+            /// <summary>Set message start and message middle buffers as delivered on send complete by skipping the sent state [0x01]</summary>
+            EarlyMessageDelivery = 0x01,
+
+            /// <summary>(EarlyMessageDelivery)</summary>
+            OptimizedDefault = (EarlyMessageDelivery),
+
+            /// <summary>All bits set</summary>
+            All = 0xffffffff,
+        }
+
         public class TCPTransport : DisposableBase, ITransportConnection
         {
             private static AtomicUInt32 instanceNumGen = new AtomicUInt32();
@@ -819,7 +839,6 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
 
                 sessionBase.TransportParamsNVS = ConnParamsNVS;
 
-
                 minReceiveBufferSize = BufferPool.BufferSize * TcpBufferRunHeaderV1.maxBuffersInRun * TcpBufferRunHeaderV1.size;
                 minSendBufferSize = Math.Max(minReceiveBufferSize, sessionBase.Config.MaxBufferWriteAheadCount * BufferPool.BufferSize + TcpBufferRunHeaderV1.size);
 
@@ -828,6 +847,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                     Port = ConnParamsNVS["Port"].VC.GetValue<int>(rethrow: false, defaultValue: Constants.DefaultTCPPort);
                     KeepAlivePeriod = ConnParamsNVS["KeepAlivePeriod"].VC.GetValue<TimeSpan>(rethrow: false, defaultValue: (10.0).FromSeconds());
                     ConnectionType = ConnParamsNVS["ConnectionType"].VC.GetValue<string>(rethrow: false).MapNullToEmpty();
+                    TCPOptimizations = ConnParamsNVS["TCPOptimizations"].VC.GetValue<TCPOptimizations>(rethrow: false, defaultValue: TCPOptimizations.OptimizedDefault);
 
                     IPV6 = ConnectionType.EndsWith("v6");
 
@@ -952,6 +972,17 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
             public EndPoint LocalEndPoint { get; private set; }
 
             public int NumConcurrentAccepts { get; private set; }
+            public TCPOptimizations TCPOptimizations 
+            { 
+                get { return _tcpOptimizations; } 
+                private set 
+                { 
+                    _tcpOptimizations = value;
+                    EnableEarlyMessageDelivery = value.IsSet(TCPOptimizations.EarlyMessageDelivery);
+                } 
+            }
+            public TCPOptimizations _tcpOptimizations;
+            public bool EnableEarlyMessageDelivery { get; private set; }
 
             public int minReceiveBufferSize;
             public int minSendBufferSize;
@@ -1815,7 +1846,12 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                 foreach (var buffer in st.bufferArray)
                 {
                     if (buffer.State == Buffers.BufferState.SendPosted)
-                        buffer.SetState(qpcTimeStamp, Buffers.BufferState.Sent, reason);
+                    {
+                        bool markBufferDeliveredEarly = EnableEarlyMessageDelivery && (buffer.PurposeCode == Buffers.PurposeCode.MessageMiddle || buffer.PurposeCode == Buffers.PurposeCode.MessageStart);
+
+                        // immediately mark message start or message middle buffers as having been delivered.  Only mark message or message end buffers as Sent (aka waiting for ack)
+                        buffer.SetState(qpcTimeStamp, markBufferDeliveredEarly ? Buffers.BufferState.Delivered : Buffers.BufferState.Sent, reason);
+                    }
                 }
             }
 

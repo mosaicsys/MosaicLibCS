@@ -92,10 +92,13 @@ namespace MosaicLib.Modular.Part
         /// </summary>
         AcceptCustomChangeFromAttemptOnlineState = 16,
 
+        [Obsolete("Please switch to use the correctly spelled version (2018-12-05)")]
+        UseOnlineUnititializedState = 32,
+
         /// <summary>
         /// When this option is enabled, successful GoOnline(false) operations will set the UseState to OnlineUnintialized if the UseState was not Online when the operation was started.
         /// </summary>
-        UseOnlineUnititializedState = 32,
+        UseOnlineUninitializedState = 32,
 
         /// <summary>
         /// Selects that execution of GoOnline and GoOffline actions using base class will succeed and will automatically update the BaseUseState.
@@ -405,7 +408,7 @@ namespace MosaicLib.Modular.Part
                 return new SimpleActivePartBaseSettings()
                 {
                     AutomaticallyIncAndDecBusyCountAroundActionInvoke = true,
-                    GoOnlineAndGoOfflineHandling = GoOnlineAndGoOfflineHandling.All | GoOnlineAndGoOfflineHandling.UseOnlineUnititializedState | GoOnlineAndGoOfflineHandling.AcceptCustomChangeFromAttemptOnlineState,
+                    GoOnlineAndGoOfflineHandling = GoOnlineAndGoOfflineHandling.All | GoOnlineAndGoOfflineHandling.UseOnlineUninitializedState | GoOnlineAndGoOfflineHandling.AcceptCustomChangeFromAttemptOnlineState,
                     SimpleActivePartBehaviorOptions = SimpleActivePartBehaviorOptions.PerformActionPublishesActionInfo | SimpleActivePartBehaviorOptions.MainThreadStartSetsStateToOffline | SimpleActivePartBehaviorOptions.MainThreadStopSetsStateToStoppedIfIsOnlineOrAttemptOnline | SimpleActivePartBehaviorOptions.MainThreadStopSetsStateToStoppedIfOffline | SimpleActivePartBehaviorOptions.UseMainThreadFailedState | SimpleActivePartBehaviorOptions.PerformMainLoopServiceCallsServiceBusyConditionChangeDetection,
                     SimplePartBaseSettings = SimplePartBaseSettings.DefaultVersion2,
                 };
@@ -448,25 +451,27 @@ namespace MosaicLib.Modular.Part
                                                          string logGroupName = null,
                                                          IPartsInterconnection registerPartWith = null,
                                                          bool disablePartRegistration = false,
-                                                         LoggingOptionSelect? loggingOptionSelect = null
+                                                         LoggingOptionSelect? loggingOptionSelect = null,
+                                                         bool disableBusyBehavior = false,
+                                                         bool disablePartBaseIVIUse = false
                                                          )
         {
-            if (automaticallyIncAndDecBusyCountAroundActionInvoke.HasValue)
+            if (automaticallyIncAndDecBusyCountAroundActionInvoke != null)
                 settings.AutomaticallyIncAndDecBusyCountAroundActionInvoke = automaticallyIncAndDecBusyCountAroundActionInvoke.Value;
 
-            if (maxActionsToInvokePerServiceLoop.HasValue)
+            if (maxActionsToInvokePerServiceLoop != null)
                 settings.MaxActionsToInvokePerServiceLoop = maxActionsToInvokePerServiceLoop.Value;
 
-            if (goOnlineAndOfflineHandling.HasValue)
+            if (goOnlineAndOfflineHandling != null)
                 settings.GoOnlineAndGoOfflineHandling = goOnlineAndOfflineHandling.Value;
 
-            if (simpleActivePartBehaviorOptions.HasValue)
+            if (simpleActivePartBehaviorOptions != null)
                 settings.SimpleActivePartBehaviorOptions = simpleActivePartBehaviorOptions.Value;
 
-            if (waitTimeLimit.HasValue)
+            if (waitTimeLimit != null)
                 settings.WaitTimeLimit = waitTimeLimit.Value;
 
-            if (simplePartBaseSettings.HasValue)
+            if (simplePartBaseSettings != null)
                 settings.SimplePartBaseSettings = simplePartBaseSettings.Value;
 
             if (partBaseIVI != null)
@@ -488,6 +493,12 @@ namespace MosaicLib.Modular.Part
 
             if (loggingOptionSelect != null)
                 settings.simplePartBaseSettings.LoggingOptionSelect = loggingOptionSelect ?? default(LoggingOptionSelect);
+
+            if (disableBusyBehavior || disablePartBaseIVIUse)
+            {
+                settings.AutomaticallyIncAndDecBusyCountAroundActionInvoke &= !disableBusyBehavior;
+                settings.simplePartBaseSettings = settings.simplePartBaseSettings.Build(disableBusyBehavior: disableBusyBehavior, disablePartBaseIVIUse: disablePartBaseIVIUse);
+            }
 
             return settings;
         }
@@ -1031,7 +1042,7 @@ namespace MosaicLib.Modular.Part
                 }
                 else if (result == string.Empty || action.ActionState.Succeeded)
                 {
-                    if (andInitialize || entryBaseState.UseState == UseState.Online || entryBaseState.UseState == UseState.OnlineBusy || !settings.CheckFlag(GoOnlineAndGoOfflineHandling.UseOnlineUnititializedState))
+                    if (andInitialize || entryBaseState.UseState == UseState.Online || entryBaseState.UseState == UseState.OnlineBusy || !settings.CheckFlag(GoOnlineAndGoOfflineHandling.UseOnlineUninitializedState))
                         SetBaseState(UseState.Online, "{0} Completed".CheckedFormat(description), true);
                     else
                         SetBaseState(UseState.OnlineUninitialized, "{0} Completed (starting BaseState was {1})".CheckedFormat(description, entryBaseState.ToString(Part.BaseState.ToStringSelect.UseStateNoPrefix | Part.BaseState.ToStringSelect.ConnState)), true);
@@ -1389,8 +1400,11 @@ namespace MosaicLib.Modular.Part
             }
 		}
 
-        private void SetupActionInfoPublisherIVAsIfNeeded()
+        protected void PublishActionInfo(IActionInfo actionInfo)
         {
+            if (settings.simplePartBaseSettings.DisablePartBaseIVIUse)
+                return;
+
             if (actionInfoIVA == null)
             {
                 ivi = base.settings.PartBaseIVI ?? Values.Instance;
@@ -1400,11 +1414,6 @@ namespace MosaicLib.Modular.Part
                 actionInfoIVAArray = new IValueAccessor[] { actionInfoIVA, lastActionInfoIVA };
                 actionInfoIVAArrayLength = actionInfoIVAArray.Length;
             }
-        }
-
-        protected void PublishActionInfo(IActionInfo actionInfo)
-        {
-            SetupActionInfoPublisherIVAsIfNeeded();
 
             if (!actionInfo.ActionState.IsComplete)
             {

@@ -36,6 +36,7 @@ namespace MosaicLib.Modular.Action
     /// It also includes other logging related configuration parameters.
     /// These include Done, Error, State and Update events.
     /// <para/>Commonly used static values: Signif_Error_Debug_Debug, Info_Error_Debug_Debug, Info_Error_Trace_Trace, Info_Info_Trace_Trace, Debug_Debug_Trace_Trace, Trace_Trace_Trace_Trace, None_None_None_None
+    /// <para/>Instances of this class (but possibly not derived ones) are immutable.
     /// </summary>
     public class ActionLoggingConfig
     {
@@ -118,7 +119,7 @@ namespace MosaicLib.Modular.Action
 
     /// <summary>
     /// Flag enumeration used to select specific logging options.
-    /// <para/>None (0x00), OldXmlishStyle (0x01)
+    /// <para/>None (0x00), OldXmlishStyle (0x01), IncludeRunTimeOnCompletion (0x02)
     /// </summary>
     [Flags]
     public enum ActionLoggingStyleSelect : int
@@ -128,6 +129,39 @@ namespace MosaicLib.Modular.Action
 
         /// <summary>Selects use of older Xmlish style of these messages (0x01)</summary>
         OldXmlishStyle = 0x01,
+
+        /// <summary>When enabled, this option selects that the run time (time from start to complete) will be included in the completion log message (if any).  This option is not supported when OldXmlishStyle logging has been selected.</summary>
+        IncludeRunTimeOnCompletion = 0x02,
+    }
+
+    /// <summary>
+    /// This interface defines the features that an ActionLogging class instance provides that are used by other elements of the action implementation system.
+    /// </summary>
+    public interface IActionLogging
+    {
+        /// <summary>Typically used to give the name of the Action</summary>
+        string Mesg { get; }
+
+        /// <summary>Typically updated to contain the string version of the ParamValue or other per instance details for a specific Action instance.</summary>
+        string MesgDetail { get; }
+
+        /// <summary>Gives the, optional, Logging.IBasicLogger that shall be used as the base for the Emitters according to the corresponding Config values.  When set to null the individual Emitters are explicitly set to the Logging.NullEmitter.</summary>
+        Logging.IBasicLogger Logger { get; }
+
+        /// <summary>Gives the, optional, ActionLoggingConfig instance that will be used to determine which Logger emitters will be used by this instance.  When set to null the individual Emitters are explicitly set to the Logging.NullEmitter.</summary>
+        ActionLoggingConfig Config { get; }
+
+        /// <summary>get/set property defines the Logging.IMesgEmitter that is used for Done related events generated using this object.  Assigning the Logger or Config properties has the side effect of settings this property as well.</summary>
+        Logging.IMesgEmitter Done { get; }
+
+        /// <summary>get/set property defines the Logging.IMesgEmitter that is used for Error related events generated using this object.  Assigning the Logger or Config properties has the side effect of settings this property as well.</summary>
+        Logging.IMesgEmitter Error { get; }
+
+        /// <summary>get/set property defines the Logging.IMesgEmitter that is used for State change related events generated using this object.  Assigning the Logger or Config properties has the side effect of settings this property as well.</summary>
+        Logging.IMesgEmitter State { get; }
+
+        /// <summary>get/set property defines the Logging.IMesgEmitter that is used for Action Update related events generated using this object.  Assigning the Logger or Config properties has the side effect of settings this property as well.</summary>
+        Logging.IMesgEmitter Update { get; }
     }
 
 	/// <summary>
@@ -135,7 +169,7 @@ namespace MosaicLib.Modular.Action
 	/// It is typically created by an active part and given to the action for the action to use in emiting log messages.
     /// It also supports copy constructor behavior so that it can be replicated and used for individual actions.
 	/// </summary>
-	public class ActionLogging
+    public class ActionLogging : IActionLogging
 	{
         /// <summary>Copy constructor for use in creating ActionLogging objects for new Action objects: Mesg empty, MesgDetails empty. For use with Property Initializers</summary>
         public ActionLogging(ActionLogging copyFrom) : this(string.Empty, string.Empty, copyFrom.Logger, copyFrom.Config, copyFrom.Done, copyFrom.Error, copyFrom.State, copyFrom.Update) { }
@@ -170,8 +204,8 @@ namespace MosaicLib.Modular.Action
         }
 
         string mesg;
-		string mesgDetail;
-        internal string eMesgDetail;
+		volatile string mesgDetail;
+        internal volatile string eMesgDetail;
         volatile Logging.IBasicLogger logger;
         volatile ActionLoggingConfig config;
         volatile Logging.IMesgEmitter doneEmitter, errorEmitter, stateEmitter, updateEmitter;
@@ -182,10 +216,10 @@ namespace MosaicLib.Modular.Action
         /// <summary>Typically updated to contain the string version of the ParamValue or other per instance details for a specific Action instance.</summary>
         public string MesgDetail { get { return mesgDetail; } set { mesgDetail = value.MapNullToEmpty(); eMesgDetail = mesgDetail.GenerateEscapedVersion(); } }
 
-        /// <summary>Gives the, optinal, Logging.IBasicLogger that shall be used as the base for the Emitters according to the corresponding Config values.  When set to null the Emitters are explicitly set to the Logging.NullEmitter.</summary>
+        /// <summary>Gives the, optional, Logging.IBasicLogger that shall be used as the base for the Emitters according to the corresponding Config values.  When set to null the individual Emitters are explicitly set to the Logging.NullEmitter.</summary>
         public Logging.IBasicLogger Logger { get { return logger; } set { logger = value; UpdateEmitters(); } }
 
-        /// <summary>Gives the, optional, ActionLoggingConfig instance that will be used to determine which Logger emitters will be used by this instance.  When set to null the Emitters are explicitly set to the Logging.NullEmitter.</summary>
+        /// <summary>Gives the, optional, ActionLoggingConfig instance that will be used to determine which Logger emitters will be used by this instance.  When set to null the individual Emitters are explicitly set to the Logging.NullEmitter.</summary>
         public ActionLoggingConfig Config { get { return config; } set { config = value; UpdateEmitters(); } }
 
         /// <summary>get/set property defines the Logging.IMesgEmitter that is used for Done related events generated using this object.  Assigning the Logger or Config properties has the side effect of settings this property as well.</summary>
@@ -598,7 +632,7 @@ namespace MosaicLib.Modular.Action
 		#region local methods
 
         /// <summary>Used internally to generate and emit consistantly formatted ActionStateChange records, either with or without a resultCode as deteremined by the toState value.</summary>
-		private static void EmitStateChangeMesg(ActionLogging logging, ActionStateCode toState, ActionStateCode fromState, string resultCode)
+		private static void EmitStateChangeMesg(ActionLogging logging, ActionStateCode toState, ActionStateCode fromState, string resultCode, TimeSpan runTime = default(TimeSpan))
 		{
             Logging.IMesgEmitter emitter = logging.State;
             string description = logging.ActionDescription;
@@ -614,10 +648,13 @@ namespace MosaicLib.Modular.Action
             {
                 string eDescription = description.GenerateEscapedVersion();
 
+                bool includeRunTime = isComplete && ((logging.Config.ActionLoggingStyleSelect & ActionLoggingStyleSelect.IncludeRunTimeOnCompletion) != 0);
+                string runTimeStr = (includeRunTime ? " runTime:{0:f6}".CheckedFormat(runTime.TotalSeconds) : "");
+
                 if (isComplete && !rcIsNonEmpty)
-                    emitter.Emit("Action succeeded [name:({0}) state:{1}<-{2}]", eDescription, toState, fromState);
+                    emitter.Emit("Action succeeded [name:({0}) state:{1}<-{2}{3}]", eDescription, toState, fromState, runTimeStr);
                 else if (isComplete)
-                    emitter.Emit("Action failed [name:({0}) state:{1}<-{2} resultCode:({3})]", eDescription, toState, fromState, resultCode.GenerateEscapedVersion());
+                    emitter.Emit("Action failed [name:({0}) state:{1}<-{2} resultCode:({3}){4}]", eDescription, toState, fromState, resultCode.GenerateEscapedVersion(), runTimeStr);
                 else if (!includeRC)
                     emitter.Emit("Action state changed [name:({0}) state:{1}<-{2}]", eDescription, toState, fromState);
                 else
@@ -669,6 +706,7 @@ namespace MosaicLib.Modular.Action
             {
                 resultCode = null;
                 StateCode = ActionStateCode.Started;
+                StartedTimeStamp = TimeStamp;
                 EmitStateChangeMesg(logging, stateCode, entryASC, string.Empty);
             }
             else
@@ -676,6 +714,8 @@ namespace MosaicLib.Modular.Action
                 HandleInvalidStateChange("SetStateStarted", logging);
             }
 		}
+
+        public QpcTimeStamp StartedTimeStamp { get; private set; }
 
         /// <summary>Attempts to change the contained StateCode to ActionStateCode.Issued</summary>
 		public void SetStateIssued(ActionLogging logging)
@@ -735,7 +775,7 @@ namespace MosaicLib.Modular.Action
                     namedValues = namedValueSet.ConvertToReadOnly();
                     EmitUpdateNamedValuesMesg(logging, StateCode, namedValues);
                 }
-                EmitStateChangeMesg(logging, stateCode, entryASC, rc);
+                EmitStateChangeMesg(logging, stateCode, entryASC, rc, runTime: TimeStamp - StartedTimeStamp);
             }
             else
             {
@@ -788,15 +828,13 @@ namespace MosaicLib.Modular.Action
 	#region ActionImpl related interfaces and delegates
 
 	/// <summary>Non-typed version of templatized IProviderActionBase.  This is simply an IProviderFacet</summary>
-	public interface IProviderActionBase 
-        : IProviderFacet 
+	public interface IProviderActionBase : IProviderFacet 
     { }
 
 	/// <summary>Version of IProviderActionBase that gives get access to the ParamValue, set access to the ResultValue and a variation on CompleteRequest that completes the Action with a result code and value.</summary>
     /// <typeparam name="ParamType">Gives the type used for the ParamValue property that may be used to pass customized data from the client to the provider.</typeparam>
     /// <typeparam name="ResultType">Gives the type used for the ResultValue property that may be used to pass customized data from the provider to the client at the completion of the Action.</typeparam>
-	public interface IProviderActionBase<ParamType, ResultType> 
-        : IProviderActionBase
+	public interface IProviderActionBase<ParamType, ResultType> : IProviderActionBase
 	{
         /// <summary>
         /// Gives the provider get/set access to the ParamValue as last set by the client.
@@ -956,6 +994,8 @@ namespace MosaicLib.Modular.Action
 
         /// <summary>Protected property that reports the ActionLogging instance that this Action is using for its logging.</summary>
 		protected ActionLogging Logging { get { return logging; } }
+
+        IActionLogging IProviderFacet.Logging { get { return logging; } }
 
         /// <summary>Protected Static property that Action's use as a source for WaitEventNotifiers to be used when waiting without any other useable event notifier.</summary>
         protected static EventNotifierPool eventNotifierPool { get { return eventNotifierPoolSingleton.Instance; } }

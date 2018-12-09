@@ -287,6 +287,7 @@ namespace RemotingTool
                 case "GoOnlineAndInitialize": remotingClient.CreateGoOnlineAction(andInitialize: true).Start(); break;
                 case "GoOffline": remotingClient.CreateGoOfflineAction().Start(); break;
                 case "Ping": remotingClient.CreateServiceAction("Remote $RemotingServicePing$").Start(); break;
+                case "BigPing": remotingClient.CreateServiceAction("Remote $RemotingServicePing$", namedParamValues: new NamedValueSet() { { "b", new byte [100 * 1024] } }).Start(); break;
                 default: remotingClient.CreateServiceAction((string)(b.Tag)).Start(); break;
             }
         }

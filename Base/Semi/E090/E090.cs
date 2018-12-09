@@ -90,6 +90,9 @@ namespace MosaicLib.Semi.E090
 
         /// <summary>E039 attribute name used for list of accumulated DateTime.Now.ToString("o") values at which the SPSList had an SPS value appended (when enabled): "SPSDateTimeList"</summary>
         public const string SPSDateTimeListAttributeName = "SPSDateTimeList";
+
+        /// <summary>E039 attribute name used to optionally save the Name of the last location a substrate was in when it is being removed (used with RemovedSetsRemovedFromSubstLocNameAttribute option): "RemovedFromSubstLocName"</summary>
+        public const string RemovedFromSubstLocNameAttributeName = "RemovedFromSubstLocName";
     }
 
     /// <summary>
@@ -114,6 +117,10 @@ namespace MosaicLib.Semi.E090
         public static E090StateUpdateBehavior SetSubstProcStateUpdateBehaviorAdditions { get { return _setSubstProcStateUpdateBehaviorAdditions; } set { _setSubstProcStateUpdateBehaviorAdditions = (value & ~(E090StateUpdateBehavior.UsePendingSPS)); } }
         private static E090StateUpdateBehavior _setSubstProcStateUpdateBehaviorAdditions = E090StateUpdateBehavior.None;
 
+        /// <summary>This value is used to globally add specific features to the updateBehavior parameter values used with RemoveE090Subst calls.  Defaults to None.</summary>
+        public static E090StateUpdateBehavior RemoveSubstUpdateBehaviorAdditions { get { return _removeSubstUpdateBehaviorAdditions; } set { _removeSubstUpdateBehaviorAdditions = value; } }
+        private static E090StateUpdateBehavior _removeSubstUpdateBehaviorAdditions = E090StateUpdateBehavior.None;
+
         /// <summary>This value is used to globally add specific features to the updateBehavior parameter values used with all direct, or indirect, GenerateE090UpdateItems calls (including NoteSubstMoved, SetSubstProcState, and SetPendingSubstProcState calls).  This property cannot be used to set the UsePendingSPS as it is removed (bitwise) from any value that is given to the setter.  Defaults to None.</summary>
         public static E090StateUpdateBehavior GenerateE090UpdateItemsBehaviorAdditions { get { return _generateE090UpdateItemsBehaviorAdditions; } set { _generateE090UpdateItemsBehaviorAdditions = (value & ~(E090StateUpdateBehavior.UsePendingSPS)); } }
         private static E090StateUpdateBehavior _generateE090UpdateItemsBehaviorAdditions = E090StateUpdateBehavior.None;
@@ -123,12 +130,14 @@ namespace MosaicLib.Semi.E090
         /// <para/>If <paramref name="checkNoteSubstrateMovedAdditions"/> is true then this check includes the current value of the NoteSubstMovedUpdateBehaviorAdditions selected behavior
         /// <para/>If <paramref name="checkSetSubstProcStateAdditions"/> is true then this check includes the current value of the SetSubstProcStateUpdateBehaviorAdditions selected behavior
         /// <para/>If <paramref name="checkGenerateUpdateItemAdditions"/> is true then this check includes the current value of the GenerateE090UpdateItemsBehaviorAdditions selected behavior
+        /// <para/>If <paramref name="checkRemoveSubstUpdateBehaviorAdditions"/> is true then this check includes the current value of the RemoveSubstUpdateBehaviorAdditions selected behavior
         /// </summary>
-        public static bool GetUseExternalSync(bool checkNoteSubstrateMovedAdditions = false, bool checkSetSubstProcStateAdditions = true, bool checkGenerateUpdateItemAdditions = true)
+        public static bool GetUseExternalSync(bool checkNoteSubstrateMovedAdditions = false, bool checkSetSubstProcStateAdditions = true, bool checkGenerateUpdateItemAdditions = true, bool checkRemoveSubstUpdateBehaviorAdditions = true)
         {
             var bitUnion = (checkNoteSubstrateMovedAdditions ? _noteSubstMovedUpdateBehaviorAdditions : E090StateUpdateBehavior.None)
                            | (checkSetSubstProcStateAdditions ? _setSubstProcStateUpdateBehaviorAdditions : E090StateUpdateBehavior.None)
                            | (checkGenerateUpdateItemAdditions ? _generateE090UpdateItemsBehaviorAdditions : E090StateUpdateBehavior.None)
+                           | (checkRemoveSubstUpdateBehaviorAdditions ? _removeSubstUpdateBehaviorAdditions : E090StateUpdateBehavior.None)
                            ;
 
             return bitUnion.IsSet(E090StateUpdateBehavior.AddExternalSyncItem);
@@ -139,6 +148,7 @@ namespace MosaicLib.Semi.E090
             MaximumSPSListLength = DefaultMaximumSPSListLength;
             NoteSubstMovedUpdateBehaviorAdditions = E090StateUpdateBehavior.None;
             SetSubstProcStateUpdateBehaviorAdditions = E090StateUpdateBehavior.None;
+            RemoveSubstUpdateBehaviorAdditions = E090StateUpdateBehavior.None;
             GenerateE090UpdateItemsBehaviorAdditions = E090StateUpdateBehavior.None;
         }
     }
@@ -151,8 +161,9 @@ namespace MosaicLib.Semi.E090
     /// Flags that are used to control the behavior of the various E090 Update related ExtensionMethods provided here.
     /// <para/>None (0x00), AllowReturnToNeedsProcessing (0x02), AutoUpdateSTS (0x04), UsePendingSPS (0x08), UseSPSList (0x10), UseSPSLocList (0x20), UseSPSDateTimeList (0x40), 
     /// AddSPSMoved (0x100), AddSPSCreated (0x200), AddSPSRemoved (0x400),
-    /// AddExternalSyncItem (0x1000)
-    /// StandardSPSUpdate (0x06), BasicSPSLists (0x30)
+    /// AddExternalSyncItem (0x1000),
+    /// HandleMovedToDestLocWithSJRSStopAndSPSInProcess (0x10000), HandleMovedToDestLocWithSJRSAbortAndSPSInProcess (0x20000),
+    /// RemoveAttemptsToSetSPSToLost (0x100000), RemoveAttemptsToMoveLostSubstToDest (0x200000), RemoveAttemptsToMoveAllSubstToDestOrSrc (0x400000), RemovedSetsRemovedFromSubstLocNameAttribute (0x800000)
     /// </summary>
     [Flags]
     public enum E090StateUpdateBehavior : int
@@ -170,7 +181,10 @@ namespace MosaicLib.Semi.E090
         /// <summary>Include this flag to support adding automatic transitions for the STS based on the location and the SPS [0x04]</summary>
         AutoUpdateSTS = 0x04,
 
-        /// <summary>The use of this flag causes the E090 SPS related logic to primarily update the PendingSPS rather than the main SPS property.  This allows the E090 SPS system to be given a sequence of values and delays performing the final SPS complete transition until the user explicitly requests it or until the substrate reaches its destination (at which point it is safe to lock down the final SPS value). [0x08]</summary>
+        /// <summary>
+        /// The use of this flag causes the E090 SPS related logic to primarily update the PendingSPS rather than the main SPS property.  
+        /// This allows the E090 SPS system to be given a sequence of values and delays performing the final SPS complete transition until the user explicitly requests it or until the substrate reaches its destination (at which point it is safe to lock down the final SPS value). [0x08]
+        /// </summary>
         UsePendingSPS = 0x08,
 
         /// <summary>The use of this flag causes each E090 SPS state update operation to append the given non-Undefined SPS value to the SPSList attribute. [0x10]</summary>
@@ -209,6 +223,18 @@ namespace MosaicLib.Semi.E090
         /// <summary>When a substrate is moved to its destination location and its SPS is InProcess and its SJRS is Abort then its SPS will be set to Aborted. [0x10000]</summary>
         /// <remarks>Note that the use of this option allows such a substrate to reach its destination without additional work on the scheduler/SRM's behalf</remarks>
         HandleMovedToDestLocWithSJRSAbortAndSPSInProcess = 0x20000,
+
+        /// <summary>When a substrate is removed its SPS will be set to Lost if it has not already reached a complete state.  [0x100000]</summary>
+        RemoveAttemptsToSetSPSToLost = 0x100000,
+
+        /// <summary>When a substrate is removed in the Lost state it will be moved to its Destination location before being marked as removed (if needed).  This is done after appling the removal changes in relation to the RemoveAttemptsToSetSPSToLost flag.  [0x200000]</summary>
+        RemoveAttemptsToMoveLostSubstToDest = 0x200000,
+
+        /// <summary>When a substrate is removed it will be moved back to its Source or Destination location before being marked as removed.  This is done after appling the removal changes in relation to the RemoveAttemptsToSetSPSToLost flag.  [0x400000]</summary>
+        RemoveAttemptsToMoveAllSubstToDestOrSrc = 0x400000,
+
+        /// <summary>When a substrate is removed this option will cause its RemovedFromSubstLocName Attribute to be created/set to the location name of the location from which it is being removed.  [0x800000]</summary>
+        RemovedSetsRemovedFromSubstLocNameAttribute = 0x800000,
 
         /// <summary>(AllowReturnToNeedsProcessing | AutoUpdateSTS) [0x06]</summary>
         [Obsolete("Please switch to using other enumeration combination values (2018-05-30)")]
@@ -314,6 +340,13 @@ namespace MosaicLib.Semi.E090
             E039UpdateItem[] updateItemArray = new List<E039UpdateItem>().GenerateCreateE090SubstItems(substName, out addObjectUpdateItem, srcSubstLocObjID: srcSubstLocObjID, destSubstLocObjID: destSubstLocObjID, initialE090SubstrateObjState: initialE090SubstrateObjState, attributes: attributes, flags: flags, addSyncExternalItem: addSyncExternalItem).ToArray();
 
             return tableUpdater.Update(updateItemArray).Run();
+        }
+
+        public static string RemoveE090Subst(this IE039TableUpdater tableUpdater, E090SubstObserver substObs, E090StateUpdateBehavior updateBehavior = E090StateUpdateBehavior.None, bool addSyncExternalItem = false)
+        {
+            var ec = tableUpdater.RemoveE090Subst((E090SubstInfo) substObs, updateBehavior: updateBehavior, addSyncExternalItem: addSyncExternalItem);
+            substObs.UpdateInline();
+            return ec;
         }
 
         public static string RemoveE090Subst(this IE039TableUpdater tableUpdater, E090SubstInfo currentSubstInfo, E090StateUpdateBehavior updateBehavior = E090StateUpdateBehavior.None, bool addSyncExternalItem = false)
@@ -568,10 +601,45 @@ namespace MosaicLib.Semi.E090
 
         public static List<E039UpdateItem> GenerateRemoveE090SubstItems(this List<E039UpdateItem> updateItemList, E090SubstInfo currentSubstInfo, E090StateUpdateBehavior updateBehavior = E090StateUpdateBehavior.None, bool addSyncExternalItem = false)
         {
+            updateBehavior |= Settings.RemoveSubstUpdateBehaviorAdditions;
+
+            bool removeAttemptsToSetSPSToLost = updateBehavior.IsSet(E090StateUpdateBehavior.RemoveAttemptsToSetSPSToLost);
+            bool removeAttemptsToMoveAllSubstToDestOrSrc = updateBehavior.IsSet(E090StateUpdateBehavior.RemoveAttemptsToMoveAllSubstToDestOrSrc);
+            bool removeAttemptsToMoveLostSubstToDest = removeAttemptsToMoveAllSubstToDestOrSrc || updateBehavior.IsSet(E090StateUpdateBehavior.RemoveAttemptsToMoveLostSubstToDest);
+            if (removeAttemptsToMoveLostSubstToDest || removeAttemptsToMoveAllSubstToDestOrSrc)
+                updateBehavior |= Settings.NoteSubstMovedUpdateBehaviorAdditions;
+
+            if (!currentSubstInfo.SPS.IsProcessingComplete() && removeAttemptsToSetSPSToLost)
+            {
+                updateItemList.GenerateE090UpdateItems(currentSubstInfo: currentSubstInfo, spsParam: SubstProcState.Lost, updateBehavior: updateBehavior);
+                currentSubstInfo.SPS = SubstProcState.Lost;
+            }
+
+            if (currentSubstInfo.STS.IsAtWork() && (currentSubstInfo.SPS == SubstProcState.Lost ? removeAttemptsToMoveLostSubstToDest : removeAttemptsToMoveAllSubstToDestOrSrc))
+            {
+                bool currentSubstInfoIsNeedsProcessing = currentSubstInfo.SPS.IsNeedsProcessing();
+
+                var spsParam = updateBehavior.IsSet(E090StateUpdateBehavior.AddSPSMoved) ? SubstProcState.Moved : SubstProcState.Undefined;
+
+                if (currentSubstInfoIsNeedsProcessing && !currentSubstInfo.LinkToSrc.ToID.IsEmpty && currentSubstInfo.LocID != currentSubstInfo.LinkToSrc.ToID.Name)
+                {
+                    updateItemList.GenerateE090UpdateItems(currentSubstInfo: currentSubstInfo, spsParam: spsParam, toLocObjID: currentSubstInfo.LinkToSrc.ToID, updateBehavior: updateBehavior);
+                    currentSubstInfo.LocID = currentSubstInfo.LinkToSrc.ToID.Name;
+                }
+                else if (!currentSubstInfoIsNeedsProcessing && !currentSubstInfo.LinkToDest.ToID.IsEmpty && currentSubstInfo.LocID != currentSubstInfo.LinkToDest.ToID.Name)
+                {
+                    updateItemList.GenerateE090UpdateItems(currentSubstInfo: currentSubstInfo, spsParam: spsParam, toLocObjID: currentSubstInfo.LinkToDest.ToID, updateBehavior: updateBehavior);
+                    currentSubstInfo.LocID = currentSubstInfo.LinkToDest.ToID.Name;
+                }
+            }
+
             updateBehavior |= Settings.GenerateE090UpdateItemsBehaviorAdditions;
 
             if (updateBehavior.IsSet(E090StateUpdateBehavior.AddSPSRemoved))
                 updateItemList.GenerateE090UpdateItems(currentSubstInfo: currentSubstInfo, spsParam: SubstProcState.Removed, updateBehavior: updateBehavior);
+
+            if (updateBehavior.IsSet(E090StateUpdateBehavior.RemovedSetsRemovedFromSubstLocNameAttribute))
+                updateItemList.AddSetAttributesItem(objID: currentSubstInfo, attributes: new NamedValueSet() { { Constants.RemovedFromSubstLocNameAttributeName, currentSubstInfo.LocID } }, mergeBehavior: NamedValueMergeBehavior.AddAndUpdate);
 
             updateItemList.Add(new E039UpdateItem.RemoveObject(currentSubstInfo.ObjID));
 
@@ -642,6 +710,7 @@ namespace MosaicLib.Semi.E090
                         attribUpdateNVS = attribUpdateNVS ?? new NamedValueSet();
 
                         setSPS = SubstProcState.Stopped;
+                        spsParam = spsParam.MapUndefinedTo(setSPS);
                         addToSPSLists = true;
                     }
                     if (currentSubstInfo.SJRS == SubstrateJobRequestState.Abort && updateBehavior.IsSet(E090StateUpdateBehavior.HandleMovedToDestLocWithSJRSAbortAndSPSInProcess))
@@ -649,6 +718,7 @@ namespace MosaicLib.Semi.E090
                         attribUpdateNVS = attribUpdateNVS ?? new NamedValueSet();
 
                         setSPS = SubstProcState.Aborted;
+                        spsParam = spsParam.MapUndefinedTo(setSPS);
                         addToSPSLists = true;
                     }
                 }
@@ -903,6 +973,14 @@ namespace MosaicLib.Semi.E090
             }
 
             return startingSPS;
+        }
+
+        /// <summary>
+        /// If the given <paramref name="sps"/> is not SubstProcState.Undefined then its value is returned unchanged, otherwise the given <paramref name="mapToSPS"/> value is returned.
+        /// </summary>
+        public static SubstProcState MapUndefinedTo(this SubstProcState sps, SubstProcState mapToSPS)
+        {
+            return (sps != SubstProcState.Undefined) ? sps : mapToSPS;
         }
 
         /// <summary>
@@ -1314,6 +1392,12 @@ namespace MosaicLib.Semi.E090
         public E039ObjectID ObjID { get { return _objID ?? E039ObjectID.Empty; } set { _objID = value; } }
         private E039ObjectID _objID;
 
+        /// <summary>Returns the E039ObjectFlags from the associated Obj or E039ObjectFlags.None if there is no such object.</summary>
+        public E039ObjectFlags ObjFlags { get { return (Obj != null) ? Obj.Flags : E039ObjectFlags.None; } }
+
+        /// <summary>Returns true when the associated Obj's Flags have been marked with the E039ObjectFlags.IsFinal flag to indicate that this is the final publication for the object (after which it has been removed from the table)</summary>
+        public bool IsFinal { get { return ObjFlags.IsFinal(); } }
+
         /// <summary>From SubstState attribute</summary>
         public SubstState STS { get; set; }
 
@@ -1398,7 +1482,9 @@ namespace MosaicLib.Semi.E090
             /// <summary>Debugging and logging helper method.</summary>
             public override string ToString()
             {
-                return "sps:{0} loc:{1} {2}".CheckedFormat(SPS, Loc, DateTime.ToString("o"));
+                string dtStr = DateTime.IsZero() ? "" : " {0}".CheckedFormat(DateTime.ToString("o"));
+                
+                return "sps:{0} loc:{1}{2}".CheckedFormat(SPS, Loc, dtStr);
             }
 
             /// <summary>Returns true if this and the given <paramref name="other"/> have the same contents.</summary>
@@ -2087,7 +2173,7 @@ namespace MosaicLib.Semi.E090
     /// This is a target agnostic representation for what the substrate routing and processing engine indicates that it is doing and has done with a given substrate.
     /// Generally this state is intended to react to changes in the substrate's corresponding SubstrateJobRequestState value.  However once this state reaches a terminal
     /// value it will no longer change.
-    /// <para/>Initial (0), WaitingForStart (1), Running (2), Processed (3), Rejected (4), Skipped (5), Pausing (6), Paused (7), Stopping (8), Stopped (9), Aborting (10), Aborted (11), Lost (12), Returning (13), Returned (14), Held (15), RoutingAlarm(16)
+    /// <para/>Initial (0), WaitingForStart (1), Running (2), Processed (3), Rejected (4), Skipped (5), Pausing (6), Paused (7), Stopping (8), Stopped (9), Aborting (10), Aborted (11), Lost (12), Returning (13), Returned (14), Held (15), RoutingAlarm (16), Removed (17)
     /// </summary>
     [DataContract(Namespace = MosaicLib.Constants.E090NameSpace)]
     public enum SubstrateJobState : int
@@ -2159,27 +2245,30 @@ namespace MosaicLib.Semi.E090
         /// <summary>Indicates that the substrate routing engine has encountered an error with this substrate that requires manual intervention to confirm and/or guide what the next steps shall be. [16]</summary>
         [EnumMember]
         RoutingAlarm = 16,
+
+        /// <summary>Indicates that the substrate has been removed from the system in an unexpected location and/or state. [17]</summary>
+        [EnumMember]
+        Removed = 17,
     }
 
     public static partial class ExtensionMethods
     {
         /// <summary>
-        /// Returns true if the given SubstrateJobState <paramref name="sjs"/> is final (Processed, Rejected, Skipped, Stopped, or Aborted)
+        /// Returns true if the given SubstrateJobState <paramref name="sjs"/> is final (Processed, Rejected, Skipped, Stopped, Aborted, Lost, Returned (optional), Removed)
         /// </summary>
-        public static bool IsFinal(this SubstrateJobState sjs)
+        public static bool IsFinal(this SubstrateJobState sjs, bool includeReturned = false)
         {
             switch (sjs)
             {
-                case SubstrateJobState.Processed:
-                case SubstrateJobState.Rejected:
-                case SubstrateJobState.Skipped:
-                case SubstrateJobState.Stopped:
-                case SubstrateJobState.Aborted:
-                case SubstrateJobState.Lost:
-                case SubstrateJobState.Returned:
-                    return true;
-                default:
-                    return false;
+                case SubstrateJobState.Processed: return true;
+                case SubstrateJobState.Rejected: return true;
+                case SubstrateJobState.Skipped: return true;
+                case SubstrateJobState.Stopped: return true;
+                case SubstrateJobState.Aborted: return true;
+                case SubstrateJobState.Lost: return true;
+                case SubstrateJobState.Returned: return includeReturned;
+                case SubstrateJobState.Removed: return true;
+                default: return false;
             }
         }
     }

@@ -301,7 +301,7 @@ namespace MosaicLib.SerialIO.Modbus.Server
 
         /// <summary>Contructor</summary>
         public ModbusServerFunctionPortAdapter(string partID, SerialIO.PortConfig portConfig, IModbusFCServer fcServer, ADUType aduType, byte unitID, bool responseToAllUnits)
-            : base(partID, TimeSpan.FromSeconds(0.2))
+            : base(partID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion2.Build(waitTimeLimit: (0.2).FromSeconds()))
         {
             this.fcServer = fcServer;
 
@@ -331,16 +331,10 @@ namespace MosaicLib.SerialIO.Modbus.Server
 
             port.BaseStateNotifier.NotificationList.AddItem(threadWakeupNotifier);
 
-            AddExplicitDisposeAction(() => Fcns.DisposeOfObject(ref port));
-        }
+            AddMainThreadStartingAction(() => port.StartPart());
+            AddMainThreadStoppingAction(() => port.StopPart());
 
-        /// <summary>
-        /// Catch StopPart at this level and use it to also stop the port.
-        /// </summary>
-        protected override void PreStopPart()
-        {
-            port.StopPart();
-            base.PreStopPart();
+            AddExplicitDisposeAction(() => Fcns.DisposeOfObject(ref port));
         }
 
         #endregion
@@ -424,6 +418,8 @@ namespace MosaicLib.SerialIO.Modbus.Server
         /// </summary>
         protected override void PerformMainLoopService()
         {
+            ServiceBusyConditionChangeDetection();
+
             InnerServiceFCServerAndStateRelay();
 
             bool portIsConnected = portBaseStateObserver.Object.IsConnected;

@@ -130,7 +130,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         #region Construction and related fields/properties
 
         public IVIBridge(IVIBridgeConfig config)
-            : base(config.PartID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion1.Build(waitTimeLimit: TimeSpan.FromSeconds((config.MinSyncInterval != TimeSpan.Zero) ? 0.05 : 0.2), partBaseIVI: config.PartBaseIVI))
+            : base(config.PartID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion2.Build(waitTimeLimit: TimeSpan.FromSeconds((config.MinSyncInterval != TimeSpan.Zero) ? 0.05 : 0.2), partBaseIVI: config.PartBaseIVI, disableBusyBehavior: true))
         {
             BridgeConfig = new IVIBridgeConfig(config);
 

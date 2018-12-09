@@ -2293,7 +2293,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
         #region Construction (et. al.)
 
         public MDRFRecordingEngine(MDRFRecordingEngineConfig config)
-            : base(config.PartID, SimpleActivePartBaseSettings.DefaultVersion1.Build(waitTimeLimit: (0.01).FromSeconds(), automaticallyIncAndDecBusyCountAroundActionInvoke: false))
+            : base(config.PartID, SimpleActivePartBaseSettings.DefaultVersion2.Build(waitTimeLimit: (0.01).FromSeconds(), disableBusyBehavior: true))
         {
             Config = new MDRFRecordingEngineConfig(config);
 

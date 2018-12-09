@@ -55,6 +55,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting
         IClientFacet Sync(SyncFlags syncFlags = default(SyncFlags));
 
         INotificationObject<INamedValueSet> ServerInfoNVSPublisher { get; }
+
+        INamedValueSet ConfigNVS { get; }
     }
 
     [Flags]
@@ -87,7 +89,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
                 DefaultIVI = DefaultIVI,
                 ISetsInterconnection = ISetsInterconnection,
                 IPartsInterconnection = IPartsInterconnection,
-                PartIVI = PartIVI,
+                PartIVI = PartIVI ?? Interconnect.Values.Values.Instance,
             };
         }
     }
@@ -106,7 +108,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
                 PartID = PartID,
                 ConfigNVS = ConfigNVS.ConvertToReadOnly(mapNullToEmpty: true),
                 StreamToolsConfigArray = StreamToolsConfigArray.SafeToArray(mapNullToEmpty: true),
-                PartIVI = PartIVI,
+                PartIVI = PartIVI ?? Interconnect.Values.Values.Instance,
             };
         }
     }
@@ -114,7 +116,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
     public class RemotingServer : SimpleActivePartBase, IRemoting
     {
         public RemotingServer(RemotingServerConfig config)
-            : base(config.PartID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion2.Build(automaticallyIncAndDecBusyCountAroundActionInvoke: false, partBaseIVI: config.PartIVI))
+            : base(config.PartID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion2.Build(disableBusyBehavior: true, partBaseIVI: config.PartIVI))
         {
             Config = config.MakeCopyOfThis();
             traceLogger = new Logging.Logger(PartID + ".Trace", groupName: Logging.LookupDistributionGroupName, initialInstanceLogGate: Config.ConfigNVS["TraceLogger.InitialInstanceLogGate"].VC.GetValue(rethrow: false, defaultValue: Logging.LogGate.Debug));
@@ -127,7 +129,11 @@ namespace MosaicLib.Modular.Interconnect.Remoting
 
             _serverInfoNVSPublisher = new InterlockedNotificationRefObject<INamedValueSet>(Config.ServerInfoNVS);
 
-            EventAndPerformanceRecording = new EventAndPerformanceRecording(PartID, config.PartIVI);
+            EventAndPerformanceRecording = new EventAndPerformanceRecording(PartID, Config.PartIVI);
+
+            sessionCountIVA = Config.PartIVI.GetValueAccessor<int>("{0}.SessionCount".CheckedFormat(PartID)).Set(0);
+            sessionStatesIVA = Config.PartIVI.GetValueAccessor<INamedValueSet>("{0}.SessionStates".CheckedFormat(PartID)).Set(NamedValueSet.Empty);
+            ivaArray = new IValueAccessor[] { sessionCountIVA, sessionStatesIVA };
         }
 
         public readonly string MyUUID = Guid.NewGuid().ToString();
@@ -136,6 +142,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
         private InterlockedNotificationRefObject<INamedValueSet> _serverInfoNVSPublisher;
 
         private RemotingServerConfig Config { get; set; }
+        public INamedValueSet ConfigNVS { get { return Config.ConfigNVS; } }
 
         private IEventAndPerformanceRecording EventAndPerformanceRecording { get; set; }
 
@@ -144,6 +151,11 @@ namespace MosaicLib.Modular.Interconnect.Remoting
         private Transport.ITransportConnection transport;
         private Sessions.SessionManager sessionManager;
         private BufferPool bufferPool;
+
+        private IValueAccessor<int> sessionCountIVA;
+        private IValueAccessor<INamedValueSet> sessionStatesIVA;
+        private bool sessionsChanged = false;
+        private IValueAccessor[] ivaArray;
 
         private class ClientSessionTracker
         {
@@ -154,7 +166,10 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             /// <summary>Generally this is the same as the session.ClientInstanceNum</summary>
             public ulong instanceNum;
 
+            public string fullName;
+
             public Sessions.IMessageSessionFacet session;
+            public Sessions.SessionStateCode lastSessionStateCode;
 
             public IListWithCachedArray<MessageStreamToolTracker> messageStreamToolTrackerList = new IListWithCachedArray<MessageStreamToolTracker>();
 
@@ -181,9 +196,13 @@ namespace MosaicLib.Modular.Interconnect.Remoting
 
         private void AddClientSessionTracker(ClientSessionTracker cst)
         {
+            cst.fullName = "{0}:{1}:{2}".CheckedFormat(cst.clientName, cst.instanceNum, cst.uuid);
+
             clientSessionTrackerList.Add(cst);
             uuidToClientSessionTrackerDictionary[cst.uuid] = cst;
             clientNameToClientSessionTrackerDictionary[cst.clientName] = cst;
+
+            sessionsChanged = true;
         }
 
         private ClientSessionTracker[] RemoveAndReturnPerminentlyClosedSessions()
@@ -199,6 +218,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting
                     clientSessionTrackerList.RemoveAt(idx);
                     uuidToClientSessionTrackerDictionary.Remove(cst.uuid);
                     clientNameToClientSessionTrackerDictionary.Remove(cst.clientName);
+
+                    sessionsChanged = true;
                 }
                 else
                 {
@@ -235,6 +256,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting
 
             Fcns.DisposeOfObject(ref transport);
             Fcns.DisposeOfObject(ref sessionManager);
+
+            sessionsChanged = true;
         }
 
         protected override string PerformGoOnlineAction(bool andInitialize)
@@ -408,7 +431,17 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             foreach (var cst in clientSessionTrackerList.Array)
             {
                 var session = cst.session;
+
                 count += session.Service(qpcTimeStamp);
+
+                var sessionStateCode = session.State.StateCode;
+
+                if (cst.lastSessionStateCode != sessionStateCode)
+                {
+                    sessionsChanged = true;
+                    cst.lastSessionStateCode = sessionStateCode;
+                }
+
                 perminantelyClosedCount += session.State.IsPerminantlyClosed.MapToInt();
             }
 
@@ -432,6 +465,21 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             NoteWorkCount(count);
 
             EventAndPerformanceRecording.Service(qpcTimeStamp);
+
+            if (sessionsChanged)
+            {
+                sessionsChanged = false;
+
+                sessionCountIVA.Value = clientSessionTrackerList.Count;
+
+                var nvs = new NamedValueSet();
+                foreach (var cst in clientSessionTrackerList.Array)
+                    nvs.SetValue(cst.fullName, cst.lastSessionStateCode);
+
+                sessionStatesIVA.Value = nvs;
+
+                Config.PartIVI.Set(ivaArray);
+            }
         }
 
         private void HandleNewSession(QpcTimeStamp qpcTimeStamp, Sessions.IMessageSessionFacet session)
@@ -615,9 +663,10 @@ namespace MosaicLib.Modular.Interconnect.Remoting
     public class RemotingClient : SimpleActivePartBase, IRemoting
     {
         public RemotingClient(RemotingClientConfig config)
-            : base(config.PartID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion2.Build(automaticallyIncAndDecBusyCountAroundActionInvoke: false, partBaseIVI: config.PartIVI))
+            : base(config.PartID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion2.Build(disableBusyBehavior: true, partBaseIVI: config.PartIVI))
         {
             Config = config.MakeCopyOfThis();
+
             traceLogger = new Logging.Logger(PartID + ".Trace", groupName: Logging.LookupDistributionGroupName, initialInstanceLogGate: Config.ConfigNVS["TraceLogger.InitialInstanceLogGate"].VC.GetValue(rethrow: false, defaultValue: Logging.LogGate.Debug));
 
             if (Config.StreamToolsConfigArray.IsNullOrEmpty())
@@ -627,7 +676,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
 
             AddMainThreadStoppingAction(() => Release(releaseBufferPool: true, releaseMSTTs: true));
 
-            ActionLoggingReference.Config = ActionLoggingConfig.Debug_Debug_Trace_Trace;
+            ActionLoggingReference.Config = new ActionLoggingConfig(ActionLoggingConfig.Debug_Debug_Trace_Trace, actionLoggingStyleSelect: ActionLoggingStyleSelect.IncludeRunTimeOnCompletion);
 
             _serverInfoNVSPublisher = new InterlockedNotificationRefObject<INamedValueSet>();
             serverInfoNVSIVA = (config.PartIVI ?? Interconnect.Values.Values.Instance).GetValueAccessor("{0}.ServerInfoNVS".CheckedFormat(PartID));
@@ -649,6 +698,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
 
         private Logging.IBasicLogger traceLogger;
         private RemotingClientConfig Config { get; set; }
+        public INamedValueSet ConfigNVS { get { return Config.ConfigNVS; } }
 
         private BufferPool bufferPool;
         private Transport.ITransportConnection transport;
@@ -702,8 +752,16 @@ namespace MosaicLib.Modular.Interconnect.Remoting
                 SetBaseState(ConnState.Disconnected, CurrentMethodName);
         }
 
-        protected override string PerformGoOnlineAction(bool andInitialize)
+        protected override string PerformGoOnlineActionEx(IProviderFacet ipf, bool andInitialize, INamedValueSet npv)
         {
+            if (andInitialize && !npv.IsNullOrEmpty())
+            {
+                Log.Debug.Emit("{0}: Processing ConfigNVS updates from NamedParamValues:{1}", ipf.ToString(ToStringSelect.MesgAndDetail), npv.ToStringSML());
+
+                // update and save the ConfigNVS as read only.  Normally the npv null or empty.  This allows the GoOnline client to update information like the transport type and the transport configuration on each GoOnline call
+                Config.ConfigNVS = Config.ConfigNVS.MergeWith(npv, mergeBehavior: NamedValueMergeBehavior.AddAndUpdate).ConvertToReadOnly();
+            }
+
             TimeSpan maxSessionConnectWaitTime = Config.ConfigNVS["MaxSessionConnectWaitTime"].VC.GetValue(rethrow: false, defaultValue: (5.0).FromSeconds());
             TimeSpan maxSessionCloseWaitTime = Config.ConfigNVS["MaxSessionCloseWaitTime"].VC.GetValue(rethrow: false, defaultValue: (1.0).FromSeconds());
 

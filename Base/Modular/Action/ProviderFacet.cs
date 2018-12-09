@@ -34,6 +34,12 @@ namespace MosaicLib.Modular.Action
 	public interface IProviderFacet
 	{
         /// <summary>
+        /// This property gives the provider access to the IActionLogging instance that the action implementation object is using for its logging operations.  
+        /// This allows the provider to use the action's logging for provider generated messages when they should be configured to match the action's logging configuration.
+        /// </summary>
+        IActionLogging Logging { get; }
+
+        /// <summary>
         /// Gives provider access to a readonly NamedValueSet provided by the client and cloned by the action implementation when the action is started.
         /// If the client did not provide any NamedParamValues then this property will return a readonly empty set so that it may safely be used by the provider without additional null checking.
         /// </summary>

@@ -102,7 +102,7 @@ namespace MosaicLib.PartsLib.Common.E084
         #region Construction
 
         public E084ActiveTransferSimEngine(LPM.Sim.ILPMSimPart lpmSimPart)
-            : base(lpmSimPart.PartID + ".E84Sim", "E084ActiveTransferSimEngine")
+            : base(lpmSimPart.PartID + ".E84Sim", "E084ActiveTransferSimEngine", initialSettings: SimpleActivePartBaseSettings.DefaultVersion2.Build(disableBusyBehavior: true))
         {
             ActionLoggingConfig = Modular.Action.ActionLoggingConfig.Info_Error_Trace_Trace;    // redefine the log levels for actions 
 

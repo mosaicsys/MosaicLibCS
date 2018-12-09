@@ -199,6 +199,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
         EnableStoppingRules = 0x10,
         EnableAbortingRules = 0x20,
         EnableRunningRules = 0x40,
+        EnableAbortedAtWork = 0x80,
 
         All = (EnableInfoTriggeredRules | EnableWaitingForStartRules | EnableAutoStart | EnablePausingRules | EnableStoppingRules | EnableAbortingRules | EnableRunningRules),
     }
@@ -430,21 +431,25 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
                     else if (JobTrackerLinkage.IsDropRequested)
                         nextDropReasonRequest = "Substrate processing done and linked Job is requesting to be dropped [{0}]".CheckedFormat(JobTrackerLinkage.DropRequestReason);
                 }
-                else if (SubstObserver.Object == null)
-                    nextDropReasonRequest = "Substrate Object has been removed unexpectedly";
-                else if (SubstObserver.Object.IsEmpty)
-                    nextDropReasonRequest = "Substrate Object has been emptied unexpectedly";
-                else if (SubstObserver.Object.Flags.IsFinal())
+                else if (SubstObserver.Info.IsFinal)              // this is the normal substrate removed case
                 {
                     if (JobTrackerLinkage == null)
                         nextDropReasonRequest = "Substrate Object has been removed and no Job was linked to it";
                     else if (JobTrackerLinkage.IsDropRequested)
                         nextDropReasonRequest = "Substrate Object has been removed and linked Job is requesting to be dropped [{0}]".CheckedFormat(JobTrackerLinkage.DropRequestReason);
                 }
+                else if (SubstObserver.Object == null)      // this is not an expected case
+                {
+                    nextDropReasonRequest = "Substrate Object has been removed unexpectedly";
+                }
+                else if (SubstObserver.Object.IsEmpty)      // this is not an expected case
+                {
+                    nextDropReasonRequest = "Substrate Object has been emptied unexpectedly";
+                }
 
                 if (DropRequestReason != nextDropReasonRequest)
                 {
-                    DropRequestReason = nextDropReasonRequest;
+                    DropRequestReason = nextDropReasonRequest;      // setter logs changes in reason
 
                     didSomethingCount++;
                 }
@@ -483,7 +488,12 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
 
             if (enableInfoTriggeredRules)
             {
-                if (stInfo.SJRS == SubstrateJobRequestState.Return)
+                if (sps == SubstProcState.Lost)
+                {
+                    nextSJS = SubstrateJobState.Lost;
+                    reason = "Substrate has been marked Lost";
+                }
+                else if (stInfo.SJRS == SubstrateJobRequestState.Return)
                 {
                     if (stsIsAtSource || stsIsAtDestination || isAtSrcLoc || isAtDestLoc)
                         nextSJS = SubstrateJobState.Returned;
@@ -507,13 +517,23 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
                         case SubstProcState.Skipped: nextSJS = SubstrateJobState.Skipped; break;
                         case SubstProcState.Stopped: nextSJS = SubstrateJobState.Stopped; break;
                         case SubstProcState.Aborted: nextSJS = SubstrateJobState.Aborted; break;
-                        case SubstProcState.Lost: nextSJS = SubstrateJobState.Lost; break;
                         default: break;
                     }
                 }
+                else if (Info.IsFinal)
+                {
+                    nextSJS = SubstrateJobState.Removed;
+                    reason = "Substrate has been removed/deleted unexpectedly";
+                }
 
-                if (nextSJS != SubstrateJobState.Initial)
-                    reason = "Substrate reached final state processing/transport state";
+                if (nextSJS != SubstrateJobState.Initial && reason.IsNullOrEmpty())
+                    reason = "Substrate reached a final state processing/transport state";
+            }
+
+            if (nextSJS == SubstrateJobState.Initial && stsIsAtWork && sps == SubstProcState.Aborted && enableAbortingRules && flags.IsSet(ServiceBasicSJSStateChangeTriggerFlags.EnableAbortedAtWork))
+            {
+                nextSJS = E090.SubstrateJobState.Aborted;
+                reason = "Substrate reached Aborted state AtWork";
             }
 
             if (nextSJS == SubstrateJobState.Initial)
@@ -825,14 +845,15 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
     {
         public int total;
 
-        public int stsAtSource, stsAtWork, stsAtDestination, stsOther, stsLostAnywhere;
+        public int stsAtSource, stsAtWork, stsAtDestination, stsOther, stsLostAnywhere, stsRemovedAnywhere, stsLostOrRemovedAnywhere;
         
         public int spsNeedsProcessing;
         public int spsInProcess;
         public int spsProcessed, spsStopped, spsRejected, spsAborted, spsSkipped, spsLost;
         public int spsProcessStepCompleted, spsOther;
 
-        public int sjsWaitingForStart, sjsRunning, sjsProcessed, sjsRejected, sjsSkipped, sjsPausing, sjsPaused, sjsStopping, sjsStopped, sjsAborting, sjsAborted, sjsLost, sjsReturning, sjsReturned, sjsHeld, sjsRoutingAlarm, sjsOther;
+        public int sjsWaitingForStart, sjsRunning, sjsProcessed, sjsRejected, sjsSkipped, sjsPausing, sjsPaused, sjsStopping, sjsStopped, sjsAborting, sjsAborted, sjsLost, sjsReturning, sjsReturned, sjsHeld, sjsRoutingAlarm, sjsRemoved, sjsOther;
+        public int sjsAbortedAtDestination;
 
         public void Add(SubstrateTrackerBase st)
         {
@@ -843,9 +864,15 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
             var sts = info.STS;
             var inferredSPS = info.InferredSPS;
 
-            if (inferredSPS == SubstProcState.Lost)
+            if (info.SPS == SubstProcState.Lost)
             {
                 stsLostAnywhere++;
+                stsLostOrRemovedAnywhere++;
+            }
+            else if (info.IsFinal)
+            {
+                stsRemovedAnywhere++;
+                stsLostOrRemovedAnywhere++;
             }
             else
             {
@@ -883,18 +910,19 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
                 case SubstrateJobState.Paused: sjsPaused++; break;
                 case SubstrateJobState.Stopping: sjsStopping++; break;
                 case SubstrateJobState.Stopped: sjsStopped++; break;
-                case SubstrateJobState.Aborting: sjsAborting++; break;
+                case SubstrateJobState.Aborting: sjsAborting++; if (sts == SubstState.AtDestination) sjsAbortedAtDestination++; break;
                 case SubstrateJobState.Aborted: sjsAborted++; break;
                 case SubstrateJobState.Lost: sjsLost++; break;
                 case SubstrateJobState.Returning: sjsReturning++; break;
                 case SubstrateJobState.Returned: sjsReturned++; break;
                 case SubstrateJobState.Held: sjsHeld++; break;
                 case SubstrateJobState.RoutingAlarm: sjsRoutingAlarm++; break;
+                case SubstrateJobState.Removed: sjsRemoved++; break;
                 default: sjsOther++; break;
             }
         }
 
-        private static string CustomToString(INamedValueSet nvs)
+        private static string CustomToString(INamedValueSet nvs, string emptyString = "[Empty]")
         {
             StringBuilder sb = new StringBuilder();
 
@@ -911,24 +939,25 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
                 }
             }
 
-            return sb.ToString().MapNullOrEmptyTo("[Empty]");
+            return sb.ToString().MapNullOrEmptyTo(emptyString);
         }
 
-        public string SLSToString()
+        private NamedValueSet GetSTSNVS()
         {
-            return CustomToString(new NamedValueSet()
+            return new NamedValueSet()
             {
                 { "AtSource", stsAtSource },
                 { "AtWork", stsAtWork },
                 { "AtDestination", stsAtDestination },
                 { "Lost", stsLostAnywhere },
+                { "Removed", stsRemovedAnywhere },
                 { "Other", stsOther },
-            });
+            };
         }
 
-        public string SPSToString()
+        private NamedValueSet GetSPSNVS()
         {
-            return CustomToString(new NamedValueSet()
+            return new NamedValueSet()
             {
                 { "NeedsProcessing", spsNeedsProcessing },
                 { "InProcess", spsInProcess },
@@ -940,12 +969,12 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
                 { "Aborted", spsAborted },
                 { "Lost", spsLost },
                 { "Other", spsOther },
-            });
+            };
         }
 
-        public string SJSToString()
+        private NamedValueSet GetSJSNVS()
         {
-            return CustomToString(new NamedValueSet()
+            return new NamedValueSet()
             {
                 { "WaitingForStart", sjsWaitingForStart },
                 { "Running", sjsRunning },
@@ -963,13 +992,23 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
                 { "Returned", sjsReturned },
                 { "Held", sjsHeld },
                 { "RoutingAlarm", sjsRoutingAlarm },
+                { "Removed", sjsRemoved },
                 { "Other", sjsOther },
-            });
+            };
         }
+
+        [Obsolete("Please switch to the use of the STSToString method. (2018-12-08)")]
+        public string SLSToString() { return STSToString(); }
+
+        public string STSToString() { return CustomToString(GetSTSNVS()); }
+
+        public string SPSToString() { return CustomToString(GetSPSNVS()); }
+
+        public string SJSToString() { return CustomToString(GetSJSNVS()); }
 
         public override string ToString()
         {
-            return "{0} {1} {2}".CheckedFormat(SLSToString(), SPSToString(), SJSToString());
+            return "sts:[{0}] sps:[{1}] sjs:[{2}]".CheckedFormat(CustomToString(GetSTSNVS(), emptyString: "None"), CustomToString(GetSPSNVS(), emptyString: "None"), CustomToString(GetSJSNVS(), emptyString: "None"));
         }
     }
 
