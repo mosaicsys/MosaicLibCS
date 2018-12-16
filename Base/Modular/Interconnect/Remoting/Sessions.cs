@@ -448,14 +448,20 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
                 buffer = bufferParamsArray.SafeAccess(0);
             }
 
+            if (buffer == null)
+                return null;
+
             ITransportConnectionSessionFacet session = ProcessSessionLevelInboundBuffer(qpcTimeStamp, transportEndpoint, newConnectionHandleOutboundBuffersDelegate, buffer);
 
             bufferParamsArray = bufferParamsArray.Skip(1).ToArray();
 
+            if (bufferParamsArray.IsNullOrEmpty())
+                return session;
+
             if (session != null)
                 session.HandleInboundBuffers(qpcTimeStamp, transportEndpoint, bufferParamsArray);
-            else if (!bufferParamsArray.IsNullOrEmpty())
-                IssueEmitter.Emit("{0}: Ignoring additional buffers after first buffer did not produce a connection session [{1}, {2}]", Fcns.CurrentMethodName, buffer, string.Join(", ", bufferParamsArray.Select(b => b.ToString())));
+            else
+                IssueEmitter.Emit("{0}: Ignoring additional buffers after no session found for first non-Ack buffer [{1}, {2}]", Fcns.CurrentMethodName, buffer, string.Join(", ", bufferParamsArray.Select(b => b.ToString())));
 
             return session;
         }
@@ -1186,7 +1192,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
                     count++;
                 }
 
-                if (pendingKeepAliveBuffer == null && (pendingKeepAliveBufferSendTimeStamp.Age(qpcTimeStamp) >= Config.NominalKeepAliveSendInterval))
+                if (pendingKeepAliveBuffer == null && (pendingKeepAliveBufferSendTimeStamp.Age(qpcTimeStamp) >= Config.NominalKeepAliveSendInterval) && !Config.NominalKeepAliveSendInterval.IsZero())
                 {
                     TraceEmitter.Emit("Sending KeepAlive buffer");
 

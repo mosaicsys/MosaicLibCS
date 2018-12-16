@@ -2145,9 +2145,12 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
 
                 lock (LocalPort.Mutex)
                 {
-                    LocalPort.outboundBufferList.DoForEach(bdi => { if (bdi.forwardingDelayCount > 0) bdi.forwardingDelayCount--; });
+                    if (LocalPort.outboundBufferList.Count > 0)
+                    {
+                        LocalPort.outboundBufferList.DoForEach(bdi => { if (bdi.forwardingDelayCount > 0) bdi.forwardingDelayCount--; });
 
-                    txBDIList.AddRange(LocalPort.outboundBufferList.FilterAndRemove(bdi => (bdi.forwardingDelayCount == 0)));
+                        txBDIList.AddRange(LocalPort.outboundBufferList.FilterAndRemove(bdi => (bdi.forwardingDelayCount == 0)));
+                    }
                 }
 
                 while (txBDIList.Count > 0)
@@ -2269,6 +2272,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                     LocalPort.outboundBufferList.AddRange(sendBDIArray);
                 }
 
+                ServicePostedSends(qpcTimeStamp);
+
                 traceEmitter.Emit("Enqueued {0} buffers for later delivery in port {1}", sendBDIArray.Length, LocalPort);
             }
 
@@ -2284,9 +2289,12 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
 
                 lock (LocalPort.Mutex)
                 {
-                    LocalPort.inboundBuffersList.DoForEach(bdi => { if (bdi.forwardingDelayCount > 0) bdi.forwardingDelayCount--; });
+                    if (LocalPort.inboundBuffersList.Count > 0)
+                    {
+                        LocalPort.inboundBuffersList.DoForEach(bdi => { if (bdi.forwardingDelayCount > 0) bdi.forwardingDelayCount--; });
 
-                    rxBDIList.AddRange(LocalPort.inboundBuffersList.FilterAndRemove(bdi => (bdi.forwardingDelayCount == 0)));
+                        rxBDIList.AddRange(LocalPort.inboundBuffersList.FilterAndRemove(bdi => (bdi.forwardingDelayCount == 0)));
+                    }
                 }
 
                 while (rxBDIList.Count > 0)

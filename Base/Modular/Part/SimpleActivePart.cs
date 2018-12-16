@@ -128,7 +128,7 @@ namespace MosaicLib.Modular.Part
         /// <summary>When this behavior is enabled, the MainThreadFcn exception handler will change the UseState MainThreadFailed to indicate that the part's main thread has ended. [0x02]</summary>
         UseMainThreadFailedState = 0x02,
 
-        /// <summary>When this behavior is selected, the MainThreadFcn will set the UseState to Offline when the part is started.  [0x04]</summary>
+        /// <summary>When this behavior is selected, the MainThreadFcn will set the UseState to Offline when the part is started provided that the state is still in its Undefined or Initial state.  [0x04]</summary>
         MainThreadStartSetsStateToOffline = 0x04,
 
         /// <summary>When this behavior is selected, the MainThreadFcn will set the UseState to Stopped when the part is stopped if the UseState is in an IsOnlineOrAttemptOnline state.  [0x08]</summary>
@@ -1170,7 +1170,9 @@ namespace MosaicLib.Modular.Part
                 {
                     LogThreadInfo(Log.Debug);
 
-                    if (settings.CheckFlag(SimpleActivePartBehaviorOptions.MainThreadStartSetsStateToOffline))
+                    var entryBaseState = BaseState;
+
+                    if (settings.CheckFlag(SimpleActivePartBehaviorOptions.MainThreadStartSetsStateToOffline) && (entryBaseState.UseState == UseState.Initial || entryBaseState.UseState == UseState.Undefined))
                         SetBaseState(UseState.Offline, "Part has been started");
 
                     // The following is the part's main loop:

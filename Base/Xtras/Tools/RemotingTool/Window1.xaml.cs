@@ -283,12 +283,14 @@ namespace RemotingTool
 
             switch ((string)(b.Tag))
             {
-                case "GoOnline": remotingClient.CreateGoOnlineAction(andInitialize: false).Start(); break;
-                case "GoOnlineAndInitialize": remotingClient.CreateGoOnlineAction(andInitialize: true).Start(); break;
-                case "GoOffline": remotingClient.CreateGoOfflineAction().Start(); break;
+                //case "GoOnline": remotingClient.CreateGoOnlineAction(false).Start(); break;
+                //case "GoOnlineAndInitialize": remotingClient.CreateGoOnlineAction(true).Start(); break;
+                //case "GoOffline": remotingClient.CreateGoOfflineAction().Start(); break;
+                //case "Connect": remotingClient.CreateGoOnlineAction(true).Start(); break;
+                //case "Disconnect": remotingClient.CreateGoOfflineAction().Start(); break;
+                default: remotingClient.CreateServiceAction((string)(b.Tag)).Start(); break;
                 case "Ping": remotingClient.CreateServiceAction("Remote $RemotingServicePing$").Start(); break;
                 case "BigPing": remotingClient.CreateServiceAction("Remote $RemotingServicePing$", namedParamValues: new NamedValueSet() { { "b", new byte [100 * 1024] } }).Start(); break;
-                default: remotingClient.CreateServiceAction((string)(b.Tag)).Start(); break;
             }
         }
 

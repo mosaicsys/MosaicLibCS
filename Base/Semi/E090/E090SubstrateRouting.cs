@@ -266,7 +266,12 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
 
     /// <summary>
     /// Public interface to be supported by parts that can be used with TransferPermissionRequestItems above.  
-    /// This interface allows an SRM to determine what locations the SRM already has transfer permission for and allows it to acquire and release permissions on a per location name basis.</summary>
+    /// This interface allows an SRM to determine what locations the SRM already has transfer permission for and allows it to acquire and release permissions on a per location name basis.
+    /// </summary>
+    /// <remarks>
+    /// NOTE: this interface is being extended/refactored in 0.1.6.2 to support publication of a TransferPermissionSummaryStateCode value in addition to the GrantedTokenSet which is currently published here.
+    /// As such client provided parts that implement and/or use this interface will need to be similarly refactored when switching to the use of 0.1.6.2
+    /// </remarks>
     public interface ITransferPermissionRequest
     {
         /// <summary>Action factory method.  When run the resulting action will attempt to perform the given <paramref name="requestType"/> on the part for the given <paramref name="locName"/> (which defaults to the empty string)</summary>

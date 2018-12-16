@@ -663,7 +663,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
     public class RemotingClient : SimpleActivePartBase, IRemoting
     {
         public RemotingClient(RemotingClientConfig config)
-            : base(config.PartID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion2.Build(disableBusyBehavior: true, partBaseIVI: config.PartIVI))
+            : base(config.PartID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion2.Build(disableBusyBehavior: true, partBaseIVI: config.PartIVI, goOnlineAndOfflineHandling: GoOnlineAndGoOfflineHandling.None))
         {
             Config = config.MakeCopyOfThis();
 
@@ -752,8 +752,16 @@ namespace MosaicLib.Modular.Interconnect.Remoting
                 SetBaseState(ConnState.Disconnected, CurrentMethodName);
         }
 
+        /// <summary>
+        /// Note: we explicitly re-implement the base class UseState setting behavior here so that PerformServiceActionEx can be used to call this method and the pair will produce the expected UseState change results.
+        /// </summary>
         protected override string PerformGoOnlineActionEx(IProviderFacet ipf, bool andInitialize, INamedValueSet npv)
         {
+            string description = ipf.ToString(ToStringSelect.MesgAndDetail);
+            var entryBaseState = BaseState;
+
+            SetBaseState(UseState.AttemptOnline, "{0} Started".CheckedFormat(description), true);
+
             if (andInitialize && !npv.IsNullOrEmpty())
             {
                 Log.Debug.Emit("{0}: Processing ConfigNVS updates from NamedParamValues:{1}", ipf.ToString(ToStringSelect.MesgAndDetail), npv.ToStringSML());
@@ -779,6 +787,18 @@ namespace MosaicLib.Modular.Interconnect.Remoting
                 }
 
                 Release(setConnStateToDisconnectedIfNeeded: false);
+            }
+
+            if (ec.IsNullOrEmpty())
+            {
+                if (andInitialize || entryBaseState.UseState == UseState.Online || entryBaseState.UseState == UseState.OnlineBusy || !settings.CheckFlag(GoOnlineAndGoOfflineHandling.UseOnlineUninitializedState))
+                    SetBaseState(UseState.Online, "{0} Completed".CheckedFormat(description), true);
+                else
+                    SetBaseState(UseState.OnlineUninitialized, "{0} Completed (starting BaseState was {1})".CheckedFormat(description, entryBaseState.ToString(Part.BaseState.ToStringSelect.UseStateNoPrefix | Part.BaseState.ToStringSelect.ConnState)), true);
+            }
+            else
+            {
+                SetBaseState(UseState.AttemptOnlineFailed, "{0} failed: {1}".CheckedFormat(description, ec));
             }
 
             return ec;
@@ -859,6 +879,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting
 
         protected override string PerformGoOfflineAction()
         {
+            SetBaseState(UseState.Offline, "{0} Started".CheckedFormat(CurrentActionDescription), true);
+
             TimeSpan maxSessionCloseWaitTime = Config.ConfigNVS["MaxSessionCloseWaitTime"].VC.GetValue(rethrow: false, defaultValue: (1.0).FromSeconds());
 
             string ec = InnerPerformGoOfflineAction(CurrentActionDescription, maxSessionCloseWaitTime);
@@ -944,11 +966,11 @@ namespace MosaicLib.Modular.Interconnect.Remoting
                 {
                     case "GoToOnlineFailure":
                         Release();
-                        SetBaseState(UseState.OnlineFailure, "By explicit request [{0}]".CheckedFormat(serviceName)); 
+                        SetBaseState(UseState.OnlineFailure, "By explicit request [{0}]".CheckedFormat(serviceName));
                         return "";
 
-                    case "ManuallyTriggerAutoReconnectAttempt": 
-                        manuallyTriggerAutoReconnectAttempt = true;  
+                    case "ManuallyTriggerAutoReconnectAttempt":
+                        manuallyTriggerAutoReconnectAttempt = true;
 
                         if (BaseState.IsConnectedOrConnecting)
                             SetBaseState(ConnState.Disconnected, serviceName);
@@ -959,8 +981,19 @@ namespace MosaicLib.Modular.Interconnect.Remoting
                         return base.PerformServiceActionEx(ipf, serviceName, npv);      // we expect this to fail with the standard error message...
                 }
             }
-
-            return base.PerformServiceActionEx(ipf, serviceName, npv);
+            else
+            {
+                switch (serviceName)
+                {
+                    case "GoOnline": return PerformGoOnlineActionEx(ipf, false, npv);
+                    case "GoOnlineAndInitialize": return PerformGoOnlineActionEx(ipf, true, npv);
+                    case "GoOffline": return PerformGoOfflineAction();
+                    case "Connect": return PerformGoOnlineActionEx(ipf, true, npv);
+                    case "Disconnect": return PerformGoOfflineAction();
+                    default:
+                        return base.PerformServiceActionEx(ipf, serviceName, npv);
+                }
+            }
         }
 
         public IClientFacet Sync(SyncFlags syncFlags = default(SyncFlags)) 
