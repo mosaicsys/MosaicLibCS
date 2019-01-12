@@ -674,6 +674,8 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
             foreach (var locObserver in r1ArmALocObserver.ConcatItems(r1ArmBLocObserver).Concat(processLocObserverDictionary.ValueArray))
                 allLocObserverDictionary[locObserver.ID.Name] = locObserver;
+
+            normalMoveFromLocSet = new HashSet<string>(r1ArmALocObserver.ConcatItems(r1ArmBLocObserver).Concat(processLocObserverDictionary.ValueArray).Select(obs => obs.ID.Name));
         }
 
         TestECSParts ECSPart { get; set; }
@@ -694,7 +696,10 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
         IDictionaryWithCachedArrays<string, SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>> processLocObserverDictionary = new IDictionaryWithCachedArrays<string, SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>>();
         IDictionaryWithCachedArrays<string, SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>> allLocObserverDictionary = new IDictionaryWithCachedArrays<string, SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>>();
 
+        HashSet<string> normalMoveFromLocSet;
+
         IListWithCachedArray<TestSubstrateAndProcessTracker> trackersInProcessList = new IListWithCachedArray<TestSubstrateAndProcessTracker>();
+        IListWithCachedArray<TestSubstrateAndProcessTracker> movableSubstTrackerList = new IListWithCachedArray<TestSubstrateAndProcessTracker>();
 
         public void Add(TestSubstrateAndProcessTracker substTracker)
         {
@@ -740,8 +745,11 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             // make autostart more smart - look at first process requested location and wait until it is empty
             bool enableAutoStart = isFullyOnline && (substrateStateTally.stsAtSource > 0 && substrateStateTally.sjsWaitingForStart > 0);
 
-            if (enableAutoStart && deltaCount == 0 && substTrackerList.Array.Length > 0)
+            if (enableAutoStart && substrateStateTally.stsAtSource > 0 && substTrackerList.Array.Length > 0)
             {
+                // Note: the current coding here does not support lookahead lanching where future wafers may not actually be blocked by the processing that is planned for the wafers that are already in the tool.
+                // however for simplicity of the logic below this issue will not be immediately addressed in this version of this code.
+
                 var nextSTAtSource = substTrackerList.Array.FirstOrDefault(st => st.SubstObserver.Info.STS.IsAtSource());
 
                 if (nextSTAtSource != lastSTAtSource)
@@ -847,24 +855,38 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                 }
             }
 
+            // clear and update the list of moveable substrates (those that have an assigned SJRS, are not at their destination, do not have an CurrentStationProcessICF and would like to be at a different next location than they are currently at).
+            movableSubstTrackerList.Clear();
+
             if (srmAction == null && isPartiallyOnline)
             {
                 UpdateObservers();
 
+                var moveableSet = substTrackerList
+                                .Where(tracker => (tracker.Info.SJRS != SubstrateJobRequestState.None) && (tracker.Info.STS != SubstState.AtDestination))
+                                .Where(tracker =>
+                                {
+                                    var nextLocNameList = tracker.NextLocNameList;
+                                    return (!nextLocNameList.IsNullOrEmpty() && !nextLocNameList.Contains(tracker.Info.LocID));
+                                });
+
+                movableSubstTrackerList.AddRange(moveableSet);
+            }
+
+            if (srmAction == null && isPartiallyOnline)
+            {
                 int numEmptyArms = r1ArmALocObserver.IsUnoccupied.MapToInt() + r1ArmBLocObserver.IsUnoccupied.MapToInt();
 
-                foreach (var pt in r1ArmALocObserver.ConcatItems(r1ArmBLocObserver).Concat(processLocObserverDictionary.ValueArray).Where(plot => plot.IsOccupied))
+                foreach (var st in movableSubstTrackerList.Array)
                 {
-                    var st = pt.Tracker;
+                    if (!normalMoveFromLocSet.Contains(st.Info.LocID))
+                        continue;   // we cannot move this substrate from its current location in this condition trigger block.
 
-                    var currentLocName = st.Info.LocID;
-                    var stIsAlreadyOnArm = (currentLocName != ECSPart.SRM.R1ArmALocID.Name || currentLocName != ECSPart.SRM.R1ArmALocID.Name);
+                    var stInfo = st.Info;
+                    var currentLocName = stInfo.LocID;
+                    var stIsAlreadyOnArm = (currentLocName == ECSPart.SRM.R1ArmALocID.Name || currentLocName == ECSPart.SRM.R1ArmALocID.Name);
 
-                    var nextLocList = (st != null) ? st.NextLocNameList : new ReadOnlyIList<string>(pt.ContainsSubstInfo.LinkToSrc.ToID.Name);
-
-                    // skip over locations where there no next location or the next location is the location we are already in.  This also skips over locations where a process step has been requested for that location.
-                    if (nextLocList.IsNullOrEmpty() || nextLocList.Contains(pt.ID.Name))
-                        continue;
+                    var nextLocList = (st != null) ? st.NextLocNameList : new ReadOnlyIList<string>(stInfo.LinkToSrc.ToID.Name);
 
                     List<SubstrateRoutingItemBase> srmItemList = new List<SubstrateRoutingItemBase>();
 
@@ -882,18 +904,18 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                     switch (nextMoveToStation)
                     {
                         case TestStationEnum.AL1:
-                            if (numEmptyArms > 0)
+                            if ((numEmptyArms > 0 || stIsAlreadyOnArm))
                                 srmItemList.Add(new MoveSubstrateItem(st.SubstID, nextMoveToLocName));
                             break;
 
                         case TestStationEnum.PM1:
                         case TestStationEnum.PM2:
-                            if (numEmptyArms > 0 && isFullyOnline)
+                            if ((numEmptyArms > 0 || stIsAlreadyOnArm) && isFullyOnline)
                                 srmItemList.Add(new MoveSubstrateItem(st.SubstID, nextMoveToLocName));
                             break;
 
                         case TestStationEnum.PM3Input:
-                            if (numEmptyArms > 0 && isFullyOnline)
+                            if ((numEmptyArms > 0 || stIsAlreadyOnArm) && isFullyOnline)
                             {
                                 srmItemList.Add(new TransferPermissionRequestItem(TransferPermissionRequestItemSettings.Acquire, nextMoveToLocName));
                                 srmItemList.Add(new MoveSubstrateItem(st.SubstID, nextMoveToLocName));
@@ -904,7 +926,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                             break;
 
                         case TestStationEnum.PM4:
-                            if (numEmptyArms > 0 && isFullyOnline)
+                            if ((numEmptyArms > 0 || stIsAlreadyOnArm) && isFullyOnline)
                             {
                                 // block moving a substrate onto the arms or swapping it with the pm4 transfer location if that location already has a substrate and we have already asked that substrate to be processed there.
                                 var pm4TransferLocST = pm4TransferLocObserver.Tracker;
@@ -912,10 +934,10 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
                                 if (!stIsAlreadyOnArm && numEmptyArms >= 2 && !pm4TransferLocIsInProcess)
                                 {
-                                    // move the substrate to either arm ASAP
+                                    // move the substrate to either robot arm
                                     srmItemList.Add(new MoveSubstrateItem(st.SubstID, ECSPart.SRM.R1EitherArmName));
                                 }
-                                else if (numEmptyArms >= 2 && !pm4TransferLocIsInProcess)
+                                else if ((numEmptyArms >= 2 || (numEmptyArms >= 1 && stIsAlreadyOnArm)) && !pm4TransferLocIsInProcess)
                                 {
                                     srmItemList.Add(new TransferPermissionRequestItem(TransferPermissionRequestItemSettings.Acquire, nextMoveToLocName));
                                     srmItemList.Add(new MoveOrSwapSubstrateItem(st.SubstID, nextMoveToLocName));
@@ -927,7 +949,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                             break;
 
                         default:
-                            if (numEmptyArms > 0 && !nextMoveToLocName.IsNullOrEmpty())
+                            if ((numEmptyArms > 0 || stIsAlreadyOnArm) && !nextMoveToLocName.IsNullOrEmpty())
                                 srmItemList.Add(new MoveSubstrateItem(st.SubstID, nextMoveToLocName));
                             break;
                     }
@@ -941,20 +963,23 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                         break;
                     }
                 }
+            }
 
-                if (srmAction == null)
+            if (srmAction == null && isFullyOnline)
+            {
+                int numEmptyArms = r1ArmALocObserver.IsUnoccupied.MapToInt() + r1ArmBLocObserver.IsUnoccupied.MapToInt();
+
+                // Go through each of the substrates that are running at source to see if their first next location is available and either robot arm is empty.
+                // If any are found then move the first one to either available robot arm.
+                foreach (var availableToLaunch in movableSubstTrackerList.Array.Where(st => st.Info.STS.IsAtSource() && st.Info.SJS == SubstrateJobState.Running))
                 {
-                    var nextToLaunch = substTrackerList.Array.FirstOrDefault(st => st.Info.STS.IsAtSource() && st.Info.SJS == SubstrateJobState.Running);
+                    var firstUnoccupiedLocNameInNextLocList = FindFirstUnoccupiedLoc(availableToLaunch.NextLocNameList);
 
-                    if (nextToLaunch != null)
+                    if (!firstUnoccupiedLocNameInNextLocList.IsNullOrEmpty() && numEmptyArms > 0)
                     {
-                        var firstUnoccupiedLocNameInNextLocList = FindFirstUnoccupiedLoc(nextToLaunch.NextLocNameList);
-
-                        if (!firstUnoccupiedLocNameInNextLocList.IsNullOrEmpty())
-                        {
-                            srmAction = ECSPart.SRM.Sequence(new MoveSubstrateItem(nextToLaunch.SubstID, firstUnoccupiedLocNameInNextLocList)).StartInline();
-                            deltaCount++;
-                        }
+                        srmAction = ECSPart.SRM.Sequence(new MoveSubstrateItem(availableToLaunch.SubstID, ECSPart.SRM.R1EitherArmName)).StartInline();
+                        deltaCount++;
+                        break;
                     }
                 }
             }

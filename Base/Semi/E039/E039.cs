@@ -2935,6 +2935,21 @@ namespace MosaicLib.Semi.E039
             : this((other != null) ? other.ObjPublisher : null, (other != null) ? other.infoFactoryDelegate : null)
         { }
 
+        /// <summary>
+        /// Debugging and logging helper method
+        /// </summary>
+        public override string ToString()
+        {
+            string isUpdateNeededStr = IsUpdateNeeded ? " [UpdateIsNeeded]" : "";
+
+            if (objObserver == null)
+                return "Obs{0} [Null]".CheckedFormat(isUpdateNeededStr);
+            else if (Object == null)
+                return "Obs{0} [Empty]".CheckedFormat(isUpdateNeededStr);
+            else
+                return "Obs{0} {1}".CheckedFormat(isUpdateNeededStr, Info);
+        }
+
         /// <summary>For derived types that support implicit or explicit cast operators this property determines if that instance will automatically Update itself on use of any such cast operator (or not).  <para/>Defaults to true</summary>
         public bool AutoUpdateOnCast { get; set; }
 

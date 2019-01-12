@@ -878,6 +878,95 @@ namespace MosaicLib.Utils
 
         #endregion
 
+        #region Angle related (DegreesToRadians, RadiansToDegrees, Wrap, WrapDegrees, WrapRadians, WrapDifferentialDegrees, WrapDifferentialRadians)
+
+        /// <summary>
+        /// Returns the given <paramref name="angleInDegrees"/> converted to Radians
+        /// </summary>
+        public static double DegreesToRadians(this double angleInDegrees)
+        {
+            return angleInDegrees * Math.PI * oneOver180;
+        }
+
+        /// <summary>
+        /// Returns the given <paramref name="angleInRadians"/> converted to Degrees
+        /// </summary>
+        public static double RadiansToDegrees(this double angleInRadians)
+        {
+            return angleInRadians * 180.0 * oneOverPI;
+        }
+
+        /// <summary>
+        /// Generic angle wrap method - accepts an <paramref name="value"/>, and a <paramref name="modulo"/>.
+        /// <para/>Returns value - (Floor(value / modulo) * modulo)
+        /// </summary>
+        public static double Wrap(this double value, double modulo)
+        {
+            return value - Math.Floor(value * modulo.SafeOneOver()) * modulo;
+        }
+
+        /// <summary>
+        /// Generic angle wrap method - accepts an <paramref name="value"/>, an <paramref name="offset"/>, and a <paramref name="modulo"/>.
+        /// <para/>Returns ((angle + offset).Wrap(modulo) - offset;
+        /// </summary>
+        public static double Wrap(this double value, double offset, double modulo)
+        {
+            return (value + offset).Wrap(modulo) - offset;
+        }
+
+        /// <summary>
+        /// Returns the given <paramref name="angleInDegrees"/> angle in degrees to be in the range [0.0 .. 360.0)
+        /// <para/>0.0 inclusive, 360.0 exclusive
+        /// </summary>
+        public static double WrapDegrees(this double angleInDegrees)
+        {
+            return angleInDegrees.Wrap(0.0, 360.0);
+        }
+
+        /// <summary>
+        /// Returns the given <paramref name="differentialAngleInDegrees"/> differential angle in degrees to be in the range (-180.0 .. +180.0]
+        /// <para/>-180.0 exclusive, +180.0 inclusive
+        /// </summary>
+        public static double WrapDifferentialDegrees(this double differentialAngleInDegrees)
+        {
+            return -((-differentialAngleInDegrees).Wrap(180.0, 360.0));
+        }
+
+        /// <summary>
+        /// Returns the given <paramref name="angleInRadians"/> angle in radians to be in the range [0.0 .. 2 pi)
+        /// <para/>0.0 inclusive, 2 pi exclusive
+        /// </summary>
+        public static double WrapRadians(this double angleInRadians)
+        {
+            return angleInRadians.Wrap(0.0, twoPI);
+        }
+
+        /// <summary>
+        /// Returns the given <paramref name="differentialAngleInRadians"/> differential angle in radians to be in the range (-pi .. +pi]
+        /// <para/>-pi exclusive, pi inclusive
+        /// </summary>
+        public static double WrapDifferentialRadians(this double differentialAngleInRadians)
+        {
+            return -((-differentialAngleInRadians).Wrap(Math.PI, twoPI));
+        }
+
+        /// <summary>
+        /// constant value 2.0 * Math.PI
+        /// </summary>
+        private const double twoPI = 2.0 * Math.PI;
+
+        /// <summary>
+        /// constant value 1.0 / 180.0
+        /// </summary>
+        private const double oneOver180 = (1.0 / 180.0);
+
+        /// <summary>
+        /// constant value 1.0 / Math.PI
+        /// </summary>
+        private const double oneOverPI = (1.0 / Math.PI);
+
+        #endregion
+
         #region Enum extension methods (IsSet, IsAnySet, IsMatch, Set, Clear)
 
         /// <summary>

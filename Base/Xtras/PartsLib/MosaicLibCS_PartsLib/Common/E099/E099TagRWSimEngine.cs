@@ -419,7 +419,7 @@ namespace MosaicLib.PartsLib.Common.E099.Sim
 
         protected override void PerformMainLoopService()
         {
-            ServiceBusyConditionChangeDetection();
+            base.PerformMainLoopService();
 
             if (configAccessAdapter.IsUpdateNeeded)
             {

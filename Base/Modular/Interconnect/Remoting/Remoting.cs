@@ -39,14 +39,10 @@ using MosaicLib.Utils;
 using MosaicLib.Utils.Collections;
 using MosaicLib.Utils.Tools;
 
-// Todo: remove these comments once their purpose has been resolved.
-//!!!!! Please NOTE: There are significant functional changes planed for the internal design and operation of the Remoting infrastructure.
-// As such it is not currently recommended to make use of any capabilities beyond the top level publically available ones and these public interfaces
-// are currently more likely than not to change as part of this planed capability extension for future versions of the this library.
-
-// Please NOTE: All of the code portions in the following namespace (and the namespaces under it) are currently very early in their development cycle.  
-// They are passing basic unit tests but they have not been fully tested at this point.
-// In addition each related usage interface (API) is in a early stage and may be modified somewhat in subsequent preview releases.
+// Please NOTE: The code in this namespace has reached an initial level of stability and utility.  However, when using this code, please keep in mind
+// that there are some non-trivial functional changes planed for the internal design and operation of the Remoting infrastructure, primarily in relation
+// to extensions of the MessageStreamTool functionality and implementation.  In addition the basic IRemoting interface is expected to have occasional additions.
+// As such it is not currently recommended to attempt to subclass or generate other derived or modified versions of the classes presented here at this point.
 
 namespace MosaicLib.Modular.Interconnect.Remoting
 {
@@ -596,7 +592,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
                 }
                 else
                 {
-                    /// Todo: review if we should send an error message back for this case.
+                    /// future: review if we should send an error message back for this case.
                     Log.Debug.Emit("{0}: failed to create stream tool for client '{1}' stream {2}: {3}", CurrentMethodName, cst.clientName, failureCode);
                 }
             }
@@ -663,7 +659,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
     public class RemotingClient : SimpleActivePartBase, IRemoting
     {
         public RemotingClient(RemotingClientConfig config)
-            : base(config.PartID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion2.Build(disableBusyBehavior: true, partBaseIVI: config.PartIVI, goOnlineAndOfflineHandling: GoOnlineAndGoOfflineHandling.None))
+            : base(config.PartID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion2.Build(disableBusyBehavior: true, partBaseIVI: config.PartIVI, addGoOnlineAndOfflineHandling: GoOnlineAndGoOfflineHandling.SupportServiceActions | GoOnlineAndGoOfflineHandling.SupportMappedServiceActions))
         {
             Config = config.MakeCopyOfThis();
 
@@ -752,15 +748,10 @@ namespace MosaicLib.Modular.Interconnect.Remoting
                 SetBaseState(ConnState.Disconnected, CurrentMethodName);
         }
 
-        /// <summary>
-        /// Note: we explicitly re-implement the base class UseState setting behavior here so that PerformServiceActionEx can be used to call this method and the pair will produce the expected UseState change results.
-        /// </summary>
         protected override string PerformGoOnlineActionEx(IProviderFacet ipf, bool andInitialize, INamedValueSet npv)
         {
             string description = ipf.ToString(ToStringSelect.MesgAndDetail);
             var entryBaseState = BaseState;
-
-            SetBaseState(UseState.AttemptOnline, "{0} Started".CheckedFormat(description), true);
 
             if (andInitialize && !npv.IsNullOrEmpty())
             {
@@ -787,18 +778,6 @@ namespace MosaicLib.Modular.Interconnect.Remoting
                 }
 
                 Release(setConnStateToDisconnectedIfNeeded: false);
-            }
-
-            if (ec.IsNullOrEmpty())
-            {
-                if (andInitialize || entryBaseState.UseState == UseState.Online || entryBaseState.UseState == UseState.OnlineBusy || !settings.CheckFlag(GoOnlineAndGoOfflineHandling.UseOnlineUninitializedState))
-                    SetBaseState(UseState.Online, "{0} Completed".CheckedFormat(description), true);
-                else
-                    SetBaseState(UseState.OnlineUninitialized, "{0} Completed (starting BaseState was {1})".CheckedFormat(description, entryBaseState.ToString(Part.BaseState.ToStringSelect.UseStateNoPrefix | Part.BaseState.ToStringSelect.ConnState)), true);
-            }
-            else
-            {
-                SetBaseState(UseState.AttemptOnlineFailed, "{0} failed: {1}".CheckedFormat(description, ec));
             }
 
             return ec;
@@ -879,8 +858,6 @@ namespace MosaicLib.Modular.Interconnect.Remoting
 
         protected override string PerformGoOfflineAction()
         {
-            SetBaseState(UseState.Offline, "{0} Started".CheckedFormat(CurrentActionDescription), true);
-
             TimeSpan maxSessionCloseWaitTime = Config.ConfigNVS["MaxSessionCloseWaitTime"].VC.GetValue(rethrow: false, defaultValue: (1.0).FromSeconds());
 
             string ec = InnerPerformGoOfflineAction(CurrentActionDescription, maxSessionCloseWaitTime);
@@ -983,16 +960,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             }
             else
             {
-                switch (serviceName)
-                {
-                    case "GoOnline": return PerformGoOnlineActionEx(ipf, false, npv);
-                    case "GoOnlineAndInitialize": return PerformGoOnlineActionEx(ipf, true, npv);
-                    case "GoOffline": return PerformGoOfflineAction();
-                    case "Connect": return PerformGoOnlineActionEx(ipf, true, npv);
-                    case "Disconnect": return PerformGoOfflineAction();
-                    default:
-                        return base.PerformServiceActionEx(ipf, serviceName, npv);
-                }
+                return base.PerformServiceActionEx(ipf, serviceName, npv);
             }
         }
 

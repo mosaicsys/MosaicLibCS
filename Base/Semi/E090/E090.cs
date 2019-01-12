@@ -1082,6 +1082,19 @@ namespace MosaicLib.Semi.E090
                 base.Add((obj) => UpdateContainsObject(obj));
         }
 
+        /// <summary>
+        /// Debugging and logging helper method
+        /// </summary>
+        public override string ToString()
+        {
+            string baseStr = base.ToString();
+
+            if (!AlsoObserveContents || ContainsObject == null)
+                return baseStr;
+            else
+                return "{0} Contains:{1}".CheckedFormat(baseStr, ContainsSubstInfo);
+        }
+
         /// <summary>When true this option selects that the ContainsObject and ContainsSubstInfo properties shall be set based on the object identified by the location's "Contains" link's ToID</summary>
         public bool AlsoObserveContents { get; private set; }
 
@@ -1669,10 +1682,10 @@ namespace MosaicLib.Semi.E090
                 sb.CheckedAppendFormat(" Dest:{0}", LinkToDest.ToID.ToString(E039ToStringSelect.FullName));
 
             if (SJRS != SubstrateJobRequestState.None)
-                sb.CheckedAppendFormat(" JSRS:{0}", SJRS);
+                sb.CheckedAppendFormat(" SJRS:{0}", SJRS);
 
             if (SJS != SubstrateJobState.Initial)
-                sb.CheckedAppendFormat(" JSS:{0}", SJS);
+                sb.CheckedAppendFormat(" SJS:{0}", SJS);
 
             return sb.ToString();
         }

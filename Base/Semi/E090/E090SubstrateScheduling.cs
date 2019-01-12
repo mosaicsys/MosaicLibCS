@@ -400,6 +400,19 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
     /// </summary>
     public class SubstrateTrackerBase : ISubstrateTrackerBase
     {
+        /// <summary>
+        /// Debugging and logging helper method
+        /// </summary>
+        public override string ToString()
+        {
+            string dropReqStr = (IsDropRequested ? " DropReq:{0}".CheckedFormat(DropRequestReason) : "");
+
+            if (SubstObserver != null)
+                return "ST: {0}{1}".CheckedFormat(SubstObserver, dropReqStr);
+            else
+                return "ST: No substrate object found for given id '{0}'".CheckedFormat(SubstID.FullName);
+        }
+
         public virtual void Setup(IE039TableUpdater e039TableUpdater, E039ObjectID substID, Logging.IBasicLogger logger)
         {
             SubstID = substID.MapNullToEmpty();

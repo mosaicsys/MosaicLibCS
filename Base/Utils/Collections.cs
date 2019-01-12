@@ -1695,7 +1695,17 @@ namespace MosaicLib.Utils
         /// adding an actual list of tokens after the set contains more than the fixed base number.
         /// </summary>
         public interface ITokenSet<TItemType> : ICollection<TItemType>, IEquatable<ITokenSet<TItemType>>
-        { }
+        {
+            /// <summary>
+            /// Returns true if the set contains no tokens
+            /// </summary>
+            bool IsEmpty { get; }
+
+            /// <summary>
+            /// Returns true if the set contains at least one token
+            /// </summary>
+            bool IsNotEmpty { get; }
+        }
 
         /// <summary>
         /// A TokenSet{<typeparamref name="TItemType"/>} is a form of ICollection{<typeparamref name="TItemType"/>} that supports RW and RO rendering, along with a slighly optimized behavior for cloning and the Contains method.
@@ -1763,6 +1773,16 @@ namespace MosaicLib.Utils
                 if (asReadOnly)
                     IsReadOnly = true;
             }
+
+            /// <summary>
+            /// Returns true if the set contains no tokens
+            /// </summary>
+            public bool IsEmpty { get { return Count == 0; } }
+
+            /// <summary>
+            /// Returns true if the set contains at least one token
+            /// </summary>
+            public bool IsNotEmpty { get { return Count >= 1; } }
 
             /// <summary>Returns the count of the number of tokens in the set</summary>
             public int Count

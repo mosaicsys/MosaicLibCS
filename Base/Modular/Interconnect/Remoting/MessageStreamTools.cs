@@ -1239,7 +1239,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
                 }
                 catch (System.Exception ex)
                 {
-                    /// Todo: we may need to have some status indication for this case to allow screen display of message stream tool's "state" - alternatively just elevate this to a higher log level (timer constrained)
+                    /// future: we may need to have some status indication for this case to allow screen display of message stream tool's "state" - alternatively just elevate this to a higher log level (timer constrained)
                     bool useDebugLog = !errorHoldoffTimer.Started || errorHoldoffTimer.GetIsTriggered(qpcTimeStamp);
 
                     (useDebugLog ? logger.Debug : logger.Trace).Emit("{0} encountered unexpected exception: {1}", Fcns.CurrentMethodName, ex.ToString(ExceptionFormat.TypeAndMessageAndStackTrace));

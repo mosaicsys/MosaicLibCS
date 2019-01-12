@@ -418,7 +418,7 @@ namespace MosaicLib.SerialIO.Modbus.Server
         /// </summary>
         protected override void PerformMainLoopService()
         {
-            ServiceBusyConditionChangeDetection();
+            base.PerformMainLoopService();
 
             InnerServiceFCServerAndStateRelay();
 

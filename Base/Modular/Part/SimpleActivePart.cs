@@ -55,50 +55,63 @@ namespace MosaicLib.Modular.Part
 
     /// <summary>
     /// This enumeration defines the behaviors/handling that the SimpleActivePartBase class can now implement for base class level GoOnline and GoOffline actions.
-    /// <para/>None (0), BasePerformMethodsSucceed, GoOnlineUpdatesBaseUseState, GoOfflineUpdatesBaseUseState, All,
+    /// <para/>None (0x00), BasePerformMethodsSucceed (0x01), GoOnlineUpdatesBaseUseState (0x02), GoOfflineUpdatesBaseUseState (0x04), GoOnlineFailureSetsUseStateToAttemptOnlineFailed (0x08), 
+    /// AcceptCustomChangeFromAttemptOnlineState (0x10), UseOnlineUninitializedState(0x20), SupportServiceActions (0x100), SupportMappedServiceActions (0x200), 
+    /// All (BasePerformMethodsSucceed | GoOnlineUpdatesBaseUseState | GoOfflineUpdatesBaseUseState | GoOnlineFailureSetsUseStateToAttemptOnlineFailed)
     /// <para/>Note: The SimpleActivePartBase part expicitly initializes its GoOnlineAndGoOfflineHandling to GoOnlineAndGoOfflineHandling.All by default.
     /// </summary>
     [Flags]
     public enum GoOnlineAndGoOfflineHandling : int
     {    
         /// <summary>
-        /// Selects basic handling.  Base UseState is not automatically updated and base Peform methods return not implemented result code.
+        /// Selects basic handling.  Base UseState is not automatically updated and base Peform methods return not implemented result code. [0x00]
         /// </summary>
-        None = 0,
+        None = 0x00,
 
         /// <summary>
-        /// Selects that internal default implementation of PerformGoOnline and PerformGoOffline will succeed.
+        /// Selects that internal default implementation of PerformGoOnline and PerformGoOffline will succeed.  [0x01]
         /// </summary>
-        BasePerformMethodsSucceed = 1,
+        BasePerformMethodsSucceed = 0x01,
 
         /// <summary>
-        /// Selects that execution of the GoOnline action sets Base UseState to AttemptOnline before starting initialize and then to Online or AttempOnlineFailed based on success of the normal PerformGoOnline method.
+        /// Selects that execution of the GoOnline action sets Base UseState to AttemptOnline before starting initialize and then to Online or AttempOnlineFailed based on success of the normal PerformGoOnline method.  [0x02]
         /// </summary>
-        GoOnlineUpdatesBaseUseState = 2,
+        GoOnlineUpdatesBaseUseState = 0x02,
 
         /// <summary>
-        /// Selects that execution of the GoOffline action sets Base UseState to Offline before calling the normal PerformGoOffline method.
+        /// Selects that execution of the GoOffline action sets Base UseState to Offline before calling the normal PerformGoOffline method.  [0x04]
         /// </summary>
-        GoOfflineUpdatesBaseUseState = 4,
+        GoOfflineUpdatesBaseUseState = 0x04,
 
         /// <summary>
-        /// Selects that when GoOnline fails, the resulting UseState is set to AttemptOnlineFailed.  (Default behavior is to set the UseState to Online)
+        /// Selects that when GoOnline fails, the resulting UseState is set to AttemptOnlineFailed.  (Default behavior is to set the UseState to Online)  [0x08]
         /// </summary>
-        GoOnlineFailureSetsUseStateToAttemptOnlineFailed = 8,
+        GoOnlineFailureSetsUseStateToAttemptOnlineFailed = 0x08,
 
         /// <summary>
         /// This option may only be combined with GoOnlineUpdatesBaseUseState.  When selected, if the derived classes PerformGoOnlineAction method explicitly changes the Base UseState from the pre-entry assigned value of AttemptOnline
         /// the outer state handling code will leave the derived classes value unchanged.  When not enabled, the outer method will still override the custom value and replace it with the value as determined by the outer value.
+        /// [0x10]
         /// </summary>
-        AcceptCustomChangeFromAttemptOnlineState = 16,
+        AcceptCustomChangeFromAttemptOnlineState = 0x10,
 
         [Obsolete("Please switch to use the correctly spelled version (2018-12-05)")]
-        UseOnlineUnititializedState = 32,
+        UseOnlineUnititializedState = 0x20,
 
         /// <summary>
-        /// When this option is enabled, successful GoOnline(false) operations will set the UseState to OnlineUnintialized if the UseState was not Online when the operation was started.
+        /// When this option is enabled, successful GoOnline(false) operations will set the UseState to OnlineUnintialized if the UseState was not Online when the operation was started.  [0x20]
         /// </summary>
-        UseOnlineUninitializedState = 32,
+        UseOnlineUninitializedState = 0x20,
+
+        /// <summary>
+        /// When this option is selected then the PerformServiceActionEx method will attempt to recognize and implement "GoOnline", "GoOnlineAndInitialize" and "GoOffline" methods.
+        /// </summary>
+        SupportServiceActions = 0x100,
+
+        /// <summary>
+        /// When both this option and the SupportServiceActions options are selected then the PeformServiceActionEx method will attempt to recognize and implement "Connect" and "Disconnect" methods (as GoOnlineAndInitialize, and GoOffline)
+        /// </summary>
+        SupportMappedServiceActions = 0x200,
 
         /// <summary>
         /// Selects that execution of GoOnline and GoOffline actions using base class will succeed and will automatically update the BaseUseState.
@@ -453,7 +466,8 @@ namespace MosaicLib.Modular.Part
                                                          bool disablePartRegistration = false,
                                                          LoggingOptionSelect? loggingOptionSelect = null,
                                                          bool disableBusyBehavior = false,
-                                                         bool disablePartBaseIVIUse = false
+                                                         bool disablePartBaseIVIUse = false,
+                                                         GoOnlineAndGoOfflineHandling addGoOnlineAndOfflineHandling = default(GoOnlineAndGoOfflineHandling)
                                                          )
         {
             if (automaticallyIncAndDecBusyCountAroundActionInvoke != null)
@@ -464,6 +478,9 @@ namespace MosaicLib.Modular.Part
 
             if (goOnlineAndOfflineHandling != null)
                 settings.GoOnlineAndGoOfflineHandling = goOnlineAndOfflineHandling.Value;
+
+            if (addGoOnlineAndOfflineHandling != default(GoOnlineAndGoOfflineHandling))
+                settings.GoOnlineAndGoOfflineHandling |= addGoOnlineAndOfflineHandling;
 
             if (simpleActivePartBehaviorOptions != null)
                 settings.SimpleActivePartBehaviorOptions = simpleActivePartBehaviorOptions.Value;
@@ -997,10 +1014,17 @@ namespace MosaicLib.Modular.Part
         /// <summary>
         /// This is the outer method that the corresponding action delegate points to.
         /// </summary>
-        private string OuterPerformGoOnlineAction(IProviderActionBase<bool, NullObj> action)
+        private string OuterPerformGoOnlineAction(IProviderActionBase<bool, NullObj> ipf)
         {
-            string description = action.ToString(ToStringSelect.MesgAndDetail);
-            bool andInitialize = action.ParamValue;
+            return OuterPerformGoOnlineAction(ipf, ipf.ParamValue, ipf.NamedParamValues);
+        }
+
+        /// <summary>
+        /// This is the outer method that the corresponding action delegate points to (indirectly)
+        /// </summary>
+        protected string OuterPerformGoOnlineAction(IProviderFacet ipf, bool andInitialize, INamedValueSet npv)
+        {
+            string description = ipf.ToString(ToStringSelect.MesgAndDetail);
             bool setBaseUseState = settings.CheckFlag(GoOnlineAndGoOfflineHandling.GoOnlineUpdatesBaseUseState);
 
             IBaseState entryBaseState = BaseState;
@@ -1014,7 +1038,10 @@ namespace MosaicLib.Modular.Part
 
             try
             {
-                result = PerformGoOnlineAction(action);
+                if (ipf is IProviderActionBase<bool, NullObj>)
+                    result = PerformGoOnlineAction((IProviderActionBase<bool, NullObj>)ipf);
+                else
+                    result = PerformGoOnlineActionEx(ipf, andInitialize, npv);
             }
             catch (System.Exception ex)
             {
@@ -1040,7 +1067,7 @@ namespace MosaicLib.Modular.Part
                 {
                     Log.Trace.Emit("{0}: PerformGoOnlineAction explicitly changed the UseState to '{1}' [will not overwrite here]", description, BaseState.UseState);
                 }
-                else if (result == string.Empty || action.ActionState.Succeeded)
+                else if (result == string.Empty || ipf.ActionState.Succeeded)
                 {
                     if (andInitialize || entryBaseState.UseState == UseState.Online || entryBaseState.UseState == UseState.OnlineBusy || !settings.CheckFlag(GoOnlineAndGoOfflineHandling.UseOnlineUninitializedState))
                         SetBaseState(UseState.Online, "{0} Completed".CheckedFormat(description), true);
@@ -1053,8 +1080,8 @@ namespace MosaicLib.Modular.Part
 
                     if (result != null)
                         SetBaseState(nextUseState, "{0} Failed: {1}".CheckedFormat(description, result), true);
-                    else if (action.ActionState.Failed)
-                        SetBaseState(nextUseState, "{0} Failed: {1}".CheckedFormat(description, action.ActionState.ResultCode), true);
+                    else if (ipf.ActionState.Failed)
+                        SetBaseState(nextUseState, "{0} Failed: {1}".CheckedFormat(description, ipf.ActionState.ResultCode), true);
                 }
             }
 
@@ -1093,14 +1120,17 @@ namespace MosaicLib.Modular.Part
             }
 		}
 
-        private string OuterPerformGoOfflineAction(IProviderActionBase<NullObj, NullObj> action)
+        /// <summary>
+        /// Outer method used to implemen the GoOffline action behavior.  
+        /// </summary>
+        protected string OuterPerformGoOfflineAction(IProviderActionBase ipf)
         {
-            string description = action.ToString(ToStringSelect.MesgAndDetail);
+            string description = ipf.ToString(ToStringSelect.MesgAndDetail);
 
             if (settings.CheckFlag(GoOnlineAndGoOfflineHandling.GoOfflineUpdatesBaseUseState))
                 SetBaseState(UseState.Offline, "{0} Started".CheckedFormat(description), true);
 
-            string result = PerformGoOfflineAction(action);
+            string result = PerformGoOfflineAction(ipf);
 
             return result;
         }
@@ -1142,14 +1172,44 @@ namespace MosaicLib.Modular.Part
             if (ipf == null)
                 return "SimpleActivePartBase::PerformServiceAction: given empty action pointer";
 
+            if (settings.CheckFlag(GoOnlineAndGoOfflineHandling.SupportServiceActions))
+            {
+                string mappedServiceName = serviceName;
+
+                if (settings.CheckFlag(GoOnlineAndGoOfflineHandling.SupportMappedServiceActions))
+                {
+                    switch (serviceName)
+                    {
+                        case "Connect": mappedServiceName = "GoOnlineAndInitialize"; break;
+                        case "Disconnect": mappedServiceName = "GoOffline"; break;
+                        default: break;
+                    }
+                }
+
+                switch (mappedServiceName)
+                {
+                    case "GoOnline": return OuterPerformGoOnlineAction(ipf, false, npv);
+                    case "GoOnlineAndInitialize": return OuterPerformGoOnlineAction(ipf, true, npv);
+                    case "GoOffline":
+                        {
+                            IProviderActionBase ipab = ipf as IProviderActionBase;
+                            if (ipab != null)
+                                return OuterPerformGoOfflineAction(ipab);
+                            else
+                                return "Cannot process {0} request: The given action is not castable to the required IProviderActionBase type.".CheckedFormat(serviceName);
+                        }
+                    default: break;
+                }
+            }
+
             return PerformServiceAction(serviceName);
         }
 
-        /// <summary>Stub method provides overridable virtual default ServiceAction.  Always fails.</summary>
-		/// <returns>"Action:Service(serviceName): there is no implementation for this requested service action."</returns>
+        /// <summary>Stub method provides overridable virtual default ServiceAction.  This method always fails (returns an error message).</summary>
+		/// <returns>"There is no implementation for this requested service action [serviceName]</returns>
 		protected virtual string PerformServiceAction(string serviceName)
 		{
-			return "Action:Service({0}): there is no implementation for this requested service action.".CheckedFormat(serviceName);
+			return "There is no implementation for this requested service action [{0}]".CheckedFormat(serviceName);
 		}
 
 		#endregion

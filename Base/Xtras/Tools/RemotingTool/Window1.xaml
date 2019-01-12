@@ -43,8 +43,8 @@
                         <!--<Label Content="Rate" Height="24" HorizontalAlignment="Left" Margin="7,95,0,0" VerticalAlignment="Top" Width="34" />-->
                         <!--<TextBox Height="23" HorizontalAlignment="Left" IsReadOnly="False" Margin="46,96,0,0" Text="{Binding Path=[AvgCmdRateInHz].ValueAsDouble, Mode=OneWay, StringFormat=f2, FallbackValue=[empty]}" IsUndoEnabled="False" VerticalAlignment="Top" Width="65" />-->
                         <StackPanel Orientation="Horizontal" Margin="13,146,9.778,0" Height="31" VerticalAlignment="Top" >
-                            <Button Click="RCButton_Clicked" Content="Connect" Tag="GoOnlineAndInitialize" Height="23" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3" />
-                            <Button Click="RCButton_Clicked" Content="Disconnect" Tag="GoOffline" Height="23" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3" />
+                            <Button Click="RCButton_Clicked" Content="Connect" Tag="Connect" Height="23" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3" />
+                            <Button Click="RCButton_Clicked" Content="Disconnect" Tag="Disconnect" Height="23" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3" />
                             <Button Click="RCButton_Clicked" Content="Remote Ping" Tag="Ping" Height="23" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3" />
                             <Button Click="RCButton_Clicked" Content="Remote Big Ping" Tag="BigPing" Height="23" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="3" />
                         </StackPanel>
