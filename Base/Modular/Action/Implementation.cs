@@ -467,6 +467,16 @@ namespace MosaicLib.Modular.Action
         /// </summary>
         public bool Equals(IActionState other)
         {
+            return this.Equals(other, compareTimestamps: true);
+        }
+
+        /// <summary>
+        /// IEquatable{IActionState} Equals implementation.  
+        /// Returns true of the contents of this IActionState are "equal" to the contents of the other IActionState.
+        /// Checks StateCode, ResultCode, TimeStamp (optionally) and NamedValues for equality
+        /// </summary>
+        public bool Equals(IActionState other, bool compareTimestamps)
+        {
             if (Object.ReferenceEquals(this, other))
                 return true;
 
@@ -475,7 +485,7 @@ namespace MosaicLib.Modular.Action
 
             return (StateCode == other.StateCode
                     && ResultCode == other.ResultCode
-                    && TimeStamp == other.TimeStamp
+                    && (TimeStamp == other.TimeStamp || !compareTimestamps)
                     && NamedValues.IsEqualTo(other.NamedValues)
                     );
         }

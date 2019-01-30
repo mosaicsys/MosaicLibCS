@@ -1,6 +1,6 @@
 //-------------------------------------------------------------------
 /*! @file Interconnect/Values.cs
- *  @brief Defines a set of classes that are used to supported interconnecting value adapters.
+ *  @brief Defines a set of classes that are used to supported interconnecting value accessors.
  * 
  * Copyright (c) Mosaic Systems Inc.
  * Copyright (c) 2015 Mosaic Systems Inc.
@@ -120,7 +120,7 @@ namespace MosaicLib.Modular.Interconnect.Values
 
         /// <summary>
         /// This method is used to Set the table entry values for an array of IValueAccessor instances.  
-        /// This arrayed set operation is performed atomically across all of the table entries referred to by the non-null adapters in the array.
+        /// This arrayed set operation is performed atomically across all of the table entries referred to by the non-null accessors in the array.
         /// The optimize flag indicates if the caller would like all accessors to be set or just those that have their IsSetPending flag set.
         /// <para/>This method is specifically intended for use by ValueSetAdapter instances.
         /// </summary>
@@ -131,7 +131,7 @@ namespace MosaicLib.Modular.Interconnect.Values
 
         /// <summary>
         /// This method is used to Set the table entry values for a portion of an array of IValueAccessor instances.  
-        /// This arrayed set operation is performed atomically across all of the table entries referred to by the non-null adapters in the array.
+        /// This arrayed set operation is performed atomically across all of the table entries referred to by the non-null accessors in the array.
         /// The optimize flag indicates if the caller would like all accessors to be set or just those that have their IsSetPending flag set.
         /// <para/>This method is specifically intended for use by ValueSetAdapter instances.
         /// </summary>
@@ -142,7 +142,7 @@ namespace MosaicLib.Modular.Interconnect.Values
 
         /// <summary>
         /// This method is used to Set the table entry values for a portion of an array of IValueAccessor instances.  
-        /// This arrayed set operation is performed atomically across all of the table entries referred to by the non-null adapters in the array.
+        /// This arrayed set operation is performed atomically across all of the table entries referred to by the non-null accessors in the array.
         /// The optimize flag indicates if the caller would like all accessors to be set or just those that have their IsSetPending flag set.
         /// <para/>This method is specifically intended for use by ValueSetAdapter instances.
         /// </summary>
@@ -153,7 +153,7 @@ namespace MosaicLib.Modular.Interconnect.Values
 
         /// <summary>
         /// This method is used to Update a set/array of IValueAccessor instances from the corresponding set of interconnection table entry values.  
-        /// This arrayed update operation is performed atomically across the table entries referred to by the non-null adapters in the array up to the given maximum item index to update.
+        /// This arrayed update operation is performed atomically across the table entries referred to by the non-null accessors in the array up to the given maximum item index to update.
         /// <para/>This method is specifically intended for use by Custom update scanner instances.
         /// </summary>
         /// <param name="accessorArray">Gives an array of items.  Only non-null items will be Updated.</param>
@@ -656,9 +656,9 @@ namespace MosaicLib.Modular.Interconnect.Values
 
             ValueTableEntry tableEntry = InnerGetValueTableEntry(name, metaDataIn, mergeBehavior);
 
-            IValueAccessor adapter = new ValueAccessorImpl(this, tableEntry, update: true);
+            IValueAccessor accessor = new ValueAccessorImpl(this, tableEntry, update: true);
 
-            return adapter;
+            return accessor;
         }
 
         /// <summary>
@@ -672,9 +672,9 @@ namespace MosaicLib.Modular.Interconnect.Values
 
             ValueTableEntry tableEntry = InnerGetValueTableEntry(name, metaDataIn, mergeBehavior);
 
-            IValueAccessor<TValueType> adapter = new ValueAccessorImpl<TValueType>(this, tableEntry, update: true);
+            IValueAccessor<TValueType> accessor = new ValueAccessorImpl<TValueType>(this, tableEntry, update: true);
 
-            return adapter;
+            return accessor;
         }
 
         /// <summary>Returns an array of the names of all of the values in this interconnection table instance.</summary>
@@ -809,7 +809,7 @@ namespace MosaicLib.Modular.Interconnect.Values
 
         /// <summary>
         /// This method is used to Set the table entry values for an array of IValueAccessor instances.  
-        /// This arrayed set operation is performed atomically across all of the table entries referred to by the non-null adapters in the array.
+        /// This arrayed set operation is performed atomically across all of the table entries referred to by the non-null accessors in the array.
         /// The optimize flag indicates if the caller would like all accessors to be set or just those that have their IsSetPending flag set.
         /// <para/>This method is specifically intended for use by ValueSetAdapter instances.
         /// </summary>
@@ -823,7 +823,7 @@ namespace MosaicLib.Modular.Interconnect.Values
 
         /// <summary>
         /// This method is used to Set the table entry values for a portion of an array of IValueAccessor instances.  
-        /// This arrayed set operation is performed atomically across all of the table entries referred to by the non-null adapters in the array.
+        /// This arrayed set operation is performed atomically across all of the table entries referred to by the non-null accessors in the array.
         /// The optimize flag indicates if the caller would like all accessors to be set or just those that have their IsSetPending flag set.
         /// <para/>This method is specifically intended for use by ValueSetAdapter instances.
         /// </summary>
@@ -837,7 +837,7 @@ namespace MosaicLib.Modular.Interconnect.Values
 
         /// <summary>
         /// This method is used to Set the table entry values for a portion of an array of IValueAccessor instances.  
-        /// This arrayed set operation is performed atomically across all of the table entries referred to by the non-null adapters in the array.
+        /// This arrayed set operation is performed atomically across all of the table entries referred to by the non-null accessors in the array.
         /// The optimize flag indicates if the caller would like all accessors to be set or just those that have their IsSetPending flag set.
         /// <para/>This method is specifically intended for use by ValueSetAdapter instances.
         /// </summary>
@@ -954,7 +954,7 @@ namespace MosaicLib.Modular.Interconnect.Values
 
         /// <summary>
         /// This method is used to Update a set/array of IValueAccessor instances from the corresponding set of interconnection table entry values.  
-        /// This arrayed update operation is performed atomically across the table entries referred to by the non-null adapters in the array up to the given maximum item index to update.
+        /// This arrayed update operation is performed atomically across the table entries referred to by the non-null accessors in the array up to the given maximum item index to update.
         /// <para/>This method is specifically intended for use by Custom update scanner instances.
         /// </summary>
         /// <param name="accessorArray">Gives an array of items.  Only non-null items will be Updated.</param>

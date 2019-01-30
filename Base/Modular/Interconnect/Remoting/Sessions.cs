@@ -1473,7 +1473,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
                         // collect and trigger resend on all of the related buffers in the outgoingBuffersList
                         Buffers.Buffer[] addToSendNowSetArray = deliveryPendingList.Where(buffer => (buffer.SeqNum > lastRecvdValidAckBufferSeqNum) && (buffer.State == BufferState.Sent) && (buffer.TimeStamp < normalResendThreshold)).ToArray();
 
-                        TraceEmitter.Emit("Triggering normal resend (time) for: {0} [of {1}]", String.Join(",", addToSendNowSetArray.Select(buffer => buffer.BufferName)), outOfOrderPossibleMissingBufferArray.Length);
+                        TraceEmitter.Emit("Triggering normal resend (time) for: {0} [of {1}]", String.Join(",", addToSendNowSetArray.Select(buffer => buffer.BufferName)), outOfOrderPossibleMissingBufferArray.SafeLength());
 
                         foreach (var resendBuffer in addToSendNowSetArray)
                             sendNowList.Add(resendBuffer.SetState(qpcTimeStamp, BufferState.ReadyToResend, "Resend: after normal time delay").Update(ackSeqNum: bufferAckSeqNumToSend, orInFlags: BufferHeaderFlags.BufferIsBeingResent));
@@ -1827,7 +1827,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
                         TraceEmitter.Emit("Received out of order buffer {0}", buffer);
 
                         // out of order buffers that have sequence numbers will be saved for later processing or discard based on later reception of in order buffers.  This logic now includes processing of management buffers with sequence numbrers.
-                        heldOutOfOrderBuffersList.Add(bufferSeqNum, buffer);
+                        heldOutOfOrderBuffersList[bufferSeqNum] = buffer;
 
                         EventAndPerformanceRecording.RecordEvent(RecordEventType.BufferReceivedOutOfOrder);
                     }

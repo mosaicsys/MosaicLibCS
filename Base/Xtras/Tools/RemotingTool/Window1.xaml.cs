@@ -75,7 +75,7 @@ namespace RemotingTool
         {
             public ConfigValues()
             {
-                ConnectionType = "UDPv4";
+                ConnectionType = "TCPv4";
                 Port = "9000";
                 IPAddress = "127.0.0.1";
                 TraceSelect = null;
@@ -189,12 +189,6 @@ namespace RemotingTool
 
             DataContext = WVIA;
 
-            //Logger.Info.EmitWith("Test message", new NamedValueSet() { { "key", "value" }, { "keyword" } }, Enumerable.Range(0, 256).Select(i => unchecked((byte)i)).ToArray());
-
-            //Values.Instance.GetValueAccessor("Test").Set("This is a test");
-            //Values.Instance.GetValueAccessor("Test2");
-            //Values.Instance.GetValueAccessor("Normal").Set("This is not a test");
-
             E039ObjectSetTracker = SetTracker.GetSetTracker("E039ObjectSet");
             var test = e039ListView;
         }
@@ -283,6 +277,8 @@ namespace RemotingTool
 
             switch ((string)(b.Tag))
             {
+                // NOTE: these cases are now handled directly in the RemotingClient via its use of the SupportServiceActions and SupportMappedServiceActions behavior flags.
+
                 //case "GoOnline": remotingClient.CreateGoOnlineAction(false).Start(); break;
                 //case "GoOnlineAndInitialize": remotingClient.CreateGoOnlineAction(true).Start(); break;
                 //case "GoOffline": remotingClient.CreateGoOfflineAction().Start(); break;

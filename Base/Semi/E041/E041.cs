@@ -1812,6 +1812,14 @@ namespace MosaicLib.Semi.E041
         /// </summary>
         private class ANSourceImpl : IANSource, IANOccurrence, IANCondition, IANAcknowledgeableSourceBase, IANSourceBase
         {
+            /// <summary>
+            /// Debugging and logging helper method
+            /// </summary>
+            public override string ToString()
+            {
+                return "{0}".CheckedFormat(ANState);
+            }
+
             private readonly object mutex = new object();
 
             #region fields and properties that are filled in/setup by the parent part
@@ -1998,7 +2006,10 @@ namespace MosaicLib.Semi.E041
 
                         if (!ANState.SelectedActionName.IsNullOrEmpty())
                         {
-                            Logger.Debug.Emit("cleared unexpected residual SelectedActionName:'{0}'", ANState.SelectedActionName);
+                            bool isAck = ANState.SelectedActionName == Constants.Ack || ANState.SelectedActionName == Constants.Acknowledge;
+                            if (!isAck)
+                                Logger.Debug.Emit("Clear: removing unused SelectedActionName:'{0}'", ANState.SelectedActionName);
+
                             ANState.SelectedActionName = null;
                         }
 

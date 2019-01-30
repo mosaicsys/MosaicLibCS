@@ -111,6 +111,7 @@ namespace MosaicLib.PartsLib.Common.E099
         bool IsEqualTo(ITagRWState rhs);
     }
 
+    [DataContract(Namespace = MosaicLib.Constants.PartsLibNameSpace)]
     public class TagRWState : ITagRWState
     {
         public TagRWState()
@@ -128,16 +129,16 @@ namespace MosaicLib.PartsLib.Common.E099
             SetFrom(rhs);
         }
 
-        public TagRWState SetFrom(ITagRWState rhs)
+        public TagRWState SetFrom(ITagRWState other, bool asReadOnly = false)
         {
-            NVS = rhs.NVS.IsNullOrEmpty() ? null : new NamedValueSet(rhs.NVS);
+            NVS = (asReadOnly) ? other.NVS.ConvertToReadOnly(mapNullToEmpty: false) : (other.NVS.IsNullOrEmpty() ? null : new NamedValueSet(other.NVS));
 
-            ReadTagIDActionInfo = new TagActionInfo(rhs.ReadTagIDActionInfo);
-            ReadPagesActionInfo = new TagActionInfo(rhs.ReadPagesActionInfo);
-            WritePagesActionInfo = new TagActionInfo(rhs.WritePagesActionInfo);
-            CombinedActionInfo = new TagActionInfo(rhs.CombinedActionInfo);
+            ReadTagIDActionInfo = new TagActionInfo(other.ReadTagIDActionInfo);
+            ReadPagesActionInfo = new TagActionInfo(other.ReadPagesActionInfo);
+            WritePagesActionInfo = new TagActionInfo(other.WritePagesActionInfo);
+            CombinedActionInfo = new TagActionInfo(other.CombinedActionInfo);
 
-            PartBaseState = new BaseState(rhs.PartBaseState);
+            PartBaseState = new BaseState(other.PartBaseState);
 
             return this;
         }
@@ -147,27 +148,39 @@ namespace MosaicLib.PartsLib.Common.E099
         ITagActionInfo ITagRWState.ReadTagIDActionInfo { get { return ReadTagIDActionInfo; } }
         ITagActionInfo ITagRWState.ReadPagesActionInfo { get { return ReadPagesActionInfo; } }
         ITagActionInfo ITagRWState.WritePagesActionInfo { get { return WritePagesActionInfo; } }
+        ITagActionInfo ITagRWState.CombinedActionInfo { get { return CombinedActionInfo; } }
 
         IBaseState ITagRWState.PartBaseState { get { return PartBaseState; } }
 
-        public NamedValueSet NVS { get { return (nvs ?? (nvs = new NamedValueSet())); } set { nvs = value; } }
+        public NamedValueSet NVS { get { return (nvs ?? (nvs = new NamedValueSet())); } set { nvs = value.MapEmptyToNull(); } }
+
+        [DataMember(Order = 100, Name = "NVS", IsRequired = false, EmitDefaultValue = false)]
         private NamedValueSet nvs = null;
 
+        [DataMember(Order = 200, IsRequired = false, EmitDefaultValue = false)]
         public TagActionInfo ReadTagIDActionInfo { get; set; }
+
+        [DataMember(Order = 300, IsRequired = false, EmitDefaultValue = false)]
         public TagActionInfo ReadPagesActionInfo { get; set; }
+
+        [DataMember(Order = 400, IsRequired = false, EmitDefaultValue = false)]
         public TagActionInfo WritePagesActionInfo { get; set; }
-        public ITagActionInfo CombinedActionInfo { get; set; }
+
+        [DataMember(Order = 500, IsRequired = false, EmitDefaultValue = false)]
+        public TagActionInfo CombinedActionInfo { get; set; }
+
+        [DataMember(Order = 600, IsRequired = false, EmitDefaultValue = false)]
         public BaseState PartBaseState { get; set; }
 
         public bool Equals(ITagRWState other)
         {
             return (other != null
-                    && ((NVS.IsNullOrEmpty() && other.NVS.IsNullOrEmpty()) || NVS.IsEqualTo(other.NVS))
+                    && ((NVS.IsNullOrEmpty() && other.NVS.IsNullOrEmpty()) || NVS.IsEqualTo(other.NVS, compareReadOnly: false))
                     && ReadTagIDActionInfo.Equals(other.ReadTagIDActionInfo)
                     && ReadPagesActionInfo.Equals(other.ReadPagesActionInfo)
                     && WritePagesActionInfo.Equals(other.WritePagesActionInfo)
                     && CombinedActionInfo.Equals(other.CombinedActionInfo)
-                    && PartBaseState.Equals(other.PartBaseState)
+                    && PartBaseState.Equals(other.PartBaseState, compareTimestamps: false)
                     );
         }
 
@@ -204,10 +217,18 @@ namespace MosaicLib.PartsLib.Common.E099
         string DisplayTextForTagID { get; }
     }
 
+    [DataContract(Namespace=MosaicLib.Constants.PartsLibNameSpace)]
+    [KnownType(typeof(ActionInfo))]
+    [KnownType(typeof(TagPageContents))]
     public class TagActionInfo : ITagActionInfo
     {
+        [DataMember(Order = 100, IsRequired = false, EmitDefaultValue = false)]
         public IActionInfo ActionInfo { get; set; }
+
+        [DataMember(Order = 200, IsRequired = false, EmitDefaultValue = false)]
         public string TagID { get; set; }
+
+        [DataMember(Order = 300, IsRequired = false, EmitDefaultValue = false)]
         public ITagPageContents[] PageContentsArray { get; set; }
 
         public TagActionInfo()
@@ -233,7 +254,7 @@ namespace MosaicLib.PartsLib.Common.E099
 
         public bool Equals(ITagActionInfo other)
         {
-            return (Object.ReferenceEquals(ActionInfo, other.ActionInfo)
+            return (ActionInfo.Equals(other.ActionInfo, compareTimestamps: false)
                     && TagID == other.TagID
                     && PageContentsArray.IsEqualTo(other.PageContentsArray)
                     );
@@ -281,25 +302,25 @@ namespace MosaicLib.PartsLib.Common.E099
 
     /// <summary>
     /// This enumeration give information about the type of RFID reader/writer that this device offers
-    /// <para/>None, Reader, Writer, RFID, TIRIS,
+    /// <para/>None (0x00), Reader (0x01), Writer (0x02), RFID (0x100), TIRIS (0x200),
     /// </summary>
     [Flags]
     public enum TagReaderType : int
     {
-        /// <summary>This device does not support any RFID access</summary>
-        None = 0x0000,
+        /// <summary>This device does not support any RFID access [0x00]</summary>
+        None = 0x00,
 
-        /// <summary>This device can be used to read tags, generally by reading a selected range of pages and concatinating their contents.</summary>
-        Reader = 0x0001,
+        /// <summary>This device can be used to read tags, generally by reading a selected range of pages and concatinating their contents. [0x01]</summary>
+        Reader = 0x01,
 
-        /// <summary>This device can be used to write tag contents in pages.</summary>
-        Writer = 0x0002,
+        /// <summary>This device can be used to write tag contents in pages. [0x02]</summary>
+        Writer = 0x02,
 
-        /// <summary>This device makes use of RFID communications with the Tag.</summary>
-        RFID = 0x0100,
+        /// <summary>This device makes use of RFID communications with the Tag. [0x100]</summary>
+        RFID = 0x100,
 
-        /// <summary>This device is designed to work with TIRIS tags.</summary>
-        TIRIS = 0x0200,
+        /// <summary>This device is designed to work with TIRIS tags. [0x200]</summary>
+        TIRIS = 0x200,
     }
 
 
@@ -466,9 +487,13 @@ namespace MosaicLib.PartsLib.Common.E099
         }
     }
 
+    [DataContract(Namespace = MosaicLib.Constants.PartsLibNameSpace)]
     public class TagPageContents : ITagPageContents
     {
+        [DataMember(Order = 100)]
         public int PageIndex { get; set; }
+
+        [DataMember(Order = 200, IsRequired = false, EmitDefaultValue = false)]
         public byte[] ByteArray { get; set; }
 
         public override bool Equals(object rhsAsObject)

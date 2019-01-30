@@ -870,9 +870,17 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
 
         public void Add(SubstrateTrackerBase st)
         {
-            total++;
+            Add(st.SubstObserver.Info, st.SubstrateJobState);
+        }
 
-            var info = st.SubstObserver.Info;
+        public void Add(E090SubstInfo info)
+        {
+            Add(info, info.SJS);
+        }
+
+        public void Add(E090SubstInfo info, SubstrateJobState sjs)
+        {
+            total++;
 
             var sts = info.STS;
             var inferredSPS = info.InferredSPS;
@@ -912,7 +920,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
                 default: spsOther++; break;
             }
 
-            switch (st.SubstrateJobState)
+            switch (sjs)
             {
                 case SubstrateJobState.WaitingForStart: sjsWaitingForStart++; break;
                 case SubstrateJobState.Running: sjsRunning++; break;
@@ -923,8 +931,8 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
                 case SubstrateJobState.Paused: sjsPaused++; break;
                 case SubstrateJobState.Stopping: sjsStopping++; break;
                 case SubstrateJobState.Stopped: sjsStopped++; break;
-                case SubstrateJobState.Aborting: sjsAborting++; if (sts == SubstState.AtDestination) sjsAbortedAtDestination++; break;
-                case SubstrateJobState.Aborted: sjsAborted++; break;
+                case SubstrateJobState.Aborting: sjsAborting++; break;
+                case SubstrateJobState.Aborted: sjsAborted++; if (sts == SubstState.AtDestination) sjsAbortedAtDestination++; break;
                 case SubstrateJobState.Lost: sjsLost++; break;
                 case SubstrateJobState.Returning: sjsReturning++; break;
                 case SubstrateJobState.Returned: sjsReturned++; break;
@@ -976,11 +984,11 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
                 { "InProcess", spsInProcess },
                 { "ProcessStepCompleted", spsProcessStepCompleted },
                 { "Processed", spsProcessed },
-                { "Rejected", spsRejected },
-                { "Stopped", spsStopped },
-                { "Skipped", spsSkipped },
                 { "Aborted", spsAborted },
+                { "Stopped", spsStopped },
+                { "Rejected", spsRejected },
                 { "Lost", spsLost },
+                { "Skipped", spsSkipped },
                 { "Other", spsOther },
             };
         }

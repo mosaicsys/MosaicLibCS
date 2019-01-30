@@ -191,6 +191,7 @@ namespace MosaicLib.PartsLib.Common.LPM
         bool IsEqualTo(ILPMState rhs);
     }
 
+    [DataContract(Namespace = MosaicLib.Constants.PartsLibNameSpace)]
     public class LPMState : ILPMState
     {
         public LPMState()
@@ -256,30 +257,48 @@ namespace MosaicLib.PartsLib.Common.LPM
         IPortUsageContextInfo ILPMState.PortUsageContextInfo { get { return this.PortUsageContextInfo; } }
         IBaseState ILPMState.PartBaseState { get { return this.PartBaseState; } }
 
-        public NamedValueSet NVS { get { return (nvs ?? (nvs = new NamedValueSet())); } set { nvs = value; } }
+        public NamedValueSet NVS { get { return (nvs ?? (nvs = new NamedValueSet())); } set { nvs = value.MapEmptyToNull(); } }
+
+        [DataMember(Order = 100, Name = "NVS", IsRequired = false, EmitDefaultValue = false)]
         private NamedValueSet nvs = null;
 
+        [DataMember(Order = 200, IsRequired = false, EmitDefaultValue = false)]
         public DeviceCapabilities DeviceCapabilities { get; set; }
+
+        [DataMember(Order = 300, IsRequired = false, EmitDefaultValue = false)]
         public PodSensorValues PodSensorValues { get; set; }
+
+        [DataMember(Order = 400, IsRequired = false, EmitDefaultValue = false)]
         public DecodedPodInfo DecodedPodInfo { get; set; }
+
+        [DataMember(Order = 500, IsRequired = false, EmitDefaultValue = false)]
         public PositionState PositionState { get; set; }
 
+        [DataMember(Order = 600, IsRequired = false, EmitDefaultValue = false)]
         public DisplayState DisplayStateSetpoint { get; set; }
+
+        [DataMember(Order = 700, IsRequired = false, EmitDefaultValue = false)]
         public DisplayState DisplayState { get; set; }
+
+        [DataMember(Order = 800, IsRequired = false, EmitDefaultValue = false)]
         public ButtonSet ButtonSet { get; set; }
 
+        [DataMember(Order = 900, IsRequired = false, EmitDefaultValue = false)]
         public E84State E84State { get; set; }
 
+        [DataMember(Order = 1000, IsRequired = false, EmitDefaultValue = false)]
         public MapResults MapResults { get; set; }
 
+        [DataMember(Order = 1100, IsRequired = false, EmitDefaultValue = false)]
         public PortUsageContextInfo PortUsageContextInfo { get; set; }
 
+        [DataMember(Order = 1200, IsRequired = false, EmitDefaultValue = false)]
         public BaseState PartBaseState { get; set; }
 
         public bool Equals(ILPMState other)
         {
             return (other != null
-                    && ((NVS.IsNullOrEmpty() && other.NVS.IsNullOrEmpty()) || NVS.IsEqualTo(other.NVS))
+                && ((NVS.IsNullOrEmpty() && other.NVS.IsNullOrEmpty()) || NVS.IsEqualTo(other.NVS, compareReadOnly: false))
                     && DeviceCapabilities.Equals(other.DeviceCapabilities)
                     && PodSensorValues.Equals(other.PodSensorValues)
                     && DecodedPodInfo.Equals(other.DecodedPodInfo)
@@ -290,7 +309,7 @@ namespace MosaicLib.PartsLib.Common.LPM
                     && E84State.Equals(other.E84State)
                     && MapResults.Equals(other.MapResults)
                     && ((PortUsageContextInfo == null && other.PortUsageContextInfo == null) || (PortUsageContextInfo != null && PortUsageContextInfo.Equals(other.PortUsageContextInfo)))
-                    && PartBaseState.Equals(other.PartBaseState)
+                    && PartBaseState.Equals(other.PartBaseState, compareTimestamps: false)
                     );
         }
 
@@ -320,20 +339,28 @@ namespace MosaicLib.PartsLib.Common.LPM
     {
         /// <summary>default/placeholder value: 0x0000</summary>
         None = 0x0000,
+
         /// <summary>Initialize: 0x0001</summary>
         Initialize = 0x0001,
+
         /// <summary>Clamp: 0x0002</summary>
         Clamp = 0x0002,
+
         /// <summary>Unclamp: 0x0004</summary>
         Unclamp = 0x0004,
+
         /// <summary>Dock: 0x0008</summary>
         Dock = 0x0008,
+
         /// <summary>Undock: 0x0010</summary>
         Undock = 0x0010,
+
         /// <summary>Open: 0x0020</summary>
         Open = 0x0020,
+
         /// <summary>Close: 0x0040</summary>
         Close = 0x0040,
+
         /// <summary>Map: 0x0080</summary>
         Map = 0x0080,
     }
@@ -369,6 +396,7 @@ namespace MosaicLib.PartsLib.Common.LPM
         bool IsEqualTo(IPortUsageContextInfo rhs);
     }
 
+    [DataContract(Namespace = MosaicLib.Constants.PartsLibNameSpace)]
     public class PortUsageContextInfo : IPortUsageContextInfo
     {
         public PortUsageContextInfo()
@@ -402,22 +430,46 @@ namespace MosaicLib.PartsLib.Common.LPM
             return this;
         }
 
+        [DataMember(Order = 100, IsRequired = false, EmitDefaultValue = false)]
         public Semi.E087.AMS AMS { get; set; }
+ 
+        [DataMember(Order = 200, IsRequired = false, EmitDefaultValue = false)]
         public Semi.E087.LTS LTS { get; set; }
+
+        [DataMember(Order = 300, IsRequired = false, EmitDefaultValue = false)]
         public Semi.E087.LRS LRS { get; set; }
 
+        [DataMember(Order = 400, IsRequired = false, EmitDefaultValue = false)]
         public bool Initializing { get; set; }
+
+        [DataMember(Order = 500, IsRequired = false, EmitDefaultValue = false)]
         public bool Error { get; set; }
+
+        [DataMember(Order = 600, IsRequired = false, EmitDefaultValue = false)]
         public bool Alarm { get; set; }
+        
+        [DataMember(Order = 700, IsRequired = false, EmitDefaultValue = false)]
         public bool Busy { get; set; }
+        
+        [DataMember(Order = 800, IsRequired = false, EmitDefaultValue = false)]
         public bool Loading { get; set; }
+        
+        [DataMember(Order = 900, IsRequired = false, EmitDefaultValue = false)]
         public bool Unloading { get; set; }
+        
+        [DataMember(Order = 1000, IsRequired = false, EmitDefaultValue = false)]
         public bool E84LoadInProgress { get; set; }
+        
+        [DataMember(Order = 1100, IsRequired = false, EmitDefaultValue = false)]
         public bool E84UnloadInProgress { get; set; }
 
+        [DataMember(Order = 1200, IsRequired = false, EmitDefaultValue = false)]
         public bool APresentOrPlacementAlarmIsActive { get; set; }
 
+        [DataMember(Order = 1300, IsRequired = false, EmitDefaultValue = false)]
         public DisplayItemState.OnOffFlashState Button1State { get; set; }
+
+        [DataMember(Order = 1400, IsRequired = false, EmitDefaultValue = false)]
         public DisplayItemState.OnOffFlashState Button2State { get; set; }
 
         public override string ToString()
@@ -507,24 +559,25 @@ namespace MosaicLib.PartsLib.Common.LPM
 
     /// <summary>
     /// This enumeration give information about the type of mapper support this device offers
-    /// <para/>None, HasMapper, CanMapOnClose
+    /// <para/>None (0x00), CanMapOnOpen (0x01), CanMapAfterOpen (0x02), CanMapOnClose (0x04)
     /// </summary>
     [Flags]
     public enum MapperCapabilities : int
     {
-        /// <summary>This device does not support any type of mapping.</summary>
-        None = 0,
+        /// <summary>This device does not support any type of mapping. [0x00]</summary>
+        None = 0x00,
 
-        /// <summary>This device has a mapper that can be used to map while opening the Carrier.</summary>
-        CanMapOnOpen = 1,
+        /// <summary>This device has a mapper that can be used to map while opening the Carrier. [0x01]</summary>
+        CanMapOnOpen = 0x01,
 
-        /// <summary>This device has a mapper that can be used to map after opening the Carrier (generally by raising the door and mapping while lowering the door).</summary>
-        CanMapAfterOpen = 2,
+        /// <summary>This device has a mapper that can be used to map after opening the Carrier (generally by raising the door and mapping while lowering the door). [0x02]</summary>
+        CanMapAfterOpen = 0x02,
 
-        /// <summary>This device has a mapper that can be used to map while closing the Carrier (generally by reversing the motions used to map while opening the Carrier).</summary>
-        CanMapOnClose = 4,
+        /// <summary>This device has a mapper that can be used to map while closing the Carrier (generally by reversing the motions used to map while opening the Carrier). [0x04]</summary>
+        CanMapOnClose = 0x04,
     }
 
+    [DataContract(Namespace = MosaicLib.Constants.PartsLibNameSpace)]
     public class DeviceCapabilities : IDeviceCapabilities
     {
         public DeviceCapabilities()
@@ -545,12 +598,15 @@ namespace MosaicLib.PartsLib.Common.LPM
         }
 
         /// <summary>This value indicates what form of CarrierID/Tag Reader capabilities this device supports, if any.</summary>
+        [DataMember(Order = 100, IsRequired = false, EmitDefaultValue = false)]
         public E099.TagReaderType TagReaderType { get; set; }
 
         /// <summary>This value indicates whether the device has any E84 hardware available</summary>
+        [DataMember(Order = 200, IsRequired = false, EmitDefaultValue = false)]
         public bool HasE84 { get; set; }
 
         /// <summary>This value indicates what mapping capabilities this device offers.</summary>
+        [DataMember(Order = 300, IsRequired = false, EmitDefaultValue = false)]
         public MapperCapabilities MapperCapabilities { get; set; }
 
         /// <summary>Returns true if this object has the same contents as the given rhs one.</summary>
@@ -599,6 +655,7 @@ namespace MosaicLib.PartsLib.Common.LPM
         bool IsEqualTo(IMapResults rhs);
     }
 
+    [DataContract(Namespace = MosaicLib.Constants.PartsLibNameSpace)]
     public class MapResults : IMapResults
     {
         public MapResults() { }
@@ -635,10 +692,12 @@ namespace MosaicLib.PartsLib.Common.LPM
         /// <summary>This is true when the ResultCode is the empty string.  This is the same as what is normally called Succeeded, except that it does not tell you anything about the contents of the SlotMap itself.</summary>
         public bool IsValid { get { return ResultCode == string.Empty; } }
 
+        [DataMember(Order = 100, IsRequired = false, EmitDefaultValue = false)]
         public SlotState[] SlotMap { get { return slotMap; } set { slotMap = value ?? emptySlotMap; } }
         private SlotState[] slotMap = emptySlotMap;
         private static readonly SlotState[] emptySlotMap = EmptyArrayFactory<SlotState>.Instance;
 
+        [DataMember(Order = 200, IsRequired = false, EmitDefaultValue = false)]
         public string ResultCode { get; set; }
 
         public bool Equals(IMapResults other)
@@ -692,6 +751,7 @@ namespace MosaicLib.PartsLib.Common.LPM
         bool IsEqualTo(IPodSensorValues rhs);
     }
 
+    [DataContract(Namespace = MosaicLib.Constants.PartsLibNameSpace)]
     public class PodSensorValues : IPodSensorValues
     {
         public PodSensorValues() 
@@ -709,7 +769,9 @@ namespace MosaicLib.PartsLib.Common.LPM
             return this;
         }
 
+        [DataMember(Order = 100, IsRequired = false, EmitDefaultValue = false)]
         public PresentPlaced PresentPlaced { get; set; }
+
         public bool PresenceSensor { get { return PresentPlaced.IsSet(PresentPlaced.Present); } }
         public bool PlacementSensor { get { return PresentPlaced.IsSet(PresentPlaced.Placed); } }
         public bool IsPartiallyPlaced { get { return PresentPlaced.IsSet(PresentPlaced.PartiallyPlaced); } }
@@ -718,6 +780,7 @@ namespace MosaicLib.PartsLib.Common.LPM
         public bool DoesPlacedEqualPresent { get { return PresentPlaced.DoesPlacedEqualPresent(); } }
         public bool IsPlacedOrPresent { get { return PresentPlaced.IsPlacedOrPresent(); } }
 
+        [DataMember(Order = 200, IsRequired = false, EmitDefaultValue = false)]
         public InfoPads InfoPads { get; set; }
 
         public bool InfoPad_A { get { return InfoPads.IsSet(InfoPads.A); } }
@@ -746,7 +809,10 @@ namespace MosaicLib.PartsLib.Common.LPM
         }
     }
 
-    /// <summary>Present/Placed related flag enum</summary>
+    /// <summary>
+    /// Present/Placed related flag enum
+    /// <para/>None (0x00), Present (0x01), Placed (0x02), PartiallyPlaced (0x04)
+    /// </summary>
     [DataContract]
     [Flags]
     public enum PresentPlaced
@@ -754,18 +820,24 @@ namespace MosaicLib.PartsLib.Common.LPM
         /// <summary>Neither Presence nor Placement sensors are active</summary>
         [EnumMember]
         None = 0x00,
+
         /// <summary>Presence sensor is active</summary>
         [EnumMember]
         Present = 0x01,
+
         /// <summary>Placement sensor is active</summary>
         [EnumMember]
         Placed = 0x02,
+
         /// <summary>Placement sensor is partially active</summary>
         [EnumMember]
         PartiallyPlaced = 0x04,
     }
 
-    /// <summary>InfoPad flag enum</summary>
+    /// <summary>
+    /// InfoPad flag enum
+    /// <para/>None (0x00), A (0x01), B (0x02), C (0x04), D (0x08)
+    /// </summary>
     [DataContract]
     [Flags]
     public enum InfoPads
@@ -773,15 +845,19 @@ namespace MosaicLib.PartsLib.Common.LPM
         /// <summary>No InfoPad is currently active.  0x00</summary>
         [EnumMember]
         None = 0x00,
+
         /// <summary>InfoPad A is active.  0x01</summary>
         [EnumMember]
         A = 0x01,
+
         /// <summary>InfoPad B is active.  0x02</summary>
         [EnumMember]
         B = 0x02,
+
         /// <summary>InfoPad C is active.  0x04</summary>
         [EnumMember]
         C = 0x04,
+
         /// <summary>InfoPad D is active.  0x08</summary>
         [EnumMember]
         D = 0x08,
@@ -801,6 +877,7 @@ namespace MosaicLib.PartsLib.Common.LPM
         bool IsEqualTo(IDecodedPodInfo rhs);
     }
 
+    [DataContract(Namespace = MosaicLib.Constants.PartsLibNameSpace)]
     public class DecodedPodInfo : IDecodedPodInfo
     {
         public DecodedPodInfo() 
@@ -819,8 +896,10 @@ namespace MosaicLib.PartsLib.Common.LPM
             return this;
         }
 
+        [DataMember(Order = 100, IsRequired = false, EmitDefaultValue = false)]
         public CarrierType CarrierType { get; set; }
 
+        [DataMember(Order = 200, IsRequired = false, EmitDefaultValue = false)]
         public OCA OCA { get; set; }
 
         public bool Equals(IDecodedPodInfo other)
@@ -844,7 +923,11 @@ namespace MosaicLib.PartsLib.Common.LPM
         }
     }
 
-    /// <summary>Flag enumeration that gives information about a Carrier including type (FOUP, FOSB, Cassette), Slots (25, 13, 26) and WaferSize (100, 125, 150, 200, 300, 450 mm)</summary>
+    /// <summary>
+    /// Flag enumeration that gives information about a Carrier including type (FOUP, FOSB, Cassette), Slots (25, 13, 26) and WaferSize (100, 125, 150, 200, 300, 450 mm)
+    /// <para/>None (0x00), FOUP (0x01), FOSB (0x02), FOSB_NoDoor (0x04), Cassette (0x08), Other (0x80), Slot_25 (0x100), Slot_13 (0x200), Slot_26 (0x400),
+    /// Size_100mm (0x10000), Size_125mm (0x20000), Size_150mm (0x40000), Size_200mm (0x80000), Size_300mm (0x100000), Size_450mm (0x200000)
+    /// </summary>
     [DataContract]
     [Flags]
     public enum CarrierType
@@ -898,7 +981,10 @@ namespace MosaicLib.PartsLib.Common.LPM
         Size_400mm = 0x200000,
     }
 
-    /// <summary>Flag enumeration that gives information about OCA (if any)</summary>
+    /// <summary>
+    /// Flag enumeration that gives information about OCA (if any)
+    /// <para/>None (0x00), Installed (0x01), Open (0s02), Locked (0x04)
+    /// </summary>
     [DataContract]
     [Flags]
     public enum OCA
@@ -1033,6 +1119,7 @@ namespace MosaicLib.PartsLib.Common.LPM
         Other,
     }
 
+    [DataContract(Namespace = MosaicLib.Constants.PartsLibNameSpace)]
     public class PositionState : IPositionState
     {
         public PositionState()
@@ -1085,35 +1172,57 @@ namespace MosaicLib.PartsLib.Common.LPM
         }
 
         /// <summary>Clamped == AtPos2, Unclamped/Released == AtPos1</summary>
+        [DataMember(Order = 100, IsRequired = false, EmitDefaultValue = false)]
         public ActuatorPosition ClampState { get; set; }
+
         /// <summary>Docked == AtPos2, Undocked == AtPos1</summary>
+        [DataMember(Order = 200, IsRequired = false, EmitDefaultValue = false)]
         public ActuatorPosition DockState { get; set; }
+
         /// <summary>Vacuum turned on == AtPos2, Vacuum turned off == AtPos1</summary>
+        [DataMember(Order = 300, IsRequired = false, EmitDefaultValue = false)]
         public ActuatorPosition VacState { get; set; }
+
         /// <summary>Door Keys Horizontal (door unlatched from carrier) == AtPos2, Door Keys Vertical (door latched in carrier) == AtPos1</summary>
+        [DataMember(Order = 400, IsRequired = false, EmitDefaultValue = false)]
         public ActuatorPosition DoorKeysState { get; set; }
+
         /// <summary>Door Open (away from carrier) == AtPos2, Door Closed (pressed into carrier) == AtPos1</summary>
+        [DataMember(Order = 500, IsRequired = false, EmitDefaultValue = false)]
         public ActuatorPosition DoorOpenState { get; set; }
+       
         /// <summary>Door Down == AtPos2, Door Up == AtPos1</summary>
+        [DataMember(Order = 600, IsRequired = false, EmitDefaultValue = false)]
         public ActuatorPosition DoorDownState { get; set; }
 
         public bool AreAllActuatorPositionsValid { get { return (ClampState.IsValid() && DockState.IsValid() && VacState.IsValid() && DoorKeysState.IsValid() && DoorOpenState.IsValid() && DoorDownState.IsValid()); } }
 
         /// <summary>This property returns true if the device has been initialized/homed/referenced since we last started communicating with it</summary>
-        public bool IsReferenced { get; set;  }
+        [DataMember(Order = 700, IsRequired = false, EmitDefaultValue = false)]
+        public bool IsReferenced { get; set; }
+
         /// <summary>This property returns true if the driver believes that the device is activly controlling its position.</summary>
+        [DataMember(Order = 800, IsRequired = false, EmitDefaultValue = false)]
         public bool IsServoOn { get; set; }
 
+        [DataMember(Order = 900, IsRequired = false, EmitDefaultValue = false)]
         public bool MotionILockSensorIsTripped { get; set; }
+        [DataMember(Order = 1000, IsRequired = false, EmitDefaultValue = false)]
         public bool ProtrusionSensorIsTripped { get; set; }
 
+        [DataMember(Order = 1100, IsRequired = false, EmitDefaultValue = false)]
         public bool IsCarrierDoorDetected { get; set; }
 
+        [DataMember(Order = 1200, IsRequired = false, EmitDefaultValue = false)]
         public bool IsCarrierOpen { get; set; }
+
+        [DataMember(Order = 1300, IsRequired = false, EmitDefaultValue = false)]
         public bool IsCarrierClosed { get; set; }
 
+        [DataMember(Order = 1400, IsRequired = false, EmitDefaultValue = false)]
         public bool IsValid { get; set; }
 
+        [DataMember(Order = 1500, IsRequired = false, EmitDefaultValue = false)]
         public bool IsSafeToAccess { get; set; }
 
         public string InMotionReason 
@@ -1164,13 +1273,14 @@ namespace MosaicLib.PartsLib.Common.LPM
             get { return explicitInMotionReason ?? string.Empty; }
             set
             {
-                explicitInMotionReason = value;
+                explicitInMotionReason = value.MapEmptyToNull();
 
                 if (!explicitInMotionReason.IsNullOrEmpty())
                     IsSafeToAccess = false;
             }
         }
 
+        [DataMember(Order = 1600, Name = "ExplicitInMotionReason", IsRequired = false, EmitDefaultValue = false)]
         private string explicitInMotionReason;
 
         public bool Equals(IPositionState other)
@@ -1274,6 +1384,7 @@ namespace MosaicLib.PartsLib.Common.LPM
         bool IsEqualTo(IActuatorStates rhs);
     }
 
+    [DataContract(Namespace = MosaicLib.Constants.PartsLibNameSpace)]
     public class ActuatorStates : IActuatorStates
     {
         public ActuatorStates()
@@ -1303,11 +1414,22 @@ namespace MosaicLib.PartsLib.Common.LPM
             return this;
         }
 
+        [DataMember(Order = 100, IsRequired = false, EmitDefaultValue = false)]
         public IActuatorState ClampState { get; set; }
+
+        [DataMember(Order = 200, IsRequired = false, EmitDefaultValue = false)]
         public IActuatorState DockState { get; set; }
+
+        [DataMember(Order = 300, IsRequired = false, EmitDefaultValue = false)]
         public IActuatorState VacState { get; set; }
+
+        [DataMember(Order = 400, IsRequired = false, EmitDefaultValue = false)]
         public IActuatorState DoorKeysState { get; set; }
+
+        [DataMember(Order = 500, IsRequired = false, EmitDefaultValue = false)]
         public IActuatorState DoorOpenState { get; set; }
+
+        [DataMember(Order = 600, IsRequired = false, EmitDefaultValue = false)]
         public IActuatorState DoorDownState { get; set; }
 
         public bool Equals(IActuatorStates other)
@@ -1340,6 +1462,7 @@ namespace MosaicLib.PartsLib.Common.LPM
         IDisplayItemState[] AllItemArray { get; }
     }
 
+    [DataContract(Namespace = MosaicLib.Constants.PartsLibNameSpace)]
     public class DisplayState : IDisplayState
     {
         public const int DefaultNumPanelItems = 8;
@@ -1370,8 +1493,13 @@ namespace MosaicLib.PartsLib.Common.LPM
             return this;
         }
 
+        [DataMember(Order = 100, IsRequired = false, EmitDefaultValue = false)]
         public DisplayItemState[] ButtonItemArray { get; private set; }
+        
+        [DataMember(Order = 200, IsRequired = false, EmitDefaultValue = false)]
         public DisplayItemState[] PanelItemArray { get; private set; }
+
+        [DataMember(Order = 300, IsRequired = false, EmitDefaultValue = false)]
         public DisplayItemState[] AllItemArray { get; private set; }
 
         IDisplayItemState[] IDisplayState.ButtonItemArray { get { return this.ButtonItemArray; } }
@@ -1413,6 +1541,7 @@ namespace MosaicLib.PartsLib.Common.LPM
         bool IsEqualTo(IButtonSet rhs);
     }
 
+    [DataContract(Namespace = MosaicLib.Constants.PartsLibNameSpace)]
     public class ButtonSet : IButtonSet
     {
         public ButtonSet() { }
@@ -1433,10 +1562,16 @@ namespace MosaicLib.PartsLib.Common.LPM
             return this;
         }
 
+        [DataMember(Order = 100, IsRequired = false, EmitDefaultValue = false)]
         public bool Button1 { get; set; }
+
+        [DataMember(Order = 200, IsRequired = false, EmitDefaultValue = false)]
         public bool Button2 { get; set; }
 
+        [DataMember(Order = 300, IsRequired = false, EmitDefaultValue = false)]
         public int Button1ChangeCount { get; set; }
+
+        [DataMember(Order = 400, IsRequired = false, EmitDefaultValue = false)]
         public int Button2ChangeCount { get; set; }
 
         public void ButtonChanged(int buttonNum, bool value)
@@ -1490,6 +1625,7 @@ namespace MosaicLib.PartsLib.Common.LPM
         string CurrentBackgroundColor { get; }
     }
 
+    [DataContract(Namespace = MosaicLib.Constants.PartsLibNameSpace)]
     public class DisplayItemState : IDisplayItemState
     {
         /// <summary>Represents the different states that an individual LPM physical annunciator (LED) can be set to</summary>
@@ -1554,20 +1690,39 @@ namespace MosaicLib.PartsLib.Common.LPM
             return this;
         }
 
+        [DataMember(Order = 100, IsRequired = false, EmitDefaultValue = false)]
         public bool IsButton { get; set; }
+
+        [DataMember(Order = 200, IsRequired = false, EmitDefaultValue = false)]
         public int ItemIdx { get; set; }
+
         public int LampNum { get { return (ItemIdx + 1 + (IsButton ? DisplayState.ButtonLampNumOffset : 0)); } }
 
+        [DataMember(Order = 300, IsRequired = false, EmitDefaultValue = false)]
         public string Text { get; set; }
+
+        [DataMember(Order = 400, IsRequired = false, EmitDefaultValue = false)]
         public string BorderColor { get; set; }
+
+        [DataMember(Order = 500, IsRequired = false, EmitDefaultValue = false)]
         public string OffBackgroundColor { get; set; }
+
+        [DataMember(Order = 600, IsRequired = false, EmitDefaultValue = false)]
         public string OnBackgroundColor { get; set; }
+
+        [DataMember(Order = 700, IsRequired = false, EmitDefaultValue = false)]
         public OnOffFlashState State { get; set; }
+
+        [DataMember(Order = 800, IsRequired = false, EmitDefaultValue = false)]
         public bool IsInternal { get; set; }
+
+        [DataMember(Order = 900, IsRequired = false, EmitDefaultValue = false)]
         public bool IsInstalled { get; set; }
 
+        [DataMember(Order = 1000, IsRequired = false, EmitDefaultValue = false)]
         public OnOffFlashState LastLampCmdState { get; set; }
 
+        [DataMember(Order = 1100, IsRequired = false, EmitDefaultValue = false)]
         public bool FlashStateIsOn { get; set; }
 
         public string CurrentBackgroundColor
@@ -1645,6 +1800,7 @@ namespace MosaicLib.PartsLib.Common.LPM
         bool IsEqualTo(IE84State rhs);
     }
 
+    [DataContract(Namespace = MosaicLib.Constants.PartsLibNameSpace)]
     public class E84State : IE84State
     {        
         public E84State() 
@@ -1692,10 +1848,19 @@ namespace MosaicLib.PartsLib.Common.LPM
         IPassiveToActivePinsState IE84State.OutputReadback { get { return this.OutputReadback; } }
         IActiveToPassivePinsState IE84State.Inputs { get { return this.Inputs; } }
 
+        [DataMember(Order = 100, IsRequired = false, EmitDefaultValue = false)]
         public PartsLib.Common.E084.StateCode StateCode { get; set; }
+
+        [DataMember(Order = 200, IsRequired = false, EmitDefaultValue = false)]
         public string StateCodeReason { get; set; }
+        
+        [DataMember(Order = 300, IsRequired = false, EmitDefaultValue = false)]
         public PassiveToActivePinsState OutputSetpoint { get; set; }
+
+        [DataMember(Order = 400, IsRequired = false, EmitDefaultValue = false)]
         public PassiveToActivePinsState OutputReadback { get; set; }
+    
+        [DataMember(Order = 500, IsRequired = false, EmitDefaultValue = false)]
         public ActiveToPassivePinsState Inputs { get; set; }
 
         public bool OutputSetpointPinsMatchesReadback { get { return (OutputSetpoint.PackedWord == OutputReadback.PackedWord); } }

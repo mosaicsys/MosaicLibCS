@@ -56,7 +56,7 @@ namespace MosaicLib.Modular.Part
     /// <summary>
     /// This enumeration defines the behaviors/handling that the SimpleActivePartBase class can now implement for base class level GoOnline and GoOffline actions.
     /// <para/>None (0x00), BasePerformMethodsSucceed (0x01), GoOnlineUpdatesBaseUseState (0x02), GoOfflineUpdatesBaseUseState (0x04), GoOnlineFailureSetsUseStateToAttemptOnlineFailed (0x08), 
-    /// AcceptCustomChangeFromAttemptOnlineState (0x10), UseOnlineUninitializedState(0x20), SupportServiceActions (0x100), SupportMappedServiceActions (0x200), 
+    /// AcceptCustomChangeFromAttemptOnlineState (0x10), UseOnlineUninitializedState(0x20), UseOnlineInPlaceOfSpecificAttemptOnlineCases(0x40), SupportServiceActions (0x100), SupportMappedServiceActions (0x200), 
     /// All (BasePerformMethodsSucceed | GoOnlineUpdatesBaseUseState | GoOfflineUpdatesBaseUseState | GoOnlineFailureSetsUseStateToAttemptOnlineFailed)
     /// <para/>Note: The SimpleActivePartBase part expicitly initializes its GoOnlineAndGoOfflineHandling to GoOnlineAndGoOfflineHandling.All by default.
     /// </summary>
@@ -92,6 +92,7 @@ namespace MosaicLib.Modular.Part
         /// This option may only be combined with GoOnlineUpdatesBaseUseState.  When selected, if the derived classes PerformGoOnlineAction method explicitly changes the Base UseState from the pre-entry assigned value of AttemptOnline
         /// the outer state handling code will leave the derived classes value unchanged.  When not enabled, the outer method will still override the custom value and replace it with the value as determined by the outer value.
         /// [0x10]
+        /// <para/>Note: when using the UseOnlineInPlaceOfSpecificAttemptOnlineCases flag, this flag will also recognize the Online state as being a non-custom change, if that was the state that the outer method selected.
         /// </summary>
         AcceptCustomChangeFromAttemptOnlineState = 0x10,
 
@@ -102,6 +103,12 @@ namespace MosaicLib.Modular.Part
         /// When this option is enabled, successful GoOnline(false) operations will set the UseState to OnlineUnintialized if the UseState was not Online when the operation was started.  [0x20]
         /// </summary>
         UseOnlineUninitializedState = 0x20,
+
+        /// <summary>
+        /// When this option is enabled, GoOnline(false/true) will prevent the transition to AttemptOnline if the UseState is already Online and the use of the Busy state is enabled.  
+        /// This allows the part to simply report that it is busy for re-initialize type cases where the part is not already reporting a fault or non-happy starting state.
+        /// </summary>
+        UseOnlineInPlaceOfSpecificAttemptOnlineCases = 0x40,
 
         /// <summary>
         /// When this option is selected then the PerformServiceActionEx method will attempt to recognize and implement "GoOnline", "GoOnlineAndInitialize" and "GoOffline" methods.
@@ -157,7 +164,7 @@ namespace MosaicLib.Modular.Part
     /// <summary>
     /// Public and published interface about an action.
     /// </summary>
-    public interface IActionInfo
+    public interface IActionInfo : IEquatable<IActionInfo>
     {
         /// <summary>Gives the basic "name" of the action</summary>
         string Description { get; }
@@ -173,6 +180,11 @@ namespace MosaicLib.Modular.Part
 
         /// <summary>Custom variant of normal ToString method that gives caller access to which parts of the action they want included in the string.</summary>
         string ToString(ToStringSelect toStringSelect);
+
+        /// <summary>
+        /// Returns true if this ActionInfo has the same contents as the given <paramref name="other"/> instance.  Comparing timestamps is optional
+        /// </summary>
+        bool Equals(IActionInfo other, bool compareTimestamps);
     }
 
     /// <summary>
@@ -271,6 +283,27 @@ namespace MosaicLib.Modular.Part
                 return "{0} {1}".CheckedFormat(actionName, ActionState.StateCode);
         }
 
+        /// <summary>
+        /// Returns true if this ActionInfo has the same contents as the given <paramref name="other"/>.
+        /// </summary>
+        public bool Equals(IActionInfo other)
+        {
+            return this.Equals(other, compareTimestamps: true);
+        }
+
+        /// <summary>
+        /// Returns true if this ActionInfo has the same contents as the given <paramref name="other"/> instance.  Comparing timestamps is optional
+        /// </summary>
+        public bool Equals(IActionInfo other, bool compareTimestamps)
+        {
+            return (other != null
+                && (Description == other.Description
+                        && DescriptionWithDetails == other.DescriptionWithDetails
+                        && ActionState.IsEqualTo(other.ActionState, compareTimestamps: compareTimestamps)
+                       ));
+        }
+
+
         /// <summary>Gives the basic "name" of the action</summary>
         [DataMember(Order = 100)]
         public string Description { get; private set; }
@@ -304,9 +337,10 @@ namespace MosaicLib.Modular.Part
     public struct SimpleActivePartBaseSettings
     {
         /// <summary>
-        /// When this property is set to true, the BaseState will automatically transition between Busy and Idle when Actions implementations are invoked and return.  
+        /// When this property is set to true, the BaseState can automatically transition between Busy and not Busy when Actions implementations are invoked and return.  
         /// When it is false the derived object will be entirely responsible for causing the component to transition between the Busy and Idle states.  
         /// <para/>Defaults to false
+        /// <para/>Enableing this property is only useful if the SimplePartBaseBehavior has at least one of the BusyRelatedFlags related behaviors enabled.
         /// </summary>
         public bool AutomaticallyIncAndDecBusyCountAroundActionInvoke { get; set; }
 
@@ -411,7 +445,7 @@ namespace MosaicLib.Modular.Part
         /// <para/>AutomaticallyIncAndDecBusyCountAroundActionInvoke = true,
         /// <para/>GoOnlineAndGoOfflineHandling = GoOnlineAndGoOfflineHandling.All | GoOnlineAndGoOfflineHandling.UseOnlineUnititializedState | GoOnlineAndGoOfflineHandling.AcceptCustomChangeFromAttemptOnlineState,
         /// <para/>SimpleActivePartBehaviorOptions = SimpleActivePartBehaviorOptions.PerformActionPublishesActionInfo | SimpleActivePartBehaviorOptions.MainThreadStartSetsStateToOffline | SimpleActivePartBehaviorOptions.MainThreadStopSetsStateToStoppedIfIsOnline | SimpleActivePartBehaviorOptions.MainThreadStopSetsStateToStoppedIfOffline | SimpleActivePartBehaviorOptions.UseMainThreadFailedState | SimpleActivePartBehaviorOptions.PerformMainLoopServiceCallsServiceBusyConditionChangeDetection,
-        /// <para/>SimplePartBaseSettings = SimplePartBaseSettings.DefaultVersion2 (SimplePartBaseBehavior = SimplePartBaseBehavior.All (TreatPartAsBusyWhenQueueIsNotEmpty | TreatPartAsBusyWhenInternalPartBusyCountIsNonZero)),
+        /// <para/>SimplePartBaseSettings = SimplePartBaseSettings.DefaultVersion2 (SimplePartBaseBehavior = SimplePartBaseBehavior.All (TreatPartAsBusyWhenQueueIsNotEmpty | TreatPartAsBusyWhenInternalPartBusyCountIsNonZero)), CreateBaseStateIVAInBaseConstructor = true
         /// <para/>Please note: unless explicitly assigned by the client the default, unset, value of WaitTimeLimit will be replaced with 0.1 seconds by the Part when it uses this object's SetupForUse method.
         /// </summary>
         public static SimpleActivePartBaseSettings DefaultVersion2
@@ -1026,12 +1060,18 @@ namespace MosaicLib.Modular.Part
         {
             string description = ipf.ToString(ToStringSelect.MesgAndDetail);
             bool setBaseUseState = settings.CheckFlag(GoOnlineAndGoOfflineHandling.GoOnlineUpdatesBaseUseState);
+            bool useOnlineInPlaceOfSpecificAttemptOnlineCases = setBaseUseState && settings.CheckFlag(GoOnlineAndGoOfflineHandling.UseOnlineInPlaceOfSpecificAttemptOnlineCases)
+                                                                && settings.AutomaticallyIncAndDecBusyCountAroundActionInvoke && settings.simplePartBaseSettings.SimplePartBaseBehavior.IsAnySet(SimplePartBaseBehavior.BusyRelatedFlags);
 
             IBaseState entryBaseState = BaseState;
+            UseState goOnlineInProgressUseState = UseState.Undefined;
 
             if (setBaseUseState)
             {
-                SetBaseState(UseState.AttemptOnline, "{0} Started".CheckedFormat(description), true);
+                if ((entryBaseState.UseState == UseState.Online || entryBaseState.UseState == UseState.OnlineBusy) && useOnlineInPlaceOfSpecificAttemptOnlineCases)
+                    SetBaseState(goOnlineInProgressUseState = UseState.Online, "{0} Started (already Online case)".CheckedFormat(description), true);
+                else
+                    SetBaseState(goOnlineInProgressUseState = UseState.AttemptOnline, "{0} Started".CheckedFormat(description), true);
             }
 
             string result;
@@ -1045,7 +1085,7 @@ namespace MosaicLib.Modular.Part
             }
             catch (System.Exception ex)
             {
-                if (setBaseUseState && BaseState.UseState == UseState.AttemptOnline && settings.CheckFlag(GoOnlineAndGoOfflineHandling.GoOnlineFailureSetsUseStateToAttemptOnlineFailed))
+                if (setBaseUseState && PrivateBaseState.UseState == goOnlineInProgressUseState && settings.CheckFlag(GoOnlineAndGoOfflineHandling.GoOnlineFailureSetsUseStateToAttemptOnlineFailed))
                 {
                     result = "Derived class PerformGoOnlineAction method threw exception: {0}".CheckedFormat(ex.ToString(ExceptionFormat.TypeAndMessageAndStackTrace));
 
@@ -1063,9 +1103,9 @@ namespace MosaicLib.Modular.Part
 
             if (setBaseUseState)
             {
-                if (BaseState.UseState != UseState.AttemptOnline && settings.CheckFlag(GoOnlineAndGoOfflineHandling.AcceptCustomChangeFromAttemptOnlineState))
+                if (PrivateBaseState.UseState != goOnlineInProgressUseState && settings.CheckFlag(GoOnlineAndGoOfflineHandling.AcceptCustomChangeFromAttemptOnlineState))
                 {
-                    Log.Trace.Emit("{0}: PerformGoOnlineAction explicitly changed the UseState to '{1}' [will not overwrite here]", description, BaseState.UseState);
+                    Log.Trace.Emit("{0}: PerformGoOnlineAction explicitly changed the UseState to '{1}' [will not overwrite here]", description, PrivateBaseState.UseState);
                 }
                 else if (result == string.Empty || ipf.ActionState.Succeeded)
                 {
@@ -1100,7 +1140,7 @@ namespace MosaicLib.Modular.Part
         /// </summary>
         protected virtual string PerformGoOnlineActionEx(IProviderFacet ipf, bool andInitialize, INamedValueSet npv)
         {
-            return PerformGoOnlineAction(andInitialize);
+            return PerformGoOnlineAction(andInitialize).MapNullToEmpty();
         }
 
         /// <summary>Stub method provides overridable virtual default GoOnlineAction.  Fails if BasePerformMethodsSucceed flag is not set in GoOnlineAndGoOfflineHandling property value.</summary>
@@ -1138,7 +1178,7 @@ namespace MosaicLib.Modular.Part
         /// <summary>Provide overridable virtual passthrough PerformGoOfflineAction implementation.  Invokes PerformGoOfflineAction();</summary>
 		protected virtual string PerformGoOfflineAction(IProviderActionBase action)
 		{
-			return PerformGoOfflineAction();
+            return PerformGoOfflineAction().MapNullToEmpty();
 		}
 
         /// <summary>Stub method provides overridable virtual default GoOfflineAction.  Fails if BasePerformMethodsSucceed flag is not set in GoOnlineAndGoOfflineHandling property value.</summary>
@@ -1202,7 +1242,7 @@ namespace MosaicLib.Modular.Part
                 }
             }
 
-            return PerformServiceAction(serviceName);
+            return PerformServiceAction(serviceName).MapNullToEmpty();
         }
 
         /// <summary>Stub method provides overridable virtual default ServiceAction.  This method always fails (returns an error message).</summary>

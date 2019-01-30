@@ -346,6 +346,14 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
+        /// Extension method returns the given <paramref name="arrayIn"/> is non-empty otherwise this method returns <paramref name="mapEmptyTo"/>.
+        /// </summary>
+        public static TItemType[] MapEmptyTo<TItemType>(this TItemType[] arrayIn, TItemType[] mapEmptyTo = null)
+        {
+            return (arrayIn.SafeLength() != 0) ? arrayIn : mapEmptyTo;
+        }
+
+        /// <summary>
         /// Extension method either returns the given <paramref name="listIn"/> (if it is not null) or returns a new empty List{TItemType} if the given <paramref name="listIn"/> is null.
         /// </summary>
         public static List<TItemType> MapNullToEmpty<TItemType>(this List<TItemType> listIn)

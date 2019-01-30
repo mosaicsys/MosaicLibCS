@@ -208,6 +208,13 @@ namespace MosaicLib.Modular.Action
         /// These may be used to carry progress information back to the client and/or to carry additional results back to the client once the Action is complete.
         /// </summary>
         Common.INamedValueSet NamedValues { get; }
+
+        /// <summary>
+        /// IEquatable{IActionState} Equals implementation.  
+        /// Returns true of the contents of this IActionState are "equal" to the contents of the other IActionState.
+        /// Checks StateCode, ResultCode, TimeStamp (optionally) and NamedValues for equality
+        /// </summary>
+        bool Equals(IActionState other, bool compareTimestamps);
     }
 
 	#endregion
@@ -347,7 +354,7 @@ namespace MosaicLib.Modular.Action
         /// <summary>
         /// Returns true if the given actionState has the same contents as the given rhs.
         /// </summary>
-        public static bool IsEqualTo(this IActionState actionState, IActionState rhs)
+        public static bool IsEqualTo(this IActionState actionState, IActionState rhs, bool compareTimestamps = true)
         {
             if (Object.ReferenceEquals(actionState, rhs) || (actionState == null && rhs == null))
                 return true;
@@ -355,7 +362,7 @@ namespace MosaicLib.Modular.Action
             if (actionState == null || rhs == null)
                 return false;
 
-            return actionState.Equals(rhs);
+            return actionState.Equals(rhs, compareTimestamps: compareTimestamps);
         }
 
         /// <summary>

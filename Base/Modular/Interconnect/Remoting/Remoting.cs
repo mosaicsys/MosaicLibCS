@@ -930,12 +930,12 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             }
             else if (ss.MatchToken("Sync"))
             {
-                SyncFlags syncFlags = default(SyncFlags);
+                SyncFlags syncFlags = npv["syncFlags"].VC.GetValue<SyncFlags>(rethrow: false);
 
                 if (ss.IsAtEnd || ss.ParseValue<SyncFlags>(out syncFlags))
                     return PerformSync(syncFlags);
                 else
-                    return "Invalid or unsupported Sync request format [{0}]".CheckedFormat(serviceName);
+                    return "Invalid or unsupported Sync request format [{0}, npv:{1}]".CheckedFormat(serviceName, npv.SafeToStringSML());
             }
             else if (ss.MatchToken("FaultInjection"))
             {
@@ -973,7 +973,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
 
         private string PerformSync(IProviderFacet action)
         {
-            SyncFlags syncFlags = action.NamedParamValues["syncflags"].VC.GetValue<SyncFlags>(rethrow: true);
+            SyncFlags syncFlags = action.NamedParamValues["syncFlags"].VC.GetValue<SyncFlags>(rethrow: true);
 
             return PerformSync(syncFlags);
         }

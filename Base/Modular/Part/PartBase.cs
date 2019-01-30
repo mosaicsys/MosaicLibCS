@@ -677,6 +677,12 @@ namespace MosaicLib.Modular.Part
         /// <summary>Returns true if the given other IBaseState is non-null and if the contents of this and the given other IBaseState are equal to each other.</summary>
         public bool Equals(IBaseState other)
         {
+            return this.Equals(other, compareTimestamps: true);
+        }
+
+        /// <summary>Returns true if the given other IBaseState is non-null and if the contents of this and the given other IBaseState are equal to each other (comparing timestamps is optional).</summary>
+        public bool Equals(IBaseState other, bool compareTimestamps)
+        {
             return (other != null
                 && PartID == other.PartID
                 && IsSimulated == other.IsSimulated
@@ -685,7 +691,7 @@ namespace MosaicLib.Modular.Part
                 && ConnState == other.ConnState
                 && ActionName == other.ActionName
                 && Reason == other.Reason
-                && TimeStamp == other.TimeStamp
+                && (TimeStamp == other.TimeStamp || !compareTimestamps)
                 );
         }
 
@@ -925,6 +931,9 @@ namespace MosaicLib.Modular.Part
 
         /// <summary>(TreatPartAsBusyWhenQueueIsNotEmpty | TreatPartAsBusyWhenInternalPartBusyCountIsNonZero) [0x03]</summary>
         All = (TreatPartAsBusyWhenQueueIsNotEmpty | TreatPartAsBusyWhenInternalPartBusyCountIsNonZero),
+
+        /// <summary>This is the set of all of the busy related flag items from this behavior type.  (TreatPartAsBusyWhenQueueIsNotEmpty | TreatPartAsBusyWhenInternalPartBusyCountIsNonZero) [0x03]</summary>
+        BusyRelatedFlags = (TreatPartAsBusyWhenQueueIsNotEmpty | TreatPartAsBusyWhenInternalPartBusyCountIsNonZero),
     }
 
     /// <summary>
@@ -966,6 +975,11 @@ namespace MosaicLib.Modular.Part
         /// When set to true this behavior disables all part base class based IVI use for publication using IVAs created from the PartBaseIVI (or the default IVI): BaseState, ActionInfo, LastActionInfo, ...
         /// </summary>
         public bool DisablePartBaseIVIUse { get; set; }
+
+        /// <summary>
+        /// When this flag is set, the BaseState IVA will be created in the SimplePartBase classes constructor and it will be initialized to the last published BaseState at that point.
+        /// </summary>
+        public bool CreateBaseStateIVAInBaseConstructor { get; set; }
 
         /// <summary>
         /// Used to specify settings in relation to logging options for this part.
@@ -1016,7 +1030,8 @@ namespace MosaicLib.Modular.Part
 
         /// <summary>
         /// returns te second non-constructor default SimpleParstBaseSettings value (established under MosaicLibCS 0.1.6.1):
-        /// <para/>SimplePartBaseBehavior = SimplePartBaseBehavior.All (TreatPartAsBusyWhenQueueIsNotEmpty | TreatPartAsBusyWhenInternalPartBusyCountIsNonZero),
+        /// <para/>SimplePartBaseBehavior = SimplePartBaseBehavior.All (TreatPartAsBusyWhenQueueIsNotEmpty | TreatPartAsBusyWhenInternalPartBusyCountIsNonZero), 
+        /// CreateBaseStateIVAInBaseConstructor = true
         /// </summary>
         public static SimplePartBaseSettings DefaultVersion2
         {
@@ -1025,6 +1040,7 @@ namespace MosaicLib.Modular.Part
                 return new SimplePartBaseSettings()
                 {
                     SimplePartBaseBehavior = SimplePartBaseBehavior.All,
+                    CreateBaseStateIVAInBaseConstructor = true,
                 };
             }
         }
@@ -1066,7 +1082,8 @@ namespace MosaicLib.Modular.Part
                                                     IValuesInterconnection partBaseIVI = null,
                                                     LoggingOptionSelect ? loggingOptionSelect = null,
                                                     bool disableBusyBehavior = false,
-                                                    bool disablePartBaseIVIUse = false
+                                                    bool disablePartBaseIVIUse = false,
+                                                    bool createBaseStateIVAInBaseConstructor = false
                                                     )
         {
             if (simplePartBaseBehavior != null)
@@ -1089,6 +1106,9 @@ namespace MosaicLib.Modular.Part
 
             if (disablePartBaseIVIUse)
                 settings.DisablePartBaseIVIUse = true;
+
+            if (createBaseStateIVAInBaseConstructor)
+                settings.CreateBaseStateIVAInBaseConstructor = true;
 
             return settings;
         }
@@ -1135,6 +1155,9 @@ namespace MosaicLib.Modular.Part
             publishedBaseState.Object = PrivateBaseState;
 
             settings = settings.SetupForUse();
+
+            if (settings.CreateBaseStateIVAInBaseConstructor)
+                SetupBaseStatePublisherIVAIfNeeded();
         }
 
         #endregion
@@ -1223,6 +1246,7 @@ namespace MosaicLib.Modular.Part
                     settings.BaseStatePublicationValueName = "{0}.BaseState".CheckedFormat(PartID);
 
                 baseStatePublisherIVA = (settings.PartBaseIVI ?? Values.Instance).GetValueAccessor(settings.BaseStatePublicationValueName);
+                baseStatePublisherIVA.Set(publishedBaseState.Object);
             }
         }
 
@@ -1234,6 +1258,7 @@ namespace MosaicLib.Modular.Part
             IBaseState entryState = publishedBaseState.VolatileObject;
             UseState entryUseState = (entryState != null ? entryState.UseState : UseState.Initial);
             ConnState entryConnState = (entryState != null ? entryState.ConnState : ConnState.Initial);
+            string entryReason = (entryState != null ? entryState.Reason : null);
             string entryActionName = (entryState != null ? entryState.ActionName : String.Empty);
 
             BaseState baseStateCopy = PrivateBaseState;
@@ -1259,7 +1284,7 @@ namespace MosaicLib.Modular.Part
             bool includeAction = (publishState.ActionName != String.Empty || entryActionName != publishState.ActionName);
             bool useNewStyle = ((settings.LoggingOptionSelect & LoggingOptionSelect.OldXmlishStyle) == 0);
 
-            if (entryUseState != publishState.UseState)
+            if (entryUseState != publishState.UseState || entryReason != publishState.Reason)
             {
                 if (!includeAction)
                 {

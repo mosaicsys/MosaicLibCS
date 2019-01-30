@@ -550,13 +550,13 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             /// <summary>Allows the client to "attach" a gauge to any delgate that can produce a floating point value.</summary>
             public Func<double> RawValueSourceDelegate { get; private set; }
 
-            /// <summary>Gives the most recently observed pressure value in client specified PressureUnits.  Will have noise added if NoiseLevelInPercent is above zero.</summary>
+            /// <summary>Gives the most recently observed flow or pressure value in client specified VolumetricFlowUnits or PressureUnits.  Will have noise added if NoiseLevelInPercent is above zero.</summary>
             public double Value { get { return Config.ConvertValueUOM(servicedScaledValueStdUnits, outbound: true); } }
 
-            /// <summary>Gives the most recently observed differential pressure value (Pressure - Config.DifferentialReferencePPressure) in client specified PressureUnits.  Will have noise added if either Config.noise related parameter is above zero.  Config.InvertDifferentialReading can be used to invert the sign of the returned value.</summary>
+            /// <summary>Gives the most recently observed differential value (Value - Config.DifferentialReferenceValue) in client specified VolumetricFlowUnits or PressureUnits.  Will have noise added if either Config.noise related parameter is above zero.  Config.InvertDifferentialReading can be used to invert the sign of the returned value.</summary>
             public double DifferentialValue { get { return Config.ConvertValueUOM(servicedScaledDifferentialValueStdUnits, outbound: true); } }
 
-            /// <summary>Returns true if the last raw reading was outside of the stated min..max reading range.</summary>
+            /// <summary>Returns true if the last raw reading was outside of the stated min .. max reading range.</summary>
             public bool ReadingOutOfRange { get; private set; }
 
             /// <summary>Returns true when the sensor has detected a fault condition (ReadingOutOfRange, FaultInjection, ...).</summary>

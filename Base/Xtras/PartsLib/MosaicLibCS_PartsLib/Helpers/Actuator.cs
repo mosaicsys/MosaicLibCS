@@ -233,6 +233,7 @@ namespace MosaicLib.PartsLib.Helpers
         }
     }
 
+    [DataContract(Namespace=MosaicLib.Constants.PartsLibNameSpace)]
     public class ActuatorState : IActuatorState
     {
         public ActuatorState()
@@ -269,12 +270,23 @@ namespace MosaicLib.PartsLib.Helpers
             return this;
         }
 
-        public virtual ActuatorPosition TargetPos { get; set; }
-        public virtual string TargetPosStr { get; set; }
-        public virtual double TargetPositionInPercent { get; set; }
-        public virtual ActuatorPosition PosState { get; set; }
-        public virtual string PosStateStr { get; set; }
-        public virtual double PositionInPercent { get; set; }
+        [DataMember(Order = 100, IsRequired = false, EmitDefaultValue = false)]
+        public ActuatorPosition TargetPos { get; set; }
+
+        [DataMember(Order = 200, IsRequired = false, EmitDefaultValue = false)]
+        public string TargetPosStr { get; set; }
+
+        [DataMember(Order = 300, IsRequired = false, EmitDefaultValue = false)]
+        public double TargetPositionInPercent { get; set; }
+
+        [DataMember(Order = 400, IsRequired = false, EmitDefaultValue = false)]
+        public ActuatorPosition PosState { get; set; }
+
+        [DataMember(Order = 500, IsRequired = false, EmitDefaultValue = false)]
+        public string PosStateStr { get; set; }
+
+        [DataMember(Order = 600, IsRequired = false, EmitDefaultValue = false)]
+        public double PositionInPercent { get; set; }
 
         public bool IsAtPos1 { get { return (IsAtTarget && PosState == ActuatorPosition.AtPos1); } }
         public bool IsAtPos2 { get { return (IsAtTarget && PosState == ActuatorPosition.AtPos2); } }
