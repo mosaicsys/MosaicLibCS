@@ -608,7 +608,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             
             MessageStreamTools.IMessageStreamTool messageStreamTool = null;
 
-            if (toolTypeStr == MessageStreamTools.BaseMessageStreamTool.Config.toolTypeStr)
+            if (toolTypeStr == MessageStreamTools.BaseMessageStreamTool.LocalConfig.toolTypeStr)
                 messageStreamTool = new MessageStreamTools.BaseMessageStreamTool(PartID, mstt.stream, this, bufferPool, message, messageNVS) { ServerInfoNVS = Config.ServerInfoNVS };
             else if (toolTypeStr == MessageStreamTools.ActionRelayMessageStreamToolConfig.toolTypeStr)
                 messageStreamTool = new MessageStreamTools.ActionRelayMessageStreamTool(PartID, mstt.stream, this, bufferPool, message, messageNVS, Config.IPartsInterconnection);
@@ -813,7 +813,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
                 if (messageStreamToolTrackerArray.IsNullOrEmpty())
                 {
                     actionRelayStreamTool = null;
-                    var adjustedStreamToolConfigArray = new MessageStreamTools.BaseMessageStreamTool.Config().Concat<MessageStreamToolConfigBase>(Config.StreamToolsConfigArray).ToArray();
+                    var adjustedStreamToolConfigArray = new MessageStreamTools.BaseMessageStreamTool.LocalConfig().Concat<MessageStreamToolConfigBase>(Config.StreamToolsConfigArray).ToArray();
                     messageStreamToolTrackerArray = adjustedStreamToolConfigArray.Select((stc, index) => new MessageStreamToolTracker() { stream = index, messageStreamToolConfig = stc, messageStreamTool = CreateStreamTool(index, stc) }).ToArray();
                 }
 
@@ -1169,7 +1169,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
 
         private MessageStreamTools.IMessageStreamTool CreateStreamTool(int stream, MessageStreamTools.MessageStreamToolConfigBase messageStreamToolConfig)
         {
-            MessageStreamTools.BaseMessageStreamTool.Config baseMSTConfig = messageStreamToolConfig as MessageStreamTools.BaseMessageStreamTool.Config;
+            MessageStreamTools.BaseMessageStreamTool.LocalConfig baseMSTConfig = messageStreamToolConfig as MessageStreamTools.BaseMessageStreamTool.LocalConfig;
 
             if (baseMSTConfig != null)
             {

@@ -79,6 +79,7 @@ namespace RemotingTool
                 Port = "9000";
                 IPAddress = "127.0.0.1";
                 TraceSelect = null;
+                ToolLogGate = Logging.LogGate.All;
                 IVITableName = string.Empty;
                 AutoReconnectHoldoff = (10.0).FromSeconds();
                 RemoteLogMessageSetName = "LogMessageHistory";
@@ -86,6 +87,7 @@ namespace RemotingTool
                 RemoteLogMessageSetMaximumItemsPerMessage = 100;
                 BufferSize = MosaicLib.Modular.Interconnect.Remoting.Buffers.BufferPool.DefaultBufferSize;
                 SessionExpirationPeriod = (1.0).FromMinutes();
+                E039ObjectTableSetName = "E039ObjectSet";
             }
 
             [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
@@ -99,6 +101,9 @@ namespace RemotingTool
 
             [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
             public string TraceSelect { get; set; }
+
+            [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
+            public Logging.LogGate ToolLogGate { get; set; }
 
             [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
             public TimeSpan AutoReconnectHoldoff { get; set; }
@@ -120,9 +125,14 @@ namespace RemotingTool
 
             [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
             public TimeSpan SessionExpirationPeriod { get; set; }
+
+            [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
+            public string E039ObjectTableSetName { get; set; }
         }
 
         ConfigValues config = new ConfigValues();
+
+        public string E039ObjectTableSetName { get { return config.E039ObjectTableSetName; } }
 
         public Window1()
         {
@@ -159,9 +169,13 @@ namespace RemotingTool
                 },
                 StreamToolsConfigArray = new MessageStreamToolConfigBase[] 
                 { 
-                    new ActionRelayMessageStreamToolConfig(),
+                    new ActionRelayMessageStreamToolConfig()
+                    {
+                        ToolLogGate = config.ToolLogGate,
+                    },
                     new IVIRelayMessageStreamToolConfig()
                     {
+                        ToolLogGate = config.ToolLogGate,
                         ClientIVI = RemoteIVI,
                         RemoteIVIName = config.IVITableName,
                         IVIRelayDirection = IVIRelayDirection.FromServer,
@@ -169,14 +183,16 @@ namespace RemotingTool
                     },
                     new SetRelayMessageStreamToolConfig<Logging.LogMessage>()
                     {
+                        ToolLogGate = config.ToolLogGate,
                          ClearClientSetOnCloseOrFailure = true,
                          SetID = new Modular.Interconnect.Sets.SetID(config.RemoteLogMessageSetName, generateUUIDForNull: false),
                          MaximumItemsPerMessage = config.RemoteLogMessageSetMaximumItemsPerMessage,
                     },
                     new SetRelayMessageStreamToolConfig<E039Object>()
                     {
+                        ToolLogGate = config.ToolLogGate,
                         ClearClientSetOnCloseOrFailure = true,
-                        SetID = new Modular.Interconnect.Sets.SetID("E039ObjectSet", generateUUIDForNull: false),
+                        SetID = new Modular.Interconnect.Sets.SetID(E039ObjectTableSetName, generateUUIDForNull: false),
                     },
                 }.WhereIsNotDefault().ToArray(),
             };
@@ -189,7 +205,7 @@ namespace RemotingTool
 
             DataContext = WVIA;
 
-            E039ObjectSetTracker = SetTracker.GetSetTracker("E039ObjectSet");
+            E039ObjectSetTracker = SetTracker.GetSetTracker(E039ObjectTableSetName);
             var test = e039ListView;
         }
 
@@ -269,27 +285,25 @@ namespace RemotingTool
 
         #endregion
 
-        #region Button click handlers
-
-        private void RCButton_Clicked(object sender, RoutedEventArgs e)
+        private void RoutedServiceCommand_Executed(object sender, ExecutedRoutedEventArgs e)
         {
-            Button b = (Button)sender;
+            RoutedCommand rcmd = (RoutedCommand) e.Command;
+            Control c = e.Source as Control;
 
-            switch ((string)(b.Tag))
+            string cmdParam = e.Parameter.SafeToString();
+
+            var npv = MosaicLib.WPF.Extensions.Attachable.GetNPV(c);
+
+            if (npv != null && npv.Contains("PingSize"))
             {
-                // NOTE: these cases are now handled directly in the RemotingClient via its use of the SupportServiceActions and SupportMappedServiceActions behavior flags.
-
-                //case "GoOnline": remotingClient.CreateGoOnlineAction(false).Start(); break;
-                //case "GoOnlineAndInitialize": remotingClient.CreateGoOnlineAction(true).Start(); break;
-                //case "GoOffline": remotingClient.CreateGoOfflineAction().Start(); break;
-                //case "Connect": remotingClient.CreateGoOnlineAction(true).Start(); break;
-                //case "Disconnect": remotingClient.CreateGoOfflineAction().Start(); break;
-                default: remotingClient.CreateServiceAction((string)(b.Tag)).Start(); break;
-                case "Ping": remotingClient.CreateServiceAction("Remote $RemotingServicePing$").Start(); break;
-                case "BigPing": remotingClient.CreateServiceAction("Remote $RemotingServicePing$", namedParamValues: new NamedValueSet() { { "b", new byte [100 * 1024] } }).Start(); break;
+                var npvAdj = npv.ConvertToWritable();
+                npvAdj.SetValue("b", new byte[npv["PingSize"].VC.GetValue<int>(rethrow: false, defaultValue: 100 * 1024)]);
+                npv = npvAdj;
             }
-        }
 
-        #endregion
+            remotingClient.CreateServiceAction(cmdParam, namedParamValues: npv).Start();
+
+            e.Handled = true;
+        }
     }
 }

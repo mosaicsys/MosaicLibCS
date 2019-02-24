@@ -194,6 +194,12 @@ namespace MosaicLib.PartsLib.Common.LPM
     [DataContract(Namespace = MosaicLib.Constants.PartsLibNameSpace)]
     public class LPMState : ILPMState
     {
+        /// <summary>
+        /// Returns an empty LPMState instance.
+        /// </summary>
+        public static ILPMState Empty { get { return _empty; } }
+        private static readonly ILPMState _empty = new LPMState();
+
         public LPMState()
         {
             DeviceCapabilities = new DeviceCapabilities();

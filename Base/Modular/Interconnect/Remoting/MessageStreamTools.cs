@@ -120,28 +120,50 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
     #endregion
 
-    #region MessageStreamToolConfigBase
+    #region MessageStreamToolConfigBase, MessageStreamToolConfigBase<TConfigType>
 
     /// <summary>Base class for configuration (and selection) objects used to create various types of remoting stream tools.</summary>
-    public abstract class MessageStreamToolConfigBase : ICopyable<MessageStreamToolConfigBase>
+    public abstract class MessageStreamToolConfigBase
     {
-        public virtual NamedValueSet AddValues(NamedValueSet nvs) 
+        public MessageStreamToolConfigBase()
+        {
+            ToolLogGate = Logging.LogGate.All;
+        }
+
+        public virtual NamedValueSet AddValues(NamedValueSet nvs)
         {
             nvs = nvs.ConvertToWritable();
 
             nvs.SetValue("ToolTypeStr", ToolTypeStr);
+            nvs.ConditionalSetValue("ToolLogGate", ToolLogGate != Logging.LogGate.All, ToolLogGate);
 
-            return nvs; 
+            return nvs;
         }
-
-        public virtual MessageStreamToolConfigBase ApplyValues(INamedValueSet nvs) 
-        { 
-            return this; 
-        }
-
-        public abstract MessageStreamToolConfigBase MakeCopyOfThis(bool deepCopy = true);
 
         public abstract string ToolTypeStr { get; }
+
+        public Logging.LogGate ToolLogGate { get; set; }
+    }
+
+    /// <summary>
+    /// Base class for configuration (and selection) objects used to create various types of remoting stream tools.  
+    /// This layer/version is templateized on its derived type.
+    /// </summary>
+    public abstract class MessageStreamToolConfigBase<TDerivedType>
+        : MessageStreamToolConfigBase, ICopyable<TDerivedType>
+        where TDerivedType : MessageStreamToolConfigBase
+    {
+        public virtual TDerivedType ApplyValues(INamedValueSet nvs) 
+        {
+            ToolLogGate = nvs["ToolLogGate"].VC.GetValue<Logging.LogGate>(rethrow: false, defaultValue: Logging.LogGate.All);
+
+            return (this as TDerivedType);
+        }
+
+        public virtual TDerivedType MakeCopyOfThis(bool deepCopy = true)
+        {
+            return (TDerivedType)this.MemberwiseClone(); 
+        }
     }
 
     #endregion
@@ -152,14 +174,12 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
     /// This object is used to select remoting message stream to be used to relay actions that are delivered to a Remoting client part over the remoting connection
     /// At most one stream can be configured for action relay use.
     /// </summary>
-    public class ActionRelayMessageStreamToolConfig : MessageStreamToolConfigBase
+    public class ActionRelayMessageStreamToolConfig : MessageStreamToolConfigBase<ActionRelayMessageStreamToolConfig>
     {
         public static readonly string toolTypeStr = "ActionRelay";
         public override string ToolTypeStr { get { return toolTypeStr; } }
 
         public Parts.IPartsInterconnection LocalIPartsInterconnection { get; set; }
-
-        public override MessageStreamToolConfigBase MakeCopyOfThis(bool deepCopy = true) { return (MessageStreamToolConfigBase)this.MemberwiseClone(); }
     }
 
     /// <summary>This intercace allows a Remoting part to make use of an Action Relay Stream Tool to relay actions that are give to the part to the other end.</summary>
@@ -176,7 +196,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
     /// <summary>
     /// This is an intermediate base class used to support creation of templatized SetRelayMessageStreamToolConfig objects.
     /// </summary>
-    public class SetRelayMessageStreamToolConfigBase : MessageStreamToolConfigBase
+    public class SetRelayMessageStreamToolConfigBase : MessageStreamToolConfigBase<SetRelayMessageStreamToolConfigBase>
     {
         public static readonly string toolTypeStr = "SetRelay";
         public override string ToolTypeStr { get { return toolTypeStr; } }
@@ -204,7 +224,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
             return nvs;
         }
 
-        public override MessageStreamToolConfigBase ApplyValues(INamedValueSet nvs) 
+        public override SetRelayMessageStreamToolConfigBase ApplyValues(INamedValueSet nvs) 
         {
             nvs = nvs ?? NamedValueSet.Empty;
 
@@ -214,10 +234,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
             SetItemTypeStr = nvs["SetItemTypeStr"].VC.GetValue<string>(rethrow: false).MapNullToEmpty();
             ClearClientSetOnCloseOrFailure = nvs.Contains("ClearClientSetOnCloseOrFailure");
 
-            return this;
+            return base.ApplyValues(nvs);
         }
-
-        public override MessageStreamToolConfigBase MakeCopyOfThis(bool deepCopy = true) { return (MessageStreamToolConfigBase)this.MemberwiseClone(); }
 
         internal virtual Sets.ITrackingSet CreateReferenceTrackingSet() { throw new System.NotImplementedException(); }
     }
@@ -229,7 +247,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
     {
         internal override String SetItemTypeStr { get { return typeof(TSetItemType).ToString(); } set { } }
 
-        public override MessageStreamToolConfigBase MakeCopyOfThis(bool deepCopy = true) { return (MessageStreamToolConfigBase)this.MemberwiseClone(); }
+        public override SetRelayMessageStreamToolConfigBase MakeCopyOfThis(bool deepCopy = true) { return (SetRelayMessageStreamToolConfigBase)this.MemberwiseClone(); }
 
         internal override Sets.ITrackingSet CreateReferenceTrackingSet() { return new Sets.TrackingSet<TSetItemType>(SetID, Sets.SetType.Tracking, registerSelfWithSetsInstance: (LocalISetsInstance ?? Sets.Sets.Instance), createMutex: true); }
     }
@@ -274,7 +292,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
     /// This object is used to select and configure a remoting message stream to be used to cyclicly transfer selected contents between a remote IVI (name may be specified explicitly if registered) and the local one.
     /// This object may specify the direction of transfer, name filtering and conversion information, and meta data filtering criteria.
     /// </summary>
-    public class IVIRelayMessageStreamToolConfig : MessageStreamToolConfigBase
+    public class IVIRelayMessageStreamToolConfig : MessageStreamToolConfigBase<IVIRelayMessageStreamToolConfig>
     {
         public IVIRelayMessageStreamToolConfig()
         {
@@ -315,7 +333,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
             return nvs;
         }
 
-        public override MessageStreamToolConfigBase ApplyValues(INamedValueSet nvs)
+        public override IVIRelayMessageStreamToolConfig ApplyValues(INamedValueSet nvs)
         {
             nvs = nvs ?? NamedValueSet.Empty;
 
@@ -330,22 +348,17 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
             ResetClientSideIVAsOnCloseOrFailure = nvs.Contains("ResetClientSideIVAsOnCloseOrFailure");
             IVATurnaroundHoldoffPeriod = nvs["IVATurnaroundHoldoffPeriod"].VC.GetValue<TimeSpan>(rethrow: false);
 
-            return this;
+            return base.ApplyValues(nvs);
         }
 
-        public override MessageStreamToolConfigBase MakeCopyOfThis(bool deepCopy = true)
+        public override IVIRelayMessageStreamToolConfig MakeCopyOfThis(bool deepCopy = true)
         {
-            return new IVIRelayMessageStreamToolConfig()
-            {
-                ClientIVI = ClientIVI,
-                RemoteIVIName = RemoteIVIName,
-                IVIRelayDirection = IVIRelayDirection,
-                ServerToClientFromNamePrefix = ServerToClientFromNamePrefix,
-                ServerToClientToNamePrefix = ServerToClientToNamePrefix,
-                ServerToClientMetaDataFilterNVS = ServerToClientMetaDataFilterNVS.ConvertToReadOnly(mapNullToEmpty: true),
-                ClientToServerMetaDataFilterNVS = ClientToServerMetaDataFilterNVS.ConvertToReadOnly(mapNullToEmpty: true),
-                IVATurnaroundHoldoffPeriod = IVATurnaroundHoldoffPeriod,
-            };
+            IVIRelayMessageStreamToolConfig copy = base.MakeCopyOfThis(deepCopy: deepCopy);     // this defaults to being a memberwise clone...
+
+            copy.ServerToClientMetaDataFilterNVS = ServerToClientMetaDataFilterNVS.ConvertToReadOnly(mapNullToEmpty: true);
+            copy.ClientToServerMetaDataFilterNVS = ClientToServerMetaDataFilterNVS.ConvertToReadOnly(mapNullToEmpty: true);
+
+            return copy;
         }
     }
 
@@ -373,7 +386,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
     /// This message stream tool is used for message based communications between the client and the server.  
     /// Initially it is used to carry the ServerInfoNVS from the server to the client on session setup.
     /// </summary>
-    public class BaseMessageStreamTool : MessageStreamToolBase, IMessageStreamTool
+    public class BaseMessageStreamTool : MessageStreamToolBase<BaseMessageStreamTool.LocalConfig>, IMessageStreamTool
     {
         #region Construction and related fields/properties
 
@@ -381,7 +394,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
         /// Client construction
         /// </summary>
         public BaseMessageStreamTool(string hostPartID, int stream, INotifyable hostNotifier, Buffers.BufferPool bufferPool)
-            : base("Base", hostPartID, stream, hostNotifier, bufferPool, isClientSideIn: true)
+            : base("Base", hostPartID, stream, hostNotifier, bufferPool, isClientSideIn: true, config: new LocalConfig())
         {
             ResetState(QpcTimeStamp.Now, ResetType.ClientConstruction);
         }
@@ -390,7 +403,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
         /// Constructor used by RemotingServer
         /// </summary>
         public BaseMessageStreamTool(string hostPartID, int stream, INotifyable hostNotifier, Buffers.BufferPool bufferPool, Messages.Message streamSetupMessage, INamedValueSet streamSetupMessageNVS)
-            : base("Base", hostPartID, stream, hostNotifier, bufferPool, isClientSideIn: false)
+            : base("Base", hostPartID, stream, hostNotifier, bufferPool, isClientSideIn: false, config: new LocalConfig().ApplyValues(streamSetupMessageNVS))
         {
             ResetState(QpcTimeStamp.Now, ResetType.ServerConstruction);
         }
@@ -417,14 +430,12 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
         #endregion
 
-        #region Config
+        #region LocalConfig
 
-        public class Config : MessageStreamToolConfigBase
+        public class LocalConfig : MessageStreamToolConfigBase<LocalConfig>
         {
             public static readonly string toolTypeStr = "Base";
             public override string ToolTypeStr { get { return toolTypeStr; } }
-
-            public override MessageStreamToolConfigBase MakeCopyOfThis(bool deepCopy = true) { return (MessageStreamToolConfigBase)this.MemberwiseClone(); }
         }
 
         #endregion
@@ -468,7 +479,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
             if (sendSetupMessage)
             {
-                mesg = GenerateCommonSetupMessage(qpcTimeStamp, new Config().AddValues(null));
+                mesg = GenerateCommonSetupMessage(qpcTimeStamp, new LocalConfig().AddValues(null));
             }
             else
             {
@@ -543,7 +554,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
     #region ActionRelayMessageStreamTool
 
-    public class ActionRelayMessageStreamTool : MessageStreamToolBase, IMessageStreamTool, IActionRelayMessageStreamTool
+    public class ActionRelayMessageStreamTool : MessageStreamToolBase<ActionRelayMessageStreamToolConfig>, IMessageStreamTool, IActionRelayMessageStreamTool
     {
         /// <summary>
         /// This is the service name that will be interpreted as a ping, rather than as a target part name and sub-service request name
@@ -557,9 +568,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
         /// Constructor used by RemotingClient
         /// </summary>
         public ActionRelayMessageStreamTool(string hostPartID, int stream, INotifyable hostNotifier, Buffers.BufferPool bufferPool, ActionRelayMessageStreamToolConfig config)
-            : base("ActionRelay", hostPartID, stream, hostNotifier, bufferPool, isClientSideIn: true)
+            : base("ActionRelay", hostPartID, stream, hostNotifier, bufferPool, isClientSideIn: true, config: config)
         {
-            Config = config;
             IPartsInterconnection = config.LocalIPartsInterconnection ?? Parts.Parts.Instance;
 
             ResetState(QpcTimeStamp.Now, ResetType.ClientConstruction);
@@ -569,15 +579,13 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
         /// Constructor used by RemotingServer
         /// </summary>
         public ActionRelayMessageStreamTool(string hostPartID, int stream, INotifyable hostNotifier, Buffers.BufferPool bufferPool, Messages.Message streamSetupMessage, INamedValueSet streamSetupMessageNVS, Parts.IPartsInterconnection iPartsInterconnection)
-            : base("ActionRelay", hostPartID, stream, hostNotifier, bufferPool, isClientSideIn: false)
+            : base("ActionRelay", hostPartID, stream, hostNotifier, bufferPool, isClientSideIn: false, config: new ActionRelayMessageStreamToolConfig().ApplyValues(streamSetupMessageNVS))
         {
-            (Config = new ActionRelayMessageStreamToolConfig()).ApplyValues(streamSetupMessageNVS);
             IPartsInterconnection = iPartsInterconnection ?? Parts.Parts.Instance;
 
             ResetState(QpcTimeStamp.Now, ResetType.ServerConstruction);
         }
 
-        public ActionRelayMessageStreamToolConfig Config { get; private set; }
         public Parts.IPartsInterconnection IPartsInterconnection { get; private set; }
 
         #endregion
@@ -1146,7 +1154,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
     #region SetRelayMessageStreamTool
 
-    public class SetRelayMessageStreamTool : MessageStreamToolBase, IMessageStreamTool
+    public class SetRelayMessageStreamTool : MessageStreamToolBase<SetRelayMessageStreamToolConfigBase>, IMessageStreamTool
     {
         #region Construction and related fields
 
@@ -1154,9 +1162,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
         /// Constructor used by RemotingClient
         /// </summary>
         public SetRelayMessageStreamTool(string hostPartID, int stream, INotifyable hostNotifier, Buffers.BufferPool bufferPool, SetRelayMessageStreamToolConfigBase config)
-            : base ("SetRelay.Rx", hostPartID, stream, hostNotifier, bufferPool, isClientSideIn: true)
+            : base("SetRelay.Rx", hostPartID, stream, hostNotifier, bufferPool, isClientSideIn: true, config: config)
         {
-            Config = config;
             sets = Config.LocalISetsInstance ?? Sets.Sets.Instance;
 
             trackingSet = config.CreateReferenceTrackingSet();
@@ -1168,9 +1175,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
         /// Constructor used by RemotingServer
         /// </summary>
         public SetRelayMessageStreamTool(string hostPartID, int stream, INotifyable hostNotifier, Buffers.BufferPool bufferPool, Messages.Message streamSetupMessage, INamedValueSet streamSetupMessageNVS, Sets.ISetsInterconnection iSetsInstance)
-            : base("SetRelay.Tx", hostPartID, stream, hostNotifier, bufferPool, isClientSideIn: false)
+            : base("SetRelay.Tx", hostPartID, stream, hostNotifier, bufferPool, isClientSideIn: false, config: new SetRelayMessageStreamToolConfigBase().ApplyValues(streamSetupMessageNVS))
         {
-            (Config = new SetRelayMessageStreamToolConfigBase()).ApplyValues(streamSetupMessageNVS);
             sets = iSetsInstance ?? Sets.Sets.Instance;
 
             QpcTimeStamp qpcNow = QpcTimeStamp.Now;
@@ -1179,8 +1185,6 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
             CheckForSets(qpcNow, forceRunNow: true);
         }
-
-        public SetRelayMessageStreamToolConfigBase Config { get; private set; }
 
         Sets.ITrackingSet trackingSet;
 
@@ -1351,7 +1355,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
     #region IVIRelayMessageStreamTool
 
-    public class IVIRelayMessageStreamTool : MessageStreamToolBase, IMessageStreamTool
+    public class IVIRelayMessageStreamTool : MessageStreamToolBase<IVIRelayMessageStreamToolConfig>, IMessageStreamTool
     {
         #region Construction and related fields
 
@@ -1359,9 +1363,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
         /// Constructor used by RemotingClient
         /// </summary>
         public IVIRelayMessageStreamTool(string hostPartID, int stream, INotifyable hostNotifier, Buffers.BufferPool bufferPool, IVIRelayMessageStreamToolConfig config)
-            : base("IVIRelay", hostPartID, stream, hostNotifier, bufferPool, isClientSideIn: true)
+            : base("IVIRelay", hostPartID, stream, hostNotifier, bufferPool, isClientSideIn: true, config: config)
         {
-            Config = config;
             ivi = Config.ClientIVI ?? Values.Values.Instance;
 
             switch (Config.IVIRelayDirection)
@@ -1384,9 +1387,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
         /// Constructor used by RemotingServer
         /// </summary>
         public IVIRelayMessageStreamTool(string hostPartID, int stream, INotifyable hostNotifier, Buffers.BufferPool bufferPool, Messages.Message streamSetupMessage, INamedValueSet streamSetupMessageNVS, IIVIRegistration iIVIRegistration, IValuesInterconnection defaultIVI)
-            : base("IVIRelay", hostPartID, stream, hostNotifier, bufferPool, isClientSideIn: false)
+            : base("IVIRelay", hostPartID, stream, hostNotifier, bufferPool, isClientSideIn: false, config: new IVIRelayMessageStreamToolConfig().ApplyValues(streamSetupMessageNVS))
         {
-            (Config = new IVIRelayMessageStreamToolConfig()).ApplyValues(streamSetupMessageNVS);
             IIVIRegistration = iIVIRegistration ?? Values.IVIRegistration.Instance;
 
             if (Config.RemoteIVIName.IsNullOrEmpty())
@@ -1409,7 +1411,6 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
             ResetState(QpcTimeStamp.Now, ResetType.ServerConstruction, extra: "{0} IsInitiator:{1} IsAcceptor:{2} WaitBeforeRegistration:{3}".CheckedFormat(sideName, isInitiator, isAcceptor, waitBeforeRegistration));
         }
 
-        public IVIRelayMessageStreamToolConfig Config { get; private set; }
         public IIVIRegistration IIVIRegistration { get; private set; }
         public readonly bool isInitiator, isAcceptor, waitBeforeRegistration;
 
@@ -2277,11 +2278,15 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
     #region MessageStreamToolBase
 
-    public abstract class MessageStreamToolBase : DisposableBase, IServiceable
+    public abstract class MessageStreamToolBase<TConfigType> 
+        : DisposableBase, IServiceable
+        where TConfigType : MessageStreamToolConfigBase<TConfigType>, new()
     {
-        public MessageStreamToolBase(string loggingSourceStrPart, string hostPartID, int stream, INotifyable hostNotifier, Buffers.BufferPool bufferPool, bool isClientSideIn)
+        public MessageStreamToolBase(string loggingSourceStrPart, string hostPartID, int stream, INotifyable hostNotifier, Buffers.BufferPool bufferPool, bool isClientSideIn, TConfigType config)
         {
-            logger = new Logging.Logger("{0}.{1}.s{2}".CheckedFormat(hostPartID, loggingSourceStrPart, stream), groupName: Logging.LookupDistributionGroupName);
+            Config = config.MakeCopyOfThis();
+
+            logger = new Logging.Logger("{0}.{1}.s{2}".CheckedFormat(hostPartID, loggingSourceStrPart, stream), groupName: Logging.LookupDistributionGroupName, initialInstanceLogGate: Config.ToolLogGate);
 
             HostPartID = hostPartID;
             Stream = stream;
@@ -2295,6 +2300,9 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
             AddExplicitDisposeAction(Release);
         }
+
+        /// <summary>Gives the config instance that was given to this tool (client side) or was generated from the setup message NVS for this tool (server side)</summary>
+        public TConfigType Config { get; private set; }
 
         /// <summary>Client initiates message stream tool creation in the server.  Different tools have different directionalities of communication based on type and configuration.</summary>
         public readonly bool isClientSide;

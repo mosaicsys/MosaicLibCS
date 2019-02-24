@@ -36,7 +36,6 @@ using MosaicLib;
 using MosaicLib.Utils;
 using MosaicLib.Modular.Interconnect.Sets;
 
-using MosaicLib.WPF.Logging;
 using MosaicLib.WPF.Tools.Sets;
 
 namespace MosaicLib.WPF.Controls
@@ -46,24 +45,75 @@ namespace MosaicLib.WPF.Controls
     /// </summary>
     public partial class LogView : UserControl
     {
+        public const int defaultMaximumCapacity = 1000;
+
         public LogView()
         {
-            LogMessageSetTracker = new AdjustableLogMessageSetTracker() { LogGate = MosaicLib.Logging.LogGate.Info };
-
-            LogMessageSetTracker.NewItemsAdded += PostAttemptToScrollToBottom;
-            LogMessageSetTracker.SetRebuilt += () =>
-                                                {
-                                                    if (!LogMessageSetTracker.Pause)
-                                                        PostAttemptToScrollToBottom();
-                                                };
+            LogMessageSetTracker = new AdjustableLogMessageSetTracker(maximumCapacity: defaultMaximumCapacity) { LogGate = MosaicLib.Logging.LogGate.Info };
 
             IsVisibleChanged += LogView_IsVisibleChanged;
 
-            SetBinding(LogGateProperty, new Binding() { Source = LogMessageSetTracker, Path = new PropertyPath(AdjustableLogMessageSetTracker.LogGateProperty), Mode = BindingMode.TwoWay });
-            SetBinding(FilterStringProperty, new Binding() { Source = LogMessageSetTracker, Path = new PropertyPath(AdjustableLogMessageSetTracker.FilterStringProperty), Mode = BindingMode.TwoWay });
-
             InitializeComponent();
         }
+
+        /// <summary>
+        /// This property (getter) gives the current maximum capacity for the LogMessageSetTracker AdjustableLogMessageSetTracker instance that is currently in use.
+        /// This property (setter) replaces the LogMessageSetTracker instance with a new instance if the new value does not match the current AdjustableLogMessageSetTracker instances MaximumCapacity.
+        /// <para/>Defaults to 1000
+        /// </summary>
+        public int MaximumCapacity 
+        {
+            get { return LogMessageSetTracker.MaximumCapacity; }
+            set
+            {
+                var currentSetTracker = LogMessageSetTracker;
+                if (currentSetTracker == null || currentSetTracker.MaximumCapacity != value)
+                {
+                    LogMessageSetTracker = new AdjustableLogMessageSetTracker((currentSetTracker != null) ? currentSetTracker.SetName : null, maximumCapacity: value) 
+                    { 
+                        LogGate = (currentSetTracker != null) ? currentSetTracker.LogGate : MosaicLib.Logging.LogGate.Info, 
+                        FilterString = (currentSetTracker != null) ? currentSetTracker.FilterString : string.Empty,
+                    };
+                }
+            }
+        }
+
+        private static DependencyPropertyKey LogMessageSetTrackerPropertyKey = DependencyProperty.RegisterReadOnly("LogMessageSetTracker", typeof(AdjustableLogMessageSetTracker), typeof(LogView), new PropertyMetadata(null));
+        public AdjustableLogMessageSetTracker LogMessageSetTracker 
+        { 
+            get { return _logMessageSetTracker; } 
+            private set 
+            {
+                var prevSetTracker = _logMessageSetTracker;
+
+                SetValue(LogMessageSetTrackerPropertyKey, (_logMessageSetTracker = value)); 
+
+                _postAttemptToScrollToBottom = _postAttemptToScrollToBottom ?? PostAttemptToScrollToBottom;
+                _postAttemptToScrollToBottomIfNotPaused = _postAttemptToScrollToBottomIfNotPaused ?? (() =>
+                    {
+                        if (!LogMessageSetTracker.Pause)
+                            PostAttemptToScrollToBottom();
+                    });
+
+                if (prevSetTracker != null)
+                {
+                    prevSetTracker.NewItemsAdded -= _postAttemptToScrollToBottom;
+                    prevSetTracker.SetRebuilt -= _postAttemptToScrollToBottomIfNotPaused;
+
+                    BindingOperations.ClearBinding(prevSetTracker, AdjustableLogMessageSetTracker.LogGateProperty);
+                    BindingOperations.ClearBinding(prevSetTracker, AdjustableLogMessageSetTracker.FilterStringProperty);
+                }
+
+                LogMessageSetTracker.NewItemsAdded += _postAttemptToScrollToBottom;
+                LogMessageSetTracker.SetRebuilt += _postAttemptToScrollToBottomIfNotPaused;
+
+                SetBinding(LogGateProperty, new Binding() { Source = LogMessageSetTracker, Path = new PropertyPath(AdjustableLogMessageSetTracker.LogGateProperty), Mode = BindingMode.TwoWay });
+                SetBinding(FilterStringProperty, new Binding() { Source = LogMessageSetTracker, Path = new PropertyPath(AdjustableLogMessageSetTracker.FilterStringProperty), Mode = BindingMode.TwoWay });
+            } 
+        }
+        private AdjustableLogMessageSetTracker _logMessageSetTracker;
+        private BasicNotificationDelegate _postAttemptToScrollToBottom;
+        private BasicNotificationDelegate _postAttemptToScrollToBottomIfNotPaused;
 
         public static DependencyProperty SetNameProperty = DependencyProperty.Register("SetName", typeof(string), typeof(LogView), new PropertyMetadata(null, HandleSetNamePropertyChanged));
         public static DependencyProperty EnabledSourcesProperty = DependencyProperty.Register("EnabledSources", typeof(object), typeof(LogView), new PropertyMetadata(null, HandleEnabledSourcesPropertyChanged));
@@ -113,8 +163,6 @@ namespace MosaicLib.WPF.Controls
         {
             System.Threading.SynchronizationContext.Current.Post(o => AttemptToScrollTo(ScrollTo.Bottom), this);
         }
-
-        public AdjustableLogMessageSetTracker LogMessageSetTracker { get; private set; }
 
         private void HandleClearButton_Click(object sender, RoutedEventArgs e)
         {

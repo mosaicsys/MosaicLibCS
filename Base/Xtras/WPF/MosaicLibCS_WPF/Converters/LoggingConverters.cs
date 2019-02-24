@@ -58,9 +58,9 @@ namespace MosaicLib.WPF.Converters
     /// Supports bindable, one way, conversion of an ILogMessage to a string by optionally concatinating the message's Mesg property with string formatted versions of its NamedValueSet and Data properties.
     /// <seealso cref="LogMessageContentCombiningSelection"/> which defines the available flags/rules that may be used to perform this concatination.
     /// </summary>
-    public class LogMessageContentCombiningConverter : IValueConverter
+    public class LogMessageContentCombiningConverter : OneWayValueConverterBase
     {
-        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        public override object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
             MosaicLib.Logging.ILogMessage lm = value as MosaicLib.Logging.ILogMessage;
 
@@ -120,11 +120,6 @@ namespace MosaicLib.WPF.Converters
                 return sb.ToString();
             }
 
-            return Binding.DoNothing;
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-        {
             return Binding.DoNothing;
         }
     }

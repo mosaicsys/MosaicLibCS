@@ -36,20 +36,47 @@ using MosaicLib.Utils.Collections;
 
 namespace MosaicLib.WPF.Converters
 {
+    #region OneWayValueConverterBase, OneWayMultiValueConverterBase
+
+    /// <summary>
+    /// Base class for One Way Value Converter classes.  ConvertBack return Binding.DoNothing by default.
+    /// </summary>
+    public abstract class OneWayValueConverterBase : IValueConverter
+    {
+        public abstract object Convert(object value, Type targetType, object parameter, CultureInfo culture);
+
+        public virtual object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            return Binding.DoNothing;
+        }
+    }
+
+    /// <summary>
+    /// Base class for One Way Multi Value Converter classes.  ConvertBack throws a NotImplementedException.
+    /// </summary>
+    public abstract class OneWayMultiValueConverterBase : IMultiValueConverter
+    {
+        public abstract object Convert(object[] values, Type targetType, object parameter, CultureInfo culture);
+
+        public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture)
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+    #endregion
+
+    #region ObjectToStringConverter, VCToStringSMLConverter, SetToStringConverter
+
     /// <summary>
     /// Supports bindable, one way, conversion of an object to a string by calling SafeToString() on it.
     /// <para/>The ConvertBack method alsways returns Binding.DoNothing
     /// </summary>
-    public class ObjectToStringConverter : IValueConverter
+    public class ObjectToStringConverter : OneWayValueConverterBase
     {
-        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        public override object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
             return value.SafeToString();
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-        {
-            return Binding.DoNothing;
         }
     }
 
@@ -57,44 +84,74 @@ namespace MosaicLib.WPF.Converters
     /// Supports bindable, one way, conversion of an object to a string by creating a value container for the given object and then calling ToStringSML on it.
     /// <para/>The ConvertBack method alsways returns Binding.DoNothing
     /// </summary>
-    public class VCToStringSMLConverter : IValueConverter
+    public class VCToStringSMLConverter : OneWayValueConverterBase
     {
-        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        public override object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
 			return ValueContainer.CreateFromObject(value).ToStringSML();
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-        {
-            return Binding.DoNothing;
         }
     }
 
     /// <summary>
     /// Supports bindable, one way, conversion of any IEnumerable object to a string using String.Join(", ", set.Select(o.ToString()))
     /// </summary>
-    public class SetToStringConverter : IValueConverter
+    public class SetToStringConverter : OneWayValueConverterBase
     {
-        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        public override object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
             IEnumerable set = value as IEnumerable;
             string delimiter = (parameter as string) ?? ", ";
 
             return String.Join(delimiter, set.SafeToSet().Select(o => o.SafeToString()));
         }
+    }
 
-        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+    #endregion
+
+    #region NamedValueConverter and NamedValueSetConverter
+
+    /// <summary>
+    /// This value converter is passed a string parameter (aka the item name) and returns a NamedValue contains the parameter as a string name associated with the given value.
+    /// </summary>
+    public class NamedValueConverter : OneWayValueConverterBase
+    {
+        public override object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            return Binding.DoNothing;
+            return new NamedValue(parameter.SafeToString(), ValueContainer.CreateFromObject(value), asReadOnly: false);
         }
     }
 
     /// <summary>
+    /// This multi value converter is passed a set of NamedValues (see NamedValueConverter) or a set of items and generates a NamedValueSet composed of the given set of NamedValues.
+    /// Any item that is not an INamedValue will be replaced with a new readonly NamedValue that is composed of the item's index as the name of the NamedValue and with the item as the value of the NamedValue.
+    /// </summary>
+    public class NamedValueSetConverter : OneWayMultiValueConverterBase
+    {
+        public override object Convert(object [] values, Type targetType, object parameter, CultureInfo culture)
+        {
+            var nvSet = values.MapNullToEmpty().Select((item, itemIndex) =>
+                {
+                    var nv = item as INamedValue;
+                    if (nv != null)
+                        return nv;
+
+                    return new NamedValue(itemIndex.ToString(), ValueContainer.CreateFromObject(item), asReadOnly: false);
+                });
+
+            return new NamedValueSet(nvSet, asReadOnly: true);
+        }
+    }
+
+    #endregion
+
+    #region PartBaseStateDenyReasonSetConverter, PartBaseStateDenyReasonSetConverterBehavior (et. al.)
+
+    /// <summary>
     /// Supports bindable, one way, conversion of IBaseState objects into an array of strings (deny reason set) based on a specific set of conditions
     /// </summary>
-    public class PartBaseStateDenyReasonSetConverter : IValueConverter
+    public class PartBaseStateDenyReasonSetConverter : OneWayValueConverterBase
     {
-        public virtual object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        public override object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
             var behavior = (parameter != null) ? ((parameter is PartBaseStateDenyReasonSetConverterBehavior) ? (PartBaseStateDenyReasonSetConverterBehavior)parameter : ValueContainer.CreateFromObject(parameter).GetValue<PartBaseStateDenyReasonSetConverterBehavior>(rethrow: false)) : default(PartBaseStateDenyReasonSetConverterBehavior);
 
@@ -143,13 +200,11 @@ namespace MosaicLib.WPF.Converters
 
             return EmptyArrayFactory<string>.Instance;
         }
-
-        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-        {
-            return Binding.DoNothing;
-        }
     }
 
+    /// <summary>
+    /// PartBaseStateDenyReasonSetConverter variant that makes use of the PartBaseStateDenyReasonSetConverterBehavior.IsFullyOnlineAndIdle
+    /// </summary>
     public class PartBaseStateIsFullyOnlineAndIdleDenyReasonSetConverter : PartBaseStateDenyReasonSetConverter
     {
         public override object Convert(object value, Type targetType, object parameter, CultureInfo culture)
@@ -158,6 +213,9 @@ namespace MosaicLib.WPF.Converters
         }
     }
 
+    /// <summary>
+    /// PartBaseStateDenyReasonSetConverter variant that makes use of the PartBaseStateDenyReasonSetConverterBehavior.IsOnlineAndIdle
+    /// </summary>
     public class PartBaseStateIsOnlineAndIdleDenyReasonSetConverter : PartBaseStateDenyReasonSetConverter
     {
         public override object Convert(object value, Type targetType, object parameter, CultureInfo culture)
@@ -166,6 +224,9 @@ namespace MosaicLib.WPF.Converters
         }
     }
 
+    /// <summary>
+    /// PartBaseStateDenyReasonSetConverter variant that makes use of the PartBaseStateDenyReasonSetConverterBehavior.IsOnline
+    /// </summary>
     public class PartBaseStateIsOnlineDenyReasonSetConverter : PartBaseStateDenyReasonSetConverter
     {
         public override object Convert(object value, Type targetType, object parameter, CultureInfo culture)
@@ -174,6 +235,9 @@ namespace MosaicLib.WPF.Converters
         }
     }
 
+    /// <summary>
+    /// PartBaseStateDenyReasonSetConverter variant that makes use of the PartBaseStateDenyReasonSetConverterBehavior.IsNotBusy
+    /// </summary>
     public class PartBaseStateIsNotBusyDenyReasonSetConverter : PartBaseStateDenyReasonSetConverter
     {
         public override object Convert(object value, Type targetType, object parameter, CultureInfo culture)
@@ -201,24 +265,23 @@ namespace MosaicLib.WPF.Converters
         IsNotBusy,
     }
 
+    #endregion
+
+    #region FlattenSetConverter, FlattenAndSquishSetConverter, FirstNonEmptyItemOrSetConverter, FlattenSetBehavior and related ExtensionMethods
+
     /// <summary>
     /// Supports bindable, one way, flatten a set of sets of things into a single set of things.  
     /// The Convert parameter may be passed as a FlattenSetBehavior to control the desired set flattening behavior (either Concatenate or FirstNonEmptyItemOrSet)
     /// This is done by expanding each of the top level IEnumerable objects in the given values array so that the individual elements in each such sub-set are directly included in the resulting set.
     /// This converter supports flattening of mixes of top level objects (non-IEnumerable ones) and IEnumerable ones (which will be flattened into the output set).
     /// </summary>
-    public class FlattenSetConverter : IMultiValueConverter
+    public class FlattenSetConverter : OneWayMultiValueConverterBase
     {
-        public virtual object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
+        public override object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
         {
             var flattenSetBehavior = (parameter != null) ? ((parameter is FlattenSetBehavior) ? (FlattenSetBehavior) parameter : ValueContainer.CreateFromObject(parameter).GetValue<FlattenSetBehavior>(rethrow: false)) : default(FlattenSetBehavior);
 
             return values.FlattenSet(flattenSetBehavior);
-        }
-
-        public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture)
-        {
-            throw new System.NotSupportedException();
         }
     }
 
@@ -319,4 +382,6 @@ namespace MosaicLib.WPF.Converters
             return nullOrEmptyObjectResult;
         }
     }
+
+    #endregion
 }

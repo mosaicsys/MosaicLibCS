@@ -41,11 +41,7 @@ namespace MosaicLib.Modular.Common
     #region Basic types
 
     /// <summary>Define a Null type that can be used as a ParamType or a ResultType in ParamType and ResultType types in the IAction related pattern types.</summary>
-    public class NullObj 
-    {
-        /// <summary>Default (only) constructor</summary>
-        public NullObj() { } 
-    }
+    public struct NullObj { }
 
     #endregion
 
@@ -652,6 +648,8 @@ namespace MosaicLib.Modular.Common
         private static readonly Type vcArrayType = typeof(ValueContainer[]);
         private static readonly Type iListOfStringType = typeof(IList<System.String>);
         private static readonly Type iListOfVCType = typeof(IList<ValueContainer>);
+        private static readonly Type listOfStringType = typeof(List<System.String>);
+        private static readonly Type listOfVCType = typeof(List<ValueContainer>);
         private static readonly Type iNamedValueSetType = typeof(INamedValueSet);
         private static readonly Type iNamedValueType = typeof(INamedValue);
         private static readonly Type vcEnumerableType = typeof(IEnumerable<ValueContainer>);
@@ -1291,20 +1289,26 @@ namespace MosaicLib.Modular.Common
                         case ContainerStorageType.DateTime: value = (TValueType)((System.Object)u.DateTime); break;
                         case ContainerStorageType.IListOfString:
                             {
-                                // IListOfString can be read as String [] or as IList<String>
+                                // IListOfString can be read as String [], List<string> or as IList<String>
+                                var iList = o as IList<String> ?? emptyIListOfString;
                                 if (TValueTypeType == stringArrayType)
-                                    value = (TValueType)((System.Object)((o as IList<String> ?? emptyIListOfString).ToArray()));      // special case for reading from an IListOfString to an String array.
+                                    value = (TValueType)((System.Object)(iList.ToArray()));      // special case for reading from an IListOfString to an String array.
+                                else if (TValueTypeType == listOfStringType)
+                                    value = (TValueType)((System.Object)(new List<string>(iList)));  // special case for reading from an IListOfString to List<string>
                                 else
-                                    value = (TValueType)((System.Object)(o as IList<String> ?? emptyIListOfString));      // all other cases the TValueType should be castable from an IList<String>
+                                    value = (TValueType)((System.Object)iList);      // all other cases the TValueType should be castable from an IList<String>
                             }
                             break;
                         case ContainerStorageType.IListOfVC:
                             {
-                                // IListOfVC can be read as VC [] or as IList<VC>
+                                // IListOfVC can be read as VC [], List<VC> or as IList<VC>
+                                var iList = o as IList<ValueContainer> ?? emptyIListOfVC;
                                 if (TValueTypeType == vcArrayType)
-                                    value = (TValueType)((System.Object)((o as IList<ValueContainer> ?? emptyIListOfVC).ToArray()));      // special case for reading from an IListOfVC to an VC array.
+                                    value = (TValueType)((System.Object)(iList.ToArray()));      // special case for reading from an IListOfVC to an VC array.
+                                else if (TValueTypeType == listOfVCType)
+                                    value = (TValueType)((System.Object)(new List<ValueContainer>(iList)));  // special case for reading from an IListOfVC to List<VC>
                                 else
-                                    value = (TValueType)((System.Object)(o as IList<ValueContainer> ?? emptyIListOfVC));      // all other cases the TValueType should be castable from an IList<VC>
+                                    value = (TValueType)((System.Object)iList);      // all other cases the TValueType should be castable from an IList<VC>
                             }
                             break;
                         case ContainerStorageType.INamedValueSet: value = (TValueType)o; break;

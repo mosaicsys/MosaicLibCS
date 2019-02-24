@@ -631,6 +631,24 @@ namespace MosaicLib.Utils
             return (set != null && set.Contains(item));
         }
 
+        /// <summary>
+        /// Adds the given <paramref name="item"/> to the given <paramref name="set"/> if it does not already contain the item.
+        /// If <paramref name="set"/> is passed as null then this method creates new one (HashSet) to which the <paramref name="item"/> is added.
+        /// Returns the given <paramref name="set"/> or the newly created one if it was passed as null.
+        /// <para/>Note: at present this EM can only be used with reference <typeparamref name="ItemType"/> types.
+        /// </summary>
+        public static ICollection<ItemType> SafeAddIfNeeded<ItemType>(this ICollection<ItemType> set, ItemType item) 
+            where ItemType : class
+        {
+            if (set == null)
+                set = new HashSet<ItemType>();
+
+            if (!set.Contains(item))
+                set.Add(item);
+
+            return set;
+        }
+
         #endregion
 
         #region IEnumerable methods (SafeToSet variants) - for use with IEnumerable, ICollection, and IList derived objects

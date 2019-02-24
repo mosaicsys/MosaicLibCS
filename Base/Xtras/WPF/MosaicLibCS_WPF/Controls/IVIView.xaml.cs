@@ -38,6 +38,7 @@ using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Interconnect.Values;
 using MosaicLib.Utils;
 using MosaicLib.Utils.Collections;
+using System.ComponentModel;
 
 namespace MosaicLib.WPF.Controls
 {
@@ -204,6 +205,85 @@ namespace MosaicLib.WPF.Controls
 
         IListWithCachedArray<IVAWrapper> ivaWrapperList = new IListWithCachedArray<IVAWrapper>();
         IListWithCachedArray<IValueAccessor> ivaList = new IListWithCachedArray<IValueAccessor>();
+
+        private void GridViewColumnHeader_Click(object sender, RoutedEventArgs e)
+        {
+            var columnHeaderUserClickedOn = (GridViewColumnHeader) sender;
+            string columnHeaderTagAsString = columnHeaderUserClickedOn.Tag.ToString();
+
+            var nextSortKeySelection = ValueContainer.CreateFromObject(columnHeaderUserClickedOn.Tag).GetValue<SortKeySelection>(rethrow: false);
+            var nextSortDirectionSelection = currentSortDirectionSelection;
+
+            if (nextSortKeySelection != currentSortKeySelection)
+            {
+                nextSortDirectionSelection = SortDirectionSelection.Ascending;
+            }
+            else
+            {
+                switch (currentSortDirectionSelection)
+                {
+                    case SortDirectionSelection.None: nextSortDirectionSelection = SortDirectionSelection.Ascending; break;
+                    case SortDirectionSelection.Ascending: nextSortDirectionSelection = SortDirectionSelection.Descending; break;
+                    case SortDirectionSelection.Descending: nextSortDirectionSelection = SortDirectionSelection.None; break;
+                    default: nextSortDirectionSelection = SortDirectionSelection.None; break;
+                }
+            }
+
+            InnerUpdateSorting(nextSortKeySelection, nextSortDirectionSelection);
+        }
+
+        SortKeySelection currentSortKeySelection;
+        SortDirectionSelection currentSortDirectionSelection;
+
+        private void InnerUpdateSorting(SortKeySelection nextSortKeySelection, SortDirectionSelection nextSortDirectionSelection)
+        {
+            if (nextSortDirectionSelection == SortDirectionSelection.None)
+                nextSortKeySelection = SortKeySelection.None;
+
+            var sortDirection = (nextSortDirectionSelection == SortDirectionSelection.Ascending) ? ListSortDirection.Ascending : ListSortDirection.Descending;
+            SortDescription? sortDescription = null;
+
+            switch (nextSortKeySelection)
+            {
+                case SortKeySelection.None: break;
+                case SortKeySelection.Name: sortDescription = new SortDescription("Name", sortDirection); break;
+                case SortKeySelection.SeqNum: sortDescription = new SortDescription("ValueSeqNum", sortDirection); break;
+                default: break;
+            }
+
+            if (sortDescription == null)
+            {
+                if (listView.Items.SortDescriptions.Count > 0)
+                {
+                    listView.Items.SortDescriptions.Clear();
+                    currentSortKeySelection = SortKeySelection.None;
+                    currentSortDirectionSelection = SortDirectionSelection.None;
+                }
+            }
+            else
+            {
+                if (listView.Items.SortDescriptions.Count == 0)
+                    listView.Items.SortDescriptions.Add(sortDescription ?? default(SortDescription));
+                else
+                    listView.Items.SortDescriptions[0] = sortDescription ?? default(SortDescription);
+                currentSortKeySelection = nextSortKeySelection;
+                currentSortDirectionSelection = nextSortDirectionSelection;
+            }
+        }
+
+        public enum SortKeySelection : int
+        {
+            None = 0,
+            Name,
+            SeqNum,
+        }
+
+        public enum SortDirectionSelection : int
+        {
+            None = 0,
+            Ascending,
+            Descending,
+        }
     }
 
     public class IVAWrapper : DependencyObject

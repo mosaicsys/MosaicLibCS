@@ -1,0 +1,89 @@
+﻿<UserControl x:Class="MosaicLib.WPF.Controls.E090View"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:conv="clr-namespace:MosaicLib.WPF.Converters"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+    xmlns:wpfControls="clr-namespace:MosaicLib.WPF.Controls"
+    Name="E090ViewMainControl">
+    <!--<UserControl.FontSize>12</UserControl.FontSize>-->
+    <!--<UserControl.MinHeight>400</UserControl.MinHeight>-->
+    <!--<UserControl.MinWidth>800</UserControl.MinWidth>-->
+    <UserControl.Resources>
+        <conv:VCToStringSMLConverter x:Key="VCToStringSMLConverter"/>
+        <wpfControls:E090ViewCombinedInfoToBrushConverter x:Key="E090CombinedInfoToBrushConverter"/>
+    </UserControl.Resources>
+    <DockPanel>
+        <GroupBox Name="E090ViewControlsGB" DockPanel.Dock="Bottom" Header="E090 View Controls" Visibility="{Binding ElementName=E090ViewMainControl, Path=ControlsVisibility}" Margin="0,0,0,0">
+            <WrapPanel Orientation="Horizontal">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="13,0,0,0" ToolTip="Live filter text.  Applies to the SubstLocNames.">
+                    <Label Content="Filter:" VerticalAlignment="Center"/>
+                    <TextBox Text="{Binding ElementName=E090ViewMainControl, Path=FilterString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="120" VerticalAlignment="Center"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="13,0,0,0">
+                    <Label Content="Count (view, total):" VerticalAlignment="Center"/>
+                    <Label Content="{Binding ElementName=listView, Path=Items.Count, Mode=OneWay, FallbackValue=000}" ContentStringFormat="{}{0:d3}" Margin="3,2,0,2" MinWidth="40" BorderBrush="DarkGray" BorderThickness="1" VerticalAlignment="Center" ToolTip="Shows the number of filtered items that are currently visible"/>
+                    <Label Content="{Binding ElementName=E090ViewMainControl, Path=Items.Count, Mode=OneWay, FallbackValue=000}" ContentStringFormat="{}{0:d3}" Margin="3,2,0,2" MinWidth="40" BorderBrush="DarkGray" BorderThickness="1" VerticalAlignment="Center" ToolTip="Shows the total number of items that are currently visible"/>
+                </StackPanel>
+            </WrapPanel>
+        </GroupBox>
+        <ListView x:Name="listView" ItemsSource="{Binding ElementName=E090ViewMainControl, Path=Items}" ScrollViewer.VerticalScrollBarVisibility="Visible" MinHeight="75">
+            <ListView.View>
+                <GridView>
+                    <!-- SubstLocName From SubstName Info -->
+                    <GridViewColumn Width="100" DisplayMemberBinding="{Binding CombinedInfo.SubstLocInfo.ObjID.Name, Mode=OneWay}">
+                        <GridViewColumn.Header>
+                            <GridViewColumnHeader Content="SubstLocName" Tag="SubstLocName" Click="GridViewColumnHeader_Click"/>
+                        </GridViewColumn.Header>
+                    </GridViewColumn>
+                    <GridViewColumn Width="100" DisplayMemberBinding="{Binding CombinedInfo.SubstInfoFrom, Mode=OneWay}">
+                        <GridViewColumn.Header>
+                            <GridViewColumnHeader Content="From" Tag="SubstInfoFrom" Click="GridViewColumnHeader_Click"/>
+                        </GridViewColumn.Header>
+                    </GridViewColumn>
+                    <GridViewColumn Width="100" DisplayMemberBinding="{Binding CombinedInfo.SubstInfo.ObjID.Name, Mode=OneWay}">
+                        <GridViewColumn.Header>
+                            <GridViewColumnHeader Content="SubstName" Tag="SubstName" Click="GridViewColumnHeader_Click"/>
+                        </GridViewColumn.Header>
+                    </GridViewColumn>
+                    <GridViewColumn Header="Info" Width="600" DisplayMemberBinding="{Binding CombinedInfo}"/>
+                </GridView>
+            </ListView.View>
+            <ListView.ItemContainerStyle>
+                <Style TargetType="{x:Type ListViewItem}">
+                    <Setter Property="Background" Value="{Binding CombinedInfo, Converter={StaticResource E090CombinedInfoToBrushConverter}}" />
+                    <Setter Property="ToolTipService.InitialShowDelay" Value="2000"/>
+                    <Setter Property="ToolTipService.BetweenShowDelay" Value="5000"/>
+                    <Setter Property="ToolTipService.ShowDuration" Value="30000"/>
+                    <Setter Property="ToolTip">
+                        <Setter.Value>
+                            <Grid MinWidth="500" MaxWidth="800" MaxHeight="500" Tag="{Binding}">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="100"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Label Grid.Row="0" Grid.Column="0" Content="SubstLocInfo" VerticalAlignment="Center"/>
+                                <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding Tag.CombinedInfo.SubstLocInfo, Mode=OneWay, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type Grid}}}" IsReadOnly="True" IsUndoEnabled="False" VerticalAlignment="Center"/>
+                                <Label Grid.Row="1" Grid.Column="0" Content="SubstLoc Attributes"/>
+                                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Tag.CombinedInfo.SubstLocInfo.Obj.Attributes, Converter={StaticResource VCToStringSMLConverter}, Mode=OneWay, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type Grid}}}" IsReadOnly="True" IsUndoEnabled="False" VerticalAlignment="Center"/>
+                                <Label Grid.Row="2" Grid.Column="0" Content="SubstInfoFrom"/>
+                                <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding Tag.CombinedInfo.SubstInfoFrom, Mode=OneWay, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type Grid}}}" IsReadOnly="True" IsUndoEnabled="False" VerticalAlignment="Center"/>
+                                <Label Grid.Row="3" Grid.Column="0" Content="SubstInfo"/>
+                                <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding Tag.CombinedInfo.SubstInfo, Mode=OneWay, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type Grid}}}" IsReadOnly="True" IsUndoEnabled="False" VerticalAlignment="Center"/>
+                                <Label Grid.Row="4" Grid.Column="0" Content="Subst Attributes"/>
+                                <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding Tag.CombinedInfo.SubstInfo.Obj.Attributes, Converter={StaticResource VCToStringSMLConverter}, Mode=OneWay, RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type Grid}}}" IsReadOnly="True" IsUndoEnabled="False" VerticalAlignment="Center"/>
+                            </Grid>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </ListView.ItemContainerStyle>
+        </ListView>
+    </DockPanel>
+</UserControl>

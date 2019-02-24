@@ -20,25 +20,27 @@
  */
 
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Text;
-using System.Windows.Controls;
 using System.Windows;
-using System.Windows.Threading;
-using System.Windows.Data;
+using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Data;
+using System.Windows.Threading;
 
 using MosaicLib.Modular.Common;
 using MosaicLib.Utils;
 using MosaicLib.Utils.Collections;
-using System.Collections;
 
 namespace MosaicLib.WPF.Extensions
 {
     /// <summary>
     /// This is a set of common semi-generic, Attachable dependancy properties.
+    /// <para/>Tag1 ... Tag9
+    /// <para/>NPV
     /// <para/>DenyReason (string), DenyReasonSet (IList{string}), OverrideDenyReason (bool)
     /// </summary>
     public static class Attachable
@@ -74,6 +76,17 @@ namespace MosaicLib.WPF.Extensions
         [AttachedPropertyBrowsableForType(typeof(FrameworkElement))] public static void SetTag7(FrameworkElement obj, object value) { obj.SetValue(Tag7Property, value); }
         [AttachedPropertyBrowsableForType(typeof(FrameworkElement))] public static void SetTag8(FrameworkElement obj, object value) { obj.SetValue(Tag8Property, value); }
         [AttachedPropertyBrowsableForType(typeof(FrameworkElement))] public static void SetTag9(FrameworkElement obj, object value) { obj.SetValue(Tag9Property, value); }
+
+        #endregion
+
+        #region NPV
+
+        /// <summary>
+        /// NPV attached/attachable property - applies to all Control types (GCD of ButtonBase and MenuItem - aka the ICommandSource objects)
+        /// </summary>
+        public static readonly DependencyProperty NPVProperty = DependencyProperty.RegisterAttached("NPV", typeof(INamedValueSet), typeof(Attachable));
+        [AttachedPropertyBrowsableForType(typeof(Control))] public static INamedValueSet GetNPV(Control obj) { return (INamedValueSet)obj.GetValue(NPVProperty); }
+        [AttachedPropertyBrowsableForType(typeof(Control))] public static void SetNPV(Control obj, INamedValueSet value) { obj.SetValue(NPVProperty, value); }
 
         #endregion
 

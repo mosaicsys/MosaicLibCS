@@ -445,7 +445,8 @@ namespace MosaicLib.Modular.Part
         /// <para/>AutomaticallyIncAndDecBusyCountAroundActionInvoke = true,
         /// <para/>GoOnlineAndGoOfflineHandling = GoOnlineAndGoOfflineHandling.All | GoOnlineAndGoOfflineHandling.UseOnlineUnititializedState | GoOnlineAndGoOfflineHandling.AcceptCustomChangeFromAttemptOnlineState,
         /// <para/>SimpleActivePartBehaviorOptions = SimpleActivePartBehaviorOptions.PerformActionPublishesActionInfo | SimpleActivePartBehaviorOptions.MainThreadStartSetsStateToOffline | SimpleActivePartBehaviorOptions.MainThreadStopSetsStateToStoppedIfIsOnline | SimpleActivePartBehaviorOptions.MainThreadStopSetsStateToStoppedIfOffline | SimpleActivePartBehaviorOptions.UseMainThreadFailedState | SimpleActivePartBehaviorOptions.PerformMainLoopServiceCallsServiceBusyConditionChangeDetection,
-        /// <para/>SimplePartBaseSettings = SimplePartBaseSettings.DefaultVersion2 (SimplePartBaseBehavior = SimplePartBaseBehavior.All (TreatPartAsBusyWhenQueueIsNotEmpty | TreatPartAsBusyWhenInternalPartBusyCountIsNonZero)), CreateBaseStateIVAInBaseConstructor = true
+        /// <para/>SimplePartBaseSettings = SimplePartBaseSettings.DefaultVersion2 (SimplePartBaseBehavior = SimplePartBaseBehavior.All (TreatPartAsBusyWhenQueueIsNotEmpty | TreatPartAsBusyWhenInternalPartBusyCountIsNonZero)),
+        /// <para/>CreateBaseStateIVAInBaseConstructor = true
         /// <para/>Please note: unless explicitly assigned by the client the default, unset, value of WaitTimeLimit will be replaced with 0.1 seconds by the Part when it uses this object's SetupForUse method.
         /// </summary>
         public static SimpleActivePartBaseSettings DefaultVersion2

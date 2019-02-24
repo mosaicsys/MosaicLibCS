@@ -787,10 +787,10 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             public double OffDifferentialValue { get { return ConvertValueUOM(offDifferentialValueInStdUnits, outbound: true); } set { offDifferentialValueInStdUnits = ConvertValueUOM(value, inbound: true); } }
 
             /// <summary>Defines the minimum value that the gauge can read in client specified PressureUnits/VolumetricFlowUnits.</summary>
-            public double MinimumValue { get { return PressureUnits.ConvertFromKPa(minimumValueInStdUnits); } set { minimumValueInStdUnits = ConvertValueUOM(value, inbound: true); } }
+            public double MinimumValue { get { return ConvertValueUOM(minimumValueInStdUnits, outbound: true); } set { minimumValueInStdUnits = ConvertValueUOM(value, inbound: true); } }
 
             /// <summary>Defines the maximum value that the gauge can read in client specified PressureUnits/VolumetricFlowUnits.</summary>
-            public double MaximumValue { get { return PressureUnits.ConvertFromKPa(maximumValueInStdUnits); } set { maximumValueInStdUnits = ConvertValueUOM(value, inbound: true); } }
+            public double MaximumValue { get { return ConvertValueUOM(maximumValueInStdUnits, outbound: true); } set { maximumValueInStdUnits = ConvertValueUOM(value, inbound: true); } }
 
             /// <summary>Defines the minimum differential value that the gauge can read in client specified PressureUnits/VolumetricFlowUnits.</summary>
             public double MinimumDifferentialValue { get { return ConvertValueUOM(minimumDifferentialValueInStdUnits, outbound: true); } set { minimumDifferentialValueInStdUnits = ConvertValueUOM(value, inbound: true); } }

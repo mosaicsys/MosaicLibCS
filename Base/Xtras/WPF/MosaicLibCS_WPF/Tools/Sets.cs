@@ -630,7 +630,7 @@ namespace MosaicLib.WPF.Tools.Sets
         public static readonly MosaicLib.Logging.LogGate DefaultLogGate = MosaicLib.Logging.LogGate.Debug;
 
         public AdjustableLogMessageSetTracker(string setName, int maximumCapacity = 1000, bool allowItemsToBeRemoved = false)
-            : this(new SetID(setName, generateUUIDForNull: false), maximumCapacity: maximumCapacity, allowItemsToBeRemoved: allowItemsToBeRemoved)
+            : this(setName.IsNeitherNullNorEmpty() ? new SetID(setName, generateUUIDForNull: false) : null, maximumCapacity: maximumCapacity, allowItemsToBeRemoved: allowItemsToBeRemoved)
         { }
 
         public AdjustableLogMessageSetTracker(SetID setID = null, int maximumCapacity = 1000, bool allowItemsToBeRemoved = false)
@@ -655,6 +655,8 @@ namespace MosaicLib.WPF.Tools.Sets
                 ClearCollectedSetDeltas();
             }
         }
+
+        public int MaximumCapacity { get { return maximumCapacity; } }
 
         private void HandleNewSetID(SetID setID)
         {
@@ -1030,25 +1032,28 @@ namespace MosaicLib.WPF.Tools.Sets
 
             public E039TableSetTracker(SetID setID, ISetsInterconnection isi = null, double defaultUpdateRate = DefaultUpdateRate)
             {
-                var setTracker = SetTracker.GetSetTracker(setID, isi: isi, defaultUpdateRate: defaultUpdateRate, defaultMaximumItemsPerIteration: 0);
+                SetTracker = SetTracker.GetSetTracker(setID, isi: isi, defaultUpdateRate: defaultUpdateRate, defaultMaximumItemsPerIteration: 0);
 
-                if (setTracker.MaximumItemsPerIteration != 0)
-                    setTracker = new SetTracker(setID, isi: isi, defaultUpdateRate: defaultUpdateRate, defaultMaximumItemsPerIteration: 0);
+                if (SetTracker.MaximumItemsPerIteration != 0)
+                    SetTracker = new SetTracker(setID, isi: isi, defaultUpdateRate: defaultUpdateRate, defaultMaximumItemsPerIteration: 0);
 
                 var setTrackerTracker = new SetTrackerTracker()
                 {
                     setID = setID,
-                    setTracker = setTracker,
+                    setTracker = SetTracker,
                 };
 
-                setNameToSetTrackerTrackerDictionary[setID.Name] = setTrackerTracker;
-
-                setTracker.AddSetDeltasEventHandler((sender, setDelta) => HandleOnNotifySetDeltasEvent(setTrackerTracker, setDelta), setDelta => HandleOnNotifySetDeltasEvent(setTrackerTracker, setDelta), delayPriming: true);
+                SetTracker.AddSetDeltasEventHandler((sender, setDelta) => HandleOnNotifySetDeltasEvent(setTrackerTracker, setDelta), setDelta => HandleOnNotifySetDeltasEvent(setTrackerTracker, setDelta), delayPriming: true);
             }
 
             #endregion
 
             #region public interface (TypeNames, E039TableTypeDictionaryFactory, IE039TableTypeDictionary this[typeName], GetObjectTracker)
+
+            /// <summary>
+            /// This gives access to the setTracker instance that this table set tracker is based on.
+            /// </summary>
+            public SetTracker SetTracker { get; private set; }
 
             public IE039TablePerTypeDictionary this[string typeName] { get { return GetTableTypeDictionary(typeName); } }
 
@@ -1136,7 +1141,6 @@ namespace MosaicLib.WPF.Tools.Sets
 
             #region HandleOnNotifySetDeltasEvent and related fields
 
-            private Dictionary<string, SetTrackerTracker> setNameToSetTrackerTrackerDictionary = new Dictionary<string, SetTrackerTracker>();
             private Dictionary<string, E039TableTypeDictionary> typeNameToTableTypeDictionary = new Dictionary<string, E039TableTypeDictionary>();
 
             private List<InnerObjectTracker> touchedInnerObjectTrackerList = new List<InnerObjectTracker>();
@@ -1659,8 +1663,8 @@ namespace MosaicLib.WPF.Tools.Sets
 
             internal long ObjectItemSeqNum { get; set; }
 
-            private static readonly DependencyPropertyKey ObjectIDPropertyKey = DependencyProperty.RegisterReadOnly("ObjectID", typeof(E039ObjectID), typeof(E039ObjectTracker), new PropertyMetadata(E039ObjectID.Empty));
-            private static readonly DependencyPropertyKey ObjectPropertyKey = DependencyProperty.RegisterReadOnly("Object", typeof(IE039Object), typeof(E039ObjectTracker), new PropertyMetadata(null));
+            public static readonly DependencyPropertyKey ObjectIDPropertyKey = DependencyProperty.RegisterReadOnly("ObjectID", typeof(E039ObjectID), typeof(E039ObjectTracker), new PropertyMetadata(E039ObjectID.Empty));
+            public static readonly DependencyPropertyKey ObjectPropertyKey = DependencyProperty.RegisterReadOnly("Object", typeof(IE039Object), typeof(E039ObjectTracker), new PropertyMetadata(null));
 
             public E039ObjectID ObjectID { get { return _objectID; } internal set { SetValue(ObjectIDPropertyKey, _objectID = value); } }
             public E039ObjectID _objectID = E039ObjectID.Empty;
@@ -1745,8 +1749,8 @@ namespace MosaicLib.WPF.Tools.Sets
 
             internal long ObjectItemSeqNum { get; set; }
  
-            private static readonly DependencyPropertyKey LinkPropertyKey = DependencyProperty.RegisterReadOnly("Link", typeof(E039Link), typeof(E039LinkToObjectTracker), new PropertyMetadata(E039Link.Empty));
-            private static readonly DependencyPropertyKey ObjectPropertyKey = DependencyProperty.RegisterReadOnly("Object", typeof(IE039Object), typeof(E039LinkToObjectTracker), new PropertyMetadata(null));
+            public static readonly DependencyPropertyKey LinkPropertyKey = DependencyProperty.RegisterReadOnly("Link", typeof(E039Link), typeof(E039LinkToObjectTracker), new PropertyMetadata(E039Link.Empty));
+            public static readonly DependencyPropertyKey ObjectPropertyKey = DependencyProperty.RegisterReadOnly("Object", typeof(IE039Object), typeof(E039LinkToObjectTracker), new PropertyMetadata(null));
 
             public E039Link Link { get { return _link; } internal set { SetValue(LinkPropertyKey, _link = value); } }
             private E039Link _link = E039Link.Empty;
@@ -1815,9 +1819,9 @@ namespace MosaicLib.WPF.Tools.Sets
             }
             private ItemSeqNumAndE039ObjectPair[] _pairArray = Utils.Collections.EmptyArrayFactory<ItemSeqNumAndE039ObjectPair>.Instance;
 
-            private static readonly DependencyPropertyKey LinksPropertyKey = DependencyProperty.RegisterReadOnly("Links", typeof(E039Link []), typeof(E039LinksFromObjectsTracker), new PropertyMetadata(Utils.Collections.EmptyArrayFactory<E039Link>.Instance));
-            private static readonly DependencyPropertyKey ObjectsPropertyKey = DependencyProperty.RegisterReadOnly("Objects", typeof(IE039Object []), typeof(E039LinksFromObjectsTracker), new PropertyMetadata(Utils.Collections.EmptyArrayFactory<IE039Object>.Instance));
-            private static readonly DependencyPropertyKey FirstObjectPropertyKey = DependencyProperty.RegisterReadOnly("FirstObject", typeof(IE039Object), typeof(E039LinksFromObjectsTracker), new PropertyMetadata(null));
+            public static readonly DependencyPropertyKey LinksPropertyKey = DependencyProperty.RegisterReadOnly("Links", typeof(E039Link []), typeof(E039LinksFromObjectsTracker), new PropertyMetadata(Utils.Collections.EmptyArrayFactory<E039Link>.Instance));
+            public static readonly DependencyPropertyKey ObjectsPropertyKey = DependencyProperty.RegisterReadOnly("Objects", typeof(IE039Object[]), typeof(E039LinksFromObjectsTracker), new PropertyMetadata(Utils.Collections.EmptyArrayFactory<IE039Object>.Instance));
+            public static readonly DependencyPropertyKey FirstObjectPropertyKey = DependencyProperty.RegisterReadOnly("FirstObject", typeof(IE039Object), typeof(E039LinksFromObjectsTracker), new PropertyMetadata(null));
 
             public E039Link[] Links { get { return _links; } internal set { SetValue(LinksPropertyKey, _links = value ?? Utils.Collections.EmptyArrayFactory<E039Link>.Instance); } }
             private E039Link[] _links = Utils.Collections.EmptyArrayFactory<E039Link>.Instance;
@@ -1836,6 +1840,371 @@ namespace MosaicLib.WPF.Tools.Sets
         {
             public long ItemSeqNum { get; set; }
             public IE039Object Object { get; set; }
+        }
+    }
+
+    #endregion
+
+    #region E090 related helper objects
+
+    namespace E090
+    {
+        public class E090TableSetTracker : DependencyObject, IE090SubstLocAndSubstTrackerFactory
+        {
+            #region Constant values (DefaultUpdateRate)
+
+            /// <summary>Gives the default update rate for set trackers (5.0 Hz)</summary>
+            public const double DefaultUpdateRate = 5.0;
+
+            #endregion
+
+            public E090TableSetTracker(string e090SetName, ISetsInterconnection isi = null, double defaultUpdateRate = DefaultUpdateRate)
+                : this(new SetID(e090SetName, generateUUIDForNull: false), isi: isi, defaultUpdateRate: defaultUpdateRate)
+            { }
+
+            public E090TableSetTracker(SetID setID, ISetsInterconnection isi = null, double defaultUpdateRate = DefaultUpdateRate)
+            {
+                e039TableSetTracker = Tools.Sets.E039.E039TableSetTracker.GetE039TableSetTracker(setID, isi: isi, defaultUpdateRate: defaultUpdateRate);
+                SetTracker = e039TableSetTracker.SetTracker;
+
+                SubstLocDict = e039TableSetTracker[Semi.E090.Constants.SubstrateLocationObjectType];
+
+                _substLocNamesAddedNotificationList.Source = this;
+
+                SetTracker.AddSetDeltasEventHandler(handler: (o, sd) => HandleSetDeltas(sd), setPrimingDelegate: sd => HandleSetDeltas(sd), delayPriming: true);
+            }
+
+            private Tools.Sets.E039.E039TableSetTracker e039TableSetTracker;
+            private SetTracker SetTracker { get; set; }
+
+            public E090CombinedSubstLocAndSubstInfoTracker this[string substLocName]
+            {
+                get { return new E090CombinedSubstLocAndSubstInfoTracker(substLocName, SubstLocDict); }
+            }
+
+            public IEventHandlerNotificationList<string[]> SubstLocNamesAddedNotificationList { get { return _substLocNamesAddedNotificationList; } }
+            private EventHandlerNotificationList<string[]> _substLocNamesAddedNotificationList = new EventHandlerNotificationList<string[]>();
+
+            private void HandleSetDeltas(ISetDelta setDelta)
+            {
+                if (setDelta == null)
+                    return;
+
+                int addedItemCount = 0;
+                foreach (var addRangeItem in setDelta.AddRangeItems)
+                {
+                    foreach (var addedItem in addRangeItem.RangeObjects)
+                    {
+                        var e039Object = addedItem as IE039Object;
+                        var e039ObjectID = (e039Object ?? E039Object.Empty).ID;
+                        var e039ObjectName = e039ObjectID.Name;
+
+                        if (e039ObjectID.Type == Semi.E090.Constants.SubstrateLocationObjectType && !knownSubstLocNamesSet.Contains(e039ObjectName))
+                        {
+                            addedItemCount++;
+                            knownSubstLocNamesSet.Add(e039ObjectName);
+                            pendingAddedSubstLocList.Add(e039ObjectName);
+                        }
+                    }
+                }
+
+                if (addedItemCount > 0 && !handlePendingAddedSubstLocItemsPosted)
+                {
+                    System.Threading.SynchronizationContext.Current.Post(o => HandlePendingAddedSubstLocItems(), this);
+                    handlePendingAddedSubstLocItemsPosted = true;
+                }
+            }
+
+            private void HandlePendingAddedSubstLocItems()
+            {
+                handlePendingAddedSubstLocItemsPosted = false;
+
+                _substLocNamesAddedNotificationList.Notify(pendingAddedSubstLocList.ToArray());
+
+                pendingAddedSubstLocList.Clear();
+            }
+
+            private HashSet<string> knownSubstLocNamesSet = new HashSet<string>();
+            private List<string> pendingAddedSubstLocList = new List<string>();
+            private bool handlePendingAddedSubstLocItemsPosted = false;
+
+            private E039.IE039TablePerTypeDictionary SubstLocDict { get; set; }
+        }
+
+        /// <summary>
+        /// Interface supported by E090TableSetTracker.  Used to generate E090SubstLocAndSubstTracker objects for given SubstLoc names.
+        /// </summary>
+        public interface IE090SubstLocAndSubstTrackerFactory
+        {
+            /// <summary>
+            /// This getter returns a new E090SubstLocAndSubstTracker instance for the given <paramref name="substLocName"/>.
+            /// </summary>
+            E090CombinedSubstLocAndSubstInfoTracker this[string substLocName] { get; }
+        }
+
+        /// <summary>
+        /// This is the object that is produced using an E090CombinedSubstLocAndSubstInfoTracker.  
+        /// It contains an E090SubstLocInfo and a E090SubstInfo.  
+        /// The E090SubstLocInfo gives the directly known information about a substrate location while the 
+        /// E090SubstInfo gives the information about the substrate that is currently contained in this location, or which
+        /// is the first substrate to indicate that the location is its source or destination location.  The SubstInfoFrom
+        /// property indicates which substrate object link the SubstInfo contents was obtained from.
+        /// </summary>
+        public class E090CombinedSubstLocAndSubstInfo
+        {
+            /// <summary>Gives the extracted substrate location information for the substrate location being tracked and reported using this class.</summary>
+            public Semi.E090.E090SubstLocInfo SubstLocInfo { get; internal set; }
+
+            /// <summary>Indicates which substrate object link source was used to populate the SubstInfo contained here.</summary>
+            public SubstInfoFrom SubstInfoFrom { get; internal set; }
+
+            /// <summary>Gives the extracted substrate information for the substrate as obtained using the SubstInfoFrom link in relation to the substrate location that is being tracked and reported using this class.</summary>
+            public Semi.E090.E090SubstInfo SubstInfo { get; internal set; }
+
+            /// <summary>Gives an empty E090CombinedSubstLocAndSubstInfo object</summary>
+            public static E090CombinedSubstLocAndSubstInfo Empty {get { return _empty;}}
+
+            private static readonly E090CombinedSubstLocAndSubstInfo _empty = new E090CombinedSubstLocAndSubstInfo();
+
+            /// <summary>Debugging and logging helper method</summary>
+            public override string ToString()
+            {
+                switch (SubstInfoFrom)
+                {
+                    case E090.SubstInfoFrom.None:
+                        return "{0} {1}".CheckedFormat(SubstLocInfo, SubstInfoFrom);
+                    case E090.SubstInfoFrom.Contains:
+                        return "{0} Contains {1}".CheckedFormat(SubstLocInfo, SubstInfo);
+                    case E090.SubstInfoFrom.Source:
+                        return "{0} IsSourceFor {1}".CheckedFormat(SubstLocInfo, SubstInfo);
+                    case E090.SubstInfoFrom.Destination:
+                        return "{0} IsDestinationFor {1}".CheckedFormat(SubstLocInfo, SubstInfo);
+                    default:
+                        return "{0} ?:{1} {2}".CheckedFormat(SubstLocInfo, SubstInfoFrom, SubstInfo);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Defines the set of substrate object sources for the SubstInfo property in a E090CombinedSubstLocAndSubstInfo object.
+        /// <para/>None (0), Contains, Source, Destination
+        /// </summary>
+        public enum SubstInfoFrom : int
+        {
+            /// <summary>No source.  The SubstInfo is in its default state.</summary>
+            None = 0,
+
+            /// <summary>The SubstInfo represents the extracted information from the substrate object at the To end of the SubstLoc's Contains link.</summary>
+            Contains,
+
+            /// <summary>The SubstInfo represents the extracted information from the first substrate object that links to this SubstLoc using a Source Location (SrcLoc) link.</summary>
+            Source,
+
+            /// <summary>The SubstInfo represents the extracted information from the first substrate object that links to this SubstLoc using a Destination Location (DestLoc) link.</summary>
+            Destination,
+        }
+
+        /// <summary>
+        /// DependencyObject class used to allow a client to observe the decoded states for a set of cross-linked objects, starting at a substrate location.
+        /// This object observes the given location and the Links to Contains and from SrcLoc and DestLoc and then uses the resulting observed set of objects
+        /// to generate a dynamically updating E090CombinedSubstLocAndSubstInfo which is published using the CombinedInfo read only DependencyPropertyKey.
+        /// <para/>Supports the following DependencyPropertyKeys:
+        /// <para/>CombinedInfo: gives the E090CombinedSubstLocAndSubstInfo derived from the state of the location tracker and link to/from trackers that this object is observing.
+        /// </summary>
+        public class E090CombinedSubstLocAndSubstInfoTracker : DependencyObject
+        {
+            internal E090CombinedSubstLocAndSubstInfoTracker(string substLocName, E039.IE039TablePerTypeDictionary substLocObjObserverFactory)
+            {
+                substLocObjTracker = substLocObjObserverFactory[substLocName];
+
+                substLocContainsObjTracker = substLocObjTracker.E039LinkToObjectTrackerFactory[Semi.E090.Constants.ContainsLinkKey];
+                srcLocLinkedObjTracker = substLocObjTracker.E039LinksFromObjectsTrackerFactory[Semi.E090.Constants.SourceLocationLinkKey];
+                destLocLinkedObjTracker = substLocObjTracker.E039LinksFromObjectsTrackerFactory[Semi.E090.Constants.DestinationLocationLinkKey];
+
+                var binding = new Binding();
+
+                BindingOperations.SetBinding(this, SubstLocObjProperty, new Binding() { Source = substLocObjTracker, Path = new PropertyPath(E039.E039ObjectTracker.ObjectPropertyKey.DependencyProperty), Mode = BindingMode.OneWay });
+                BindingOperations.SetBinding(this, ContainsSubstObjProperty, new Binding() { Source = substLocContainsObjTracker, Path = new PropertyPath(E039.E039LinkToObjectTracker.ObjectPropertyKey.DependencyProperty), Mode = BindingMode.OneWay });
+                BindingOperations.SetBinding(this, FirstSrcLocLinkedObjProperty, new Binding() { Source = srcLocLinkedObjTracker, Path = new PropertyPath(E039.E039LinksFromObjectsTracker.FirstObjectPropertyKey.DependencyProperty), Mode = BindingMode.OneWay });
+                BindingOperations.SetBinding(this, FirstDestLocLinkedObjProperty, new Binding() { Source = destLocLinkedObjTracker, Path = new PropertyPath(E039.E039LinksFromObjectsTracker.FirstObjectPropertyKey.DependencyProperty), Mode = BindingMode.OneWay });
+
+                substLocObj = substLocObjTracker.Object;
+                containsSubstObj = substLocContainsObjTracker.Object;
+                firstSrcLocLinkedObj = srcLocLinkedObjTracker.FirstObject;
+                firstDestLocLinkedObj = destLocLinkedObjTracker.FirstObject;
+
+                InnerUpdateCombinedInfo();
+            }
+
+            private E039.E039ObjectTracker substLocObjTracker;
+            private E039.E039LinkToObjectTracker substLocContainsObjTracker;
+            private E039.E039LinksFromObjectsTracker srcLocLinkedObjTracker, destLocLinkedObjTracker;
+
+            public static readonly DependencyPropertyKey CombinedInfoPropertyKey = DependencyProperty.RegisterReadOnly("CombinedInfo", typeof(E090CombinedSubstLocAndSubstInfo), typeof(E090CombinedSubstLocAndSubstInfoTracker), new PropertyMetadata(E090CombinedSubstLocAndSubstInfo.Empty));
+
+            public E090CombinedSubstLocAndSubstInfo CombinedInfo { get { return _combinedInfo; } set { SetValue(CombinedInfoPropertyKey, (_combinedInfo = value)); } }
+            private E090CombinedSubstLocAndSubstInfo _combinedInfo = E090CombinedSubstLocAndSubstInfo.Empty;
+
+            public override string ToString()
+            {
+                return "Tracker {0}".CheckedFormat(_combinedInfo);
+            }
+
+            private static readonly DependencyProperty SubstLocObjProperty = DependencyProperty.Register("SubstLocObj", typeof(IE039Object), typeof(E090CombinedSubstLocAndSubstInfoTracker), new PropertyMetadata(HandleNewSubstLocObj));
+            private static readonly DependencyProperty ContainsSubstObjProperty = DependencyProperty.Register("ContainsSubstObj", typeof(IE039Object), typeof(E090CombinedSubstLocAndSubstInfoTracker), new PropertyMetadata(HandleNewContainsSubstObj));
+            private static readonly DependencyProperty FirstSrcLocLinkedObjProperty = DependencyProperty.Register("FirstSrcLocLinkedObj", typeof(IE039Object), typeof(E090CombinedSubstLocAndSubstInfoTracker), new PropertyMetadata(HandleNewFirstSrcLocLinkedObj));
+            private static readonly DependencyProperty FirstDestLocLinkedObjProperty = DependencyProperty.Register("FirstDestLocLinkedObj", typeof(IE039Object), typeof(E090CombinedSubstLocAndSubstInfoTracker), new PropertyMetadata(HandleNewFirstDestLocLinkedObj));
+
+            private static void HandleNewSubstLocObj(DependencyObject d, DependencyPropertyChangedEventArgs e)
+            {
+                E090CombinedSubstLocAndSubstInfoTracker me = d as E090CombinedSubstLocAndSubstInfoTracker;
+
+                me.substLocObj = e.NewValue as IE039Object;
+
+                me.InnerUpdateCombinedInfo();
+            }
+
+            private static void HandleNewContainsSubstObj(DependencyObject d, DependencyPropertyChangedEventArgs e)
+            {
+                E090CombinedSubstLocAndSubstInfoTracker me = d as E090CombinedSubstLocAndSubstInfoTracker;
+
+                me.containsSubstObj = e.NewValue as IE039Object;
+
+                me.InnerUpdateCombinedInfo();
+            }
+
+            private static void HandleNewFirstSrcLocLinkedObj(DependencyObject d, DependencyPropertyChangedEventArgs e)
+            {
+                E090CombinedSubstLocAndSubstInfoTracker me = d as E090CombinedSubstLocAndSubstInfoTracker;
+
+                me.firstSrcLocLinkedObj = e.NewValue as IE039Object;
+
+                me.InnerUpdateCombinedInfo();
+            }
+
+            private static void HandleNewFirstDestLocLinkedObj(DependencyObject d, DependencyPropertyChangedEventArgs e)
+            {
+                E090CombinedSubstLocAndSubstInfoTracker me = d as E090CombinedSubstLocAndSubstInfoTracker;
+
+                me.firstDestLocLinkedObj = e.NewValue as IE039Object;
+
+                me.InnerUpdateCombinedInfo();
+            }
+
+            private IE039Object substLocObj, containsSubstObj, firstSrcLocLinkedObj, firstDestLocLinkedObj;
+
+            private Semi.E090.E090SubstLocInfo substLocInfo;
+            private Semi.E090.E090SubstInfo substInfo;
+            private SubstInfoFrom substInfoFrom;
+
+            /// <summary>
+            /// This method consultes the contents of the set of E039Objects that are tracked here (substLocObj, containsSubstObj, firstSrcLocLinkedObj, firstDestLocLinkedObj)
+            /// and updates the E090CombinedSubstLocAndSubstInfo based on the contents of these objects (when present).
+            /// This logic includes determining where to obtain the E090SubstInfo from (none, contains, source, destination) and handling cases where the IsOccupied state of the
+            /// SubstLocInfo does not match the presance of the last observed containsSubstObj.  
+            /// At present the value of the containsSubstObj object will generally override the substLocInfo.LinkToSubst.ToID so that the reported IsOccupied value will generally
+            /// be true if containsSubstObj != null. 
+            /// </summary>
+            private void InnerUpdateCombinedInfo()
+            {
+                if (!Object.ReferenceEquals(substLocInfo.Obj, substLocObj))
+                    substLocInfo = new Semi.E090.E090SubstLocInfo(substLocObj);
+
+                if (containsSubstObj != null)
+                {
+                    // this location contains the given object
+                    substInfoFrom = SubstInfoFrom.Contains;
+                }
+                else if (firstSrcLocLinkedObj == null && firstDestLocLinkedObj == null)
+                {
+                    // this location is neither a source nor a destination for any substrate and it is not currently occupied.
+                    substInfoFrom = SubstInfoFrom.None;
+                }
+                else if (ReferenceEquals(firstDestLocLinkedObj, firstSrcLocLinkedObj))
+                {
+                    // this location is both the source and destination for one substrate (that is not currently here).  
+                    // Explicitly Update the substInfo for that substrate and then use it to determine which substInfoFrom value to use.
+                    if (!Object.ReferenceEquals(substInfo.Obj, firstDestLocLinkedObj))
+                        substInfo = new Semi.E090.E090SubstInfo(firstDestLocLinkedObj);
+
+                    // if the SPS is needs processing then this substrate can return to this location as its source, otherwise it must go to its destination.
+                    substInfoFrom = (substInfo.SPS == Semi.E090.SubstProcState.NeedsProcessing) ? SubstInfoFrom.Source : SubstInfoFrom.Destination;
+                }
+                else if (firstSrcLocLinkedObj != null && firstDestLocLinkedObj == null)
+                {
+                    // this location is the source for a substrate but not the destination for any substrates
+                    substInfoFrom = SubstInfoFrom.Source;
+                }
+                else if (firstSrcLocLinkedObj == null && firstDestLocLinkedObj != null)
+                {
+                    // this location is the destination for a substrate but not the source for any substrates
+                    substInfoFrom = SubstInfoFrom.Destination;
+                }
+                else
+                {
+                    // this location is both the source and destination of different substrates.  
+                    var srcObjInfo = Object.ReferenceEquals(substInfo.Obj, firstSrcLocLinkedObj) ? substInfo : new Semi.E090.E090SubstInfo(firstSrcLocLinkedObj);
+
+                    if (srcObjInfo.SPS == Semi.E090.SubstProcState.NeedsProcessing)     // source substrate may still need to return to source
+                    {
+                        substInfoFrom = SubstInfoFrom.Source;
+
+                        substInfo = srcObjInfo;
+                    }
+                    else
+                    {
+                        // we only report this location as being the destination for that substrate after the substrate that came from this location indicates it is no longer needs processing (aka after it can no longer return to this location).
+                        substInfoFrom = SubstInfoFrom.Destination;
+                    }
+                }
+
+                switch (substInfoFrom)
+                {
+                    case SubstInfoFrom.None:
+                    default:
+                        if (substInfo.Obj != null)
+                            substInfo = default(Semi.E090.E090SubstInfo);
+                        break;
+
+                    case SubstInfoFrom.Contains:
+                        if (!Object.ReferenceEquals(substInfo.Obj, containsSubstObj))
+                            substInfo = new Semi.E090.E090SubstInfo(containsSubstObj);
+                        break;
+
+                    case SubstInfoFrom.Source:
+                        if (!Object.ReferenceEquals(substInfo.Obj, firstSrcLocLinkedObj))
+                            substInfo = new Semi.E090.E090SubstInfo(firstSrcLocLinkedObj);
+                        break;
+
+                    case SubstInfoFrom.Destination:
+                        if (!Object.ReferenceEquals(substInfo.Obj, firstDestLocLinkedObj))
+                            substInfo = new Semi.E090.E090SubstInfo(firstDestLocLinkedObj);
+                        break;
+                }
+
+                if (substLocInfo.LinkToSubst.ToID.Equals(substInfo.ObjID) || substInfoFrom == SubstInfoFrom.Source || substInfoFrom == SubstInfoFrom.Destination)
+                {
+                    // the substLocInfo is linked to the same substrate that we have information for or the substrate is linked by source or destination
+                    CombinedInfo = new E090CombinedSubstLocAndSubstInfo()
+                    {
+                        SubstLocInfo = substLocInfo,
+                        SubstInfoFrom = substInfoFrom,
+                        SubstInfo = substInfo,
+                    };
+                }
+                else
+                {
+                    // otherwise the substLocInfo linkage is not consistent with the last object we observed to be contained here - update the link to match the observed contained substrate - covers both the occupied and unoccupied cases.
+                    var fixedLinkToSubst = new Semi.E039.E039Link(substLocInfo.LinkToSubst) { ToID = substInfo.ObjID };
+
+                    CombinedInfo = new E090CombinedSubstLocAndSubstInfo()
+                    {
+                        SubstLocInfo = new Semi.E090.E090SubstLocInfo(substLocInfo) { LinkToSubst = fixedLinkToSubst },
+                        SubstInfoFrom = substInfoFrom,
+                        SubstInfo = substInfo,
+                    };
+                }
+            }
         }
     }
 

@@ -954,12 +954,17 @@ namespace MosaicLib.Modular.Part
         public SimplePartBaseBehavior SimplePartBaseBehavior { get; set; }
 
         /// <summary>
-        /// Set this to be non-null to enable BaseState publication via IVA.  
-        /// When this is set to the empty string, the IVA name will be derived from the PartID as [PartID].BaseState
-        /// When this is neither null nor empty then the IVA name will be the given string value.
-        /// <para/>Defaults to string.Empty to enable publication using the default name.
+        /// Leave this un-set or set this to the empty string to enable use of default BaseState publication IVA use (when enabled elsewhere).  
+        /// The default name will be of the form [PartID].BaseState where [PartID] is replaced with the part's PartID.
+        /// Set this to be non-empty to enable BaseState publication via IVA with custom configured IVA name. 
+        /// Explicitly set this property to null to disable BaseState publication IVA use.
+        /// <para/>Getter returns the empty string when un-set and returns the last assigned value after this property has been explicitly set.
         /// </summary>
-        public string BaseStatePublicationValueName { get { return baseStatePublicationValueName; } set { baseStatePublicationValueName = value; baseStatePublicationValueNameHasBeenSet = true; } }
+        public string BaseStatePublicationValueName 
+        { 
+            get { return baseStatePublicationValueNameHasBeenSet ? baseStatePublicationValueName : string.Empty; } 
+            set { baseStatePublicationValueName = value; baseStatePublicationValueNameHasBeenSet = true; } 
+        }
 
         private string baseStatePublicationValueName;
         private bool baseStatePublicationValueNameHasBeenSet;
@@ -987,19 +992,15 @@ namespace MosaicLib.Modular.Part
         public LoggingOptionSelect LoggingOptionSelect { get; set; }
 
         /// <summary>
-        /// This method is called during Settings assignment.  It applies any required settings changes of struct default values.
-        /// <para/>if the BaseStatePublicationValueName property has not been explicitly set, it will be set to string.Empty.
+        /// This method does not currently make any changes to the state of the object.  It is, however, retained for backward compatability.
         /// </summary>
         public SimplePartBaseSettings SetupForUse()
         {
-            if (!baseStatePublicationValueNameHasBeenSet)
-                baseStatePublicationValueName = string.Empty;
-
             return this;
         }
 
         /// <summary>
-        /// returns a constructor default SimpleParstBaseSettings value.
+        /// returns a constructor default SimplePartBaseSettings value.
         /// <para/>LoggingOptionSelect = LoggingOptionSelect.OldXmlishStyle
         /// </summary>
         public static SimplePartBaseSettings DefaultVersion0 
@@ -1014,7 +1015,7 @@ namespace MosaicLib.Modular.Part
         }
 
         /// <summary>
-        /// returns te first non-constructor default SimpleParstBaseSettings value (established under MosaicLibCS 0.1.6.0):
+        /// returns te first non-constructor default SimplePartBaseSettings value (established under MosaicLibCS 0.1.6.0):
         /// <para/>SimplePartBaseBehavior = SimplePartBaseBehavior.All (TreatPartAsBusyWhenQueueIsNotEmpty | TreatPartAsBusyWhenInternalPartBusyCountIsNonZero),
         /// </summary>
         public static SimplePartBaseSettings DefaultVersion1 
@@ -1029,9 +1030,9 @@ namespace MosaicLib.Modular.Part
         }
 
         /// <summary>
-        /// returns te second non-constructor default SimpleParstBaseSettings value (established under MosaicLibCS 0.1.6.1):
+        /// returns te second non-constructor default SimplePartBaseSettings value (established under MosaicLibCS 0.1.6.1):
         /// <para/>SimplePartBaseBehavior = SimplePartBaseBehavior.All (TreatPartAsBusyWhenQueueIsNotEmpty | TreatPartAsBusyWhenInternalPartBusyCountIsNonZero), 
-        /// CreateBaseStateIVAInBaseConstructor = true
+        /// <para/>CreateBaseStateIVAInBaseConstructor = true
         /// </summary>
         public static SimplePartBaseSettings DefaultVersion2
         {
@@ -1105,7 +1106,10 @@ namespace MosaicLib.Modular.Part
                 settings.SimplePartBaseBehavior = settings.SimplePartBaseBehavior & ~(SimplePartBaseBehavior.TreatPartAsBusyWhenQueueIsNotEmpty | SimplePartBaseBehavior.TreatPartAsBusyWhenInternalPartBusyCountIsNonZero);
 
             if (disablePartBaseIVIUse)
+            {
+                settings.BaseStatePublicationValueName = null;
                 settings.DisablePartBaseIVIUse = true;
+            }
 
             if (createBaseStateIVAInBaseConstructor)
                 settings.CreateBaseStateIVAInBaseConstructor = true;

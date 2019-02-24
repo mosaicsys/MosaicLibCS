@@ -31,8 +31,16 @@
         <ListView x:Name="listView" ItemsSource="{Binding ElementName=IVIViewMainControl, Path=Items}" ScrollViewer.VerticalScrollBarVisibility="Visible" MinHeight="75">
             <ListView.View>
                 <GridView>
-                    <GridViewColumn Header="Name" Width="{Binding NameColumnWidth, ElementName=IVIViewMainControl}" DisplayMemberBinding="{Binding Name, Mode=OneWay}"/>
-                    <GridViewColumn Header="Seq#" Width="{Binding SeqNumColumnWidth, ElementName=IVIViewMainControl}" DisplayMemberBinding="{Binding ValueSeqNum, Mode=OneWay}"/>
+                    <GridViewColumn Width="{Binding NameColumnWidth, ElementName=IVIViewMainControl}" DisplayMemberBinding="{Binding Name, Mode=OneWay}" >
+                        <GridViewColumn.Header>
+                            <GridViewColumnHeader Content="Name" Tag="Name" Click="GridViewColumnHeader_Click"/>
+                        </GridViewColumn.Header>
+                    </GridViewColumn>
+                    <GridViewColumn Width="{Binding SeqNumColumnWidth, ElementName=IVIViewMainControl}" DisplayMemberBinding="{Binding ValueSeqNum, Mode=OneWay}">
+                        <GridViewColumn.Header>
+                            <GridViewColumnHeader Content="Seq#" Tag="SeqNum" Click="GridViewColumnHeader_Click"/>
+                        </GridViewColumn.Header>
+                    </GridViewColumn>
                     <GridViewColumn Header="Value" Width="{Binding ValueColumnWidth, ElementName=IVIViewMainControl}" DisplayMemberBinding="{Binding VC, Converter={StaticResource VCToStringSMLConverter}, Mode=OneWay}"/>
                 </GridView>
             </ListView.View>

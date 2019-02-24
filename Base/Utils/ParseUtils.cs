@@ -1109,9 +1109,10 @@ namespace MosaicLib.Utils
 
         /// <summary>
         /// Attempts to parse an Xml style Attribute from the current position where the xml generally reads as
-        /// <code>attribName='value'</code>, 
+        /// <code>attribName='value'</code>, or 
         /// <code>attribName="value"</code>, or
         /// <code>attribName=value</code>, or
+        /// <code>attribName:value</code>
         /// </summary>
         /// <param name="attribName">gives the attribute name of the attribute that is to be parsed</param>
         /// <param name="value">receives the string contents of the value portion of the matching attribute or String.Empty if the parse fails.</param>
@@ -1134,6 +1135,8 @@ namespace MosaicLib.Utils
             else if (localScan.MatchToken("=\'", false, false))
                 termChar = '\'';
             else if (localScan.MatchToken("=", false, false))
+            { }
+            else if (localScan.MatchToken(":", false, false))
             { }
             else
                 success = false;

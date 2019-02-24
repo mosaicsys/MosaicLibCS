@@ -25,9 +25,10 @@ using System.Collections.Generic;
 using System.Linq;
 
 using MosaicLib.Modular.Config;
-using MosaicLib.Utils;
-using MosaicLib.Utils.StringMatching;
 using MosaicLib.Time;
+using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
+using MosaicLib.Utils.StringMatching;
 
 namespace MosaicLib
 {
@@ -145,15 +146,57 @@ namespace MosaicLib
             /// for both this group and for any group that is linked, directly or indirectly, to this group.
             /// </remarks>
             void LinkDistributionToGroup(string fromGroupName, string linkToGroupName);
+
+            /// <summary>
+            /// This method is used to change the <paramref name="groupSettings"/> that are applied to the given <paramref name="groupName"/>
+            /// <para/>Note: the use of this method is generally expected to remove the use of some of the older individual settings update methods such as SetDistributionGroupGate.
+            /// </summary>
+            void UpdateGroupSettings(string groupName, GroupSettings groupSettings);
         }
-	
+
+	    /// <summary>
+	    /// This struct contains the user changable set of values that can be used to adjust the behavior of a logging group.  
+        /// <para/>Note: these settings do not currently include means to change the set of LMH instances that are attached to the group or to change the set of other groups that are linked to this group.
+	    /// </summary>
+        public struct GroupSettings
+        {
+            /// <summary>
+            /// Defines the LogGate to be used with this group.
+            /// </summary>
+            public LogGate? LogGate { get; set; }
+
+            /// <summary>
+            /// Defines the GroupLinkageBehavior that is selected for this group.
+            /// </summary>
+            public GroupLinkageBehavior? GroupLinkageBehavior { get; set; }
+
+            /// <summary>Debugging and logging helper method</summary>
+            public override string ToString()
+            {
+                return "gate:{0} linkageBehavior:{1}".CheckedFormat(LogGate, GroupLinkageBehavior);
+            }
+        }
+
+        /// <summary>
+        /// This flag enumeration contains a set of user available behavior options that may be selected for use with group linkage
+        /// <para/>None (0x00), IncludeLinkedLMHInstancesInGroupGateEvaluation (0x01)
+        /// </summary>
+        [Flags]
+        public enum GroupLinkageBehavior : int
+        {
+            /// <summary>Placeholder default.  No non-default settings are selected.  [0x00]</summary>
+            None = 0x00,
+
+            /// <summary>Selects that the link from's group effective distribution gate level will be elevated to include the active gate levels of the linked LogMessageHandler instances whenever distribution gate levels are (re)evaluated.  [0x01]</summary>
+            IncludeLinkedLMHInstancesInGroupGateEvaluation = 0x01,
+        }
+
 		#endregion
 
 		#region LogMessageDistribution class
 
 		public class LogMessageDistribution : Utils.DisposableBase, ILogMessageDistribution
 		{
-            //-------------------------------------------------------------------
             #region Singleton Instance
 
             private static readonly SingletonHelperBase<ILogMessageDistribution> instanceHelper = new SingletonHelperBase<ILogMessageDistribution>(SingletonInstanceBehavior.AutoConstructIfNeeded, () => new LogMessageDistribution());
@@ -161,7 +204,6 @@ namespace MosaicLib
 
             #endregion
 
-			//-------------------------------------------------------------------
 			#region Construction
 
             /// <summary>
@@ -213,7 +255,6 @@ namespace MosaicLib
 
 			#endregion
 
-            //-------------------------------------------------------------------
             #region instance variables and related types: PerLoggerIDInfo, DistHandlerInfo, PerDistGroupIDInfo
 
             const int MesgQueueSize = 1000;
@@ -226,9 +267,6 @@ namespace MosaicLib
 
             /// <summary>volatile to support testing outside of lock ownership.  changes are still done inside lock.</summary>
             private volatile bool shutdown = false;
-
-            /// <summary>Returns true if this distribution instance has been shutdown</summary>
-            public bool HasBeenShutdown { get { return shutdown; } }
 
             /// <summary>this is only used within the ownership of the mutex so it does not need to be interlocked</summary>
             Utils.SequenceNumberInt mesgDistributionSeqGen = new MosaicLib.Utils.SequenceNumberInt(0, true);
@@ -320,6 +358,265 @@ namespace MosaicLib
                 }
             }
 
+            List<PerLoggerIDInfo> perLoggerIDInfoList = new List<PerLoggerIDInfo>();	// index by loggerID
+            PerLoggerIDInfo[] perLoggerIDInfoArray = Utils.Collections.EmptyArrayFactory<PerLoggerIDInfo>.Instance;      // index by loggerID - always stays synchronized with perLoggerIDInfoList contents
+            Dictionary<string, int> loggerNameToIDMap = new Dictionary<string, int>();
+
+            class DistHandlerInfo
+            {
+                public override string ToString()
+                {
+                    string lmhName = (lmh != null) ? lmh.Name : "[LMHIsNull]";
+                    return "DistHandlerInfo '{0}'".CheckedFormat(lmhName);
+                }
+
+                protected ILogMessageHandler lmh = null;
+                protected LoggerConfig lmhLoggerConfig = LoggerConfig.None;
+
+                public bool Valid { get { return (LMH != null); } }
+                public ILogMessageHandler LMH { get { return lmh; } set { lmh = value; if (lmh != null) lmhLoggerConfig = lmh.LoggerConfig; } }
+                public LoggerConfig LoggerConfig { get { return lmhLoggerConfig; } }
+
+                public DistHandlerInfo() { }
+                public DistHandlerInfo(ILogMessageHandler lmh) { LMH = lmh; }
+            }
+
+            class PerDistGroupIDInfo
+            {
+                public override string ToString()
+                {
+                    string linkedGroups = string.Join(",", linkedToDistGroupList.Select(pdg => pdg.DistGroupName).ToArray());
+                    string linkedLMHs = string.Join(",", distHandlerInfoList.Select(dhi => dhi.LMH.Name).ToArray());
+                    return "PerDistGroupIDInfo '{0}' id:{1} linkedGroups:{2} lmhs:{3} linkageBehavior:{4}".CheckedFormat(DistGroupName, DistGroupID, linkedGroups, linkedLMHs, GroupLinkageBehavior);
+                }
+
+                /// <summary>contains the name of the group.</summary>
+                private string groupName = string.Empty;
+
+                /// <summary>contains the group's ID (also used as an index into the distGroupIDInfoList)</summary>
+                private int id = DistGroupID_Invalid;
+
+                public string DistGroupName { get { return groupName; } }
+                /// <summary>readonly property gives caller access to the stored Distribution Group ID for this group.</summary>
+                public int DistGroupID { get { return id; } }
+
+                private bool disabled = false;
+                public bool Disabled
+                {
+                    get { return disabled; }
+                    set
+                    {
+                        if (disabled != value)
+                        {
+                            disabled = value;
+                            loggerConfigWrittenNotification.Notify();
+                        }
+                    }
+                }
+
+                public GroupLinkageBehavior GroupLinkageBehavior { get; set; }
+
+                /// <summary>stores the current LoggerConfig setting for this group.</summary>
+                private LoggerConfig groupLoggerConfigSetting = LoggerConfig.All;
+
+                /// <summary>public property access to stored LoggerConfig.  Signals that a logger config update is needed whenever the property is set.</summary>
+                public LoggerConfig GroupLoggerConfigSetting
+                {
+                    get { return groupLoggerConfigSetting; }
+                    set
+                    {
+                        groupLoggerConfigSetting = new LoggerConfig(value) { GroupName = DistGroupName };
+                        loggerConfigWrittenNotification.Notify();
+                    }
+                }
+
+                /// <summary>This is the list of DistHandlerInfo objects for the log message handlers that will recieve messages that are distributed to/through this group.</summary>
+                public IListWithCachedArray<DistHandlerInfo> distHandlerInfoList = new IListWithCachedArray<DistHandlerInfo>();
+
+                /// <summary>
+                /// This is the extended list of DistHandlerInfo objects for the log message handlers that will recieve messages that are distributed to/through this group.
+                /// It includes both the directly linked handlers and the indirectly linked handlers that 
+                /// </summary>
+                public IListWithCachedArray<DistHandlerInfo> expandedDistHandlerInfoList = new IListWithCachedArray<DistHandlerInfo>();
+
+                /// <summary>
+                /// This field is set whenever a new lmh is added to the expanded lmh list.  It is cleared when the group next re-evaluates its gate level.
+                /// </summary>
+                public bool expandedDistHandlerInfoListChanged = false;
+
+                /// <summary>This is the array of info objects for the log message handlers that will recieve messages that are distributed to/through this group.</summary>
+                public DistHandlerInfo[] expandedDistHandlerInfoArray = Utils.Collections.EmptyArrayFactory<DistHandlerInfo>.Instance;
+
+                /// <summary>
+                /// Used to add a new log message handler to this group's distribution list.
+                /// This also adds the lmh to the expanded lmh list (if needed) for all of the groups that are linked to this group.
+                /// </summary>
+                public void AddDistHandlerInfo(DistHandlerInfo dhInfo) 
+                {
+                    distHandlerInfoList.Add(dhInfo);
+
+                    AddExpandedDistHandlerInfo(dhInfo);
+
+                    loggerConfigWrittenNotification.Notify();
+                }
+
+                public void AddExpandedDistHandlerInfo(DistHandlerInfo dhInfo)
+                {
+                    // add the given dhInfo to the local list first
+                    if (!expandedDistHandlerInfoList.Contains(dhInfo))
+                    {
+                        expandedDistHandlerInfoList.Add(dhInfo);
+                        expandedDistHandlerInfoArray = expandedDistHandlerInfoList.Array;
+                        expandedDistHandlerInfoListChanged = true;
+                    }
+
+                    // then recursively add the given dhInfo to all of the expandedDistHandlerInfoLists of all of the groups that are linked to this one
+                    //  recursive search ends with any such group that already has this lmh in its expanded list (thus preventing indefinite recursion.
+                    foreach (var linkedFromDGInfo in linkedFromDistGroupList.Array)
+                    {
+                        if (!linkedFromDGInfo.expandedDistHandlerInfoList.Contains(dhInfo))
+                            linkedFromDGInfo.AddExpandedDistHandlerInfo(dhInfo);
+                    }
+                }
+
+                /// <summary>list of linked groups to which messages accepted by this group will also be delivered.  This group is always the first item in this list.</summary>
+                public IListWithCachedArray<PerDistGroupIDInfo> linkedToDistGroupList = new IListWithCachedArray<PerDistGroupIDInfo>();
+
+                /// <summary>list of linked groups from which messages accepted by this group will also be delivered.</summary>
+                public IListWithCachedArray<PerDistGroupIDInfo> linkedFromDistGroupList = new IListWithCachedArray<PerDistGroupIDInfo>();
+
+                /// <summary>
+                /// Adds the given target group ID to this groups linked dist list if needed.  Returns true if the given ID was not already in the list and was added.  Returns false if the given ID was already in the list.
+                /// This method also adds all of the extendedDistHandlerInfo items from the linkToDistGroupIDInfo's expandedDistHandlerInfoArray to this group's expandedDistHandlerInfoList if they are not already included.
+                /// </summary>
+                public bool AddLinkTo(PerDistGroupIDInfo linkToDistGroupIDInfo)
+                {
+                    linkToDistGroupIDInfo.linkedFromDistGroupList.SafeAddIfNeeded(this);
+
+                    if (!linkedToDistGroupList.Contains(linkToDistGroupIDInfo))
+                    {
+                        linkedToDistGroupList.Add(linkToDistGroupIDInfo);
+
+                        if (this != linkToDistGroupIDInfo)
+                        {
+                            foreach (var extendedDHInfo in linkToDistGroupIDInfo.expandedDistHandlerInfoArray)
+                                AddExpandedDistHandlerInfo(extendedDHInfo);
+                        }
+
+                        return true;
+                    }
+                    else
+                    {
+                        return false;
+                    }
+                }
+
+                /// <summary>sequence number used to record when logging config related changes have been made that might require the cached gates to be re-evaluated.</summary>
+                private Utils.InterlockedSequenceNumberInt loggerConfigWrittenNotification = new MosaicLib.Utils.InterlockedSequenceNumberInt(); 	// used as INotifyable
+
+                /// <summary>get only public property version of the loggerConfigWrittenNotification object as a simple INotifyable.</summary>
+                public Utils.INotifyable LoggerConfigWrittenNotification { get { return loggerConfigWrittenNotification; } }
+ 
+                /// <summary>SequenceNumberObserver that looks at the loggerConfigWrittenNotification.</summary>
+                public Utils.SequenceNumberObserver<int> loggerConfigWrittenObserver;
+
+                /// <summary>the logical "and" of the logGateSetting and distHandlerLogGate</summary>
+                private LoggerConfig activeLoggerConfig = LoggerConfig.None;
+
+                /// <summary>
+                /// This MatchRuleSet defines the rules that are applied to the set of Lookup loggers to map them to use this group.
+                /// </summary>
+                public MatchRuleSet loggerNameMatchRuleSet = MatchRuleSet.None;
+
+                /// <summary>Constructor - caller provides group ID and name</summary>
+                public PerDistGroupIDInfo(int dgid, string groupName)
+                {
+                    id = dgid;
+                    this.groupName = groupName;
+                    AddLinkTo(this);        // so the list always starts with us
+
+                    activeLoggerConfig.GroupName = groupName;
+                    groupLoggerConfigSetting.GroupName = groupName;
+                    loggerConfigWrittenObserver = new MosaicLib.Utils.SequenceNumberObserver<int>(loggerConfigWrittenNotification);
+                }
+
+                /// <summary>Returns true if any log message handler (logger) has had its configuration changed since we last scanned them.  Use UpdateActiveLoggerConfig to incorporate these changes.</summary>
+                public bool IsActiveLoggerConfigUpdateNeeded { get { return loggerConfigWrittenObserver.IsUpdateNeeded; } }
+
+                /// <summary>Combines the configs for the handlers in the distribution set with the group's configuration to generate the activeLoggerConfig, the cached summary of the config that is used to gate allocation and delivery of messages.</summary>
+                public bool UpdateActiveLoggerConfig()
+                {
+                    LoggerConfig distHandlerLoggerConfigOr = LoggerConfig.None;			//!< the logical "or" of the gates for our distribution handlers at the time they were added.
+
+                    distHandlerLoggerConfigOr.GroupName = DistGroupName;
+
+                    bool includeLinkedLMHInstancesInGroupGateEvaluation = (GroupLinkageBehavior & GroupLinkageBehavior.IncludeLinkedLMHInstancesInGroupGateEvaluation) != 0;
+
+                    foreach (DistHandlerInfo dhInfo in (!includeLinkedLMHInstancesInGroupGateEvaluation ? distHandlerInfoList.Array : expandedDistHandlerInfoArray))
+                        distHandlerLoggerConfigOr |= dhInfo.LoggerConfig;
+
+                    expandedDistHandlerInfoListChanged = false;
+
+                    LoggerConfig updatedLoggerConfig = distHandlerLoggerConfigOr & groupLoggerConfigSetting;
+                    if (Disabled)
+                        updatedLoggerConfig.LogGate = LogGate.None;
+
+                    if (activeLoggerConfig.Equals(updatedLoggerConfig))
+                        return false;
+
+                    activeLoggerConfig = updatedLoggerConfig;
+                    return true;
+                }
+
+                /// <summary>Returns a LoggerConfig that is the logical "and" of the logGateSetting and distHandlerLogGate.  Automatically triggers updates when needed.</summary>
+                public LoggerConfig ActiveLoggerConfig
+                {
+                    get
+                    {
+                        if (IsActiveLoggerConfigUpdateNeeded)
+                            UpdateActiveLoggerConfig();
+
+                        return activeLoggerConfig;
+                    }
+                }
+            }
+
+            PerDistGroupIDInfo defaultDistGroupIDInfo = null;
+            List<PerDistGroupIDInfo> distGroupIDInfoList = new List<PerDistGroupIDInfo>();			// index by group id
+            PerDistGroupIDInfo[] distGroupIDInfoArray = Utils.Collections.EmptyArrayFactory<PerDistGroupIDInfo>.Instance;
+            Dictionary<string, int> distGroupNameToIDMap = new Dictionary<string, int>();
+
+            // information used to implement queued logging.
+
+            volatile MessageQueue mesgQueue = null;
+            SequencedLoggerConfigSource mesgQueueLoggerGateSource = new SequencedLoggerConfigSource(LoggerConfig.All);
+            System.Threading.Thread mesgQueueDistThread = null;
+            Utils.WaitEventNotifier mesgQueueDistThreadWakeupNotification = new MosaicLib.Utils.WaitEventNotifier(MosaicLib.Utils.WaitEventNotifier.Behavior.WakeAllSticky);
+
+            #endregion
+
+            #region IConfig related parts
+
+            /// <summary>field that gives the configInstance that is used to obtain ICKA values for reduce/increase config keys.</summary>
+            private volatile IConfig configInstance = null;
+
+            /// <summary>
+            /// This is the method that is used as a delegate to field Config ChangeNotification notifications.
+            /// When this callback is triggered, it simply sets the serviceICKAUpdatesHoldoffCounter to the preconfigured serviceICKAUpdatesNotifyCountValue
+            /// so that the next -n DistributeMessage calls will call ServiceICKAUpdatesForPerLoggerIDInfoArray to handle possible ICKA value changes.
+            /// </summary>
+            void ChangeNotificationList_OnNotify()
+            {
+                serviceICKAUpdatesHoldoffCounter = serviceICKAUpdatesNotifyCountValue;
+            }
+
+            /// <summary>
+            /// The following counter is incremented non-atomically and outside of any locks.  Since this counter is only used as a heuristic this is fine.
+            /// </summary>
+            private volatile int serviceICKAUpdatesHoldoffCounter = 0;
+            private const int serviceICKAUpdatesRetriggerCountValue = 20;      // recheck for config updates every 100 times DistributeMessage is called
+            private const int serviceICKAUpdatesNotifyCountValue = -100;        // each time ChangeNotificationList_OnNotify, the next 100 DistributeMessage calls will also call ServiceICKAUpdatesForPerLoggerIDInfoArray
+
             private void UpdateLogGateFromPendingConfigValues(PerLoggerIDInfo plInfo)
             {
                 if (plInfo.havePendingLogGateChanges)
@@ -354,10 +651,6 @@ namespace MosaicLib
 
                 return true;
             }
-
-            List<PerLoggerIDInfo> perLoggerIDInfoList = new List<PerLoggerIDInfo>();	// index by loggerID
-            PerLoggerIDInfo[] perLoggerIDInfoArray = Utils.Collections.EmptyArrayFactory<PerLoggerIDInfo>.Instance;      // index by loggerID - always stays synchronized with perLoggerIDInfoList contents
-            Dictionary<string, int> loggerNameToIDMap = new Dictionary<string, int>();
 
             AtomicInt32 serviceExclusionAtomicInt = new AtomicInt32();
             volatile int serviceConfigChangeSeqNum = 0;
@@ -399,202 +692,16 @@ namespace MosaicLib
                 }
             }
 
-            class DistHandlerInfo
-            {
-                public override string ToString()
-                {
-                    string lmhName = (lmh != null) ? lmh.Name : "[LMHIsNull]";
-                    return "DistHandlerInfo '{0}'".CheckedFormat(lmhName);
-                }
-
-                protected ILogMessageHandler lmh = null;
-                protected LoggerConfig lmhLoggerConfig = LoggerConfig.None;
-
-                public bool Valid { get { return (LMH != null); } }
-                public ILogMessageHandler LMH { get { return lmh; } set { lmh = value; if (lmh != null) lmhLoggerConfig = lmh.LoggerConfig; } }
-                public LoggerConfig LoggerConfig { get { return lmhLoggerConfig; } }
-
-                public DistHandlerInfo() { }
-                public DistHandlerInfo(ILogMessageHandler lmh) { LMH = lmh; }
-            }
-
-            class PerDistGroupIDInfo
-            {
-                public override string ToString()
-                {
-                    string linkedGroups = string.Join(",", linkedDistGroupList.Select(pdg => pdg.DistGroupName).ToArray());
-                    string linkedLMHs = string.Join(",", distHandlerInfoList.Select(dhi => dhi.LMH.Name).ToArray());
-                    return "PerDistGroupIDInfo '{0}' id:{1} linkedGroups:{2} lmhs:{3}".CheckedFormat(DistGroupName, DistGroupID, linkedGroups, linkedLMHs);
-                }
-
-                /// <summary>contains the name of the group.</summary>
-                private string groupName = string.Empty;
-
-                /// <summary>contains the group's ID (also used as an index into the distGroupIDInfoList)</summary>
-                private int id = DistGroupID_Invalid;
-
-                public string DistGroupName { get { return groupName; } }
-                /// <summary>readonly property gives caller access to the stored Distribution Group ID for this group.</summary>
-                public int DistGroupID { get { return id; } }
-
-                private bool disabled = false;
-                public bool Disabled
-                {
-                    get { return disabled; }
-                    set
-                    {
-                        if (disabled != value)
-                        {
-                            disabled = value;
-                            loggerConfigWrittenNotification.Notify();
-                        }
-                    }
-                }
-
-                /// <summary>stores the current LoggerConfig setting for this group.</summary>
-                private LoggerConfig groupLoggerConfigSetting = LoggerConfig.All;
-
-                /// <summary>public property access to stored LoggerConfig.  Signals that a logger config update is needed whenever the property is set.</summary>
-                public LoggerConfig GroupLoggerConfigSetting
-                {
-                    get { return groupLoggerConfigSetting; }
-                    set
-                    {
-                        groupLoggerConfigSetting = new LoggerConfig(value) { GroupName = DistGroupName };
-                        loggerConfigWrittenNotification.Notify();
-                    }
-                }
-
-                /// <summary>This is the list of info objects for the log message handlers that will recieve messages that are distributed to/through this group.</summary>
-                public List<DistHandlerInfo> distHandlerInfoList = new List<DistHandlerInfo>();
-
-                /// <summary>This is the array of info objects for the log message handlers that will recieve messages that are distributed to/through this group.</summary>
-                public DistHandlerInfo[] distHandlerInfoArray = Utils.Collections.EmptyArrayFactory<DistHandlerInfo>.Instance;
-
-                /// <summary>Used to add a new log message handler to this group's distribution list.</summary>
-                public void Add(DistHandlerInfo dhInfo) 
-                { 
-                    distHandlerInfoList.Add(dhInfo);
-                    distHandlerInfoArray = distHandlerInfoList.SafeToArray();
-
-                    loggerConfigWrittenNotification.Notify(); 
-                }
-
-                /// <summary>internal list of linked groups to which messages accepted by this group will also be delivered.  This group is always the first item in this list.</summary>
-                private List<PerDistGroupIDInfo> linkedDistGroupList = new List<PerDistGroupIDInfo>();
-
-                /// <summary>cached ToArray version of linkedDistGroupList for improved foreach behavior.</summary>
-                private PerDistGroupIDInfo[] linkedDistGroupArray = Utils.Collections.EmptyArrayFactory<PerDistGroupIDInfo>.Instance;
-
-                /// <summary>public get-only propery version of linkedDistGroupArray cached list value.</summary>
-                public PerDistGroupIDInfo[] LinkedDistGroupArray { get { return linkedDistGroupArray; } }
-
-                /// <summary>Adds the given target group ID to this groups linked dist list if needed.  Returns true if the given ID was not already in the list and was added.  Returns false if the given ID was already in the list.</summary>
-                public bool AddLinkTo(PerDistGroupIDInfo linkToDistGroupIDInfo)
-                {
-                    if (!linkedDistGroupList.Contains(linkToDistGroupIDInfo))
-                    {
-                        linkedDistGroupList.Add(linkToDistGroupIDInfo);
-                        linkedDistGroupArray = linkedDistGroupList.ToArray();
-                        return true;
-                    }
-                    else
-                    {
-                        return false;
-                    }
-                }
-
-                /// <summary>sequence number used to record when logging config related changes have been made that might require the cached gates to be re-evaluated.</summary>
-                private Utils.InterlockedSequenceNumberInt loggerConfigWrittenNotification = new MosaicLib.Utils.InterlockedSequenceNumberInt();	// used as INotifyable
-
-                /// <summary>get only public property version of the loggerConfigWrittenNotification object as a simple INotifyable.</summary>
-                public Utils.INotifyable LoggerConfigWrittenNotification { get { return loggerConfigWrittenNotification; } }
- 
-                /// <summary>SequenceNumberObserver that looks at the loggerConfigWrittenNotification.</summary>
-                public Utils.SequenceNumberObserver<int> loggerConfigWrittenObserver;
-
-                /// <summary>the logical "and" of the logGateSetting and distHandlerLogGate</summary>
-                private LoggerConfig activeLoggerConfig = LoggerConfig.None;
-
-                /// <summary>
-                /// This MatchRuleSet defines the rules that are applied to the set of Lookup loggers to map them to use this group.
-                /// </summary>
-                public MatchRuleSet loggerNameMatchRuleSet = MatchRuleSet.None;
-
-                /// <summary>Constructor - caller provides group ID and name</summary>
-                public PerDistGroupIDInfo(int dgid, string groupName)
-                {
-                    id = dgid;
-                    this.groupName = groupName;
-                    AddLinkTo(this);        // so the list always starts with us
-
-                    activeLoggerConfig.GroupName = groupName;
-                    groupLoggerConfigSetting.GroupName = groupName;
-                    loggerConfigWrittenObserver = new MosaicLib.Utils.SequenceNumberObserver<int>(loggerConfigWrittenNotification);
-                }
-
-                /// <summary>Returns true if any log message handler (logger) has had its configuration changed since we last scanned them.  Use UpdateActiveLoggerConfig to incorporate these changes.</summary>
-                public bool IsActiveLoggerConfigUpdateNeeded { get { return loggerConfigWrittenObserver.IsUpdateNeeded; } }
-
-                /// <summary>Combines the configs for the handlers in the distribution set with the group's configuration to generate the activeLoggerConfig, the cached summary of the config that is used to gate allocation and delivery of messages.</summary>
-                public bool UpdateActiveLoggerConfig()
-                {
-                    LoggerConfig distHandlerLoggerConfigOr = LoggerConfig.None;			//!< the logical "or" of the gates for our distribution handlers at the time they were added.
-                    LoggerConfig distHandlerLoggerConfigAnd = LoggerConfig.None;	    //!< the logical "and" of the gates for our distribution handlers at the time they were added.
-
-                    distHandlerLoggerConfigOr.GroupName = DistGroupName;
-
-                    foreach (DistHandlerInfo dhInfo in distHandlerInfoList)
-                    {
-                        distHandlerLoggerConfigOr |= dhInfo.LoggerConfig;
-                        distHandlerLoggerConfigAnd &= dhInfo.LoggerConfig;
-                    }
-
-                    LoggerConfig updatedLoggerConfig = distHandlerLoggerConfigOr & groupLoggerConfigSetting;
-                    if (Disabled)
-                        updatedLoggerConfig.LogGate = LogGate.None;
-
-                    if (activeLoggerConfig.Equals(updatedLoggerConfig))
-                        return false;
-
-                    activeLoggerConfig = updatedLoggerConfig;
-                    return true;
-                }
-
-                /// <summary>Returns a LoggerConfig that is the logical "and" of the logGateSetting and distHandlerLogGate.  Automatically triggers updates when needed.</summary>
-                public LoggerConfig ActiveLoggerConfig
-                {
-                    get
-                    {
-                        if (IsActiveLoggerConfigUpdateNeeded)
-                            UpdateActiveLoggerConfig();
-
-                        return activeLoggerConfig;
-                    }
-                }
-            }
-
-            PerDistGroupIDInfo defaultDistGroupIDInfo = null;
-            List<PerDistGroupIDInfo> distGroupIDInfoList = new List<PerDistGroupIDInfo>();			// index by group id
-            PerDistGroupIDInfo[] distGroupIDInfoArray = Utils.Collections.EmptyArrayFactory<PerDistGroupIDInfo>.Instance;
-            Dictionary<string, int> distGroupNameToIDMap = new Dictionary<string, int>();
-
-            // information used to implement queued logging.
-
-            volatile MessageQueue mesgQueue = null;
-            SequencedLoggerConfigSource mesgQueueLoggerGateSource = new SequencedLoggerConfigSource(LoggerConfig.All);
-            System.Threading.Thread mesgQueueDistThread = null;
-            Utils.WaitEventNotifier mesgQueueDistThreadWakeupNotification = new MosaicLib.Utils.WaitEventNotifier(MosaicLib.Utils.WaitEventNotifier.Behavior.WakeAllSticky);
-
             #endregion
 
-            //-------------------------------------------------------------------
-			#region ILogMessageDistribution methods
+            #region ILogMessageDistribution methods
 
-			// methods used by ILoggers
+            /// <summary>Returns true if this distribution instance has been shutdown</summary>
+            public bool HasBeenShutdown { get { return shutdown; } }
+            
+            #endregion
 
-            /// <summary>field that gives the configInstance that is used to obtain ICKA values for reduce/increase config keys.</summary>
-            private volatile IConfig configInstance = null;
+            #region ILogMessageDistributionForLoggers methods
 
             /// <summary>
             /// used to create/lookup the LoggerSourceInfo for a given <paramref name="loggerName"/>.
@@ -742,23 +849,6 @@ namespace MosaicLib
 				}
 			}
 
-            /// <summary>
-            /// This is the method that is used as a delegate to field Config ChangeNotification notifications.
-            /// When this callback is triggered, it simply sets the serviceICKAUpdatesHoldoffCounter to the preconfigured serviceICKAUpdatesNotifyCountValue
-            /// so that the next -n DistributeMessage calls will call ServiceICKAUpdatesForPerLoggerIDInfoArray to handle possible ICKA value changes.
-            /// </summary>
-            void ChangeNotificationList_OnNotify()
-            {
-                serviceICKAUpdatesHoldoffCounter = serviceICKAUpdatesNotifyCountValue;
-            }
-
-            /// <summary>
-            /// The following counter is incremented non-atomically and outside of any locks.  Since this counter is only used as a heuristic this is fine.
-            /// </summary>
-            private volatile int serviceICKAUpdatesHoldoffCounter = 0;
-            private const int serviceICKAUpdatesRetriggerCountValue = 20;      // recheck for config updates every 100 times DistributeMessage is called
-            private const int serviceICKAUpdatesNotifyCountValue = -100;        // each time ChangeNotificationList_OnNotify, the next 100 DistributeMessage calls will also call ServiceICKAUpdatesForPerLoggerIDInfoArray
-
             /// <summary>used to allow a logger to request that it block until its last emitted message has been fully delivered or the time limit is reached (renterant method on multiple callers)</summary>
             public bool WaitForDistributionComplete(int lid, TimeSpan timeLimit)
 			{
@@ -805,6 +895,10 @@ namespace MosaicLib
 				return !isMessageDeliveryInProgress;
 			}
 
+            #endregion
+
+            #region ILogMessageDistributionForQueuedLoggers methods
+
             /// <summary>request distribution to start support for queued logging</summary>
             public void StartQueuedMessageDeliveryIfNeeded()
 			{
@@ -842,35 +936,6 @@ namespace MosaicLib
 						Utils.Asserts.TakeBreakpointAfterFault("LMD::StartQueuedMessageDelivery MesgQueue did not enable or thread not created.");
 				}
 			}
-
-            /// <summary>request distribution to stop support for queued logging</summary>
-            public void StopQueuedMessageDelivery()
-            {
-                if (mesgQueueDistThread == null && (mesgQueue == null || mesgQueue.IsEnabled == false))
-                    return;
-
-                System.Threading.Thread threadToJoin = null;
-
-                lock (distMutex)
-                {
-                    if (mesgQueueDistThread == null && (mesgQueue == null || mesgQueue.IsEnabled == false))
-                        return;
-
-                    if (mesgQueue != null)
-                        mesgQueue.DisableQueue();
-
-                    threadToJoin = mesgQueueDistThread;
-                    mesgQueueDistThread = null;
-
-                    mesgQueue = null;
-                }
-
-                if (threadToJoin != null)
-                {
-                    threadToJoin.Join();
-                    Utils.Fcns.DisposeOfObject(ref threadToJoin);
-                }
-            }
 
             /// <summary>used to allow a queued logger to request that it block until its last emitted message has been fully delivered or the time limit is reached (renterant method on multiple callers)</summary>
             public bool WaitForQueuedMessageDistributionComplete(int id, TimeSpan timeLimit)
@@ -944,8 +1009,111 @@ namespace MosaicLib
 
             #endregion
 
-            //-------------------------------------------------------------------
-            #region Other LogMessageDistImpl methods (used by public static helpers)
+            #region ILogMessageDistributionManagement methods
+
+            /// <summary>Initializes and starts distribution, if needed.</summary>
+            public void StartupIfNeeded(string mesg)
+            {
+                lock (distMutex)
+                {
+                    if (!shutdown)
+                        return;
+
+                    InnerRestartAllHandlers();
+
+                    shutdown = false;
+
+                    // Enable all of the dist groups (internally will restore their distribution group gates to prior value)
+                    foreach (var dgInfo in distGroupIDInfoArray)
+                        dgInfo.Disabled = false;
+
+                    // now Enable all of the logger's (internally will restore their distribution group gate to prior value)
+                    foreach (var plInfo in perLoggerIDInfoArray)
+                        plInfo.Disabled = false;
+
+                    InnerLogLog(MesgType.Debug, mesg);
+                }
+            }
+
+            /// <summary>Stops distribution in an orderly manner.  Attempts to distributed messages will be ignored here after.</summary>
+            public void Shutdown(string mesg)
+            {
+                // mark that we are shutting down
+                lock (distMutex)
+                {
+                    if (shutdown)
+                        return;
+
+                    // now Diable all of the logger's (internally will set their distribution group gate to None)
+                    foreach (var plInfo in perLoggerIDInfoArray)
+                        plInfo.Disabled = true;
+
+                    // Disable all of the dist groups
+                    foreach (var dgInfo in distGroupIDInfoArray)
+                        dgInfo.Disabled = true;
+
+                    shutdown = true;
+
+                    InnerLogLog(MesgType.Debug, mesg);				// log message (from inner source) that distribution has stopped
+                }
+
+                // leave the lock and run the pattern required to shutdown the inner message queue and service thread
+                //	that are used by QueuedLoggers.
+
+                {
+                    // disable the queue (tells mesgQueueDistThread to stop)
+                    if (mesgQueue != null && mesgQueue.IsEnabled)
+                        mesgQueue.DisableQueue();
+
+                    // signal the thread to wakeup and service the disabled queue
+                    if (mesgQueueDistThreadWakeupNotification != null)
+                        mesgQueueDistThreadWakeupNotification.Notify();
+
+                    // join the thread (if it has been started)
+                    if (mesgQueueDistThread != null)
+                    {
+                        mesgQueueDistThread.Join();
+                        mesgQueueDistThread = null;
+                    }
+
+                    // dist thread will have drained the queue by this point (if it could do so)
+                }
+
+                // relock the distribution and complete the shutdown of the handlers and the distribution.
+                lock (distMutex)
+                {
+                    InnerShutdownAllHandlers();						// stop all handlers
+                }
+            }
+
+            /// <summary>request distribution to stop support for queued logging</summary>
+            public void StopQueuedMessageDelivery()
+            {
+                if (mesgQueueDistThread == null && (mesgQueue == null || mesgQueue.IsEnabled == false))
+                    return;
+
+                System.Threading.Thread threadToJoin = null;
+
+                lock (distMutex)
+                {
+                    if (mesgQueueDistThread == null && (mesgQueue == null || mesgQueue.IsEnabled == false))
+                        return;
+
+                    if (mesgQueue != null)
+                        mesgQueue.DisableQueue();
+
+                    threadToJoin = mesgQueueDistThread;
+                    mesgQueueDistThread = null;
+
+                    mesgQueue = null;
+                }
+
+                if (threadToJoin != null)
+                {
+                    threadToJoin.Join();
+                    Utils.Fcns.DisposeOfObject(ref threadToJoin);
+                }
+            }
 
             /// <summary>Adds the given logMessageHandler to the given groupName (or the default group if no non-empty group name is given)</summary>
             public void AddLogMessageHandlerToDistributionGroup(ILogMessageHandler logMessageHandler, string groupName = null)
@@ -977,12 +1145,12 @@ namespace MosaicLib
                         foreach (var logMessageHandler in logMessageHandlerSet.Where(lmh => (lmh != null)))
                         {
                             int dhInfoIdx = dgInfo.distHandlerInfoList.Count;
-                            dgInfo.Add(new DistHandlerInfo(logMessageHandler));
+                            dgInfo.AddDistHandlerInfo(new DistHandlerInfo(logMessageHandler));
 
                             logMessageHandler.NotifyOnCompletedDelivery.AddItem(mesgDeliveryOccurredNotification);
 
                             if (dgInfo.UpdateActiveLoggerConfig())
-                                InnerUpdateLoggerDistGroupConfigForGroup(dgid);
+                                InnerUpdateLoggerDistGroupConfigForGroup(dgInfo);
                         }
                     }
                     else
@@ -990,13 +1158,13 @@ namespace MosaicLib
                         InnerLogLog(MesgType.Warning, "{0}: Given GroupName '{1}' is not valid and could not be created.", Fcns.CurrentMethodName, groupName);
                     }
                 }
-			}
+            }
 
             /// <summary>Replaces the indicated group's name matching rules with the given one</summary>
             public void MapLoggersToDistributionGroup(LoggerNameMatchType matchType, string matchStr, string groupName)
             {
-				try
-				{
+                try
+                {
                     switch (matchType)
                     {
                         case LoggerNameMatchType.MatchPrefix:
@@ -1020,12 +1188,12 @@ namespace MosaicLib
                             MapLoggersToDistributionGroup(Utils.StringMatching.MatchRuleSet.None, groupName, appendRules: false);
                             break;
                     }
-				}
-				catch (System.Exception ex)
-				{
+                }
+                catch (System.Exception ex)
+                {
                     // cannot use normal logging here since we are in the process of updating the distribution tables when we are here.
-					Utils.Asserts.LogFaultOccurance(Utils.Fcns.CheckedFormat("{0} grp:{1}, matchType:{2}, matchStr:'{3}' failed", Fcns.CurrentMethodName, groupName, matchType, matchStr), ex);
-				}
+                    Utils.Asserts.LogFaultOccurance(Utils.Fcns.CheckedFormat("{0} grp:{1}, matchType:{2}, matchStr:'{3}' failed", Fcns.CurrentMethodName, groupName, matchType, matchStr), ex);
+                }
             }
 
             /// <summary>
@@ -1033,10 +1201,10 @@ namespace MosaicLib
             /// This method is ignored if the caller attempts to define the rule set to be used with the default distribution group.
             /// </summary>
             public void MapLoggersToDistributionGroup(Utils.StringMatching.MatchRuleSet matchRuleSet, string groupName, bool appendRules = false)
-			{
+            {
                 lock (distMutex)
-				{
-					int dgid = InnerGetDistGroupID(groupName, createIfNeeded: true);
+                {
+                    int dgid = InnerGetDistGroupID(groupName, createIfNeeded: true);
                     PerDistGroupIDInfo dgInfo = distGroupIDInfoArray.SafeAccess(dgid);
 
                     if (dgInfo != null && dgid != DistGroupID_Default)
@@ -1052,16 +1220,16 @@ namespace MosaicLib
                     {
                         InnerLogLog(MesgType.Warning, "{0}: Given GroupName '{1}' is not valid and could not be created.", Fcns.CurrentMethodName, groupName);
                     }
-				}
-			}
+                }
+            }
 
             /// <summary>Sets the indicated group's LogGate to the given value</summary>
             public void SetDistributionGroupGate(string groupName, LogGate logGate)
-			{
+            {
                 groupName = groupName.MapNullOrEmptyTo(DefaultDistributionGroupName);
 
                 lock (distMutex)
-				{
+                {
                     int dgid = InnerGetDistGroupID(groupName, createIfNeeded: true);
                     PerDistGroupIDInfo dgInfo = distGroupIDInfoArray.SafeAccess(dgid);
 
@@ -1074,14 +1242,14 @@ namespace MosaicLib
                         dgInfo.GroupLoggerConfigSetting = lc;
 
                         if (dgInfo.UpdateActiveLoggerConfig())
-                            InnerUpdateLoggerDistGroupConfigForGroup(dgid);
+                            InnerUpdateLoggerDistGroupConfigForGroup(dgInfo);
                     }
                     else
-					{
+                    {
                         InnerLogLog(MesgType.Warning, "{0}: Given GroupName '{1}' is not valid and could not be created.", Fcns.CurrentMethodName, groupName);
-					}
-				}
-			}
+                    }
+                }
+            }
 
             /// <summary>
             /// Setup an internal link from the fromGroupName to the group (and groups) represented by linkToGroupName so that messages that are 
@@ -1108,19 +1276,26 @@ namespace MosaicLib
 
                     if (fromDgInfo != null && linkToDgInfo != null)
                     {
-                        Queue<PerDistGroupIDInfo> linkBuildQueue = new Queue<PerDistGroupIDInfo>();
-                        linkBuildQueue.Enqueue(linkToDgInfo);
+                        fromDgInfo.AddLinkTo(linkToDgInfo);
 
-                        while (linkBuildQueue.Count != 0)
+                        List<PerDistGroupIDInfo> updateScanList = new List<PerDistGroupIDInfo>();
+                        List<PerDistGroupIDInfo> updateList = new List<PerDistGroupIDInfo>();
+                        updateScanList.Add(linkToDgInfo);
+
+                        for (int index = 0; index < updateScanList.Count; )
                         {
-                            PerDistGroupIDInfo linkTestDgInfo = linkBuildQueue.Dequeue();
+                            var nextToCheck = updateScanList.SafeAccess(index++);
 
-                            if (!fromDgInfo.AddLinkTo(linkTestDgInfo))
-                                continue;       // given ID is already in the list - do not add it or its subs
+                            if (nextToCheck == null || !nextToCheck.expandedDistHandlerInfoListChanged)
+                                continue;
 
-                            foreach (PerDistGroupIDInfo dgInfo in linkTestDgInfo.LinkedDistGroupArray)
-                                linkBuildQueue.Enqueue(dgInfo);
+                            if (nextToCheck.UpdateActiveLoggerConfig())
+                                updateList.SafeAddIfNeeded(nextToCheck);
+
+                            nextToCheck.linkedToDistGroupList.Array.DoForEach(linkedToDGInfo => updateScanList.SafeAddIfNeeded(linkedToDGInfo));
                         }
+
+                        updateList.DoForEach(dgInfo => InnerUpdateLoggerDistGroupConfigForGroup(dgInfo));
                     }
                     else
                     {
@@ -1129,86 +1304,49 @@ namespace MosaicLib
                 }
             }
 
-            /// <summary>Initializes and starts distribution, if needed.</summary>
-            public void StartupIfNeeded(string mesg)
+            /// <summary>
+            /// This method is used to change the <paramref name="groupSettings"/> that are applied to the given <paramref name="groupName"/>
+            /// <para/>Note: the use of this method is generally expected to remove the use of some of the older individual settings update methods such as SetDistributionGroupGate.
+            /// </summary>
+            public void UpdateGroupSettings(string groupName, GroupSettings groupSettings)
             {
+                groupName = groupName.MapNullOrEmptyTo(DefaultDistributionGroupName);
+
                 lock (distMutex)
                 {
-                    if (!shutdown)
-                        return;
+                    int dgid = InnerGetDistGroupID(groupName, createIfNeeded: true);
+                    PerDistGroupIDInfo dgInfo = distGroupIDInfoArray.SafeAccess(dgid);
 
-                    InnerRestartAllHandlers();
+                    if (dgInfo != null)
+                    {
+                        if (groupSettings.LogGate != null)
+                        {
+                            // read the LoggerConfig (struct), update the LogGate field and then write it back to the PerDistGroupIDInfo so that it can notify observers of the change.
+                            LoggerConfig lc = dgInfo.GroupLoggerConfigSetting;
 
-                    shutdown = false;
+                            lc.LogGate = groupSettings.LogGate ?? LogGate.All;
 
-                    // Enable all of the dist groups (internally will restore their distribution group gates to prior value)
-                    foreach (var dgInfo in distGroupIDInfoArray)
-                        dgInfo.Disabled = false;
+                            dgInfo.GroupLoggerConfigSetting = lc;
+                        }
 
-                    // now Enable all of the logger's (internally will restore their distribution group gate to prior value)
-                    foreach (var plInfo in perLoggerIDInfoArray)
-                        plInfo.Disabled = false;
+                        if (groupSettings.GroupLinkageBehavior != null)
+                        {
+                            dgInfo.GroupLinkageBehavior = groupSettings.GroupLinkageBehavior ?? GroupLinkageBehavior.None;
+                        }
 
-                    InnerLogLog(MesgType.Debug, mesg);
+                        if (dgInfo.UpdateActiveLoggerConfig())
+                            InnerUpdateLoggerDistGroupConfigForGroup(dgInfo);
+                    }
+                    else
+                    {
+                        InnerLogLog(MesgType.Warning, "{0}: Given GroupName '{1}' is not valid and could not be created.", Fcns.CurrentMethodName, groupName);
+                    }
                 }
             }
 
-            /// <summary>Stops distribution in an orderly manner.  Attempts to distributed messages will be ignored here after.</summary>
-            public void Shutdown(string mesg)
-			{
-				// mark that we are shutting down
-				lock (distMutex)
-				{
-					if (shutdown)
-						return;
+            #endregion
 
-                    // now Diable all of the logger's (internally will set their distribution group gate to None)
-                    foreach (var plInfo in perLoggerIDInfoArray)
-                        plInfo.Disabled = true;
-
-                    // Disable all of the dist groups
-                    foreach (var dgInfo in distGroupIDInfoArray)
-                        dgInfo.Disabled = true;
-
-					shutdown = true;
-
-					InnerLogLog(MesgType.Debug, mesg);				// log message (from inner source) that distribution has stopped
-				}
-
-				// leave the lock and run the pattern required to shutdown the inner message queue and service thread
-				//	that are used by QueuedLoggers.
-
-				{
-					// disable the queue (tells mesgQueueDistThread to stop)
-					if (mesgQueue != null && mesgQueue.IsEnabled)
-						mesgQueue.DisableQueue();
-
-					// signal the thread to wakeup and service the disabled queue
-					if (mesgQueueDistThreadWakeupNotification != null)
-						mesgQueueDistThreadWakeupNotification.Notify();
-
-					// join the thread (if it has been started)
-					if (mesgQueueDistThread != null)
-					{
-						mesgQueueDistThread.Join();
-						mesgQueueDistThread = null;
-					}
-
-					// dist thread will have drained the queue by this point (if it could do so)
-				}
-
-				// relock the distribution and complete the shutdown of the handlers and the distribution.
-				lock (distMutex)
-				{
-					InnerShutdownAllHandlers();						// stop all handlers
-				}
-			}
-
-			#endregion
-
-			//-------------------------------------------------------------------
-			#region inner implementation methods
-			// inner methods - these require that the mMutex already be held by the caller
+            #region inner implementation methods (these require that the mMutex already be held by the caller)
 
 			protected void ForceFullFlush()
 			{
@@ -1471,10 +1609,15 @@ namespace MosaicLib
 
 			protected void InnerUpdateLoggerDistGroupConfigForGroup(int dgid)
 			{
-                PerDistGroupIDInfo dgInfo = distGroupIDInfoArray.SafeAccess(dgid);
+                InnerUpdateLoggerDistGroupConfigForGroup(distGroupIDInfoArray.SafeAccess(dgid));
+			}
 
+            private void InnerUpdateLoggerDistGroupConfigForGroup(PerDistGroupIDInfo dgInfo)
+            {
                 if (dgInfo != null)
                 {
+                    int dgid = dgInfo.DistGroupID;
+
                     LoggerConfig activeLoggerConfig = dgInfo.ActiveLoggerConfig;
 
                     // tell all of the loggers about the new value of their distribution groups activeLogGate
@@ -1484,7 +1627,7 @@ namespace MosaicLib
                             plInfo.DistGroupConfig = activeLoggerConfig;		// this property handles change detection
                     }
                 }
-			}
+            }
 
             /// <summary>Loop through each logger and determin which distribution group it belongs to (default if none)</summary>
 			protected void InnerRemapLoggersToDistGroups()
@@ -1571,20 +1714,15 @@ namespace MosaicLib
                 InnerDistributeMessage(ref lm, srcDgInfo);
             }
 
-            private void InnerDistributeMessage(ref LogMessage lm, PerDistGroupIDInfo srcDgInfo)
+            private void InnerDistributeMessage(ref LogMessage lm, PerDistGroupIDInfo dgInfo)
 			{
                 // traverse groups to which this group is linked and deliver the message to each group's list of log message handlers.
-                if (srcDgInfo != null)
+                if (dgInfo != null)
                 {
-                    foreach (PerDistGroupIDInfo dgInfo in srcDgInfo.LinkedDistGroupArray)
+                    foreach (DistHandlerInfo dhInfo in dgInfo.expandedDistHandlerInfoArray)
                     {
-                        // tell each of the log message handlers in this group to process this message
-
-                        foreach (DistHandlerInfo dhInfo in dgInfo.distHandlerInfoArray)
-                        {
-                            if (dhInfo.Valid && dhInfo.LoggerConfig.IsTypeEnabled(lm.MesgType))
-                                dhInfo.LMH.HandleLogMessage(lm);
-                        }
+                        if (dhInfo.Valid && dhInfo.LoggerConfig.IsTypeEnabled(lm.MesgType))
+                            dhInfo.LMH.HandleLogMessage(lm);
                     }
                 }
 
@@ -1602,20 +1740,14 @@ namespace MosaicLib
                 InnerDistributeMessages(lmArray, srcDgInfo);
             }
 
-            private void InnerDistributeMessages(LogMessage[] lmArray, PerDistGroupIDInfo srcDgInfo)
+            private void InnerDistributeMessages(LogMessage[] lmArray, PerDistGroupIDInfo dgInfo)
 			{
-                if (srcDgInfo != null)
+                if (dgInfo != null)
                 {
-                    // traverse groups to which this group is linked and deliver the messages to each group's list of log message handlers.
-                    foreach (PerDistGroupIDInfo dgInfo in srcDgInfo.LinkedDistGroupArray)
+                    foreach (DistHandlerInfo dhInfo in dgInfo.expandedDistHandlerInfoArray)
                     {
-                        // tell each of the log message handlers to process this vector of messages
-
-                        foreach (DistHandlerInfo dhInfo in dgInfo.distHandlerInfoArray)
-                        {
-                            if (dhInfo.Valid)
-                                dhInfo.LMH.HandleLogMessages(lmArray);
-                        }
+                        if (dhInfo.Valid)
+                            dhInfo.LMH.HandleLogMessages(lmArray);
                     }
                 }
 
@@ -1633,7 +1765,7 @@ namespace MosaicLib
 
                 if (dgInfo != null)
                 {
-                    foreach (DistHandlerInfo dhInfo in dgInfo.distHandlerInfoArray)
+                    foreach (DistHandlerInfo dhInfo in dgInfo.expandedDistHandlerInfoArray)
                     {
                         if (dhInfo.Valid && dhInfo.LMH.IsMessageDeliveryInProgress(testSeqNum))
                             return true;
@@ -1648,7 +1780,7 @@ namespace MosaicLib
 				// first shutdown each of the logger specific handlers
 				foreach (PerDistGroupIDInfo dgInfo in distGroupIDInfoArray)
 				{
-                    foreach (DistHandlerInfo dhInfo in dgInfo.distHandlerInfoArray)
+                    foreach (DistHandlerInfo dhInfo in dgInfo.distHandlerInfoList.Array)
 					{
 						if (dhInfo.Valid)
 							dhInfo.LMH.Flush();
@@ -1660,7 +1792,7 @@ namespace MosaicLib
 			{
                 foreach (PerDistGroupIDInfo dgInfo in distGroupIDInfoArray)
 				{
-                    foreach (DistHandlerInfo dhInfo in dgInfo.distHandlerInfoArray)
+                    foreach (DistHandlerInfo dhInfo in dgInfo.distHandlerInfoList.Array)
 					{
 						if (dhInfo.Valid)
 							dhInfo.LMH.Shutdown();
@@ -1672,7 +1804,7 @@ namespace MosaicLib
             {
                 foreach (PerDistGroupIDInfo dgInfo in distGroupIDInfoArray)
                 {
-                    foreach (DistHandlerInfo dhInfo in dgInfo.distHandlerInfoArray)
+                    foreach (DistHandlerInfo dhInfo in dgInfo.distHandlerInfoList.Array)
                     {
                         if (dhInfo.Valid)
                             dhInfo.LMH.StartIfNeeded();
@@ -1683,9 +1815,9 @@ namespace MosaicLib
 			#endregion
         }
 
-		#endregion
+        #endregion
 
-		//-------------------------------------------------------------------
+        //-------------------------------------------------------------------
 		#region LogMessageDistributionImpl singleton public accessor methods (static methods in Logging class/namespace)
 
 		//-------------------------------------------------------------------
@@ -1759,6 +1891,14 @@ namespace MosaicLib
             LogMessageDistribution.Instance.LinkDistributionToGroup(fromGroupName, DefaultDistributionGroupName);
         }
 
+        /// <summary>
+        /// This method is used to change the <paramref name="groupSettings"/> that are applied to the given <paramref name="groupName"/>
+        /// <para/>Note: the use of this method is generally expected to remove the use of some of the older individual settings update methods such as SetDistributionGroupGate.
+        /// </summary>
+        public static void UpdateGroupSettings(string groupName, GroupSettings groupSettings)
+        {
+            LogMessageDistribution.Instance.UpdateGroupSettings(groupName, groupSettings);
+        }
 
         /// <summary>Changes the group used by specific source name to a different target group name on a source by source basis.</summary>
         public static void SetDistributionGroupName(string sourceName, string groupName)
@@ -1798,7 +1938,7 @@ namespace MosaicLib
 		#endregion
 
 		//-------------------------------------------------------------------
-	}
+    }
 }
 
 //-------------------------------------------------------------------

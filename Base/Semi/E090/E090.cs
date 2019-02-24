@@ -93,6 +93,15 @@ namespace MosaicLib.Semi.E090
 
         /// <summary>E039 attribute name used to optionally save the Name of the last location a substrate was in when it is being removed (used with RemovedSetsRemovedFromSubstLocNameAttribute option): "RemovedFromSubstLocName"</summary>
         public const string RemovedFromSubstLocNameAttributeName = "RemovedFromSubstLocName";
+
+        /// <summary>E039 attribute name used to optionally record an instance number for a given SubstLoc object.</summary>
+        public const string InstanceNumAttributeName = "InstanceNum";
+
+        /// <summary>E039 attribute name used to optionally record the E87 SlotState from a mapping operation on a given location in that location object's attribute set.</summary>
+        public const string MapSlotStateAttributeName = "MapSlotState";
+
+        /// <summary>E039 attribute name used to optionally record the reason why an existing subsrate location is not currently accessible.</summary>
+        public const string NotAccessibleReasonAttributeName = "NotAccessibleReason";
     }
 
     /// <summary>
@@ -523,6 +532,42 @@ namespace MosaicLib.Semi.E090
             return ec;
         }
 
+        public static string SetSubstLocStates(this IE039TableUpdater tableUpdater, E090SubstLocObserver substLocObs, E087.SlotState? mapSlotStateParam = null, string notAccessibleReasonParam = null, bool addSyncExternalItem = false)
+        {
+            string ec = tableUpdater.SetSubstLocStates(substLocObs.Info, mapSlotStateParam: mapSlotStateParam, notAccessibleReasonParam: notAccessibleReasonParam, addSyncExternalItem: addSyncExternalItem);
+
+            substLocObs.Update();
+
+            return ec;
+        }
+
+        public static string SetSubstLocStates(this IE039TableUpdater tableUpdater, E090SubstLocInfo currentSubstLocInfo, E087.SlotState? mapSlotStateParam = null, string notAccessibleReasonParam = null, bool addSyncExternalItem = false)
+        {
+            E039ObjectID substLocObjID = currentSubstLocInfo.ObjID;
+
+            string ec = null;
+            using (var eeTrace = new Logging.EnterExitTrace(logger, "{0}: obj '{1}'{2}{3}".CheckedFormat(Fcns.CurrentMethodName, substLocObjID, mapSlotStateParam != null ? " mapSlotState:{0}".CheckedFormat(mapSlotStateParam) : "", notAccessibleReasonParam != null ? " notAccessibleReason:{0}".CheckedFormat(notAccessibleReasonParam) : "")))
+            {
+                List<E039UpdateItem> updateItemList = new List<E039UpdateItem>();
+
+                ec = updateItemList.GenerateE090UpdateItems(currentSubstLocInfo, mapSlotStateParam: mapSlotStateParam, notAccessibleReasonParam: notAccessibleReasonParam, addSyncExternalItem: addSyncExternalItem);
+
+                if (ec.IsNullOrEmpty())
+                {
+                    if (updateItemList.Count > 0)
+                        eeTrace.ExtraMessage = tableUpdater.Update(updateItemList.ToArray()).Run();
+                    else
+                        eeTrace.ExtraMessage = "There was nothing to do";
+                }
+                else
+                {
+                    eeTrace.ExtraMessage = ec;
+                }
+            }
+
+            return ec;
+        }
+
         public static List<E039UpdateItem> GenerateCreateE090SubstLocItems(this List<E039UpdateItem> updateItemList, string substLocName, out E039UpdateItem.AddObject addObjectUpdateItem, INamedValueSet attributes = null, E039ObjectFlags flags = E039ObjectFlags.None, bool addIfNeeded = false, bool addSyncExternalItem = false, int instanceNum = 0, bool assignUUID = false, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate)
         {
             E039ObjectID substLocObjID = new E039ObjectID(substLocName, Constants.SubstrateLocationObjectType, assignUUID: assignUUID);
@@ -930,6 +975,65 @@ namespace MosaicLib.Semi.E090
             return string.Empty;
         }
 
+        public static string GenerateE090UpdateItems(this List<E039UpdateItem> updateItemList, E090SubstLocInfo currentSubstLocInfo, E087.SlotState ? mapSlotStateParam, string notAccessibleReasonParam = null, E090StateUpdateBehavior updateBehavior = E090StateUpdateBehavior.None, bool addSyncExternalItem = false)
+        {
+            updateBehavior |= Settings.GenerateE090UpdateItemsBehaviorAdditions;
+
+            if (updateItemList == null)
+                return "{0}: given invalid or null parameter".CheckedFormat(Fcns.CurrentMethodName);
+
+            if (currentSubstLocInfo.Obj != null && !currentSubstLocInfo.Obj.IsSubstLoc())
+                return "{0}: given non-SubstLoc obj [{1}]".CheckedFormat(Fcns.CurrentMethodName, currentSubstLocInfo.Obj);
+
+            if (!currentSubstLocInfo.IsValid)
+                return "{0}: given unusable obj.  derived SubstLoc Info is not valid: [{1}]".CheckedFormat(Fcns.CurrentMethodName, currentSubstLocInfo);
+
+            // the following logic will create the attribute update NVS if needed.  If it ends up being non-empty then an UpdateItem will be added for it.
+            NamedValueSet attribUpdateNVS = null;
+            NamedValueMergeBehavior attribUpdateNVSMergeBehavior = NamedValueMergeBehavior.AddAndUpdate;
+
+            var mapSlotStateValue = mapSlotStateParam ?? E087.SlotState.Invalid;
+
+            if (mapSlotStateParam != null && currentSubstLocInfo.MapSlotState != mapSlotStateValue)
+            {
+                attribUpdateNVS = attribUpdateNVS ?? new NamedValueSet();
+
+                if (mapSlotStateValue != E087.SlotState.Invalid)
+                {
+                    attribUpdateNVS.SetValue(Constants.MapSlotStateAttributeName, ValueContainer.Create(mapSlotStateValue));
+
+                }
+                else
+                {
+                    attribUpdateNVS.SetValue(Constants.MapSlotStateAttributeName, ValueContainer.Null);
+                    attribUpdateNVSMergeBehavior |= NamedValueMergeBehavior.RemoveNull;
+                }
+            }
+
+            if (notAccessibleReasonParam != null && currentSubstLocInfo.NotAccessibleReason != notAccessibleReasonParam)
+            {
+                attribUpdateNVS = attribUpdateNVS ?? new NamedValueSet();
+
+                if (notAccessibleReasonParam.IsNeitherNullNorEmpty())
+                {
+                    attribUpdateNVS.SetValue(Constants.NotAccessibleReasonAttributeName, ValueContainer.Create(notAccessibleReasonParam));
+                }
+                else
+                {
+                    attribUpdateNVS.SetValue(Constants.NotAccessibleReasonAttributeName, ValueContainer.Null);
+                    attribUpdateNVSMergeBehavior |= NamedValueMergeBehavior.RemoveNull;
+                }
+            }
+
+            if (!attribUpdateNVS.IsNullOrEmpty())
+                updateItemList.AddSetAttributesItem(objID: currentSubstLocInfo.ObjID, attributes: attribUpdateNVS, mergeBehavior: attribUpdateNVSMergeBehavior);
+
+            if (addSyncExternalItem || updateBehavior.IsSet(E090StateUpdateBehavior.AddExternalSyncItem))
+                updateItemList.Add(new E039UpdateItem.SyncExternal());
+
+            return string.Empty;
+        }
+
         /// <summary>
         /// Returns true if the given obj's ID IsSubstrate (aka its type is "Substrate")
         /// </summary>
@@ -944,6 +1048,22 @@ namespace MosaicLib.Semi.E090
         public static bool IsSubstrate(this E039ObjectID objID)
         {
             return (objID != null && objID.Type == Constants.SubstrateObjectType);
+        }
+
+        /// <summary>
+        /// Returns true if the given obj's ID IsSubstLoc (aka its type is "SubstLoc")
+        /// </summary>
+        public static bool IsSubstLoc(this IE039Object obj)
+        {
+            return (obj != null && obj.ID.IsSubstLoc());
+        }
+
+        /// <summary>
+        /// Returns true if the given objID is of type "SubstLoc"
+        /// </summary>
+        public static bool IsSubstLoc(this E039ObjectID objID)
+        {
+            return (objID != null && objID.Type == Constants.SubstrateLocationObjectType);
         }
 
         private static Logging.ILogger logger = new Logging.Logger("E090.ExtensionMethods");
@@ -1174,7 +1294,9 @@ namespace MosaicLib.Semi.E090
             ObjID = (Obj != null) ? Obj.ID : E039ObjectID.Empty;
 
             INamedValueSet attributes = (Obj != null) ? Obj.Attributes : NamedValueSet.Empty;
-            InstanceNum = attributes["InstanceNum"].VC.GetValue<int>(rethrow: false);
+            InstanceNum = attributes[Constants.InstanceNumAttributeName].VC.GetValue<int>(rethrow: false);
+            MapSlotState = attributes[Constants.MapSlotStateAttributeName].VC.GetValue<Semi.E087.SlotState?>(rethrow: false);
+            NotAccessibleReason = attributes[Constants.NotAccessibleReasonAttributeName].VC.GetValue<string>(rethrow: false).MapNullToEmpty();
 
             LinkToSubst = Obj.FindFirstLinkTo(Constants.ContainsLinkKey);
             SrcLinksToHere = Obj.FindLinksFrom(Constants.SourceLocationLinkKey).ToArray();
@@ -1188,6 +1310,8 @@ namespace MosaicLib.Semi.E090
             Obj = other.Obj;
             ObjID = other.ObjID;
             InstanceNum = other.InstanceNum;
+            MapSlotState = other.MapSlotState;
+            NotAccessibleReason = other.NotAccessibleReason;
 
             LinkToSubst = other.LinkToSubst;
             SrcLinksToHere = other.SrcLinksToHere.MakeCopyOf(mapNullToEmpty: false);
@@ -1197,7 +1321,9 @@ namespace MosaicLib.Semi.E090
         /// <summary>Used to update the given <paramref name="nvs"/> to contain Attribute values for the properties in this object that represent Attribute values.</summary>
         public NamedValueSet UpdateAttributeValues(NamedValueSet nvs)
         {
-            nvs.ConditionalSetValue("InstanceNum", InstanceNum != 0, InstanceNum);
+            nvs.ConditionalSetValue(Constants.InstanceNumAttributeName, InstanceNum != 0, InstanceNum);
+            nvs.ConditionalSetValue(Constants.MapSlotStateAttributeName, MapSlotState != null, MapSlotState);
+            nvs.ConditionalSetValue(Constants.NotAccessibleReasonAttributeName, NotAccessibleReason.IsNeitherNullNorEmpty(), NotAccessibleReason);
 
             return nvs;
         }
@@ -1211,6 +1337,12 @@ namespace MosaicLib.Semi.E090
 
         /// <summary>When non-zero, this property gives the instance number for this location.  This is typically used when the location is part of a set of locations that can be indexed.  In this case this property may be used to determine the location's index in the set.</summary>
         public int InstanceNum { get; set; }
+
+        /// <summary>When non-null this gives the E087 SlotState that was last produced when mapping this location.</summary>
+        public Semi.E087.SlotState? MapSlotState { get; set; }
+
+        /// <summary>When non-empty this gives the reason why this substrate location should not be accessed now.</summary>
+        public string NotAccessibleReason { get; set; }
 
         /// <summary>Gives the "Contains" link</summary>
         public E039Link LinkToSubst { get; set; }
@@ -1648,7 +1780,7 @@ namespace MosaicLib.Semi.E090
         /// <summary>Debugging and logging helper</summary>
         public string ToString(bool includeSubstID)
         {
-            if (IsEmpty)
+            if (IsEmpty || (Obj == null && ObjID.IsEmpty))
                 return "E90SubstInfo Empty";
 
             StringBuilder sb = new StringBuilder("E90SubstInfo");
