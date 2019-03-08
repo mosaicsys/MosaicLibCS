@@ -471,10 +471,16 @@ namespace MosaicLib.WPF.Common
                 bool traceRingLinkToDefaultGroup = nvs["traceRingLinkToDefaultGroup"].VC.GetValue<bool?>(rethrow: false) ?? config.GetConfigKeyAccessOnce("Config.Logging.TraceRing.LinkToDefaultGroup", silenceLogging: true).GetValue(false);
 
                 if (traceRingLinkFromDefaultGroup)
+                {
+                    Logging.UpdateGroupSettings(Logging.DefaultDistributionGroupName, new Logging.GroupSettings() { GroupLinkageBehavior = Logging.GroupLinkageBehavior.IncludeLinkedLMHInstancesInGroupGateEvaluation });
                     Logging.LinkDistributionToGroup(Logging.DefaultDistributionGroupName, traceLoggingGroupName);
+                }
 
                 if (traceRingLinkToDefaultGroup)
+                {
+                    Logging.UpdateGroupSettings(traceLoggingGroupName, new Logging.GroupSettings() { GroupLinkageBehavior = Logging.GroupLinkageBehavior.IncludeLinkedLMHInstancesInGroupGateEvaluation });
                     Logging.LinkDistributionToGroup(traceLoggingGroupName, Logging.DefaultDistributionGroupName);
+                }
             }
 
             if (nvs.Contains("appEventMesgType"))

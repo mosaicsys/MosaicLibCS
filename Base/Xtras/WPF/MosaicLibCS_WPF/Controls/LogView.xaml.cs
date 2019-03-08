@@ -124,6 +124,7 @@ namespace MosaicLib.WPF.Controls
         public static DependencyProperty LogGateProperty = DependencyProperty.Register("LogGate", typeof(MosaicLib.Logging.LogGate), typeof(LogView), new PropertyMetadata(AdjustableLogMessageSetTracker.DefaultLogGate));
         public static DependencyProperty FilterStringProperty = DependencyProperty.Register("FilterString", typeof(string), typeof(LogView), new PropertyMetadata(""));
         public static DependencyProperty ControlsVisibilityProperty = DependencyProperty.Register("ControlsVisibility", typeof(Visibility), typeof(LogView), new PropertyMetadata(Visibility.Visible));
+        public static DependencyProperty FilterFieldWidthProperty = DependencyProperty.Register("FilterFieldWidth", typeof(double), typeof(LogView), new PropertyMetadata(120.0));
 
         public string SetName { get { return (string)GetValue(SetNameProperty); } set { SetValue(SetNameProperty, value); } }
         public object EnabledSources { get { return (string)GetValue(EnabledSourcesProperty); } set { SetValue(EnabledSourcesProperty, value); } }
@@ -134,6 +135,7 @@ namespace MosaicLib.WPF.Controls
         public MosaicLib.Logging.LogGate LogGate { get { return (MosaicLib.Logging.LogGate)GetValue(LogGateProperty); } set { SetValue(LogGateProperty, value); } }
         public string FilterString { get { return (string)GetValue(FilterStringProperty); } set { SetValue(FilterStringProperty, value); } }
         public Visibility ControlsVisibility { get { return (Visibility)GetValue(ControlsVisibilityProperty); } set { SetValue(ControlsVisibilityProperty, value); } }
+        public double FilterFieldWidth { get { return (double)GetValue(FilterFieldWidthProperty); } set { SetValue(FilterFieldWidthProperty, value); } }
 
         private static void HandleSetNamePropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {

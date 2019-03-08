@@ -60,29 +60,68 @@ namespace MosaicLib.WPF.Controls
 
         private bool ApplyFilterString(object obj)
         {
-            if (_filterString.IsNullOrEmpty())
-                return true;
-
             Tools.Sets.E090.E090CombinedSubstLocAndSubstInfoTracker tracker = obj as Tools.Sets.E090.E090CombinedSubstLocAndSubstInfoTracker;
 
             if (tracker == null)
                 return false;
 
-            return (tracker.CombinedInfo.SubstLocInfo.ObjID.Name.IndexOf(_filterString, StringComparison.InvariantCultureIgnoreCase) != -1);
+            if (filterPredicate == null)
+                return true;
+
+            return filterPredicate(tracker.CombinedInfo);
+        }
+
+        Func<Tools.Sets.E090.E090CombinedSubstLocAndSubstInfo, bool> filterPredicate = null;
+
+        private void InnerUpdateFilterString(string filterString)
+        {
+            string[] splitFilterStringArray = filterString.MapNullToEmpty().Split('|').Where(str => str.IsNeitherNullNorEmpty()).ToArray();
+            switch (splitFilterStringArray.Length)
+            {
+                case 0:
+                    filterPredicate = null;
+                    break;
+
+                case 1:
+                    {
+                        string splitFilterString = splitFilterStringArray[0];
+                        filterPredicate = (combined => (combined.SubstLocInfo.ObjID.Name.IndexOf(splitFilterString, StringComparison.InvariantCultureIgnoreCase) != -1)
+                                                        || (combined.SubstInfo.ObjID.Name.IndexOf(splitFilterString, StringComparison.InvariantCultureIgnoreCase) != -1)
+                                                        || (combined.SubstInfoFrom.ToString().IndexOf(splitFilterString, StringComparison.InvariantCultureIgnoreCase) != -1)
+                                                        );
+                    }
+                    break;
+
+                default:
+                    filterPredicate = (combined => splitFilterStringArray.Any(splitFilterString => (combined.SubstLocInfo.ObjID.Name.IndexOf(splitFilterString, StringComparison.InvariantCultureIgnoreCase) != -1)
+                                                                                                    || (combined.SubstInfo.ObjID.Name.IndexOf(splitFilterString, StringComparison.InvariantCultureIgnoreCase) != -1)
+                                                                                                    || (combined.SubstInfoFrom.ToString().IndexOf(splitFilterString, StringComparison.InvariantCultureIgnoreCase) != -1)
+                                                                                                    ));
+                    break;
+            }
         }
 
         public static DependencyProperty SetNameProperty = DependencyProperty.Register("SetName", typeof(string), typeof(E090View), new PropertyMetadata(string.Empty, HandleSetNamePropertyChanged));
         public static DependencyProperty FilterStringProperty = DependencyProperty.Register("FilterString", typeof(string), typeof(E090View), new PropertyMetadata(string.Empty, HandleFilterStringPropertyChanged));
         public static DependencyPropertyKey ItemsPropertyKey = DependencyProperty.RegisterReadOnly("Items", typeof(ObservableCollection<Tools.Sets.E090.E090CombinedSubstLocAndSubstInfoTracker>), typeof(E090View), new PropertyMetadata(null));
         public static DependencyProperty ControlsVisibilityProperty = DependencyProperty.Register("ControlsVisibility", typeof(Visibility), typeof(E090View), new PropertyMetadata(Visibility.Visible));
+        public static DependencyProperty SubstLocNameColumnWidthProperty = DependencyProperty.Register("SubstLocNameColumnWidth", typeof(double), typeof(E090View), new PropertyMetadata(100.0));
+        public static DependencyProperty FromColumnWidthProperty = DependencyProperty.Register("FromColumnWidth", typeof(double), typeof(E090View), new PropertyMetadata(100.0));
+        public static DependencyProperty SubstNameColumnWidthProperty = DependencyProperty.Register("SubstNameColumnWidth", typeof(double), typeof(E090View), new PropertyMetadata(100.0));
+        public static DependencyProperty InfoColumnWidthProperty = DependencyProperty.Register("InfoColumnWidth", typeof(double), typeof(E090View), new PropertyMetadata(600.0));
+        public static DependencyProperty FilterFieldWidthProperty = DependencyProperty.Register("FilterFieldWidth", typeof(double), typeof(E090View), new PropertyMetadata(120.0));
 
         public string SetName { get { return (string)GetValue(SetNameProperty); } set { SetValue(SetNameProperty, _setName = value); } }
-        public string FilterString { get { return (string)GetValue(FilterStringProperty); } set { SetValue(FilterStringProperty, _filterString = value); } }
+        public string FilterString { get { return (string)GetValue(FilterStringProperty); } set { SetValue(FilterStringProperty, value); } }
         public ObservableCollection<Tools.Sets.E090.E090CombinedSubstLocAndSubstInfoTracker> Items { get { return _items; } set { SetValue(ItemsPropertyKey, _items = value); } }
         public Visibility ControlsVisibility { get { return (Visibility)GetValue(ControlsVisibilityProperty); } set { SetValue(ControlsVisibilityProperty, value); } }
+        public double SubstLocNameColumnWidth { get { return (double)GetValue(SubstLocNameColumnWidthProperty); } set { SetValue(SubstLocNameColumnWidthProperty, value); } }
+        public double FromColumnWidth { get { return (double)GetValue(FromColumnWidthProperty); } set { SetValue(FromColumnWidthProperty, value); } }
+        public double SubstNameColumnWidth { get { return (double)GetValue(SubstNameColumnWidthProperty); } set { SetValue(SubstNameColumnWidthProperty, value); } }
+        public double InfoColumnWidth { get { return (double)GetValue(InfoColumnWidthProperty); } set { SetValue(InfoColumnWidthProperty, value); } }
+        public double FilterFieldWidth { get { return (double)GetValue(FilterFieldWidthProperty); } set { SetValue(FilterFieldWidthProperty, value); } }
 
         private string _setName = string.Empty;
-        private string _filterString = string.Empty;
         private ObservableCollection<Tools.Sets.E090.E090CombinedSubstLocAndSubstInfoTracker> _items;
 
         private static void HandleSetNamePropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -98,13 +137,15 @@ namespace MosaicLib.WPF.Controls
             _handleSubstLocNamesAdded = _handleSubstLocNamesAdded ?? HandleSubstLocNamesAdded;
             var prevSetTracker = selectedE090TableSetTracker;
 
-            selectedE090TableSetTracker = new Tools.Sets.E090.E090TableSetTracker(_setName = newSetName);
+            selectedE090TableSetTracker = new Tools.Sets.E090.E090TableSetTrackerWithSubstLocListBuilder(_setName = newSetName);
             selectedE090TableSetTracker.SubstLocNamesAddedNotificationList.OnNotify += _handleSubstLocNamesAdded;
 
             if (prevSetTracker != null)
                 prevSetTracker.SubstLocNamesAddedNotificationList.OnNotify -= _handleSubstLocNamesAdded;
 
             _items.Clear();
+
+            //HandleSubstLocNamesAdded(this, new[] { "aaLocDoesNotExist" });
         }
 
         private static void HandleFilterStringPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -113,7 +154,7 @@ namespace MosaicLib.WPF.Controls
 
             if (me != null)
             {
-                me._filterString = ((string) e.NewValue).MapNullToEmpty();
+                me.InnerUpdateFilterString((string)e.NewValue);
                 CollectionViewSource.GetDefaultView(me.listView.ItemsSource).Refresh();
             }
         }
@@ -130,7 +171,7 @@ namespace MosaicLib.WPF.Controls
             }
         }
 
-        WPF.Tools.Sets.E090.E090TableSetTracker selectedE090TableSetTracker = null;
+        WPF.Tools.Sets.E090.E090TableSetTrackerWithSubstLocListBuilder selectedE090TableSetTracker = null;
 
         private void GridViewColumnHeader_Click(object sender, RoutedEventArgs e)
         {
@@ -218,17 +259,17 @@ namespace MosaicLib.WPF.Controls
     /// Supports bindable, one way, conversion of an E090CombinedSubstLocAndSubstInfo into a (background) brush
     /// <para/>The ConvertBack method alsways returns Binding.DoNothing
     /// </summary>
-    public class E090ViewCombinedInfoToBrushConverter : IValueConverter
+    public class E090ViewCombinedInfoToBrushConverter : Converters.OneWayValueConverterBase
     {
-        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        public override object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
             var combinedInfo = value as Tools.Sets.E090.E090CombinedSubstLocAndSubstInfo;
 
-            if (combinedInfo == null || combinedInfo.SubstLocInfo.ObjID.IsEmpty)
-                return sienna;
+            if (combinedInfo == null || combinedInfo.SubstLocInfo.ObjID.IsEmpty || combinedInfo.SubstLocInfo.SLS == Semi.E090.SubstLocState.Undefined)
+                return siennaBrush;
 
             if (combinedInfo.SubstInfoFrom == Tools.Sets.E090.SubstInfoFrom.None)
-                return darkGray;
+                return lightGrayBrush;
 
             Color substColor = default(Color);
             float alpha = 1.0f;
@@ -238,30 +279,24 @@ namespace MosaicLib.WPF.Controls
                 case Semi.E090.SubstProcState.NeedsProcessing: substColor = lightSkyBlue; break;
                 case Semi.E090.SubstProcState.InProcess: substColor = blue; break;
                 case Semi.E090.SubstProcState.Processed: substColor = green; break;
-                case Semi.E090.SubstProcState.Rejected: substColor = yellow; break;
+                case Semi.E090.SubstProcState.Rejected: substColor = red; break;
                 case Semi.E090.SubstProcState.Aborted: substColor = orange; break;
-                case Semi.E090.SubstProcState.Stopped: substColor = red; break;
+                case Semi.E090.SubstProcState.Stopped: substColor = yellow; break;
                 case Semi.E090.SubstProcState.Skipped: substColor = gray; break;
                 case Semi.E090.SubstProcState.Undefined: substColor = goldenrod; break;
                 case Semi.E090.SubstProcState.Lost: substColor = goldenrod; break;
                 default: substColor = goldenrod; break;
             }
 
-            if (combinedInfo.SubstInfoFrom == Tools.Sets.E090.SubstInfoFrom.Source || combinedInfo.SubstInfoFrom == Tools.Sets.E090.SubstInfoFrom.Destination)
-            {
-                substColor = Color.Add(cornSilk, Color.Multiply(substColor, 0.5f));
-                substColor.Clamp();
-            }
+            if (combinedInfo.SubstInfoFrom == Tools.Sets.E090.SubstInfoFrom.Contains)
+                alpha *= 0.5f;
+            else if (combinedInfo.SubstInfoFrom == Tools.Sets.E090.SubstInfoFrom.Source || combinedInfo.SubstInfoFrom == Tools.Sets.E090.SubstInfoFrom.Destination)
+                alpha *= 0.1f;
 
             substColor.ScA = alpha;
             substColor.Clamp();
 
             return new SolidColorBrush(substColor);
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-        {
-            return Binding.DoNothing;
         }
 
         private static readonly TypeConverter colorConverter = TypeDescriptor.GetConverter(typeof(Color));
@@ -274,9 +309,13 @@ namespace MosaicLib.WPF.Controls
         private static readonly Color orange = ((Color)colorConverter.ConvertFrom("Orange"));
         private static readonly Color red = ((Color)colorConverter.ConvertFrom("Red"));
 
+        private static readonly Color lightGray = ((Color)colorConverter.ConvertFrom("LightGray"));
         private static readonly Color gray = ((Color)colorConverter.ConvertFrom("Gray"));
         private static readonly Color darkGray = ((Color)colorConverter.ConvertFrom("DarkGray"));
         private static readonly Color goldenrod = ((Color)colorConverter.ConvertFrom("Goldenrod"));
         private static readonly Color sienna = ((Color)colorConverter.ConvertFrom("Sienna"));
+
+        private static readonly Brush lightGrayBrush = new SolidColorBrush(lightGray);
+        private static readonly Brush siennaBrush = new SolidColorBrush(sienna);
     }
 }

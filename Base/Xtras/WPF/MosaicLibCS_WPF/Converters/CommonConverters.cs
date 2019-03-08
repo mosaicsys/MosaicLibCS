@@ -108,6 +108,44 @@ namespace MosaicLib.WPF.Converters
 
     #endregion
 
+    #region AppendParameterConverter(s)
+
+    /// <summary>
+    /// This value converter appends the given string ConverterParameter to the given string value, inserting the given delimiter between them (as needed when both are non-empty)
+    /// </summary>
+    public class AppendParameterWithDelimiterConverter : OneWayValueConverterBase
+    {
+        public AppendParameterWithDelimiterConverter(string delimiter)
+        {
+            Delimiter = delimiter.MapNullToEmpty();
+        }
+
+        public string Delimiter { get; private set; }
+
+        public override object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            var valueStr = value.SafeToString();
+            var parameterStr = parameter.SafeToString();
+
+            if (valueStr.IsNullOrEmpty())
+                return parameterStr;
+            else if (parameterStr.IsNullOrEmpty())
+                return valueStr;
+            else
+                return string.Concat(valueStr, Delimiter, parameterStr);
+        }
+    }
+
+    /// <summary>
+    /// Variant of AppendParameterWithDelimiterConverter that inserts spaces between the value and the parameter when both are non-empty
+    /// </summary>
+    public class AppendParameterWithSpaceDelimiterConverter : AppendParameterWithDelimiterConverter
+    {
+        public AppendParameterWithSpaceDelimiterConverter() : base(" ") {}
+    }
+
+    #endregion
+
     #region NamedValueConverter and NamedValueSetConverter
 
     /// <summary>

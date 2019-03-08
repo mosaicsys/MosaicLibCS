@@ -289,11 +289,11 @@ namespace MosaicLib.Semi.E090
             return new E039ObjectID(substLocName, Constants.SubstrateLocationObjectType, tableObserver: tableObserver);
         }
 
-        public static string CreateE090SubstLoc(this IE039TableUpdater tableUpdater, string substLocName, Action<E039UpdateItem.AddObject> addedObjectDelegate, INamedValueSet attributes = null, E039ObjectFlags flags = E039ObjectFlags.Pinned, bool addSyncExternalItem = false, int instanceNum = 0, bool addIfNeeded = true, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate)
+        public static string CreateE090SubstLoc(this IE039TableUpdater tableUpdater, string substLocName, Action<E039UpdateItem.AddObject> addedObjectDelegate, INamedValueSet attributes = null, E039ObjectFlags flags = E039ObjectFlags.Pinned, bool addSyncExternalItem = false, int instanceNum = 0, bool addIfNeeded = true, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate, E090SubstLocInfo? initialAttributesFromInfo = null)
         {
             E039UpdateItem.AddObject addObjectUpdateItem;
 
-            string ec = tableUpdater.CreateE090SubstLoc(substLocName, out addObjectUpdateItem, attributes: attributes, flags: flags, addSyncExternalItem: addSyncExternalItem, instanceNum: instanceNum, addIfNeeded: addIfNeeded, mergeBehavior: mergeBehavior);
+            string ec = tableUpdater.CreateE090SubstLoc(substLocName, out addObjectUpdateItem, attributes: attributes, flags: flags, addSyncExternalItem: addSyncExternalItem, instanceNum: instanceNum, addIfNeeded: addIfNeeded, mergeBehavior: mergeBehavior, initialAttributesFromInfo: initialAttributesFromInfo);
 
             if (addedObjectDelegate != null)
                 addedObjectDelegate(addObjectUpdateItem);
@@ -301,11 +301,11 @@ namespace MosaicLib.Semi.E090
             return ec;
         }
 
-        public static string CreateE090SubstLoc(this IE039TableUpdater tableUpdater, string substLocName, Action<E039ObjectID> addedObjectIDDelegate, INamedValueSet attributes = null, E039ObjectFlags flags = E039ObjectFlags.Pinned, bool addSyncExternalItem = false, int instanceNum = 0, bool addIfNeeded = true, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate)
+        public static string CreateE090SubstLoc(this IE039TableUpdater tableUpdater, string substLocName, Action<E039ObjectID> addedObjectIDDelegate, INamedValueSet attributes = null, E039ObjectFlags flags = E039ObjectFlags.Pinned, bool addSyncExternalItem = false, int instanceNum = 0, bool addIfNeeded = true, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate, E090SubstLocInfo? initialAttributesFromInfo = null)
         {
             E039UpdateItem.AddObject addObjectUpdateItem;
 
-            string ec = tableUpdater.CreateE090SubstLoc(substLocName, out addObjectUpdateItem, attributes: attributes, flags: flags, addSyncExternalItem: addSyncExternalItem, instanceNum: instanceNum, addIfNeeded: addIfNeeded, mergeBehavior: mergeBehavior);
+            string ec = tableUpdater.CreateE090SubstLoc(substLocName, out addObjectUpdateItem, attributes: attributes, flags: flags, addSyncExternalItem: addSyncExternalItem, instanceNum: instanceNum, addIfNeeded: addIfNeeded, mergeBehavior: mergeBehavior, initialAttributesFromInfo: initialAttributesFromInfo);
 
             if (addedObjectIDDelegate != null && addObjectUpdateItem.AddedObjectPublisher != null)
                 addedObjectIDDelegate((addObjectUpdateItem.AddedObjectPublisher.Object ?? E039Object.Empty).ID);
@@ -313,11 +313,22 @@ namespace MosaicLib.Semi.E090
             return ec;
         }
 
-        public static string CreateE090SubstLoc(this IE039TableUpdater tableUpdater, string substLocName, out E039UpdateItem.AddObject addObjectUpdateItem, INamedValueSet attributes = null, E039ObjectFlags flags = E039ObjectFlags.Pinned, bool addSyncExternalItem = false, int instanceNum = 0, bool addIfNeeded = true, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate)
+        public static string CreateE090SubstLoc(this IE039TableUpdater tableUpdater, string substLocName, out E039UpdateItem.AddObject addObjectUpdateItem, INamedValueSet attributes = null, E039ObjectFlags flags = E039ObjectFlags.Pinned, bool addSyncExternalItem = false, int instanceNum = 0, bool addIfNeeded = true, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate, E090SubstLocInfo ? initialAttributesFromInfo = null)
         {
-            E039UpdateItem[] updateItemArray = new List<E039UpdateItem>().GenerateCreateE090SubstLocItems(substLocName, out addObjectUpdateItem, attributes: attributes, flags: flags, addSyncExternalItem: addSyncExternalItem, instanceNum: instanceNum, addIfNeeded: addIfNeeded, mergeBehavior: mergeBehavior).ToArray();
+            List<E039UpdateItem> updateItemList = new List<E039UpdateItem>().GenerateCreateE090SubstLocItems(substLocName, out addObjectUpdateItem, attributes: attributes, flags: flags, addSyncExternalItem: false, instanceNum: instanceNum, addIfNeeded: addIfNeeded, mergeBehavior: mergeBehavior);
 
-            return tableUpdater.Update(updateItemArray).Run();
+            if (initialAttributesFromInfo != null)
+            {
+                var attributesValuesToUse = initialAttributesFromInfo ?? E090SubstLocInfo.Empty;
+                var pseudoCurrentInfo = new E090SubstLocInfo() { ObjID = addObjectUpdateItem.ObjID };
+
+                updateItemList.GenerateE090UpdateItems(pseudoCurrentInfo, mapSlotStateParam: attributesValuesToUse.MapSlotState, notAccessibleReasonParam: attributesValuesToUse.NotAccessibleReason, ignoreCurrentSubstLocInfoValidity: true);
+            }
+
+            if (addSyncExternalItem)
+                updateItemList.Add(new E039UpdateItem.SyncExternal());
+
+            return tableUpdater.Update(updateItemList.ToArray()).Run();
         }
 
         public static string CreateE090Subst(this IE039TableUpdater tableUpdater, string substName, Action<E039UpdateItem.AddObject> addedObjectDelegate, E039ObjectID srcSubstLocObjID, E039ObjectID destSubstLocObjID = null, E090SubstInfo? initialE090SubstrateObjState = null, INamedValueSet attributes = null, E039ObjectFlags flags = E039ObjectFlags.None, bool addSyncExternalItem = false)
@@ -577,6 +588,7 @@ namespace MosaicLib.Semi.E090
 
             updateItemList.Add(addObjectUpdateItem = new E039UpdateItem.AddObject(substLocObjID, attributes: attributes, flags: flags, ifNeeded: addIfNeeded, mergeBehavior: mergeBehavior));
             updateItemList.Add(new E039UpdateItem.AddLink(new E039Link(substLocObjID, E039ObjectID.Empty, Constants.ContainsLinkKey), ifNeeded: addIfNeeded));
+
             if (addSyncExternalItem)
                 updateItemList.Add(new E039UpdateItem.SyncExternal());
 
@@ -705,11 +717,11 @@ namespace MosaicLib.Semi.E090
         {
             updateBehavior |= Settings.GenerateE090UpdateItemsBehaviorAdditions;
 
-            if (updateItemList == null)
+            if (currentSubstInfo.ObjID == null || updateItemList == null)
                 return "{0}: given invalid or null parameter".CheckedFormat(Fcns.CurrentMethodName);
 
-            if (currentSubstInfo.Obj != null && !currentSubstInfo.Obj.IsSubstrate())
-                return "{0}: given non-Substrate obj [{1}]".CheckedFormat(Fcns.CurrentMethodName, currentSubstInfo.Obj);
+            if (!currentSubstInfo.ObjID.IsSubstrate())
+                return "{0}: given non-Substrate ObjID [{1}]".CheckedFormat(Fcns.CurrentMethodName, currentSubstInfo.ObjID);
 
             toLocObjID = toLocObjID ?? E039ObjectID.Empty;
 
@@ -920,11 +932,11 @@ namespace MosaicLib.Semi.E090
 
         public static string GenerateE090UpdateSubstrateJobStates(this List<E039UpdateItem> updateItemList, E090SubstInfo currentSubstInfo, SubstrateJobRequestState? sjrs = null, SubstrateJobState? sjs = null, E090StateUpdateBehavior updateBehavior = E090StateUpdateBehavior.None, bool addSyncExternalItem = false)
         {
-            if (currentSubstInfo.Obj == null || updateItemList == null)
+            if (currentSubstInfo.ObjID == null || updateItemList == null)
                 return "{0}: given invalid or null parameter".CheckedFormat(Fcns.CurrentMethodName);
 
-            if (!currentSubstInfo.Obj.IsSubstrate())
-                return "{0}: given non-Substrate obj [{1}]".CheckedFormat(Fcns.CurrentMethodName, currentSubstInfo.Obj);
+            if (!currentSubstInfo.ObjID.IsSubstrate())
+                return "{0}: given non-Substrate ObjID [{1}]".CheckedFormat(Fcns.CurrentMethodName, currentSubstInfo.ObjID);
 
             if (!currentSubstInfo.IsValid)
                 return "{0}: given unusable obj.  derived Substrate Info is not valid: [{1}]".CheckedFormat(Fcns.CurrentMethodName, currentSubstInfo);
@@ -975,17 +987,17 @@ namespace MosaicLib.Semi.E090
             return string.Empty;
         }
 
-        public static string GenerateE090UpdateItems(this List<E039UpdateItem> updateItemList, E090SubstLocInfo currentSubstLocInfo, E087.SlotState ? mapSlotStateParam, string notAccessibleReasonParam = null, E090StateUpdateBehavior updateBehavior = E090StateUpdateBehavior.None, bool addSyncExternalItem = false)
+        public static string GenerateE090UpdateItems(this List<E039UpdateItem> updateItemList, E090SubstLocInfo currentSubstLocInfo, E087.SlotState ? mapSlotStateParam = null, string notAccessibleReasonParam = null, E090StateUpdateBehavior updateBehavior = E090StateUpdateBehavior.None, bool addSyncExternalItem = false, bool ignoreCurrentSubstLocInfoValidity = false)
         {
             updateBehavior |= Settings.GenerateE090UpdateItemsBehaviorAdditions;
 
-            if (updateItemList == null)
+            if (currentSubstLocInfo.ObjID == null && updateItemList == null)
                 return "{0}: given invalid or null parameter".CheckedFormat(Fcns.CurrentMethodName);
 
-            if (currentSubstLocInfo.Obj != null && !currentSubstLocInfo.Obj.IsSubstLoc())
-                return "{0}: given non-SubstLoc obj [{1}]".CheckedFormat(Fcns.CurrentMethodName, currentSubstLocInfo.Obj);
+            if (!currentSubstLocInfo.ObjID.IsSubstLoc())
+                return "{0}: given non-SubstLoc ObjID [{1}]".CheckedFormat(Fcns.CurrentMethodName, currentSubstLocInfo.ObjID);
 
-            if (!currentSubstLocInfo.IsValid)
+            if (!currentSubstLocInfo.IsValid && !ignoreCurrentSubstLocInfoValidity)
                 return "{0}: given unusable obj.  derived SubstLoc Info is not valid: [{1}]".CheckedFormat(Fcns.CurrentMethodName, currentSubstLocInfo);
 
             // the following logic will create the attribute update NVS if needed.  If it ends up being non-empty then an UpdateItem will be added for it.
@@ -994,7 +1006,7 @@ namespace MosaicLib.Semi.E090
 
             var mapSlotStateValue = mapSlotStateParam ?? E087.SlotState.Invalid;
 
-            if (mapSlotStateParam != null && currentSubstLocInfo.MapSlotState != mapSlotStateValue)
+            if (mapSlotStateParam != null && currentSubstLocInfo.MapSlotState != mapSlotStateParam)
             {
                 attribUpdateNVS = attribUpdateNVS ?? new NamedValueSet();
 
@@ -1005,8 +1017,8 @@ namespace MosaicLib.Semi.E090
                 }
                 else
                 {
-                    attribUpdateNVS.SetValue(Constants.MapSlotStateAttributeName, ValueContainer.Null);
-                    attribUpdateNVSMergeBehavior |= NamedValueMergeBehavior.RemoveNull;
+                    attribUpdateNVS.SetValue(Constants.MapSlotStateAttributeName, ValueContainer.Empty);
+                    attribUpdateNVSMergeBehavior |= NamedValueMergeBehavior.RemoveEmpty;
                 }
             }
 
@@ -1020,8 +1032,8 @@ namespace MosaicLib.Semi.E090
                 }
                 else
                 {
-                    attribUpdateNVS.SetValue(Constants.NotAccessibleReasonAttributeName, ValueContainer.Null);
-                    attribUpdateNVSMergeBehavior |= NamedValueMergeBehavior.RemoveNull;
+                    attribUpdateNVS.SetValue(Constants.NotAccessibleReasonAttributeName, ValueContainer.Empty);
+                    attribUpdateNVSMergeBehavior |= NamedValueMergeBehavior.RemoveEmpty;
                 }
             }
 

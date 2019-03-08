@@ -18,7 +18,7 @@
             <WrapPanel Orientation="Horizontal">
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="13,0,0,0" ToolTip="Live filter text.  Applies to the SubstLocNames.">
                     <Label Content="Filter:" VerticalAlignment="Center"/>
-                    <TextBox Text="{Binding ElementName=E090ViewMainControl, Path=FilterString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="120" VerticalAlignment="Center"/>
+                    <TextBox Text="{Binding ElementName=E090ViewMainControl, Path=FilterString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="{Binding ElementName=E090ViewMainControl, Path=FilterFieldWidth, FallbackValue=120.0}" VerticalAlignment="Center"/>
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="13,0,0,0">
                     <Label Content="Count (view, total):" VerticalAlignment="Center"/>
@@ -31,22 +31,22 @@
             <ListView.View>
                 <GridView>
                     <!-- SubstLocName From SubstName Info -->
-                    <GridViewColumn Width="100" DisplayMemberBinding="{Binding CombinedInfo.SubstLocInfo.ObjID.Name, Mode=OneWay}">
+                    <GridViewColumn Width="{Binding ElementName=E090ViewMainControl, Path=SubstLocNameColumnWidth, FallbackValue=100}" DisplayMemberBinding="{Binding CombinedInfo.SubstLocInfo.ObjID.Name, Mode=OneWay}">
                         <GridViewColumn.Header>
                             <GridViewColumnHeader Content="SubstLocName" Tag="SubstLocName" Click="GridViewColumnHeader_Click"/>
                         </GridViewColumn.Header>
                     </GridViewColumn>
-                    <GridViewColumn Width="100" DisplayMemberBinding="{Binding CombinedInfo.SubstInfoFrom, Mode=OneWay}">
+                    <GridViewColumn Width="{Binding ElementName=E090ViewMainControl, Path=FromColumnWidth, FallbackValue=100}" DisplayMemberBinding="{Binding CombinedInfo.SubstInfoFrom, Mode=OneWay}">
                         <GridViewColumn.Header>
                             <GridViewColumnHeader Content="From" Tag="SubstInfoFrom" Click="GridViewColumnHeader_Click"/>
                         </GridViewColumn.Header>
                     </GridViewColumn>
-                    <GridViewColumn Width="100" DisplayMemberBinding="{Binding CombinedInfo.SubstInfo.ObjID.Name, Mode=OneWay}">
+                    <GridViewColumn Width="{Binding ElementName=E090ViewMainControl, Path=SubstNameColumnWidth, FallbackValue=100}" DisplayMemberBinding="{Binding CombinedInfo.SubstInfo.ObjID.Name, Mode=OneWay}">
                         <GridViewColumn.Header>
                             <GridViewColumnHeader Content="SubstName" Tag="SubstName" Click="GridViewColumnHeader_Click"/>
                         </GridViewColumn.Header>
                     </GridViewColumn>
-                    <GridViewColumn Header="Info" Width="600" DisplayMemberBinding="{Binding CombinedInfo}"/>
+                    <GridViewColumn Header="Info" Width="{Binding ElementName=E090ViewMainControl, Path=InfoColumnWidth, FallbackValue=600}" DisplayMemberBinding="{Binding CombinedInfo}"/>
                 </GridView>
             </ListView.View>
             <ListView.ItemContainerStyle>
@@ -57,7 +57,7 @@
                     <Setter Property="ToolTipService.ShowDuration" Value="30000"/>
                     <Setter Property="ToolTip">
                         <Setter.Value>
-                            <Grid MinWidth="500" MaxWidth="800" MaxHeight="500" Tag="{Binding}">
+                            <Grid MinWidth="500" MaxWidth="800" MaxHeight="600" Tag="{Binding}">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="*"/>
                                     <RowDefinition Height="*"/>

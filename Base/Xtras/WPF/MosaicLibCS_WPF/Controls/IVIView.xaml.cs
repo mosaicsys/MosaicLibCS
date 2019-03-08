@@ -77,15 +77,43 @@ namespace MosaicLib.WPF.Controls
 
         private bool ApplyIVANameFilter(object obj)
         {
-            if (_ivaNameFilterString.IsNullOrEmpty())
-                return true;
-
             IVAWrapper ivaWrapper = obj as IVAWrapper;
 
             if (ivaWrapper == null)
                 return false;
 
-            return (ivaWrapper.Name.IndexOf(_ivaNameFilterString, StringComparison.InvariantCultureIgnoreCase) != -1);
+            if (filterPredicate == null)
+                return true;
+
+            return filterPredicate(ivaWrapper);
+        }
+
+        Func<IVAWrapper, bool> filterPredicate = null;
+
+        private void InnerUpdateFilterString(string filterString, bool enableFilterOnVCasSMLString)
+        {
+            string[] splitFilterStringArray = filterString.MapNullToEmpty().Split('|').Where(str => str.IsNeitherNullNorEmpty()).ToArray();
+            switch (splitFilterStringArray.Length)
+            {
+                case 0:
+                    filterPredicate = null;
+                    break;
+
+                case 1:
+                    {
+                        string splitFilterStringItem = splitFilterStringArray[0];
+                        filterPredicate = (wrapper => (wrapper.Name.IndexOf(splitFilterStringItem, StringComparison.InvariantCultureIgnoreCase) != -1)
+                                                        || (enableFilterOnVCasSMLString && wrapper.VCasSMLString.IndexOf(splitFilterStringItem, StringComparison.InvariantCultureIgnoreCase) != -1)
+                                                        );
+                    }
+                    break;
+
+                default:
+                    filterPredicate = (wrapper => splitFilterStringArray.Any(splitFilterStringItem => (wrapper.Name.IndexOf(splitFilterStringItem, StringComparison.InvariantCultureIgnoreCase) != -1)
+                                                                                                        || (enableFilterOnVCasSMLString && wrapper.VCasSMLString.IndexOf(splitFilterStringItem, StringComparison.InvariantCultureIgnoreCase) != -1)
+                                                                                                        ));
+                    break;
+            }
         }
 
         private static readonly Timers.ISharedDispatcherTimer timer = Timers.SharedDispatcherTimerFactory.GetSharedTimer(5.0);
@@ -96,22 +124,25 @@ namespace MosaicLib.WPF.Controls
         public static DependencyProperty SeqNumColumnWidthProperty = DependencyProperty.Register("SeqNumColumnWidth", typeof(double), typeof(IVIView), new PropertyMetadata(20.0));
         public static DependencyProperty ValueColumnWidthProperty = DependencyProperty.Register("ValueColumnWidth", typeof(double), typeof(IVIView), new PropertyMetadata(200.0));
         public static DependencyProperty PauseProperty = DependencyProperty.Register("Pause", typeof(bool), typeof(IVIView), new PropertyMetadata(false, HandlePausePropertyChanged));
-        public static DependencyProperty IVANameFilterStringProperty = DependencyProperty.Register("IVANameFilterString", typeof(string), typeof(IVIView), new PropertyMetadata(string.Empty, HandleIVANameFilterStringPropertyChanged));
+        public static DependencyProperty FilterStringProperty = DependencyProperty.Register("FilterString", typeof(string), typeof(IVIView), new PropertyMetadata(string.Empty, HandleFilterStringPropertyChanged));
         public static DependencyPropertyKey ItemsPropertyKey = DependencyProperty.RegisterReadOnly("Items", typeof(ObservableCollection<IVAWrapper>), typeof(IVIView), new PropertyMetadata(null));
         public static DependencyProperty ControlsVisibilityProperty = DependencyProperty.Register("ControlsVisibility", typeof(Visibility), typeof(IVIView), new PropertyMetadata(Visibility.Visible));
+        public static DependencyProperty FilterFieldWidthProperty = DependencyProperty.Register("FilterFieldWidth", typeof(double), typeof(IVIView), new PropertyMetadata(120.0));
+        public static DependencyProperty EnableFilterOnVCasSMLStringProperty = DependencyProperty.Register("EnableFilterOnVCasSMLString", typeof(bool), typeof(IVIView), new PropertyMetadata(true, HandleEnableFilterOnVCasSMLStringPropertyChanged));
 
         public string IVIName { get { return (string)GetValue(IVINameProperty); } set { SetValue(IVINameProperty, _ivaName = value); } }
         public double NameColumnWidth { get { return (double)GetValue(NameColumnWidthProperty); } set { SetValue(NameColumnWidthProperty, value); } }
         public double SeqNumColumnWidth { get { return (double)GetValue(SeqNumColumnWidthProperty); } set { SetValue(SeqNumColumnWidthProperty, value); } }
         public double ValueColumnWidth { get { return (double)GetValue(ValueColumnWidthProperty); } set { SetValue(ValueColumnWidthProperty, value); } }
         public bool Pause { get { return (bool)GetValue(PauseProperty); } set { SetValue(PauseProperty, _isPaused = value); } }
-        public string IVANameFilterString { get { return (string)GetValue(IVANameFilterStringProperty); } set { SetValue(IVANameFilterStringProperty, _ivaNameFilterString = value); } }
+        public string FilterString { get { return (string)GetValue(FilterStringProperty); } set { SetValue(FilterStringProperty, value); } }
         public ObservableCollection<IVAWrapper> Items { get { return _items; } set { SetValue(ItemsPropertyKey, _items = value);  } }
         public Visibility ControlsVisibility { get { return (Visibility)GetValue(ControlsVisibilityProperty); } set { SetValue(ControlsVisibilityProperty, value); } }
+        public double FilterFieldWidth { get { return (double)GetValue(FilterFieldWidthProperty); } set { SetValue(FilterFieldWidthProperty, value); } }
+        public bool EnableFilterOnVCasSMLString { get { return (bool)GetValue(EnableFilterOnVCasSMLStringProperty); } set { SetValue(EnableFilterOnVCasSMLStringProperty, value); } }
 
         private string _ivaName = string.Empty;
         private bool _isPaused;
-        private string _ivaNameFilterString = string.Empty;
         private ObservableCollection<IVAWrapper> _items;
 
         private static void HandleSetNamePropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -139,13 +170,24 @@ namespace MosaicLib.WPF.Controls
             }
         }
 
-        private static void HandleIVANameFilterStringPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        private static void HandleFilterStringPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             IVIView me = d as IVIView;
 
             if (me != null)
             {
-                me._ivaNameFilterString = ((string) e.NewValue).MapNullToEmpty();
+                me.InnerUpdateFilterString((string)e.NewValue, me.EnableFilterOnVCasSMLString);
+                CollectionViewSource.GetDefaultView(me.listView.ItemsSource).Refresh();
+            }
+        }
+
+        private static void HandleEnableFilterOnVCasSMLStringPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            IVIView me = d as IVIView;
+
+            if (me != null)
+            {
+                me.InnerUpdateFilterString(me.FilterString, (bool)e.NewValue);
                 CollectionViewSource.GetDefaultView(me.listView.ItemsSource).Refresh();
             }
         }
@@ -292,6 +334,7 @@ namespace MosaicLib.WPF.Controls
         private static readonly DependencyPropertyKey IDPropertyKey = DependencyProperty.RegisterReadOnly("ID", typeof(int), typeof(IVAWrapper), new PropertyMetadata(0));
         private static readonly DependencyPropertyKey ValueSeqNumPropertyKey = DependencyProperty.RegisterReadOnly("ValueSeqNum", typeof(uint), typeof(IVAWrapper), new PropertyMetadata(0u));
         private static readonly DependencyPropertyKey VCPropertyKey = DependencyProperty.RegisterReadOnly("VC", typeof(ValueContainer), typeof(IVAWrapper), new PropertyMetadata(ValueContainer.Empty));
+        private static readonly DependencyPropertyKey VCasSMLStringPropertyKey = DependencyProperty.RegisterReadOnly("VCasSMLString", typeof(string), typeof(IVAWrapper), new PropertyMetadata(ValueContainer.Empty.ToStringSML()));
         private static readonly DependencyPropertyKey MetaDataSeqNumPropertyKey = DependencyProperty.RegisterReadOnly("MetaDataSeqNum", typeof(uint), typeof(IVAWrapper), new PropertyMetadata(0u));
         private static readonly DependencyPropertyKey MetaDataPropertyKey = DependencyProperty.RegisterReadOnly("MetaData", typeof(INamedValueSet), typeof(IVAWrapper), new PropertyMetadata(null));
 
@@ -301,6 +344,7 @@ namespace MosaicLib.WPF.Controls
         public ValueContainer VC { get { return IVA.VC; } }
         public uint MetaDataSeqNum { get { return IVA.MetaDataSeqNum; } }
         public INamedValueSet MetaData { get { return IVA.MetaData; } }
+        public string VCasSMLString { get; private set; }
 
         public IValueAccessor IVA { get; private set; }
 
@@ -321,6 +365,7 @@ namespace MosaicLib.WPF.Controls
             {
                 SetValue(ValueSeqNumPropertyKey, lastValueSeqNum = ValueSeqNum);
                 SetValue(VCPropertyKey, VC);
+                SetValue(VCasSMLStringPropertyKey, VCasSMLString = VC.ToStringSML());
             }
 
             if (lastMetaDataSeqNum != MetaDataSeqNum || forceUpdate)

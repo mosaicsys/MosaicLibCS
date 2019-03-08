@@ -1067,6 +1067,12 @@ namespace MosaicLib.PartsLib.Common.LPM
         /// </summary>
         bool IsSafeToAccess { get; }
 
+        /// <summary>
+        /// LPM position is safe for the Carrier to be manually placed or removed.  
+        /// Generally this means that the position is valid, the door is up and closed, and the PDO is undocked and unclamped.
+        /// </summary>
+        bool IsSafeForManualCarrierHandoff { get; }
+
         /// <summary>Indicates the reason that the IsInMotion is true</summary>
         string InMotionReason { get; }
 
@@ -1153,6 +1159,7 @@ namespace MosaicLib.PartsLib.Common.LPM
             IsCarrierClosed = rhs.IsCarrierClosed;
             IsValid = rhs.IsValid;
             IsSafeToAccess = rhs.IsSafeToAccess;
+            IsSafeForManualCarrierHandoff = rhs.IsSafeForManualCarrierHandoff;
             ExplicitInMotionReason = rhs.ExplicitInMotionReason;
             
             return this;
@@ -1213,6 +1220,7 @@ namespace MosaicLib.PartsLib.Common.LPM
 
         [DataMember(Order = 900, IsRequired = false, EmitDefaultValue = false)]
         public bool MotionILockSensorIsTripped { get; set; }
+
         [DataMember(Order = 1000, IsRequired = false, EmitDefaultValue = false)]
         public bool ProtrusionSensorIsTripped { get; set; }
 
@@ -1230,6 +1238,13 @@ namespace MosaicLib.PartsLib.Common.LPM
 
         [DataMember(Order = 1500, IsRequired = false, EmitDefaultValue = false)]
         public bool IsSafeToAccess { get; set; }
+
+        /// <summary>
+        /// LPM position is safe for the Carrier to be manually placed or removed.  
+        /// Generally this means that the position is valid, the door is up and closed, and the PDO is undocked and unclamped.
+        /// </summary>
+        [DataMember(Order = 1600, IsRequired = false, EmitDefaultValue = false)]
+        public bool IsSafeForManualCarrierHandoff { get; set; }
 
         public string InMotionReason 
         {
@@ -1282,7 +1297,10 @@ namespace MosaicLib.PartsLib.Common.LPM
                 explicitInMotionReason = value.MapEmptyToNull();
 
                 if (!explicitInMotionReason.IsNullOrEmpty())
+                {
                     IsSafeToAccess = false;
+                    IsSafeForManualCarrierHandoff = false;
+                }
             }
         }
 
@@ -1308,6 +1326,7 @@ namespace MosaicLib.PartsLib.Common.LPM
                     && IsCarrierClosed == other.IsCarrierClosed
                     && IsValid == other.IsValid
                     && IsSafeToAccess == other.IsSafeToAccess
+                    && IsSafeForManualCarrierHandoff == other.IsSafeForManualCarrierHandoff
                     );
         }
 

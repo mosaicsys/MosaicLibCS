@@ -130,7 +130,7 @@ namespace MosaicLib.Modular.Part
     /// <summary>
     /// This enumeration is used to define obtional behaviors for the overall part.
     /// <para/>None (0x00), PerformActionPublishesActionInfo (0x01), UseMainThreadFailedState (0x02), MainThreadStartSetsStateToOffline (0x04), MainThreadStopSetsStateToStoppedIfIsOnlineOrAttemptOnline (0x08),
-    /// MainThreadStopSetsStateToStoppedIfOffline (0x10), PerformMainLoopServiceCallsServiceBusyConditionChangeDetection (0x20)
+    /// MainThreadStopSetsStateToStoppedIfOffline (0x10), PerformMainLoopServiceCallsServiceBusyConditionChangeDetection (0x20), DisableActionInfoRelatedIVAUsage (0x40)
     /// </summary>
     [Flags]
     public enum SimpleActivePartBehaviorOptions
@@ -159,6 +159,9 @@ namespace MosaicLib.Modular.Part
 
         /// <summary>When this behavior is selected, the PerformMainLoopService will call ServiceBusyConditionChangeDetection.  When not selected, only the MainThreadFcn will call this method. [0x20]</summary>
         PerformMainLoopServiceCallsServiceBusyConditionChangeDetection = 0x20,
+
+        /// <summary>When this behavior is selected, the ActionInfo and LastActionInfo IVA's will not be used.  This allows more fine scale IVA usage controls than is available with the DisablePartBaseIVIUse option by itself. [0x40]</summary>
+        DisableActionInfoRelatedIVAUsage = 0x40,
     }
 
     /// <summary>
@@ -502,7 +505,8 @@ namespace MosaicLib.Modular.Part
                                                          LoggingOptionSelect? loggingOptionSelect = null,
                                                          bool disableBusyBehavior = false,
                                                          bool disablePartBaseIVIUse = false,
-                                                         GoOnlineAndGoOfflineHandling addGoOnlineAndOfflineHandling = default(GoOnlineAndGoOfflineHandling)
+                                                         GoOnlineAndGoOfflineHandling addGoOnlineAndOfflineHandling = default(GoOnlineAndGoOfflineHandling),
+                                                         SimpleActivePartBehaviorOptions addSimpleActivePartBehaviorOptions = default(SimpleActivePartBehaviorOptions)
                                                          )
         {
             if (automaticallyIncAndDecBusyCountAroundActionInvoke != null)
@@ -551,6 +555,9 @@ namespace MosaicLib.Modular.Part
                 settings.AutomaticallyIncAndDecBusyCountAroundActionInvoke &= !disableBusyBehavior;
                 settings.simplePartBaseSettings = settings.simplePartBaseSettings.Build(disableBusyBehavior: disableBusyBehavior, disablePartBaseIVIUse: disablePartBaseIVIUse);
             }
+
+            if (addSimpleActivePartBehaviorOptions != default(SimpleActivePartBehaviorOptions))
+                settings.SimpleActivePartBehaviorOptions |= addSimpleActivePartBehaviorOptions;
 
             return settings;
         }
@@ -749,6 +756,8 @@ namespace MosaicLib.Modular.Part
                 Interconnect.Parts.Parts.Instance.RegisterPart(this);
             else if (settings.registerPartWith != null)
                 settings.registerPartWith.RegisterPart(this);
+
+            disableActionInfoRelatedIVAUsage = settings.SimpleActivePartBehaviorOptions.IsSet(SimpleActivePartBehaviorOptions.DisableActionInfoRelatedIVAUsage) || settings.simplePartBaseSettings.DisablePartBaseIVIUse;
         }
 
         /// <summary>
@@ -802,6 +811,8 @@ namespace MosaicLib.Modular.Part
         /// <para/>WARNING: if a derived part replaces the settings using this method, then it must use the SetupForUse settings method on the new value before assigning it to this field.
         /// </summary>
         protected new SimpleActivePartBaseSettings settings = new SimpleActivePartBaseSettings();
+
+        private bool disableActionInfoRelatedIVAUsage = false;
 
         [Obsolete("Please replace the use of this property with the corresponding one in the part's Settings (2017-01-20)")]
         public bool AutomaticallyIncAndDecBusyCountAroundActionInvoke  { get { return settings.AutomaticallyIncAndDecBusyCountAroundActionInvoke; } protected set { settings.AutomaticallyIncAndDecBusyCountAroundActionInvoke = value; } }
@@ -1505,7 +1516,7 @@ namespace MosaicLib.Modular.Part
 
         protected void PublishActionInfo(IActionInfo actionInfo)
         {
-            if (settings.simplePartBaseSettings.DisablePartBaseIVIUse)
+            if (disableActionInfoRelatedIVAUsage)
                 return;
 
             if (actionInfoIVA == null)

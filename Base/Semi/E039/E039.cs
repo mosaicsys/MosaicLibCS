@@ -347,11 +347,21 @@ namespace MosaicLib.Semi.E039
         public class SetAttributes : ObjIDAndAttributeBase
         {
             /// <summary>
-            /// Normal Constructor.  Caller specifies the <paramref name="objID"/> of the object to apply this change to, the set of <paramref name="attributes"/> to change,
+            /// Single ObjID Constructor.  Caller specifies the <paramref name="objID"/> of the object to apply this change to, the set of <paramref name="attributes"/> to change,
             /// and the <paramref name="mergeBehavior"/> to be used when merging the given <paramref name="attributes"/> in with the target object's current attribute values.
             /// </summary>
             public SetAttributes(E039ObjectID objID, INamedValueSet attributes, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate)
                 : base(objID, attributes)
+            {
+                MergeBehavior = mergeBehavior;
+            }
+
+            /// <summary>
+            /// ObjIDSet Constructor.  Caller specifies the <paramref name="objIDSet"/> of the objects to apply this change to, the set of <paramref name="attributes"/> to change,
+            /// and the <paramref name="mergeBehavior"/> to be used when merging the given <paramref name="attributes"/> in with each target object's current attribute values.
+            /// </summary>
+            public SetAttributes(IEnumerable<E039ObjectID> objIDSet, INamedValueSet attributes, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddAndUpdate)
+                : base(objIDSet, attributes)
             {
                 MergeBehavior = mergeBehavior;
             }
@@ -471,6 +481,12 @@ namespace MosaicLib.Semi.E039
                 Attributes = attributes.ConvertToReadOnly();
             }
 
+            protected ObjIDAndAttributeBase(IEnumerable<E039ObjectID> objIDSet, INamedValueSet attributes)
+                : base(objIDSet)
+            {
+                Attributes = attributes.ConvertToReadOnly();
+            }
+
             public INamedValueSet Attributes { get; private set; }
 
             public override string ToString()
@@ -481,13 +497,45 @@ namespace MosaicLib.Semi.E039
 
         public class ObjIDBase : E039UpdateItem
         {
-            protected ObjIDBase(E039ObjectID objID) { ObjID = objID ?? E039ObjectID.Empty; }
+            /// <summary>
+            /// Single objID constructor
+            /// </summary>
+            protected ObjIDBase(E039ObjectID objID) 
+            { 
+                ObjID = objID ?? E039ObjectID.Empty;
+                ObjIDSet = null;
+            }
 
+            /// <summary>
+            /// ObjIDSet constructor
+            /// </summary>
+            protected ObjIDBase(IEnumerable<E039ObjectID> objIDSet)
+            {
+                ObjID = E039ObjectID.Empty;
+                ObjIDSet = objIDSet.ConvertToReadOnly();
+            }
+
+            /// <summary>
+            /// When non-null and non-empty, this property defines the E039ObjectID of the E039Object instance that this item applies to.
+            /// </summary>
             public E039ObjectID ObjID { get; private set; }
 
+            /// <summary>
+            /// When non-null, this property defines the set of E039ObjectIDs for the set of E039Object instances that this item will be applied to.  
+            /// Use of this property is mutually exclusive with the use of the base class's ObjID property.
+            /// <para/>Note: not all derived types support use of this property.
+            /// </summary>
+            public ReadOnlyIList<E039ObjectID> ObjIDSet { get; private set; }
+
+            /// <summary>
+            /// Debugging and logging helper.
+            /// </summary>
             public override string ToString()
             {
-                return "{0}".CheckedFormat(ObjID.ToString(E039ToStringSelect.FullName));
+                if (ObjIDSet == null)
+                    return "{0}".CheckedFormat(ObjID.ToString(E039ToStringSelect.FullName));
+                else
+                    return "[{0}]".CheckedFormat(String.Join(",", ObjIDSet.Select(objID => objID.ToString(E039ToStringSelect.FullName))));
             }
         }
     }
@@ -1729,14 +1777,29 @@ namespace MosaicLib.Semi.E039
                 return InnerPerformAddObjectUpdateItem(updateItem as E039UpdateItem.AddObject);
 
             ObjectTracker objectTracker = null;
+            ObjectTracker [] objectTrackerArray = null;
             E039Link link = default(E039Link);
 
             if (updateItem is E039UpdateItem.ObjIDBase && !(updateItem is E039UpdateItem.SyncPersist))
             {
-                E039ObjectID objID = (updateItem as E039UpdateItem.ObjIDBase).ObjID;
-                objectTracker = FindObjectTrackerForID(objID);
-                if (objectTracker == null)
-                    return "No object found for E039ObjectID '{0}'".CheckedFormat(objID.ToString(E039ToStringSelect.DefaultObjIDSelect));
+                var uiAsObjIDBase = updateItem as E039UpdateItem.ObjIDBase;
+
+                if (uiAsObjIDBase.ObjIDSet == null)
+                {
+                    var objID = uiAsObjIDBase.ObjID;
+
+                    objectTracker = FindObjectTrackerForID(objID);
+                    if (objectTracker == null)
+                        return "No object found for E039ObjectID '{0}'".CheckedFormat(objID.ToString(E039ToStringSelect.DefaultObjIDSelect));
+                }
+                else
+                {
+                    var objIDSet = uiAsObjIDBase.ObjIDSet;
+                    objectTrackerArray = objIDSet .Select(objID => FindObjectTrackerForID(objID)).ToArray();
+
+                    if (objectTrackerArray.Count(ot => ot == null) > 0)
+                        return "One or more IDs in [{0}] were not found".CheckedFormat(String.Join(",", objIDSet.Select(ot => ot.ToString(E039ToStringSelect.FullName))));
+                }
             }
             else if (updateItem is E039UpdateItem.LinkBase)
             {
@@ -1751,12 +1814,23 @@ namespace MosaicLib.Semi.E039
                     link.FromID = objectTracker.ObjID;
             }
 
-            // This test MUST come before the SetAttributes test as this is also a SetAttributes update item.
+            // This test MUST come before the SetAttributes test as each TestAndSetAttributes is also a SetAttributes update item.
             if (updateItem is E039UpdateItem.TestAndSetAttributes)
                 return InnerPerformTestAndSetAttributesUpdateItem(objectTracker, updateItem as E039UpdateItem.TestAndSetAttributes);
 
             if (updateItem is E039UpdateItem.SetAttributes)
-                return InnerPerformSetAttributesUpdateItem(objectTracker, updateItem as E039UpdateItem.SetAttributes);
+            {
+                var uiAsSetAttributes = updateItem as E039UpdateItem.SetAttributes;
+                if (objectTrackerArray != null)
+                {
+                    var ecSet = objectTrackerArray.Select(ot => InnerPerformSetAttributesUpdateItem(ot, uiAsSetAttributes));
+                    return ecSet.Where(ec => ec.IsNeitherNullNorEmpty()).FirstOrDefault().MapNullToEmpty();
+                }
+                else
+                {
+                    return InnerPerformSetAttributesUpdateItem(objectTracker, uiAsSetAttributes);
+                }
+            }
 
             if (updateItem is E039UpdateItem.AddLink)
                 return InnerPerformAddLinkUpdateItem(objectTracker, link, updateItem as E039UpdateItem.AddLink);

@@ -15,11 +15,12 @@
         <GroupBox Name="IVIViewControlsGB" DockPanel.Dock="Bottom" Header="IVI View Controls" Visibility="{Binding ElementName=IVIViewMainControl, Path=ControlsVisibility}" Margin="0,0,0,0">
             <WrapPanel Orientation="Horizontal">
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="13,0,0,0" ToolTip="When checked this prevents IVA changes or additions from being made to the filterable set">
-                    <CheckBox Content="Pause" IsChecked="{Binding ElementName=IVIViewMainControl, Path=Pause, Mode=TwoWay, FallbackValue=false}" VerticalAlignment="Center"/>
+                    <CheckBox Content="Pause" IsChecked="{Binding ElementName=IVIViewMainControl, Path=Pause, Mode=TwoWay}" VerticalAlignment="Center"/>
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="13,0,0,0" ToolTip="Live filter text.  Applies to the IVA Names.">
                     <Label Content="Filter:" VerticalAlignment="Center"/>
-                    <TextBox Text="{Binding ElementName=IVIViewMainControl, Path=IVANameFilterString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="120" VerticalAlignment="Center"/>
+                    <TextBox Text="{Binding ElementName=IVIViewMainControl, Path=FilterString, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="{Binding ElementName=IVIViewMainControl, Path=FilterFieldWidth, FallbackValue=120.0}" VerticalAlignment="Center"/>
+                    <CheckBox Content="VC" IsChecked="{Binding ElementName=IVIViewMainControl, Path=EnableFilterOnVCasSMLString, Mode=TwoWay}" VerticalAlignment="Center" Margin="5,0,0,0"/>
                 </StackPanel>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="13,0,0,0">
                     <Label Content="Count (view, total):" VerticalAlignment="Center"/>
@@ -41,7 +42,7 @@
                             <GridViewColumnHeader Content="Seq#" Tag="SeqNum" Click="GridViewColumnHeader_Click"/>
                         </GridViewColumn.Header>
                     </GridViewColumn>
-                    <GridViewColumn Header="Value" Width="{Binding ValueColumnWidth, ElementName=IVIViewMainControl}" DisplayMemberBinding="{Binding VC, Converter={StaticResource VCToStringSMLConverter}, Mode=OneWay}"/>
+                    <GridViewColumn Header="Value" Width="{Binding ValueColumnWidth, ElementName=IVIViewMainControl}" DisplayMemberBinding="{Binding VCasSMLString, Mode=OneWay}"/>
                 </GridView>
             </ListView.View>
             <ListView.ItemContainerStyle>

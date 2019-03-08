@@ -1,5 +1,5 @@
 ﻿//-------------------------------------------------------------------
-/*! @file ButtonIsPressedObserver.cs
+/*! @file Attachable.cs
  *  @brief
  * 
  * Copyright (c) Mosaic Systems Inc.
@@ -76,6 +76,19 @@ namespace MosaicLib.WPF.Extensions
         [AttachedPropertyBrowsableForType(typeof(FrameworkElement))] public static void SetTag7(FrameworkElement obj, object value) { obj.SetValue(Tag7Property, value); }
         [AttachedPropertyBrowsableForType(typeof(FrameworkElement))] public static void SetTag8(FrameworkElement obj, object value) { obj.SetValue(Tag8Property, value); }
         [AttachedPropertyBrowsableForType(typeof(FrameworkElement))] public static void SetTag9(FrameworkElement obj, object value) { obj.SetValue(Tag9Property, value); }
+
+        #endregion
+
+        #region Group, CancellationGroup property
+
+        public static readonly DependencyProperty GroupProperty = DependencyProperty.RegisterAttached("Group", typeof(object), typeof(Attachable));
+        public static readonly DependencyProperty CancellationGroupProperty = DependencyProperty.RegisterAttached("CancellationGroup", typeof(object), typeof(Attachable));
+
+        [AttachedPropertyBrowsableForType(typeof(FrameworkElement))] public static object GetGroup(FrameworkElement obj) { return obj.GetValue(GroupProperty); }
+        [AttachedPropertyBrowsableForType(typeof(FrameworkElement))] public static void SetGroup(FrameworkElement obj, object value) { obj.SetValue(GroupProperty, value); }
+
+        [AttachedPropertyBrowsableForType(typeof(Control))] public static object GetCancellationGroup(Control obj) { return obj.GetValue(GroupProperty); }
+        [AttachedPropertyBrowsableForType(typeof(Control))] public static void SetCancellationGroup(Control obj, object value) { obj.SetValue(GroupProperty, value); }
 
         #endregion
 
