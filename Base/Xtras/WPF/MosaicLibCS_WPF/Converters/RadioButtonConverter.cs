@@ -24,19 +24,26 @@ using System.Windows;
 using System.Windows.Data;
 using System.Globalization;
 
+using MosaicLib.Utils;
+
 namespace MosaicLib.WPF.Converters
 {
 	public class RadioButtonConverter: IValueConverter
 	{
 		public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
 		{
-            return object.Equals(value, parameter);
+            var valueStr = value.SafeToString().Replace(", ", ",");
+            var parameterStr = parameter.SafeToString().Replace(", ", ",");
+
+            return valueStr == parameterStr;
 		}
 
 		public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
 		{
+            var parameterStr = parameter.SafeToString().Replace(", ", ",");
+
 			if (object.Equals(value, true))
-				return parameter;
+                return parameterStr;
 			else
 				return Binding.DoNothing;
 		}

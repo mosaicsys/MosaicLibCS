@@ -141,7 +141,49 @@ namespace MosaicLib.WPF.Converters
     /// </summary>
     public class AppendParameterWithSpaceDelimiterConverter : AppendParameterWithDelimiterConverter
     {
+        /// <summary></summary>
         public AppendParameterWithSpaceDelimiterConverter() : base(" ") {}
+    }
+
+    #endregion
+
+    #region IndexIntoSplitStringConverter, IndexIntoCommaDelimitedStringConverter
+
+    /// <summary>
+    /// This value converter accepts an integer value and uses it to select, and return, the indexed string as extracted from the parameter value split using the construction provided delimiter character.
+    /// </summary>
+    public class IndexIntoSplitStringConverter : OneWayValueConverterBase
+    {
+        /// <summary>Constructor - requires caller to provide the delimiter to use.</summary>
+        public IndexIntoSplitStringConverter(char delimiter, bool clipInt = true)
+        {
+            Delimiter = delimiter;
+            ClipInt = clipInt;
+        }
+
+        public char Delimiter { get; private set; }
+        public bool ClipInt { get; private set; }
+
+        public override object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            int indexFromValue = ValueContainer.CreateFromObject(value).GetValue<int>(rethrow: false);
+
+            string [] tokenSetArray = parameter.SafeToString().Split(Delimiter);
+
+            if (ClipInt && !tokenSetArray.IsNullOrEmpty())
+                return tokenSetArray.SafeAccess(indexFromValue.Clip(0, tokenSetArray.Length - 1));
+            else
+                return tokenSetArray.SafeAccess(indexFromValue);
+        }
+    }
+
+    /// <summary>
+    /// This value converter accepts an integer value and uses it to select, and return, the indexed string as extracted from the parameter value split using the command delimeter character (,)
+    /// </summary>
+    public class IndexIntoCommaDelimitedStringConverter : IndexIntoSplitStringConverter
+    {
+        /// <summary>Constructor</summary>
+        public IndexIntoCommaDelimitedStringConverter() : base(',') {}
     }
 
     #endregion

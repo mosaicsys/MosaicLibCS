@@ -265,7 +265,7 @@ namespace MosaicLib.WPF.Controls
         {
             var combinedInfo = value as Tools.Sets.E090.E090CombinedSubstLocAndSubstInfo;
 
-            if (combinedInfo == null || combinedInfo.SubstLocInfo.ObjID.IsEmpty || combinedInfo.SubstLocInfo.SLS == Semi.E090.SubstLocState.Undefined)
+            if (combinedInfo == null || combinedInfo.SubstLocInfo.ObjID.IsEmpty || combinedInfo.SubstLocInfo.SLS == Semi.E090.SubstLocState.Undefined || combinedInfo.SubstLocInfo.NotAccessibleReason.IsNeitherNullNorEmpty())
                 return siennaBrush;
 
             if (combinedInfo.SubstInfoFrom == Tools.Sets.E090.SubstInfoFrom.None)
@@ -278,6 +278,7 @@ namespace MosaicLib.WPF.Controls
             {
                 case Semi.E090.SubstProcState.NeedsProcessing: substColor = lightSkyBlue; break;
                 case Semi.E090.SubstProcState.InProcess: substColor = blue; break;
+                case Semi.E090.SubstProcState.ProcessStepCompleted: substColor = blue; break;
                 case Semi.E090.SubstProcState.Processed: substColor = green; break;
                 case Semi.E090.SubstProcState.Rejected: substColor = red; break;
                 case Semi.E090.SubstProcState.Aborted: substColor = orange; break;

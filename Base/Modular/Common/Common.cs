@@ -1319,8 +1319,15 @@ namespace MosaicLib.Modular.Common
                 {
                     if (TValueTypeType == typeof(Logging.LogGate))
                     {
-                        Logging.LogGate logGate = (Logging.LogGate)this;            // use explicit cast to get this.
-                        value = (TValueType)((object)logGate);
+                        if (IsNullOrEmpty && rethrow == false)
+                        {
+                            value = defaultValue;
+                        }
+                        else
+                        {
+                            Logging.LogGate logGate = (Logging.LogGate)this;            // use explicit cast to get this.
+                            value = (TValueType)((object)logGate);
+                        }
                     }
                     else if (TValueTypeType == typeof(Logging.LogGate?))
                     {
@@ -1573,7 +1580,7 @@ namespace MosaicLib.Modular.Common
 
         #endregion
 
-        #region static global exception counts and latched exceptions
+        #region static global exception counts and latched exceptions - these methods/fields/properties are primarily used for unit testing.
 
         /// <summary>
         /// Global static volatile pseudo count of the number of exceptions that have occurred within a ValueContainer.SetValue method call.
@@ -1596,6 +1603,17 @@ namespace MosaicLib.Modular.Common
         /// Global static volatile field that gives the last exception that was generated and caught during a ValueContainer.GetValue method call.
         /// </summary>
         public static volatile System.Exception GlobalLastGetValueFailedException = null;
+
+        /// <summary>
+        /// This method clears the standard ValueContainer global exception count and record values including GlobalSetValueFailedCount, GlobalGetValueFailedCount, GlobalLastSetValueFailedException, and GlobalLastGetValueFailedException
+        /// </summary>
+        public static void ClearGlobalExceptionValues()
+        {
+            GlobalSetValueFailedCount = 0;
+            GlobalGetValueFailedCount = 0;
+            GlobalLastSetValueFailedException = null;
+            GlobalLastGetValueFailedException = null;
+        }
 
         #endregion
 

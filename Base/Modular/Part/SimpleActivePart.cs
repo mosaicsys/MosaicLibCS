@@ -64,7 +64,7 @@ namespace MosaicLib.Modular.Part
     public enum GoOnlineAndGoOfflineHandling : int
     {    
         /// <summary>
-        /// Selects basic handling.  Base UseState is not automatically updated and base Peform methods return not implemented result code. [0x00]
+        /// Selects basic handling.  Base UseState is not automatically updated and base Perform methods return not implemented result code. [0x00]
         /// </summary>
         None = 0x00,
 
