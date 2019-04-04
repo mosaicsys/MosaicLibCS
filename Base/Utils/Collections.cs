@@ -1714,7 +1714,7 @@ namespace MosaicLib.Utils
         /// <para/>This class implicilty uses default(<typeparamref name="TItemType"/>) to indicate when a token position is empty.
         /// As such you cannot Add default values to the set.
         /// </summary>
-        [Serializable]
+        [DataContract(Namespace=MosaicLib.Constants.MosaicLibNameSpaceRoot)]
         public class TokenSet<TItemType> : ITokenSet<TItemType>
         {
             private static readonly EqualityComparer<TItemType> defaultEqualityComparer = EqualityComparer<TItemType>.Default;
@@ -1959,11 +1959,30 @@ namespace MosaicLib.Utils
                 return this.SequenceEqual(other);
             }
 
-            [NonSerialized]
             private bool isReadOnly;
 
-            private TItemType token1, token2, token3;
+            [DataMember(Order=1000, IsRequired=false, EmitDefaultValue=false)]
+            private TItemType token1;
+
+            [DataMember(Order = 2000, IsRequired = false, EmitDefaultValue = false)]
+            private TItemType token2;
+
+            [DataMember(Order = 3000, IsRequired = false, EmitDefaultValue = false)]
+            private TItemType token3;
+
             private List<TItemType> moreTokens;
+
+            [DataMember(Order = 4000, Name = "moreTokens", IsRequired = false, EmitDefaultValue = false)]
+            private TItemType[] MoreTokensArray 
+            { 
+                get { return moreTokens.SafeToArray(mapNullToEmpty: false).MapEmptyToNull(); }
+                set { moreTokens = (value.IsNullOrEmpty() ? null : new List<TItemType>(value)); }
+            }
+
+            internal TItemType Token1 { get { return token1; } }
+            internal TItemType Token2 { get { return token2; } }
+            internal TItemType Token3 { get { return token3; } }
+            internal IEnumerable<TItemType> MoreTokens { get { return moreTokens; } }
 
             public override string ToString()
             {
@@ -2220,6 +2239,30 @@ namespace MosaicLib.Utils
                 return mapNullToEmpty ? new TokenSet<TItemType>() : null;
         }
 
+        /// <summary>
+        /// Determine the given TokenSet (<paramref name="value"/>) has the same set of tokens (by object.Equals equality) as the given <paramref name="other"/> set contains.  
+        /// Optinally compares the two sets IsReadOnly values for equality.
+        /// </summary>
+        public static bool Equals<TItemType>(this ITokenSet<TItemType> value, ITokenSet<TItemType> other, bool compareReadOnly)
+        {
+            if (Object.ReferenceEquals(value, other))
+                return true;
+
+            if (value == null || other == null)
+                return false;
+
+            if (compareReadOnly && (value.IsReadOnly != other.IsReadOnly))
+                return false;
+
+            TokenSet<TItemType> valueAsTS = value as TokenSet<TItemType>;
+            TokenSet<TItemType> otherAsTS = other as TokenSet<TItemType>;
+
+            // if this set has matching occupied local token values and both sets do not have moreTokens lists then return true
+            if (valueAsTS != null && otherAsTS != null && Equals(valueAsTS.Token1, otherAsTS.Token1) && Equals(valueAsTS.Token2, otherAsTS.Token2) && Equals(valueAsTS.Token3, otherAsTS.Token3) && valueAsTS.MoreTokens == null && otherAsTS.MoreTokens == null)
+                return true;
+
+            return value.SequenceEqual(other);
+        }
         #endregion
     }
 

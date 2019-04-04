@@ -199,7 +199,7 @@ namespace MosaicLib.Modular.Config
             if (!BaseState.IsOnline)
                 return "Part is not Online [{0}]".CheckedFormat(BaseState);
 
-            ServiceBridge();
+            ServiceBridge(forSync: true);
 
             return string.Empty;
         }
@@ -305,7 +305,7 @@ namespace MosaicLib.Modular.Config
             public IValueAccessor iva;
         }
 
-        private void ServiceBridge()
+        private void ServiceBridge(bool forSync = false)
         {
             if (useNominalSyncHoldoffTimer)
                 nominalSyncHoldoffTimer.Reset();
@@ -361,7 +361,7 @@ namespace MosaicLib.Modular.Config
             }
 
             // if we have lookAtLater items and the corresponding timer has triggered then 
-            if (lookAtLaterDictionary.Count > 0 && (!useLookAtLaterTimer || lookAtLaterTimer.IsTriggered))
+            if (lookAtLaterDictionary.Count > 0 && (!useLookAtLaterTimer || lookAtLaterTimer.IsTriggered || forSync))
             {
                 foreach (var item in lookAtLaterDictionary.Values.ToArray())
                 {

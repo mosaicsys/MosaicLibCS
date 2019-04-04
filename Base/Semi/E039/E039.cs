@@ -43,7 +43,89 @@ using MosaicLib.Utils.StringMatching;
 
 namespace MosaicLib.Semi.E039
 {
-    #region E039Table observation
+    /*
+     * Note: The code in this namespace is generally based on the terminology used in the E039 standard, however a number of the
+     * functions and capabilties reflected here are not directly tied to explicit requirements in that standard.
+     * 
+     * The code contained here supports the general concept of an E039 object which id identified by a Type, a Name, and an optional UUID (see E039ObjectID).
+     * These objects include a set of one or more Attributes (via use of NamedValueSet related concepts) and they support the concept of "linkage" where one
+     * object can indicate that it is linked to other objects using a set of key strings (Contains, SrcLoc, DestLoc, ...).  Individual published E039Object instances
+     * are generally enforced to be Immutable and changes in attributes or linkage creates new replacement object instances that carry the updated content.
+     * 
+     * Please additinally note: the code, concepts, and patterns described here are generally derived from the standard E039 use patterns and concepts.  
+     * However there is no code here that supports the direct use of these classes to implement externally available streams and functions required by the E039 semi standard.
+     * 
+     * E039Object related Observe, Update, and Persist related operations are all managed by a single entity that implements the IE039TableObserver and IE039TableUpdater interface.
+     * At present one or more E039BasicTablePart instances, which implements both interfaces, are generally used to handles these responsibilities.
+     * 
+     * These interfaces define use of a conceptual model where a single part contains a set of tables of objects, indexed by their Type, Name, and/or UUID.  The IE039TableObserver interface
+     * supports obtaining information about the tables and their contents, and the ability to "subscribe" to a given E039ObjectID (using INotificationObject and related observer object patterns).   
+     * The IE039TableUpdater interface supports the ability to make changes to these objects through the use of IClientFacet Action factory method variants called Update.
+     * These Update action factory method variants accept one or more E039UpdateItem instances and when run they apply the changes requested by these update items to 
+     * selected objects in the type/instance table space.  Supported update item types include AddObject, RemoveObject, AddLink, RemoveLink, SetAttributes, TestAndSetAttributes,
+     * SyncExternal, SyncPersist, and SyncPublication.  
+     * 
+     * The focus on the design of these interfaces and the related supporting code is to support both a high level of both usability and good support for atomic consistancy in moderate to 
+     * complex update patterns.  The use of Update actions with more than one contained Update Item allows the client to make certain patterns of changes appear to be applied
+     * atomicially to a set of related objects.  For example is is possible to change the linkage between a set of objects and update their corresponding attributes using a single Update call
+     * so that the externally persisted state transitions directly from the before to the after without risk that an interuption and later reload could produce an object tableset state taking
+     * between updating the links and the attributes (for example).   All client visible changes triggereed by running an Update action will be completed before the action completes.  As such
+     * a client can reliably make a change and observe its full effect through any of the direct observation pathways immediately after the corresponding Update action has completed.
+     * Publication through Modular.Interconnect.Sets is done using atomic remove and replace update operations on the set and as such the set state will likewise only reflect the results of 
+     * atomicly related groups of update items.  Publication through INotificationObject related paths will appear atomic, and temporally consistatn to the client running an Update item,
+     * however the individual publication steps are performed in some order and as such a third party observer for a given set of object publisher cannot use this pathway to see the changes
+     * applied as an atomic set.  They can see this if they are using a tracking set to observe the object states through the set based interface.
+     * 
+     * It is additionally useful to note that the SetAttributes (and related) Update Item type make use of a settable NamedValueMergeBehavior when applying any NamedValueSet contents from the item
+     * to the object's NamedValueSet instance that holds its current Attribute values.  Various behaviors can be specified to support complex attribute permutation concepts such as Sum, AppendLists,
+     * RemoveNull, and RemoveEmpty.  This allows the client a reasonable amount of flexability to use NVS centric attributes to implement concatination, counters, totalizers, etc. in addition to the
+     * basic ability to add, update, and remove named attribute values in the object's set of such values.
+     * 
+     * In addition the AddObject and AddLink items support an IfNeeded property that allows them to be used during application startup where there is an ambiguity in the initial table set state
+     * where certain required objects may either not exist (fresh applciation startup, sometimes after deletion of persist files), or already exist because they were re-loaded from persist already.
+     * This IfNeeded property allows these add if needed use patterns to be widely supported in the code to correctly initialize the initial object state without extra glue code to handle the 
+     * common case where the add is not needed.  This pattern also covers most software and hardware configuration update cases where the persisted state already has a base set of objects but where
+     * the new feature or option requires the presence of a new, not previously known, object to be optionally added, amongst a set of existing ones.
+     * 
+     * The persist model:  
+     * 
+     * When an E039BasicTablePart is created, it is given configuration information that defines one or more groups of object Types that are to be handled, and optionally persisted, 
+     * together (see E039BasicTablePartConfig and E039TableTypeSetPersistSpecItem).  This allows the client to limit the size of any given persist storage file while retaining the
+     * ability to persist a group of types together so that the update atomicity constraints involving sets of attribute and linkage changes can be maintained.  Generally the client uses persist 
+     * file rings based on XML or JSON serialization as the underlying storage format which provide a good tradeoff between performance and fault tolerance.  The E039BasicTablePart uses configured
+     * heuristics and related client usable update items to attempt to limit the rate of persisting the each table set state so that the entire table is not re-written after each Update action 
+     * completes when there are likely to be a set of related Update items used in an short period of time.
+     * 
+     * These persistance files are only ever loaded on the first GoOnline action run on the related E039BasicTablePart instance.  The persisted representation includes all of the object instances
+     * in the related table set and includes the LinkTo sets for each such object.  The related LinksFrom related information is reconstructed from the the corresponding LinksTo information after
+     * all persisted objects have been reloaded for all persisted table sets.
+     * 
+     * For good performance the use of the DataContractXmlAdapter, DataContractJsonAdapter, or the DataContractJsonDotNetAdapter are recommended for persisting table sets.
+     * 
+     * The publication model:  
+     * 
+     * The IE039TableUpdater and IE039TableObserver interfaces work together to make changes to the underlying objects in the table sets and to publish them so that external observers
+     * tell that a new object instance has been generated.  When making a change to an object, the table updator both publishes a newly created instance of this object (with updated contents)
+     * and it follows the links from and links to links to signal other objects that link or from the changed one so that they will perform a pseudo-publication where they increment their
+     * publication sequence number without generating an actual new object (since their contents did not actually change).  This signaling mechanism allows entities that are observing an object's
+     * state through a link coming from another object to be informed when the linked object may have changed state.  Use of this publication mechanism is based on the use of the INotificationObject.
+     * Typically a client will use the IE039TableObserver interface to obtain a set of INotificationObjects, creates a corresponding set of ISequencedObjectSourceObserver instances
+     * (using the SequencedRefObjectSourceObserver, or E039ObjectObserverWithInfoExtraction, etc. classes) and uses these observer objects to know when a new object may have been published
+     * (or when a new linked object may have been published) using the IsUpdateNeeded property on the observer.  In current use patterns the client generally uses an 
+     * E039ObjectObserverWithInfoExtraction dervied observer which includes automatic extraction and dependent information re-evaluation on calls to Update.
+     * 
+     * The second means of publication is through the use of Modular.Interconnect.Sets.  The E039BasicTable part can be configured (using E039BasicTablePartConfig and E039TableTypeSetPersistSpecItem)
+     * to associate a Object ReferenceSet and an Object History ReferenceSet with one or more table type sets.  When changed objects are published, the old object instance is replaced in the
+     * object reference set, and the new object is appended to the history set (which is size constrained internally to give FIFO history behavior).  The object reference set is generally
+     * used for user interface construction.  In the MosaicLib's WPF specific assembly you can find a set of set specific helper "tools" that support automatic tracking of an
+     * set of E039Objects and generation of a set of tracker objects indexed by E039ObjectIDs that are used to track a reference set and generate DepenencyProperty set events when new objects
+     * are published for given IDs.  This set of tools also includes trackers that will trigger DependencyProperty set events based on object changes that are reachable
+     * by following links to/from a given tracked object ID.  In addition when combined with the use of Modular.Interconnect.Remoting, a given reference set can be incrementally
+     * reflected through a remoting connection.  This allows the same WPF centric tracker componsitional tools to be used in both a local WPF process and in a remotely linked WPF process
+     * using identical object tracking tools and use patterns.
+     */
+
+    #region E039Table observation (IE039TableObserver)
 
     /// <summary>
     /// This interface is used by clients of an E039Table manager part to get observer access to the published state of the objects that are stored in the table.
@@ -646,7 +728,7 @@ namespace MosaicLib.Semi.E039
         { }
 
         /// <summary>Custom constructor for use by E039 internals.  Gives caller access to assign all of the critical properties of an E039ObjectID</summary>
-        internal E039ObjectID(string name, string type, string uuid, IE039TableObserver tableObserver)
+        public E039ObjectID(string name, string type, string uuid, IE039TableObserver tableObserver = null)
         {
             Name = name;
             Type = type;
@@ -1660,7 +1742,12 @@ namespace MosaicLib.Semi.E039
 
         INotificationObject<IE039Object> IE039TableObserver.GetPublisher(E039ObjectID objSpec) 
         {
-            objSpec = objSpec ?? E039ObjectID.Empty;
+            if (objSpec == null)
+            {
+                Log.Debug.Emit("GetPublisher: passed null for objSpec");
+
+                return null;
+            }
 
             lock (externalDicationaryMutex)
             {
@@ -1680,6 +1767,8 @@ namespace MosaicLib.Semi.E039
                 if (ot != null)
                     return ot.objPublisher;
             }
+
+            Log.Debug.Emit("GetPublisher({0}): No publisher found for the given ObjID", objSpec);
 
             return null;
         }

@@ -144,7 +144,7 @@ namespace MosaicLib
             Debug = 6,
 
             [EnumMember]
-            [Obsolete("The use of this MesgType element has been deprecated and will be removed in a future release.  Please replace its use with the use of the ArrayLength element. (2018-08-12)")]
+            [Obsolete("The use of this MesgType element has been deprecated and will be removed in a future release.  Please replace its use with the use of the ArraySize element. (2018-08-12)")]
             Max = 7,
 
             /// <summary>used to record occurrence of very frequent events such as those used to track data transfer, flow of control, construction and destruction, etc...  [7]</summary>

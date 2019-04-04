@@ -383,6 +383,13 @@ namespace MosaicLib.Modular.Action
             return action;
         }
 
+        /// <summary>Inline variant of action.NotifyOnComplete.AddItem(<paramref name="notifyTarget"/>) that supports call chaining.</summary>
+        public static TClientFacetType AddNotifyOnCompleteInline<TClientFacetType>(this TClientFacetType action, INotifyable notifyTarget) where TClientFacetType : IClientFacet
+        {
+            action.NotifyOnComplete.AddItem(notifyTarget);
+            return action;
+        }
+
         /// <summary>Inline variant of action.Start that supports call chaining.  This method saves the result code from the Start call in the given resultCode out parameter.</summary>
         public static TClientFacetType StartInline<TClientFacetType>(this TClientFacetType action, out string resultCode) where TClientFacetType : IClientFacet
         {

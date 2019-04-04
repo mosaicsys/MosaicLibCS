@@ -1885,7 +1885,7 @@ namespace MosaicLib.Modular.Common
     /// </summary>
     public enum ContainerStorageType : byte
     {
-        /// <summary>Custom value for cases where the storage type has not been defined -(the default value: 0)</summary>
+        /// <summary>Custom value for cases where the storage type has not been defined (the default value: 0)</summary>
         None = 0,
         /// <summary>Custom value for special GetValue/SetValue cases.  This CST is not intended to be used for actual storage</summary>
         Custom,
@@ -2018,16 +2018,16 @@ namespace MosaicLib.Modular.Common
                 case ContainerStorageType.SByte:
                 case ContainerStorageType.Int16:
                 case ContainerStorageType.Int32:
-                case ContainerStorageType.Int64: 
+                case ContainerStorageType.Int64:
                     return includeSigned;
                 case ContainerStorageType.Boolean:
                 case ContainerStorageType.Binary:
                 case ContainerStorageType.Byte:
                 case ContainerStorageType.UInt16:
                 case ContainerStorageType.UInt32:
-                case ContainerStorageType.UInt64: 
+                case ContainerStorageType.UInt64:
                     return includeUnsigned;
-                default: 
+                default:
                     return false;
             }
         }
@@ -2096,6 +2096,225 @@ namespace MosaicLib.Modular.Common
         public static ValueContainer SetFromSet<ItemType>(this ValueContainer vc, IEnumerable<ItemType> itemSet)
         {
             return ValueContainer.CreateFromSet<ItemType>(itemSet);
+        }
+
+        /// <summary>
+        /// Extension method is used to convert the contents ofa given ValueContainer into its "raw" JSON representation.
+        /// In particular this includes conversion of INamedValueSet and INamedValue contents into what is best described as JSON dictionary representation.
+        /// [{"key1":value},{"key2":value},...].  This method currently attempts to cover all well known ValueContainer contents as well as
+        /// unrecognized object types which are encoded to JSON with the help of a ValueContainerEnvelope and a corresponding DataContractJsonSerializer.
+        /// </summary>
+        public static string ConvertToRawJSON(this ValueContainer vc)
+        {
+            try
+            {
+                using (var ms = new System.IO.MemoryStream())
+                {
+                    using (var xmlWriter = System.Runtime.Serialization.Json.JsonReaderWriterFactory.CreateJsonWriter(ms, Encoding.UTF8, ownsStream: false))
+                    {
+                        xmlWriter.WriteRawJSONElement("root", vc);
+
+                        xmlWriter.Flush();
+                        xmlWriter.Close();
+                    }
+
+                    string result = Encoding.UTF8.GetString(ms.ToArray());
+                    return result;
+                }
+            }
+            catch (System.Exception ex)
+            {
+                string exStr = ex.ToString(ExceptionFormat.TypeAndMessage);
+                return "{{\"ex\":\"{0}\"}}".CheckedFormat(exStr.GenerateQuotableVersion());
+            }
+        }
+
+        private static void WriteRawJSONElement(this System.Xml.XmlDictionaryWriter xmlWriter, string elementName, ValueContainer vc)
+        {
+            ContainerStorageType vcCST = vc.cvt;
+
+            switch (vcCST)
+            {
+                case ContainerStorageType.INamedValueSet: xmlWriter.WriteRawJSONElement(elementName, vc.GetValue<INamedValueSet>(rethrow: true)); return;
+                case ContainerStorageType.INamedValue: xmlWriter.WriteRawJSONElement(elementName, vc.GetValue<INamedValue>(rethrow: true)); return;
+                case ContainerStorageType.IListOfString: xmlWriter.WriteRawJSONElement(elementName, vc.GetValue<IEnumerable<string>>(rethrow: true)); return;
+                case ContainerStorageType.IListOfVC: xmlWriter.WriteRawJSONElement(elementName, vc.GetValue<IEnumerable<ValueContainer>>(rethrow: true)); return;
+                case ContainerStorageType.String: xmlWriter.WriteRawJSONElement(elementName, vc.GetValue<string>(rethrow: true)); return;
+                case ContainerStorageType.Custom: xmlWriter.WriteRawJSONElement(elementName, vc.GetValue<string>(rethrow: true)); return;
+                case ContainerStorageType.DateTime: xmlWriter.WriteRawJSONElement(elementName, vc.GetValue<DateTime>(rethrow: true).ToString("o")); return;
+                case ContainerStorageType.TimeSpan: xmlWriter.WriteRawJSONElement(elementName, vc.GetValue<TimeSpan>(rethrow: true).ToString()); return;
+                case ContainerStorageType.None: xmlWriter.WriteRawJSONElementNull(elementName); return;
+                case ContainerStorageType.Object: xmlWriter.WriteRawJSONElementAsDecodedObject(elementName, vc.o); return;
+                default: break;
+            }
+
+            xmlWriter.WriteStartElement(elementName);
+
+            switch (vc.cvt)
+            {
+                case ContainerStorageType.Bo: xmlWriter.WriteAttributeString("type", "boolean"); xmlWriter.WriteValue(vc.u.b); break;
+                case ContainerStorageType.F4: xmlWriter.WriteAttributeString("type", "number"); xmlWriter.WriteValue(vc.u.f32); break;
+                case ContainerStorageType.F8: xmlWriter.WriteAttributeString("type", "number"); xmlWriter.WriteValue(vc.u.f64); break;
+                case ContainerStorageType.Bi: xmlWriter.WriteAttributeString("type", "number"); xmlWriter.WriteValue(vc.u.bi); break;
+                case ContainerStorageType.I1: xmlWriter.WriteAttributeString("type", "number"); xmlWriter.WriteValue(vc.u.i8); break;
+                case ContainerStorageType.I2: xmlWriter.WriteAttributeString("type", "number"); xmlWriter.WriteValue(vc.u.i16); break;
+                case ContainerStorageType.I4: xmlWriter.WriteAttributeString("type", "number"); xmlWriter.WriteValue(vc.u.i32); break;
+                case ContainerStorageType.I8: xmlWriter.WriteAttributeString("type", "number"); xmlWriter.WriteValue(vc.u.i64); break;
+                case ContainerStorageType.U1: xmlWriter.WriteAttributeString("type", "number"); xmlWriter.WriteValue(vc.u.u8); break;
+                case ContainerStorageType.U2: xmlWriter.WriteAttributeString("type", "number"); xmlWriter.WriteValue(vc.u.u16); break;
+                case ContainerStorageType.U4: xmlWriter.WriteAttributeString("type", "number"); xmlWriter.WriteValue(vc.u.u32); break;
+                case ContainerStorageType.U8: xmlWriter.WriteAttributeString("type", "number"); xmlWriter.WriteValue((long)(vc.u.u64)); break;
+                default: break;
+            }
+
+            xmlWriter.WriteEndElement();
+        }
+
+        private static void WriteRawJSONElementNull(this System.Xml.XmlDictionaryWriter xmlWriter, string elementName)
+        {
+            xmlWriter.WriteStartElement(elementName);
+            xmlWriter.WriteAttributeString("type", "null");
+            xmlWriter.WriteEndElement();
+        }
+
+        private static void WriteRawJSONElementAsDecodedObject(this System.Xml.XmlDictionaryWriter xmlWriter, string elementName, object o)
+        {
+            if (o == null)
+                xmlWriter.WriteRawJSONElementNull(elementName);
+            else if (o is IEnumerable)
+                xmlWriter.WriteRawJSONElement(elementName, (IEnumerable)(o));
+            else
+            {
+                var oType = o.GetType();
+
+                bool hasDataContractAttribute = (!oType.GetCustomAttributes(typeof(DataContractAttribute), false).IsNullOrEmpty());
+                bool hasCollectionDataContractAttribute = (!oType.GetCustomAttributes(typeof(CollectionDataContractAttribute), false).IsNullOrEmpty());
+                bool hasSerializableAttribute = (!oType.GetCustomAttributes(typeof(SerializableAttribute), false).IsNullOrEmpty());
+
+                if (hasDataContractAttribute || hasCollectionDataContractAttribute || hasSerializableAttribute)
+                {
+                    new DataContractJsonSerializer(oType).WriteObject(xmlWriter, o);
+                }
+                else
+                {
+                    xmlWriter.WriteRawJSONElementVCE(elementName, ValueContainer.CreateFromObject(o));
+                }
+            }
+        }
+
+        private static void WriteRawJSONElementVCE(this System.Xml.XmlDictionaryWriter xmlWriter, string elementName, ValueContainer vc)
+        {
+            ValueContainerEnvelope vce = new ValueContainerEnvelope() { VC = vc };
+            DataContractJsonAdapter<ValueContainerEnvelope> vceDCA = new DataContractJsonAdapter<ValueContainerEnvelope>();
+
+            var vceAsStr = vceDCA.ConvertObjectToString(vce);
+            xmlWriter.WriteRawJSONElement(elementName, vceAsStr);
+        }
+
+        private static void WriteRawJSONElement(this System.Xml.XmlDictionaryWriter xmlWriter, string elementName, string s)
+        {
+            if (s == null)
+            {
+                xmlWriter.WriteRawJSONElementNull(elementName);
+            }
+            else
+            {
+                xmlWriter.WriteStartElement(elementName);
+                xmlWriter.WriteAttributeString("type", "string");
+                xmlWriter.WriteValue(s);
+                xmlWriter.WriteEndElement();
+            }
+        }
+
+        private static void WriteRawJSONElement(this System.Xml.XmlDictionaryWriter xmlWriter, string elementName, INamedValueSet nvs)
+        {
+            if (nvs == null)
+            {
+                xmlWriter.WriteRawJSONElementNull(elementName);
+            }
+            else
+            {
+                xmlWriter.WriteStartElement(elementName);
+                xmlWriter.WriteAttributeString("type", "array");
+
+                foreach (var nv in nvs)
+                    xmlWriter.WriteRawJSONElement("item", nv);
+
+                xmlWriter.WriteEndElement();
+            }
+        }
+
+        private static void WriteRawJSONElement(this System.Xml.XmlDictionaryWriter xmlWriter, string elementName, INamedValue nv)
+        {
+            if (nv == null)
+            {
+                xmlWriter.WriteRawJSONElementNull(elementName);
+            }
+            else
+            {
+                xmlWriter.WriteStartElement(elementName);
+                xmlWriter.WriteAttributeString("type", "object");
+
+                if (nv.Name.IsNeitherNullNorEmpty())
+                    xmlWriter.WriteRawJSONElement(nv.Name, nv.VC);
+
+                xmlWriter.WriteEndElement();
+            }
+        }
+
+        private static void WriteRawJSONElement(this System.Xml.XmlDictionaryWriter xmlWriter, string elementName, IEnumerable<string> stringSet)
+        {
+            if (stringSet == null)
+            {
+                xmlWriter.WriteRawJSONElementNull(elementName);
+            }
+            else
+            {
+                xmlWriter.WriteStartElement(elementName);
+                xmlWriter.WriteAttributeString("type", "array");
+
+                foreach (var s in stringSet)
+                    xmlWriter.WriteRawJSONElement("item", s);
+
+                xmlWriter.WriteEndElement();
+            }
+        }
+
+        private static void WriteRawJSONElement(this System.Xml.XmlDictionaryWriter xmlWriter, string elementName, IEnumerable<ValueContainer> vcSet)
+        {
+            if (vcSet == null)
+            {
+                xmlWriter.WriteRawJSONElementNull(elementName);
+            }
+            else
+            {
+                xmlWriter.WriteStartElement(elementName);
+                xmlWriter.WriteAttributeString("type", "array");
+
+                foreach (var vc in vcSet)
+                    xmlWriter.WriteRawJSONElement("item", vc);
+
+                xmlWriter.WriteEndElement();
+            }
+        }
+
+        private static void WriteRawJSONElement(this System.Xml.XmlDictionaryWriter xmlWriter, string elementName, IEnumerable objectSet)
+        {
+            if (objectSet == null)
+            {
+                xmlWriter.WriteRawJSONElementNull(elementName);
+            }
+            else
+            {
+
+                xmlWriter.WriteStartElement(elementName);
+                xmlWriter.WriteAttributeString("type", "array");
+
+                foreach (var o in objectSet)
+                    xmlWriter.WriteRawJSONElement("item", ValueContainer.CreateFromObject(o));
+
+                xmlWriter.WriteEndElement();
+            }
         }
     }
 
@@ -2376,10 +2595,10 @@ namespace MosaicLib.Modular.Common
         private object o { get { return oGetValue; } set { VC = new ValueContainer() { cvt = ContainerStorageType.Object, o = value }; } }
 
         [DataMember(EmitDefaultValue = false, IsRequired = false)]
-        private NamedValue nvi { get { return nviGetValue; } set { VC = ValueContainer.Create(value); } }
+        private NamedValue nvi { get { return nviGetValue; } set { VC = ValueContainer.Create(value.MakeReadOnly()); } }
 
         [DataMember(EmitDefaultValue = false, IsRequired = false)]
-        private NamedValueSet nvs { get { return nvsGetValue; } set { VC = ValueContainer.Create(value); } }
+        private NamedValueSet nvs { get { return nvsGetValue; } set { VC = ValueContainer.Create(value.MakeReadOnly()); } }
 
         [DataMember(EmitDefaultValue = false, IsRequired = false)]
         private VCEArrayHelper array { get { return vceArrayHelper; } set { VC = value.VC; } }
@@ -3390,7 +3609,7 @@ namespace MosaicLib.Modular.Common
 
         #endregion
 
-        #region Locally defined helper utility methods and properties (Add, AddRange variants)
+        #region Locally defined helper utility methods and properties (Add, AddRange variants, GetNamedValue, GetValue, SetKeyword, SetValue variants, Remove, RemoveAt, RemoveInline, string indexer, int indexer)
 
         /// <summary>
         /// This allows the class to be used with a Dictionary style initializer to add keywords to the set.
@@ -3571,7 +3790,7 @@ namespace MosaicLib.Modular.Common
         }
 
         /// <summary>
-        /// Asks the underlying SortedList to Remove the given name (after sanitization) from the set.
+        /// Asks the underlying List to Remove the given <paramref name="name"/>ed valuess (after sanitization) from the set.
         /// Returns true if the given sanitized name was found and removed from the set.  Returns false otherwise.
         /// </summary>
         /// <exception cref="System.NotSupportedException">thrown if the collection has been set to IsReadOnly</exception>
@@ -3609,6 +3828,30 @@ namespace MosaicLib.Modular.Common
 
             nameToIndexDictionary = null;
             list.RemoveAt(index);
+        }
+
+        /// <summary>
+        /// Removes each of the named values in the given <paramref name="nameParamsArray"/> from the set, if any.
+        /// <para/>Supports call chaining
+        /// </summary>
+        public NamedValueSet RemoveInline(params string[] nameParamsArray)
+        {
+            ThrowIfIsReadOnly("The RemoveInline method");
+
+            foreach (var name in nameParamsArray.MapNullToEmpty())
+            {
+                string sanitizedName = name.Sanitize();
+
+                int index = AttemptToFindItemIndexInList(sanitizedName, false);     // do not create a dictionary for this effort since we are just going to delete it anyway
+
+                if (index >= 0)
+                {
+                    nameToIndexDictionary = null;
+                    list.RemoveAt(index);
+                }
+            }
+
+            return this;
         }
 
         /// <summary>
@@ -4226,6 +4469,20 @@ namespace MosaicLib.Modular.Common
         }
 
         #endregion
+
+        #region OnDeserialed support
+
+        /// <summary>
+        /// Note: The following method is retained for documentation purposes but the actual deserialziation appears to make a new copy of this Set on completion of the deserialization process
+        /// and the new copy is not marked readonly by default.
+        /// </summary>
+        [OnDeserialized]
+        private void OnDeserialized(StreamingContext context)
+        {
+            MakeReadOnly();
+    }
+
+        #endregion
     }
 
     /// <summary>
@@ -4411,6 +4668,19 @@ namespace MosaicLib.Modular.Common
         #region IsReadOnly support
 
         /// <summary>
+        /// This method can be used on a newly created NamedValue to set its IsReadOnly property to true while also supporting call chaining.
+        /// If this NamedValue is already IsReadOnly then this method has no effect.
+        /// </summary>
+        /// <remarks>Use the ConvertToReadOnly extension method to convert INamedValue objects to be ReadOnly.</remarks>
+        public NamedValue MakeReadOnly()
+        {
+            if (!IsReadOnly)
+                IsReadOnly = true;
+
+            return this;
+        }
+
+        /// <summary>
         /// getter returns true if the item has been set to be read only.
         /// if setter is given true then it sets the item to be read only.
         /// setter only accepts being given false if the item has not already been set to read only.
@@ -4487,6 +4757,16 @@ namespace MosaicLib.Modular.Common
         }
 
         #endregion
+
+        #region OnDeserialed support
+
+        [OnDeserialized]
+        private void OnDeserialized(StreamingContext context)
+        {
+            MakeReadOnly();
+    }
+
+    #endregion
     }
 
     #endregion
@@ -4558,9 +4838,9 @@ namespace MosaicLib.Modular.Common
         }
 
         /// <summary>
-        /// Converts the given INamedValueSet iNvSet to a readonly NamedValueSet, either by casting or by copying.
-        /// If the given iNvSet value is null then this method return NamedValueSet.Empty or null, based on the value of the given <paramref name="mapNullToEmpty"/> parameter.
-        /// If the given iNvSet value IsReadOnly and its type is actually a NamedValueSet then this method returns the given iNvSet down casted as a NamedValueSet (path used for serialziation)
+        /// Converts the given INamedValueSet <paramref name="iNvSet"/> to a readonly NamedValueSet, either by casting or by copying.
+        /// If the given <paramref name="iNvSet"/> value is null then this method return NamedValueSet.Empty or null, based on the value of the given <paramref name="mapNullToEmpty"/> parameter.
+        /// If the given <paramref name="iNvSet"/> value IsReadOnly and its type is actually a NamedValueSet then this method returns the given iNvSet down casted as a NamedValueSet (path used for serialziation)
         /// Otherwise this method returns a new readonly NamedValueSet created as a sufficiently deep clone of the given iNvSet.
         /// </summary>
         public static NamedValueSet ConvertToReadOnly(this INamedValueSet iNvSet, bool mapNullToEmpty = true)
@@ -4606,8 +4886,8 @@ namespace MosaicLib.Modular.Common
 
         /// <summary>
         /// Converts the given INamedValueSet iNvSet to a read/write NamedValueSet by cloning if needed.
-        /// If the given iNvSet is null then this method returns a new writable NamedValueSet or null, based on the value of the given <paramref name="mapNullToEmpty"/> parameter.
-        /// If the given iNvSet value is not null and it is !IsReadonly then return the given value.
+        /// If the given <paramref name="iNvSet"/> is null then this method returns a new writable NamedValueSet or null, based on the value of the given <paramref name="mapNullToEmpty"/> parameter.
+        /// If the given <paramref name="iNvSet"/> value is not null and it is !IsReadonly then return the given value.
         /// Otherwise this method constructs and returns a new readwrite NamedValueSet copy the given nvSet.
         /// </summary>
         public static NamedValueSet ConvertToWritable(this INamedValueSet iNvSet, bool mapNullToEmpty = true)

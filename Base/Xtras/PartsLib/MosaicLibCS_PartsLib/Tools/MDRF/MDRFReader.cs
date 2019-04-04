@@ -424,6 +424,11 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
         /// if any related writer is not flushing changes to the index on a very frequent basis.
         /// </summary>
         EnableLiveFileHeuristics = 0x02,
+
+        /// <summary>
+        /// Selects that the MDRFFileReader will always attempt to decode Occurrence bodies as NVS objects and then fallback to the existing behavior if the E005 data payload cannot be represented as an NVS.
+        /// </summary>
+        AttemptToDecodeOccurrenceBodyAsNVS = 0x10,
     }
 
     public class MDRFFileReader : DisposableBase
@@ -1256,6 +1261,34 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
             occurrenceVC = dbb.payloadDataArray.DecodeE005Data(ref decodeIndex, ref dbb.resultCode);
             if (!dbb.IsValid)
                 return;
+
+            // if the occurrence's body is a list and the AttemptToDecodeOccurrenceBodyAsNVS behavior has been selected then attempt to convert the given ValueContainer tree as an NVS
+            if (occurrenceVC.cvt == ContainerStorageType.IListOfVC && (MDRFFileReaderBehavior & Reader.MDRFFileReaderBehavior.AttemptToDecodeOccurrenceBodyAsNVS) != 0)
+            {
+                try
+                {
+                    var vcList = occurrenceVC.GetValue<ReadOnlyIList<ValueContainer>>(rethrow: true);
+
+                    NamedValueSet nvs = new NamedValueSet();
+
+                    foreach (var vcListItem in vcList)
+                    {
+                        var itemList = vcListItem.GetValue<ReadOnlyIList<ValueContainer>>(rethrow: true);
+
+                        var key = itemList[0].GetValue<string>(rethrow: true);
+                        switch (itemList.Count)
+                        {
+                            case 1: nvs.SetKeyword(key); break;
+                            case 2: nvs.SetValue(key, itemList[1]); break;
+                            default: nvs.SetValue(key, itemList.Skip(1).ToArray()); break;
+                        }
+                    }
+
+                    occurrenceVC = ValueContainer.Create(nvs);
+                }
+                catch
+                {}
+            }
 
             SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = ProcessContentEvent.Occurrence, OccurrenceInfo = oi, SeqNum = seqNumU8, VC = occurrenceVC, DataBlockBuffer = dbb });
         }

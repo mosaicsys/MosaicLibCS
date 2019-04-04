@@ -26,19 +26,20 @@ using System.Linq;
 using System.Runtime.Serialization;
 using System.Text;
 
-using MosaicLib.Utils;
-using MosaicLib.Utils.Collections;
-using MosaicLib.Time;
 using MosaicLib.Modular;
-using MosaicLib.Modular.Part;
-using MosaicLib.PartsLib.Helpers;
-using MosaicLib.Semi.E084;
-using MosaicLib.Semi.E087;
+using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Config;
 using MosaicLib.Modular.Config.Attributes;
 using MosaicLib.Modular.Interconnect.Values;
 using MosaicLib.Modular.Interconnect.Values.Attributes;
-using MosaicLib.Modular.Common;
+using MosaicLib.Modular.Part;
+using MosaicLib.PartsLib.Helpers;
+using MosaicLib.Semi.E084;
+using MosaicLib.Semi.E087;
+using MosaicLib.Semi.E090.SubstrateRouting;
+using MosaicLib.Time;
+using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
 
 namespace MosaicLib.PartsLib.Common.LPM
 {
@@ -52,7 +53,7 @@ namespace MosaicLib.PartsLib.Common.LPM
     /// In addition to the formal requirments defined here, such PDO driver parts are also expected to support the following IVA names
     /// <para/>"LPMState": contains the last published ILPMState object for gui data binding use (et. al.)
     /// </remarks>
-    public interface ILPMPart : IActivePartBase
+    public interface ILPMPart : IActivePartBase, ITransferPermissionRequest
 	{
         /// <summary>
         /// Action factory method.  When run, this action will cause this part to initialize the load port.  

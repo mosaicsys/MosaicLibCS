@@ -25,7 +25,7 @@ using System.Collections.Generic;
 namespace MosaicLib.Utils
 {
     //-------------------------------------------------------------------
-    #region Helper functions and classes
+    #region Helper functions and classes (Fcns, InvokeDelegateOnDispose, InvokeDelegateOnIDispose)
 
     /// <summary>
     /// Fcns class is essentially a namespace for series of static helper methods
@@ -85,8 +85,10 @@ namespace MosaicLib.Utils
     /// <summary>
     /// Instances of this class may be used to invoke a simple delegate on explicit disposal of each instance.  
     /// It is generally used to trigger the delegate to be invoked when flow of control leaves the execution block for a using instruction.
+    /// <para/>This class is intended to be used with IDisposable use patterns such as with using statements.  
+    /// It does not register a finalizer or provide any finalizer related behavior.
     /// </summary>
-    public class InvokeDelegateOnDispose : DisposableBase
+    public sealed class InvokeDelegateOnDispose : DisposableBaseBase
     {
         /// <summary>
         /// Define the Delegate type that will be invoked on explicit Dispose of this object.
@@ -94,26 +96,35 @@ namespace MosaicLib.Utils
         public delegate void DisposeDelegate();
 
         /// <summary>
-        /// Constructor:  Caller provides the delegate to be invoked on explicit dispose of this object.
+        /// Constructor:  Caller provides the delegate, or action, to be invoked on explicit dispose of this object.
         /// </summary>
-        public InvokeDelegateOnDispose(DisposeDelegate disposeDelegate) { this.disposeDelegate = disposeDelegate; }
-
-        /// <summary>
-        /// Internal storage for the delegate to be invoked on explicit dispose
-        /// </summary>
-        private DisposeDelegate disposeDelegate = null;
-
-        /// <summary>
-        /// Implementation method for DisposableBase.  Called by Disposable base either for explicit dispose or as part of the finalizer pattern.
-        /// </summary>
-        /// <param name="disposeType">Gives the dispose type.  DisposeType.CalledExplicitly will trigger the contained delegate to be invoked.  DisposeType.CalledByFinalizer will not.</param>
-        protected override void Dispose(DisposableBase.DisposeType disposeType)
+        public InvokeDelegateOnDispose(DisposeDelegate disposeDelegate = null, Action disposeAction = null) 
         {
-            if (disposeType == DisposeType.CalledExplicitly && disposeDelegate != null)
-            {
-                disposeDelegate();
+            if (disposeAction != null)
+                Action = disposeAction;
 
-                disposeDelegate = null;
+            if (disposeDelegate != null)
+                Delegate = disposeDelegate; 
+        }
+
+        public Action Action { get; set; }
+        public DisposeDelegate Delegate { get; set; }
+
+        /// <summary>
+        /// Implementation method for IDisposable.Dispose.  Calls the Action and/or Delegate (if either/both are non-null)
+        /// </summary>
+        public override void Dispose()
+        {
+            if (Action != null)
+            {
+                Action();
+                Action = null;
+            }
+
+            if (Delegate != null)
+            {
+                Delegate();
+                Delegate = null;
             }
         }
     }
@@ -121,22 +132,7 @@ namespace MosaicLib.Utils
     #endregion
 
     //-------------------------------------------------------------------
-    #region DisposableBase and DisposableBaseBase
-
-    /// <summary>Defines the base class of the DisposableBase class.</summary>
-	/// <remarks>
-	/// Provides default virtual implementation of Dispose method.  It is necessary to provide this explicit base class for the 
-	/// DisposableBase class so that it can mark its override of this method as sealed.
-	/// </remarks>
-	public class DisposableBaseBase : System.IDisposable
-	{
-        /// <summary>
-        /// Defines the placeholder public external symbol that is used so that this class can implement IDisposable.  
-        /// This pattern allows us to override and seal this method in the DisposableBase derived class so that classes that inherit from it cannot re-implement the public Dispose method.
-        /// Implementation of this method in this class is empty.
-        /// </summary>
-		public virtual void Dispose() { }
-	}
+    #region DisposableBase
 
 	/// <summary>
 	/// This class is a base class that defines and implements an extendable version the standard CLR IDisposable/Dispose/Finalize pattern. 
@@ -328,6 +324,30 @@ namespace MosaicLib.Utils
 		private AtomicInt32 activeDisposeCounter = new AtomicInt32(0);
 
 		#endregion
+    }
+
+    #endregion
+
+
+    //-------------------------------------------------------------------
+
+    #region DisposableBaseBase
+
+    /// <summary>
+    /// Defines the base class of the DisposableBase class(s).
+    /// </summary>
+    /// <remarks>
+    /// Provides default virtual implementation of Dispose method.  It is necessary to provide this explicit base class for the 
+    /// DisposableBase class so that it can mark its override of this method as sealed.
+    /// </remarks>
+    public class DisposableBaseBase : System.IDisposable
+    {
+        /// <summary>
+        /// Defines the placeholder public external symbol that is used so that this class can implement IDisposable.  
+        /// This pattern allows us to override and seal this method in the DisposableBase derived class so that classes that inherit from it cannot re-implement the public Dispose method.
+        /// Implementation of this method in this class is empty.
+        /// </summary>
+        public virtual void Dispose() { }
     }
 
     #endregion

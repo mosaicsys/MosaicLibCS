@@ -289,6 +289,9 @@ namespace MosaicLib.Modular.Part
         /// <summary>returns true if either the UseState or the ConnState are not at their Undefined value.  Typically this means that the part has not be started or that it has not generated its initial value.</summary>
         bool IsDefined { get; }
 
+        /// <summary>returns the last non-empty fault reason that was explicitly assigned by the part, or the empty string.</summary>
+        string ExplicitFaultReason { get; }
+
         /// <summary>Returns true if the given rhs is non-null and if the contents of this and the given rhs IBaseState are equal to each other.</summary>
         [Obsolete("Please replace with the use of the corresponding IEquateable<>.Equals method (2017-03-10)")]
         bool IsEqualTo(IBaseState rhs);
@@ -354,7 +357,7 @@ namespace MosaicLib.Modular.Part
         }
 
         /// <summary>
-        /// Returns true if the given baseState is null or its UseState is any Failure/Failed state or its ConnState is any Failed state.
+        /// Returns true if the given baseState is null or its UseState is any Failure/Failed state or its ConnState is any Failed state, or its ExplicitFaultReason is non-empty
         /// <para/>Includes UseStates: AttemptOnlineFailed, FailedToOffline, OnlineFailure, MainThreadFailed
         /// <para/>includes ConnStates: ConnectFailed, ConnectionFailed (only evaluated if <paramref name="includeConnState"/> is true)
         /// </summary>
@@ -384,7 +387,31 @@ namespace MosaicLib.Modular.Part
                 }
             }
 
+            if (baseState.ExplicitFaultReason.IsNeitherNullNorEmpty())
+                return true;
+
             return false;
+        }
+
+        /// <summary>
+        /// If the given <paramref name="useState"/> is OnlineBusy then this method returns Online, otherwise this method returns the given <paramref name="useState"/> value.
+        /// </summary>
+        public static UseState MapBusyToOnline(this UseState useState)
+        {
+            return ((useState == UseState.OnlineBusy) ? UseState.Online : useState);
+        }
+
+        /// <summary>
+        /// Accepts a given IBaseState <paramref name="baseStateIn"/> and returns a BaseState equivilant of it.
+        /// If the given <paramref name="baseStateIn"/> is derived from BaseState then this method simply returns it.  
+        /// Otherwise this method constructs a new BaseState from the given one and returns the new one.
+        /// </summary>
+        public static BaseState ConvertToBaseState(this IBaseState baseStateIn)
+        {
+            if (baseStateIn is BaseState)
+                return (BaseState)baseStateIn;
+
+            return ((baseStateIn != null) ? new BaseState(baseStateIn) : BaseState.None);
         }
     }
 
@@ -674,6 +701,12 @@ namespace MosaicLib.Modular.Part
         /// <summary>returns true if either the UseState or the ConnState are not at their Undefined value.  Typically this means that the part has not be started or that it has not generated its initial value.</summary>
         public bool IsDefined { get { return (UseState != UseState.Undefined || ConnState != ConnState.Undefined); } }
 
+        /// <summary>returns the last non-empty fault reason that was explicitly assigned by the part, or the empty string.</summary>
+        public string ExplicitFaultReason { get { return _explicitFaultReason.MapNullToEmpty(); } set { _explicitFaultReason = value.MapEmptyToNull(); } }
+
+        [DataMember(Order = 700, Name = "ExplicitFaultReason", EmitDefaultValue=false, IsRequired=false)]
+        private string _explicitFaultReason;
+
         /// <summary>Returns true if the given other IBaseState is non-null and if the contents of this and the given other IBaseState are equal to each other.</summary>
         public bool Equals(IBaseState other)
         {
@@ -692,6 +725,7 @@ namespace MosaicLib.Modular.Part
                 && ActionName == other.ActionName
                 && Reason == other.Reason
                 && (TimeStamp == other.TimeStamp || !compareTimestamps)
+                && ExplicitFaultReason == other.ExplicitFaultReason
                 );
         }
 
@@ -705,8 +739,8 @@ namespace MosaicLib.Modular.Part
 
 		#region public methods
 
-        /// <summary>static property that returns an empty IBaseState</summary>
-        public static IBaseState None { get { return new BaseState(); } }
+        /// <summary>static property that returns an empty (default) BaseState</summary>
+        public static BaseState None { get { return default(BaseState); } }
 
         /// <summary>Constructor: allows caller to specify if the source part IsPrimaryPart or not</summary>
         public BaseState(bool isPrimaryPart) 
@@ -732,6 +766,7 @@ namespace MosaicLib.Modular.Part
             connState = other.ConnState;
             actionName = other.ActionName;
             timeStamp = other.TimeStamp;
+            ExplicitFaultReason = other.ExplicitFaultReason;
         }
 
         /// <summary>Sets the part as Simulator and allows it to be put in an Online state and/or to have its IsPrimaryPart property set.</summary>
@@ -825,6 +860,7 @@ namespace MosaicLib.Modular.Part
             bool includeActionName = toStringSelect.IsSet(ToStringSelect.ActionName) && (IsBusy && (!actionName.IsNullOrEmpty()));
             bool includeReason = toStringSelect.IsSet(ToStringSelect.Reason) && (!reason.IsNullOrEmpty());
             bool includeConnState = toStringSelect.IsSet(ToStringSelect.ConnState) && (connState != ConnState.NotApplicable);
+            bool includeExplicitFaultReason = toStringSelect.IsSet(ToStringSelect.ExplicitFaultReason) && (_explicitFaultReason.IsNeitherNullNorEmpty());
 
             StringBuilder sb = new StringBuilder();
 
@@ -845,12 +881,15 @@ namespace MosaicLib.Modular.Part
             if (includeReason)
                 sb.CheckedAppendFormatWithDelimiter(", ", "reason:[{0}]", reason);
 
+            if (includeExplicitFaultReason)
+                sb.CheckedAppendFormatWithDelimiter(", ", "fault:[{0}]", _explicitFaultReason);
+
             return sb.ToString();
 		}
 
         /// <summary>
         /// Used to select which parts to include when using the customized version of the BaseState ToString method
-        /// <para/>None (0x00), PartID (0x01), UseState (0x02), ActionName (0x04), ConnState (0x08), Reason (0x10), UseStateNoPrefix (0x20), All (0x1f), AllExceptPartID (0x3c)
+        /// <para/>None (0x00), PartID (0x01), UseState (0x02), ActionName (0x04), ConnState (0x08), Reason (0x10), UseStateNoPrefix (0x20), ExplicitFaultReason (0x40), All (0x5f), AllExceptPartID (0x7c)
         /// </summary>
         [Flags]
         public enum ToStringSelect : int
@@ -860,22 +899,30 @@ namespace MosaicLib.Modular.Part
 
             /// <summary>Include the PartID.  [0x01]</summary>
             PartID = 0x01,
+
             /// <summary>Include use:UseState [0x02]</summary>
             UseState = 0x02,
+
             /// <summary>Include action:ActionName when busy.  [0x04]</summary>
             ActionName = 0x04,
+
             /// <summary>Include conn:ConnState.  [0x08]</summary>
             ConnState = 0x08,
+
             /// <summary>Include reason:[Reason] when reason is present.  [0x10]</summary>
             Reason = 0x10,
+
             /// <summary>Include UseState (with no prefix).  [0x20]</summary>
             UseStateNoPrefix = 0x20,
 
-            /// <summary>(PartID | UseState | ActionName | ConnState | Reason) [0x1f]</summary>
-            All = (PartID | UseState | ActionName | ConnState | Reason),
+            /// <summary>Include fault:[ExplicitFaultReason] when ExplicitFaultReason is present.  [0x40]</summary>
+            ExplicitFaultReason = 0x40,
 
-            /// <summary>(UseStateNoPrefix | ActionName | ConnState | Reason) [0x3c]</summary>
-            AllForPart = (UseStateNoPrefix | ActionName | ConnState | Reason),
+            /// <summary>(PartID | UseState | ActionName | ConnState | Reason) [0x5f]</summary>
+            All = (PartID | UseState | ActionName | ConnState | Reason | ExplicitFaultReason),
+
+            /// <summary>(UseStateNoPrefix | ActionName | ConnState | Reason) [0x7c]</summary>
+            AllForPart = (UseStateNoPrefix | ActionName | ConnState | Reason | ExplicitFaultReason),
         }
 
 		#endregion
@@ -1410,17 +1457,23 @@ namespace MosaicLib.Modular.Part
 
         /// <summary>
         /// This class provides the local implementation needed with the CreateInternalBusyFlagHolderObject method(s).  
-        /// It is passed a SimplePartBase and a Reason on construction.  This class will call the part.DecrementInternalPartBusyCounter method when this object is explicitly disposed.
+        /// It is passed a SimplePartBase and a Reason on construction.  
+        /// This class will call the part.DecrementInternalPartBusyCounter method when this object is explicitly disposed.
         /// </summary>
-        private class DecrementPartBusyCounterOnDispose : DisposableBase
+        private class DecrementPartBusyCounterOnDispose : DisposableBaseBase
         {
-            public DecrementPartBusyCounterOnDispose(SimplePartBase part, string reason) { Part = part; Reason = reason; }
+            public DecrementPartBusyCounterOnDispose(SimplePartBase part, string reason) 
+            { 
+                Part = part; 
+                Reason = reason; 
+            }
+
             public SimplePartBase Part { get; internal set; }
             public string Reason { get; internal set; }
 
-            protected override void Dispose(DisposableBase.DisposeType disposeType)
+            public override void Dispose()
             {
-                if (disposeType == DisposeType.CalledExplicitly && Part != null)
+                if (Part != null)
                 {
                     Part.DecrementInternalPartBusyCounter(Reason);
                     Part = null;
@@ -1484,6 +1537,21 @@ namespace MosaicLib.Modular.Part
             privateBaseState.SetState(rhs, reason);
             if (publish)
                 PublishBaseState(reason);
+        }
+
+        /// <summary>
+        /// Updates the part's BaseState ExplicitFaultReason and optionally publishes the resulting base state if the reason was changed.
+        /// </summary>
+        protected void SetExplicitFaultReason(string explicitFaultReason, bool publish = true)
+        {
+            explicitFaultReason = explicitFaultReason.MapNullToEmpty();
+
+            if (privateBaseState.ExplicitFaultReason != explicitFaultReason)
+            {
+                privateBaseState.ExplicitFaultReason = explicitFaultReason;
+                if (publish)
+                    PublishBaseState("ExplicitFaultReason was changed");
+            }
         }
 
         #endregion

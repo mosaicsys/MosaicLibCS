@@ -36,6 +36,54 @@ using MosaicLib.Utils.Collections;
 
 namespace MosaicLib.Semi.E090
 {
+    /*
+     * This namespace consists of a set of defintions, Extension Methods, and classes that are used on top of the existing related E039 namespace and concepts to implement E090 centric objects,
+     * state, and relationships, especially involving Substrate objects and Substrate Location (SubstLoc) objects.  All of the related object reprersentation and persistance and publication is
+     * done using the corresponding existing E039 concepts and use patterns.
+     * 
+     * This namespace includes a large number of E090 centric helper extension methods and a set of E090 centric information extraction and observer helper objects that provide the standard mapping
+     * of E090 terms to E039 behaviors.  
+     * 
+     * Please note that there is no element of the underlying E039 implementation that is directly intertined with this set of E090 helpers.  The client is welcome to ignore the helper methods and
+     * objects that are included here and to use their own E090 centric implemenation as desired on top of the E039 concepts, or separately from them.
+     * 
+     * The bulk of the extension methods provided here are designed to facilitate common E090 substrate and substrate location centric use patterns.  These consist of an outer set of 
+     * methods that are applied to an IE039TableUpdater instance, and a set of corresponding update item generation extenstion methods that are applied to a List{E039UpdateItem} to which the
+     * generated update items are added.  Methods are available to Create and Remove substrate and substrate location objects.  By default these methods use the IfNeeded concept so that they can
+     * be applied and succeed even if the related objects (usually SubstLoc objects) already exist.  Methods are also available to move substrates, and to change the states of specific substrate
+     * and substrate location attributes.  For example the default behavior is that the NoteSubstMoved method will no only update the Contains linkage in the from and to substrate locations
+     * but that it will also update the substrate's STS to indicate when the substrate departs from/arrives at its source or destination location(s).
+     * 
+     * The IE039TableUpdater methods are each built on top of the use of corresponding List{E039UpdateItem} methods.  This allows a client to uses the same underlying attribute and linkage
+     * decision tree logic in compositional cases where the client would also like to have other update items included in the execution of a single Update action.
+     * 
+     * In addition to the EMs used to generate and apply E090 object and state change behaviors, there are a set of classes that can be used by a client to decode, process, and track
+     * E090 centric objects.  The E090SubstInfo and E090SubstLocInfo objects (structs) are typically generated in relation to a given E039Object (of the correct type) and serve to extract
+     * relevant information from it to simplify the clients use of E039 for these E090 centric purposes.  There are a number of direct predicates and state specific extension methods that
+     * may be used by clients to help minimize the glue logic required for standard client side substrate based decision tree logic.
+     * 
+     * These information decoding objects are then used with (and provided by) the E090SubstLocObserver and E090SubstObserver objects that are the primary means for clients to track
+     * the state of a given substrate, or the state of a substrate location, and typically of the object it contains, with minimal client side required glue code.
+     * 
+     * The combination of the use of IE039TableUpdater.Update(...) related patterns with the related E090 centric extension methods, atomic and temporally consistant publication, and 
+     * glue free state observers means that the client code required to use and manipulate E090 centric objects is significantly minimized and simplified so that the client code can stay
+     * focused on what it needs this information for, rather than how it gets and decodes it.
+     * 
+     * In addition to basic E090 concepts like the SubstState (STS) and the SubstProcState (SPS), this namespace introduces a set of parallel concepts:
+     * 
+     * PseudoSPS values and PendingSPS attribute:  The SubstProcState enumeration used here includes a set of what are known as pseduoSPS values.  These are not part of the E090 standard but
+     * there presance allows the client to use the standard call tree and parameter and update flow patterns to perform addionally useful concepts.  These include supporting a more
+     * generallized pattern for process steps to record intermediate SPS results as well as a means to (optinally and configurably) accumulate a more useful history of what has been done to a 
+     * given substrate than the E090 history concept directly supports.  Please see the related enumeration, structure and EM related defintions for more details.
+     * 
+     * As with the relationship between E039 and WPF, E090 now includes a related set of WPF helper tools in the WPF centric assembly.  This includes a E090 location tracker object that
+     * generates and publishes a combined info object that includes the E090SubstLocInfo for the given location, as well as the E090SubstInfo for the substrate that is currently in that 
+     * location (Contains), or when empty, for the substrate that came from (SrcLoc), or goes to (DestLoc) the location.  This tracker object and combined information object generally supports
+     * the use of terse location centric binding statements, used with converters, to provide efficient and customizable visualization of the infomation that is typically known about a
+     * substrate location and any substrate that it contains or is related to in a source/destination sense.  Again these techniques scale well and work seamlessly in both local and
+     * remote user interface situations.
+     */
+
     #region Constants (type names) and Settings
 
     /// <summary>

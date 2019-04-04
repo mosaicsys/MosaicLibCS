@@ -38,11 +38,84 @@ using MosaicLib.Utils.Collections;
 
 namespace MosaicLib.Semi.E090.SubstrateScheduling
 {
+    /*
+     * The classes and defintions here are generally used as part of the Scheduler related addition to the E090 namespace concepts.
+     * 
+     * The SubstrateScheduling namepace contains a number of interfaces and base classes that can be used to assist in the creation of a state observing style of scheduler
+     * that is envisioned here (and for which an example can be found in the MosaicLib.Semi.E090.SubstrateTestingTools namespace).
+     * 
+     * Generally the scheduler's contemplated here are expected to contain signficant amounts of tool specific logic, design and behavior.  The interfaces and realted concepts
+     * presented here are expeced to be useful in many situations but there is no expectation that they will be useful in all substrate route and process execution scheduling cases.
+     * For example the scheduler concepts presented here do not generally make use of any significant ability to look forward in time as part of any resource allocation and reservation 
+     * constratined scheduler designs.
+     * 
+     * The scheduler use model contemplated here is based on a process that consists of a sequence of steps, each with a set of valid locations to visit and a specificiation of what processing 
+     * step is to be performed at any such location.  In its basic form such a scheduler uses one or more SRM instances to move each substrate from place to place and performing the corresponoding 
+     * the corresponding processing steps along the way.  This is embodied in the NextLocNameList property concept which is a property of a tracked substrate that reports out the set of locations
+     * that the substrate would like to be at next based on its tracked state, its process sequence and the process steps that have already been performed on it.  As the substrate moves and is 
+     * processed this property changes to indicate where the substrate needs to be next.  The majority of the work such a scheduler does is to evalute the set of subtrates
+     * that would like to be moved (aka their NextLocNameList is non-empty and does not include their current location) and to select which should be moved and when to accomplish the overall
+     * processing goals for each.
+     * 
+     * A compositional concept used here is the divsion of the scheduler into a wrapper part and a tool.  The tool contains the actual tracking and trigger logic that is used to drive the scheduler
+     * behavior and the wrapper part is used to give it a thread and to perform basic housekeeping and publication related aspects.  The presance of this split allows the tool portion to be re-used
+     * in a set of compatible wrapper parts so as to support use in different execution, job, and test environments.  This concept is not an essential one to the use models contempalated here and it
+     * should only be employed in actual code if the ability to re-host the logic this way is desired and feasable in each specific use case.
+     * 
+     * In addition this overall approach is very dependant on the E039 and E090 update and publication related use model as the scheduler design requires that the updated substrate state it can see
+     * will reflect the results of any SRM or processing actions in a temporally consistant maner with the completion of those related actions (AKA the published state changes that result from 
+     * execution of any such action must be visible to the scheduler tracker objects before any such action completes).
+     * 
+     * Interface areas and concepts:  
+     * 
+     * ISubstrateSchedulerPart: auto/recovery/service behavior selection and state publishing.  The part is the wrapper that is generally used to host a tool instance, or directly implements the related decision tree logic.
+     * ISubstrateSchedulerTool: recommended interface between wrapper (thread) and tool (decision tree logic) - when this pattern is used.
+     * ISubstrateSchedulerPartState, ISubstrateSchedulerPartStateToTool (et. al.): information maintained in the wrapper, published and passed to the Tool during service and evaluation steps.
+     * IPrepare, IPreparednessState, QuerySummaryState (et. al.): interface provided by process modules to allow the scheduler to determine if a processing path is currently viable and to be able to requet that one be made available when needed.
+     * ISubstrateAndProcessTrackerBase (et. al.): combines the general concept of tracking the location and state of a substrate with the knowledge of its process specification and the steps that have been performed so far.
+     */
+
+    #region ISubstrateSchedulerPart (et. al.)
+
+    /// <summary>
+    /// This interface is expected to be supported by all SubstrateSchedulerPart type parts.
+    /// </summary>
+    /// <remarks>
+    /// Generally when performing a GoOnline(true) action, a substrate scheduler part is expected to look for the presence of a SetSelectedBehavior key in its NPV.
+    /// If this is found it shall get a BehaviorEnableFlags value from it and shall call PerformSetSelectedBehavior on that value.
+    /// </remarks>
+    public interface ISubstrateSchedulerPart : IActivePartBase
+    {
+        /// <summary>
+        /// Action factory method:  When the resuling action is run it will attempt to change the part's BehaviorEnableFlags to be the given value.
+        /// The scheduler will generally confirm that this request is permitted by the tool before making the change.  
+        /// If the <paramref name="force"/> flag is true then the part will make the change in state even if the tool indicates that it should not be permitteed.
+        /// The <paramref name="force"/> flag is expected to be used in cases where the user has been asked if they really want to make this change and they
+        /// explicitly confirm that they do.
+        /// </summary>
+        IClientFacet SetSelectedBehavior(BehaviorEnableFlags flags, bool force = false);
+
+        /// <summary>
+        /// State publisher for the ISubstrateSchedulerPartState that is being passed to the tool's service method.
+        /// A copy of information published here is also published to the corresponding PartID.State IVA.
+        /// </summary>
+        INotificationObject<ISubstrateSchedulerPartState> StatePublisher { get; }
+    }
+
+    #endregion
+
+    #region ISubstrateSchedulerTool
+
     /// <summary>
     /// This is the interface that is expected to be supported by any tool class used to implement customer specific substrate scheduling rules so that these rules
     /// may be used within common Scheduler Parts and constructs in a way that allows the rules to be reused in different environements.  
     /// This is specifically intended to support seamless use of such a tool class in both Semi standard hosted enironments and in much simpler unit testing environements, amongst other cases.
     /// </summary>
+    /// <remarks>
+    /// This interface is only intended to be representational and/or usefull for some specific use cases and/or as an example.  
+    /// It is expected that some scheduling related designs may generally want to be able to use an abstraction like this concept of a substrate scheduler tool but that the details
+    /// of its implementation and use might be partially, or completely different.  As such this interface is not intended to cover all such pattern use cases.
+    /// </remarks>
     public interface ISubstrateSchedulerTool<TSubstTrackerType, TProcessSpec, TProcessStepSpec> 
         where TSubstTrackerType : SubstrateAndProcessTrackerBase<TProcessSpec, TProcessStepSpec>
         where TProcessSpec : IProcessSpec<TProcessStepSpec>
@@ -58,20 +131,721 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
         void Drop(TSubstTrackerType substTracker);
 
         /// <summary>
-        /// This method returns a list of reasons why the scheduler cannot be transitioned from the current given <paramref name="partBaseState"/> to the given <paramref name="requestedUseState"/>
-        /// This is generally used when attempting to GoOnline, in which case the <paramref name="andInitialize"/> method will be provided as well.
-        /// <para/>Note that when going offline, this method is intended to be advisory - it shall return the reasons why going offline might be a problem but there is no requirement that the caller will do anything specific with any non-empty resulting list in this case.
+        /// Allows the hosting part to inform the tool when a GoOnline Action is being performed.  
+        /// This method is called after the hosting part has completed its own operations and they have all been completed successfully.
         /// </summary>
-        IList<string> VerifyUseStateChange(IBaseState partBaseState, UseState requestedUseState, bool andInitialize = false);
+        string PerformGoOnlineActionEx(IProviderFacet ipf, bool andInitialize, INamedValueSet npv, Func<bool> hasStopBeenRequestedDelegate, ref RequestsAndStatusOutFromTool requestAndStatusOutFromTool);
 
         /// <summary>
-        /// Called periodically.  
-        /// <paramref name="recentTrackerChangeMayHaveOccurred"/> will be true if any substrate observer's flagged IsUpdateNeeded since the last Service call, or if the caller otherwise believes that a substrate tracker change may have occurred. 
-        /// This method returns a count of the number of change it made or observed to allow the caller to optimze its spin loop sleep behavior to increase responsiveness in relation to loosely coupled state transitions.
-        /// <para/>This method is expected to have different behavior based on the given <paramref name="partBaseState"/>.
+        /// Allows the hosting part to inform the tool when a GoOffline Action is being performed.
+        /// This method is called after the hosting part has completed its own operations and they have all been completed successfully.
         /// </summary>
-        int Service(bool recentTrackerChangeMayHaveOccurred, ref SubstrateStateTally substrateStateTally, IBaseState partBaseState);
+        string PerformGoOofflineAction(IProviderFacet ipf, Func<bool> hasStopBeenRequestedDelegate);
+
+        /// <summary>
+        /// This method returns a list of reasons why the scheduler cannot be transitioned from the current given <paramref name="stateToTool"/> using the given <paramref name="requestNVS"/> request specification.  (See comments for Service above and here below for details on supported request patterns)
+        /// This method will only be called if the request is not coming from the tool itself.  If the request is coming from the tool then the hosting part assumes that the tool has already determined that the change would be permitted.
+        /// </summary>
+        /// <remarks>
+        /// In addition to the supported patterns from the RequestsAndStatusOutFromTool object, the following are generally expected to be supported keywords and/or named value pairs for Verify:
+        ///     SetAutomatic - keyword (no value) - used to request that the hosting part can transition to a fully automatic state.  The hosting part typically indicates this to verify that it can GoOnline(true).
+        ///     GoOnline - keyword (no value) - used to request that the hosting part can transition to an online state.  The hosting part typically indicates this to verify that it can GoOnline(false).
+        ///     GoOffline - keyword (no value) - advisory - used to indicate that the hosting part is going to transition to the offline state by request.
+        ///     SetBehavior - BehaviorEnableFlags - used when part is processing a SetSelectedBehavior request.  
+        /// </remarks>
+        IList<string> VerifyStateChange(ISubstrateSchedulerPartStateToTool stateToTool, INamedValueSet requestNVS);
+
+        /// <summary>
+        /// Called periodically to allow the tool to perform work.  Nominally this method is where the tool is given a repeated oportunity to create and start SRM and process actions.
+        /// This method returns a count of the number of change it made or observed to allow the caller to optimze its spin loop sleep behavior to increase responsiveness in relation to loosely coupled state transitions.
+        /// <param name="stateToTool">Gives the tool access to the state information that the hosting part provides to the tool in order to tell the tool what behavior is permitted and behavior is not.</param>
+        /// <param name="requestAndStatusOutFromTool">Allows the tool to pass a set of requests, and status information, back to the hosting part so that the hosting part can react and/or publish state accordingly.  Please see remarks below  and under VerityStateChange for details on standard request patterns.</param>
+        /// </summary>
+        int Service(ISubstrateSchedulerPartStateToTool stateToTool, ref RequestsAndStatusOutFromTool requestAndStatusOutFromTool);
     }
+
+    #endregion
+
+    #region ISubstrateSchedulerPartState, SubstrateSchedulerPartStatusFlags, BehaviorEnableFlags, EMs, SubstrateSchedulerPartStateBase, SubstrateSchedulerPartStateForPublication
+
+    /// <summary>
+    /// This interface provides all of the standard information that a scheduler part now provides to a tool 
+    /// </summary>
+    public interface ISubstrateSchedulerPartState : IEquatable<ISubstrateSchedulerPartState>
+    {
+        /// <summary>Carries the hosting part's status flags to the tool</summary>
+        SubstrateSchedulerPartStatusFlags PartStatusFlags { get; }
+
+        /// <summary>Defines a set of tool and part behaviors that the part controls and passes to the tool so the tool can know which classes of behavior are currently permitted.</summary>
+        BehaviorEnableFlags BehaviorEnableFlags { get; }
+
+        /// <summary>Gives the tool access to the scheduler part's base state (or pseudo base state for non-part schedulers) so that the tool can derive basic information about the hosting part's UseState</summary>
+        IBaseState PartBaseState { get; }
+
+        /// <summary>Gives the tool access to an optional arbitraty set of additional key/value pairs</summary>
+        INamedValueSet CustomStateNVS { get; }
+    }
+
+    /// <summary>
+    /// Corresonding interface for information that is passed to the tool during Verify and Service calls.  This is a super-set of the ISubstrateSchedulerPartState.
+    /// </summary>
+    public interface ISubstrateSchedulerPartStateToTool : ISubstrateSchedulerPartState
+    { }
+
+    /// <summary>
+    /// Status flags that a substrate scheduler maintains and makes available to the substrate scheduling tool.
+    /// <para/>None (0x00), ServiceActionInProgress (0x01), RecoveryActionInProgress (0x02)
+    /// </summary>
+    [Flags]
+    public enum SubstrateSchedulerPartStatusFlags : int
+    {
+        /// <summary>Placeholder default [0x00]</summary>
+        None = 0x00,
+
+        /// <summary>When this flag is set, it indicates that the scheduler part has created and started a service action on a subordinate part that has not completed yet.  The typical example of this is to indicate that a service action initiated SRM action is in progress.  [0x02]</summary>
+        ServiceActionInProgress = 0x01,
+
+        /// <summary>When this flag is set, it indicates that the sheduler part is running a recovery action pattern, such as ClearSystem.  </summary>
+        RecoveryActionInProgress = 0x02,
+
+        /// <summary>When this flag is set, one or more parts of the scheduler have an annuncaitor signaling and waiting for an action to be selected by the appropriate decision authority</summary>
+        WaitingForActionToBeSelected = 0x10,
+    }
+
+    /// <summary>
+    /// This enumeration defines the set of scheduler and scheduler tool flags that are used to enable various scheduling related behaviors.
+    /// <para/>None (0x00), ServiceActions (0x01), RecoveryMaterialMovement (0x02), ProcessMaterialMovement (0x04), ProcessExecution (0x08), SubstrateLaunch (0x10)
+    /// <para/>Combination values: Service (ServiceActions), Recovery (ServiceActions | RecoveryMaterialMovement), Automatic (RecoveryMaterialMovement | ProcessMaterialMovement | ProcessStepExecution | SubstrateLaunch)
+    /// </summary>
+    [Flags]
+    public enum BehaviorEnableFlags : int
+    {
+        /// <summary>Placeholder default [0x00]</summary>
+        None = 0x00,
+
+        /// <summary>Enable handling of service actions [0x01]</summary>
+        ServiceActions = 0x01,
+
+        /// <summary>Enable handling of material movement for recovery of material [0x02]</summary>
+        RecoveryMaterialMovement = 0x02,
+
+        /// <summary>Enable handling of material movement required for normal processing [0x04]</summary>
+        ProcessMaterialMovement = 0x04,
+
+        /// <summary>Enable handling of process step exeuction required for normal processing [0x08]</summary>
+        ProcessStepExecution = 0x08,
+
+        /// <summary>Enable transition trigger logic for WaitingForStart to Runing transition [0x10]</summary>
+        SubstrateLaunch = 0x10,
+
+        /// <summary>Summary value for fully manual use: (ServiceActions) [0x01]</summary>
+        Service = ServiceActions,
+
+        /// <summary>Summary value for recovery use: (ServiceActions | RecoveryMaterialMovement) [0x03]</summary>
+        Recovery = ServiceActions | RecoveryMaterialMovement,
+
+        /// <summary>Summary value for automatic use: (RecoveryMaterialMovement | ProcessMaterialMovement | ProcessStepExecution | SubstrateLaunch) [0x1e]</summary>
+        Automatic = RecoveryMaterialMovement | ProcessMaterialMovement | ProcessStepExecution | SubstrateLaunch,
+    }
+
+    /// <summary>
+    /// Extension Methods
+    /// </summary>
+    public static partial class ExtensionMethods
+    {
+        /// <summary>
+        /// Returns true if the given <paramref name="stateToTool"/>'s BehaviorEnableFlags has the ServiceActions flag set 
+        /// and its PartBaseState.UseState is Online, OnlineBusy, OnlineUninitialized, OnlineFailure,
+        /// </summary>
+        public static bool AreServiceActionsEnabled(this ISubstrateSchedulerPartState stateToTool)
+        {
+            return ((stateToTool.BehaviorEnableFlags & BehaviorEnableFlags.ServiceActions) != 0)
+                && stateToTool.PartBaseState.UseState.IsOnline(acceptUninitialized: true, acceptOnlineFailure: true, acceptAttemptOnlineFailed: false);
+        }
+
+        /// <summary>
+        /// Returns true if the given <paramref name="stateToTool"/>'s BehaviorEnableFlags has the RecoveryMaterialMovement flag set 
+        /// and its PartBaseState.UseState is Online, OnlineBusy, or OnlineUninitialized
+        /// </summary>
+        public static bool IsRecoveryMaterialMovementEnabled(this ISubstrateSchedulerPartState stateToTool)
+        {
+            return ((stateToTool.BehaviorEnableFlags & BehaviorEnableFlags.RecoveryMaterialMovement) != 0)
+                && stateToTool.PartBaseState.UseState.IsOnline(acceptUninitialized: true, acceptOnlineFailure: true, acceptAttemptOnlineFailed: false);
+        }
+
+        /// <summary>
+        /// Returns true if the given <paramref name="stateToTool"/>'s BehaviorEnableFlags has the ProcessMaterialMovement flag set 
+        /// and its PartBaseState.UseState is fully Online 
+        /// </summary>
+        public static bool IsProcessMaterialMovementEnabled(this ISubstrateSchedulerPartState stateToTool)
+        {
+            return ((stateToTool.BehaviorEnableFlags & BehaviorEnableFlags.ProcessMaterialMovement) != 0)
+                && stateToTool.PartBaseState.UseState.IsOnline(acceptUninitialized: false, acceptOnlineFailure: false, acceptAttemptOnlineFailed: false);
+        }
+
+        /// <summary>
+        /// Returns true if the given <paramref name="stateToTool"/>'s BehaviorEnableFlags has the ProcessStepExecution flag set 
+        /// and its PartBaseState.UseState is fully Online 
+        /// </summary>
+        public static bool IsProcessStepExecutionEnabled(this ISubstrateSchedulerPartState stateToTool)
+        {
+            return ((stateToTool.BehaviorEnableFlags & BehaviorEnableFlags.ProcessStepExecution) != 0)
+                && stateToTool.PartBaseState.UseState.IsOnline(acceptUninitialized: false, acceptOnlineFailure: false, acceptAttemptOnlineFailed: false);
+        }
+
+        /// <summary>
+        /// Returns true if the given <paramref name="stateToTool"/>'s BehaviorEnableFlags has the SubstrateLaunch flag set 
+        /// and its PartBaseState.UseState is fully Online 
+        /// </summary>
+        public static bool IsSubstrateLaunchEnabled(this ISubstrateSchedulerPartState stateToTool)
+        {
+            return ((stateToTool.BehaviorEnableFlags & BehaviorEnableFlags.SubstrateLaunch) != 0)
+                && stateToTool.PartBaseState.UseState.IsOnline(acceptUninitialized: false, acceptOnlineFailure: false, acceptAttemptOnlineFailed: false);
+        }
+    }
+
+    /// <summary>
+    /// Default implementation object to support the ISubstrateSchedulerPartState interface
+    /// </summary>
+    public class SubstrateSchedulerPartState : ISubstrateSchedulerPartState, ISubstrateSchedulerPartStateToTool, ICopyable<ISubstrateSchedulerPartStateToTool>
+    {
+        /// <summary>Carries the hosting part's status flags to the tool</summary>
+        public SubstrateSchedulerPartStatusFlags PartStatusFlags { get; set; }
+
+        /// <summary>Gives the tool access to the scheduler part's base state (or pseudo base state for non-part schedulers) so that the tool can derive basic information about the hosting part's UseState</summary>
+        public IBaseState PartBaseState { get { return _partBaseState ?? BaseState.None; } set { _partBaseState = value; } }
+
+        private IBaseState _partBaseState;
+
+        /// <summary>Defines a set of tool and part behaviors that the part controls and passes to the tool so the tool can know which classes of behavior are currently permitted.</summary>
+        public BehaviorEnableFlags BehaviorEnableFlags { get; set; }
+
+        INamedValueSet ISubstrateSchedulerPartState.CustomStateNVS { get { return _customStateNVS.MapNullToEmpty(); } }
+
+        /// <summary>Gives the tool access to an optional arbitraty set of additional key/value pairs</summary>
+        public NamedValueSet CustomStateNVS { get { return _customStateNVS ?? (_customStateNVS = new NamedValueSet()); } set { _customStateNVS = value; } }
+
+        private NamedValueSet _customStateNVS;
+
+        public override string ToString()
+        {
+            string nvsStr = _customStateNVS.IsNullOrEmpty() ? "" : " nvs:{0}".CheckedFormat(_customStateNVS.ToStringSML());
+            return "Part:{0} Status:'{1}' EnabledBehavior:'{2}'{3}".CheckedFormat(PartBaseState, PartStatusFlags, BehaviorEnableFlags, nvsStr);
+        }
+
+        /// <summary>
+        /// IEquatable implementation method.  Returns true IFF the given <paramref name="other"/>'s contents are equal to this object's contents.
+        /// </summary>
+        public bool Equals(ISubstrateSchedulerPartState other)
+        {
+            return (other != null
+                    && PartStatusFlags == other.PartStatusFlags
+                    && PartBaseState.Equals(other.PartBaseState)
+                    && BehaviorEnableFlags == other.BehaviorEnableFlags
+                    && CustomStateNVS.IsEqualTo(other.CustomStateNVS, compareReadOnly: false)
+                    );
+        }
+
+        /// <summary>
+        /// Allows the caller to generate a copy of this object.  This is typically used for publication through an INotificationObject such as the ISubstrateSchedulerPart.StatePublisher
+        /// </summary>
+        public virtual ISubstrateSchedulerPartStateToTool MakeCopyOfThis(bool deepCopy = true)
+        {
+            var copyOfThis = (SubstrateSchedulerPartState)this.MemberwiseClone();
+
+            _customStateNVS = _customStateNVS.ConvertToReadOnly(mapNullToEmpty: false);
+
+            return copyOfThis;
+        }
+    }
+
+    /// <summary>
+    /// Version of ISubstrateSchedulerPartState that is used for publication.  Instances of this class are immutable.
+    /// </summary>
+    [DataContract(Namespace = MosaicLib.Constants.E090NameSpace)]
+    public class SubstrateSchedulerPartStateForPublication : ISubstrateSchedulerPartState
+    {
+        public SubstrateSchedulerPartStateForPublication()
+        {
+            PartBaseState = BaseState.None;
+        }
+
+        public SubstrateSchedulerPartStateForPublication(ISubstrateSchedulerPartState other)
+        {
+            PartStatusFlags = other.PartStatusFlags;
+            PartBaseState = other.PartBaseState.ConvertToBaseState();
+            BehaviorEnableFlags = other.BehaviorEnableFlags;
+            CustomStateNVS = other.CustomStateNVS.ConvertToReadOnly();
+        }
+
+        /// <summary>Returns an empty state instance.</summary>
+        public static ISubstrateSchedulerPartState Empty { get { return _empty; } }
+        private static readonly ISubstrateSchedulerPartState _empty = new SubstrateSchedulerPartStateForPublication();
+
+        /// <summary>Carries the hosting part's status flags to the tool</summary>
+        [DataMember(Order = 1000, EmitDefaultValue = false, IsRequired = false)]
+        public SubstrateSchedulerPartStatusFlags PartStatusFlags { get; set; }
+
+        /// <summary>Gives the tool access to the scheduler part's base state (or pseudo base state for non-part schedulers) so that the tool can derive basic information about the hosting part's UseState</summary>
+        [DataMember(Order = 1100, Name = "PartBaseState", EmitDefaultValue = false, IsRequired = false)]
+        public BaseState PartBaseState { get; set; }
+
+        IBaseState ISubstrateSchedulerPartState.PartBaseState { get { return PartBaseState; } }
+
+        /// <summary>Defines a set of tool and part behaviors that the part controls and passes to the tool so the tool can know which classes of behavior are currently permitted.</summary>
+        [DataMember(Order = 1200, EmitDefaultValue = false, IsRequired = false)]
+        public BehaviorEnableFlags BehaviorEnableFlags { get; set; }
+
+        INamedValueSet ISubstrateSchedulerPartState.CustomStateNVS { get { return _customStateNVS.MapNullToEmpty(); } }
+
+        /// <summary>Gives the tool access to an optional arbitraty set of additional key/value pairs</summary>
+        public NamedValueSet CustomStateNVS { get { return _customStateNVS.MapNullToEmpty(); } set { _customStateNVS = value.MapEmptyToNull().ConvertToReadOnly(mapNullToEmpty: false); } }
+
+        [DataMember(Order = 1300, Name = "CustomStateNVS", EmitDefaultValue = false, IsRequired = false)]
+        private NamedValueSet _customStateNVS;
+
+        public override string ToString()
+        {
+            string nvsStr = _customStateNVS.IsNullOrEmpty() ? "" : " nvs:{0}".CheckedFormat(_customStateNVS.ToStringSML());
+            return "Part:{0} Status:'{1}' EnabledBehavior:'{2}'{3}".CheckedFormat(PartBaseState, PartStatusFlags, BehaviorEnableFlags, nvsStr);
+        }
+
+        /// <summary>
+        /// IEquatable implementation method.  Returns true IFF the given <paramref name="other"/>'s contents are equal to this object's contents.
+        /// </summary>
+        public bool Equals(ISubstrateSchedulerPartState other)
+        {
+            return (other != null
+                    && PartStatusFlags == other.PartStatusFlags
+                    && PartBaseState.Equals(other.PartBaseState)
+                    && BehaviorEnableFlags == other.BehaviorEnableFlags
+                    && CustomStateNVS.IsEqualTo(other.CustomStateNVS, compareReadOnly: false)
+                    );
+        }
+    }
+
+    #endregion
+
+    #region RequestsAndStatusOutFromTool
+
+    /// <summary>
+    /// This object contains the set of status and request information that the tool provides to the scheduler so that the scheduler can react and reflect that information
+    /// This is particularly centered on concepts of fault indication, and requests for changes in behavior enable flags (typically due to handling of annuniciator selected actions)
+    /// </summary>
+    public struct RequestsAndStatusOutFromTool
+    {
+        /// <summary>
+        /// When this is non-empty, it indicates that the tool has at least one active fault condition (usually representing a signaling annunciator)
+        /// </summary>
+        public string ToolFaultReason { get; set; }
+
+        /// <summary>
+        /// This gives the set of scheduler status flags that the tool is reporting.  Generally the scheduler part will reflect this to the information that it publishes to the outside world.
+        /// </summary>
+        public SubstrateSchedulerPartStatusFlags ToolStatusFlags { get; set; }
+
+        /// <summary>
+        /// When this NVS is non-mepty it gives the set of keywords and/or key value pairs that can be used by the tool to ask the part to do things for it.  (see remarks below)
+        /// </summary>
+        /// <remarks>
+        /// The following is a set of recommended keywords and named values to support:
+        ///     SetService - keyword (no value) - indicates that the tool would like the part to change settings to the "Service" settings - service requests permitted, automatic motion and processing not permitted.
+        ///     SetRecovery - keyword (no value) - indicates that the tool would like the part to change settings to the "Recovery" settings.
+        ///     SetAutomatic - keyword (no value) - indicates that the tool would like the part to change settings to the "Automatic" settings.
+        ///     Reason - string value indicates reason for this request
+        ///     WaitingForActionToBeSelected - keyword (no value) - indicates that one or more tool annunciators are in an OnAndWaiting state.
+        /// </remarks>
+        public INamedValueSet RequestNVSFromTool { get; set; }
+    }
+
+    #endregion
+
+    #region IPrepare, IPreparednessState, PreparednessStateForPublication, QuerySummaryState, IPreparednessState<>, PreparednessQueryResult<>, PreparednessState<>, EMs
+
+    /// <summary>
+    /// This interface may be used by a scheduler to observe and attempt to control the "preparedness" of a part/module.
+    /// This interface allows the client to request the part to prepare to process a specific recipe step and to observe the last published IPreparednessState
+    /// This state then supports a Query interface that can be used to (indirectly) ask the part if it is ready for a given process step spec and/or to get additional information about it
+    /// that is relevant to decision tree logic for routing wafers.
+    /// <para/>Individual parts are generally responsible for preforming individual process steps where the scheduler routes the wafers between locations so that it can perform each of the steps in the process sequence that has been assigned to the wafer.
+    /// As such this interface is currently focused on the logic and patterns around preparing a part to be able to perform a specific processing step.
+    /// </summary>
+    public interface IPrepare<TProcessSpecType, TProcessStepSpecType>
+        where TProcessSpecType : IProcessSpec
+        where TProcessStepSpecType : IProcessStepSpec
+    {
+        /// <summary>
+        /// Action factory method.  When the resulting action is run, it will request the part to prepare for the given <paramref name="processStepSpec"/>.
+        /// This action type typically supports cancelation and it is expected that the scheduler will cancel prepare requests when it is no longer waiting for them.
+        /// In additon a part may choose to abort a prepare request if it receives another that contradicts the first.
+        /// </summary>
+        IClientFacet PrepareForStep(TProcessSpecType processSpec, TProcessStepSpecType processStepSpec);
+
+        /// <summary>
+        /// This publisher gives the most recently generated IPreparednessState value from the part.  
+        /// Typically clients observe this and re-evaluate all of their related QueryResults when a new IPreparednessState instance is published.
+        /// </summary>
+        INotificationObject<IPreparednessState<TProcessSpecType, TProcessStepSpecType>> StatePublisher { get; }
+    }
+
+    /// <summary>
+    /// This interface is the basis for both the IPreparednessState (et. al.) and the PreparednessQueryResult.  
+    /// It is also the basis for a publisher class that can be used to publish a serializable copy of either of these.
+    /// </summary>
+    public interface IPreparednessState
+    {
+        /// <summary>Gives the recipe name of the corresponding process spec (if any)</summary>
+        string ProcessSpecRecipeName { get; }
+
+        /// <summary>Gives the recipe name of the corresponding process step spec (if any)</summary>
+        string ProcessStepSpecRecipeName { get; }
+
+        /// <summary>Gives the general state of preparedness as reported by the part, in relation to its currently selected, or seperately indicated ProcessSpec and ProcessStepSpec.</summary>
+        QuerySummaryState SummaryState { get; }
+
+        /// <summary>Gives the time stamp that was assigned when the SummaryState was last updated.  This is also used as the reference time stamp for use with the EstimatedTimeToReady property's value.</summary>
+        QpcTimeStamp SummaryStateTimeStamp { get; }
+
+        /// <summary>
+        /// Gives the period of time, measured from the given SummaryStateTimeStamp, after which the source part believes that it will be Ready.  
+        /// When the source part is not actively preparing for a given process step spec, or when it cannot predict the delay, this value will be TimeSpan.Zero.
+        /// </summary>
+        TimeSpan EstimatedTimeToReady { get; }
+
+        /// <summary>Gives a text description of what triggered the last publication of this object (if any).</summary>
+        string Reason { get; }
+
+        /// <summary>Allows the object to carry additional arbitrary data.</summary>
+        INamedValueSet NVS { get; }
+    }
+
+    /// <summary>
+    /// This class is intended to be used to support publication of an IPreparednessState derived state via an IVAs or via other mechanisms that require serialization support.
+    /// Instances of this class are immutable.
+    /// </summary>
+    [DataContract(Namespace=MosaicLib.Constants.E090NameSpace)]
+    public class PreparednessStateForPublication : IPreparednessState
+    {
+        public static IPreparednessState Empty { get { return _empty; } }
+        private static readonly IPreparednessState _empty = new PreparednessStateForPublication();
+
+        public PreparednessStateForPublication()
+        {
+            ProcessSpecRecipeName = string.Empty;
+            ProcessStepSpecRecipeName = string.Empty;
+        }
+
+        /// <summary>Makes a copy of the contents of the given <paramref name="other"/> instance.</summary>
+        public PreparednessStateForPublication(IPreparednessState other)
+        {
+            SummaryState = other.SummaryState;
+            SummaryStateTimeStamp = other.SummaryStateTimeStamp;
+            EstimatedTimeToReady = other.EstimatedTimeToReady;
+            Reason = other.Reason;
+            NVS = other.NVS;
+        }
+
+        /// <summary>Gives the recipe name of the corresponding process spec (if any)</summary>
+        [DataMember(Order = 800)]
+        public string ProcessSpecRecipeName { get; private set; }
+
+        /// <summary>Gives the recipe name of the corresponding process step spec (if any)</summary>
+        [DataMember(Order = 900)]
+        public string ProcessStepSpecRecipeName { get; private set; }
+
+        /// <summary>Gives the general state of preparedness as reported by the part, in relation to its currently selected, or seperately indicated ProcessSpec and ProcessStepSpec.</summary>
+        [DataMember(Order = 1000)]
+        public QuerySummaryState SummaryState { get; private set; }
+
+        /// <summary>Gives the time stamp that was assigned when the SummaryState was last updated.  This is also used as the reference time stamp for use with the EstimatedTimeToReady property's value.</summary>
+        public QpcTimeStamp SummaryStateTimeStamp { get; private set; }
+
+        [DataMember(Order = 1100)]
+        private double SummaryStateTimeStampAge { get { return SummaryStateTimeStamp.Age.TotalSeconds; } set { SummaryStateTimeStamp = QpcTimeStamp.Now + value.FromSeconds(); } }
+
+        /// <summary>
+        /// Gives the period of time, measured from the given SummaryStateTimeStamp, after which the source part believes that it will be Ready.  
+        /// When the source part is not actively preparing for a given process step spec, or when it cannot predict the delay, this value will be TimeSpan.Zero.
+        /// </summary>
+        [DataMember(Order = 1200, EmitDefaultValue=false, IsRequired=false)]
+        public TimeSpan EstimatedTimeToReady { get; private set; }
+
+        /// <summary>Gives a text description of what triggered the last publication of this object (if any).</summary>
+        public string Reason { get { return _reason.MapNullToEmpty(); } private set { _reason = value.MapEmptyToNull(); } }
+
+        [DataMember(Order = 1300, Name="Reason", EmitDefaultValue = false, IsRequired = false)]
+        private string _reason;
+
+        /// <summary>Allows the object to carry additional arbitrary data.</summary>
+        public INamedValueSet NVS { get { return _nvs.MapNullToEmpty(); } private set { _nvs = value.MapEmptyToNull().ConvertToReadOnly(mapNullToEmpty: false); } }
+
+        [DataMember(Order = 1400, Name="NVS", EmitDefaultValue = false, IsRequired = false)]
+        private NamedValueSet _nvs;
+
+        /// <summary>Debugging and logging assistant</summary>
+        public override string ToString()
+        {
+            return "Preparedness {0} State:{1} ETTR:{2:f3} Reason:'{3}' NVS:{4}".CheckedFormat(ProcessSpecRecipeName.CombineRecipeNames(ProcessStepSpecRecipeName), SummaryState, EstimatedTimeToReady.TotalSeconds, Reason, NVS.SafeToStringSML());
+        }
+    }
+
+    /// <summary>
+    /// This flag enumeration is used to define a set of flags that are conveighed via state and query results.
+    /// The interpretation, and permitted combinations, of these flags is context dependant in relation to its use in state and query results.
+    /// <para/>None (0x00), NotAvailable (0x01), Ready (0x02), Preparing (0x04), CanPrepare (0x08), Compatible (0x10), ProcessLocked (0x20)
+    /// </summary>
+    /// <remarks>
+    /// This enumeration is used in both preparedness state and query results.
+    /// Generally preparedness state objects will assert one of NotAvailable, Ready, or Preparing, possibly with CanPrepare
+    /// Generally the Query method will assert the same values with Ready and Preparing masked off if either of the spec items given to the Query method doe not match, or are not compatible with, the corresponding ones from the sourcing state.
+    /// </remarks>
+    [Flags, DataContract(Namespace = MosaicLib.Constants.E090NameSpace)]
+    public enum QuerySummaryState : int
+    {
+        /// <summary>Placeholder default value. [0x00]</summary>
+        [EnumMember]
+        None = 0x00,
+
+        /// <summary>
+        /// Indicates that the part is in a not availalbe, or other fault condition, where it is neither Ready nor Preparing.  
+        /// If this is indicated with CanPrepare then the part expects that the use of Prepare is possibly able to succeed (such as in the OnlineFailure state). 
+        /// If this is indicated without CanPrepare then the part must be successfully initialized (GoOnlineAndInitialize) first (such as in the AttemptOnlineFailed state).
+        /// [0x01]
+        /// </summary>
+        [EnumMember]
+        NotAvailable = 0x01,
+
+        /// <summary>Indicates that the part is ready to process the corresponding ProcessStepSpec.  [0x02]</summary>
+        [EnumMember]
+        Ready = 0x02,
+
+        /// <summary>Indicates that the part is preparing to be ready to process the corresponding ProcessStepSpec.  [0x04]</summary>
+        [EnumMember]
+        Preparing = 0x04,
+
+        /// <summary>Indicates that the query believes that the part can prepare for the corresponding ProcessStepSpec.  [0x08]</summary>
+        [EnumMember]
+        CanPrepare = 0x08,
+
+        /// <summary>
+        /// Indiciates that the corresponding ProcessStepSpec is not identical to the one that the part has prepared for but that the given one is compatible with the one the part has been prepared for and thus that it can be run without re-preparing.  
+        /// This flag must be combined with either Ready or Preparing.  [0x10]
+        /// </summary>
+        [EnumMember]
+        Compatible = 0x10,
+
+        /// <summary>
+        /// This flag is used to indicate that the process the part has prepared for cannot be changed through the scheduler driven Prepare mechanism because it has been locked to only run another process.  
+        /// This flag will be used alone if the step specs are not compatible or with Ready,Compatible or Preparing,Compatible.  [0x20]
+        /// </summary>
+        [EnumMember]
+        ProcessLocked = 0x20,
+    }
+
+    /// <summary>
+    /// This interface defines the externally visible set of properties and method(s) that may be used by an external client to gain insight into the
+    /// state of preparedness of a part that supports the IPrepare interface.  Each time the source part generates new information about is overall state of preparedness
+    /// or has an internal state change that would modify the query results that it would produce, updates and publishes a new object that supports this interface, to reflect
+    /// the internal change in state.
+    /// <para/>NOTE: the contents of the object that backs any published version of this interface must be immutable.  
+    /// The results of reviewing any property or calling any method with identical parameters as produced by any object that implements this interface cannot change after it has been published.
+    /// <para/>As such all of the properties and method(s) supported by this interface on published objects must be thread safe and reenterant.  
+    /// Normally this is a natural result of the underlying object being immutable.
+    /// </summary>
+    public interface IPreparednessState<TProcessSpecType, TProcessStepSpecType> : IPreparednessState
+        where TProcessSpecType : IProcessSpec
+        where TProcessStepSpecType : IProcessStepSpec
+    {
+        /// <summary>Gives the ProcessSpec for which the source object has been prepared or is preparing.  This property may be null if the part has never started a prepare.</summary>
+        TProcessSpecType ProcessSpec { get; }
+
+        /// <summary>Gives the ProcessStepSpec for which the source object has been prepared or is preparing.  This property may be null if the part has never started a prepare.</summary>
+        TProcessStepSpecType ProcessStepSpec { get; }
+
+        /// <summary>
+        /// This method is passed a <paramref name="processStepSpec"/> that the caller would like to obtain preparedness information about and a time stamp.
+        /// This method compares the given <paramref name="processStepSpec"/> to the one that the publisher has prepared, or is preparing, for to determine if they are the same
+        /// and/or if they are compatible.  
+        /// This method produces a PreparednessQueryResult that gives information about the results of the query for the given <paramref name="processStepSpec"/>
+        /// which includes the specific QuerySummaryState flags for the query on this step spec and information about when the part estimates that it will be complete
+        /// </summary>
+        PreparednessQueryResult<TProcessSpecType, TProcessStepSpecType> Query(TProcessSpecType processSpec, TProcessStepSpecType processStepSpec, QpcTimeStamp qpcTimeStamp = default(QpcTimeStamp));
+    }
+
+    /// <summary>
+    /// This struct gives the results for a Query operation on the contained ParentState when passed the contained ProcessStepSpec.  
+    /// The SummaryState gives the flag values that resulted from the query and these are combined with the SummaryStateTimeStamp (which gives the time stamp at the time the Query results were evaluated)
+    /// and the EstimatedTimeToReady which will be non-zero when the query results indicate that the published ParentState indicates that the part expects to be ready to process the queried process step
+    /// after the indicated period estimate has elapsed.
+    /// <para/>The information contained in this query result will remain valid until the source part publishes another IPreparednessState at which point the information contained here becomes stale and should be replaced with a fresh result obtained from the newly published state object.
+    /// </summary>
+    public struct PreparednessQueryResult<TProcessSpecType, TProcessStepSpecType> : IPreparednessState
+        where TProcessSpecType : IProcessSpec
+        where TProcessStepSpecType : IProcessStepSpec
+    {
+        /// <summary>Gives the parent IPreparednessState from which this query result was generated.</summary>
+        public IPreparednessState<TProcessSpecType, TProcessStepSpecType> ParentState { get; set; }
+
+        /// <summary>Gives the client provided process spec for which this query result was generated.</summary>
+        public TProcessSpecType ProcessSpec { get; set; }
+
+        /// <summary>Gives the client provided process step spec for which this query result was generated.</summary>
+        public TProcessStepSpecType ProcessStepSpec { get; set; }
+
+        /// <summary>Gives the recipe name of the corresponding process spec (if any)</summary>
+        public string ProcessSpecRecipeName { get { return (ProcessSpec != null) ? ProcessSpec.RecipeName : null; } }
+
+        /// <summary>Gives the recipe name of the corresponding process step spec (if any)</summary>
+        public string ProcessStepSpecRecipeName { get { return (ProcessStepSpec != null) ? ProcessStepSpec.StepRecipeName : null; } }
+
+        /// <summary>Gives the general state of preparedness as reported by the part through the published state's Query method, in relation to the indicated ProcessSpec and ProcessStepSpec which were given to the Query method when it was called.</summary>
+        public QuerySummaryState SummaryState { get; set; }
+
+        /// <summary>Gives the time stamp that was assigned when the SummaryState was last updated (by the query method).  This is also used as the reference time stamp for use with the EstimatedTimeToReady property's value.</summary>
+        public QpcTimeStamp SummaryStateTimeStamp { get; set; }
+
+        /// <summary>
+        /// Gives the period of time, measured from the given SummaryStateTimeStamp, after which the source part believes that it will be Ready.  
+        /// When the source part is not actively preparing for a given process step spec, or when it cannot predict the delay, this value will be TimeSpan.Zero.
+        /// </summary>
+        public TimeSpan EstimatedTimeToReady { get; set; }
+
+        /// <summary>Gives a text description of what triggered the last publication of this object (if any).</summary>
+        public string Reason { get; set; }
+
+        /// <summary>Allows the object to carry additional arbitrary data.</summary>
+        public INamedValueSet NVS { get; set; }
+
+        /// <summary>Debugging and logging assistant</summary>
+        public override string ToString()
+        {
+            return "QueryResult {0} State:{1} ETTR:{2:f3} Reason:'{3}' NVS:{4}".CheckedFormat(ProcessSpec.CombineRecipeNames(ProcessStepSpec), SummaryState, EstimatedTimeToReady.TotalSeconds, Reason, NVS.SafeToStringSML());
+        }
+    }
+
+    /// <summary>
+    /// This is a basic example implementation class for the IPreparednessState
+    /// </summary>
+    public class PreparednessState<TProcessSpecType, TProcessStepSpecType> : IPreparednessState<TProcessSpecType, TProcessStepSpecType>, ICopyable<IPreparednessState<TProcessSpecType, TProcessStepSpecType>>
+        where TProcessSpecType : IProcessSpec
+        where TProcessStepSpecType : IProcessStepSpec
+    {
+        /// <summary>Gives the ProcessSpec for which the source object has been prepared or is preparing.  This property may be null if the part has never started a prepare.</summary>
+        public TProcessSpecType ProcessSpec { get; set; }
+
+        /// <summary>Gives the ProcessStepSpec for which the source object has been prepared or is preparing.  This property may be null if the part has never started a prepare.</summary>
+        public TProcessStepSpecType ProcessStepSpec { get; set; }
+
+        /// <summary>Gives the recipe name of the corresponding process spec (if any)</summary>
+        public string ProcessSpecRecipeName { get { return (ProcessSpec != null) ? ProcessSpec.RecipeName : null; } }
+
+        /// <summary>Gives the recipe name of the corresponding process step spec (if any)</summary>
+        public string ProcessStepSpecRecipeName { get { return (ProcessStepSpec != null) ? ProcessStepSpec.StepRecipeName : null; } }
+        
+        /// <summary>Gives the general state of preparedness as reported by the part, in relation to its currently selected, or seperately indicated ProcessSpec and ProcessStepSpec.</summary>
+        public QuerySummaryState SummaryState { get; set; }
+
+        /// <summary>Gives the time stamp that was assigned when the SummaryState was last updated.  This is also used as the reference time stamp for use with the EstimatedTimeToReady property's value.</summary>
+        public QpcTimeStamp SummaryStateTimeStamp { get; set; }
+
+        /// <summary>
+        /// Gives the period of time, measured from the given SummaryStateTimeStamp, after which the source part believes that it will be Ready.  
+        /// When the source part is not actively preparing for a given process step spec, or when it cannot predict the delay, this value will be TimeSpan.Zero.
+        /// </summary>
+        public TimeSpan EstimatedTimeToReady { get; set; }
+
+        /// <summary>Gives a text description of what triggered the last publication of this object (if any).</summary>
+        public string Reason { get; set; }
+
+        /// <summary>Allows the object to carry additional arbitrary data.</summary>
+        public INamedValueSet NVS { get; set; }
+
+        public virtual PreparednessQueryResult<TProcessSpecType, TProcessStepSpecType> Query(TProcessSpecType processSpec, TProcessStepSpecType processStepSpec, QpcTimeStamp qpcTimeStamp = default(QpcTimeStamp))
+        {
+            qpcTimeStamp = qpcTimeStamp.MapDefaultToNow();
+
+            var result = new PreparednessQueryResult<TProcessSpecType, TProcessStepSpecType>()
+            {
+                ParentState = this,
+                ProcessSpec = processSpec,
+                ProcessStepSpec = processStepSpec,
+                SummaryStateTimeStamp = qpcTimeStamp,
+                NVS = NVS.ConvertToReadOnly(),
+            };
+
+            if (Object.ReferenceEquals(ProcessSpec, processSpec) && Object.ReferenceEquals(ProcessStepSpec, processStepSpec))
+            {
+                result.SummaryState = SummaryState;
+
+                if (!EstimatedTimeToReady.IsZero() && SummaryState.IsSet(QuerySummaryState.Preparing))
+                    result.EstimatedTimeToReady = new TimeSpan(1).Min(EstimatedTimeToReady - (qpcTimeStamp - SummaryStateTimeStamp));
+
+                Reason = "Query requeseted [{0}]".CheckedFormat(Reason);
+            }
+            else
+            {
+                result.SummaryState = SummaryState.Clear(QuerySummaryState.Ready | QuerySummaryState.Preparing);
+
+                result.Reason = "Given process spec items do not match part's selected process spec: {0}. [{1}]".CheckedFormat(ProcessSpec.CombineRecipeNames(ProcessStepSpec), Reason);
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Allows the caller to generate a copy of this object.  This is typically used for publication through an INotificationObject such as the IPrepare.StatePublisher
+        /// </summary>
+        public virtual IPreparednessState<TProcessSpecType, TProcessStepSpecType> MakeCopyOfThis(bool deepCopy = true)
+        {
+            var copyOfThis = (PreparednessState<TProcessSpecType, TProcessStepSpecType>) this.MemberwiseClone();
+            copyOfThis.NVS = copyOfThis.NVS.ConvertToReadOnly();
+
+            return copyOfThis;
+        }
+
+        /// <summary>Debugging and logging assistant</summary>
+        public override string ToString()
+        {
+            return "Preparedness {0} State:{1} ETTR:{2:f3} Reason:'{3}' NVS:{4}".CheckedFormat(ProcessSpec.CombineRecipeNames(ProcessStepSpec), SummaryState, EstimatedTimeToReady.TotalSeconds, Reason, NVS.SafeToStringSML());
+        }
+    }
+
+    /// <summary>
+    /// Extension Methods
+    /// </summary>
+    public static partial class ExtensionMethods
+    {
+        public static string CombineRecipeNames(this IProcessSpec processSpec, IProcessStepSpec processStepSpec)
+        {
+            string processSpecRecipeName = (processSpec != null) ? processSpec.RecipeName : null;
+            string processStepSpecRecipeName = (processStepSpec != null) ? processStepSpec.StepRecipeName : null;
+
+            return processSpecRecipeName.CombineRecipeNames(processStepSpecRecipeName);
+        }
+
+        public static string CombineRecipeNames(this string processSpecRecipeName, string processStepSpecRecipeName)
+        {
+            if (processSpecRecipeName.IsNeitherNullNorEmpty())
+            {
+                if (processStepSpecRecipeName.IsNeitherNullNorEmpty())
+                    return "{0}:{1}".CheckedFormat(processSpecRecipeName, processStepSpecRecipeName);
+                else
+                    return processSpecRecipeName;
+            }
+            else if (processStepSpecRecipeName.IsNeitherNullNorEmpty())
+            {
+                return processStepSpecRecipeName;
+            }
+            else
+            {
+                return "[NoProcessSpecOrProcessStepSpecRecipeName]";
+            }
+        }
+    }
+
+    #endregion
+
+    #region ISubstrateAndProcessTrackerBase, IProcessSpec, IProcessStepSpec, IProcessStepResult, ProcessStepTrackerResultItem
 
     /// <summary>
     /// This is the interface provided by the SubstrateAndProcessTrackerBase class
@@ -118,11 +892,12 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
     public interface IProcessStepSpec
     {
         IProcessSpec ProcessSpec { get; }
+        string StepRecipeName { get; }
         int StepNum { get; }
         ReadOnlyIList<string> UsableLocNameList { get; }
         INamedValueSet StepVariables { get; }
 
-        void SetProcessSpecAndStepNum(IProcessSpec processSpec, int stepNum);
+        void SetProcessSpecAndStepNum(IProcessSpec processSpec, int stepNum, string stepRecipeName = null);
     }
 
     /// <summary>
@@ -154,6 +929,11 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
         }
     }
 
+
+    #endregion
+
+    #region ISubstrateTrackerBase, ServiceBasicSJSStateChangeTriggerFlags, IJobTrackerLinkage, SubstLocObserverWithTrackerLookup
+
     /// <summary>
     /// This is the interface provided by the SubstrateTrackerBase class.  
     /// <para/>Please note that it cannot be used to construct or initialize a SubstrateTrackerBase instance.
@@ -170,10 +950,14 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
 
         E090SubstObserver SubstObserver { get; }
         E090SubstInfo Info { get; }
+
+        QpcTimeStamp LastServiceStartTimeStamp { get; set; }
         QpcTimeStamp LastUpdateTimeStamp { get; set; }
 
+        bool IsServiceNeeded { get; }
         bool IsUpdateNeeded { get; }
-        bool UpdateIfNeeded(bool forceUpdate = false);
+
+        bool UpdateIfNeeded(bool forceUpdate = false, QpcTimeStamp qpcTimeStamp = default(QpcTimeStamp), bool noteStartingService = false);
 
         bool IsDropRequested { get; }
         string DropRequestReason { get; set; }
@@ -259,6 +1043,10 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
         protected IDictionary<string, TSubstrateAndProcessTrackerType> fullNameToSubstrTrackerDictionary;
     }
 
+    #endregion
+
+    #region SubstrateAndProcessTrackerBase, ProcessSpecBase, ProcessStepSpecBase, ProcessStepResultBase
+
     /// <summary>
     /// This is a useful base class that allows the user to combine Substrate Tracking and Substrate Process Tracking.
     /// </summary>
@@ -288,14 +1076,24 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
             { }
             else if (NextStepSpec != null)
             {
-                Logger.Debug.Emit("Completed {0} for {1}: Next Step: [{2}]", trackerResultItem, SubstID.FullName, NextStepSpec);
+                Logger.Debug.Emit("{0} step {1}: Next Step: [{2}]", SubstID.FullName, trackerResultItem, NextStepSpec);
             }
             else
             {
-                if (autoLatchFinalSPS)
-                    E039TableUpdater.SetSubstProcState(SubstObserver, GetFinalSPS());
+                Logger.Debug.Emit("{0} step {1}: No more steps. [InferredSPS:{2}]", SubstID.FullName, trackerResultItem, SubstObserver.Info.InferredSPS);
 
-                Logger.Debug.Emit("Completed {0} for {1}: No more steps. [inferredSPS:{2}]", trackerResultItem, SubstID.FullName, SubstObserver.Info.InferredSPS);
+                var finalSPS = GetFinalSPS();
+
+                if (autoLatchFinalSPS)
+                {
+                    Logger.Debug.Emit("{0}: Latching final SPS {1} at loc {2}", SubstID.FullName, finalSPS, Info.LocID);
+
+                    E039TableUpdater.SetSubstProcState(SubstObserver, GetFinalSPS());
+                }
+                else
+                {
+                    Logger.Debug.Emit("{0}: Not latching final SPS {1} at loc {2} [yet]", SubstID.FullName, finalSPS, Info.LocID);
+                }
             }
         }
 
@@ -325,7 +1123,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
         {
             RecipeName = recipeName.MapNullToEmpty();
             RecipeVariables = recipeVariables.ConvertToReadOnly();
-            Steps = new ReadOnlyIList<TProcessStepSpecType>(stepSpecSet.SafeToArray().Select((stepSpec, idx) => KVP.Create(idx + 1, stepSpec)).DoForEach(kvp => kvp.Value.SetProcessSpecAndStepNum(this, kvp.Key)).Select(kvp => kvp.Value));
+            Steps = new ReadOnlyIList<TProcessStepSpecType>(stepSpecSet.SafeToArray().Select((stepSpec, idx) => KVP.Create(idx + 1, stepSpec)).DoForEach(kvp => kvp.Value.SetProcessSpecAndStepNum(this, kvp.Key, "{0}.Step{1}".CheckedFormat(this.RecipeName, kvp.Key))).Select(kvp => kvp.Value));
         }
 
         public string RecipeName { get; private set; }
@@ -343,40 +1141,46 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
     /// </summary>
     public class ProcessStepSpecBase : IProcessStepSpec
     {
-        public ProcessStepSpecBase(IEnumerable<string> usableLocSet, INamedValueSet stepVariables = null)
-            : this(null, 0, usableLocSet, stepVariables)
+        public ProcessStepSpecBase(IEnumerable<string> usableLocSet, INamedValueSet stepVariables = null, string stepRecipeName = null)
+            : this(null, 0, usableLocSet, stepVariables, stepRecipeName)
         { }
 
-        public ProcessStepSpecBase(int stepNum, IEnumerable<string> usableLocSet, INamedValueSet stepVariables = null)
-            : this (null, stepNum, usableLocSet, stepVariables)
+        public ProcessStepSpecBase(int stepNum, IEnumerable<string> usableLocSet, INamedValueSet stepVariables = null, string stepRecipeName = null)
+            : this(null, stepNum, usableLocSet, stepVariables, stepRecipeName)
         { }
 
-        public ProcessStepSpecBase(IProcessSpec processSpec, int stepNum, IEnumerable<string> usableLocSet, INamedValueSet stepVariables = null)
+        public ProcessStepSpecBase(IProcessSpec processSpec, int stepNum, IEnumerable<string> usableLocSet, INamedValueSet stepVariables = null, string stepRecipeName = null)
         {
             ProcessSpec = processSpec;
+            StepRecipeName = stepRecipeName.MapNullToEmpty();
             StepNum = stepNum;
             UsableLocNameList = new ReadOnlyIList<string>(usableLocSet);
             StepVariables = stepVariables.ConvertToReadOnly();
         }
 
         public IProcessSpec ProcessSpec { get; private set; }
+        public string StepRecipeName { get; private set; }
         public int StepNum { get; private set; }
         public ReadOnlyIList<string> UsableLocNameList { get; private set; }
         public INamedValueSet StepVariables { get; private set; }
 
-        public void SetProcessSpecAndStepNum(IProcessSpec processSpec, int stepNum)
+        public void SetProcessSpecAndStepNum(IProcessSpec processSpec, int stepNum, string defaultStepRecipeName = null)
         {
             if (ProcessSpec != null || StepNum != 0)
                 throw new System.InvalidOperationException("This method is not valid once a non-null ProcessSpec, or a non-zero StepNum has been assigned to this step");
 
             ProcessSpec = processSpec;
             StepNum = stepNum;
+            if (defaultStepRecipeName.IsNeitherNullNorEmpty() && StepRecipeName.IsNullOrEmpty())
+                StepRecipeName = defaultStepRecipeName;
         }
 
         public override string ToString()
         {
-            var rcpName = (ProcessSpec != null ? ProcessSpec.RecipeName : "[NullProcessSpec]");
-            return "ProcessStepSpec Rcp:'{0}' StepNum:{1} UsableLocNameList:[{2}] StepVars:{3}".CheckedFormat(rcpName, StepNum, String.Join(", ", UsableLocNameList), StepVariables.SafeToStringSML());
+            var processRcpNameStr = ((ProcessSpec != null) ? " ProcRcp:'{0}'".CheckedFormat(ProcessSpec.RecipeName) : " [NullProcessSpec]");
+            var stepRcpNameStr = (StepRecipeName.IsNeitherNullNorEmpty() ? " StepRcp:'{0}'".CheckedFormat(StepRecipeName) : "");
+
+            return "ProcessStepSpec{0}{1} StepNum:{2} UsableLocNameList:[{3}] StepVars:{4}".CheckedFormat(processRcpNameStr, stepRcpNameStr, StepNum, String.Join(", ", UsableLocNameList), StepVariables.SafeToStringSML());
         }
     }
 
@@ -394,6 +1198,10 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
         public string ResultCode { get; private set; }
         public SubstProcState SPS { get; private set; }
     }
+
+    #endregion
+
+    #region SubstrateTrackerBase
 
     /// <summary>
     /// This is the base substrate tracking class for use with E090 Substrate Scheduling.
@@ -496,8 +1304,6 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
 
             SubstrateJobState nextSJS = SubstrateJobState.Initial;
             string reason = null;
-
-            TimeSpan stateAge = LastUpdateTimeStamp.Age;
 
             if (enableInfoTriggeredRules)
             {
@@ -762,21 +1568,46 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
 
         public E090SubstObserver SubstObserver { get; private set; }
         public E090SubstInfo Info { get { return SubstObserver.Info; } }
-        public QpcTimeStamp LastUpdateTimeStamp { get; set; }
 
-        public virtual bool IsUpdateNeeded { get { return SubstObserver.IsUpdateNeeded; } set { SubstObserver.IsUpdateNeeded = value; } }
-        public virtual bool UpdateIfNeeded(bool forceUpdate = false)
+        public QpcTimeStamp LastServiceStartTimeStamp { get; set; }
+        public int LastServiceStartSeqNum { get; set; }
+
+        public QpcTimeStamp LastUpdateTimeStamp { get; set; }
+        public int LastUpdatedSeqNum { get; set; }
+
+        public virtual bool IsServiceNeeded 
         {
-            if (!IsUpdateNeeded && !forceUpdate)
+            get { return IsUpdateNeeded || LastServiceStartSeqNum != LastUpdatedSeqNum || LastServiceStartSeqNum != SubstObserver.VolatileSequenceNumber; }
+        }
+
+        public virtual bool IsUpdateNeeded 
+        { 
+            get { return SubstObserver.IsUpdateNeeded; } 
+            set { SubstObserver.IsUpdateNeeded = value; } 
+        }
+
+        public virtual bool UpdateIfNeeded(bool forceUpdate = false, QpcTimeStamp qpcTimeStamp = default(QpcTimeStamp), bool noteStartingService = false)
+        {
+            if (!IsUpdateNeeded && !forceUpdate && !noteStartingService)
                 return false;
 
+            var capturedSeqNum = SubstObserver.VolatileSequenceNumber;
+
             bool changed = SubstObserver.Update(forceUpdate: forceUpdate);
+
             if (changed)
             {
                 if (JobTrackerLinkage != null && !JobTrackerLinkage.SubstrateTrackerHasBeenUpdated)
                     JobTrackerLinkage.SubstrateTrackerHasBeenUpdated = true;
 
-                LastUpdateTimeStamp = QpcTimeStamp.Now;
+                LastUpdateTimeStamp = (qpcTimeStamp = qpcTimeStamp.MapDefaultToNow());
+                LastUpdatedSeqNum = capturedSeqNum;
+            }
+
+            if (noteStartingService)
+            {
+                LastServiceStartSeqNum = LastUpdatedSeqNum;
+                LastServiceStartTimeStamp = (qpcTimeStamp = qpcTimeStamp.MapDefaultToNow());
             }
 
             return changed;
@@ -851,10 +1682,14 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
         protected static readonly E039UpdateItem.SyncExternal syncExternal = new E039UpdateItem.SyncExternal();
     }
 
+    #endregion
+
+    #region SubstrateStateTally
+
     /// <summary>
     /// This object type is used to count up the states of a set of one or more SubstrateTrackerBase objects to give a quick overview of the distribution of such a set of subsrates.
     /// </summary>
-    public struct SubstrateStateTally
+    public class SubstrateStateTally
     {
         public int total;
 
@@ -867,6 +1702,21 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
 
         public int sjsWaitingForStart, sjsRunning, sjsProcessed, sjsRejected, sjsSkipped, sjsPausing, sjsPaused, sjsStopping, sjsStopped, sjsAborting, sjsAborted, sjsLost, sjsReturning, sjsReturned, sjsHeld, sjsRoutingAlarm, sjsRemoved, sjsOther;
         public int sjsAbortedAtDestination;
+
+        public void Clear()
+        {
+            total = 0;
+            stsAtSource = stsAtWork = stsAtDestination = stsOther = stsLostAnywhere = stsLostOrRemovedAnywhere = 0;
+
+            spsNeedsProcessing = 0;
+
+            spsInProcess = 0;
+            spsProcessed = spsStopped = spsRejected = spsAborted = spsSkipped = spsLost = 0;
+            spsProcessStepCompleted = spsOther = 0;
+
+            sjsWaitingForStart = sjsRunning = sjsProcessed = sjsRejected = sjsSkipped = sjsPausing = sjsPaused = sjsStopping = sjsStopped = sjsAborting = sjsAborted = sjsLost = sjsReturning = sjsReturned = sjsHeld = sjsRoutingAlarm = sjsRemoved = sjsOther = 0;
+            sjsAbortedAtDestination = 0;
+        }
 
         public void Add(SubstrateTrackerBase st)
         {
@@ -1033,6 +1883,10 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
         }
     }
 
+    #endregion
+
+    #region SubstrateSchedulingException
+
     /// <summary>
     /// Exception class that is intended for use in this substrate scheduling, and related, code.
     /// </summary>
@@ -1042,4 +1896,6 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
             : base(mesg, innerException) 
         { }
     }
+
+    #endregion
 }

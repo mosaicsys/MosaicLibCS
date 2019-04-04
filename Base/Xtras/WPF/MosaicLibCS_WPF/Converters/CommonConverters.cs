@@ -155,7 +155,7 @@ namespace MosaicLib.WPF.Converters
     public class IndexIntoSplitStringConverter : OneWayValueConverterBase
     {
         /// <summary>Constructor - requires caller to provide the delimiter to use.</summary>
-        public IndexIntoSplitStringConverter(char delimiter, bool clipInt = true)
+        public IndexIntoSplitStringConverter(char delimiter, bool clipInt = true, MapNullOrEmptyStringTo mapNullOrEmptyStringTo = MapNullOrEmptyStringTo.Binding_DoNothing)
         {
             Delimiter = delimiter;
             ClipInt = clipInt;
@@ -163,6 +163,7 @@ namespace MosaicLib.WPF.Converters
 
         public char Delimiter { get; private set; }
         public bool ClipInt { get; private set; }
+        public MapNullOrEmptyStringTo MapNullOrEmptyStringTo { get; private set; }
 
         public override object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
@@ -170,20 +171,76 @@ namespace MosaicLib.WPF.Converters
 
             string [] tokenSetArray = parameter.SafeToString().Split(Delimiter);
 
-            if (ClipInt && !tokenSetArray.IsNullOrEmpty())
-                return tokenSetArray.SafeAccess(indexFromValue.Clip(0, tokenSetArray.Length - 1));
-            else
-                return tokenSetArray.SafeAccess(indexFromValue);
+            string result = (ClipInt && !tokenSetArray.IsNullOrEmpty()) ? tokenSetArray.SafeAccess(indexFromValue.Clip(0, tokenSetArray.Length - 1))
+                                                                        : tokenSetArray.SafeAccess(indexFromValue);
+
+            if (result.IsNeitherNullNorEmpty())
+                return result;
+
+            switch (MapNullOrEmptyStringTo)
+            {
+                default:
+                case Converters.MapNullOrEmptyStringTo.NoChange: return result;
+                case Converters.MapNullOrEmptyStringTo.Null: return null;
+                case Converters.MapNullOrEmptyStringTo.Empty: return "";
+                case Converters.MapNullOrEmptyStringTo.Binding_DoNothing: return Binding.DoNothing;
+            }
         }
     }
 
     /// <summary>
-    /// This value converter accepts an integer value and uses it to select, and return, the indexed string as extracted from the parameter value split using the command delimeter character (,)
+    /// This enumeration is used to determine what the IndexInfoSplitStringConverter (and derived converters) should return if the selected item is null or string.Empty.
+    /// <para/>Null (0), Empty, Binding_DoNothing
+    /// </summary>
+    public enum MapNullOrEmptyStringTo
+    {
+        /// <summary>Returns the indexed value without change (typically empty or null depending on condition)</summary>
+        NoChange = 0,
+
+        /// <summary>Returns null</summary>
+        Null,
+
+        /// <summary>Returns String.Empty</summary>
+        Empty,
+
+        /// <summary>Returns Binding.DoNothing</summary>
+        Binding_DoNothing,
+    }
+
+    /// <summary>
+    /// This value converter accepts an integer value and uses it to select, and return, the indexed string as extracted from the parameter value split using the comma delimeter character (,)
     /// </summary>
     public class IndexIntoCommaDelimitedStringConverter : IndexIntoSplitStringConverter
     {
         /// <summary>Constructor</summary>
         public IndexIntoCommaDelimitedStringConverter() : base(',') {}
+    }
+
+    /// <summary>
+    /// This value converter accepts an integer value and uses it to select, and return, the indexed string as extracted from the parameter value split using the pipe delimeter character (|)
+    /// </summary>
+    public class IndexIntoPipeDelimitedStringConverter : IndexIntoSplitStringConverter
+    {
+        /// <summary>Constructor</summary>
+        public IndexIntoPipeDelimitedStringConverter() : base('|') { }
+    }
+
+    /// <summary>
+    /// This value converter accepts an integer value and uses it to select, and return, the indexed string as extracted from the parameter value split using the colon delimeter character (:)
+    /// </summary>
+    public class IndexIntoColonDelimitedStringConverter : IndexIntoSplitStringConverter
+    {
+        /// <summary>Constructor</summary>
+        public IndexIntoColonDelimitedStringConverter() : base(':') { }
+    }
+
+    /// <summary>
+    /// This value converter accepts an integer value and uses it to select, and return, the indexed string as extracted from the parameter value split using the semi-colon delimeter character (;)
+    /// </summary>
+    public class IndexIntoSemiColonDelimitedStringConverter : IndexIntoSplitStringConverter
+    {
+        /// <summary>Constructor</summary>
+        public IndexIntoSemiColonDelimitedStringConverter() : base(';') { }
     }
 
     #endregion

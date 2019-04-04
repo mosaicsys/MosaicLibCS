@@ -133,6 +133,27 @@ namespace MosaicLib.Utils.Pooling
         }
 
         /// <summary>
+        /// This method attempts to return each of the items in the given <paramref name="list"/> and then clears the given list.
+        /// </summary>
+        public void ReleaseAndClear(IList<TItemType> list)
+        {
+            if (list != null)
+            {
+                list.DoForEach(item => ReleaseGivenItem(item));
+                list.Clear();
+            }
+        }
+
+        /// <summary>
+        /// This method attempts to return each of the items in the given <paramref name="set"/> to the free list.
+        /// </summary>
+        public void ReleaseSet(IEnumerable<TItemType> set)
+        {
+            if (set != null)
+                set.DoForEach(item => ReleaseGivenItem(item));
+        }
+
+        /// <summary>
         /// This is the actual free list that is used to hold onto the items that have been Released and that are available to be given out by Get calls.
         /// </summary>
         private List<TItemType> freeList = new List<TItemType>();

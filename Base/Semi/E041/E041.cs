@@ -56,7 +56,7 @@ namespace MosaicLib.Semi.E041
     // annunciator mechanism and to associated it with a specific set of actions that a user (or other external 
     // agent/decision authority) may request is a more generally capable use model.  It is a 
     // proper super-set of the functions required to support the E041 Exception use model and as such can 
-    // covers that case as well.
+    // cover that case as well.
     //
     // In addition where E041 refers to a recovery action, we will simply refer to an 
     // action name since the more general term is more useful for situations where the 

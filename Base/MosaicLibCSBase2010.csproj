@@ -87,7 +87,6 @@
     <Compile Include="Modular\Interconnect\Remoting\Sessions.cs" />
     <Compile Include="Modular\Interconnect\Remoting\MessageStreamTools.cs" />
     <Compile Include="Modular\Interconnect\Values.cs" />
-    <Compile Include="Modular\Interconnect\WCF.cs" />
     <Compile Include="Modular\Interconnect\Sets.cs" />
     <Compile Include="Modular\Interconnect\Remoting\Transport.cs" />
     <Compile Include="Modular\Part\PartBase.cs" />
