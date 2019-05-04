@@ -955,7 +955,6 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
             nextScanRow = filteredFileIndexRowArray.SafeAccess(currentFilteredScanRowIndex + 1);
 
             //List<Tuple<double, bool>> cadenceTriggerEvalList = new List<Tuple<double, bool>>();
-            //List<double> cadenceTriggerTimeList = new List<double>();
 
             if (currentScanRow != null)
             {
@@ -993,8 +992,6 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                             enableReportingCadenceIntervalEventsForThisTimeStamp = intervalCadenceTimer.GetIsTriggered(new QpcTimeStamp(dbb.fileDeltaTimeStamp));
 
                             //cadenceTriggerEvalList.Add(Tuple.Create(dbb.fileDeltaTimeStamp, enableReportingCadenceIntervalEventsForThisTimeStamp));
-                            //if (enableReportingCadenceIntervalEventsForThisTimeStamp)
-                            //    cadenceTriggerTimeList.Add(dbb.fileDeltaTimeStamp);
                         }
 
                         if (enableReportingCadenceIntervalEventsForThisTimeStamp)
@@ -1031,6 +1028,9 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                 }
             }
 
+            //int total = cadenceTriggerEvalList.Count;
+            //int kept = cadenceTriggerEvalList.Count(t => t.Item2);
+
             // signal the RowEnd of the currentScanRow if it is not null.
             if (currentScanRow != null)
                 SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = ProcessContentEvent.RowEnd, Row = currentScanRow, FileDeltaTimeStamp = currentScanRow.LastBlockDeltaTimeStamp });
@@ -1053,6 +1053,22 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                 intervalCadenceTimer = new QpcTimer() { TriggerIntervalInSec = filterSpec.NominalMinimumGroupAndTimeStampUpdateInterval, AutoReset = true }.Reset(QpcTimeStamp.Zero, triggerImmediately: true);
             else
                 intervalCadenceTimer = default(QpcTimer);
+
+            if (!filterSpec.FirstDateTime.IsZero())
+            {
+                double firstDataTimeAsDeltaTimeStamp = (filterSpec.FirstDateTime.ToUniversalTime() - this.DateTimeInfo.UTCDateTime).TotalSeconds;
+
+                if (filterSpec.FirstFileDeltaTimeStamp < firstDataTimeAsDeltaTimeStamp)
+                    filterSpec.FirstFileDeltaTimeStamp = firstDataTimeAsDeltaTimeStamp;
+            }
+
+            if (!filterSpec.LastDateTime.IsZero())
+            {
+                double endDataTimeAsDeltaTimeStamp = (filterSpec.LastDateTime.ToUniversalTime() - this.DateTimeInfo.UTCDateTime).TotalSeconds;
+
+                if (filterSpec.LastFileDeltaTimeStamp > endDataTimeAsDeltaTimeStamp)
+                    filterSpec.LastFileDeltaTimeStamp = endDataTimeAsDeltaTimeStamp;
+            }
         }
 
         private bool haveStartConditionsBeenReached;
@@ -1145,14 +1161,16 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
 
         private void ProcessContents(DataBlockBuffer dbb, ReadAndProcessFilterSpec filterSpec)
         {
-            if (!dbb.DoesFilterAcceptThis(filterSpec, checkIfComesAfterStartOfFilterPeriod: !filterSpec.AutoRewindToPriorFullGroupRow, checkIfComesBeforeEndOfFilterPeriod: true))
+            bool filterAcceptsThis = dbb.DoesFilterAcceptThis(filterSpec, checkIfComesAfterStartOfFilterPeriod: true, checkIfComesBeforeEndOfFilterPeriod: false);
+
+            if (!filterAcceptsThis && !filterSpec.AutoRewindToPriorFullGroupRow)
                 return;
 
             switch (dbb.FixedBlockTypeID)
             {
                 case FixedBlockTypeID.ErrorV1:
                 case FixedBlockTypeID.MessageV1:
-                    if ((filterSpec.PCEMask & (ProcessContentEvent.Message | ProcessContentEvent.Error)) != 0)
+                    if (filterAcceptsThis && (filterSpec.PCEMask & (ProcessContentEvent.Message | ProcessContentEvent.Error)) != 0)
                     {
                         PopulateDataBlockBufferIfNeeded(dbb);
                         ProcessMessageOrErrorBlock(dbb, filterSpec);
@@ -1180,6 +1198,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
             switch (mdci.ItemType)
             {
                 case MDItemType.Occurrence:
+                    if (filterAcceptsThis)
                     {
                         IOccurrenceInfo oi = mdci as IOccurrenceInfo;
 
@@ -1197,7 +1216,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                     {
                         IGroupInfo gi = mdci as IGroupInfo;
 
-                        // only filter on coming before end of filter period if 
+                        // only filter on coming before end of filter period if
                         if (gi != null
                             && filterSpec.GroupFilterDelegate(gi) 
                             && (filterSpec.PCEMask & (ProcessContentEvent.Group | ProcessContentEvent.EmptyGroup | ProcessContentEvent.PartialGroup | ProcessContentEvent.StartOfFullGroup | ProcessContentEvent.GroupSetStart | ProcessContentEvent.GroupSetEnd)) != 0

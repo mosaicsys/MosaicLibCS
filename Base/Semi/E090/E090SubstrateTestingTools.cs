@@ -650,7 +650,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
         public override void Setup(IE039TableUpdater e039TableUpdater, E039ObjectID substID, Logging.IBasicLogger logger, ProcessSpecBase<ProcessStepSpecBase> processSpec)
         {
-            throw new System.InvalidOperationException("This method can no longer be used directly - use the ECSParts variant in stead");
+            throw new System.InvalidOperationException("This method can no longer be used directly - use the local variant instead");
         }
 
         public TestECSParts ECSParts { get; set; }
@@ -931,6 +931,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
                 case E090.SubstrateJobState.Returning:
                 case E090.SubstrateJobState.Aborting:
+                case E090.SubstrateJobState.Pausing:
                     if (Info.STS.IsAtWork() && isRecoveryMaterialMovementEnabled)
                         return Info.SPS.IsNeedsProcessing() ? srcLocNameList : destLocNameList;
                     else
@@ -1202,7 +1203,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                 allLocObserverDictionary[extraLocID.Name] = new E090SubstLocObserver(extraLocID.GetPublisher());
             }
 
-            var stationToPrepareKVPSet = new KeyValuePair<string, IPrepare<IProcessSpec, IProcessStepSpec>>[]
+            var locNameToPrepareKVPSet = new KeyValuePair<string, IPrepare<IProcessSpec, IProcessStepSpec>>[]
                 {
                     KVP.Create(ECSPart.PM1.LocID.Name, ECSPart.PM1 as IPrepare<IProcessSpec, IProcessStepSpec>),
                     KVP.Create(ECSPart.PM2.LocID.Name, ECSPart.PM2 as IPrepare<IProcessSpec, IProcessStepSpec>),
@@ -1214,7 +1215,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                 }
                 .Where(kvp => kvp.Value != null)
                 ;
-            stationToPrepareDictionary = new Dictionary<string, IPrepare<IProcessSpec, IProcessStepSpec>>().SafeAddRange(stationToPrepareKVPSet);
+            locNameToPrepareDictionary = new Dictionary<string, IPrepare<IProcessSpec, IProcessStepSpec>>().SafeAddRange(locNameToPrepareKVPSet);
 
             normalMoveFromLocSet = new HashSet<string>(r1ArmALocObserver.ConcatItems(r1ArmBLocObserver).Concat(processLocObserverWithTrackerDictionary.ValueArray).Select(obs => obs.ID.Name));
         }
@@ -1248,7 +1249,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
         public IDictionary<string, E090SubstLocObserver> AllLocObserverDictionary { get { return allLocObserverDictionary; } }
 
-        private IDictionary<string, IPrepare<IProcessSpec, IProcessStepSpec>> stationToPrepareDictionary;
+        private IDictionary<string, IPrepare<IProcessSpec, IProcessStepSpec>> locNameToPrepareDictionary;
 
         HashSet<string> normalMoveFromLocSet;
 
@@ -1367,8 +1368,8 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
             int deltaCount = 0;
 
-            QpcTimeStamp qpcNow = QpcTimeStamp.Now;
-            deltaCount += ServiceTrackersAndUpdateObservers(stateToTool, qpcNow);
+            QpcTimeStamp qpcTimeStamp = QpcTimeStamp.Now;
+            deltaCount += ServiceTrackersAndUpdateObservers(stateToTool, qpcTimeStamp);
 
             if (!isProcessStepExecutionEnabled)
             {
@@ -1410,7 +1411,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                     {
                         srmAction = null;
 
-                        deltaCount += ServiceTrackersAndUpdateObservers(stateToTool, qpcNow);
+                        deltaCount += ServiceTrackersAndUpdateObservers(stateToTool, qpcTimeStamp);
                     }
                     else
                     {
@@ -1424,7 +1425,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
                         srmAction = null;
 
-                        deltaCount += ServiceTrackersAndUpdateObservers(stateToTool, qpcNow);
+                        deltaCount += ServiceTrackersAndUpdateObservers(stateToTool, qpcTimeStamp);
 
                         return deltaCount;
                     }
@@ -1452,8 +1453,6 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                     deltaCount++;
                 }
             }
-
-            QpcTimeStamp qpcTimeStamp = QpcTimeStamp.Now;
 
             if (srmAction == null && filteredSubstTrackerList.Count > 0)
             {
@@ -1603,8 +1602,9 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             if (srmAction == null && filteredSubstTrackerList.Count > 0 && isSubstrateLaunchEnabled && pendingPrepareList.Count == 0 && !PrepareFailedAnnunciator.ANState.IsSignaling)
             {
                 var stWaitingForStart = filteredSubstTrackerList.Array.FirstOrDefault(st => !st.evalInfo.flags.hasBeenStarted && (st.evalInfo.flags.canBeMovedNow || st.evalInfo.flags.canBeSwappedNow || st.evalInfo.flags.havePossibleAlmostAvailableForApproach && st.evalInfo.firstPossibleAlmostAvailableForApproachToStationEval.GetIsAlmostAvailableToApproachTarget(MaxEstimatedAlmostAvailablePeriod, qpcTimeStamp)));
+                var anyStartedAtSource = (stWaitingForStart != null) &&  filteredSubstTrackerList.Array.Any(st => st.evalInfo.flags.hasBeenStarted && st.Info.STS == SubstState.AtSource);
 
-                if (stWaitingForStart != null)
+                if (stWaitingForStart != null && !anyStartedAtSource)
                 {
                     qpcTimeStamp = QpcTimeStamp.Now;
 
@@ -1944,7 +1944,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
         private Tuple<ProcessStepSpecBase, Tuple<string, IPrepare<IProcessSpec, IProcessStepSpec>, PreparednessQueryResult<IProcessSpec, IProcessStepSpec>, bool>[]>[] GeneratePrepareRelatedStationStepTupleSet(QpcTimeStamp qpcTimeStamp, TestSubstrateAndProcessTracker stWaitingForStart)
         {
-            var stationStepTupleSet = stWaitingForStart.ProcessSpec.Steps.Select(stepSpec => Tuple.Create(stepSpec, stepSpec.UsableLocNameList.Select(locName => Tuple.Create(locName, stationToPrepareDictionary.SafeTryGetValue(locName)))
+            var stationStepTupleSet = stWaitingForStart.ProcessSpec.Steps.Select(stepSpec => Tuple.Create(stepSpec, stepSpec.UsableLocNameList.Select(locName => Tuple.Create(locName, locNameToPrepareDictionary.SafeTryGetValue(locName)))
                                                                                                                                               .Where(t => t.Item2 != null)
                                                                                                                                               .Select(t => Tuple.Create(t.Item1, t.Item2, t.Item2.StatePublisher.Object.Query(stWaitingForStart.ProcessSpec, stepSpec, qpcTimeStamp)))
                                                                                                                                               .Select(t => Tuple.Create(t.Item1, t.Item2, t.Item3, t.Item3.SummaryState.IsClear(QuerySummaryState.Ready)))

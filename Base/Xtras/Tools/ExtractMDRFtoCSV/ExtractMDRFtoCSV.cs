@@ -40,6 +40,8 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
     public static class ExtractMDRFtoCSV
     {
         private static string appName = "AppNameNotFound";
+        private static System.Reflection.Assembly currentExecAssy = System.Reflection.Assembly.GetExecutingAssembly();
+        private static string[] currentExecAssyFullNameSplit = currentExecAssy.FullName.Split(' ').Select(item => item.Trim(',')).ToArray();
 
         static void Main(string[] args)
         {
@@ -76,8 +78,10 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
                         { }
                         else if ((ss.MatchToken("end:", requireTokenEnd: false) || ss.MatchToken("e:", requireTokenEnd: false)) && ss.ParseValue(out endDeltaTime))
                         { }
+                        else if (ss.MatchToken("tail:", requireTokenEnd: false) && ss.ParseValue(out tailTime))
+                        { }
                         else if ((ss.MatchToken("interval:", requireTokenEnd: false) || ss.MatchToken("i:", requireTokenEnd: false)) && ss.ParseValue(out nominalUpdateInterval))
-                        {}
+                        { }
                         else if (ss.ParseValue(out argSelect) && ss.IsAtEnd)
                         {
                             select |= argSelect;
@@ -156,6 +160,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
         private static Select select = Select.None;
         private static double startDeltaTime = 0.0;
         private static double endDeltaTime = double.PositiveInfinity;
+        private static double tailTime = 0.0;
         private static string fileNameTag = null;
         private static List<string> selectedGroupList = new List<string>();
         private static double nominalUpdateInterval = 0.0;
@@ -164,13 +169,15 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
         {
             Console.WriteLine("Usage: {0} [-IncludeOccurrences | -IncludeExtras".CheckedFormat(appName));
             Console.WriteLine("       | -Sparse | -NoData | -HeaderAndDataOnly | -MapBool | -group:name | -tag:tag");
-            Console.WriteLine("       | -interval:interval | -start:deltaTime | -end:deltaTime] [fileName.mdrf] ...");
+            Console.WriteLine("       | -interval:interval | -start:deltaTime | -end:deltaTime | -tail:period] [fileName.mdrf] ...");
             Console.WriteLine("   or: {0} [-List | -ListIndex | -ListGroupInfo | -ListOccurrenceInfo] [fileName.mdrf] ...".CheckedFormat(appName));
             Console.WriteLine("   or: {0} [-ListOccurrences | -ListMessages] [fileName.mdrf] ...".CheckedFormat(appName));
             Console.WriteLine(" Also accepts: -io, -ie, -s, -nd, -hado, -mb, -g:name, -t:tag, -s:dt, -e:dt, -i:interval");
             Console.WriteLine("               -l, -li, -lgi, -loi");
             Console.WriteLine("               -lo, -lm");
             Console.WriteLine();
+
+            Console.WriteLine("Assembly: {0} [{1}]", currentExecAssyFullNameSplit.SafeAccess(0), currentExecAssyFullNameSplit.SafeAccess(1));
         }
 
         private static void ProcessFileNameArg(string arg)
@@ -255,7 +262,11 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
                         else
                             sw.CheckedWriteLine("$Group.Names,{0}", String.Join(",", FilteredGroupInfoArray.Select((gi, idx) => "{0}:{1}".CheckedFormat(idx + 1, gi.Name)).ToArray()));
 
-                        if (startDeltaTime != 0.0 || endDeltaTime != double.PositiveInfinity)
+                        if (tailTime != 0.0)
+                        {
+                            sw.CheckedWriteLine("$Filter.TailTime,{0:f6}", tailTime);
+                        }
+                        else if (startDeltaTime != 0.0 || endDeltaTime != double.PositiveInfinity)
                         {
                             sw.CheckedWriteLine("$Filter.DeltaTime,{0:f6},{1:f6}", startDeltaTime, endDeltaTime);
                         }
@@ -270,6 +281,12 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
                         columnNames = columnNames.Concat(FilteredGroupInfoArray.SelectMany((gi, idx) => gi.GroupPointInfoArray.Select(gpi => "{0}:{1}".CheckedFormat(idx+1, gpi.Name)))).ToArray();
 
                     sw.CheckedWriteLine(String.Join(",", columnNames));
+
+                    if (tailTime != 0.0)
+                    {
+                        endDeltaTime = currentReader.FileIndexInfo.LastBlockInfo.BlockDeltaTimeStamp;
+                        startDeltaTime = Math.Max(0.0, endDeltaTime - tailTime);
+                    }
 
                     ReadAndProcessFilterSpec filterSpec = new ReadAndProcessFilterSpec()
                     {

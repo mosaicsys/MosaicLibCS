@@ -985,7 +985,7 @@ namespace MosaicLib.Utils
         private List<System.Threading.EventWaitHandle> eventWaitHandleList = null;
 
         /// <summary>Internal helper method used to add items to the lists used here</summary>
-        protected void AddItem<TItemType>(ref List<TItemType> listRef, TItemType item) where TItemType: class
+        protected void AddItem<TItemType>(ref List<TItemType> listRef, TItemType item)
         {
             lock (mutex)
             {
@@ -1000,7 +1000,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>Internal helper method used to add items to the lists used here</summary>
-        protected void RemoveItem<TItemType>(ref List<TItemType> listRef, TItemType item) where TItemType : class
+        protected void RemoveItem<TItemType>(ref List<TItemType> listRef, TItemType item)
         {
             lock (mutex)
             {
@@ -1076,8 +1076,8 @@ namespace MosaicLib.Utils
         /// </summary>
         public new event EventHandlerDelegate<EventArgsType> OnNotify
 		{
-            add { AddItem(ref eventHandlerList, value); }
-            remove { RemoveItem(ref eventHandlerList, value); }
+            add { AddItem(ref eventHandlerDelegateList, value); }
+            remove { RemoveItem(ref eventHandlerDelegateList, value); }
 		}
 
         /// <summary>
@@ -1087,6 +1087,38 @@ namespace MosaicLib.Utils
         public object Source { get; set; }
 
 		#endregion
+
+        #region internal event handler tuple list interface (AddHandlerWithObjectKey, RemoveHandlerByObjectKey)
+
+        /// <summary>
+        /// Adds a given <paramref name="eventHandlerDelegate"/> and an associated <paramref name="objectKey"/>.  This method is used with RemoveHandlerByObjectKey.
+        /// </summary>
+        internal void AddHandlerWithObjectKey(EventHandlerDelegate<EventArgsType> eventHandlerDelegate, System.Object objectKey)
+        {
+            OnNotify += eventHandlerDelegate;
+            AddItem(ref eventHandlerTupleList, Tuple.Create(objectKey, eventHandlerDelegate));
+        }
+
+        /// <summary>
+        /// Finds the EventHandlerDelegate instance that is associated with the given <paramref name="objectKey"/> (if any) and removes both from the corresonding notification list(s)
+        /// </summary>
+        internal bool RemoveHandlerByObjectKey(System.Object objectKey)
+        {
+            Tuple<object, EventHandlerDelegate<EventArgsType>> t = null;
+
+            if (eventHandlerTupleList != null)
+                t = eventHandlerTupleList.Find(item => Object.ReferenceEquals(objectKey, item.Item1));
+
+            if (t != null)
+            {
+                eventHandlerTupleList.Remove(t);
+                OnNotify -= t.Item2;
+            }
+
+            return (t != null);
+        }
+
+        #endregion
 
 		#region INotifyable<EventArgsType> Members
 
@@ -1129,7 +1161,8 @@ namespace MosaicLib.Utils
 
         #region Internals
 
-        private List<EventHandlerDelegate<EventArgsType>> eventHandlerList = null;
+        private List<EventHandlerDelegate<EventArgsType>> eventHandlerDelegateList = null;
+        private List<Tuple<object, EventHandlerDelegate<EventArgsType>>> eventHandlerTupleList = null;
 
         private volatile EventHandlerDelegate<EventArgsType>[] savedEventHandlerArray = emptyEventHandlerArray;
 
@@ -1148,7 +1181,7 @@ namespace MosaicLib.Utils
 
             lock (mutex)
             {
-                savedEventHandlerArray = eventHandlerArray = eventHandlerList.SafeToArray();
+                savedEventHandlerArray = eventHandlerArray = eventHandlerDelegateList.SafeToArray();
 
                 return eventHandlerArray;
             }
@@ -1158,6 +1191,37 @@ namespace MosaicLib.Utils
 
         #endregion
 	}
+
+    /// <summary>
+    /// Extension Methods
+    /// </summary>
+    public static partial class ExtensionMethods
+    {
+        /// <summary>
+        /// This extension method allows the given <paramref name="eventHandler"/> System.EventHandler to be added to the given EventHandlerNotificationList{EventArgsType}'s OnNotify list.
+        /// <para/>Supports call chaining.
+        /// </summary>
+        public static EventHandlerNotificationList<EventArgsType> AddOnNotifyItem<EventArgsType>(this EventHandlerNotificationList<EventArgsType> eventHandlerNotificationList, System.EventHandler<EventArgsType> eventHandler)
+            where EventArgsType : System.EventArgs
+        {
+            EventHandlerDelegate<EventArgsType> eventHandlerDelegate = (sender, e) => eventHandler(sender, e);
+            eventHandlerNotificationList.AddHandlerWithObjectKey(eventHandlerDelegate, eventHandler);
+
+            return eventHandlerNotificationList;
+        }
+
+        /// <summary>
+        /// This extension method allows the previously added <paramref name="eventHandler"/> System.EventHandler to be removed from the given EventHandlerNotificationList{EventArgsType}'s OnNotify list.
+        /// <para/>Supports call chaining.
+        /// </summary>
+        public static EventHandlerNotificationList<EventArgsType> RemoveOnNotifyItem<EventArgsType>(this EventHandlerNotificationList<EventArgsType> eventHandlerNotificationList, System.EventHandler<EventArgsType> eventHandler)
+            where EventArgsType : System.EventArgs
+        {
+            eventHandlerNotificationList.RemoveHandlerByObjectKey(eventHandler);
+
+            return eventHandlerNotificationList;
+        }
+    }
 
 	#endregion
 

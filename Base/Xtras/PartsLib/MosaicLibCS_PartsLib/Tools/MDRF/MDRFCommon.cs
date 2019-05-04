@@ -745,6 +745,62 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
 
     #endregion
 
+    #region Extension Methods
+
+    public static partial class ExtensionMethods
+    {
+        public static INamedValueSet ConvertToNVS(this IGroupInfo[] igiArray)
+        {
+            return new NamedValueSet(igiArray.Select(igi => igi.ConvertToNV())).MakeReadOnly();
+        }
+
+        public static INamedValueSet ConvertToNVS(this IGroupPointInfo[] igpiArray)
+        {
+            return new NamedValueSet(igpiArray.Select(igpi => igpi.ConvertToNV())).MakeReadOnly();
+        }
+
+        public static INamedValueSet ConvertToNVS(this IOccurrenceInfo[] ioiArray)
+        {
+            return new NamedValueSet(ioiArray.Select(ioi => ioi.ConvertToNV())).MakeReadOnly();
+        }
+
+        public static INamedValue ConvertToNV(this IGroupInfo igi)
+        {
+            return new NamedValue(igi.Name, new NamedValueSet() 
+                {
+                    { "Comment", igi.Comment },
+                    { "ClientID", igi.ClientID },
+                    { "ClientNVS", igi.ClientNVS },
+                    { "GroupPointInfoNVS", igi.GroupPointInfoArray.ConvertToNVS() },
+                }).MakeReadOnly();
+        }
+
+        public static INamedValue ConvertToNV(this IGroupPointInfo igpi)
+        {
+            return new NamedValue(igpi.Name, new NamedValueSet() 
+                {
+                    { "Comment", igpi.Comment },
+                    { "IFC", igpi.IFC }, 
+                    { "ClientID", igpi.ClientID },
+                    { "ClientNVS", igpi.ClientNVS },
+                }).MakeReadOnly();
+        }
+
+        public static INamedValue ConvertToNV(this IOccurrenceInfo ioi)
+        {
+            return new NamedValue(ioi.Name, new NamedValueSet() 
+                {
+                    { "Comment", ioi.Comment },
+                    { "IFC", ioi.IFC }, 
+                    { "ClientID", ioi.ClientID },
+                    { "ClientNVS", ioi.ClientNVS },
+                }).MakeReadOnly();
+        }
+    }
+
+    #endregion
+
+
     #region IMessageInfo
 
     public interface IMessageInfo
@@ -757,10 +813,10 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
 
     public class MessageInfo : IMessageInfo
     {
-        public FixedBlockTypeID FixedBlockTypeID { get; internal set; }
-        public double FileDeltaTimeStamp { get; internal set; }
-        public double MessageRecordedUtcTime { get; internal set; }
-        public string Message { get; internal set; }
+        public FixedBlockTypeID FixedBlockTypeID { get; set; }
+        public double FileDeltaTimeStamp { get; set; }
+        public double MessageRecordedUtcTime { get; set; }
+        public string Message { get; set; }
     }
 
     #endregion

@@ -1382,6 +1382,7 @@ namespace MosaicLib.Semi.E039
             PersistHelperActionLoggingConfig = new ActionLoggingConfig(ActionLoggingConfig.Trace_Trace_Trace_Trace, actionLoggingStyleSelect: ActionLoggingStyleSelect.IncludeRunTimeOnCompletion);
             PersistFileWrittenMesgType = Logging.MesgType.Debug;
             PersistFileWriteFailedMesgType = Logging.MesgType.Debug;
+            GetPublisherIssueMesgType = Logging.MesgType.Debug;
         }
 
         public E039BasicTablePartConfig(E039BasicTablePartConfig other, bool testPersitValues = true)
@@ -1420,6 +1421,7 @@ namespace MosaicLib.Semi.E039
             PersistHelperActionLoggingConfig = other.PersistHelperActionLoggingConfig;
             PersistFileWrittenMesgType = other.PersistFileWrittenMesgType;
             PersistFileWriteFailedMesgType = other.PersistFileWriteFailedMesgType;
+            GetPublisherIssueMesgType = other.GetPublisherIssueMesgType;
 
             CustomActionLoggingConfigDict = other.CustomActionLoggingConfigDict;
         }
@@ -1471,6 +1473,9 @@ namespace MosaicLib.Semi.E039
         public ActionLoggingConfig PersistHelperActionLoggingConfig { get; set; }
         public Logging.MesgType PersistFileWrittenMesgType { get; set;  }
         public Logging.MesgType PersistFileWriteFailedMesgType { get; set; }
+
+        /// <summary>Gives the Logging.MesgType that is to be used when GetPublishder is called with a null or empty or not found objectID.  Defaults to Debug.</summary>
+        public Logging.MesgType GetPublisherIssueMesgType { get; set; }
 
         public ReadOnlyIDictionary<string, ActionLoggingConfig> CustomActionLoggingConfigDict { get; set; }
 
@@ -1744,7 +1749,7 @@ namespace MosaicLib.Semi.E039
         {
             if (objSpec == null)
             {
-                Log.Debug.Emit("GetPublisher: passed null for objSpec");
+                GetPublisherIssueEmitter.Emit("GetPublisher: passed null for objSpec");
 
                 return null;
             }
@@ -1768,10 +1773,12 @@ namespace MosaicLib.Semi.E039
                     return ot.objPublisher;
             }
 
-            Log.Debug.Emit("GetPublisher({0}): No publisher found for the given ObjID", objSpec);
+            GetPublisherIssueEmitter.Emit("GetPublisher({0}): No publisher found for the given ObjID", objSpec);
 
             return null;
         }
+
+        private Logging.IMesgEmitter GetPublisherIssueEmitter { get { return Log.Emitter(Config.GetPublisherIssueMesgType) ?? Logging.NullEmitter; } }
 
         #endregion
 

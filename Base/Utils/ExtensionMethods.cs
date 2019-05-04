@@ -695,6 +695,35 @@ namespace MosaicLib.Utils
 
         #endregion
 
+        #region ICollection methods (SafeAddItems, SafeAddRange)
+
+        /// <summary>Adds the given <paramref name="firstItem"/> and any following <paramref name="moreItemsArray"/> to the given <paramref name="collection"/> and returns it (to support call chaining)</summary>
+        public static TCollection SafeAddItems<TCollection, TItem>(this TCollection collection, TItem firstItem, params TItem[] moreItemsArray)
+            where TCollection : ICollection<TItem>
+        {
+            if (collection != null)
+            {
+                collection.Add(firstItem);
+
+                if (!moreItemsArray.IsNullOrEmpty())
+                    moreItemsArray.DoForEach(item => collection.Add(item));
+            }
+
+            return collection;
+        }
+
+        /// <summary>Adds the given <paramref name="itemSet"/> set of items to the given <paramref name="collection"/> and returns it (to support call chaining)</summary>
+        public static TCollection SafeAddRange<TCollection, TItem>(this TCollection collection, IEnumerable<TItem> itemSet)
+            where TCollection : ICollection<TItem>
+        {
+            if (itemSet != null && collection != null)
+                itemSet.DoForEach(item => collection.Add(item));
+
+            return collection;
+        }
+
+        #endregion
+
         #region IDictionary related (SafeTryGetValue)
 
         /// <summary>

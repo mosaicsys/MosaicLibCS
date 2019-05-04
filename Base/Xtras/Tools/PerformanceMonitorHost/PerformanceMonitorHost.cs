@@ -44,6 +44,8 @@ namespace MosaicLib.Tools.PerformanceMonitorHost
     public static class PerformanceMonitorHost
     {
         private static string appName = "AppNameNotFound";
+        private static System.Reflection.Assembly currentExecAssy = System.Reflection.Assembly.GetExecutingAssembly();
+        private static string[] currentExecAssyFullNameSplit = currentExecAssy.FullName.Split(' ').Select(item => item.Trim(',')).ToArray();
 
         private static MMTimerPeriod mmTimerPeriod;
 
@@ -70,6 +72,7 @@ namespace MosaicLib.Tools.PerformanceMonitorHost
 
         static void Main(string[] args)
         {
+            string[] entryArgs = args;
             try
             {
                 mmTimerPeriod = new MMTimerPeriod();
@@ -116,6 +119,9 @@ namespace MosaicLib.Tools.PerformanceMonitorHost
                 PerformanceSuitePart perfSuite;
 
                 List<IActivePartBase> partsList = new List<IActivePartBase>();
+
+                appLogger.Info.Emit("{0} [{1}] being run with arguments:{2}", currentExecAssyFullNameSplit.SafeAccess(0), currentExecAssyFullNameSplit.SafeAccess(1), string.Join(" ", entryArgs));
+                appLogger.Info.Emit(" and current directory '{0}'", System.IO.Directory.GetCurrentDirectory());
 
                 using (Win32.Hooks.ConsoleCtrlHandlerHook consoleCtrlHandlerHook = new Win32.Hooks.ConsoleCtrlHandlerHook("cch", (sender, ctrlType) => CtrlHandlerDelegate(sender, ctrlType, partsList)))
                 {

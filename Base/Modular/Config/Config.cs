@@ -969,16 +969,27 @@ namespace MosaicLib.Modular.Config
 
     /// <summary>
     /// This enumeration can be used by clients to customize the set of standard providers that are added when using any of the AddStandardProviders helper methods.
+    /// <para/>None (0x00), MainArgs (0x01), EnvVar (0x02), AppConfig (0x04), Include (0x08), All (0x0f)
     /// </summary>
     [Flags]
     public enum StandardProviderSelect
     {
+        /// <summary>Default placeholder value [0x00]</summary>
         None = 0x00,
-        MainArgs = 0x01,
-        EnvVars = 0x02,
-        AppConfig = 0x04,
-        Include  = 0x08,
 
+        /// <summary>Selects that AddStandardProviders shall add a MainArgsConfigKeyProvider when it is used is passed a non-null mainArgs parameter value.  [0x01]</summary>
+        MainArgs = 0x01,
+
+        /// <summary>Selects that AddStandardProviders shall add an EnvVarsConfigKeyProvider.  [0x02]</summary>
+        EnvVars = 0x02,
+
+        /// <summary>Selects that AddStandardProviders shall add an AppConfigConfigKeyProvider.  [0x04]</summary>
+        AppConfig = 0x04,
+
+        /// <summary>Selects that AddStandardProviders shall add an IncludeFileConfigKeyProvider.  [0x08]</summary>
+        Include = 0x08,
+
+        /// <summary>(MainArgs | EnvVars | AppConfig | Include) [0x0f]</summary>
         All = (MainArgs | EnvVars | AppConfig | Include),
     }
 
@@ -987,9 +998,8 @@ namespace MosaicLib.Modular.Config
     #region ConfigBase
 
     /// <summary>
-    /// Partially abstract base class which may be used as the base for IConfig implementation classes.  
-    /// Provides common Logger and Trace logger.  
-    /// Provides implementation methods/properties for most of the IConfigSubscription interface and for most of the IConfigKeyGetSet interface.
+    /// Base class which may be used as the base for IConfig implementation classes.  
+    /// This class is used directly as the default IConfig implementation class.
 	/// </summary>
 	public class ConfigBase : IConfig, IConfigInternal, IEnumerable, IServiceable
     {

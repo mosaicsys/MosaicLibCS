@@ -2155,28 +2155,31 @@ namespace MosaicLib.Utils
 
         #region IDictionary<TKey, TValue> (SafeAddItems, SafeAddRange, SafeSetValueForKey)
 
-        /// <summary>Adds (using SafeSetKeyValue) the given <paramref name="firstItem"/> and any following <paramref name="moreItemsArray"/> to the given <paramref name="dictionary"/> and returns it (to support call chaining)</summary>
-        public static IDictionary<TKey, TValue> SafeAddItems<TKey, TValue>(this IDictionary<TKey, TValue> dictionary, KeyValuePair<TKey, TValue> firstItem, params KeyValuePair<TKey, TValue>[] moreItemsArray)
+        /// <summary>Adds (using SafeSetKeyValue) the given <paramref name="firstKVP"/> and any following <paramref name="moreKVPItemsArray"/> to the given <paramref name="dictionary"/> and returns it (to support call chaining)</summary>
+        public static TDictionary SafeAddItems<TDictionary, TKey, TValue>(this TDictionary dictionary, KeyValuePair<TKey, TValue> firstKVP, params KeyValuePair<TKey, TValue>[] moreKVPItemsArray)
+            where TDictionary : IDictionary<TKey, TValue>
         {
-            dictionary.SafeSetKeyValue(firstItem);
+            dictionary.SafeSetKeyValue(firstKVP);
 
-            if (!moreItemsArray.IsNullOrEmpty())
-                moreItemsArray.DoForEach(item => dictionary.SafeSetKeyValue(item));
+            if (!moreKVPItemsArray.IsNullOrEmpty())
+                moreKVPItemsArray.DoForEach(item => dictionary.SafeSetKeyValue(item));
 
             return dictionary;
         }
 
         /// <summary>Adds (using SafeSetKeyValue)  the given <paramref name="itemSet"/> set of items to the given <paramref name="dictionary"/> and returns it (to support call chaining)</summary>
-        public static IDictionary<TKey, TValue> SafeAddRange<TKey, TValue>(this IDictionary<TKey, TValue> dictionary, IEnumerable<KeyValuePair<TKey, TValue>> itemSet)
+        public static TDictionary SafeAddRange<TDictionary, TKey, TValue>(this TDictionary dictionary, IEnumerable<KeyValuePair<TKey, TValue>> itemSet)
+            where TDictionary : IDictionary<TKey, TValue>
         {
-            if (itemSet != null)
+            if (itemSet != null && dictionary != null)
                 itemSet.DoForEach(item => dictionary.SafeSetKeyValue(item));
 
             return dictionary;
         }
 
         /// <summary>If the given <paramref name="dictionary"/> is non-null and the given <paramref name="kvp"/>'s Key is non-null then uses the TKey indexed setter to set the key's value in the dictionary.  Returns the given <paramref name="dictionary"/> to support call chaining.</summary>
-        public static IDictionary<TKey, TValue> SafeSetKeyValue<TKey, TValue>(this IDictionary<TKey, TValue> dictionary, KeyValuePair<TKey, TValue> kvp)
+        public static TDictionary SafeSetKeyValue<TDictionary, TKey, TValue>(this TDictionary dictionary, KeyValuePair<TKey, TValue> kvp)
+            where TDictionary : IDictionary<TKey, TValue>
         {
             if (dictionary != null && kvp.Key != null)
                 dictionary[kvp.Key] = kvp.Value;

@@ -1444,7 +1444,8 @@ namespace MosaicLib.Semi.E090
         /// </summary>
         public IE039Object GetContainedE039Object(IE039Object fallbackObj = null)
         {
-            return LinkToSubst.ToID.GetObject(fallbackObj);
+            var toID = LinkToSubst.ToID;
+            return (!toID.IsNullOrEmpty() ? toID.GetObject(fallbackObj) : fallbackObj);
         }
 
         private static readonly E039Link[] emptyLinkArray = EmptyArrayFactory<E039Link>.Instance;

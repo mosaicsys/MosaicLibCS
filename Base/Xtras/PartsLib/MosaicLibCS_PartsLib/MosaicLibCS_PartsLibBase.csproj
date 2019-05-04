@@ -51,6 +51,9 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="..\..\..\..\CommonAssemblyInfo.cs">
+      <Link>Properties\CommonAssemblyInfo.cs</Link>
+    </Compile>
     <Compile Include="Common\BCR\BCRSim.cs" />
     <Compile Include="Common\E084\E084ActiveTransferSimEngine.cs" />
     <Compile Include="Common\E084\E084PassiveTransferState.cs" />

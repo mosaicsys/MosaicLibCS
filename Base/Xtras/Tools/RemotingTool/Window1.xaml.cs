@@ -142,13 +142,14 @@ namespace RemotingTool
 
             new ConfigValueSetAdapter<ConfigValues>(configInstance) { ValueSet = config, SetupIssueEmitter = Logger.Error, ValueNoteEmitter = Logger.Debug }.Setup();
 
-            System.Reflection.Assembly currentExecAssy = System.Reflection.Assembly.GetExecutingAssembly();
-            Title = currentExecAssy.FullName.Split(' ').SafeAccess(0).Trim(',');
-
             IVI = Values.Instance;
             RemoteIVI = new ValuesInterconnection("RemoteIVI");
 
             InitializeComponent();
+
+            System.Reflection.Assembly currentExecAssy = System.Reflection.Assembly.GetExecutingAssembly();
+            var currentExecAssyFullNameSplit = currentExecAssy.FullName.Split(' ').Select(item => item.Trim(',')).ToArray();
+            Title = "{0} [{1}]".CheckedFormat(currentExecAssyFullNameSplit.SafeAccess(0), currentExecAssyFullNameSplit.SafeAccess(1));
 
             WVIA = new WPFValueInterconnectAdapter(IVI);
 
