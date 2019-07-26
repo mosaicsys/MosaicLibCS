@@ -1,10 +1,11 @@
 //-------------------------------------------------------------------
 /*! @file ComSerialIO.cs
- * @brief This file contains the definitions of the ComPort SerialIO port implementation class.
+ *  @brief This file contains the definitions of the ComPort SerialIO port implementation class.
  * 
- * Copyright (c) Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2008 Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2002 Mosaic Systems Inc., All rights reserved. (C++ library version)
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2008 Mosaic Systems Inc.
+ * Copyright (c) 2002 Mosaic Systems Inc.  (C++ library version)
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +19,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
 
 using System;
 using System.IO.Ports;
@@ -52,9 +52,11 @@ namespace MosaicLib.SerialIO
 	/// <summary>This struct is used to parse the specStr for a PortConfig when external code has decided that the PortConfig is a ComPort config</summary>
 	/// <remarks>
 	/// we support the following two formats
-	///		<ComPort port="\\.\com200"><UartConfig baud="9600" DataBits="8" Mode="rs232-3wire" Parity="none" StopBits="1"/></ComPort>
-	///		<ComPort port="com1" uartConfig="9600,n,8,1"/>
-	/// </remarks>
+    /// <para/>
+	///		(ComPort port="\\.\com200")(UartConfig baud="9600" DataBits="8" Mode="rs232-3wire" Parity="none" StopBits="1"/)(/ComPort)
+	///		(ComPort port="com1" uartConfig="9600,n,8,1"/)
+    /// <para/>Replace ( and ) with less than and greater than
+    /// </remarks>
 	public struct ComPortConfig
 	{
         /// <summary>Constructor.  Parses the given specStr</summary>
@@ -73,7 +75,7 @@ namespace MosaicLib.SerialIO
         /// <summary>True if a valid SpecStr has been given to this object and false otherwise.</summary>
         public bool IsValid { get { return faultCode == string.Empty; } }
         /// <summary>Returns a non-empty description of the issue if IsValid is false.  returns empty string if IsValid is ture.</summary>
-        public string ErrorCode { get { return (IsValid ? string.Empty : (!String.IsNullOrEmpty(SpecStr) ? ("ComPortConfig parse failed: " + faultCode) : "No valid SpecStr has been parsed")); } }
+        public string ErrorCode { get { return (IsValid ? string.Empty : (!String.IsNullOrEmpty(SpecStr) ? ("ComPortConfig parse failed: {0}".CheckedFormat(faultCode)) : "No valid SpecStr has been parsed")); } }
 
 		private void ParseSpec()
 		{
@@ -204,7 +206,7 @@ namespace MosaicLib.SerialIO
 			}
 			catch (System.Exception ex)
 			{
-				faultCode = "Exception:" + ex.Message;
+                faultCode = ex.ToString(ExceptionFormat.TypeAndMessage);
 			}
 
 			if (string.IsNullOrEmpty(faultCode))
@@ -230,7 +232,7 @@ namespace MosaicLib.SerialIO
 			}
 			catch (System.Exception ex)
 			{
-				faultCode = "Exception:" + ex.Message;
+                faultCode = ex.ToString(ExceptionFormat.TypeAndMessage);
 			}
 
 			if (string.IsNullOrEmpty(faultCode))
@@ -304,7 +306,7 @@ namespace MosaicLib.SerialIO
             }
             catch (System.Exception ex)
             {
-                return "Exception:" + ex.Message;
+                return ex.ToString(ExceptionFormat.TypeAndMessage);
             }
 		}
 
@@ -327,7 +329,7 @@ namespace MosaicLib.SerialIO
 			}
 			catch (System.Exception ex)
 			{
-				return "Exception:" + ex.Message;
+                return ex.ToString(ExceptionFormat.TypeAndMessage);
 			}
 		}
 

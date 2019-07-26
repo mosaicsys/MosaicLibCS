@@ -10,12 +10,13 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>MosaicLib</RootNamespace>
     <AssemblyName>MosaicLibCSBase</AssemblyName>
-    <TargetFrameworkVersion>v3.5</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <FileUpgradeFlags>
     </FileUpgradeFlags>
     <OldToolsVersion>3.5</OldToolsVersion>
     <UpgradeBackupLocation />
+    <TargetFrameworkProfile>Client</TargetFrameworkProfile>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|AnyCPU'">
     <DebugSymbols>true</DebugSymbols>
@@ -52,7 +53,6 @@
     <Reference Include="System.ServiceModel">
       <RequiredTargetFramework>3.0</RequiredTargetFramework>
     </Reference>
-    <Reference Include="System.ServiceModel.Web" />
     <Reference Include="System.Xml" />
     <Reference Include="WindowsBase" />
   </ItemGroup>
@@ -76,12 +76,20 @@
     <Compile Include="Modular\Action\Queue.cs" />
     <Compile Include="Modular\Common\Common.cs" />
     <Compile Include="Modular\Config\Config.cs" />
+    <Compile Include="Modular\Config\ConfigIVIBridge.cs" />
     <Compile Include="Modular\Config\ConfigProviders.cs" />
     <Compile Include="Modular\Config\ConfigValueSetAdapter.cs" />
+    <Compile Include="Modular\Interconnect\IVIBridge.cs" />
     <Compile Include="Modular\Interconnect\Parts.cs" />
+    <Compile Include="Modular\Interconnect\Remoting\Buffers.cs" />
+    <Compile Include="Modular\Interconnect\Remoting\Messages.cs" />
+    <Compile Include="Modular\Interconnect\Remoting\Remoting.cs" />
+    <Compile Include="Modular\Interconnect\Remoting\Sessions.cs" />
+    <Compile Include="Modular\Interconnect\Remoting\MessageStreamTools.cs" />
     <Compile Include="Modular\Interconnect\Values.cs" />
     <Compile Include="Modular\Interconnect\WCF.cs" />
     <Compile Include="Modular\Interconnect\Sets.cs" />
+    <Compile Include="Modular\Interconnect\Remoting\Transport.cs" />
     <Compile Include="Modular\Part\PartBase.cs" />
     <Compile Include="Modular\Part\SimpleActivePart.cs" />
     <Compile Include="Modular\Persist\Persist.cs" />
@@ -89,6 +97,10 @@
     <Compile Include="Modular\Reflection\GetterSetterFactory.cs" />
     <Compile Include="MosaicLibCSBase.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Semi\E005\E005Data.cs" />
+    <Compile Include="Semi\E090\E090SubstrateRouting.cs" />
+    <Compile Include="Semi\E090\E090SubstrateScheduling.cs" />
+    <Compile Include="Semi\E090\E090SubstrateTestingTools.cs" />
     <Compile Include="Serial\AutoEchoWrapper.cs" />
     <Compile Include="Serial\ComSerialIO.cs" />
     <Compile Include="Serial\SerialIO.cs" />
@@ -101,10 +113,12 @@
     <Compile Include="Serial\Modbus\ModbusClient.cs" />
     <Compile Include="Serial\Modbus\ModbusServer.cs" />
     <Compile Include="Semi\E005\E005.cs" />
+    <Compile Include="Semi\E039\E039.cs" />
     <Compile Include="Semi\E041\E041.cs" />
     <Compile Include="Semi\E084\E084.cs" />
     <Compile Include="Semi\E084\E084IOSupport.cs" />
     <Compile Include="Semi\E087\E087.cs" />
+    <Compile Include="Semi\E090\E090.cs" />
     <Compile Include="Time\MMTimer.cs" />
     <Compile Include="Time\QpcTime.cs" />
     <Compile Include="Time\Ticks.cs" />
@@ -117,12 +131,17 @@
     <Compile Include="Utils\Enums.cs" />
     <Compile Include="Utils\ErrorCodeUtils.cs" />
     <Compile Include="Utils\ExtensionMethods.cs" />
+    <Compile Include="Utils\Interlocks.cs" />
     <Compile Include="Utils\Notification.cs" />
     <Compile Include="Utils\ObjID.cs" />
+    <Compile Include="Utils\LifetimeTracking.cs" />
     <Compile Include="Utils\ParseUtils.cs" />
     <Compile Include="Utils\Pooling.cs" />
     <Compile Include="Utils\Singleton.cs" />
     <Compile Include="Utils\String.cs" />
+    <Compile Include="Utils\Tools\EventRateTools.cs" />
+    <Compile Include="Utils\Tools\SlewRateLimitTool.cs" />
+    <Compile Include="Win32\Hooks.cs" />
     <Compile Include="Win32\Registry.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

@@ -1,10 +1,11 @@
 //-------------------------------------------------------------------
 /*! @file SerialPortSpec.cs
- * @brief This file contains a set of definitions and classes that are used to specify the target and serial configuration for various types of serial ports and uses.
+ *  @brief This file contains a set of definitions and classes that are used to specify the target and serial configuration for various types of serial ports and uses.
  * 
- * Copyright (c) Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2008 Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2002 Mosaic Systems Inc., All rights reserved. (C++ library version)
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2008 Mosaic Systems Inc.
+ * Copyright (c) 2002 Mosaic Systems Inc.  (C++ library version)
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +19,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
 
 using System;
 using System.Collections;
@@ -31,6 +31,10 @@ namespace MosaicLib.SerialIO
 {
 	//-----------------------------------------------------------------
 
+    /// <summary>
+    /// Used to define the general mode that a port is being used in.  Some modes have the side effect of requesting RTS handshake (rs485).
+    /// <para/>Valid values: DOSMode_Default (0), RS232_3wire, RS232_4wire, RS232_5wire, RS232_7wire, RS232_9wire, RS485_5wire, RS485_3wireMDEcho, RS485_3wireMDNoEcho, Fiber_1pair, Fiber_1pairInv
+    /// </summary>
 	public enum PortMode
 	{
 		// standard asynchronous rs-232 modes
@@ -59,7 +63,7 @@ namespace MosaicLib.SerialIO
 
 	//-----------------------------------------------------------------
 
-	public interface IComPortUartConfig
+	public interface IComPortUartConfig : IEquatable<IComPortUartConfig>
 	{
 		double BaudRate { get; }
 		int BaudRateInt { get; }
@@ -82,6 +86,7 @@ namespace MosaicLib.SerialIO
 		private int			dataBits;
 		private StopBits	stopBits;
 		private PortMode	portMode;
+        private Handshake   handshake;
 
 		//-------------------------------
 		// public methods
@@ -102,7 +107,7 @@ namespace MosaicLib.SerialIO
 					case PortMode.RS232_5wire:
 					case PortMode.RS232_7wire:
 					case PortMode.RS232_9wire:
-						return Handshake.RequestToSend;
+                        return handshake.MapDefaultTo(Handshake.RequestToSend);
 
 					case PortMode.DOSMode_Default:
 					case PortMode.RS232_3wire:
@@ -112,19 +117,53 @@ namespace MosaicLib.SerialIO
 					case PortMode.Fiber_1pair:
 					case PortMode.Fiber_1pairInv:
 					default:
-						return Handshake.None;
+                        return handshake.MapDefaultTo(Handshake.None);
 				}
 			}
+            set
+            {
+                handshake = value;
+            }
 		}
 
-		public ComPortUartConfig(string cfgStr) : this() { ParseString(cfgStr); }
+		public ComPortUartConfig(string cfgStr) 
+            : this() 
+        { 
+            ParseString(cfgStr); 
+        }
 
-		public bool ParseString(string cfgStr) { StringScanner scanner = new StringScanner(cfgStr); return ParseString(ref scanner); }
-		public bool ParseString(ref StringScanner scan)
+        bool IEquatable<IComPortUartConfig>.Equals(IComPortUartConfig other)
+        {
+            return (BaudRate == other.BaudRate
+                    && Parity == other.Parity
+                    && DataBits == other.DataBits
+                    && StopBits == other.StopBits
+                    && PortMode == other.PortMode
+                    && Handshake == other.Handshake);
+        }
+
+        private void Clear()
+        {
+            fromXml = false;
+            baudRate = 0.0;
+            parity = System.IO.Ports.Parity.None;
+            dataBits = 0;
+            stopBits = System.IO.Ports.StopBits.None;
+            portMode = SerialIO.PortMode.DOSMode_Default;
+            handshake = System.IO.Ports.Handshake.None;
+        }
+
+		public bool ParseString(string cfgStr) 
+        { 
+            StringScanner scanner = new StringScanner(cfgStr); 
+            return ParseString(ref scanner); 
+        }
+
+        public bool ParseString(ref StringScanner scan)
 		{
 			bool success = true;
 
-			this = new ComPortUartConfig();	// clear
+            Clear();
 
 			scan.SkipOverWhiteSpace();
 
@@ -133,25 +172,25 @@ namespace MosaicLib.SerialIO
 				fromXml = true;
 
 				bool endFound = false;
-				// mode, baud, dataBits, stopBits, parity
 
 				while (!endFound && success && scan.IsIdxValid)
 				{
                     if (scan.MatchToken("/>", false, false))
 					{
 						endFound = true;
-						continue;
+						break;
 					}
 
-					if (!(scan.ParseXmlAttribute("Baud", out baudRate) && baudRate >= 0.0)
-						&& !scan.ParseXmlAttribute("DataBits", DataBitsCharTokenValueMap, out dataBits)
-						&& !scan.ParseXmlAttribute("Mode", PortModeTokenValueMap, out portMode)
-						&& !scan.ParseXmlAttribute("Parity", ParityTokenValueMap, out parity)
-						&& !scan.ParseXmlAttribute("StopBits", StopBitsCharTokenValueMap, out stopBits)
-						)
-					{
-						success = false;
-					}
+                    switch (scan.ExtractToken(TokenType.AlphaNumeric, skipTrailingWhiteSpace: false, requireTokenEnd: false))
+                    {
+                        case "Baud": if (!scan.ParseXmlAttribute("", out baudRate) || baudRate < 0.0) success = false; break;
+                        case "DataBits": if (!scan.ParseXmlAttribute("", DataBitsCharTokenValueMap, out dataBits)) success = false; break;
+                        case "Mode": if (!scan.ParseXmlAttribute("", PortModeTokenValueMap, out portMode)) success = false; break;
+                        case "Parity": if (!scan.ParseXmlAttribute("", ParityTokenValueMap, out parity)) success = false; break;
+                        case "StopBits": if (!scan.ParseXmlAttribute("", StopBitsCharTokenValueMap, out stopBits)) success = false; break;
+                        case "Handshake": if (!scan.ParseXmlAttribute("", out handshake)) success = false; break;
+                        default: success = false; break;
+                    }
 				}
 
 				if (!endFound)
@@ -186,24 +225,36 @@ namespace MosaicLib.SerialIO
 			return success;
 		}
 
-        public string FmtToString() { return FmtToString(fromXml); }
-		public string FmtToString(bool xmlStyle)
+        public override string ToString()
+        {
+            return FmtToString();
+        }
+
+        public string FmtToString() 
+        { 
+            return FmtToString(fromXml); 
+        }
+
+        public string FmtToString(bool xmlStyle)
 		{
-			if (xmlStyle)
+            string handshakeStr = (handshake != System.IO.Ports.Handshake.None) ? " Handshake=\"{0}\"".CheckedFormat(handshake) : string.Empty;
+
+            if (xmlStyle || !handshakeStr.IsNullOrEmpty())
 			{
-				return Fcns.CheckedFormat("<UartConfig  Baud=\"{0}\" DataBits=\"{1}\" Mode=\"{2}\" Parity=\"{3}\" StopBits=\"{4}\"/>"
+				return Fcns.CheckedFormat("<UartConfig Baud=\"{0}\" DataBits=\"{1}\" Mode=\"{2}\" Parity=\"{3}\" StopBits=\"{4}\"{5}/>"
 										, baudRate
                                         , StringScanner.FindTokenNameByValue(dataBits, DataBitsCharTokenValueMap, "?")
                                         , StringScanner.FindTokenNameByValue(portMode, PortModeCharTokenValueMap, "?")
-                                        , StringScanner.FindTokenNameByValue(parity, ParityCharTokenValueMap, "?")
+                                        , StringScanner.FindTokenNameByValue(parity, ParityTokenValueMap, "?")
                                         , StringScanner.FindTokenNameByValue(stopBits, StopBitsCharTokenValueMap, "?")
+                                        , handshakeStr
 										);
 			}
 			else if (portMode == PortMode.DOSMode_Default)
 			{
 				return Fcns.CheckedFormat("{0},{1},{2},{3}"
 										, baudRate
-                                        , StringScanner.FindTokenNameByValue(parity, ParityTokenValueMap, "?")
+                                        , StringScanner.FindTokenNameByValue(parity, ParityCharTokenValueMap, "?")
                                         , StringScanner.FindTokenNameByValue(dataBits, DataBitsCharTokenValueMap, "?")
                                         , StringScanner.FindTokenNameByValue(stopBits, StopBitsCharTokenValueMap, "?")
 										);
@@ -212,7 +263,7 @@ namespace MosaicLib.SerialIO
 			{
 				return Fcns.CheckedFormat("{0},{1},{2},{3},{4}"
 										, baudRate
-                                        , StringScanner.FindTokenNameByValue(parity, ParityTokenValueMap, "?")
+                                        , StringScanner.FindTokenNameByValue(parity, ParityCharTokenValueMap, "?")
                                         , StringScanner.FindTokenNameByValue(dataBits, DataBitsCharTokenValueMap, "?")
                                         , StringScanner.FindTokenNameByValue(stopBits, StopBitsCharTokenValueMap, "?")
                                         , StringScanner.FindTokenNameByValue(portMode, PortModeTokenValueMap, "?")

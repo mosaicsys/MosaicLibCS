@@ -2,9 +2,10 @@
 /*! @file E084.cs
  *  @brief This file provides common definitions that relate to the use of the Semi standard E084 interface.
  *
- * Copyright (c) Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2010 Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2006 Mosaic Systems Inc., All rights reserved. (C++ library version)
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2010 Mosaic Systems Inc.
+ * Copyright (c) 2006 Mosaic Systems Inc.  (C++ library version)
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,11 +20,17 @@
  * limitations under the License.
  */
 
+using System;
+using System.Runtime.Serialization;
+
+using MosaicLib.Modular.Common;
+using MosaicLib.Modular.Config;
+using MosaicLib.Modular.Config.Attributes;
+using MosaicLib.Modular.Interconnect.Values.Attributes;
+using MosaicLib.Utils;
+
 namespace MosaicLib.Semi.E084       //! namespace within which to define information that is based on E084.  Current rev 0704
 {
-    using System;
-    using System.Runtime.Serialization;
-
     //-------------------------------------------------------------------
     /// <summary>
     /// Enum is used to identify one of the two possible PIO interfaces
@@ -31,13 +38,13 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
     [Flags]
     public enum PIOSelect : byte
     {
-        /// <summary>Indicates that no PIO interface is being identified.</summary>
+        /// <summary>Indicates that no PIO interface is being identified.  0</summary>
         None = 0,
-        /// <summary>Indicates that the OHT PIO interface is being identified.</summary>
+        /// <summary>Indicates that the OHT PIO interface is being identified.  1</summary>
         OHT = 1,
-        /// <summary>Indicates that the AGV PIO interface is being identified.</summary>
+        /// <summary>Indicates that the AGV PIO interface is being identified.  2</summary>
         AGV = 2,
-        /// <summary>Indicates that both the OHT and AGV PIO interfaces are being identified.</summary>
+        /// <summary>Indicates that both the OHT and AGV PIO interfaces are being identified.  3</summary>
         All = 3,
     }
 
@@ -54,30 +61,37 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
     [System.Flags]
 	public enum ActiveToPassivePinBits : uint
 	{
-        /// <summary>Defines the bit for the VALID signal, pin 14</summary>
-		VALID_pin14		= 0x0001,
-        /// <summary>Defines the bit for the CS_0 signal, pin 15</summary>
+        /// <summary>Defines the bit value when no pins are asserted</summary>
+        None = 0x0000,
+        /// <summary>Defines the bit value when no pins are active</summary>
+        NoActivePins = 0x0000,
+        /// <summary>Defines the bit for the VALID signal.<para/>pin 14, 0x0001</summary>
+		VALID_pin14	= 0x0001,
+        /// <summary>Defines the bit for the CS_0 signal.<para/>pin 15, 0x0002</summary>
         CS_0_pin15 = 0x0002,
-        /// <summary>Defines the bit for the CS_1 signal, pin 16</summary>
+        /// <summary>Defines the bit for the CS_1 signal.<para/>pin 16, 0x0004</summary>
         CS_1_pin16 = 0x0004,
-        /// <summary>Defines the bit for the AM_AVBL signal, pin 17</summary>
+        /// <summary>Defines the bit for the AM_AVBL signal.<para/>pin 17, 0x0008</summary>
         AM_AVBL_pin17 = 0x0008,
-        /// <summary>Defines the bit for the TR_REQ signal, pin 18</summary>
+        /// <summary>Defines the bit for the TR_REQ signal.<para/>pin 18, 0x0010</summary>
         TR_REQ_pin18 = 0x0010,
-        /// <summary>Defines the bit for the BUSY signal, pin 19</summary>
+        /// <summary>Defines the bit for the BUSY signal.<para/>pin 19, 0x0020</summary>
         BUSY_pin19 = 0x0020,
-        /// <summary>Defines the bit for the COMPT signal, pin 20</summary>
+        /// <summary>Defines the bit for the COMPT signal.<para/>pin 20, 0x0040</summary>
         COMPT_pin20 = 0x0040,
-        /// <summary>Defines the bit for the CONT signal, pin 21</summary>
+        /// <summary>Defines the bit for the CONT signal.<para/>pin 21, 0x0080</summary>
         CONT_pin21 = 0x0080,
         /// <summary>
         /// Defines the bit used to conveigh the state of the Transfer Interlock Signal (Light Curtain) where asserted means that the transfer is permitted.  
         /// This is not a defined pin in the E84 interface standard.  It is often used externally to force the A->P ES signal to the fault state (off) when the interlock is tripped (de-asserted).
+        /// <para/>pin None, 0x0800
         /// </summary>
         XferILock_sig = 0x0800,
         /// <summary>
-        /// Defines the bit positions that are actual E84 pins.  
-        /// These are are checked for zero to determin when PinBits are in an valid Idle state, and are passed to/from underlying E84 hardware interface, often to an external optical interface.</summary>
+        /// Defines the bit positions that are actual E84 pins.  This mask does not include any bits in the packed word that are not actual E84 A to P DIO pins.
+        /// These are are checked for zero to determine when PinBits are in an valid Idle state, and are passed to/from underlying E84 hardware interface, often to an external optical interface.
+        /// <para/>pin N/A, 0x00ff
+        /// </summary>
         PinsBitMask = 0x00ff,
 	}
 
@@ -91,23 +105,27 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
     [System.Flags]
 	public enum PassiveToActivePinBits : uint
 	{
-        /// <summary>Defines the bit for the L_REQ signal, pin 1</summary>
+        /// <summary>Defines the bit value when no pins are asserted</summary>
+        None = 0x0000,
+        /// <summary>Defines the bit value when no pins are active</summary>
+        NoActivePins = 0x0000,
+        /// <summary>Defines the bit for the L_REQ signal.<para/>pin 1, 0x0001</summary>
         L_REQ_pin1 = 0x0001,
-        /// <summary>Defines the bit for the U_REQ signal, pin 2</summary>
+        /// <summary>Defines the bit for the U_REQ signal.<para/>pin 2, 0x0002</summary>
         U_REQ_pin2 = 0x0002,
-        /// <summary>Defines the bit for the VA signal, pin 3</summary>
+        /// <summary>Defines the bit for the VA signal.<para/>pin 3, 0x0004</summary>
         VA_pin3 = 0x0004,
-        /// <summary>Defines the bit for the READY signal, pin 4</summary>
+        /// <summary>Defines the bit for the READY signal.<para/>pin 4, 0x0008</summary>
         READY_pin4 = 0x0008,
-        /// <summary>Defines the bit for the VS_0 signal, pin 5</summary>
+        /// <summary>Defines the bit for the VS_0 signal.<para/>pin 5, 0x0010</summary>
         VS_0_pin5 = 0x0010,
-        /// <summary>Defines the bit for the VS_1 signal, pin 6</summary>
+        /// <summary>Defines the bit for the VS_1 signal.<para/>pin 6, 0x0020</summary>
         VS_1_pin6 = 0x0020,
-        /// <summary>Defines the bit for the HO_AVBL signal, pin 7</summary>
+        /// <summary>Defines the bit for the HO_AVBL signal.<para/>pin 7, 0x0040</summary>
         HO_AVBL_pin7 = 0x0040,
-        /// <summary>Defines the bit for the ES signal, pin 8</summary>
+        /// <summary>Defines the bit for the ES signal.<para/>pin 8, 0x0080</summary>
         ES_pin8 = 0x0080,
-        /// <summary>defines bits that are actual E084 pins, and are passed to/from underlying E84 hardware interface, often to an external optical interface.</summary>
+        /// <summary>defines bits that are actual E084 pins, and are passed to/from underlying E84 hardware interface, often to an external optical interface.<para/>pin N/A, 0x00ff</summary>
         PinsBitMask = 0x00ff,
     }
 
@@ -118,7 +136,7 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
 	
 	///<summary>Interface used to define and access ActiveToPassivePins state.</summary>
     ///<remarks>ActiveToPassive pins use 0 Vdc (pin 24) and 24 Vdc (pin 23) [references provided by Passive side]</remarks>
-	public interface IActiveToPassivePinsState
+	public interface IActiveToPassivePinsState : IEquatable<IActiveToPassivePinsState>
 	{
         /// <summary>Provides get/set access to the low level interface/port name that is relevant for this state object.  May be set to String.Empty or to null</summary>
         string IFaceName { get; set; }
@@ -132,38 +150,45 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
 		///<summary>True if ActiveToPassive pins have made a valid port selection.</summary>
 		bool IsSelectActive { get; }
 
-		///<summary>VALID - used as qualifier for CS_0 and CS_1, requests passive to acknowledge availability of automated transfer</summary>
+		///<summary>VALID - used as qualifier for CS_0 and CS_1, requests passive to acknowledge availability of automated transfer.<para/>pin 14, 0x0001</summary>
 		bool VALID { get; }
 
-		///<summary>CS_0 - select line for first port</summary>
+        ///<summary>CS_0 - select line for first port.<para/>pin 15, 0x0002</summary>
 		bool CS_0 { get; }
 
-		///<summary>CS_1 - select line for second port (opt)</summary>
+        ///<summary>CS_1 - select line for second port (opt).<para/>pin 16, 0x0004</summary>
 		bool CS_1 { get; }
 
-		///<summary>AM_AVBL - only used for interbay passive OHS vehicles</summary>
+        ///<summary>AM_AVBL - only used for interbay passive OHS vehicles.<para/>pin 17, 0x0008</summary>
 		bool AM_AVBL { get; }
 
-		///<summary>TR_REQ - request passive to engage transfer and signal when automatic transfer is ready</summary>
+        ///<summary>TR_REQ - request passive to engage transfer and signal when automatic transfer is ready.<para/>pin 18, 0x0010</summary>
 		bool TR_REQ { get; }
 
-		///<summary>BUSY - inform passive that physical transfer is in process</summary>
+        ///<summary>BUSY - inform passive that physical transfer is in process.<para/>pin 19, 0x0020</summary>
 		bool BUSY { get; }
 
-		///<summary>COMPT - inform passive that requested transfer is complete (after BUSY cleared), hold until READY cleared</summary>
+        ///<summary>COMPT - inform passive that requested transfer is complete (after BUSY cleared), hold until READY cleared.<para/>pin 20, 0x0040</summary>
 		bool COMPT { get; }
 
-		///<summary>CONT - request passive to retain use of port for followon transfer.  Set and cleared at each BUSY transition to on</summary>
+        ///<summary>CONT - request passive to retain use of port for followon transfer.  Set and cleared at each BUSY transition to on.<para/>pin 21, 0x0080</summary>
 		bool CONT { get; }
 
-		///<summary>LC_ILOCK - external input (not a normal e84 pin) indicating if the Light Curtain Interlock is in a non-tripped state (beam not broken).  State machine faults if this signal goes false while VALID is true.</summary>
-		///<remarks>This signal is NOT part of the E084 standard.</remarks>
+		///<summary>
+        ///(aka LC_ILOCK) - external input (not a normal e84 pin) indicating if the Light Curtain Interlock is in a non-tripped state (beam not broken).  
+        ///State machine faults if this signal goes false while VALID is true.
+        ///<para/>pin none, 0x0800
+        ///</summary>
+		///<remarks>This signal is NOT part of the E084 standard and is not included in the 25 pin connector.</remarks>
 		bool XferILock { get; }
-	}
+
+        [Obsolete("Please replace with the use of the corresponding IEquateable<>.Equals method (2017-03-10)")]
+        bool IsEqualTo(IActiveToPassivePinsState rhs);
+    }
 
     ///<summary>Interface used to define and access PassiveToActivePins state.</summary>
     ///<remarks>PassiveToActivePins use SIGNAL_COM (pin25) and SIGNAL_24V (pin 22) [references provided by Active side]</remarks>
-    public interface IPassiveToActivePinsState
+    public interface IPassiveToActivePinsState : IEquatable<IPassiveToActivePinsState>
 	{
         /// <summary>Provides get/set access to the low level interface/port name that is relevant for this state object.  May be set to String.Empty or to null</summary>
         string IFaceName { get; set; }
@@ -177,31 +202,34 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
         /// <summary>Returns true if PassiveToActive pins are in a selectable state (ES+HO)</summary>
         bool IsSelectable { get; }
 
-		///<summary>L_REQ - to active: set signal to indicate that port is ready to accept an automatic load transfer request, cleared to signal that physical delivery has completed.</summary>
+        ///<summary>L_REQ - to active: set signal to indicate that port is ready to accept an automatic load transfer request, cleared to signal that physical delivery has completed.<para/>pin 1, 0x0001</summary>
 		bool L_REQ { get; }
 
-		///<summary>U_REQ - to active: set signal to indicate that port is ready to accept an automatic unload transfer request, cleared to signal that physical removal has completed.</summary>
+        ///<summary>U_REQ - to active: set signal to indicate that port is ready to accept an automatic unload transfer request, cleared to signal that physical removal has completed.<para/>pin 2, 0x0002</summary>
 		bool U_REQ { get; }
 
-		///<summary>VA - only used for interbay passive OHS vehicles.  Valid signal for use wiht VS_0 and VS_1 select signals.</summary>
+        ///<summary>VA - only used for interbay passive OHS vehicles.  Valid signal for use with VS_0 and VS_1 select signals.<para/>pin 3, 0x0004</summary>
 		bool VA { get; }
 
-		///<summary>READY - to active: set signal to indicate that port is allocated for transfer and that port is ready for physical transfer to begin.  signal cleared when COMPT has been observed.</summary>
+        ///<summary>READY - to active: set signal to indicate that port is allocated for transfer and that port is ready for physical transfer to begin.  signal cleared when COMPT has been observed.<para/>pin 4, 0x0008</summary>
 		bool READY { get; }
 
-		///<summary>VS_0 - only used for interbay passive OHS vehicles</summary>
+        ///<summary>VS_0 - only used for interbay passive OHS vehicles.<para/>pin 5, 0x0010</summary>
 		bool VS_0 { get; }
 
-		///<summary>VS_1 - only used for interbay passive OHS vehicles</summary>
+        ///<summary>VS_1 - only used for interbay passive OHS vehicles.<para/>pin 6, 0x0020</summary>
 		bool VS_1 { get; }
 
-		///<summary>HO_AVBL - inform AMHS that handoff is available.  Used both within transfer session to inform active of transfer failure(s), Used outside of transfer session to block active from requesting one.</summary>
+        ///<summary>HO_AVBL - inform AMHS that handoff is available.  Used both within transfer session to inform active of transfer failure(s), Used outside of transfer session to block active from requesting one.<para/>pin 7, 0x0040</summary>
 		bool HO_AVBL { get; }
 
-		///<summary>ES (emergency stop) - Please see E084 standard for details on specific meaning of this signal.  External actors are required to halt motion immediately when this signal is not active.</summary>
+        ///<summary>ES (emergency stop) - Please see E084 standard for details on specific meaning of this signal.  External actors are required to halt motion immediately when this signal is not active.<para/>pin 8, 0x0080</summary>
 		///<remarks>NOTE: This signal is active (current flowing) when motion is permitted.</remarks>
 		bool ES { get; }
-	}
+
+        [Obsolete("Please replace with the use of the corresponding IEquateable<>.Equals method (2017-03-10)")]
+        bool IsEqualTo(IPassiveToActivePinsState rhs);
+    }
 	
 	#endregion
 
@@ -213,21 +241,60 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
     [DataContract(Namespace = Constants.E084NameSpace)]
     public struct ActiveToPassivePinsState : IActiveToPassivePinsState
 	{
+        /// <summary>Object based polymorphic copy constructor</summary>
+        public ActiveToPassivePinsState(object o)
+            : this(new ValueContainer(o))
+        { }
+
+        /// <summary>Object based polymorphic copy constructor</summary>
+        public ActiveToPassivePinsState(ValueContainer vc) 
+            : this()
+        {
+            if (vc.IsObject && vc.ValueAsObject is IActiveToPassivePinsState)
+            {
+                SetFrom(vc.ValueAsObject as IActiveToPassivePinsState);
+            }
+            else
+            {
+                IFaceName = "From:{0}".CheckedFormat(vc);
+                PackedWord = vc.GetValue<ActiveToPassivePinBits>(false);
+            }
+        }
+
         /// <summary>Copy constructor</summary>
-        /// <param name="rhs">Defines the instance that this is constructed as a copy of.</param>
         public ActiveToPassivePinsState(IActiveToPassivePinsState rhs) 
             : this() 
-        { 
-            IFaceName = rhs.IFaceName; 
-            PackedWord = rhs.PackedWord; 
+        {
+            SetFrom(rhs);
+        }
+
+        /// <summary>Helper method for use in copy constructors</summary>
+        private void SetFrom(IActiveToPassivePinsState rhs)
+        {
+            if (rhs != null)
+            {
+                IFaceName = rhs.IFaceName;
+                PackedWord = rhs.PackedWord;
+            }
+            else
+            {
+                IFaceName = "SetFromNull";
+                PackedWord = ActiveToPassivePinBits.NoActivePins;
+            }
         }
 
         /// <summary>
-        /// Returns true if the given pair of objects have the identical contents
+        /// Returns true if this object has the same contents as the given other
         /// </summary>
+        public bool Equals(IActiveToPassivePinsState other)
+        {
+            return (other != null && IFaceName == other.IFaceName && PackedWord == other.PackedWord);
+        }
+
+        [Obsolete("Please replace with the use of the corresponding IEquateable<>.Equals method (2017-03-10)")]
         public bool IsEqualTo(IActiveToPassivePinsState rhs)
         {
-            return (rhs != null && IFaceName == rhs.IFaceName && PackedWord == rhs.PackedWord);
+            return Equals(rhs);
         }
 
         /// <summary>
@@ -237,7 +304,7 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
         /// <returns>true if both objects contain the same values, false if rhsAsObject is null, is not of this type or has different contents</returns>
         public override bool Equals(object rhsAsObject)
 		{
-            return IsEqualTo(rhsAsObject as IActiveToPassivePinsState);
+            return Equals(rhsAsObject as IActiveToPassivePinsState);
 		}
 
         /// <summary>
@@ -287,7 +354,7 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
         /// <summary>Returns a print/log suitable string version of the state of this A2P pins state object</summary>
         public override string ToString()
 		{
-            return Utils.Fcns.CheckedFormat("{10}:${0:x}{1}{2}{3}{4}{5}{6}{7}{8}{9}"
+            return Utils.Fcns.CheckedFormat("{10}:${0:x2}{1}{2}{3}{4}{5}{6}{7}{8}{9}"
                                             , (UInt32) PackedWord
                                             , (VALID ? ",VALID" : "")
                                             , (CS_0 ? ",CS_0" : "")
@@ -297,7 +364,7 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
                                             , (BUSY ? ",BUSY" : "")
                                             , (COMPT ? ",COMPT" : "")
                                             , (CONT ? ",CONT" : "")
-                                            , (!XferILock ? ",XferILockFault" : "")
+                                            , (!XferILock ? "" : ",XferILockOk")
                                             , (IFaceName ?? "[none]")
                                             );
 		}
@@ -315,33 +382,37 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
             } 
         }
 
-		///<summary>VALID - used as qualifier for CS_0 and CS_1, requests passive to acknowledge availability of automated transfer</summary>
-		public bool VALID { get; set; }
+        ///<summary>VALID - used as qualifier for CS_0 and CS_1, requests passive to acknowledge availability of automated transfer.<para/>pin 14, 0x0001</summary>
+        public bool VALID { get; set; }
 
-		///<summary>CS_0 - select line for first port</summary>
-		public bool CS_0 { get; set; }
+        ///<summary>CS_0 - select line for first port.<para/>pin 15, 0x0002</summary>
+        public bool CS_0 { get; set; }
 
-		///<summary>CS_1 - select line for second port (opt)</summary>
-		public bool CS_1 { get; set; }
+        ///<summary>CS_1 - select line for second port (opt).<para/>pin 16, 0x0004</summary>
+        public bool CS_1 { get; set; }
 
-		///<summary>AM_AVBL - only used for interbay passive OHS vehicles</summary>
-		public bool AM_AVBL { get; set; }
+        ///<summary>AM_AVBL - only used for interbay passive OHS vehicles.<para/>pin 17, 0x0008</summary>
+        public bool AM_AVBL { get; set; }
 
-		///<summary>TR_REQ - request passive to engage transfer and signal when automatic transfer is ready</summary>
-		public bool TR_REQ { get; set; }
+        ///<summary>TR_REQ - request passive to engage transfer and signal when automatic transfer is ready.<para/>pin 18, 0x0010</summary>
+        public bool TR_REQ { get; set; }
 
-		///<summary>BUSY - inform passive that physical transfer is in process</summary>
-		public bool BUSY { get; set; }
+        ///<summary>BUSY - inform passive that physical transfer is in process.<para/>pin 19, 0x0020</summary>
+        public bool BUSY { get; set; }
 
-		///<summary>COMPT - inform passive that requested transfer is complete (after BUSY cleared), hold until READY cleared</summary>
-		public bool COMPT { get; set; }
+        ///<summary>COMPT - inform passive that requested transfer is complete (after BUSY cleared), hold until READY cleared.<para/>pin 20, 0x0040</summary>
+        public bool COMPT { get; set; }
 
-		///<summary>CONT - request passive to retain use of port for followon transfer.  Set and cleared at each BUSY transition to on</summary>
-		public bool CONT { get; set; }
+        ///<summary>CONT - request passive to retain use of port for followon transfer.  Set and cleared at each BUSY transition to on.<para/>pin 21, 0x0080</summary>
+        public bool CONT { get; set; }
 
-        ///<summary>XferILock - external input (not an e84 pin) indicating if the Transfer (Light Curtain) Interlock is in a non-tripped state.  State machine faults if this signal goes false while VALID is true.</summary>
-		///<remarks>This signal is NOT part of the E084 standard and is not physically present in any standard 25 pin E084 electical interface.</remarks>
-		public bool XferILock { get; set; }
+        ///<summary>
+        ///(aka LC_ILOCK) - external input (not a normal e84 pin) indicating if the Light Curtain Interlock is in a non-tripped state (beam not broken).  
+        ///State machine faults if this signal goes false while VALID is true.
+        ///<para/>pin none, 0x0800
+        ///</summary>
+        ///<remarks>This signal is NOT part of the E084 standard and is not included in the 25 pin connector.</remarks>
+        public bool XferILock { get; set; }
     }
 
     ///<summary>Utility class used to implement packed and boolean property formats for IPassiveToActivePinsState.  Also supports conversion between formats.</summary>
@@ -349,21 +420,59 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
     [DataContract(Namespace = Constants.E084NameSpace)]
     public struct PassiveToActivePinsState : IPassiveToActivePinsState
 	{
+        /// <summary>Object based polymorphic copy constructor</summary>
+        public PassiveToActivePinsState(object o)
+            : this(new ValueContainer(o))
+        { }
+        /// <summary>Object based polymorphic copy constructor</summary>
+        public PassiveToActivePinsState(ValueContainer vc) 
+            : this()
+        {
+            if (vc.IsObject && vc.ValueAsObject is IPassiveToActivePinsState)
+            {
+                SetFrom(vc.ValueAsObject as IPassiveToActivePinsState);
+            }
+            else
+            {
+                IFaceName = "From:{0}".CheckedFormat(vc);
+                PackedWord = vc.GetValue<PassiveToActivePinBits>(false);
+            }
+        }
+
         /// <summary>Copy constructor</summary>
-        /// <param name="rhs">Defines the instance that this is constructed as a copy of.</param>
         public PassiveToActivePinsState(IPassiveToActivePinsState rhs) 
             : this() 
-        { 
-            IFaceName = rhs.IFaceName; 
-            PackedWord = rhs.PackedWord; 
+        {
+            SetFrom(rhs);
+        }
+
+        /// <summary>Helper method for use in copy constructors</summary>
+        private void SetFrom(IPassiveToActivePinsState rhs)
+        {
+            if (rhs != null)
+            {
+                IFaceName = rhs.IFaceName;
+                PackedWord = rhs.PackedWord;
+            }
+            else
+            {
+                IFaceName = "SetFromNull";
+                PackedWord = PassiveToActivePinBits.NoActivePins;
+            }
         }
 
         /// <summary>
-        /// Returns true if the given pair of objects have the identical contents
+        /// Returns true if this object has the same contents as the given other
         /// </summary>
+        public bool Equals(IPassiveToActivePinsState other)
+        {
+            return (other != null && IFaceName == other.IFaceName && PackedWord == other.PackedWord);
+        }
+
+        [Obsolete("Please replace with the use of the corresponding IEquateable<>.Equals method (2017-03-10)")]
         public bool IsEqualTo(IPassiveToActivePinsState rhs)
         {
-            return (rhs != null && IFaceName == rhs.IFaceName && PackedWord == rhs.PackedWord);
+            return Equals(rhs);
         }
 
         /// <summary>
@@ -373,7 +482,7 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
         /// <returns>true if both objects contain the same values, false if rhsAsObject is null, is not of this type or has different contents</returns>
         public override bool Equals(object rhsAsObject)
 		{
-            return IsEqualTo(rhsAsObject as IPassiveToActivePinsState);
+            return Equals(rhsAsObject as IPassiveToActivePinsState);
 		}
 
         /// <summary>
@@ -421,7 +530,7 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
         /// <summary>Returns a print/log suitable string version of the state of this P2A pins state object</summary>
 		public override string ToString()
 		{
-            return Utils.Fcns.CheckedFormat("{9}:${0:x}{1}{2}{3}{4}{5}{6}{7}{8}"
+            return Utils.Fcns.CheckedFormat("{9}:${0:x2}{1}{2}{3}{4}{5}{6}{7}{8}"
                                             , (UInt32) PackedWord
                                             , (L_REQ ? ",L_REQ" : "")
                                             , (U_REQ ? ",U_REQ" : "")
@@ -459,29 +568,29 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
             }
         }
 
-		///<summary>L_REQ - to active: set signal to indicate that port is ready to accept an automatic load transfer request, cleared to signal that physical delivery has completed.</summary>
-		public bool L_REQ { get; set; }
+        ///<summary>L_REQ - to active: set signal to indicate that port is ready to accept an automatic load transfer request, cleared to signal that physical delivery has completed.<para/>pin 1, 0x0001</summary>
+        public bool L_REQ { get; set; }
 
-		///<summary>U_REQ - to active: set signal to indicate that port is ready to accept an automatic unload transfer request, cleared to signal that physical removal has completed.</summary>
+        ///<summary>U_REQ - to active: set signal to indicate that port is ready to accept an automatic unload transfer request, cleared to signal that physical removal has completed.<para/>pin 2, 0x0002</summary>
         public bool U_REQ { get; set; }
 
-		///<summary>VA - only used for interbay passive OHS vehicles.  Valid signal for use wiht VS_0 and VS_1 select signals.</summary>
+        ///<summary>VA - only used for interbay passive OHS vehicles.  Valid signal for use with VS_0 and VS_1 select signals.<para/>pin 3, 0x0004</summary>
         public bool VA { get; set; }
 
-		///<summary>READY - to active: set signal to indicate that port is allocated for transfer and that port is ready for physical transfer to begin.  signal cleared when COMPT has been observed.</summary>
+        ///<summary>READY - to active: set signal to indicate that port is allocated for transfer and that port is ready for physical transfer to begin.  signal cleared when COMPT has been observed.<para/>pin 4, 0x0008</summary>
         public bool READY { get; set; }
 
-		///<summary>VS_0 - only used for interbay passive OHS vehicles</summary>
+        ///<summary>VS_0 - only used for interbay passive OHS vehicles.<para/>pin 5, 0x0010</summary>
         public bool VS_0 { get; set; }
 
-		///<summary>VS_1 - only used for interbay passive OHS vehicles</summary>
+        ///<summary>VS_1 - only used for interbay passive OHS vehicles.<para/>pin 6, 0x0020</summary>
         public bool VS_1 { get; set; }
 
-		///<summary>HO_AVBL - inform AMHS that handoff is available.  Used both within transfer session to inform active of transfer failure(s), Used outside of transfer session to block active from requesting one.</summary>
+        ///<summary>HO_AVBL - inform AMHS that handoff is available.  Used both within transfer session to inform active of transfer failure(s), Used outside of transfer session to block active from requesting one.<para/>pin 7, 0x0040</summary>
         public bool HO_AVBL { get; set; }
 
-		///<summary>ES (emergency stop) - Please see E084 standard for details on specific meaning of this signal.  External actors are required to halt motion immediately when this signal is not active.</summary>
-		///<remarks>NOTE: This signal is active (current flowing) when motion is permitted.</remarks>
+        ///<summary>ES (emergency stop) - Please see E084 standard for details on specific meaning of this signal.  External actors are required to halt motion immediately when this signal is not active.<para/>pin 8, 0x0080</summary>
+        ///<remarks>NOTE: This signal is active (current flowing) when motion is permitted.</remarks>
         public bool ES { get; set; }
 	};
 
@@ -490,34 +599,36 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
 	//-------------------------------------------------------------------
     #region E084 Timer related utility classes
 
-    /// <summary>This class is a pseudo base class that simply serves to define a set of constant default values for used in derived classes.</summary>
-    public class TimersCommon
-    {
-        ///<summary>Minimum expected time limit value for most timer values [1.0]</summary>
-	    public const double MinimumStandardTimerValue = 1.0;
-        ///<summary>Default time limit value for handshake type timers [2.0]</summary>
-	    public const double DefaultStandardTimerValue = 2.0;
-        ///<summary>Default time limit value used for TP3 and TP4 [60.0]</summary>
-	    public const double DefaultMotionTimerValue = 60.0;
-        ///<summary>Maximum expected time limit value for most timer values [999.0]</summary>
-	    public const double MaximumStandardTimerValue = 999.0;
-    }
-
     /// <summary>Defines the storage and use of the TA1, TA2, and TA3 timer values</summary>
     [DataContract(Namespace = Constants.E084NameSpace)]
-    public class ActiveTimers : TimersCommon
+    public class ActiveTimers
 	{
+        ///<summary>Default time limit value for handshake type timers TA1, TA2 and TA3 [2.0]</summary>
+        public const double DefaultHandshakeTimerValue = 2.0;
+
         ///<summary>VALID on to [L_REQ or U_REQ] on</summary>
         [DataMember]
-		double TA1 { get; set; }
+        [ConfigItem]
+        [ValueSetItem]
+        public double TA1 { get; set; }
 
         ///<summary>T_REQ on to READY on</summary>
         [DataMember]
-        double TA2 { get; set; }
+        [ConfigItem]
+        [ValueSetItem]
+        public double TA2 { get; set; }
 
         ///<summary>COMPT on to READY off</summary>
         [DataMember]
-        double TA3 { get; set; }
+        [ConfigItem]
+        [ValueSetItem]
+        public double TA3 { get; set; }
+
+        /// <summary>Debugging and Logging helper method</summary>
+        public override string ToString()
+        {
+            return "TA1:{0:f1} TA2:{1:f1} TA3:{2:f1}".CheckedFormat(TA1, TA2, TA3);
+        }
 
         /// <summary>
         /// Default Constructor:
@@ -525,18 +636,50 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
         /// </summary>
 		public ActiveTimers()
         {
-			TA1 = DefaultStandardTimerValue;
-			TA2 = DefaultStandardTimerValue;
-			TA3 = DefaultStandardTimerValue; 
+            SetFrom(null);
         }
 
         /// <summary>Copy constructor</summary>
-        /// <param name="rhs">Defines the instance that this is constructed as a copy of.</param>
         public ActiveTimers(ActiveTimers rhs) 
-        { 
-            TA1 = rhs.TA1; 
-            TA2 = rhs.TA2; 
-            TA3 = rhs.TA3; 
+        {
+            SetFrom(rhs);
+        }
+
+        /// <summary>Constructor and Copy constructor helper function</summary>
+        public ActiveTimers SetFrom(ActiveTimers rhs)
+        {
+            if (rhs != null)
+            {
+                TA1 = rhs.TA1;
+                TA2 = rhs.TA2;
+                TA3 = rhs.TA3;
+            }
+            else
+            {
+                TA1 = DefaultHandshakeTimerValue;
+                TA2 = DefaultHandshakeTimerValue;
+                TA3 = DefaultHandshakeTimerValue;
+            }
+
+            return this;
+        }
+
+        /// <summary>
+        /// Update this object's ConfigItem marked public properties from corresponingly named config keys (using the namePrefix)
+        /// </summary>
+        public ActiveTimers Setup(string namePrefix, Logging.IMesgEmitter issueEmitter, Logging.IMesgEmitter valueEmitter)
+        {
+            return Setup(config: null, namePrefix: namePrefix, issueEmitter: issueEmitter, valueEmitter: valueEmitter);
+        }
+
+        /// <summary>
+        /// Update this object's ConfigItem marked public properties from corresponingly named config keys (using the namePrefix)
+        /// </summary>
+        public ActiveTimers Setup(IConfig config, string namePrefix, Logging.IMesgEmitter issueEmitter, Logging.IMesgEmitter valueEmitter)
+        {
+            ConfigValueSetAdapter<ActiveTimers> adapter = new ConfigValueSetAdapter<ActiveTimers>(config) { ValueSet = this, SetupIssueEmitter = issueEmitter, UpdateIssueEmitter = issueEmitter, ValueNoteEmitter = valueEmitter }.Setup(namePrefix);
+
+            return this;
         }
 
         /// <summary>
@@ -559,56 +702,111 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
 
     /// <summary>Defines the storage and use of the TP1, TP2, TP3, TP4, TP5, and TP6 timer values</summary>
     [DataContract(Namespace = Constants.E084NameSpace)]
-    public class PassiveTimers : TimersCommon
-	{
+    public class PassiveTimers
+    {       
+        ///<summary>Minimum expected time limit value for most timer values [1.0]</summary>
+        public const double MinimumHandshakeTimerValue = 1.0;
+        ///<summary>Default time limit value for handshake type timers [2.0]</summary>
+        public const double DefaultHandshakeTimerValue = 2.0;
+        ///<summary>Default time limit value used for TP3 and TP4 [60.0]</summary>
+        public const double DefaultMotionTimerValue = 60.0;
+        ///<summary>Maximum expected time limit value for most timer values [999.0]</summary>
+        public const double MaximumTimerValue = 999.0;
+
         ///<summary>L_REQ or U_REQ on to TR_REQ on</summary>
         [DataMember]
-        double TP1 { get; set; }
+        [ConfigItem]
+        [ValueSetItem]
+        public double TP1 { get; set; }
 
         ///<summary>READY on to BUSY on</summary>
         [DataMember]
-        double TP2 { get; set; }
+        [ConfigItem]
+        [ValueSetItem]
+        public double TP2 { get; set; }
 
         ///<summary>BUSY on to carrier delivered or carrier removed</summary>
         [DataMember]
-        double TP3 { get; set; }
+        [ConfigItem]
+        [ValueSetItem]
+        public double TP3 { get; set; }
 
         ///<summary>L_REQ or U_REQ off to BUSY off</summary>
         [DataMember]
-        double TP4 { get; set; }
+        [ConfigItem]
+        [ValueSetItem]
+        public double TP4 { get; set; }
 
         ///<summary>READY off to VALID off</summary>
         [DataMember]
-        double TP5 { get; set; }
+        [ConfigItem]
+        [ValueSetItem]
+        public double TP5 { get; set; }
 
         ///<summary>VALID off to VALID on [CONT handoff]</summary>
+        ///<remarks>This timer is not normally used since continuous handoff is not supported on most OHT I300I tools</remarks>
         [DataMember]
-        double TP6 { get; set; }
+        [ConfigItem(IsOptional=true)]
+        [ValueSetItem(SilenceIssues=true)]
+        public double TP6 { get; set; }
+
+        /// <summary>Debugging and Logging helper method</summary>
+        public override string ToString()
+        {
+            if (TP6 == 0.0)
+                return "TP1:{0:f1} TP2:{1:f1} TP3:{2:f1} TP4:{3:f1} TP5:{4:f1}".CheckedFormat(TP1, TP2, TP3, TP4, TP5);
+            else
+                return "TP1:{0:f1} TP2:{1:f1} TP3:{2:f1} TP4:{3:f1} TP5:{4:f1} TP6:{5:f1}".CheckedFormat(TP1, TP2, TP3, TP4, TP5, TP6);
+        }
 
         /// <summary>
         /// Default constructor:
-        /// TP1 = 2.0, TP2 = 2.0, TP3 = 60.0, TP4 = 60.0, TP5 = 2.0, TP6 = 2.0
+        /// TP1 = 2.0, TP2 = 2.0, TP3 = 60.0, TP4 = 60.0, TP5 = 2.0, TP6 = 0.0
         /// </summary>
         public PassiveTimers()
         {
-			TP1 = DefaultStandardTimerValue;
-			TP2 = DefaultStandardTimerValue;
-			TP3 = DefaultMotionTimerValue;
-			TP4 = DefaultMotionTimerValue;
-			TP5 = DefaultStandardTimerValue;
-			TP6 = DefaultStandardTimerValue;
+            SetFrom(null);
         }
 
         /// <summary>Copy constructor</summary>
-        /// <param name="rhs">Defines the instance that this is constructed as a copy of.</param>
         public PassiveTimers(PassiveTimers rhs)
         {
-            TP1 = rhs.TP1; 
-            TP2 = rhs.TP2; 
-            TP3 = rhs.TP3; 
-            TP4 = rhs.TP4; 
-            TP5 = rhs.TP5; 
-            TP6 = rhs.TP6;
+            SetFrom(rhs);
+        }
+
+        /// <summary>Constructor and Copy constructor helper function</summary>
+        public PassiveTimers SetFrom(PassiveTimers rhs)
+        {
+            if (rhs != null)
+            {
+                TP1 = rhs.TP1;
+                TP2 = rhs.TP2;
+                TP3 = rhs.TP3;
+                TP4 = rhs.TP4;
+                TP5 = rhs.TP5;
+                TP6 = rhs.TP6;
+            }
+            else
+            {
+                TP1 = DefaultHandshakeTimerValue;
+                TP2 = DefaultHandshakeTimerValue;
+                TP3 = DefaultMotionTimerValue;
+                TP4 = DefaultMotionTimerValue;
+                TP5 = DefaultHandshakeTimerValue;
+                TP6 = 0.0;
+            }
+
+            return this;
+        }
+
+        /// <summary>
+        /// Update this object's ConfigItem marked public properties from corresponingly named config keys (using the namePrefix)
+        /// </summary>
+        public PassiveTimers Setup(string namePrefix, Logging.IMesgEmitter issueEmitter, Logging.IMesgEmitter valueEmitter)
+        {
+            ConfigValueSetAdapter<PassiveTimers> adapter = new ConfigValueSetAdapter<PassiveTimers>() { ValueSet = this, SetupIssueEmitter = issueEmitter, UpdateIssueEmitter = issueEmitter, ValueNoteEmitter = valueEmitter }.Setup(namePrefix);
+
+            return this;
         }
 
         /// <summary>
@@ -631,7 +829,7 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
 
     /// <summary>This class defines specific internal timer values that may be used within a relevant state machine engine.</summary>
     [DataContract(Namespace = Constants.E084NameSpace)]
-	public class DelayTimers : TimersCommon
+	public class DelayTimers
 	{
         /// <summary>Defines the minimum value that TD0 may normally be set to [0.1]</summary>
 	    public const double MinimumTD0Value = 0.1;
@@ -644,28 +842,62 @@ namespace MosaicLib.Semi.E084       //! namespace within which to define informa
 
         ///<summary>Active side minumum nominal delay between CS_x on and VALID on</summary>
         [DataMember]
+        [ConfigItem]
+        [ValueSetItem]
         public double TD0 { get; set; }
 
         ///<summary>Active side minimum delay between VALID off and VALID on (such as for CONT handoff)</summary>
         [DataMember]
+        [ConfigItem]
+        [ValueSetItem]
         public double TD1 { get; set; }
+
+        /// <summary>Debugging and Logging helper method</summary>
+        public override string ToString()
+        {
+            return "TD0:{0:f1} TD1:{1:f1}".CheckedFormat(TD0, TD1);
+        }
 
         /// <summary>
         /// Default constructor:
         /// TD0 = 0.1, TD1 = 1.0
         /// </summary>
 		public DelayTimers() 
-        { 
-            TD0 = DefaultTD0Value; 
-            TD1 = DefaultTD1Value; 
+        {
+            SetFrom(null);
         }
 
         /// <summary>Copy constructor</summary>
-        /// <param name="rhs">Defines the instance that this is constructed as a copy of.</param>
         public DelayTimers(DelayTimers rhs) 
-        { 
-            TD0 = rhs.TD0; 
-            TD1 = rhs.TD1; 
+        {
+            SetFrom(rhs);
+        }
+
+        /// <summary>Constructor and Copy constructor helper function</summary>
+        public DelayTimers SetFrom(DelayTimers rhs)
+        {
+            if (rhs != null)
+            {
+                TD0 = rhs.TD0;
+                TD1 = rhs.TD1;
+            }
+            else
+            {
+                TD0 = DefaultTD0Value;
+                TD1 = DefaultTD1Value;
+            }
+
+            return this;
+        }
+
+        /// <summary>
+        /// Update this object's ConfigItem marked public properties from corresponingly named config keys (using the namePrefix)
+        /// </summary>
+        public DelayTimers Setup(string namePrefix, Logging.IMesgEmitter issueEmitter, Logging.IMesgEmitter valueEmitter)
+        {
+            ConfigValueSetAdapter<DelayTimers> adapter = new ConfigValueSetAdapter<DelayTimers>() { ValueSet = this, SetupIssueEmitter = issueEmitter, UpdateIssueEmitter = issueEmitter, ValueNoteEmitter = valueEmitter }.Setup(namePrefix);
+
+            return this;
         }
 
         /// <summary>

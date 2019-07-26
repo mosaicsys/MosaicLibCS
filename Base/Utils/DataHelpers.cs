@@ -3,9 +3,10 @@
  * This file contains a series of utility classes that are used to encapuslate
  * track, record and/or manage data objects.
  * 
- * Copyright (c) Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2008 Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2006 Mosaic Systems Inc., All rights reserved. (C++ library version)
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2008 Mosaic Systems Inc.
+ * Copyright (c) 2006 Mosaic Systems Inc.  (C++ library version)
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,17 +20,36 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
 
 using System;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
-using System.IO;
+using System.Text;
+
+using MosaicLib.Utils.Collections;
 
 namespace MosaicLib.Utils
 {
-	//-------------------------------------------------
+    #region utility interfaces: ICopyable<TObjectType>
+
+    /// <summary>
+    /// This interface is used with generics so that they can make use of some type of copy construction in a generic manner through the use of the MakeCopyOfThis method defined by this interface.
+    /// </summary>
+    public interface ICopyable<TObjectType>
+    {
+        /// <summary>
+        /// Requests the current object to make a copy of itself of the given type.  
+        /// If deepCopy is true then the copy shall be a deep copy otherwise it can be any type of copy the object defines.
+        /// In many cases this method will only produce deep copies.
+        /// </summary>
+        TObjectType MakeCopyOfThis(bool deepCopy = true);
+    }
+
+    #endregion
+
+    //-------------------------------------------------
 	#region Data Packing, Unpacking, Byte Order manipulations
 
 	/// <summary>
@@ -57,8 +77,8 @@ namespace MosaicLib.Utils
 		{ 
 			value = 0;
 
-            if (byteArray == null || (baseIdx < 0) || ((baseIdx + 1) >= byteArray.Length))
-				return false;
+            if (!byteArray.IsSafeIndex(baseIdx, length: 2))
+                return false;
 
             value = Pack(byteArray [baseIdx], byteArray [baseIdx + 1]);
 			return true;
@@ -70,24 +90,38 @@ namespace MosaicLib.Utils
 		{ 
 			value = 0;
 
-            if (byteArray == null || (baseIdx < 0) || ((baseIdx + 3) >= byteArray.Length))
-				return false;
+            if (!byteArray.IsSafeIndex(baseIdx, length: 4))
+                return false;
 
             value = Pack(byteArray [baseIdx], byteArray [baseIdx + 1], byteArray [baseIdx + 2], byteArray [baseIdx + 3]);
 			return true;
         }
 
-        /// <summary>Packs a set of the given number of bytes (2, 3, or 4, in big endian order) from the indicated location in the given byteArray, and places them in the UInt32 value output.</summary>
+        /// <summary>Packs a set of 8 bytes, in big endian order, from the indicated location in the given byteArray, and places them in the UInt64 value output.</summary>
+        /// <returns>True on success, false if the byteArray or baseIdx could not be used to obtain the required number of bytes</returns>
+        public static bool Pack(Byte[] byteArray, int baseIdx, out UInt64 value)
+        {
+            value = 0;
+
+            if (!byteArray.IsSafeIndex(baseIdx, length: 8))
+                return false;
+
+            value = Pack(byteArray[baseIdx], byteArray[baseIdx + 1], byteArray[baseIdx + 2], byteArray[baseIdx + 3], byteArray[baseIdx + 4], byteArray[baseIdx + 5], byteArray[baseIdx + 6], byteArray[baseIdx + 7]);
+            return true;
+        }
+
+        /// <summary>Packs a set of the given number of bytes (1, 2, 3, or 4, in big endian order) from the indicated location in the given byteArray, and places them in the UInt32 value output.</summary>
         /// <returns>True on success, false if the byteArray or baseIdx could not be used to obtain the required number of bytes, or if numBytes is not a supported value.</returns>
         public static bool Pack(Byte[] byteArray, int baseIdx, int numBytes, out UInt32 value)
         {
             value = 0;
 
-            if (byteArray == null || (baseIdx < 0) || ((baseIdx + numBytes) > byteArray.Length))
+            if (!byteArray.IsSafeIndex(baseIdx, length: numBytes))
                 return false;
 
             switch (numBytes)
             {
+                case 1: value = byteArray[baseIdx]; return true;
                 case 2: value = Pack(byteArray[baseIdx], byteArray[baseIdx + 1]); return true;
                 case 3: value = Pack(byteArray[baseIdx], byteArray[baseIdx + 1], byteArray[baseIdx + 2]); return true;
                 case 4: value = Pack(byteArray[baseIdx], byteArray[baseIdx + 1], byteArray[baseIdx + 2], byteArray[baseIdx + 3]); return true;
@@ -95,8 +129,31 @@ namespace MosaicLib.Utils
             }
         }
 
+        /// <summary>Packs a set of the given number of bytes (2, 3, or 4, in big endian order) from the indicated location in the given byteArray, and places them in the UInt32 value output.</summary>
+        /// <returns>True on success, false if the byteArray or baseIdx could not be used to obtain the required number of bytes, or if numBytes is not a supported value.</returns>
+        public static bool Pack(Byte[] byteArray, int baseIdx, int numBytes, out UInt64 value)
+        {
+            value = 0;
+
+            if (!byteArray.IsSafeIndex(baseIdx, length: numBytes))
+                return false;
+
+            switch (numBytes)
+            {
+                case 1: value = byteArray[baseIdx]; return true;
+                case 2: value = Pack(byteArray[baseIdx], byteArray[baseIdx + 1]); return true;
+                case 3: value = Pack(byteArray[baseIdx], byteArray[baseIdx + 1], byteArray[baseIdx + 2]); return true;
+                case 4: value = Pack(byteArray[baseIdx], byteArray[baseIdx + 1], byteArray[baseIdx + 2], byteArray[baseIdx + 3]); return true;
+                case 5: value = Pack(0, 0, 0, byteArray[baseIdx], byteArray[baseIdx + 1], byteArray[baseIdx + 2], byteArray[baseIdx + 3], byteArray[baseIdx + 4]); return true;
+                case 6: value = Pack(0, 0, byteArray[baseIdx], byteArray[baseIdx + 1], byteArray[baseIdx + 2], byteArray[baseIdx + 3], byteArray[baseIdx + 4], byteArray[baseIdx + 5]); return true;
+                case 7: value = Pack(0, byteArray[baseIdx], byteArray[baseIdx + 1], byteArray[baseIdx + 2], byteArray[baseIdx + 3], byteArray[baseIdx + 4], byteArray[baseIdx + 5], byteArray[baseIdx + 6]); return true;
+                case 8: value = Pack(byteArray[baseIdx], byteArray[baseIdx + 1], byteArray[baseIdx + 2], byteArray[baseIdx + 3], byteArray[baseIdx + 4], byteArray[baseIdx + 5], byteArray[baseIdx + 6], byteArray[baseIdx + 7]); return true;
+                default: return false;
+            }
+        }
+
         /// <summary>Packs and returns 2 bytes from the indicated location in the given byteArray in BigEndian Order.  Returns 0 if any of the indicates bytes are not accessible.</summary>
-        public static UInt16 Pack2(Byte[] byteArray, int baseIdx)
+        public static UInt16 Pack2(Byte[] byteArray, int baseIdx = 0)
         {
             UInt16 value;
             Pack(byteArray, baseIdx, out value);
@@ -104,7 +161,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>Packs and returns 3 bytes from the indicated location in the given byteArray in BigEndian Order.  Returns 0 if any of the indicates bytes are not accessible.</summary>
-        public static UInt32 Pack3(Byte[] byteArray, int baseIdx)
+        public static UInt32 Pack3(Byte[] byteArray, int baseIdx = 0)
         {
             UInt32 value;
             Pack(byteArray, baseIdx, 3, out value);
@@ -112,10 +169,20 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>Packs and returns 4 bytes from the indicated location in the given byteArray in BigEndian Order.  Returns 0 if any of the indicates bytes are not accessible.</summary>
-        public static UInt32 Pack4(Byte[] byteArray, int baseIdx)
+        public static UInt32 Pack4(Byte[] byteArray, int baseIdx = 0)
         {
             UInt32 value;
             Pack(byteArray, baseIdx, out value);
+            return value;
+        }
+
+        /// <summary>Packs and returns 8 bytes from the indicated location in the given byteArray in BigEndian Order.  Returns 0 if any of the indicates bytes are not accessible.</summary>
+        public static UInt64 Pack8(Byte[] byteArray, int baseIdx = 0)
+        {
+            UInt64 value;
+
+            Pack(byteArray, baseIdx, out value);
+            
             return value;
         }
 
@@ -167,9 +234,38 @@ namespace MosaicLib.Utils
 			}
 		}
 
+        /// <summary>Unpacks 8 bytes from the given UInt64 value and saves them in the corresponding output variables</summary>
+        public static void Unpack(UInt64 l, out Byte uumsb, out Byte uulsb, out Byte ulmsb, out Byte ullsb, out Byte lumsb, out Byte lulsb, out Byte llmsb, out Byte lllsb)
+        {
+            unchecked
+            {
+                uumsb = (Byte)(l >> 56);
+                uulsb = (Byte)(l >> 48);
+                ulmsb = (Byte)(l >> 40);
+                ullsb = (Byte)(l >> 32);
+                lumsb = (Byte)(l >> 24);
+                lulsb = (Byte)(l >> 16);
+                llmsb = (Byte)(l >> 8);
+                lllsb = (Byte)(l >> 0);
+            }
+        }
+
+        /// <summary>Unpacks 4 words from the given UInt64 value and saves them in the corresponding output variables</summary>
+        public static void Unpack(UInt64 l, out UInt16 umsw, out UInt16 ulsw, out UInt16 lmsw, out UInt16 llsw)
+        {
+            unchecked
+            {
+                umsw = (UInt16)(l >> 48);
+                ulsw = (UInt16)(l >> 32);
+                lmsw = (UInt16)(l >> 16);
+                llsw = (UInt16)(l >> 0);
+            }
+        }
+
+
         /// <summary>Unpacks 2 bytes from the given UInt16 value and saves them in the give byteArray at the given baseIdx offset.  Uses Big Endian byte ordering.</summary>
         /// <returns>True on success, false if the byteArray or baseIdx could not be used to save the required number of bytes.</returns>
-        public static bool Unpack(UInt16 w, byte[] byteArray, int baseIdx)
+        public static bool Unpack(UInt16 w, byte[] byteArray, int baseIdx = 0)
 		{
 			if (byteArray == null || baseIdx < 0 || ((baseIdx + 2) > byteArray.Length))
 				return false;
@@ -179,7 +275,7 @@ namespace MosaicLib.Utils
 
         /// <summary>Unpacks 4 bytes from the given UInt32 value and saves them in the give byteArray at the given baseIdx offset.  Uses Big Endian byte ordering.</summary>
         /// <returns>True on success, false if the byteArray or baseIdx could not be used to save the required number of bytes.</returns>
-        public static bool Unpack(UInt32 l, byte[] byteArray, int baseIdx)
+        public static bool Unpack(UInt32 l, byte[] byteArray, int baseIdx = 0)
 		{
 			if (byteArray == null || baseIdx < 0 || ((baseIdx + 4) > byteArray.Length))
 				return false;
@@ -187,7 +283,17 @@ namespace MosaicLib.Utils
 			return true;
         }
 
-        /// <summary>Unpacks the given number of bytes (2, 3 or 4) from the given UInt32 value and saves them in the give byteArray at the given baseIdx offset.  Uses Big Endian byte ordering.</summary>
+        /// <summary>Unpacks 8 bytes from the given UInt64 value and saves them in the give byteArray at the given baseIdx offset.  Uses Big Endian byte ordering.</summary>
+        /// <returns>True on success, false if the byteArray or baseIdx could not be used to save the required number of bytes.</returns>
+        public static bool Unpack(UInt64 l, byte[] byteArray, int baseIdx = 0)
+        {
+            if (byteArray == null || baseIdx < 0 || ((baseIdx + 8) > byteArray.Length))
+                return false;
+            Unpack(l, out byteArray[baseIdx], out byteArray[baseIdx + 1], out byteArray[baseIdx + 2], out byteArray[baseIdx + 3], out byteArray[baseIdx + 4], out byteArray[baseIdx + 5], out byteArray[baseIdx + 6], out byteArray[baseIdx + 7]);
+            return true;
+        }
+
+        /// <summary>Unpacks the given number of bytes (1, 2, 3 or 4) from the given UInt32 value and saves them in the give byteArray at the given baseIdx offset.  Uses Big Endian byte ordering.</summary>
         /// <returns>True on success, false if the byteArray or baseIdx could not be used to save the required number of bytes, or if numBytes is not a supported value.</returns>
         public static bool Unpack(UInt32 l, byte[] byteArray, int baseIdx, int numBytes)
         {
@@ -196,6 +302,7 @@ namespace MosaicLib.Utils
 
             switch (numBytes)
             {
+                case 1: byteArray[baseIdx] = (byte) (l & 0x00ff); return true;
                 case 2: Unpack((UInt16) (l & 0xffff), out byteArray[baseIdx], out byteArray[baseIdx + 1]); return true;
                 case 3: Unpack(l, out byteArray[baseIdx], out byteArray[baseIdx + 1], out byteArray[baseIdx + 2]); return true;
                 case 4: Unpack(l, out byteArray[baseIdx], out byteArray[baseIdx + 1], out byteArray[baseIdx + 2], out byteArray[baseIdx + 3]); return true;
@@ -389,7 +496,217 @@ namespace MosaicLib.Utils
 
 	#endregion
 
-	//-------------------------------------------------
+    #region Extension methods for marshaling between byte arrays and other objects
+
+    public static partial class ExtensionMethods
+    {
+        /// <summary>
+        /// This method obtains the byte array length that will be required in order to marshal the given <paramref name="type"/> of object to a byte array.
+        /// </summary>
+        public static int GetMarshaledByteArraySize(this System.Type type, int fallbackValue = 0, bool rethrow = true)
+        {
+            try
+            {
+                int length = Marshal.SizeOf(type);
+
+                return length;
+            }
+            catch (System.Exception ex)
+            {
+                if (rethrow && ex != null)
+                    throw;
+
+                return fallbackValue;
+            }
+        }
+
+        /// <summary>
+        /// This method obtains the byte array length that will be required in order to marshal the given <paramref name="value"/> object to a byte array.
+        /// </summary>
+        public static int GetMarshaledByteArraySize<TObjType>(this TObjType value, int fallbackValue = 0, bool rethrow = true)
+        {
+            try
+            {
+                int length = Marshal.SizeOf(value);
+
+                return length;
+            }
+            catch (System.Exception ex)
+            {
+                if (rethrow && ex != null)
+                    throw;
+
+                return fallbackValue;
+            }
+        }
+
+        /// <summary>
+        /// This method allocates a byte array of the length given by Marshal.Sizeof({TObjType}), 
+        /// pins it and marshals the given <paramref name="value"/>'s contents into the allocated byte array 
+        /// which is unpinned and returned.  
+        /// If the method encounteres any error (exceptions) this method will either <paramref name="rethrow"/> (when requested)
+        /// or will return the given <paramref name="fallbackValue"/>.
+        /// </summary>
+        public static byte[] MarshalStructToByteArray<TObjType>(this TObjType value, byte[] fallbackValue = null, bool rethrow = true)
+        {
+            GCHandle gch = default(GCHandle);
+            IntPtr gchP = default(IntPtr);
+
+            try
+            {
+                int length = Marshal.SizeOf(typeof(TObjType));
+                byte [] data = new byte [length];
+
+                gch = GCHandle.Alloc(data, GCHandleType.Pinned);
+                gchP = gch.AddrOfPinnedObject();
+
+                Marshal.StructureToPtr(value, gchP, false);
+
+                return data;
+            }
+            catch (System.Exception ex)
+            {
+                if (rethrow && ex != null)
+                    throw;
+
+                return fallbackValue;
+            }
+            finally
+            {
+                gchP = default(IntPtr);
+
+                if (gch.IsAllocated)
+                    gch.Free();
+            }
+        }
+
+        /// <summary>
+        /// This method pins the given <paramref name="byteArray"/>, verifies that it has sufficient size to receive the <paramref name="value"/>'s contents,
+        /// and marshals those contents into the byte array starting at the given <paramref name="startIdx"/>. 
+        /// Method returns the number of bytes produced after unpining the byte array.
+        /// If the method encounteres any error (exceptions) this method will either <paramref name="rethrow"/> (when requested)
+        /// or will return 0.
+        /// </summary>
+        public static int MarshalStructIntoToByteArray<TObjType>(this TObjType value, byte[] byteArray, int startIdx = 0, bool rethrow = true)
+        {
+            GCHandle gch = default(GCHandle);
+            IntPtr gchP = default(IntPtr);
+
+            try
+            {
+                int length = Marshal.SizeOf(typeof(TObjType));
+
+                if (byteArray != null)
+                    gch = GCHandle.Alloc(byteArray, GCHandleType.Pinned);
+
+                if (gch.IsAllocated && byteArray.IsSafeIndex(startIdx, length))
+                {
+                    gchP = gch.AddrOfPinnedObject();
+                    if (startIdx != 0)
+                        gchP = IntPtr.Add(gchP, startIdx);
+                }
+                else
+                {
+                    throw new System.IndexOutOfRangeException("invalid combination of size, startIdx, and length [{0}, {1}, {2}]".CheckedFormat(byteArray.SafeCount(), startIdx, length));
+                }
+
+                Marshal.StructureToPtr(value, gchP, false);
+
+                return length;
+            }
+            catch (System.Exception ex)
+            {
+                if (rethrow && ex != null)
+                    throw;
+
+                return 0;
+            }
+            finally
+            {
+                gchP = default(IntPtr);
+
+                if (gch.IsAllocated)
+                    gch.Free();
+            }
+        }
+
+        /// <summary>
+        /// This method pins the given byteArray, computes a relative offset into the byte array, 
+        /// and marshals the indicated bytes into a new instance of the given <typeparamref name="TObjType"/> which is returned after unpinning the given byteArray.
+        /// If the method encounteres any error (exceptions) this method will either <paramref name="rethrow"/> (when requested)
+        /// or will return the given <paramref name="fallbackValue"/>.
+        /// </summary>
+        public static TObjType MarshalStructFromByteArray<TObjType>(this byte[] byteArray, int startIdx = 0, TObjType fallbackValue = default(TObjType), bool rethrow = true, int? byteCountIn = null)
+        {
+            TObjType value;
+
+            byteArray.MarshalStructFromByteArray(out value, startIdx: startIdx, fallbackValue: fallbackValue, rethrow: rethrow, availableByteCountIn: byteCountIn);
+
+            return value;
+        }
+
+        /// <summary>
+        /// This method pins the given <paramref name="byteArray"/>, computes a relative offset into it, verifies that the byte array is sufficiently large, 
+        /// and marshals the indicated bytes into a new instance of the given <typeparamref name="TObjType"/> which is assigned to the given <paramref name="valueOut"/> out parameter.  The number of bytes produced is returned after unpinning the given byteArray.
+        /// If the method encounteres any error (exceptions) this method will either <paramref name="rethrow"/> (when requested)
+        /// or will assign the given <paramref name="fallbackValue"/> and return zero.
+        /// </summary>
+        public static int MarshalStructFromByteArray<TObjType>(this byte[] byteArray, out TObjType valueOut, int startIdx = 0, TObjType fallbackValue = default(TObjType), bool strictLength = true, bool rethrow = true, int? availableByteCountIn = null)
+        {
+            GCHandle gch = default(GCHandle);
+            IntPtr gchP = default(IntPtr);
+
+            try
+            {
+                int length = Marshal.SizeOf(typeof(TObjType));
+
+                if (byteArray != null)
+                {
+                    gch = GCHandle.Alloc(byteArray, GCHandleType.Pinned);
+                }
+
+                int testLength = (strictLength ? length : 1);
+
+                bool lengthLessThanGivenAvailableByteCount = ((availableByteCountIn == null) || (testLength <= availableByteCountIn));
+
+                if (byteArray.IsSafeIndex(startIdx, length: testLength) && gch.IsAllocated && lengthLessThanGivenAvailableByteCount)
+                {
+                    gchP = gch.AddrOfPinnedObject();
+                    if (startIdx != 0)
+                        gchP = IntPtr.Add(gchP, startIdx);
+                }
+                else
+                {
+                    throw new System.IndexOutOfRangeException("invalid combination of size, and startIdx [{0}, {1}]".CheckedFormat(byteArray.SafeCount(), startIdx));
+                }
+
+                valueOut = (TObjType)Marshal.PtrToStructure(gchP, typeof(TObjType));
+
+                return Math.Min(length, byteArray.SafeCount() - startIdx);
+            }
+            catch (System.Exception ex)
+            {
+                valueOut = fallbackValue;
+
+                if (rethrow && ex != null)
+                    throw;
+
+                return 0;
+            }
+            finally
+            {
+                gchP = default(IntPtr);
+
+                if (gch.IsAllocated)
+                    gch.Free();
+            }
+        }
+        private static readonly byte[] emptyByteArray = EmptyArrayFactory<byte>.Instance;
+    }
+
+    #endregion
+
+    //-------------------------------------------------
 	#region Atomic Value types
 
     /// <summary>Defines an interface to the Atomic Value storage and manipulation types used here.</summary>
@@ -499,7 +816,7 @@ namespace MosaicLib.Utils
     }
 
     /// <summary>
-    /// This struct provides the standard System.Threading.Interlocked operations wrapped around a volatile System.Int64 value.  This is done to allow us to surpress the warnings that are generated when passing a volatile by reference
+    /// This struct provides the standard System.Threading.Interlocked operations wrapped around a volatile System.Int64 value.  This is done to allow us to suppress the warnings that are generated when passing a volatile by reference
     /// </summary>
     public struct AtomicInt64 : IAtomicValue<System.Int64>
     {
@@ -758,6 +1075,12 @@ namespace MosaicLib.Utils
         /// <summary>Protected native volatile handle that contains the object reference.</summary>
         /// <remarks>reference objects may be flagged as being volatile and as such they may be atomically updated/replaced without additional concern.  The CLR makes certain that this operation is safe and meaningful.</remarks>
         protected volatile RefObjectType volatileObjHandle = null;
+
+        /// <summary>Debugging and logging helper</summary>
+        public override string ToString()
+        {
+            return "VolatileRefObject {0}".CheckedFormat(Object);
+        }
 	}
 
 	/// <summary>Implements the IGuardedObjectSource.  Uses mutex to implement object access synchronization.</summary>
@@ -779,7 +1102,13 @@ namespace MosaicLib.Utils
         /// <summary>Protected native volatile handle that contains the object reference.</summary>
         /// <remarks>reference objects may be flagged as being volatile and as such they may be atomically updated/replaced without additional concern.  The CLR makes certain that this operation is safe and meaningful.</remarks>
 		protected volatile RefObjectType volatileObjHandle = null;
-	}
+
+        /// <summary>Debugging and logging helper</summary>
+        public override string ToString()
+        {
+            return "GuardedRefObject {0}".CheckedFormat(Object);
+        }
+    }
 
 	/// <summary>Implements the IGuardedObjectSource.  Uses mutex to implement object access synchronization.</summary>
 	/// <typeparam name="ValueObjectType">The type of the guarded object.  Must be a value type.</typeparam>
@@ -798,7 +1127,13 @@ namespace MosaicLib.Utils
         /// <summary>Protected native storage for the value object type against which this class has been defined.</summary>
         /// <remarks>value objects are stored in this object and require use of the mutex for both access and modification.</remarks>
         protected ValueObjectType valueObjStorage = default(ValueObjectType);
-	}
+
+        /// <summary>Debugging and logging helper</summary>
+        public override string ToString()
+        {
+            return "GuardedValueObject {0}".CheckedFormat(Object);
+        }
+    }
 
 	#endregion
 
@@ -1099,7 +1434,13 @@ namespace MosaicLib.Utils
 
         /// <summary>Protected access to underlying sequence number generator used by this object</summary>
 		protected SequenceNumberInt seqNum = new SequenceNumberInt();
-	}
+
+        /// <summary>Debugging and logging helper</summary>
+        public override string ToString()
+        {
+            return "GuardedSequencedRefObject seqNum:{0} obj:{1}".CheckedFormat(VolatileSequenceNumber, Object);
+        }
+    }
 
     /// <summary>
     /// A variation of a <see cref="MosaicLib.Utils.VolatileRefObject{ValueObjectType}"/> that can be used as an <see cref="MosaicLib.Utils.ISequencedObjectSource{RefObjectType, SeqNumberType}"/>
@@ -1126,7 +1467,13 @@ namespace MosaicLib.Utils
         public virtual int Increment() { return seqNum.Increment(); }
 
 		private InterlockedSequenceNumberInt seqNum  = new InterlockedSequenceNumberInt();
-	}
+    
+        /// <summary>Debugging and logging helper</summary>
+        public override string ToString()
+        {
+            return "InterlockedSequencedRefObject seqNum:{0} obj:{1}".CheckedFormat(VolatileSequenceNumber, Object);
+        }
+    }
 
 	/// <summary>A variation of a GuardedValueObject that can be used as an ISequencedValueObjectSource</summary>
 	/// <typeparam name="ValueObjectType">Gives the type of the guarded object.  Must be a value type.</typeparam>
@@ -1152,7 +1499,13 @@ namespace MosaicLib.Utils
 
         /// <summary>Protected access to underlying sequence number generator used by this object</summary>
         protected SequenceNumberInt seqNum = new SequenceNumberInt();
-	}
+
+        /// <summary>Debugging and logging helper</summary>
+        public override string ToString()
+        {
+            return "GuardedSequencedValueObject seqNum:{0} obj:{1}".CheckedFormat(VolatileSequenceNumber, Object);
+        }
+    }
 
 	#endregion
 
@@ -1213,7 +1566,23 @@ namespace MosaicLib.Utils
         ISequencedSourceObserver ISequencedSourceObserver.UpdateInline() { return UpdateInline(); }
 
 		#endregion
-	}
+    
+        /// <summary>Debugging and logging helper</summary>
+        public override string ToString()
+        {
+            StringBuilder sb = new StringBuilder("SequencedRefObjectSourceObserver seqNum:{0}".CheckedFormat(VolatileSequenceNumber));
+
+            if (IsUpdateNeeded)
+                sb.Append(" UpdateNeeded");
+
+            if (HasBeenSet)
+                sb.CheckedAppendFormat(" obj:{0}", Object);
+            else
+                sb.Append(" HasNotBeenSet");
+
+            return sb.ToString();
+        }
+    }
 
 	/// <summary>Provides an implementation of the ISequencedValueObjectSourceObserver</summary>
 	/// <typeparam name="ValueObjectType">Gives the type of the observed object.  Must be a value type.</typeparam>
@@ -1269,7 +1638,23 @@ namespace MosaicLib.Utils
         ISequencedSourceObserver ISequencedSourceObserver.UpdateInline() { return UpdateInline(); }
 
 		#endregion
-	}
+
+        /// <summary>Debugging and logging helper</summary>
+        public override string ToString()
+        {
+            StringBuilder sb = new StringBuilder("SequencedValueObjectSourceObserver seqNum:{0}".CheckedFormat(VolatileSequenceNumber));
+
+            if (IsUpdateNeeded)
+                sb.Append(" UpdateNeeded");
+
+            if (HasBeenSet)
+                sb.CheckedAppendFormat(" obj:{0}", Object);
+            else
+                sb.Append(" HasNotBeenSet");
+
+            return sb.ToString();
+        }
+    }
 
 	#endregion
 
@@ -1291,18 +1676,28 @@ namespace MosaicLib.Utils
         /// Attempts to use an underlying DataContractSerializer to read the deserialize the corresponding object from the given stream using its ReadObject method.  
         /// Returns the object if the read was successful.
         /// </summary>
+        /// <exception cref="System.Runtime.Serialization.SerializationException">May be thrown by the underlying Data contract serialization object's ReadObject method that is used here.</exception>
         TObjectType ReadObject(System.IO.Stream readStream);
+
+        /// <summary>
+        /// Attempts to use the contained DataContractSerializer to read the deserialize the corresponding object from the given TextReader.
+        /// </summary>
+        /// <param name="tr">Acts as the source of the text from which the DataContractSerializer is to deserialize the object.</param>
+        /// <exception cref="System.Runtime.Serialization.SerializationException">May be thrown by the underlying Data contract serialization object's ReadObject method that is used here.</exception>
+        TObjectType ReadObject(System.IO.TextReader tr);
 
         /// <summary>
         /// Attempts to use an underlying DataContractSerializer to read the deserialize the corresponding object from the given string.
         /// </summary>
-        /// <param name="s">Contains the text from which the DataCongtractSerializer is to deserialize the object.</param>
+        /// <param name="s">Contains the text from which the DataContractSerializer is to deserialize the object.</param>
+        /// <exception cref="System.Runtime.Serialization.SerializationException">May be thrown by the underlying Data contract serialization object's ReadObject method that is used here.</exception>
         TObjectType ReadObject(String s);
 
         /// <summary>
         /// Attempts to open the given path as an serialized text file and read/deserialize the given object from it using an underlying DataContractSerializer
         /// If the underlying File.Open or ReadObject method call fails, this method will either return the given defaultValue (of rethrow is false) or will rethrow the original exception.
         /// </summary>
+        /// <exception cref="System.Runtime.Serialization.SerializationException">May be thrown by the underlying Data contract serialization object's ReadObject method that is used here.</exception>
         TObjectType ReadFromFile(String path, TObjectType defaultValue, bool rethrow);
 
         /// <summary>
@@ -1319,13 +1714,19 @@ namespace MosaicLib.Utils
         /// Attempts to open the given path as a text file and write/serialize the given object into the file using an underlying DataContractSerializer.
         /// If the underlying File.Open or DataContractSerializer.WiteObject call fails, this method will either return (of rethrow is false) or will rethrow the original exception.
         /// </summary>
+        /// <exception cref="System.Runtime.Serialization.InvalidDataContractException">The type being serialized does not conform to data contract rules. For example, the System.Runtime.Serialization.DataContractAttribute attribute has not been applied to the type.</exception>
+        /// <exception cref="System.Runtime.Serialization.SerializationException">There is a problem with the instance being written</exception>
+        /// <exception cref="System.ServiceModel.QuotaExceededException">The maximum number of objects to serialize has been exceeded. Check the System.Runtime.Serialization.DataContractSerializer.MaxItemsInObjectGraph property.</exception>
         void WriteToFile(TObjectType obj, String path, bool rethrow);
 
         /// <summary>
         /// Serializes the given object by calling WriteObject on the underlying DataContractSerializer to serialize and write the object into a String
         /// </summary>
         /// <param name="obj">Gives the object that is to be serialized</param>
-        /// <returns>A string containing the serialized representation of the given object as serialized by the contained DataContracxtSerialzier</returns>
+        /// <returns>A string containing the serialized representation of the given object as serialized by the contained DataContractSerializer</returns>
+        /// <exception cref="System.Runtime.Serialization.InvalidDataContractException">The type being serialized does not conform to data contract rules. For example, the System.Runtime.Serialization.DataContractAttribute attribute has not been applied to the type.</exception>
+        /// <exception cref="System.Runtime.Serialization.SerializationException">There is a problem with the instance being written</exception>
+        /// <exception cref="System.ServiceModel.QuotaExceededException">The maximum number of objects to serialize has been exceeded. Check the System.Runtime.Serialization.DataContractSerializer.MaxItemsInObjectGraph property.</exception>
         string ConvertObjectToString(TObjectType obj);
     }
 
@@ -1342,16 +1743,38 @@ namespace MosaicLib.Utils
         , IDataContractAdapter<TObjectType>
     {
         /// <summary>
+        /// Gets or sets the contained System.Text.Encoding property to determine what character encoding will be used during appropriate serialization and deserialization operations.
+        /// </summary>
+        /// <returns>The text encoding to use. The default is Encoding.ASCII</returns>
+        public virtual System.Text.Encoding Encoding { get { return _encoding; } set { _encoding = value; } }
+        private System.Text.Encoding _encoding = System.Text.Encoding.ASCII;
+
+        /// <summary>
         /// Attempts to use an underlying DataContractSerializer to read the deserialize the corresponding object from the given stream using its ReadObject method.  
         /// Returns the object if the read was successful.
         /// </summary>
         public abstract TObjectType ReadObject(Stream readStream);
 
         /// <summary>
+        /// When overriden in a derived class, this method attempts to use the contained DataContractSerializer to read the deserialize the corresponding object from the given TextReader.
+        /// <para/>The default implementation provided here will throw a System.NotImplementedException on any attempted use.
+        /// </summary>
+        /// <param name="tr">Acts as the source of the text from which the DataContractSerializer is to deserialize the object.</param>
+        /// <exception cref="System.NotImplementedException">The default implementation provided here will throw a System.NotImplementedException on any attempted use.</exception>
+        public virtual TObjectType ReadObject(System.IO.TextReader tr)
+        {
+            throw new System.NotImplementedException("ReadObject(TextReader) is not supported for the {0} class".CheckedFormat(Fcns.CurrentClassName));
+        }
+
+        /// <summary>
         /// Attempts to use an underlying DataContractSerializer to read the deserialize the corresponding object from the given string.
         /// </summary>
-        /// <param name="s">Contains the text from which the DataCongtractSerializer is to deserialize the object.</param>
-        public abstract TObjectType ReadObject(string s);
+        /// <param name="s">Contains the text from which the DataContractSerializer is to deserialize the object.</param>
+        public virtual TObjectType ReadObject(string s)
+        {
+            using (System.IO.StringReader sr = new StringReader(s))
+                return ReadObject(sr);
+        }
 
         /// <summary>
         /// Attempts to open the given path as an serialized text file and read/deserialize the given object from it using an underlying DataContractSerializer
@@ -1409,7 +1832,7 @@ namespace MosaicLib.Utils
         /// Serializes the given object by calling WriteObject on the underlying DataContractSerializer to serialize and write the object into a String
         /// </summary>
         /// <param name="obj">Gives the object that is to be serialized</param>
-        /// <returns>A string containing the serialized representation of the given object as serialized by the contained DataContracxtSerialzier</returns>
+        /// <returns>A string containing the serialized representation of the given object as serialized by the contained DataContractSerializer</returns>
         public abstract string ConvertObjectToString(TObjectType obj);
     }
 
@@ -1458,14 +1881,23 @@ namespace MosaicLib.Utils
         /// <param name="encoding">Defines the XmlWritterSettings.Encoding that will be used.</param>
         public DataContractXmlAdapter(System.Text.Encoding encoding)
         {
-            xws.ConformanceLevel = System.Xml.ConformanceLevel.Document;
-            xws.OmitXmlDeclaration = false;
-            xws.Encoding = encoding;
-            xws.Indent = true;
-            xws.CloseOutput = false;     // this class will explicitly close the underlying stream
+            base.Encoding = encoding;
 
-            xrs.ConformanceLevel = System.Xml.ConformanceLevel.Auto;
-            xrs.CloseInput = false;
+            xws = new System.Xml.XmlWriterSettings()
+            {
+                ConformanceLevel = System.Xml.ConformanceLevel.Document,
+                OmitXmlDeclaration = false,
+                Encoding = encoding,
+                Indent = true,
+                CloseOutput = false,    // this class will explicitly close the underlying stream
+            };
+
+            xrs = new System.Xml.XmlReaderSettings()
+            {
+                ConformanceLevel = System.Xml.ConformanceLevel.Auto,
+                CloseInput = false,     // this class will explicitly close any underlying stream
+            };
+
             VerifyObjectName = true;
         }
 
@@ -1502,7 +1934,7 @@ namespace MosaicLib.Utils
         /// Gets or sets the contained XmlWritterSettings.Encoding property to determine what character encoding will be used.
         /// </summary>
         /// <returns>The text encoding to use. The default is Encoding.ASCII</returns>
-        public System.Text.Encoding Encoding { get { return xws.Encoding; } set { xws.Encoding = value; } }
+        public override System.Text.Encoding Encoding { get { return xws.Encoding; } set { xws.Encoding = base.Encoding = value; } }
 
         /// <summary>
         /// Gets or sets the contained XmlWritterSettings.Indent property to determine if generated Xml text will be wrapped and indented.
@@ -1573,10 +2005,10 @@ namespace MosaicLib.Utils
         public bool VerifyObjectName { get; set; }
 
         /// <summary>Settings used when serializing an object to Xml</summary>
-        protected System.Xml.XmlWriterSettings xws = new System.Xml.XmlWriterSettings();
+        protected System.Xml.XmlWriterSettings xws;
 
         /// <summary>Settings used when deserializing an object from Xml</summary>
-        protected System.Xml.XmlReaderSettings xrs = new System.Xml.XmlReaderSettings();
+        protected System.Xml.XmlReaderSettings xrs;
 
         /// <summary>The DataContractSerializer instance that is used by this adapter.</summary>
         DataContractSerializer dcs = new DataContractSerializer(typeof(TObjectType));
@@ -1588,23 +2020,20 @@ namespace MosaicLib.Utils
         /// <exception cref="System.Runtime.Serialization.SerializationException">The VerifyObjectName Property is set to true, and the element name and namespace do not correspond to the values set in the constructor.</exception>
         public override TObjectType ReadObject(System.IO.Stream readStream)
         {
-            using (System.Xml.XmlReader xr = System.Xml.XmlReader.Create(readStream, xrs))
-            {
-                return (TObjectType) dcs.ReadObject(xr, VerifyObjectName);
-            }
+            using (System.IO.TextReader tr = new System.IO.StreamReader(readStream, Encoding))
+                return ReadObject(tr);
         }
 
         /// <summary>
-        /// Attempts to use the contained DataContractSerializer to read the deserialize the corresponding object from the given string.
+        /// Attempts to use the contained DataContractSerializer to read the deserialize the corresponding object from the given TextReader.
         /// </summary>
-        /// <param name="s">Contains the text from which the DataCongtractSerializer is to deserialize the object.</param>
+        /// <param name="tr">Acts as the source for the text from which the DataContractSerializer is to deserialize the object.</param>
         /// <exception cref="System.Runtime.Serialization.SerializationException">The VerifyObjectName Property is set to true, and the element name and namespace do not correspond to the values set in the constructor.</exception>
-        public override TObjectType ReadObject(String s)
+        public override TObjectType ReadObject(System.IO.TextReader tr)
         {
-            using (System.IO.StringReader sr = new System.IO.StringReader(s))
-            using (System.Xml.XmlReader xr = System.Xml.XmlReader.Create(sr, xrs))
+            using (System.Xml.XmlReader xr = System.Xml.XmlReader.Create(tr, xrs))
             {
-                return (TObjectType) dcs.ReadObject(xr, VerifyObjectName);
+                return (TObjectType)dcs.ReadObject(xr, VerifyObjectName);
             }
         }
 
@@ -1633,13 +2062,13 @@ namespace MosaicLib.Utils
         /// using a reusable StringBuilder and a temporary XmlWriter.
         /// </summary>
         /// <param name="obj">Gives the object that is to be serialized</param>
-        /// <returns>A string containing the ASCII Xml representation of the given object as serialized by the contained DataContracxtSerialzier</returns>
+        /// <returns>A string containing the ASCII Xml representation of the given object as serialized by the contained DataContractSerializer</returns>
         public override string ConvertObjectToString(TObjectType obj)
         {
             if (sb == null)
                 sb = new System.Text.StringBuilder();
             else
-                sb.Length = 0;
+                sb.Clear();
 
             using (System.Xml.XmlWriter xw = System.Xml.XmlWriter.Create(sb, xws))
             {
@@ -1657,7 +2086,7 @@ namespace MosaicLib.Utils
 
     /// <summary>
     /// This adapter class encapsulates a small set of standard use patterns for transcribing between DataContract objects 
-    /// and the corresponding Xml strings and files.  This object contains and makes use of a DataContractSerializer to
+    /// and the corresponding JSON format strings and files.  This object contains and makes use of a DataContractJsonSerializer to
     /// implement that actual Serialization and Deserialization behavior.
     /// </summary>
     /// <typeparam name="TObjectType">
@@ -1671,7 +2100,7 @@ namespace MosaicLib.Utils
         DataContractJsonSerializer dcjs = new DataContractJsonSerializer(typeof(TObjectType));
 
         /// <summary>
-        /// Attempts to use the contained DataContractSerializer to read the deserialize the corresponding object from the given stream using its ReadObject method.  
+        /// Attempts to use the contained DataContractJsonSerializer to read the deserialize the corresponding object from the given stream using its ReadObject method.  
         /// Returns the object if the read was successful.
         /// </summary>
         /// <exception cref="System.Runtime.Serialization.SerializationException">The VerifyObjectName Property is set to true, and the element name and namespace do not correspond to the values set in the constructor.</exception>
@@ -1681,9 +2110,9 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Attempts to use the contained DataContractSerializer to read the deserialize the corresponding object from the given string.
+        /// Attempts to use the contained DataContractJsonSerializer to read the deserialize the corresponding object from the given string.
         /// </summary>
-        /// <param name="s">Contains the text from which the DataCongtractSerializer is to deserialize the object.</param>
+        /// <param name="s">Contains the text from which the DataContractJsonSerializer is to deserialize the object.</param>
         /// <exception cref="System.Runtime.Serialization.SerializationException">The VerifyObjectName Property is set to true, and the element name and namespace do not correspond to the values set in the constructor.</exception>
         public override TObjectType ReadObject(String s)
         {
@@ -1695,7 +2124,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Serializes the given object by calling WriteObject on the contained DataContractSerializer and passing it the given writeStream.
+        /// Serializes the given object by calling WriteObject on the contained DataContractJsonSerializer and passing it the given writeStream.
         /// </summary>
         /// <param name="obj">Gives the object that is to be serialized</param>
         /// <param name="writeStream">Gives the stream on which the serialized data is to be written.</param>
@@ -1708,10 +2137,10 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Serializes the given object by calling WriteObject on the contained DataContractSerializer to serialize and write the object into a String
+        /// Serializes the given object by calling WriteObject on the contained DataContractJsonSerializer to serialize and write the object into a String
         /// </summary>
         /// <param name="obj">Gives the object that is to be serialized</param>
-        /// <returns>A string containing the serialized representation of the given object as serialized by the contained DataContracxtSerialzier</returns>
+        /// <returns>A string containing the serialized representation of the given object as serialized by the contained DataContractJsonSerializer</returns>
         public override string ConvertObjectToString(TObjectType obj)
         {
             if (writeMemoryStream == null)
@@ -1742,6 +2171,7 @@ namespace MosaicLib.Utils
 
         private MemoryStream writeMemoryStream = null;
     }
+
     #endregion
 
     //-------------------------------------------------
@@ -1756,13 +2186,15 @@ namespace MosaicLib.Utils
     /// </summary>
     public class ScopedLock : IDisposable
     {
-        /// <summary>Default constructor.  Same as expicitly calling ScopedLock(null)</summary>
-        public ScopedLock() : this(null) { }
-
-        /// <summary>Optionally locking constructor.  If the given mutexObject is non-null then this constructor will Lock it.</summary>
-        public ScopedLock(object mutexObject)
+        /// <summary>
+        /// Default constructor: Supports optional locking.  
+        /// If the given <paramref name="mutexObject"/> is non-null and if <paramref name="acquireLock"/> is true then this constructor will Lock the given <paramref name="mutexObject"/>.
+        /// Dispose method will release the held mutexObject if one is held at that time.
+        /// </summary>
+        public ScopedLock(object mutexObject = null, bool acquireLock = true)
         {
-            Lock(mutexObject);
+            if (acquireLock && mutexObject != null)
+                Lock(mutexObject);
         }
 
         /// <summary>Calls Release in order to unlock any currently held lock.</summary>

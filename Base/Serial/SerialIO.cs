@@ -1,10 +1,11 @@
 //-------------------------------------------------------------------
 /*! @file SerialIO.cs
- * @brief This file defines the public interface that is provided by the classes which, when combined, make up the SerialIO portions of this library.
+ *  @brief This file defines the public interface that is provided by the classes which, when combined, make up the SerialIO portions of this library.
  * 
- * Copyright (c) Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2008 Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2006 Mosaic Systems Inc., All rights reserved. (C++ library version: SerialPort.h, SerialPort.cpp)
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2008 Mosaic Systems Inc.
+ * Copyright (c) 2006 Mosaic Systems Inc.  (C++ library version: SerialPort.h, SerialPort.cpp)
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,19 +19,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
+
+using System;
+
+using MosaicLib.Modular;
+using MosaicLib.Modular.Action;
+using MosaicLib.Modular.Config;
+using MosaicLib.Modular.Interconnect.Values;
+using MosaicLib.Modular.Part;
+using MosaicLib.Time;
+using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
 
 namespace MosaicLib.SerialIO
 {
-	//-----------------------------------------------------------------
-
-	using System;
-
-	using MosaicLib.Utils;
-	using MosaicLib.Time;
-	using MosaicLib.Modular.Action;
-	using MosaicLib.Modular.Part;
-
 	//-----------------------------------------------------------------
 	#region PortConfig
 
@@ -59,12 +61,12 @@ namespace MosaicLib.SerialIO
 	/// <summary>
     /// This struct contains all of the information that is used to define the type and behavior of a SerialIO.Port.  
 	/// Valid SpecStr values:
-    ///	<para/>	&lt;ComPort port="com1" uartConfig="9600,n,8,1"/&gt;
-    ///	<para/>	&lt;ComPort port="\\.\com200"&gt;&lt;UartConfig baud="9600" DataBits="8" Mode="rs232-3wire" Parity="none" StopBits="1"/&gt;&lt;/ComPort&gt;
-    ///	<para/>	&lt;TcpClient addr="127.0.0.1" port="5002"/&gt;
-    ///	<para/>	&lt;TcpServer addr="127.0.0.1" port="8001"/&gt;		addr is optional - will use any if no address is provided
-    ///	<para/>	&lt;UdpClient addr="127.0.0.1" port="5005"/&gt;
-    ///	<para/>	&lt;UdpServer addr="127.0.0.1" port="5006"/&gt;		addr is optional - will use any if no address is provided
+    ///	<para/>	&lt;ComPort port='com1' uartConfig='9600,n,8,1'/&gt;
+    ///	<para/>	&lt;ComPort port='com200'&gt;&lt;UartConfig baud='9600' DataBits='8' Mode='rs232-3wire' Parity='none' StopBits='1'/&gt;&lt;/ComPort&gt;
+    ///	<para/>	&lt;TcpClient addr='127.0.0.1' port='5002'/&gt;
+    ///	<para/>	&lt;TcpServer addr='127.0.0.1' port='8001'/&gt;		addr is optional - will use any if no address is provided
+    ///	<para/>	&lt;UdpClient addr='127.0.0.1' port='5005'/&gt;
+    ///	<para/>	&lt;UdpServer addr='127.0.0.1' port='5006'/&gt;		addr is optional - will use any if no address is provided
     ///	<para/> &lt;NullPort/&gt;
     /// </summary>
     public struct PortConfig
@@ -74,11 +76,10 @@ namespace MosaicLib.SerialIO
         /// <summary>Constructor for normal non-packetized send/recive.</summary>
         /// <param name="name">This gives the name that will be used for the port created from this config contents</param>
         /// <param name="specStr">This gives the port target type configuration string that is used to define the type of port that will be created and where it will be connected to.</param>
-        /// <param name="lineTerm">Selects the RxLineTerm and the TxLineTerm.  RxLineTerm is set to this value while TxLineTerm is set to this value or CRLF if this value is Auto</param>
+        /// <param name="lineTerm">Sets both the RxLineTerm and TxLineTerm properties from this value.</param>
         public PortConfig(string name, string specStr, LineTerm lineTerm) 
-            : this(name, specStr, lineTerm, (lineTerm == LineTerm.Auto ? LineTerm.CRLF : lineTerm)) 
-        {
-        }
+            : this(name, specStr, lineTerm, lineTerm) 
+        { }
 
         /// <summary>Constructor for packetized communication using one or more packet end strings to deliniate packets</summary>
         /// <param name="name">This gives the name that will be used for the port created from this config contents</param>
@@ -109,14 +110,15 @@ namespace MosaicLib.SerialIO
         /// <param name="name">This gives the name that will be used for the port created from this config contents</param>
         /// <param name="specStr">This gives the port target type configuration string that is used to define the type of port that will be created and where it will be connected to.</param>
         /// <param name="rxLineTerm">
-        /// This determines the connection mode and, in some cases, the specific patterns of line end characters that will be used.
-        /// Selects TrimWhitespaceOnRx and requires use of packetized reception if LineTerm is neither None nor Custom.
+        /// Sets the RxLineTerm property from this value.  
+        /// Also sets TrimWhitespaceOnRx (and thus requires use of packetized reception) if LineTerm is neither None nor Custom.
         /// </param>
-        /// <param name="txLineTerm">This determines the contents of the TxPacketEndStr to match the line termination characters selected here.</param>
+        /// <param name="txLineTerm">Sets the TxLineTerm property from this value.</param>
         public PortConfig(string name, string specStr, LineTerm rxLineTerm, LineTerm txLineTerm)
 			: this(name, specStr)
 		{ 
             TrimWhitespaceOnRx = (rxLineTerm != LineTerm.None && rxLineTerm != LineTerm.Custom);
+            DetectWhitespace |= TrimWhitespaceOnRx;
 
             RxLineTerm = rxLineTerm;
             TxLineTerm = txLineTerm;
@@ -132,6 +134,9 @@ namespace MosaicLib.SerialIO
         {
             Name = name;
             SpecStr = specStr;
+
+            PartBaseIVI = Values.Instance;
+            IConfig = Config.Instance;
 
             EnableAutoReconnect = false;
             ReconnectHoldoff = TimeSpan.FromSeconds(5.0);
@@ -152,6 +157,7 @@ namespace MosaicLib.SerialIO
             TraceActionUpdateMesgType = Logging.MesgType.None;
             LoggerGroupID = String.Empty;       // use default
             TraceDataLoggerGroupID = "LDG.SerialIO.TraceData";
+            TraceDataLoggerInitialLogGate = Logging.LogGate.All;
 
             RxBufferSize = 4096;
             TxBufferSize = 4096;
@@ -167,6 +173,9 @@ namespace MosaicLib.SerialIO
             Name = name;
             SpecStr = specStr;
 
+            PartBaseIVI = cloneFrom.PartBaseIVI;
+            IConfig = cloneFrom.IConfig;
+
             rxPacketEndStrArray = cloneFrom.rxPacketEndStrArray;
             rxPacketEndScannerDelegate = cloneFrom.rxPacketEndScannerDelegate;
             txPacketEndStr = cloneFrom.txPacketEndStr;
@@ -174,9 +183,11 @@ namespace MosaicLib.SerialIO
 
             loggerGroupID = cloneFrom.loggerGroupID;
             traceDataLoggerGroupID = cloneFrom.traceDataLoggerGroupID;
+            TraceDataLoggerInitialLogGate = cloneFrom.TraceDataLoggerInitialLogGate;
 
             TrimWhitespaceOnRx = cloneFrom.TrimWhitespaceOnRx;
             DiscardWhitespacePacketsOnRx = cloneFrom.DiscardWhitespacePacketsOnRx;
+            DetectWhitespace = cloneFrom.DetectWhitespace;
             EnableAutoReconnect = cloneFrom.EnableAutoReconnect;
             ReconnectHoldoff = cloneFrom.ReconnectHoldoff;
             ConnectTimeout = cloneFrom.ConnectTimeout;
@@ -191,6 +202,9 @@ namespace MosaicLib.SerialIO
             TraceDataMesgType = cloneFrom.TraceDataMesgType;
             RxBufferSize = cloneFrom.RxBufferSize;
             TxBufferSize = cloneFrom.TxBufferSize;
+            TraceDataFormat = cloneFrom.TraceDataFormat;
+            TraceDataEventMask = cloneFrom.TraceDataEventMask;
+            TraceDataAsciiEscapeChar = cloneFrom.TraceDataAsciiEscapeChar;
         }
 
         #endregion
@@ -218,10 +232,12 @@ namespace MosaicLib.SerialIO
         #region Public Set-only properties
 
         /// <summary>
-        /// Set only property.  Sets the RxPacketEndStrArray based from a given LineTerm value.  
-        /// LineTerm.None, and LineTerm.Custom set the RxPacketEndStrArray to null.  
-        /// LineTerm.Auto sets the RxPacketEndStrArray to contain "\r" and "\n" and turns on TrimWhitespaceOnRx (if not already on)
-        /// LineTerm.CR sets the RxPacketEndStrArray to "\r" and LineTerm.CRLF sets the RxPacketEndStrArray to "\r\n".
+        /// Set only property.  Verifies that no RxPacketendScannerDelegate has been selected (throws ArgumentException if not).  
+        /// Sets the RxPacketEndStrArray based from a given LineTerm value.
+        /// <para/>LineTerm.None, and LineTerm.Custom set the RxPacketEndStrArray to null.  
+        /// <para/>LineTerm.Auto sets the RxPacketEndStrArray to contain "\r" and "\n" and turns on TrimWhitespaceOnRx (if not already on)
+        /// <para/>LineTerm.CR sets the RxPacketEndStrArray to "\r" and 
+        /// <para/>LineTerm.CRLF sets the RxPacketEndStrArray to "\r\n".
         /// </summary>
         public LineTerm RxLineTerm
         {
@@ -232,7 +248,7 @@ namespace MosaicLib.SerialIO
 
                 switch (value)
                 {
-                    case LineTerm.None: RxPacketEndStrArray = new string[0]; break;
+                    case LineTerm.None: RxPacketEndStrArray = emptyStrArray; break;
                     case LineTerm.Auto: RxPacketEndStrArray = new string[] { "\r", "\n" }; TrimWhitespaceOnRx = true; break;
                     case LineTerm.CR: RxPacketEndStrArray = new string[] { "\r" }; break;
                     case LineTerm.CRLF: RxPacketEndStrArray = new string[] { "\r\n" }; break;
@@ -253,7 +269,7 @@ namespace MosaicLib.SerialIO
             {
                 switch (value)
                 {
-                    case LineTerm.None: TxPacketEndStr = String.Empty; break;
+                    case LineTerm.None: TxPacketEndStr = string.Empty; break;
                     case LineTerm.Auto: TxPacketEndStr = "\r\n"; break;
                     case LineTerm.CR: TxPacketEndStr = "\r"; break;
                     case LineTerm.CRLF: TxPacketEndStr = "\r\n"; break;
@@ -268,17 +284,30 @@ namespace MosaicLib.SerialIO
         #region Public Properties
 
         /// <summary>
+        /// Get/Set property.  May be set to define the IValuesInterconnection that the serial part will use for publishing its base state and its PortSpecStr (et. al.).
+        /// Constructor default is set from Values.Instance singleton.  If this value is explicitly assigned to null then the part will not create IVA's and/or publish related information.
+        /// </summary>
+        public IValuesInterconnection PartBaseIVI { get; set; }
+
+        /// <summary>
+        /// Get/Set property.  May be set to define the IConfig instance that the serial part will use for specific configurable values.
+        /// </summary>
+        public IConfig IConfig { get; set; }
+
+        /// <summary>
         /// Get/Set property.  
-        /// Getter returns the contains array or the an empty string[] array if the assigned value was null.
+        /// Getter returns the contained array (if non-null) or the an empty string[] array.
         /// Setter verifies that no RxPacketendScannerDelegate has been selected (throws ArgumentException if not) and then sets the contained value from the given one.
+        /// <para/>Note that the use of the RxLineTerm property setter directly assigns this value.
         /// </summary>
         public string[] RxPacketEndStrArray
         {
-            get { return ((rxPacketEndStrArray != null) ? rxPacketEndStrArray : emptyStrArray); }
+            get { return rxPacketEndStrArray ?? emptyStrArray; }
             set 
             {
                 if (rxPacketEndScannerDelegate != null)
                     throw new System.ArgumentException("RxPacketEndStrArray and RxPacketEndScanerDelegate cannot both be used as the same time");
+
                 rxPacketEndStrArray = value;
             }
         }
@@ -293,8 +322,9 @@ namespace MosaicLib.SerialIO
             get { return rxPacketEndScannerDelegate; }
             set 
             {
-                if (RxPacketEndStrArray.Length > 0)
+                if (!RxPacketEndStrArray.IsNullOrEmpty())
                     throw new System.ArgumentException("RxPacketEndScanerDelegate and RxPacketEndStrArray cannot both be used as the same time");
+
                 rxPacketEndScannerDelegate = value; 
             }
         }
@@ -306,10 +336,10 @@ namespace MosaicLib.SerialIO
         /// </summary>
         public string TxPacketEndStr
         {
-            get { return ((txPacketEndStr != null) ? txPacketEndStr : String.Empty); }
+            get { return txPacketEndStr ?? String.Empty; }
             set 
-            { 
-                txPacketEndStr = ((value != null) ? value : String.Empty);
+            {
+                txPacketEndStr = value ?? String.Empty;
                 txPacketEndStrByteArray = ByteArrayTranscoders.ByteStringTranscoder.Decode(txPacketEndStr);
             }
         }
@@ -323,37 +353,52 @@ namespace MosaicLib.SerialIO
         /// <summary>Only valid in packet mode.  Selects that leading and trailing whitespace shall be removed from the data contained in each Packet produced by the port.</summary>
         [Obsolete("This property been replaced with the more clearly named TrimWhitespaceOnRx property.  Please replace use of StripWhitepaceOnRx accordingly.  [2014-10-24]")]
         public bool StripWhitespaceOnRx { get { return TrimWhitespaceOnRx; } set { TrimWhitespaceOnRx = value; } }
+
         /// <summary>Only valid in packet mode.  Selects that leading and trailing whitespace shall be removed from the data contained in each Packet produced by the port.</summary>
         public bool TrimWhitespaceOnRx { get; set; }
+
         /// <summary>Only valid in packet mode.  Selects that whitespace packets shall be removed/discarded from the Packet sequence produced by the port.</summary>
         public bool DiscardWhitespacePacketsOnRx { get; set; }
+
+        /// <summary>This property is used in conjunction with TrimWhitespaceOnRx and DiscardWhitespacePacketsOnRx to control use of whitespace detection for ports that make use of a sliding buffer.</summary>
+        public bool DetectWhitespace { get; set; }
+
         /// <summary>Set to true so that the port will automatically attempt to reconnect any time the current connection is lost.  When false the client is responsible for performing such actions explicitly when needed.</summary>
         public bool EnableAutoReconnect { get; set; }
+
         /// <summary>Defines the period of time after failing to connect before the next connection attempt can be made.  Only used when EnableAutoReconnect is true.</summary>
         public TimeSpan ReconnectHoldoff { get; set; }
+
         /// <summary>Defines the maximum period of time between attempting to open a connection and completing the connection before the connection attempt is viewed as having failed.  Not supported for all connection types.</summary>
         public TimeSpan ConnectTimeout { get; set; }
+
         /// <summary>
         /// Defines the maximum period of time that a Read Action may be outstanding and be partially completed before it will be viewed has having failed due to the time limit being reached. 
         /// Use is context and port type dependant.
         /// </summary>
         public TimeSpan ReadTimeout { get; set; }
+
         /// <summary>
         /// Defines the maximum period of time between starting a write operation and completing the operation before it will be viewed has having failed due to the time limit being reached.
         /// Use is context and port type depedant.
         /// </summary>
         public TimeSpan WriteTimeout { get; set; }
+
         /// <summary>Defines the minimum time between successive Read Actions for the port to transition from receiving to idle.  Used as the packet timeout for packetized ports.  Used as the flush idle period for all ports.</summary>
         public TimeSpan IdleTime { get; set; }
+
         /// <summary>Defines the port's thread wait time limit for spinning when otherwise idle.  This is rarely overridden from its default value.</summary>
         public TimeSpan SpinWaitTimeLimit { get; set; }
 
         /// <summary>Defines the Logging.MesgType that is produced by the port for error messages that it produces</summary>
         public Logging.MesgType ErrorMesgType { get; set; }
+        
         /// <summary>Defines the Logging.MesgType that is produced by the port for information messages that it produces</summary>
         public Logging.MesgType InfoMesgType { get; set; }
+        
         /// <summary>Defines the Logging.MesgType that is produced by the port for debug messages that it produces</summary>
         public Logging.MesgType DebugMesgType { get; set; }
+        
         /// <summary>Defines the Logging.MesgType that is produced by the port for trace messages that it produces</summary>
         public Logging.MesgType TraceMesgType { get; set; }
 
@@ -386,6 +431,9 @@ namespace MosaicLib.SerialIO
 			set { traceDataLoggerGroupID = value; } 
 		}
 
+        /// <summary>Defines the initial LogGate that shall be used with the trace data logger.  Defaults to All.  Typically set to Debug to restrict trace data messages unless the source is explicitly elevated in the config.</summary>
+        public Logging.LogGate TraceDataLoggerInitialLogGate { get; set; }
+
         /// <summary>Defines the receiver buffer size that the port will use.  Purpose and meaning is port type specific.</summary>
         public uint RxBufferSize { get; set; }
 
@@ -394,6 +442,15 @@ namespace MosaicLib.SerialIO
 
         /// <summary>Returns true if the IdleTime is non-zero</summary>
         public bool IdleTimerEnabled { get { return (IdleTime != TimeSpan.Zero); } }
+
+        /// <summary>Gives the client specified TraceDataFormat that is to be used for a port created and configured from this spec struct.  When null the port will use default values derived from the connection type and/or from modular config.</summary>
+        public TraceDataFormat ? TraceDataFormat { get; set; }
+
+        /// <summary>Gives the client specified TraceDataEventMask that is to be used for a port created and configured from this spec struct.  When null the port will use default values derived from the connection type and/or from modular config.</summary>
+        public TraceDataEvent? TraceDataEventMask { get; set; }
+
+        /// <summary>Gives the client specified escape char that will be used when escaping the ascii text.  When null the port will use a default value of '&amp;' or from modular config</summary>
+        public char? TraceDataAsciiEscapeChar { get; set; }
 
         #endregion
 
@@ -406,10 +463,46 @@ namespace MosaicLib.SerialIO
         private string loggerGroupID;				        // for normal logger
         private string traceDataLoggerGroupID;				// for data trace logger
 
-        private static string[] emptyStrArray = new string[0];
-        private static byte[] emptyByteArray = new byte[0];
+        private static string[] emptyStrArray = EmptyArrayFactory<string>.Instance;
+        private static byte[] emptyByteArray = EmptyArrayFactory<byte>.Instance;
 
         #endregion
+    }
+
+    /// <summary>
+    /// This flag enum is used to select various details about the type and inclusion of SerialIO Trace Data.
+    /// <para/>None (0x00), OldXmlishStyle (0x01), UseMessageDataField (0x02), IncludeEscapedAscii (0x04), IncludeDottedAscii (0x08), IncludeHex (0x10), DefaultBinaryV2 (0x02), DefaultAsciiV2 (0x04)
+    /// </summary>
+    [Flags]
+    public enum TraceDataFormat
+    {
+        None = 0x00,
+        OldXmlishStyle = 0x01,
+        UseMessageDataField = 0x02,
+        IncludeEscapedAscii = 0x04,
+        IncludeDottedAscii = 0x08,
+        IncludeHex = 0x10,
+
+        DefaultBinaryV2 = (UseMessageDataField),
+        DefaultAsciiV2 = (IncludeEscapedAscii),
+    }
+
+    /// <summary>
+    /// This flag enum is used to select which sources of trace data a given SerialIO port should include.
+    /// <para/>None (0x00), Flush (0x01), Write (0x02), Read (0x04), Packet (0x08), DefaultBinaryV2 (0x07), DefaultPacketV2 (0x0b), All (0x0f)
+    /// </summary>
+    [Flags]
+    public enum TraceDataEvent
+    {
+        None = 0x00,
+        Flush = 0x01,
+        Write = 0x02,
+        Read = 0x04,
+        Packet = 0x08,
+
+        DefaultBinaryV2 = (Flush | Read | Write),
+        DefaultPacketV2 = (Flush | Write | Packet),
+        All = (Flush | Write | Read | Packet),
     }
 
 	#endregion
@@ -430,7 +523,7 @@ namespace MosaicLib.SerialIO
 
 		/// <summary>one or more bytes were successfully returned from the port</summary>
 		ReadDone,
-		/// <summary>no bytes have been or were recieved from the port during the stated time period</summary>
+		/// <summary>no bytes have been or were received from the port during the stated time period</summary>
 		ReadTimeout,
 		/// <summary>some error was reported by the port during the read.  read will terminate with all bytes that had been previously received.</summary>
 		ReadFailed,
@@ -503,7 +596,7 @@ namespace MosaicLib.SerialIO
         /// <summary>Returns the string ResultCode after the Read Action has completed.  This is generally the same value as the Read Action's ResultCode value.</summary>
         public string ResultCode { get { return resultCode; } set { resultCode = value; } }
 
-        private static byte[] emptyByteArray = new byte[0];
+        private static byte[] emptyByteArray = EmptyArrayFactory<byte>.Instance;
     }
 
 	/// <summary>This class is used with the SerialIO.Port Write Action.  It contains the set of parameters to be passed to the action and the place where the action records the results once it has been performed</summary>
@@ -584,7 +677,7 @@ namespace MosaicLib.SerialIO
         /// <summary>Returns the string ResultCode after the Write Action has completed.  This is generally the same value as the Write Action's ResultCode value.</summary>
         public string ResultCode { get { return resultCode; } set { resultCode = value; } }
 
-        private static byte[] emptyByteArray = new byte[0];
+        private static byte[] emptyByteArray = EmptyArrayFactory<byte>.Instance;
     }
 
 	//-----------------------------------------------------------------
@@ -622,16 +715,16 @@ namespace MosaicLib.SerialIO
 
         /// <summary>Returns an IReadAction which refers to the given ReadActionParam instance and which may be used to execute a read using the ReadActionParam defined behavior</summary>
         /// <remarks>This may not be used with Port's that have been configured to use an internal sliding buffer.  Use CreateGetnextPacketAction instead in these cases.</remarks>
-		IReadAction CreateReadAction(ReadActionParam param);
+		IReadAction CreateReadAction(ReadActionParam param = null);
 
         /// <summary>Returns an IWriteAction which refers to the given WriteActionParam instance and which may be used to execute a write using the WriteActionParams defined behavior</summary>
-        IWriteAction CreateWriteAction(WriteActionParam param);
+        IWriteAction CreateWriteAction(WriteActionParam param = null);
 
         /// <summary>
         /// Returns an IBasicAction.  Underlying action TimeSpan parameter has been initilized to given value of flushWaitTime.  
         /// This action may be used to flush the port of characters for the given wait time period.
         /// </summary>
-        IFlushAction CreateFlushAction(TimeSpan flushWaitLimit);
+        IFlushAction CreateFlushAction(TimeSpan flushWaitLimit = default(TimeSpan));
 
         // the following methods are only useful with Port's that have an associated SlidingPacketBuffer
 
@@ -649,7 +742,7 @@ namespace MosaicLib.SerialIO
         int NumPacketsReady { get; }
 
         /// <summary>
-        /// Returns an IGetNextPacketAction which may be executed to attempt to dequeue the next available Packet recieved by the Port.
+        /// Returns an IGetNextPacketAction which may be executed to attempt to dequeue the next available Packet received by the Port.
         /// GetNextPacketActions do not wait.  If there is no packet available then the action completes with the result (packet) set to null.
         /// </summary>
         IGetNextPacketAction CreateGetNextPacketAction();
@@ -723,21 +816,12 @@ namespace MosaicLib.SerialIO
 	/// <summary>This static class provides static methods that may be used to create various types of SerialIO.IPort objects.</summary>
 	public static partial class Factory
 	{
-		/// <summary>Create an IPort implementation object based on the first element in the SpecStr in the given portConfig struct.</summary>
-		/// <param name="portConfig">Provides all configuration details for the port to be created.</param>
-        /// <returns>The created SerialIO.Port object as an IPort.  Throws an InvalidPortConfigSpecStr exception if the required concrete type cannot be determined from the portConfig.SpecStr</returns>
-        /// <exception cref="InvalidPortConfigSpecStrException">thrown if the required concrete type cannot be determined from the portConfig.SpecStr</exception>
-        public static IPort CreatePort(PortConfig portConfig)
-        {
-            return CreatePort(portConfig, true);
-        }
-
         /// <summary>Create an IPort implementation object based on the first element in the SpecStr in the given portConfig struct.</summary>
 		/// <param name="portConfig">Provides all configuration details for the port to be created.</param>
         /// <param name="allowThrow">Set to true to allow this method to throw an exception if the given portConfig.SpecStr cannot be understood.  Set to false to force the method to construct and return a NullPort instead.</param>
 		/// <returns>The created SerialIO.Port object as an IPort.  Throws an InvalidPortConfigSpecStr exception if the required concrete type cannot be determined from the portConfig.SpecStr.</returns>
         /// <exception cref="InvalidPortConfigSpecStrException">thrown if the required concrete type cannot be determined from the portConfig.SpecStr and the allowThrow property is true</exception>
-        public static IPort CreatePort(PortConfig portConfig, bool allowThrow)
+        public static IPort CreatePort(this PortConfig portConfig, bool allowThrow = true)
 		{
 			bool success = true;
 			Utils.StringScanner specScan = new StringScanner(portConfig.SpecStr);
@@ -802,7 +886,7 @@ namespace MosaicLib.SerialIO
 		}
 	}
 
-	#endregion
+    #endregion
 
 	//-----------------------------------------------------------------
 }

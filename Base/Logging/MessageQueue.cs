@@ -1,10 +1,11 @@
 //-------------------------------------------------------------------
 /*! @file MessageQueue.cs
- * @brief This file defines and implements the MessageQueue class.
+ *  @brief This file defines and implements the MessageQueue class.
  * 
- * Copyright (c) Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2008 Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2007 Mosaic Systems Inc., All rights reserved. (C++ library version)
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2008 Mosaic Systems Inc.
+ * Copyright (c) 2007 Mosaic Systems Inc.  (C++ library version)
+ * All rights reserved. 
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,31 +19,41 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
+
+using System;
+using System.Collections.Generic;
 
 namespace MosaicLib
 {
-	using System;
-	using System.Collections.Generic;
-
 	public static partial class Logging
 	{
 		//-------------------------------------------------------------------
 
+        /// <summary>
+        /// Structure used to track the range of message sequence numbers in a message queue and to allow a client to take a snapshot of the pair of sequence numbers
+        /// and then ask questions about whether a given message seq number is currently residing in the queue or not.
+        /// </summary>
 		private struct QueuedMesgSeqNumRange
 		{
-			public volatile int lastSeqNumIn;			// sequence number of the last message to have been put into the queue
-			public volatile int lastSeqNumOut;			// sequence number of the last message to have been taken from the queue (queue is likely empty if they are both the same)
+            /// <summary>sequence number of the last message to have been put into the queue</summary>
+			public volatile int lastSeqNumIn;
+            /// <summary>sequence number of the last message to have been taken from the queue (queue is likely empty if they are both the same)</summary>
+            public volatile int lastSeqNumOut;
 
+            /// <summary>
+            /// Copy constructor.  
+            /// <para/>grab the out sequence number before the in so that we are most inclusive when making a copy of another QueuedMesgSeqNumRange value.
+            /// order matters here since these are volatile (values may be written in the background by other threads while reading..)
+            /// </summary>
 			public QueuedMesgSeqNumRange(ref QueuedMesgSeqNumRange rhs)
 			{
-				// grab the out sequence number before the in so that we are most inclusive when making a copy of another QueuedMesgSeqNumRange value.
-				// order matters here since these are volatile (values may be written in the background by other threads while reading..)
-
 				lastSeqNumOut = rhs.lastSeqNumOut;
 				lastSeqNumIn = rhs.lastSeqNumIn;
 			}
 
+            /// <summary>
+            /// Returns true if the given testSeqNum is found between lastSeqNumIn and lastSeqNumOut
+            /// </summary>
 			public bool IsMesgSeqNumInRange(int testSeqNum)
 			{
 				int d1 = unchecked (lastSeqNumIn - testSeqNum);	// >= 0 if message has been put in the queue.
@@ -65,14 +76,13 @@ namespace MosaicLib
 			private class MQLogger : LoggerBase
 			{
 				protected MessageQueue mq = null;
-				public MQLogger(string name, MessageQueue mq) : base(name, string.Empty, LogGate.All, false) { this.mq = mq; }
+				public MQLogger(string name, MessageQueue mq) : base(name, string.Empty, LogGate.All, traceLoggerCtor: false, allowUseOfModularConfig: false) { this.mq = mq; }
 				protected override string ClassName { get { return "MessageQueueLogger"; } }
 
-				public override LogMessage GetLogMessage(MesgType mesgType, string mesg, System.Diagnostics.StackFrame sourceStackFrame, bool allocatedFromDist) { return base.GetLogMessage(mesgType, mesg, sourceStackFrame, false); }
-				public override void EmitLogMessage(ref LogMessage mesg)
+				public override void EmitLogMessage(ref LogMessage lm)
 				{
-					mq.InnerEnqueueMesg(mesg);
-					mesg.RemoveReference(ref mesg);
+					mq.InnerEnqueueMesg(lm);
+                    lm = null;
 				}
 			}
 
@@ -86,7 +96,7 @@ namespace MosaicLib
 
 			volatile bool				queueIsEnabled = false;		//!< Also used to tell the back end when to exit
 
-			object						queueMutex = new object();
+			readonly object			    queueMutex = new object();
 
 			Utils.INotifyable			mesgEnqueuedNotify = new Utils.NullNotifier();
 
@@ -160,7 +170,10 @@ namespace MosaicLib
 			public void DisableQueue() { queueIsEnabled = false; }
 			public bool IsEnabled { get { return queueIsEnabled; }  }
 
-			public int EnqueueMesg(LogMessage lm)	//!< @retval the number of messages in the queue
+            /// <summary>
+            /// returns the number of messages in the queue
+            /// </summary>
+			public int EnqueueMesg(LogMessage lm)
 			{
 				if (lm == null)
 					return QueueCount;
@@ -179,7 +192,10 @@ namespace MosaicLib
 				}
 			}
 
-			public int EnqueueMesgs(LogMessage [] lmArray)					//!< @retval the number of messages in the queue
+            /// <summary>
+            /// returns the number of messages in the queue
+            /// </summary>
+			public int EnqueueMesgs(LogMessage [] lmArray)
 			{
 				lock (queueMutex)
 				{
@@ -239,11 +255,20 @@ namespace MosaicLib
 				return (mesgTargetList.Count);
 			}
 
-			public int QueueCount { get { lock (queueMutex) { return this.mesgQueueCount; } } }
+			public int QueueCount 
+            { 
+                get 
+                { 
+                    lock (queueMutex) 
+                    { 
+                        return mesgQueueCount; 
+                    } 
+                } 
+            }
 
 			public bool IsQueueFull() { return mesgQueueIsFull; }		// access to volatile is just as accurate outside the lock as inside of it
 
-			public uint TotalDroppedMesgCount { get { lock (queueMutex) { return this.mesgQueueTotalDroppedMesgCount; } } }
+			public uint TotalDroppedMesgCount { get { lock (queueMutex) { return mesgQueueTotalDroppedMesgCount; } } }
 
 			public int LastEnqueuedSeqNum { get { return queuedMesgSeqNumRange.lastSeqNumIn; } }
 			public int LastDequeuedSeqNum { get { return queuedMesgSeqNumRange.lastSeqNumOut; } }
@@ -266,37 +291,35 @@ namespace MosaicLib
             /// <summary>Enqueue a new reference to the given message into the internal message queue.</summary>
 			void InnerEnqueueMesg(LogMessage lm)
 			{
-				if (lm == null)
-				{
-					return;
-				}
+                if (lm != null)
+                {
+                    if (!mesgQueueIsFull && mesgQueueCount < mesgQueueSize)
+                    {
+                        if (useLocalMesgSeqNumGenerator)
+                            lm.SeqNum = localMesgSeqNumGenerator.Increment();
 
-				if (!mesgQueueIsFull && mesgQueueCount < mesgQueueSize)
-				{
-					if (useLocalMesgSeqNumGenerator)
-						lm.SeqNum = localMesgSeqNumGenerator.Increment();
+                        // enqueue the new message and update the local copy of the count.
+                        mesgQueue.Enqueue(lm);
+                        mesgQueueCount = mesgQueue.Count;
 
-					// enqueue the new message
-					mesgQueue.Enqueue(lm.AddReference());
-					mesgQueueCount = mesgQueue.Count;
+                        if (NullMessageSeqNum != lm.SeqNum)
+                            queuedMesgSeqNumRange.lastSeqNumIn = lm.SeqNum;
 
-					if (NullMessageSeqNum != lm.SeqNum)
-						queuedMesgSeqNumRange.lastSeqNumIn = lm.SeqNum;
+                        lm = null;
+                    }
+                    else
+                    {
+                        if (!mesgQueueIsFull)
+                        {
+                            mesgQueueIsFull = true;
+                            mesgQueueFullStartTime.SetToNow();
+                            mesgQueueDroppedMesgCount = 0;
+                        }
 
-					lm = null;
-				} 
-				else
-				{
-					if (!mesgQueueIsFull)
-					{
-						mesgQueueIsFull = true;
-						mesgQueueFullStartTime.SetToNow();
-						mesgQueueDroppedMesgCount = 0;
-					}
-
-					mesgQueueDroppedMesgCount++;
-					mesgQueueTotalDroppedMesgCount++;
-				}
+                        mesgQueueDroppedMesgCount++;
+                        mesgQueueTotalDroppedMesgCount++;
+                    }
+                }
 			}
 
 			#endregion

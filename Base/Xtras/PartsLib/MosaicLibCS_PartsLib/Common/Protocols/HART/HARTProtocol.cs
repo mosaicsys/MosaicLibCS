@@ -2,8 +2,9 @@
 /*! @file HARTProtocol.cs
  *  @brief 
  * 
- * Copyright (c) Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2011 Mosaic Systems Inc., All rights reserved
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2011 Mosaic Systems Inc.
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,11 +18,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
+
+using System;
 
 namespace MosaicLib.PartsLib.Protocols.HART
 {
-    using System;
     /*
      * Please note: the information contained here is derived from a Brooks Instruments Installation and Operation Manual titled 
      * "S-Protocol Commnication Command Description"  for the "Brooks SLA Series Flow Meters and Controllers".  This document is identified

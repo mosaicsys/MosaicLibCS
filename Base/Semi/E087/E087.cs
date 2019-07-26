@@ -1,30 +1,33 @@
 //-------------------------------------------------------------------
 /*! @file E087.cs
-	@brief This file provides common definitions that relate to the use of the E087 interface.
-
-	Copyright (c) Mosaic Systems Inc.,  All rights reserved.
-	Copyright (c) 2015 Mosaic Systems Inc.,  All rights reserved.
-	Copyright (c) 2006 Mosaic Systems Inc.,  All rights reserved.  (C++ library version)
-
-	Licensed under the Apache License, Version 2.0 (the "License");
-	you may not use this file except in compliance with the License.
-	You may obtain a copy of the License at
-
-	     http://www.apache.org/licenses/LICENSE-2.0
-
-	Unless required by applicable law or agreed to in writing, software
-	distributed under the License is distributed on an "AS IS" BASIS,
-	WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-	See the License for the specific language governing permissions and
-	limitations under the License.
+ *  @brief This file provides common definitions that relate to the use of the E087 interface.
+ *
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2015 Mosaic Systems Inc.
+ * Copyright (c) 2006 Mosaic Systems Inc.  (C++ library version)
+ * All rights reserved.
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * 
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *  
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
-//-------------------------------------------------------------------
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Runtime.Serialization;
+using System.Text;
+
 using MosaicLib.Semi.E005;
 using MosaicLib.Utils;
-using System.Text;
 
 namespace MosaicLib.Semi.E087
 {
@@ -36,50 +39,70 @@ namespace MosaicLib.Semi.E087
 
     /// <summary>
     /// Load Port Transfer State (LTS)
+    /// <para/>OutOfService = 0, TransferBlocked = 1, ReadyToLoad = 2, ReadyToUnload = 3, InService = 4, TransferReady = 5, Undefined = -1
     /// </summary>
+    [DataContract(Namespace=Constants.E087NameSpace)]
 	public enum LTS : int
 	{
-        /// <summary>-1: Local default value to use when there is no valid value.</summary>
-		Undefined = -1,
         /// <summary>0: The port has been placed out of service and cannot be used for carrier handoffs.</summary>
+        [EnumMember]
 		OutOfService = 0,
         /// <summary>1: Port cannot be used for carrier arrival or departure as the port, or the carrier that is currently there, is in use for some other purpose.</summary>
-		TransferBlocked = 1,
+        [EnumMember]
+        TransferBlocked = 1,
         /// <summary>2: Port is ready to have a carrier placed.</summary>
-		ReadyToLoad = 2,
+        [EnumMember]
+        ReadyToLoad = 2,
         /// <summary>3: Port is ready to have its carrier removed - it may still be clamped depending on carrier unlcamp handling and material transfer start trigger.</summary>
-		ReadyToUnload = 3,
+        [EnumMember]
+        ReadyToUnload = 3,
         /// <summary>4: this is a summary state (of 1,2,3): used with E87:ChangeServiceStatus</summary>
-		InService = 4,
+        [EnumMember]
+        InService = 4,
         /// <summary>5: this is a summary state (of 2 and 3)</summary>
-		TransferReady = 5,
-	}
+        [EnumMember]
+        TransferReady = 5,
+        /// <summary>-1: Local default value to use when there is no valid value.</summary>
+        [EnumMember]
+        Undefined = -1,
+    }
 
     /// <summary>
     /// LTS Transitions that match the enumerated valid LTS state transitions.
     /// </summary>
-	public enum LTS_Transition : int
+    [DataContract(Namespace = Constants.E087NameSpace)]
+    public enum LTS_Transition : int
 	{
         /// <summary>1: no state -> OutOfService or InService</summary>
-		Transition1 = 1,
+        [EnumMember]
+        Transition1 = 1,
         /// <summary>2: OutOfService -> InService</summary>
-		Transition2 = 2,
+        [EnumMember]
+        Transition2 = 2,
         /// <summary>3: InService -> OutOfService</summary>
-		Transition3 = 3,
+        [EnumMember]
+        Transition3 = 3,
         /// <summary>4: InService -> TransferReady or TransferBlocked (on operator inservice or system reset)</summary>
-		Transition4 = 4,
+        [EnumMember]
+        Transition4 = 4,
         /// <summary>5: TransferReady -> ReadyToLoad or ReadyToUnload (changed to inservice, system reset or transition 10)</summary>
-		Transition5 = 5,
+        [EnumMember]
+        Transition5 = 5,
         /// <summary>6: ReadyToLoad -> TransferBlocked (manual load or AMHS load started)</summary>
-		Transition6 = 6,
+        [EnumMember]
+        Transition6 = 6,
         /// <summary>7: ReadyToUnload -> TransferBlocked (manual load or AMHS unload started)</summary>
-		Transition7 = 7,
+        [EnumMember]
+        Transition7 = 7,
         /// <summary>8: TransferBlocked -> ReadyToLoad</summary>
-		Transition8 = 8,
+        [EnumMember]
+        Transition8 = 8,
         /// <summary>9: TransferBlocked -> ReadyToUnload</summary>
-		Transition9 = 9,
+        [EnumMember]
+        Transition9 = 9,
         /// <summary>10: TransferBlocked -> TransferReady (transfer was unsuccessful and the carrier was not loaded or unloaded)</summary>
-		Transition10 = 10,
+        [EnumMember]
+        Transition10 = 10,
 	}
 
     /// <summary>ExtensionMethod wrapper class</summary>
@@ -121,102 +144,145 @@ namespace MosaicLib.Semi.E087
 
     /// <summary>
     /// Carrier Object State Model (COSM): Carrier ID Status (CIDS)
+    /// <para/>IDNotRead = 0, WaitingForHost = 1, IDVerificationOk = 2, IDVerificationFailed = 3, Undefined = -1
     /// </summary>
-	public enum CIDS : int
+    [DataContract(Namespace = Constants.E087NameSpace)]
+    public enum CIDS : int
 	{
-        /// <summary>-1: Local default value to use when there is no valid value.</summary>
-		Undefined = -1,
         /// <summary>0: CarrierID has not been read yet.</summary>
-		IDNotRead = 0,
+        [EnumMember]
+        IDNotRead = 0,
         /// <summary>1: CarrierID read has been attempted, but value has not yet been verified by equipment or host.</summary>
-		WaitingForHost = 1,
+        [EnumMember]
+        WaitingForHost = 1,
         /// <summary>2: CarrierID has been read and verified.</summary>
-		IDVerificationOk = 2,
+        [EnumMember]
+        IDVerificationOk = 2,
         /// <summary>3: Carrier was canceled before CIDS reached IDVerificationOk state.</summary>
-		IDVerificationFailed = 3,
-	}
+        [EnumMember]
+        IDVerificationFailed = 3,
+        /// <summary>-1: Local default value to use when there is no valid value.</summary>
+        [EnumMember]
+        Undefined = -1,
+    }
 
     /// <summary>
     /// Carrier Object State Model (COSM): Carrier Slot Map Status (CSMS)
+    /// <para/>SlotMapNotRead = 0, WaitingForHost = 1, SlotMapVerificationOk = 2, SlotMapVerificationFailed = 3, Undefined = -1
     /// </summary>
-	public enum CSMS : int 
+    [DataContract(Namespace = Constants.E087NameSpace)]
+    public enum CSMS : int 
 	{
-        /// <summary>-1: Local default value to use when there is no valid value.</summary>
-		Undefined = -1,
         /// <summary>0: SlotMap has not been obtained yet.</summary>
-		SlotMapNotRead = 0,
+        [EnumMember]
+        SlotMapNotRead = 0,
         /// <summary>1: SlotMap has been obtained, but value has not yet been verified by equipment or host.</summary>
-		WaitingForHost = 1,
+        [EnumMember]
+        WaitingForHost = 1,
         /// <summary>2: SlotMap has been obtained and verified.</summary>
-		SlotMapVerificationOk = 2,
+        [EnumMember]
+        SlotMapVerificationOk = 2,
         /// <summary>3: Carrier was canceled before CSMS reached SlotMapVerficationOk state.</summary>
-		SlotMapVerificationFailed = 3,
-	}
+        [EnumMember]
+        SlotMapVerificationFailed = 3,
+        /// <summary>-1: Local default value to use when there is no valid value.</summary>
+        [EnumMember]
+        Undefined = -1,
+    }
 
     /// <summary>
     /// Carrier Object State Model (COSM): Carrier Accessing Status (CAS)
+    /// <para/>NotAccessed = 0, InAccess = 1, CarrierComplete = 2, CarrierStopped = 3, Undefined = -1
     /// </summary>
-	public enum CAS : int
+    [DataContract(Namespace = Constants.E087NameSpace)]
+    public enum CAS : int
 	{
-        /// <summary>-1: Local default value to use when there is no valid value.</summary>
-		Undefined = -1,
         /// <summary>0: Carrier has not been accessed.</summary>
-		NotAccessed = 0,
+        [EnumMember]
+        NotAccessed = 0,
         /// <summary>1: Carrier has been accessed and it is not complete/stopped</summary>
-		InAccess = 1,
+        [EnumMember]
+        InAccess = 1,
         /// <summary>2: Carrier use has been completed normally</summary>
-		CarrierComplete = 2,
+        [EnumMember]
+        CarrierComplete = 2,
         /// <summary>3: Carrier use has been completed abnormally (jobs stopped/aborted, processing failed, ...)</summary>
-		CarrierStopped = 3,
-	}
+        [EnumMember]
+        CarrierStopped = 3,
+        /// <summary>-1: Local default value to use when there is no valid value.</summary>
+        [EnumMember]
+        Undefined = -1,
+    }
 
     /// <summary>
     /// COSM Transitions that match the enumerated valid combined CIDS, CSMS, and CAS state transitions.
     /// </summary>
-	public enum COSM_Transition : int
+    [DataContract(Namespace = Constants.E087NameSpace)]
+    public enum COSM_Transition : int
 	{
         /// <summary>1: CIDS, CSMS, CAS: noState -> Carrier (A carrier is instantiated - no event required)</summary>
-		Transition1 = 1,
+        [EnumMember]
+        Transition1 = 1,
         /// <summary>2: CIDS: noState -> IdNotRead (bind or carrier notification)</summary>
-		Transition2 = 2,
+        [EnumMember]
+        Transition2 = 2,
         /// <summary>3: CIDS: noState -> WaitingForHost (cid not existing was successfully read, cid read successful but equipment based verification failed)</summary>
-		Transition3 = 3,
+        [EnumMember]
+        Transition3 = 3,
         /// <summary>4: CIDS: noState -> IdVerifyOk (id read fail or unknown cid followed by PWC)</summary>
-		Transition4 = 4,
+        [EnumMember]
+        Transition4 = 4,
         /// <summary>5: CIDS: noState -> IdVerifyFail (id read fail or unknown cid followed by cancel carrier)</summary>
-		Transition5 = 5,
+        [EnumMember]
+        Transition5 = 5,
         /// <summary>6: CIDS: IdNotRead -> IdVerifyOk (id read ok and equip verified ok)</summary>
-		Transition6 = 6,
+        [EnumMember]
+        Transition6 = 6,
         /// <summary>7: CIDS: IdNotRead -> WaitForHost (id read failed)</summary>
-		Transition7 = 7,
+        [EnumMember]
+        Transition7 = 7,
         /// <summary>8: CIDS: WaitForHost -> IdVerifyOk (pwc received)</summary>
-		Transition8 = 8,
+        [EnumMember]
+        Transition8 = 8,
         /// <summary>9: CIDS: WaitForHost -> IdVerifyFailed (cancel carrier received)</summary>
-		Transition9 = 9,
+        [EnumMember]
+        Transition9 = 9,
         /// <summary>10: CIDS: IdNotRead -> WaitForHost (bypass false, carrier rxed with reader offline or not present)</summary>
-		Transition10 = 10,
+        [EnumMember]
+        Transition10 = 10,
         /// <summary>11: CIDS: IdNotRead -> IdVerifyOk (bypass true, carrier rxed when reader offline or not present)</summary>
-		Transition11 = 11,
+        [EnumMember]
+        Transition11 = 11,
         /// <summary>12: CSMS: noState -> SMNotRead (carrier instantiated)</summary>
-		Transition12 = 12,
+        [EnumMember]
+        Transition12 = 12,
         /// <summary>13: CSMS: SMNotRead -> SMVerifyOk (sm read and equip verified ok)</summary>
-		Transition13 = 13,
+        [EnumMember]
+        Transition13 = 13,
         /// <summary>14: CSMS: SMNotRead -> WaitForHost (sm read and wait for host to verify, sm read but equip did not verify, sm read failed, sm read with abnormal substrate position)</summary>
-		Transition14 = 14,
+        [EnumMember]
+        Transition14 = 14,
         /// <summary>15: CSMS: WaitForHost -> SMVerifyOk (PWC received)</summary>
-		Transition15 = 15,
+        [EnumMember]
+        Transition15 = 15,
         /// <summary>16: CSMS: WaitForHost -> SMVerifyFailed (CancleCarrier received)</summary>
-		Transition16 = 16,
+        [EnumMember]
+        Transition16 = 16,
         /// <summary>17: CAS: noState -> NotAccessed (carrier instantiated)</summary>
-		Transition17 = 17,
+        [EnumMember]
+        Transition17 = 17,
         /// <summary>18: CAS: NotAccessed -> InAccess (access started)</summary>
-		Transition18 = 18,
+        [EnumMember]
+        Transition18 = 18,
         /// <summary>19: CAS: InAccess -> CarrierComplete (access completed normally)</summary>
-		Transition19 = 19,
+        [EnumMember]
+        Transition19 = 19,
         /// <summary>20: CAS: InAccess -> CarrierStopped (access completed abnormally - jobs failed, or cancel carrier)</summary>
-		Transition20 = 20,
+        [EnumMember]
+        Transition20 = 20,
         /// <summary>21: CIDS, CSMS, CAS: Carrier -> noState (carrier unloaded from tool, CancelBind or CancelCarrierNotification, equip verify failed and equip initiated cancel bind).</summary>
-		Transition21 = 21,
+        [EnumMember]
+        Transition21 = 21,
 	}
 
 	// COSM transition events dvs: PortID, CarrierID, LocationID, CIDS, CSMS, CAS, SlotMap, Reason
@@ -226,28 +292,37 @@ namespace MosaicLib.Semi.E087
 
     /// <summary>
     /// Access Mode State (AMS)
+    /// <para/>Manual = 0, Automatic = 1, Undefined = -1, 
     /// </summary>
-	public enum AMS : int
+    [DataContract(Namespace = Constants.E087NameSpace)]
+    public enum AMS : int
 	{
-        /// <summary>-1: Local default value to use when there is no valid value.</summary>
-		Undefined = -1,
         /// <summary>0: Port is to be used for Manual handoff (by hand or using PGV)</summary>
-		Manual = 0,
+        [EnumMember]
+        Manual = 0,
         /// <summary>1: Port is to be used for Automatic handoff using E084 interactions with OHT or AGV type AMHS hardware</summary>
-		Automatic = 1,
-	}
+        [EnumMember]
+        Automatic = 1,
+        /// <summary>-1: Local default value to use when there is no valid value.</summary>
+        [EnumMember]
+        Undefined = -1,
+    }
 
     /// <summary>
     /// AMS Transitions that match the enumerated valid AMS state transitions.
     /// </summary>
-	public enum AMS_Transition : int
+    [DataContract(Namespace = Constants.E087NameSpace)]
+    public enum AMS_Transition : int
 	{
         /// <summary>1: noState -> Manual or Auto (system restart)</summary>
-		Transition1 = 1,
+        [EnumMember]
+        Transition1 = 1,
         /// <summary>2: Manual -> Auto (change access performed, Can happen anytime except during carrier transfer)</summary>
-		Transition2 = 2,
+        [EnumMember]
+        Transition2 = 2,
         /// <summary>3: Auto -> Manual (change access performed, Can happen anytime except during carrier transfer)</summary>
-		Transition3 = 3,
+        [EnumMember]
+        Transition3 = 3,
 	}
 
 	// AMS transition events dvs: PortID, AMS
@@ -257,28 +332,37 @@ namespace MosaicLib.Semi.E087
 
     /// <summary>
     /// Load Port Reservation State Model (LRS)
+    /// <para/>NotReserved = 0, Reserved = 1, Undefined = -1
     /// </summary>
-	public enum LRS : int
+    [DataContract(Namespace = Constants.E087NameSpace)]
+    public enum LRS : int
 	{
-        /// <summary>-1: Local default value to use when there is no valid value.</summary>
-		Undefined = -1,
         /// <summary>0: The Port position has been reserved for later carrier arrival</summary>
-		NotReserved = 0,
+        [EnumMember]
+        NotReserved = 0,
         /// <summary>1: The Port position has not been reserved for later carrier arrival</summary>
-		Reserved = 1,
-	}
+        [EnumMember]
+        Reserved = 1,
+        /// <summary>-1: Local default value to use when there is no valid value.</summary>
+        [EnumMember]
+        Undefined = -1,
+    }
 
     /// <summary>
     /// LRS Transitions that match the enumerated valid LRS state transitions.
     /// </summary>
-	public enum LRS_Transition : int
+    [DataContract(Namespace = Constants.E087NameSpace)]
+    public enum LRS_Transition : int
 	{
         /// <summary>1: noState -> NotReserved (system reset)</summary>
-		Transition1 = 1,
+        [EnumMember]
+        Transition1 = 1,
         /// <summary>2: NotReserved -> Reserved (reserveAtPort or bind)</summary>
-		Transition2 = 2,
+        [EnumMember]
+        Transition2 = 2,
         /// <summary>3: Reserved -> NotReserved (cancelReservation, cancel bind)</summary>
-		Transition3 = 3,
+        [EnumMember]
+        Transition3 = 3,
 	}
 
 	// LRS transition events dvs: PortID, LRS, CarrierID
@@ -288,30 +372,40 @@ namespace MosaicLib.Semi.E087
 
     /// <summary>
     /// Load Port/Carrier Association State Model (LCAS)
+    /// <para/>NotAssociated = 0, Associated = 1, Undefined = -1
     /// </summary>
-	public enum LCAS : int
+    [DataContract(Namespace = Constants.E087NameSpace)]
+    public enum LCAS : int
 	{
-        /// <summary>-1: Local default value to use when there is no valid value.</summary>
-		Undefined = -1,
         /// <summary>0: Port is not associated with a carrier object</summary>
-		NotAssociated = 0,
+        [EnumMember]
+        NotAssociated = 0,
         /// <summary>1: Port is associated with a carrier object</summary>
-		Associated = 1,
-	}
+        [EnumMember]
+        Associated = 1,
+        /// <summary>-1: Local default value to use when there is no valid value.</summary>
+        [EnumMember]
+        Undefined = -1,
+    }
 
     /// <summary>
     /// LCAS Transitions that match the enumerated valid LCAS state transitions.
     /// </summary>
-	public enum LCAS_Transition : int
+    [DataContract(Namespace = Constants.E087NameSpace)]
+    public enum LCAS_Transition : int
 	{
         /// <summary>1: noState -> NotAssociated (system reset)</summary>
-		Transition1 = 1,
+        [EnumMember]
+        Transition1 = 1,
         /// <summary>2: NotAssociated -> Associated (bind when port not occupied, carrierID read for unassocated port, pwc or cancel carrier in response to cid read fail or unknown carrierID)</summary>
-		Transition2 = 2,
+        [EnumMember]
+        Transition2 = 2,
         /// <summary>3: Associated -> NotAssociated (cancel bind or carrier departed port)</summary>
-		Transition3 = 3,
+        [EnumMember]
+        Transition3 = 3,
         /// <summary>4: Associated -> Associated (equip based verify failed - reassoc with value read)</summary>
-		Transition4 = 4,
+        [EnumMember]
+        Transition4 = 4,
 	}
 
 	// LCAS transition events dvs: PortID, LCAS, CarrierID
@@ -321,29 +415,39 @@ namespace MosaicLib.Semi.E087
 
     /// <summary>
     /// Values that are generally used to define Carrier Hold Control behavior.
+    /// <para/>HostRelease = 1, EquipmentRelease = 2, Undefined = 0
     /// </summary>
-	public enum CarrierHoldControl : byte
+    [DataContract(Namespace = Constants.E087NameSpace)]
+    public enum CarrierHoldControl : byte
 	{
-        /// <summary>0: Local default value to use when there is no valid value.</summary>
-		CarrierHoldControl_Undefined = 0,
         /// <summary>1: E87 Release command must be explicitly between CAS transitions to CarrierComplete or CarrierStopped and LTS transition to ReadyToUnload</summary>
-		CarrierHoldControl_HostRelease = 1,
+        [EnumMember]
+        HostRelease = 1,
         /// <summary>2: LTS transitions to ReadyToUnload directly after CAS transitions to CarrierComplete or CarrierStopped</summary>
-		CarrierHoldControl_EquipmentRelease = 2,
-	}
+        [EnumMember]
+        EquipmentRelease = 2,
+        /// <summary>0: Local default value to use when there is no valid value.</summary>
+        [EnumMember]
+        Undefined = 0,
+    }
 
     /// <summary>
     /// Values that are generally used to define Auto Unclamp Control behavior.
+    /// <para/>CarrierTriggeredUnclamp = 1, AMHSTriggeredUnclamp = 2, Undefined = 0
     /// </summary>
-	public enum AutoUnclampControl : byte
+    [DataContract(Namespace = Constants.E087NameSpace)]
+    public enum AutoUnclampControl : byte
 	{
-        /// <summary>0: Local default value to use when there is no valid value.</summary>
-		AutoUnclampControl_Undefined = 0,
         /// <summary>1: unclamp on transition to CarrierComplete or CarrierStopped (or carrier canceled)</summary>
-		AutoUnclampControl_CarrierTriggeredUnclamp = 1,
+        [EnumMember]
+        CarrierTriggeredUnclamp = 1,
         /// <summary>2: unclamp during transfer start (from TRREQ to READY)</summary>
-		AutoUnclampControl_AMHSTriggeredUnclamp = 2,
-	}
+        [EnumMember]
+        AMHSTriggeredUnclamp = 2,
+        /// <summary>0: Local default value to use when there is no valid value.</summary>
+        [EnumMember]
+        Undefined = 0,
+    }
 
 	//-------------------------------------------------------------------
 	// Section 16: Services
@@ -496,7 +600,7 @@ namespace MosaicLib.Semi.E087
         public CarrierActionResult AttachStatus(StatusPair statusPair) { StatusList.Add(statusPair); return this; }
 
         /// <summary>Special case of SetCannotPerformNow which uses ERRCODE.OperationIsNotImplemented and an ErrText derived from the given function name.  Supports call chaining.</summary>
-        public CarrierActionResult FunctionNotImplemented(String functionName) { SetCannotPerformNow(ERRCODE.OperationIsNotImplemented, "Operation:" + functionName + " is not implemented"); return this; }
+        public CarrierActionResult FunctionNotImplemented(String functionName) { SetCannotPerformNow(ERRCODE.OperationIsNotImplemented, "Operation:{0} is not implemented".CheckedFormat(functionName)); return this; }
 
         /// <summary>If the StatusListIsSuccess then sets the first CAACK to CAACK.AcknowledgedCommandHasBeenPerformed otherwise replaces either IsSuccess CAACK with CAACK.CommandPerformedWithErrors.  Supports call chaining.</summary>
         public CarrierActionResult SetCommandHasBeenPerformed()								
@@ -560,38 +664,42 @@ namespace MosaicLib.Semi.E087
     /// <summary>
     /// an enum listing each of the alarms that may be produced by this system.
     /// </summary>
-	public enum Alarms : int
+    public enum Alarms : int
 	{
         /// <summary>A PIO state or usage error was detected.</summary>
 		PIOFailure,
         /// <summary>attempt was made to manually deliver a carrier to port in auto mode, or auto delivery was started to a port in manual mode (also sets PIOFailed)</summary>
 		AccessModeViolation,
-        /// <summary></summary>
+
 		CarrierVerificationFailure,
-        /// <summary></summary>
-		SlotMapReadFailed,
-        /// <summary></summary>
-		SlotMapVerificationFailed,
-        /// <summary></summary>
-		AttemptToUseOutOfServiceLoadPort,
-        /// <summary></summary>
-		CarrierPresenceError,
-        /// <summary></summary>
-		CarrierPlacementError,
+
+        SlotMapReadFailed,
+
+        SlotMapVerificationFailed,
+
+        AttemptToUseOutOfServiceLoadPort,
+
+        CarrierPresenceError,
+
+        CarrierPlacementError,
+
         /// <summary>Dock or Undock failed</summary>
 		CarrierDockFailure,
+
         /// <summary>Open or Close failed</summary>
 		CarrierDoorFailure,
-        /// <summary></summary>
-		DuplicateCarrierID,
-        /// <summary></summary>
-		CarrierRemovalError,
+
+        DuplicateCarrierID,
+
+        CarrierRemovalError,
+
         /// <summary>Clamp or Unclamp failed</summary>
 		CarrierClampFailure,
+
         /// <summary>manual transfer started but not finished</summary>
 		ManualTransferFailed,
-        /// <summary></summary>
-		PortOperationFailed,
+
+        PortOperationFailed,
 	}
 
 	//-------------------------------------------------------------------
@@ -600,29 +708,37 @@ namespace MosaicLib.Semi.E087
     /// <summary>
     /// Defines the known SlotState values
     /// </summary>
-	public enum SlotState : int	// enum for values stored in a SlotMap
+    [DataContract(Namespace = Constants.E087NameSpace)]
+    public enum SlotState : int	// enum for values stored in a SlotMap
 	{
         /// <summary>-1 or ?: the substrate slot map state for this slot is not valid</summary>
+        [EnumMember]
         Invalid = -1,
         /// <summary>0 or !: the substrate map result is not known for this slot or the map result indicates some unknown error for this slot (can be a consolidation of cross and double slotted for some mapping hardware)</summary>
-		Undefined = 0,
+        [EnumMember]
+        Undefined = 0,
         /// <summary>1 or -: the slot is known to be empty</summary>
-		Empty = 1,
+        [EnumMember]
+        Empty = 1,
         /// <summary>2 or *: no mapping hardware available.  Slot is presumed occupied until additional information is available about it.</summary>
-		NotEmpty = 2, 
+        [EnumMember]
+        NotEmpty = 2, 
         /// <summary>3 or o: slot is known to contain a substrate that passed the position and size tolerance tests.</summary>
-		CorrectlyOccupied = 3,
+        [EnumMember]
+        CorrectlyOccupied = 3,
         /// <summary>4 or D: slot is believed to contain a double slotted (thick) substrate.</summary>
-		DoubleSlotted = 4, 
+        [EnumMember]
+        DoubleSlotted = 4, 
         /// <summary>5 or X: slot is believed to contain a cross sloted substrate.  May also apply to slots that are adjacent to such a wafer.</summary>
-		CrossSlotted = 5,
+        [EnumMember]
+        CrossSlotted = 5,
 	}
 
     /// <summary>
     /// Defines the variants for ToString conversions for List{SlotState} and SlotState[] ToString extension methods.
     /// <para/>Graphics (?!-*oDX) and Digits(?012345)
     /// </summary>
-    public enum SlotStateStringFormat
+    public enum SlotStateStringFormat : int
     {
         /// <summary>Generate string version of SlotSet set using mapping of ? = Invalid, ! = Undefined, - = Empty, * = NotEmpty, o = CorrectlyOccupied, D = DoubleSlotted, X = CrossSlotted</summary>
         Graphics,
@@ -633,6 +749,40 @@ namespace MosaicLib.Semi.E087
     /// <summary>ExtensionMethod wrapper class</summary>
     public static partial class ExtensionMethods
     {
+        /// <summary>
+        /// Returns true if the given slotState parameter contains a known value (one of CorrectlyOccupied, Empty, NotEmpty, CrossSlotted, DoubleSlotted, or Undefined).
+        /// </summary>
+        public static bool IsValid(this SlotState slotState)
+        {
+            switch (slotState)
+            {
+                case SlotState.CorrectlyOccupied:
+                case SlotState.Empty:
+                case SlotState.NotEmpty:
+                case SlotState.CrossSlotted:
+                case SlotState.DoubleSlotted:
+                case SlotState.Undefined:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        /// <summary>
+        /// Returns true if the given slotState parameter contains a normal value (one of CorrectlyOccupied, or Empty).
+        /// </summary>
+        public static bool IsNormal(this SlotState slotState)
+        {
+            switch (slotState)
+            {
+                case SlotState.CorrectlyOccupied:
+                case SlotState.Empty:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
         /// <summary>
         /// Sets the given slotStateList to contain the decoded version of the given fromSlotMapStr using the character parsing from the SlotState enum summary comments
         /// <para/>? = Invalid, ! = Undefined, - = Empty, * = NotEmpty, o = CorrectlyOccupied, D = DoubleSlotted, X = CrossSlotted, digits = corresponding states, all else = Invalid
@@ -684,15 +834,34 @@ namespace MosaicLib.Semi.E087
         }
 
         /// <summary>
+        /// Generates and returns an array of SlotStates decoded from the given fromSlotMapStr using the character parsing from the SlotState enum summary comments
+        /// <para/>? = Invalid, ! = Undefined, - = Empty, * = NotEmpty, o = CorrectlyOccupied, D = DoubleSlotted, X = CrossSlotted, digits = corresponding states, all else = Invalid
+        /// <para/>Returns the given slotStateList (or a new one if the method was passed null for the list.  If append is false and the list is not empty on entry, the given list will be cleared before parsing.
+        /// </summary>
+        public static SlotState [] ParseSlotStates(this string fromSlotMapStr)
+        {
+            return new List<SlotState>().Parse(fromSlotMapStr, true).ToArray();
+        }
+
+        /// <summary>
         /// Converts the given slotStateList to a string using the requested format of Graphics or Digits, and returns the string.
         /// </summary>
-        public static string ToString(this List<SlotState> slotStateList, SlotStateStringFormat format)
+        public static string ToString(this IList<SlotState> slotStateList, SlotStateStringFormat format)
         {
             return ToString(slotStateList, (format == SlotStateStringFormat.Graphics ? graphicsCharArray : digitsCharArray));
         }
 
+        /// <summary>
+        /// Converts the given slotStateList to a string using the requested format of Graphics or Digits, and returns the string.
+        /// </summary>
+        public static string ToString(this SlotState [] slotStateArray, SlotStateStringFormat format)
+        {
+            return ToString(slotStateArray, (format == SlotStateStringFormat.Graphics ? graphicsCharArray : digitsCharArray));
+        }
+
         /// <summary>Char array used to translate a SlotState value (casted as an integer + 1) into a graphical character</summary>
         public static readonly char[] graphicsCharArray = ("?!-*oDX".ToCharArray());
+
         /// <summary>Char array used to translate a SlotState value (casted as an integer) into a digit equivilant.  SlotState.Invalid is transformed to '?'</summary>
         public static readonly char[] digitsCharArray = ("?012345".ToCharArray());
 
@@ -702,13 +871,24 @@ namespace MosaicLib.Semi.E087
         /// char array index 1 is for SlotState.Undefined, etc... All states that after incrementing, do not map to valid index will
         /// be represented in the output by a ?.
         /// </summary>
-        public static string ToString(this List<SlotState> slotStateList, char[] slotStateToCharMappingArray)
+        public static string ToString(this IList<SlotState> slotStateList, char[] slotStateToCharMappingArray)
+        {
+            return slotStateList.ToArray().ToString(slotStateToCharMappingArray);
+        }
+
+        /// <summary>
+        /// Converts the given slotStateArray to a string using the given char array which is used to obtain the character for each
+        /// SlotState value (casted as an integer), shifted right by one.  char array index 0 is for the SlotState.Invalid state,
+        /// char array index 1 is for SlotState.Undefined, etc... All states that after incrementing, do not map to valid index will
+        /// be represented in the output by a ?.
+        /// </summary>
+        public static string ToString(this SlotState [] slotStateArray, char[] slotStateToCharMappingArray)
         {
             StringBuilder sb = new StringBuilder();
 
-            if (slotStateList != null)
+            if (slotStateArray != null)
             {
-                foreach (SlotState slotState in slotStateList)
+                foreach (SlotState slotState in slotStateArray)
                 {
                     sb.Append(slotStateToCharMappingArray.SafeAccess(1 + unchecked((int)slotState), '?'));
                 }

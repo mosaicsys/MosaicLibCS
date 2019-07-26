@@ -1,10 +1,11 @@
 //-------------------------------------------------------------------
 /*! @file UdpSerialIO.cs
- * @brief This file defines the SerialIO related classes that are used for Udp based ports (UdpClientPort and UdpServerPort)
+ *  @brief This file defines the SerialIO related classes that are used for Udp based ports (UdpClientPort and UdpServerPort)
  * 
- * Copyright (c) Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2008 Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2002 Mosaic Systems Inc., All rights reserved. (C++ library version)
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2008 Mosaic Systems Inc.
+ * Copyright (c) 2002 Mosaic Systems Inc.  (C++ library version)
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,18 +19,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 using System.Net;
 using System.Net.Sockets;
 
-using MosaicLib.Utils;
-using MosaicLib.Time;
 using MosaicLib.Modular.Action;
 using MosaicLib.Modular.Part;
+using MosaicLib.Time;
+using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
 
 namespace MosaicLib.SerialIO
 {
@@ -169,7 +171,7 @@ namespace MosaicLib.SerialIO
 			}
 			catch (System.Exception ex)
 			{
-				faultCode = "Exception:" + ex.Message;
+				faultCode = ex.ToString(ExceptionFormat.TypeAndMessage);
 			}
 
 			if (string.IsNullOrEmpty(faultCode))
@@ -199,7 +201,7 @@ namespace MosaicLib.SerialIO
 			}
 			catch (System.Exception ex)
 			{
-				faultCode = "Exception:" + ex.Message;
+				faultCode = ex.ToString(ExceptionFormat.TypeAndMessage);
 			}
 
 			if (string.IsNullOrEmpty(faultCode))
@@ -277,7 +279,7 @@ namespace MosaicLib.SerialIO
 			}
 			catch (System.Exception ex)
 			{
-				return "Exception:" + ex.Message;
+				return ex.ToString(ExceptionFormat.TypeAndMessage);
 			}
 		}
 
@@ -296,7 +298,7 @@ namespace MosaicLib.SerialIO
 			}
 			catch (System.Exception ex)
 			{
-				return "Exception:" + ex.Message;
+				return ex.ToString(ExceptionFormat.TypeAndMessage);
 			}
 		}
 
@@ -418,10 +420,18 @@ namespace MosaicLib.SerialIO
     #region SelectSocketMonitor
 
     /// <summary>
-    /// This class implements a singleton threaded object that is used to repeatedly call select on a configured set of sockets and then inform
+    /// This class implements a singleton threaded object (not SAP based) 
+    /// that is used to repeatedly call select on a configured set of sockets and then inform
     /// the registered clients about desired socket activities by notifying them using an INotifyable object.
-    /// (not based on SimpleActivePart)
     /// </summary>
+    /// <remarks>
+    /// <para/>Note: This singleton is now used for both UDP and TCP related serial ports.
+    /// <para/>This object is not SimpleActivePartBase based because all of its public interface methods are blocking (synchronous)
+    /// and the use of an internal action queue to implement these public methods could cause undesired delays due to the nature of the
+    /// inner thread's being blocked when calling Socket.Select.
+    /// <para/>The thread created by this part is created as a BackgroundThread so that it will not block app exit if it has not been formally stopped before shutdown.
+    /// Since its main purpose is to render a set of safe arrays and call select on them, and notify the corresponding requestors when the select indicates that desired activity has happened, is available, on each such thread
+    /// </remarks>
     public class SelectSocketMonitor : DisposableBase
     {
         /// <summary>
@@ -447,6 +457,7 @@ namespace MosaicLib.SerialIO
 
         /// <summary>Defines the Logger instance that is used to log a record of basic use of this object.</summary>
         public Logging.ILogger Logger { get; private set; }
+
         /// <summary>Defines the Trace logger instance that is used to record trace records about this object.</summary>
         public Logging.ILogger Trace { get; private set; }
 
@@ -465,15 +476,38 @@ namespace MosaicLib.SerialIO
         /// <summary>Adds/Replaces the indicated socket, settings and notification target to the monitor list and starts the background service thread if it is not already running.</summary>
         public void AddSocketToList(Socket s, bool read, bool write, bool error, INotifyable notifyTarget)
         {
-            TableItem tableItem = new TableItem() { s = s, read = read, write = write, error = error, notifyTarget = notifyTarget };
+            TableItem tableItem = new TableItem() 
+            { 
+                Socket = s, 
+                read = read, 
+                write = write, 
+                error = error, 
+                notifyTarget = notifyTarget, 
+            };
+
+            string notUsableReason = tableItem.NotUsableReason;
+            if (!notUsableReason.IsNullOrEmpty())
+            {
+                tableItem.LastLoggedNotUsableReason = notUsableReason;
+
+                Logger.Debug.Emit("{0} given unusable socket {1} : {2} [Adding inactive]", Fcns.CurrentMethodName, tableItem.shAsInt64, notUsableReason);
+            }
 
             lock (userTableMutex)
             {
+                // the following passes ownership of the tableItem to this object's service thread.
                 userTableDictionary[s] = tableItem;
+
+                notifyOnNextTableRebuildTableItemList.Add(tableItem);
+
                 rebuildTablesFromUserTable = true;
+
+                NumActiveSockets += 1;
             }
 
             StartBackgroundThreadIfNeeded();
+
+            threadWaitEventNotifier.Notify();
         }
 
         /// <summary>
@@ -482,14 +516,38 @@ namespace MosaicLib.SerialIO
         /// </summary>
         public void RemoveSocketFromList(Socket s)
         {
+            TableItem removedTableItem = null;
+
             lock (userTableMutex)
             {
-                if (userTableDictionary.ContainsKey(s))
+                if (userTableDictionary.TryGetValue(s, out removedTableItem))
+                {
                     userTableDictionary.Remove(s);
+                }
 
-                rebuildTablesFromUserTable = true;
+                if (removedTableItem != null)
+                {
+                    notifyOnNextTableRebuildTableItemList.Add(removedTableItem);
+
+                    rebuildTablesFromUserTable = true;
+
+                    if (removedTableItem.IsInActiveList)
+                        NumActiveSockets -= 1;
+                    else
+                        NumInactiveSockets -= 1;
+                }
             }
+
+            if (removedTableItem != null)
+                Logger.Debug.Emit("{0} removed socket {1}", Fcns.CurrentMethodName, removedTableItem.shAsInt64);
+            else
+                Logger.Debug.Emit("{0} could not find requested socket {1}", Fcns.CurrentMethodName, s.HandleAsInt64());
+
+            threadWaitEventNotifier.Notify();
         }
+
+        public int NumActiveSockets { get; private set; }
+        public int NumInactiveSockets { get; private set; }
 
         private void StartBackgroundThreadIfNeeded()
         {
@@ -529,64 +587,108 @@ namespace MosaicLib.SerialIO
 
         WaitEventNotifier threadWaitEventNotifier = new WaitEventNotifier(WaitEventNotifier.Behavior.WakeOne);
 
-        private object userTableMutex = new object();
+        private readonly object userTableMutex = new object();
         private Dictionary<Socket, TableItem> userTableDictionary = new Dictionary<Socket, TableItem>();
+        private List<TableItem> notifyOnNextTableRebuildTableItemList = new List<TableItem>();
         private volatile bool rebuildTablesFromUserTable = false;
 
         private class TableItem
         {
-            public Socket s;
+            public Socket Socket 
+            { 
+                get { return socket; } 
+                set 
+                { 
+                    socket = value;
+                    shAsInt64 = socket.HandleAsInt64();
+                } 
+            }
+            public Socket socket { get; private set; }
             public bool read, write, error;
             public INotifyable notifyTarget;
+
+            public Int64 shAsInt64 = -1;
+            public bool IsHandleValid { get { return ((shAsInt64 != 0) && (shAsInt64 != -1)); } }
 
             public bool touched;
 
             public TableItem() { }
 
-            public bool IsUsable
+            /// <summary>
+            /// Returns empty string if the socket is usable and non-empty description of the reason if the socket is not usable
+            /// </summary>
+            public string NotUsableReason
             {
                 get
                 {
                     bool isActive = (read || write || error);
-                    bool isNonNull = (s != null && notifyTarget != null);
-                    if (!isActive || !isNonNull)
-                        return false;
+                    if (!isActive)
+                        return "no monitor purpose selected (!read && !write && !error)";
 
-                    bool isConnectedOrBound = (s.Connected || s.IsBound);
-                    Int64 shAsInt64 = s.Handle.ToInt64();
-                    bool isHandleValid = ((shAsInt64 != 0) && (shAsInt64 != -1));
+                    if (socket == null)
+                        return "given socket is null";
 
-                    return (isConnectedOrBound && isHandleValid && (s.SocketType != SocketType.Unknown));
+                    if (notifyTarget == null)
+                        return "notifyTarget is null";
+
+                    try
+                    {
+                        if (!socket.Connected && !socket.IsBound)
+                            return "socket is neither connected nor bound";
+
+                        if (!IsHandleValid)
+                            return "socket's handle '{0}' is not valid".CheckedFormat(shAsInt64);
+
+                        bool socketTypeIsUnknown = (socket.SocketType == SocketType.Unknown);
+
+                        if (socketTypeIsUnknown)
+                            return "socket's SocketType is Unknown";
+
+                        if (socket.LocalEndPoint == null)
+                            return "socket's LocalEndPoint is null";
+
+                        return string.Empty;
+                    }
+                    catch (System.Exception ex)
+                    {
+                        return "Unexpected exception querying socket state: {0}".CheckedFormat(ex.ToString(ExceptionFormat.TypeAndMessage));
+                    }
                 }
             }
+
+            public bool IsInActiveList { get; set; }
+            public string LastLoggedNotUsableReason { get; set; }
         }
 
-        private object threadStartMutex = new object();
+        private readonly object threadStartMutex = new object();
         private System.Threading.Thread serviceThread = null;
         private volatile bool threadStarted = false;
         private volatile bool stopThread = false;
 
-        private const int emptySetWaitMSec = 10;              // 10 msec
-        private const int selectThrewWaitMSec = 20;           // 20 msec
-        private const int selectWaitMicroSec = 100000;        // 100 msec
+        /// <summary>10 msec</summary>
+        private const int emptySetWaitMSec = 10;
+        /// <summary>10 msec</summary>
+        private const int selectThrewWaitMSec = 10;
+        /// <summary>10000 uSec == 10 msec</summary>
+        private const int selectWaitMicroSec = 10000;
+
+        private Dictionary<Socket, TableItem> referenceActiveTableItemDictionary = new Dictionary<Socket, TableItem>();
+        private TableItem[] activeTableItemArray = EmptyArrayFactory<TableItem>.Instance;
+        private TableItem[] inactiveTableItemArray = EmptyArrayFactory<TableItem>.Instance;
+        private QpcTimer rebuildTableItemsTimer = new QpcTimer() { TriggerIntervalInSec = 0.200 };
+
+        private Socket[] activeReadSocketArray = EmptyArrayFactory<Socket>.Instance;
+        private Socket[] activeWriteSocketArray = EmptyArrayFactory<Socket>.Instance;
+        private Socket[] activeErrorSocketArray = EmptyArrayFactory<Socket>.Instance;
+
+        private List<Socket> selectReadSocketListParam = new List<Socket>();
+        private List<Socket> selectWriteSocketListParam = new List<Socket>();
+        private List<Socket> selectErrorSocketListParam = new List<Socket>();
 
         private void ThreadEntryPoint()
         {
-            using (var eeTrace = new Logging.EnterExitTrace(Trace, "ThreadEntryPoint"))
+            using (var eeTrace = new Logging.EnterExitTrace(Logger, "ThreadEntryPoint", mesgType: Logging.MesgType.Debug))
             {
-                List<TableItem> tableItemList = new List<TableItem>();
-                Dictionary<Socket, TableItem> referenceTable = new Dictionary<Socket, TableItem>();
-                List<Socket> referenceReadList = new List<Socket>();
-                List<Socket> referenceWriteList = new List<Socket>();
-                List<Socket> referenceErrorList = new List<Socket>();
-                bool setIsEmpty = true;
-
-                List<Socket> readList = new List<Socket>();
-                List<Socket> writeList = new List<Socket>();
-                List<Socket> errorList = new List<Socket>();
-
-                List<Socket> dropList = new List<Socket>();
-
                 rebuildTablesFromUserTable = true;
 
                 for (; ; )
@@ -594,110 +696,145 @@ namespace MosaicLib.SerialIO
                     if (stopThread)
                         break;
 
+                    if (!inactiveTableItemArray.IsNullOrEmpty() && rebuildTableItemsTimer.StartIfNeeded().IsTriggered)
+                        rebuildTablesFromUserTable = true;
+
                     if (rebuildTablesFromUserTable)
+                        RebuildTablesFromUserTable();
+
+                    try
                     {
-                        rebuildTablesFromUserTable = false;
+                        selectReadSocketListParam.Clear();
+                        selectWriteSocketListParam.Clear();
+                        selectErrorSocketListParam.Clear();
 
-                        tableItemList.Clear();
-                        referenceTable.Clear();
-                        referenceReadList.Clear();
-                        referenceWriteList.Clear();
-                        referenceErrorList.Clear();
+                        selectReadSocketListParam.AddRange(activeReadSocketArray);
+                        selectWriteSocketListParam.AddRange(activeWriteSocketArray);
+                        selectErrorSocketListParam.AddRange(activeErrorSocketArray);
 
-                        dropList.Clear();
+                        if (!selectReadSocketListParam.IsNullOrEmpty() || !selectWriteSocketListParam.IsNullOrEmpty() || !selectErrorSocketListParam.IsNullOrEmpty())
+                            Socket.Select(selectReadSocketListParam, selectWriteSocketListParam, selectErrorSocketListParam, selectWaitMicroSec);
+                        else
+                            threadWaitEventNotifier.WaitMSec(emptySetWaitMSec);
 
-                        lock (userTableMutex)
+                        SetTableItemTouchedFlags(referenceActiveTableItemDictionary, selectReadSocketListParam);
+                        SetTableItemTouchedFlags(referenceActiveTableItemDictionary, selectWriteSocketListParam);
+                        SetTableItemTouchedFlags(referenceActiveTableItemDictionary, selectErrorSocketListParam);
+
+                        bool anyTouched = false;
+                        foreach (TableItem tableItem in activeTableItemArray)
                         {
-                            foreach (KeyValuePair<Socket, TableItem> kvp in userTableDictionary)
+                            if (tableItem.touched)
                             {
-                                TableItem tableItem = kvp.Value;
-
-                                if (tableItem.IsUsable)
-                                    tableItemList.Add(tableItem);
-                                else
-                                    dropList.Add(kvp.Key);
-                            }
-
-                            if (dropList.Count > 0)
-                            {
-                                foreach (Socket s in dropList)
-                                    userTableDictionary.Remove(s);
+                                tableItem.notifyTarget.Notify();
+                                tableItem.touched = false;
+                                anyTouched = true;
                             }
                         }
 
-                        if (dropList.Count > 0)
-                        {
-                            Logger.Warning.Emit("Dropped {0} invalid Socket select TableItems", dropList.Count);
-                        }
-
-                        foreach (TableItem tableItem in tableItemList)
-                        {
-                            referenceTable.Add(tableItem.s, tableItem);
-
-                            if (tableItem.read)
-                                referenceReadList.Add(tableItem.s);
-                            if (tableItem.write)
-                                referenceWriteList.Add(tableItem.s);
-                            if (tableItem.error)
-                                referenceErrorList.Add(tableItem.s);
-                        }
-
-                        setIsEmpty = ((referenceReadList.Count == 0) && (referenceWriteList.Count == 0) && (referenceErrorList.Count == 0));
-
-                        Logger.Debug.Emit("Select table rebuilt.  Contains {0} sockets", tableItemList.Count);
+                        if (anyTouched)
+                            System.Threading.Thread.Sleep(1);      // prevent free spin of this thread when signaling events.
                     }
-
-                    if (setIsEmpty)
+                    catch (System.Exception ex)
                     {
-                        threadWaitEventNotifier.WaitMSec(emptySetWaitMSec);
-                    }
-                    else
-                    {
-                        try
-                        {
-                            readList.Clear(); writeList.Clear(); errorList.Clear();
-                            readList.AddRange(referenceReadList); writeList.AddRange(referenceWriteList); errorList.AddRange(referenceErrorList);
+                        Trace.Debug.Emit("Select failed: {0}", ex.ToString(ExceptionFormat.TypeAndMessage));
 
-                            Socket.Select(readList, writeList, errorList, selectWaitMicroSec);
-
-                            SetTableItemTouchedFlags(referenceTable, readList);
-                            SetTableItemTouchedFlags(referenceTable, writeList);
-                            SetTableItemTouchedFlags(referenceTable, errorList);
-
-                            bool anyTouched = false;
-                            foreach (TableItem tableItem in tableItemList)
-                            {
-                                if (tableItem.touched)
-                                {
-                                    tableItem.notifyTarget.Notify();
-                                    tableItem.touched = false;
-                                    anyTouched = true;
-                                }
-                            }
-
-                            if (anyTouched)
-                                System.Threading.Thread.Sleep(10);      // prevent free spin of this thread when signaling events.
-                        }
-                        catch (System.Exception ex)
-                        {
-                            Trace.Debug.Emit("Select failed: {0}", ex.Message);
-
-                            threadWaitEventNotifier.WaitMSec(selectThrewWaitMSec);
-                            rebuildTablesFromUserTable = true;
-                        }
+                        threadWaitEventNotifier.WaitMSec(selectThrewWaitMSec);
+                        rebuildTablesFromUserTable = true;
                     }
                 }
             }
         }
 
-        private static void SetTableItemTouchedFlags(Dictionary<Socket, TableItem> referenceTable, List<Socket> socketList)
+        List<TableItem> allTableItemsList = new List<TableItem>();
+
+        private void RebuildTablesFromUserTable()
         {
-            foreach (var s in socketList)
+            allTableItemsList.Clear();
+
+            TableItem[] notifyTableItemArray = null;
+
+            lock (userTableMutex)
             {
-                TableItem tableItem;
-                if (s != null && referenceTable.TryGetValue(s, out tableItem) && tableItem != null)
-                    tableItem.touched = true;
+                rebuildTablesFromUserTable = false;
+
+                if (!notifyOnNextTableRebuildTableItemList.IsEmpty())
+                {
+                    notifyTableItemArray = notifyOnNextTableRebuildTableItemList.ToArray();
+                    notifyOnNextTableRebuildTableItemList.Clear();
+                }
+
+                allTableItemsList.AddRange(userTableDictionary.Values);
+
+                foreach (var tableItem in allTableItemsList)
+                {
+                    string notUsableReason = tableItem.NotUsableReason;
+                    tableItem.IsInActiveList = notUsableReason.IsNullOrEmpty();
+
+                    if (tableItem.LastLoggedNotUsableReason.MapNullToEmpty() != notUsableReason)
+                        Logger.Debug.Emit("Socket.Handle {0} Not Usable Reason changed to '{1}' [from '{2}']", tableItem.shAsInt64, notUsableReason, tableItem.LastLoggedNotUsableReason);
+
+                    tableItem.LastLoggedNotUsableReason = notUsableReason;
+                }
+
+                activeTableItemArray = allTableItemsList.Where(item => item.IsInActiveList).ToArray();
+                inactiveTableItemArray = allTableItemsList.Where(item => !item.IsInActiveList).ToArray();
+
+                referenceActiveTableItemDictionary.Clear();
+
+                activeTableItemArray.DoForEach(tableItem => referenceActiveTableItemDictionary.Add(tableItem.socket, tableItem));
+
+                activeReadSocketArray = activeTableItemArray.Where(tableItem => tableItem.read).Select(tableItem => tableItem.socket).ToArray();
+                activeWriteSocketArray = activeTableItemArray.Where(tableItem => tableItem.write).Select(tableItem => tableItem.socket).ToArray();
+                activeErrorSocketArray = activeTableItemArray.Where(tableItem => tableItem.error).Select(tableItem => tableItem.socket).ToArray();
+
+                int numActiveSockets = activeTableItemArray.Length;
+                int numInactiveSockets = inactiveTableItemArray.Length;
+
+                if (lastNumActiveSockets != numActiveSockets || lastNumInactiveSockets != numInactiveSockets)
+                {
+                    if (inactiveTableItemArray.IsNullOrEmpty())
+                        Logger.Debug.Emit("Select table rebuilt.  Contains {0} active sockets", activeTableItemArray.Length);
+                    else
+                        Logger.Debug.Emit("Select table rebuilt.  Contains {0} active sockets and {1} inactive sockets", activeTableItemArray.Length, inactiveTableItemArray.Length);
+
+                    NumActiveSockets = lastNumActiveSockets = numActiveSockets;
+                    NumInactiveSockets = lastNumInactiveSockets = numInactiveSockets;
+                }
             }
+
+            // notify any items obtained from the notifyOnNextRebuildTableItemList now (outside of the userTableMutex locked block)
+            if (!notifyTableItemArray.IsNullOrEmpty())
+                notifyTableItemArray.DoForEach(t => t.notifyTarget.Notify());
+        }
+
+        private int lastNumActiveSockets = 0, lastNumInactiveSockets = 0;
+
+        private static void SetTableItemTouchedFlags(Dictionary<Socket, TableItem> referenceTableItemDictionary, List<Socket> socketList)
+        {
+            if (!socketList.IsNullOrEmpty())
+            {
+                foreach (var socket in socketList)
+                {
+                    TableItem tableItem = referenceTableItemDictionary.SafeTryGetValue(socket, fallbackValue: fallbackTableItem);
+                    tableItem.touched = true;
+                }
+
+                socketList.Clear();
+            }
+        }
+
+        private static readonly TableItem fallbackTableItem = new TableItem();
+    }
+
+    public static partial class ExtensionMethods
+    {
+        /// <summary>
+        /// Extension method that will accept a socket and will return the ToInt64 from its Handle or -1 if the socket or its Handle are null
+        /// </summary>
+        public static Int64 HandleAsInt64(this Socket socket)
+        {
+            return  ((socket != null && socket.Handle != null) ? socket.Handle.ToInt64() : -1);
         }
     }
 

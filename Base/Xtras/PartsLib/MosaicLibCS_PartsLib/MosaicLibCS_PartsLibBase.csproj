@@ -8,14 +8,15 @@
     <ProjectGuid>{510022EC-7C35-4F8A-B1C7-2471E1DE8678}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>MosaicLibCS_PartsLib</RootNamespace>
+    <RootNamespace>MosaicLib.PartsLib</RootNamespace>
     <AssemblyName>MosaicLibCS_PartsLib</AssemblyName>
-    <TargetFrameworkVersion>v3.5</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <FileUpgradeFlags>
     </FileUpgradeFlags>
     <OldToolsVersion>3.5</OldToolsVersion>
     <UpgradeBackupLocation />
+    <TargetFrameworkProfile>Client</TargetFrameworkProfile>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -52,27 +53,46 @@
   <ItemGroup>
     <Compile Include="Common\BCR\BCRSim.cs" />
     <Compile Include="Common\E084\E084ActiveTransferSimEngine.cs" />
+    <Compile Include="Common\E084\E084PassiveTransferState.cs" />
+    <Compile Include="Common\E099\E099TagRW.cs" />
     <Compile Include="Common\E099\E099TagRWSimEngine.cs" />
+    <Compile Include="Common\LPM\LPM.cs" />
     <Compile Include="Common\LPM\LPMSim.cs" />
     <Compile Include="Common\MassFlow\MassFlow.cs" />
     <Compile Include="Common\Motion\Motion.cs" />
+    <Compile Include="Common\Physics\Physics.cs" />
     <Compile Include="Common\Protocols\HART\HARTBusMaster.cs" />
     <Compile Include="Common\Protocols\HART\HARTProtocol.cs" />
     <Compile Include="Helpers\Actuator.cs" />
     <Compile Include="Helpers\EventRateTool.cs" />
+    <Compile Include="Scan\Plugins\Sim\Common.cs" />
+    <Compile Include="Scan\Plugins\Sim\FlowModel.cs" />
+    <Compile Include="Scan\Plugins\Sim\Heater.cs" />
     <Compile Include="Scan\ScanEngine\ScanEngine.cs" />
     <Compile Include="Scan\Plugins\Sim\MFC.cs" />
+    <Compile Include="Tools\MDRF\MDRFCommon.cs" />
+    <Compile Include="Tools\MDRF\MDRFWriter.cs" />
+    <Compile Include="Tools\MDRF\MDRFReader.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="app.config" />
+    <Compile Include="Tools\OutputDebugStringCapture.cs" />
+    <Compile Include="Tools\Performance\NetIfacePerformance.cs" />
+    <Compile Include="Tools\Performance\PerformanceCounters.cs" />
+    <Compile Include="Tools\Performance\CPUPerformance.cs" />
+    <Compile Include="Tools\Performance\FileRWPerformance.cs" />
+    <Compile Include="Tools\Performance\PerformanceCommon.cs" />
+    <Compile Include="Tools\Performance\PerformanceSuite.cs" />
+    <Compile Include="Tools\Performance\PingPerformance.cs" />
+    <Compile Include="Tools\Performance\ProcessPerformance.cs" />
+    <Compile Include="Tools\Performance\SerialEchoPerformance.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\..\MosaicLibCSBase2010.csproj">
       <Project>{DFD5D17D-1977-4B56-A4EB-5955B40B6ABB}</Project>
       <Name>MosaicLibCSBase2010</Name>
+      <Private>False</Private>
     </ProjectReference>
   </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.

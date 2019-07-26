@@ -1,10 +1,11 @@
 //-------------------------------------------------------------------
 /*! @file Implementation.cs
- * @brief This file contains the definitions and classes that are used to define the internal Action Implementation objects for the Modular Action portions of this library.
+ *  @brief This file contains the definitions and classes that are used to define the internal Action Implementation objects for the Modular Action portions of this library.
  * 
- * Copyright (c) Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2008 Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2006 Mosaic Systems Inc., All rights reserved. (C++ library version)
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2008 Mosaic Systems Inc.
+ * Copyright (c) 2006 Mosaic Systems Inc.  (C++ library version)
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,9 +19,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
 
-//-------------------------------------------------
 using System;
 using MosaicLib.Utils;
 using MosaicLib.Time;
@@ -34,68 +33,135 @@ namespace MosaicLib.Modular.Action
 
     /// <summary>
     /// This class defines the Logging.MesgType's for each of the standard classes of log messaages that Action objects emit during normal use.
+    /// It also includes other logging related configuration parameters.
     /// These include Done, Error, State and Update events.
+    /// <para/>Commonly used static values: Signif_Error_Debug_Debug, Info_Error_Debug_Debug, Info_Error_Trace_Trace, Info_Info_Trace_Trace, Debug_Debug_Trace_Trace, Trace_Trace_Trace_Trace, None_None_None_None
+    /// <para/>Instances of this class (but possibly not derived ones) are immutable.
     /// </summary>
     public class ActionLoggingConfig
     {
-        /// <summary>Default constructor:  Sets all Mesg Types to Logging.MesgTypes.None</summary>
-        public ActionLoggingConfig()
-        {
-            DoneMesgType = Logging.MesgType.None;
-            ErrorMesgType = Logging.MesgType.None;
-            StateMesgType = Logging.MesgType.None;
-            UpdateMesgType = Logging.MesgType.None;
-        }
-
-        /// <summary>Explicit constructor:  Caller passes the 4 Logging.MesgType values explicitly.</summary>
-        public ActionLoggingConfig(Logging.MesgType doneMesgType, Logging.MesgType errorMesgType, Logging.MesgType stateMesgType, Logging.MesgType updateMesgType) 
+        /// <summary>Explicit constructor with all available properties as optional ones.</summary>
+        public ActionLoggingConfig(Logging.MesgType doneMesgType = Logging.MesgType.None, Logging.MesgType errorMesgType = Logging.MesgType.None, Logging.MesgType stateMesgType = Logging.MesgType.None, Logging.MesgType updateMesgType = Logging.MesgType.None, ActionLoggingStyleSelect actionLoggingStyleSelect = Action.ActionLoggingStyleSelect.None) 
         {
             DoneMesgType = doneMesgType;
             ErrorMesgType = errorMesgType;
             StateMesgType = stateMesgType;
             UpdateMesgType = updateMesgType;
+            ActionLoggingStyleSelect = actionLoggingStyleSelect;
         }
 
-        /// <summary>Copy Constructor:  Creates a new instance from the given rhs that contains copies of the contained MesgType values.</summary>
-        public ActionLoggingConfig(ActionLoggingConfig rhs) 
+        /// <summary>Copy Constructor:  Creates a new instance from the given <paramref name="other"/> that contains copies of the contained MesgType values.</summary>
+        public ActionLoggingConfig(ActionLoggingConfig other, Logging.MesgType ? doneMesgType = null, Logging.MesgType ? errorMesgType = null, Logging.MesgType ? stateMesgType = null, Logging.MesgType ? updateMesgType = null, ActionLoggingStyleSelect ? actionLoggingStyleSelect = null) 
         {
-            DoneMesgType = rhs.DoneMesgType;
-            ErrorMesgType = rhs.ErrorMesgType;
-            StateMesgType = rhs.StateMesgType;
-            UpdateMesgType = rhs.UpdateMesgType;
+            DoneMesgType = doneMesgType ?? other.DoneMesgType;
+            ErrorMesgType = errorMesgType ?? other.ErrorMesgType;
+            StateMesgType = stateMesgType ?? other.StateMesgType;
+            UpdateMesgType = updateMesgType ?? other.UpdateMesgType;
+            ActionLoggingStyleSelect = actionLoggingStyleSelect ?? other.ActionLoggingStyleSelect;
+        }
+
+        /// <summary>
+        /// Debugging and logging helper method.
+        /// </summary>
+        public override string ToString()
+        {
+            return "Done:{0} Error:{1} State:{2} Update:{3}{4}".CheckedFormat(DoneMesgType, ErrorMesgType, StateMesgType, UpdateMesgType, (ActionLoggingStyleSelect == Action.ActionLoggingStyleSelect.None) ? "" : " {0}".CheckedFormat(ActionLoggingStyleSelect));
         }
 
         /// <summary>Gives the Logging.MesgType that is to be used for successfull Action Completion messages.</summary>
         public Logging.MesgType DoneMesgType { get; protected set; }
+
         /// <summary>Gives the Logging.MesgType that is to be used for Action Failed messages (including failed Action Completion messages).</summary>
         public Logging.MesgType ErrorMesgType { get; protected set; }
+
         /// <summary>Gives the Logging.MesgType that is to be used for other Action state change messages.</summary>
         public Logging.MesgType StateMesgType { get; protected set; }
+
         /// <summary>Gives the Logging.MesgTuype that is to be used for intermediate Action Update related messages.</summary>
         public Logging.MesgType UpdateMesgType { get; protected set; }
+
+        /// <summary>Gives the currently selected action logging style</summary>
+        public ActionLoggingStyleSelect ActionLoggingStyleSelect { get; protected set; }
+        
+        /// <summary>Canned configuration: Done=Signif, Error=Error, State=Debug, Update=Debug</summary>
+        public static ActionLoggingConfig Signif_Error_Debug_Debug { get { return signif_error_debug_debug; } }
+
+        /// <summary>Canned configuration: Done=Info, Error=Error, State=Debug, Update=Debug</summary>
+        public static ActionLoggingConfig Info_Error_Debug_Debug { get { return info_error_debug_debug; } }
+
+        /// <summary>Canned configuration: Done=Info, Error=Error, State=Trace, Update=Trace</summary>
+        public static ActionLoggingConfig Info_Error_Trace_Trace { get { return info_error_trace_trace; } }
+
+        /// <summary>Canned configuration: Done=Info, Error=Info, State=Trace, Update=Trace</summary>
+        public static ActionLoggingConfig Info_Info_Trace_Trace { get { return info_info_trace_trace; } }
+
+        /// <summary>Canned configuration: Done=Debug, Error=Debug, State=Trace, Update=Trace</summary>
+        public static ActionLoggingConfig Debug_Debug_Trace_Trace { get { return debug_debug_trace_trace; } }
+
+        /// <summary>Canned configuration: Done=Debug, Error=Error, State=Trace, Update=Trace</summary>
+        public static ActionLoggingConfig Debug_Error_Trace_Trace { get { return debug_error_trace_trace; } }
+
+        /// <summary>Canned configuration: Done=Trace, Error=Trace, State=Trace, Update=Trace</summary>
+        public static ActionLoggingConfig Trace_Trace_Trace_Trace { get { return trace_trace_trace_trace; } }
+
+        /// <summary>Canned configuration: Done=None, Error=None, State=None, Update=None</summary>
+        public static ActionLoggingConfig None_None_None_None { get { return none_none_none_none; } }
 
         private static readonly ActionLoggingConfig signif_error_debug_debug = new ActionLoggingConfig(Logging.MesgType.Signif, Logging.MesgType.Error, Logging.MesgType.Debug, Logging.MesgType.Debug);
         private static readonly ActionLoggingConfig info_error_debug_debug = new ActionLoggingConfig(Logging.MesgType.Info, Logging.MesgType.Error, Logging.MesgType.Debug, Logging.MesgType.Debug);
         private static readonly ActionLoggingConfig info_error_trace_trace = new ActionLoggingConfig(Logging.MesgType.Info, Logging.MesgType.Error, Logging.MesgType.Trace, Logging.MesgType.Trace);
         private static readonly ActionLoggingConfig info_info_trace_trace = new ActionLoggingConfig(Logging.MesgType.Info, Logging.MesgType.Info, Logging.MesgType.Trace, Logging.MesgType.Trace);
         private static readonly ActionLoggingConfig debug_debug_trace_trace = new ActionLoggingConfig(Logging.MesgType.Debug, Logging.MesgType.Debug, Logging.MesgType.Trace, Logging.MesgType.Trace);
+        private static readonly ActionLoggingConfig debug_error_trace_trace = new ActionLoggingConfig(Logging.MesgType.Debug, Logging.MesgType.Error, Logging.MesgType.Trace, Logging.MesgType.Trace);
         private static readonly ActionLoggingConfig trace_trace_trace_trace = new ActionLoggingConfig(Logging.MesgType.Trace, Logging.MesgType.Trace, Logging.MesgType.Trace, Logging.MesgType.Trace);
         private static readonly ActionLoggingConfig none_none_none_none = new ActionLoggingConfig(Logging.MesgType.None, Logging.MesgType.None, Logging.MesgType.None, Logging.MesgType.None);
+    }
 
-        /// <summary>Canned configuration: Done=Signif, Error=Error, State=Debug, Update=Debug</summary>
-        public static ActionLoggingConfig Signif_Error_Debug_Debug { get { return signif_error_debug_debug; } }
-        /// <summary>Canned configuration: Done=Info, Error=Error, State=Debug, Update=Debug</summary>
-        public static ActionLoggingConfig Info_Error_Debug_Debug { get { return info_error_debug_debug; } }
-        /// <summary>Canned configuration: Done=Info, Error=Error, State=Trace, Update=Trace</summary>
-        public static ActionLoggingConfig Info_Error_Trace_Trace { get { return info_error_trace_trace; } }
-        /// <summary>Canned configuration: Done=Info, Error=Info, State=Trace, Update=Trace</summary>
-        public static ActionLoggingConfig Info_Info_Trace_Trace { get { return info_info_trace_trace; } }
-        /// <summary>Canned configuration: Done=Debug, Error=Debug, State=Trace, Update=Trace</summary>
-        public static ActionLoggingConfig Debug_Debug_Trace_Trace { get { return debug_debug_trace_trace; } }
-        /// <summary>Canned configuration: Done=Trace, Error=Trace, State=Trace, Update=Trace</summary>
-        public static ActionLoggingConfig Trace_Trace_Trace_Trace { get { return trace_trace_trace_trace; } }
-        /// <summary>Canned configuration: Done=None, Error=None, State=None, Update=None</summary>
-        public static ActionLoggingConfig None_None_None_None { get { return none_none_none_none; } }
+    /// <summary>
+    /// Flag enumeration used to select specific logging options.
+    /// <para/>None (0x00), OldXmlishStyle (0x01), IncludeRunTimeOnCompletion (0x02)
+    /// </summary>
+    [Flags]
+    public enum ActionLoggingStyleSelect : int
+    {
+        /// <summary>Default, placeholder (0x00)</summary>
+        None = 0x00,
+
+        /// <summary>Selects use of older Xmlish style of these messages (0x01)</summary>
+        OldXmlishStyle = 0x01,
+
+        /// <summary>When enabled, this option selects that the run time (time from start to complete) will be included in the completion log message (if any).  This option is not supported when OldXmlishStyle logging has been selected.</summary>
+        IncludeRunTimeOnCompletion = 0x02,
+    }
+
+    /// <summary>
+    /// This interface defines the features that an ActionLogging class instance provides that are used by other elements of the action implementation system.
+    /// </summary>
+    public interface IActionLogging
+    {
+        /// <summary>Typically used to give the name of the Action</summary>
+        string Mesg { get; }
+
+        /// <summary>Typically updated to contain the string version of the ParamValue or other per instance details for a specific Action instance.</summary>
+        string MesgDetail { get; }
+
+        /// <summary>Gives the, optional, Logging.IBasicLogger that shall be used as the base for the Emitters according to the corresponding Config values.  When set to null the individual Emitters are explicitly set to the Logging.NullEmitter.</summary>
+        Logging.IBasicLogger Logger { get; }
+
+        /// <summary>Gives the, optional, ActionLoggingConfig instance that will be used to determine which Logger emitters will be used by this instance.  When set to null the individual Emitters are explicitly set to the Logging.NullEmitter.</summary>
+        ActionLoggingConfig Config { get; }
+
+        /// <summary>get/set property defines the Logging.IMesgEmitter that is used for Done related events generated using this object.  Assigning the Logger or Config properties has the side effect of settings this property as well.</summary>
+        Logging.IMesgEmitter Done { get; }
+
+        /// <summary>get/set property defines the Logging.IMesgEmitter that is used for Error related events generated using this object.  Assigning the Logger or Config properties has the side effect of settings this property as well.</summary>
+        Logging.IMesgEmitter Error { get; }
+
+        /// <summary>get/set property defines the Logging.IMesgEmitter that is used for State change related events generated using this object.  Assigning the Logger or Config properties has the side effect of settings this property as well.</summary>
+        Logging.IMesgEmitter State { get; }
+
+        /// <summary>get/set property defines the Logging.IMesgEmitter that is used for Action Update related events generated using this object.  Assigning the Logger or Config properties has the side effect of settings this property as well.</summary>
+        Logging.IMesgEmitter Update { get; }
     }
 
 	/// <summary>
@@ -103,7 +169,7 @@ namespace MosaicLib.Modular.Action
 	/// It is typically created by an active part and given to the action for the action to use in emiting log messages.
     /// It also supports copy constructor behavior so that it can be replicated and used for individual actions.
 	/// </summary>
-	public class ActionLogging
+    public class ActionLogging : IActionLogging
 	{
         /// <summary>Copy constructor for use in creating ActionLogging objects for new Action objects: Mesg empty, MesgDetails empty. For use with Property Initializers</summary>
         public ActionLogging(ActionLogging copyFrom) : this(string.Empty, string.Empty, copyFrom.Logger, copyFrom.Config, copyFrom.Done, copyFrom.Error, copyFrom.State, copyFrom.Update) { }
@@ -117,8 +183,8 @@ namespace MosaicLib.Modular.Action
         /// <summary>Standard constructor for creating a reference ActionLogging object (from which others are created)</summary>
         public ActionLogging(Logging.IBasicLogger logger, ActionLoggingConfig config)
 		{
-            this.mesg = String.Empty;
-            this.mesgDetail = String.Empty;
+            Mesg = String.Empty;
+            MesgDetail = String.Empty;
             this.logger = logger;
             this.config = config;
             UpdateEmitters();
@@ -127,8 +193,8 @@ namespace MosaicLib.Modular.Action
         /// <summary>Common constructor used by other public ones.</summary>
         protected ActionLogging(string mesg, string mesgDetails, Logging.IBasicLogger logger, ActionLoggingConfig config, Logging.IMesgEmitter doneEmitter, Logging.IMesgEmitter errorEmitter, Logging.IMesgEmitter stateEmitter, Logging.IMesgEmitter updateEmitter)
         {
-            this.mesg = mesg;
-            this.mesgDetail = mesgDetails;
+            Mesg = mesg;
+            MesgDetail = mesgDetails;
             this.logger = logger;
             this.config = config;
             this.doneEmitter = doneEmitter;
@@ -138,21 +204,22 @@ namespace MosaicLib.Modular.Action
         }
 
         string mesg;
-		string mesgDetail;
+		volatile string mesgDetail;
+        internal volatile string eMesgDetail;
         volatile Logging.IBasicLogger logger;
         volatile ActionLoggingConfig config;
         volatile Logging.IMesgEmitter doneEmitter, errorEmitter, stateEmitter, updateEmitter;
 
         /// <summary>Typically used to give the name of the Action</summary>
-        public string Mesg { get { return mesg; } set { mesg = value; } }
+        public string Mesg { get { return mesg; } set { mesg = value.MapNullToEmpty(); } }
 
         /// <summary>Typically updated to contain the string version of the ParamValue or other per instance details for a specific Action instance.</summary>
-        public string MesgDetail { get { return mesgDetail; } set { mesgDetail = value; } }
+        public string MesgDetail { get { return mesgDetail; } set { mesgDetail = value.MapNullToEmpty(); eMesgDetail = mesgDetail.GenerateEscapedVersion(); } }
 
-        /// <summary>Gives the, optinal, Logging.IBasicLogger that shall be used as the base for the Emitters according to the corresponding Config values.  When set to null the Emitters are explicitly set to the Logging.NullEmitter.</summary>
+        /// <summary>Gives the, optional, Logging.IBasicLogger that shall be used as the base for the Emitters according to the corresponding Config values.  When set to null the individual Emitters are explicitly set to the Logging.NullEmitter.</summary>
         public Logging.IBasicLogger Logger { get { return logger; } set { logger = value; UpdateEmitters(); } }
 
-        /// <summary>Gives the, optional, ActionLoggingConfig instance that will be used to determine which Logger emitters will be used by this instance.  When set to null the Emitters are explicitly set to the Logging.NullEmitter.</summary>
+        /// <summary>Gives the, optional, ActionLoggingConfig instance that will be used to determine which Logger emitters will be used by this instance.  When set to null the individual Emitters are explicitly set to the Logging.NullEmitter.</summary>
         public ActionLoggingConfig Config { get { return config; } set { config = value; UpdateEmitters(); } }
 
         /// <summary>get/set property defines the Logging.IMesgEmitter that is used for Done related events generated using this object.  Assigning the Logger or Config properties has the side effect of settings this property as well.</summary>
@@ -192,12 +259,21 @@ namespace MosaicLib.Modular.Action
         }
 
         /// <summary>Returns a string version of the Mesg and MesgDetail.</summary>
+        public string ActionDescription
+        {
+            get
+            {
+                if (string.IsNullOrEmpty(mesgDetail))
+                    return Mesg;
+                else
+                    return "{0}[{1}]".CheckedFormat(Mesg, eMesgDetail);
+            }
+        }
+
+        /// <summary>Returns a string version of the Mesg and MesgDetail.</summary>
         public override string ToString()
 		{
-			if (string.IsNullOrEmpty(mesgDetail))
-				return Mesg;
-			else
-				return Utils.Fcns.CheckedFormat("{0}[{1}]", Mesg, MesgDetail);
+            return ActionDescription;
 		}
 
         /// <summary>Uses the given Logger and Config to update/replace the contents of the 4 emitters.</summary>
@@ -225,8 +301,9 @@ namespace MosaicLib.Modular.Action
 
 	#endregion
 
-	//-------------------------------------------------
-	#region IActionState Implementation
+    //-------------------------------------------------
+
+    #region IActionState Implementation
 
     /// <summary>
     /// This class is the basic class that implements an IActionState
@@ -235,7 +312,7 @@ namespace MosaicLib.Modular.Action
     /// This class does not directly support DataContract serialiation (it has no DataMembers itself) but it needs to be marked with the DataContract attribute
     /// so that its derived types can be DataContract serialized.
     /// </remarks>
-    [DataContract(Namespace = Constants.ModularActionNameSpace)]
+    [DataContract(Namespace = Constants.ModularActionNameSpace), Serializable]
     public class ActionStateImplBase : IActionState
     {
         #region Protected constructor(s)
@@ -248,15 +325,34 @@ namespace MosaicLib.Modular.Action
         /// Please note that the namedValues are not deep-cloned by this operation.  
         /// NVL cloning is done on entry to the ActionImpl class and from there it requred that the IActionState users do not modify the contents of these shared objects.
         /// </remarks>
-        protected ActionStateImplBase(IActionState rhs)
+        protected ActionStateImplBase(IActionState other)
         {
-            ActionStateImplBase rhsAsASIB = rhs as ActionStateImplBase;
+            if (other != null)
+            {
+                ActionStateImplBase otherAsASIB = other as ActionStateImplBase;
 
-            stateCode = rhs.StateCode;
-            timeStamp = rhs.TimeStamp;
-            resultCode = ((rhsAsASIB != null) ? rhsAsASIB.resultCode : rhs.ResultCode);     // try to make a naked copy of the result code (rather than using the public ResultCode property that has additional logic).
-            isCancelRequested = rhs.IsCancelRequested;
-            namedValues = rhs.NamedValues.ConvertToReadOnly();
+                stateCode = other.StateCode;
+                timeStamp = other.TimeStamp;
+                resultCode = ((otherAsASIB != null) ? otherAsASIB.resultCode : other.ResultCode);     // try to make a naked copy of the result code (rather than using the public ResultCode property that has additional logic).
+                isCancelRequested = other.IsCancelRequested;
+                namedValues = other.NamedValues.ConvertToReadOnly();
+            }
+        }
+
+        #endregion
+
+        #region Serialization support
+
+        [OnSerializing]
+        private void OnSerializing(StreamingContext context)
+        {
+            age = timeStamp.Age.TotalSeconds;
+        }
+
+        [OnDeserialized]
+        private void OnDeserialized(StreamingContext context)
+        {
+            timeStamp = QpcTimeStamp.Now + age.FromSeconds();
         }
 
         #endregion
@@ -265,14 +361,21 @@ namespace MosaicLib.Modular.Action
 
         /// <summary>stores the last ActionStateCode value</summary>
         protected ActionStateCode stateCode = ActionStateCode.Initial;
+
         /// <summary>stores the last QpcTimeStamp for the stateCode value.</summary>
+        [NonSerialized]
         protected Time.QpcTimeStamp timeStamp = Time.QpcTimeStamp.Zero;
+
         /// <summary>stores the resultCode which is valid while the Action is Complete.</summary>
         protected string resultCode = null;
+
         /// <summary>Indicates if the client has requested that the current Action execution be canceled by the provider.</summary>
         protected volatile bool isCancelRequested = false;
+
         /// <summary>Contains the last set of NameValues that have been given by the provider.  This will always be a readonly copy of a set that was passed in from elsewhere.</summary>
         protected Common.NamedValueSet namedValues = null;
+
+        private double age;
 
         #endregion
 
@@ -284,7 +387,7 @@ namespace MosaicLib.Modular.Action
             if (namedValues.IsNullOrEmpty())
                 return Fcns.CheckedFormat("{0} rc:'{1}'{2}", stateCode, resultCode, (IsCancelRequested ? " CancelRequested" : ""));
             else
-                return Fcns.CheckedFormat("{0} rc:'{1}'{2} {3}", stateCode, resultCode, (IsCancelRequested ? " CancelRequested" : ""), namedValues);
+                return Fcns.CheckedFormat("{0} rc:'{1}'{2} {3}", stateCode, resultCode, (IsCancelRequested ? " CancelRequested" : ""), namedValues.ToStringSML());
         }
 
         /// <summary>Public Getter returns the published ActionStateCode.  Protected Setter updates the StateCode to the given value and sets the timeStamp to QpcTimeStamp.Now.</summary>
@@ -357,14 +460,94 @@ namespace MosaicLib.Modular.Action
             get { return namedValues ?? Common.NamedValueSet.Empty; }
         }
 
+        /// <summary>
+        /// IEquatable{IActionState} Equals implementation.  
+        /// Returns true of the contents of this IActionState are "equal" to the contents of the other IActionState.
+        /// Checks StateCode, ResultCode, TimeStamp and NamedValues for equality
+        /// </summary>
+        public bool Equals(IActionState other)
+        {
+            return this.Equals(other, compareTimestamps: true);
+        }
+
+        /// <summary>
+        /// IEquatable{IActionState} Equals implementation.  
+        /// Returns true of the contents of this IActionState are "equal" to the contents of the other IActionState.
+        /// Checks StateCode, ResultCode, TimeStamp (optionally) and NamedValues for equality
+        /// </summary>
+        public bool Equals(IActionState other, bool compareTimestamps)
+        {
+            if (Object.ReferenceEquals(this, other))
+                return true;
+
+            if (other == null)
+                return false;
+
+            return (StateCode == other.StateCode
+                    && ResultCode == other.ResultCode
+                    && (TimeStamp == other.TimeStamp || !compareTimestamps)
+                    && NamedValues.IsEqualTo(other.NamedValues)
+                    );
+        }
+
         #endregion
+
+        #region object.Equals overrides
+
+        /// <summary>
+        /// Returns true if the given other object is an IActionState and this action state is IEquatable.Equals to the given other IActionState
+        /// </summary>
+        public override bool Equals(object other)
+        {
+            if (other is IActionState)
+                return Equals(other as IActionState);
+            else
+                return false;
+        }
+
+        /// <summary>
+        /// Passthough override method include to prevent warnings due to custom Equals implementation
+        /// </summary>
+        public override int GetHashCode()
+        {
+            return base.GetHashCode();
+        }
+
+        #endregion
+
+        public static IActionState Empty { get { return empty; } }
+        private static readonly IActionState empty = new ActionStateImplBase();
+    }
+
+    public static partial class ExtensionMethods
+    {
+        public static bool Equals(this IActionState thisIAS, IActionState other, bool compareTimeStamps = true)
+        {
+            if (Object.ReferenceEquals(thisIAS, other))
+                return true;
+
+            if (thisIAS == null || other == null)
+                return false;
+
+            if (thisIAS.Equals(other))
+                return true;
+
+            if (compareTimeStamps)
+                return false;
+
+            return (thisIAS.StateCode == other.StateCode
+                    && thisIAS.ResultCode == other.ResultCode
+                    // && thisIAS.TimeStamp == other.TimeStamp
+                    && thisIAS.NamedValues.IsEqualTo(other.NamedValues)
+                    );
+        }
     }
 
     /// <summary>
     /// This is a basic storage wrapper object for IActionState.  Any code that wishes may use this class to create a clone of a given IActionState.
     /// This class is also used as the source/destination class for all DataContract serialization/deserialization of an IActionState's contents.
     /// </summary>
-    [DataContract(Name = "ActionState", Namespace = Constants.ModularActionNameSpace)]
+    [DataContract(Name = "ActionState", Namespace = Constants.ModularActionNameSpace), Serializable]
     public class ActionStateCopy : ActionStateImplBase
     {
         /// <summary>Default constructor</summary>
@@ -379,7 +562,7 @@ namespace MosaicLib.Modular.Action
         {
             this.StateCode = stateCode;
             this.resultCode = resultCode;
-            this.namedValues = namedValues.ConvertToReadOnly();
+            this.namedValues = namedValues.ConvertToReadOnly(mapNullToEmpty: false);
         }
 
         /// <summary>Copy constructor</summary>
@@ -387,9 +570,12 @@ namespace MosaicLib.Modular.Action
         /// Please note that the namedValues are not deep-cloned by this operation.  
         /// NVL cloning is done on entry to the ActionImpl class and from there it requred that the IActionState users do not modify the contents of these shared objects.
         /// </remarks>
-        public ActionStateCopy(IActionState rhs) 
-            : base(rhs) 
-        { }
+        public ActionStateCopy(IActionState other, bool autoRemoveResultCode = true) 
+            : base(other) 
+        {
+            if (autoRemoveResultCode && StateCode != ActionStateCode.Complete)
+                resultCode = null;
+        }
 
         /// <summary>
         /// This property is only used for DataContract serialization/deserialization.
@@ -410,57 +596,110 @@ namespace MosaicLib.Modular.Action
         private bool DC_IsCancelRequested { get { return base.isCancelRequested; } set { base.isCancelRequested = value; } }
 
         /// <summary>
-        /// This property is only used for DataContract serialization/deserialization.
+        /// This property is used for DataContract serialization/deserialization.  The getter is also used for remoting as it gives the remoting code getter access to the internally deserialized and stored namedValues field, which may be null.
         /// The property setter sets the IsReadOnly flag on the NamedValueSet instance that it is given.
         /// It can (and should) do this because this setter is only called by DataContract deserialization and as such the NamedValueSet instance it is being given
         /// has always been freshly constructed and has no other users or clients that are permitted to further change it.
         /// </summary>
         [DataMember(Name = "NamedValues", Order = 40, EmitDefaultValue = false, IsRequired = false)]
-        private NamedValueSet DC_NamedValues 
+        internal NamedValueSet DC_NamedValues 
         {
             get { return base.namedValues; }
-            set {  base.namedValues = value.MakeReadOnly(); } 
+            private set { base.namedValues = ((value != null) ? value.MakeReadOnly() : null); }     // this path is only used for deserialization.  As such we can safely convert the given NVS instance to be readonly without needing to copy it first.
         }
 
         /// <summary>Returns the approximate size of the contents in bytes.</summary>
+        [Obsolete("The use of this property has been deprecated.  (2018-03-09)")]
         public int EstimatedContentSizeInBytes
         {
             get { return (30 + 10 + DC_ResultCode.EstimatedContentSizeInBytes() + (DC_IsCancelRequested ? 40 : 0) + DC_NamedValues.MapNullToEmpty().EstimatedContentSizeInBytes); }
         }
     }
 
+    public static partial class ExtensionMethods
+    {
+        /// <summary>
+        /// Allows the caller to pass an IActionState instance and get back an ActionStateCopy from it.  
+        /// This is done by casting if the underlying object is already an ActionStateCopy, otherwise this done using a copy constructor.
+        /// </summary>
+        public static ActionStateCopy ConvertToActionStateCopy(this IActionState actionStateIn, bool autoRemoveResultCode = true)
+        {
+            ActionStateCopy actionState = actionStateIn as ActionStateCopy;
+
+            if (actionState == null && actionStateIn != null)
+                actionState = new ActionStateCopy(actionStateIn, autoRemoveResultCode: autoRemoveResultCode);
+
+            return actionState;
+        }
+    }
+
     ///<summary>
 	/// Define a class that contains the information necessary to determine the progress and success of a specfic Action.
-	/// The object is a struct 
 	///</summary>
-	public class ActionStateImpl : ActionStateImplBase
+    [Serializable]
+    public class ActionStateImpl : ActionStateImplBase
 	{
 		#region local methods
 
         /// <summary>Used internally to generate and emit consistantly formatted ActionStateChange records, either with or without a resultCode as deteremined by the toState value.</summary>
-		private static void EmitStateChangeMesg(ActionLogging logging, ActionStateCode toState, ActionStateCode fromState, string resultCode)
+		private static void EmitStateChangeMesg(ActionLogging logging, ActionStateCode toState, ActionStateCode fromState, string resultCode, TimeSpan runTime = default(TimeSpan))
 		{
             Logging.IMesgEmitter emitter = logging.State;
-			bool isComplete = (toState == ActionStateCode.Complete);
+            string description = logging.ActionDescription;
+            bool useNewStyle = ((logging.Config.ActionLoggingStyleSelect & ActionLoggingStyleSelect.OldXmlishStyle) == 0);
+
+            bool isComplete = (toState == ActionStateCode.Complete);
             bool rcIsNonEmpty = !resultCode.IsNullOrEmpty();
             bool includeRC = (isComplete || rcIsNonEmpty);
 			if (isComplete)
                 emitter = rcIsNonEmpty ? logging.Error : logging.Done;
 
-			if (includeRC)
-                emitter.Emit("<ActionStateChange id='{0}' to='{1}' from='{2}' rc='{3}'/>", logging, toState, fromState, resultCode.GenerateQuotableVersion());
-			else
-				emitter.Emit("<ActionStateChange id='{0}' to='{1}' from='{2}'/>", logging, toState, fromState);
+            if (useNewStyle)
+            {
+                string eDescription = description.GenerateEscapedVersion();
+
+                bool includeRunTime = isComplete && ((logging.Config.ActionLoggingStyleSelect & ActionLoggingStyleSelect.IncludeRunTimeOnCompletion) != 0);
+                string runTimeStr = (includeRunTime ? " runTime:{0:f6}".CheckedFormat(runTime.TotalSeconds) : "");
+
+                if (isComplete && !rcIsNonEmpty)
+                    emitter.Emit("Action succeeded [name:({0}) state:{1}<-{2}{3}]", eDescription, toState, fromState, runTimeStr);
+                else if (isComplete)
+                    emitter.Emit("Action failed [name:({0}) state:{1}<-{2} resultCode:({3}){4}]", eDescription, toState, fromState, resultCode.GenerateEscapedVersion(), runTimeStr);
+                else if (!includeRC)
+                    emitter.Emit("Action state changed [name:({0}) state:{1}<-{2}]", eDescription, toState, fromState);
+                else
+                    emitter.Emit("Action state changed [name:({0}) state:{1}<-{2} resultCode:({3})]", eDescription, toState, fromState, resultCode.GenerateEscapedVersion());
+            }
+            else
+            {
+                if (!includeRC)
+                    emitter.Emit("<ActionStateChange id='{0}' to='{1}' from='{2}'/>", description, toState, fromState);
+                else
+                    emitter.Emit("<ActionStateChange id='{0}' to='{1}' from='{2}' rc='{3}'/>", description, toState, fromState, resultCode.GenerateQuotableVersion());
+            }
 		}
 
-        /// <summary>Used internally to gennerate and emit consistantly formatted ActinoNamedValueListUpdate records.</summary>
-        private static void EmitNamedValueListUpdateMesg(ActionLogging logging, ActionStateCode state, Common.INamedValueSet nvl)
+        /// <summary>Used internally to generate and emit consistantly formatted ActionNamedValueListUpdate records.</summary>
+        private static void EmitUpdateNamedValuesMesg(ActionLogging logging, ActionStateCode state, Common.INamedValueSet nvs)
         {
             Logging.IMesgEmitter emitter = logging.Update;
+            string description = logging.ActionDescription;
+            bool useNewStyle = ((logging.Config.ActionLoggingStyleSelect & ActionLoggingStyleSelect.OldXmlishStyle) == 0);
 
-            string nvls = (nvl != null ? nvl.ToString() : "");
+            if (emitter.IsEnabled)
+            {
+                if (useNewStyle)
+                {
+                    // NOTE: the nvs is passed directly to the message level so it will show up when the message is formatted for output.
+                    emitter.EmitWith("Action state NamedValues updated [name:({0}) state:{1}]".CheckedFormat(logging.ActionDescription.GenerateEscapedVersion(), state), nvs);
+                }
+                else
+                {
+                    string nvls = ((nvs != null) ? nvs.ToString() : "");
 
-            emitter.Emit("<ActionNamedValueListUpdate id='{0}' state='{1}'>{2}</ActionNamedValueListUpdate>", logging, state, nvls);
+                    emitter.Emit("<ActionNamedValueListUpdate id='{0}' state='{1}'>{2}</ActionNamedValueListUpdate>", logging, state, nvls);
+                }
+            }
         }
 
         /// <summary>Method sets the volatile isCancelRequested value</summary>
@@ -477,6 +716,7 @@ namespace MosaicLib.Modular.Action
             {
                 resultCode = null;
                 StateCode = ActionStateCode.Started;
+                StartedTimeStamp = TimeStamp;
                 EmitStateChangeMesg(logging, stateCode, entryASC, string.Empty);
             }
             else
@@ -484,6 +724,8 @@ namespace MosaicLib.Modular.Action
                 HandleInvalidStateChange("SetStateStarted", logging);
             }
 		}
+
+        public QpcTimeStamp StartedTimeStamp { get; private set; }
 
         /// <summary>Attempts to change the contained StateCode to ActionStateCode.Issued</summary>
 		public void SetStateIssued(ActionLogging logging)
@@ -508,7 +750,7 @@ namespace MosaicLib.Modular.Action
             if (IsStarted || IsIssued)
             {
                 namedValues = namedValueSet.ConvertToReadOnly();
-                EmitNamedValueListUpdateMesg(logging, StateCode, namedValues);
+                EmitUpdateNamedValuesMesg(logging, StateCode, namedValues);
             }
             else
             {
@@ -529,7 +771,7 @@ namespace MosaicLib.Modular.Action
         public void SetStateComplete(string rc, ActionLogging logging, bool updateNVL, Common.INamedValueSet namedValueSet)
 		{
 			ActionStateCode entryASC = stateCode;
-			bool isError = !String.IsNullOrEmpty(rc);
+			bool isError = !rc.IsNullOrEmpty();
 
 			// normal transition is from Issued to Complete.
 			//	also accept transition from Ready or Started to Complete if we are given a non-null resultCode
@@ -541,13 +783,13 @@ namespace MosaicLib.Modular.Action
                 if (updateNVL)
                 {
                     namedValues = namedValueSet.ConvertToReadOnly();
-                    EmitNamedValueListUpdateMesg(logging, StateCode, namedValues);
+                    EmitUpdateNamedValuesMesg(logging, StateCode, namedValues);
                 }
-                EmitStateChangeMesg(logging, stateCode, entryASC, rc);
+                EmitStateChangeMesg(logging, stateCode, entryASC, rc, runTime: TimeStamp - StartedTimeStamp);
             }
             else
             {
-                HandleInvalidStateChange(Utils.Fcns.CheckedFormat("SetStateComplete('{0}')", (rc != null ? rc : "<NullString>")), logging);
+                HandleInvalidStateChange("SetStateComplete[{0}]".CheckedFormat(rc.MapDefaultTo("<NullString>")), logging);
             }
 		}
 
@@ -571,7 +813,7 @@ namespace MosaicLib.Modular.Action
         /// </summary>
 		private void HandleInvalidStateChange(string methodName, ActionLogging logging)
 		{
-			string ec = Utils.Fcns.CheckedFormat("ActionState.{0}: is not legal while action is in state '{1}'", methodName, StateCode);
+			string ec = Utils.Fcns.CheckedFormat("ActionState.{0}: is not legal while action is in state {1}", methodName, StateCode);
 			Utils.Asserts.TakeBreakpointAfterFault(ec);
 			SetStateInvalid(ec, logging);
 		}
@@ -596,15 +838,13 @@ namespace MosaicLib.Modular.Action
 	#region ActionImpl related interfaces and delegates
 
 	/// <summary>Non-typed version of templatized IProviderActionBase.  This is simply an IProviderFacet</summary>
-	public interface IProviderActionBase 
-        : IProviderFacet 
+	public interface IProviderActionBase : IProviderFacet 
     { }
 
 	/// <summary>Version of IProviderActionBase that gives get access to the ParamValue, set access to the ResultValue and a variation on CompleteRequest that completes the Action with a result code and value.</summary>
     /// <typeparam name="ParamType">Gives the type used for the ParamValue property that may be used to pass customized data from the client to the provider.</typeparam>
     /// <typeparam name="ResultType">Gives the type used for the ResultValue property that may be used to pass customized data from the provider to the client at the completion of the Action.</typeparam>
-	public interface IProviderActionBase<ParamType, ResultType> 
-        : IProviderActionBase
+	public interface IProviderActionBase<ParamType, ResultType> : IProviderActionBase
 	{
         /// <summary>
         /// Gives the provider get/set access to the ParamValue as last set by the client.
@@ -624,7 +864,10 @@ namespace MosaicLib.Modular.Action
 		void CompleteRequest(string resultCode, ResultType resultValue);
 	}
 
-	/// <summary>Action Method Delegate for a simple synchronous method that returns the string result code which is then used to complete the action.</summary>
+	/// <summary>
+    /// Action Method Delegate for a simple synchronous method that returns the string result code which is then used to complete the action.
+    /// <para/>Note: unlike the ActionMethodDelegateActionArgStrResult and the FullActionMethodDelegate, if this delegate returns null it indicates that the action is complete.
+    /// </summary>
 	/// <returns>string result code.  null or string.Empty indicates that the caller must complete the action successfully, any other value is a fault code and indicates that the caller must mark the action has failed.</returns>
 	public delegate string ActionMethodDelegateStrResult();
 
@@ -666,7 +909,10 @@ namespace MosaicLib.Modular.Action
         /// <param name="actionQ">Defines the ActionQueue that this action will be enqueued to each time it is started.</param>
         /// <param name="method">Defines the client provided delegate that will be invoked when the Action transitions to the ActionStateCode.Issued state.</param>
         /// <param name="logging">Provides the ActionLogging information that is used to define and customize the logging for this Action.</param>
-        public ActionImplBase(ActionQueue actionQ, ActionMethodDelegateStrResult method, ActionLogging logging) 
+        /// <param name="mesg">When this is non-null it will be used to replace the given logging instance's Mesg with a new instance constructed using the given message</param>
+        /// <param name="mesgDetails">When this is non-null and if the mesg is non-null it will be used to replace the given logging instance's MesgDetail with a new instance constructed using the given message details</param>
+        /// <param name="doNotCloneLogging">When this parameter is false, the given logging object will be treated as a reference copy and a clone will be made of it, otherwise the given instance will be used verbatim</param>
+        public ActionImplBase(ActionQueue actionQ, ActionMethodDelegateStrResult method, ActionLogging logging, string mesg = null, string mesgDetails = null, bool doNotCloneLogging = false) 
 			: this(actionQ, null, false
 					, delegate(IProviderActionBase<ParamType, ResultType> action, out string resultCode) 
 							{ 
@@ -674,7 +920,7 @@ namespace MosaicLib.Modular.Action
 								if (resultCode == null) 
 									resultCode = string.Empty; 
 							}
-					, logging) 
+                    , logging, mesg, mesgDetails, doNotCloneLogging) 
 		{}
 
         /// <summary>Constructor for use with more complete action method delegate: ActionMethodDelegateActionArgStrResult{ParamType, ResultType}.  Uses adapter delegate to become a FullActionMethodDelegate{ParamType, ResultType}</summary>
@@ -683,13 +929,16 @@ namespace MosaicLib.Modular.Action
         /// <param name="paramValueIsFixed">Set to true if the Action's ParamValue cannot be changed after the Action has been created.</param>
         /// <param name="method">Defines the client provided delegate that will be invoked when the Action transitions to the ActionStateCode.Issued state.</param>
         /// <param name="logging">Provides the ActionLogging information that is used to define and customize the logging for this Action.</param>
-        public ActionImplBase(ActionQueue actionQ, object paramValueObj, bool paramValueIsFixed, ActionMethodDelegateActionArgStrResult<ParamType, ResultType> method, ActionLogging logging)
+        /// <param name="mesg">When this is non-null it will be used to replace the given logging instance's Mesg with a new instance constructed using the given message</param>
+        /// <param name="mesgDetails">When this is non-null and if the mesg is non-null it will be used to replace the given logging instance's MesgDetail with a new instance constructed using the given message details</param>
+        /// <param name="doNotCloneLogging">When this parameter is false, the given logging object will be treated as a reference copy and a clone will be made of it, otherwise the given instance will be used verbatim</param>
+        public ActionImplBase(ActionQueue actionQ, object paramValueObj, bool paramValueIsFixed, ActionMethodDelegateActionArgStrResult<ParamType, ResultType> method, ActionLogging logging, string mesg = null, string mesgDetails = null, bool doNotCloneLogging = false)
 			: this(actionQ, paramValueObj, paramValueIsFixed
 					, delegate(IProviderActionBase<ParamType, ResultType> action, out string resultCode) 
 							{ 
 								resultCode = method(action); 
 							}
-					, logging) 
+                    , logging, mesg, mesgDetails, doNotCloneLogging) 
 		{}
 
         /// <summary>Constructor for use with full action method delegate: FullActionMethodDelegate{ParamType, ResultType}.</summary>
@@ -697,12 +946,26 @@ namespace MosaicLib.Modular.Action
         /// <param name="paramValueObj">Gives the initial value that is to be assigned to the Action's ParamValue, or null if no value is to be so assigned.</param>
         /// <param name="paramValueIsFixed">Set to true if the Action's ParamValue cannot be changed after the Action has been created.</param>
         /// <param name="method">Defines the client provided delegate that will be invoked when the Action transitions to the ActionStateCode.Issued state.</param>
-        /// <param name="logging">Provides the ActionLogging information that is used to define and customize the logging for this Action.</param>
-        public ActionImplBase(ActionQueue actionQ, object paramValueObj, bool paramValueIsFixed, FullActionMethodDelegate<ParamType, ResultType> method, ActionLogging logging)
+        /// <param name="loggingIn">Provides the ActionLogging information that is used to define and customize the logging for this Action.</param>
+        /// <param name="mesg">When this is non-null it will be used to replace the given logging instance's Mesg with a new instance constructed using the given message</param>
+        /// <param name="mesgDetails">When this is non-null and if the mesg is non-null it will be used to replace the given logging instance's MesgDetail with a new instance constructed using the given message details</param>
+        /// <param name="doNotCloneLogging">When this parameter is false, the given logging object will be treated as a reference copy and a clone will be made of it, otherwise the given instance will be used verbatim</param>
+        public ActionImplBase(ActionQueue actionQ, object paramValueObj, bool paramValueIsFixed, FullActionMethodDelegate<ParamType, ResultType> method, ActionLogging loggingIn, string mesg = null, string mesgDetails = null, bool doNotCloneLogging = false)
 		{
 			this.actionQ = actionQ;
 			this.method = method;
-			this.logging = logging;
+
+            var cloneLogging = !doNotCloneLogging;
+
+            var logging = cloneLogging ? new ActionLogging(loggingIn) : loggingIn;
+
+            this.logging = logging;
+
+            if (mesg != null || mesgDetails != null)
+            {
+                logging.Mesg = mesg;
+                logging.MesgDetail = mesgDetails;
+            }
 
 			string ec = null;
 			if (paramValueObj != null)
@@ -715,9 +978,9 @@ namespace MosaicLib.Modular.Action
 
 			this.paramValueIsFixed = paramValueIsFixed;
 
-			actionState.SetStateReady(logging);
+            actionState.SetStateReady(logging);
 			if (ec != null)
-				actionState.SetStateComplete(ec, logging);
+                actionState.SetStateComplete(ec, logging);
 
             NoteActionStateUpdated();
         }
@@ -730,7 +993,7 @@ namespace MosaicLib.Modular.Action
 		private ActionQueue actionQ = null;
 		private FullActionMethodDelegate<ParamType, ResultType> method = null;
 		private ActionLogging logging;
-		private object actionStateMutex = new object();
+		private readonly object actionStateMutex = new object();
 		private ActionStateImpl actionState = new ActionStateImpl();
         private IActionState iActionState = null;
         private BasicNotificationList notifyOnComplete = new BasicNotificationList();
@@ -741,6 +1004,8 @@ namespace MosaicLib.Modular.Action
 
         /// <summary>Protected property that reports the ActionLogging instance that this Action is using for its logging.</summary>
 		protected ActionLogging Logging { get { return logging; } }
+
+        IActionLogging IProviderFacet.Logging { get { return logging; } }
 
         /// <summary>Protected Static property that Action's use as a source for WaitEventNotifiers to be used when waiting without any other useable event notifier.</summary>
         protected static EventNotifierPool eventNotifierPool { get { return eventNotifierPoolSingleton.Instance; } }
@@ -765,7 +1030,7 @@ namespace MosaicLib.Modular.Action
         /// <summary>
         /// Carries a set of name/value pair objects that can be passed by the client to the target Part as named parameter values based on the Common.NamedValueList
         /// facility.  These may be used to carry an arbitrary set of parameters, by name, to the Action's implementing part.
-        /// A readonly copy of thie property is made when the action is Started and this clone is then made available to the provider.
+        /// A readonly copy of this property is made when the action is Started and this clone is then made available to the provider.
         /// </summary>
         /// <remarks>
         /// Client is free to replace this property at any time or to change the underlying set contents at any time.  
@@ -790,15 +1055,14 @@ namespace MosaicLib.Modular.Action
         /// </summary>
         protected void CaptureClientNamedParamValues()
         {
-            if (clientNamedParamValues != null)
-            {
-                providerNamedParamValues = clientNamedParamValues.ConvertToReadOnly();
-                EmitActionEvent(Utils.Fcns.CheckedFormat("NamedParamValues has been set to '{0}' by Start", providerNamedParamValues), actionState.StateCode);
-            }
-            else
-            {
-                providerNamedParamValues = null;
-            }
+            INamedValueSet entryProviderNPV = providerNamedParamValues;
+
+            providerNamedParamValues = clientNamedParamValues.ConvertToReadOnly(mapNullToEmpty: false);
+ 
+            if (providerNamedParamValues != null)
+                EmitActionEvent("NamedParamValues have been captured", actionState.StateCode, nvs: providerNamedParamValues);
+            else if (entryProviderNPV != null)
+                EmitActionEvent("NamedParamValues have been cleared", actionState.StateCode);
         }
 
         /// <summary>Starts the action if it is in an Idle state and return string.Empty or returns an error message if the action is not in a state from which it can be started.</summary>
@@ -923,7 +1187,7 @@ namespace MosaicLib.Modular.Action
                 lock (actionStateMutex) 
                 {
                     if (iActionState == null)
-                        iActionState = new ActionStateCopy(actionState);
+                        iActionState = new ActionStateCopy(actionState, autoRemoveResultCode: false);
                         
                     return iActionState;
                 } 
@@ -1102,7 +1366,7 @@ namespace MosaicLib.Modular.Action
                 }
                 catch (System.Exception ex)
                 {
-                    resultCode = Utils.Fcns.CheckedFormat("Internal: Method invoke threw unexpected exception: [{0}]", ex);
+                    resultCode = Utils.Fcns.CheckedFormat("Internal: Method invoke threw unexpected {0}", ex.ToString(ExceptionFormat.Full));
                 }
 
 				ias = ActionState;
@@ -1125,7 +1389,7 @@ namespace MosaicLib.Modular.Action
 			}
             else if (!resultCode.IsNullOrEmpty())
             {
-                EmitActionError("Invoked delegate gave rc:'{0}' after action already complete".CheckedFormat(resultCode), ActionState.StateCode);
+                EmitActionError("Invoked delegate gave rc:[{0}] after action already complete".CheckedFormat(resultCode), ActionState.StateCode);
             }
 		}
 
@@ -1147,16 +1411,19 @@ namespace MosaicLib.Modular.Action
             }
         }
 
-        /// <summary>Provider invokes this to indicate that the action is complete and to provide the final resultCode</summary>
+        /// <summary>Provider invokes this to indicate that the action is complete and to provide the final <paramref name="resultCode"/></summary>
         public void CompleteRequest(string resultCode) 
         { 
             CompleteRequest(resultCode, false, null); 
         }
 
-        /// <summary>Provider invokes this to indicate that the action is complete and to provide the final resultCode and set of NamedValues</summary>
+        /// <summary>
+        /// Provider invokes this to indicate that the action is complete and to provide the final <paramref name="resultCode"/>.
+        /// If a non-null <paramref name="namedValueSet"/> is provided then it will be used to secify the completed IActionState's NamedValues.
+        /// </summary>
         public void CompleteRequest(string resultCode, Common.INamedValueSet namedValueSet) 
         { 
-            CompleteRequest(resultCode, true, namedValueSet); 
+            CompleteRequest(resultCode, (namedValueSet != null), namedValueSet); 
         }
 
         /// <summary>Internal private common implementation for the CompleteRequest method.</summary>
@@ -1208,19 +1475,19 @@ namespace MosaicLib.Modular.Action
         public string ToString(ToStringSelect select)
         {
             string mesg = logging.Mesg;
-            string mesgDetail = logging.MesgDetail;
+            string eMesgDetail = logging.MesgDetail;
 
-            bool includeMesgDetail = (!mesgDetail.IsNullOrEmpty() && (select != ToStringSelect.JustMesg));
+            bool includeMesgDetail = (!eMesgDetail.IsNullOrEmpty() && (select != ToStringSelect.JustMesg));
             bool includeState = (select == ToStringSelect.MesgDetailAndState);
 
             if (!includeMesgDetail && !includeState)
                 return mesg;
             else if (includeMesgDetail && !includeState)
-                return "{0} '{1}'".CheckedFormat(mesg, mesgDetail);
+                return "{0}[{1}]".CheckedFormat(mesg, eMesgDetail);
             else if (!includeMesgDetail && includeState)
                 return "{0} state:{1}".CheckedFormat(mesg, ActionState);
             else
-                return "{0} '{1}' state:{2}".CheckedFormat(mesg, mesgDetail, ActionState);
+                return "{0}[{1}] state:{2}".CheckedFormat(mesg, eMesgDetail, ActionState);
         }
 
         /// <summary>Protected method is used internally to record that the ActionState may have been changed so as to force the generation of a new clone when one of the clients next asks for it.</summary>
@@ -1234,18 +1501,36 @@ namespace MosaicLib.Modular.Action
         /// Protected common method used to generate and emit consistently formatted ActionEvent records
         /// <para/>{ActionEvent id="{0}" state="{1}"}{2}{/ActionEvent}
         /// </summary>
-		protected void EmitActionEvent(string eventStr, ActionStateCode actionStateCode) 
+		protected void EmitActionEvent(string eventStr, ActionStateCode actionStateCode, INamedValueSet nvs = null) 
 		{
-			logging.State.Emit("<ActionEvent id='{0}' state='{1}'>{2}</ActionEvent>", logging.Mesg, actionStateCode, eventStr); 
+            bool useNewStyle = ((logging.Config.ActionLoggingStyleSelect & ActionLoggingStyleSelect.OldXmlishStyle) == 0);
+            string description = logging.ActionDescription;
+
+            if (useNewStyle)
+            {
+                logging.State.EmitWith("Action event reported [name:({0}) state:{1} event:({2})]".CheckedFormat(description.GenerateEscapedVersion(), actionStateCode, eventStr.GenerateEscapedVersion()), nvs: nvs);
+            }
+            else
+            {
+                string nvsStr = (nvs.IsNullOrEmpty() ? "" : " {0}".CheckedFormat(nvs.ToStringSML()));
+
+                logging.State.Emit("<ActionEvent id='{0}' state='{1}'>{2}{3}</ActionEvent>", description, actionStateCode, eventStr, nvsStr);
+            }
 		}
 
         /// <summary>
         /// Protected common method used to generate and emit consistently formatted ActionError records
         /// <para/>{ActionError id="{0}" state="{1}"}{2}{/ActionError}
         /// </summary>
-        protected void EmitActionError(string eventStr, ActionStateCode actionStateCode) 
-		{ 
-			logging.Error.Emit("<ActionError id='{0}' state='{1}'>{2}</ActionError>", logging.Mesg, actionStateCode, eventStr); 
+        protected void EmitActionError(string errorStr, ActionStateCode actionStateCode) 
+		{
+            bool useNewStyle = ((logging.Config.ActionLoggingStyleSelect & ActionLoggingStyleSelect.OldXmlishStyle) == 0);
+            string description = logging.ActionDescription;
+
+            if (useNewStyle)
+                logging.Error.Emit("Action issue detected [name:({0}) state:{1} error:({2})]", description.GenerateEscapedVersion(), actionStateCode, errorStr.GenerateEscapedVersion());
+            else
+                logging.Error.Emit("<ActionError id='{0}' state='{1}'>{2}</ActionError>", description, actionStateCode, errorStr); 
 		}
 
         /// <summary>

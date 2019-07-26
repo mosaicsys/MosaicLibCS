@@ -2,9 +2,10 @@
 /*! @file Notification.cs
  *  @brief This file contains a series of utility classes that are used to handle notification, especially in multi-threaded apps.
  * 
- * Copyright (c) Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2008 Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2002 Mosaic Systems Inc., All rights reserved. (C++ library version)
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2008 Mosaic Systems Inc.
+ * Copyright (c) 2002 Mosaic Systems Inc.  (C++ library version)
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +19,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
 
 using System;
 using System.Collections.Generic;
@@ -29,10 +29,69 @@ using MosaicLib.Time;
 
 namespace MosaicLib.Utils
 {
-	//-------------------------------------------------
-	#region Notification targets: delegates
+    #region IServiceable and related Service() EM
 
-	/// <summary> Define the signature of the delegate that is used with BasicNotification </summary>
+    /// <summary>
+    /// This interface may be used by various objects to support a generic means of servicing the object using an external entity.
+    /// </summary>
+    public interface IServiceable
+    {
+        /// <summary>
+        /// Caller passes temporary control to the target object's IServiceable.Service method.
+        /// This method may be passed a <paramref name="qpcTimeStamp"/> as provided by the caller or QpcTimeStamp.Zero if the caller does not normally provide a non-default time stamp value.
+        /// This method generally is expected to return a possitive value if the method made or observed any relevant changes, otherwise the method is generally expected to return zero.
+        /// </summary>
+        int Service(QpcTimeStamp qpcTimeStamp = default(QpcTimeStamp));
+    }
+
+    /// <summary>
+    /// Partial ExtensionMethods wrapper class
+    /// </summary>
+    public static partial class ExtensionMethods
+    {
+        /// <summary>
+        /// Allows the caller to Service the given IServiceable <paramref name="obj"/>
+        /// If the given <paramref name="obj"/> is null then this method has no effect.
+        /// If this Service method throws an exeception then it will be recorded using Asserts.NoteFaultOccurance.
+        /// </summary>
+        public static int SafeService(this IServiceable obj, QpcTimeStamp qpcTimeStamp = default(QpcTimeStamp))
+        {
+            if (obj != null)
+            {
+                try
+                {
+                    return obj.Service(qpcTimeStamp);
+                }
+                catch (System.Exception ex)
+                {
+                    string faultStr = "IServiceable object '{0}' Service method threw exception: {1}".CheckedFormat(obj, ex.ToString(ExceptionFormat.TypeAndMessageAndStackTrace));
+
+                    Asserts.NoteFaultOccurance(faultStr, AssertType.Log);
+                }
+            }
+
+            return 0;
+        }
+
+        /// <summary>
+        /// If the given IServiceable <paramref name="obj"/> is non-null, this method uses ThreadPool.QueueUserWorkItem to queue a call to run the SafeService method on it.
+        /// If <paramref name="passQpcAtTimeOfCall"/> is true then the SafeService method will be passed QpcTimeStamp.Now, otherwise it will be passed QpcTimeStamp.Zero.
+        /// </summary>
+        public static void QueueServiceWorkItem(this IServiceable obj, bool passQpcAtTimeOfCall = true)
+        {
+            if (obj != null)
+            {
+                System.Threading.ThreadPool.QueueUserWorkItem(o => obj.SafeService(qpcTimeStamp: (passQpcAtTimeOfCall ? QpcTimeStamp.Now : QpcTimeStamp.Zero)));
+            }
+        }
+    }
+
+    #endregion
+
+    //-------------------------------------------------
+    #region Notification targets: delegates (BasicNotificationDelegate)
+
+    /// <summary> Define the signature of the delegate that is used with BasicNotification </summary>
 	public delegate void BasicNotificationDelegate();
 
 	#endregion
@@ -101,7 +160,7 @@ namespace MosaicLib.Utils
 
         internal object CreatedInPool { get; set; }
 
-        /// <summary>Provides a message emitter that may be used to record a Trace of the Notification and Wait useage of this object</summary>
+        /// <summary>Provides a message emitter that may be used to record a Trace of the Notification and Wait usage of this object</summary>
         public Logging.IMesgEmitter TraceEmitter { get { return traceEmitter ?? Logging.NullEmitter; } set { traceEmitter = value; } }
         private Logging.IMesgEmitter traceEmitter = null;
 
@@ -215,9 +274,7 @@ namespace MosaicLib.Utils
         /// <summary>Caller invokes this to Notify a target object that something notable has happened.</summary>
         public override void Notify()
 		{
-            string methodName = (IsTraceEmitterEnabled) ? new System.Diagnostics.StackFrame().GetMethod().Name : string.Empty;
-
-            using (var eeTrace = (IsTraceEmitterEnabled) ? new Logging.EnterExitTrace(TraceEmitter, methodName, 0) : null)
+            using (var eeTrace = (IsTraceEmitterEnabled) ? new Logging.EnterExitTrace(TraceEmitter) : null)
             {
                 if (behavior == Behavior.WakeAll)
                     EventWaitHandleHelper.PulseEvent(eventH);
@@ -245,9 +302,7 @@ namespace MosaicLib.Utils
         /// <summary>Resets the underlying event.</summary>
         public override void Reset()
 		{
-            string methodName = (IsTraceEmitterEnabled) ? new System.Diagnostics.StackFrame().GetMethod().Name : string.Empty;
-
-            using (var eeTrace = (IsTraceEmitterEnabled) ? new Logging.EnterExitTrace(TraceEmitter, methodName, 0) : null)
+            using (var eeTrace = (IsTraceEmitterEnabled) ? new Logging.EnterExitTrace(TraceEmitter) : null)
             {
                 EventWaitHandleHelper.ResetEvent(eventH);
             }
@@ -256,9 +311,7 @@ namespace MosaicLib.Utils
         /// <summary>returns true if object was signaling at end of wait, false otherwise</summary>
         public override bool Wait()
 		{
-            string methodName = (IsTraceEmitterEnabled) ? new System.Diagnostics.StackFrame().GetMethod().Name : string.Empty;
-
-            using (var eeTrace = (IsTraceEmitterEnabled) ? new Logging.EnterExitTrace(TraceEmitter, methodName, 0) : null)
+            using (var eeTrace = (IsTraceEmitterEnabled) ? new Logging.EnterExitTrace(TraceEmitter) : null)
             {
                 bool signaled = false;
                 try
@@ -288,9 +341,9 @@ namespace MosaicLib.Utils
         /// <summary>returns true if object was signaling at end of wait, false otherwise</summary>
         public override bool WaitMSec(int timeLimitInMSec)
 		{
-            string methodName = (IsTraceEmitterEnabled) ? Fcns.CheckedFormat("{0}({1})", new System.Diagnostics.StackFrame().GetMethod().Name, timeLimitInMSec) : string.Empty;
+            string methodName = (IsTraceEmitterEnabled) ? Fcns.CheckedFormat("{0}({1})", Fcns.CurrentMethodName, timeLimitInMSec) : string.Empty;
 
-            using (var eeTrace = (IsTraceEmitterEnabled) ? new Logging.EnterExitTrace(TraceEmitter, methodName, 0) : null)
+            using (var eeTrace = (IsTraceEmitterEnabled) ? new Logging.EnterExitTrace(TraceEmitter, methodName) : null)
             {
                 bool signaled = false;
                 try
@@ -350,6 +403,10 @@ namespace MosaicLib.Utils
 	/// </summary>
 	public class NullNotifier : EventNotifierBase
 	{
+        /// <summary>Support a singleton Instance for clients to use.</summary>
+        public static NullNotifier Instance { get { return instance; } }
+        private static NullNotifier instance = new NullNotifier();
+
         /// <summary>
         /// Default constructor for a NullNotifier.
         /// </summary>
@@ -783,13 +840,21 @@ namespace MosaicLib.Utils
 
         /// <summary>Adds the given <see cref="INotifyable"/> target object to the list</summary>
 		void AddItem(INotifyable notifyableTarget);
-        /// <summary>Removes the first instance of the given <see cref="INotifyable"/> target object from the list</summary>
+
+        /// <summary>Removes the first instance of the given <see cref="INotifyable"/> target object from the list.  Has no effect if no such instance is found in the list.</summary>
         void RemoveItem(INotifyable notifyableTarget);
 
         /// <summary>Adds the given <see cref="System.Threading.EventWaitHandle"/> object to the list</summary>
         void AddItem(System.Threading.EventWaitHandle eventWaitHandle);
-        /// <summary>Removes the first instance of the given <see cref="System.Threading.EventWaitHandle"/> object from the list</summary>
+
+        /// <summary>Removes the first instance of the given <see cref="System.Threading.EventWaitHandle"/> object from the list.  Has no effect if no such instance is found in the list.</summary>
         void RemoveItem(System.Threading.EventWaitHandle eventWaitHandle);
+
+        /// <summary>Adds the given <paramref name="action"/> to the list</summary>
+        void AddItem(Action action);
+
+        /// <summary>Remvoes the first instance of the given <paramref name="action"/> from the list.  Has no effect if no such instance is found in the list.</summary>
+        void RemoveItem(Action action);
 	}
 
     /// <summary>
@@ -834,32 +899,44 @@ namespace MosaicLib.Utils
         /// </summary>
         public event BasicNotificationDelegate OnNotify
 		{
-            add { CreateEmptyObjectIfNeeded(ref basicNotificationDelegateList).Add(value); }
-            remove { CreateEmptyObjectIfNeeded(ref basicNotificationDelegateList).Remove(value); }
+            add { AddItem(ref basicNotificationDelegateList, value); }
+            remove { RemoveItem(ref basicNotificationDelegateList, value); }
 		}
 
         /// <summary>Adds the given <see cref="INotifyable"/> target object to the list</summary>
         public void AddItem(INotifyable notifyableTarget)
 		{
-            CreateEmptyObjectIfNeeded(ref notifyableList).Add(notifyableTarget);
+            AddItem(ref notifyableList, notifyableTarget);
 		}
 
         /// <summary>Removes the first instance of the given <see cref="INotifyable"/> target object from the list</summary>
         public void RemoveItem(INotifyable notifyableTarget)
 		{
-            CreateEmptyObjectIfNeeded(ref notifyableList).Remove(notifyableTarget);
+            RemoveItem(ref notifyableList, notifyableTarget);
 		}
 
         /// <summary>Adds the given <see cref="System.Threading.EventWaitHandle"/> object to the list</summary>
         public void AddItem(System.Threading.EventWaitHandle eventWaitHandle)
         {
-            CreateEmptyObjectIfNeeded(ref eventWaitHandleList).Add(eventWaitHandle);
+            AddItem(ref eventWaitHandleList, eventWaitHandle);
         }
 
         /// <summary>Removes the first instance of the given <see cref="System.Threading.EventWaitHandle"/> object from the list</summary>
         public void RemoveItem(System.Threading.EventWaitHandle eventWaitHandle)
         {
-            CreateEmptyObjectIfNeeded(ref eventWaitHandleList).Remove(eventWaitHandle);
+            RemoveItem(ref eventWaitHandleList, eventWaitHandle);
+        }
+
+        /// <summary>Adds the given <paramref name="action"/> to the list</summary>
+        public void AddItem(Action action)
+        {
+            AddItem(ref basicNotificationActionList, action);
+        }
+
+        /// <summary>Remvoes the first instance of the given <paramref name="action"/> from the list.  Has no effect if no such instance is found in the list.</summary>
+        public void RemoveItem(Action action)
+        {
+            RemoveItem(ref basicNotificationActionList, action);
         }
 
 		#endregion
@@ -869,69 +946,105 @@ namespace MosaicLib.Utils
         /// <summary>Caller invokes this to Notify a target object that something notable has happened.</summary>
         public virtual void Notify() 
 		{
-			int delegateExceptions = 0, notifyExceptions = 0, eventWaitHandleExeceptions = 0;
+			int exceptionCount = 0;
+            System.Exception firstEx = null;
 
-            BasicNotificationDelegate[] basicNotificationDelegateArray = (basicNotificationDelegateList != null ? basicNotificationDelegateList.Array : emptyBasicNotificationDelegateArray);
-            foreach (BasicNotificationDelegate bnd in basicNotificationDelegateArray)
+            Action[] actionArray = GetCombinedActionArrayAndRebuildIfNeeded();
+
+            foreach (Action a in actionArray)
             {
-                try { (bnd ?? nullBasicNotificationDelegate)(); }
-                catch { delegateExceptions++; }
+                try
+                {
+                    a();
+                }
+                catch (System.Exception ex)
+                {
+                    firstEx = firstEx ?? ex;
+                    exceptionCount++;
+                }
             }
 
-            INotifyable[] notifyableArray = (notifyableList != null ? notifyableList.Array : emptyNotifyableArray);
-            foreach (INotifyable notificationItem in notifyableArray)
+            if (firstEx != null)
             {
-                try { (notificationItem ?? nullNotifier).Notify(); }
-                catch { notifyExceptions++; }
+                Asserts.TakeBreakpointAfterFault(Utils.Fcns.CheckedFormat("Notify triggered {0} exception(s) [first: {1}]", exceptionCount, firstEx.ToString(ExceptionFormat.TypeAndMessageAndStackTrace)));
             }
-
-            System.Threading.EventWaitHandle[] eventWaitHandleArray = (eventWaitHandleList != null ? eventWaitHandleList.Array : emptyEventWaitHandleArray);
-            foreach (System.Threading.EventWaitHandle eventWaitHandle in eventWaitHandleArray)
-            {
-                try { EventWaitHandleHelper.SetEvent(eventWaitHandle); }
-                catch { eventWaitHandleExeceptions++; }
-            }
-
-            if (delegateExceptions != 0 || notifyExceptions != 0 || eventWaitHandleExeceptions != 0)
-                Asserts.TakeBreakpointAfterFault(Utils.Fcns.CheckedFormat("Notify triggered exceptions: delegates:{0} inotifyable:{1} eventWaitHandle:{2}", delegateExceptions, notifyExceptions, eventWaitHandleExeceptions));
 		}
-
-        private static readonly BasicNotificationDelegate[] emptyBasicNotificationDelegateArray = new BasicNotificationDelegate[0];
-        private static readonly INotifyable[] emptyNotifyableArray = new INotifyable[0];
-        private static readonly System.Threading.EventWaitHandle[] emptyEventWaitHandleArray = new System.Threading.EventWaitHandle[0];
 
 		#endregion
 
-        #region Private fields and methods
-
-        private Collections.LockedObjectListWithCachedArray<BasicNotificationDelegate> basicNotificationDelegateList = null;
-        private Collections.LockedObjectListWithCachedArray<INotifyable> notifyableList = null;
-        private Collections.LockedObjectListWithCachedArray<System.Threading.EventWaitHandle> eventWaitHandleList = null;
-
-        private static BasicNotificationDelegate nullBasicNotificationDelegate = (delegate() { });
-        private static NullNotifier nullNotifier = new NullNotifier();
+        #region Internals
 
         /// <summary>
         /// Protected mutex object used during object creation as required within the CreateEmptyObjectIfNeeded static method.
         /// </summary>
-        protected static object objectCreationMutex = new object();
+        protected static readonly object mutex = new object();
 
-        /// <summary>
-        /// Static helper method used to combine handle query, object creation and handle update into a single pass through method.  
-        /// This method supports a form of on-first-use singleton construction for notification target object lists.
-        /// This allows this class to have 0, 1, 2, or 3 lists of notification target objects but only to create each list if it will actually be used.
-        /// This method locks the single objectCreationMutex to make certain that only once thread will create any given referenced object at a time.
-        /// </summary>
-        protected static TObjectType CreateEmptyObjectIfNeeded<TObjectType>(ref TObjectType objectHandleRef) where TObjectType : class, new()
+        private List<Action> basicNotificationActionList = null;
+        private List<BasicNotificationDelegate> basicNotificationDelegateList = null;
+        private List<INotifyable> notifyableList = null;
+        private List<System.Threading.EventWaitHandle> eventWaitHandleList = null;
+
+        /// <summary>Internal helper method used to add items to the lists used here</summary>
+        protected void AddItem<TItemType>(ref List<TItemType> listRef, TItemType item) where TItemType: class
         {
-            if (objectHandleRef != null)
-                return objectHandleRef;
+            lock (mutex)
+            {
+                if (listRef == null)
+                    listRef = new List<TItemType>();
 
-            lock (objectCreationMutex) 
-            { 
-                return (objectHandleRef = objectHandleRef ?? new TObjectType()); 
+                if (item != null)
+                    listRef.Add(item);
+
+                InnerNoteListContentsChanged();
             }
         }
+
+        /// <summary>Internal helper method used to add items to the lists used here</summary>
+        protected void RemoveItem<TItemType>(ref List<TItemType> listRef, TItemType item) where TItemType : class
+        {
+            lock (mutex)
+            {
+                if (listRef == null)
+                    listRef = new List<TItemType>();
+
+                if (item != null)
+                    listRef.Remove(item);
+
+                InnerNoteListContentsChanged();
+            }
+        }
+
+        /// <summary>
+        /// Called while owning the mutex to indicate that one or more list contents have been changed.
+        /// </summary>
+        protected virtual void InnerNoteListContentsChanged()
+        {
+            savedCombinedActionArray = null;
+        }
+
+        private volatile Action[] savedCombinedActionArray = emptyActionArray;
+
+        private Action[] GetCombinedActionArrayAndRebuildIfNeeded()
+        {
+            Action[] actionArray = savedCombinedActionArray;
+
+            if (actionArray != null)
+                return actionArray;
+
+            lock (mutex)
+            {
+                savedCombinedActionArray = actionArray = emptyActionArray
+                                    .Concat(basicNotificationActionList as IList<Action> ?? Collections.ReadOnlyIList<Action>.Empty)
+                                    .Concat((basicNotificationDelegateList as IList<BasicNotificationDelegate> ?? Collections.ReadOnlyIList<BasicNotificationDelegate>.Empty).Select(bnd => (Action)(() => bnd())))
+                                    .Concat((notifyableList as IList<INotifyable> ?? Collections.ReadOnlyIList<INotifyable>.Empty).Select(notifyable => (Action)(() => notifyable.Notify())))
+                                    .Concat((eventWaitHandleList as IList<System.Threading.EventWaitHandle> ?? Collections.ReadOnlyIList<System.Threading.EventWaitHandle>.Empty).Select(ewl => (Action)(() => ewl.Set())))
+                                    .ToArray();
+
+                return actionArray;
+            }
+        }
+
+        private static readonly Action[] emptyActionArray = Utils.Collections.EmptyArrayFactory<Action>.Instance;
 
         #endregion
     }
@@ -944,15 +1057,14 @@ namespace MosaicLib.Utils
 	/// without owning the mutex, a delegate may be invoked after it has been removed.
 	/// Notify method is not intended to be reentrantly invoked but will not generate any exceptions if this occurs.
 	/// </remarks>
-
     public class EventHandlerNotificationList<EventArgsType> : BasicNotificationList, IEventHandlerNotificationList<EventArgsType>, INotifyable<EventArgsType>
 	{
-		#region Ctor
+		#region Construction
 
-		/// <summary> Ctor defaults to using EventHandlerNotificationList instance itself as source of events </summary>
+		/// <summary>Constructor defaults to using EventHandlerNotificationList instance itself as source of events </summary>
 		public EventHandlerNotificationList() { Source = this; }
 
-		/// <summary> Ctor allows caller to explicitly specify the source object that will be passed to the delegates on Notify </summary>
+        /// <summary>Constructor allows caller to explicitly specify the source object that will be passed to the delegates on Notify </summary>
 		public EventHandlerNotificationList(object eventSourceObject) { Source = eventSourceObject; }
 
 		#endregion
@@ -964,8 +1076,8 @@ namespace MosaicLib.Utils
         /// </summary>
         public new event EventHandlerDelegate<EventArgsType> OnNotify
 		{
-            add { CreateEmptyObjectIfNeeded(ref eventNotificationDelegateList).Add(value); }
-            remove { CreateEmptyObjectIfNeeded(ref eventNotificationDelegateList).Remove(value); }
+            add { AddItem(ref eventHandlerList, value); }
+            remove { RemoveItem(ref eventHandlerList, value); }
 		}
 
         /// <summary>
@@ -983,34 +1095,66 @@ namespace MosaicLib.Utils
         /// Invokes each EventHandlerDelegate from a cached copy of the OnNotify event list, passing it a captured copy of the Source property and the given eventArgs property.
         /// Then invokes the base.Notify method so that this method can also be used to signal any of the supported BasicNotificationList targets.
         /// </summary>
-        /// <param name="eventArgs"></param>
 		public virtual void Notify(EventArgsType eventArgs) 
 		{
-            int delegateExceptions = 0;
             object source = Source;
 
-            if (eventNotificationDelegateList != null)
+            int exceptionCount = 0;
+            System.Exception firstEx = null;
+
+            EventHandlerDelegate<EventArgsType>[] eventHandlerArray = GetEventHandlerArrayAndRebuildIfNeeded();
+
+            foreach (EventHandlerDelegate<EventArgsType> eventHandler in eventHandlerArray)
             {
-                foreach (EventHandlerDelegate<EventArgsType> eventDelegate in eventNotificationDelegateList.Array)
+                try 
+                { 
+                    eventHandler(source, eventArgs); 
+                }
+                catch (System.Exception ex)
                 {
-                    try { (eventDelegate ?? nullEventNotificationDelegate)(source, eventArgs); }
-                    catch { delegateExceptions++; }
+                    firstEx = firstEx ?? ex;
+                    exceptionCount++; 
                 }
             }
 
-            if (delegateExceptions != 0)
-                Asserts.TakeBreakpointAfterFault(Utils.Fcns.CheckedFormat("Notify(EventArgs) triggered exceptions: delegates:{0}", delegateExceptions));
+            if (firstEx != null)
+            {
+                Asserts.TakeBreakpointAfterFault(Utils.Fcns.CheckedFormat("Notify(EventArgs) triggered {0} exception(s) [first: {1}]", exceptionCount, firstEx.ToString(ExceptionFormat.TypeAndMessageAndStackTrace)));
+            }
 
             base.Notify();
         }
 
 		#endregion
 
-        #region private fields
+        #region Internals
 
-        private Collections.LockedObjectListWithCachedArray<EventHandlerDelegate<EventArgsType>> eventNotificationDelegateList = null;
+        private List<EventHandlerDelegate<EventArgsType>> eventHandlerList = null;
 
-        private static EventHandlerDelegate<EventArgsType> nullEventNotificationDelegate = (delegate(object source, EventArgsType eventArgs) { });
+        private volatile EventHandlerDelegate<EventArgsType>[] savedEventHandlerArray = emptyEventHandlerArray;
+
+        protected override void InnerNoteListContentsChanged()
+        {
+            base.InnerNoteListContentsChanged();
+            savedEventHandlerArray = null;
+        }
+
+        private EventHandlerDelegate<EventArgsType>[] GetEventHandlerArrayAndRebuildIfNeeded()
+        {
+            EventHandlerDelegate<EventArgsType>[] eventHandlerArray = savedEventHandlerArray;
+
+            if (eventHandlerArray != null)
+                return eventHandlerArray;
+
+            lock (mutex)
+            {
+                savedEventHandlerArray = eventHandlerArray = eventHandlerList.SafeToArray();
+
+                return eventHandlerArray;
+            }
+        }
+
+        private static readonly EventHandlerDelegate<EventArgsType>[] emptyEventHandlerArray = Collections.EmptyArrayFactory<EventHandlerDelegate<EventArgsType>>.Instance;
 
         #endregion
 	}
@@ -1043,8 +1187,11 @@ namespace MosaicLib.Utils
 	{
         /// <summary>Default Constructor.  By default the contained Object will be null and sequence number will be in its initial, unset, state.</summary>
         public InterlockedNotificationRefObject() { }
+
         /// <summary>Explicit Constructor.  Caller provides default initialValue for Object.  Sequence number will be incremented from initial state.</summary>
-        public InterlockedNotificationRefObject(RefObjectType initialValue) : base(initialValue) { }
+        public InterlockedNotificationRefObject(RefObjectType initialValue) 
+            : base(initialValue) 
+        { }
 
         /// <summary>Sets the contained object and notifies all parties in the contained notificationList.  Use of lock free, volatile update and notify pattern requires that property setter cannot be used reentrantly.</summary>
 		public override RefObjectType Object { set { base.Object = value; notificationList.Notify(); } }
@@ -1067,8 +1214,11 @@ namespace MosaicLib.Utils
 	{
         /// <summary>Default Constructor.  By default the contained Object will be null and sequence number will be in its initial, unset, state.</summary>
         public GuardedNotificationValueObject() { }
+
         /// <summary>Explicit Constructor.  Caller provides default initialValue for Object.  Sequence number will be incremented from initial state.</summary>
-        public GuardedNotificationValueObject(ValueObjectType initialValue) : base(initialValue) { }
+        public GuardedNotificationValueObject(ValueObjectType initialValue) 
+            : base(initialValue) 
+        { }
 
         /// <summary>
         /// Accessor inherited from GuardedValueObject which uses mutex to control access to stored value object.  Accessor is thread safe and reentrant.

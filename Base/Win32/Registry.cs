@@ -1,9 +1,10 @@
 ﻿//-------------------------------------------------------------------
 /*! @file Registry.cs
- * @brief This file contains Registry related tools.
+ *  @brief This file contains Registry related tools.
  * 
- * Copyright (c) Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2010 Mosaic Systems Inc., All rights reserved
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2010 Mosaic Systems Inc.
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,14 +18,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
+
+using System;
+using System.Security.AccessControl;
+using System.Runtime.InteropServices;
 
 namespace MosaicLib.Win32.Registry
 {
-    using System;
-    using Microsoft.Win32;
-    using System.Security.AccessControl;
-    using System.Runtime.InteropServices;
+    using Microsoft.Win32;      // this using is located here to address namespace and symbol definition overlap issues in this source.
 
     #region Fcns static class
 
@@ -41,7 +42,7 @@ namespace MosaicLib.Win32.Registry
         /// In normal use this is performed at specific points in an application's installation/removal pattern.
         /// </summary>
         /// <param name="hKey">Gives the key handle value that identifies the key to be flushed.  Appears to be ignored in many Win32 implementations.</param>
-        /// <returns></returns>
+        /// <returns>a Win32 error code or 0 to indicate success.</returns>
         /// <remarks>
         /// From MSDN remarks on this API method:
         /// Calling RegFlushKey is an expensive operation that significantly affects system-wide performance as it consumes disk bandwidth and blocks 

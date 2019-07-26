@@ -1,24 +1,24 @@
 //-------------------------------------------------------------------
 /*! @file E005.cs
-	@brief This file provides common definitions that relate to the use of the E005 interface.
-
-	Copyright (c) Mosaic Systems Inc.,  All rights reserved.
-	Copyright (c) 2015 Mosaic Systems Inc.,  All rights reserved.
-	Copyright (c) 2006 Mosaic Systems Inc.,  All rights reserved.  (C++ library version)
-
-	Licensed under the Apache License, Version 2.0 (the "License");
-	you may not use this file except in compliance with the License.
-	You may obtain a copy of the License at
-
-	     http://www.apache.org/licenses/LICENSE-2.0
-
-	Unless required by applicable law or agreed to in writing, software
-	distributed under the License is distributed on an "AS IS" BASIS,
-	WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-	See the License for the specific language governing permissions and
-	limitations under the License.
+ *  @brief This file provides common definitions that relate to the use of the E005 interface.
+ *
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2015 Mosaic Systems Inc.
+ * Copyright (c) 2006 Mosaic Systems Inc.  (C++ library version)
+ * All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
-//-------------------------------------------------------------------
 
 using System.Runtime.Serialization;
 
@@ -29,39 +29,33 @@ namespace MosaicLib.Semi.E005
 
     /// <summary>
     /// Alarm Category Code Byte (the Alarm severity portion of it)
+    /// <para/>PersonalSafety (1), EquipmentSafety (2), ParameterControlWarning (3), ParameterControlError (4), IrrecoverableError (5), EquipmentStatusWarning (6), AttentionFlags (7), DataIntegrity (8), 
+    /// E041_Attention (100), E041_Warning (101), E041_Error (102), E041_Alarm (103) 
     /// </summary>
     [DataContract(Namespace = Constants.SemiNameSpace)]
     public enum ALCD : byte
     {
-        /// <summary></summary>
         [EnumMember]
         PersonalSafety = 1,
 
-        /// <summary></summary>
         [EnumMember]
         EquipmentSafety = 2,
 
-        /// <summary></summary>
         [EnumMember]
         ParameterControlWarning = 3,
 
-        /// <summary></summary>
         [EnumMember]
         ParameterControlError = 4,
 
-        /// <summary></summary>
         [EnumMember]
         IrrecoverableError = 5,
 
-        /// <summary></summary>
         [EnumMember]
         EquipmentStatusWarning = 6,
 
-        /// <summary></summary>
         [EnumMember]
         AttentionFlags = 7,
 
-        /// <summary></summary>
         [EnumMember]
         DataIntegrity = 8,
 
@@ -73,7 +67,11 @@ namespace MosaicLib.Semi.E005
         [EnumMember]
         BeginCustomRegion = 64,
 
-        /// <summary>This is not an indication of any form of failure.  It is simply used to inform the user/decision authority of some occurrence and optionally request/prompt the user/decision authority to provide some input.  These generally do not have an associated ALID. (100)</summary>
+        /// <summary>
+        /// This is not an indication of any form of failure.  
+        /// It is simply used to inform the user/decision authority of some occurrence and optionally request/prompt the user/decision authority to provide some input.  
+        /// These generally do not have an associated ALID. (100)
+        /// </summary>
         [EnumMember]
         E041_Attention = 100,
 
@@ -81,13 +79,17 @@ namespace MosaicLib.Semi.E005
         [EnumMember]
         E041_Warning = 101,
 
-        /// <summary>Error annuciators are similar to Alarm annunciators except that they support (recovery) action invocation by the currently active decision authority. (102)</summary>
+        /// <summary>Error annunciators are similar to Alarm annunciators except that they support (recovery) action invocation by the currently active decision authority. (102)</summary>
         [EnumMember]
         E041_Error = 102,
 
         /// <summary>Under E041 Alarm annunciators are used simply to report exception conditions but they do not offer or support (recovery) action invocation by the decision authority. (103)</summary>
         [EnumMember]
         E041_Alarm = 103,
+
+        /// <summary>Interpretaion of this annunciator type is state and context dependant, especially in relation to when this annunciator is passed to a host.  May or may not have a known ALID. (104)</summary>
+        [EnumMember]
+        E041_Dynamic = 104,
     }
 
     /// <summary>
@@ -161,203 +163,153 @@ namespace MosaicLib.Semi.E005
         [EnumMember]
         NoError = 0,
 
-        /// <summary></summary>
         [EnumMember]
         UnknownObjectInObjectSpecifier = 1,
 
-        /// <summary></summary>
         [EnumMember]
         UnknownTargetObjectType = 2,
         
-        /// <summary></summary>
         [EnumMember]
         UnknownObjectInstance = 3,
         
-        /// <summary></summary>
         [EnumMember]
         UnknownAttributeName = 4,
         
-        /// <summary></summary>
         [EnumMember]
         ReadonlyAttributeAccessDenied = 5,
         
-        /// <summary></summary>
         [EnumMember]
         UnknownObjectType = 6,
         
-        /// <summary></summary>
         [EnumMember]
         InvalidAttributeValue = 7,
         
-        /// <summary></summary>
         [EnumMember]
         SyntaxError = 8,
         
-        /// <summary></summary>
         [EnumMember]
         VerificationError = 9,
         
-        /// <summary></summary>
         [EnumMember]
         ValidationError = 10,
         
-        /// <summary></summary>
         [EnumMember]
         ObjectIdentifierInUse = 11,
         
-        /// <summary></summary>
         [EnumMember]
         ParametersImproperlySpecified = 12,
         
-        /// <summary></summary>
         [EnumMember]
         InsufficientParametersSpecified = 13,
         
-        /// <summary></summary>
         [EnumMember]
         UnsupportedOptionRequested = 14,
         
-        /// <summary></summary>
         [EnumMember]
         Busy = 15,
         
-        /// <summary></summary>
         [EnumMember]
         NotAvailableForProcessing = 16,
         
-        /// <summary></summary>
         [EnumMember]
         CommandNotValidForCurrentState = 17,
         
-        /// <summary></summary>
         [EnumMember]
         NoMaterialAltered = 18,
         
-        /// <summary></summary>
         [EnumMember]
         MaterialPartiallyProcessed = 19,
         
-        /// <summary></summary>
         [EnumMember]
         AllMaterialProcessed = 20,
         
-        /// <summary></summary>
         [EnumMember]
         RecipeSpecificationRelatedError = 21,
         
-        /// <summary></summary>
         [EnumMember]
         FailedDuringProcessing = 22,
         
-        /// <summary></summary>
         [EnumMember]
         FailedWhileNotProcessing = 23,
         
-        /// <summary></summary>
         [EnumMember]
         FailedDueToLackOfMaterial = 24,
         
-        /// <summary></summary>
         [EnumMember]
         JobAborted = 25,
         
-        /// <summary></summary>
         [EnumMember]
         JobStopped = 26,
         
-        /// <summary></summary>
         [EnumMember]
         JobCancelled = 27,
         
-        /// <summary></summary>
         [EnumMember]
         CannotChangeSelectedRecipe = 28,
         
-        /// <summary></summary>
         [EnumMember]
         UnknownEvent = 29,
         
-        /// <summary></summary>
         [EnumMember]
         DuplicateReportID = 30,
         
-        /// <summary></summary>
         [EnumMember]
         UnknownDataReport = 31,
         
-        /// <summary></summary>
         [EnumMember]
         DataReportNotLinked = 32,
         
-        /// <summary></summary>
         [EnumMember]
         UnknownTraceReport = 33,
         
-        /// <summary></summary>
         [EnumMember]
         DuplicateTraceID = 34,
         
-        /// <summary></summary>
         [EnumMember]
         TooManyDataReports = 35,
         
-        /// <summary></summary>
         [EnumMember]
         SamplePeriodOutOfRange = 36,
         
-        /// <summary></summary>
         [EnumMember]
         GroupSizeToLarge = 37,
         
-        /// <summary></summary>
         [EnumMember]
         RecoveryActionCurrentlyInvalid = 38,
         
-        /// <summary></summary>
         [EnumMember]
         BusyWithAnotherRecoveryCurrentlyUnableToPerformTheRecovery = 39,
         
-        /// <summary></summary>
         [EnumMember]
         NoActiveRecoveryAction = 40,
         
-        /// <summary></summary>
         [EnumMember]
         ExceptionRecoveryFailed = 41,
         
-        /// <summary></summary>
         [EnumMember]
         ExceptionRecoveryAborted = 42,
         
-        /// <summary></summary>
         [EnumMember]
         InvalidTableElement = 43,
         
-        /// <summary></summary>
         [EnumMember]
         UnknownTableElement = 44,
         
-        /// <summary></summary>
         [EnumMember]
         CannotDeletePredefined = 45,
         
-        /// <summary></summary>
         [EnumMember]
         InvalidToken = 46,
         
-        /// <summary></summary>
         [EnumMember]
         InvalidParameter = 47,
         
-        /// <summary></summary>
         [EnumMember]
         LoadPortDoesNotExist = 48,
         
-        /// <summary></summary>
         [EnumMember]
         LoadPortAlreadyInUse = 49,
 
-        /// <summary></summary>
         [EnumMember]
         MissingCarrier = 50,
 
@@ -476,6 +428,7 @@ namespace MosaicLib.Semi.E005
     [DataContract(Namespace = Constants.SemiNameSpace)]
     public enum MF : byte
     {
+        [EnumMember]
         Wafer = 1,
         [EnumMember]
         Cassette = 2,

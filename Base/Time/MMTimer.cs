@@ -1,10 +1,11 @@
 //-------------------------------------------------------------------
 /*! @file MMTimer.cs
- * @brief This file defines interfaces and classes that help give the client access to and use of the windows multi-media related timer functions.
+ *  @brief This file defines interfaces and classes that help give the client access to and use of the windows multi-media related timer functions.
  * 
- * Copyright (c) Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2008 Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2002 Mosaic Systems Inc., All rights reserved. (C++ library version)
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2008 Mosaic Systems Inc.
+ * Copyright (c) 2002 Mosaic Systems Inc.  (C++ library version)
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,13 +19,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
+
+using System;
+using System.Runtime.InteropServices;
 
 namespace MosaicLib.Time
 {
-    using System;
-    using System.Runtime.InteropServices;
-
     /// <summary>
     /// Static "namespace" for P-Invoke method names used to interact with winmm.dll
     /// </summary>
@@ -72,7 +72,6 @@ namespace MosaicLib.Time
         /// <summary>
         /// Implementation for abstract DisposableBase: regardless of DisposeType, if the timer period has been set then this method will invoke winmm_dll.timeEndPeriod to release the acquired timer resolution.
         /// </summary>
-        /// <param name="type"></param>
 		protected override void Dispose(DisposeType type)
 		{
 			if (periodHasBeenSet)

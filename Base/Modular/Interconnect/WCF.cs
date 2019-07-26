@@ -2,8 +2,9 @@
 /*! @file Interconnect/WCF.cs
  *  @brief Defines a service, a client, and related classes, that are used to allow WCF connections to provide remote access to Interconnect Values and Parts.
  * 
- * Copyright (c) Mosaic Systems Inc.,  All rights reserved.
- * Copyright (c) 2015 Mosaic Systems Inc., All rights reserved.
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2015 Mosaic Systems Inc.
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,24 +18,26 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
 
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using System.Linq;
-using System.ServiceModel;
+using System.Reflection;
 using System.Runtime.Serialization;
-using MosaicLib.Utils;
-using MosaicLib.Modular.Common;
-using MosaicLib.Modular.Part;
-using MosaicLib.Modular.Interconnect.Values;
-using MosaicLib.Utils.StringMatching;
-using MosaicLib.Utils.Pooling;
-using MosaicLib.Time;
-using MosaicLib.Modular.Action;
+using System.ServiceModel;
 using System.ServiceModel.Description;
 using System.ServiceModel.Channels;
+
+using MosaicLib.Modular.Action;
+using MosaicLib.Modular.Common;
+using MosaicLib.Modular.Interconnect.Sets;
+using MosaicLib.Modular.Interconnect.Values;
+using MosaicLib.Modular.Part;
+using MosaicLib.Time;
+using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
+using MosaicLib.Utils.StringMatching;
+using MosaicLib.Utils.Pooling;
 
 // Modular.Interconnect is the general namespace for tools that help interconnect Modular Parts without requiring that that have pre-existing knowledge of each-other's classes.
 // This file contains the definitions for the underlying Modular.Interconnect.WCF namespace.
@@ -52,6 +55,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
                     SessionMode = SessionMode.Required, 
                     CallbackContract = typeof(IInterconnectPropagationSessionCommonAPI),
                     ProtectionLevel = System.Net.Security.ProtectionLevel.None)]
+    [Obsolete("Use of Interconnect.WCF has been replaced with use of corresponding Interconnect.Remoting features.  Interconnect.WCF is no longer supported and will be removed (2018-02-18)")]
     public interface IInterconnectPropagationSessionClientAPI 
         : IInterconnectPropagationSessionCommonAPI
     {
@@ -73,6 +77,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
     /// This is the packaged content for the values that are passed to a StartSession call.
     /// </summary>
     [DataContract(Namespace = Constants.ModularInterconnectNameSpace)]
+    [Obsolete("Use of Interconnect.WCF has been replaced with use of corresponding Interconnect.Remoting features.  Interconnect.WCF is no longer supported and will be removed (2018-02-18)")]
     public class StartSessionParameter
     {
         #region Serialzied Properties
@@ -82,22 +87,22 @@ namespace MosaicLib.Modular.Interconnect.WCF
         public string ClientName { get; set; }
 
         /// <summary>Passes the name of the interconnect table that the client would like to connect to.  Use null/empty to connect to the default table.</summary>
-        [DataMember(Order = 10)]
+        [DataMember(Order = 10, EmitDefaultValue = false, IsRequired = false)]
         public string InterconnectTableName { get; set; }
 
         /// <summary>
         /// The set of rules for what server side names shall be propagated to the client using this session.  
         /// If this parameter is passed as null then it will be replaced with and interpreted as MatchRuleSet.Any
         /// </summary>
-        [DataMember(Order = 20)]
+        [DataMember(Order = 20, EmitDefaultValue = false, IsRequired = false)]
         public MatchRuleSet NameMatchRuleSet { get; set; }
 
         #endregion
 
-        #region Non-Serialized parts (primarily for Service to identify the Client Connection on which this parameter was recieved).
+        #region Non-Serialized parts (primarily for Service to identify the Client Connection on which this parameter was received).
 
         /// <summary>
-        /// This non-serialized property is used by the Servier side to record and track the client instances on which each Server side push call is handled.
+        /// This non-serialized property is used by the Server side to record and track the client instances on which each Server side push call is handled.
         /// </summary>
         public IInterconnectPropagationSessionCommonAPI ClientCallbackInstance { get; set; }
 
@@ -116,6 +121,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
     [ServiceContract(Name = "InterConnPropagCommonAPI", 
                     Namespace = Constants.ModularInterconnectNameSpace, 
                     ProtectionLevel = System.Net.Security.ProtectionLevel.None)]
+    [Obsolete("Use of Interconnect.WCF has been replaced with use of corresponding Interconnect.Remoting features.  Interconnect.WCF is no longer supported and will be removed (2018-02-18)")]
     public interface IInterconnectPropagationSessionCommonAPI
     {
         /// <summary>
@@ -145,6 +151,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
     /// Individual properties in the class are used for different parts of the protocol.
     /// </summary>
     [DataContract(Name = "param", Namespace = Constants.ModularInterconnectNameSpace)]
+    [Obsolete("Use of Interconnect.WCF has been replaced with use of corresponding Interconnect.Remoting features.  Interconnect.WCF is no longer supported and will be removed (2018-02-18)")]
     public class PushParameter
     {
         #region Acknowledgement and SeqNum
@@ -202,10 +209,10 @@ namespace MosaicLib.Modular.Interconnect.WCF
 
         #endregion
 
-        #region Non-Serialized parts (primarily for Service to identify the Client Connection on which each PushParameter was recieved).
+        #region Non-Serialized parts (primarily for Service to identify the Client Connection on which each PushParameter was received).
 
         /// <summary>
-        /// This non-serialized property is used by the Servier side to record and track the client instances on which each Server side push call is handled.
+        /// This non-serialized property is used by the Server side to record and track the client instances on which each Server side push call is handled.
         /// </summary>
         public IInterconnectPropagationSessionCommonAPI ClientCallbackInstance { get; set; }
 
@@ -217,7 +224,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
         #endregion
 
         /// <summary>
-        /// Method used immediately prior to returing this item the a freelist.
+        /// Method used immediately prior to returing this item a freelist.
         /// </summary>
         internal void Clear()
         {
@@ -235,6 +242,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
     /// Custom CollectionDataContract object type used with IInterconnectPropagationSessionAPI Push method and related PushParameter parameter. 
     /// </summary>
     [CollectionDataContract(ItemName = "item", Namespace = Constants.ModularInterconnectNameSpace)]
+    [Obsolete("Use of Interconnect.WCF has been replaced with use of corresponding Interconnect.Remoting features.  Interconnect.WCF is no longer supported and will be removed (2018-02-18)")]
     public class ValuePropagationItemList : List<ValuePropagationItem>
     {
         /// <summary>Default constructor gives empty list</summary>
@@ -252,6 +260,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
     /// <para/>Normal Update Record (bidirectional, has ID but no Name)
     /// </summary>
     [DataContract(Namespace=Constants.ModularInterconnectNameSpace)]
+    [Obsolete("Use of Interconnect.WCF has been replaced with use of corresponding Interconnect.Remoting features.  Interconnect.WCF is no longer supported and will be removed (2018-02-18)")]
     public class ValuePropagationItem
     {
         /// <summary>Carries the optional server side assigned ID that is used to effeciently refer to the named value after it has been registered and assigned an ID by the server.</summary>
@@ -287,6 +296,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
         public bool IsNormalUpdateRecord { get { return (ID != 0 && Name == null); } }
 
         /// <summary>Returns the approximate size of the contents in bytes.</summary>
+        [Obsolete("The use of this property has been deprecated.  (2018-03-07)")]
         public int EstimatedContentSizeInBytes
         {
             get
@@ -300,6 +310,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
     /// Custom CollectionDataContract object type used with IInterconnectPropagationSessionAPI Push method and related PushParameter parameter. 
     /// </summary>
     [CollectionDataContract(ItemName = "item", Namespace = Constants.ModularInterconnectNameSpace)]
+    [Obsolete("Use of Interconnect.WCF has been replaced with use of corresponding Interconnect.Remoting features.  Interconnect.WCF is no longer supported and will be removed (2018-02-18)")]
     public class RemoteServiceActionRequestList : List<RemoteServiceActionRequest>
     {
         /// <summary>Default constructor gives empty list</summary>
@@ -315,6 +326,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
     /// This class can also be used to request that a previously started action should be asked to RequestCancel.
     /// </summary>
     [DataContract(Namespace = Constants.ModularInterconnectNameSpace)]
+    [Obsolete("Use of Interconnect.WCF has been replaced with use of corresponding Interconnect.Remoting features.  Interconnect.WCF is no longer supported and will be removed (2018-02-18)")]
     public class RemoteServiceActionRequest
     {
         /// <summary>Carries a unique identifier created for each newly started RemoteServiceAction</summary>
@@ -356,6 +368,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
     /// Custom CollectionDataContract object type used with IInterconnectPropagationSessionAPI Push method and related PushParameter parameter. 
     /// </summary>
     [CollectionDataContract(ItemName = "item", Namespace = Constants.ModularInterconnectNameSpace)]
+    [Obsolete("Use of Interconnect.WCF has been replaced with use of corresponding Interconnect.Remoting features.  Interconnect.WCF is no longer supported and will be removed (2018-02-18)")]
     public class RemoteServiceActionUpdateList : List<RemoteServiceActionUpdate>
     {
         /// <summary>Default constructor gives empty list</summary>
@@ -369,6 +382,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
     /// This class is used as part of the PushParameters to allow one end of inform the other about updates to the IActionState for a previously started RemoteServiceAction.
     /// </summary>
     [DataContract(Namespace = Constants.ModularInterconnectNameSpace)]
+    [Obsolete("Use of Interconnect.WCF has been replaced with use of corresponding Interconnect.Remoting features.  Interconnect.WCF is no longer supported and will be removed (2018-02-18)")]
     public class RemoteServiceActionUpdate
     {
         /// <summary>Carries a unique identifier that indicates which RemoteServiceAction this state update applies to.</summary>
@@ -400,11 +414,29 @@ namespace MosaicLib.Modular.Interconnect.WCF
 
     #endregion
 
+    #region ISubscribeToSet
+
+    /// <summary>
+    /// Interface used when Subscribing to a remote set.  This interface is generally implemented by ClientServiceParts
+    /// </summary>
+    [Obsolete("Use of Interconnect.WCF has been replaced with use of corresponding Interconnect.Remoting features.  Interconnect.WCF is no longer supported and will be removed (2018-02-18)")]
+    public interface ISubscribeToSet
+    {
+        /// <summary>
+        /// Requests the client to subscribe to a given set from the connected ServerServicePart.  
+        /// The returned value is a set (a hidden tracking set) that is maintained by the ClientServicePart and which the client can track with their own TrackingSet(s)
+        /// </summary>
+        IClientFacetWithResult<ITrackingSet<TSetItemType>> SubscribeToSet<TSetItemType>(string setName = null, string setUUID = null);
+    }
+
+    #endregion
+
     #region Server (ServerServiceConfig and ServerServicePart)
 
     /// <summary>
     /// This class is used to specify all of the per instance configurable details about a Part that is used as the Client end of this WCF Modular Interconnect Service
     /// </summary>
+    [Obsolete("Use of Interconnect.WCF has been replaced with use of corresponding Interconnect.Remoting features.  Interconnect.WCF is no longer supported and will be removed (2018-02-18)")]
     public class ServerServiceConfig
     {
         /// <summary>
@@ -443,7 +475,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
             return (ServerServiceConfig) MemberwiseClone();
         }
 
-        public static readonly Uri[] EmptyUriArray = new Uri[0];
+        public static readonly Uri[] EmptyUriArray = EmptyArrayFactory<Uri>.Instance;
     }
 
     /// <summary>
@@ -455,15 +487,15 @@ namespace MosaicLib.Modular.Interconnect.WCF
     /// <remarks>
     /// At present the current class definition is a placeholder until the coding of the ClientServicePart and the ConnetionScanHelper is done.
     /// </remarks>
+    [Obsolete("Use of Interconnect.WCF has been replaced with use of corresponding Interconnect.Remoting features.  Interconnect.WCF is no longer supported and will be removed (2018-02-18)")]
     public class ServerServicePart : SimpleActivePartBase
     {
         #region Construction
 
-        public ServerServicePart(ServerServiceConfig config) 
-            : base(config.PartID) 
+        public ServerServicePart(ServerServiceConfig config)
+            : base(config.PartID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion0.Build(waitTimeLimit: TimeSpan.FromSeconds(0.01)))   // max spin rate is 100 Hz
         {
             Config = config.MakeCopyOfThis();
-            WaitTimeLimit = TimeSpan.FromSeconds(0.01);
 
             serverMethodHandler = new InterconnectPropagationSessionClientAPIHandler() 
             { 
@@ -471,11 +503,13 @@ namespace MosaicLib.Modular.Interconnect.WCF
                 PushParameterHandler = AsyncConsumePushParameter, 
                 EndSessionHandler = AsynchHandleEndSession, 
             };
+
+            SetupMainThreadStartingAndStoppingActions();
         }
 
         private ServerServiceConfig Config { get; set; }
 
-        private InterconnectPropagationSessionClientAPIHandler serverMethodHandler;      // initizlied in the constructor
+        private InterconnectPropagationSessionClientAPIHandler serverMethodHandler;      // initialized in the constructor
 
         #endregion
 
@@ -548,13 +582,14 @@ namespace MosaicLib.Modular.Interconnect.WCF
             return "Service Action '{0}' cannot be performed: No matching session client name was found".CheckedFormat(actionAsStr);
         }
 
-        protected override void MainThreadFcn()
+        private void SetupMainThreadStartingAndStoppingActions()
         {
-            base.MainThreadFcn();
+            AddMainThreadStoppingAction(() =>
+            {
+                InnerCloseServiceHost();
 
-            InnerCloseServiceHost();
-
-            ServicePendingCloseQueue(true);
+                ServicePendingCloseQueue(true);
+            });
         }
 
         protected override void PerformMainLoopService()
@@ -700,7 +735,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
             }
             catch (System.Exception ex)
             {
-                Log.Debug.Emit("ServiceHost close failed unexpectedly: {0}", ex);
+                Log.Debug.Emit("ServiceHost close failed unexpectedly: {0}", ex.ToString(ExceptionFormat.Full));
             }
 
             serviceHost = null;
@@ -922,7 +957,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
             }
         }
 
-        private object asyncInboundPushParameterQueueMutex = new object();
+        private readonly object asyncInboundPushParameterQueueMutex = new object();
         private Queue<PushParameter> asyncInboundPushParameterQueue = new Queue<PushParameter>();
         private volatile int asyncInboundPushParameterQueueCount = 0;
 
@@ -996,6 +1031,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
     /// <summary>
     /// This class is used to specify all of the per instance configurable details about a Part that is used as the Client end of this WCF Modular Interconnect Service
     /// </summary>
+    [Obsolete("Use of Interconnect.WCF has been replaced with use of corresponding Interconnect.Remoting features.  Interconnect.WCF is no longer supported and will be removed (2018-02-18)")]
     public class ClientServiceConfig
     {
         /// <summary>
@@ -1039,23 +1075,34 @@ namespace MosaicLib.Modular.Interconnect.WCF
     /// <summary>
     /// This is the Part that is used to implement the Client end of a Interconnect WCF Service.
     /// </summary>
-    public class ClientServicePart : SimpleActivePartBase
+    [Obsolete("Use of Interconnect.WCF has been replaced with use of corresponding Interconnect.Remoting features.  Interconnect.WCF is no longer supported and will be removed (2018-02-18)")]
+    public class ClientServicePart : SimpleActivePartBase //, ISubscribeToSet
     {
         /// <summary>
         /// Constructor.  Caller must provide a ClientServiceConfig that will be cloned by this part to record its operational settings.
         /// Then it determines the IVI that it will be linked to, from the given LocalIVI or from the LocalValueTableName if the local IVI was not given.
         /// </summary>
         public ClientServicePart(ClientServiceConfig config)
-            : base(config.PartID) 
+            : base(config.PartID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion0.Build(waitTimeLimit: TimeSpan.FromSeconds(0.01)))  // max spin rate is 100 Hz
         {
             Config = config.MakeCopyOfThis();
 
             IVI = Config.LocalIVI ?? Interconnect.Values.Values.GetTable(Config.LocalValueTableName, true);
 
-            WaitTimeLimit = TimeSpan.FromSeconds(0.01);     // max spin rate is 100 Hz
-
             clientCallbackHandler = new InterconnectPropagationSessionClientCallbackHandler() { PushParameterHandler = AsynchConsumePushParameter };
+
+            SetupMainThreadStartingAndStoppingActions();
         }
+
+        #region ISubscribeToSet implementation.
+
+        ///// <summary>
+        ///// Requests the client to subscribe to a given set from the connected ServerServicePart.  
+        ///// The returned value is a set (a hidden tracking set) that is maintained by the ClientServicePart and which the client can track with their own TrackingSet(s)
+        ///// </summary>
+        //IClientFacetWithResult<ITrackingSet<TSetItemType>> SubscribeToSet<TSetItemType>(string setName = null, string setUUID = null);
+
+        #endregion
 
         private ClientServiceConfig Config { get; set; }
 
@@ -1177,11 +1224,9 @@ namespace MosaicLib.Modular.Interconnect.WCF
             return base.PerformServiceAction(action);
         }
 
-        protected override void MainThreadFcn()
+        private void SetupMainThreadStartingAndStoppingActions()
         {
-            base.MainThreadFcn();
-
-            InnerCloseConnectionAndGoOffline("At MainThreadFcn.End", null);
+            AddMainThreadStoppingAction(() => InnerCloseConnectionAndGoOffline("At MainThreadFcn.End", null));
         }
 
         protected override void PerformMainLoopService()
@@ -1390,7 +1435,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
             }
         }
 
-        private object inboundPushParameterQueueMutex = new object();
+        private readonly object inboundPushParameterQueueMutex = new object();
         private volatile int inboundPushParameterQueueCount = 0;
         private Queue<PushParameter> inboundPushParameterQueue = new Queue<PushParameter>();
 
@@ -1428,6 +1473,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
     /// The coding of this class is intended to include 0th order optimizations to avoid generating garbage more garbage allocations than is strictly required to support the protocol
     /// and related functionality.  
     /// </remarks>
+    [Obsolete("Use of Interconnect.WCF has been replaced with use of corresponding Interconnect.Remoting features.  Interconnect.WCF is no longer supported and will be removed (2018-02-18)")]
     internal class ConnectionScanHelper : DisposableBase
     {
         #region default constrution and external setup properties
@@ -1543,6 +1589,55 @@ namespace MosaicLib.Modular.Interconnect.WCF
 
         #endregion
 
+        #region Set subscription support.
+
+        public enum SetHandlerState
+        {
+            Local = 0,
+            WaitingToSendSubscriptionRequest,
+            WaitingForSubscriptionResponse,
+            Subscribed,
+        }
+
+        public class SetHandler
+        {
+            public SetID SetID { get; set; }
+            public Type SetItemType { get; set; }
+            public SetHandlerState State { get; set; }
+            public ITrackingSet TrackingSet { get; set; }
+        }
+
+        public SetHandler CreateClientSetHandler<TSetItemType>(string setName = null, string setUUID = null)
+        {
+            SetHandler setHandler = null;
+
+            if (!setUUID.IsNullOrEmpty() && toClientSetDictionaryByUUID.TryGetValue(setUUID, out setHandler))
+                return setHandler;
+
+            if (!setName.IsNullOrEmpty() && toClientSetDictionaryByName.TryGetValue(setName, out setHandler))
+                return setHandler;
+
+            if (setName.IsNullOrEmpty() && setUUID.IsNullOrEmpty())
+                return idleSetHandler;
+
+            setHandler.SetID = new SetID(name: setName, uuid: setUUID);
+            setHandler.SetItemType = typeof(TSetItemType);
+            setHandler.State = SetHandlerState.WaitingToSendSubscriptionRequest;
+
+            return setHandler;
+        }
+
+        public Dictionary<string, SetHandler> toClientSetDictionaryByName = new Dictionary<string, SetHandler>();
+        public Dictionary<string, SetHandler> toClientSetDictionaryByUUID = new Dictionary<string, SetHandler>();
+        public List<SetHandler> clientSetList = new List<SetHandler>();
+        // public List<SetHandler> 
+
+        public List<SetHandler> fromSetList = new List<SetHandler>();
+
+        private static readonly SetHandler idleSetHandler = new SetHandler() { SetID = new SetID(name: "", uuid: ""), TrackingSet = new TrackingSet<object>(new ReferenceSet<object>(new SetID(""), 1, false)) };
+
+        #endregion
+
         #region public methods and related state information
 
         /// <summary>Publically accessible queue of PushParameter items that have been delivered from the other end of the WCF connection.</summary>
@@ -1587,7 +1682,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
         /// generates and Push's these VPI's by including them in PushParameter that are given the api's Push method,
         /// and keeps track of how many PPItems have been pushed so that it keeps the outgoing connection busy without
         /// overloading the buffer space in either direction while still confirming that the PPItems are actually being processed by the other end,
-        /// informs the other end about its progess in processing the pushed items that it has recieved from the other end.
+        /// informs the other end about its progess in processing the pushed items that it has received from the other end.
         /// </summary>
         public void Service()
         {
@@ -1766,7 +1861,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
             if (IsStateInRegistrationPhase && IsClient)
             {
                 if (ppItem.VPIList == null || ppItem.VPIList.Count == 0)
-                    CompleteRegistrationPhase("recieved Push with no ValueItems [SeqNum:{0}]".CheckedFormat(ppItem.SeqNum));
+                    CompleteRegistrationPhase("received Push with no ValueItems [SeqNum:{0}]".CheckedFormat(ppItem.SeqNum));
                 else if (ppItem.VPIList[0].Name.IsNullOrEmpty())
                     CompleteRegistrationPhase("Recieved Pushed ValueItem with no Name [SeqNum:{0}]".CheckedFormat(ppItem.SeqNum));
             }
@@ -1835,7 +1930,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
 
                 if (item != null)
                 {
-                    item.IVA.ValueContainer = vpi.VC;       // may mark set as pending if the VC contents is differnt than the current ValueContainer contents.
+                    item.IVA.VC = vpi.VC;       // may mark set as pending if the VC contents is differnt than the current ValueContainer contents.
 
                     if (!havePendingIVAValuesToSet)
                         havePendingIVAValuesToSet = item.IVA.IsSetPending;
@@ -1860,7 +1955,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
                     {
                         if (!vpi.VC.IsEmpty)
                         {
-                            item.IVA.ValueContainer = vpi.VC;
+                            item.IVA.VC = vpi.VC;
 
                             if (!havePendingIVAValuesToSet)
                                 havePendingIVAValuesToSet = item.IVA.IsSetPending;
@@ -1889,7 +1984,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
                     {
                         if (!vpi.VC.IsEmpty)
                         {
-                            item.IVA.ValueContainer = vpi.VC;
+                            item.IVA.VC = vpi.VC;
 
                             if (!havePendingIVAValuesToSet)
                                 havePendingIVAValuesToSet = item.IVA.IsSetPending;
@@ -2107,7 +2202,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
 
             if (workingCount > 0)
             {
-                IVI.Update(workingIVAArray, workingCount);
+                IVI.Update(workingIVAArray, numEntriesToUpdate: workingCount);
 
                 for (int idx = 0; idx < workingCount; idx++)
                 {
@@ -2137,7 +2232,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
                         vpi.ID = item.AssignedID;
                     }
 
-                    vpi.VC = (item.IVA.HasValueBeenSet ? item.IVA.ValueContainer : ValueContainer.Empty);
+                    vpi.VC = (item.IVA.HasValueBeenSet ? item.IVA.VC : ValueContainer.Empty);
 
                     pendingVPIQueue.Enqueue(vpi);
                 }
@@ -2594,7 +2689,6 @@ namespace MosaicLib.Modular.Interconnect.WCF
         /// Enqueues the given rsau in either the pendingRemoteServiceActionUpdateCompleteQueue or the pendingRemoteServiceActionUpdateQueue depending on whether the 
         /// rsau's ActionState IsComplete, or not.
         /// </summary>
-        /// <param name="rsau"></param>
         private void EnqueuePendingRSAU(RemoteServiceActionUpdate rsau)
         {
             if (rsau.ActionState.IsComplete)
@@ -2752,7 +2846,7 @@ namespace MosaicLib.Modular.Interconnect.WCF
 
         #region Connetion Abort handling.
 
-        /// <summary></summary>
+        /// <summary>Returns true if the current AbortReason is no null or empty.  Generally this indicates that the connection is being aborted.</summary>
         public bool IsAbortRequested { get { return !AbortReason.IsNullOrEmpty(); } }
 
         /// <summary>

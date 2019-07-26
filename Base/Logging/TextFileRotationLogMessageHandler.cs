@@ -1,10 +1,11 @@
 //-------------------------------------------------------------------
 /*! @file TextFileRotationLogMessageHandler.cs
- * @brief This file defines the LogMessageHandler implementation class that is responsible for implementing a form of log file ring based on creation of a ring of files in a directory.
+ *  @brief This file defines the LogMessageHandler implementation class that is responsible for implementing a form of log file ring based on creation of a ring of files in a directory.
  * 
- * Copyright (c) Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2008 Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2007 Mosaic Systems Inc., All rights reserved. (C++ library version)
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2008 Mosaic Systems Inc.
+ * Copyright (c) 2007 Mosaic Systems Inc.  (C++ library version)
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,9 +19,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
 
 using System;
+
+using MosaicLib;
+using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
 
 namespace MosaicLib
 {
@@ -41,12 +45,12 @@ namespace MosaicLib
                 /// <summary>
                 /// Constructor - <see cref="FileRotationLoggingConfig"/> parameter defines all initial values for the configuration and operation of this LMH.
                 /// </summary>
-				public TextFileRotationLogMessageHandler(FileRotationLoggingConfig frlConfig) 
-					: base(frlConfig.name, frlConfig.logGate, frlConfig.includeFileAndLine, true)
+				public TextFileRotationLogMessageHandler(FileRotationLoggingConfig frlConfig)
+                    : base(frlConfig.name, frlConfig.logGate, recordSourceStackFrame: frlConfig.includeFileAndLine)
 				{
 					// replace the default LogMessageHandlerLogger with a normal QueuedLogger.  This is for use by all levels of this LMH type.
                     //  this allows generated messages to be inserted into and handled by the entire distribution system rather than just by this LMH instance.
-					logger = new QueuedLogger(Name, LogGate, frlConfig.includeFileAndLine);
+					logger = new QueuedLogger(Name, LogGate);
 
 					config = frlConfig;
 					dirMgr = new File.DirectoryFileRotationManager(config.name);
@@ -55,13 +59,13 @@ namespace MosaicLib
 					dirMgrConfig = new MosaicLib.File.DirectoryFileRotationManager.Config();
 
 					dirMgrConfig.dirPath = config.dirPath;
-					dirMgrConfig.fileNamePrefix = config.name;
-					dirMgrConfig.fileNameSuffix = ".log";
+					dirMgrConfig.fileNamePrefix = config.fileNamePrefix;
+					dirMgrConfig.fileNameSuffix = config.fileNameSuffix;
 
 					if (config.nameUsesDateAndTime)
 						dirMgrConfig.fileNamePattern = File.DirectoryFileRotationManager.FileNamePattern.ByDate;
 					else
-						dirMgrConfig.fileNamePattern = File.DirectoryFileRotationManager.FileNamePattern.Numeric4DecimalDigits;
+                        dirMgrConfig.fileNamePattern = File.DirectoryFileRotationManager.FileNamePattern.Numeric4DecimalDigits;
 
 					dirMgrConfig.excludeFileNamesSet = config.excludeFileNamesSet;
 
@@ -124,10 +128,6 @@ namespace MosaicLib
 
 					CompleteFileAccess();
 				}
-
-                /// <summary>Query method that may be used to tell if message delivery for a given message is still in progress on this handler.</summary>
-                /// <remarks>This LMH type does not queue messages internally.  As such the returned value is always false.</remarks>
-                public override bool IsMessageDeliveryInProgress(int testMesgSeqNum) { return false; }
 
                 /// <summary>Once called, this method only returns after the handler has made a reasonable effort to verify that all outsanding, pending messages, visible at the time of the call, have been full processed before the call returns.</summary>
                 public override void Flush()
@@ -216,26 +216,52 @@ namespace MosaicLib
                 /// </summary>
                 /// <returns>true if an active file name could be determined and the ostream could be successfully opened to append to it.</returns>
 				protected bool ActivateFile()
-				{
-					bool isAdvanceNeeded = dirMgr.IsFileAdvanceNeeded();
-					activeFilePath = (isAdvanceNeeded ? dirMgr.AdvanceToNextActiveFile() : dirMgr.PathToActiveFile);
+                {
+                    bool isAdvanceNeeded = dirMgr.IsFileAdvanceNeeded();
+                    activeFilePath = (isAdvanceNeeded ? dirMgr.AdvanceToNextActiveFile() : dirMgr.PathToActiveFile);
 
-					if (string.IsNullOrEmpty(activeFilePath))
-						return false;
+                    if (string.IsNullOrEmpty(activeFilePath))
+                        return false;
 
-					// establish the open mode.  if we are supposed to advance to a new file
-					//	 then make certain that we truncate the old file if it is still there.
-					bool append = !isAdvanceNeeded;
-					
-					ostream = new System.IO.StreamWriter(activeFilePath, append, System.Text.Encoding.ASCII);
+                    bool fileExists = System.IO.File.Exists(activeFilePath);
 
-					handledLogMessageCounter = 0;
+                    if (!fileExists)
+                    {
+                        System.IO.File.WriteAllBytes(activeFilePath, EmptyArrayFactory<byte>.Instance); // this makes certain the file has been created
 
-					if (ostream != null && !ostream.BaseStream.CanWrite)
-						CloseFile();
+                        // this needs to be here to prevent Win32 "tunneling" from preservering the creation time from the file we just deleted
+                        System.IO.File.SetCreationTime(activeFilePath, DateTime.Now);
+                    }
 
-					return (ostream != null);
-				}
+                    // establish the open mode.  if we are supposed to advance to a new file
+                    //	 then make certain that we truncate the old file if it is still there.
+                    bool append = !isAdvanceNeeded;
+
+                    ostream = new System.IO.StreamWriter(activeFilePath, append, System.Text.Encoding.ASCII);
+
+                    handledLogMessageCounter = 0;
+
+                    if (ostream != null && !ostream.BaseStream.CanWrite)
+                        CloseFile();
+
+                    bool addHeader = (isAdvanceNeeded || !fileExists);
+
+                    if (ostream != null && addHeader)
+                    {
+                        GenerateAndProduceHeaderLines(config.fileHeaderLines,
+                                                      config.fileHeaderLinesDelegate,
+                                                      (lm) =>
+                                                      {
+                                                          lineFmt.FormatLogMessageToOstream(lm, ostream);
+                                                          handledLogMessageCounter++;
+                                                      }
+                        );
+                    }
+
+                    dirMgr.RefreshActiveFileInfo();
+
+                    return (ostream != null);
+                }
 
 				const int MaxMessagesToHandleBeforeRescan = 100;
 
@@ -258,8 +284,9 @@ namespace MosaicLib
 							return false;
 					}
 
-					if (dirMgr.IsDirectoryCleanupNeeded)
-						dirMgr.PerformIncrementalCleanup();
+                    string cleanupNeededReason = dirMgr.DirectoryCleanupNeededReason;
+                    if (!cleanupNeededReason.IsNullOrEmpty())
+                        dirMgr.PerformIncrementalCleanup(cleanupNeededReason);
 
 					bool recheckActiveFileSize = (handledLogMessageCounter >= MaxMessagesToHandleBeforeRescan);
 					if (recheckActiveFileSize)

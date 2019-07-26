@@ -1,10 +1,11 @@
 //-------------------------------------------------------------------
 /*! @file ModbusClient.cs
- * @brief This file defines Modbus helper definitiions and classes that are specific to Modbus Clients
+ *  @brief This file defines Modbus helper definitiions and classes that are specific to Modbus Clients
  * 
- * Copyright (c) Mosaic Systems Inc.  All rights reserved
- * Copyright (c) 2011 Mosaic Systems Inc.  All rights reserved
- * Copyright (c) 2010 Mosaic Systems Inc.  All rights reserved (prior C++ library version)
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2011 Mosaic Systems Inc.
+ * Copyright (c) 2010 Mosaic Systems Inc.  (prior C++ library version)
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +19,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
 
 using System;
 using System.Collections.Generic;
@@ -400,7 +400,7 @@ namespace MosaicLib.SerialIO.Modbus.Client
         /// <summary>Gives the QpcTimeStamp of the last time the ClientFunctionState was internally assigned.</summary>
         public QpcTimeStamp ClientFunctionStateTime { get; set; }
 
-        /// <summary>Gives an ExceptionCode that was returned in the command response or ExcpetionCode.Custom if the failure came from some other source.</summary>
+        /// <summary>Gives an ExceptionCode that was returned in the command response or ExceptionCode.Custom if the failure came from some other source.</summary>
         public ExceptionCode ExceptionCode { get; set; }
         /// <summary>Set to true if this exception code was obtained from the resonseADU body.</summary>
         public bool ExceptionCodeIsFromResponse { get; set; }
@@ -619,10 +619,12 @@ namespace MosaicLib.SerialIO.Modbus.Client
             portReadAction = port.CreateReadAction(portReadActionParam = new ReadActionParam() { WaitForAllBytes = false });
             portWriteAction = port.CreateWriteAction(portWriteActionParam = new WriteActionParam());
             portFlushAction = port.CreateFlushAction(FlushPeriod);
+            portReinitializeAction = port.CreateGoOnlineAction(true);
 
             portReadAction.NotifyOnComplete.AddItem(actionWaitEvent);
             portWriteAction.NotifyOnComplete.AddItem(actionWaitEvent);
             portFlushAction.NotifyOnComplete.AddItem(actionWaitEvent);
+            portReinitializeAction.NotifyOnComplete.AddItem(actionWaitEvent);
         }
 
         /// <summary>
@@ -652,6 +654,7 @@ namespace MosaicLib.SerialIO.Modbus.Client
         IWriteAction portWriteAction = null;
         WriteActionParam portWriteActionParam = null;
         IFlushAction portFlushAction = null;
+        IBasicAction portReinitializeAction = null;
         WaitEventNotifier actionWaitEvent = new WaitEventNotifier(WaitEventNotifier.Behavior.WakeOne);
 
         #endregion
@@ -769,6 +772,7 @@ namespace MosaicLib.SerialIO.Modbus.Client
             // Flush the port if the last command did not succeed.
             if (performInitialFlush && FlushPeriod != TimeSpan.Zero)
             {
+
                 portFlushAction.ParamValue = FlushPeriod;
                 portFlushAction.Run();      // failures will not directly effect the success/failure of the function execution
             }

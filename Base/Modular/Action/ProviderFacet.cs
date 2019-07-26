@@ -1,10 +1,11 @@
 //-------------------------------------------------------------------
 /*! @file ProviderFacet.cs
- * @brief This file contains the definitions and classes that are used to define the Service Provider side, or facet, of the Modular Action portions of this library.
+ *  @brief This file contains the definitions and classes that are used to define the Service Provider side, or facet, of the Modular Action portions of this library.
  * 
- * Copyright (c) Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2008 Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2006 Mosaic Systems Inc., All rights reserved. (C++ library version)
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2008 Mosaic Systems Inc.
+ * Copyright (c) 2006 Mosaic Systems Inc.  (C++ library version)
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,18 +19,26 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
+
+using System;
+
+using MosaicLib.Utils;
+using MosaicLib.Time;
 
 namespace MosaicLib.Modular.Action
 {
-	//-------------------------------------------------
-
 	/// <summary>
 	/// This interface defines the common Provider side portions of the Action implementation object.
 	/// The methods defined in this interface are used by the Action Queue and by generic provider base classes.
 	/// </summary>
 	public interface IProviderFacet
 	{
+        /// <summary>
+        /// This property gives the provider access to the IActionLogging instance that the action implementation object is using for its logging operations.  
+        /// This allows the provider to use the action's logging for provider generated messages when they should be configured to match the action's logging configuration.
+        /// </summary>
+        IActionLogging Logging { get; }
+
         /// <summary>
         /// Gives provider access to a readonly NamedValueSet provided by the client and cloned by the action implementation when the action is started.
         /// If the client did not provide any NamedParamValues then this property will return a readonly empty set so that it may safely be used by the provider without additional null checking.
@@ -53,11 +62,12 @@ namespace MosaicLib.Modular.Action
         /// </summary>
         void UpdateNamedValues(Common.INamedValueSet namedValueSet);
 
-        /// <summary>Provider invokes this to indicate that the action is complete and to provide the final resultCode</summary>
+        /// <summary>Provider invokes this to indicate that the action is complete and to provide the final <paramref name="resultCode"/></summary>
         void CompleteRequest(string resultCode);
 
         /// <summary>
-        /// Provider invokes this to indicate that the action is complete and to provide the final resultCode and set of NamedValues (from which a readonly copy is made and retained)
+        /// Provider invokes this to indicate that the action is complete and to provide the final <paramref name="resultCode"/>.
+        /// If a non-null <paramref name="namedValueSet"/> is provided then it will be used to secify the completed IActionState's NamedValues.
         /// </summary>
         void CompleteRequest(string resultCode, Common.INamedValueSet namedValueSet);
 
@@ -67,7 +77,50 @@ namespace MosaicLib.Modular.Action
         string ToString(ToStringSelect select);
     }
 
-	//-------------------------------------------------
+    /// <summary>
+    /// common "namespace" class to define extension methods within.
+    /// </summary>
+    public static partial class ExtensionMethods
+    {
+        /// <summary>
+        /// Run the given action to completion.  Returns the given action to support call chaining.  
+        /// Optional parameters support constrained total wait timeLimit, use provided spinPeriod, parentAction (to monitor for cancel requests) and spinDelegate
+        /// spinPeriod will use 0.10 seconds if a non-default (zero) value is not provided.
+        /// </summary>
+        /// <remarks>
+        /// Currently this method uses a spin timer and repeatedly calls the given action's time limit based WaitUntilComplete method.  
+        /// This means that the method will have settable latency (based on the provided spinPeriod) in reacting to a cancelation request and reflecting it into the action being run here.
+        /// </remarks>
+        public static TClientFacetType RunInline<TClientFacetType>(this TClientFacetType action, TimeSpan timeLimit = default(TimeSpan), TimeSpan spinPeriod = default(TimeSpan), IProviderFacet parentAction = null, System.Action spinDelegate = null) 
+            where TClientFacetType : IClientFacet
+        {
+            spinPeriod = spinPeriod.MapDefaultTo(TimeSpan.FromSeconds(0.10));
+            bool haveSpinDelegate = spinDelegate != null;
+            bool haveTimeLimit = (timeLimit != default(TimeSpan));
+            bool haveParentAction = (parentAction != null);
+
+            QpcTimer waitTimeLimitTimer = default(QpcTimer);
+            if (haveTimeLimit)
+                waitTimeLimitTimer = new QpcTimer() { TriggerInterval = timeLimit, Started = true };
+
+            for (; ; )
+            {
+                if (action.WaitUntilComplete(spinPeriod))
+                    break;
+
+                if (haveSpinDelegate)
+                    spinDelegate();
+
+                if (haveParentAction && parentAction.IsCancelRequestActive && !action.IsCancelRequestActive)
+                    action.RequestCancel();
+
+                if (haveTimeLimit && waitTimeLimitTimer.IsTriggered)
+                    break;
+            }
+
+            return action;
+        }
+    }
 }
 
 //-------------------------------------------------

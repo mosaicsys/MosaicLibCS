@@ -1,10 +1,11 @@
 //-------------------------------------------------------------------
 /*! @file Logging.cs
- * @brief This provides the definitions, including interfaces, classes, types and functions that are essential to the MosaicLib logging system.
+ *  @brief This provides the definitions, including interfaces, classes, types and functions that are essential to the MosaicLib logging system.
  * 
- * Copyright (c) Mosaic Systems Inc.  All rights reserved
- * Copyright (c) 2008 Mosaic Systems Inc.  All rights reserved
- * Copyright (c) 2006 Mosaic Systems Inc.  All rights reserved. (C++ library version)
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2008 Mosaic Systems Inc.
+ * Copyright (c) 2006 Mosaic Systems Inc.  (C++ library version)
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,20 +19,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
 
 using System;
-using System.Runtime.Serialization;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.Serialization;
+using System.Text;
+
+using MosaicLib.Modular.Common;
 using MosaicLib.Time;
 using MosaicLib.Utils;
-using MosaicLib.Modular.Common;
 
 namespace MosaicLib
 {
 	/// <summary>
-	/// This static public class contains the definitions that are used to define the MosaicLib logging system.  
+	/// This static public class contains the definitions that are used to create the MosaicLib logging system.  
 	/// This system is designed to provide efficient, source identified, gate controllable, multi-threaded logging 
 	/// of messages and/or data from multiple sources into some number of, possibly source specific, message handlers.  
 	/// </summary>
@@ -39,13 +41,14 @@ namespace MosaicLib
 	/// Terms:
     /// <list type="bullet">
     /// <item>
-    ///		<see cref="Logging.LogMessage"/> - an object that is allocated from the distribution system, has a message placed within it and is then
-    ///			emitted into the logging system where it may be recorded in one or more destinations (LogMessageHandlers)
-    ///			LogMessages support use with strings and may be modified by making use of their Text.StringBuffer.  
+    ///		<see cref="Logging.LogMessage"/> - The basic log message object, has a message placed within it and is then
+    ///			emitted into the logging system where it may be recorded in one or more destinations (LogMessageHandlers).
     ///			LogMessages carry a sourceInfo (of the Logger from which they were allocated), a mesg type, a message, 
-    ///			an INamedValueSet and a timestamp.  In addition they are generally 
-    ///			annotated with the stack frame of the client code from which they were created so that the logging
-    ///			infrastructure has access to the file name and line number of the source code that allocated the message.  
+    ///			an INamedValueSet and a timestamp.
+    ///			
+    ///         Please NOTE: use of stack frame recording for purposes of file and line number output has been deprecated.
+    ///         Optimizations done by the JITer can collapse multiple method layers and thus the skipStackFrames based calculation
+    ///         of the frame of the original calling code is no longer accurate and can thus report incorrect and missleading file and line numbers.
     /// </item>
     /// <item>
     ///		LoggerName - each Logger is associated with a string that defines its name.  All Loggers
@@ -53,7 +56,7 @@ namespace MosaicLib
     ///			rules although each one may provide a separate locally defined LoggingConfig value.
     /// </item>
     /// <item>
-    ///		<see cref="Logging.Logger"/> - an object from which LogMessage(s) are obtained and into which LogMessage(s)
+    ///		<see cref="Logging.Logger"/> - an object from which LogMessages are obtained and into which LogMessages
     ///			are typically emitted.  Each Logger instance represents a single portal into
     ///			the log distribution system.  Multiple Logger instances may be constructed using 
     ///			the same LoggerName, in which case they share the same common distribution rules.  
@@ -76,7 +79,7 @@ namespace MosaicLib
     ///			if a given mesg type should be allocated and/or emitted.  LogGate values are typically applied in
     ///			a least restrictive to most restrictive manner (as a LogMessage is routed) so that messages that cannot
     ///			be processed (are gated off in all possible places they might go) will never be generated while other
-    ///			messages are forwarded to those consumers that might be interested in them.
+    ///			messages are forwarded to those handlers that might be interested in them.
     /// </item>
     /// <item>
     ///		<see cref="Logging.IMesgEmitter"/> - a shorthand helper class that is provided by loggers to client code and which can be used to generate
@@ -112,47 +115,61 @@ namespace MosaicLib
         [DataContract(Namespace=Constants.LoggingNameSpace)]
 		public enum MesgType : int
 		{
-            /// <summary>used as a gate to suppress passing all mesg types.  0</summary>
+            /// <summary>used as a gate to suppress passing all mesg types.  [0]</summary>
             [EnumMember]
 			None = 0,
-            /// <summary>used to record occurrence of setup related (ctor) issues that may prevent use of the affected entity.  1</summary>
+
+            /// <summary>used to record occurrence of setup related (ctor) issues that may prevent use of the affected entity.  [1]</summary>
             [EnumMember]
             Fatal = 1,
-            /// <summary>used to record occurrence of unexpected failures that might prevent future actions from operating correctly.  2</summary>
+
+            /// <summary>used to record occurrence of unexpected failures that might prevent future actions from operating correctly.  [2]</summary>
             [EnumMember]
             Error = 2,
-            /// <summary>used to record occurrence of unexpected failures which are not expected to prevent future actions from operating correctly.  3</summary>
+
+            /// <summary>used to record occurrence of unexpected failures which are not expected to prevent future actions from operating correctly.  [3]</summary>
             [EnumMember]
             Warning = 3,
-            /// <summary>used to record occurrence of significant milestones and/or changes during normal operation of the system.  4</summary>
+
+            /// <summary>used to record occurrence of significant milestones and/or changes during normal operation of the system.  [4]</summary>
             [EnumMember]
             Signif = 4,
-            /// <summary>used to record occurrence of relatively insignificant items.  5</summary>
+
+            /// <summary>used to record occurrence of relatively insignificant items.  [5]</summary>
             [EnumMember]
             Info = 5,
-            /// <summary>used to record occurrence of information that is intended to provide an even more detailed view.  6</summary>
+
+            /// <summary>used to record occurrence of information that is intended to provide an even more detailed view.  [6]</summary>
             [EnumMember]
             Debug = 6,
-            /// <summary>used to record occurrence of very frequent events such as those used to track data transfer, flow of control, construction and destruction, etc...  7</summary>
-            [EnumMember]
-            Trace = 7,			
-            /// <summary>
-            /// Defines the last MesgType member that represents an actual message type.  Used to size arrays that may be indexed by a MesgType (cast as an Int32)
-            /// <para/>Max = Trace ( = 7)
-            /// </summary>
-            [EnumMember]
-            Max = Trace,
 
-            /// <summary>used as a level to permit passing all mesg types.  Max + 1</summary>
             [EnumMember]
-            All,
+            [Obsolete("The use of this MesgType element has been deprecated and will be removed in a future release.  Please replace its use with the use of the ArrayLength element. (2018-08-12)")]
+            Max = 7,
+
+            /// <summary>used to record occurrence of very frequent events such as those used to track data transfer, flow of control, construction and destruction, etc...  [7]</summary>
+            [EnumMember]
+            Trace = 7,		
+	
+            /// <summary>used as a level to permit passing all mesg types.  [8]</summary>
+            [EnumMember]
+            All = 8,
+
+            /// <summary>used as the array length of arrays that shall generally be indexable by the useful individual MesgType values (Fatal..Trace, aka 1..7).  [ArraySize = All = 8]</summary>
+            [EnumMember]
+            ArraySize = 8,
         }
 
+        private static readonly MesgType[] allMesgTypesArray = new MesgType[] { MesgType.Fatal, MesgType.Error, MesgType.Warning, MesgType.Signif, MesgType.Info, MesgType.Debug, MesgType.Trace };
+
+        /// <summary>Returns an enumerable set of all message types (Fatal, Error, Warning, Signif, Info, Debug, Trace).</summary>
+        public static IEnumerable<MesgType> AllMesgTypes { get { return allMesgTypesArray; } }
+
         /// <summary>Returns mesgType.ToString()</summary>
-		public static string ConvertToString(MesgType mesgType) { return mesgType.ToString(); }
+		public static string ConvertToString(this MesgType mesgType) { return mesgType.ToString(); }
 
         /// <summary>Returns 3 character version of mesgType.ToString()</summary>
-        public static string ConvertToFixedWidthString(MesgType mesgType)
+        public static string ConvertToFixedWidthString(this MesgType mesgType)
 		{
 			switch (mesgType)
 			{
@@ -179,6 +196,22 @@ namespace MosaicLib
 			}
 		}
 
+        /// <summary>
+        /// Convert extension method that can be used to convert a System.Diagnostics.TraceLevel to a MesgType
+        /// </summary>
+        public static MesgType ConvertToMesgType(this System.Diagnostics.TraceLevel traceLevel, MesgType verboseLevel = MesgType.Debug, MesgType defaultLevel = MesgType.Error)
+        {
+            switch (traceLevel)
+            {
+                case System.Diagnostics.TraceLevel.Off: return MesgType.None;
+                case System.Diagnostics.TraceLevel.Error: return MesgType.Error;
+                case System.Diagnostics.TraceLevel.Warning: return MesgType.Warning;
+                case System.Diagnostics.TraceLevel.Info: return MesgType.Info;
+                case System.Diagnostics.TraceLevel.Verbose: return verboseLevel;
+                default: return defaultLevel;
+            }
+        }
+
 		#endregion
 
 		//-------------------------------------------------------------------
@@ -204,7 +237,7 @@ namespace MosaicLib
 		/// </remarks>
 
         [DataContract(Namespace=MosaicLib.Constants.LoggingNameSpace)]
-		public struct MesgTypeMask
+		public struct MesgTypeMask : IEquatable<MesgTypeMask>
 		{
 			/// <summary>Enum defines how a MesgType is used.  Bit is as a single bit, Level is as a mask for all types at or above the given level</summary>
 			public enum MaskType
@@ -215,16 +248,29 @@ namespace MosaicLib
 				Level			
 			}
 
-            /// <summary>Standard constructor for a bit type MesgTypeMask</summary>
-			public MesgTypeMask(MesgType mesgType) : this(mesgType, MaskType.Bit) { }
+            /// <summary>Constructor for mask of given type (Bit or Level) for given MesgType.  <paramref name="maskType"/> defaults to Bit</summary>
+			public MesgTypeMask(MesgType mesgType, MaskType maskType = MaskType.Bit) 
+                : this(ConvertToBitMask(mesgType, maskType)) 
+            { }
 
-            /// <summary>Constructor for mask of given type (Bit or Level) for given MesgType</summary>
-			public MesgTypeMask(MesgType mesgType, MaskType maskType) : this(ConvertToBitMask(mesgType, maskType)) { }
+            /// <summary>Constructor for mask with <paramref name="maskBits"/> specified explicitly</summary>
+            public MesgTypeMask(int maskBits) 
+            { 
+                this.maskBits = maskBits; 
+            }
+
+            /// <summary>Constructor for parsing from a string version</summary>
+            public MesgTypeMask(string parseFromStr)
+            {
+                maskBits = parseFromStr.TryParse(fallbackValue: default(MesgTypeMask)).MaskBits;
+            }
 
             /// <summary>Returns new MesgTypeMask containing the logical or of the masks on the left and right sides</summary>
             public static MesgTypeMask operator |(MesgTypeMask lhs, MesgTypeMask rhs) { return new MesgTypeMask(lhs.maskBits | rhs.maskBits); }
             /// <summary>Returns new MesgTypeMask containing the logical and of the masks on the left and right sides</summary>
             public static MesgTypeMask operator &(MesgTypeMask lhs, MesgTypeMask rhs) { return new MesgTypeMask(lhs.maskBits & rhs.maskBits); }
+            /// <summary>Returns new MesgTypeMask containing the logical exclusive or of the masks on the left and right sides</summary>
+            public static MesgTypeMask operator ^(MesgTypeMask lhs, MesgTypeMask rhs) { return new MesgTypeMask(lhs.maskBits ^ rhs.maskBits); }
             /// <summary>Returns new MesgTypeMask containing the logical inverse (compliment) of the given mask (on the right of the operator)</summary>
             public static MesgTypeMask operator ~(MesgTypeMask rhs) { return new MesgTypeMask(~rhs.maskBits); }
 
@@ -236,6 +282,10 @@ namespace MosaicLib
             public override bool Equals(object rhs) { return (rhs != null && rhs is MesgTypeMask && maskBits == ((MesgTypeMask)rhs).maskBits); }
             /// <summary>Provided for consistency</summary>
             public override int GetHashCode() { return maskBits.GetHashCode(); }
+
+            /// <summary>IEquatable{LogGate} implementation methods.  Returns true if this gate object has the same MaskBits contents as the other gate object has.</summary>
+            public bool Equals(MesgTypeMask other) { return maskBits.Equals(other.maskBits); }
+
 
             /// <summary>Returns true if the mask includes the given mesg type.</summary>
             public bool IsTypeEnabled(MesgType testType) { return IsTypeEnabled(testType, MaskType.Bit); }
@@ -251,19 +301,8 @@ namespace MosaicLib
             /// <summary>Returns true if all of the given bits in testBits are also set in this object's mask</summary>
             public bool AreAllTestBitsEnabled(int testBits) { return (testBits == (maskBits & testBits)); }
 
-            /// <summary>Constructor for mask with initialBits specified explicitly</summary>
-            public MesgTypeMask(int initialBits) { maskBits = initialBits; }
-
-            /// <summary>Constructor for parsing from a string version</summary>
-            public MesgTypeMask(string parseStr) : this()
-            {
-                MesgTypeMask mtm;
-                if (TryParse(parseStr, out mtm))
-                    maskBits = mtm.maskBits;
-            }
-
-            /// <summary>Helper property for unit testing.  This property is not expected to be applicable for general use.</summary>
-            public int MaskBits { get { return maskBits; } }
+            /// <summary>Gives caller get/set access to the underlying bit mask.  Helper property for unit testing.</summary>
+            public int MaskBits { get { return maskBits; } set { maskBits = value; } }
 
             /// <summary>Returns a mask derived from the given mesgType and maskType.</summary>
             /// <param name="mesgType">Defines the mesg type enum value from which the mask is derived.</param>
@@ -366,28 +405,11 @@ namespace MosaicLib
                 };
 
             /// <summary>Provides a method that will attempt to generate a MesgTypeMask from a given string resulting from calling ToString on another MesgTypeMask.  Returns true if the original could be reconstructed or false if the string was not recognized and was not decidable.</summary>
-            public static bool TryParse(string s, out MesgTypeMask mtm)
+            public static bool TryParse(string str, out MesgTypeMask mtm)
             {
-                int maskBits = 0;
-                bool success = false;
-                Utils.StringScanner scan = new MosaicLib.Utils.StringScanner(s);
-
-                string name = scan.ExtractToken(MosaicLib.Utils.TokenType.AlphaNumeric, false);
-                if (scan.Char == '+')
-                {
-                    name = name + scan.Char;
-                    scan.Idx++;
-                }
-
-                if (Utils.StringScanner.FindTokenValueByName(name, MesgTypeMaskNameMap, out maskBits) && (scan.IsAtEnd || scan.Char == '['))    // ignore trailing [$hh] if it is present
-                    success = true;
-                else if (name == "Custom" && scan.MatchToken("[$", false, false) && scan.ParseHexValue(out maskBits, 1, 8, false, false, false) && scan.MatchToken("]", false, false) && scan.IsAtEnd)
-                    success = true;
-
-                mtm = new MesgTypeMask(maskBits);
-                return success;
+                return str.TryParse(out mtm, fallbackValue: default(MesgTypeMask));
             }
-		}
+        }
 
 		/// <summary>
 		/// This struct is a container for a MesgTypeMask which is variation on the MesgTypeMask with the simple constructor set to use the 
@@ -395,19 +417,31 @@ namespace MosaicLib
 		/// </summary>
 
         [DataContract(Namespace = MosaicLib.Constants.LoggingNameSpace)]
-        public struct LogGate
+        public struct LogGate : IEquatable<LogGate>
 		{
             /// <summary>Standard constructor to build a level type mask (as opposed to a bit type mask)</summary>
-			public LogGate(MesgType mesgType) { mask = new MesgTypeMask(mesgType, MesgTypeMask.MaskType.Level); }
+			public LogGate(MesgType mesgType, MesgTypeMask.MaskType maskType = Logging.MesgTypeMask.MaskType.Level) 
+            { 
+                mask = new MesgTypeMask(mesgType, maskType); 
+            }
+
             /// <summary>Copy constructor</summary>
-            public LogGate(LogGate rhs) : this(rhs.mask) { }
+            public LogGate(LogGate other) 
+                : this(other.mask) 
+            { }
+
             /// <summary>Copy constructor from a MesgTypeMask</summary>
-            public LogGate(MesgTypeMask rhs) { mask = rhs; }
+            public LogGate(MesgTypeMask mtm) 
+            { 
+                mask = mtm; 
+            }
 
             /// <summary>Returns new LogGate containing the logical or of the masks on the left and right sides</summary>
 			public static LogGate operator |(LogGate lhs, LogGate rhs) { return new LogGate(lhs.mask | rhs.mask); }
             /// <summary>Returns new LogGate containing the logical and of the masks on the left and right sides</summary>
 			public static LogGate operator &(LogGate lhs, LogGate rhs) { return new LogGate(lhs.mask & rhs.mask); }
+            /// <summary>Returns new LogGate containing the logical exclusive or of the masks on the left and right sides</summary>
+            public static LogGate operator ^(LogGate lhs, LogGate rhs) { return new LogGate(lhs.mask ^ rhs.mask); }
             /// <summary>Returns new LogGate containing the logical inverse (compliment) of the given mask (on the right of the operator)</summary>
 			public static LogGate operator ~(LogGate lhs) { return new LogGate(~lhs.mask); }
 
@@ -420,6 +454,9 @@ namespace MosaicLib
             /// <summary>Provided for consistency</summary>
             public override int GetHashCode() { return mask.GetHashCode(); }
 
+            /// <summary>IEquatable{LogGate} implementation methods.  Returns true if this gate object has the same MaskBits contents as the other gate object has.</summary>
+            public bool Equals(LogGate other) { return mask.Equals(other.mask); }
+
             /// <summary>Returns true if the mask includes the given mesg type.</summary>
             public bool IsTypeEnabled(MesgType testType) { return mask.IsTypeEnabled(testType, MesgTypeMask.MaskType.Bit); }
 
@@ -428,10 +465,13 @@ namespace MosaicLib
             /// <summary>get/set property that gives external access to the underlying MesgTypeMask that this object contains and uses.</summary>
             public MesgTypeMask MesgTypeMask { get { return mask; } set { mask = value; } }
 
+            /// <summary>Gives caller get/set access to the underlying MesgTypeMask bit mask.</summary>
+            public int MaskBits { get { return mask.MaskBits; } set { mask.MaskBits = value; } }
+
             /// <summary>Provide added debugging support.</summary>
             public override string ToString()
             {
-                return ToString(false);
+                return ToString(allowTerseVersion: false);
             }
 
             /// <summary>Provide added debugging support.  Then allowTerseVersion is true, this method can return strings like "Debug", etc. in place of the longer versions.</summary>
@@ -478,32 +518,18 @@ namespace MosaicLib
             /// Provides a method that will attempt to generate a LogGate from a given string resulting from calling ToString on another LogGate.  
             /// Returns true if the original could be reconstructed or false if the string was not recognized or it could not otherwise be decoded.
             /// </summary>
-            public bool TryParse(string valueStr)
+            public bool TryParse(string str)
             {
-                LogGate logGate = this;
+                LogGate logGate = default(LogGate);
+                bool success = str.TryParse(out logGate, fallbackValue: this);
 
-                if (Utils.StringScanner.FindTokenValueByName(valueStr, LogGateNameMap, out logGate))
-                {
+                if (success)
                     mask = logGate.mask;
-                    return true;
-                }
 
-                Utils.StringScanner scan = new MosaicLib.Utils.StringScanner(valueStr);
-                if (scan.MatchToken("LogGate:", false, false, false, MosaicLib.Utils.TokenType.ToNextWhiteSpace))
-                {
-                    MesgTypeMask mtm = mask;
-
-                    if (MesgTypeMask.TryParse(scan.Rest, out mtm))
-                    {
-                        mask = mtm;
-                        return true;
-                    }
-                }
-
-                return false;
+                return success;
             }
 
-            /// <summary>Static LogGate that has no message types enabled.</summary>
+            /// <summary>Static LogGate that has no message types enabled. [0x0000]</summary>
             public static LogGate None { get { return new LogGate(MesgType.None); } }
             /// <summary>Static LogGate that has all Error and higher message types enabled.</summary>
             public static LogGate Error { get { return new LogGate(MesgType.Error); } }
@@ -519,16 +545,78 @@ namespace MosaicLib
             public static LogGate Trace { get { return new LogGate(MesgType.Trace); } }
             /// <summary>Static LogGate that has all message types enabled.</summary>
             public static LogGate All { get { return new LogGate(MesgType.All); } }
-		}
+
+            #region cast operators
+
+            /// <summary>
+            /// Cast operator for explicit conversion from a ValueContainer to a LogGate.  Supports <paramref name="vc"/> containing an integer or a supported (and parsable) string representation.
+            /// </summary>
+            /// <exception cref="MosaicLib.Modular.Common.ValueContainerGetValueException">may be thrown if either of the underlying GetValue calls generate an conversion exception.</exception>
+            /// <exception cref="System.InvalidCastException">thrown if the given string cannot be parsed as a LogGate using LogGate.TryParse.</exception>
+            public static explicit operator LogGate(ValueContainer vc)
+            {
+                if (vc.cvt.IsInteger(includeSigned: true, includeUnsigned: true))
+                    return (LogGate)vc.GetValue<int>(rethrow: true);
+                else
+                    return (LogGate)vc.GetValue<string>(rethrow: true);
+            }
+
+            /// <summary>
+            /// Cast operator for explicit conversion to ValueContainer
+            /// </summary>
+            public static explicit operator ValueContainer(LogGate logGate)
+            {
+                return new ValueContainer((string) logGate);
+            }
+
+            /// <summary>
+            /// Cast operator for explicit conversion from a string to a LogGate - uses LogGate.TryParse.
+            /// </summary>
+            /// <exception cref="System.InvalidCastException">thrown if the given string cannot be parsed as a LogGate using LogGate.TryParse.</exception>
+            public static explicit operator LogGate(string str)
+            {
+                LogGate logGate = default(LogGate);
+                if (logGate.TryParse(str))
+                    return logGate;
+
+                throw new System.InvalidCastException("No valid cast to LogGate found for value {0}".CheckedFormat(new ValueContainer(str)));
+            }
+
+            /// <summary>
+            /// Cast operator for explicit conversion to string
+            /// </summary>
+            public static explicit operator string(LogGate logGate)
+            {
+                return logGate.ToString(allowTerseVersion: true);
+            }
+
+            /// <summary>
+            /// Cast operator for explicit conversion from int <paramref name="maskBits"/> to a LogGate
+            /// </summary>
+            public static explicit operator LogGate(int maskBits)
+            {
+                return new LogGate() { MaskBits = maskBits };
+            }
+
+            /// <summary>
+            /// Cast operator for explicit conversion to int
+            /// </summary>
+            public static explicit operator int(LogGate logGate)
+            {
+                return logGate.MaskBits;
+            }
+
+            #endregion
+        }
 
 		#endregion
 
 		//-------------------------------------------------------------------
 		#region LoggerID
 
-        /// <summary>Special value used as a LoggerID to indicate that no logger is identified</summary>
+        /// <summary>Special value used as a LoggerID to indicate that no logger is identified (-1)</summary>
 		public const int LoggerID_Invalid = -1;
-        /// <summary>Special value used as a LoggerID to cover specific internal handling cases.</summary>
+        /// <summary>Special value used as a LoggerID to cover specific internal handling cases. (-2)</summary>
         public const int LoggerID_InternalLogger = -2;
 
         /// <summary>Returns true if the given lid is >= 0</summary>
@@ -554,19 +642,17 @@ namespace MosaicLib
             /// <summary>Query method to use the LogGate to determine if a given MesgType is currently enabled.</summary>
             bool IsTypeEnabled(MesgType testType);
 
-            /// <summary>Propery that is set to true if this Logger should record stack frames for source file and line number extraction.</summary>
+            /// <summary>Recording of source stack frames is no longer supported.</summary>
+            [Obsolete("Support for recording File and Line has been removed.  Use of this property is no longer supported. (2017-07-21)")]
             bool RecordSourceStackFrame { get; }
 
-            /// <summary>Determines allocation and release style for individual messages.</summary>
-            /// <remarks>
-            /// In LogMessageHandlers, this property indicates if the handler supports use of reference counted release strategy for the messages it handles (or not).  Some handlers may not support this and as such will prevent their loggers from using pooled log messages.
-            /// In Loggers, this property determines how the distribution system will allocate each message used by the logger.  If the property is true then pooled messages may be used for internally allocated and emitted used messages, otherwise a GC based message allocation and release approach is used.
-            /// </remarks>
+            /// <summary>Pooling of LogMessages has been removed.  This property is no longer supported.</summary>
+            [Obsolete("Pooling of LogMessages has been removed.  This property is no longer supported. (2016-12-22)")]
             bool SupportsReferenceCountedRelease { get; }
 		}
 
         /// <summary>Implement standard storage object for supporting the ILoggerConfig interface.  These objects are used to define and control logging for specific groups of loggers and log message handlers.</summary>
-		public struct LoggerConfig : ILoggerConfig
+		public struct LoggerConfig : ILoggerConfig, IEquatable<ILoggerConfig>
 		{
             // all LoggerConfig objects are constructed using default constructor.  Client may set properties using post CTOR {} notation.
 
@@ -577,8 +663,6 @@ namespace MosaicLib
                 GroupName = rhs.GroupName;
                 LogGate = rhs.LogGate;
                 LogGateIncrease = rhs.LogGateIncrease;
-                RecordSourceStackFrame = rhs.RecordSourceStackFrame;
-                SupportsReferenceCountedRelease = rhs.SupportsReferenceCountedRelease;
             }
 
             /// <summary>Name of corresponding Logger Group.  May be empty if no group is associated.  For LogMessageHandlers, this name will be derived from the Handler's name</summary>
@@ -593,22 +677,30 @@ namespace MosaicLib
             /// <summary>Query method to use the LogGate to determine if a given MesgType is currently enabled.</summary>
             public bool IsTypeEnabled(MesgType testType) { return LogGate.IsTypeEnabled(testType); }
 
-            /// <summary>Property that is set to true if this Logger should record stack frames for source file and line number extraction.</summary>
-            public bool RecordSourceStackFrame { get; set; }    // synonym for recordFileAndLine;            /// <summary></summary>
+            /// <summary>Recording of source stack frames is no longer supported.</summary>
+            [Obsolete("Support for recording File and Line has been removed.  Use of this property is no longer supported. (2017-07-21)")]
+            public bool RecordSourceStackFrame { get { return false; } set { } } 
 
-            /// <summary>Determines allocation and release style for individual messages.</summary>
-            /// <remarks>
-            /// In LogMessageHandlers, this property indicates if the handler supports use of reference counted release strategy for the messages it handles (or not).  Some handlers may not support this and as such will prevent their loggers from using pooled log messages.
-            /// In Loggers, this property determines how the distribution system will allocate each message used by the logger.  If the property is true then pooled messages may be used for internally allocated and emitted used messages, otherwise a GC based message allocation and release approach is used.
-            /// </remarks>
-            public bool SupportsReferenceCountedRelease { get; set; }
+            /// <summary>Pooling of LogMessages has been removed.  This property is no longer supported.</summary>
+            [Obsolete("Pooling of LogMessages has been removed.  This property is no longer supported. (2016-12-22)")]
+            public bool SupportsReferenceCountedRelease { get { return false; } set { } }
+
+            /// <summary>Returns true if this object has the same contents as the given <paramref name="other"/> object.</summary>
+            public bool Equals(ILoggerConfig other)
+            {
+                return (other != null &&
+                        GroupName == other.GroupName &&
+                        LogGate == other.LogGate &&
+                        LogGateIncrease == other.LogGateIncrease
+                        );
+            }
 
             /// <summary>Provide added debugging support using override for LoggerConfig.ToString() method.</summary>
             public override string ToString()
             {
-                string logGateIncreaseStr = ((LogGateIncrease == LogGate.None) ? "" : " incr:{0}".CheckedFormat(LogGateIncrease));
+                string logGateIncreaseStr = ((LogGateIncrease == LogGate.None) ? "" : " incr:{0}".CheckedFormat(LogGateIncrease.ToString(true)));
  
-                return Utils.Fcns.CheckedFormat("Grp:'{0}' {1}{2}{3}{4}", GroupName, LogGate, logGateIncreaseStr, (RecordSourceStackFrame ? " +FL" : ""), (SupportsReferenceCountedRelease ? " +RefRel" : ""));
+                return Utils.Fcns.CheckedFormat("Grp:'{0}' {1}{2}", GroupName, LogGate.ToString(true), logGateIncreaseStr);
             }
 
             /// <summary>
@@ -621,8 +713,6 @@ namespace MosaicLib
                     GroupName = lhs.GroupName,
                     LogGate = (lhs.LogGate | rhs.LogGate),
                     LogGateIncrease = (lhs.LogGateIncrease | rhs.LogGateIncrease),
-                    RecordSourceStackFrame = (lhs.RecordSourceStackFrame | rhs.RecordSourceStackFrame),
-                    SupportsReferenceCountedRelease = (lhs.SupportsReferenceCountedRelease | rhs.SupportsReferenceCountedRelease)
                 }; 
             }
 
@@ -636,8 +726,6 @@ namespace MosaicLib
                     GroupName = lhs.GroupName,
                     LogGate = (lhs.LogGate & rhs.LogGate),
                     LogGateIncrease = lhs.LogGateIncrease,      // just keep the existing increase, do not reduce it using the value in the rhs.
-                    RecordSourceStackFrame = (lhs.RecordSourceStackFrame & rhs.RecordSourceStackFrame),
-                    SupportsReferenceCountedRelease = (lhs.SupportsReferenceCountedRelease & rhs.SupportsReferenceCountedRelease)
                 };
             }
 
@@ -651,22 +739,26 @@ namespace MosaicLib
                     GroupName = lhs.GroupName,
                     LogGate = (lhs.LogGate & rhs),
                     LogGateIncrease = lhs.LogGateIncrease,
-                    RecordSourceStackFrame = lhs.RecordSourceStackFrame,
-                    SupportsReferenceCountedRelease = lhs.SupportsReferenceCountedRelease,
                 };
             }
 
-            private static LoggerConfig none = new LoggerConfig() { LogGate = LogGate.None, RecordSourceStackFrame = false, SupportsReferenceCountedRelease = true };
-            private static LoggerConfig allWithFL = new LoggerConfig() { LogGate = LogGate.All, RecordSourceStackFrame = true, SupportsReferenceCountedRelease = true };
-            private static LoggerConfig allNoFL = new LoggerConfig() { LogGate = LogGate.All, RecordSourceStackFrame = false, SupportsReferenceCountedRelease = true };
-
-            /// <summary>Returns LoggerConfig with LogGate = LogGate.None, RecordSourceStackFrame = false, SupportsReferenceCountedRelease = true</summary>
+            /// <summary>Returns LoggerConfig with LogGate = LogGate.None</summary>
 			public static LoggerConfig None { get { return none; } }
-            /// <summary>Returns LoggerConfig with LogGate = LogGate.All, RecordSourceStackFrame = true, SupportsReferenceCountedRelease = true</summary>
-            public static LoggerConfig AllNoFL { get { return allNoFL; } }
-            /// <summary>Returns LoggerConfig with LogGate = LogGate.All, RecordSourceStackFrame = false, SupportsReferenceCountedRelease = true</summary>
-            public static LoggerConfig AllWithFL { get { return allWithFL; } }
-		}
+
+            /// <summary>Returns LoggerConfig with LogGate = LogGate.All</summary>
+            public static LoggerConfig All { get { return all; } }
+
+            /// <summary>Returns LoggerConfig with LogGate = LogGate.All</summary>
+            [Obsolete("Support for recording File and Line has been removed.  Please use the All property in its place. (2017-07-21)")]
+            public static LoggerConfig AllNoFL { get { return all; } }
+
+            /// <summary>Returns LoggerConfig with LogGate = LogGate.All</summary>
+            [Obsolete("Support for recording File and Line has been removed.  Please use the All property in its place. (2017-07-21)")]
+            public static LoggerConfig AllWithFL { get { return all; } }
+
+            private static LoggerConfig none = new LoggerConfig() { LogGate = LogGate.None };
+            private static LoggerConfig all = new LoggerConfig() { LogGate = LogGate.All };
+        }
 
         /// <summary> class used by distribution system to generate and distribute the sequenced LoggerConfig values that are observed using the SequencedLoggerConfigObserver objects. </summary>
 		public class SequencedLoggerConfigSource
@@ -724,16 +816,23 @@ namespace MosaicLib
 
             /// <summary>Returns GroupName from cached copy from LoggerConfig Source</summary>
 			public String GroupName { get { return LoggerConfig.GroupName; } }
+
             /// <summary>Returns LogGate from cached copy from LoggerConfig Source</summary>
             public LogGate LogGate { get { return LoggerConfig.LogGate; } }
+
             /// <summary>Gives access to a LogGate object which requests all corresponding loggers to increase their local gate level using this value..</summary>
             public LogGate LogGateIncrease { get { return LoggerConfig.LogGateIncrease; } }
+
             /// <summary>Calls IsTypeEnabled on cached copy from LoggerConfig Source</summary>
             public bool IsTypeEnabled(MesgType testType) { return LoggerConfig.IsTypeEnabled(testType); }
+
             /// <summary>Returns RecordSourceStackFrame from cached copy from LoggerConfig Source</summary>
-            public bool RecordSourceStackFrame { get { return LoggerConfig.RecordSourceStackFrame; } }
-            /// <summary>Returns SupportsReferenceCountedRelease from cached copy from LoggerConfig Source</summary>
-            public bool SupportsReferenceCountedRelease { get { return LoggerConfig.SupportsReferenceCountedRelease; } }
+            [Obsolete("Support for recording File and Line has been removed.  Use of this property is no longer supported. (2017-07-21)")]
+            public bool RecordSourceStackFrame { get { return false; } }
+
+            /// <summary>Pooling of LogMessages has been removed.  This property is no longer supported.</summary>
+            [Obsolete("Pooling of LogMessages has been removed.  This property is no longer supported. (2016-12-22)")]
+            public bool SupportsReferenceCountedRelease { get { return false; } }
 		}
 
 		#endregion
@@ -751,10 +850,11 @@ namespace MosaicLib
 		/// </remarks>
 		public class LoggerSourceInfo
 		{
-			private static readonly Utils.ISequencedObjectSource<LoggerConfig, Int32> allLoggerConfigSource = new SequencedLoggerConfigSource(LoggerConfig.AllWithFL).LoggerConfigSource;
+			private static readonly Utils.ISequencedObjectSource<LoggerConfig, Int32> allLoggerConfigSource = new SequencedLoggerConfigSource(LoggerConfig.All).LoggerConfigSource;
 
             /// <summary>Constructor:  Requires loggerID and loggerName</summary>
 			public LoggerSourceInfo(int loggerID, string loggerName) : this(loggerID, loggerName, allLoggerConfigSource) { }
+
             /// <summary>Constructor:  Accepts loggerID, loggerName, and an ISequencedObjectSource{LoggerConfig, Int32}</summary>
             public LoggerSourceInfo(int loggerID, string loggerName, Utils.ISequencedObjectSource<LoggerConfig, Int32> loggerConfigSource) 
 			{
@@ -767,32 +867,46 @@ namespace MosaicLib
 			public LoggerSourceInfo()
 			{
 				ID = LoggerID_Invalid;
-				Name = "[INVALID]";
+				Name = "_EmptyLSI_";
                 LoggerConfigSource = allLoggerConfigSource;
 			}
 
             /// <summary>Gives the LoggerID for the Logger with this Name</summary>
             public int ID { get; private set; }
+
             /// <summary>Gives the Logger Name for this Logging Source.  Usually this is a component name or other object ID and/or path name.</summary>
             public string Name { get; private set; }
+
             /// <summary>Gives the ISequencedObjectSource{LoggerConfig, Int32} that will be used by Logger instances to track logging configuration changes made in the distribution system.</summary>
             public Utils.ISequencedObjectSource<LoggerConfig, Int32> LoggerConfigSource { get; private set; }
+
             /// <summary>Returns true if the ID is valid, the Name is neither null nor empty and the LoggerConfigSource is not null.</summary>
             public bool IsValid { get { return IsLoggerIDValid(ID) && !string.IsNullOrEmpty(Name) && LoggerConfigSource != null; } }
-		}
+
+            /// <summary>Returns a singleton empty object</summary>
+            public static LoggerSourceInfo Empty { get { return empty; } }
+            private static readonly LoggerSourceInfo empty = new LoggerSourceInfo();
+
+            /// <summary>debugging helper method</summary>
+            public override string ToString()
+            {
+                if (IsValid)
+                    return "LoggerSourceInfo: id:{0} name:'{1}' config:'{2}'".CheckedFormat(ID, Name, LoggerConfigSource.Object);
+                else
+                    return "LoggerSourceInfo: id:{0} name:'{1}' [NotValid]".CheckedFormat(ID, Name);
+            }
+        }
 
 		#endregion
 
 		//-------------------------------------------------------------------
 		#region LogMessage class and related definitions
 
-        /// <summary>The Message Seqeunce number used when there is no message.</summary>
+        /// <summary>The Message Seqeunce number used when there is no message. (0)</summary>
 		public const int NullMessageSeqNum = 0;
 
-        //-------------------------------------------------------------------
-
         /// <summary>This interface defines the publicly accessible properties and methods that a LogMessage provides for accessing its stored contents.</summary>
-        public interface ILogMessage
+        public interface ILogMessage : IEquatable<ILogMessage>
         {
             /// <summary>Returns the name of the sourcing logger object or a fixed string if there is no such object.</summary>
             string LoggerName { get; }
@@ -812,6 +926,9 @@ namespace MosaicLib
             /// <summary>Returns a, possibly null, byte array of binary data that is associated with this message.</summary>
             byte[] Data { get; }
 
+            /// <summary>True if the message has been given to the distribution system.</summary>
+            bool Emitted { get; }
+
             /// <summary>Returns the QpcTimeStamp at which this message was emitted or zero if it has not been emitted</summary>
             QpcTimeStamp EmittedQpcTime { get; }
 
@@ -824,184 +941,233 @@ namespace MosaicLib
             /// <summary>Returns the Win32 ThreadID (from kernel32.GetCurrentThreadID) of the thread that setup this message</summary>
             int Win32ThreadID { get; }
 
+            /// <summary>Returns the Name of the Thread that initially setup this message.</summary>
+            string ThreadName { get; }
+
             /// <summary>Returns the DataTime taken at the time the message was emitted or the empty DateTime if it has not bee emitted.</summary>
             DateTime EmittedDateTime { get; }
 
-            /// <summary>Method used to get the EmittedDataTime formatted as a standard string.</summary>
-            string GetFormattedDateTime();
-
             /// <summary>Method used to get the EmittedDataTime in one of the standard supported formats.</summary>
-            string GetFormattedDateTime(Utils.Dates.DateTimeFormat dtFormat);
+            string GetFormattedDateTime(Utils.Dates.DateTimeFormat dtFormat = Utils.Dates.DateTimeFormat.LogDefault);
         }
-
-        //-------------------------------------------------------------------
 
 		/// <summary>This class implements the public sharable container that is used for all information that is to be logged using this logging system.</summary>
 		/// <remarks>
 		/// Messages are generated from a specific source and also include:
-		///		a MesgType, a message string, an optional INamedValueSet, 
-		///		an optional reference to the stack frame from which the message was, originally, allocated and from which the
-		///		distribution system can get the file name an line number of the allocating code.
+		///		a MesgType, a message string, an optional INamedValueSet, and an optional data byte array
 		/// </remarks>
-
-        public class LogMessage : Utils.Pooling.RefCountedRefObjectBase<LogMessage>, ILogMessage
+        [DataContract(Namespace=Constants.LoggingNameSpace), Serializable]
+        public class LogMessage : ILogMessage
 		{
             /// <summary>Default constructor.</summary>
 			public LogMessage() 
             {
-                Reset();
+                ThreadID = -1;
+                Win32ThreadID = -1;
             }
 
-            /// <summary>Copy constructor - creates a duplicate of the given rhs</summary>
-            public LogMessage(LogMessage rhs) 
+            /// <summary>Copy constructor - creates a duplicate of the given <paramref name="other"/></summary>
+            public LogMessage(LogMessage other) 
             {
-                loggerSourceInfo = rhs.LoggerSourceInfo;
-                MesgType = rhs.MesgType;
-                mesg = rhs.Mesg;
-                mesgEscaped = rhs.mesgEscaped;
-                SourceStackFrame = rhs.SourceStackFrame;
-                nvs = rhs.nvs;
-                data = ((rhs.Data != null) ? (rhs.Data.Clone() as byte []) : null);
-                Emitted = rhs.Emitted;
-                EmittedDateTime = rhs.EmittedDateTime;
-                EmittedQpcTime = rhs.EmittedQpcTime;
-                SeqNum = rhs.SeqNum;
-                ThreadID = rhs.ThreadID;
-                Win32ThreadID = rhs.Win32ThreadID;
-                threadName = rhs.threadName;
+                _loggerSourceInfo = other._loggerSourceInfo;
+                _loggerID = other._loggerID;
+                _loggerName = other._loggerName;
+                MesgType = other.MesgType;
+                _mesg = other.Mesg;
+                _mesgEscaped = other._mesgEscaped;
+                _nvs = other._nvs;
+                _data = ((other.Data != null) ? (other.Data.Clone() as byte []) : null);
+                Emitted = other.Emitted;
+                _emittedQpcTime = other._emittedQpcTime;
+                EmittedDateTime = other.EmittedDateTime;
+                SeqNum = other.SeqNum;
+                ThreadID = other.ThreadID;
+                Win32ThreadID = other.Win32ThreadID;
+                _threadName = other._threadName;
             }
 
             /// <summary>Resets contents to default state</summary>
+            [Obsolete("This method will be deprecated as messages are no longer reused.  Please remove the use of this method [2017-12-19]")]
             public LogMessage Reset()
-            { 
-                ResetEmitted(); 
+            {
                 MesgType = MesgType.None; 
-                mesg = string.Empty;
-                mesgEscaped = null;
-                nvs = null;
-                SourceStackFrame = null; 
+                _mesg = string.Empty;
+                _mesgEscaped = null;
+                _nvs = null;
                 ThreadID = -1;
                 Win32ThreadID = -1;
-                ThreadName = null; 
+                ThreadName = null;
+                Emitted = false;
+                _emittedQpcTime = QpcTimeStamp.Zero;
+                EmittedDateTime = default(DateTime);
                 SeqNum = NullMessageSeqNum;
 
                 return this;
             }
 
-            /// <summary>Asserts that the message is in the not-emitted state.  Primarily used for enforcing that pool messages are recycled correctly.</summary>
+            /// <summary>
+            /// Asserts that the message is in the not-emitted state.  
+            /// Helps enforces that message contents cannot be changed after they have been emitted.
+            /// Primarily used for enforcing that pool messages are recycled correctly.
+            /// </summary>
             public LogMessage AssertNotEmitted(string caller) 
             { 
                 if (Emitted) 
-                    Utils.Asserts.TakeBreakpointAfterFault("AssertNotEmitted failed for:" + caller);
-
-                return this;
-            }
-
-            /// <summary>Sets up contents from a given source with no explicitly given Mesg</summary>
-            public LogMessage Setup(LoggerSourceInfo loggerSourceInfo, MesgType mesgType, System.Diagnostics.StackFrame sourceStackFrame)
-            {
-                Mesg = null;
-                this.loggerSourceInfo = loggerSourceInfo;
-                MesgType = mesgType;
-                SourceStackFrame = sourceStackFrame;
-                nvs = null;
-                SetThreadID();
+                    Utils.Asserts.TakeBreakpointAfterFault("AssertNotEmitted failed for: {0}".CheckedFormat(caller));
 
                 return this;
             }
 
             /// <summary>Sets up contents from a given source with an explicitly given Mesg</summary>
+            [Obsolete("The use of this method has been replaced by the version that does not provide a sourceStackFrame.  Recording of source stack frames has been deperated (2017-07-21)")]
             public LogMessage Setup(LoggerSourceInfo loggerSourceInfo, MesgType mesgType, string mesg, System.Diagnostics.StackFrame sourceStackFrame)
             {
-                Mesg = mesg;
-                this.loggerSourceInfo = loggerSourceInfo;
+                return Setup(loggerSourceInfo, mesgType, mesg);
+            }
+
+            /// <summary>Sets up contents from a given source with an explicitly given mesgType and an optional mesg, nvs, and data</summary>
+            public LogMessage Setup(LoggerSourceInfo loggerSourceInfo = null, MesgType mesgType = Logging.MesgType.None, string mesg = null, INamedValueSet nvs = null, byte [] data = null)
+            {
+                LoggerSourceInfo = loggerSourceInfo;
                 MesgType = mesgType;
-                SourceStackFrame = sourceStackFrame;
-                nvs = null;
+                Mesg = mesg;
+                _nvs = nvs.ConvertToReadOnly(mapNullToEmpty: false).MapEmptyToNull();
+                _data = data;
                 SetThreadID();
 
                 return this;
             }
 
-			// information about the message source
-			private LoggerSourceInfo loggerSourceInfo = null;					// messages all share a pointer to the same logger source id and string
-            /// <summary>Returns the LoggerSourceInfo of the logger that generated this message or null if message is in default state or no such source was given</summary>
-            public LoggerSourceInfo LoggerSourceInfo { get { return loggerSourceInfo; } }
+            /// <summary>
+            /// Debug helper method (this method is not intended for use in logging)
+            /// </summary>
+            public override string ToString()
+            {
+                return "{0} {1} {2}:{3}".CheckedFormat(Emitted ? "Emitted" : "NotEmitted", MesgType, LoggerName, MesgEscaped);
+            }
+
+            /// <summary>
+            /// Returns the LoggerSourceInfo of the logger that generated this message or null if message is in default state or no such source was given.
+            /// Messages all share a reference to the same logger source id and string if they all come from the same source id.
+            /// </summary>
+            public LoggerSourceInfo LoggerSourceInfo { get { return _loggerSourceInfo; } private set { _loggerSourceInfo = value; if (value != null && value.IsValid) { _loggerName = value.Name; _loggerID = value.ID; } } }
+            [NonSerialized]
+            private LoggerSourceInfo _loggerSourceInfo;
+
             /// <summary>Returns true if the current SourceInfo is non null.</summary>
-            public bool IsLoggerSourceInfoValid { get { return (loggerSourceInfo != null); } }
+            public bool IsLoggerSourceInfoValid { get { return (LoggerSourceInfo != null && LoggerSourceInfo.IsValid); } }
 
             /// <summary>Returns the LoggerID in the Log Distribution System for the LoggerSourceInfo or LoggerID_Invalid if there is no valid LoggerSourceInfo</summary>
-            public int LoggerID { get { return (IsLoggerSourceInfoValid ? loggerSourceInfo.ID : LoggerID_Invalid); } }
+            public int LoggerID { get { return _loggerID ?? LoggerID_Invalid; } }
+
+            [DataMember(Order = 100, Name = "LoggerID", IsRequired = false, EmitDefaultValue = false)]
+            private int? _loggerID = null;
+
             /// <summary>Returns the LoggerName for the logger reference in the given LoggerSourceInfo or a fixed string ("NULL_LOGGER") if there is none</summary>
-            public string LoggerName { get { return GetLoggerName("NULL_LOGGER"); } }
+            public string LoggerName { get { return (_loggerName ?? GetLoggerName("_NullLoggerName_")); } }
+
             /// <summary>helper method used to Get LoggerName where caller specifies the string to return when the message has no defined LoggerSourceInfo</summary>
-            public string GetLoggerName(string nullLoggerName) { return (IsLoggerSourceInfoValid ? loggerSourceInfo.Name : nullLoggerName); }
+            public string GetLoggerName(string nullLoggerName) { return (IsLoggerSourceInfoValid ? LoggerSourceInfo.Name : nullLoggerName); }
+
+            [DataMember(Order = 200, Name = "LoggerName", IsRequired = false, EmitDefaultValue = false)]
+            private string _loggerName = null;
 
 			// information about the actual event
 
             /// <summary>Returns the MesgType that the message was setup for or MesgType.None if the message has not been setup.</summary>
+            [DataMember(Order = 300, Name="MesgType", IsRequired = false, EmitDefaultValue = false)]
             public MesgType MesgType { get; private set; }
-
-			// the message text.
-			private string mesg = null;
 
             /// <summary>Returns the current Message Body.  Returns empty string if the message has not been given a body.  Setter allows the contained mesg to be updated, provided that the message has not been emitted.</summary>
             public string Mesg 
 			{ 
-				get { return (mesg ?? string.Empty); } 
-				set { AssertNotEmitted("Mesg property Set"); mesg = value; }
+				get { return (_mesg ?? string.Empty); } 
+				set { AssertNotEmitted("Mesg property Set"); _mesg = value; }
 			}
+
+            [DataMember(Order = 400, Name="Mesg", IsRequired=false, EmitDefaultValue=false)]
+            private string _mesg = null;
 
             /// <summary>Returns an escaped version the string body of the message or the empty string if none was given</summary>
             public string MesgEscaped
             {
                 get
                 {
-                    if (mesgEscaped == null)
-                        mesgEscaped = mesg.GenerateLoggingVersion();
+                    if (_mesgEscaped == null)
+                        _mesgEscaped = _mesg.GenerateLoggingVersion();
 
-                    return mesgEscaped;
+                    return _mesgEscaped;
                 }
             }
-
-            private string mesgEscaped = null;
+            [NonSerialized]
+            private string _mesgEscaped = null;
 
 			// the message data - an optional binary block of bytes
-
-			private byte [] data = null;
 
             /// <summary>Returns the current Message Data body as a block of bytes or null if there are none.  Setter allows the contained data body to be updated provided that the message has not been emitted. </summary>
             public byte[] Data
 			{
-				get { return data; }
-                set { AssertNotEmitted("Data property Set"); data = value; }
+				get { return _data; }
+                set 
+                { 
+                    AssertNotEmitted("Data property Set"); 
+                    _data = value; 
+                }
 			}
+            [DataMember(Order = 500, Name = "Data", IsRequired = false, EmitDefaultValue = false)]
+            private byte[] _data = null;
 
-			// the message can contain an INamedValueSet
-            private static readonly INamedValueSet emptyNVS = new NamedValueSet() { IsReadOnly = true };
-            private INamedValueSet nvs = null;
+            // the message can contain an INamedValueSet
 
             /// <summary>
             /// Getter returns a read-only instance of the, possibly empty, named value set that was given to this log message.
             /// Setter converts the given value from to be readonly (using the ConvertToReadOnly extension methods).  If the given value is null or is already readonly then it will be used by the LogMessage without change or cloning.
             /// </summary>
-            public INamedValueSet NamedValueSet { get { return nvs ?? emptyNVS; } set { AssertNotEmitted("NamedValueSet property Set"); nvs = value.ConvertToReadOnly(); } }
+            public INamedValueSet NamedValueSet 
+            { 
+                get { return _nvs ?? Modular.Common.NamedValueSet.Empty; } 
+                set 
+                { 
+                    AssertNotEmitted("NamedValueSet property Set"); 
+                    _nvs = value.ConvertToReadOnly(mapNullToEmpty: false).MapEmptyToNull(); 
+                } 
+            }
+            /// <summary>Returns raw _nvs field contents.  Used for logging to clarify cases where no NVS has been provided as seperate from case where an empty one has.</summary>
+            internal INamedValueSet Raw_nvs { get { return _nvs; } }
+
+            [DataMember(Order = 600, Name = "NVS", IsRequired = false, EmitDefaultValue = false)]
+            private NamedValueSet _nvs = null;
 
             /// <summary>Returns the System.Diagnostics.StackFrame from which the message was created/emitted.  May be null if SourceStackFrames are not being acquired.</summary>
-            public System.Diagnostics.StackFrame SourceStackFrame { get; private set; }
+            [Obsolete("Support for recording of stack frames for logging has been removed.  This property is no longer supported (2017-07-21)")]
+            public System.Diagnostics.StackFrame SourceStackFrame { get { return null; } }
 
 			// information about wether the message has been emitted and if so when it was emitted (qpc and local)
 
-            /// <summary>True if the message has been given to the distribution system.  Cleared after distribution is complete or the message has been cloned.</summary>
-            public bool Emitted { get; private set; }
+            /// <summary>True if the message has been given to the distribution system.</summary>
+            public bool Emitted { get { return _emitted; } private set { _emitted = value; _emittedDC = (value) ? (bool?)null : false; } }
+            [NonSerialized]
+            private bool _emitted;
+
+            [DataMember(Order = 700, Name = "Emitted", IsRequired = false, EmitDefaultValue = false)]
+            private bool? _emittedDC = false;
 
             /// <summary>Returns the QpcTimeStamp at which the message was first emitted. - non transferable between process spaces.</summary>
-            public QpcTimeStamp EmittedQpcTime { get; private set; }
+            public QpcTimeStamp EmittedQpcTime { get { return _emittedQpcTime; } private set { _emittedQpcTime = value; } }
+            [NonSerialized]
+            private QpcTimeStamp _emittedQpcTime;
+
+            [DataMember(Order = 700, Name = "EmittedAge", IsRequired = false, EmitDefaultValue = false)]
+            private double _emittedAge { get { return EmittedQpcTime.IsZero ? 0.0 : EmittedQpcTime.Age.TotalSeconds; } set { EmittedQpcTime = ((value == 0.0) ? QpcTimeStamp.Zero : QpcTimeStamp.Now + value.FromSeconds()); } }
 
             /// <summary>Returns the DataTime taken at the time the message was emitted or the empty DateTime if it has not bee emitted.</summary>
             public DateTime EmittedDateTime { get; private set; }
 
+            [DataMember(Order = 800, Name = "EmittedDateTime", IsRequired = false, EmitDefaultValue = false)]
+            private string _emittedDateTime { get { return EmittedDateTime.ToString("o"); } set { EmittedDateTime = DateTime.ParseExact(value, "o", null); } }
+
             /// <summary>Resets the message to the non-emitted state. - used during internal Logging infrastructure message recycling.</summary>
+            [Obsolete("This method will be deprecated as messages are no longer reused.  Please remove the use of this method [2017-12-19]")]
             LogMessage ResetEmitted()
 			{
 				Emitted = false;
@@ -1011,12 +1177,13 @@ namespace MosaicLib
                 return this;
 			}
 
-            /// <summary>Marks the message as having been emitted.</summary>
+            /// <summary>Marks the message as having been emitted.  This essentially makes the message read only.</summary>
             public LogMessage NoteEmitted() 
 			{ 
 				AssertNotEmitted("NoteEmitted call");
-                if (loggerSourceInfo == null)
-    				Utils.Asserts.TakeBreakpointAfterFault("NoteEmitted failed: SourceID == null");
+
+                if (LoggerSourceInfo == null)
+                    LoggerSourceInfo = LoggerSourceInfo.Empty;
 
                 Emitted = true;
 				EmittedQpcTime = QpcTimeStamp.Now;
@@ -1026,39 +1193,79 @@ namespace MosaicLib
 			}
 
             /// <summary>Returns the message Sequence number as assigned when the message was emitted.  May be used to determine when the message has been delivered from the distribution system.</summary>
+            [DataMember(Order = 900, Name = "SeqNum", IsRequired = false, EmitDefaultValue = false)]
             public int SeqNum { get; internal set; }
 
             /// <summary>Returns the ThreadID that initially setup this message.</summary>
+            [DataMember(Order = 1000, Name = "ThreadID", IsRequired = false, EmitDefaultValue = false)]
             public int ThreadID { get; private set; }
 
             /// <summary>Returns the Win32 ThreadID (from kernel32.GetCurrentThreadID) of the thread that setup this message</summary>
+            [DataMember(Order = 1100, Name = "Win32ThreadID", IsRequired = false, EmitDefaultValue = false)]
             public int Win32ThreadID { get; private set; }
 
-            private string threadName = null;
-            /// <summary>Returns the ThreadName that initially setup this message.</summary>
-            public string ThreadName { get { return threadName ?? String.Empty; } private set { threadName = value; } }
+            /// <summary>Returns the Name of the Thread that initially setup this message.</summary>
+            public string ThreadName { get { return _threadName ?? String.Empty; } private set { _threadName = value; } }
+            [DataMember(Order = 1200, Name = "ThreadName", IsRequired = false, EmitDefaultValue = false)]
+            private string _threadName = null;
 
             /// <summary>Method used to set the contained ThreadID and ThreadName during setup</summary>
             private LogMessage SetThreadID() 
             {
                 System.Threading.Thread currentThread = System.Threading.Thread.CurrentThread;
                 ThreadID = currentThread.ManagedThreadId;
-                threadName = currentThread.Name;
+                _threadName = currentThread.Name;
 
                 Win32ThreadID = Utils.Win32.GetCurrentThreadId();
 
                 return this;
             }
 
-            /// <summary>Method used to get the EmittedDataTime formatted as a standard string.</summary>
-            public string GetFormattedDateTime() { return GetFormattedDateTime(Utils.Dates.DateTimeFormat.LogDefault); }
-
             /// <summary>Method used to get the EmittedDataTime formatted in one of the standard supported formats.</summary>
-            public string GetFormattedDateTime(Utils.Dates.DateTimeFormat dtFormat) { return Utils.Dates.CvtToString(EmittedDateTime, dtFormat); }
+            public string GetFormattedDateTime(Utils.Dates.DateTimeFormat dtFormat = Utils.Dates.DateTimeFormat.LogDefault) 
+            { 
+                return Utils.Dates.CvtToString(EmittedDateTime, dtFormat); 
+            }
 
-            /// <summary>Internal method used to cleanup the contents of a message on release to the message pool for internally recycled messages in the distribution system.</summary>
-            protected override void PerformPostReleaseCleanup() { Reset(); } // provide non-default post release cleanup behavior
-		};
+            [OnDeserialized]
+            private void HandleOnDeserialized(StreamingContext context)
+            {
+                _emitted = _emittedDC ?? true;
+                if (_nvs != null && !_nvs.IsReadOnly)
+                    _nvs.IsReadOnly = true;
+
+                if (_emitted && EmittedQpcTime.IsZero)
+                    EmittedQpcTime = QpcTimeStamp.Now;
+            }
+
+            bool IEquatable<ILogMessage>.Equals(ILogMessage other)
+            {
+                return this.Equals(other, includeEmittedQpcTime: false);
+            }
+
+            /// <summary>
+            /// IEquatable{ILogMessage}.Equals implementation method - allows caller to indicate if emittedQpcTime should be included in comparison (defaults to false).
+            /// </summary>
+            public bool Equals(ILogMessage other, bool includeEmittedQpcTime = false)
+            {
+                bool edtEquals = (EmittedDateTime == other.EmittedDateTime);
+
+                return (other != null
+                    && SeqNum == other.SeqNum
+                    && LoggerName == other.LoggerName
+                    && MesgType == other.MesgType
+                    && Mesg == other.Mesg
+                    && NamedValueSet.Equals(other.NamedValueSet)
+                    && Data.IsEqualTo(other.Data)
+                    && Emitted == other.Emitted
+                    && (!includeEmittedQpcTime || EmittedQpcTime == other.EmittedQpcTime)
+                    && EmittedDateTime == other.EmittedDateTime
+                    && ThreadID == other.ThreadID
+                    && Win32ThreadID == other.Win32ThreadID
+                    && ThreadName == other.ThreadName
+                    );
+            }
+        };
 
 		#endregion
 
@@ -1088,6 +1295,12 @@ namespace MosaicLib
             /// <summary>Emit method variant.  If the Emitter IsEnabled then it will emit the given string using behavior defined by the actual implementation class.</summary>
             /// <param name="str">Gives the string message body to emit.</param>
             void Emit(string str);
+
+            /// <summary>EmitWith method.  If the Emitter IsEnabled then it will emit the given string using behavior defined by the actual implementation class.</summary>
+            /// <param name="str">Gives the string message body to emit.</param>
+            /// <param name="nvs">Gives the INamedValueSet that is to be included in the message (will get merged with any default NVS defined by logger)</param>
+            /// <param name="data">Gives the byte array data that is to be included in the message</param>
+            void EmitWith(string str, INamedValueSet nvs = null, byte[] data = null);
 
             /// <summary>Variant of CheckedFormat for the same parameter signature</summary>
             /// <summary>Emit method variant.  If the Emitter IsEnabled then it will format the given fmt and arg, using Fcns.CheckedFormat, and emit the resulting string.</summary>
@@ -1120,12 +1333,14 @@ namespace MosaicLib
             /// </summary>
             /// <param name="skipNStackFrames">Gives the number of additional stack frame to skip, from the one above this one, when acquiring a StackFrame to get the source file and line number from.</param>
             /// <param name="str">Gives the string message body to emit.</param>
+            [Obsolete("Support for recording source stack frames (for File and Line recording) has been removed.  Use of this method is no longer supported. (2017-07-21)")]
             void Emit(int skipNStackFrames, string str);
 
             /// <summary>Variant of CheckedFormat for the same parameter signature for nested use with offset distance to root caller for stack frame recording</summary>
             /// <param name="skipNStackFrames">Gives the number of additional stack frame to skip, from the one above this one, when acquiring a StackFrame to get the source file and line number from.</param>
             /// <param name="fmt">Gives the format string that will be passed to CheckedFormat</param>
             /// <param name="arg0">Gives the first argument object instance that will be formatted into a string in the resulting message</param>
+            [Obsolete("Support for recording source stack frames (for File and Line recording) has been removed.  Use of this method is no longer supported. (2017-07-21)")]
             void Emit(int skipNStackFrames, string fmt, object arg0);
 
             /// <summary>Variant of CheckedFormat for the same parameter signature for nested use with offset distance to root caller for stack frame recording</summary>
@@ -1133,6 +1348,7 @@ namespace MosaicLib
             /// <param name="fmt">Gives the format string that will be passed to CheckedFormat</param>
             /// <param name="arg0">Gives the first argument object instance that will be formatted into a string in the resulting message</param>
             /// <param name="arg1">Gives the second argument object instance that will be formatted into a string in the resulting message</param>
+            [Obsolete("Support for recording source stack frames (for File and Line recording) has been removed.  Use of this method is no longer supported. (2017-07-21)")]
             void Emit(int skipNStackFrames, string fmt, object arg0, object arg1);
 
             /// <summary>Variant of CheckedFormat for the same parameter signature for nested use with offset distance to root caller for stack frame recording</summary>
@@ -1141,12 +1357,14 @@ namespace MosaicLib
             /// <param name="arg0">Gives the first argument object instance that will be formatted into a string in the resulting message</param>
             /// <param name="arg1">Gives the second argument object instance that will be formatted into a string in the resulting message</param>
             /// <param name="arg2">Gives the third argument object instance that will be formatted into a string in the resulting message</param>
+            [Obsolete("Support for recording source stack frames (for File and Line recording) has been removed.  Use of this method is no longer supported. (2017-07-21)")]
             void Emit(int skipNStackFrames, string fmt, object arg0, object arg1, object arg2);
 
             /// <summary>Variant of CheckedFormat for the same parameter signature for nested use with offset distance to root caller for stack frame recording</summary>
             /// <param name="skipNStackFrames">Gives the number of additional stack frame to skip, from the one above this one, when acquiring a StackFrame to get the source file and line number from.</param>
             /// <param name="fmt">Gives the format string that will be passed to CheckedFormat</param>
             /// <param name="args">Gives the array of object instances that will be formatted into a strings in the resulting message</param>
+            [Obsolete("Support for recording source stack frames (for File and Line recording) has been removed.  Use of this method is no longer supported. (2017-07-21)")]
             void Emit(int skipNStackFrames, string fmt, params object[] args);
 
             /// <summary>Variant of CheckedFormat for the same parameter signature for nested use with offset distance to root caller for stack frame recording</summary>
@@ -1154,6 +1372,7 @@ namespace MosaicLib
             /// <param name="provider">Gives the culture specific IFormatProvider that will be used to convert individual Object instances into their string equivalents</param>
             /// <param name="fmt">Gives the format string that will be passed to CheckedFormat</param>
             /// <param name="args">Gives the array of object instances that will be formatted into a strings in the resulting message</param>
+            [Obsolete("Support for recording source stack frames (for File and Line recording) has been removed.  Use of this method is no longer supported. (2017-07-21)")]
             void Emit(int skipNStackFrames, IFormatProvider provider, string fmt, params object[] args);
         }
 
@@ -1170,6 +1389,11 @@ namespace MosaicLib
             /// Setter only property.  Passes the desired NamedValueSet that shall be given to all future log messages emitted by the message emitter implementation class that implements this interface.
             /// </summary>
             INamedValueSet DefaultNamedValueSet { set; }
+
+            /// <summary>
+            /// Setter only property.  Passes the desired merge behavior that shall be used when merging the DefaultNamedValueSet into any caller provided one.  Defaults to NamedValueSetMergeBehavior.AddNewItems.
+            /// </summary>
+            NamedValueMergeBehavior DefaultNamedValueSetMergeBehavior { set; }
         }
 
         #endregion
@@ -1188,14 +1412,19 @@ namespace MosaicLib
         {
             /// <summary>Returns a message emitter for Error messages from this logger</summary>
             IMesgEmitter Error { get; }
+
             /// <summary>Returns a message emitter for Warning messages from this logger</summary>
             IMesgEmitter Warning { get; }
+
             /// <summary>Returns a message emitter for Signif messages from this logger</summary>
             IMesgEmitter Signif { get; }
+
             /// <summary>Returns a message emitter for Info messages from this logger</summary>
             IMesgEmitter Info { get; }
+
             /// <summary>Returns a message emitter for Debug messages from this logger</summary>
             IMesgEmitter Debug { get; }
+
             /// <summary>Returns a message emitter for Trace messages from this logger</summary>
             IMesgEmitter Trace { get; }
 
@@ -1211,19 +1440,24 @@ namespace MosaicLib
             /// </summary>
             IMesgEmitter this[MesgType mesgType] { get; }
 
-            /// <summary>Allows the caller to specify the default NamedValueSet value that is to be attached to all LogMessages generated by the logger's emitter for the given mesgType</summary>
-            void SetDefaultNamedValueSetForEmitter(MesgType mesgType, INamedValueSet nvs);
+            /// <summary>Allows the caller to specify the default NamedValueSet value that is to be attached to all LogMessages generated by the logger's emitter for the given mesgType.  Supports call chaining.</summary>
+            IBasicLogger SetDefaultNamedValueSetForEmitter(MesgType mesgType, INamedValueSet nvs, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddNewItems);
+
+            /// <summary>Allows the caller to specify the default NamedValueSet value that is to be attached to all LogMessages generated by the logger's emitter for for all of the message types that match the given log gate.  Supports call chaining.</summary>
+            IBasicLogger SetDefaultNamedValueSetForEmitter(LogGate logGate, INamedValueSet nvs, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddNewItems);
 
             /// <summary>
             /// Helper method: Gets the current System.Diagnostics.StackFrame of the caller (up skipNStackFrames levels from the level above this method)
             /// <para/>Returns created StackFrame if stack frame tagging support is currently enabled or null if it is not
             /// </summary>
             /// <param name="skipNStackFrames">Gives the number of additional stack frame to skip, from the one above this one, when acquiring a StackFrame to get the source file and line number from.</param>
+            [Obsolete("Support for recording stack frame during logging has been removed.  Use of this method is no longer supported. (2017-07-21)")]
             System.Diagnostics.StackFrame GetStackFrame(int skipNStackFrames);
 
             /// <summary>
             /// This property returns true if this logger is currently configured to record stack frames
             /// </summary>
+            [Obsolete("Support for recording stack frame during logging has been removed.  Use of this method is no longer supported. (2017-07-21)")]
             bool IsRecordingSourceStackFrame { get; }
         }
 
@@ -1266,13 +1500,15 @@ namespace MosaicLib
             /// <summary>returns true if the given message type is currently enabled.</summary>
             bool IsTypeEnabled(MesgType mesgType);
 
-            /// <summary>returns a new message with type, source, file and line filled in.  Message will be empty.</summary>
-            LogMessage GetLogMessage(MesgType mesgType, System.Diagnostics.StackFrame sourceStackFrame);
+            /// <summary>returns a new message with type, source, message, file and line filled in (as appropriate and enabled).</summary>
+            LogMessage GetLogMessage(MesgType mesgType, string mesg = null, INamedValueSet nvs = null, byte [] data = null);
+
+            /// <summary>returns a new message with type, source, message, file and line filled in (as appropriate and enabled).</summary>
+            [Obsolete("The sourceStackFrame parameter is no longer supported.  Please use the variant of this method without this parameter.  (2017-07-21)")]
+            LogMessage GetLogMessage(MesgType mesgType, string mesg, System.Diagnostics.StackFrame sourceStackFrame, int skipNStackFrames = 0);
 
             /// <summary>returns a new message with type, source, message, file and line filled in.</summary>
-            LogMessage GetLogMessage(MesgType mesgType, string mesg, System.Diagnostics.StackFrame sourceStackFrame);
-
-            /// <summary>returns a new message with type, source, message, file and line filled in.</summary>
+            [Obsolete("The sourceStackFrame and allocateFromDist parameters are no longer supported.  Please use the variant of this method without these parameters.  (2016-12-22, 2017-07-21)")]
             LogMessage GetLogMessage(MesgType mesgType, string mesg, System.Diagnostics.StackFrame sourceStackFrame, bool allocatedFromDist);
 
             /// <summary>Emits the message.  Takes ownership by setting the caller's reference to null.</summary>
@@ -1339,14 +1575,19 @@ namespace MosaicLib
 
             /// <summary>Returns a message emitter for Error messages from this logger</summary>
             public IMesgEmitter Error { get { return (error ?? (error = Emitter(MesgType.Error))); } }
+            
             /// <summary>Returns a message emitter for Warning messages from this logger</summary>
             public IMesgEmitter Warning { get { return (warning ?? (warning = Emitter(MesgType.Warning))); } }
+            
             /// <summary>Returns a message emitter for Signif messages from this logger</summary>
             public IMesgEmitter Signif { get { return (signif ?? (signif = Emitter(MesgType.Signif))); } }
+            
             /// <summary>Returns a message emitter for Info messages from this logger</summary>
             public IMesgEmitter Info { get { return (info ?? (info = Emitter(MesgType.Info))); } }
+            
             /// <summary>Returns a message emitter for Debug messages from this logger</summary>
             public IMesgEmitter Debug { get { return (debug ?? (debug = Emitter(MesgType.Debug))); } }
+
             /// <summary>Returns a message emitter for Trace messages from this logger</summary>
             public IMesgEmitter Trace { get { return (trace ?? (trace = Emitter(MesgType.Trace))); } }
 
@@ -1380,31 +1621,63 @@ namespace MosaicLib
                 get { return Emitter(mesgType); } 
             }
 
-            /// <summary>Allows the caller to specify the default NamedValueSet value that is to be attached to all LogMessages generated by the logger's emitter for the given mesgType</summary>
-            public void SetDefaultNamedValueSetForEmitter(MesgType mesgType, INamedValueSet nvs)
+            /// <summary>Allows the caller to specify the default NamedValueSet value that is to be attached to all LogMessages generated by the logger's emitter for the given mesgType.  Supports call chaining.</summary>
+            public IBasicLogger SetDefaultNamedValueSetForEmitter(MesgType mesgType, INamedValueSet nvs, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddNewItems)
             {
-                IMesgEmitter emitter = Emitter(mesgType);
-                IDefaultNamedValueSetSetter defaultNvsSetter = emitter as IDefaultNamedValueSetSetter;
+                if (mesgType != MesgType.All)
+                {
+                    IMesgEmitter emitter = Emitter(mesgType);
+                    IDefaultNamedValueSetSetter defaultNvsSetter = emitter as IDefaultNamedValueSetSetter;
 
-                if (defaultNvsSetter != null)
-                    defaultNvsSetter.DefaultNamedValueSet = nvs;
+                    if (defaultNvsSetter != null)
+                    {
+                        defaultNvsSetter.DefaultNamedValueSet = nvs;
+                        defaultNvsSetter.DefaultNamedValueSetMergeBehavior = mergeBehavior;
+                    }
+                }
+                else
+                {
+                    foreach (IMesgEmitter emitter in AllMesgTypes.Select(mt => Emitter(mt)))
+                    {
+                        IDefaultNamedValueSetSetter defaultNvsSetter = emitter as IDefaultNamedValueSetSetter;
+
+                        if (defaultNvsSetter != null)
+                        {
+                            defaultNvsSetter.DefaultNamedValueSet = nvs;
+                            defaultNvsSetter.DefaultNamedValueSetMergeBehavior = mergeBehavior;
+                        }
+                    }
+                }
+
+                return this;
+            }
+
+            /// <summary>Allows the caller to specify the default NamedValueSet value that is to be attached to all LogMessages generated by the logger's emitter for for all of the message types that match the given log gate.  Supports call chaining.</summary>
+            public IBasicLogger SetDefaultNamedValueSetForEmitter(LogGate logGate, INamedValueSet nvs, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddNewItems)
+            {
+                foreach (var mesgType in AllMesgTypes)
+                {
+                    if (logGate.IsTypeEnabled(mesgType))
+                        SetDefaultNamedValueSetForEmitter(mesgType, nvs, mergeBehavior: mergeBehavior);
+                }
+
+                return this;
             }
 
             /// <summary>Helper method: Gets the current System.Diagnostics.StackFrame of the caller (up skipNStackFrames levels)</summary>
             /// <param name="skipNStackFrames">Gives the number of additional stack frame to skip, from the one above this one, when acquiring a StackFrame to get the source file and line number from.</param>
             /// <returns>Selected StackFrame if stack frame tagging support is currently enabled or null if it is not</returns>
+            [Obsolete("Support for recording stack frame during logging has been removed.  Use of this method is no longer supported. (2017-07-21)")]
             public System.Diagnostics.StackFrame GetStackFrame(int skipNStackFrames)
             {
-                if (IsRecordingSourceStackFrame)
-                    return new System.Diagnostics.StackFrame(skipNStackFrames + 1, true);
-                else
-                    return null;
+                return null;
             }
 
             /// <summary>
             /// This property returns true if this logger is currently configured to record stack frames
             /// </summary>
-            public bool IsRecordingSourceStackFrame { get { return (LoggerConfigObserver != null && LoggerConfigObserver.RecordSourceStackFrame); } }
+            [Obsolete("Support for recording File and Line has been removed.  Use of this property is no longer supported. (2017-07-21)")]
+            public bool IsRecordingSourceStackFrame { get { return false; } }
 
             #endregion
 
@@ -1412,7 +1685,7 @@ namespace MosaicLib
             /// Preallocated array of IMesgEmitters that have been created.  Allows this caller to create only the emitters that are actually used
             /// but also allows it to reuse each emitter type without effort.
             /// </summary>
-            private IMesgEmitter[] emitters = new IMesgEmitter[((int)MesgType.Max) + 1];
+            private IMesgEmitter[] emitters = new IMesgEmitter[(int)MesgType.ArraySize];
 
             /// <summary>
             /// per type IMesgEmitter cached results to further improve the code paths for the high usage direct message type IMesgEmitter properies
@@ -1423,7 +1696,7 @@ namespace MosaicLib
         #endregion
 
         //-------------------------------------------------------------------
-        #region IMesgEmitter Implementations: LoggerMesgEmitterImpl, NullMesgEmitter, ThrowMesgEmitter, GenericMesgEmitterBase
+        #region IMesgEmitter Implementations: LoggerMesgEmitterImpl, LMHMesgEmitter, ListEmitter, NullMesgEmitter, ThrowMesgEmitter, GenericMesgEmitterBase
 
         #region LoggerMesgEmitterImpl
 
@@ -1446,135 +1719,113 @@ namespace MosaicLib
             /// <summary>Debugging helper method</summary>
             public override string ToString()
             {
-                bool loggerIsRecordingSourceStackFrames = (Logger != null && Logger.IsRecordingSourceStackFrame);
-                return Utils.Fcns.CheckedFormat("LoggerEmitter {0} {1}", MesgType, Logger.Name, (loggerIsRecordingSourceStackFrames ? " RecordingStackFrames" : String.Empty));
+                return Utils.Fcns.CheckedFormat("LoggerEmitter {0} {1}", MesgType, Logger.Name);
             }
 
-			#region IMesgEmitter Members
+			#region IMesgEmitter override Members
 
             /// <summary>
             /// Returns true if Logger is non-null and if it reports IsTypeEnabled(MesgType).
             /// </summary>
 			public override bool IsEnabled { get { return (Logger != null && Logger.IsTypeEnabled(MesgType)); } }
 
-            /// <summary>
-            /// Requests the Logger to obtain the stack frame of the caller skipNStackFrames up from here.  If the Logger is configured
-            /// to collect source file and line numbers then it will return the acquired StackFrame otherwise it will return null to
-            /// indicate that no StackFrame was acquired. 
-            /// </summary>
-            /// <param name="skipNStackFrames">Gives the number of additional stack frame to skip, from the one above this one, when acquiring a StackFrame to get the source file and line number from.</param>
-            protected override System.Diagnostics.StackFrame GetStackFrame(int skipNStackFrames)
-			{
-                bool loggerIsRecordingSourceStackFrames = (Logger != null && Logger.IsRecordingSourceStackFrame);
-                if (!loggerIsRecordingSourceStackFrames)
-					return null;
-
-                return Logger.GetStackFrame(1 + skipNStackFrames + SkipNAdditionalStackFrames);
-			}
-
             /// <summary>Emit method variant.  If the Emitter IsEnabled then it will acquire a LogMessage, assign the given str as its mesg body and emit it using the associated Logger instance.</summary>
-            /// <param name="skipNStackFrames">Gives the number of additional stack frame to skip, from the one above this one, when acquiring a StackFrame to get the source file and line number from.</param>
             /// <param name="str">Gives the string message body to emit.</param>
-			public override void Emit(int skipNStackFrames, string str)
-			{
-				if (IsEnabled)
-				{
-                    LogMessage lm = Logger.GetLogMessage(MesgType, str, GetStackFrame(1 + skipNStackFrames), true)
-                        .SetDefaults(DefaultNamedValueSet);
-					Logger.EmitLogMessage(ref lm);
-				}
-			}
+            public override void Emit(string str)
+            {
+                if (IsEnabled)
+                {
+                    LogMessage lm = Logger.GetLogMessage(MesgType, str)
+                        .SetDefaults(DefaultNamedValueSet, DefaultNamedValueSetMergeBehavior);
+                    Logger.EmitLogMessage(ref lm);
+                }
+            }
+
+            /// <summary>EmitWith method.  If the Emitter IsEnabled then it will emit the given string using behavior defined by the actual implementation class.</summary>
+            /// <param name="str">Gives the string message body to emit.</param>
+            /// <param name="nvs">Gives the INamedValueSet that is to be included in the message (will get merged with any default NVS defined by logger)</param>
+            /// <param name="data">Gives the byte array data that is to be included in the message</param>
+            public override void EmitWith(string str, INamedValueSet nvs = null, byte [] data = null)
+            {
+                if (IsEnabled)
+                {
+                    LogMessage lm = Logger.GetLogMessage(MesgType, str, nvs: nvs, data: data)
+                        .SetDefaults(DefaultNamedValueSet, DefaultNamedValueSetMergeBehavior);
+                    Logger.EmitLogMessage(ref lm);
+                }
+            }
+
 
             /// <summary>Emit method variant.  If the Emitter IsEnabled then it will acquire a LogMessage, format the given fmt and args to generate the LogMessage Mesg body and emit the LogMessage using the associated Logger instance.</summary>
-            /// <param name="skipNStackFrames">Gives the number of additional stack frame to skip, from the one above this one, when acquiring a StackFrame to get the source file and line number from.</param>
             /// <param name="fmt">Gives the format string that will be passed to CheckedFormat</param>
             /// <param name="arg0">Gives the first argument object instance that will be formatted into a string in the resulting message</param>
-            public override void Emit(int skipNStackFrames, string fmt, object arg0)
-			{
-				if (IsEnabled)
-				{
-                    LogMessage lm = Logger.GetLogMessage(MesgType, string.Empty, GetStackFrame(1 + skipNStackFrames), true)
-                        .SetDefaults(DefaultNamedValueSet)
-                        .SetMesg(Utils.Fcns.CheckedFormat(fmt, arg0));
-					Logger.EmitLogMessage(ref lm);
-				}
-			}
+            public override void Emit(string fmt, object arg0)
+            {
+                if (IsEnabled)
+                {
+                    LogMessage lm = Logger.GetLogMessage(MesgType, fmt.CheckedFormat(arg0))
+                        .SetDefaults(DefaultNamedValueSet, DefaultNamedValueSetMergeBehavior);
+                    Logger.EmitLogMessage(ref lm);
+                }
+            }
 
             /// <summary>Emit method variant.  If the Emitter IsEnabled then it will acquire a LogMessage, format the given fmt and args to generate the LogMessage Mesg body and emit the LogMessage using the associated Logger instance.</summary>
-            /// <param name="skipNStackFrames">Gives the number of additional stack frame to skip, from the one above this one, when acquiring a StackFrame to get the source file and line number from.</param>
             /// <param name="fmt">Gives the format string that will be passed to CheckedFormat</param>
             /// <param name="arg0">Gives the first argument object instance that will be formatted into a string in the resulting message</param>
             /// <param name="arg1">Gives the second argument object instance that will be formatted into a string in the resulting message</param>
-            public override void Emit(int skipNStackFrames, string fmt, object arg0, object arg1)
-			{
-				if (IsEnabled)
-				{
-                    LogMessage lm = Logger.GetLogMessage(MesgType, string.Empty, GetStackFrame(1 + skipNStackFrames), true)
-                        .SetDefaults(DefaultNamedValueSet)
-                        .SetMesg(Utils.Fcns.CheckedFormat(fmt, arg0, arg1));
-					Logger.EmitLogMessage(ref lm);
-				}
-			}
+            public override void Emit(string fmt, object arg0, object arg1)
+            {
+                if (IsEnabled)
+                {
+                    LogMessage lm = Logger.GetLogMessage(MesgType, fmt.CheckedFormat(arg0, arg1))
+                        .SetDefaults(DefaultNamedValueSet, DefaultNamedValueSetMergeBehavior);
+                    Logger.EmitLogMessage(ref lm);
+                }
+            }
 
             /// <summary>Emit method variant.  If the Emitter IsEnabled then it will acquire a LogMessage, format the given fmt and args to generate the LogMessage Mesg body and emit the LogMessage using the associated Logger instance.</summary>
-            /// <param name="skipNStackFrames">Gives the number of additional stack frame to skip, from the one above this one, when acquiring a StackFrame to get the source file and line number from.</param>
             /// <param name="fmt">Gives the format string that will be passed to CheckedFormat</param>
             /// <param name="arg0">Gives the first argument object instance that will be formatted into a string in the resulting message</param>
             /// <param name="arg1">Gives the second argument object instance that will be formatted into a string in the resulting message</param>
             /// <param name="arg2">Gives the third argument object instance that will be formatted into a string in the resulting message</param>
-            public override void Emit(int skipNStackFrames, string fmt, object arg0, object arg1, object arg2)
-			{
-				if (IsEnabled)
-				{
-                    LogMessage lm = Logger.GetLogMessage(MesgType, string.Empty, GetStackFrame(1 + skipNStackFrames), true)
-                        .SetDefaults(DefaultNamedValueSet)
-                        .SetMesg(Utils.Fcns.CheckedFormat(fmt, arg0, arg1, arg2));
-					Logger.EmitLogMessage(ref lm);
-				}
-			}
-
-            /// <summary>Emit method variant.  If the Emitter IsEnabled then it will acquire a LogMessage, format the given fmt and args to generate the LogMessage Mesg body and emit the LogMessage using the associated Logger instance.</summary>
-            /// <param name="skipNStackFrames">Gives the number of additional stack frame to skip, from the one above this one, when acquiring a StackFrame to get the source file and line number from.</param>
-            /// <param name="fmt">Gives the format string that will be passed to CheckedFormat</param>
-            /// <param name="args">Gives the array of object instances that will be formatted into a strings in the resulting message</param>
-            public override void Emit(int skipNStackFrames, string fmt, params object[] args)
-			{
-				if (IsEnabled)
-				{
-                    LogMessage lm = Logger.GetLogMessage(MesgType, string.Empty, GetStackFrame(1 + skipNStackFrames), true)
-                        .SetDefaults(DefaultNamedValueSet)
-                        .SetMesg(Utils.Fcns.CheckedFormat(fmt, args));
-					Logger.EmitLogMessage(ref lm);
-				}
-			}
-
-            /// <summary>Emit method variant.  If the Emitter IsEnabled then it will acquire a LogMessage, format the given fmt and args to generate the LogMessage Mesg body and emit the LogMessage using the associated Logger instance.</summary>
-            /// <param name="skipNStackFrames">Gives the number of additional stack frame to skip, from the one above this one, when acquiring a StackFrame to get the source file and line number from.</param>
-            /// <param name="provider">Gives the culture specific IFormatProvider that will be used to convert individual Object instances into their string equivalents</param>
-            /// <param name="fmt">Gives the format string that will be passed to CheckedFormat</param>
-            /// <param name="args">Gives the array of object instances that will be formatted into a strings in the resulting message</param>
-            public override void Emit(int skipNStackFrames, IFormatProvider provider, string fmt, params object[] args)
+            public override void Emit(string fmt, object arg0, object arg1, object arg2)
             {
                 if (IsEnabled)
                 {
-                    LogMessage lm = Logger.GetLogMessage(MesgType, string.Empty, GetStackFrame(1 + skipNStackFrames), true)
-                        .SetDefaults(DefaultNamedValueSet)
-                        .SetMesg(Utils.Fcns.CheckedFormat(provider, fmt, args));
+                    LogMessage lm = Logger.GetLogMessage(MesgType, fmt.CheckedFormat(arg0, arg1, arg2))
+                        .SetDefaults(DefaultNamedValueSet, DefaultNamedValueSetMergeBehavior);
+                    Logger.EmitLogMessage(ref lm);
+                }
+            }
+
+            /// <summary>Emit method variant.  If the Emitter IsEnabled then it will acquire a LogMessage, format the given fmt and args to generate the LogMessage Mesg body and emit the LogMessage using the associated Logger instance.</summary>
+            /// <param name="fmt">Gives the format string that will be passed to CheckedFormat</param>
+            /// <param name="args">Gives the array of object instances that will be formatted into a strings in the resulting message</param>
+            public override void Emit(string fmt, params object[] args)
+            {
+                if (IsEnabled)
+                {
+                    LogMessage lm = Logger.GetLogMessage(MesgType, fmt.CheckedFormat(args))
+                        .SetDefaults(DefaultNamedValueSet, DefaultNamedValueSetMergeBehavior);
+                    Logger.EmitLogMessage(ref lm);
+                }
+            }
+
+            /// <summary>Emit method variant.  If the Emitter IsEnabled then it will acquire a LogMessage, format the given fmt and args to generate the LogMessage Mesg body and emit the LogMessage using the associated Logger instance.</summary>
+            /// <param name="provider">Gives the culture specific IFormatProvider that will be used to convert individual Object instances into their string equivalents</param>
+            /// <param name="fmt">Gives the format string that will be passed to CheckedFormat</param>
+            /// <param name="args">Gives the array of object instances that will be formatted into a strings in the resulting message</param>
+            public override void Emit(IFormatProvider provider, string fmt, params object[] args)
+            {
+                if (IsEnabled)
+                {
+                    LogMessage lm = Logger.GetLogMessage(MesgType, provider.CheckedFormat(fmt, args))
+                        .SetDefaults(DefaultNamedValueSet, DefaultNamedValueSetMergeBehavior);
                     Logger.EmitLogMessage(ref lm);
                 }
             }
 
             #endregion
-
-			#region NullEmitter - This property is retained for backwards compatibility
-
-            /// <summary>
-            /// Obsolete version of <see cref="Logging.NullEmitter"/>.  Temporarily preserved for code compatibility.
-            /// </summary>
-            [Obsolete("This property is being replaced with the use of the Logging.NullEmitter instance which is functionally identical.  (2013-05-02")]
-            public static IMesgEmitter Null { get { return Logging.NullEmitter; } }
-
-			#endregion
 
             #region IDefaultNamedValueSetSetter interface
 
@@ -1583,11 +1834,22 @@ namespace MosaicLib
             /// </summary>
             public INamedValueSet DefaultNamedValueSet
             {
-                get { return defaultNamedValueSet; }
-                set { defaultNamedValueSet = value; }
+                get { return _defaultNamedValueSet; }
+                set { _defaultNamedValueSet = value.ConvertToReadOnly(mapNullToEmpty: false); }
             }
 
-            private volatile INamedValueSet defaultNamedValueSet = null;
+            private volatile INamedValueSet _defaultNamedValueSet = null;
+
+            /// <summary>
+            /// Setter only property.  Passes the desired merge behavior that shall be used when merging the DefaultNamedValueSet into any caller provided one.  Defaults to NamedValueSetMergeBehavior.AddNewItems.
+            /// </summary>
+            public NamedValueMergeBehavior DefaultNamedValueSetMergeBehavior 
+            {
+                get { return _defaultNamedValueSetMergeBehavior; }
+                set { _defaultNamedValueSetMergeBehavior = value; }
+            }
+
+            private volatile NamedValueMergeBehavior _defaultNamedValueSetMergeBehavior = NamedValueMergeBehavior.AddNewItems;
 
             #endregion
         }
@@ -1597,12 +1859,17 @@ namespace MosaicLib
         #region locally defined extension method
 
         /// <summary>
-        /// Call chaining extension method that is used to set the NamedValueSet property on the given lm LogMessage instance.
+        /// Call chaining extension method that is used to set or update the NamedValueSet property on the given lm LogMessage instance.
         /// </summary>
-        public static LogMessage SetDefaults(this LogMessage lm, INamedValueSet nvs)
+        public static LogMessage SetDefaults(this LogMessage lm, INamedValueSet nvs, NamedValueMergeBehavior mergeBehavior = NamedValueMergeBehavior.AddNewItems)
         {
-            if (lm != null)
-                lm.NamedValueSet = nvs;
+            if (lm != null && nvs != null)
+            {
+                if (lm.Raw_nvs == null)
+                    lm.NamedValueSet = nvs;
+                else if (!nvs.IsNullOrEmpty())
+                    lm.NamedValueSet = lm.Raw_nvs.MergeWith(nvs, mergeBehavior: mergeBehavior);
+            }
 
             return lm;
         }
@@ -1620,17 +1887,74 @@ namespace MosaicLib
 
         #endregion
 
+        #region LMHMesgEmitter
+
+        /// <summary>
+        /// This emitter is used to emit messages directly into a given ILogMessageHandler instance.  This is currently used for unit testing.
+        /// </summary>
+        public class LMHMesgEmitter : GenericMesgEmitterBase
+        {
+            /// <summary>Constructor</summary>
+            public LMHMesgEmitter(ILogMessageHandler lmh, MesgType mesgType)
+            {
+                this.lmh = lmh;
+                MesgType = mesgType;
+
+                IsEnabled = (lmh != null) && lmh.LoggerConfig.LogGate.IsTypeEnabled(mesgType);
+            }
+
+            private ILogMessageHandler lmh;
+
+            /// <summary>
+            /// Method implements the required abstract basic Emit method from the base class.
+            /// If the emitter is  enabled then this method generates a log message and asks the referenced ILogMessageHandler to handle it.
+            /// </summary>
+            /// <param name="str">Gives the string message body to emit.</param>
+            public override void Emit(string str)
+            {
+                if (IsEnabled)
+                {
+                    LogMessage lm = new LogMessage()
+                        .Setup(LoggerSourceInfo.Empty, MesgType, str)
+                        .NoteEmitted();
+
+                    lmh.HandleLogMessage(lm);
+                }
+            }
+
+            /// <summary>
+            /// Method re-implements the EmitWith method from the base class.
+            /// If the emitter is enabled then this method generates a log message and asks the referenced ILogMessageHandler to handle it.
+            /// </summary>
+            /// <param name="str">Gives the string message body to emit.</param>
+            /// <param name="nvs">Gives the INamedValueSet to emit with the message.</param>
+            /// <param name="data">Gives the byte array data to emit with the message.</param>
+            public override void EmitWith(string str, INamedValueSet nvs = null, byte[] data = null)
+            {
+                if (IsEnabled)
+                {
+                    LogMessage lm = new LogMessage()
+                        .Setup(LoggerSourceInfo.Empty, MesgType, str, nvs: nvs, data: data)
+                        .NoteEmitted();
+
+                    lmh.HandleLogMessage(lm);
+                }
+            }
+        }
+
+        #endregion
+
         #region ListMesgEmitter
 
         /// <summary>
-        /// This emitter is used to collect emitted messages into a List of Items, each of which contains an emitted MesgStr and a StackFrame (which will be null if CollectStackFrames was false at the time the message was emitted)
+        /// This emitter is used to collect emitted messages into a List of Items, each of which contains an emitted MesgStr, and optional NVS and Data (from EmitWith)
         /// </summary>
         public class ListMesgEmitter : GenericMesgEmitterBase
         {
             /// <summary>Default constructor</summary>
-            public ListMesgEmitter()
+            public ListMesgEmitter(bool isEnabled = true)
             {
-                IsEnabled = true;
+                IsEnabled = isEnabled;
                 EmittedItemList = new List<Item>();
             }
 
@@ -1641,35 +1965,31 @@ namespace MosaicLib
             public new bool IsEnabled { get { return base.IsEnabled; } set { base.IsEnabled = value; } }
 
             /// <summary>
-            /// get/set property implements required abstract property from base class.  May be set as desired to enable and disable the collection of StackFrames for the emitted Items generated by this instance.
-            /// <para/>Defaults to false.
-            /// </summary>
-            public new bool CollectStackFrames { get { return base.CollectStackFrames; } set { base.CollectStackFrames = value; } }
-
-            /// <summary>
             /// Method implements the required abstract basic Emit method from the base class.
             /// If the emitter is not enabled then this method immediately returns.
             /// Generates a new Item with its Mesg property assigned to the given Str.  
-            /// Item's StackFrame property will be assigned to null or the results of calling CollectStackFrame based on the current value of the CollectStackFrames property.
             /// The resulting Item is appended to the EmittedItemList maintained by this instance.
             /// </summary>
-            /// <param name="skipNStackFrames">Gives the number of additional stack frame to skip, from the one above this one, when acquiring a StackFrame to get the source file and line number from.</param>
             /// <param name="str">Gives the string message body to emit.</param>
-            public override void Emit(int skipNStackFrames, string str)
+            public override void Emit(string str)
+            {
+                EmitWith(str);
+            }
+
+            /// <summary>EmitWith method.  If the Emitter IsEnabled then it will emit the given string using behavior defined by the actual implementation class.</summary>
+            /// <param name="str">Gives the string message body to emit.</param>
+            /// <param name="nvs">Gives the INamedValueSet that is to be included in the message (will get merged with any default NVS defined by logger)</param>
+            /// <param name="data">Gives the byte array data that is to be included in the message</param>
+            public override void EmitWith(string str, INamedValueSet nvs = null, byte[] data = null)
             {
                 if (!IsEnabled)
                     return;
 
-                Item item = new Item() { MesgStr = str, StackFrame = (CollectStackFrames ? base.GetStackFrame(skipNStackFrames + 1) : null) };
+                Item item = new Item() { MesgStr = str, NVS = nvs, Data = data, SeqNum = staticItemSeqNumGen.Increment() };
 
-                if (EmittedItemListMutex == null)
-                    EmittedItemList.Add(item);
-                else
+                using (new ScopedLock(EmittedItemListMutex))
                 {
-                    lock (EmittedItemListMutex)
-                    {
-                        EmittedItemList.Add(item);
-                    }
+                    EmittedItemList.Add(item);
                 }
             }
 
@@ -1680,8 +2000,21 @@ namespace MosaicLib
             /// </summary>
             public List<Item> EmittedItemList { get; private set; }
 
+            /// <summary>Clears the contents of the EmittedItemList.  Threadsafe if non-null <see cref="EmittedItemListMutex"/> has been provided.</summary>
+            public void Clear() { using (new ScopedLock(EmittedItemListMutex)) { EmittedItemList.Clear(); } }
+
+            /// <summary>Captures and returns an array of the Items that are currently in the.  Threadsafe if non-null <see cref="EmittedItemListMutex"/> has been provided.</summary>
+            public Item[] EmitterItemArray { get { using (new ScopedLock(EmittedItemListMutex)) { return EmittedItemList.ToArray(); } } }
+
+            /// <summary>
+            /// Returns an IEnumerable that produces the set of MesgStrs from each of the items that are currently in the list
+            /// </summary>
+            public IEnumerable<string> EmittedMesgStrs { get { return EmitterItemArray.Select(item => item.MesgStr); } }
+
             /// <summary>Optional: If this object is assigned a non-null value it will be used as a mutex when internally accessing the EmittedItemList to append items to it.</summary>
             public object EmittedItemListMutex { get; set; }
+
+            private static AtomicUInt64 staticItemSeqNumGen = new AtomicUInt64();
 
             /// <summary>This is the container object used for emitted items.  It consists of a MesgStr and a, possibly null, StackFrame.</summary>
             public class Item
@@ -1689,16 +2022,35 @@ namespace MosaicLib
                 /// <summary>Returns the emitted Message String for this Item</summary>
                 public String MesgStr { get; internal set; }
 
+                /// <summary>Returns the emitted NVS for this Item (may be null)</summary>
+                public INamedValueSet NVS { get; internal set; }
+
+                /// <summary>Returns the emitted Data for this Item (may be null)</summary>
+                public byte [] Data { get; internal set; }
+
+                /// <summary>Returns the sequence number assigned to this item.</summary>
+                public ulong SeqNum { get; internal set; }
+
                 /// <summary>Returns the collected StackFrame for this Item or null if no frame was acquired.</summary>
-                public System.Diagnostics.StackFrame StackFrame { get; internal set; }
+                [Obsolete("Support for recording stack frame during logging has been removed.  Use of this property is no longer supported. (2017-07-21)")]
+                public System.Diagnostics.StackFrame StackFrame { get { return null; } internal set { } }
 
                 /// <summary>Generates a printable version of the contained MesgStr (and StackFrame if included) contents</summary>
                 public override string ToString()
                 {
-                    if (StackFrame == null)
-                        return MesgStr ?? String.Empty;
-                    else
-                        return Utils.Fcns.CheckedFormat("{0} {1}", MesgStr, StackFrame);
+                    StringBuilder sb = new StringBuilder();
+
+                    sb.CheckedAppendFormat("MesgStr:[{0}]", MesgStr.GenerateSquareBracketEscapedVersion());
+
+                    if (NVS != null)
+                        sb.CheckedAppendFormat(" {0}", NVS.ToStringSML());
+
+                    if (Data != null)
+                        sb.CheckedAppendFormat(" Data:[{0}]", ByteArrayTranscoders.HexStringTranscoder.Encode(Data));
+
+                    sb.CheckedAppendFormat(" SeqNum:{0}", SeqNum);
+
+                    return sb.ToString();
                 }
             }
         }
@@ -1719,14 +2071,6 @@ namespace MosaicLib
 
             /// <summary>Returns false</summary>
             public override bool IsEnabled { get { return false; } }
-
-            /// <summary>Returns false</summary>
-            public override bool CollectStackFrames { get { return false; } }
-
-            /// <summary>Basic abstract implementation method for a NullMesgEmitter.  Accepts the given skipNStackFrames and str parameters and does no additional work.</summary>
-            /// <param name="skipNStackFrames">Gives the number of additional stack frame to skip, from the one above this one, when acquiring a StackFrame to get the source file and line number from.</param>
-            /// <param name="str">Gives the string message body to emit.</param>
-            public override void Emit(int skipNStackFrames, string str) { }
         }
 
         #endregion
@@ -1782,15 +2126,10 @@ namespace MosaicLib
             /// <summary>Returns true</summary>
             public override bool IsEnabled { get { return true; } }
 
-            /// <summary>Returns false - the thrown exception will collect its own stack frame.</summary>
-            public override bool CollectStackFrames { get { return false; } }
-
             /// <summary>
             /// This method passes the given str to the ExceptionFactoryDelegate to generate a new System.Exception or ThrowMesgEmitter.Exception instance which is then thrown.
             /// </summary>
-            /// <param name="skipNStackFrames">ignored - stack frame is rooted at code location in this class where exception is constructed.</param>
-            /// <param name="str">contains the string which will be used as the Exception's Message.</param>
-            public override void Emit(int skipNStackFrames, string str)
+            public override void Emit(string str)
             {
                 System.Exception ex = exceptionFactoryDelegate(str);
                 if (ex != null)
@@ -1818,7 +2157,7 @@ namespace MosaicLib
             /// <summary>Debugging helper method</summary>
             public override string ToString()
             {
-                return Utils.Fcns.CheckedFormat("{0} Generic Emitter{1}", MesgType, (CollectStackFrames ? " +CollectsStackFrames" : String.Empty));
+                return Utils.Fcns.CheckedFormat("{0} Generic Emitter", MesgType);
             }
 
             #region IMesgEmitter Members
@@ -1833,65 +2172,109 @@ namespace MosaicLib
             public MesgType MesgType { get; set; }
 
             /// <summary>get/protected set property implements.  Set to enable the collection of StackFrames for the emitted Items generated by this instance.</summary>
-            public virtual bool CollectStackFrames { get; protected set; }
+            [Obsolete("Support for recording stack frame during logging has been removed.  Use of this property is no longer supported. (2017-07-21)")]
+            public virtual bool CollectStackFrames { get { return false; } set { } }
 
             /// <summary>Helper method: If enabled using the CollectStackFrames property, gets the current System.Diagnostics.StackFrame of the caller (up skipNStackFrames levels from the level above this method)</summary>
             /// <param name="skipNStackFrames">Gives the number of additional stack frame to skip, from the one above this one, when acquiring a StackFrame to get the source file and line number from.</param>
             /// <returns>Selected StackFrame if stack frame tagging support is currently enabled using the CollectStackFrames property, or null if it is not</returns>
+            [Obsolete("Support for recording stack frame during logging has been removed.  Use of this method is no longer supported. (2017-07-21)")]
             protected virtual System.Diagnostics.StackFrame GetStackFrame(int skipNStackFrames)
             {
-                if (CollectStackFrames)
-                    return new System.Diagnostics.StackFrame(skipNStackFrames + 1, true);
-                else
-                    return null;
+                return null;
             }
 
             /// <summary>Emit method variant.  If the Emitter IsEnabled then it will emit the given string using the Emit(1,str) variant.</summary>
             /// <param name="str">Gives the string message body to emit.</param>
-            public void Emit(string str) { Emit(1, str); }
+            public virtual void Emit(string str) 
+            { }
+
+            /// <summary>EmitWith method.  If the Emitter IsEnabled then it will emit the given string using behavior defined by the actual implementation class.</summary>
+            /// <param name="str">Gives the string message body to emit.</param>
+            /// <param name="nvs">Gives the INamedValueSet that is to be included in the message (will get merged with any default NVS defined by logger)</param>
+            /// <param name="data">Gives the byte array data that is to be included in the message</param>
+            public virtual void EmitWith(string str, INamedValueSet nvs = null, byte [] data = null)
+            {
+                if (IsEnabled)
+                {
+                    StringBuilder sb = new StringBuilder(str);
+
+                    if (nvs != null)
+                        sb.CheckedAppendFormat(" nvs:{0}", nvs.ToStringSML());
+
+                    if (data != null)
+                        sb.CheckedAppendFormat(" data:[{0}]", ByteArrayTranscoders.HexStringTranscoder.Encode(data));
+
+                    Emit(sb.ToString());
+                }
+            }
 
             /// <summary>Emit method variant.  If the Emitter IsEnabled then it will format the given fmt and arg, using Fcns.CheckedFormat, and emit the resulting string using the Emit(1,str) variant.</summary>
             /// <param name="fmt">Gives the format string that will be passed to CheckedFormat</param>
             /// <param name="arg0">Gives the first argument object instance that will be formatted into a string in the resulting message</param>
-            public void Emit(string fmt, object arg0) { Emit(1, fmt, arg0); }
+            public virtual void Emit(string fmt, object arg0) 
+            {
+                if (IsEnabled)
+                    Emit(Utils.Fcns.CheckedFormat(fmt, arg0));
+            }
 
             /// <summary>Emit method variant.  If the Emitter IsEnabled then it will format the given fmt and args, using Fcns.CheckedFormat, and emit the resulting string using the Emit(1,str) variant.</summary>
             /// <param name="fmt">Gives the format string that will be passed to CheckedFormat</param>
             /// <param name="arg0">Gives the first argument object instance that will be formatted into a string in the resulting message</param>
             /// <param name="arg1">Gives the second argument object instance that will be formatted into a string in the resulting message</param>
-            public void Emit(string fmt, object arg0, object arg1) { Emit(1, fmt, arg0, arg1); }
+            public virtual void Emit(string fmt, object arg0, object arg1) 
+            {
+                if (IsEnabled)
+                    Emit(Utils.Fcns.CheckedFormat(fmt, arg0, arg1));
+            }
 
             /// <summary>Emit method variant.  If the Emitter IsEnabled then it will format the given fmt and args, using Fcns.CheckedFormat, and emit the resulting string using the Emit(1,str) variant.</summary>
             /// <param name="fmt">Gives the format string that will be passed to CheckedFormat</param>
             /// <param name="arg0">Gives the first argument object instance that will be formatted into a string in the resulting message</param>
             /// <param name="arg1">Gives the second argument object instance that will be formatted into a string in the resulting message</param>
             /// <param name="arg2">Gives the third argument object instance that will be formatted into a string in the resulting message</param>
-            public void Emit(string fmt, object arg0, object arg1, object arg2) { Emit(1, fmt, arg0, arg1, arg2); }
+            public virtual void Emit(string fmt, object arg0, object arg1, object arg2) 
+            {
+                if (IsEnabled)
+                    Emit(Utils.Fcns.CheckedFormat(fmt, arg0, arg1, arg2));
+            }
 
             /// <summary>Emit method variant.  If the Emitter IsEnabled then it will format the given fmt and args, using Fcns.CheckedFormat, and emit the resulting string using the Emit(1,str) variant.</summary>
             /// <param name="fmt">Gives the format string that will be passed to CheckedFormat</param>
             /// <param name="args">Gives the array of object instances that will be formatted into a strings in the resulting message</param>
-            public void Emit(string fmt, params object[] args) { Emit(1, fmt, args); }
+            public virtual void Emit(string fmt, params object[] args) 
+            {
+                if (IsEnabled)
+                    Emit(Utils.Fcns.CheckedFormat(fmt, args));
+            }
 
             /// <summary>Emit method variant.  If the Emitter IsEnabled then it will format the given fmt and arg, using Fcns.CheckedFormat, and emit the resulting string using the Emit(1,str) variant.</summary>
             /// <param name="provider">Gives the culture specific IFormatProvider that will be used to convert individual Object instances into their string equivalents</param>
             /// <param name="fmt">Gives the format string that will be passed to CheckedFormat</param>
             /// <param name="args">Gives the array of object instances that will be formatted into a strings in the resulting message</param>
-            public void Emit(IFormatProvider provider, string fmt, params object[] args) { Emit(1, provider, fmt, args); }
+            public virtual void Emit(IFormatProvider provider, string fmt, params object[] args) 
+            {
+                if (IsEnabled)
+                    Emit(Utils.Fcns.CheckedFormat(provider, fmt, args));
+            }
 
             /// <summary>Basic abstract Emit method variant.  Actual behavior is determined by the implementation object.</summary>
             /// <param name="skipNStackFrames">Gives the number of additional stack frame to skip, from the one above this one, when acquiring a StackFrame to get the source file and line number from.</param>
             /// <param name="str">Gives the string message body to emit.</param>
-            public abstract void Emit(int skipNStackFrames, string str);
+            [Obsolete("Support for recording source stack frames (for File and Line recording) has been removed.  Use of this method is no longer supported. (2017-07-21)")]
+            public virtual void Emit(int skipNStackFrames, string str)
+            {
+                Emit(str);
+            }
 
             /// <summary>Emit method variant.  If the Emitter IsEnabled then it will format the given fmt and arg, using Fcns.CheckedFormat, and emit the resulting string using the Emit(1,str) variant.</summary>
             /// <param name="skipNStackFrames">Gives the number of additional stack frame to skip, from the one above this one, when acquiring a StackFrame to get the source file and line number from.</param>
             /// <param name="fmt">Gives the format string that will be passed to CheckedFormat</param>
             /// <param name="arg0">Gives the first argument object instance that will be formatted into a string in the resulting message</param>
+            [Obsolete("Support for recording source stack frames (for File and Line recording) has been removed.  Use of this method is no longer supported. (2017-07-21)")]
             public virtual void Emit(int skipNStackFrames, string fmt, object arg0)
             {
-                if (IsEnabled)
-                    Emit(skipNStackFrames + 1, Utils.Fcns.CheckedFormat(fmt, arg0));
+                Emit(fmt, arg0);
             }
 
             /// <summary>Emit method variant.  If the Emitter IsEnabled then it will format the given fmt and args, using Fcns.CheckedFormat, and emit the resulting string using the Emit(1,str) variant.</summary>
@@ -1899,10 +2282,10 @@ namespace MosaicLib
             /// <param name="fmt">Gives the format string that will be passed to CheckedFormat</param>
             /// <param name="arg0">Gives the first argument object instance that will be formatted into a string in the resulting message</param>
             /// <param name="arg1">Gives the second argument object instance that will be formatted into a string in the resulting message</param>
+            [Obsolete("Support for recording source stack frames (for File and Line recording) has been removed.  Use of this method is no longer supported. (2017-07-21)")]
             public virtual void Emit(int skipNStackFrames, string fmt, object arg0, object arg1)
             {
-                if (IsEnabled)
-                    Emit(skipNStackFrames + 1, Utils.Fcns.CheckedFormat(fmt, arg0, arg1));
+                Emit(fmt, arg0, arg1);
             }
 
             /// <summary>Emit method variant.  If the Emitter IsEnabled then it will format the given fmt and args, using Fcns.CheckedFormat, and emit the resulting string using the Emit(1,str) variant.</summary>
@@ -1911,20 +2294,20 @@ namespace MosaicLib
             /// <param name="arg0">Gives the first argument object instance that will be formatted into a string in the resulting message</param>
             /// <param name="arg1">Gives the second argument object instance that will be formatted into a string in the resulting message</param>
             /// <param name="arg2">Gives the third argument object instance that will be formatted into a string in the resulting message</param>
+            [Obsolete("Support for recording source stack frames (for File and Line recording) has been removed.  Use of this method is no longer supported. (2017-07-21)")]
             public virtual void Emit(int skipNStackFrames, string fmt, object arg0, object arg1, object arg2)
             {
-                if (IsEnabled)
-                    Emit(skipNStackFrames + 1, Utils.Fcns.CheckedFormat(fmt, arg0, arg1, arg2));
+                Emit(fmt, arg0, arg1, arg2);
             }
 
             /// <summary>Emit method variant.  If the Emitter IsEnabled then it will format the given fmt and args, using Fcns.CheckedFormat, and emit the resulting string using the Emit(1,str) variant.</summary>
             /// <param name="skipNStackFrames">Gives the number of additional stack frame to skip, from the one above this one, when acquiring a StackFrame to get the source file and line number from.</param>
             /// <param name="fmt">Gives the format string that will be passed to CheckedFormat</param>
             /// <param name="args">Gives the array of object instances that will be formatted into a strings in the resulting message</param>
+            [Obsolete("Support for recording source stack frames (for File and Line recording) has been removed.  Use of this method is no longer supported. (2017-07-21)")]
             public virtual void Emit(int skipNStackFrames, string fmt, params object[] args)
             {
-                if (IsEnabled)
-                    Emit(skipNStackFrames + 1, Utils.Fcns.CheckedFormat(fmt, args));
+                Emit(fmt, args);
             }
 
             /// <summary>Emit method variant.  If the Emitter IsEnabled then it will format the given fmt and args, using Fcns.CheckedFormat, and emit the resulting string using the Emit(1,str) variant.</summary>
@@ -1932,10 +2315,10 @@ namespace MosaicLib
             /// <param name="provider">Gives the culture specific IFormatProvider that will be used to convert individual Object instances into their string equivalents</param>
             /// <param name="fmt">Gives the format string that will be passed to CheckedFormat</param>
             /// <param name="args">Gives the array of object instances that will be formatted into a strings in the resulting message</param>
+            [Obsolete("Support for recording source stack frames (for File and Line recording) has been removed.  Use of this method is no longer supported. (2017-07-21)")]
             public virtual void Emit(int skipNStackFrames, IFormatProvider provider, string fmt, params object[] args)
             {
-                if (IsEnabled)
-                    Emit(skipNStackFrames + 1, Utils.Fcns.CheckedFormat(provider, fmt, args));
+                Emit(provider, fmt, args);
             }
 
             #endregion
@@ -2068,27 +2451,7 @@ namespace MosaicLib
             /// Base class constructor.  
             /// Initializes all internal behavior logic including:
             /// <list type="bullet">
-            /// <item>captures handle to distribution engine</item>
-            /// <item>captures and configured initial Instance Log Gate</item>
-            /// <item>looks up and saves source info for this named logger</item>
-            /// <item>Initializes base class LoggerConfigObserver used to handle distributed per logger/group configuration behavior.</item>
-            /// <item>Captures and applies custom logger group name assignment.</item>
-            /// <item>Sets up optional MyTraceEmitter and emits created and destroyed messages if enabled.</item>
-            /// </list>
-            /// </summary>
-            /// <param name="name">Gives the logger name for this logger instance.  Used to obtain the matching LoggerSourceInfo from LogDistribution.</param>
-            /// <param name="groupName">Defines the group name the logger should be included in.  All loggers using the same logger name will be moved to this group ID</param>
-            /// <param name="initialInstanceLogGate">Defines the initial value for the logger's InstanceLogGate value.</param>
-            /// <param name="traceLoggerCtor">Set to true to cause the logger to define a trace emitter that will be used to emit construction/destruction messages for this logger instance.</param>
-            public LoggerBase(string name, string groupName, LogGate initialInstanceLogGate, bool traceLoggerCtor)
-                : this(name, groupName, initialInstanceLogGate, traceLoggerCtor, true)
-            {}
-
-            /// <summary>
-            /// Base class constructor.  
-            /// Initializes all internal behavior logic including:
-            /// <list type="bullet">
-            /// <item>captures handle to distribution engine</item>
+            /// <item>captures handle to distribution engine (caller provided or singleton instance)</item>
             /// <item>captures and configured initial Instance Log Gate</item>
             /// <item>looks up and saves source info for this named logger</item>
             /// <item>Initializes base class LoggerConfigObserver used to handle distributed per logger/group configuration behavior.</item>
@@ -2101,34 +2464,48 @@ namespace MosaicLib
             /// <param name="initialInstanceLogGate">Defines the initial value for the logger's InstanceLogGate value.</param>
             /// <param name="traceLoggerCtor">Set to true to cause the logger to define a trace emitter that will be used to emit construction/destruction messages for this logger instance.</param>
             /// <param name="allowUseOfModularConfig">can be given as false to suppress use of modular config key Logging.Loggers.[name].LogGate as source for additional LogGate value.</param>
-            public LoggerBase(string name, string groupName, LogGate initialInstanceLogGate, bool traceLoggerCtor, bool allowUseOfModularConfig)
+            /// <param name="callerProvidedLMD">can be used to define the ILogMessageDistributionForLoggers instance that this object will be used with</param>
+            public LoggerBase(string name, string groupName, LogGate initialInstanceLogGate, bool traceLoggerCtor = true, bool allowUseOfModularConfig = true, ILogMessageDistributionForLoggers callerProvidedLMD = null)
 			{
-				dist = GetLogMessageDistribution();
+				dist = callerProvidedLMD ?? LogMessageDistribution.Instance;
+
                 if (dist == null)
-				    Utils.Asserts.TakeBreakpointAfterFault(ClassName + ": LogMessageDistribution is null");
+				    Utils.Asserts.TakeBreakpointAfterFault("{0}: LogMessageDistribution is null".CheckedFormat(ClassName));
 
                 sourceInfo = dist.GetLoggerSourceInfo(name, allowUseOfModularConfig);
 
                 LoggerConfigObserver = new SequencedLoggerConfigObserver(sourceInfo.LoggerConfigSource);
 
-                InstanceLogGate = initialInstanceLogGate;
+                if (!groupName.IsNullOrEmpty() && groupName != GroupName)
+                    GroupName = groupName;
 
-				if (!string.IsNullOrEmpty(groupName) && groupName != GroupName)
-					GroupName = groupName;
+                if (traceLoggerCtor)
+                    myTraceEmitter = new LoggerMesgEmitterImpl() { Logger = this, MesgType = MesgType.Trace, SkipNAdditionalStackFrames = 1 };	// this emitter records the stack frame 1 above its caller, ie our caller
 
-				if (traceLoggerCtor)
-					myTraceEmitter = new LoggerMesgEmitterImpl() { Logger = this, MesgType = MesgType.Trace, SkipNAdditionalStackFrames = 1 } ;	// this emitter records the stack frame 1 above its caller, ie our caller
+                if (initialInstanceLogGate == LogGate.All)
+                {
+                    InstanceLogGate = initialInstanceLogGate;
 
-				MyTraceEmitter.Emit("{0} object has been created", ClassName);
+                    MyTraceEmitter.Emit("{0} object has been created", ClassName);
+                }
+                else
+                {
+                    MyTraceEmitter.Emit("{0} object has been created with initialLogGate:{1}", ClassName, initialInstanceLogGate);
+
+                    InstanceLogGate = initialInstanceLogGate;
+                }
 			}
 
-            /// <summary>Copy constructor for cloning.  Produces a separate instance of a LoggerBase object that is initialized to the same settings as the copy source but which can be used independantly of it.</summary>
+            /// <summary>
+            /// Copy constructor for cloning.  Produces a separate instance of a LoggerBase object that is initialized to the same settings as the copy source but which can be used independantly of it.
+            /// </summary>
             public LoggerBase(LoggerBase rhs)
                 : base(rhs)
 			{
 				dist = rhs.dist;
 				sourceInfo = rhs.sourceInfo;
-                explitilyGivenInstanceLogGate = rhs.explitilyGivenInstanceLogGate;
+
+                explicitlyGivenInstanceLogGate = rhs.explicitlyGivenInstanceLogGate;
                 optionallyElevatedLogGate = rhs.optionallyElevatedLogGate;
 				myTraceEmitter = rhs.myTraceEmitter;
 
@@ -2174,21 +2551,21 @@ namespace MosaicLib
                     if (LoggerConfigObserver.IsUpdateNeeded)
                     {
                         LoggerConfigObserver.Update();
-                        optionallyElevatedLogGate = explitilyGivenInstanceLogGate | LoggerConfigObserver.LogGateIncrease;
+                        optionallyElevatedLogGate = explicitlyGivenInstanceLogGate | LoggerConfigObserver.LogGateIncrease;
                     }
 
                     return optionallyElevatedLogGate;
                 }
                 set 
                 { 
-                    explitilyGivenInstanceLogGate = value;
+                    explicitlyGivenInstanceLogGate = value;
 
                     LoggerConfigObserver.Update();
-                    optionallyElevatedLogGate = explitilyGivenInstanceLogGate | LoggerConfigObserver.LogGateIncrease;
+                    optionallyElevatedLogGate = explicitlyGivenInstanceLogGate | LoggerConfigObserver.LogGateIncrease;
                 } 
             }
 
-            private LogGate explitilyGivenInstanceLogGate = LogGate.All;
+            private LogGate explicitlyGivenInstanceLogGate = LogGate.All;
             private LogGate optionallyElevatedLogGate = LogGate.All;
 
             /// <summary>
@@ -2205,46 +2582,34 @@ namespace MosaicLib
 				return true;
 			}
 
-            /// <summary>Allocates and returns a non-pooled message of the requested type, log message string is initialized to be empty.</summary>
-            public LogMessage GetLogMessage(MesgType mesgType, System.Diagnostics.StackFrame sourceStackFrame) 
-            { 
-                return GetLogMessage(mesgType, string.Empty, sourceStackFrame, false); 
+            /// <summary>returns a new message with type, source, message, file and line filled in (as appropriate and enabled).</summary>
+            public virtual LogMessage GetLogMessage(MesgType mesgType, string mesg = null, INamedValueSet nvs = null, byte [] data = null)
+            {
+                LogMessage lm = null;
+
+                if (!loggerHasBeenShutdown)
+                    lm = new LogMessage().Setup(sourceInfo, mesgType, mesg: mesg ?? string.Empty, nvs: nvs, data: data);
+
+                return lm;
             }
 
             /// <summary>Allocates and returns a non-pooled message of the requested type, and initializes it with the given message string</summary>
-            public LogMessage GetLogMessage(MesgType mesgType, string mesg, System.Diagnostics.StackFrame sourceStackFrame) 
-            { 
-                return GetLogMessage(mesgType, mesg, sourceStackFrame, false); 
+            [Obsolete("The sourceStackFrame parameter is no longer supported.  Please use the variant of this method without this parameter.  (2016-12-22, 2017-07-21)")]
+            public virtual LogMessage GetLogMessage(MesgType mesgType, string mesg, System.Diagnostics.StackFrame sourceStackFrame, int skipNStackFrames = 0) 
+            {
+                return GetLogMessage(mesgType, mesg);
             }
 
             /// <summary>
             /// Returns a new message with type, source, message, file and line filled in.  
-            /// allocateFromDist determines if method attempts to allocate the messages from the distribution system's pool.  
-            /// If a message cannot be obtained from the distribution pool then the method attempts to create the message using new.
-            /// In either case the obtained message is Setup with the given settings and content.
+            /// The obtained message is Setup with the given settings and content and is then returned.
+            /// allocateFromDist is now ignored.  All messages are created locally.
+            /// <para/>Note: if the loggerHasBeenShutdown then this method will return null.
             /// </summary>
+            [Obsolete("The sourceStackFrame and allocateFromDist parameters are no longer supported.  Please use the variant of this method without these parameters.  (2016-12-22, 2017-07-21)")]
             public virtual LogMessage GetLogMessage(MesgType mesgType, string mesg, System.Diagnostics.StackFrame sourceStackFrame, bool allocateFromDist)	
 			{
-				LogMessage lm = null;
-				if (!loggerHasBeenShutdown)
-				{
-                    bool allowAllocateFromDist = false;// disable pool based allocation for all messages (for now)
-
-                    // only allocate messages from the pool if the caller permits and if the group (currently) only has handlers that support reference counted release.
-                    if (allocateFromDist && LoggerSourceInfo.LoggerConfigSource.Object.SupportsReferenceCountedRelease && allowAllocateFromDist)
-						lm = dist.GetLogMessage();
-					else
-						lm = new LogMessage();
-				}
-                if (lm != null)
-                {
-                    if (!lm.IsUnique)
-                        Utils.Asserts.TakeBreakpointAfterFault("Allocated Message is not Unique");
-
-                    lm.Setup(sourceInfo, mesgType, mesg, GetStackFrame(1));
-                }
-
-				return lm;
+                return GetLogMessage(mesgType, mesg);
 			}
 
             /// <summary>Emits the message.  Takes ownership by setting the caller's reference to null.</summary>
@@ -2288,7 +2653,8 @@ namespace MosaicLib
             protected abstract string ClassName { get; }
 
             /// <summary>the distribution system to which we belong</summary>
-            protected ILogMessageDistribution dist = null;
+            protected ILogMessageDistributionForLoggers dist = null;
+
             /// <summary>stores the reference id and name</summary>
             protected LoggerSourceInfo sourceInfo = null;
 
@@ -2312,25 +2678,26 @@ namespace MosaicLib
 		/// <summary>This class provides the standard basic implementation for use as an ILogger</summary>
 		public class Logger : LoggerBase
 		{
-            /// <summary>Constructor.  Uses given logger name.  Uses default group name, LogGate.All and enables instance trace logging</summary>
-            /// <param name="name">Provides the LoggerName (source ID) to use for this logger.</param>
-			public Logger(string name) : base(name, string.Empty, LogGate.All, true) { }
-
             /// <summary>Constructor.  Uses given logger name, and group name.  Use LogGate.All and enables instance trace logging</summary>
             /// <param name="name">Provides the LoggerName (source ID) to use for this logger.</param>
             /// <param name="groupName">Provides the GroupName that this logger name will be assigned/moved to</param>
-            public Logger(string name, string groupName) : base(name, groupName, LogGate.All, true) { }
+            public Logger(string name, string groupName = "") : base(name, groupName, LogGate.All, traceLoggerCtor: true) { }
 
             /// <summary>Constructor.  Uses given logger name, and initialInstanceLogGate.  Enables instance trace logging</summary>
             /// <param name="name">Provides the LoggerName (source ID) to use for this logger.</param>
             /// <param name="initialInstanceLogGate">Defines the initial instance group gate that may be more restrictive than the gate assigned to the group or the logger through the distribution system.</param>
-            public Logger(string name, LogGate initialInstanceLogGate) : base(name, string.Empty, initialInstanceLogGate, true) { }
+            public Logger(string name, LogGate initialInstanceLogGate) : base(name, string.Empty, initialInstanceLogGate, traceLoggerCtor: true) { }
 
             /// <summary>Constructor.  Uses given logger name, group name, and initialInstanceLogGate.  Use default group name and enables instance trace logging</summary>
             /// <param name="name">Provides the LoggerName (source ID) to use for this logger.</param>
             /// <param name="groupName">Provides the GroupName that this logger name will be assigned/moved to</param>
             /// <param name="initialInstanceLogGate">Defines the initial instance group gate that may be more restrictive than the gate assigned to the group or the logger through the distribution system.</param>
-            public Logger(string name, string groupName, LogGate initialInstanceLogGate) : base(name, groupName, initialInstanceLogGate, true) { }
+            /// <param name="traceLoggerCtor">Set to true to cause the logger to define a trace emitter that will be used to emit construction/destruction messages for this logger instance.</param>
+            /// <param name="callerProvidedLMD">can be used to define the ILogMessageDistributionForLoggers instance that this object will be used with</param>
+            /// <param name="allowUseOfModularConfig">can be given as false to suppress use of modular config key Logging.Loggers.[name].LogGate as source for additional LogGate value.</param>
+            public Logger(string name, string groupName, LogGate initialInstanceLogGate, bool traceLoggerCtor = true, ILogMessageDistributionForLoggers callerProvidedLMD = null, bool allowUseOfModularConfig = true)
+                : base(name, groupName, initialInstanceLogGate, traceLoggerCtor: traceLoggerCtor, allowUseOfModularConfig: allowUseOfModularConfig, callerProvidedLMD: callerProvidedLMD) 
+            { }
 
             /// <summary>Copy constructor.</summary>
             /// <param name="rhs">Gives the Logger instance to make a copy from.</param>
@@ -2355,7 +2722,7 @@ namespace MosaicLib
             /// <param name="groupName">Provides the GroupName that this logger name will be assigned/moved to</param>
             /// <param name="initialInstanceLogGate">Defines the initial instance group gate that may be more restrictive than the gate assigned to the group or the logger through the distribution system.</param>
             public ConfigLogger(string name, string groupName, LogGate initialInstanceLogGate) 
-                : base(name, groupName, initialInstanceLogGate, true, false) 
+                : base(name, groupName, initialInstanceLogGate, traceLoggerCtor: true, allowUseOfModularConfig: false) 
             { }
 
             /// <summary>Defines the ClassName value that will be used by the LoggerBase when generating trace messages (if enabled).</summary>
@@ -2365,94 +2732,88 @@ namespace MosaicLib
         #endregion
 
         //-------------------------------------------------------------------
-		#region Trace helper objects
-
-        // NOTE:
-        // The following Trace object classes were inspired by the use of the TraceLogger class from logger.h in the log4cplus library developed by Tad E. Smith.
-        // In most cases these objects should be used in the context of a using statement such as:
-        //
-        //	using (IDisposable traceObj = MosaicLib.Logging.EntryExitTrace(logger, "TestTrace")) { [do stuff] }
+		#region Trace helper objects (CtorDisposeTrace, EntryExitTrace, TimerTrace)
 
         /// <summary>
         /// This class is used to provide a Trace on construction/destruction.  It logs a configurable message on construction and explicit disposal.
         /// Generally this class is used as the base class for the EnterExitTrace and TimerTrace classes.  By default messages use MesgType.Trace.
         /// </summary>
+        /// <remarks>
+        /// The following Trace object classes were inspired by the use of the TraceLogger class from logger.h in the log4cplus library developed by Tad E. Smith.
+        /// In most cases these objects should be used in the context of a using statement such as:
+        ///
+        ///	using (var ctTrace = new MosaicLib.Logging.CtorDisposeTrace(logger, "TraceID")) { [do stuff] }
+        /// </remarks>
         public class CtorDisposeTrace : IDisposable
 		{
-			private const string defaultCtorPrefixStr = "Ctor:";
-			private const string defaultDisposePrefixStr = "Dispose:";
-
-            /// <summary>String that may be assigned by the client to include additional information in the [] section of the dispose message that is generated.</summary>
-            public string ExtraMessage { get; set; }
-
             /// <summary>
             /// Defines the default message type that will be used for messages emitted by this object.
             /// <para/>currently MesgType.Trace
             /// </summary>
 			protected const MesgType defaultMesgType = MesgType.Trace;
 
-            /// <summary>Constructor.  Uses default prefix strings and MesgType.Trace log message type.</summary>
-            /// <param name="logger">Gives logger instance to use.</param>
-            /// <param name="traceID">Gives traceID string to use in resulting emitted messages.</param>
-            public CtorDisposeTrace(IBasicLogger logger, string traceID)
-				: this(logger, traceID, defaultMesgType, defaultCtorPrefixStr, 1, defaultDisposePrefixStr, 0) {}
+            /// <summary>
+            /// Defines the default warning message type that will be used for warning messages emitted by this object.
+            /// <para/>currently MesgType.Warning
+            /// </summary>
+			protected const MesgType defaultWarningMesgType = MesgType.Warning;
 
             /// <summary>Constructor.  Uses default prefix strings.</summary>
             /// <param name="logger">Gives logger instance to use.</param>
-            /// <param name="traceID">Gives traceID string to use in resulting emitted messages.</param>
-            /// <param name="mesgType">Gives the MesgType to use for the emitted messages.</param>
-            public CtorDisposeTrace(IBasicLogger logger, string traceID, MesgType mesgType)
-				: this(logger, traceID, mesgType, defaultCtorPrefixStr, 1, defaultDisposePrefixStr, 0) {}
-
-            /// <summary>Constructor.  Uses default prefix strings.</summary>
-            /// <param name="logger">Gives logger instance to use.</param>
-            /// <param name="traceID">Gives traceID string to use in resulting emitted messages.</param>
-            /// <param name="mesgType">Gives the MesgType to use for the emitted messages.</param>
-            /// <param name="ctorSkipNStackFrames">Defines the number of stack frames to skip for the stack frame that is used as the source for the emitted ctor message.</param>
-            public CtorDisposeTrace(IBasicLogger logger, string traceID, MesgType mesgType, int ctorSkipNStackFrames)
-				: this(logger, traceID, mesgType, defaultCtorPrefixStr, ctorSkipNStackFrames + 1, defaultDisposePrefixStr, 0) {}
-
-            /// <summary>Full Constructor for use with Logger.</summary>
-            /// <param name="logger">Gives logger instance to use.</param>
-            /// <param name="traceID">Gives traceID string to use in resulting emitted messages.</param>
+            /// <param name="traceID">Gives traceID string to use in resulting emitted messages.  When null this will be replaced with the name of the method that called this one.</param>
             /// <param name="mesgType">Gives the MesgType to use for the emitted messages.</param>
             /// <param name="ctorPrefixStr">Gives the name used for ctor type emitted messages.  Typically used when sub-classing this object for other purposes.</param>
-            /// <param name="ctorSkipNStackFrames">Defines the number of stack frames to skip for the stack frame that is used as the source for the emitted ctor message.</param>
             /// <param name="disposePrefixStr">Gives the name used for dispose type emitted messages.  Typically used when sub-classing this object for other purposes.</param>
-            /// <param name="disposeSkipNStackFrames">Defines the number of stack frames to skip for the stack frame that is used as the source for the emitted dispose message.</param>
-            public CtorDisposeTrace(IBasicLogger logger, string traceID, MesgType mesgType, string ctorPrefixStr, int ctorSkipNStackFrames, string disposePrefixStr, int disposeSkipNStackFrames)
-			{
-				if (logger != null)
-				{
-					mesgEmitter = logger.Emitter(mesgType);
-					warningEmitter = logger.Warning;
-				}
-
-				string ctorStr = ctorPrefixStr + traceID;
-				mesgEmitter.Emit(ctorSkipNStackFrames + 1, ctorStr);
-
-				disposeStr = disposePrefixStr + traceID;
-				this.disposeSkipNStackFrames = disposeSkipNStackFrames;
-			}
+            /// <param name="warningMesgType">Gives the Warning MesgType to use for the emitted warning messages (if any).</param>
+            /// <param name="setStartTime">When true, requests that the object set its StartTime using SetStartTime.</param>
+            [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+            public CtorDisposeTrace(IBasicLogger logger, string traceID = null, MesgType mesgType = defaultMesgType, string ctorPrefixStr = "Ctor:", string disposePrefixStr = "Dispose:", MesgType warningMesgType = defaultWarningMesgType, bool setStartTime = false)
+                : this((logger != null) ? logger.Emitter(mesgType) : null, traceID ?? new System.Diagnostics.StackFrame(1).GetMethod().Name, ctorPrefixStr, disposePrefixStr, (logger != null) ? logger.Emitter(warningMesgType) : null, setStartTime)
+            { }
 
             /// <summary>Full Constructor for use with emitter.</summary>
             /// <param name="emitter">Gives emitter instance to use for normal output.</param>
-            /// <param name="traceID">Gives traceID string to use in resulting emitted messages.</param>
+            /// <param name="traceID">Gives traceID string to use in resulting emitted messages.  When null this will be replaced with the name of the method that called this one.</param>
             /// <param name="ctorPrefixStr">Gives the name used for ctor type emitted messages.  Typically used when sub-classing this object for other purposes.</param>
-            /// <param name="ctorSkipNStackFrames">Defines the number of stack frames to skip for the stack frame that is used as the source for the emitted ctor message.</param>
             /// <param name="disposePrefixStr">Gives the name used for dispose type emitted messages.  Typically used when sub-classing this object for other purposes.</param>
-            /// <param name="disposeSkipNStackFrames">Defines the number of stack frames to skip for the stack frame that is used as the source for the emitted dispose message.</param>
-            public CtorDisposeTrace(IMesgEmitter emitter, string traceID, string ctorPrefixStr, int ctorSkipNStackFrames, string disposePrefixStr, int disposeSkipNStackFrames)
+            /// <param name="warningEmitter">Gives emitter instance to use for warning output.</param>
+            /// <param name="setStartTime">When true, requests that the object set its StartTime using SetStartTime.</param>
+            [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+            public CtorDisposeTrace(IMesgEmitter emitter, string traceID = null, string ctorPrefixStr = "Ctor:", string disposePrefixStr = "Dispose:", IMesgEmitter warningEmitter = null, bool setStartTime = false)
             {
-                mesgEmitter = emitter ?? Logging.NullEmitter;
+                traceID = traceID ?? new System.Diagnostics.StackFrame(1).GetMethod().Name;
 
-                string ctorStr = ctorPrefixStr + traceID;
-                mesgEmitter.Emit(ctorSkipNStackFrames + 1, ctorStr);
+                mesgEmitter = emitter;
+                this.warningEmitter = warningEmitter;
 
-                disposeStr = disposePrefixStr + traceID;
-                this.disposeSkipNStackFrames = disposeSkipNStackFrames;
+                string ctorStr = String.Concat(ctorPrefixStr.MapNullToEmpty(), traceID);
+
+                if (mesgEmitter != null)
+                    mesgEmitter.Emit(ctorStr);
+
+                disposeStr = String.Concat(disposePrefixStr.MapNullToEmpty(), traceID);
+
+                if (setStartTime)
+                    SetStartTime();
             }
 
+            /// <summary>Deprecated Constructor</summary>
+            [Obsolete("Method signatures which support stack frame traversal counters have been deprecated.  Please switch to use of signatures without stack frame traversal counts. [2017-12-19]")]
+            public CtorDisposeTrace(IBasicLogger logger, string traceID, MesgType mesgType, int ctorSkipNStackFrames)
+                : this(logger, traceID.MapNullToEmpty(), mesgType) 
+            { }
+
+            /// <summary>Deprecated Constructor</summary>
+            [Obsolete("Method signatures which support stack frame traversal counters have been deprecated.  Please switch to use of signatures without stack frame traversal counts. [2017-12-19]")]
+            public CtorDisposeTrace(IBasicLogger logger, string traceID, MesgType mesgType, string ctorPrefixStr, int ctorSkipNStackFrames, string disposePrefixStr, int disposeSkipNStackFrames)
+                : this(logger, traceID.MapNullToEmpty(), mesgType, ctorPrefixStr, disposePrefixStr)
+			{ }
+
+            /// <summary>Deprecated Constructor</summary>
+            [Obsolete("Method signatures which support stack frame traversal counters have been deprecated.  Please switch to use of signatures without stack frame traversal counts. [2017-12-19]")]
+            public CtorDisposeTrace(IMesgEmitter emitter, string traceID, string ctorPrefixStr, int ctorSkipNStackFrames, string disposePrefixStr, int disposeSkipNStackFrames)
+                : this(emitter, traceID.MapNullToEmpty(), ctorPrefixStr, disposePrefixStr)
+            { }
 
             /// <summary>
             /// Implementation method for <see cref="IDisposable"/> interface.
@@ -2461,8 +2822,7 @@ namespace MosaicLib
 			{
                 try
                 {
-                    if (disposeStr != null 
-                        && ((mesgEmitter != null && mesgEmitter.IsEnabled) || (warningEmitter != null && warningEmitter.IsEnabled)))
+                    if (disposeStr != null && ((mesgEmitter != null && mesgEmitter.IsEnabled) || (warningEmitter != null && warningEmitter.IsEnabled)))
                     {
                         string timeCountRateStr = String.Empty;
                         double runTime = RunTime;
@@ -2489,9 +2849,9 @@ namespace MosaicLib
                             finalDisposeStr = Utils.Fcns.CheckedFormat("{0} [{1} {2}]", disposeStr, timeCountRateStr, ExtraMessage);
 
                         if (mesgEmitter != null)
-                            mesgEmitter.Emit(disposeSkipNStackFrames + 1, finalDisposeStr);
+                            mesgEmitter.Emit(finalDisposeStr);
                         else if (warningEmitter != null)
-                            warningEmitter.Emit(disposeSkipNStackFrames + 1, "Unexpected disposal of trace object for mesg:{0}", finalDisposeStr);
+                            warningEmitter.Emit("Unexpected disposal of trace object for mesg:{0}", finalDisposeStr);
                     }
                 }
                 catch
@@ -2504,12 +2864,12 @@ namespace MosaicLib
 
             /// <summary>Storage for string that will be emitted on dispose</summary>
 			protected string disposeStr = null;
+
             /// <summary>Storage for emitter that was used by ctor and which will be used on dispose.</summary>
-            protected IMesgEmitter mesgEmitter = Logging.NullEmitter;
+            protected IMesgEmitter mesgEmitter;
+
             /// <summary>Storage for emitter that will be used for unexpected dispose cases.</summary>
-            protected IMesgEmitter warningEmitter = Logging.NullEmitter;
-            /// <summary>Storage for count of number of stack frames to skip on dispose.</summary>
-            protected int disposeSkipNStackFrames = 0;
+            protected IMesgEmitter warningEmitter;
 
             /// <summary>Property used by derived classes to track start/end timing</summary>
             public double StartTime { get { return startTime; } set { startTime = value; HaveStartTime = true; } }
@@ -2525,6 +2885,9 @@ namespace MosaicLib
 
             /// <summary>Returns true if the StartTime property has been set</summary>
             public bool HaveStartTime { get; private set; }
+
+            /// <summary>String that may be assigned by the client to include additional information in the [] section of the dispose message that is generated.</summary>
+            public string ExtraMessage { get; set; }
 
             /// <summary>Returns the time in seconds (from QPC) that have elapsed since the SetStartTime method was called.  Returns zero if HaveStartTime is not true (ie the StartTime property has not been set or the SetStartTime method has not been called).</summary>
             public double RunTime
@@ -2556,72 +2919,50 @@ namespace MosaicLib
         /// <summary>
         /// This class is generally used as a method entry/exit Trace.  It is based on the CtorDisposeTrace with modified default log message prefixes.
         /// By default messages use CtorDisposeTrace default message type (MesgType.Trace)
+        /// <para/>Also supports ExtraMessage property.
         /// </summary>
         /// <remarks>
-        ///	using (var eeTrace = MosaicLib.Logging.EntryExitTrace(logger)) { [do stuff] }
+        ///	using (var eeTrace = new MosaicLib.Logging.EntryExitTrace(logger)) { [do stuff] }
         /// </remarks>
-        public class EnterExitTrace
-			: CtorDisposeTrace
+        public class EnterExitTrace : CtorDisposeTrace
 		{
+            /// <summary>Enter:</summary>
 			private const string entryPrefixStr = "Enter:";
-			private const string exitPrefixStr = "Exit:";
-
-            /// <summary>constructor.  Uses caller's method name as traceID</summary>
-            /// <param name="logger">provides logger that will be used to emit enter(ctor) and leave(dispose) messages</param>
-			public EnterExitTrace(IBasicLogger logger)
-				: base(logger, new System.Diagnostics.StackFrame(1).GetMethod().Name, defaultMesgType, entryPrefixStr, 1, exitPrefixStr, 0) 
-            {
-                SetStartTime();
-            }
+            /// <summary>Exit:</summary>
+            private const string exitPrefixStr = "Exit:";
+            /// <summary>MesgType.Trace</summary>
+            private const MesgType defaultEntryExitMesgType = MesgType.Trace;
 
             /// <summary>constructor.</summary>
             /// <param name="logger">provides logger that will be used to emit Enter(ctor) and Exit(dispose) messages</param>
-            /// <param name="traceID">Gives caller provided traceID to generate "Enter:{traceID}" and "Exit:{traceID}" messages for.</param>
-            public EnterExitTrace(IBasicLogger logger, string traceID)
-				: base(logger, traceID, defaultMesgType, entryPrefixStr, 1, exitPrefixStr, 0)
-            {
-                SetStartTime();
-            }
-
-            /// <summary>constructor.</summary>
-            /// <param name="logger">provides logger that will be used to emit Enter(ctor) and Exit(dispose) messages</param>
-            /// <param name="traceID">Gives caller provided traceID to generate "Enter:{traceID}" and "Exit:{traceID}" messages for.</param>
+            /// <param name="traceID">Gives caller provided traceID to generate "Enter:{traceID}" and "Exit:{traceID}" messages for.  When null this will be replaced with the name of the method that called this one.</param>
             /// <param name="mesgType">Gives message type to use for emitted Enter and Leave messages</param>
-            public EnterExitTrace(IBasicLogger logger, string traceID, MesgType mesgType)
-				: base(logger, traceID, mesgType, entryPrefixStr, 1, exitPrefixStr, 0)
-            {
-                SetStartTime();
-            }
+            /// <param name="warningMesgType">Gives the Warning MesgType to use for the emitted warning messages (if any).</param>
+            [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+            public EnterExitTrace(IBasicLogger logger, string traceID = null, MesgType mesgType = defaultEntryExitMesgType, MesgType warningMesgType = defaultWarningMesgType)
+                : base(logger, traceID ?? new System.Diagnostics.StackFrame(1).GetMethod().Name, mesgType, entryPrefixStr, exitPrefixStr, warningMesgType: warningMesgType, setStartTime: true)
+            { }
 
-            /// <summary>constructor.</summary>
-            /// <param name="logger">provides logger that will be used to emit Enter(ctor) and Exit(dispose) messages</param>
-            /// <param name="traceID">Gives caller provided traceID to generate "Enter:{traceID}" and "Exit:{traceID}" messages for.</param>
-            /// <param name="mesgType">Gives message type to use for emitted Enter and Leave messages</param>
-            /// <param name="ctorSkipNStackFrames">Gives number of stack frames to skip for the stack frame used for the emitted Enter message.</param>
+            /// <summary>constructor for use with emitter.</summary>
+            /// <param name="emitter">Gives emitter instance to use for normal output.</param>
+            /// <param name="traceID">Gives caller provided traceID to generate "Enter:{traceID}" and "Exit:{traceID}" messages for.  When null this will be replaced with the name of the method that called this one.</param>
+            /// <param name="warningEmitter">Gives emitter instance to use for warning output.</param>
+            [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+            public EnterExitTrace(IMesgEmitter emitter, string traceID = null, IMesgEmitter warningEmitter = null)
+                : base(emitter, traceID ?? new System.Diagnostics.StackFrame(1).GetMethod().Name, entryPrefixStr, exitPrefixStr, warningEmitter: warningEmitter, setStartTime: true)
+            { }
+
+            /// <summary>Deprecated Constructor</summary>
+            [Obsolete("Method signatures which support stack frame traversal counters have been deprecated.  Please switch to use of signatures without stack frame traversal counts. [2017-12-19]")]
             public EnterExitTrace(IBasicLogger logger, string traceID, MesgType mesgType, int ctorSkipNStackFrames)
-				: base(logger, traceID, mesgType, entryPrefixStr, ctorSkipNStackFrames + 1, exitPrefixStr, 0) 
-            {
-                SetStartTime();
-            }
+                : this(logger, traceID.MapNullToEmpty(), mesgType) 
+            { }
 
-            /// <summary>constructor for use with emitter.</summary>
-            /// <param name="emitter">Gives emitter instance to use for normal output.</param>
-            /// <param name="traceID">Gives caller provided traceID to generate "Enter:{traceID}" and "Exit:{traceID}" messages for.</param>
-            public EnterExitTrace(IMesgEmitter emitter, string traceID)
-                : base(emitter, traceID, entryPrefixStr, 1, exitPrefixStr, 0)
-            {
-                SetStartTime();
-            }
-
-            /// <summary>constructor for use with emitter.</summary>
-            /// <param name="emitter">Gives emitter instance to use for normal output.</param>
-            /// <param name="traceID">Gives caller provided traceID to generate "Enter:{traceID}" and "Exit:{traceID}" messages for.</param>
-            /// <param name="ctorSkipNStackFrames">Gives number of stack frames to skip for the stack frame used for the emitted Enter message.</param>
+            /// <summary>Deprecated Constructor</summary>
+            [Obsolete("Method signatures which support stack frame traversal counters have been deprecated.  Please switch to use of signatures without stack frame traversal counts. [2017-12-19]")]
             public EnterExitTrace(IMesgEmitter emitter, string traceID, int ctorSkipNStackFrames)
-                : base(emitter, traceID, entryPrefixStr, ctorSkipNStackFrames + 1, exitPrefixStr, 0)
-            {
-                SetStartTime();
-            }
+                : this(emitter, traceID.MapNullToEmpty())
+            { }
         }
 
 		//-------------------------------------------------------------------
@@ -2629,56 +2970,179 @@ namespace MosaicLib
         /// <summary>
         /// This class is generally used as a section start/stop Trace.  It is based on the CtorDisposeTrace with modified default log message prefixes.
         /// By default start and stop messages use MesgType.Debug.
+        /// <para/>Also supports Count and ExtraMessage properties.
         /// </summary>
         /// <remarks>
-        ///	using (MosaicLib.Logging.TimerTrace(logger, "MeasurementName")) { [do stuff] }
+        ///	using (var tTrace = new MosaicLib.Logging.TimerTrace(logger, "MeasurementName")) { [do stuff] }
         /// </remarks>
-        public class TimerTrace
-			: CtorDisposeTrace
+        public class TimerTrace : CtorDisposeTrace
 		{
-			private const string startPrefixStr = "Start:";
-			private const string stopPrefixStr = "Stop:";
+            /// <summary>Start:</summary>
+            private const string startPrefixStr = "Start:";
+            /// <summary>Stop:</summary>
+            private const string stopPrefixStr = "Stop:";
+            /// <summary>MesgType.Debug</summary>
             private const MesgType defaultStartStopMesgType = MesgType.Debug;
 
             /// <summary>constructor.</summary>
             /// <param name="logger">provides logger that will be used to emit Start(ctor) and Stop(dispose) messages</param>
-            /// <param name="traceID">Gives caller provided traceID to generate "Start:{traceID}" and "Stop:{traceID}" messages for.</param>
-            public TimerTrace(IBasicLogger logger, string traceID)
-				: this(logger, traceID, defaultStartStopMesgType, 1) {}
-
-            /// <summary>constructor.</summary>
-            /// <param name="logger">provides logger that will be used to emit Start(ctor) and Stop(dispose) messages</param>
-            /// <param name="traceID">Gives caller provided traceID to generate "Start:{traceID}" and "Stop:{traceID}" messages for.</param>
+            /// <param name="traceID">Gives caller provided traceID to generate "Start:{traceID}" and "Stop:{traceID}" messages for.  When null this will be replaced with the name of the method that called this one.</param>
             /// <param name="mesgType">Gives message type to use for emitted Start and Stop messages</param>
-            public TimerTrace(IBasicLogger logger, string traceID, MesgType mesgType)
-				: this(logger, traceID, mesgType, 1) {}
-
-            /// <summary>constructor.</summary>
-            /// <param name="logger">provides logger that will be used to emit Start(ctor) and Stop(dispose) messages</param>
-            /// <param name="traceID">Gives caller provided traceID to generate "Start:{traceID}" and "Stop:{traceID}" messages for.</param>
-            /// <param name="mesgType">Gives message type to use for emitted Start and Stop messages</param>
-            /// <param name="ctorSkipNStackFrames">Gives number of stack frames to skip for the stack frame used for the emitted Start messages.</param>
-            public TimerTrace(IBasicLogger logger, string traceID, MesgType mesgType, int ctorSkipNStackFrames)
-				: base(logger, traceID, mesgType, startPrefixStr, ctorSkipNStackFrames + 1, stopPrefixStr, 0)
-			{
-                SetStartTime();
-			}
+            /// <param name="warningMesgType">Gives the Warning MesgType to use for the emitted warning messages (if any).</param>
+            [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+            public TimerTrace(IBasicLogger logger, string traceID = null, MesgType mesgType = MesgType.Debug, MesgType warningMesgType = defaultWarningMesgType)
+                : base(logger, traceID ?? new System.Diagnostics.StackFrame(1).GetMethod().Name, mesgType, startPrefixStr, stopPrefixStr, warningMesgType: warningMesgType, setStartTime: true) 
+            { }
 
             /// <summary>constructor for use with emitter.</summary>
             /// <param name="emitter">Gives emitter instance to use for normal output.</param>
-            /// <param name="traceID">Gives caller provided traceID to generate "Enter:{traceID}" and "Exit:{traceID}" messages for.</param>
-            /// <param name="ctorSkipNStackFrames">Gives number of stack frames to skip for the stack frame used for the emitted Enter message.</param>
+            /// <param name="traceID">Gives caller provided traceID to generate "Start:{traceID}" and "Stop:{traceID}" messages for.</param>
+            /// <param name="warningEmitter">Gives emitter instance to use for warning output.</param>
+            [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+            public TimerTrace(IMesgEmitter emitter, string traceID = null, IMesgEmitter warningEmitter = null)
+                : base(emitter, traceID ?? new System.Diagnostics.StackFrame(1).GetMethod().Name, startPrefixStr, stopPrefixStr, warningEmitter: warningEmitter, setStartTime: true)
+            { }
+
+            /// <summary>Deprecated Constructor</summary>
+            [Obsolete("Method signatures which support stack frame traversal counters have been deprecated.  Please switch to use of signatures without stack frame traversal counts. [2017-12-19]")]
+            public TimerTrace(IBasicLogger logger, string traceID, MesgType mesgType, int ctorSkipNStackFrames)
+				: this(logger, traceID.MapNullToEmpty(), mesgType)
+			{ }
+
+            /// <summary>Deprecated Constructor</summary>
+            [Obsolete("Method signatures which support stack frame traversal counters have been deprecated.  Please switch to use of signatures without stack frame traversal counts. [2017-12-19]")]
             public TimerTrace(IMesgEmitter emitter, string traceID, int ctorSkipNStackFrames)
-                : base(emitter, traceID, startPrefixStr, ctorSkipNStackFrames + 1, stopPrefixStr, 0)
-            {
-                SetStartTime();
-            }
+                : this(emitter, traceID.MapNullToEmpty())
+            { }
 		}
 
 		#endregion
 
 		//-------------------------------------------------------------------
 	}
+
+    #region Logging related ExtensionMethods
+
+    public static partial class ExtensionMethods
+    {
+        /// <summary>
+        /// Emit extension method to be used with IMesgEmitters.  
+        /// Allows an IFormattable <paramref name="formattable"/> to be safely emitted through the emitter.  
+        /// Internally uses SafeToString and allows the caller to specify the SafeToString optional paramters.
+        /// </summary>
+        public static void Emit(this Logging.IMesgEmitter emitter, IFormattable formattable, string format = null, IFormatProvider formatProvider = null, string mapNullTo = "", ExceptionFormat caughtExceptionToStringFormat = (ExceptionFormat.TypeAndMessageAndStackTrace))
+        {
+            if (emitter != null && emitter.IsEnabled)
+            {
+                emitter.Emit(formattable.SafeToString(format, formatProvider, mapNullTo: mapNullTo, caughtExceptionToStringFormat: caughtExceptionToStringFormat));
+            }
+        }
+
+        /// <summary>
+        /// Provides a method that will attempt to generate a LogGate from a given string resulting from calling ToString on another LogGate.  
+        /// Returns true if the original could be reconstructed or false if the string was not recognized or it could not otherwise be decoded.
+        /// </summary>
+        public static Logging.LogGate TryParse(this string str, Logging.LogGate fallbackValue = default(Logging.LogGate))
+        {
+            bool ignoreSuccessOut = false;
+            return str.TryParse(fallbackValue, out ignoreSuccessOut);
+        }
+
+        /// <summary>
+        /// Provides a method that will attempt to generate a LogGate from a given string resulting from calling ToString on another LogGate.  
+        /// Returns true if the original could be reconstructed or false if the string was not recognized or it could not otherwise be decoded.
+        /// </summary>
+        public static bool TryParse(this string str, out Logging.LogGate resultOut, Logging.LogGate fallbackValue = default(Logging.LogGate))
+        {
+            bool success = false;
+            resultOut = str.TryParse(fallbackValue, out success);
+            return success;
+        }
+
+        /// <summary>
+        /// Provides a method that will attempt to generate a LogGate from a given string resulting from calling ToString on another LogGate.  
+        /// Returns true if the original could be reconstructed or false if the string was not recognized or it could not otherwise be decoded.
+        /// </summary>
+        public static Logging.LogGate TryParse(this string str, Logging.LogGate fallbackValue, out bool success)
+        {
+            Logging.LogGate logGate = fallbackValue;
+
+            if (Utils.StringScanner.FindTokenValueByName(str, Logging.LogGate.LogGateNameMap, out logGate))
+            {
+                success = true;
+                return logGate;
+            }
+
+            Utils.StringScanner ss = new MosaicLib.Utils.StringScanner(str);
+            if (ss.MatchToken("LogGate:", false, false, false, TokenType.ToNextWhiteSpace))
+            {
+                Logging.MesgTypeMask mtm = logGate.MesgTypeMask;
+
+                if (Logging.MesgTypeMask.TryParse(ss.Rest, out mtm))
+                {
+                    success = true;
+                    return new Logging.LogGate(mtm);
+                }
+            }
+
+            int mask = 0;
+            if (ss.ParseValue(out mask) && ss.IsAtEnd)
+            {
+                success = true;
+                return new Logging.LogGate(new Logging.MesgTypeMask(mask));
+            }
+
+            success = false;
+            return fallbackValue;
+        }
+
+        /// <summary>
+        /// Provides a method that will attempt to generate a MesgTypeMask from a given string resulting from calling ToString on another MesgTypeMask.  Returns true if the original could be reconstructed or false if the string was not recognized and was not decidable.
+        /// </summary>
+        public static Logging.MesgTypeMask TryParse(this string str, Logging.MesgTypeMask fallbackValue = default(Logging.MesgTypeMask))
+        {
+            bool ignoreSuccessOut = false;
+            return str.TryParse(fallbackValue, out ignoreSuccessOut);
+        }
+
+        /// <summary>
+        /// Provides a method that will attempt to generate a MesgTypeMask from a given string resulting from calling ToString on another MesgTypeMask.  Returns true if the original could be reconstructed or false if the string was not recognized and was not decidable.
+        /// </summary>
+        public static bool TryParse(this string str, out Logging.MesgTypeMask resultOut, Logging.MesgTypeMask fallbackValue = default(Logging.MesgTypeMask))
+        {
+            bool success = false;
+            resultOut = str.TryParse(fallbackValue, out success);
+            return success;
+        }
+
+        /// <summary>
+        /// Provides a method that will attempt to generate a MesgTypeMask from a given string resulting from calling ToString on another MesgTypeMask.  Returns true if the original could be reconstructed or false if the string was not recognized and was not decidable.
+        /// </summary>
+        public static Logging.MesgTypeMask TryParse(this string str, Logging.MesgTypeMask fallbackValue, out bool success)
+        {
+            Utils.StringScanner scan = new MosaicLib.Utils.StringScanner(str);
+
+            string name = scan.ExtractToken(MosaicLib.Utils.TokenType.AlphaNumeric, false);
+            if (scan.Char == '+')
+            {
+                name = name + scan.Char;
+                scan.Idx++;
+            }
+
+            int maskBits = 0;
+
+            if (Utils.StringScanner.FindTokenValueByName(name, Logging.MesgTypeMask.MesgTypeMaskNameMap, out maskBits) && (scan.IsAtEnd || scan.Char == '['))    // ignore trailing [$hh] if it is present
+                success = true;
+            else if (name == "Custom" && scan.MatchToken("[$", false, false) && scan.ParseHexValue(out maskBits, 1, 8, false, false, false) && scan.MatchToken("]", false, false) && scan.IsAtEnd)
+                success = true;
+            else
+                success = false;
+
+            return success ? new Logging.MesgTypeMask(maskBits) : fallbackValue;
+        }
+    }
+
+    #endregion
 
 	//-------------------------------------------------------------------
 }

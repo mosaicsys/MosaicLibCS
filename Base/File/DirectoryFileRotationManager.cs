@@ -1,11 +1,12 @@
 //-------------------------------------------------------------------
 /*! @file DirectoryFileRotationManager.cs
- * @brief This file defines the DirectoryFileRotationManager class.
+ *  @brief This file defines the DirectoryFileRotationManager class.
  * (see descriptions below)
  * 
- * Copyright (c) Mosaic Systems Inc.  All rights reserved
- * Copyright (c) 2008 Mosaic Systems Inc.  All rights reserved
- * Copyright (c) 2007 Mosaic Systems Inc.  All rights reserved. (C++ library version)
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2008 Mosaic Systems Inc.
+ * Copyright (c) 2007 Mosaic Systems Inc.  (C++ library version)
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,15 +20,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
 
 using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 
-using MosaicLib.Utils;
+using MosaicLib;
 using MosaicLib.Modular.Part;
+using MosaicLib.Utils;
 
 namespace MosaicLib.File
 {
@@ -127,24 +128,28 @@ namespace MosaicLib.File
 		public string LastFaultCode { get { return setupFaultCode; } }
 
         /// <summary>Returns true if there are files in the directory that need to be deleted</summary>
-		public bool IsDirectoryCleanupNeeded
+        [Obsolete("Please change to using DirectoryCleanupNeededReason property (2016-12-13)")]
+        public bool IsDirectoryCleanupNeeded { get { return !DirectoryCleanupNeededReason.IsNullOrEmpty(); } }
+
+        /// <summary>Returns true if there are files in the directory that need to be deleted</summary>
+		public string DirectoryCleanupNeededReason
 		{
 			get 
 			{
 				if (config.purgeRules.dirNumFilesLimit != 0 && (totalNumberOfManagedFiles > config.purgeRules.dirNumFilesLimit))
-					return true;
+                    return "Directory File Count Limit Reached: {0} > {1}".CheckedFormat(totalNumberOfManagedFiles, config.purgeRules.dirNumFilesLimit);
 
 				if (config.purgeRules.dirTotalSizeLimit != 0 && (totalSizeOfManagedFiles > config.purgeRules.dirTotalSizeLimit))
-					return true;
+                    return "Directory Total Size Limit Reached: {0} > {1} bytes".CheckedFormat(totalSizeOfManagedFiles, config.purgeRules.dirTotalSizeLimit);
 
-				if (config.purgeRules.fileAgeLimitInSec > 0.0)
+				if (config.purgeRules.FileAgeLimit > TimeSpan.Zero)
 				{
 					if (IsDirEntryIDValid(oldestFileDirEntryID))
 					{
 						DirectoryEntryInfo oldestEntry = dirEntryList[oldestFileDirEntryID];
 
-						if (oldestEntry.CreationAge.TotalSeconds >= config.purgeRules.fileAgeLimitInSec)
-							return true;
+                        if (oldestEntry.CreationAge >= config.purgeRules.FileAgeLimit)
+                            return "Oldest file age is at or above File Age Limit: {0:f6} >= {1:f6} days".CheckedFormat(oldestEntry.CreationAge.TotalDays, config.purgeRules.FileAgeLimit.TotalDays);
 					}
 					else
 					{
@@ -152,14 +157,15 @@ namespace MosaicLib.File
 					}
 				}
 
-				return false;
+				return string.Empty;
 			}
 		}
 
         /// <summary>deletes the oldest file in the directory as needed to cleanup the directory (max of one deletion per call)</summary>
-		public void PerformIncrementalCleanup()
+		public void PerformIncrementalCleanup(string cleanupNeededReason = null)
 		{
-			if (!IsDirectoryCleanupNeeded)
+            cleanupNeededReason = cleanupNeededReason ?? DirectoryCleanupNeededReason;
+            if (cleanupNeededReason.IsNullOrEmpty())
 				return;
 
 			int entryID = FindOldestDirEntryID();
@@ -191,17 +197,16 @@ namespace MosaicLib.File
 
 			double fileAgeInHours = entryToDelete.CreationAge.TotalHours;
 
-			logger.Trace.Emit("PerformIncrementalCleanup::Attempting to delete file:'{0}' id:{1} size:{2} age:{3} hours", nameToDelete, entryID, entryFileInfo.Length, fileAgeInHours.ToString("f3"));
+			logger.Trace.Emit("PerformIncrementalCleanup::Attempting to delete file:'{0}' id:{1} size:{2} age:{3} hours [reason {4}]", nameToDelete, entryID, entryFileInfo.Length, fileAgeInHours.ToString("f3"), cleanupNeededReason);
 
 			try {
 				entryFileInfo.Delete();
-				logger.Info.Emit("Cleanup deleted file:'{0}', size:{1} age:{2} hours", nameToDelete, entryFileInfo.Length, fileAgeInHours.ToString("f3"));
+				logger.Info.Emit("Cleanup deleted file:'{0}', size:{1} age:{2} hours [reason {3}]", nameToDelete, entryFileInfo.Length, fileAgeInHours.ToString("f3"), cleanupNeededReason);
 			}
 			catch (System.Exception ex)
 			{
-				logger.Error.Emit("Cleanup failed to delete file:'{0}', code:{1}", nameToDelete, ex.Message);
+                logger.Error.Emit("Cleanup failed to delete file:'{0}', code:{1} [reason {2}]", nameToDelete, ex.Message, cleanupNeededReason);
 			}
-
 
 			// wether or not the deletion succeeded - remove the entry from the two maps
 			RemoveDirEntry(entryID);
@@ -212,10 +217,7 @@ namespace MosaicLib.File
 		{
 			get
 			{
-				DirectoryEntryInfo activeFileEntry = null;
-
-				if (IsDirEntryIDValid(activeFileEntryID))
-					activeFileEntry = dirEntryList[activeFileEntryID];
+                DirectoryEntryInfo activeFileEntry = ActiveFileDirectoryEntryInfo;
 
 				if (activeFileEntry != null && activeFileEntry.IsFile)
 					return activeFileEntry.FileSystemInfo.FullName;
@@ -224,8 +226,30 @@ namespace MosaicLib.File
 			}
 		}
 
+        /// <summary>
+        /// Returns the DirectoryEntryInfo for the active file or null if there is no such current active file entry or the entry is not a file.
+        /// </summary>
+        public DirectoryEntryInfo ActiveFileDirectoryEntryInfo
+        {
+            get
+            {
+                DirectoryEntryInfo activeFileEntry = null;
+
+                if (IsDirEntryIDValid(activeFileEntryID))
+                    activeFileEntry = dirEntryList[activeFileEntryID];
+
+                if (activeFileEntry != null && activeFileEntry.IsFile)
+                    return activeFileEntry;
+                else
+                    return null;
+            }
+        }
+
         /// <summary>Returns true if the client should stop using the current file and should start using a new file in the directory</summary>
-		public bool IsFileAdvanceNeeded() { return IsFileAdvanceNeeded(true); }
+		public bool IsFileAdvanceNeeded() 
+        { 
+            return IsFileAdvanceNeeded(true); 
+        }
 
         /// <summary>Returns true if the client should stop using the current file and should start using a new file in the directory</summary>
         public bool IsFileAdvanceNeeded(bool recheckActiveFileSizeNow)
@@ -250,6 +274,14 @@ namespace MosaicLib.File
 
             return config.advanceRules.IsFileAdvanceNeeded(activeFileInfo);
 		}
+
+        /// <summary>
+        /// Method allows client to explicitly trigger work to refresh the information about the current active file.
+        /// </summary>
+        public void RefreshActiveFileInfo()
+        {
+            MaintainActiveFileInfo(true);
+        }
 
         /// <summary>
         /// Updates and returns the path to the next active file which the client should create and then use.
@@ -289,6 +321,8 @@ namespace MosaicLib.File
 		{
             /// <summary>{prefix}YYYYMMDD_hhmmssnn{suffix}</summary>
 			ByDate,
+            /// <summary>{prefix}n{suffix}</summary>
+            Numeric1DecimalDigit,
             /// <summary>{prefix}nn{suffix}</summary>
             Numeric2DecimalDigits,
             /// <summary>{prefix}nnn{suffix}</summary>
@@ -391,31 +425,30 @@ namespace MosaicLib.File
 
 			// record the given configuration
 			this.config = config;
+            configDirPath = System.IO.Path.GetFullPath(config.dirPath.MapNullOrEmptyTo(@"."));
 			excludedFileSet = new System.Collections.Specialized.StringCollection();
 			excludedFileSet.AddRange(config.excludeFileNamesSet.SafeToArray());
-
-			string dirPath = config.dirPath;
 
 			// try to add a DirectoryEntryInfo record for each of the files that are in the directory 
 			try 
 			{
-				DirectoryEntryInfo basePathInfo = new DirectoryEntryInfo(dirPath);
+                DirectoryEntryInfo basePathInfo = new DirectoryEntryInfo(configDirPath);
 
 				if (basePathInfo.Exists)
 				{
 					if (basePathInfo.IsFile)
-						throw new SetupFailureException(Utils.Fcns.CheckedFormat("target path '{0}' does not specify a directory.", dirPath));
+                        throw new SetupFailureException(Utils.Fcns.CheckedFormat("target path '{0}' does not specify a directory.", configDirPath));
 				}
 				else
 				{
 					if (config.createDirectoryIfNeeded)
-						System.IO.Directory.CreateDirectory(dirPath);
+                        System.IO.Directory.CreateDirectory(configDirPath);
 					else
-						throw new SetupFailureException(Utils.Fcns.CheckedFormat("target path '{0}' does not exist.", dirPath));
+                        throw new SetupFailureException(Utils.Fcns.CheckedFormat("target path '{0}' does not exist.", configDirPath));
 				}
 
 				// directory exists or has been created - now scan it and record each of the entries that are found therein
-				DirectoryInfo dirInfo = new DirectoryInfo(dirPath);
+                DirectoryInfo dirInfo = new DirectoryInfo(configDirPath);
 				FileSystemInfo [] directoryFSIArray = dirInfo.GetFileSystemInfos();
 
 				foreach (FileSystemInfo fsi in directoryFSIArray)
@@ -428,7 +461,7 @@ namespace MosaicLib.File
 				}
 
 				if (numBadDirEntries != 0)
-					logger.Error.Emit("Setup Failure: There are bad directory entries in dir '{0}'", dirPath);
+                    logger.Error.Emit("Setup Failure: There are bad directory entries in dir '{0}'", configDirPath);
 			}
 			catch (SetupFailureException sfe)
 			{
@@ -436,7 +469,7 @@ namespace MosaicLib.File
 			}
 			catch (System.Exception ex)
 			{
-				SetSetupFaultCode(Utils.Fcns.CheckedFormat("Setup Failure: encountered unexpected exception '{0}' while processing dir '{1}'", ex.Message, dirPath));
+                SetSetupFaultCode(Utils.Fcns.CheckedFormat("Setup Failure: encountered unexpected {0} while processing dir '{1}'", ex.ToString(ExceptionFormat.TypeAndMessage), configDirPath));
 			}
 
 			if (!SetupFailed)
@@ -463,7 +496,8 @@ namespace MosaicLib.File
 				switch (config.fileNamePattern)
 				{
 				case FileNamePattern.ByDate:				numFileNumberDigits = 0; break;
-				case FileNamePattern.Numeric2DecimalDigits:	numFileNumberDigits = 2; maxFileNumber = 100; break;
+                case FileNamePattern.Numeric1DecimalDigit: numFileNumberDigits = 1; maxFileNumber = 10; break;
+                case FileNamePattern.Numeric2DecimalDigits: numFileNumberDigits = 2; maxFileNumber = 100; break;
 				case FileNamePattern.Numeric3DecimalDigits:	numFileNumberDigits = 3; maxFileNumber = 1000; break;
 				case FileNamePattern.Numeric4DecimalDigits:	numFileNumberDigits = 4; maxFileNumber = 10000; break;
 				default: SetSetupFaultCode("Setup Failure: Invalid file name pattern in configuration"); break;
@@ -562,23 +596,29 @@ namespace MosaicLib.File
 				}
 
 				if (!matchFound && dirEntryIDListSortedByCreatedFTimeUtc.Count != 0)
-					logger.Warning.Emit("Setup Warning: no valid active file found in non-empty directory '{0}'", dirPath);
+                    logger.Warning.Emit("Setup Warning: no valid active file found in non-empty directory '{0}'", configDirPath);
 			}
 
 			if (!SetupFailed && config.enableAutomaticCleanup)
 			{
-				for (int limit = 0; IsDirectoryCleanupNeeded && (limit < config.maxAutoCleanupDeletes); limit++)
-					PerformIncrementalCleanup();
+				for (int limit = 0; limit < config.maxAutoCleanupDeletes; limit++)
+                {
+                    string cleanupNeededReason = DirectoryCleanupNeededReason;
+                    if (cleanupNeededReason.IsNullOrEmpty())
+                        break;
+
+                    PerformIncrementalCleanup(cleanupNeededReason);
+                }
 			}
 
 			if (SetupFailed)
 			{
-				logger.Error.Emit("Directory is not usable: path:'{0}' fault:'{1}'", dirPath, setupFaultCode);
+                logger.Error.Emit("Directory is not usable: path:'{0}' fault:'{1}'", configDirPath, setupFaultCode);
 			}
 			else
 			{
-				logger.Debug.Emit("Directory is usable: path:'{0}' number of files:{1} active file:'{2}'", 
-											dirPath, dirEntryIDListSortedByName.Count, activeFileInfo.Name);
+				logger.Debug.Emit("Directory is usable: path:'{0}' number of files:{1} active file:'{2}'",
+                                            configDirPath, dirEntryIDListSortedByName.Count, activeFileInfo.Name);
 			}
 
 			setupPerformed = true;
@@ -652,8 +692,6 @@ namespace MosaicLib.File
         /// </summary>
 		protected void GenerateNextActiveFile()
 		{
-            string methodName = new System.Diagnostics.StackFrame().GetMethod().Name;
-            
             // any current active entry is no longer active
 			activeFileEntryID = DirEntryID_Invalid;
 
@@ -676,7 +714,8 @@ namespace MosaicLib.File
 				}
 				break;
 
-			case FileNamePattern.Numeric2DecimalDigits:
+            case FileNamePattern.Numeric1DecimalDigit:
+            case FileNamePattern.Numeric2DecimalDigits:
 			case FileNamePattern.Numeric3DecimalDigits:
 			case FileNamePattern.Numeric4DecimalDigits:
 				{
@@ -698,7 +737,7 @@ namespace MosaicLib.File
 			DirectoryEntryInfo entryInfo = new DirectoryEntryInfo(filePath);
 			FileSystemInfo entryFSI = entryInfo.FileSystemInfo;
 
-			Utils.Asserts.LogIfConditionIsNotTrue((nameWasInMap == entryInfo.Exists), "{0}: name already exists only if it was removed from map".CheckedFormat(methodName));
+            Utils.Asserts.LogIfConditionIsNotTrue((nameWasInMap == entryInfo.Exists), "{0}: name already exists only if it was removed from map".CheckedFormat(Fcns.CurrentMethodName));
 
 			if (entryInfo.Exists)
 			{
@@ -707,15 +746,15 @@ namespace MosaicLib.File
 				double fileAgeInHours = entryInfo.CreationAge.TotalHours;
                 Int64 fileSize = entryInfo.Length;
 
-				logger.Trace.Emit("{0}: Attempting to delete prior file:'{1}' size:{2} age:{3} hours", methodName, entryInfo.Name, fileSize, fileAgeInHours.ToString("f3"));
+				logger.Trace.Emit("{0}: Attempting to delete prior file:'{1}' size:{2} age:{3} hours", Fcns.CurrentMethodName, entryInfo.Name, fileSize, fileAgeInHours.ToString("f3"));
 
 				try {
 					entryFSI.Delete();
-                    logger.Debug.Emit("{0}: Deleted prior file:'{1}' size:{2} age:{3} hours", methodName, entryInfo.Name, fileSize, fileAgeInHours.ToString("f3"));
+                    logger.Debug.Emit("{0}: Deleted prior file:'{1}' size:{2} age:{3} hours", Fcns.CurrentMethodName, entryInfo.Name, fileSize, fileAgeInHours.ToString("f3"));
 				}
 				catch (System.Exception ex)
 				{
-                    logger.Error.Emit("{0}: failed to delete prior file:'{1}', error:'{2}'", methodName, entryInfo.Name, ex.Message);
+                    logger.Error.Emit("{0}: failed to delete prior file:'{1}', error:'{2}'", Fcns.CurrentMethodName, entryInfo.Name, ex.Message);
 					return;
 				}
 			}
@@ -727,7 +766,7 @@ namespace MosaicLib.File
 
 			DirectoryEntryInfo activeFileEntry = dirEntryList[activeFileEntryID];
 
-            logger.Debug.Emit("{0}: active file is now:'{1}' id:{2}", methodName, activeFileEntry.Name, activeFileEntryID);
+            logger.Debug.Emit("{0}: active file is now:'{1}' id:{2}", Fcns.CurrentMethodName, activeFileEntry.Name, activeFileEntryID);
 		}
 
         /// <summary>
@@ -939,6 +978,7 @@ namespace MosaicLib.File
 		bool firstSetup = true;
 
 		Config config = null;
+        string configDirPath = null;
 		System.Collections.Specialized.StringCollection excludedFileSet = null;
 
 		bool setupPerformed = false;
@@ -979,25 +1019,59 @@ namespace MosaicLib.File
             if (activeFileInfo == null)	// if we could not cast the entry's FSI to a FileInfo entry then advance is needed
                 return true;
 
+            return IsFileAdvanceNeeded(advanceRules, activeFileInfo.Length, activeFileInfo.CreationTime, DateTime.Now);
+        }
+
+        /// <summary>Returns true if the client should stop using the current file and should start using a new file in the directory</summary>
+        public static bool IsFileAdvanceNeeded(this Logging.FileRotationLoggingConfig.AdvanceRules advanceRules, long activeFileLength, DateTime activeFileCreationTime, DateTime now)
+        {
             // check for size limit reached
-            bool sizeLimitReached = (activeFileInfo.Length > advanceRules.fileSizeLimit
+            bool sizeLimitReached = (activeFileLength > advanceRules.fileSizeLimit
                                      && advanceRules.fileSizeLimit > 0);
 
             if (sizeLimitReached)
                 return true;
 
             // then check for age limit reached
-            bool ageLimitReached = false;
-
             if (advanceRules.fileAgeLimitInSec > 0.0)
             {
-                double fileAgeInSec = (DateTime.Now - activeFileInfo.CreationTime).TotalSeconds;
+                double fileAgeInSec = (now - activeFileCreationTime).TotalSeconds;
 
-                ageLimitReached = (fileAgeInSec > advanceRules.fileAgeLimitInSec);
+                bool ageLimitReached = (fileAgeInSec > advanceRules.fileAgeLimitInSec);
+
+                if (ageLimitReached)
+                    return true;
             }
 
-            if (ageLimitReached)
-                return true;
+            // check if the advance on time boundary boundary has been crossed
+            if (advanceRules.advanceOnTimeBoundary != Logging.AdvanceOnTimeBoundary.None)
+            {
+                switch (advanceRules.advanceOnTimeBoundary)
+                {
+                    case Logging.AdvanceOnTimeBoundary.Hourly:
+                        if (activeFileCreationTime.Hour != now.Hour)
+                            return true;
+                        break;
+                    case Logging.AdvanceOnTimeBoundary.Daily:
+                        if (activeFileCreationTime.DayOfYear != now.DayOfYear)
+                            return true;
+                        break;
+                    case Logging.AdvanceOnTimeBoundary.EachMonday:
+                        if (activeFileCreationTime.DayOfYear != now.DayOfYear && now.DayOfWeek == DayOfWeek.Monday)
+                            return true;
+                        break;
+                    case Logging.AdvanceOnTimeBoundary.EachSunday:
+                        if (activeFileCreationTime.DayOfYear != now.DayOfYear && now.DayOfWeek == DayOfWeek.Sunday)
+                            return true;
+                        break;
+                    case Logging.AdvanceOnTimeBoundary.Monthly:
+                        if (activeFileCreationTime.Month != now.Month)
+                            return true;
+                        break;
+                    default:
+                        break;
+                }
+            }
 
             // neither limit reached
             return false;

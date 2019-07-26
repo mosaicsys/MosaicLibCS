@@ -1,10 +1,11 @@
 //-------------------------------------------------------------------
 /*! @file ClientFacet.cs
- * @brief This file contains the definitions and classes that are used to define the Client side, or facet, of the Modular Action concept which is implemented in this library.
+ *  @brief This file contains the definitions and classes that are used to define the Client side, or facet, of the Modular Action concept which is implemented in this library.
  * 
- * Copyright (c) Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2008 Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2006 Mosaic Systems Inc., All rights reserved. (C++ library version)
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2008 Mosaic Systems Inc.
+ * Copyright (c) 2006 Mosaic Systems Inc. (C++ library version)
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +19,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
 
 //-------------------------------------------------
  //@page MosaicLib_ModularActionsPage Modular Actions
@@ -109,10 +109,13 @@
 //-------------------------------------------------
 
 using System;
-using MosaicLib.Utils;
-using MosaicLib.Time;
-using MosaicLib.Modular.Common;
+using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.Serialization;
+
+using MosaicLib.Modular.Common;
+using MosaicLib.Time;
+using MosaicLib.Utils;
 
 namespace MosaicLib.Modular.Action
 {
@@ -134,24 +137,24 @@ namespace MosaicLib.Modular.Action
     [DataContract(Namespace=Constants.ModularActionNameSpace)]
 	public enum ActionStateCode : int
 	{
-		/// <summary>default ctor value for structs</summary>
+		/// <summary>default ctor value for structs (0)</summary>
         [EnumMember]
 		Initial = 0,
-		/// <summary>state after valid creation by a provider</summary>
+		/// <summary>state after valid creation by a provider (1)</summary>
         [EnumMember]
-        Ready,
-		/// <summary>this state covers the operation from once the Start method has committed to enqueueing the operation until it is marked as having been issued.</summary>
+        Ready = 1,
+		/// <summary>this state covers the operation from once the Start method has committed to enqueueing the operation until it is marked as having been issued. (2)</summary>
         [EnumMember]
-        Started,
-		/// <summary>provider has accepted this operation and is performing it</summary>
+        Started = 2,
+		/// <summary>provider has accepted this operation and is performing it (3)</summary>
         [EnumMember]
-        Issued,
-		/// <summary>operation has been completed (successfully or not).</summary>
+        Issued = 3,
+		/// <summary>operation has been completed (successfully or not). (4)</summary>
         [EnumMember]
-        Complete,
-		/// <summary>should never be in this state - cannot be Started or used</summary>
+        Complete = 4,
+		/// <summary>should never be in this state - cannot be Started or used (5)</summary>
         [EnumMember]
-        Invalid,
+        Invalid = 5,
 	};
 
 	#endregion
@@ -165,7 +168,7 @@ namespace MosaicLib.Modular.Action
 	///make summary inquires about the state code and result code string.
 	///</summary>
 	
-	public interface IActionState
+	public interface IActionState : IEquatable<IActionState>
 	{
 		/// <summary>The last reported state code for from the Action</summary>
 		ActionStateCode StateCode { get; }
@@ -205,6 +208,13 @@ namespace MosaicLib.Modular.Action
         /// These may be used to carry progress information back to the client and/or to carry additional results back to the client once the Action is complete.
         /// </summary>
         Common.INamedValueSet NamedValues { get; }
+
+        /// <summary>
+        /// IEquatable{IActionState} Equals implementation.  
+        /// Returns true of the contents of this IActionState are "equal" to the contents of the other IActionState.
+        /// Checks StateCode, ResultCode, TimeStamp (optionally) and NamedValues for equality
+        /// </summary>
+        bool Equals(IActionState other, bool compareTimestamps);
     }
 
 	#endregion
@@ -215,7 +225,7 @@ namespace MosaicLib.Modular.Action
 	/// <summary>
     /// Basic Client Facet interface.  
     /// Allows client to Start, Wait For Completion, Run, Request Cancel and access the Action's ActionState.  
-    /// Also allows client to register a notification item with the notification list.
+    /// Also allows client to register a notification item Action's NotifyOnComplete and/or NotifyOnUpdate notification lists.
     /// </summary>
 	public interface IClientFacet
 	{
@@ -228,7 +238,7 @@ namespace MosaicLib.Modular.Action
         /// <summary>
         /// Carries a set of name/value pair objects that can be passed by the client to the target Part as named parameter values based on the Common.NamedValueList
         /// facility.  These may be used to carry an arbitrary set of parameters, by name, to the Action's implementing part.
-        /// A readonly copy of thie property is made when the action is Started and this clone is then made available to the provider.
+        /// A readonly copy of this property is made when the action is Started and this clone is then made available to the provider.
         /// </summary>
         Common.INamedValueSet NamedParamValues { get; set; }
 
@@ -326,13 +336,46 @@ namespace MosaicLib.Modular.Action
 
     #endregion
 
-    #region IClientFacet ExtentionMethods
+    #region IActionState and IClientFacet ExtentionMethods
 
     /// <summary>
     /// common "namespace" class to define extension methods within.
     /// </summary>
     public static partial class ExtentionMethods
     {
+        /// <summary>
+        /// Returns true if the given actionState has the same contents as ActionStateImplBase.Empty.
+        /// </summary>
+        public static bool IsEmpty(this IActionState actionState)
+        {
+            return ActionStateImplBase.Empty.IsEqualTo(actionState);
+        }
+
+        /// <summary>
+        /// Returns true if the given actionState has the same contents as the given rhs.
+        /// </summary>
+        public static bool IsEqualTo(this IActionState actionState, IActionState rhs, bool compareTimestamps = true)
+        {
+            if (Object.ReferenceEquals(actionState, rhs) || (actionState == null && rhs == null))
+                return true;
+
+            if (actionState == null || rhs == null)
+                return false;
+
+            return actionState.Equals(rhs, compareTimestamps: compareTimestamps);
+        }
+
+        /// <summary>
+        /// Call chainable version of setter for IClientFacet's NamedParamValues property.  
+        /// If <paramref name="namedParamValues"/> is null and <paramref name="ifNotNull"/> is true then this method makes no change.
+        /// </summary>
+        public static TClientFacetType SetNamedParamValues<TClientFacetType>(this TClientFacetType action, INamedValueSet namedParamValues, bool ifNotNull = false) where TClientFacetType : IClientFacet
+        {
+            if (namedParamValues != null || !ifNotNull)
+                action.NamedParamValues = namedParamValues;
+            return action;
+        }
+
         /// <summary>Inline variant of action.Start that supports call chaining.  This method is only intended for use in cases where the action is already known to be ready to start (ie the start will not fail) as the result code from the underlying start call will be lost.</summary>
         public static TClientFacetType StartInline<TClientFacetType>(this TClientFacetType action) where TClientFacetType : IClientFacet
         {
@@ -360,6 +403,207 @@ namespace MosaicLib.Modular.Action
             action.Run(timeLimit);
             return action;
         }
+
+        /// <summary>
+        /// Blocks the caller until the given action completes or the isWaitLimitReachedDelegate returns true (typically based on a timer expiring).
+        /// This evaluation takes place in a spin loop with the spin's wait period given using the spinInterval value.  
+        /// If the caller does not provide a spinInterval then 0.1 seconds will be used.  The any given spinInterval value will be clipped to be between 0.001 seconds and 0.5 seconds.
+        /// <para/>supports call chaining
+        /// </summary>
+        public static TClientFacetType WaitUntilComplete<TClientFacetType>(this TClientFacetType action, Func<bool> isWaitLimitReachedDelegate, TimeSpan? spinInterval = null) 
+            where TClientFacetType : IClientFacet
+        {
+            TimeSpan useSpinInterval = (spinInterval ?? (0.1).FromSeconds()).Clip(spinIntervalClipRangeMinValue, spinIntervalClipRangeMaxValue);
+
+            isWaitLimitReachedDelegate = isWaitLimitReachedDelegate ?? (() => false);
+
+            if (action != null)
+            {
+                for (; ; )
+                {
+                    if (action.ActionState.IsComplete)
+                        break;
+
+                    if (isWaitLimitReachedDelegate())
+                        break;
+
+                    action.WaitUntilComplete(useSpinInterval);
+                }
+            }
+
+            return action;
+        }
+
+        /// <summary>
+        /// Blocks the caller until the given actionSet completes (based on the chosen completionType) or the isWaitLimitReachedDelegate returns true (typically based on a timer expiring).
+        /// This evaluation takes place in a spin loop with the spin's wait period given using the spinInterval value.  
+        /// If the caller does not provide a spinInterval then 0.1 seconds will be used.  The any given spinInterval value will be clipped to be between 0.001 seconds and 0.5 seconds
+        /// <para/>supports call chaining
+        /// </summary>
+        public static TClientFacetType [] WaitUntilSetComplete<TClientFacetType>(this TClientFacetType [] actionSetArray, Func<bool> isWaitLimitReachedDelegate = null, TimeSpan? spinInterval = null, WaitForSetCompletionType completionType = WaitForSetCompletionType.All) 
+            where TClientFacetType : IClientFacet
+        {
+            TimeSpan useSpinInterval = (spinInterval ?? (0.1).FromSeconds()).Clip(spinIntervalClipRangeMinValue, spinIntervalClipRangeMaxValue);
+
+            Func<string> spinEarlyExitCodeDelegate = null;
+            if (isWaitLimitReachedDelegate != null) 
+                spinEarlyExitCodeDelegate = () => (isWaitLimitReachedDelegate() ? "" : null);
+
+            actionSetArray.WaitUntilSetComplete(spinEarlyExitCodeDelegate: spinEarlyExitCodeDelegate, spinInterval: spinInterval, completionType: completionType);
+
+            return actionSetArray;
+        }
+
+        /// <summary>
+        /// Returns the ActionState from the first failed icf's of the given set, the ActionState from the last successfull icf if all of them succeeded, or the given <paramref name="fallbackValue"/>.
+        /// </summary>
+        public static IActionState GetFirstFailureOrAllSuccessState(this IClientFacet[] actionSetArray, IActionState fallbackValue = null)
+        {
+            int numThatHaveNotCompleted = 0;
+            IActionState lastSuccess = null;
+
+            foreach (var icf in actionSetArray)
+            {
+                var actionState = icf.ActionState;
+
+                if (!actionState.IsComplete)
+                    numThatHaveNotCompleted++;
+                else if (actionState.Failed)
+                    return actionState;
+                else
+                    lastSuccess = actionState;
+            }
+
+            if (numThatHaveNotCompleted == 0)
+                return lastSuccess;
+
+            return fallbackValue;
+        }
+
+        /// <summary>
+        /// Blocks the caller until the given <paramref name="actionSetArray"/> completes (based on the chosen <paramref name="completionType"/>) or the <paramref name="spinEarlyExitCodeDelegate"/> returns a non-null string (typically based on a timer expiring, cancel requested, part shutdown requested, ...).
+        /// This evaluation takes place in a spin loop with the spin's wait period given using the <paramref name="spinInterval"/> value.  
+        /// If the caller does not provide a spinInterval then 0.1 seconds will be used.  The any given <paramref name="spinInterval"/> value will be clipped to be between 0.001 seconds and 0.5 seconds
+        /// </summary>
+        public static string WaitUntilSetComplete<TClientFacetType>(this TClientFacetType[] actionSetArray, Func<string> spinEarlyExitCodeDelegate, TimeSpan? spinInterval = null, WaitForSetCompletionType completionType = WaitForSetCompletionType.All)
+            where TClientFacetType : IClientFacet
+        {
+            TimeSpan useSpinInterval = (spinInterval ?? (0.1).FromSeconds()).Clip(spinIntervalClipRangeMinValue, spinIntervalClipRangeMaxValue);
+
+            spinEarlyExitCodeDelegate = spinEarlyExitCodeDelegate ?? (() => null);
+
+            IClientFacet firstAction = actionSetArray.FirstOrDefault();
+
+            if (firstAction != null)
+            {
+                for (; ; )
+                {
+                    IClientFacet firstWaitableAction = null;
+
+                    switch (completionType)
+                    {
+                        case WaitForSetCompletionType.Any:
+                            {
+                                var firstCompleteAction = actionSetArray.FirstOrDefault(a => a.ActionState.IsComplete);
+                                if (firstCompleteAction != null)
+                                    return firstCompleteAction.ActionState.ResultCode;
+
+                                firstWaitableAction = actionSetArray.FirstOrDefault(a => !a.ActionState.IsComplete);
+                            }
+                            break;
+
+                        case WaitForSetCompletionType.All:
+                            firstWaitableAction = actionSetArray.FirstOrDefault(a => !a.ActionState.IsComplete);
+                            if (firstWaitableAction == null)
+                            {
+                                var firstFailedAction = actionSetArray.FirstOrDefault(a => a.ActionState.Failed);
+                                if (firstFailedAction != null)
+                                    return firstFailedAction.ActionState.ResultCode;
+                                else
+                                    return "";
+                            }
+                            break;
+
+                        case WaitForSetCompletionType.AllOrAnyFailure:
+                            {
+                                // NOTE: in the following case the order of evaluation is important as the ActionStates of incomplete actions may change between the evaluation of the firstWaitableAction and of the firstFailedAction
+                                firstWaitableAction = actionSetArray.FirstOrDefault(a => !a.ActionState.IsComplete);
+                                var firstFailedAction = actionSetArray.FirstOrDefault(a => a.ActionState.Failed);
+                                if (firstFailedAction != null)
+                                    return firstFailedAction.ActionState.ResultCode;
+                                else if (firstWaitableAction == null)
+                                    return "";
+                            }
+
+                            break;
+                    }
+
+                    string earlyExitCode = spinEarlyExitCodeDelegate();
+                    if (earlyExitCode != null)
+                        return earlyExitCode;
+
+                    if (firstWaitableAction != null)
+                        firstWaitableAction.WaitUntilComplete(useSpinInterval);
+                    else
+                        spinIntervalClipRangeMinValue.Sleep();
+                }
+            }
+
+            return "";      // there were no actions to run
+        }
+
+        /// <summary>
+        /// Attempts to Start each of the given <paramref name="actionSetArray"/> of actions and then waits for them to complete.
+        /// If some or all of them are started, gets the exitCode that results from passing the corresponding set of parameters to WaitUntilSetComplete for the set of successfully started actions.
+        /// Then returns either the non-empty exit code from WaitUntilSetComplete, or the first non-empty failure code from attempting to start the actions, or the empty string to indicate success.
+        /// </summary>
+        public static string RunSet<TClientFacetType>(this TClientFacetType[] actionSetArray, Func<string> spinEarlyExitCodeDelegate = null, TimeSpan? spinInterval = null, WaitForSetCompletionType completionType = WaitForSetCompletionType.All)
+            where TClientFacetType : IClientFacet
+        {
+            int successfullyStartedCount = 0;
+            string firstStartFailureEC = null;
+            foreach (var a in actionSetArray)
+            {
+                var ec = a.Start();
+                if (ec.IsNullOrEmpty())
+                    successfullyStartedCount++;
+                else
+                    firstStartFailureEC = firstStartFailureEC ?? ec;
+            }
+
+            if (successfullyStartedCount > 0)
+            {
+                string waitResultEC = null;
+                if (firstStartFailureEC == null)
+                    waitResultEC = actionSetArray.WaitUntilSetComplete(spinEarlyExitCodeDelegate: spinEarlyExitCodeDelegate, spinInterval: spinInterval, completionType: completionType);
+                else
+                    waitResultEC = actionSetArray.Take(successfullyStartedCount).ToArray().WaitUntilSetComplete(spinEarlyExitCodeDelegate: spinEarlyExitCodeDelegate, spinInterval: spinInterval, completionType: completionType);
+
+                if (!waitResultEC.IsNullOrEmpty())
+                    return waitResultEC;
+            }
+
+            return firstStartFailureEC ?? "";
+        }
+
+        /// <summary>
+        /// This enumeration is used with the IEnumerable variant of the WaitUntilComplete extension methods.  
+        /// It determines if the WaitUntilComplete method is intended to wait for 
+        /// </summary>
+        public enum WaitForSetCompletionType
+        {
+            /// <summary>Wait completes normally when all actions have been completed</summary>
+            All,
+
+            /// <summary>Wait completes normally when any action has been completed</summary>
+            Any,
+
+            /// <summary>Wait completes normally when all actions have succeeded or any action has failed (whichever comes first)</summary>
+            AllOrAnyFailure,
+        }
+
+        private static readonly TimeSpan spinIntervalClipRangeMinValue = (1.0).FromMilliseconds();
+        private static readonly TimeSpan spinIntervalClipRangeMaxValue = (0.5).FromSeconds(); 
     }
 
     #endregion

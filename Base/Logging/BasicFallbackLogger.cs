@@ -1,10 +1,11 @@
 //-------------------------------------------------------------------
 /*! @file BasicFallbackLogger.cs
- * @brief This file defines the static BasicFallbackLogger class that is used to emit log messages when the normal log distribution system cannot otherwise be used.  Typically this class is used within the log distribution system itself.
+ *  @brief This file defines the static BasicFallbackLogger class that is used to emit log messages when the normal log distribution system cannot otherwise be used.  Typically this class is used within the log distribution system itself.
  * 
- * Copyright (c) Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2008 Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2007 Mosaic Systems Inc., All rights reserved. (C++ library version)
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2008 Mosaic Systems Inc.
+ * Copyright (c) 2007 Mosaic Systems Inc.  (C++ library version)
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,12 +19,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
+
+using System.Runtime.InteropServices;
 
 namespace MosaicLib
 {
-	using System.Runtime.InteropServices;
-
     /// <summary>
     /// The contents of this file extend the Logging class/namespace.
     /// </summary>
@@ -51,7 +51,6 @@ namespace MosaicLib
 			/// <summary>
 			/// Provide local and public access to OutputDebugString method
 			/// </summary>
-			/// <param name="message"></param>
 			[DllImport("Kernel32.dll")]
 			public static extern void OutputDebugString(string message);
 
@@ -68,7 +67,6 @@ namespace MosaicLib
 			/// <summary>
 			/// Allows the caller to change the BasicFallbackLogger's text file to use a specific one.  Set to null to prevent BasicFallbackLogger from attempting to write to a file.
 			/// </summary>
-			/// <param name="path"></param>
 			public static void SetFilePath(string path)
 			{
 				lock (logFileMutex)
@@ -135,7 +133,7 @@ namespace MosaicLib
 			private static volatile bool useTraceOutput = true;
 			private static volatile bool useFileOutput = true;
 			private static string logFilePath = "BasicFallbackLog.txt";
-			private static object logFileMutex = new object();
+			private static readonly object logFileMutex = new object();
 			private static System.Text.Encoding stringEncoder = new System.Text.UTF8Encoding();
 		}
 	}

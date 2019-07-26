@@ -1,10 +1,11 @@
 //-------------------------------------------------------------------
 /*! @file TextFileDateTreeLogMessagehandler.cs
- * @brief This file defines the LogMessageHandler implementation class that is responsible for implementing a form of log file ring 
+ *  @brief This file defines the LogMessageHandler implementation class that is responsible for implementing a form of log file ring 
  *        based on creation of a date tree of text files with integrated pruning.
  * 
- * Copyright (c) Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2016 Mosaic Systems Inc., All rights reserved
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2016 Mosaic Systems Inc.
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +19,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
 
 using System;
 using System.Collections.Generic;
@@ -26,8 +26,10 @@ using System.Linq;
 using System.IO;
 
 using MosaicLib.File;
-using MosaicLib.Utils;
+using MosaicLib.Modular.Config;
 using MosaicLib.Time;
+using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
 
 namespace MosaicLib
 {
@@ -59,12 +61,21 @@ namespace MosaicLib
                     public bool IncludeDate { get { return LineFormat.IncludeDate; } set { LineFormat.IncludeDate = value; } }
                     public bool IncludeQpc { get { return LineFormat.IncludeQpc; } set { LineFormat.IncludeQpc = value; } }
                     public bool IncludeSource { get { return LineFormat.IncludeSource; } set { LineFormat.IncludeSource = value; } }
-                    public bool IncludeFileAndLine { get { return LineFormat.IncludeFileAndLine; } set { LineFormat.IncludeFileAndLine = value; } }
+                    [Obsolete("Support for recording file and line information has been removed from logging.  This property is no longer supported (2017-07-21)")]
+                    public bool IncludeFileAndLine { get { return false; } set { } }
                     public bool IncludeData { get { return LineFormat.IncludeData; } set { LineFormat.IncludeData = value; } }
                     public bool IncludeThreadInfo { get { return LineFormat.IncludeThreadInfo; } set { LineFormat.IncludeThreadInfo = value; } }
                     public bool IncludeNamedValueSet { get { return LineFormat.IncludeNamedValueSet; } set { LineFormat.IncludeNamedValueSet = value; } }
 
+                    /// <summary>
+                    /// Defines an, optionally null, array of lines of text that will be added at the top of each file that is created when using this configuration
+                    /// </summary>
                     public string[] FileHeaderLines { get; set; }
+
+                    /// <summary>
+                    /// When this is non-null, Defines an delegate that is invoked to return an array of lines of text that will be added at the top of each file that is created when using this configuration.
+                    /// The lines produced by this delegate will be added to the file after the FileHeaderLines have been added.
+                    /// </summary>
                     public Func<string[]> FileHeaderLinesDelegate { get; set; }
 
                     public LineFormat LineFormat { get; set; }
@@ -103,7 +114,6 @@ namespace MosaicLib
 
                         LineFormat = new LineFormat(true, true, true, true, true, false, "\r\n", "\t") { IncludeThreadInfo = false, IncludeNamedValueSet = false };
 
-                        IncludeFileAndLine = false;
                         IncludeQpc = true;
                         IncludeData = true;
                         IncludeThreadInfo = true;
@@ -150,36 +160,36 @@ namespace MosaicLib
                         base.SetFrom(rhs);
                     }
 
-                    private static readonly string[] emptyStringArray = new string[0];
-
                     /// <summary>
                     /// Modular.Config helper setup method.  Constructs a FileRotationLoggingConfig from the matching contents in this object and then
                     /// calls its UpdateFromModularConfig method to fill in its values from modular config.  Finally this method updates the localy stored
                     /// values from the updated FileRotationLoggingConfig contents and reconstructs the LineFormat
                     /// </summary>
-                    public Config UpdateFromModularConfig(string configKeyPrefixStr, Logging.IMesgEmitter issueEmitter, Logging.IMesgEmitter valueEmitter)
+                    public Config UpdateFromModularConfig(string configKeyPrefixStr, Logging.IMesgEmitter issueEmitter = null, Logging.IMesgEmitter valueEmitter = null, IConfig configInstance = null)
                     {
                         FileRotationLoggingConfig frlConfig = new FileRotationLoggingConfig(Name, DirPath)
                         {
                             dirPath = DirPath,
+                            fileNamePrefix = FileNamePrefix,
+                            fileNameSuffix = FileNameExtension,
                             logGate = LogGate,
                             includeQpcTime = IncludeQpc,
                             includeNamedValueSet = IncludeNamedValueSet,
                             includeThreadInfo = IncludeThreadInfo,
-                            includeFileAndLine = IncludeFileAndLine,
                             advanceRules = AdvanceRules,
                             purgeRules = new FileRotationLoggingConfig.PurgeRules(PruneRules),
                             mesgQueueSize = MesgQueueSize,
                         };
-                        frlConfig.UpdateFromModularConfig(configKeyPrefixStr, issueEmitter, valueEmitter);
+                        frlConfig.UpdateFromModularConfig(configKeyPrefixStr, issueEmitter: issueEmitter, valueEmitter: valueEmitter, configInstance: configInstance);
 
                         DirPath = frlConfig.dirPath;
+                        FileNamePrefix = frlConfig.fileNamePrefix;
+                        FileNameExtension = frlConfig.fileNameSuffix;
                         LogGate = frlConfig.logGate;
 
                         IncludeQpc = frlConfig.includeQpcTime;
                         IncludeNamedValueSet = frlConfig.includeNamedValueSet;
                         IncludeThreadInfo = frlConfig.includeThreadInfo;
-                        IncludeFileAndLine = frlConfig.includeFileAndLine;
 
                         AdvanceRules = frlConfig.advanceRules;
 
@@ -200,17 +210,16 @@ namespace MosaicLib
                 /// Constructor - <see cref="FileRotationLoggingConfig"/> parameter defines all initial values for the configuration and operation of this LMH.
                 /// </summary>
                 public TextFileDateTreeLogMessageHandler(Config configIn) 
-					: base(configIn.Name, configIn.LogGate, configIn.IncludeFileAndLine, false)
+					: base(configIn.Name, configIn.LogGate)
 				{
                     config = new Config(configIn);
-                    headerLoggerStub = new Logger("Header");
                     
                     // replace the default LogMessageHandlerLogger with a normal QueuedLogger.  This is for use by all levels of this LMH type.
                     //  this allows generated messages to be inserted into and handled by the entire distribution system rather than just by this LMH instance.
-					logger = new QueuedLogger(Name, LogGate, config.IncludeFileAndLine);
+					logger = new QueuedLogger(Name, LogGate);
 
                     string pruneMgrName = "{0}.PruneMgr".CheckedFormat(config.Name);
-                    Logging.ILogger pruneLogger = new QueuedLogger(pruneMgrName, LogGate, config.IncludeFileAndLine);
+                    Logging.ILogger pruneLogger = new QueuedLogger(pruneMgrName, LogGate);
 
                     Dictionary<string, Logging.IMesgEmitter> pruneMgrEmitterDictionary = new Dictionary<string, IMesgEmitter>()
                     {
@@ -275,10 +284,6 @@ namespace MosaicLib
 					CompleteFileAccess();
 				}
 
-                /// <summary>Query method that may be used to tell if message delivery for a given message is still in progress on this handler.</summary>
-                /// <remarks>This LMH type does not queue messages internally.  As such the returned value is always false.</remarks>
-                public override bool IsMessageDeliveryInProgress(int testMesgSeqNum) { return false; }
-
                 /// <summary>Once called, this method only returns after the handler has made a reasonable effort to verify that all outsanding, pending messages, visible at the time of the call, have been full processed before the call returns.</summary>
                 public override void Flush()
 				{
@@ -304,8 +309,6 @@ namespace MosaicLib
                 bool setupPerformed = false;
                 string setupFaultCode = string.Empty;
 
-                /// <summary>This logger instance is used to obtain the log messages that will be formatted into the newly opened file to implement the header.</summary>
-                Logging.Logger headerLoggerStub;
                 LineFormat lineFmt = null;
 
                 /// <summary>
@@ -358,8 +361,6 @@ namespace MosaicLib
                 /// <returns>True if the setup operation was successfull</returns>
                 protected bool Setup()
                 {
-                    string methodName = new System.Diagnostics.StackFrame().GetMethod().Name;
-                    
                     lastSetupAttemptTime.SetToNow();
 
                     bool success = false;
@@ -395,7 +396,7 @@ namespace MosaicLib
                     }
                     else
                     {
-                        logger.Error.Emit("{0} failed: {1}", methodName, setupFaultCode);
+                        logger.Error.Emit("{0} failed: {1}", Fcns.CurrentMethodName, setupFaultCode);
                         return false;
                     }
                 }
@@ -443,7 +444,17 @@ namespace MosaicLib
                         System.IO.Directory.CreateDirectory(activeFileDirPath);
                     }
 
-					// establish the open mode.  if we are supposed to advance to a new file
+                    bool fileExists = System.IO.File.Exists(activeFilePath);
+
+                    if (!fileExists)
+                    {
+                        System.IO.File.WriteAllBytes(activeFilePath, EmptyArrayFactory<byte>.Instance); // this makes certain the file has been created
+
+                        // this needs to be here to prevent Win32 "tunneling" from preservering the creation time from the file we just deleted
+                        System.IO.File.SetCreationTime(activeFilePath, DateTime.Now);
+                    }
+
+                    // establish the open mode.  if we are supposed to advance to a new file
 					//	 then make certain that we truncate the old file if it is still there.
 					bool append = !isAdvanceNeeded;
 
@@ -458,21 +469,18 @@ namespace MosaicLib
 
                     if (ostream != null && addHeader)
                     {
-                        string[] headerLines = (config.FileHeaderLines ?? emptyStringArray);
-                        if (config.FileHeaderLinesDelegate != null)
-                            headerLines = headerLines.Concat(config.FileHeaderLinesDelegate()).ToArray();
-
-                        foreach (Logging.LogMessage lm in headerLines.Select(mesg => headerLoggerStub.GetLogMessage(MesgType.Info, mesg, null).NoteEmitted()).ToArray())
-                        {
-                            lineFmt.FormatLogMessageToOstream(lm, ostream);
-                            handledLogMessageCounter++;                            
-                        }
+                        GenerateAndProduceHeaderLines(config.FileHeaderLines, 
+                                                      config.FileHeaderLinesDelegate, 
+                                                      (lm) =>
+                                                        {
+                                                            lineFmt.FormatLogMessageToOstream(lm, ostream);
+                                                            handledLogMessageCounter++;
+                                                        }
+                        );
                     }
 
 					return (ostream != null);
 				}
-
-                private static readonly string[] emptyStringArray = new string[0];
 
                 /// <summary>Returns true if the client should stop using the current file and should start using a new file in the directory</summary>
                 public bool IsFileAdvanceNeeded(bool recheckActiveFileSizeNow)
@@ -506,11 +514,9 @@ namespace MosaicLib
 
                     if (ActiveFileDirEntryInfo != null)
                     {
-                        string methodName = new System.Diagnostics.StackFrame().GetMethod().Name;
-
                         double fileAgeInHours = ActiveFileDirEntryInfo.CreationAge.TotalHours;
 
-                        logger.Debug.Emit("{0}: prior file:'{1}' size:{2} age:{3} hours", methodName, ActiveFileDirEntryInfo.Name, ActiveFileDirEntryInfo.Length, fileAgeInHours.ToString("f3"));
+                        logger.Debug.Emit("{0}: prior file:'{1}' size:{2} age:{3} hours", Fcns.CurrentMethodName, ActiveFileDirEntryInfo.Name, ActiveFileDirEntryInfo.Length, fileAgeInHours.ToString("f3"));
                     }
 
                     GenerateNextActiveFile();
@@ -526,7 +532,6 @@ namespace MosaicLib
                 /// </summary>
                 protected void GenerateNextActiveFile()
                 {
-                    string methodName = new System.Diagnostics.StackFrame().GetMethod().Name;
                     string formatStr = string.Empty;
                     string dateTreeStr = string.Empty;
                     string middleStr = string.Empty;
@@ -562,16 +567,16 @@ namespace MosaicLib
                         double fileAgeInHours = fileEntryInfo.CreationAge.TotalHours;
                         Int64 fileSize = fileEntryInfo.Length;
 
-                        logger.Trace.Emit("{0}: Attempting to delete prior file:'{1}' size:{2} age:{3} hours", methodName, fileEntryInfo.Name, fileSize, fileAgeInHours.ToString("f3"));
+                        logger.Trace.Emit("{0}: Attempting to delete prior file:'{1}' size:{2} age:{3} hours", Fcns.CurrentMethodName, fileEntryInfo.Name, fileSize, fileAgeInHours.ToString("f3"));
 
                         try
                         {
                             fileEntryFSI.Delete();
-                            logger.Debug.Emit("{0}: Deleted prior file:'{1}' size:{2} age:{3} hours", methodName, fileEntryInfo.Name, fileSize, fileAgeInHours.ToString("f3"));
+                            logger.Debug.Emit("{0}: Deleted prior file:'{1}' size:{2} age:{3} hours", Fcns.CurrentMethodName, fileEntryInfo.Name, fileSize, fileAgeInHours.ToString("f3"));
                         }
                         catch (System.Exception ex)
                         {
-                            logger.Error.Emit("{0}: failed to delete prior file:'{1}', error:'{2}'", methodName, fileEntryInfo.Name, ex.Message);
+                            logger.Error.Emit("{0}: failed to delete prior file:'{1}', error:'{2}'", Fcns.CurrentMethodName, fileEntryInfo.Name, ex.Message);
                             return;
                         }
                     }

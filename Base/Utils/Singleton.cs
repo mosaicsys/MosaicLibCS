@@ -1,9 +1,10 @@
 //-------------------------------------------------------------------
 /*! @file Singleton.cs
- * @brief This file contains helper classes for creation and use of singletons
+ *  @brief This file contains helper classes for creation and use of singletons
  * 
- * Copyright (c) Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2011 Mosaic Systems Inc., All rights reserved
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2011 Mosaic Systems Inc.
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,9 +18,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
 
 using System;
+
 namespace MosaicLib.Utils
 {
 	//-------------------------------------------------
@@ -72,12 +73,17 @@ namespace MosaicLib.Utils
     /// </summary>
     public enum SingletonInstanceBehavior
     {
-        /// <summary>First use of Instance property will automatically construct the instance using default constructor.  Instance cannot be provided externally.</summary>
+        /// <summary>
+        /// First use of Instance property will automatically construct the instance using default constructor, or instance factory delegate (as appropriate).  Instance cannot be provided externally.
+        /// </summary>
         AutoConstruct = 0,
-        /// <summary>First use of Instance property will automatically construct the instance using default constructor if the Instance has not been assigned by that point.  Instance may be provided externally or it may be automatically constructed.</summary>
+
+        /// <summary>First use of Instance property will automatically construct the instance using default constructor, or instance factory delegate (as appropriate), if the Instance has not been assigned by that point.  Instance may be provided externally or it may be automatically constructed.  Instance may be explicitly assigned to null to remove the previously obtained instance and it may be set to be non-null if there is no currently defined instance.  To replace the instance, set it to null and then to the next value or use the getter to create one automatically.</summary>
         AutoConstructIfNeeded,
+
         /// <summary>Instance property is manually assigned.  It must be assigned non-null value prior to first use of Instance property by Singleton user/client code.</summary>
         ManuallyAssign_MustBeNonNull,
+
         /// <summary>Instance property is manually assigned.  It may be null or non-null at any point that a Singleton user/client attempts to use it.</summary>
         ManuallyAssign_MayBeNull,
     }
@@ -111,7 +117,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Returns true if the singletonInstanceBehavior allows the Instace getter to return null.
+        /// Returns true if the singletonInstanceBehavior allows the Instance getter to return null.
         /// <para/>ManuallyAssign_MayBeNull
         /// </summary>
         public static bool DoesBehaviorPermitInstanceGetterToReturnNull(this SingletonInstanceBehavior singletonInstanceBehavior)
@@ -120,7 +126,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Returns true if the singletonInstanceBehavior allows the Instace to be set to null.
+        /// Returns true if the singletonInstanceBehavior allows the Instance to be set to null.
         /// <para/>ManuallyAssign_MayBeNull, AutoConstructIfNeeded
         /// </summary>
         public static bool DoesBehaviorPermitInstanceToBeSetToNull(this SingletonInstanceBehavior singletonInstanceBehavior)
@@ -323,17 +329,18 @@ namespace MosaicLib.Utils
                             value = instanceConstructionDelegate();
 
                             if (value == null)
-                                throw new SingletonException("InstanceConstructionDelegate returned null.");
+                                throw new SingletonException("instanceConstructionDelegate returned null.");
 
                             recursiveConstructionCount.Decrement();
+
+                            // only update the volatile copy after the construction of the underlying object is complete.
+                            instance = value;
                         }
-
-                        instance = value;   // do not update the volatile until the construction of the underlying object is complete.
                     }
-                }
 
-                if (value == null && !Behavior.DoesBehaviorPermitInstanceGetterToReturnNull())
-                    throw new SingletonException("Attempt to get Instance from {0} SingletonHelper before Instace was assigned to a non-null value".CheckedFormat(Behavior));
+                    if (value == null && !Behavior.DoesBehaviorPermitInstanceGetterToReturnNull())
+                        throw new SingletonException("Attempt to get Instance from {0} SingletonHelper before Instance was assigned to a non-null value".CheckedFormat(Behavior));
+                }
 
                 return value;
             }

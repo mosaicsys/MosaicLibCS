@@ -1,10 +1,11 @@
 //-------------------------------------------------------------------
 /*! @file Modbus.cs
- * @brief This file defines Modbus helper definitiions and classes that are common to all Modbus Clients and Servers
+ *  @brief This file defines Modbus helper definitiions and classes that are common to all Modbus Clients and Servers
  * 
- * Copyright (c) Mosaic Systems Inc.  All rights reserved
- * Copyright (c) 2011 Mosaic Systems Inc.  All rights reserved
- * Copyright (c) 2010 Mosaic Systems Inc.  All rights reserved (prior C++ library version)
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2011 Mosaic Systems Inc.
+ * Copyright (c) 2010 Mosaic Systems Inc.  (prior C++ library version)
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +19,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
 
 using System;
 using System.Collections.Generic;
@@ -26,10 +26,11 @@ using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 
-using MosaicLib.Utils;
-using MosaicLib.Time;
 using MosaicLib.Modular.Action;
 using MosaicLib.Modular.Part;
+using MosaicLib.Time;
+using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
 
 namespace MosaicLib.SerialIO.Modbus
 {
@@ -528,7 +529,7 @@ namespace MosaicLib.SerialIO.Modbus
 
                 set
                 {
-                    byte [] copyFrom = ((value != null) ? value : new byte [0]);
+                    byte[] copyFrom = ((value != null) ? value : EmptyArrayFactory<byte>.Instance);
                     if (copyFrom.Length > bytes.Length)
                         System.Array.Resize(ref copyFrom, bytes.Length);
 
@@ -544,7 +545,7 @@ namespace MosaicLib.SerialIO.Modbus
         //--------------------------------------------------------------------------
         #region FCInfo - Function Code docoder and helper object
 
-        ///<summary>Gives decoded useage information about a given Modbus function code.</summary>
+        ///<summary>Gives decoded usage information about a given Modbus function code.</summary>
         public struct FCInfo
         {
             /// <summary>Gives the constructed function code</summary>
@@ -829,7 +830,7 @@ namespace MosaicLib.SerialIO.Modbus
                         break;
                 }
 
-                return true;    // we have recieved a complete response, even if it is not a valid one.
+                return true;    // we have received a complete response, even if it is not a valid one.
             }
 
             /// <summary>
@@ -919,7 +920,7 @@ namespace MosaicLib.SerialIO.Modbus
 
                 if (String.IsNullOrEmpty(ecStr))
                 {
-                    // verify that the fc matches the outgoing one even if response is an excpetion.  
+                    // verify that the fc matches the outgoing one even if response is an exception.  
                     // Also verify that we did not receive any extra bytes.
                     byte txFC = requestAdu.PktBuf.bytes[requestAdu.PDUStartOffset];
                     byte rxFC = unchecked((byte)(PktBuf.bytes[PDUStartOffset] & ~ExceptionFunctionCodeMask));
@@ -942,7 +943,7 @@ namespace MosaicLib.SerialIO.Modbus
                 if (String.IsNullOrEmpty(ecStr))
                     ecStr = DecodeRxPkt();
 
-                return true;    // we have recieved a complete response, even if it is not a valid one.
+                return true;    // we have received a complete response, even if it is not a valid one.
             }
 
             /// <summary>
@@ -1228,7 +1229,7 @@ namespace MosaicLib.SerialIO.Modbus
             }
 
             /// <summary>
-            /// This method invokes InitializeResponsePDU and then if this response is not an excpetion, this method also fills in the PDU header.
+            /// This method invokes InitializeResponsePDU and then if this response is not an exception, this method also fills in the PDU header.
             /// </summary>
             public void InitializeResponsePDUForSend()
             {

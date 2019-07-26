@@ -2,9 +2,10 @@
 /*! @file SlidingBuffer.cs
  *  @brief This file defines the SlidingBuffer and SlidingLineBuffer classes that are used for packet/line reassembly on serial device drivers.
  * 
- * Copyright (c) Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2008 Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2002 Mosaic Systems Inc., All rights reserved. (C++ library version, found under Utils)
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2008 Mosaic Systems Inc.
+ * Copyright (c) 2002 Mosaic Systems Inc.  (C++ library version, found under Utils)
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,12 +19,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
 
 using System;
 using System.Collections;
 using System.Collections.Generic;
+
 using MosaicLib.Time;
+using MosaicLib.Utils.Collections;
 
 namespace MosaicLib.SerialIO
 {
@@ -136,14 +138,8 @@ namespace MosaicLib.SerialIO
             BufferHasBeenIncreased(n);
         }
 
-        /// <summary>Clears the buffer contents, aligns the empty buffer and updates the get and put timestamps.</summary>
-        protected virtual void ResetBuffer()
-        {
-            ResetBuffer(true);
-        }
-
         /// <summary>Clears the buffer contents, aligns the empty buffer and updates the get and put timestamps.  Optionally resets the get and put timers</summary>
-        protected virtual void ResetBuffer(bool resetTimers)
+        public virtual void ResetBuffer(bool resetTimers = true)
         {
             getIdx = 0;
             putIdx = 0;
@@ -171,10 +167,13 @@ namespace MosaicLib.SerialIO
 
         /// <summary>Returns the number of bytes that are currently held in the buffer.  (putIdx - getIdx)</summary>
         public int BufferDataCount { get { return (putIdx - getIdx); } }
+
         /// <summary>Returns true if BufferDataCount is zero</summary>
         public bool BufferEmpty { get { return (putIdx <= getIdx); } }
+        
         /// <summary>Returns the QpcTimeStamp from the last time that bytes were pulled from the buffer, or put to the buffer after it has been aligned, or the buffer was reset.</summary>
         public QpcTimeStamp ContentGetTime { get { return getTimeStamp; } }	// >= timestamp of head char
+        
         /// <summary>Returns the QpcTimeStamp from the last time that bytes were appended into the buffer or the buffer was reset.</summary>
         public QpcTimeStamp ContentPutTime { get { return putTimeStamp; } }	// = timestamp of tail char
 
@@ -186,11 +185,13 @@ namespace MosaicLib.SerialIO
 
         /// <summary>This gives ths index into the buffer at which the first content byte is found (if any)</summary>
 		protected int getIdx = 0;
+        
         /// <summary>This gives the QpcTimeStamp at the point when the getIdx was last changed.</summary>
         protected QpcTimeStamp getTimeStamp = QpcTimeStamp.Zero;
 
         /// <summary>This gives the index into the buffer at which the next byte can be put into the buffer, or the buffer length if the buffer is full.</summary>
         protected int putIdx = 0;
+
         /// <summary>This gives the QpcTimeStamp at the point when the putIdx was last changed.</summary>
         protected QpcTimeStamp putTimeStamp = QpcTimeStamp.Zero;
     }
@@ -257,7 +258,7 @@ namespace MosaicLib.SerialIO
         /// <summary>Returns the Data content array for this Packet.  May be null if no data is assocaited with this Packet</summary>
         public byte[] Data { get { return data; } set { data = value; dataStr = null; } }
 
-        /// <summary>Contains the ErrorCode for property for any Packet.  Will return String.Empty whenever the internally stored copy of thie property is, or has been set to, null.  Setter will set Type to Error if it is Null</summary>
+        /// <summary>Contains the ErrorCode for property for any Packet.  Will return String.Empty whenever the internally stored copy of this property is, or has been set to, null.  Setter will set Type to Error if it is Null</summary>
         public string ErrorCode 
         { 
             get { return (errorCode ?? String.Empty); } 
@@ -313,7 +314,7 @@ namespace MosaicLib.SerialIO
         }
 
         /// <summary>Fixed emptyData field used in place of null Data property during ToString operations.</summary>
-        private static byte[] emptyData = new byte[0];
+        private static byte[] emptyData = EmptyArrayFactory<byte>.Instance;
 
         /// <summary>
         /// Returns a string version of the Packet that indicates the type and length of the packet but does not include its data content
@@ -391,25 +392,17 @@ namespace MosaicLib.SerialIO
         /// <param name="size">gives the desired size of the buffer.  Defines the maximum number of bytes that can be in one packet.</param>
         public SlidingPacketBuffer(uint size)
             : base(size)
-        {
-        }
-
-        /// <summary>Constructor</summary>
-        /// <param name="size">gives the desired size of the buffer.  Defines the maximum number of bytes that can be in one packet.</param>
-        /// <param name="packetEndStrArray">gives a list of one or more strings which define a packet end delimiter pattern.</param>
-        /// <param name="packetTimeout">gives the maximum amount of time that may elpased from the last byte added before a valid packet end is found</param>
-        public SlidingPacketBuffer(uint size, string[] packetEndStrArray, TimeSpan packetTimeout) 
-            : this(size, packetEndStrArray, packetTimeout, true) { }
+        { }
 
         /// <summary>Constructor</summary>
         /// <param name="size">gives the desired size of the buffer.  Defines the maximum number of bytes that can be in one packet.</param>
         /// <param name="packetEndStrArray">gives a list of one or more strings which define a packet end delimiter pattern.</param>
         /// <param name="packetTimeout">gives the maximum amount of time that may elpased from the last byte added before a valid packet end is found</param>
         /// <param name="stripWhitespace">Sets the StripWhitespace property to the value given in this argument</param>
-        public SlidingPacketBuffer(uint size, string[] packetEndStrArray, TimeSpan packetTimeout, bool stripWhitespace)
+        public SlidingPacketBuffer(uint size, string[] packetEndStrArray, TimeSpan packetTimeout, bool stripWhitespace = true)
             : base(size)
         { 
-            StripWhitespace = stripWhitespace; 
+            StripWhitespace = stripWhitespace;
             PacketTimeout = packetTimeout; 
             PacketEndStrArray = packetEndStrArray; 
         }
@@ -505,7 +498,7 @@ namespace MosaicLib.SerialIO
                     {
                         // we do not strip whitespace from flushed data.
                     }
-                    else if (StripWhitespace)
+                    else if (stripWhitespace)
                     {
                         while (dataCopyLen > 0)
                         {
@@ -526,13 +519,16 @@ namespace MosaicLib.SerialIO
 
                         isWhitespace = (dataCopyLen == 0);
                     }
-                    else
+                    else if (detectWhitespace)
                     {
                         isWhitespace = true;    // assume that it is all whitespace
                         for (int scanOffset = 0; scanOffset < dataCopyLen; scanOffset++)
                         {
                             if (!IsWhiteSpace(buffer[getIdx + scanOffset]))
+                            {
                                 isWhitespace = false;
+                                break;
+                            }
                         }
                     }
 
@@ -550,16 +546,22 @@ namespace MosaicLib.SerialIO
 
                         extractedPacketQueue.Enqueue(p);
                     }
+                    // else this run is all whitespace and we have been configured to DiscardWhitespacePackets - so just drop these bytes.
 
                     UsedNChars(nextPacketLen);
                 }
             }
 
             // drop leading whitespace from buffer immediately (this will prevent them from causing generation of unexpected timeout packets for trailing whitespace that is ignored)
-            if (StripWhitespace && BufferDataCount > 0)
+            if (stripWhitespace)
             {
-                if (IsWhiteSpace(buffer[getIdx]))
-                    UsedNChars(1);
+                int whiteSpaceRunLength = 0;
+
+                while (whiteSpaceRunLength < BufferDataCount && IsWhiteSpace(buffer[getIdx + whiteSpaceRunLength]))
+                    whiteSpaceRunLength++;
+
+                if (whiteSpaceRunLength > 0)
+                    UsedNChars(whiteSpaceRunLength);
             }
 
             // check for timeout: when both the contentPutAge and the contentGetAge are larger than the PacketTimeout and it is not zero.
@@ -576,7 +578,7 @@ namespace MosaicLib.SerialIO
 
                     // transfer the current bytes in the sliding buffer into a new packet and reset the sliding buffer
                     Packet p = new Packet(PacketType.Timeout, new byte[BufferDataCount], Utils.Fcns.CheckedFormat("Timeout: {0} stale chars found in buffer {1:f3} seconds after most recent {2}", BufferDataCount, contentAgeInSec, opStr));
-    				System.Buffer.BlockCopy(buffer, getIdx, p.Data, 0, BufferDataCount);
+                    System.Buffer.BlockCopy(buffer, getIdx, p.Data, 0, BufferDataCount);
 
                     extractedPacketQueue.Enqueue(p);
 
@@ -636,14 +638,31 @@ namespace MosaicLib.SerialIO
             return shortestPacketLen;
         }
 
-        /// <summary>Gets or set the current StripWhitespace flag.  When set to true, all leading and trailing white space is removed from packet data for Data packets.  Packet type will be changed to Whitespace if the resulting Data packet is empty.</summary>
+        /// <summary>
+        /// Gets or set the current StripWhitespace flag.  When set to true, all leading and trailing white space is removed from packet data for Data packets.  Packet type will be changed to Whitespace if the resulting Data packet is empty.
+        /// When set true this property will also set the DetectWhitespace property.
+        /// </summary>
         public bool StripWhitespace 
         { 
             get { return stripWhitespace; }
             set 
             { 
-                stripWhitespace = value; 
+                stripWhitespace = value;
+                if (value)
+                    detectWhitespace = true;
                 Service(true); 
+            } 
+        }
+
+        /// <summary>Get/Set property.  Determines if this SPB is allowed to look for whitespace.  When set to false it also disables StipWhitespace.</summary>
+        public bool DetectWhitespace 
+        { 
+            get { return detectWhitespace; } 
+            set 
+            {
+                detectWhitespace = value;
+                if (!value)
+                    stripWhitespace = false;
             } 
         }
 
@@ -700,7 +719,7 @@ namespace MosaicLib.SerialIO
             {
                 packetEndScannerDelegate = value;
                 if (value != null)
-                    PacketEndStrArray = new string[0];
+                    PacketEndStrArray = EmptyArrayFactory<string>.Instance;
             }
         }
 
@@ -745,6 +764,7 @@ namespace MosaicLib.SerialIO
         }
 
         private bool stripWhitespace = false;
+        private bool detectWhitespace = false;
         private TimeSpan packetTimeout = TimeSpan.Zero;
         private List<string> packetEndStrList = new List<string>();
         private List<byte[]> packetEndByteArrayList = new List<byte[]>();

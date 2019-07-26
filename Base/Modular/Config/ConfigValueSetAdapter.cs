@@ -2,8 +2,9 @@
 /*! @file ConfigValueSetAdapter.cs
  *  @brief 
  * 
- * Copyright (c) Mosaic Systems Inc.  All rights reserved
- * Copyright (c) 2014 Mosaic Systems Inc.  All rights reserved
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2014 Mosaic Systems Inc.  
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,14 +18,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
 
 using System;
 using System.Collections.Generic;
-using MosaicLib.Utils;
-using MosaicLib.Modular.Reflection.Attributes;
 using System.Reflection;
+using System.Linq;
+
 using MosaicLib.Modular.Common;
+using MosaicLib.Modular.Config.Attributes;
+using MosaicLib.Modular.Reflection.Attributes;
+using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
 
 namespace MosaicLib.Modular.Config
 {
@@ -38,50 +42,55 @@ namespace MosaicLib.Modular.Config
         /// This attribute is used to annotate public settable properties and fields in a class in order that the class can be used as the ConfigValueSet for
         /// a ConfigValueSetAdapter adapter.  Each settable property or field in the ConfigValueSet class specifies a specific property and value source that 
 		/// will receive the initial value and possibly later updates for config key's value that use normal update behavior.
-        /// <para/>Name = null, NameAdjust = NameAdjust.Prefix0, UpdateNormally = true (ReadOnlyOnce = false), IsOptional = false, SilenceIssues = false
+        /// <para/>Name = null, NameAdjust = NameAdjust.Prefix0, UpdateNormally = false (ReadOnlyOnce = true), IsOptional = false, SilenceIssues = false,
+        /// <para/>EnsureExists = false, DefaultProviderName = "", AdditionalKeywords = empty string array.
         /// </summary>
         [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field, AllowMultiple = false)]
         public class ConfigItemAttribute : AnnotatedItemAttributeBase
         {
             /// <summary>
             /// Default constructor.
-            /// <para/>Name = null, NameAdjust = NameAdjust.Prefix0, UpdateNormally = true (ReadOnlyOnce = false), IsOptional = false, SilenceIssues = false
+            /// <para/>Name = null, NameAdjust = NameAdjust.Prefix0, UpdateNormally = false (ReadOnlyOnce = true), IsOptional = false, SilenceIssues = false, EnsureExists = false, DefaultProviderName = "", AdditionalKeywords = new string[0]
             /// </summary>
             public ConfigItemAttribute() 
-                : base()
-            {
-            }
+            { }
 
             /// <summary>
-            /// This property defines the config key's value update behavior that is used for the identified config key's value as Normal or ReadOnlyOnce
+            /// This property defines the config key's value update behavior that is used for the identified config key's value as Normal or ReadOnlyOnce (default)
             /// </summary>
             public ConfigKeyAccessFlags AccessFlags { get { return accessFlags; } set { accessFlags = value; } }
             private ConfigKeyAccessFlags accessFlags = new ConfigKeyAccessFlags();
 
             /// <summary>
-            /// This property is true when the config key's value will follow the MayBeChanged update behavior.
+            /// This property is true when the config key's value will follow the MayBeChanged update behavior.  (defaults to false)
             /// </summary>
             public bool UpdateNormally { get { return accessFlags.MayBeChanged; } set { accessFlags.MayBeChanged = value; } }
 
             /// <summary>
-            /// This property is true when the config key's value will follow the ReadOnlyOnce update behavior.  This may be used as a shorthand for the ValueUpdateBehavior property.
+            /// This property is true when the config key's value will follow the ReadOnlyOnce update behavior.  This may be used as a shorthand for the ValueUpdateBehavior property.  (defaults to true)
             /// </summary>
             public bool ReadOnlyOnce { get { return accessFlags.ReadOnlyOnce; } set { accessFlags.ReadOnlyOnce = value; } }
 
             /// <summary>
-            /// When an item is marked as optional, no error messages will be generated if the config key is not found during setup.
+            /// When an item is marked as optional, no error messages will be generated if the config key is not found during setup.  (defaults to false)
             /// </summary>
             public bool IsOptional { get { return accessFlags.IsOptional; } set { accessFlags.IsOptional = value; } }
 
             /// <summary>
-            /// When an item is marked to SilenceIssues, no issue messages will be emitted if the config key cannot be accessed.  Value messages will still be emitted.
-            /// </summary>
-            public bool SilenceIssues { get { return accessFlags.SilenceIssues; } set { accessFlags.SilenceIssues = value; } }
-
-            /// <summary>
-            /// When an item is marked to SilenceLogging, neither Issue nor Value messages will be emitted in relation to attempts to access this key.
+            /// When an item is marked to SilenceLogging, neither Issue nor Value messages will be emitted in relation to attempts to access this key.  (defaults to false)
             /// </summary>
             public bool SilenceLogging { get { return accessFlags.SilenceLogging; } set { accessFlags.SilenceLogging = value; } }
+
+            /// <summary>
+            /// Set this property to true to attempt to create a config key in the default provider, or in any provider that supports this feature, if the key was not already found.
+            /// </summary>
+            public bool EnsureExists { get { return accessFlags.EnsureExists ?? false; } set { accessFlags.EnsureExists = value; } }
+
+            /// <summary>
+            /// This property may be used to request that the key be obtained from the named provider before searching other providers for the same name.  
+            /// In addition when using the EnsureExists feature, the provider named here will be asked to create the requested config key before consulting other providers.
+            /// </summary>
+            public string DefaultProviderName { get { return accessFlags.DefaultProviderName.MapNullToEmpty(); } set { accessFlags.DefaultProviderName = value; } }
         }
     }
 
@@ -102,30 +111,23 @@ namespace MosaicLib.Modular.Config
     /// <remarks>
     /// The primary methods/properties used on this adapter are: Construction, ValueSet, Setup, Update, IsUpdateNeeded
     /// </remarks>
-
-    public class ConfigValueSetAdapter<TConfigValueSet> : DisposableBase where TConfigValueSet : class
+    public class ConfigValueSetAdapter<TConfigValueSet>
+        : DisposableBase // Allows this object to remove itself from the config instance's ChangeNotificationList on dispose.
+        where TConfigValueSet : class
     {
         #region Ctor
 
         /// <summary>
-        /// Default constructor.  Assigns adapter to use default Config.Instance IConfig service instance.  
-        /// For use with Property Initializers and the Setup method to define and setup the adapter instance for use.
-        /// Setup method is used to generate final derived item names and to bind and make the initial update to the ValueSet contents.
-        /// Setup method may also specify/override the config instance that is to be used.
-        /// <para/>Please Note: the Setup method must be called before the adapter can be used.  
-        /// </summary>
-        public ConfigValueSetAdapter()
-            : this(null)
-        { }
-
-        /// <summary>
-        /// Config instance constructor.  Assigns adapter to use given configInstance IConfig service instance.  This may be overriden during the Setup call.
+        /// Config instance constructor.  Assigns adapter to use given defaultConfigInstance IConfig service instance.  
+        /// During the later Setup call this value may be overwritten, and/or have null replaced with the fallback singleton instance.
         /// For use with Property Initializers and the Setup method to define and setup the adapter instance for use.
         /// <para/>Please Note: the Setup method must be called before the adapter can be used.  
         /// </summary>
-        public ConfigValueSetAdapter(IConfig configInstance)
+        public ConfigValueSetAdapter(IConfig defaultConfigInstance = null)
         {
-            ConfigInstance = configInstance;
+            KeyMetaDataMergeBehavior = NamedValueMergeBehavior.AddNewItems;
+
+            ConfigInstance = defaultConfigInstance;
 
             configItemInfoList = AnnotatedClassItemAccessHelper<Attributes.ConfigItemAttribute>.ExtractItemInfoAccessListFrom(typeof(TConfigValueSet), ItemSelection.IncludeExplicitPublicItems | ItemSelection.IncludeInheritedItems);
             NumItems = configItemInfoList.Count;
@@ -149,7 +151,32 @@ namespace MosaicLib.Modular.Config
         /// <summary>Defines the emitter used to emit Update related changes in config point values.  Defaults to the null emitter.</summary>
         public Logging.IMesgEmitter ValueNoteEmitter { get { return FixupEmitterRef(ref valueNoteEmitter); } set { valueNoteEmitter = value; } }
 
-        private IConfig ConfigInstance { get; set; }        // delay making default ConfigInstance assignment until Setup method.
+        /// <summary>Helper property that may be used to update the default value of EnsureExists meta data value when generating per key meta data</summary>
+        public bool? EnsureExists { get; set; }
+
+        /// <summary>Helper property that may be used to update the default value of DefaultProviderName meta data value when generating per key meta data</summary>
+        public string DefaultProviderName { get; set; }
+
+        /// <summary>Helper property that may be used to deafult the default set of metadata keywords used when generating per key meta data</summary>
+        public string[] AdditionalKeywords { get; set; }
+
+        /// <summary>
+        /// When this property has non-empty contents, the MetaData for each IConfigKeyAccessSpec generated by this adapter will have the contents of this NVS merged
+        /// into whatever MetaData the key was already given.  Merging uses NamedValueMergeBehavior.AddNewItems behavior.
+        /// </summary>
+        public INamedValueSet DefaultKeyMetaData { get { return _DefaultKeyMetaData; } set { _DefaultKeyMetaData = value.ConvertToReadOnly(); } }
+        private INamedValueSet _DefaultKeyMetaData = NamedValueSet.Empty;
+
+        /// <summary>
+        /// Defines the merge behavior that will be used by this adapter and by the Config instance when merging key meta data defined here.  Defaults to AddNewItems.
+        /// </summary>
+        public NamedValueMergeBehavior KeyMetaDataMergeBehavior { get; set; }
+
+        ///<summary>
+        ///After Setup has been performed, this property will contain the IConfig instance with which this adapter interacts.
+        ///This property may remain in its default state (null) until Setup has been performed.
+        ///</summary>
+        private IConfig ConfigInstance { get; set; }
 
         /// <summary>
         /// This method determines the set of full Parameter Names from the ValueSet's annotated items, 
@@ -183,6 +210,13 @@ namespace MosaicLib.Modular.Config
             bool anySetupIssues = false;
             int idx;
 
+            INamedValueSet defaultNVS = DefaultKeyMetaData;
+
+            if (!AdditionalKeywords.IsNullOrEmpty())
+                defaultNVS = defaultNVS.MergeWith(AdditionalKeywords.Select(keyword => new NamedValue(keyword) { IsReadOnly = true }), KeyMetaDataMergeBehavior);
+
+            defaultNVS = defaultNVS.ConvertToReadOnly(mapNullToEmpty: false);
+
             for (idx = 0; idx < NumItems; idx++)
             {
                 ItemInfo<Attributes.ConfigItemAttribute> itemInfo = configItemInfoList[idx];
@@ -196,11 +230,24 @@ namespace MosaicLib.Modular.Config
                 {
                     if (!itemAttribute.SilenceIssues)
                         SetupIssueEmitter.Emit("Member/key '{0}'/'{1}' is not usable:  There is no valid public member Setter, in ValueSet type '{2}'", memberName, fullKeyName, tConfigValueSetTypeStr);
+
                     continue;
                 }
 
                 ConfigKeyAccessFlags customAccessFlags = new ConfigKeyAccessFlags(itemAttribute.AccessFlags) { SilenceIssues = true };
-                IConfigKeyAccess keyAccess = ConfigInstance.GetConfigKeyAccess(new ConfigKeyAccessSpec(fullKeyName, customAccessFlags));
+
+                // Apply global setup properties down into individual item attributes
+                if ((EnsureExists ?? false) && customAccessFlags.EnsureExists == null)
+                    customAccessFlags.EnsureExists = true;
+
+                if (!DefaultProviderName.IsNullOrEmpty() && customAccessFlags.DefaultProviderName == null)
+                    customAccessFlags.DefaultProviderName = DefaultProviderName;
+
+                INamedValueSet combindKeyMetaData = itemAttribute.GetMergedMetaData(defaultNVS, KeyMetaDataMergeBehavior).MapEmptyToNull();
+
+                ValueContainer defaultValue = ((customAccessFlags.EnsureExists ?? false) ? GetDefaultValue(itemInfo) : ValueContainer.Empty);
+
+                IConfigKeyAccess keyAccess = ConfigInstance.GetConfigKeyAccess(new ConfigKeyAccessSpec(fullKeyName, customAccessFlags) { MetaData = combindKeyMetaData, MergeBehavior = KeyMetaDataMergeBehavior }, defaultValue);
 
                 KeySetupInfo keySetupInfo = new KeySetupInfo()
                 {
@@ -211,17 +258,19 @@ namespace MosaicLib.Modular.Config
 
                 keySetupInfo.UpdateMemberFromKeyAccessAction = GenerateUpdateMemberFromKeyAccessAction(keySetupInfo);
 
-                Logging.IMesgEmitter selectedIssueEmitter = SetupIssueEmitter;
-
-                if (keyAccess.Flags.IsOptional && selectedIssueEmitter.IsEnabled)
-                    selectedIssueEmitter = ValueNoteEmitter;
-
                 if (!keyAccess.IsUsable)
                 {
                     if (!itemAttribute.SilenceIssues)
                     {
-                        selectedIssueEmitter.Emit("Member/Key '{0}'/'{1}' is not usable: {2}", memberName, keyAccess.Key, keyAccess.ResultCode);
-                        anySetupIssues = true;
+                        if (keyAccess.Flags.IsOptional)
+                        {
+                            ValueNoteEmitter.Emit("Optional Member/Key '{0}'/'{1}' is not usable: {2}", memberName, keyAccess.Key, keyAccess.ResultCode);
+                        }
+                        else
+                        {
+                            SetupIssueEmitter.Emit("Member/Key '{0}'/'{1}' is not usable: {2}", memberName, keyAccess.Key, keyAccess.ResultCode);
+                            anySetupIssues = true;
+                        }
                     }
                     continue;
                 }
@@ -229,7 +278,7 @@ namespace MosaicLib.Modular.Config
                 {
                     if (!itemAttribute.SilenceIssues)
                     {
-                        selectedIssueEmitter.Emit("Member/Key '{0}'/'{1}' is not usable: no valid accessor delegate could be generated for its ValueSet type:'{3}'", memberName, fullKeyName, itemInfo.ItemType, tConfigValueSetTypeStr);
+                        SetupIssueEmitter.Emit("Member/Key '{0}'/'{1}' is not usable: no valid accessor delegate could be generated for its ValueSet type:'{3}'", memberName, fullKeyName, itemInfo.ItemType, tConfigValueSetTypeStr);
                         anySetupIssues = true;
                     }
                     continue;
@@ -237,6 +286,8 @@ namespace MosaicLib.Modular.Config
 
                 keySetupInfoArray[idx] = keySetupInfo;
             }
+
+            _ickaArray = keySetupInfoArray.Where(item => item != null).Select(item => item.KeyAccess).ToArray();
 
             // next link events - this initializes the Configuration Service Changed event callback handler and connects it to the Configuration Service.
             IBasicNotificationList notificationList = ConfigInstance.ChangeNotificationList;
@@ -253,12 +304,13 @@ namespace MosaicLib.Modular.Config
 
         /// <summary>
         /// This property will be true after the user commits an update to one or more dynamic configuration config key's values that this adapter is tracking.
+        /// It is generally cleared by calling the Update method.
         /// </summary>
         public bool IsUpdateNeeded
         {
             get 
             {
-                return (isUpdateNeeded || (lastUpdateConfigChangeSeqNum != ConfigInstance.ChangeSeqNum)); 
+                return (isUpdateNeeded || _ickaArray.Any(icka => icka.IsUpdateNeeded)); 
             }
             internal set 
             { 
@@ -266,7 +318,7 @@ namespace MosaicLib.Modular.Config
             }
         }
 
-        private int lastUpdateConfigChangeSeqNum = 0;
+        private ConfigSubscriptionSeqNums lastUpdateConfigChangeSeqNums;
         private volatile bool isUpdateNeeded = false;
 
         /// <summary>
@@ -282,21 +334,21 @@ namespace MosaicLib.Modular.Config
         /// The relevant ValueSet item values will be updated by this method based on the dynamic config key's value updates that have been received since 
         /// the last call to Setup or Update.
         /// </summary>
-        public void Update()
+        public ConfigValueSetAdapter<TConfigValueSet> Update()
         {
-            Update(false, UpdateIssueEmitter, ValueNoteEmitter);
+            return Update(false, UpdateIssueEmitter, ValueNoteEmitter);
         }
 
-        private void Update(bool isFirstUpdate, Logging.IMesgEmitter updateIssueEmitter, Logging.IMesgEmitter valueNoteEmitter)
+        private ConfigValueSetAdapter<TConfigValueSet> Update(bool isFirstUpdate, Logging.IMesgEmitter updateIssueEmitter, Logging.IMesgEmitter valueNoteEmitter)
         {
             if (ValueSet == null)
                 throw new System.NullReferenceException("ValueSet property must be non-null before Update can be called");
 
             if (!IsUpdateNeeded && !isFirstUpdate)
-                return;
+                return this;
 
             IsUpdateNeeded = false;
-            lastUpdateConfigChangeSeqNum = ConfigInstance.ChangeSeqNum;
+            lastUpdateConfigChangeSeqNums = ConfigInstance.SeqNums;
 
             foreach (var keySetupInfo in keySetupInfoArray)
             {
@@ -318,17 +370,51 @@ namespace MosaicLib.Modular.Config
                         ValueNoteEmitter.Emit("Member/Key '{0}'/'{1}' in type '{2}' was not changed: there is no member update delegate", keySetupInfo.FullItemName, keyAccess.Key, tConfigValueSetTypeStr);
                 }
             }
+
+            return this;
         }
+
+        /// <summary>
+        /// Gives the caller access to the set of IConfigKeyAccess items that this adapter has generated and uses to support its operation
+        /// </summary>
+        public IConfigKeyAccess[] ICKAArray { get { return _ickaArray; } }
+
+        private IConfigKeyAccess[] _ickaArray = EmptyArrayFactory<IConfigKeyAccess>.Instance;
 
         #endregion
 
         #region private methods
+
+        /// <summary>
+        /// Simple method that uses basic reflection to obtain the desird Property/Field contents enclosed in a ValueContainer.
+        /// </summary>
+        ValueContainer GetDefaultValue(ItemInfo<ConfigItemAttribute> itemInfo)
+        {
+            if (ValueSet != null)
+            {
+                if (itemInfo.IsProperty)
+                    return new ValueContainer(itemInfo.PropertyInfo.GetValue(ValueSet, emptyObjectArray));
+                else if (itemInfo.IsField)
+                    return new ValueContainer(itemInfo.FieldInfo.GetValue(ValueSet));
+            }
+
+            return ValueContainer.Empty;
+        }
+
+        private static readonly object[] emptyObjectArray = EmptyArrayFactory<object>.Instance;
 
         protected string GenerateFullKeyName(ItemInfo<Attributes.ConfigItemAttribute> itemInfo, string[] baseNames)
         {
             return itemInfo.GenerateFullName(baseNames);
         }
 
+        /// <summary>
+        /// This method is used to generate the member setter for a specific keySetupInfo item.
+        /// </summary>
+        /// <remarks>
+        /// This method cannot make use of the more generic Modular.Reflection.AnnotatedClassItemAccessHelper.GenerateSetMemberFromVCAction method as this method does not currently
+        /// support definition of the default value to use.  As such this method cannot be easily reduced to use of the more generic version.
+        /// </remarks>
         Action<TConfigValueSet, Logging.IMesgEmitter, Logging.IMesgEmitter> GenerateUpdateMemberFromKeyAccessAction(KeySetupInfo keySetupInfo)
         {
             ItemInfo<Attributes.ConfigItemAttribute> itemInfo = keySetupInfo.ItemInfo;
@@ -412,6 +498,20 @@ namespace MosaicLib.Modular.Config
                 Func<IConfigKeyAccess, double, double> ikaGetter = (ika, defaultValue) => ika.GetValue<double>(defaultValue);
                 Action<TConfigValueSet, double> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TConfigValueSet, double>(itemInfo);
                 Func<TConfigValueSet, double> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TConfigValueSet, double>(itemInfo);
+                innerBoundSetter = delegate(TConfigValueSet valueSetObj, IConfigKeyAccess ika) { pfSetter(valueSetObj, ikaGetter(ika, pfGetter(valueSetObj))); };
+            }
+            else if (itemInfo.ItemType == typeof(DateTime))
+            {
+                Func<IConfigKeyAccess, DateTime, DateTime> ikaGetter = (ika, defaultValue) => ika.GetValue<DateTime>(defaultValue);
+                Action<TConfigValueSet, DateTime> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TConfigValueSet, DateTime>(itemInfo);
+                Func<TConfigValueSet, DateTime> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TConfigValueSet, DateTime>(itemInfo);
+                innerBoundSetter = delegate(TConfigValueSet valueSetObj, IConfigKeyAccess ika) { pfSetter(valueSetObj, ikaGetter(ika, pfGetter(valueSetObj))); };
+            }
+            else if (itemInfo.ItemType == typeof(TimeSpan))
+            {
+                Func<IConfigKeyAccess, TimeSpan, TimeSpan> ikaGetter = (ika, defaultValue) => ika.GetValue<TimeSpan>(defaultValue);
+                Action<TConfigValueSet, TimeSpan> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TConfigValueSet, TimeSpan>(itemInfo);
+                Func<TConfigValueSet, TimeSpan> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TConfigValueSet, TimeSpan>(itemInfo);
                 innerBoundSetter = delegate(TConfigValueSet valueSetObj, IConfigKeyAccess ika) { pfSetter(valueSetObj, ikaGetter(ika, pfGetter(valueSetObj))); };
             }
             else if (itemInfo.ItemType == typeof(string))
@@ -498,9 +598,23 @@ namespace MosaicLib.Modular.Config
                 Func<TConfigValueSet, double ?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TConfigValueSet, double ?>(itemInfo);
                 innerBoundSetter = delegate(TConfigValueSet valueSetObj, IConfigKeyAccess ika) { pfSetter(valueSetObj, ikaGetter(ika, pfGetter(valueSetObj))); };
             }
+            else if (itemInfo.ItemType == typeof(DateTime ?))
+            {
+                Func<IConfigKeyAccess, DateTime?, DateTime?> ikaGetter = (ika, defaultValue) => ika.GetValue<DateTime?>(defaultValue);
+                Action<TConfigValueSet, DateTime?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TConfigValueSet, DateTime?>(itemInfo);
+                Func<TConfigValueSet, DateTime?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TConfigValueSet, DateTime?>(itemInfo);
+                innerBoundSetter = delegate(TConfigValueSet valueSetObj, IConfigKeyAccess ika) { pfSetter(valueSetObj, ikaGetter(ika, pfGetter(valueSetObj))); };
+            }
+            else if (itemInfo.ItemType == typeof(TimeSpan ?))
+            {
+                Func<IConfigKeyAccess, TimeSpan ?, TimeSpan ?> ikaGetter = (ika, defaultValue) => ika.GetValue<TimeSpan ?>(defaultValue);
+                Action<TConfigValueSet, TimeSpan ?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TConfigValueSet, TimeSpan ?>(itemInfo);
+                Func<TConfigValueSet, TimeSpan ?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TConfigValueSet, TimeSpan ?>(itemInfo);
+                innerBoundSetter = delegate(TConfigValueSet valueSetObj, IConfigKeyAccess ika) { pfSetter(valueSetObj, ikaGetter(ika, pfGetter(valueSetObj))); };
+            }
             else if (itemInfo.ItemType == typeof(ValueContainer))
             {
-                Func<IConfigKeyAccess, ValueContainer, ValueContainer> ikaGetter = (ika, defaultValue) => ika.ValueContainer;
+                Func<IConfigKeyAccess, ValueContainer, ValueContainer> ikaGetter = (ika, defaultValue) => ika.VC;
                 Action<TConfigValueSet, ValueContainer> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TConfigValueSet, ValueContainer>(itemInfo);
                 Func<TConfigValueSet, ValueContainer> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TConfigValueSet, ValueContainer>(itemInfo);
                 innerBoundSetter = delegate(TConfigValueSet valueSetObj, IConfigKeyAccess ika) { pfSetter(valueSetObj, ikaGetter(ika, pfGetter(valueSetObj))); };
@@ -546,16 +660,16 @@ namespace MosaicLib.Modular.Config
             }
             else if (itemInfo.ItemType == typeof(Logging.LogGate))
             {
-                Func<IConfigKeyAccess, Logging.LogGate, Logging.LogGate> ikaGetter
-                    = (ika, defaultValue)
-                        =>
-                        {
-                            Logging.LogGate gate = defaultValue;
-                            gate.TryParse(ika.GetValue<string>(defaultValue.ToString()));
-                            return gate;
-                        };
+                Func<IConfigKeyAccess, Logging.LogGate, Logging.LogGate> ikaGetter = (ika, defaultValue) => ika.GetValue<Logging.LogGate>(defaultValue);
                 Action<TConfigValueSet, Logging.LogGate> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TConfigValueSet, Logging.LogGate>(itemInfo);
                 Func<TConfigValueSet, Logging.LogGate> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TConfigValueSet, Logging.LogGate>(itemInfo);
+                innerBoundSetter = delegate(TConfigValueSet valueSetObj, IConfigKeyAccess ika) { pfSetter(valueSetObj, ikaGetter(ika, pfGetter(valueSetObj))); };
+            }
+            else if (itemInfo.ItemType == typeof(Logging.LogGate ?))
+            {
+                Func<IConfigKeyAccess, Logging.LogGate ?, Logging.LogGate ?> ikaGetter = (ika, defaultValue) => ika.GetValue<Logging.LogGate ?>(defaultValue);
+                Action<TConfigValueSet, Logging.LogGate ?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TConfigValueSet, Logging.LogGate ?>(itemInfo);
+                Func<TConfigValueSet, Logging.LogGate ?> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TConfigValueSet, Logging.LogGate ?>(itemInfo);
                 innerBoundSetter = delegate(TConfigValueSet valueSetObj, IConfigKeyAccess ika) { pfSetter(valueSetObj, ikaGetter(ika, pfGetter(valueSetObj))); };
             }
             else
@@ -645,7 +759,7 @@ namespace MosaicLib.Modular.Config
             public Action<TConfigValueSet, Logging.IMesgEmitter, Logging.IMesgEmitter> UpdateMemberFromKeyAccessAction { get; set; }
         }
 
-        /// <remarks>Non-null elements in this array correspond to fully vetted writeable value set items.</remarks>
+        /// <remarks>Non-null elements in this array correspond to fully vetted writable value set items.</remarks>
         KeySetupInfo[] keySetupInfoArray = null;
 
         #endregion

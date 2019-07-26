@@ -2,8 +2,9 @@
 /*! @file ByteArrayTranscoders.cs
  *  @brief This file contains a number of string related helper methods
  * 
- * Copyright (c) Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2008 Mosaic Systems Inc., All rights reserved
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2008 Mosaic Systems Inc.
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,14 +18,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
+
+using System;
+using System.Text;
+using System.Collections.Generic;
+
+using MosaicLib.Utils.Collections;
 
 namespace MosaicLib.Utils
 {
-    using System;
-    using System.Text;
-    using System.Collections.Generic;
-
 	#region Byte Array Transcoders
 
     /// <summary>
@@ -33,7 +35,7 @@ namespace MosaicLib.Utils
     /// </summary>
 	public interface IByteArrayTranscoder
 	{
-		/// <summary>Encodes the bytes in the given source buffer and returns the resulting encoded string.</summary>
+		/// <summary>Encodes the bytes in the given source buffer (optinally null) and returns the resulting encoded string.</summary>
 		/// <param name="sourceBuffer">specifies the source buffer from which to encode bytes</param>
 		/// <returns>the encoded string</returns>
 		string Encode(byte [] sourceBuffer);
@@ -92,7 +94,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Protected read only empty byte array field.  Immutable.  Used for null transformation to minimize if statements in normal flow of control.
         /// </summary>
-		protected readonly static byte [] emptyArray = new byte [0];
+        protected readonly static byte[] emptyArray = EmptyArrayFactory<byte>.Instance;
 
         /// <summary>Encodes the bytes in the given source buffer and returns the resulting encoded string.</summary>
         /// <param name="sourceBuffer">specifies the source buffer from which to encode bytes</param>

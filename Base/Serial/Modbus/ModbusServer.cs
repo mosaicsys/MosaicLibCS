@@ -1,10 +1,11 @@
 //-------------------------------------------------------------------
 /*! @file ModbusServer.cs
- * @brief This file defines Modbus helper definitiions and classes that are specific to Modbus Servers
+ *  @brief This file defines Modbus helper definitiions and classes that are specific to Modbus Servers
  * 
- * Copyright (c) Mosaic Systems Inc.  All rights reserved
- * Copyright (c) 2013 Mosaic Systems Inc.  All rights reserved
- * Copyright (c) 2010 Mosaic Systems Inc.  All rights reserved (portions of prior C++ library version)
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2013 Mosaic Systems Inc.
+ * Copyright (c) 2010 Mosaic Systems Inc.  (portions of prior C++ library version)
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +19,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
 
 using System;
 using System.Collections.Generic;
@@ -262,13 +262,14 @@ namespace MosaicLib.SerialIO.Modbus.Server
             }
             catch (System.Exception ex)
             {
-                Issue.Emitter.Emit("Modbus Servier '{0}' threw unexpected exception: fc:{1} ex:{2}", fcServer.Name, requestAdu.FCInfo.FC, ex);
+                Issue.Emitter.Emit("Modbus Server '{0}' threw unexpected exception: fc:{1} {2}", fcServer.Name, requestAdu.FCInfo.FC, ex.ToString(ExceptionFormat.TypeAndMessage));
+                Debug.Emitter.Emit(ex.ToString(ExceptionFormat.Full));
                 exceptionCode = ExceptionCode.SlaveDeviceFailure;
             }
 
             if (exceptionCode != ExceptionCode.IgnoreRequest)
             {
-                // build an excpetion response packet
+                // build an exception response packet
                 responseAdu.ExceptionCodeToSend = exceptionCode;
 
                 responseAdu.InitializeResponsePDUForSend();
@@ -300,12 +301,12 @@ namespace MosaicLib.SerialIO.Modbus.Server
 
         /// <summary>Contructor</summary>
         public ModbusServerFunctionPortAdapter(string partID, SerialIO.PortConfig portConfig, IModbusFCServer fcServer, ADUType aduType, byte unitID, bool responseToAllUnits)
-            : base(partID, TimeSpan.FromSeconds(0.2))
+            : base(partID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion2.Build(waitTimeLimit: (0.2).FromSeconds()))
         {
             this.fcServer = fcServer;
 
             Timeout = portConfig.ReadTimeout;
-            portConfig.ReadTimeout = TimeSpan.FromSeconds(Math.Min(0.1, Timeout.TotalSeconds));
+            portConfig.ReadTimeout = TimeSpan.FromSeconds(Math.Max(0.1, Timeout.TotalSeconds));
 
             port = SerialIO.Factory.CreatePort(portConfig);
             portBaseStateObserver = new SequencedRefObjectSourceObserver<IBaseState, Int32>(port.BaseStateNotifier);
@@ -321,23 +322,19 @@ namespace MosaicLib.SerialIO.Modbus.Server
             portReadAction = port.CreateReadAction(portReadActionParam = new ReadActionParam() { WaitForAllBytes = false });
             portWriteAction = port.CreateWriteAction(portWriteActionParam = new WriteActionParam());
             portFlushAction = port.CreateFlushAction(FlushPeriod);
+            portReinitializeAction = port.CreateGoOnlineAction(true);
 
             portReadAction.NotifyOnComplete.AddItem(threadWakeupNotifier);
             portWriteAction.NotifyOnComplete.AddItem(threadWakeupNotifier);
             portFlushAction.NotifyOnComplete.AddItem(threadWakeupNotifier);
+            portReinitializeAction.NotifyOnComplete.AddItem(threadWakeupNotifier);
 
             port.BaseStateNotifier.NotificationList.AddItem(threadWakeupNotifier);
 
-            AddExplicitDisposeAction(() => Fcns.DisposeOfObject(ref port));
-        }
+            AddMainThreadStartingAction(() => port.StartPart());
+            AddMainThreadStoppingAction(() => port.StopPart());
 
-        /// <summary>
-        /// Catch StopPart at this level and use it to also stop the port.
-        /// </summary>
-        protected override void PreStopPart()
-        {
-            port.StopPart();
-            base.PreStopPart();
+            AddExplicitDisposeAction(() => Fcns.DisposeOfObject(ref port));
         }
 
         #endregion
@@ -355,6 +352,7 @@ namespace MosaicLib.SerialIO.Modbus.Server
         IWriteAction portWriteAction = null;
         WriteActionParam portWriteActionParam = null;
         IFlushAction portFlushAction = null;
+        IBasicAction portReinitializeAction = null;
 
         #endregion
 
@@ -420,17 +418,19 @@ namespace MosaicLib.SerialIO.Modbus.Server
         /// </summary>
         protected override void PerformMainLoopService()
         {
+            base.PerformMainLoopService();
+
             InnerServiceFCServerAndStateRelay();
 
             bool portIsConnected = portBaseStateObserver.Object.IsConnected;
 
-            if (portWriteAction.ActionState.IsPendingCompletion || portFlushAction.ActionState.IsPendingCompletion)
+            if (portWriteAction.ActionState.IsPendingCompletion || portFlushAction.ActionState.IsPendingCompletion || portReinitializeAction.ActionState.IsPendingCompletion)
             {
-                // we cannot service a new request until the write and/or flush from a prior service loop have completed.
+                // we cannot service a new request until the write, flush, and/or reinitialize actions started in any prior service loop have completed.
                 return;
             }
 
-            bool startFlush = false;
+            bool resyncCommandStream = false;
             bool startWrite = false;
 
             if (portIsConnected && portReadAction.ActionState.CanStart)
@@ -455,6 +455,7 @@ namespace MosaicLib.SerialIO.Modbus.Server
                         else
                         {
                             Log.Error.Emit("Invalid request received: {0} [numBytes:{1}]", ec, portReadActionParam.BytesRead);
+                            resyncCommandStream = true;
                         }
 
                         portReadActionParam.BytesRead = 0;
@@ -480,9 +481,11 @@ namespace MosaicLib.SerialIO.Modbus.Server
                     }
                 }
 
-                if (!startFlush)
+                if (!resyncCommandStream)
                 {
                     // start the read immediately even if we are also starting a write (keep the interface primed)
+                    // do not start the next read if we need to resync the command stream
+
                     if (portReadActionParam.BytesRead == 0)
                         bufferFillStartTime = QpcTimeStamp.Now;
 
@@ -513,9 +516,24 @@ namespace MosaicLib.SerialIO.Modbus.Server
 
                 portWriteAction.Start();
             }
-            else if (startFlush)
+            else if (resyncCommandStream)
             {
-                portFlushAction.Start();
+                IPortBehavior portBehavior = port.PortBehavior;
+
+                if (portBehavior.IsDatagramPort)
+                {
+                    // there is nothing to do for datagram ports.  
+                    // Each message is a seperate item so there is no "leftover" bytes from prior requests that we might need to get rid of.
+                }
+                else if (portBehavior.IsByteStreamPort && portBehavior.IsNetworkPort)
+                {
+                    Log.Debug.Emit("Forcing port to reset current connection after protocol decode error (drop and immediately reconnect)");
+                    portReinitializeAction.Start();
+                }
+                else
+                {
+                    portFlushAction.Start();
+                }
             }
         }
 
@@ -528,7 +546,6 @@ namespace MosaicLib.SerialIO.Modbus.Server
             }
 
             fcServer.Service();
-
         }
 
         #endregion

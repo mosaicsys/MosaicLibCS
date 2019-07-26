@@ -2,8 +2,9 @@
 /*! @file Dates.cs
  *  @brief This file contains a small set of DateTime related helper methods
  * 
- * Copyright (c) Mosaic Systems Inc., All rights reserved
- * Copyright (c) 2008 Mosaic Systems Inc., All rights reserved
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2008 Mosaic Systems Inc.
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,14 +18,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
+
+using System;
+using System.Text;
+using System.Collections.Generic;
 
 namespace MosaicLib.Utils
 {
-    using System;
-    using System.Text;
-    using System.Collections.Generic;
-
 	#region Dates
 
     /// <summary>
@@ -32,6 +32,24 @@ namespace MosaicLib.Utils
     /// </summary>
     public static class Dates
 	{
+        /// <summary>
+        /// This method converts the given dt DateTime into a double in units of seconds (UTC) since 00:00:00.000 Jan 1, 1601 (aka the FTime base offset).
+        /// </summary>
+        public static double GetUTCTimeSince1601(this DateTime dt)
+        {
+            return dt.ToFileTimeUtc() * 0.0000001;
+        }
+
+        /// <summary>
+        /// This method converts the given utcTimeSince1601 into a UTC DateTime value.
+        /// </summary>
+        public static DateTime GetDateTimeFromUTCTimeSince1601(this double utcTimeSince1601)
+        {
+            long utcFTime = unchecked((long)(utcTimeSince1601 * 10000000.0));
+
+            return DateTime.FromFileTimeUtc(utcFTime);
+        }
+
 		// methods used to provide timestamps for LogMessages
 
 		/// <summary>Enum to define the supported formats for converting DataTime values to a string.</summary>
@@ -76,7 +94,7 @@ namespace MosaicLib.Utils
         /// <param name="dt">Specifies the DateTime value to convert</param>
         /// <param name="dtFormat">Specifies the desired format from the set of supported enum values.</param>
         /// <returns>The DateTime converted to a string based on the desired format.</returns>
-        public static string CvtToString(DateTime dt, DateTimeFormat dtFormat)
+        public static string CvtToString(this DateTime dt, DateTimeFormat dtFormat)
         {
             return CvtToString(ref dt, dtFormat);
         }

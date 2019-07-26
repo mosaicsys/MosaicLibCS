@@ -1,9 +1,10 @@
 //-------------------------------------------------------------------
-/*! @file GettersAndSetters.cs
+/*! @file GettersSettersFactory.cs
  *  @brief 
  * 
- * Copyright (c) Mosaic Systems Inc.  All rights reserved
- * Copyright (c) 2012 Mosaic Systems Inc.  All rights reserved
+ * Copyright (c) Mosaic Systems Inc.
+ * Copyright (c) 2012 Mosaic Systems Inc.
+ * All rights reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +18,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-//-------------------------------------------------------------------
 
 using System;
 using System.Collections.Generic;
@@ -48,9 +48,15 @@ namespace MosaicLib.Modular.Reflection
 
             if (!targetObjType.Equals(pi.DeclaringType) && !targetObjType.IsSubclassOf(pi.DeclaringType))
                 throw new System.NotSupportedException("Cannot create property getter function when given TObject is not derived from the given PropertyInfo instance's DeclaringType");
+
             if (!resultType.Equals(pi.PropertyType))
                 throw new System.NotSupportedException("Cannot create property getter function when given TResult is not the same as the given PropertyInfo instance's PropertyType");
-            if (pi.GetGetMethod().IsStatic)
+
+            MethodInfo pgGetMethod = pi.GetGetMethod();
+            if (pgGetMethod == null)
+                throw new System.NotSupportedException("Cannot create property setter action when given PropertyInfo's GetMethod does not exist");
+
+            if (pgGetMethod.IsStatic)
                 throw new System.NotSupportedException("Cannot create property setter action when given PropertyInfo's GetMethod is static");
 
             ParameterExpression targetObjParameter = Expression.Parameter(targetObjType, "targetObj");
@@ -75,17 +81,23 @@ namespace MosaicLib.Modular.Reflection
 
             if (!targetObjType.Equals(pi.DeclaringType) && !targetObjType.IsSubclassOf(pi.DeclaringType))
                 throw new System.NotSupportedException("Cannot create property setter function when given TObject is not derived from the given PropertyInfo instance's DeclaringType");
+
             if (targetObjType.IsValueType)
                 throw new System.NotSupportedException("Cannot create property setter action when given TObject is a value type");
+
             if (!valueType.Equals(pi.PropertyType))
                 throw new System.NotSupportedException("Cannot create property setter function when given TValue is not the same as the given PropertyInfo instance's PropertyType");
-            if (pi.GetSetMethod().IsStatic)
+
+            MethodInfo piSetMethod = pi.GetSetMethod();
+            if (piSetMethod == null)
+                throw new System.NotSupportedException("Cannot create property setter action when given PropertyInfo's SetMethod does not exist");
+
+            if (piSetMethod.IsStatic)
                 throw new System.NotSupportedException("Cannot create property setter action when given PropertyInfo's SetMethod is static");
 
             ParameterExpression targetObjParameter = Expression.Parameter(targetObjType, "targetObj");
             ParameterExpression valueParameter = Expression.Parameter(valueType, "value");
-            MethodInfo mi = pi.GetSetMethod();
-            MethodCallExpression propertySetExpr = Expression.Call(targetObjParameter, mi, valueParameter);
+            MethodCallExpression propertySetExpr = Expression.Call(targetObjParameter, piSetMethod, valueParameter);
 
             Action<TObject, TValue> act = Expression.Lambda<Action<TObject, TValue>>(propertySetExpr, targetObjParameter, valueParameter).Compile();
 
