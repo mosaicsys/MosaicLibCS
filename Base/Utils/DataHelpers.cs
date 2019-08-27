@@ -22,6 +22,7 @@
  */
 
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Runtime.Serialization;
@@ -71,8 +72,8 @@ namespace MosaicLib.Utils
         /// <summary>Packs the given pair of UInt16 values as a UInt32 and returns it</summary>
         public static UInt32 Pack(UInt16 msw, UInt16 lsw) { unchecked { return ((((UInt32)msw) << 16) | ((UInt32)lsw)); } }
 
-        /// <summary>Packs a pair of bytes, in big endian order, from the indicated location in the given byteArray, and places them in the UInt16 value output.</summary>
-        /// <returns>True on success, false if the byteArray or baseIdx could not be used to obtain the required number of bytes</returns>
+        /// <summary>Packs a pair of bytes, in big endian order, from the indicated location in the given <paramref name="byteArray"/>, and places them in the UInt16 value output.</summary>
+        /// <returns>True on success, false if the <paramref name="byteArray"/> or <paramref name="baseIdx"/> could not be used to obtain the required number of bytes</returns>
         public static bool Pack(Byte[] byteArray, int baseIdx, out UInt16 value) 
 		{ 
 			value = 0;
@@ -80,12 +81,12 @@ namespace MosaicLib.Utils
             if (!byteArray.IsSafeIndex(baseIdx, length: 2))
                 return false;
 
-            value = Pack(byteArray [baseIdx], byteArray [baseIdx + 1]);
+            value = Pack(byteArray[baseIdx], byteArray[baseIdx + 1]);
 			return true;
 		}
 
-        /// <summary>Packs a set of 4 bytes, in big endian order, from the indicated location in the given byteArray, and places them in the UInt32 value output.</summary>
-        /// <returns>True on success, false if the byteArray or baseIdx could not be used to obtain the required number of bytes</returns>
+        /// <summary>Packs a set of 4 bytes, in big endian order, from the indicated location in the given <paramref name="byteArray"/>, and places them in the UInt32 value output.</summary>
+        /// <returns>True on success, false if the <paramref name="byteArray"/> or <paramref name="baseIdx"/> could not be used to obtain the required number of bytes</returns>
         public static bool Pack(Byte[] byteArray, int baseIdx, out UInt32 value) 
 		{ 
 			value = 0;
@@ -93,12 +94,12 @@ namespace MosaicLib.Utils
             if (!byteArray.IsSafeIndex(baseIdx, length: 4))
                 return false;
 
-            value = Pack(byteArray [baseIdx], byteArray [baseIdx + 1], byteArray [baseIdx + 2], byteArray [baseIdx + 3]);
+            value = Pack(byteArray[baseIdx], byteArray[baseIdx + 1], byteArray[baseIdx + 2], byteArray[baseIdx + 3]);
 			return true;
         }
 
-        /// <summary>Packs a set of 8 bytes, in big endian order, from the indicated location in the given byteArray, and places them in the UInt64 value output.</summary>
-        /// <returns>True on success, false if the byteArray or baseIdx could not be used to obtain the required number of bytes</returns>
+        /// <summary>Packs a set of 8 bytes, in big endian order, from the indicated location in the given <paramref name="byteArray"/>, and places them in the UInt64 value output.</summary>
+        /// <returns>True on success, false if the <paramref name="byteArray"/> or <paramref name="baseIdx"/> could not be used to obtain the required number of bytes</returns>
         public static bool Pack(Byte[] byteArray, int baseIdx, out UInt64 value)
         {
             value = 0;
@@ -110,8 +111,8 @@ namespace MosaicLib.Utils
             return true;
         }
 
-        /// <summary>Packs a set of the given number of bytes (1, 2, 3, or 4, in big endian order) from the indicated location in the given byteArray, and places them in the UInt32 value output.</summary>
-        /// <returns>True on success, false if the byteArray or baseIdx could not be used to obtain the required number of bytes, or if numBytes is not a supported value.</returns>
+        /// <summary>Packs a set of the given number of bytes (1, 2, 3, or 4, in big endian order) from the indicated location in the given <paramref name="byteArray"/>, and places them in the UInt32 value output.</summary>
+        /// <returns>True on success, false if the <paramref name="byteArray"/> or <paramref name="baseIdx"/> could not be used to obtain the required number of bytes, or if numBytes is not a supported value.</returns>
         public static bool Pack(Byte[] byteArray, int baseIdx, int numBytes, out UInt32 value)
         {
             value = 0;
@@ -129,8 +130,8 @@ namespace MosaicLib.Utils
             }
         }
 
-        /// <summary>Packs a set of the given number of bytes (2, 3, or 4, in big endian order) from the indicated location in the given byteArray, and places them in the UInt32 value output.</summary>
-        /// <returns>True on success, false if the byteArray or baseIdx could not be used to obtain the required number of bytes, or if numBytes is not a supported value.</returns>
+        /// <summary>Packs a set of the given number of bytes (2, 3, or 4, in big endian order) from the indicated location in the given <paramref name="byteArray"/>, and places them in the UInt32 value output.</summary>
+        /// <returns>True on success, false if the <paramref name="byteArray"/> or <paramref name="baseIdx"/> could not be used to obtain the required number of bytes, or if numBytes is not a supported value.</returns>
         public static bool Pack(Byte[] byteArray, int baseIdx, int numBytes, out UInt64 value)
         {
             value = 0;
@@ -152,7 +153,7 @@ namespace MosaicLib.Utils
             }
         }
 
-        /// <summary>Packs and returns 2 bytes from the indicated location in the given byteArray in BigEndian Order.  Returns 0 if any of the indicates bytes are not accessible.</summary>
+        /// <summary>Packs and returns 2 bytes from the indicated location in the given <paramref name="byteArray"/> in BigEndian Order.  Returns 0 if any of the indicates bytes are not accessible.</summary>
         public static UInt16 Pack2(Byte[] byteArray, int baseIdx = 0)
         {
             UInt16 value;
@@ -160,7 +161,7 @@ namespace MosaicLib.Utils
             return value;
         }
 
-        /// <summary>Packs and returns 3 bytes from the indicated location in the given byteArray in BigEndian Order.  Returns 0 if any of the indicates bytes are not accessible.</summary>
+        /// <summary>Packs and returns 3 bytes from the indicated location in the given <paramref name="byteArray"/> in BigEndian Order.  Returns 0 if any of the indicates bytes are not accessible.</summary>
         public static UInt32 Pack3(Byte[] byteArray, int baseIdx = 0)
         {
             UInt32 value;
@@ -168,7 +169,7 @@ namespace MosaicLib.Utils
             return value;
         }
 
-        /// <summary>Packs and returns 4 bytes from the indicated location in the given byteArray in BigEndian Order.  Returns 0 if any of the indicates bytes are not accessible.</summary>
+        /// <summary>Packs and returns 4 bytes from the indicated location in the given <paramref name="byteArray"/> in BigEndian Order.  Returns 0 if any of the indicates bytes are not accessible.</summary>
         public static UInt32 Pack4(Byte[] byteArray, int baseIdx = 0)
         {
             UInt32 value;
@@ -176,7 +177,7 @@ namespace MosaicLib.Utils
             return value;
         }
 
-        /// <summary>Packs and returns 8 bytes from the indicated location in the given byteArray in BigEndian Order.  Returns 0 if any of the indicates bytes are not accessible.</summary>
+        /// <summary>Packs and returns 8 bytes from the indicated location in the given <paramref name="byteArray"/> in BigEndian Order.  Returns 0 if any of the indicates bytes are not accessible.</summary>
         public static UInt64 Pack8(Byte[] byteArray, int baseIdx = 0)
         {
             UInt64 value;
@@ -186,6 +187,86 @@ namespace MosaicLib.Utils
             return value;
         }
 
+        /// <summary>Packs a pair of bytes, in big endian order, from the indicated location in the given <paramref name="fromBytes"/>, and places them in the UInt16 value output.</summary>
+        /// <returns>True on success, false if the <paramref name="fromBytes"/> or <paramref name="baseIdx"/> could not be used to obtain the required number of bytes</returns>
+        public static bool Pack(this IList<byte> fromBytes, int baseIdx, out UInt16 value)
+        {
+            value = 0;
+
+            if (!fromBytes.IsSafeIndex(baseIdx, length: 2))
+                return false;
+
+            value = Pack(fromBytes[baseIdx], fromBytes[baseIdx + 1]);
+            return true;
+        }
+
+        /// <summary>Packs a set of 4 bytes, in big endian order, from the indicated location in the given <paramref name="fromBytes"/>, and places them in the UInt32 value output.</summary>
+        /// <returns>True on success, false if the <paramref name="fromBytes"/> or <paramref name="baseIdx"/> could not be used to obtain the required number of bytes</returns>
+        public static bool Pack(this IList<byte> fromBytes, int baseIdx, out UInt32 value)
+        {
+            value = 0;
+
+            if (!fromBytes.IsSafeIndex(baseIdx, length: 4))
+                return false;
+
+            value = Pack(fromBytes[baseIdx], fromBytes[baseIdx + 1], fromBytes[baseIdx + 2], fromBytes[baseIdx + 3]);
+            return true;
+        }
+
+        /// <summary>Packs a set of 8 bytes, in big endian order, from the indicated location in the given <paramref name="fromBytes"/>, and places them in the UInt64 value output.</summary>
+        /// <returns>True on success, false if the <paramref name="fromBytes"/> or <paramref name="baseIdx"/> could not be used to obtain the required number of bytes</returns>
+        public static bool Pack(this IList<byte> fromBytes, int baseIdx, out UInt64 value)
+        {
+            value = 0;
+
+            if (!fromBytes.IsSafeIndex(baseIdx, length: 8))
+                return false;
+
+            value = Pack(fromBytes[baseIdx], fromBytes[baseIdx + 1], fromBytes[baseIdx + 2], fromBytes[baseIdx + 3], fromBytes[baseIdx + 4], fromBytes[baseIdx + 5], fromBytes[baseIdx + 6], fromBytes[baseIdx + 7]);
+            return true;
+        }
+
+        /// <summary>Packs a set of the given number of bytes (1, 2, 3, or 4, in big endian order) from the indicated location in the given <paramref name="fromBytes"/>, and places them in the UInt32 value output.</summary>
+        /// <returns>True on success, false if the <paramref name="fromBytes"/> or <paramref name="baseIdx"/> could not be used to obtain the required number of bytes, or if numBytes is not a supported value.</returns>
+        public static bool Pack(this IList<byte> fromBytes, int baseIdx, int numBytes, out UInt32 value)
+        {
+            value = 0;
+
+            if (!fromBytes.IsSafeIndex(baseIdx, length: numBytes))
+                return false;
+
+            switch (numBytes)
+            {
+                case 1: value = fromBytes[baseIdx]; return true;
+                case 2: value = Pack(fromBytes[baseIdx], fromBytes[baseIdx + 1]); return true;
+                case 3: value = Pack(fromBytes[baseIdx], fromBytes[baseIdx + 1], fromBytes[baseIdx + 2]); return true;
+                case 4: value = Pack(fromBytes[baseIdx], fromBytes[baseIdx + 1], fromBytes[baseIdx + 2], fromBytes[baseIdx + 3]); return true;
+                default: return false;
+            }
+        }
+
+        /// <summary>Packs a set of the given number of bytes (2, 3, or 4, in big endian order) from the indicated location in the given <paramref name="fromBytes"/>, and places them in the UInt32 value output.</summary>
+        /// <returns>True on success, false if the <paramref name="fromBytes"/> or <paramref name="baseIdx"/> could not be used to obtain the required number of bytes, or if numBytes is not a supported value.</returns>
+        public static bool Pack(this IList<byte> fromBytes, int baseIdx, int numBytes, out UInt64 value)
+        {
+            value = 0;
+
+            if (!fromBytes.IsSafeIndex(baseIdx, length: numBytes))
+                return false;
+
+            switch (numBytes)
+            {
+                case 1: value = fromBytes[baseIdx]; return true;
+                case 2: value = Pack(fromBytes[baseIdx], fromBytes[baseIdx + 1]); return true;
+                case 3: value = Pack(fromBytes[baseIdx], fromBytes[baseIdx + 1], fromBytes[baseIdx + 2]); return true;
+                case 4: value = Pack(fromBytes[baseIdx], fromBytes[baseIdx + 1], fromBytes[baseIdx + 2], fromBytes[baseIdx + 3]); return true;
+                case 5: value = Pack(0, 0, 0, fromBytes[baseIdx], fromBytes[baseIdx + 1], fromBytes[baseIdx + 2], fromBytes[baseIdx + 3], fromBytes[baseIdx + 4]); return true;
+                case 6: value = Pack(0, 0, fromBytes[baseIdx], fromBytes[baseIdx + 1], fromBytes[baseIdx + 2], fromBytes[baseIdx + 3], fromBytes[baseIdx + 4], fromBytes[baseIdx + 5]); return true;
+                case 7: value = Pack(0, fromBytes[baseIdx], fromBytes[baseIdx + 1], fromBytes[baseIdx + 2], fromBytes[baseIdx + 3], fromBytes[baseIdx + 4], fromBytes[baseIdx + 5], fromBytes[baseIdx + 6]); return true;
+                case 8: value = Pack(fromBytes[baseIdx], fromBytes[baseIdx + 1], fromBytes[baseIdx + 2], fromBytes[baseIdx + 3], fromBytes[baseIdx + 4], fromBytes[baseIdx + 5], fromBytes[baseIdx + 6], fromBytes[baseIdx + 7]); return true;
+                default: return false;
+            }
+        }
         #endregion
 
         #region Unpacking
@@ -263,8 +344,8 @@ namespace MosaicLib.Utils
         }
 
 
-        /// <summary>Unpacks 2 bytes from the given UInt16 value and saves them in the give byteArray at the given baseIdx offset.  Uses Big Endian byte ordering.</summary>
-        /// <returns>True on success, false if the byteArray or baseIdx could not be used to save the required number of bytes.</returns>
+        /// <summary>Unpacks 2 bytes from the given UInt16 value and saves them in the give <paramref name="byteArray"/> at the given <paramref name="baseIdx"/> offset.  Uses Big Endian byte ordering.</summary>
+        /// <returns>True on success, false if the <paramref name="byteArray"/> or <paramref name="baseIdx"/> could not be used to save the required number of bytes.</returns>
         public static bool Unpack(UInt16 w, byte[] byteArray, int baseIdx = 0)
 		{
 			if (byteArray == null || baseIdx < 0 || ((baseIdx + 2) > byteArray.Length))
@@ -273,8 +354,8 @@ namespace MosaicLib.Utils
 			return true;
 		}
 
-        /// <summary>Unpacks 4 bytes from the given UInt32 value and saves them in the give byteArray at the given baseIdx offset.  Uses Big Endian byte ordering.</summary>
-        /// <returns>True on success, false if the byteArray or baseIdx could not be used to save the required number of bytes.</returns>
+        /// <summary>Unpacks 4 bytes from the given UInt32 value and saves them in the give <paramref name="byteArray"/> at the given <paramref name="baseIdx"/> offset.  Uses Big Endian byte ordering.</summary>
+        /// <returns>True on success, false if the <paramref name="byteArray"/> or <paramref name="baseIdx"/> could not be used to save the required number of bytes.</returns>
         public static bool Unpack(UInt32 l, byte[] byteArray, int baseIdx = 0)
 		{
 			if (byteArray == null || baseIdx < 0 || ((baseIdx + 4) > byteArray.Length))
@@ -283,8 +364,8 @@ namespace MosaicLib.Utils
 			return true;
         }
 
-        /// <summary>Unpacks 8 bytes from the given UInt64 value and saves them in the give byteArray at the given baseIdx offset.  Uses Big Endian byte ordering.</summary>
-        /// <returns>True on success, false if the byteArray or baseIdx could not be used to save the required number of bytes.</returns>
+        /// <summary>Unpacks 8 bytes from the given UInt64 value and saves them in the give <paramref name="byteArray"/> at the given <paramref name="baseIdx"/> offset.  Uses Big Endian byte ordering.</summary>
+        /// <returns>True on success, false if the <paramref name="byteArray"/> or <paramref name="baseIdx"/> could not be used to save the required number of bytes.</returns>
         public static bool Unpack(UInt64 l, byte[] byteArray, int baseIdx = 0)
         {
             if (byteArray == null || baseIdx < 0 || ((baseIdx + 8) > byteArray.Length))
@@ -293,8 +374,8 @@ namespace MosaicLib.Utils
             return true;
         }
 
-        /// <summary>Unpacks the given number of bytes (1, 2, 3 or 4) from the given UInt32 value and saves them in the give byteArray at the given baseIdx offset.  Uses Big Endian byte ordering.</summary>
-        /// <returns>True on success, false if the byteArray or baseIdx could not be used to save the required number of bytes, or if numBytes is not a supported value.</returns>
+        /// <summary>Unpacks the given number of bytes (1, 2, 3 or 4) from the given UInt32 value and saves them in the give <paramref name="byteArray"/> at the given <paramref name="baseIdx"/> offset.  Uses Big Endian byte ordering.</summary>
+        /// <returns>True on success, false if the <paramref name="byteArray"/> or <paramref name="baseIdx"/> could not be used to save the required number of bytes, or if numBytes is not a supported value.</returns>
         public static bool Unpack(UInt32 l, byte[] byteArray, int baseIdx, int numBytes)
         {
             if (byteArray == null || baseIdx < 0 || ((baseIdx + numBytes) > byteArray.Length))
@@ -306,6 +387,45 @@ namespace MosaicLib.Utils
                 case 2: Unpack((UInt16) (l & 0xffff), out byteArray[baseIdx], out byteArray[baseIdx + 1]); return true;
                 case 3: Unpack(l, out byteArray[baseIdx], out byteArray[baseIdx + 1], out byteArray[baseIdx + 2]); return true;
                 case 4: Unpack(l, out byteArray[baseIdx], out byteArray[baseIdx + 1], out byteArray[baseIdx + 2], out byteArray[baseIdx + 3]); return true;
+                default: return false;
+            }
+        }
+
+        /// <summary>Unpacks 2 bytes from the given UInt16 value and saves them in the give <paramref name="into"/> at the given <paramref name="baseIdx"/> offset.  Uses Big Endian byte ordering.</summary>
+        /// <returns>True on success, false if the <paramref name="into"/> or <paramref name="baseIdx"/> could not be used to save the required number of bytes.</returns>
+        public static bool Unpack(this UInt16 v, IList<byte> into, int baseIdx = 0)
+        {
+            return ((UInt64)v).Unpack(into, baseIdx, 2);
+        }
+
+        /// <summary>Unpacks 4 bytes from the given UInt32 value and saves them in the give <paramref name="into"/> at the given <paramref name="baseIdx"/> offset.  Uses Big Endian byte ordering.</summary>
+        /// <returns>True on success, false if the <paramref name="into"/> or <paramref name="baseIdx"/> could not be used to save the required number of bytes.</returns>
+        public static bool Unpack(this UInt32 v, IList<byte> into, int baseIdx = 0)
+        {
+            return ((UInt64)v).Unpack(into, baseIdx, 4);
+        }
+
+        /// <summary>Unpacks 8 bytes from the given UInt64 value and saves them in the give <paramref name="into"/> at the given <paramref name="baseIdx"/> offset.  Uses Big Endian byte ordering.</summary>
+        /// <returns>True on success, false if the <paramref name="into"/> or <paramref name="baseIdx"/> could not be used to save the required number of bytes.</returns>
+        public static bool Unpack(this UInt64 v, IList<byte> into, int baseIdx = 0)
+        {
+            return v.Unpack(into, baseIdx, 8);
+        }
+
+        /// <summary>Unpacks the given number of bytes (1, 2, 3 or 4) from the given UInt32 value and saves them in the give <paramref name="into"/> at the given <paramref name="baseIdx"/> offset.  Uses Big Endian byte ordering.</summary>
+        /// <returns>True on success, false if the <paramref name="into"/> or <paramref name="baseIdx"/> could not be used to save the required number of bytes, or if numBytes is not a supported value.</returns>
+        public static bool Unpack(this UInt64 v, IList<byte> into, int baseIdx, int numBytes)
+        {
+            if (!into.IsSafeIndex(baseIdx, length: numBytes) || into.IsReadOnly)
+                return false;
+
+            switch (numBytes)
+            {
+                case 1: into[baseIdx] = (byte)(v & 0x00ff); return true;
+                case 2: { byte b0, b1; Unpack((UInt16)(v & 0xffff), out b0, out b1); into[baseIdx] = b0; into[baseIdx + 1] = b1; return true; }
+                case 3: { byte b0, b1, b2; Unpack((UInt32) (v & 0x0ffffffff), out b0, out b1, out b2); into[baseIdx] = b0; into[baseIdx + 1] = b1; into[baseIdx + 2] = b2; return true; }
+                case 4: { byte b0, b1, b2, b3; Unpack((UInt32)(v & 0x0ffffffff), out b0, out b1, out b2, out b3); into[baseIdx] = b0; into[baseIdx + 1] = b1; into[baseIdx + 2] = b2; into[baseIdx + 3] = b3; return true; }
+                case 8: { byte b0, b1, b2, b3, b4, b5, b6, b7; Unpack(v, out b0, out b1, out b2, out b3, out b4, out b5, out b6, out b7); into[baseIdx] = b0; into[baseIdx + 1] = b1; into[baseIdx + 2] = b2; into[baseIdx + 3] = b3; into[baseIdx + 4] = b4; into[baseIdx + 5] = b5; into[baseIdx + 6] = b6; into[baseIdx + 7] = b7; return true; }
                 default: return false;
             }
         }
@@ -2232,6 +2352,36 @@ namespace MosaicLib.Utils
                 System.Threading.Monitor.Exit(lockedMutexObject);
                 lockedMutexObject = null;
             }
+        }
+
+        /// <summary>
+        /// Attempts to lock the given mutexObject using System.Threading.Monitor.TryEnter.  On success this object will indicate HasLock is true, on failure HasLock will be false.
+        /// </summary>
+        public ScopedLock TryLockInline(object mutexObject, TimeSpan maxWaitTimeLimit = default(TimeSpan))
+        {
+            TryLock(mutexObject, maxWaitTimeLimit);
+
+            return this;
+        }
+
+        /// <summary>
+        /// Attempts to lock the given mutexObject using System.Threading.Monitor.TryEnter.  Returns true if the lock was successfully acquired, or false otherwise.
+        /// </summary>
+        public bool TryLock(object mutexObject, TimeSpan maxWaitTimeLimit = default(TimeSpan))
+        {
+            Release();
+
+            if (mutexObject != null)
+            {
+                bool gotLock = (maxWaitTimeLimit.IsZero()) ? System.Threading.Monitor.TryEnter(mutexObject) : System.Threading.Monitor.TryEnter(mutexObject, maxWaitTimeLimit);
+                if (gotLock)
+                {
+                    lockedMutexObject = mutexObject;
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 

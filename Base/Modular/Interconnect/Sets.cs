@@ -2729,17 +2729,15 @@ namespace MosaicLib.Modular.Interconnect.Sets
         /// </summary>
         private bool ApplyFilterToItem(Func<TObjectType, bool> filter, TObjectType item)
         {
-            if (filter == null)
-                return true;
+            bool result = false;
 
             try
             {
-                return filter(item);
+                result = (filter == null || filter(item));
             }
-            catch
-            {
-                return false;
-            }
+            catch { }
+
+            return result;
         }
 
         /// <summary>Creates and returns a tracking set that can be used to track this tracking set set.</summary>

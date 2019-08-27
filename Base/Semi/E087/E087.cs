@@ -26,6 +26,7 @@ using System.Linq;
 using System.Runtime.Serialization;
 using System.Text;
 
+using MosaicLib.Modular.Common;
 using MosaicLib.Semi.E005;
 using MosaicLib.Utils;
 
@@ -487,9 +488,37 @@ namespace MosaicLib.Semi.E087
             if (IsSuccess)
                 return "Success";
             else
-                return Fcns.CheckedFormat("ErrCode:{0}[{1}] ErrText:'{2}'", ErrCode, unchecked((int) ErrCode), ErrText);
+                return "ErrCode:{0}[{1}] ErrText:'{2}'".CheckedFormat(ErrCode, unchecked((int) ErrCode), ErrText);
         }
     }
+
+
+    /// <summary>
+    /// This enumeration defines the set of known CARRIERACTION values.  This value is used in string form as part of S3/F17[W] messages.
+    /// </summary>
+    [DataContract(Namespace = Constants.E087NameSpace)]
+    public enum CARRIERACTION : int
+    {
+        [EnumMember]
+        None = 0,
+        [EnumMember]
+        Bind,
+        [EnumMember]
+        CancelBind,
+        [EnumMember]
+        CancelCarrier,
+        [EnumMember]
+        CancelCarrierAtPort,
+        [EnumMember]
+        CarrierNotification,
+        [EnumMember]
+        CancelCarrierNotification,
+        [EnumMember]
+        CarrierReCreate,
+        [EnumMember]
+        ProceedWithCarrier,
+    }
+
 
     /// <summary>
     /// Used to generate and handle response error code sets for Carrier Action related Stream/Functions.
@@ -538,7 +567,7 @@ namespace MosaicLib.Semi.E087
 
         /// <summary>
         /// Gives get/set access to the first element of the StatusList.  
-        /// Getter returns first StatusPair in StatusList, setting the list to contain a single successfull StatusPair if required.
+        /// Getter returns first StatusPair in StatusList, setting the list to contain a single successful StatusPair if required.
         /// Setter sets the first element of the StatusList to the given StatusPair value, creating or enlarging the StatusList as needed.
         /// </summary>
         public StatusPair FirstStatusPair
@@ -750,7 +779,7 @@ namespace MosaicLib.Semi.E087
     public static partial class ExtensionMethods
     {
         /// <summary>
-        /// Returns true if the given slotState parameter contains a known value (one of CorrectlyOccupied, Empty, NotEmpty, CrossSlotted, DoubleSlotted, or Undefined).
+        /// Returns true if the given <paramref name="slotState"/> parameter contains a known value (one of CorrectlyOccupied, Empty, NotEmpty, CrossSlotted, DoubleSlotted, or Undefined).
         /// </summary>
         public static bool IsValid(this SlotState slotState)
         {
@@ -769,7 +798,7 @@ namespace MosaicLib.Semi.E087
         }
 
         /// <summary>
-        /// Returns true if the given slotState parameter contains a normal value (one of CorrectlyOccupied, or Empty).
+        /// Returns true if the given <paramref name="slotState"/> parameter contains a normal value (one of CorrectlyOccupied, or Empty).
         /// </summary>
         public static bool IsNormal(this SlotState slotState)
         {
@@ -784,7 +813,7 @@ namespace MosaicLib.Semi.E087
         }
 
         /// <summary>
-        /// Sets the given slotStateList to contain the decoded version of the given fromSlotMapStr using the character parsing from the SlotState enum summary comments
+        /// Sets the given <paramref name="slotStateList"/> to contain the decoded version of the given <paramref name="fromSlotMapStr"/> using the character parsing from the SlotState enum summary comments
         /// <para/>? = Invalid, ! = Undefined, - = Empty, * = NotEmpty, o = CorrectlyOccupied, D = DoubleSlotted, X = CrossSlotted, digits = corresponding states, all else = Invalid
         /// <para/>Returns the given slotStateList (or a new one if the method was passed null for the list.  If needed, the given list will be cleared before parsing.
         /// </summary>
@@ -794,7 +823,7 @@ namespace MosaicLib.Semi.E087
         }
 
         /// <summary>
-        /// Sets, or appends, the given slotStateList to contain the decoded version of the given fromSlotMapStr using the character parsing from the SlotState enum summary comments
+        /// Sets, or <paramref name="append"/>'s, the given <paramref name="slotStateList"/> to contain the decoded version of the given <paramref name="fromSlotMapStr"/> using the character parsing from the SlotState enum summary comments
         /// <para/>? = Invalid, ! = Undefined, - = Empty, * = NotEmpty, o = CorrectlyOccupied, D = DoubleSlotted, X = CrossSlotted, digits = corresponding states, all else = Invalid
         /// <para/>Returns the given slotStateList (or a new one if the method was passed null for the list.  If append is false and the list is not empty on entry, the given list will be cleared before parsing.
         /// </summary>
@@ -834,7 +863,7 @@ namespace MosaicLib.Semi.E087
         }
 
         /// <summary>
-        /// Generates and returns an array of SlotStates decoded from the given fromSlotMapStr using the character parsing from the SlotState enum summary comments
+        /// Generates and returns an array of SlotStates decoded from the given <paramref name="fromSlotMapStr"/> using the character parsing from the SlotState enum summary comments
         /// <para/>? = Invalid, ! = Undefined, - = Empty, * = NotEmpty, o = CorrectlyOccupied, D = DoubleSlotted, X = CrossSlotted, digits = corresponding states, all else = Invalid
         /// <para/>Returns the given slotStateList (or a new one if the method was passed null for the list.  If append is false and the list is not empty on entry, the given list will be cleared before parsing.
         /// </summary>
@@ -844,17 +873,28 @@ namespace MosaicLib.Semi.E087
         }
 
         /// <summary>
-        /// Converts the given slotStateList to a string using the requested format of Graphics or Digits, and returns the string.
+        /// Converts the given <paramref name="slotStateList"/> to a string using the requested <paramref name="format"/> of Graphics or Digits, and returns the string.
         /// </summary>
-        public static string ToString(this IList<SlotState> slotStateList, SlotStateStringFormat format)
+        public static string ToString(this IList<SlotState> slotStateList, SlotStateStringFormat format = SlotStateStringFormat.Graphics)
         {
             return ToString(slotStateList, (format == SlotStateStringFormat.Graphics ? graphicsCharArray : digitsCharArray));
         }
 
         /// <summary>
-        /// Converts the given slotStateList to a string using the requested format of Graphics or Digits, and returns the string.
+        /// Converts the given <paramref name="slotStateVC"/> to a string using the requested <paramref name="format"/> of Graphics or Digits, and returns the string.
+        /// The given <paramref name="slotStateVC"/> is expected to contain a List of U1 items.
         /// </summary>
-        public static string ToString(this SlotState [] slotStateArray, SlotStateStringFormat format)
+        public static string ToSlotStateString(this ValueContainer slotStateVC, bool rethrow = true, SlotStateStringFormat format = SlotStateStringFormat.Graphics)
+        {
+            SlotState[] slotStateArray = slotStateVC.GetValue<IList<ValueContainer>>(rethrow: rethrow).MapNullToEmpty().Select(vc => vc.GetValue<SlotState>(rethrow: rethrow)).ToArray();
+
+            return slotStateArray.ToString(format: format);
+        }
+
+        /// <summary>
+        /// Converts the given <paramref name="slotStateArray"/> to a string using the requested <paramref name="format"/> of Graphics or Digits, and returns the string.
+        /// </summary>
+        public static string ToString(this SlotState [] slotStateArray, SlotStateStringFormat format = SlotStateStringFormat.Graphics)
         {
             return ToString(slotStateArray, (format == SlotStateStringFormat.Graphics ? graphicsCharArray : digitsCharArray));
         }
@@ -866,18 +906,18 @@ namespace MosaicLib.Semi.E087
         public static readonly char[] digitsCharArray = ("?012345".ToCharArray());
 
         /// <summary>
-        /// Converts the given slotStateList to a string using the given char array which is used to obtain the character for each
+        /// Converts the given <paramref name="slotStateList"/> to a string using the given <paramref name="slotStateToCharMappingArray"/> char array which is used to obtain the character for each
         /// SlotState value (casted as an integer), shifted right by one.  char array index 0 is for the SlotState.Invalid state,
         /// char array index 1 is for SlotState.Undefined, etc... All states that after incrementing, do not map to valid index will
         /// be represented in the output by a ?.
         /// </summary>
         public static string ToString(this IList<SlotState> slotStateList, char[] slotStateToCharMappingArray)
         {
-            return slotStateList.ToArray().ToString(slotStateToCharMappingArray);
+            return slotStateList.SafeToArray().ToString(slotStateToCharMappingArray);
         }
 
         /// <summary>
-        /// Converts the given slotStateArray to a string using the given char array which is used to obtain the character for each
+        /// Converts the given <paramref name="slotStateArray"/> to a string using the given <paramref name="slotStateToCharMappingArray"/> char array which is used to obtain the character for each
         /// SlotState value (casted as an integer), shifted right by one.  char array index 0 is for the SlotState.Invalid state,
         /// char array index 1 is for SlotState.Undefined, etc... All states that after incrementing, do not map to valid index will
         /// be represented in the output by a ?.
@@ -899,7 +939,4 @@ namespace MosaicLib.Semi.E087
     }
 
 	//-------------------------------------------------------------------
-
-	// End items that are derived directly from E087 and/or other Semi standard 
-	//	document(s).
 }

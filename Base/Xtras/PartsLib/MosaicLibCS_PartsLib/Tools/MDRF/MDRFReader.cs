@@ -1509,7 +1509,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
 
         /// <summary>
         /// Reads the data block at the given offset in the file.
-        /// On successfull block read, if advanceOffsetOnSuccess is true, advances the given offset by the resulting data block's total length.
+        /// On successful block read, if advanceOffsetOnSuccess is true, advances the given offset by the resulting data block's total length.
         /// </summary>
         private DataBlockBuffer ReadDataBlockAndHandleTimeStampUpdates(ref int atOffsetInFile, bool requirePayloadBytes = true)
         {
@@ -1545,7 +1545,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
 
         /// <summary>
         /// Attempts to read the block header, and optionally the block contents, at the given offset.
-        /// On successfull block read, if advanceOffsetOnSuccess is true, advances the given offset by the resulting data block's total length.
+        /// On successful block read, if advanceOffsetOnSuccess is true, advances the given offset by the resulting data block's total length.
         /// </summary>
         private DataBlockBuffer InnerReadDataBlock(ref int atOffsetInFile, bool requirePayloadBytes)
         {

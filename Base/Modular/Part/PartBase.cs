@@ -616,7 +616,7 @@ namespace MosaicLib.Modular.Part
 	/// and may be used with some other storage container to service the part's BaseState property.
 	/// </summary>
     [DataContract(Namespace=Constants.ModularNameSpace), Serializable]
-	public struct BaseState : IBaseState
+	public struct BaseState : IBaseState, ICopyable<IBaseState>
 	{
 		#region private fields
 
@@ -926,6 +926,18 @@ namespace MosaicLib.Modular.Part
         }
 
 		#endregion
+
+        #region ICopyable<IBaseState> interface
+
+        /// <summary>
+        /// Returns this casted (and thus boxed) as IBaseState.
+        /// </summary>
+        public IBaseState MakeCopyOfThis(bool deepCopy = true)
+        {
+            return this;
+        }
+
+        #endregion
     }
 
     public static partial class ExtensionMethods
@@ -962,7 +974,7 @@ namespace MosaicLib.Modular.Part
 
     /// <summary>
     /// Defines the behavior options that can be select at the SimplePartBase level
-    /// <para/>None (0x00), TreatPartAsBusyWhenQueueIsNotEmpty (0x01), TreatPartAsBusyWhenInternalPartBusyCountIsNonZero (0x02), All (0x03)
+    /// <para/>None (0x00), TreatPartAsBusyWhenQueueIsNotEmpty (0x01), TreatPartAsBusyWhenInternalPartBusyCountIsNonZero (0x02), TreatPartAsOnlineFailureWhenOnlineOrOnlineBusyWithExplicitFailure (0x04), All (0x03)
     /// </summary>
     [Flags]
     public enum SimplePartBaseBehavior : int
@@ -976,7 +988,10 @@ namespace MosaicLib.Modular.Part
         /// <summary>When present, this flag indicates that the part should be busy whenever its internal part busy counter is non-zero [0x02]</summary>
         TreatPartAsBusyWhenInternalPartBusyCountIsNonZero = 0x02,
 
-        /// <summary>(TreatPartAsBusyWhenQueueIsNotEmpty | TreatPartAsBusyWhenInternalPartBusyCountIsNonZero) [0x03]</summary>
+        /// <summary>When present, thjis flag indicates that the part should be published as OnlineFailure whenever its internal useState is Online or OnlineBusy and it as a non-empty ExplicitFailureReason posted.</summary>
+        TreatPartAsOnlineFailureWhenOnlineOrOnlineBusyWithExplicitFailure = 0x04,
+
+        /// <summary>(TreatPartAsBusyWhenQueueIsNotEmpty | TreatPartAsBusyWhenInternalPartBusyCountIsNonZero) [0x07]</summary>
         All = (TreatPartAsBusyWhenQueueIsNotEmpty | TreatPartAsBusyWhenInternalPartBusyCountIsNonZero),
 
         /// <summary>This is the set of all of the busy related flag items from this behavior type.  (TreatPartAsBusyWhenQueueIsNotEmpty | TreatPartAsBusyWhenInternalPartBusyCountIsNonZero) [0x03]</summary>
@@ -1131,7 +1146,8 @@ namespace MosaicLib.Modular.Part
                                                     LoggingOptionSelect ? loggingOptionSelect = null,
                                                     bool disableBusyBehavior = false,
                                                     bool disablePartBaseIVIUse = false,
-                                                    bool createBaseStateIVAInBaseConstructor = false
+                                                    bool createBaseStateIVAInBaseConstructor = false,
+                                                    SimplePartBaseBehavior addSimplePartBaseBehavior = default(SimplePartBaseBehavior)
                                                     )
         {
             if (simplePartBaseBehavior != null)
@@ -1160,6 +1176,9 @@ namespace MosaicLib.Modular.Part
 
             if (createBaseStateIVAInBaseConstructor)
                 settings.CreateBaseStateIVAInBaseConstructor = true;
+
+            if (addSimplePartBaseBehavior != default(SimplePartBaseBehavior))
+                settings.SimplePartBaseBehavior = settings.SimplePartBaseBehavior | addSimplePartBaseBehavior;
 
             return settings;
         }
@@ -1321,10 +1340,20 @@ namespace MosaicLib.Modular.Part
                                      || (settings.CheckFlag(SimplePartBaseBehavior.TreatPartAsBusyWhenInternalPartBusyCountIsNonZero) && lastCapturedInternalPartBusyCounter != 0)
                                      ;
 
-            if (pushPartToBusyState && baseStateCopy.UseState == UseState.Online)      // map idle state to busy state
+            if ((baseStateCopy.UseState == UseState.Online || baseStateCopy.UseState == UseState.OnlineBusy) 
+                && baseStateCopy.ExplicitFaultReason.IsNeitherNullNorEmpty() 
+                && settings.CheckFlag(SimplePartBaseBehavior.TreatPartAsOnlineFailureWhenOnlineOrOnlineBusyWithExplicitFailure))
+            {
+                baseStateCopy.UseState = UseState.OnlineFailure;
+            }
+            else if (pushPartToBusyState && baseStateCopy.UseState == UseState.Online)      // map idle state to busy state
+            {
                 baseStateCopy.UseState = UseState.OnlineBusy;
+            }
             else if (entryUseState == UseState.OnlineBusy && baseStateCopy.UseState == UseState.Online)
+            {
                 baseStateCopy.ActionName = String.Empty;
+            }
 
             IBaseState publishState = baseStateCopy;
 
@@ -1548,9 +1577,19 @@ namespace MosaicLib.Modular.Part
 
             if (privateBaseState.ExplicitFaultReason != explicitFaultReason)
             {
+                var entryExplicitFaultReason = privateBaseState.ExplicitFaultReason;
+
                 privateBaseState.ExplicitFaultReason = explicitFaultReason;
+
                 if (publish)
-                    PublishBaseState("ExplicitFaultReason was changed");
+                {
+                    if (explicitFaultReason.IsNullOrEmpty())
+                        PublishBaseState("ExplicitFaultReason was cleared");
+                    else if (entryExplicitFaultReason.IsNullOrEmpty())
+                        PublishBaseState("ExplicitFaultReason was set to:" + explicitFaultReason);
+                    else
+                        PublishBaseState("ExplicitFaultReason was changed to:" + explicitFaultReason);
+                }
             }
         }
 

@@ -37,7 +37,7 @@ using MosaicLib.Modular.Interconnect.Values;
 
 namespace MosaicLib.WPF.Interconnect
 {
-    #region WPFValueAccessor and DataContext helper
+    #region WPFValueAccessor and IVAInfo
 
     /// <summary>
     /// This class is used by with the WPFValueInterconnectAdapter to provide a simple connection between an IValuesInterconnection and WPF using Bindable objects.
@@ -47,26 +47,56 @@ namespace MosaicLib.WPF.Interconnect
     /// This object provides the glue logic that is used to replicate changes to the these DP's into their corresponding ValueAccessors and to replciate changes to the ValueAccessor
     /// back into the corresponding dependency properties when the ValueAccessors have been updated with new values.
     /// <para/>This object is only constructed by WPFValueInterconnectAdapter instances.
+    /// <para/>R/W Properties: VC, ValueAsObject, ValueAsDouble, ValueAsBoolean, ValueAsInt32, ValueAsString
+    /// <para/>R/O Properties: Name, MetaData.
     /// </summary>
     public class WPFValueAccessor : DependencyObject
     {
         /// <summary>internal Contructor.  Requires the corresponding IValueAccessor to which it is connected</summary>
         internal WPFValueAccessor(IValueAccessor iva)
         {
-            ValueAccessor = iva;
+            IVA = iva;
+
+            SetValue(NameProperty, IVA.Name);
 
             if (iva != null && iva.HasValueBeenSet)
                 NotifyValueHasBeenUpdated();
         }
 
         /// <summary>Retains the IValueAccessor instance to which this object is connected.</summary>
-        internal IValueAccessor ValueAccessor { get; private set; }
+        public IValueAccessor IVA { get; private set; }
 
-        internal UInt32 LastServicedValueSeqNum { get; set; }
+        private ulong LastServicedValueSeqNum { get; set; }
 
-        /// <summary>This property returns true if the ValueAccessor.IsUpdatedNeeded or (LastServicedValueSeqNum != ValueAccessor.ValueSeqNum).</summary>
+        private ulong LastServicedMetaDataSeqNum { get; set; }
+
+        /// <summary>This property returns true if the ValueAccessor.IsUpdatedNeeded or (LastServicedValueSeqNum != ValueAccessor.ValueSeqNum) or (LastServicedMetaDataSeqNum != ValueAccessor.MetaDataSeqNum).</summary>
         /// <remarks>This property convers the case where a WVA is added after the matching IVA has been given its initial value (ie LastServicedValueSeqNum is zero and ValueAccessor.ValueSeqNum is not).</remarks>
-        internal bool IsUpdateNeeded { get { return (ValueAccessor.IsUpdateNeeded || (LastServicedValueSeqNum != ValueAccessor.ValueSeqNum)); } }
+        internal bool IsUpdateNeeded { get { return (IVA.IsUpdateNeeded || (LastServicedValueSeqNum != IVA.ValueSeqNum) || (LastServicedMetaDataSeqNum != IVA.MetaDataSeqNum)); } }
+
+        /// <summary>The caller may attach event notifiers to this notification list to be informed when the observed IValueAccessor has been updated or set by this object.</summary>
+        public IEventHandlerNotificationList<UpdateEventArgs> UpdateNotificationList { get { return _updateNotificationList ?? (_updateNotificationList = new EventHandlerNotificationList<UpdateEventArgs>() { Source = this }); } }
+        EventHandlerNotificationList<UpdateEventArgs> _updateNotificationList;
+
+        /// <summary>Defines the sources for UpdateItems.  [FromIVA, ToIVA]</summary>
+        public enum UpdateType : int
+        {
+            /// <summary>The update item is in response to a new VC value that came from the IVA</summary>
+            FromIVA,
+            /// <summary>The update item represents a new VC value that has been sent to the IVA (via its Set method).</summary>
+            ToIVA,
+        }
+
+        /// <summary>Carries the internal information about an update notification.  Includes UpdateType, VC and the IVA instance for which the update applies.</summary>
+        public struct UpdateEventArgs
+        {
+            /// <summary>Gives the type of update as FromIVA or ToIVA</summary>
+            public UpdateType UpdateType { get; set; }
+            /// <summary>Gives the corresponding ValueContainer value that was transferred.</summary>
+            public ValueContainer VC { get; set; }
+            /// <summary>Gives the IVA instance that is associated with the source WPFValueAccessor instance.</summary>
+            public IValueAccessor IVA { get; set; }
+        }
 
         /// <summary>
         /// Callback from WPFValueInteronnectAdapater after the connected IValueAccessor has been updated to trigger the WVA to distribute the value to the corresponding dependency properties.
@@ -79,10 +109,13 @@ namespace MosaicLib.WPF.Interconnect
             inNotifyValueHasBeenUpdated = true;
 
             // update local copy of the ValueAccessor's ValueSeqNum
-            LastServicedValueSeqNum = ValueAccessor.ValueSeqNum;
+            LastServicedValueSeqNum = IVA.ValueSeqNum;
+
+            bool mdSeqNumChanged = (LastServicedMetaDataSeqNum != IVA.MetaDataSeqNum);
+            LastServicedMetaDataSeqNum = IVA.MetaDataSeqNum;
 
             // extract new values from the IVA's ValueContainer
-            ValueContainer ivaVC = ValueAccessor.VC;
+            ValueContainer ivaVC = IVA.VC;
             object valueAsObject = ivaVC.ValueAsObject;
             string valueAsString = valueAsObject as string;
 
@@ -179,6 +212,15 @@ namespace MosaicLib.WPF.Interconnect
             if (setStringDP)
                 SetValue(ValueAsStringProperty, valueAsString);
 
+            if (mdSeqNumChanged || lastMetaData == null)
+            {
+                lastMetaData = IVA.MetaData.MapNullToEmpty();
+                SetValue(MetaDataProperty, lastMetaData);
+            }
+
+            if (_updateNotificationList != null)
+                _updateNotificationList.Notify(new UpdateEventArgs() { UpdateType = UpdateType.FromIVA, VC = ivaVC, IVA = IVA });
+
             inNotifyValueHasBeenUpdated = false;
         }
 
@@ -190,6 +232,7 @@ namespace MosaicLib.WPF.Interconnect
         private bool? lastValueAsBoolean = null;
         private Int32? lastValueAsInt32 = null;
         private string lastValueAsString = null;
+        private INamedValueSet lastMetaData = null;
 
         /// <summary>
         /// Callback from WPF to tell us that one of the dependency properties has been changed.
@@ -206,10 +249,13 @@ namespace MosaicLib.WPF.Interconnect
 
                 if (!inNotifyValueHasBeenUpdated)
                 {
-                    if (!ValueAccessor.VC.IsEqualTo(newValueVC))
+                    if (!IVA.VC.IsEqualTo(newValueVC))
                     {
-                        ValueAccessor.Set(newValueVC);
+                        IVA.Set(newValueVC);
                         lastVC = newValueVC;
+
+                        if (_updateNotificationList != null)
+                            _updateNotificationList.Notify(new UpdateEventArgs() { UpdateType = UpdateType.ToIVA, VC = newValueVC, IVA = IVA });
                     }
                 }
                 else if (!lastVC.IsEqualTo(newValueVC))
@@ -229,6 +275,7 @@ namespace MosaicLib.WPF.Interconnect
                     lastValueAsInt32 = e.NewValue as Int32?;
                 else if (e.Property == ValueAsStringProperty)
                     lastValueAsString = e.NewValue as String;
+
             }
             else
             {
@@ -236,16 +283,26 @@ namespace MosaicLib.WPF.Interconnect
             }
         }
 
-        public static readonly System.Windows.DependencyProperty VCProperty = System.Windows.DependencyProperty.Register("VC", typeof(ValueContainer), typeof(WPFValueAccessor));
-        public static readonly System.Windows.DependencyProperty ValueAsObjectProperty = System.Windows.DependencyProperty.Register("ValueAsObject", typeof(System.Object), typeof(WPFValueAccessor));
-        public static readonly System.Windows.DependencyProperty ValueAsDoubleProperty = System.Windows.DependencyProperty.Register("ValueAsDouble", typeof(System.Double?), typeof(WPFValueAccessor));
-        public static readonly System.Windows.DependencyProperty ValueAsBooleanProperty = System.Windows.DependencyProperty.Register("ValueAsBoolean", typeof(System.Boolean?), typeof(WPFValueAccessor));
-        public static readonly System.Windows.DependencyProperty ValueAsInt32Property = System.Windows.DependencyProperty.Register("ValueAsInt32", typeof(System.Int32?), typeof(WPFValueAccessor));
-        public static readonly System.Windows.DependencyProperty ValueAsStringProperty = System.Windows.DependencyProperty.Register("ValueAsString", typeof(System.String), typeof(WPFValueAccessor));
+        public static readonly DependencyProperty VCProperty = DependencyProperty.Register("VC", typeof(ValueContainer), typeof(WPFValueAccessor));
+        public static readonly DependencyProperty ValueAsObjectProperty = DependencyProperty.Register("ValueAsObject", typeof(object), typeof(WPFValueAccessor));
+        public static readonly DependencyProperty ValueAsDoubleProperty = DependencyProperty.Register("ValueAsDouble", typeof(double?), typeof(WPFValueAccessor));
+        public static readonly DependencyProperty ValueAsBooleanProperty = DependencyProperty.Register("ValueAsBoolean", typeof(bool?), typeof(WPFValueAccessor));
+        public static readonly DependencyProperty ValueAsInt32Property = DependencyProperty.Register("ValueAsInt32", typeof(int?), typeof(WPFValueAccessor));
+        public static readonly DependencyProperty ValueAsStringProperty = DependencyProperty.Register("ValueAsString", typeof(string), typeof(WPFValueAccessor));
+        public static readonly DependencyPropertyKey NameProperty = DependencyProperty.RegisterReadOnly("Name", typeof(string), typeof(WPFValueAccessor), new PropertyMetadata(null));
+        public static readonly DependencyPropertyKey MetaDataProperty = DependencyProperty.RegisterReadOnly("MetaData", typeof(INamedValueSet), typeof(WPFValueAccessor), new PropertyMetadata(null));
+
+        public ValueContainer VC { get { return (ValueContainer)GetValue(VCProperty); } set { SetValue(VCProperty, value); } }
+        public object ValueAsObject { get { return GetValue(ValueAsObjectProperty); } set { SetValue(ValueAsObjectProperty, value); } }
+        public double? ValueAsDouble { get { return (double?)GetValue(ValueAsDoubleProperty); } set { SetValue(ValueAsDoubleProperty, value); } }
+        public int? ValueAsInt32 { get { return (int?)GetValue(ValueAsInt32Property); } set { SetValue(ValueAsInt32Property, value); } }
+        public string ValueAsString { get { return (string)GetValue(ValueAsStringProperty); } set { SetValue(ValueAsStringProperty, value); } }
+        public string Name { get { return IVA.Name; } }
+        public INamedValueSet MetaData { get { return lastMetaData.MapNullToEmpty(); } }
 
         public override string ToString()
         {
-            return "WVA for:{0}".CheckedFormat(ValueAccessor);
+            return "WVA for:{0}".CheckedFormat(IVA);
         }
     }
 
@@ -314,7 +371,7 @@ namespace MosaicLib.WPF.Interconnect
         #region Dictionary overrides
 
         /// <summary>
-        /// Local "override" for base Dicationary's this[name] method.
+        /// Local "override" for base Dictionary's this[name] method.
         /// Gets/Creates the WPFValueAccessorSubTreeFactory associated with the given name, creating a new one if it does not exist already.
         /// </summary>
         /// <param name="name">The name/key of the WPFValueAccessorSubTreeFactory instance to get.</param>
@@ -401,7 +458,7 @@ namespace MosaicLib.WPF.Interconnect
         #region Dictionary overrides
 
         /// <summary>
-        /// Local "override" for base Dicationary's this[name] method.
+        /// Local "override" for base Dictionary's this[name] method.
         /// Gets the WPFValueAccessor associated with the given name, obtaining one from the Base.
         /// </summary>
         /// <param name="name">The name/key of the WPFValueAccessor instance to get.</param>
@@ -520,7 +577,7 @@ namespace MosaicLib.WPF.Interconnect
         #region Dictionary overrides
 
         /// <summary>
-        /// Local "override" for base Dicationary's this[name] method.
+        /// Local "override" for base Dictionary's this[name] method.
         /// Gets the WPFValueAccessor associated with the given name, creating a new one if it does not exist already.
         /// </summary>
         /// <param name="name">The name/key of the WPFValueAccessor instance to get.</param>
@@ -574,7 +631,7 @@ namespace MosaicLib.WPF.Interconnect
         {
             if (rebuildArrays)
             {
-                activeIvaArray = activeWvaList.Select((wva) => wva.ValueAccessor).ToArray();
+                activeIvaArray = activeWvaList.Select((wva) => wva.IVA).ToArray();
                 wvaUpdateArray = new WPFValueAccessor[activeWvaList.Count];
                 ivaUpdateArray = new IValueAccessor[activeWvaList.Count];
             }

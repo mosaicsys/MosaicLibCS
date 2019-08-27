@@ -226,10 +226,12 @@ namespace MosaicLib.Modular.Config
                 string itemName = (!string.IsNullOrEmpty(itemAttribute.Name) ? itemAttribute.Name : itemInfo.MemberInfo.Name);
                 string fullKeyName = GenerateFullKeyName(itemInfo, baseNames);
 
+                Logging.IMesgEmitter setupIssueEmitter = (!itemAttribute.SilenceIssues && !itemAttribute.SilenceLogging) ? SetupIssueEmitter : Logging.NullEmitter;
+                Logging.IMesgEmitter valueNoteEmitter = (!itemAttribute.SilenceLogging) ? ValueNoteEmitter : Logging.NullEmitter;
+
                 if (!itemInfo.CanSetValue)
                 {
-                    if (!itemAttribute.SilenceIssues)
-                        SetupIssueEmitter.Emit("Member/key '{0}'/'{1}' is not usable:  There is no valid public member Setter, in ValueSet type '{2}'", memberName, fullKeyName, tConfigValueSetTypeStr);
+                    setupIssueEmitter.Emit("Member/key '{0}'/'{1}' is not usable:  There is no valid public member Setter, in ValueSet type '{2}'", memberName, fullKeyName, tConfigValueSetTypeStr);
 
                     continue;
                 }
@@ -245,42 +247,51 @@ namespace MosaicLib.Modular.Config
 
                 INamedValueSet combindKeyMetaData = itemAttribute.GetMergedMetaData(defaultNVS, KeyMetaDataMergeBehavior).MapEmptyToNull();
 
-                ValueContainer defaultValue = ((customAccessFlags.EnsureExists ?? false) ? GetDefaultValue(itemInfo) : ValueContainer.Empty);
-
-                IConfigKeyAccess keyAccess = ConfigInstance.GetConfigKeyAccess(new ConfigKeyAccessSpec(fullKeyName, customAccessFlags) { MetaData = combindKeyMetaData, MergeBehavior = KeyMetaDataMergeBehavior }, defaultValue);
-
                 KeySetupInfo keySetupInfo = new KeySetupInfo()
                 {
-                    KeyAccess = keyAccess,
                     ItemInfo = itemInfo,
                     FullItemName = fullKeyName,
                 };
 
+                ValueContainer defaultValue = default(ValueContainer);
+
                 keySetupInfo.UpdateMemberFromKeyAccessAction = GenerateUpdateMemberFromKeyAccessAction(keySetupInfo);
+                keySetupInfo.MemberVCValueGetter = keySetupInfo.ItemInfo.GenerateGetMemberToVCFunc<TConfigValueSet>();
+
+                if (customAccessFlags.EnsureExists ?? false)
+                {
+                    if (keySetupInfo.MemberVCValueGetter != null)
+                    {
+                        defaultValue = keySetupInfo.MemberVCValueGetter(ValueSet, setupIssueEmitter, valueNoteEmitter, rethrow: false);
+                    }
+                    else
+                    {
+                        setupIssueEmitter.Emit("EnsureExists requested for item '{0}' which does not support getter access.  Key cannot be created with empty value.", itemInfo);
+                        anySetupIssues |= !itemAttribute.SilenceIssues;
+                    }
+                }
+
+                IConfigKeyAccess keyAccess = ConfigInstance.GetConfigKeyAccess(new ConfigKeyAccessSpec(fullKeyName, customAccessFlags) { MetaData = combindKeyMetaData, MergeBehavior = KeyMetaDataMergeBehavior }, defaultValue);
+                keySetupInfo.KeyAccess = keyAccess;
 
                 if (!keyAccess.IsUsable)
                 {
-                    if (!itemAttribute.SilenceIssues)
+                    if (keyAccess.Flags.IsOptional)
                     {
-                        if (keyAccess.Flags.IsOptional)
-                        {
-                            ValueNoteEmitter.Emit("Optional Member/Key '{0}'/'{1}' is not usable: {2}", memberName, keyAccess.Key, keyAccess.ResultCode);
-                        }
-                        else
-                        {
-                            SetupIssueEmitter.Emit("Member/Key '{0}'/'{1}' is not usable: {2}", memberName, keyAccess.Key, keyAccess.ResultCode);
-                            anySetupIssues = true;
-                        }
+                        valueNoteEmitter.Emit("Optional Member/Key '{0}'/'{1}' is not usable: {2}", memberName, keyAccess.Key, keyAccess.ResultCode);
+                    }
+                    else
+                    {
+                        setupIssueEmitter.Emit("Member/Key '{0}'/'{1}' is not usable: {2}", memberName, keyAccess.Key, keyAccess.ResultCode);
+                        anySetupIssues |= !itemAttribute.SilenceIssues;
                     }
                     continue;
                 }
                 else if (keySetupInfo.UpdateMemberFromKeyAccessAction == null)
                 {
-                    if (!itemAttribute.SilenceIssues)
-                    {
-                        SetupIssueEmitter.Emit("Member/Key '{0}'/'{1}' is not usable: no valid accessor delegate could be generated for its ValueSet type:'{3}'", memberName, fullKeyName, itemInfo.ItemType, tConfigValueSetTypeStr);
-                        anySetupIssues = true;
-                    }
+                    setupIssueEmitter.Emit("Member/Key '{0}'/'{1}' is not usable: no valid accessor delegate could be generated for its ValueSet type:'{3}'", memberName, fullKeyName, itemInfo.ItemType, tConfigValueSetTypeStr);
+                    anySetupIssues |= !itemAttribute.SilenceIssues;
+
                     continue;
                 }
 
@@ -342,7 +353,7 @@ namespace MosaicLib.Modular.Config
         private ConfigValueSetAdapter<TConfigValueSet> Update(bool isFirstUpdate, Logging.IMesgEmitter updateIssueEmitter, Logging.IMesgEmitter valueNoteEmitter)
         {
             if (ValueSet == null)
-                throw new System.NullReferenceException("ValueSet property must be non-null before Update can be called");
+                throw new System.NullReferenceException("ValueSet property must be non-null before {0} can be called".CheckedFormat(Fcns.CurrentMethodName));
 
             if (!IsUpdateNeeded && !isFirstUpdate)
                 return this;
@@ -375,6 +386,52 @@ namespace MosaicLib.Modular.Config
         }
 
         /// <summary>
+        /// May be called by the client to obtain values from each of the annotated members and to attempt to set the corresponding config keys from these values.
+        /// This method will only attempt to set individual key values when the members current values are not ValueContainer.Equal to the current values in the key access objects 
+        /// or for which the key access object IsUpdateNeeded property is true (indicating that the keys value has changed since this adapter was last Updated).
+        /// </summary>
+        public ConfigValueSetAdapter<TConfigValueSet> Set(string commentStr = "", bool andUpdateAfterSet = true)
+        {
+            if (ValueSet == null)
+                throw new System.NullReferenceException("ValueSet property must be non-null before {0} can be called".CheckedFormat(Fcns.CurrentMethodName));
+
+            List<Tuple<KeySetupInfo, ValueContainer, Logging.IMesgEmitter, Logging.IMesgEmitter>> pendingUpdateItemList = new List<Tuple<KeySetupInfo, ValueContainer, Logging.IMesgEmitter, Logging.IMesgEmitter>>();
+
+            foreach (var keySetupInfo in keySetupInfoArray)
+            {
+                if (keySetupInfo == null || keySetupInfo.MemberVCValueGetter == null)
+                    continue;
+
+                var accessFlags = keySetupInfo.ItemAttribute.AccessFlags;
+                var silenceLogging = accessFlags.SilenceLogging;
+                var silenceIssues = silenceLogging || accessFlags.SilenceIssues;
+
+                try
+                {
+                    var issueEmitter = !silenceIssues ? UpdateIssueEmitter : Logging.NullEmitter;
+                    var valueEmitter = !silenceLogging ? ValueNoteEmitter : Logging.NullEmitter;
+                    var rethrow = issueEmitter.IsEnabled;
+
+                    ValueContainer vc = keySetupInfo.MemberVCValueGetter(ValueSet, issueEmitter, valueEmitter, true);
+
+                    if (!vc.Equals(keySetupInfo.KeyAccess.VC) || keySetupInfo.KeyAccess.IsUpdateNeeded)
+                        pendingUpdateItemList.Add(Tuple.Create(keySetupInfo, vc, issueEmitter, valueEmitter));
+                }
+                catch { }
+            }
+
+            if (pendingUpdateItemList.Count > 0 && ConfigInstance != null)
+            {
+                ConfigInstance.SetValues(pendingUpdateItemList.Select(t => KVP.Create(t.Item1.KeyAccess, t.Item2)).ToArray(), commentStr.MapNullToEmpty());
+            }
+
+            if (andUpdateAfterSet)
+                Update();
+
+            return this;
+        }
+
+        /// <summary>
         /// Gives the caller access to the set of IConfigKeyAccess items that this adapter has generated and uses to support its operation
         /// </summary>
         public IConfigKeyAccess[] ICKAArray { get { return _ickaArray; } }
@@ -383,25 +440,7 @@ namespace MosaicLib.Modular.Config
 
         #endregion
 
-        #region private methods
-
-        /// <summary>
-        /// Simple method that uses basic reflection to obtain the desird Property/Field contents enclosed in a ValueContainer.
-        /// </summary>
-        ValueContainer GetDefaultValue(ItemInfo<ConfigItemAttribute> itemInfo)
-        {
-            if (ValueSet != null)
-            {
-                if (itemInfo.IsProperty)
-                    return new ValueContainer(itemInfo.PropertyInfo.GetValue(ValueSet, emptyObjectArray));
-                else if (itemInfo.IsField)
-                    return new ValueContainer(itemInfo.FieldInfo.GetValue(ValueSet));
-            }
-
-            return ValueContainer.Empty;
-        }
-
-        private static readonly object[] emptyObjectArray = EmptyArrayFactory<object>.Instance;
+        #region private methods (GenerateFullKeyName, GenerateUpdateMemberFromKeyAccessAction, GenerateSetAccessFromMemberAction)
 
         protected string GenerateFullKeyName(ItemInfo<Attributes.ConfigItemAttribute> itemInfo, string[] baseNames)
         {
@@ -757,6 +796,9 @@ namespace MosaicLib.Modular.Config
             /// <summary>delegate that is used to set a specific member's value from a given config key's value object's stored value.</summary>
             /// <remarks>this item will be null for static items and for items that failed to be setup correctly.</remarks>
             public Action<TConfigValueSet, Logging.IMesgEmitter, Logging.IMesgEmitter> UpdateMemberFromKeyAccessAction { get; set; }
+
+            /// <summary>delegate that is used to get this specfic member's value as a value container.  ValueSet, rethrow => VC  returns ValueContainer.Empty if no valid value could be obtained and rethrow is false.</summary>
+            public AnnotatedClassItemAccessHelper.GetMemberAsVCFunctionDelegate<TConfigValueSet> MemberVCValueGetter { get; set; } 
         }
 
         /// <remarks>Non-null elements in this array correspond to fully vetted writable value set items.</remarks>

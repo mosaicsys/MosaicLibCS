@@ -638,7 +638,8 @@ namespace MosaicLib.Modular.Config
 
             List<string> includeKeyValuesList = new List<string>(includeKeysArray.Select((key) => config.GetConfigKeyAccess(key).ValueAsString));
 
-            DataContractAsciiXmlAdapter<ConfigKeyFile> keyStoreLoader = new DataContractAsciiXmlAdapter<ConfigKeyFile>();
+            DataContractAsciiXmlAdapter<ConfigKeyFile> xmlKeyStoreLoader = new DataContractAsciiXmlAdapter<ConfigKeyFile>();
+            DataContractJsonAdapter<ConfigKeyFile> jsonKeyStoreLoader = new DataContractJsonAdapter<ConfigKeyFile>();
 
             Dictionary<string, ConfigKeyAccessImpl> includeFilesKeysDictionary = new Dictionary<string, ConfigKeyAccessImpl>();
 
@@ -663,7 +664,10 @@ namespace MosaicLib.Modular.Config
                 {
                     string fullPath = System.IO.Path.GetFullPath(includePath);
                     string fileContents = System.IO.File.ReadAllText(fullPath);
-                    ConfigKeyFile ckf = keyStoreLoader.ReadObject(fileContents);
+
+                    bool readAsJsonFile = fullPath.EndsWith(".json", StringComparison.InvariantCultureIgnoreCase) || fullPath.EndsWith(".txt", StringComparison.InvariantCultureIgnoreCase);
+
+                    ConfigKeyFile ckf = readAsJsonFile ? jsonKeyStoreLoader.ReadObject(fileContents) : xmlKeyStoreLoader.ReadObject(fileContents);
 
                     foreach (KeyItem keyItem in ckf.KeySet)
                     {
@@ -690,7 +694,7 @@ namespace MosaicLib.Modular.Config
     #region  IniFileConfigKeyProvider
 
     /// <summary>
-    /// Provides a type of DicationaryConfigKeyProvier obtained by loading a windows "INI" style text file which consists of sections of lines that read as
+    /// Provides a type of DictionaryConfigKeyProvier obtained by loading a windows "INI" style text file which consists of sections of lines that read as
     /// <para/>[SectionName]
     /// <para/>key1=value1
     /// <para/>key2=value2
@@ -974,7 +978,7 @@ namespace MosaicLib.Modular.Config
     #region PersistentXmlTextFileRingProvider, PersistentSerializedTextFileRingProviderBase
 
     /// <summary>
-    /// Provides a type of DicationaryConfigKeyProvider obtained by using a DataContractPersistentXmlTextFileRingStorageAdapter based on the ConfigKeyStore file format.
+    /// Provides a type of DictionaryConfigKeyProvider obtained by using a DataContractPersistentXmlTextFileRingStorageAdapter based on the ConfigKeyStore file format.
     /// Normally this provider is used for read/write behavior and is most easily used to support EnsureExists usage patterns and/or moderate to high write rate usages
     /// with the same file IO failure handling that is provided through the use of the PeristentObjectFileRing.
     /// </summary>
@@ -990,7 +994,7 @@ namespace MosaicLib.Modular.Config
     }
 
     /// <summary>
-    /// Provides a type of DicationaryConfigKeyProvier obtained by using a DataContractPersistentXmlTextFileRingStorageAdapter based on the ConfigKeyStore file format.
+    /// Provides a type of DictionaryConfigKeyProvier obtained by using a DataContractPersistentXmlTextFileRingStorageAdapter based on the ConfigKeyStore file format.
     /// Normally this provider is used for read/write behavior and is most easily used to support EnsureExists usage patterns and/or moderate to high write rate usages
     /// with the same file IO failure handling that is provided through the use of the PeristentObjectFileRing.
     /// </summary>
@@ -1156,7 +1160,7 @@ namespace MosaicLib.Modular.Config
     #region RegistryKeyTreeProvider
 
     /// <summary>
-    /// Provides a type of DicationaryConfigKeyProvier obtained by loading a windows registry key tree
+    /// Provides a type of DictionaryConfigKeyProvier obtained by loading a windows registry key tree
     /// <para/>[SectionName]
     /// <para/>key1=value1
     /// <para/>key2=value2

@@ -689,7 +689,12 @@ namespace MosaicLib.WPF.Tools.Sets
                 else
                 {
                     ValueContainer enabledSourcesVC = ValueContainer.CreateFromObject(enabledSources);
-                    HashSet<string> sourceFilterHashSet = (enabledSourcesVC.IsNullOrEmpty) ? null : new HashSet<string>(enabledSourcesVC.GetValue<IList<string>>(rethrow: false, defaultValue: MosaicLib.Utils.Collections.EmptyArrayFactory<string>.Instance));
+                    string[] enabledSourceArray = (enabledSourcesVC.cvt.IsList() 
+                                                        ? enabledSourcesVC.GetValue<string[]>(rethrow: false) 
+                                                        : enabledSourcesVC.GetValue<string>(rethrow: false).MapNullToEmpty().Split('|').Select(s => s.Trim()).Where(s => s.IsNeitherNullNorEmpty()).ToArray()) 
+                                                    ?? EmptyArrayFactory<string>.Instance;
+                    HashSet<string> sourceFilterHashSet = (enabledSourceArray.IsNullOrEmpty()) ? null : new HashSet<string>(enabledSourceArray);
+
                     var useLogGate = logGate;
 
                     string[] splitFilterStringArray = filterString.MapNullToEmpty().Split('|').Where(str => str.IsNeitherNullNorEmpty()).ToArray();
@@ -697,27 +702,58 @@ namespace MosaicLib.WPF.Tools.Sets
                     switch (splitFilterStringArray.Length)
                     {
                         case 0:
-                            addItemFilter = (lm) => ((lm != null)
-                                                     && (useLogGate.IsTypeEnabled(lm.MesgType))
-                                                     && (sourceFilterHashSet == null || sourceFilterHashSet.Contains(lm.LoggerName))
-                                                     );
+                            addItemFilter = (lm) =>
+                                {
+                                    if (lm == null)
+                                        return false;
+
+                                    if (!useLogGate.IsTypeEnabled(lm.MesgType))
+                                        return false;
+
+                                    if (sourceFilterHashSet != null && !sourceFilterHashSet.Contains(lm.LoggerName))
+                                        return false;
+
+                                    return true;
+                                };
                             break;
 
                         case 1:
                             var firstFilterStr = splitFilterStringArray[0];
-                            addItemFilter = (lm) => ((lm != null)
-                                                     && (useLogGate.IsTypeEnabled(lm.MesgType))
-                                                     && (sourceFilterHashSet == null || sourceFilterHashSet.Contains(lm.LoggerName))
-                                                     && ((lm.MesgType.ToString().IndexOf(firstFilterStr, StringComparison.CurrentCultureIgnoreCase) >= 0) || lm.LoggerName.IndexOf(firstFilterStr, StringComparison.CurrentCultureIgnoreCase) >= 0) || (lm.Mesg.IndexOf(firstFilterStr, StringComparison.CurrentCultureIgnoreCase) >= 0)
-                                                     );
+                            addItemFilter = (lm) => 
+                                {
+                                    if (lm == null)
+                                        return false;
+
+                                    if (!useLogGate.IsTypeEnabled(lm.MesgType))
+                                        return false;
+
+                                    if (sourceFilterHashSet != null && !sourceFilterHashSet.Contains(lm.LoggerName))
+                                        return false;
+
+                                    if ((lm.MesgType.ToString().IndexOf(firstFilterStr, StringComparison.CurrentCultureIgnoreCase) >= 0) || (lm.LoggerName.IndexOf(firstFilterStr, StringComparison.CurrentCultureIgnoreCase) >= 0) || (lm.Mesg.IndexOf(firstFilterStr, StringComparison.CurrentCultureIgnoreCase) >= 0))
+                                        return true;
+
+                                    return false;
+                                };
                             break;
 
                         default:
-                            addItemFilter = (lm) => ((lm != null)
-                                                     && (useLogGate.IsTypeEnabled(lm.MesgType))
-                                                     && (sourceFilterHashSet == null || sourceFilterHashSet.Contains(lm.LoggerName))
-                                                     && splitFilterStringArray.Any(filterStrItem => ((lm.MesgType.ToString().IndexOf(filterStrItem, StringComparison.CurrentCultureIgnoreCase) >= 0) || lm.LoggerName.IndexOf(filterStrItem, StringComparison.CurrentCultureIgnoreCase) >= 0) || (lm.Mesg.IndexOf(filterStrItem, StringComparison.CurrentCultureIgnoreCase) >= 0))
-                                                     );
+                            addItemFilter = (lm) => 
+                                {
+                                    if (lm == null)
+                                        return false;
+
+                                    if (!useLogGate.IsTypeEnabled(lm.MesgType))
+                                        return false;
+
+                                    if (sourceFilterHashSet != null && !sourceFilterHashSet.Contains(lm.LoggerName))
+                                        return false;
+
+                                    if (splitFilterStringArray.Any(filterStrItem => ((lm.MesgType.ToString().IndexOf(filterStrItem, StringComparison.CurrentCultureIgnoreCase) >= 0) || (lm.LoggerName.IndexOf(filterStrItem, StringComparison.CurrentCultureIgnoreCase) >= 0) || (lm.Mesg.IndexOf(filterStrItem, StringComparison.CurrentCultureIgnoreCase) >= 0))))
+                                        return true;
+
+                                    return false;
+                                };
                             break;
                     }
 
@@ -824,6 +860,7 @@ namespace MosaicLib.WPF.Tools.Sets
         public string SetName { get { return (string)GetValue(SetNameProperty); } set { SetValue(SetNameProperty, value); } }
         public bool Pause { get { return (bool)GetValue(PauseProperty); } set { SetValue(PauseProperty, value); } }
         public Func<MosaicLib.Logging.ILogMessage, bool> FilterDelegate { get { return (Func<MosaicLib.Logging.ILogMessage, bool>)GetValue(FilterDelegateProperty); } set { SetValue(FilterDelegateProperty, value); } }
+        /// <summary>When set to an enumerable set of strings, or to a single string (with or without | delimiters) it limits the set of log sources that will be tracked</summary>
         public object EnabledSources { get { return GetValue(EnabledSourcesProperty); } set { SetValue(EnabledSourcesProperty, value); } }
         public string FilterString { get { return (string) GetValue(FilterStringProperty); } set { SetValue(FilterStringProperty, value); } }
         public MosaicLib.Logging.LogGate LogGate { get { return (MosaicLib.Logging.LogGate) GetValue(LogGateProperty); } set { SetValue(LogGateProperty, value); } }

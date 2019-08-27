@@ -1063,14 +1063,14 @@ namespace MosaicLib.PartsLib.Common.LPM
         bool IsValid { get; }
 
         /// <summary>
-        /// LPM position is safe to access (detailed meaning is device specific).  
-        /// Generally this means that the carrier is present, the position is valid, docked, and the door is open and down.
+        /// LPM position is safe for the Carrier to be accessed through its open door, typically by an EFEM robot. (detailed meaning is device specific)
+        /// Generally this means that the position is valid and immobile, the PDO is clamped and docked, and the door is open and down.
         /// </summary>
         bool IsSafeToAccess { get; }
 
         /// <summary>
         /// LPM position is safe for the Carrier to be manually placed or removed.  
-        /// Generally this means that the position is valid, the door is up and closed, and the PDO is undocked and unclamped.
+        /// Generally this means that the position is valid and immobile, the door is up and closed, and the PDO is undocked and unclamped.
         /// </summary>
         bool IsSafeForManualCarrierHandoff { get; }
 
@@ -1237,12 +1237,16 @@ namespace MosaicLib.PartsLib.Common.LPM
         [DataMember(Order = 1400, IsRequired = false, EmitDefaultValue = false)]
         public bool IsValid { get; set; }
 
+        /// <summary>
+        /// LPM position is safe for the Carrier to be accessed through its open door, typically by an EFEM robot. (detailed meaning is device specific)
+        /// Generally this means that the position is valid and immobile, the PDO is clamped and docked, and the door is open and down.
+        /// </summary>
         [DataMember(Order = 1500, IsRequired = false, EmitDefaultValue = false)]
         public bool IsSafeToAccess { get; set; }
 
         /// <summary>
         /// LPM position is safe for the Carrier to be manually placed or removed.  
-        /// Generally this means that the position is valid, the door is up and closed, and the PDO is undocked and unclamped.
+        /// Generally this means that the position is valid and immobile, the door is up and closed, and the PDO is undocked and unclamped.
         /// </summary>
         [DataMember(Order = 1600, IsRequired = false, EmitDefaultValue = false)]
         public bool IsSafeForManualCarrierHandoff { get; set; }
@@ -1386,10 +1390,12 @@ namespace MosaicLib.PartsLib.Common.LPM
             string motionILockStr = (MotionILockSensorIsTripped ? " MotILock" : "");
             string wsoStr = (ProtrusionSensorIsTripped ? " WSO" : "");
             string vacYN = ((IsVacEnabled && IsCarrierDoorDetected) ? "Yes" : "No");
+            string safeForAccess = (IsSafeToAccess ? "Y" : "N");
+            string safeForManualHandoff = (IsSafeForManualCarrierHandoff ? "Y" : "N");
 
             switch (posSummary)
             {
-                default: return "{0} vac:{1}{2}{3}".CheckedFormat(posSummary, vacYN, motionILockStr, wsoStr);
+                default: return "{0} vac:{1}{2}{3} accessOk:{4} manualHandoffOk:{5}".CheckedFormat(posSummary, vacYN, motionILockStr, wsoStr, safeForAccess, safeForManualHandoff);
                 case PositionSummary.InMotion: return "InMotion:{0} vac:{1}{2}{3}".CheckedFormat(InMotionReason, vacYN, motionILockStr, wsoStr);
                 case PositionSummary.ServoOff:
                 case PositionSummary.Other: return "{0} vac:{1}{2}{3}".CheckedFormat(posSummary, vacYN, motionILockStr, wsoStr);

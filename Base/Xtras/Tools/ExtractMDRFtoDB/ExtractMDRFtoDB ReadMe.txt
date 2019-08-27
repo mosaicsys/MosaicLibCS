@@ -31,8 +31,8 @@ of config key providers (EnvVars, Include).
 This tool processes its command line and selected files in phases:
 
 * Setup configuration and extract, process and remove key=value style arguments from the command line
-* Process configuration .ini files from command line
-* Optionally change working directory to the directory of the first configuration .ini file (enabled by default)
+* Process configuration .ini file, if present, from the command line
+* Optionally change working directory to the directory of the location of the configuration .ini file (enabled by default)
 * Create/truncate and initialize the output data file
 * Process MDRF file specifications from command line
 * Read indicated MDRF files as configured
@@ -42,28 +42,17 @@ This tool processes its command line and selected files in phases:
 
 On launch the application processes the arguments given on the command line.  These are expected to include any of three patterns:
  
-* INI files
+* optional INI file
 * MDRF files
 * parameter values (key=value)
 
 The application processes all of the parameter values first through the use of '''Config.AddStandardProviders(ref args, StandardProviderSelect.All);''' 
 which recognizes, removes, and processes any parameter value assignment items that are found in the user provided command line arguments.
 
-Next the application extracts and processes all of the argments that look like the name of a ini file (names that end in .ini).  These are each loaded in 
-turn using an IniFileConfigKeyProvider and processed.  Generally the program uses the key value from the last such ini file that specified that key,
-however the following key(s) are handled specially:
+Next the application extracts and processes the first argment that looks like the name of a ini file (names that end in .ini).  This file is loaded in 
+using an IniFileConfigKeyProvider and processed.  
 
-* MDRFFileSpec - Each file that specifies a non-empty value for this string gets added to the effective set of MDRF file (and file search) strings.
-* IncludeGroupSpecStr - values from multiple configuration .ini files are combined when processing the MDRF files.
-* IncludeIOPointSpecStr - values from multiple configuration .ini files are combined when processing the MDRF files.
-* IncludeIOPointPrefixSpecStr - values from multiple configuration .ini files are combined when processing the MDRF files.
-* IncludeIOPointContainsSpecStr - values from multiple configuration .ini files are combined when processing the MDRF files.
-* ExcludeIOPointContainsSpecStr - values from multiple configuration .ini files are combined when processing the MDRF files.
-* IncludeOccurrenceSpecStr - values from multiple configuration .ini files are combined when processing the MDRF files.
-* MapSpecStr - values from multiple configuration .ini files are combined when processing the MDRF files.
-* AutoCDToIniFileDirectory - only applies to the first configuration .ini file that does not explicitly disable this option.
-
-Once all of the ini files have been processed the application determines the desired type of data file and creates/truncates and initializes the
+Once the ini file, if any, has been processed the application determines the desired type of data file and creates/truncates and initializes the
 selected data output file that the MDRF file contents will be extracted into.
 
 Then the application processes all of the remaining command line items as names of MDRF files or as search strings for names of MDRF files (*.MDRF for example).
@@ -91,6 +80,7 @@ after all MDRF file contents have been read into memory.
 * IncludeOccurrenceSpecStr (string, items in comma seperated list)
 * MapSpecStr (string, mapping items in comma seperated list.  Each mapping item is old:new)
 * MaxThreadsToUse (int, when present this limits the number of concurrent threads used to load MDRF files.  It may be used to similarly limit the amount of memory that the application uses by limiting the number of MDRF file contents that must be able to be loaded into memory at one time to this value.)
+* AddOccurrenceKeyColumns (boolean, when set to true causes the occurrence table to have columns added to it for each key name in any recorded occurrence nvs.  These columns will likely be sparse.  Only supported in non-text output formats.)
 
 ## Filtering
 

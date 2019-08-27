@@ -1272,7 +1272,7 @@ namespace MosaicLib.Semi.E090
             if (!AlsoObserveContents || ContainsObject == null)
                 return baseStr;
             else
-                return "{0} Contains:{1}".CheckedFormat(baseStr, ContainsSubstInfo);
+                return "{0} Contains:{1}{2}".CheckedFormat(baseStr, ContainsSubstInfo, IsUpdateNeeded ? " UpdateNeeded" : "");
         }
 
         /// <summary>When true this option selects that the ContainsObject and ContainsSubstInfo properties shall be set based on the object identified by the location's "Contains" link's ToID</summary>
@@ -1294,6 +1294,24 @@ namespace MosaicLib.Semi.E090
         public bool IsUnoccupied
         {
             get { return Info.IsUnoccupied && ContainsObject.IsNullOrEmpty(); }
+        }
+
+        /// <summary>Returns true if Info.NotAccessibleReason is null or empty (aka if the position is accessible)</summary>
+        public bool IsAccessible
+        {
+            get { return Info.NotAccessibleReason.IsNullOrEmpty(); }
+        }
+
+        /// <summary>Returns true if the observed location IsOccupied and IsAccessible</summary>
+        public bool IsOccupiedAndAccessible
+        {
+            get { return IsOccupied && IsAccessible; }
+        }
+
+        /// <summary>Returns true if the observed location IsUnoccupied and IsAccessible</summary>
+        public bool IsUnoccupiedAndAccessible
+        {
+            get { return IsUnoccupied && IsAccessible; }
         }
 
         /// <summary>If AlsoObserveContents is true then this gives the IE039Object that is the target of the Contains link, or null if the link does not exist or it's ToID is empty, otherwise this property returns null.</summary>
@@ -1332,6 +1350,14 @@ namespace MosaicLib.Semi.E090
         public E090SubstObserver(E090SubstObserver other)
             : this((other != null) ? other.ObjPublisher : null)
         { }
+
+        /// <summary>
+        /// Debug and logging helper method
+        /// </summary>
+        public override string ToString()
+        {
+            return "SubstObs: {0}{1}".CheckedFormat(Info, IsUpdateNeeded ? " UpdateNeeded" : "");
+        }
     }
     #endregion
 
@@ -2444,7 +2470,7 @@ namespace MosaicLib.Semi.E090
         [EnumMember]
         Returned = 14,
 
-        /// <summary>Indicates that the substrate routing and processing engine is not being asked to make any changes to a substrate and that substrate is not in its initial source location. [15]</summary>
+        /// <summary>Indicates that the substrate routing and processing engine that has been asked to process this substrate (SRJS.Run) but that it cannot execute process at thie time.[15]</summary>
         [EnumMember]
         Held = 15,
 

@@ -531,10 +531,11 @@ namespace MosaicLib.Modular.Config
     }
 
     /// <summary>
-    /// Predicate Delegate that may be used to determine if the contents of a given key and INamedValueSet meet, or adhear to, a caller's specific constraints.
+    /// (key, metaData, vc) => bool
+    /// <para/>Predicate Delegate that may be used to determine if the contents of a given key and INamedValueSet meet, or adhear to, a caller's specific constraints.
     /// This delegate is generally used with the SearchForKeys method.
     /// </summary>
-    public delegate bool ConfigKeyFilterPredicate(string key, INamedValueSet metaDat, ValueContainer vc);
+    public delegate bool ConfigKeyFilterPredicate(string key, INamedValueSet metaData, ValueContainer vc);
 
     #endregion
 
@@ -969,7 +970,7 @@ namespace MosaicLib.Modular.Config
 
     /// <summary>
     /// This enumeration can be used by clients to customize the set of standard providers that are added when using any of the AddStandardProviders helper methods.
-    /// <para/>None (0x00), MainArgs (0x01), EnvVar (0x02), AppConfig (0x04), Include (0x08), All (0x0f)
+    /// <para/>None (0x00), MainArgs (0x01), EnvVars (0x02), AppConfig (0x04), Include (0x08), All (0x0f)
     /// </summary>
     [Flags]
     public enum StandardProviderSelect
@@ -1132,7 +1133,7 @@ namespace MosaicLib.Modular.Config
 
             if (change || ensureExists)
             {
-                foreach (IConfigKeyAccess changedKey in changedKeyDicationary.ValueArray)
+                foreach (IConfigKeyAccess changedKey in changedKeyDictionary.ValueArray)
                 {
                     ConfigKeyAccessImpl readOnceCKAI = null;
                     if (readOnlyOnceKeyDictionary.TryGetValue(changedKey.Key ?? String.Empty, out readOnceCKAI) && readOnceCKAI != null && changedKey.ValueAsString != readOnceCKAI.ValueAsString)
@@ -1284,8 +1285,8 @@ namespace MosaicLib.Modular.Config
                         valueChangeCount += deltaItem.ValueChanged.MapToInt();
                         mdChangeCount += deltaItem.MetaDataChanged.MapToInt();
 
-                        if (deltaItem.ValueChanged && !changedKeyDicationary.ContainsKey(deltaItem.RootCKA.Key))
-                            changedKeyDicationary.Add(deltaItem.RootCKA.Key, deltaItem.RootCKA);
+                        if (deltaItem.ValueChanged && !changedKeyDictionary.ContainsKey(deltaItem.RootCKA.Key))
+                            changedKeyDictionary.Add(deltaItem.RootCKA.Key, deltaItem.RootCKA);
                     }
 
                     deltaItemReportList.Clear();
@@ -1673,7 +1674,7 @@ namespace MosaicLib.Modular.Config
         /// This is the set of all key access objects for keys that have been used with SetValue(s) or which have otherwise been observed to have had values assigned to them after construction. 
         /// This allows the engine to determine if any read once keys have been changed since they were first accessed.
         /// </summary>
-        protected IDictionaryWithCachedArrays<string, IConfigKeyAccess> changedKeyDicationary = new IDictionaryWithCachedArrays<string, IConfigKeyAccess>();
+        protected IDictionaryWithCachedArrays<string, IConfigKeyAccess> changedKeyDictionary = new IDictionaryWithCachedArrays<string, IConfigKeyAccess>();
 
         #endregion
 
@@ -1777,8 +1778,8 @@ namespace MosaicLib.Modular.Config
 
                             foreach (var kvp in kvpArray)
                             {
-                                if (!changedKeyDicationary.ContainsKey(kvp.Key.Key))
-                                    changedKeyDicationary.Add(kvp.Key.Key, kvp.Key);
+                                if (!changedKeyDictionary.ContainsKey(kvp.Key.Key))
+                                    changedKeyDictionary.Add(kvp.Key.Key, kvp.Key);
                             }
                         }
                         else if (firstError != null)

@@ -163,28 +163,36 @@ namespace MosaicLib.Semi.E039
     public static partial class ExtensionMethods
     {
         /// <summary>
-        /// This method is a shorthand for table.GetPublisher(link.ToID);
+        /// This method is a shorthand for (!link.ToID.IsNullOrEmpty() ? table.GetPublisher(link.ToID) : fallbackValue)
         /// </summary>
-        public static INotificationObject<IE039Object> GetLinkToPublisher(this IE039TableObserver table, E039Link link)
+        public static INotificationObject<IE039Object> GetLinkToPublisher(this IE039TableObserver table, E039Link link, INotificationObject<IE039Object> fallbackValue = null)
         {
-            return table.GetPublisher(link.ToID);
+            return (!link.ToID.IsNullOrEmpty() ? table.GetPublisher(link.ToID) : fallbackValue);
         }
 
         /// <summary>
-        /// This method is a shorthand for table.GetPublisher(link.FromID);
+        /// This method is a shorthand for (!link.ToID.IsNullOrEmpty() ? table.GetPublisher(link.FromID) : fallbackValue);
         /// </summary>
-        public static INotificationObject<IE039Object> GetLinkFromPublisher(this IE039TableObserver table, E039Link link)
+        public static INotificationObject<IE039Object> GetLinkFromPublisher(this IE039TableObserver table, E039Link link, INotificationObject<IE039Object> fallbackValue = null)
         {
-            return table.GetPublisher(link.FromID);
+            return (!link.ToID.IsNullOrEmpty() ? table.GetPublisher(link.FromID) : fallbackValue);
         }
 
         /// <summary>
-        /// tableObserver helper method.  Attempts to obtain the object for a given <paramref name="objID"/>.  
+        /// <paramref name="tableObserver"/> helper method.  Attempts to obtain the publisher for a given <paramref name="objID"/> if the <paramref name="tableObserver"/> is non-null and the <paramref name="objID"/> is non-empty.  
+        /// </summary>
+        public static INotificationObject<IE039Object> GetPublisher(this IE039TableObserver tableObserver, E039ObjectID objID, INotificationObject<IE039Object> fallbackValue = null)
+        {
+            return ((tableObserver != null && !objID.IsNullOrEmpty()) ? tableObserver.GetPublisher(objID) : null) ?? fallbackValue;
+        }
+
+        /// <summary>
+        /// <paramref name="tableObserver"/>  helper method.  Attempts to obtain the object for a given <paramref name="objID"/> if the <paramref name="tableObserver"/> is non-null and the <paramref name="objID"/> is non-empty.  
         /// First attempts to obtain the publisher for the <paramref name="objID"/> and then attempts to obtain the Object from the publisher.
         /// </summary>
         public static IE039Object GetObject(this IE039TableObserver tableObserver, E039ObjectID objID, IE039Object fallbackValue = null)
         {
-            return ((tableObserver != null) ? tableObserver.GetPublisher(objID).GetObject(fallbackValue: null) : null) ?? fallbackValue;
+            return tableObserver.GetPublisher(objID, fallbackValue: null).GetObject(fallbackValue: fallbackValue);
         }
 
         /// <summary>
@@ -1062,16 +1070,7 @@ namespace MosaicLib.Semi.E039
         /// </summary>
         public static IE039Object GetObject(this E039ObjectID objID, IE039Object fallbackValue = null)
         {
-            IE039TableObserver tableObserver = ((objID != null) ? objID.TableObserver : null);
-
-            if (tableObserver != null)
-            {
-                INotificationObject<IE039Object> publisher = tableObserver.GetPublisher(objID);
-                if (publisher != null)
-                    return publisher.Object ?? fallbackValue;
-            }
-
-            return fallbackValue;
+            return objID.GetPublisher(fallbackValue: null).GetObject(fallbackValue: fallbackValue);
         }
 
         /// <summary>
@@ -1082,14 +1081,8 @@ namespace MosaicLib.Semi.E039
         /// </summary>
         public static INotificationObject<IE039Object> GetPublisher(this E039ObjectID objID, INotificationObject<IE039Object> fallbackValue = null)
         {
-            IE039TableObserver tableObserver = ((objID != null) ? objID.TableObserver : null);
-
-            if (tableObserver != null)
-            {
-                INotificationObject<IE039Object> publisher = tableObserver.GetPublisher(objID);
-                if (publisher != null)
-                    return publisher;
-            }
+            if (!objID.IsNullOrEmpty())
+                return objID.TableObserver.GetPublisher(objID, fallbackValue: fallbackValue);
 
             return fallbackValue;
         }
@@ -1424,6 +1417,8 @@ namespace MosaicLib.Semi.E039
             GetPublisherIssueMesgType = other.GetPublisherIssueMesgType;
 
             CustomActionLoggingConfigDict = other.CustomActionLoggingConfigDict;
+
+            PartQueueSize = other.PartQueueSize;
         }
 
         internal void SetupForUse()
@@ -1478,6 +1473,9 @@ namespace MosaicLib.Semi.E039
         public Logging.MesgType GetPublisherIssueMesgType { get; set; }
 
         public ReadOnlyIDictionary<string, ActionLoggingConfig> CustomActionLoggingConfigDict { get; set; }
+
+        /// <summary>When this value is greater than 10 it will increase the parts ActionQueue size to be the indicated size.</summary>
+        public int PartQueueSize { get; set; }
 
         private IValuesInterconnection _partBaseIVI, _objectIVI;
         private ISetsInterconnection _isi;
@@ -1577,7 +1575,7 @@ namespace MosaicLib.Semi.E039
         /// Constructor - most behavior features are defined by the provided <paramref name="config"/> contents.
         /// </summary>
         public E039BasicTablePart(E039BasicTablePartConfig config)
-            : base(config.PartID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion2.Build(disableBusyBehavior: true, partBaseIVI: config.PartBaseIVI))
+            : base(config.PartID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion2.Build(disableBusyBehavior: true, partBaseIVI: config.PartBaseIVI), queueSize: Math.Max(10, config.PartQueueSize))
         {
             Config = new E039BasicTablePartConfig(config, testPersitValues: true);
             Config.SetupForUse();
@@ -1720,7 +1718,7 @@ namespace MosaicLib.Semi.E039
 
         IE039Object[] IE039TableObserver.GetObjects(E039TypeFilter typeFilter, E039InstanceFilter instanceFilter)
         {
-            lock (externalDicationaryMutex)
+            lock (externalDictionaryMutex)
             {
                 return InnerGetTypeAndInstanceFilteredSet(typeFilter, instanceFilter).ToArray();
             }
@@ -1728,7 +1726,7 @@ namespace MosaicLib.Semi.E039
 
         int IE039TableObserver.GetObjectCount(E039TypeFilter typeFilter, E039InstanceFilter instanceFilter)
         {
-            lock (externalDicationaryMutex)
+            lock (externalDictionaryMutex)
             {
                 return InnerGetTypeAndInstanceFilteredSet(typeFilter, instanceFilter).Count();
             }
@@ -1747,14 +1745,14 @@ namespace MosaicLib.Semi.E039
 
         INotificationObject<IE039Object> IE039TableObserver.GetPublisher(E039ObjectID objSpec) 
         {
-            if (objSpec == null)
+            if (objSpec.IsNullOrEmpty())
             {
-                GetPublisherIssueEmitter.Emit("GetPublisher: passed null for objSpec");
+                GetPublisherIssueEmitter.Emit("GetPublisher: passed {0} for objSpec", objSpec.SafeToString(mapNullTo: "[null]"));
 
                 return null;
             }
 
-            lock (externalDicationaryMutex)
+            lock (externalDictionaryMutex)
             {
                 ObjectTracker ot = null;
 
@@ -2133,7 +2131,7 @@ namespace MosaicLib.Semi.E039
                     // update the uuid to tracker dictionaries with the new UUID and tracker.
                     uuidToObjectTrackerDictionary[updateItemUUID] = ot;
 
-                    lock (externalDicationaryMutex)
+                    lock (externalDictionaryMutex)
                     {
                         externalUUIDToObjectTrackerDictionary[updateItemUUID] = ot;
                     }
@@ -2216,7 +2214,7 @@ namespace MosaicLib.Semi.E039
                 bool idHasUUID = !objID.UUID.IsNullOrEmpty();
 
                 // remove the object from the external dictionaries
-                lock (externalDicationaryMutex)
+                lock (externalDictionaryMutex)
                 {
                     if (idHasUUID)
                         externalUUIDToObjectTrackerDictionary.Remove(objID.UUID);
@@ -2597,7 +2595,7 @@ namespace MosaicLib.Semi.E039
 
         #region support fields for asynchronous methods
 
-        object externalDicationaryMutex = new object();
+        object externalDictionaryMutex = new object();
         Dictionary<string, ObjectTracker> externalUUIDToObjectTrackerDictionary = new Dictionary<string, ObjectTracker>();
         Dictionary<string, Dictionary<string, ObjectTracker>> externalTypeToObjectNameDictionaryDictionary = new Dictionary<string, Dictionary<string, ObjectTracker>>();
 
@@ -2646,7 +2644,7 @@ namespace MosaicLib.Semi.E039
             if (idHasUUID)
                 uuidToObjectTrackerDictionary[id.UUID] = ot;
 
-            lock (externalDicationaryMutex)
+            lock (externalDictionaryMutex)
             {
                 if (idHasUUID)
                     externalUUIDToObjectTrackerDictionary[id.UUID] = ot;
@@ -2686,7 +2684,7 @@ namespace MosaicLib.Semi.E039
 
                 typeNameToTypeTableTrackerDictionary[typeName] = ttt;
 
-                lock (externalDicationaryMutex)
+                lock (externalDictionaryMutex)
                 {
                     if (!externalTypeToObjectNameDictionaryDictionary.ContainsKey(typeName))
                         externalTypeToObjectNameDictionaryDictionary[typeName] = new Dictionary<string, ObjectTracker>();

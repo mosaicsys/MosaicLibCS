@@ -38,14 +38,10 @@ namespace MosaicLib.WPF.Extensions
 
         [AttachedPropertyBrowsableForType(typeof(FrameworkElement))]
         public static bool GetObserve(FrameworkElement obj) { return (bool)obj.GetValue(ObserverProperty); }
-
-        [AttachedPropertyBrowsableForType(typeof(FrameworkElement))]
         public static void SetObserve(FrameworkElement obj, bool value) { obj.SetValue(ObserverProperty, value); }
 
         [AttachedPropertyBrowsableForType(typeof(FrameworkElement))]
         public static bool GetIsPressed(FrameworkElement obj) { return (bool)obj.GetValue(IsPressedProperty); }
-
-        [AttachedPropertyBrowsableForType(typeof(FrameworkElement))]
         public static void SetIsPressed(FrameworkElement obj, bool value) { obj.SetValue(IsPressedProperty, value); }
 
         private static void OnObserveChanged(DependencyObject obj, DependencyPropertyChangedEventArgs e)

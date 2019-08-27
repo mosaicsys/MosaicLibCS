@@ -30,6 +30,7 @@ using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Config;
 using MosaicLib.Modular.Interconnect.Values;
 using MosaicLib.Modular.Interconnect.Values.Attributes;
+using MosaicLib.Modular.Reflection.Attributes;
 using MosaicLib.PartsLib.Tools.MDRF.Common;
 using MosaicLib.PartsLib.Tools.MDRF.Reader;
 using MosaicLib.Time;
@@ -41,7 +42,6 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
     {
         private static string appName = "AppNameNotFound";
         private static System.Reflection.Assembly currentExecAssy = System.Reflection.Assembly.GetExecutingAssembly();
-        private static string[] currentExecAssyFullNameSplit = currentExecAssy.FullName.Split(' ').Select(item => item.Trim(',')).ToArray();
 
         static void Main(string[] args)
         {
@@ -177,7 +177,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
             Console.WriteLine("               -lo, -lm");
             Console.WriteLine();
 
-            Console.WriteLine("Assembly: {0} [{1}]", currentExecAssyFullNameSplit.SafeAccess(0), currentExecAssyFullNameSplit.SafeAccess(1));
+            Console.WriteLine("Assembly: {0}", currentExecAssy.GetSummaryNameAndVersion());
         }
 
         private static void ProcessFileNameArg(string arg)

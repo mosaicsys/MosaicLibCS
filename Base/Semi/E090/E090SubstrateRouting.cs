@@ -85,7 +85,7 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
 
     #endregion
 
-    #region SubstrateRoutingItemBase, ApproachLocationItem, MoveSubstrateItem, SwapSubstratesItem, MoveOrSwapSubstrateItem, RunActionItem
+    #region SubstrateRoutingItemBase
 
     /// <summary>
     /// This is the required base class for all Subsrate Routing Items that can be Run using a <seealso cref="ISubstrateRoutingManager"/>
@@ -97,6 +97,10 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
         /// </summary>
         public string Comment { get; set; }
     }
+
+    #endregion
+
+    #region ApproachLocationItem, MoveSubstrateItem, SwapSubstratesItem, MoveOrSwapSubstrateItem, RunActionItem
 
     /// <summary>
     /// This item has two forms.  In the first it is given a Substrate ID, and in the second it is given the location name of a robot or of a robot arm.
@@ -448,7 +452,8 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
         /// <summary>
         /// Gives the name of the specific ITransferPermissionRequest interface that this state relates to.  May be empty if the source only has one such interface.
         /// </summary>
-        public string InterfaceName { get; set; }
+        public string InterfaceName { get { return _interfaceName.MapNullToEmpty(); } set { _interfaceName = value; } }
+        private string _interfaceName;
 
         /// <summary>
         /// Gives the summary of the current transfer permission state. 
@@ -465,7 +470,8 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
         /// <para/>This is normally used for the NotAvailable state to describe why the state of this part is not available to grant transfer permission.
         /// However it may also be used for other states.
         /// </summary>
-        public string Reason { get; set; }
+        public string Reason { get { return _reason.MapNullToEmpty(); } set { _reason = value; } }
+        private string _reason;
 
         /// <summary>
         /// Gives the estimated time period after which this part expects to be available to grant transfer permission requests.  
@@ -558,10 +564,10 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
         /// </summary>
         public TransferPermissionStateForPublication(ITransferPermissionState other)
         {
-            _interfaceName = other.InterfaceName;
+            _interfaceName = other.InterfaceName.MapEmptyToNull();
             SummaryStateCode = other.SummaryStateCode;
             SummaryStateTimeStamp = other.SummaryStateTimeStamp;
-            Reason = other.Reason;
+            _reason = other.Reason.MapEmptyToNull();
             EstimatedAvailableAfterPeriod = other.EstimatedAvailableAfterPeriod;
 
             GrantedTokenSet = other.GrantedTokenSet.ConvertToWritable(mapNullToEmpty: true);
@@ -598,7 +604,7 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
         /// <para/>This is normally used for the NotAvailable state to describe why the state of this part is not available to grant transfer permission.
         /// However it may also be used for other states.
         /// </summary>
-        public string Reason { get { return _reason.MapNullToEmpty(); } private set { _reason = value.MapEmptyToNull(); } }
+        public string Reason { get { return _reason.MapNullToEmpty(); } }
 
         [DataMember(Order = 4000, Name = "Reason", IsRequired = false, EmitDefaultValue = false)]
         private string _reason;
@@ -835,6 +841,59 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
 
     #endregion
 
+    #region Query Items (DelegatePredicate, PredicateItemBehavior)
+
+    /// <summary>
+    /// This item is used to perform a delegate based predicate item where the caller provides an aribrarty Func{string} which returns a non-empty string when the predicate fails which describes the reason the predicate failed
+    /// <para/>WARNING: the user of this item is REQUIRED to understand the limitations and ramifications of using a client provided delegate which will be called by the SRM part thread.  
+    /// </summary>
+    public class DelegatePredicateItem : SubstrateRoutingItemBase
+    {
+        /// <summary>
+        /// Constructor.
+        /// <para/>WARNING: the user of this item is REQUIRED to understand the limitations and ramifications of using a client provided delegate which will be called by the SRM part thread.  
+        /// </summary>
+        public DelegatePredicateItem(Func<string> predicateDelegate, PredicateItemBehavior itemBehavior, INamedValueSet namedValuesToMergeOnNegativeResult = null)
+        {
+            PredicateDelegate = predicateDelegate;
+        }
+
+        /// <summary>Gives the construction time given predicate delegate that this item is to use.  Returns non-empty string on predicate failure which describes why the predicate failed.</summary>
+        public Func<string> PredicateDelegate { get; private set; }
+
+        /// <summary>Gives the value of the enum that is used to select the behavior of the predicate item.  Aka what to  do when it fails.</summary>
+        public PredicateItemBehavior Behavior { get; private set; }
+
+        /// <summary>This set of named values will be merged (using AddAndUpdate) into the action's NamedValues if the predicate fails.</summary>
+        public INamedValueSet NamedValuesToMergeOnNegativeResult { get; private set; }
+
+        public override string ToString()
+        {
+            string commentStr = Comment.IsNeitherNullNorEmpty() ? " Comment:'{0}'".CheckedFormat(Comment) : "";
+            string nvsStr = (NamedValuesToMergeOnNegativeResult.IsNullOrEmpty() ? "" : " MergeNVSOnFalse:{0}".CheckedFormat(NamedValuesToMergeOnNegativeResult.ToStringSML()));
+
+            return "{0} {2}{3}{4}".CheckedFormat(Fcns.CurrentClassLeafName, Behavior, commentStr, nvsStr);
+        }
+    }
+
+    /// <summary>
+    /// This enumeration defines the resulting behavior of evaluating the predicate within a given predicate item (such as SubstratePredicateItem)
+    /// <para/>None (0), NegativeFailsSequence, NegativeEndsSequence
+    /// </summary>
+    public enum PredicateItemBehavior : int
+    {
+        /// <summary>Placeholder default [0]</summary>
+        None = 0,
+
+        /// <summary>If the selected predicate fails (produces false) then the item causes the sequence to fail.</summary>
+        NegativeFailsSequence,
+
+        /// <summary>If the selected predicate fails (produces false) then the item causes the sequence to end (without attempting to explicitly run any additional items)</summary>
+        NegativeEndsSequence,
+    }
+
+    #endregion
+
     #region Service action related EMs
 
     /// <summary>
@@ -897,7 +956,6 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
         /// <summary>This dictionary gives the set of locations (and ITRP instances) with which TransferPermissionRequestItem can be explicitly used in an SRMBase.  Internally the SRMBase will merge this set with the contents of the AutoLocNameToITPRDictionary so that all automatic locations can also be manually acquired and released.</summary>
         public ReadOnlyIDictionary<string, ITransferPermissionRequest> ManualLocNameToITPRDictionary { get; set; }
     }
-
 
     /// <summary>
     /// This is a useful base class for creating usage specific SRM types.  This class incorporates some of the common sequence execution framework logic 
@@ -982,6 +1040,8 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
         {
             string ec = string.Empty;
 
+            string endSequenceReason = null;
+
             foreach (var item in itemArray)
             {
                 if (item is MoveSubstrateItem)
@@ -996,11 +1056,19 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
                     ec = PerformItem(ipf, (RunActionItem)item);
                 else if (item is TransferPermissionRequestItem)
                     ec = PerformItem(ipf, (TransferPermissionRequestItem)item);
+                else if (item is DelegatePredicateItem)
+                    ec = PerformItem(ipf, (DelegatePredicateItem)item, out endSequenceReason);
                 else
                     ec = "Item type '{0}' is not supported".CheckedFormat(item.GetType());
 
-                if (!ec.IsNullOrEmpty())
+                if (ec.IsNeitherNullNorEmpty())
                     break;
+
+                if (endSequenceReason.IsNeitherNullNorEmpty())
+                {
+                    Log.Debug.Emit("Sequence completed early [item '{0}' gave reason '{1}']", item, endSequenceReason);
+                    break;
+                }
             }
 
             if (ec.IsNullOrEmpty())
@@ -1031,7 +1099,7 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
             if (fromLocObs == null)
                 return "{0} failed: given substrate's current location is not supported here [{1}]".CheckedFormat(desc, substCurrentLocName);
 
-            if (fromLocObs.Info.NotAccessibleReason.IsNeitherNullNorEmpty())
+            if (!fromLocObs.IsAccessible)
                 return "{0} failed: given substrate's current location is not accessible [{1}]".CheckedFormat(desc, fromLocObs.Info.NotAccessibleReason);
 
             var toLocObs = GetSubstLocObserver(toLocName, SubstLocType.EmptyDestination);
@@ -1039,7 +1107,7 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
             if (toLocObs == null)
                 return "{0} failed: given move to location is not supported here [{1}]".CheckedFormat(desc, toLocName);
 
-            if (toLocObs.Info.NotAccessibleReason.IsNeitherNullNorEmpty())
+            if (!toLocObs.IsAccessible)
                 return "{0} failed: given move to location is not accessible [{1}]".CheckedFormat(desc, toLocObs.Info.NotAccessibleReason);
 
             string ec = InnerPerformMoveSubstrate(ipf, substObs, fromLocObs, toLocObs, desc);
@@ -1082,13 +1150,13 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
             if (fromLocObs == null)
                 return "{0} failed: given substrate's current location is not supported here [{1}]".CheckedFormat(desc, substCurrentLocName);
 
-            if (fromLocObs.Info.NotAccessibleReason.IsNeitherNullNorEmpty())
+            if (!fromLocObs.IsAccessible)
                 return "{0} failed: given substrate's current location is not accessible [{1}]".CheckedFormat(desc, fromLocObs.Info.NotAccessibleReason);
 
             if (swapAtLocObs == null)
                 return "{0} failed: given swap with substrate's current location is not supported here [{1}]".CheckedFormat(desc, swapWithSubstCurrentLocName);
 
-            if (swapAtLocObs.Info.NotAccessibleReason.IsNeitherNullNorEmpty())
+            if (!swapAtLocObs.IsAccessible)
                 return "{0} failed: given swap with substrate's location is not accessible [{1}]".CheckedFormat(desc, swapAtLocObs.Info.NotAccessibleReason);
 
             string ec = InnerPerformSwapSubstrates(ipf, substObs, fromLocObs, swapWithSubstObs, swapAtLocObs, desc);
@@ -1125,13 +1193,13 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
             if (fromLocObs == null)
                 return "{0} failed: given substrate's current location is not supported here [{1}]".CheckedFormat(desc, substCurrentLocName);
 
-            if (fromLocObs.Info.NotAccessibleReason.IsNeitherNullNorEmpty())
+            if (!fromLocObs.IsAccessible)
                 return "{0} failed: given substrate's current location is not accessible [{1}]".CheckedFormat(desc, fromLocObs.Info.NotAccessibleReason);
 
             if (toLocObs == null)
                 return "{0} failed: given move to/swap at location is not supported here [{1}]".CheckedFormat(desc, toLocName);
 
-            if (toLocObs.Info.NotAccessibleReason.IsNeitherNullNorEmpty())
+            if (!toLocObs.IsAccessible)
                 return "{0} failed: given move to/swap at location is not accessible [{1}]".CheckedFormat(desc, toLocObs.Info.NotAccessibleReason);
 
             string ec = AcquireLocationTransferPermissionForThisItemIfNeeded(ipf, fromLocObs.ID.Name, toLocObs.ID.Name);
@@ -1292,6 +1360,46 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
             }
 
             return ec;
+        }
+
+        protected virtual string PerformItem(IProviderFacet ipf, DelegatePredicateItem item, out string endSequenceReason)
+        {
+            var desc = item.ToString();
+
+            endSequenceReason = null;
+
+            string predicateResultStr = (item.PredicateDelegate != null) ? item.PredicateDelegate() : "PredicateDelegate is null";
+            bool predicateSucceeded = predicateResultStr.IsNullOrEmpty();
+
+            if (!predicateSucceeded && !item.NamedValuesToMergeOnNegativeResult.IsNullOrEmpty())
+            {
+                ipf.UpdateNamedValues(ipf.ActionState.NamedValues.MergeWith(item.NamedValuesToMergeOnNegativeResult, NamedValueMergeBehavior.AddAndUpdate).MakeReadOnly());
+            }
+
+            switch (item.Behavior)
+            {
+                case PredicateItemBehavior.None:
+                    if (predicateSucceeded)
+                        Log.Debug.Emit("{0}: predicate succeeded", desc);
+                    else
+                        Log.Debug.Emit("{0}: predicate failed: {1}", desc, predicateResultStr);
+
+                    return string.Empty;
+
+                case PredicateItemBehavior.NegativeFailsSequence:
+                    if (predicateSucceeded)
+                        return string.Empty;
+                    else
+                        return "{0} failed: {1}".CheckedFormat(desc, predicateResultStr);
+
+                case PredicateItemBehavior.NegativeEndsSequence:
+                    endSequenceReason = predicateResultStr;
+
+                    return string.Empty;
+
+                default:
+                    return "{0} failed: selected Behavior '{1}' is not valid".CheckedFormat(desc, item.Behavior);
+            }
         }
 
         protected virtual string WaitForPostedItemsComplete(IProviderFacet ipf, string[] locNameArray = null)

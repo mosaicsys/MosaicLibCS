@@ -487,4 +487,136 @@ namespace MosaicLib.Semi.E005
         [EnumMember]
         WillNotAccept = 5,
     }
+
+    [DataContract(Namespace = Constants.SemiNameSpace)]
+    public enum COMMACK : byte
+    {
+        [EnumMember]
+        Accepted = 0,
+        [EnumMember]
+        Denied_TryAgain = 1,
+        [EnumMember]
+        Denied_Internal = 255,
+    }
+
+    [DataContract(Namespace = Constants.SemiNameSpace)]
+    public enum DRACK : byte
+    {
+        [EnumMember]
+        Accepted = 0,
+        [EnumMember]
+        Denied_InsufficientSpace = 1,
+        [EnumMember]
+        Denied_InvalidFormat = 2,
+        [EnumMember]
+        Denied_AtLeastOneRPTIDAlreadyDefined = 3,
+        [EnumMember]
+        Denied_AtLeastOneVIDIsNotValid = 4,
+        [EnumMember]
+        Denied_Internal = 255,
+    }
+
+    // Note: CEED is boolean.  True means enable
+
+    [DataContract(Namespace = Constants.SemiNameSpace)]
+    public enum ERACK : byte
+    {
+        [EnumMember]
+        Accepted = 0,
+        [EnumMember]
+        Denied_AtLeastOneCEIDIsNotValid = 1,
+        [EnumMember]
+        Denied_Internal = 255,
+    }
+
+    [DataContract(Namespace = Constants.SemiNameSpace)]
+    public enum LRACK : byte
+    {
+        [EnumMember]
+        Accepted = 0,
+        [EnumMember]
+        Denied_InsufficientSpace = 1,
+        [EnumMember]
+        Denied_InvalidFormat = 2,
+        [EnumMember]
+        Denied_AtLeastOneCEIDLinkAlreadyDefined = 3,
+        [EnumMember]
+        Denied_AtLeastOneCEIDIsNotValid = 4,
+        [EnumMember]
+        Denied_AtLeastOneRPTIDIsNotValid = 5,
+        [EnumMember]
+        Denied_Internal = 255,
+    }
+
+    [DataContract(Namespace = Constants.SemiNameSpace)]
+    public enum RSPACK : byte
+    {
+        [EnumMember]
+        Accepted = 0,
+        [EnumMember]
+        Rejected = 1,
+        [EnumMember]
+        Denied_Internal = 255,
+    }
+
+    [DataContract(Namespace = Constants.SemiNameSpace)]
+    public enum RSDC : byte
+    {
+        [EnumMember]
+        Transmit = 0,
+        [EnumMember]
+        Purge = 1,
+    }
+
+    [DataContract(Namespace = Constants.SemiNameSpace)]
+    public enum RSDA : byte
+    {
+        [EnumMember]
+        Ok = 0,
+        [EnumMember]
+        Denied_BusyTryLater = 1,
+        [EnumMember]
+        Denied_SpoolDataDoesNotExist = 2,
+        [EnumMember]
+        Denied_Internal = 255,
+    }
+
+    [DataContract(Namespace = Constants.SemiNameSpace)]
+    public enum ControlState : byte
+    {
+        [EnumMember]
+        None = 0,
+        [EnumMember]
+        EquipmentOffline = 1,
+        [EnumMember]
+        AttemptOnline = 2,
+        [EnumMember]
+        HostOffline = 3,
+        [EnumMember]
+        OnlineLocal = 4,
+        [EnumMember]
+        OnlineRemote = 5,
+    }
+
+    [DataContract(Namespace = Constants.SemiNameSpace)]
+    public enum OFLACK : byte
+    {
+        [EnumMember]
+        Acknowledge = 0,
+        [EnumMember]
+        Denied_Internal = 255,
+    }
+
+    [DataContract(Namespace = Constants.SemiNameSpace)]
+    public enum ONLACK : byte
+    {
+        [EnumMember]
+        Accepted = 0,
+        [EnumMember]
+        NotAllowed = 1,
+        [EnumMember]
+        AlreadyOnline = 2,
+        [EnumMember]
+        Denied_Internal = 255,
+    }
 }

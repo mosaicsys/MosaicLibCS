@@ -76,11 +76,11 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
     /// </summary>
     public class TestECSParts : DisposableBase
     {
-        public TestECSParts(string baseName, ReferenceSet<E039Object> e090HistorySet = null, int numLPSlotsAndWafers = 5)
-            : this(baseName, new E039BasicTablePartConfig(baseName + ".E039Table") { DefaultFallbackReferenceHistorySet = e090HistorySet }, numLPSlotsAndWafers: numLPSlotsAndWafers)
+        public TestECSParts(string baseName, ReferenceSet<E039Object> e090HistorySet = null, int numLPSlotsAndWafers = 5, bool disableR1ArmB = false)
+            : this(baseName, new E039BasicTablePartConfig(baseName + ".E039Table") { DefaultFallbackReferenceHistorySet = e090HistorySet }, numLPSlotsAndWafers: numLPSlotsAndWafers, disableR1ArmB: disableR1ArmB)
         { }
 
-        public TestECSParts(string baseName, E039BasicTablePartConfig e039BasicTablePartConfig, bool e039AutoGoOnline = true, bool otherPartsAutoGoOnline = true, int numLPSlotsAndWafers = 5, IConfig iConfig = null)
+        public TestECSParts(string baseName, E039BasicTablePartConfig e039BasicTablePartConfig, bool e039AutoGoOnline = true, bool otherPartsAutoGoOnline = true, int numLPSlotsAndWafers = 5, IConfig iConfig = null, bool disableR1ArmB = false)
         {
             iConfig = iConfig ?? Config.Instance;
 
@@ -118,6 +118,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                 NumLPSlots = numLPSlotsAndWafers,
                 NumLPWafers = numLPSlotsAndWafers,
                 AutoLocNameToITPRDictionary = SRMLocNameToITPRDictionary,
+                DisableR1ArmB = disableR1ArmB,
             };
             SRM = new TestSRM(srmConfig).RunGoOnlineActionInline();
 
@@ -310,6 +311,8 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
             return ec;
         }
+
+
 
         private string PerformSetSubstrateProcessSpecs(IProviderFacet ipf, string jobID, ProcessSpecBase<ProcessStepSpecBase> processSpec, SubstrateJobRequestState initialSJRM, E039ObjectID[] substIdArray)
         {
@@ -807,7 +810,13 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                 didCount += UpdateIfNeeded(forceUpdate: forceUpdate, qpcTimeStamp: qpcTimeStamp, noteStartingService: true).MapToInt();
 
                 if (sjsStateChangeTriggerFlags != default(ServiceBasicSJSStateChangeTriggerFlags))
+                {
                     didCount += ServiceBasicSJSStateChangeTriggers(sjsStateChangeTriggerFlags);
+
+                    // if ServiceBasicSJSStateChangeTriggers changed anything then we may need to re-update the tracker's state.
+                    if (IsUpdateNeeded)
+                        didCount += UpdateIfNeeded(forceUpdate: forceUpdate, qpcTimeStamp: qpcTimeStamp, noteStartingService: false).MapToInt();
+                }
 
                 if (serviceEvaluationUpdates)
                     UpdateEvalInfo(alreadyFoundFirstWaitingForStartSubstrate: alreadyFoundFirstWaitingForStartSubstrate, stateToTool: stateToTool);
@@ -891,6 +900,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
                 case E090.SubstrateJobState.Running:
                 case E090.SubstrateJobState.Stopping:
+                case E090.SubstrateJobState.Pausing:
                     if (stepSpec != null)
                     {
                         if (isProcessMaterialMovementEnabled)
@@ -923,6 +933,10 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
                         return atPM4 ? robotArmsLocNameList : destLocNameList;
                     }
+                    else if (isRecoveryMaterialMovementEnabled && (Info.SJS == SubstrateJobState.Stopping || Info.SJS == SubstrateJobState.Pausing) && Info.STS.IsAtWork())
+                    {
+                        return Info.SPS.IsNeedsProcessing() ? srcLocNameList : destLocNameList;
+                    }
                     else
                     {
                         // For cases that this code does not directly recognize.  Just leave the wafer in its current location (aka strand it)
@@ -931,7 +945,6 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
                 case E090.SubstrateJobState.Returning:
                 case E090.SubstrateJobState.Aborting:
-                case E090.SubstrateJobState.Pausing:
                     if (Info.STS.IsAtWork() && isRecoveryMaterialMovementEnabled)
                         return Info.SPS.IsNeedsProcessing() ? srcLocNameList : destLocNameList;
                     else
@@ -965,7 +978,8 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                     break;
                 case SubstrateJobState.Running:
                 case SubstrateJobState.Stopping:
-                    if (!isProcessMaterialMovementEnabled)
+                case SubstrateJobState.Pausing:
+                    if (!isProcessMaterialMovementEnabled && !isRecoveryMaterialMovementEnabled)
                         isUsable = false;
                     break;
                 case SubstrateJobState.Aborting:
@@ -1018,12 +1032,12 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             EvaluationInfo.Flags flags = default(EvaluationInfo.Flags);
 
             flags.hasBeenStarted = (st.Info.SJS != SubstrateJobState.WaitingForStart);
-            bool isSJSRunningOrStopping = (st.Info.SJS == SubstrateJobState.Running || st.Info.SJS == SubstrateJobState.Stopping);
+            bool isSJSRunningOrStoppingOrPausing = (st.Info.SJS == SubstrateJobState.Running || st.Info.SJS == SubstrateJobState.Stopping || st.Info.SJS == SubstrateJobState.Pausing);
 
             flags.wantsToBeHere = (nextLocNameList ?? ReadOnlyIList<string>.Empty).Contains(st.Info.LocID);
             flags.wantsToMove = !nextLocNameList.IsNullOrEmpty() && !flags.wantsToBeHere;
             flags.isInProcessOrPendingProcess = (st.CurrentStationProcessICF != null);
-            flags.canStartProcessStepHereNow = (flags.wantsToBeHere && isSJSRunningOrStopping && !flags.isInProcessOrPendingProcess);
+            flags.canStartProcessStepHereNow = (flags.wantsToBeHere && isSJSRunningOrStoppingOrPausing && !flags.isInProcessOrPendingProcess);
 
             if (flags.wantsToMove && !flags.isInProcessOrPendingProcess)
             {
@@ -1043,10 +1057,16 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
             flags.isOnRobotArm = (currentLocName == ECSParts.SRM.R1ArmALocID.Name || currentLocName == ECSParts.SRM.R1ArmBLocID.Name);
 
+            flags.nextStationEvalListIncludesPipelinedPMInput = evalInfo.nextStationEvalList.Any(stationEval => stationEval.IsPipelinedPMInputLocation);
+            flags.nextStationEvalListIncludesPipelinedPMOutput = evalInfo.nextStationEvalList.Any(stationEval => stationEval.IsPipelinedPMOutputLocation);
+
             evalInfo.flags = flags;
         }
 
+        /// <summary>This flag is true when the tool has referenced the substrate in an SRM action and that action has not completed.</summary>
         public bool IsInSRMAction { get; set; }
+
+        public override bool IsMotionPending { get { return IsInSRMAction; } }
 
         public EvaluationInfo evalInfo = new EvaluationInfo();
 
@@ -1070,6 +1090,8 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                 public bool canBeMovedNow, canBeSwappedNow;
                 public bool havePossibleAlmostAvailableForApproach;
                 public bool isOnRobotArm;
+                public bool nextStationEvalListIncludesPipelinedPMInput;
+                public bool nextStationEvalListIncludesPipelinedPMOutput;
 
                 public bool IsAnyFlagSet
                 {
@@ -1123,7 +1145,9 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             public TestStationEnum station;
             public ITransferPermissionRequest itpr;
 
-            public bool IsValid { get { return locObs != null; } }
+            public bool IsValid { get { return locObs != null && locObs.Info.ObjID.Name.IsNeitherNullNorEmpty(); } }
+            public bool IsPipelinedPMInputLocation { get { return station == TestStationEnum.PM4 || station == TestStationEnum.PM3Input; } }
+            public bool IsPipelinedPMOutputLocation { get { return station == TestStationEnum.PM4 || station == TestStationEnum.PM3Output; } }
 
             public bool stAtLocIsBeingProcessed;
             public bool stAtLocWantsToMove;
@@ -1163,68 +1187,102 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
         #endregion
     }
 
-    public class TestSubstrateSchedulerTool: ISubstrateSchedulerTool<TestSubstrateAndProcessTracker, ProcessSpecBase<ProcessStepSpecBase>, ProcessStepSpecBase>
+    public class TestSubstrateSchedulerToolConfig : ICopyable<TestSubstrateSchedulerToolConfig>
     {
-        public TestSubstrateSchedulerTool(string name, TestECSParts ecsParts, TimeSpan ? maxEstimatedAlmostAvailablePeriod)
+        public TestSubstrateSchedulerToolConfig(string name, TestECSParts ecsParts)
         {
             Name = name;
-            ECSPart = ecsParts;
+            ECSParts = ecsParts;
+            MaxEstimatedAlmostAvailablePeriod = (1.0).FromSeconds();
+            EnableAutoResumeFromHeld = true;
+            ServiceBasicSJSStateChangeTriggerFlags = SubstrateScheduling.ServiceBasicSJSStateChangeTriggerFlags.All & ~(ServiceBasicSJSStateChangeTriggerFlags.EnableAutoStart);
+        }
+
+        public TestSubstrateSchedulerToolConfig MakeCopyOfThis(bool deepCopy = true)
+        {
+            return (TestSubstrateSchedulerToolConfig)this.MemberwiseClone();
+        }
+
+        public string Name { get; private set; }
+        public TestECSParts ECSParts { get; private set; }
+
+        public TimeSpan MaxEstimatedAlmostAvailablePeriod { get; set; }
+
+        public bool EnableAutoResumeFromHeld { get; set; }
+
+        public ServiceBasicSJSStateChangeTriggerFlags ServiceBasicSJSStateChangeTriggerFlags { get; set; }
+    }
+
+    public class TestSubstrateSchedulerTool: ISubstrateSchedulerTool<TestSubstrateAndProcessTracker, ProcessSpecBase<ProcessStepSpecBase>, ProcessStepSpecBase>
+    {
+        public TestSubstrateSchedulerTool(string name, TestECSParts ecsParts) 
+            : this(new TestSubstrateSchedulerToolConfig(name, ecsParts)) 
+        { }
+
+        public TestSubstrateSchedulerTool(string name, TestECSParts ecsParts, TimeSpan maxEstimatedAlmostAvailablePeriod)
+            : this(new TestSubstrateSchedulerToolConfig(name, ecsParts) { MaxEstimatedAlmostAvailablePeriod = maxEstimatedAlmostAvailablePeriod })
+        { }
+
+        public TestSubstrateSchedulerTool(TestSubstrateSchedulerToolConfig toolConfig)
+        {
+            Name = toolConfig.Name;
+            ToolConfig = toolConfig.MakeCopyOfThis();
+
+            ECSParts = ToolConfig.ECSParts;
             Logger = new Logging.Logger(Name);
 
-            MaxEstimatedAlmostAvailablePeriod = maxEstimatedAlmostAvailablePeriod ?? (1.0).FromSeconds();
+            RouteSequenceFailedAnnunciator = ECSParts.ANManagerPart.RegisterANSource(Name, new E041.ANSpec() { ANName = "{0}.RouteSequenceFailed".CheckedFormat(Name), ANType = E041.ANType.Error, ALID = E041.ANAlarmID.OptLookup });
+            PrepareFailedAnnunciator = ECSParts.ANManagerPart.RegisterANSource(Name, new E041.ANSpec() { ANName = "{0}.PrepareFailed".CheckedFormat(Name), ANType = E041.ANType.Error, ALID = E041.ANAlarmID.OptLookup });
 
-            RouteSequenceFailedAnnunciator = ecsParts.ANManagerPart.RegisterANSource(Name, new E041.ANSpec() { ANName = "{0}.RouteSequenceFailed".CheckedFormat(Name), ANType = E041.ANType.Error, ALID = E041.ANAlarmID.OptLookup });
-            PrepareFailedAnnunciator = ecsParts.ANManagerPart.RegisterANSource(Name, new E041.ANSpec() { ANName = "{0}.PrepareFailed".CheckedFormat(Name), ANType = E041.ANType.Error, ALID = E041.ANAlarmID.OptLookup });
+            r1ArmALocObserver = new SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>(ECSParts.SRM.R1ArmALocID, substTrackerDictionary);
+            r1ArmBLocObserver = new SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>(ECSParts.SRM.R1ArmBLocID, substTrackerDictionary);
+            r1LocObserverArray = new[] { r1ArmALocObserver, r1ArmBLocObserver };
 
-            r1ArmALocObserver = new SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>(ECSPart.SRM.R1ArmALocID, substTrackerDictionary);
-            r1ArmBLocObserver = new SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>(ECSPart.SRM.R1ArmBLocID, substTrackerDictionary);
-
-            al1LocObserver = new SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>(ECSPart.SRM.AL1LocID, substTrackerDictionary);
-            pm1LocObserver = new SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>(ECSPart.PM1.LocID, substTrackerDictionary);
-            pm2LocObserver = new SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>(ECSPart.PM2.LocID, substTrackerDictionary);
-            pm3InputLocObserver = new SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>(ECSPart.PM3.InputLocID, substTrackerDictionary);
-            pm3OutputLocObserver = new SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>(ECSPart.PM3.OutputLocID, substTrackerDictionary);
-            pm4TransferLocObserver = new SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>(ECSPart.PM4.InputLocID, substTrackerDictionary);
-            pmRejectLocObserver = new SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>(ECSPart.PMReject.LocID, substTrackerDictionary);
-            pmAbortLocObserver = new SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>(ECSPart.PMAbort.LocID, substTrackerDictionary);
-            pmReturnLocObserver = new SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>(ECSPart.PMReturn.LocID, substTrackerDictionary);
+            al1LocObserver = new SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>(ECSParts.SRM.AL1LocID, substTrackerDictionary);
+            pm1LocObserver = new SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>(ECSParts.PM1.LocID, substTrackerDictionary);
+            pm2LocObserver = new SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>(ECSParts.PM2.LocID, substTrackerDictionary);
+            pm3InputLocObserver = new SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>(ECSParts.PM3.InputLocID, substTrackerDictionary);
+            pm3OutputLocObserver = new SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>(ECSParts.PM3.OutputLocID, substTrackerDictionary);
+            pm4TransferLocObserver = new SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>(ECSParts.PM4.InputLocID, substTrackerDictionary);
+            pmRejectLocObserver = new SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>(ECSParts.PMReject.LocID, substTrackerDictionary);
+            pmAbortLocObserver = new SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>(ECSParts.PMAbort.LocID, substTrackerDictionary);
+            pmReturnLocObserver = new SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>(ECSParts.PMReturn.LocID, substTrackerDictionary);
 
             foreach (var processLocObserver in al1LocObserver.ConcatItems(pm1LocObserver, pm2LocObserver, pm3InputLocObserver, pm3OutputLocObserver, pm4TransferLocObserver, pmRejectLocObserver, pmAbortLocObserver, pmReturnLocObserver))
                 processLocObserverWithTrackerDictionary[processLocObserver.ID.Name] = processLocObserver;
 
-            foreach (var locObserver in r1ArmALocObserver.ConcatItems(r1ArmBLocObserver).Concat(processLocObserverWithTrackerDictionary.ValueArray))
+            foreach (var locObserver in r1LocObserverArray.Concat(processLocObserverWithTrackerDictionary.ValueArray))
             {
                 allLocObserverWithTrackerDictionary[locObserver.ID.Name] = locObserver;
                 allLocObserverDictionary[locObserver.ID.Name] = locObserver;
             }
 
-            foreach (var extraLocID in ECSPart.SRM.LPSlotLocIDArray)
+            foreach (var extraLocID in ECSParts.SRM.LPSlotLocIDArray)
             {
                 allLocObserverDictionary[extraLocID.Name] = new E090SubstLocObserver(extraLocID.GetPublisher());
             }
 
             var locNameToPrepareKVPSet = new KeyValuePair<string, IPrepare<IProcessSpec, IProcessStepSpec>>[]
                 {
-                    KVP.Create(ECSPart.PM1.LocID.Name, ECSPart.PM1 as IPrepare<IProcessSpec, IProcessStepSpec>),
-                    KVP.Create(ECSPart.PM2.LocID.Name, ECSPart.PM2 as IPrepare<IProcessSpec, IProcessStepSpec>),
-                    KVP.Create(ECSPart.PM3.InputLocID.Name, ECSPart.PM3 as IPrepare<IProcessSpec, IProcessStepSpec>),
-                    KVP.Create(ECSPart.PM4.InputLocID.Name, ECSPart.PM4 as IPrepare<IProcessSpec, IProcessStepSpec>),
-                    KVP.Create(ECSPart.PMAbort.LocID.Name, ECSPart.PMAbort as IPrepare<IProcessSpec, IProcessStepSpec>),
-                    KVP.Create(ECSPart.PMReject.LocID.Name, ECSPart.PMReject as IPrepare<IProcessSpec, IProcessStepSpec>),
-                    KVP.Create(ECSPart.PMReturn.LocID.Name, ECSPart.PMReturn as IPrepare<IProcessSpec, IProcessStepSpec>),
+                    KVP.Create(ECSParts.PM1.LocID.Name, ECSParts.PM1 as IPrepare<IProcessSpec, IProcessStepSpec>),
+                    KVP.Create(ECSParts.PM2.LocID.Name, ECSParts.PM2 as IPrepare<IProcessSpec, IProcessStepSpec>),
+                    KVP.Create(ECSParts.PM3.InputLocID.Name, ECSParts.PM3 as IPrepare<IProcessSpec, IProcessStepSpec>),
+                    KVP.Create(ECSParts.PM4.InputLocID.Name, ECSParts.PM4 as IPrepare<IProcessSpec, IProcessStepSpec>),
+                    KVP.Create(ECSParts.PMAbort.LocID.Name, ECSParts.PMAbort as IPrepare<IProcessSpec, IProcessStepSpec>),
+                    KVP.Create(ECSParts.PMReject.LocID.Name, ECSParts.PMReject as IPrepare<IProcessSpec, IProcessStepSpec>),
+                    KVP.Create(ECSParts.PMReturn.LocID.Name, ECSParts.PMReturn as IPrepare<IProcessSpec, IProcessStepSpec>),
                 }
                 .Where(kvp => kvp.Value != null)
                 ;
             locNameToPrepareDictionary = new Dictionary<string, IPrepare<IProcessSpec, IProcessStepSpec>>().SafeAddRange(locNameToPrepareKVPSet);
 
-            normalMoveFromLocSet = new HashSet<string>(r1ArmALocObserver.ConcatItems(r1ArmBLocObserver).Concat(processLocObserverWithTrackerDictionary.ValueArray).Select(obs => obs.ID.Name));
+            normalMoveFromLocSet = new HashSet<string>(r1LocObserverArray.Concat(processLocObserverWithTrackerDictionary.ValueArray).Select(obs => obs.ID.Name));
         }
 
         public string Name { get; private set; }
-        TestECSParts ECSPart { get; set; }
+        TestSubstrateSchedulerToolConfig ToolConfig { get; set; }
+        TestECSParts ECSParts { get; set; }
         Logging.ILogger Logger { get; set; }
-
-        TimeSpan MaxEstimatedAlmostAvailablePeriod { get; set; }
 
         E041.IANSource RouteSequenceFailedAnnunciator { get; set; }
         E041.IANSource PrepareFailedAnnunciator { get; set; }
@@ -1237,6 +1295,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
         IListWithCachedArray<TestSubstrateAndProcessTracker> filteredSubstTrackerList = new IListWithCachedArray<TestSubstrateAndProcessTracker>();
 
         SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker> r1ArmALocObserver, r1ArmBLocObserver;
+        SubstLocObserverWithTrackerLookup<TestSubstrateAndProcessTracker>[] r1LocObserverArray;
         IClientFacet srmAction;
         IListWithCachedArray<TestSubstrateAndProcessTracker> srmActionSubstTrackerList = new IListWithCachedArray<TestSubstrateAndProcessTracker>();
 
@@ -1379,7 +1438,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                 {
                     foreach (var st in substTrackerList.Array)
                     {
-                        var sjs = st.SubstrateJobState;
+                        var sjs = st.Info.SJS;
                         if (sjs == SubstrateJobState.Running || sjs == SubstrateJobState.WaitingForStart)
                             st.SetSubstrateJobState(SubstrateJobState.Held, "Part is no longer permitted to run process [{0}]".CheckedFormat(stateToTool));
                     }
@@ -1388,11 +1447,22 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             else
             {
                 holdStrandedSubstratesTriggerHoldoffTimer.StopIfNeeded();
+
+                if (substrateStateTally.sjsHeld > 0 && ToolConfig.EnableAutoResumeFromHeld)
+                {
+                    foreach (var st in substTrackerList.Array.Where(st => st.Info.SJS == SubstrateJobState.Held))
+                    {
+                        if (st.Info.STS.IsAtSource())
+                            st.SetSubstrateJobState(SubstrateJobState.WaitingForStart, "Auto resuming held substrate [AtSource]");
+                        else if (st.Info.STS.IsAtWork())
+                            st.SetSubstrateJobState(SubstrateJobState.Running, "Auto resuming held substrate [AtWork:{0}]".CheckedFormat(st.Info.LocID));
+                    }
+                }
             }
 
             foreach (var st in trackersInProcessList.Array)
             {
-                if (st.CurrentStationProcessICF == null && st.Info.LocID != ECSPart.PM4.OutputLocID.Name)
+                if (st.CurrentStationProcessICF == null && st.Info.LocID != ECSParts.PM4.OutputLocID.Name)
                 {
                     trackersInProcessList.Remove(st);       // this is safe when iterating on the IListWithCachedArray.Array.
                     deltaCount++;
@@ -1445,7 +1515,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             {
                 foreach (var st in filteredSubstTrackerList.Array.Where(st => !st.IsInSRMAction && st.evalInfo.flags.hasBeenStarted && st.evalInfo.flags.canStartProcessStepHereNow))
                 {
-                    st.StartProcessAtCurrentLocation(ECSPart, HostingPartNotifier);
+                    st.StartProcessAtCurrentLocation(ECSParts, HostingPartNotifier);
 
                     if (st.CurrentStationProcessICF != null)
                         trackersInProcessList.Add(st);
@@ -1459,8 +1529,8 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                 srmActionItemBuilderList.Clear();
                 srmActionItemBuilderSubstTrackerList.Clear();
 
-                int numEmptyArms = r1ArmALocObserver.IsUnoccupied.MapToInt() + r1ArmBLocObserver.IsUnoccupied.MapToInt();
-                int numOccupiedArms = r1ArmALocObserver.IsOccupied.MapToInt() + r1ArmBLocObserver.IsOccupied.MapToInt();
+                int numEmptyUsableArms = r1ArmALocObserver.IsUnoccupiedAndAccessible.MapToInt() + r1ArmBLocObserver.IsUnoccupiedAndAccessible.MapToInt();
+                int numOccupiedUsableArms = r1ArmALocObserver.IsOccupiedAndAccessible.MapToInt() + r1ArmBLocObserver.IsOccupiedAndAccessible.MapToInt();
 
                 bool anyCanBeMovedNow = filteredSubstTrackerList.Array.Any(st => st.evalInfo.flags.canBeMovedNow);
                 bool anyCanBeSwappedNow = filteredSubstTrackerList.Array.Any(st => st.evalInfo.flags.canBeSwappedNow);
@@ -1470,23 +1540,27 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                 // and there is at least one substrate that can be swapped now or that is almost available to be moved then 
                 // move that substrate onto one of the two arms.
 
-                if (srmActionItemBuilderList.Count == 0 && numEmptyArms >= 2 && !anyCanBeMovedNow)
+                if (srmActionItemBuilderList.Count == 0 && numEmptyUsableArms >= 2 && !anyCanBeMovedNow)
                 {
-                    var stToMoveToArm = filteredSubstTrackerList.Array.FirstOrDefault(st => st.evalInfo.flags.hasBeenStarted && (st.evalInfo.flags.canBeSwappedNow || st.evalInfo.flags.havePossibleAlmostAvailableForApproach && !st.evalInfo.flags.isOnRobotArm && st.evalInfo.firstPossibleAlmostAvailableForApproachToStationEval.GetIsAlmostAvailableToApproachTarget(MaxEstimatedAlmostAvailablePeriod, qpcTimeStamp)));
+                    var stToMoveToArm = filteredSubstTrackerList.Array.FirstOrDefault(st => st.evalInfo.flags.hasBeenStarted && (st.evalInfo.flags.canBeSwappedNow || (!st.evalInfo.flags.isOnRobotArm && st.evalInfo.flags.havePossibleAlmostAvailableForApproach && st.evalInfo.firstPossibleAlmostAvailableForApproachToStationEval.GetIsAlmostAvailableToApproachTarget(ToolConfig.MaxEstimatedAlmostAvailablePeriod, qpcTimeStamp))));
                     if (stToMoveToArm != null)
                     {
-                        var useArmLocName = r1ArmALocObserver.IsUnoccupied ? r1ArmALocObserver.ID.Name : r1ArmBLocObserver.ID.Name;     // Todo: replace this with wear leveled selection version similar to the one that the SRM uses.
+                        var useArmLocName = r1ArmALocObserver.IsUnoccupiedAndAccessible ? r1ArmALocObserver.ID.Name : r1ArmBLocObserver.ID.Name;     // future: replace this with wear leveled selection version similar to the one that the SRM uses.
 
                         srmActionItemBuilderList.Add(new ApproachLocationItem(useArmLocName, stToMoveToArm.Info.LocID, waitUntilDone: false) { Comment = "ApproachGetSubstApproachAlmostAvailable" });
-                        srmActionItemBuilderList.Add(new MoveSubstrateItem(stToMoveToArm.SubstID, ECSPart.SRM.R1EitherArmName));
-                        srmActionItemBuilderList.Add(new ApproachLocationItem(stToMoveToArm.SubstID, stToMoveToArm.evalInfo.firstPossibleAlmostAvailableForApproachToStationEval.locInfo.ObjID.Name, waitUntilDone: true, mustSucceed: true));
+                        srmActionItemBuilderList.Add(new MoveSubstrateItem(stToMoveToArm.SubstID, ECSParts.SRM.R1EitherArmName));
+
+                        if (stToMoveToArm.evalInfo.flags.canBeSwappedNow)
+                            srmActionItemBuilderList.Add(new ApproachLocationItem(stToMoveToArm.SubstID, stToMoveToArm.evalInfo.firstCanSwapAtStationEval.locInfo.ObjID.Name, waitUntilDone: true, mustSucceed: true));
+                        else if (stToMoveToArm.evalInfo.flags.havePossibleAlmostAvailableForApproach)
+                            srmActionItemBuilderList.Add(new ApproachLocationItem(stToMoveToArm.SubstID, stToMoveToArm.evalInfo.firstPossibleAlmostAvailableForApproachToStationEval.locInfo.ObjID.Name, waitUntilDone: true, mustSucceed: true));
 
                         srmActionItemBuilderSubstTrackerList.Add(stToMoveToArm);
                     }
                 }
 
                 // if there is a substrate on the one arm and the other arm is empty and the substrate on the arm can be swapped then swap the wafer with the one at the target location.
-                if (srmActionItemBuilderList.Count == 0 && numEmptyArms > 0 && numOccupiedArms > 0)
+                if (srmActionItemBuilderList.Count == 0 && numEmptyUsableArms > 0 && numOccupiedUsableArms > 0)
                 {
                     var stOnArm = filteredSubstTrackerList.Array.FirstOrDefault(st => st.evalInfo.flags.hasBeenStarted && st.evalInfo.flags.isOnRobotArm && st.evalInfo.flags.canBeSwappedNow);
 
@@ -1498,19 +1572,20 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
                         var swapAtStationEvalItem = stOnArm.evalInfo.nextStationEvalList.Where(stationEval => stationEval.isAvailableSwapTarget && candidateSwapAtStationLocNameSet.Contains(stationEval.locInfo.ObjID.Name)).FirstOrDefault();
 
+                        // change this to AttemptToSwapSubstrateToNextLocation
                         if (swapAtStationEvalItem.IsValid)
-                            AttemptToMoveOrSwapSubstrateToNextLocation(isProcessStepExecutionEnabled, stOnArm, swapAtStationEvalItem, numEmptyArms, comment: "SwapOutboundSubstAtLocWithInboundOneOnArm");
+                            AttemptToMoveOrSwapSubstrateToNextLocation(isProcessStepExecutionEnabled, stOnArm, swapAtStationEvalItem, numEmptyUsableArms, comment: "SwapOutboundSubstAtLocWithInboundOneOnArm");
                     }
                 }
 
                 // if either substrate on the robot arm is available to be moved to its next location them move it (in some cases this creates and starts a pending process after the move is complete)
-                if (srmActionItemBuilderList.Count == 0 && numOccupiedArms >= 1 && anyCanBeMovedNow)
+                if (srmActionItemBuilderList.Count == 0 && numOccupiedUsableArms >= 1 && anyCanBeMovedNow)
                 {
                     foreach (var stOnArm in filteredSubstTrackerList.Array.Where(st => st.evalInfo.flags.hasBeenStarted && st.evalInfo.flags.isOnRobotArm && st.evalInfo.flags.canBeMovedNow))
                     {
                         foreach (var tryAvailableMoveTargetStationEval in stOnArm.evalInfo.nextStationEvalList.Where(stationEval => stationEval.isAvailableMoveTarget))
                         {
-                            if (AttemptToMoveSubstrateToNextLocation(isProcessStepExecutionEnabled, stOnArm, tryAvailableMoveTargetStationEval, numEmptyArms, comment: "PutSubstFromRobotAtNextLoc"))
+                            if (AttemptToMoveSubstrateToNextLocation(isProcessStepExecutionEnabled, stOnArm, tryAvailableMoveTargetStationEval, numEmptyUsableArms, comment: "PutSubstFromRobotAtNextLoc"))
                                 break;
                         }
 
@@ -1520,15 +1595,17 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                 }
 
                 // if there is a substrate that is not on the robot arm and it can move there and none of the next location names for the substrates that are already on an arm match any of the next location names for this one then move it to the first available arm
-                if (srmActionItemBuilderList.Count == 0 && numEmptyArms > 0)
+                // Note: do not move a substrate onto the last available arm if that substrate needs to go to a location that is the output location for a pipelined PM.  This is because the pipelined PM output location can become occupied outside of the control of this logic.
+                if (srmActionItemBuilderList.Count == 0 && numEmptyUsableArms > 0)
                 {
-                    tempStringHashSet.Clear();      // use this as a list of the next locaction names that the wafers on the robot are already intended to be moved to.
-                    filteredSubstTrackerList.Array.DoForEach(stOnArm => stOnArm.evalInfo.nextLocNameList.DoForEach(locName => tempStringHashSet.Add(locName)));
+                    UpdateHashSetOfLocationsRobotArmWafersCanGoToNext();
 
-                    var stToGet = filteredSubstTrackerList.Array.FirstOrDefault(st => st.evalInfo.flags.hasBeenStarted && !st.evalInfo.flags.isOnRobotArm && st.evalInfo.flags.canBeMovedNow && !st.evalInfo.nextLocNameList.Any(locName => tempStringHashSet.Contains(locName)));
+                    bool atLeastTwoArmsAreEmpty = (numEmptyUsableArms >= 2);
+
+                    var stToGet = filteredSubstTrackerList.Array.FirstOrDefault(st => st.evalInfo.flags.hasBeenStarted && !st.evalInfo.flags.isOnRobotArm && st.evalInfo.flags.canBeMovedNow && !st.evalInfo.nextLocNameList.Any(locName => hashSetOfSubstrateTrackerOnRobotNextLocNames.Contains(locName)) && (atLeastTwoArmsAreEmpty || !st.evalInfo.flags.nextStationEvalListIncludesPipelinedPMOutput));
                     if (stToGet != null)
                     {
-                        var useArmLocName = r1ArmALocObserver.IsUnoccupied ? r1ArmALocObserver.ID.Name : r1ArmBLocObserver.ID.Name;     // Todo: replace this with wear leveled selection version similar to the one that the SRM uses.
+                        var useArmLocName = r1ArmALocObserver.IsUnoccupiedAndAccessible ? r1ArmALocObserver.ID.Name : r1ArmBLocObserver.ID.Name;     // future: replace this with wear leveled selection version similar to the one that the SRM uses.
 
                         srmActionItemBuilderList.Add(new ApproachLocationItem(useArmLocName, stToGet.evalInfo.currentLocObs.ID.Name, waitUntilDone: false) { Comment = "GetMovableSubstToRobot"});
                         srmActionItemBuilderList.Add(new MoveSubstrateItem(stToGet.SubstID, useArmLocName));
@@ -1538,16 +1615,16 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                 }
 
                 // if there is a substrate that is going to PM4 and both arms are empty then move the substrate to an arm
-                if (srmActionItemBuilderList.Count == 0 && numOccupiedArms == 0)
+                if (srmActionItemBuilderList.Count == 0 && numOccupiedUsableArms == 0)
                 {
-                    var stToGet = filteredSubstTrackerList.Array.FirstOrDefault(st => st.evalInfo.flags.hasBeenStarted && !st.evalInfo.flags.isOnRobotArm && (st.evalInfo.flags.canBeMovedNow || st.evalInfo.flags.canBeSwappedNow || st.evalInfo.flags.havePossibleAlmostAvailableForApproach && st.evalInfo.firstPossibleAlmostAvailableForApproachToStationEval.GetIsAlmostAvailableToApproachTarget(MaxEstimatedAlmostAvailablePeriod, qpcTimeStamp)) && st.evalInfo.firstCanMoveToStationEval.station == TestStationEnum.PM4);
+                    var stToGet = filteredSubstTrackerList.Array.FirstOrDefault(st => st.evalInfo.flags.hasBeenStarted && !st.evalInfo.flags.isOnRobotArm && (st.evalInfo.flags.canBeMovedNow || st.evalInfo.flags.canBeSwappedNow || st.evalInfo.flags.havePossibleAlmostAvailableForApproach && st.evalInfo.firstPossibleAlmostAvailableForApproachToStationEval.GetIsAlmostAvailableToApproachTarget(ToolConfig.MaxEstimatedAlmostAvailablePeriod, qpcTimeStamp)) && st.evalInfo.firstCanMoveToStationEval.IsPipelinedPMOutputLocation);
                     if (stToGet != null)
                     {
-                        var useArmLocName = r1ArmALocObserver.IsUnoccupied ? r1ArmALocObserver.ID.Name : r1ArmBLocObserver.ID.Name;     // Todo: replace this with wear leveled selection version similar to the one that the SRM uses.
+                        var useArmLocName = r1ArmALocObserver.IsUnoccupiedAndAccessible ? r1ArmALocObserver.ID.Name : r1ArmBLocObserver.ID.Name;     // future: replace this with wear leveled selection version similar to the one that the SRM uses.
 
-                        srmActionItemBuilderList.Add(new ApproachLocationItem(useArmLocName, stToGet.evalInfo.currentLocObs.ID.Name, waitUntilDone: false) { Comment = "GetNextPM4SubstToRobot"});
+                        srmActionItemBuilderList.Add(new ApproachLocationItem(useArmLocName, stToGet.evalInfo.currentLocObs.ID.Name, waitUntilDone: false) { Comment = "GetNextPipelinedOutputPMLocSubstToEmptyRobot"});
                         srmActionItemBuilderList.Add(new MoveSubstrateItem(stToGet.SubstID, useArmLocName));
-                        srmActionItemBuilderList.Add(new ApproachLocationItem(stToGet.SubstID, ECSPart.PM4.InputLocID.Name, waitUntilDone: true));
+                        srmActionItemBuilderList.Add(new ApproachLocationItem(stToGet.SubstID, ECSParts.PM4.InputLocID.Name, waitUntilDone: true));
 
                         srmActionItemBuilderSubstTrackerList.Add(stToGet);
                     }
@@ -1558,7 +1635,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                 {
                     Logger.Debug.Emit("Creating SRM action [{0}]", srmActionItemBuilderList.First().Comment);
 
-                    srmAction = ECSPart.SRM.Sequence(srmActionItemBuilderList.ToArray()).AddNotifyOnCompleteInline(HostingPartNotifier).StartInline();
+                    srmAction = ECSParts.SRM.Sequence(srmActionItemBuilderList.ToArray()).AddNotifyOnCompleteInline(HostingPartNotifier).StartInline();
 
                     srmActionSubstTrackerList.AddRange(srmActionItemBuilderSubstTrackerList);
                     srmActionSubstTrackerList.DoForEach(st => st.IsInSRMAction = true);
@@ -1601,7 +1678,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
             if (srmAction == null && filteredSubstTrackerList.Count > 0 && isSubstrateLaunchEnabled && pendingPrepareList.Count == 0 && !PrepareFailedAnnunciator.ANState.IsSignaling)
             {
-                var stWaitingForStart = filteredSubstTrackerList.Array.FirstOrDefault(st => !st.evalInfo.flags.hasBeenStarted && (st.evalInfo.flags.canBeMovedNow || st.evalInfo.flags.canBeSwappedNow || st.evalInfo.flags.havePossibleAlmostAvailableForApproach && st.evalInfo.firstPossibleAlmostAvailableForApproachToStationEval.GetIsAlmostAvailableToApproachTarget(MaxEstimatedAlmostAvailablePeriod, qpcTimeStamp)));
+                var stWaitingForStart = filteredSubstTrackerList.Array.FirstOrDefault(st => !st.evalInfo.flags.hasBeenStarted && (st.evalInfo.flags.canBeMovedNow || st.evalInfo.flags.canBeSwappedNow || st.evalInfo.flags.havePossibleAlmostAvailableForApproach && st.evalInfo.firstPossibleAlmostAvailableForApproachToStationEval.GetIsAlmostAvailableToApproachTarget(ToolConfig.MaxEstimatedAlmostAvailablePeriod, qpcTimeStamp)));
                 var anyStartedAtSource = (stWaitingForStart != null) &&  filteredSubstTrackerList.Array.Any(st => st.evalInfo.flags.hasBeenStarted && st.Info.STS == SubstState.AtSource);
 
                 if (stWaitingForStart != null && !anyStartedAtSource)
@@ -1700,7 +1777,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                             string reason = "{0} action selected".CheckedFormat(selectedActionName);
                             RouteSequenceFailedAnnunciator.NoteActionStarted(selectedActionName, reason);
 
-                            var icf = ECSPart.SRM.RetractArmsAndReleaseAll();
+                            var icf = ECSParts.SRM.RetractArmsAndReleaseAll();
                             string ec = icf.Run();
 
                             if (ec.IsNullOrEmpty())
@@ -1883,7 +1960,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
                         if (pendingPrepareTracker != null)
                         {
-                            ECSPart.E039TableUpdater.Update(new E039UpdateItem.SetAttributes(pendingPrepareTracker.SubstID, new NamedValueSet() { selectedActionName })).Run();
+                            ECSParts.E039TableUpdater.Update(new E039UpdateItem.SetAttributes(pendingPrepareTracker.SubstID, new NamedValueSet() { selectedActionName })).Run();
 
                             pendingPrepareTracker.SubstrateJobRequestState = targetSJRS;
                             string applyToSubstratesFromJobID = (pendingPrepareTracker.JobTrackerLinkage != null) ? pendingPrepareTracker.JobTrackerLinkage.ID : null;
@@ -1962,9 +2039,18 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
         private List<IClientFacet> pendingPrepareList = new List<IClientFacet>();
         private TestSubstrateAndProcessTracker pendingPrepareTracker;
 
-        private HashSet<string> tempStringHashSet = new HashSet<string>();
+        private HashSet<string> hashSetOfSubstrateTrackerOnRobotNextLocNames = new HashSet<string>();
 
-        private bool AttemptToMoveOrSwapSubstrateToNextLocation(bool isProcessStepExecutionEnabled, TestSubstrateAndProcessTracker stOnArm, TestSubstrateAndProcessTracker.StationEvaluationItem swapAtStationEvalItem, int numEmptyArms, string comment = "")
+        private void UpdateHashSetOfLocationsRobotArmWafersCanGoToNext()
+        {
+            if (hashSetOfSubstrateTrackerOnRobotNextLocNames.Count > 0)
+                hashSetOfSubstrateTrackerOnRobotNextLocNames.Clear();
+
+            if (r1LocObserverArray.Any(slo => slo.IsOccupiedAndAccessible))
+                hashSetOfSubstrateTrackerOnRobotNextLocNames.SafeAddRange(r1LocObserverArray.Select(slo => slo.Tracker).WhereIsNotDefault().SelectMany(st => st.evalInfo.nextLocNameList));
+        }
+
+        private bool AttemptToMoveOrSwapSubstrateToNextLocation(bool isProcessStepExecutionEnabled, TestSubstrateAndProcessTracker stOnArm, TestSubstrateAndProcessTracker.StationEvaluationItem swapAtStationEvalItem, int numEmptyUsableArms, string comment = "")
         {
             switch (swapAtStationEvalItem.station)
             {
@@ -1986,7 +2072,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                 case TestStationEnum.PM3Input:
                 case TestStationEnum.PM4:
                     // for both of these cases the other method already does a move or swap and generates and starts the corresponding process.
-                    return AttemptToMoveSubstrateToNextLocation(isProcessStepExecutionEnabled, stOnArm, swapAtStationEvalItem, numEmptyArms, comment);
+                    return AttemptToMoveSubstrateToNextLocation(isProcessStepExecutionEnabled, stOnArm, swapAtStationEvalItem, numEmptyUsableArms, comment);
 
                 default:
                     {
@@ -2000,7 +2086,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             }
         }
 
-        private bool AttemptToMoveSubstrateToNextLocation(bool isProcessStepExecutionEnabled, TestSubstrateAndProcessTracker stToMove, TestSubstrateAndProcessTracker.StationEvaluationItem toStationEvalItem, int numEmptyArms, string comment = "")
+        private bool AttemptToMoveSubstrateToNextLocation(bool isProcessStepExecutionEnabled, TestSubstrateAndProcessTracker stToMove, TestSubstrateAndProcessTracker.StationEvaluationItem toStationEvalItem, int numEmptyUsableArms, string comment = "")
         {
             string moveToLocName = toStationEvalItem.locInfo.ObjID.Name;
 
@@ -2022,7 +2108,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                     }
 
                 case TestStationEnum.PM3Input:
-                    if (isProcessStepExecutionEnabled && numEmptyArms > 0)
+                    if (isProcessStepExecutionEnabled && numEmptyUsableArms > 0)
                     {
                         srmActionItemBuilderList.Add(new ApproachLocationItem(stToMove.SubstID, moveToLocName, waitUntilDone: false) { Comment = comment });
                         srmActionItemBuilderList.Add(new TransferPermissionRequestItem(TransferPermissionRequestItemSettings.AcquireAndAutoReleaseAtEndOfSequence, moveToLocName));
@@ -2038,7 +2124,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                     break;
 
                 case TestStationEnum.PM4:
-                    if (isProcessStepExecutionEnabled && numEmptyArms > 0)
+                    if (isProcessStepExecutionEnabled && numEmptyUsableArms > 0)
                     {
                         // block moving a substrate onto the arms or swapping it with the pm4 transfer location if that location already has a substrate and we have already asked that substrate to be processed there.
                         var pm4TransferLocST = pm4TransferLocObserver.Tracker;
@@ -2109,7 +2195,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
             foreach (var st in substTrackerList.Array)
             {
-                substDeltaCount += st.Service(stateToTool: stateToTool, qpcTimeStamp: qpcTimeStamp, alreadyFoundFirstWaitingForStartSubstrate: alreadyFoundFirstWaitingForStartSubstrate);
+                substDeltaCount += st.Service(stateToTool: stateToTool, qpcTimeStamp: qpcTimeStamp, alreadyFoundFirstWaitingForStartSubstrate: alreadyFoundFirstWaitingForStartSubstrate, sjsStateChangeTriggerFlags: ToolConfig.ServiceBasicSJSStateChangeTriggerFlags);
 
                 if (st.Info.SJS == SubstrateJobState.WaitingForStart)
                     alreadyFoundFirstWaitingForStartSubstrate = true;
@@ -2136,7 +2222,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                 } 
                 else
                 {
-                    E090SubstLocInfo substLocInfo = new E090SubstLocInfo(ECSPart.E039TableObserver.GetObject(new E039ObjectID(locName, E090.Constants.SubstrateLocationObjectType)));
+                    E090SubstLocInfo substLocInfo = new E090SubstLocInfo(ECSParts.E039TableObserver.GetObject(new E039ObjectID(locName, E090.Constants.SubstrateLocationObjectType)));
                     if (substLocInfo.IsUnoccupied)
                         return locName;
                 }
@@ -2163,11 +2249,14 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             ECSParts = other.ECSParts;
             NumLPSlots = other.NumLPSlots;
             NumLPWafers = other.NumLPWafers;
+            DisableR1ArmB = other.DisableR1ArmB;
         }
 
         public TestECSParts ECSParts { get; set; }
         public int NumLPSlots { get; set; }
         public int NumLPWafers { get; set; }
+
+        public bool DisableR1ArmB { get; set; }
 
         /// <summary>Makes and returns a clone/copy of this object</summary>
         public TestSRMConfig MakeCopyOfThis(bool deepCopy = true)
@@ -2215,10 +2304,16 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
             robotArmALocObserver = observerSet[0];
             robotArmBLocObserver = observerSet[1];
+            robotArmLocObserverArray = new[] { robotArmALocObserver, robotArmBLocObserver };
 
             SetAllSubstLocObservers(observerSet.Concat(lpSlotLocObserverArray));
 
             AddMainThreadStoppingAction(() => { Log.Info.Emit("Final {0}", Counters); });
+
+            if (config.DisableR1ArmB)
+            {
+                E039TableUpdater.SetSubstLocStates(robotArmBLocObserver, notAccessibleReasonParam: "This arm is disabled");
+            }
         }
 
         public E039ObjectID[] LPSlotLocIDArray { get; private set; }
@@ -2229,6 +2324,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
         private E090SubstLocObserver[] lpSlotLocObserverArray;
         private E090SubstLocObserver robotArmALocObserver, robotArmBLocObserver;
+        private E090SubstLocObserver [] robotArmLocObserverArray;
 
         public struct CounterValues
         {
@@ -2245,6 +2341,49 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
         private CounterValues _counters;
         public CounterValues Counters { get { return _counters; } }
 
+        #region injectable location specific holds 
+
+        public readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> holdAtGetFromSubstLocNameDict = new System.Collections.Concurrent.ConcurrentDictionary<string, bool>();
+        public readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> holdAtPutToSubstLocNameDict = new System.Collections.Concurrent.ConcurrentDictionary<string, bool>();
+
+        public bool IsWaiting { get; private set; }
+
+        private void WaitBeforeGetIfNeeded(string getFromSubstLocName)
+        {
+            WaitIfNeeded(getFromSubstLocName, holdAtGetFromSubstLocNameDict, "get from");
+        }
+
+        private void WaitBeforePutIfNeeded(string putToSubstLocName)
+        {
+            WaitIfNeeded(putToSubstLocName, holdAtPutToSubstLocNameDict, "put to");
+        }
+
+        private void WaitIfNeeded(string substLocName, System.Collections.Concurrent.ConcurrentDictionary<string, bool> holdSubstLocNameDict, string opDescription)
+        {
+            if (holdSubstLocNameDict.IsEmpty || !holdSubstLocNameDict.ContainsKey(substLocName) || !holdSubstLocNameDict[substLocName])
+                return;
+
+            IsWaiting = true;
+            NotifyBaseStateNotifier();
+
+            Log.Debug.Emit("Waiting before {0} {1} [hold set: {2}]", opDescription, substLocName, string.Join(",", holdSubstLocNameDict.ToArray().Where(kvp => kvp.Value).Select(kvp => kvp.Key)));
+
+            while (!HasStopBeenRequested)
+            {
+                (0.01).FromSeconds().Sleep();
+
+                if (!holdSubstLocNameDict[substLocName])
+                    break;
+            }
+
+            Log.Debug.Emit("Done waiting before {0} {1} [hold set: {2}]", opDescription, substLocName, string.Join(",", holdSubstLocNameDict.ToArray().Where(kvp => kvp.Value).Select(kvp => kvp.Key)));
+
+            IsWaiting = false;
+            NotifyBaseStateNotifier();
+        }
+
+        #endregion
+
         protected override string PerformRetractArms(IProviderFacet ipf)
         {
             return "";
@@ -2257,9 +2396,9 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
             if (toLocName == R1EitherArmName)
             {
-                if (robotArmALocObserver.Info.IsUnoccupied)
+                if (robotArmALocObserver.IsUnoccupied && robotArmALocObserver.IsAccessible)
                     toLocName = robotArmALocObserver.ID.Name;
-                else if (robotArmBLocObserver.Info.IsUnoccupied)
+                else if (robotArmBLocObserver.IsUnoccupied && robotArmBLocObserver.IsAccessible)
                     toLocName = robotArmBLocObserver.ID.Name;
                 else
                     return "{0} failed: neither robot arm is available".CheckedFormat(desc);
@@ -2271,9 +2410,9 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                 useArmObserver = robotArmALocObserver;
             else if (fromLocName == R1ArmBLocID.Name)
                 useArmObserver = robotArmBLocObserver;
-            else if (robotArmALocObserver.Info.IsUnoccupied)
+            else if (robotArmALocObserver.IsUnoccupied && robotArmALocObserver.IsAccessible)
                 useArmObserver = robotArmALocObserver;
-            else if (robotArmBLocObserver.Info.IsUnoccupied)
+            else if (robotArmBLocObserver.IsUnoccupied && robotArmBLocObserver.IsAccessible)
                 useArmObserver = robotArmBLocObserver;
             else
                 return "{0} failed: neither robot arm is available".CheckedFormat(desc);
@@ -2294,6 +2433,8 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                     substObs.Update();
                 }
 
+                WaitBeforeGetIfNeeded(substObs.Info.LocID);
+
                 if (ec.IsNullOrEmpty())
                     ec = E039TableUpdater.NoteSubstMoved(substObs, useArmObserver.ID);
             }
@@ -2308,6 +2449,8 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                     E039TableUpdater.Update(new E039UpdateItem.SetAttributes(substObs.ID, new NamedValueSet() { "FailNextPutToLocName" }, NamedValueMergeBehavior.RemoveEmpty)).Run();
                     substObs.Update();
                 }
+
+                WaitBeforePutIfNeeded(toLocObs.ID.Name);
 
                 if (ec.IsNullOrEmpty())
                     ec = E039TableUpdater.NoteSubstMoved(substObs, toLocObs.ID);
@@ -2326,7 +2469,12 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
             E090SubstLocObserver fromArmObserver = null, toArmObserver = null;
 
-            if (substCurrentLocName == R1ArmALocID.Name && robotArmBLocObserver.Info.IsUnoccupied)
+            if (!robotArmALocObserver.IsAccessible || !robotArmBLocObserver.IsAccessible)
+            {
+                var unusableArmListStr = string.Join(", ", robotArmLocObserverArray.Where(obs => !obs.IsAccessible).Select(obs => "{0} is not accessible: {1}".CheckedFormat(obs.ID.Name, obs.Info.NotAccessibleReason)));
+                return "{0} failed: both robot arms must be accessible [{1}]".CheckedFormat(desc, unusableArmListStr);
+            }
+            else if (substCurrentLocName == R1ArmALocID.Name && robotArmBLocObserver.Info.IsUnoccupied)
             {
                 fromArmObserver = robotArmALocObserver;
                 toArmObserver = robotArmBLocObserver;
@@ -2362,6 +2510,8 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                     substObs.Update();
                 }
 
+                WaitBeforeGetIfNeeded(substObs.Info.LocID);
+
                 if (ec.IsNullOrEmpty())
                     ec = E039TableUpdater.NoteSubstMoved(substObs, fromArmObserver.ID);
             }
@@ -2377,6 +2527,8 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                     swapWithSubstObs.Update();
                 }
 
+                WaitBeforeGetIfNeeded(swapWithSubstObs.Info.LocID);
+
                 if (ec.IsNullOrEmpty())
                     ec = E039TableUpdater.NoteSubstMoved(swapWithSubstObs, toArmObserver.ID);
             }
@@ -2391,6 +2543,8 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                     E039TableUpdater.Update(new E039UpdateItem.SetAttributes(substObs.ID, new NamedValueSet() { "FailNextPutToLocName" }, NamedValueMergeBehavior.RemoveEmpty)).Run();
                     substObs.Update();
                 }
+
+                WaitBeforePutIfNeeded(swapAtLocObs.ID.Name);
 
                 if (ec.IsNullOrEmpty())
                     ec = E039TableUpdater.NoteSubstMoved(substObs, swapAtLocObs.ID);
@@ -2444,7 +2598,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
     public class SimpleExampleProcessModuleEngine : SimpleActivePartBase, ISimpleExampleProcessModuleEngine
     {
         public SimpleExampleProcessModuleEngine(string partID, TestECSParts testECSParts, string pmLocName = null, bool enableAlmostAvailable = true)
-            : base(partID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion2.Build(waitTimeLimit: (0.01).FromSeconds()))
+            : base(partID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion2.Build(waitTimeLimit: (0.01).FromSeconds(), simplePartBaseSettings: SimplePartBaseSettings.DefaultVersion2.Build(addSimplePartBaseBehavior: SimplePartBaseBehavior.TreatPartAsOnlineFailureWhenOnlineOrOnlineBusyWithExplicitFailure)))
         {
             TestECSParts = testECSParts;
             E039TableUpdater = TestECSParts.E039TableUpdater;
@@ -2470,6 +2624,19 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
         public TimeSpan ProcessAlmostCompleteLeadPeriod { get; private set; }
         public bool EnableAlmostAvailable { get; private set; }
+
+        protected override string PerformServiceActionEx(IProviderFacet ipf, string serviceName, INamedValueSet npv)
+        {
+            switch (serviceName)
+            {
+                case "SetExplicitFaultReason":
+                    SetExplicitFaultReason(npv["Reason"].VC.GetValue<string>(rethrow: true));
+                    PerformMainLoopService();
+                    return string.Empty;
+                default:
+                    return base.PerformServiceActionEx(ipf, serviceName, npv);
+            }
+        }
 
         #region ITransferPermissionRequest
 
@@ -2596,17 +2763,13 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             {
                 preparednessState.ProcessSpec = processSpec;
                 preparednessState.ProcessStepSpec = processStepSpec;
-                preparednessState.SummaryState = QuerySummaryState.Ready | QuerySummaryState.CanPrepare;
-                preparednessState.SummaryStateTimeStamp = QpcTimeStamp.Now;
-                preparednessState.Reason = ipf.ToString(ToStringSelect.MesgAndDetail);
+                preparednessState.SetSummaryState(QuerySummaryState.Ready | QuerySummaryState.CanPrepare, ipf.ToString(ToStringSelect.MesgAndDetail));
             }
             else
             {
                 preparednessState.ProcessSpec = processSpec;
                 preparednessState.ProcessStepSpec = processStepSpec;
-                preparednessState.SummaryState = QuerySummaryState.CanPrepare;
-                preparednessState.SummaryStateTimeStamp = QpcTimeStamp.Now;
-                preparednessState.Reason = "{0} failed: {1}".CheckedFormat(ipf.ToString(ToStringSelect.MesgAndDetail), ec);
+                preparednessState.SetSummaryState(QuerySummaryState.CanPrepare, "{0} failed: {1}".CheckedFormat(ipf.ToString(ToStringSelect.MesgAndDetail), ec));
             }
 
             PublishPreparednessState();
@@ -2806,17 +2969,16 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
             if (!BaseState.UseState.IsOnline(acceptOnlineFailure: false))
             {
-                if (transferPermissionState.IsAvailable() || transferPermissionState.Reason != BaseState.Reason)
+                string baseStateFaultReason = BaseState.ExplicitFaultReason.MapEmptyToNull() ?? BaseState.Reason;
+                if (transferPermissionState.IsAvailable() || transferPermissionState.Reason != baseStateFaultReason)
                 {
-                    transferPermissionState.SetState(TransferPermissionSummaryStateCode.NotAvailable, BaseState.Reason, emitter: Log.Debug);
+                    transferPermissionState.SetState(TransferPermissionSummaryStateCode.NotAvailable, baseStateFaultReason, emitter: Log.Debug);
                     PublishTransferPermissionStateIfNeeded();
                 }
 
                 if (preparednessState.SummaryState != (QuerySummaryState.NotAvailable | QuerySummaryState.CanPrepare))
                 {
-                    preparednessState.SummaryState = QuerySummaryState.NotAvailable | QuerySummaryState.CanPrepare;
-                    preparednessState.SummaryStateTimeStamp = QpcTimeStamp.Now;
-                    preparednessState.Reason = "Part is not Online: {0}".CheckedFormat(BaseState);
+                    preparednessState.SetSummaryState(QuerySummaryState.NotAvailable | QuerySummaryState.CanPrepare, "Part is not Online: {0}".CheckedFormat(BaseState));
                     PublishPreparednessState();
                 }
 
@@ -2824,9 +2986,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             }
             else if (preparednessState.SummaryState.IsSet(QuerySummaryState.NotAvailable))
             {
-                preparednessState.SummaryState = QuerySummaryState.CanPrepare;
-                preparednessState.SummaryStateTimeStamp = QpcTimeStamp.Now;
-                preparednessState.Reason = "Part is Online now: {0}".CheckedFormat(BaseState);
+                preparednessState.SetSummaryState(QuerySummaryState.CanPrepare, "Part is Online now: {0}".CheckedFormat(BaseState));
                 PublishPreparednessState();
             }
 
@@ -2872,9 +3032,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
         {
             SetBaseState(UseState.OnlineFailure, reason);
 
-            preparednessState.SummaryState = QuerySummaryState.NotAvailable | QuerySummaryState.CanPrepare;
-            preparednessState.SummaryStateTimeStamp = QpcTimeStamp.Now;
-            preparednessState.Reason = "Failed: {0}".CheckedFormat(reason);
+            preparednessState.SetSummaryState(QuerySummaryState.NotAvailable | QuerySummaryState.CanPrepare, "Failed: {0}".CheckedFormat(reason));
             PublishPreparednessState();
 
             CompletePendingAcquireRequests(resultCode: reason);

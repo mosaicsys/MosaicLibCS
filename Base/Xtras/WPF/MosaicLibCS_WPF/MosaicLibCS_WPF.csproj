@@ -69,6 +69,9 @@
       <Link>Properties\CommonAssemblyInfo.cs</Link>
     </Compile>
     <Compile Include="CommonSetup.cs" />
+    <Compile Include="Controls\DelayedConstructionWrapperUserControl.xaml.cs">
+      <DependentUpon>DelayedConstructionWrapperUserControl.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Controls\BasicLED.xaml.cs">
       <DependentUpon>BasicLED.xaml</DependentUpon>
     </Compile>
@@ -122,6 +125,10 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
+    <Page Include="Controls\DelayedConstructionWrapperUserControl.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
     <Page Include="Controls\BasicLED.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>

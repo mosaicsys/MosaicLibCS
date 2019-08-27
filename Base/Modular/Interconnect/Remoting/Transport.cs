@@ -2327,7 +2327,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
             {
                 lock (mutex)
                 {
-                    Port port = portNameToPortDicationary.SafeTryGetValue(portName);
+                    Port port = portNameToPortDictionary.SafeTryGetValue(portName);
 
                     if (port == null && createIfNeeded)
                     {
@@ -2339,7 +2339,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                         };
 
                         portList.Add(port);
-                        portNameToPortDicationary[portName] = port;
+                        portNameToPortDictionary[portName] = port;
                     }
 
                     return port;
@@ -2396,7 +2396,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                 }
             }
 
-            public Dictionary<string, Port> portNameToPortDicationary = new Dictionary<string, Port>();
+            public Dictionary<string, Port> portNameToPortDictionary = new Dictionary<string, Port>();
             public List<Port> portList = new List<Port>() { null };
         }
 

@@ -57,10 +57,10 @@ namespace MosaicLib.Time
 
 		#region member variables
 
-		/// <summary>static saved value from first successfull call to QueryPerformanceFrequency</summary>
+		/// <summary>static saved value from first successful call to QueryPerformanceFrequency</summary>
 		private static long qpcRateInHZ = 0;
 
-		/// <summary>static saved reciprocal from first successfull call to QueryPerformanceFrequency</summary>
+		/// <summary>static saved reciprocal from first successful call to QueryPerformanceFrequency</summary>
 		private static double qpcPeriodInSec = 0.0;
 
 		#endregion

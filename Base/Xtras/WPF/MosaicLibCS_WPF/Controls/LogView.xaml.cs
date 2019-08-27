@@ -127,6 +127,7 @@ namespace MosaicLib.WPF.Controls
         public static DependencyProperty FilterFieldWidthProperty = DependencyProperty.Register("FilterFieldWidth", typeof(double), typeof(LogView), new PropertyMetadata(120.0));
 
         public string SetName { get { return (string)GetValue(SetNameProperty); } set { SetValue(SetNameProperty, value); } }
+        /// <summary>When set to an enumerable set of strings, or to a single string (with or without | delimiters) it limits the set of log sources that will be tracked</summary>
         public object EnabledSources { get { return (string)GetValue(EnabledSourcesProperty); } set { SetValue(EnabledSourcesProperty, value); } }
         public double DateColumnWidth { get { return (double)GetValue(DateColumnWidthProperty); } set { SetValue(DateColumnWidthProperty, value); } }
         public double TypeColumnWidth { get { return (double)GetValue(TypeColumnWidthProperty); } set { SetValue(TypeColumnWidthProperty, value); } }

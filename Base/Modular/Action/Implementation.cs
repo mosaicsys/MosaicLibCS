@@ -68,7 +68,7 @@ namespace MosaicLib.Modular.Action
             return "Done:{0} Error:{1} State:{2} Update:{3}{4}".CheckedFormat(DoneMesgType, ErrorMesgType, StateMesgType, UpdateMesgType, (ActionLoggingStyleSelect == Action.ActionLoggingStyleSelect.None) ? "" : " {0}".CheckedFormat(ActionLoggingStyleSelect));
         }
 
-        /// <summary>Gives the Logging.MesgType that is to be used for successfull Action Completion messages.</summary>
+        /// <summary>Gives the Logging.MesgType that is to be used for successful Action Completion messages.</summary>
         public Logging.MesgType DoneMesgType { get; protected set; }
 
         /// <summary>Gives the Logging.MesgType that is to be used for Action Failed messages (including failed Action Completion messages).</summary>
@@ -702,10 +702,10 @@ namespace MosaicLib.Modular.Action
             }
         }
 
-        /// <summary>Method sets the volatile isCancelRequested value</summary>
-        public void SetCancelRequested()
+        /// <summary>Method sets the volatile isCancelRequested to the given <paramref name="value"/> (which defaults to true)</summary>
+        public void SetCancelRequested(bool value = true)
         {
-            isCancelRequested = true;
+            isCancelRequested = value;
         }
 
         /// <summary>Attempts to change the contained StateCode to ActionStateCode.Started.</summary>
@@ -897,7 +897,7 @@ namespace MosaicLib.Modular.Action
     /// <para/>Use MosaicLib.Modular.Common.NullObj in place of the ParamType or ResultType if that capability is not needed for this action implementation type.
 	/// </summary>
 	/// <typeparam name="ParamType">Defines the type of the Parameter value that may be provided with this Action.</typeparam>
-	/// <typeparam name="ResultType">Defines the type of the Result value that may be provided by the Part on successfull completion of this Action.</typeparam>
+	/// <typeparam name="ResultType">Defines the type of the Result value that may be provided by the Part on successful completion of this Action.</typeparam>
 	public class ActionImplBase<ParamType, ResultType> 
 		: IClientFacetWithParamAndResult<ParamType, ResultType>
 		, IProviderActionBase<ParamType, ResultType>
@@ -1159,24 +1159,28 @@ namespace MosaicLib.Modular.Action
         /// Client invokes this to request that the current action be canceled.  This is only meaningfull when action has been successfully started and is not complete.
         /// Provider may invoke this to internally indicate that the action should be canceled.
         /// </summary>
+        /// <remarks>
+        /// NOTE: this method is callable by both the client and the provider.  It is intentionally written as being asynchronous.  
+        /// If both the client and the provider request cancelation simultaniously it may produce unexpected log output but it will otherwise accomplish its essential purpose.
+        /// </remarks>
         public void RequestCancel()
 		{
-			if (!isCancelRequestActive)
-			{
-				isCancelRequestActive = true;
+            if (!isCancelRequestActive)
+            {
+                isCancelRequestActive = true;
                 actionState.SetCancelRequested();
 
-				ActionQueue aq = actionQ;
-				IActionState ias = ActionState;
+                ActionQueue aq = actionQ;
+                IActionState ias = ActionState;
 
-				if (aq != null && ias.IsStarted)
-				{
-					aq.NoteCancelHasBeenRequestedOnRelatedAction();
-					aq.ServiceCancelRequests();
-				}
+                if (aq != null && ias.IsStarted)
+                {
+                    aq.NoteCancelHasBeenRequestedOnRelatedAction();
+                    aq.ServiceCancelRequests();
+                }
 
-				EmitActionEvent("Cancel has been requested", ActionState.StateCode);
-			}
+                EmitActionEvent("Cancel has been requested", ActionState.StateCode);
+            }
 		}
 
         /// <summary>Property gives access to the dynamically updating IActionState for this action</summary>
@@ -1548,11 +1552,19 @@ namespace MosaicLib.Modular.Action
 
 				if (!actionState.CanStart)
 				{
-					string ec = "Action.Start failed: action is not Idle";
+					string ec = "Action.Start failed: action state code is neither Ready nor Complete";
 
 					EmitActionError(ec, actionState.StateCode);
 					return ec;
 				}
+
+                if (isCancelRequestActive || actionState.IsCancelRequested)
+                {
+                    isCancelRequestActive = false;
+                    actionState.SetCancelRequested(false);
+
+                    EmitActionEvent("prior Cancel Request has been cleared by Start", actionState.StateCode);
+                }
 
                 if (paramProvided)
 				{
@@ -1561,8 +1573,6 @@ namespace MosaicLib.Modular.Action
 				}
 
                 CaptureClientNamedParamValues();
-
-                isCancelRequestActive = false;
 
                 actionState.SetStateStarted(logging);
                 NoteActionStateUpdated();

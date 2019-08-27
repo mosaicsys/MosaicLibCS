@@ -29,7 +29,10 @@ namespace MosaicLib.Utils
 {
 	//-------------------------------------
 
-    /// <summary>Simple enumeration of the types of tokens that are supported in this set of parsing utilities.</summary>
+    /// <summary>
+    /// Simple enumeration of the types of tokens that are supported in this set of parsing utilities.
+    /// <para/>ToNextWhiteSpace, ToNextTokenSeparator, AlphaNumeric, SimpleFileName, SimpleFilePath, HexDigits, NumericsDigits, NumericFloatDigits
+    /// </summary>
     public enum TokenType
     {
         /// <summary>span anything except whitespace</summary>

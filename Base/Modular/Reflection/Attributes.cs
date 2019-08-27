@@ -21,6 +21,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Reflection;
 
@@ -82,15 +83,14 @@ namespace MosaicLib.Modular.Reflection
         /// <summary>
         /// This is the base class for all custom <see cref="ItemInfo"/> and TItemAttribute classes that may be used here.
         /// <para/>Provides a Name property and acts as the base class for attribute types that the AccessHelper can process.
-        /// <para/>Name property defaults to null, NameAdjust property defaults to NameAdjust.Prefix0
-        /// <para/>AdditionalKeywords = empty string array.
+        /// <para/>defaults: Name = null, NameAdjust = NameAdjust.Prefix0, ItemAccess = ItemAccess.Normal
         /// </summary>
         [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field, AllowMultiple = false)]
         public class AnnotatedItemAttributeBase : System.Attribute, IAnnotatedItemAttribute
         {
             /// <summary>
             /// Default constructor.
-            /// <para/>Sets Name = null, NameAdjust = NameAdjust.Prefix0, SilenceIssues = false, StorageType = ContainerStorageType.None
+            /// <para/>Sets Name = null, NameAdjust = NameAdjust.Prefix0, ItemAccess = ItemAccess.Normal
             /// </summary>
             public AnnotatedItemAttributeBase() 
                 : base() 
@@ -115,12 +115,13 @@ namespace MosaicLib.Modular.Reflection
             public virtual NameAdjust NameAdjust { get; set; }
 
             /// <summary>
-            /// When an item is marked to SilenceIssues, no issue messages will be emitted if the value cannot be accessed.  Value messages will still be emitted.
+            /// When an item is marked to SilenceIssues, no issue messages will be emitted if the value cannot be accessed.  Value messages will still be emitted.  Defaults to false.
             /// </summary>
             public bool SilenceIssues { get; set; }
 
             /// <summary>
             /// When this property is set to be any value other than None (its default), the value marshalling will attempt to cast the member value to/from this cotnainer type when setting/getting container contents.
+            /// Defaults to ContainerStorageType.None
             /// </summary>
             public ContainerStorageType StorageType { get; set; }
 
@@ -293,6 +294,96 @@ namespace MosaicLib.Modular.Reflection
                     case NameAdjust.Prefix3: return paramsStrArray.SafeAccess(3, string.Empty) + inferredName;
                     default: return string.Empty;
                 }
+            }
+
+            /// <summary>
+            /// Returns the first attribute instance of the given <typeparamref name="TAttributeType"/> that have been applied to the given <paramref name="assembly"/> or the fallbackValue if there are none.
+            /// </summary>
+            public static TAttributeType GetFirstInstance<TAttributeType>(this Assembly assembly, TAttributeType fallbackValue = default(TAttributeType), bool inherit = false) 
+                where TAttributeType : System.Attribute
+            {
+                return assembly.GetInstances<TAttributeType>(inherit: inherit).ConcatItems(fallbackValue).FirstOrDefault();
+            }
+
+            /// <summary>
+            /// Returns the set (array) of attributes of the given <typeparamref name="TAttributeType"/> that have been applied to the given <paramref name="assembly"/> or the empty array if there are none
+            /// </summary>
+            public static TAttributeType[] GetInstances<TAttributeType>(this Assembly assembly, bool inherit = false) where TAttributeType : System.Attribute
+            {
+                var attributes = (assembly != null) ? assembly.GetCustomAttributes(typeof(TAttributeType), inherit: inherit) : null;
+
+                return attributes.MapNullToEmpty().Select(item => item as TAttributeType).WhereIsNotDefault().ToArray();
+            }
+
+            /// <summary>
+            /// First attempts top find and return the non-null version information for the given assembly from the AssemblyInformationVersionAttribute.
+            /// Next, if <paramref name="tryAutoFallbackValues"/> is true, it attempts to find and return the version information for the given assembly from (in order): 
+            /// AssemblyFileVersionAttribute, AssemblyVersionAttribute, second token split from assembly's FullName.
+            /// When no such attributes and information are found then the method either returns the given fallbackValue or a string description of what could not be found (when <paramref name="mapNullFallbackValue"/> is true).
+            /// </summary>
+            public static string GetInformationalVersion(this Assembly assembly, string fallbackValue = null, bool mapNullFallbackValue = true, bool tryAutoFallbackValues = true, string [] assemblySplitFullName = null)
+            {
+                var assyInfoVersionAttrib = assembly.GetFirstInstance<AssemblyInformationalVersionAttribute>();
+
+                if (assyInfoVersionAttrib != null && assyInfoVersionAttrib.InformationalVersion.IsNeitherNullNorEmpty())
+                    return assyInfoVersionAttrib.InformationalVersion;
+
+                if (tryAutoFallbackValues)
+                {
+                    var assyFileVersionAttrib = assembly.GetFirstInstance<AssemblyFileVersionAttribute>();
+                    var assyVersionAttrib = assembly.GetFirstInstance<AssemblyVersionAttribute>();
+
+                    if (assyFileVersionAttrib != null && assyFileVersionAttrib.Version.IsNeitherNullNorEmpty())
+                        return assyFileVersionAttrib.Version;
+
+                    if (assyVersionAttrib != null && assyVersionAttrib.Version.IsNeitherNullNorEmpty())
+                        return assyVersionAttrib.Version;
+
+                    assemblySplitFullName = assemblySplitFullName ?? assembly.GetAssemblySplitFullName();
+                    var versionFromFullName = assemblySplitFullName.SafeAccess(1);
+                    if (versionFromFullName.IsNeitherNullNorEmpty())
+                        return versionFromFullName;
+                }
+
+                if (fallbackValue != null)
+                    return fallbackValue;
+
+                if (mapNullFallbackValue)
+                    return "No assembly version information found for assembly '{0}'".CheckedFormat(assembly);
+
+                return null;
+            }
+
+            /// <summary>
+            /// This EM accepts a System.Reflection.Assembly and attempts to generate a string of the form "name [version]" where
+            /// name comes from the assemblies FullName (the first token when split with space and with commas removed), and where the
+            /// version comes either from the assembly's AssemblyInformationalVersionAttribute.
+            /// </summary>
+            public static string GetSummaryNameAndVersion(this Assembly assembly, string formatString = "{0} [{1}]")
+            {
+                var assemblySplitFullName = assembly.GetAssemblySplitFullName();
+
+                var assemblyName = assembly.GetAssemblySplitFullName().SafeAccess(0);
+
+                var assemblyVersionToUse = assembly.GetInformationalVersion(assemblySplitFullName: assemblySplitFullName);
+
+                var nameAndVersion = formatString.CheckedFormat(assemblyName, assemblyVersionToUse);
+
+                return nameAndVersion;
+            }
+
+            /// <summary>
+            /// This method accepts the given <paramref name="assembly"/> and returns its FullName split on ' ' and with trailing ',' (commas) removed.
+            /// <para/>The first token of the return value is nominally the name of the assembly.
+            /// <para/>The second token is nominally the assembly version
+            /// <para/>
+            /// </summary>
+            public static string[] GetAssemblySplitFullName(this Assembly assembly)
+            {
+                var splitFullName = assembly.FullName.Split(' ');
+                var trimmedSplitFullName = splitFullName.Select(item => item.TrimEnd(',')).ToArray();
+
+                return trimmedSplitFullName;
             }
         }
 
@@ -753,6 +844,7 @@ namespace MosaicLib.Modular.Reflection
                 }
                 else if (itemInfo.ItemType == typeof(object))
                 {
+                    // Note: the fallback System.Reflection MemberInfo.GetValue based version in the final else would also cover this case but does not offer the same performance.
                     Func<TAnnotatedClass, object> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, object>(itemInfo);
                     vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<object>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
@@ -839,17 +931,31 @@ namespace MosaicLib.Modular.Reflection
                     else
                         vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<INamedValue>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
-                else
+                else if (dti.isEnum)
                 {
-                    // cover other types using ValueContainer's internal construction time object recognizer: enumeration, unrecognized, ...
-                    // NOTE: that useStorageType and isNullable are ignored here.
+                    Func<TAnnotatedClass, object> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, object>(itemInfo, permitCastAttempt: true);
+
                     vcGetter = (annotatedInstance) =>
                     {
-                        object o = itemInfo.IsProperty ? itemInfo.PropertyInfo.GetValue(annotatedInstance, emptyObjectArray) : (itemInfo.IsField ? itemInfo.FieldInfo.GetValue(annotatedInstance) : null);
-
-                        return default(ValueContainer).SetValue<object>(o, useStorageType, isNullable);
+                        return ValueContainer.Create(pfGetter(annotatedInstance), useStorageType, isNullable);
                     };
                 }
+                else
+                {
+                    Func<TAnnotatedClass, object> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, object>(itemInfo, permitCastAttempt: true);
+
+                    vcGetter = (annotatedInstance) =>
+                    {
+                        return ValueContainer.Create(pfGetter(annotatedInstance), useStorageType, isNullable);
+                    };
+                }
+                //else      // this clause is only used for unit testing when the above default type handler is not in use.
+                //{
+                //    vcGetter = (annotatedInstance) =>
+                //    {
+                //        throw new System.NotSupportedException("VCGetter faild: Cannot get {0} [{1}]".CheckedFormat(itemInfo.DerivedName, itemInfo.ItemType));
+                //    };
+                //}
 
                 GetMemberAsVCFunctionDelegate<TAnnotatedClass> memberToVCDelegate 
                     = (TAnnotatedClass annotatedInstance, Logging.IMesgEmitter updateIssueEmitter, Logging.IMesgEmitter valueUpdateEmitter, bool rethrow) => 
@@ -1024,6 +1130,11 @@ namespace MosaicLib.Modular.Reflection
                     Action<TAnnotatedClass, string[]> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, string[]>(itemInfo);
                     vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<string[]>(decodedValueType: ContainerStorageType.IListOfString, isNullable: false, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
+                else if (itemInfo.ItemType == typeof(ValueContainer))
+                {
+                    Action<TAnnotatedClass, ValueContainer> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, ValueContainer>(itemInfo);
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc); };
+                }
                 else if (itemInfo.ItemType == typeof(ValueContainer[]))
                 {
                     Action<TAnnotatedClass, ValueContainer[]> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, ValueContainer[]>(itemInfo);
@@ -1059,19 +1170,24 @@ namespace MosaicLib.Modular.Reflection
                     Action<TAnnotatedClass, ReadOnlyIList<ValueContainer>> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, ReadOnlyIList<ValueContainer>>(itemInfo);
                     vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<ReadOnlyIList<ValueContainer>>(decodedValueType: ContainerStorageType.IListOfVC, isNullable: false, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
-                else if (itemInfo.ItemType == typeof(ValueContainer))
+                else if (itemInfo.ItemType == typeof(ReadOnlyCollection<string>))
                 {
-                    Action<TAnnotatedClass, ValueContainer> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, ValueContainer>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc); };
+                    Action<TAnnotatedClass, ReadOnlyCollection<string>> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, ReadOnlyCollection<string>>(itemInfo);
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<ReadOnlyCollection<string>>(decodedValueType: ContainerStorageType.IListOfString, isNullable: false, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                }
+                else if (itemInfo.ItemType == typeof(ReadOnlyCollection<ValueContainer>))
+                {
+                    Action<TAnnotatedClass, ReadOnlyCollection<ValueContainer>> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, ReadOnlyCollection<ValueContainer>>(itemInfo);
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<ReadOnlyCollection<ValueContainer>>(decodedValueType: ContainerStorageType.IListOfVC, isNullable: false, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(Logging.LogGate))
                 {
                     Action<TAnnotatedClass, Logging.LogGate> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, Logging.LogGate>(itemInfo);
                     vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<Logging.LogGate>(decodedValueType: ContainerStorageType.Custom, isNullable: false, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
-                else if (itemInfo.ItemType == typeof(Logging.LogGate ?))
+                else if (itemInfo.ItemType == typeof(Logging.LogGate?))
                 {
-                    Action<TAnnotatedClass, Logging.LogGate ?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, Logging.LogGate ?>(itemInfo);
+                    Action<TAnnotatedClass, Logging.LogGate?> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, Logging.LogGate?>(itemInfo);
                     vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<Logging.LogGate?>(decodedValueType: ContainerStorageType.Custom, isNullable: true, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(TimeSpan))
@@ -1116,6 +1232,8 @@ namespace MosaicLib.Modular.Reflection
                 }
                 else if (itemInfo.ItemType.IsEnum || (nullableBaseType != null && nullableBaseType.IsEnum))
                 {
+                    Action<TAnnotatedClass, object> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, object>(itemInfo, permitCastAttempt: true);
+
                     Type enumType = nullableBaseType ?? itemInfo.ItemType;
 
                     vcSetter = (annotatedInstance, vc, rethrow) =>
@@ -1161,26 +1279,29 @@ namespace MosaicLib.Modular.Reflection
                         if (value == null && !isNullable)
                             value = itemInfo.ItemType.CreateDefaultInstance();
 
-                        if (itemInfo.IsProperty)
-                            itemInfo.PropertyInfo.SetValue(annotatedInstance, value, emptyObjectArray);
-                        else
-                            itemInfo.FieldInfo.SetValue(annotatedInstance, value);
+                        pfSetter(annotatedInstance, value);
                     };
                 }
                 else
                 {
                     // cover other types using ValueContainer's internal construction time object recognizer: unrecognized, ...
 
+                    Action<TAnnotatedClass, object> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, object>(itemInfo, permitCastAttempt: true);
+
                     vcSetter = (annotatedInstance, vc, rethrow) =>
                     {
                         object o = System.Convert.ChangeType(vc.ValueAsObject, itemInfo.ItemType);
 
-                        if (itemInfo.IsProperty)
-                            itemInfo.PropertyInfo.SetValue(annotatedInstance, o, emptyObjectArray);
-                        else
-                            itemInfo.FieldInfo.SetValue(annotatedInstance, o);
+                        pfSetter(annotatedInstance, o);
                     };
                 }
+                //else      // this clause is only used for unit testing when the above default type handler is not in use.
+                //{
+                //    vcSetter = (annotatedInstance, vc, rethrow) =>
+                //    {
+                //        throw new System.NotSupportedException("VCSetter faild: Cannot set {0} [{1}] to {2}{3}".CheckedFormat(itemInfo.DerivedName, itemInfo.ItemType, vc.ToStringSML(), rethrow ? " rethrow" : ""));
+                //    };
+                //}
 
                 SetMemberFromVCActionDelegate<TAnnotatedClass> memberFromVCDelegate 
                     = (TAnnotatedClass annotatedInstance, ValueContainer vc, Logging.IMesgEmitter updateIssueEmitter, Logging.IMesgEmitter valueUpdateEmitter, bool rethrow) =>
@@ -1221,15 +1342,16 @@ namespace MosaicLib.Modular.Reflection
             /// <typeparam name="TAnnotatedClass">Gives the type of the class on which the getter will be evaluated and from which the ItemInfo was harvisted.</typeparam>
             /// <typeparam name="TValueType">Gives the value type returned by the getter.</typeparam>
             /// <param name="item">Gives the PropertyInfo and/or FieldInfo for the item that shall be used to generate a getter Function.</param>
+            /// <param name="permitCastAttempt">informs the underlying CreateFieldGetterFunc or CreatePropertyGetterFunc method whether it should attempt to perform casting if needed.</param>
             /// <returns>a System.Func{TAnnotatedClass, TValueType} object that may be invoked later obtain the value of the selected field or property from an instance of the TAnnotatedClass that is given to the Func when it is invoked.</returns>
-            public static Func<TAnnotatedClass, TValueType> GenerateGetter<TAnnotatedClass, TValueType>(ItemInfo item)
+            public static Func<TAnnotatedClass, TValueType> GenerateGetter<TAnnotatedClass, TValueType>(ItemInfo item, bool permitCastAttempt = false)
             {
                 Func<TAnnotatedClass, TValueType> func = null;
 
                 if (item.IsField)
-                    func = Reflection.GetterSetterFactory.CreateFieldGetterFunc<TAnnotatedClass, TValueType>(item.FieldInfo);
+                    func = Reflection.GetterSetterFactory.CreateFieldGetterFunc<TAnnotatedClass, TValueType>(item.FieldInfo, permitCastAttempt: permitCastAttempt);
                 else
-                    func = Reflection.GetterSetterFactory.CreatePropertyGetterFunc<TAnnotatedClass, TValueType>(item.PropertyInfo);
+                    func = Reflection.GetterSetterFactory.CreatePropertyGetterFunc<TAnnotatedClass, TValueType>(item.PropertyInfo, permitCastAttempt: permitCastAttempt);
 
                 return func;
             }
@@ -1241,15 +1363,16 @@ namespace MosaicLib.Modular.Reflection
             /// <typeparam name="TAnnotatedClass">Gives the type of the class on which the setter will be performed and from which the ItemInfo was harvisted.</typeparam>
             /// <typeparam name="TValueType">Gives the value type accepted by the setter.</typeparam>
             /// <param name="item">Gives the PropertyInfo and/or FieldInfo for the item that shall be used to generate a getter Function.</param>
+            /// <param name="permitCastAttempt">informs the underlying CreateFieldSetterAction or CreatePropertySetterAction method whether it should attempt to perform casting if needed.</param>
             /// <returns>a System.Action{TAnnotatedClass, TValueType} object that may be invoked later to assign a value to the selected field or propety in an instance of the TAnnotatedClass that is given to the Action when it is invoked.</returns>
-            public static Action<TAnnotatedClass, TValueType> GenerateSetter<TAnnotatedClass, TValueType>(ItemInfo item)
+            public static Action<TAnnotatedClass, TValueType> GenerateSetter<TAnnotatedClass, TValueType>(ItemInfo item, bool permitCastAttempt = false)
             {
                 Action<TAnnotatedClass, TValueType> action = null;
 
                 if (item.IsField)
-                    action = Reflection.GetterSetterFactory.CreateFieldSetterAction<TAnnotatedClass, TValueType>(item.FieldInfo);
+                    action = Reflection.GetterSetterFactory.CreateFieldSetterAction<TAnnotatedClass, TValueType>(item.FieldInfo, permitCastAttempt: permitCastAttempt);
                 else
-                    action = Reflection.GetterSetterFactory.CreatePropertySetterAction<TAnnotatedClass, TValueType>(item.PropertyInfo);
+                    action = Reflection.GetterSetterFactory.CreatePropertySetterAction<TAnnotatedClass, TValueType>(item.PropertyInfo, permitCastAttempt: permitCastAttempt);
 
                 return action;
             }

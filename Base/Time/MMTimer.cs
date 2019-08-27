@@ -87,7 +87,7 @@ namespace MosaicLib.Time
 
         /// <summary>Contains the requested timer resolution from the construction call</summary>
 		private uint periodMilliseconds = 0;
-        /// <summary>Flag indicates if construction call to timeBeginPeriod was successfull, or not.</summary>
+        /// <summary>Flag indicates if construction call to timeBeginPeriod was successful, or not.</summary>
         private bool periodHasBeenSet = false;
 
 		#endregion

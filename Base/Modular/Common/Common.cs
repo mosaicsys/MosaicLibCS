@@ -28,6 +28,7 @@ using System.Runtime.Serialization.Formatters.Binary;
 using System.Runtime.Serialization.Json;
 using System.Runtime.InteropServices;
 using System.Collections;
+using System.Collections.ObjectModel;
 using System.Reflection;
 using System.Text;
 
@@ -457,21 +458,28 @@ namespace MosaicLib.Modular.Common
         {
             TypeAndDecodedTypeInfo[] decodeTypeAndInfoArray = new[]
             {
-                #region IListOfString: string, string [], IList<string>, List<string>, ReadOnlyIList<string>
+                #region string
 
                 new TypeAndDecodedTypeInfo(type: typeof(string), cst: ContainerStorageType.String),
+
+                #endregion
+
+                #region IListOfString: string, string [], IList<string>, List<string>, ReadOnlyCollection<string>, ReadOnlyIList<string>
+
                 new TypeAndDecodedTypeInfo(type: typeof(string []), cst: ContainerStorageType.IListOfString),
                 new TypeAndDecodedTypeInfo(type: typeof(IList<string>), cst: ContainerStorageType.IListOfString),
                 new TypeAndDecodedTypeInfo(type: typeof(List<string>), cst: ContainerStorageType.IListOfString),
+                new TypeAndDecodedTypeInfo(type: typeof(ReadOnlyCollection<string>), cst: ContainerStorageType.IListOfString),
                 new TypeAndDecodedTypeInfo(type: typeof(Utils.Collections.ReadOnlyIList<string>), cst: ContainerStorageType.IListOfString),
 
                 #endregion
 
-                #region IListOfVC: ValueContainer [], IList<ValueContainer>, List<ValueContainer>, ReadOnlyIList<ValueContainer>
+                #region IListOfVC: ValueContainer [], IList<ValueContainer>, List<ValueContainer>, ReadOnlyCollection<ValueContainer>, ReadOnlyIList<ValueContainer>
 
                 new TypeAndDecodedTypeInfo(type: typeof(ValueContainer []), cst: ContainerStorageType.IListOfVC),
                 new TypeAndDecodedTypeInfo(type: typeof(IList<ValueContainer>), cst: ContainerStorageType.IListOfVC),
                 new TypeAndDecodedTypeInfo(type: typeof(List<ValueContainer>), cst: ContainerStorageType.IListOfVC),
+                new TypeAndDecodedTypeInfo(type: typeof(ReadOnlyCollection<ValueContainer>), cst: ContainerStorageType.IListOfVC),
                 new TypeAndDecodedTypeInfo(type: typeof(Utils.Collections.ReadOnlyIList<ValueContainer>), cst: ContainerStorageType.IListOfVC),
 
                 #endregion
@@ -568,13 +576,14 @@ namespace MosaicLib.Modular.Common
         /// </summary>
         public struct DecodedTypeInfo
         {
+            public Type givenType, valueType;
             public ContainerStorageType cst;
             public bool isNullable;
             public bool isEnum;
 
             public override string ToString()
             {
-                return "{0}{1}".CheckedFormat(cst, isNullable ? " Nullable" : "");
+                return "{0}{1} cst:{2}".CheckedFormat(isNullable ? "Nullable " : "", valueType, cst);
             }
 
             /// <summary>
@@ -592,18 +601,21 @@ namespace MosaicLib.Modular.Common
             /// </summary>
             public static DecodedTypeInfo GetDecodedTypeInfo(Type type)
             {
-                DecodedTypeInfo dti = default(DecodedTypeInfo);
+                DecodedTypeInfo dti = default(DecodedTypeInfo); 
 
                 if (decodedTypeInfoDictionary.TryGetValue(type, out dti))
                     return dti;
 
-                dti.isNullable = (type.IsGenericType && (type.GetGenericTypeDefinition() == typeof(System.Nullable<>)));
+                dti.givenType = type;
+                dti.valueType = type;
 
-                Type valueType = type;
+                dti.isNullable = (type.IsGenericType && (type.GetGenericTypeDefinition() == typeof(System.Nullable<>)));
 
                 // for nullable types extract the underlying type.
                 if (dti.isNullable)
-                    valueType = Nullable.GetUnderlyingType(type);
+                    dti.valueType = Nullable.GetUnderlyingType(type);
+
+                var valueType = dti.valueType;
 
                 // all well known value types types are only reachable using the dictionary used above.  The following list is only used to support types that cannot easily be pre-known (and thus added to the dictionary)
                 if (iListOfStringType.IsAssignableFrom(valueType) || stringEnumerableType.IsAssignableFrom(valueType))
@@ -650,6 +662,8 @@ namespace MosaicLib.Modular.Common
         private static readonly Type iListOfVCType = typeof(IList<ValueContainer>);
         private static readonly Type listOfStringType = typeof(List<System.String>);
         private static readonly Type listOfVCType = typeof(List<ValueContainer>);
+        private static readonly Type readOnlyCollectionOfStringType = typeof(ReadOnlyCollection<string>);
+        private static readonly Type readOnlyCollectionOfVCType = typeof(ReadOnlyCollection<ValueContainer>);
         private static readonly Type iNamedValueSetType = typeof(INamedValueSet);
         private static readonly Type iNamedValueType = typeof(INamedValue);
         private static readonly Type vcEnumerableType = typeof(IEnumerable<ValueContainer>);
@@ -878,7 +892,10 @@ namespace MosaicLib.Modular.Common
                     case ContainerStorageType.INamedValueSet: o = (value as INamedValueSet).ConvertToReadOnly(mapNullToEmpty: true); u = default(Union); return this;
                     case ContainerStorageType.INamedValue: o = (value as INamedValue).ConvertToReadOnly(mapNullToEmpty: true); u = default(Union); return this;
                     case ContainerStorageType.Object: o = value; u = default(Union); return this;
-                    default: cvt = ContainerStorageType.None; break;
+                    case ContainerStorageType.IListOfString:
+                    case ContainerStorageType.IListOfVC:
+                    case ContainerStorageType.Custom:
+                    default: cvt = ContainerStorageType.None; break;        // types that are not handled here
                 }
             }
             catch (System.Exception ex)
@@ -941,7 +958,7 @@ namespace MosaicLib.Modular.Common
                     case ContainerStorageType.IListOfString:
                     case ContainerStorageType.IListOfVC:
                     case ContainerStorageType.Custom:
-                    default: break;
+                    default: break;     // types that are not handled here
                 }
 
                 // all other cases will need to attempt to do some form of conversion.
@@ -1201,7 +1218,7 @@ namespace MosaicLib.Modular.Common
         }
 
         /// <summary>
-        /// property is updated each time GetValue is called.  null indicates that the transfer and/or conversion was successfull while any other value indicates why it was not.
+        /// property is updated each time GetValue is called.  null indicates that the transfer and/or conversion was successful while any other value indicates why it was not.
         /// </summary>
         public System.Exception LastGetValueException { get; private set; }
 
@@ -1295,6 +1312,8 @@ namespace MosaicLib.Modular.Common
                                     value = (TValueType)((System.Object)(iList.ToArray()));      // special case for reading from an IListOfString to an String array.
                                 else if (TValueTypeType == listOfStringType)
                                     value = (TValueType)((System.Object)(new List<string>(iList)));  // special case for reading from an IListOfString to List<string>
+                                else if (TValueTypeType == readOnlyCollectionOfStringType)      // special case for reading from an IListOfString to ReadOnlyCollection<string>
+                                    value = (TValueType)((System.Object)(new List<string>(iList).AsReadOnly()));
                                 else
                                     value = (TValueType)((System.Object)iList);      // all other cases the TValueType should be castable from an IList<String>
                             }
@@ -1307,6 +1326,8 @@ namespace MosaicLib.Modular.Common
                                     value = (TValueType)((System.Object)(iList.ToArray()));      // special case for reading from an IListOfVC to an VC array.
                                 else if (TValueTypeType == listOfVCType)
                                     value = (TValueType)((System.Object)(new List<ValueContainer>(iList)));  // special case for reading from an IListOfVC to List<VC>
+                                else if (TValueTypeType == readOnlyCollectionOfVCType)      // special case for reading from an IListOfString to ReadOnlyCollection<VC>
+                                    value = (TValueType)((System.Object)(new List<ValueContainer>(iList).AsReadOnly()));
                                 else
                                     value = (TValueType)((System.Object)iList);      // all other cases the TValueType should be castable from an IList<VC>
                             }
@@ -1386,7 +1407,8 @@ namespace MosaicLib.Modular.Common
                     if (!conversionDone && decodedValueType.IsValueType() && valueAsObject is System.String)
                     {
                         // if the string is not empty then attempt to parse the string to the desired type.  This only succeeds if the entire string is parsed as the desired type.
-                        StringScanner ss = new StringScanner(valueAsObject as System.String ?? String.Empty);
+                        string valueAsString = valueAsObject as System.String ?? String.Empty;
+                        StringScanner ss = new StringScanner(valueAsString);
                         if (!ss.IsAtEnd)
                         {
                             switch (decodedValueType)
@@ -1413,7 +1435,7 @@ namespace MosaicLib.Modular.Common
                                 case ContainerStorageType.DateTime:
                                     {
                                         DateTime dt;
-                                        conversionDone = ss.ParseValue(out dt) && ss.IsAtEnd;
+                                        conversionDone = StringScanner.ParseValue(valueAsString, out dt);
                                         value = (TValueType)((System.Object)dt);
                                         break;
                                     }
@@ -2056,6 +2078,21 @@ namespace MosaicLib.Modular.Common
         }
 
         /// <summary>
+        /// Returns true if the given ContainerStorageType is L or LS.
+        /// </summary>
+        public static bool IsList(this ContainerStorageType cst)
+        {
+            switch (cst)
+            {
+                case ContainerStorageType.L:
+                case ContainerStorageType.LS:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        /// <summary>
         /// Extension method version of static Utils.Fcns.Equals method for two lists of ValueContainers.
         /// Returns true if both lists have the same length and each of lhs' ValueContainer contents are IsEqualTo the corresponding rhs'
         /// </summary>
@@ -2235,10 +2272,13 @@ namespace MosaicLib.Modular.Common
             else
             {
                 xmlWriter.WriteStartElement(elementName);
-                xmlWriter.WriteAttributeString("type", "array");
+                xmlWriter.WriteAttributeString("type", "object");
 
                 foreach (var nv in nvs)
-                    xmlWriter.WriteRawJSONElement("item", nv);
+                {
+                    if (nv.Name.IsNeitherNullNorEmpty())
+                        xmlWriter.WriteRawJSONElement(nv.Name, nv.VC);
+                }
 
                 xmlWriter.WriteEndElement();
             }
@@ -2315,6 +2355,40 @@ namespace MosaicLib.Modular.Common
 
                 xmlWriter.WriteEndElement();
             }
+        }
+
+        /// <summary>
+        /// Shortcut method that allows the caller to attempt to access an indexed sub-item in a "List" type ValueContainer's contents (L or LS).
+        /// If the given vc does not contain a supported type or the given index is not valid then the method will return the given <paramref name="fallbackValue"/>.
+        /// </summary>
+        public static ValueContainer SafeAccess(this ValueContainer vc, int index, ValueContainer fallbackValue = default(ValueContainer))
+        {
+            switch (vc.cvt)
+            {
+                case ContainerStorageType.L:
+                    {
+                        ReadOnlyIList<ValueContainer> rol = vc.o as ReadOnlyIList<ValueContainer>;
+
+                        if (rol.IsSafeIndex(index))
+                            return rol[index];
+
+                        break;
+                    }
+
+                case ContainerStorageType.LS:
+                    {
+                        ReadOnlyIList<string> rol = vc.o as ReadOnlyIList<string>;
+
+                        if (rol.IsSafeIndex(index))
+                            return ValueContainer.Create(rol[index]);
+
+                        break;
+                    }
+                default:
+                    break;
+            }
+
+            return fallbackValue;
         }
     }
 
@@ -4418,7 +4492,7 @@ namespace MosaicLib.Modular.Common
         /// </summary>
         private int AttemptToFindItemIndexInList(string sanitizedName, bool createDictionaryIfNeeded)
         {
-            if (nameToIndexDictionary == null && Count >= minElementsToUseDicationary && createDictionaryIfNeeded)
+            if (nameToIndexDictionary == null && Count >= minElementsToUseDictionary && createDictionaryIfNeeded)
                 BuildDictionary();
 
             if (nameToIndexDictionary != null)
@@ -4448,7 +4522,7 @@ namespace MosaicLib.Modular.Common
         volatile Dictionary<string, int> nameToIndexDictionary = null;
 
         /// <summary>Defines the minimum Set size required to decide to create the nameToIndexDictionary</summary>
-        const int minElementsToUseDicationary = 10;
+        const int minElementsToUseDictionary = 10;
 
         /// <summary>
         /// Explicitly request that this NVS build and retain the Dictionary it uses to find NamedValue items given a name.
@@ -4981,6 +5055,18 @@ namespace MosaicLib.Modular.Common
         }
 
         /// <summary>
+        /// Converts the given <paramref name="dictionary"/>'s contents to a NamedValueSet and returns it.
+        /// </summary>
+        public static NamedValueSet ConvertToNamedValueSet<TValueType>(this IDictionary<string, TValueType> dictionary)
+        {
+            var nvs = new NamedValueSet();
+
+            dictionary.DoForEach(kvp => nvs.SetValue(kvp.Key, ValueContainer.Create(kvp.Value)));
+
+            return nvs;
+        }
+
+        /// <summary>
         /// Attempts to convert (or create) a NamedValue from the contents of the given <paramref name="vc"/>.
         /// If the given <paramref name="vc"/> contains a INamedValue then this value is converted and returned.
         /// If the given <paramref name="vc"/> contains a list of strings then this method generates and returns a NamedValue from it (with Name from first element and values from rest)
@@ -5278,6 +5364,16 @@ namespace MosaicLib.Modular.Common
                 nvs.AddRange(from DictionaryEntry entry in dictionary select new NamedValue(entry.Key as string, entry.Value));
 
             return nvs;
+        }
+
+        /// <summary>
+        /// Obtains the <paramref name="name"/>ed NamedValue from the given <paramref name="nvs"/> NamedValueSet and then removes it from the <paramref name="nvs"/> and returns it.
+        /// </summary>
+        public static NamedValue RemoveAndReturnNamedValue(this NamedValueSet nvs, string name)
+        {
+            var nv = nvs[name];
+            nvs.Remove(name);
+            return nv;
         }
     }
 
@@ -5860,7 +5956,7 @@ namespace MosaicLib.Modular.Common
     /// </typeparam>
     /// <typeparam name="TAttribute">
     /// Allows the client to customize this adapter to make use of any <seealso cref="Attributes.NamedValueSetItemAttribute"/> derived attribute type.
-    /// This is intended to allow the client to make use of multiple custom attribute types in order to customize which adapter any given annotated item in a value set class the item is itended to be used with.
+    /// This is intended to allow the client to make use of multiple custom attribute types in order to customize which adapter any given annotated item in a value set class the item is intended to be used with.
     /// </typeparam>
     /// <remarks>
     /// The primary methods/properties used on this adapter are: Construction, ValueSet, Setup, Set, Get

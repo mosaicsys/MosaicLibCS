@@ -574,7 +574,7 @@ namespace MosaicLib.SerialIO.Modbus
 
             /// <summary>Gives the number of header bytes used in the request for this fc</summary>
             public ushort RequestHeaderBytes { get; private set; }
-            /// <summary>Gives the number of header bytes used in a successfull response for this fc</summary>
+            /// <summary>Gives the number of header bytes used in a successful response for this fc</summary>
             public ushort ResponseHeaderBytes { get; private set; }
 
             /// <summary>Gives the offset in the request PDU to the byte that carries the data byte count for the request.  This value will be zero if there is no data byte count field in this type of request</summary>

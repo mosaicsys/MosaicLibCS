@@ -74,6 +74,23 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
+        /// Allows the caller to Service the given <paramref name="set"/> of IServiceable items.  Returns the sum of the results of calling SafeService on each such object.
+        /// </summary>
+        public static int SafeServiceSet(this IEnumerable<IServiceable> set, QpcTimeStamp qpcTimeStamp = default(QpcTimeStamp))
+        {
+            if (set != null)
+            {
+                qpcTimeStamp = qpcTimeStamp.MapDefaultToNow();
+
+                return set.Sum(obj => obj.SafeService(qpcTimeStamp));
+            }
+            else
+            {
+                return 0;
+            }
+        }
+
+        /// <summary>
         /// If the given IServiceable <paramref name="obj"/> is non-null, this method uses ThreadPool.QueueUserWorkItem to queue a call to run the SafeService method on it.
         /// If <paramref name="passQpcAtTimeOfCall"/> is true then the SafeService method will be passed QpcTimeStamp.Now, otherwise it will be passed QpcTimeStamp.Zero.
         /// </summary>

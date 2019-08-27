@@ -32,6 +32,7 @@ using MosaicLib.Modular.Config;
 using MosaicLib.Modular.Interconnect.Values;
 using MosaicLib.Modular.Interconnect.Values.Attributes;
 using MosaicLib.Modular.Part;
+using MosaicLib.Modular.Reflection.Attributes;
 using MosaicLib.PartsLib.Tools;
 using MosaicLib.PartsLib.Tools.MDRF.Common;
 using MosaicLib.PartsLib.Tools.MDRF.Writer;
@@ -45,7 +46,6 @@ namespace MosaicLib.Tools.PerformanceMonitorHost
     {
         private static string appName = "AppNameNotFound";
         private static System.Reflection.Assembly currentExecAssy = System.Reflection.Assembly.GetExecutingAssembly();
-        private static string[] currentExecAssyFullNameSplit = currentExecAssy.FullName.Split(' ').Select(item => item.Trim(',')).ToArray();
 
         private static MMTimerPeriod mmTimerPeriod;
 
@@ -120,8 +120,9 @@ namespace MosaicLib.Tools.PerformanceMonitorHost
 
                 List<IActivePartBase> partsList = new List<IActivePartBase>();
 
-                appLogger.Info.Emit("{0} [{1}] being run with arguments:{2}", currentExecAssyFullNameSplit.SafeAccess(0), currentExecAssyFullNameSplit.SafeAccess(1), string.Join(" ", entryArgs));
+                appLogger.Info.Emit("{0} being run with arguments: {1}", currentExecAssy.GetSummaryNameAndVersion(), string.Join(" ", entryArgs));
                 appLogger.Info.Emit(" and current directory '{0}'", System.IO.Directory.GetCurrentDirectory());
+                appLogger.WaitForDistributionComplete((0.2).FromSeconds());
 
                 using (Win32.Hooks.ConsoleCtrlHandlerHook consoleCtrlHandlerHook = new Win32.Hooks.ConsoleCtrlHandlerHook("cch", (sender, ctrlType) => CtrlHandlerDelegate(sender, ctrlType, partsList)))
                 {

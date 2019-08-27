@@ -46,13 +46,30 @@ using MosaicLib.Utils.Tools;
 
 namespace MosaicLib.Modular.Interconnect.Remoting
 {
-    public interface IRemoting
+    /// <summary>
+    /// Common interface supported by both RemotingClient and RemotingServer part instances
+    /// </summary>
+    public interface IRemoting : IActivePartBase
     {
+        /// <summary>
+        /// Action factory method.  When the resulting action is run it will attempt to run a Sync operation as determined by the contents of the given <paramref name="syncFlags"/>
+        /// </summary>
         IClientFacet Sync(SyncFlags syncFlags = default(SyncFlags));
 
+        /// <summary>
+        /// In a RemotingClient, this publisher is used to publish the the ServerInfoNVS contents that were last obtained from the server side during session establishment.
+        /// </summary>
         INotificationObject<INamedValueSet> ServerInfoNVSPublisher { get; }
 
+        /// <summary>
+        /// Gives the NVS containing the configuration keys that were given at construction time to the RemotingClient or RemotingServer and which are used to configure its behavior.
+        /// </summary>
         INamedValueSet ConfigNVS { get; }
+
+        /// <summary>
+        /// Action factory method.  When the resulting action is run it will set the nvs and the merge behavior that are used when routing requests through an ActionRelayMessageStreamTool.
+        /// </summary>
+        IClientFacet SetOutboundActionNPVMergeValues(INamedValueSet outboundActionNPVMergeWithNVS, NamedValueMergeBehavior outboundActionNPVMergeBehavior = NamedValueMergeBehavior.AddAndUpdate);
     }
 
     [Flags]
@@ -237,6 +254,12 @@ namespace MosaicLib.Modular.Interconnect.Remoting
                 Fcns.DisposeOfObject(ref messageStreamTool);
                 lastGeneratedMessage = null;        // the message can only be safely "released" if it has been delivered.
             }
+
+            public void NotifyOnSessionStateChanged(object source, Sessions.SessionState eventArgs)
+            {
+                if (messageStreamTool != null)
+                    messageStreamTool.NotifyOnSessionStateChanged(source, eventArgs);
+            }
         }
 
         private void Release()
@@ -256,7 +279,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             sessionsChanged = true;
         }
 
-        protected override string PerformGoOnlineAction(bool andInitialize)
+        protected override string PerformGoOnlineActionEx(IProviderFacet ipf, bool andInitialize, INamedValueSet npv)
         {
             string ec = string.Empty;
 
@@ -264,6 +287,14 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             {
                 if (andInitialize && BaseState.IsOnlineOrAttemptOnline)
                     ec = PerformGoOfflineAction();
+
+                if (andInitialize && !npv.IsNullOrEmpty())
+                {
+                    Log.Debug.Emit("{0}: Processing ConfigNVS updates from NamedParamValues:{1}", ipf.ToString(ToStringSelect.MesgAndDetail), npv.ToStringSML());
+
+                    // update and save the ConfigNVS as read only.  Normally the npv is null or empty.  This allows the GoOnline client to update information like the transport type and the transport configuration on each GoOnline call
+                    Config.ConfigNVS = Config.ConfigNVS.MergeWith(npv, mergeBehavior: NamedValueMergeBehavior.AddAndUpdate).ConvertToReadOnly();
+                }
 
                 if (sessionManager == null || transport == null)
                 {
@@ -359,7 +390,13 @@ namespace MosaicLib.Modular.Interconnect.Remoting
                     if (cst.actionRelayStreamTool == null)
                         return "Remote client '{0}' does not support remote actions".CheckedFormat(clientIdToken);
 
-                    cst.actionRelayStreamTool.RelayServiceAction(ss.Rest, ipf);
+                    if (!cst.session.State.IsConnected())
+                        return "The Current session is not connected [{0}]".CheckedFormat(cst.session);
+
+                    if (!OutboundActionNPVMergeWithNVS.IsNullOrEmpty() && OutboundActionNPVMergeBehavior != default(NamedValueMergeBehavior))
+                        npv = npv.MergeWith(OutboundActionNPVMergeWithNVS, OutboundActionNPVMergeBehavior).MakeReadOnly();
+
+                    cst.actionRelayStreamTool.RelayServiceAction(ss.Rest, ipf, npv);
                     return null;
                 }
             }
@@ -399,6 +436,25 @@ namespace MosaicLib.Modular.Interconnect.Remoting
 
             return string.Empty;
         }
+
+        /// <summary>
+        /// Action factory method.  When the resulting action is run it will set the nvs and the merge behavior that are used when routing requests through an ActionRelayMessageStreamTool.
+        /// </summary>
+        public IClientFacet SetOutboundActionNPVMergeValues(INamedValueSet outboundActionNPVMergeWithNVS, NamedValueMergeBehavior outboundActionNPVMergeBehavior = NamedValueMergeBehavior.AddAndUpdate)
+        {
+            return new BasicActionImpl(actionQ, ipf => PerformSetOutboundActionNPVMergeValues(ipf, outboundActionNPVMergeWithNVS.ConvertToReadOnly(), outboundActionNPVMergeBehavior), CurrentMethodName, ActionLoggingReference);
+        }
+
+        private string PerformSetOutboundActionNPVMergeValues(IProviderFacet ipf, INamedValueSet outboundActionNPVMergeWithNVS, NamedValueMergeBehavior outboundActionNPVMergeBehavior)
+        {
+            OutboundActionNPVMergeWithNVS = outboundActionNPVMergeWithNVS.MapNullToEmpty();
+            OutboundActionNPVMergeBehavior = outboundActionNPVMergeBehavior;
+
+            return string.Empty;
+        }
+
+        private INamedValueSet OutboundActionNPVMergeWithNVS { get; set; }
+        private NamedValueMergeBehavior OutboundActionNPVMergeBehavior { get; set; }
 
         protected override void PerformMainLoopService()
         {
@@ -587,6 +643,10 @@ namespace MosaicLib.Modular.Interconnect.Remoting
                 {
                     cst.messageStreamToolTrackerList[stream] = mstt;
 
+                    // link session state publication to to message stream tool tracker
+                    cst.session.SessionStateChangedNotificationList.OnNotify += mstt.NotifyOnSessionStateChanged;
+                    mstt.NotifyOnSessionStateChanged(this, cst.session.State);
+
                     if (mstt.messageStreamTool is MessageStreamTools.IActionRelayMessageStreamTool)
                         cst.actionRelayStreamTool = mstt.messageStreamTool as MessageStreamTools.IActionRelayMessageStreamTool;
                 }
@@ -757,7 +817,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             {
                 Log.Debug.Emit("{0}: Processing ConfigNVS updates from NamedParamValues:{1}", ipf.ToString(ToStringSelect.MesgAndDetail), npv.ToStringSML());
 
-                // update and save the ConfigNVS as read only.  Normally the npv null or empty.  This allows the GoOnline client to update information like the transport type and the transport configuration on each GoOnline call
+                // update and save the ConfigNVS as read only.  Normally the npv is null or empty.  This allows the GoOnline client to update information like the transport type and the transport configuration on each GoOnline call
                 Config.ConfigNVS = Config.ConfigNVS.MergeWith(npv, mergeBehavior: NamedValueMergeBehavior.AddAndUpdate).ConvertToReadOnly();
             }
 
@@ -919,7 +979,13 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             {
                 if (actionRelayStreamTool != null)
                 {
-                    actionRelayStreamTool.RelayServiceAction(ss.Rest, ipf);
+                    if (session == null || !session.State.IsConnected())
+                        return "The Current session is not connected [{0}]".CheckedFormat(session.SafeToString(mapNullTo:"ClientSessionIsNull"));
+
+                    if (!OutboundActionNPVMergeWithNVS.IsNullOrEmpty() && OutboundActionNPVMergeBehavior != default(NamedValueMergeBehavior))
+                        npv = npv.MergeWith(OutboundActionNPVMergeWithNVS, OutboundActionNPVMergeBehavior).MakeReadOnly();
+
+                    actionRelayStreamTool.RelayServiceAction(ss.Rest, ipf, npv);
                     InnerServiceBackground();
                     return null;
                 }
@@ -987,6 +1053,25 @@ namespace MosaicLib.Modular.Interconnect.Remoting
 
             return string.Empty;
         }
+
+        /// <summary>
+        /// Action factory method.  When the resulting action is run it will set the nvs and the merge behavior that are used when routing requests through an ActionRelayMessageStreamTool.
+        /// </summary>
+        public IClientFacet SetOutboundActionNPVMergeValues(INamedValueSet outboundActionNPVMergeWithNVS, NamedValueMergeBehavior outboundActionNPVMergeBehavior = NamedValueMergeBehavior.AddAndUpdate)
+        {
+            return new BasicActionImpl(actionQ, ipf => PerformSetOutboundActionNPVMergeValues(ipf, outboundActionNPVMergeWithNVS.ConvertToReadOnly(), outboundActionNPVMergeBehavior), CurrentMethodName, ActionLoggingReference);
+        }
+
+        private string PerformSetOutboundActionNPVMergeValues(IProviderFacet ipf, INamedValueSet outboundActionNPVMergeWithNVS, NamedValueMergeBehavior outboundActionNPVMergeBehavior)
+        {
+            OutboundActionNPVMergeWithNVS = outboundActionNPVMergeWithNVS.MapNullToEmpty();
+            OutboundActionNPVMergeBehavior = outboundActionNPVMergeBehavior;
+
+            return string.Empty;
+        }
+
+        private INamedValueSet OutboundActionNPVMergeWithNVS { get; set; }
+        private NamedValueMergeBehavior OutboundActionNPVMergeBehavior { get; set; }
 
         private bool manuallyTriggerAutoReconnectAttempt = false;
 

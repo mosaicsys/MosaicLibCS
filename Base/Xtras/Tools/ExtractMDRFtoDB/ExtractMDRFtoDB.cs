@@ -30,10 +30,12 @@ using MosaicLib;
 using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Config;
 using MosaicLib.Modular.Config.Attributes;
+using MosaicLib.Modular.Reflection.Attributes;
 using MosaicLib.PartsLib.Tools.MDRF.Common;
 using MosaicLib.PartsLib.Tools.MDRF.Reader;
 using MosaicLib.Time;
 using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
 using MosaicLib.Utils.StringMatching;
 
 using System.Data.SQLite;
@@ -42,11 +44,18 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
 {
     public static class ExtractMDRFtoDB
     {
+        /// <summary>
+        /// Defines the supported data file output formats.
+        /// <para/>None (0), SQLite3, SQLite, CSV
+        /// </summary>
         public enum DataFileType : int
         {
             None = 0,
+            
             SQLite3,
-            SQLite = SQLite3,
+            SQLite,
+
+            CSV,
         }
 
         /// <summary>
@@ -105,30 +114,31 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
             public char ToSplitChar = ':';
 
             [ConfigItem]
-            public string IncludeGroupSpecStr { get { return includeGroupSpecStr; } set { includeGroupSpecStr = string.Join(",", new[] { includeGroupSpecStr, value }.Where(str => str.IsNeitherNullNorEmpty())); } }
+            public string IncludeGroupSpecStr { get; set; }
 
             [ConfigItem]
-            public string IncludeIOPointSpecStr { get { return includeIOPointSpecStr; } set { includeIOPointSpecStr = string.Join(",", new[] { includeIOPointSpecStr, value }.Where(str => str.IsNeitherNullNorEmpty())); } }
+            public string IncludeIOPointSpecStr { get; set; }
 
             [ConfigItem]
-            public string IncludeIOPointPrefixSpecStr { get { return includeIOPointPrefixSpecStr; } set { includeIOPointPrefixSpecStr = string.Join(",", new[] { includeIOPointPrefixSpecStr, value }.Where(str => str.IsNeitherNullNorEmpty())); } }
+            public string IncludeIOPointPrefixSpecStr { get; set; }
 
             [ConfigItem]
-            public string IncludeIOPointContainsSpecStr { get { return includeIOPointContainsSpecStr; } set { includeIOPointContainsSpecStr = string.Join(",", new[] { includeIOPointContainsSpecStr, value }.Where(str => str.IsNeitherNullNorEmpty())); } }
+            public string IncludeIOPointContainsSpecStr { get; set; }
 
             [ConfigItem]
-            public string ExcludeIOPointContainsSpecStr { get { return excludeIOPointContainsSpecStr; } set { excludeIOPointContainsSpecStr = string.Join(",", new[] { excludeIOPointContainsSpecStr, value }.Where(str => str.IsNeitherNullNorEmpty())); } }
+            public string ExcludeIOPointContainsSpecStr { get; set; }
 
             [ConfigItem]
-            public string IncludeOccurrenceSpecStr { get { return includeOccurrenceSpecStr; } set { includeOccurrenceSpecStr = string.Join(",", new[] { includeOccurrenceSpecStr, value }.Where(str => str.IsNeitherNullNorEmpty())); } }
+            public string IncludeOccurrenceSpecStr { get; set; }
 
             [ConfigItem]
-            public string MapSpecStr { get { return mapSpecStr; } set { mapSpecStr = string.Join(",", new[] { mapSpecStr, value }.Where(str => str.IsNeitherNullNorEmpty())); } }
+            public string MapSpecStr { get; set; }
 
             [ConfigItem]
-            public int MaxThreadsToUse;
+            public int MaxThreadsToUse { get; set; }
 
-            private string includeGroupSpecStr, includeIOPointSpecStr, includeIOPointPrefixSpecStr, includeIOPointContainsSpecStr, excludeIOPointContainsSpecStr, includeOccurrenceSpecStr, mapSpecStr;
+            [ConfigItem]
+            public bool AddOccurrenceKeyColumns { get; set; }
 
             public Settings UpdateFromConfig(IConfig iConfig = null, bool setupForUse = true)
             {
@@ -268,7 +278,6 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
 
         private static string appName = "AppNameNotFound";
         private static System.Reflection.Assembly currentExecAssy = System.Reflection.Assembly.GetExecutingAssembly();
-        private static string [] currentExecAssyFullNameSplit = currentExecAssy.FullName.Split(' ').Select(item => item.Trim(',')).ToArray();
 
         public class ErrorMessageException : System.Exception
         {
@@ -304,14 +313,19 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                 var iniFileNameArray = argList.FilterAndRemove(arg => arg.EndsWith(".ini", StringComparison.InvariantCultureIgnoreCase)).ToArray();
                 if (iniFileNameArray.IsNullOrEmpty())
                 {
-                    Console.WriteLine("NOTE: operating in direct configruation mode.  no configuration .ini file(s) were specified on the command line.  (See ReadMe.txt for details)");
+                    Console.WriteLine("NOTE: operating in direct configruation mode.  no configuration .ini file was specified on the command line.  (See ExtractMDRFtoDB ReadMe.txt for details)");
+                    Console.WriteLine();
+                }
+                else if (iniFileNameArray.Length > 1)
+                {
+                    Console.WriteLine("NOTE: more than one configuration .ini file was specified on the command line.  This program will only use the first such file.  (See ExtractMDRFtoDB ReadMe.txt for details)");
                     Console.WriteLine();
                 }
 
                 Settings settings = new Settings().UpdateFromConfig(Config.Instance, setupForUse: false);
                 bool havePerformedCDalready = false;
 
-                foreach (var iniFileName in iniFileNameArray)
+                foreach (var iniFileName in iniFileNameArray.Take(1))
                 {
                     var localIConfig = new MosaicLib.Modular.Config.ConfigBase("LocalConfig_{0}".CheckedFormat(System.IO.Path.GetFileNameWithoutExtension(iniFileName)));
                     localIConfig.AddProvider(new MosaicLib.Modular.Config.IniFileConfigKeyProvider("IniFileCKP", iniFileName));
@@ -335,20 +349,26 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
 
                 settings.SetupForUse();
 
-                Console.WriteLine("{0} [{1}]".CheckedFormat(currentExecAssyFullNameSplit.SafeAccess(0), currentExecAssyFullNameSplit.SafeAccess(1)));
+                Console.WriteLine(currentExecAssy.GetSummaryNameAndVersion());
                 Console.WriteLine();
+
+                if (settings.DataFileName.IsNullOrEmpty() && settings.DataFileType != DataFileType.None)
+                {
+                    WriteUsage("Given {0} DataFileName must be a non-empty string".CheckedFormat(settings.DataFileType));
+                    throw new ExitException();
+                }
 
                 switch (settings.DataFileType)
                 {
                     case DataFileType.SQLite3: 
-                        if (settings.DataFileName.IsNullOrEmpty())
-                        {
-                            WriteUsage("Given {0} DataFileName must be a non-empty string".CheckedFormat(settings.DataFileType));
-                            throw new ExitException();
-                        }
-
-                        dataWriter = new SQLiteDataWriter(settings); 
+                    case DataFileType.SQLite:
+                        dataWriter = new SQLite3DataWriter(settings); 
                         break;
+
+                    case DataFileType.CSV:
+                        dataWriter = new CSVDataWriter(settings);
+                        break;
+
                     default: 
                         break;
                 }
@@ -359,7 +379,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                     throw new ExitException();
                 }
 
-                dataWriter.WriteMessage("{0} [{1}] being run with arguments:{2}".CheckedFormat(currentExecAssyFullNameSplit.SafeAccess(0), currentExecAssyFullNameSplit.SafeAccess(1), string.Join(" ", entryArgs)), writeToConsole: false);
+                dataWriter.WriteMessage("{0} being run with arguments: {1}".CheckedFormat(currentExecAssy.GetSummaryNameAndVersion(), string.Join(" ", entryArgs)), writeToConsole: false);
                 dataWriter.WriteMessage(" and current directory:{0}".CheckedFormat(System.IO.Directory.GetCurrentDirectory()), writeToConsole: false);
 
                 var mdrfFileNames = GetFileNamesFromArgs(argList.ToArray());
@@ -379,42 +399,92 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
 
                 DateTime dateTimeNow = DateTime.Now;
 
-                Parallel.ForEach(mdrfFileNames, new ParallelOptions() { MaxDegreeOfParallelism = maxThreadsToUse }, 
-                    mdrfFileName =>
+                var initialWorkItemsArray = mdrfFileNames.Select(mdrfFileName => new PendingWorkItem() { mdrfFileName = mdrfFileName }).ToArray();
+
+                Parallel.ForEach(initialWorkItemsArray, new ParallelOptions() { MaxDegreeOfParallelism = maxThreadsToUse },
+                    item =>
                     {
                         QpcTimeStamp lapTime0 = QpcTimeStamp.Now;
 
+                        var mdrfFileName = item.mdrfFileName;
                         var mdrfReader = new MDRFFileReader(mdrfFileName, mdrfFileReaderBehavior: MDRFFileReaderBehavior.AttemptToDecodeOccurrenceBodyAsNVS);
+                        item.mdrfFileReader = mdrfReader;
                         var fileKBytes = mdrfReader.FileLength * (1.0 / 1024.0);
 
                         QpcTimeStamp lapTime1 = QpcTimeStamp.Now;
                         double elapsed1 = (lapTime1 - lapTime0).TotalSeconds;
 
                         Console.WriteLine("Loaded index for {0}: Size:{1:f3}k StartTime:{2} Length:{3:f3} hours [took:{4:f3} sec]".CheckedFormat(mdrfFileName, fileKBytes, mdrfReader.DateTimeInfo.UTCDateTime.ToLocalTime(), mdrfReader.FileIndexInfo.LastBlockInfo.BlockDeltaTimeStamp.FromSeconds().TotalHours, elapsed1));
-
-                        var contents = ReadContents(dateTimeNow, settings, mdrfReader);
-
-                        if (contents != null)
-                        {
-                            QpcTimeStamp lapTime2 = QpcTimeStamp.Now;
-                            double elapsed2 = (lapTime2 - lapTime1).TotalSeconds;
-
-                            Console.WriteLine("Loaded contents for {0}: Size:{1:f3}k [took:{2:f3} sec, avgRate:{3:f3} k/s]".CheckedFormat(mdrfFileName, fileKBytes, elapsed2, fileKBytes * (elapsed2.SafeOneOver())));
-
-                            dataWriter.WriteContent(contents);
-
-                            QpcTimeStamp lapTime3 = QpcTimeStamp.Now;
-                            double elapsed3 = (lapTime3 - lapTime2).TotalSeconds;
-
-                            Console.WriteLine("Saved contents for {0}: Size:{1:f3}k [took:{2:f3} sec, avgRate:{3:f3} k/s]".CheckedFormat(mdrfFileName, fileKBytes, elapsed3, fileKBytes * (elapsed3.SafeOneOver())));
-
-                            totalBytes.Add((ulong)mdrfReader.FileLength);
-                        }
-                        else
-                        {
-                            Console.WriteLine("No contents processed for {0}".CheckedFormat(mdrfFileName));
-                        }
                     });
+
+                var sortedWorkItemsArray = initialWorkItemsArray.OrderBy(item => item.mdrfFileReader.DateTimeInfo.UTCDateTime).ToArray();
+
+                for (; ; )
+                {
+                    int numWritten = sortedWorkItemsArray.Count(item => item.written);
+
+                    if (numWritten >= sortedWorkItemsArray.Length)
+                        break;
+
+                    int numReadOrWritePending = sortedWorkItemsArray.Count(item => item.readPosted && !item.written);
+                    var nextToRead = sortedWorkItemsArray.FirstOrDefault(item => !item.readPosted);
+
+                    if (nextToRead != null && numReadOrWritePending < maxThreadsToUse)
+                    {
+                        nextToRead.readPosted = true;
+
+                        System.Threading.ThreadPool.QueueUserWorkItem((ignoreMe) =>
+                            {
+                                var mdrfFileName = nextToRead.mdrfFileName;
+                                var mdrfReader = nextToRead.mdrfFileReader;
+                                var fileKBytes = mdrfReader.FileLength * (1.0 / 1024.0);
+
+                                QpcTimeStamp lapTime1 = QpcTimeStamp.Now;
+
+                                var contents = ReadContents(dateTimeNow, settings, mdrfReader);
+
+                                if (contents != null)
+                                {
+                                    QpcTimeStamp lapTime2 = QpcTimeStamp.Now;
+                                    double elapsed2 = (lapTime2 - lapTime1).TotalSeconds;
+
+                                    Console.WriteLine("Loaded contents for {0}: Size:{1:f3}k [took:{2:f3} sec, avgRate:{3:f3} k/s]".CheckedFormat(mdrfFileName, fileKBytes, elapsed2, fileKBytes * (elapsed2.SafeOneOver())));
+
+                                    nextToRead.mdrfContent = contents;
+                                }
+                                else
+                                {
+                                    Console.WriteLine("No contents processed for {0}".CheckedFormat(mdrfFileName));
+                                    nextToRead.written = true;
+                                }
+                            });
+                    }
+
+                    var nextToWrite = sortedWorkItemsArray.FirstOrDefault(item => !item.written && item.mdrfContent != null);
+
+                    if (nextToWrite != null)
+                    {
+                        var mdrfFileName = nextToWrite.mdrfFileName;
+                        var mdrfReader = nextToWrite.mdrfFileReader;
+                        var contents = nextToWrite.mdrfContent;
+                        var fileKBytes = mdrfReader.FileLength * (1.0 / 1024.0);
+                        QpcTimeStamp lapTime2 = QpcTimeStamp.Now;
+
+                        dataWriter.WriteContent(contents);
+                        nextToWrite.written = true;
+                        nextToWrite.mdrfContent = null; // allow GC to reclaim this space now.
+
+                        QpcTimeStamp lapTime3 = QpcTimeStamp.Now;
+                        double elapsed3 = (lapTime3 - lapTime2).TotalSeconds;
+
+                        Console.WriteLine("Saved contents for {0}: Size:{1:f3}k [took:{2:f3} sec, avgRate:{3:f3} k/s]".CheckedFormat(mdrfFileName, fileKBytes, elapsed3, fileKBytes * (elapsed3.SafeOneOver())));
+
+                        totalBytes.Add((ulong)mdrfReader.FileLength);
+                    }
+
+                    // prevent this method from spinning overly fast.
+                    (0.1).FromSeconds().Sleep();
+                }
 
                 Fcns.DisposeOfObject(ref dataWriter);
 
@@ -452,6 +522,15 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                 (3.0).FromSeconds().Sleep();
         }
 
+        private class PendingWorkItem
+        {
+            public string mdrfFileName;
+            public MDRFFileReader mdrfFileReader;
+            public bool readPosted;
+            public volatile MDRFContent mdrfContent;
+            public volatile bool written;
+        }
+
         private static void WriteUsage(string errorMesg = null)
         {
             if (errorMesg.IsNeitherNullNorEmpty())
@@ -461,11 +540,11 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
             }
 
             Console.WriteLine("Usage: {0} [configFileName.ini] [fileName.mdrf] ...".CheckedFormat(appName));
-            Console.WriteLine("    This program reads all of the ini file contents to configure its operation and then processes all of the indicated mdrf files using that selected configuration.");
-            Console.WriteLine("    See program ReadMe.txt for more details on the operation and use of this program.");
+            Console.WriteLine("    This program generally reads the ini file contents to configure its operation and then processes all of the indicated mdrf files using that selected configuration.");
+            Console.WriteLine("    See 'ExtractMDRFtoDB ReadMe.txt' for more details on the operation and use of this program.  This file is generally provided with the executable.");
             Console.WriteLine();
 
-            Console.WriteLine("Assembly: {0} [{1}]", currentExecAssyFullNameSplit.SafeAccess(0), currentExecAssyFullNameSplit.SafeAccess(1));
+            Console.WriteLine("Assembly: {0}", currentExecAssy.GetSummaryNameAndVersion());
         }
 
         private static string [] GetFileNamesFromArgs(string [] args)
@@ -501,6 +580,8 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
 
             return fileNameList.ToArray();
         }
+
+        #region ReadContents, MDRFContent, VCEHelper, GroupDataAccumulator, OccurrenceAccumulator, MessageAccumulator, VCSetDataRow, VCDataRow, ProcessContentEventHandlerDelegate (et. al.)
 
         private static MDRFContent ReadContents(DateTime dateTimeNow, Settings settings, MDRFFileReader mdrfFileReader)
         {
@@ -788,7 +869,8 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                 FileDeltaTimeStamp = pceData.FileDeltaTimeStamp;
                 PCE = pceData.PCE;
 
-                VC = vceHelper.Normalize(pceData.VC);
+                VC = pceData.VC;
+                NormalizedVC = vceHelper.Normalize(pceData.VC);
             }
 
             public UInt64 SeqNum { get; set; }
@@ -798,6 +880,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
             public ProcessContentEvent PCE { get; set; }
 
             public ValueContainer VC { get; set; }
+            public ValueContainer NormalizedVC { get; set; }
         }
 
         private static void ProcessContentEventHandlerDelegate(MDRFContent contentBuilder, ProcessContentEventData pceData, Settings settings)
@@ -826,6 +909,8 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
             }
         }
 
+        #endregion
+
         public interface IDataWriter : IDisposable
         {
             void WriteContent(MDRFContent mdrfContent);
@@ -834,10 +919,12 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
             void WriteError(string errorMesg, bool writeToConsole = true, Logging.IMesgEmitter emitter = null);
         }
 
-        public class SQLiteDataWriter : DisposableBase, IDataWriter
+        public class SQLite3DataWriter : DisposableBase, IDataWriter
         {
-            public SQLiteDataWriter(Settings settings)
+            public SQLite3DataWriter(Settings settings)
             {
+                Settings = settings;
+
                 if (settings.DataFileType != DataFileType.SQLite3)
                     throw new System.ArgumentException("{0} cannot be used with DataFileType.{1}".CheckedFormat(Fcns.CurrentClassLeafName, settings.DataFileType));
 
@@ -900,28 +987,31 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                 var tableNames = getTablesResults.Select(vcArray => vcArray.FirstOrDefault().GetValue<string>(rethrow: false)).ToArray();
             }
 
+            Settings Settings { get; set; }
+
             public void WriteContent(MDRFContent mdrfContent)
             {
                 DateTime fileBaseTime = mdrfContent.MDRFFileReader.DateTimeInfo.UTCDateTime.ToLocalTime();
 
-                // Add file to file table
-                AddMDRFFileToTable(mdrfContent, fileBaseTime);
+                lock (mutex)
+                {
+                    // Add file to file table
+                    AddMDRFFileToTable(mdrfContent, fileBaseTime);
 
-                // add any messages
-                if (mdrfContent.MessageList.Count > 0)
-                    AddMessages(mdrfContent.MessageList, fileBaseTime);
+                    // add any messages
+                    if (mdrfContent.MessageList.Count > 0)
+                        AddMessages(mdrfContent.MessageList, fileBaseTime);
 
-                // add any errors
-                if (mdrfContent.ErrorList.Count > 0)
-                    AddErrors(mdrfContent.ErrorList, fileBaseTime);
+                    // add any errors
+                    if (mdrfContent.ErrorList.Count > 0)
+                        AddErrors(mdrfContent.ErrorList, fileBaseTime);
 
-                // for each accumulated occurrence - add the data to the corresponding table
-                foreach (var occurrenceAccumulator in mdrfContent.OccurrenceAccumulatorArray.Where(oa => oa.RecordThisOccurrence))
-                    AddAccumulatedOccurrence(occurrenceAccumulator, fileBaseTime);
+                    AddAccumulatedOccurrences(mdrfContent.OccurrenceAccumulatorArray.Where(oa => oa.RecordThisOccurrence), fileBaseTime);
 
-                // for each accumulated group - add the data to the corresponding table
-                foreach (var groupDataAccumulator in mdrfContent.GroupDataAccumulatorArray.Where(gda => gda.RecordThisGroup))
-                    AddAccumulatedGroupData(mdrfContent, groupDataAccumulator, fileBaseTime);
+                    // for each accumulated group - add the data to the corresponding table
+                    foreach (var groupDataAccumulator in mdrfContent.GroupDataAccumulatorArray.Where(gda => gda.RecordThisGroup))
+                        AddAccumulatedGroupData(mdrfContent, groupDataAccumulator, fileBaseTime);
+                }
             }
 
             public void WriteMessage(string mesg, bool writeToConsole = true, Logging.IMesgEmitter emitter = null)
@@ -1035,22 +1125,65 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                 }
             }
 
-            public void AddAccumulatedOccurrence(OccurrenceAccumulator occurrenceAccumulator, DateTime fileBaseTime)
+            private void AddAccumulatedOccurrences(IEnumerable<OccurrenceAccumulator> occurrenceAccumulatorSet, DateTime fileBaseTime)
             {
+                VCEHelper vceHelper = new VCEHelper();
+                var flattenedSortedArray = occurrenceAccumulatorSet.SelectMany(accum => accum.vcRowList.Select(vcRow => Tuple.Create(accum.OccurrenceInfo.Name, fileBaseTime + vcRow.FileDeltaTimeStamp.FromSeconds(), vcRow.NormalizedVC.ValueAsObject, vcRow.VC.GetValue<INamedValueSet>(rethrow: false).MapNullToEmpty().BuildDictionary()))).OrderBy(t => t.Item2).ToArray();
+
+                Dictionary<string, string> keyColumnNameSet = new Dictionary<string, string>();
+
+                if (Settings.AddOccurrenceKeyColumns)
+                {
+                    foreach (var t in flattenedSortedArray)
+                        t.Item4.DoForEach(nv => keyColumnNameSet[nv.Name] = "nv.{0}".CheckedFormat(nv.Name));
+                }
+
                 lock (mutex)
                 {
-                    var insertOccurrenceCmd = new SQLiteCommand(dbConn) { CommandText = "INSERT INTO MDRF_Occurrences (DateTime, Name, Value) VALUES (@dateTime, @name, @value)" };
-                    var dateTimeParam = new SQLiteParameter("dateTime");
-                    var nameParam = new SQLiteParameter("name");
-                    var valueParam = new SQLiteParameter("value");
-                    insertOccurrenceCmd.Parameters.AddRange(new[] { dateTimeParam, nameParam, valueParam });
+                    // get existing column names
+                    var getTableInfoCmd = new SQLiteCommand(dbConn) { CommandText = "PRAGMA table_info(MDRF_Occurrences)" };
+                    var getTableInfoReader = getTableInfoCmd.ExecuteReader();
+                    var getTableInfoResults = getTableInfoReader.GenerateValuesEnumerator().ToArray();
+                    var existingColumnNameSet = new HashSet<string>(getTableInfoResults.Select(vcArray => vcArray.SafeAccess(1).GetValue<string>(rethrow: false)));
 
-                    nameParam.Value = occurrenceAccumulator.OccurrenceInfo.Name;
+                    // add missing columns as needed.
+                    foreach (var columnName in keyColumnNameSet.Values)
+                    {
+                        if (!existingColumnNameSet.Contains(columnName))
+                        {
+                            try
+                            {
+                                var addColumnCmd = new SQLiteCommand(dbConn) { CommandText = "ALTER TABLE MDRF_Occurrences ADD COLUMN '{0}' TEXT".CheckedFormat(columnName) };
+
+                                addColumnCmd.ExecuteNonQuery();
+
+                                existingColumnNameSet.Add(columnName);
+                            }
+                            catch (SQLiteException ex)
+                            {
+                                // generally because we have attempted to add the same column twice.
+                                WriteError("Error adding column '{0}' TEXT to table MDRF_Occurrences: {1}".CheckedFormat(columnName, ex.ToString(ExceptionFormat.TypeAndMessage)));
+                            }
+                        }
+                    }
+
+                    var insertCmdColumnNameArray = new string[] { "DateTime", "Name", "Value" }.Concat(keyColumnNameSet.Values).ToArray();
+                    var insertCmdColumnNamesString = string.Join(", ", insertCmdColumnNameArray.Select(name => "'{0}'".CheckedFormat(name)));
+                    var insertCmdQsString = string.Join(", ", insertCmdColumnNameArray.Select(columnName => "?"));
+                    var insertOccurrenceCmd = new SQLiteCommand(dbConn) { CommandText = "INSERT INTO MDRF_Occurrences ({0}) VALUES ({1})".CheckedFormat(insertCmdColumnNamesString, insertCmdQsString) };
+
+                    var dateTimeParam = new SQLiteParameter();
+                    var nameParam = new SQLiteParameter();
+                    var valueParam = new SQLiteParameter();
+                    var keyParamDictionary = new Dictionary<string, SQLiteParameter>().SafeAddRange(keyColumnNameSet.Select(kvp => KVP.Create(kvp.Key, new SQLiteParameter())));
+                    var keyParams = keyParamDictionary.Select(kvp => kvp.Value).ToArray();
+
+                    insertOccurrenceCmd.Parameters.AddRange(new[] { dateTimeParam, nameParam, valueParam }.Concat(keyParams).ToArray());
 
                     var transaction = dbConn.BeginTransaction();
                     int count = 0;
                     {
-                        foreach (var vcRow in occurrenceAccumulator.vcRowList)
+                        foreach (var t in flattenedSortedArray)
                         {
                             if (++count % 2000 == 0)
                             {
@@ -1058,8 +1191,17 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                                 transaction = dbConn.BeginTransaction();
                             }
 
-                            dateTimeParam.Value = fileBaseTime + vcRow.FileDeltaTimeStamp.FromSeconds();
-                            valueParam.Value = vcRow.VC.ValueAsObject;
+                            keyParams.DoForEach(param => param.Value = string.Empty);
+
+                            nameParam.Value = t.Item1;
+                            dateTimeParam.Value = t.Item2;
+                            valueParam.Value = t.Item3;
+
+                            foreach (var kvp in keyParamDictionary)
+                            {
+                                if (t.Item4.Contains(kvp.Key))
+                                    kvp.Value.Value = vceHelper.Normalize(t.Item4[kvp.Key].VC).ValueAsObject.SafeToString();
+                            }
 
                             insertOccurrenceCmd.ExecuteNonQuery();
                         }
@@ -1175,8 +1317,155 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
             object mutex = new object();
 
             SQLiteConnection dbConn;
+        }
 
-            Dictionary<string, System.Data.DataTable> dataTableDictionary = new Dictionary<string, System.Data.DataTable>();
+        public class CSVDataWriter : DisposableBase, IDataWriter
+        {
+            public CSVDataWriter(Settings settings)
+            {
+                Settings = settings;
+                extensionToUse = System.IO.Path.GetExtension(Settings.DataFileName).MapNullOrEmptyTo(".csv");
+                baseFileName = Settings.DataFileName.RemoveSuffixIfNeeded(extensionToUse);
+
+                AddExplicitDisposeAction(() =>
+                    {
+                        Fcns.DisposeOfObject(ref occurrenceFileStream);
+                        Fcns.DisposeOfObject(ref groupFileStreamList);
+                    });
+            }
+
+            Settings Settings { get; set; }
+            string baseFileName, extensionToUse;
+
+            public void WriteContent(MDRFContent mdrfContent)
+            {
+                DateTime fileBaseTime = mdrfContent.MDRFFileReader.DateTimeInfo.UTCDateTime.ToLocalTime();
+
+                lock (mutex)
+                {
+                    AddAccumulatedOccurrences(mdrfContent.OccurrenceAccumulatorArray.Where(oa => oa.RecordThisOccurrence), fileBaseTime);
+
+                    // for each accumulated group - add the data to the corresponding table
+                    foreach (var groupDataAccumulator in mdrfContent.GroupDataAccumulatorArray.Where(gda => gda.RecordThisGroup))
+                        AddAccumulatedGroupData(mdrfContent, groupDataAccumulator, fileBaseTime);
+                }
+            }
+
+            public void WriteMessage(string mesg, bool writeToConsole = true, Logging.IMesgEmitter emitter = null)
+            {
+                if (writeToConsole)
+                    Console.WriteLine(mesg);
+
+                if (emitter != null && emitter.IsEnabled)
+                    emitter.Emit(mesg);
+            }
+
+            public void WriteError(string errorMesg, bool writeToConsole = true, Logging.IMesgEmitter emitter = null)
+            {
+                if (writeToConsole)
+                    Console.WriteLine(errorMesg);
+
+                if (emitter != null && emitter.IsEnabled)
+                    emitter.Emit(errorMesg);
+            }
+
+            private void AddAccumulatedOccurrences(IEnumerable<OccurrenceAccumulator> occurrenceAccumulatorSet, DateTime fileBaseTime)
+            {
+                var flattenedSortedArray = occurrenceAccumulatorSet.SelectMany(accum => accum.vcRowList.Select(vcRow => Tuple.Create(accum.OccurrenceInfo.Name, fileBaseTime + vcRow.FileDeltaTimeStamp.FromSeconds(), vcRow.NormalizedVC.ValueAsObject))).OrderBy(t => t.Item2).ToArray();
+
+                lock (mutex)
+                {
+                    if (occurrenceFileStream == null)
+                    {
+                        string filePath = string.Concat(baseFileName, "_Occurrences", extensionToUse);
+
+                        occurrenceFileStream = System.IO.File.CreateText(filePath);
+
+                        // write the header.
+                        occurrenceFileStream.WriteLine("DateTime,Name,Value");
+                    }
+
+                    foreach (var t in flattenedSortedArray)
+                    {
+                        occurrenceFileStream.WriteLine("{0:MM/dd/yyyy HH:mm:ss.fff},{1},{2}".CheckedFormat(t.Item2, t.Item1, t.Item3));
+                    }
+
+                    occurrenceFileStream.Flush();
+                }
+            }
+
+            private void AddAccumulatedGroupData(MDRFContent mdrfContent, GroupDataAccumulator groupDataAccumulator, DateTime fileBaseTime)
+            {
+                lock (mutex)
+                {
+                    var groupWriteHelper = groupWriteHelperDictionary.SafeTryGetValue(groupDataAccumulator.MappedGroupName);
+
+                    if (groupWriteHelper == null)
+                    {
+                        string filePath = string.Concat(baseFileName, "_", groupDataAccumulator.MappedGroupName, extensionToUse);
+
+                        groupWriteHelper = new GroupWriteHelper()
+                        {
+                            mappedGroupName = groupDataAccumulator.MappedGroupName,
+                            fileStream = System.IO.File.CreateText(filePath),
+                            columnNameArray = groupDataAccumulator.MappedGroupPointInfoArray.Select(mgpi => mgpi.MappedPointName).ToArray(),
+                        };
+
+                        groupWriteHelperDictionary[groupWriteHelper.mappedGroupName] = groupWriteHelper;
+
+                        // write the header.
+                        groupWriteHelper.fileStream.WriteLine(string.Concat("DateTime,", string.Join(",", groupWriteHelper.columnNameArray)));
+                    }
+
+                    // build mapping from this gda's MappedGroupPointInfoArray to the column indexes that the CSV uses.
+                    var columnNameAndIndexKVPSet = groupDataAccumulator.MappedGroupPointInfoArray.Select((mgpi, columnIndex) => KVP.Create(mgpi.MappedPointName, columnIndex)).ToArray();
+                    var mappedPointNameToIndexDictionary = new Dictionary<string, int>().SafeAddRange(columnNameAndIndexKVPSet);
+
+                    int[] reverseMappedPointIndexByColumn = groupWriteHelper.columnNameArray.Select(columnName => mappedPointNameToIndexDictionary.SafeTryGetValue(columnName, fallbackValue: -1)).ToArray();
+
+                    var fileStream = groupWriteHelper.fileStream;
+                    foreach (var row in groupDataAccumulator.dataRowList)
+                    {
+                        fileStream.Write("{0:MM/dd/yyyy HH:mm:ss.fff}".CheckedFormat(fileBaseTime + row.FileDeltaTimeStamp.FromSeconds()));
+                        foreach (var mappedPointIndex in reverseMappedPointIndexByColumn)
+                        {
+                            var vc = row.VCArray.SafeAccess(mappedPointIndex);
+
+                            fileStream.Write(",");
+
+                            switch (vc.cvt)
+                            {
+                                case ContainerStorageType.None:
+                                    break;
+                                    
+                                case ContainerStorageType.Boolean:
+                                    fileStream.Write(vc.u.b.MapToInt());
+                                    break;
+
+                                default:
+                                    fileStream.Write(vc.ValueAsObject.SafeToString());
+                                    break;
+                            }
+                        }
+
+                        fileStream.WriteLine();
+                    }
+                }
+            }
+
+            object mutex = new object();
+
+            System.IO.StreamWriter occurrenceFileStream;
+
+            DisposableList<System.IO.StreamWriter> groupFileStreamList = new DisposableList<StreamWriter>();
+            Dictionary<string, GroupWriteHelper> groupWriteHelperDictionary = new Dictionary<string, GroupWriteHelper>();
+
+            private class GroupWriteHelper
+            {
+                public string mappedGroupName;
+                public System.IO.StreamWriter fileStream;
+                public string[] columnNameArray;
+            }
         }
     }
 

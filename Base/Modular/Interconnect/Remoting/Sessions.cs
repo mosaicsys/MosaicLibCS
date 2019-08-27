@@ -233,6 +233,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
 
         SessionState State { get; }
         ISequencedObjectSource<SessionState, int> StatePublisher { get; }
+        IEventHandlerNotificationList<SessionState> SessionStateChangedNotificationList { get; }
 
         void SetState(QpcTimeStamp qpcTimeStamp, SessionStateCode stateCode, string reason, TerminationReasonCode terminationReasonCode = TerminationReasonCode.None);
 
@@ -663,6 +664,11 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
                 SessionStateIVA = ivi.GetValueAccessor<ISessionState>("{0}.SessionState".CheckedFormat(HostName)).Set((ISessionState) State);
         }
 
+        public override string ToString()
+        {
+            return "{0} Session {1} {2}".CheckedFormat(IsClientSession ? "Client" : "Server", SessionName.MapNullOrEmptyTo("[SessionNameIsNullOrEmpty]"), State);
+        }
+
         public bool IsClientSession { get; private set; }
         public string HostName { get; private set; }
         public string HostUUID { get; private set; }
@@ -734,8 +740,12 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
 
         public SessionState State { get { return _state; } private set { _statePublisher.Object = (_state = value); } }
         private SessionState _state = default(SessionState);
+
         public ISequencedObjectSource<SessionState, int> StatePublisher { get { return _statePublisher; } }
         private GuardedSequencedValueObject<SessionState> _statePublisher = new GuardedSequencedValueObject<SessionState>(default(SessionState));
+
+        public IEventHandlerNotificationList<SessionState> SessionStateChangedNotificationList { get { return _sessionStateChangedNotificationList; } }
+        private EventHandlerNotificationList<SessionState> _sessionStateChangedNotificationList = new EventHandlerNotificationList<SessionState>();
 
         public SessionStateCode StateCode { get { return State.StateCode; } }
 
@@ -793,6 +803,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
                 useEmitter.Emit("{0} State changed to {1} [from: {2}, reason: {3}]", SessionName, stateCode, entryState, reason ?? "NoReasonGiven");
             else
                 useEmitter.Emit("{0} State changed to {1}, {2} [from: {3}, reason: {4}]", SessionName, stateCode, terminationReasonCode, entryState, reason ?? "NoReasonGiven");
+
+            _sessionStateChangedNotificationList.Notify(State);
         }
 
         public void TouchStateTime(QpcTimeStamp qpcTimeStamp, string reason)

@@ -33,7 +33,7 @@ using Newtonsoft.Json;
 namespace Mosaic.JsonDotNet
 {
     /// <summary>
-    /// Provides a type of DicationaryConfigKeyProvider obtained by using a DataContractPersistentJsonDotNetTextFileRingStorageAdapter based on the ConfigKeyStore file format.
+    /// Provides a type of DictionaryConfigKeyProvider obtained by using a DataContractPersistentJsonDotNetTextFileRingStorageAdapter based on the ConfigKeyStore file format.
     /// Normally this provider is used for read/write behavior and is most easily used to support EnsureExists usage patterns and/or moderate to high write rate usages
     /// with the same file IO failure handling that is provided through the use of the PeristentObjectFileRing.
     /// </summary>

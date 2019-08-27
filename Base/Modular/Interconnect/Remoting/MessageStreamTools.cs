@@ -45,6 +45,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
     public interface IMessageStreamTool : IServiceable
     {
+        void NotifyOnSessionStateChanged(object source, Sessions.SessionState eventArgs);
         void ResetState(QpcTimeStamp qpcTimeStamp, ResetType resetType, string reason = null, string extra = null);
         void HandleInboundMessage(QpcTimeStamp qpcTimeStamp, Messages.Message mesg);
         Messages.Message ServiceAndGenerateNextMessageToSend(QpcTimeStamp qpcTimeStamp);
@@ -185,8 +186,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
     /// <summary>This intercace allows a Remoting part to make use of an Action Relay Stream Tool to relay actions that are give to the part to the other end.</summary>
     public interface IActionRelayMessageStreamTool
     {
-        /// <summary>Consumes, and relays, the given <paramref name="action"/>'s <paramref name="requestStr"/> and NamedParamValues to the other end and relays all action state udpates back to this end until the action is complete.</summary>
-        void RelayServiceAction(string requestStr, IProviderFacet action);
+        /// <summary>Consumes, and relays, the given <paramref name="action"/>'s <paramref name="requestStr"/> and <paramref name="npv"/> to the other end and relays all action state udpates back to this end until the action is complete.</summary>
+        void RelayServiceAction(string requestStr, IProviderFacet action, INamedValueSet npv);
     }
 
     #endregion
@@ -625,11 +626,11 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
         #region IActionRelayMessageStreamTool implementation
 
-        /// <summary>Consumes, and relays, the given <paramref name="ipf"/>'s <paramref name="requestStr"/> and NamedParamValues to the other end and relays all action state udpates back to this end until the action is complete.</summary>
-        public void RelayServiceAction(string requestStr, IProviderFacet ipf)
+        /// <summary>Consumes, and relays, the given <paramref name="ipf"/>'s <paramref name="requestStr"/> and <paramref name="npvIn"/> to the other end and relays all action state udpates back to this end until the action is complete.</summary>
+        public void RelayServiceAction(string requestStr, IProviderFacet ipf, INamedValueSet npvIn)
         {
             ulong actionID = ++providerFacetActionIDGen;
-            NamedValueSet npv = ipf.NamedParamValues.ConvertToReadOnly(mapNullToEmpty: false).MapEmptyToNull();
+            NamedValueSet npv = npvIn.ConvertToReadOnly(mapNullToEmpty: false).MapEmptyToNull();
 
             var request = new RemoteServiceActionRequest()
             {
@@ -660,11 +661,28 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
         #endregion
 
-        #region InnerHandleResetState
+        #region NotifyOnSessionStateChanged, InnerHandleResetState, CancelPendingActions
+
+        public override void NotifyOnSessionStateChanged(object source, Sessions.SessionState eventArgs)
+        {
+            base.NotifyOnSessionStateChanged(source, eventArgs);
+
+            if (!LastNotifiedSessionState.IsConnected())
+                CancelPendingActions(QpcTimeStamp.Now, "The associated session is no longer connected [{0}]".CheckedFormat(LastNotifiedSessionState));
+        }
 
         public override void InnerHandleResetState(QpcTimeStamp qpcTimeStamp, ResetType resetType, string reason)
         {
-            providerFacetActionDictionary.ValueArray.DoForEach(item => item.ipf.CompleteRequest("{0}: message stream state has been reset [{1}]".CheckedFormat(logger.Name, reason)));
+            CancelPendingActions(qpcTimeStamp, "{0}: message stream state has been reset [{1}]".CheckedFormat(logger.Name, reason));
+        }
+
+        private void CancelPendingActions(QpcTimeStamp qpcTimeStamp, string reason)
+        {
+            // service the pending actions to service and remove the completed ones
+            Service(qpcTimeStamp);
+
+            providerFacetActionDictionary.ValueArray.DoForEach(item => item.ipf.CompleteRequest(reason));
+            clientFacetActionDictionary.ValueArray.DoForEach(item => { if (item.icf != null && !item.icf.ActionState.IsComplete && !item.icf.IsCancelRequestActive) { item.icf.RequestCancel(); } });
 
             providerFacetActionDictionary.Clear();
             clientFacetActionDictionary.Clear();
@@ -2315,6 +2333,13 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
         public virtual void Release()
         {
             Fcns.DisposeOfObject(ref memoryStream);
+        }
+
+        public Sessions.SessionState LastNotifiedSessionState { get; private set; }
+
+        public virtual void NotifyOnSessionStateChanged(object source, Sessions.SessionState eventArgs)
+        {
+            LastNotifiedSessionState = eventArgs;
         }
 
         public void ResetState(QpcTimeStamp qpcTimeStamp, ResetType resetType, string reason = null, string extra = null)

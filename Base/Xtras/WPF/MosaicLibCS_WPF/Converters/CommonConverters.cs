@@ -521,4 +521,19 @@ namespace MosaicLib.WPF.Converters
     }
 
     #endregion
+
+    #region ConcatenateMultivalueConverter
+
+    /// <summary>
+    /// This multi-value converter converts each of the given objects to strings and returns the concatenation of these strings
+    /// </summary>
+    public class ConcatenateMultiValueConverter : OneWayMultiValueConverterBase
+    {
+        public override object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
+        {
+            return string.Concat(values.Select(item => item.SafeToString()));
+        }
+    }
+
+    #endregion
 }

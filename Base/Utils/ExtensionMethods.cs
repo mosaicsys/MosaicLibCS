@@ -92,7 +92,7 @@ namespace MosaicLib.Utils
         #region Array, IList, List and String access extension methods (IsSafeIndex, SafeAccess, SafeSubArray, SafePut, SafeLast, SafeCopyFrom)
 
         /// <summary>
-        /// Extension method accepts given <paramref name="array"/> and <paramref name="testIndex"/> and returns true if the <paramref name="array"/> is non-null and the <paramref name="testIndex"/> is >= 0 and less than the <paramref name="array"/>.Length
+        /// Extension method accepts given <paramref name="array"/> and <paramref name="testIndex"/> and returns true if the <paramref name="array"/> is non-null and the <paramref name="testIndex"/> is >= 0 and less than the <paramref name="array"/>.Length - (<paramref name="length"/> - 1)
         /// </summary>
         public static bool IsSafeIndex<ItemType>(this ItemType[] array, int testIndex, int length = 1)
         {
@@ -100,7 +100,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Extension method accepts given <paramref name="list"/> and <paramref name="testIndex"/> and returns true if the <paramref name="list"/> is non-null and the <paramref name="testIndex"/> is >= 0 and less than the <paramref name="list"/>.Count
+        /// Extension method accepts given <paramref name="list"/> and <paramref name="testIndex"/> and returns true if the <paramref name="list"/> is non-null and the <paramref name="testIndex"/> is >= 0 and less than the <paramref name="list"/>.Count - (<paramref name="length"/> - 1)
         /// </summary>
         public static bool IsSafeIndex<ItemType>(this IList<ItemType> list, int testIndex, int length = 1)
         {
@@ -742,7 +742,7 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        #region byte arrays as bit masks
+        #region byte arrays as bit masks (byteArray.SetBit, byteArray.GetBit)
 
         /// <summary>
         /// Extension method to support setting an indicated bitIdx to the given value using the given byteArray as a packed bit vector.
@@ -1860,7 +1860,7 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        #region Exception related methods (ToString)
+        #region Exception related methods (System.Exeception.ToString)
 
         /// <summary>
         /// Exception formatting helper extension method.  Accepts a given System.Exception and a ExceptionFormat parameter
@@ -1951,6 +1951,37 @@ namespace MosaicLib.Utils
             node = null;
 
             return linkedList;
+        }
+
+        #endregion
+
+        #region ICopyable EMs (SafeMakeCopyOfThis)
+
+        /// <summary>
+        /// Returns the result of calling <paramref name="item"/>.MakeCopyOfThis(<paramref name="deepCopy"/>) is <paramref name="item"/> is not null.  Otherwise returns <paramref name="fallbackValue"/>
+        /// </summary>
+        public static TItemType SafeMakeCopyOfThis<TItemType>(this TItemType item, bool deepCopy = true, TItemType fallbackValue = default(TItemType)) 
+            where TItemType : ICopyable<TItemType>
+        {
+            if (item != null)
+                return item.MakeCopyOfThis(deepCopy: deepCopy);
+
+            return fallbackValue;
+        }
+
+        #endregion
+
+        #region IEquatable EMs (SafeEquals)
+
+        /// <summary>
+        /// If <paramref name="item"/> is not null, then returns the results of calling <paramref name="item"/>.Equals(<paramref name="other"/>), or returns true if <paramref name="other"/> is also null, or returns false otherwise.
+        /// </summary>
+        public static bool SafeEquals<TItemType>(this TItemType item, TItemType other) where TItemType : IEquatable<TItemType>
+        {
+            if (item != null)
+                return item.Equals(other);
+
+            return (other == null);
         }
 
         #endregion

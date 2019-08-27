@@ -100,9 +100,15 @@
     <Compile Include="MosaicLibCSBase.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Semi\E005\E005Data.cs" />
+    <Compile Include="Semi\E005\E005Manager.cs" />
+    <Compile Include="Semi\E005\E005Mesg.cs" />
+    <Compile Include="Semi\E005\E005Port.cs" />
+    <Compile Include="Semi\E037\E037Port.cs" />
+    <Compile Include="Semi\E040\E040.cs" />
     <Compile Include="Semi\E090\E090SubstrateRouting.cs" />
     <Compile Include="Semi\E090\E090SubstrateScheduling.cs" />
     <Compile Include="Semi\E090\E090SubstrateTestingTools.cs" />
+    <Compile Include="Semi\E094\E094.cs" />
     <Compile Include="Serial\AutoEchoWrapper.cs" />
     <Compile Include="Serial\ComSerialIO.cs" />
     <Compile Include="Serial\SerialIO.cs" />

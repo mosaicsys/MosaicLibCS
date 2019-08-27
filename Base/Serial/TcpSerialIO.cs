@@ -121,7 +121,7 @@ namespace MosaicLib.SerialIO
 
 			if (ec == null)
 			{
-				// successfull parse
+				// successful parse
 				ec = string.Empty;
 				specScanRef = specScan;
 			}

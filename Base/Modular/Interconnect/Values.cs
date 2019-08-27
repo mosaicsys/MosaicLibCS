@@ -35,24 +35,78 @@ using MosaicLib.Utils.Collections;
 // Modular.Interconnect is the general namespace for tools that help interconnect Modular Parts without requiring that that have pre-existing knowledge of each-other's classes.
 // This file contains the definitions for the underlying Modular.Interconnect.Values portion of Modular.Interconnect.
 //  
-//  Modular.Interconnect.Values provides a set of tools that are used to define one or more table spaces for interconnected values.  
-//  These are implementations of the IValuesInterconnection interface that defines what capabilities such objects expose to client code.
-//  
-//  The Values static class contains a singleton Instance pattern so that there can always be a main value interconnection instance that other objects can use.  However all of the
-//  helper classes that are used with IValueInterconnection objects support use with any externally provided instance so the client process can support multiple separate
-//  interconnections if needed.
+// Modular.Interconnect.Values provides a set of tools that are used to define one or more name indexed table spaces for interconnected values.  
+// The IValuesInterconnection (IVI) interface is the primary interface that represents the point of interconnection between clients.  
+// This interface supports IValueAccessor (IVA) factory methods that accept a string name and create an IVA that the caller (client) can use to access the value that is stored in the IVI's
+// correspondingly named table entry.  Each such table entry is created by an IVA factory method when an IVA with a previously unseen name is first requested, and such newly 
+// created table entries are preset to contain ValueContainer.Empty.  
 //
-//  IValuesInterconnection objects serve as the factory for untyped and typed (using generics) IValueAccessor objects.  These objects represent a clients access to observe and/or set
-//  a named value in the interconnection table space.  
+// The use of an IVI and a set of IVA's for value exchange is only limited by the types of values that can be placed in a ValueContainer.
+//  
+// Value exchange between clients is generally accomplished by first agreeing on a set of names to be used and an IVI instance to access these names through.  
+// Then all of the related clients each create a set of IVA instances that give them read and write access to the sub-set of names that they need access to.
+// Typically one of the clients is considered the "oracle" for each such named value and that client will generally provide the initial value for each such corresponding IVA it obtains.
+// Once this set of clients and related IVAs have been created, they can use the IVAs set the corresponding IVI table entry values and to observe the values set to such table entries by other clients.
+//
+// Each IVA instance contains the last transferred value and gives the client means to determine when the table has a new value (IsUpdateNeeded), to propate the table's value to the IVA's value (Update),
+// to change the IVAs value and to propagate the IVAs changed value to the table (Set).  
+//
+// The Values static class contains a singleton Instance pattern so that there can always be a main value interconnection instance that other objects can use.  However all of the
+// helper classes that are used with IValueInterconnection objects support use with any externally provided instance so the client process can support multiple separate
+// value interconnection tables if needed.
+//
+// Please note that IVI instances are thread safe and support re-enterant use.  However each IVA instance is only intended to be used by one client and only one thread at a time in that client.
+// It is each client's responsibility to correctly use individual IVA instances and to prevent allowing multiple threads to concurrently access an individual IVA instance.
+//
+// In addition to using individual IVA instance Set and Update calls, a client may also ask an IVI instance that it obtained a set of IVAs from to Set/Update all of the IVAs in an array as a single
+// atomic table operation.  This greately increases the overall performance of the value exchange by decreasing the total number of required table lock/unlock cycles and supports atomic transfer 
+// of sets of correllated IVAs to/from the table for cases where two clients always exchange such correlated IVA sets with their related IVI in this manner.
+// 
+// Notification:  In most cases clients are expected to poll their IVA IsUpdateNeeded flags and/or to use other related optimization techniques for updating and/or setting sets of IVAs.
+// The IVI provides a NotificiationList that is Notified whenever any Set operation completes on the table.  
+// However this notification list is not intended for general use as it may result in a very high notification rate.
+//
+// In addition to the use of individual IVA instances, this namespace supports use of the ValueSetAdapter concept where the client defines a class and annotates individual public properties and/or fields
+// using the Modular.Interconnect.Values.Attributes.ValueSetItemAttribute [ValueSetItem] and then creates a ValueSetAdapter templatized on that class.  This adapter dynamically extracts the type
+// information from the given value set class type and automatically generates a set of getter/setter glue code and a corresponding set of IVA instances.  Then when the adapter's Set and Update methods are used
+// the adpater applies performs the corresponding operation on the related set of IVA instances it created and exchanges their values with the corresponding annotated set of properties and fields of the
+// value set instance associated with the adapter.  This helps simplify the client glue and maintenance code that is required to setup and access a set of IVAs and maximumes the naming transparancy through
+// the system by allowing the IVA names to be programatically derived from value set class property and/or field names.
+
+// Additional notes:
+//
+// Use with WPF:  The constructs used here are specifically designed and intended to support use with GUI environments such as WPF.  
+// By using a WPFValueInterconnectAdapter as either the DataContext, or an explicitly specified DataCpontext type DependencyProperty, WPF Binding statements may be used to directly connect
+// bindable entities in WPF to individually named IVI table entries.  The WPFValueInterconnectAdapter is typically serviced using a dispatch timer and thus solves the threading issue by having the
+// WPF IVI interconnection support logic all run on the correct client determined Sychronization Context automatically.
+//
+// Use with Remoting:  Remoting is able to be configured to perform one way or two way, filtered replication of IVI contents between two processes via a normal remoting connection.  
+// The required transfers are done in a scan and forward manner that is relatively efficient from a transfer perspective.  Due to the use of custom serialization in Modular.Common, remoting
+// is thus able to transfer all standard ValueContainer contents as well as custom objects provided that both ends have compatible class definitions for types of the same name.  
+// Remoting also supports concurrrent replication of more than one IVI as long as each IVI that is to be made available is registered and has a well known name in the RemotingServer end.
+//
+// ValueSetAdapter, DelegateValueSetAdapter: ValueSetAdapter and DelegateValueSetAdapters are provided to help simplify the client effort required to define, setup and incrementally synchronize
+// sets of values out of and into a given IVI instance.  DelegateValueSetAdapters are used in much the same way as ValueSetAdapters execept that they allow the client to attached arbitrary 
+// client provided glue code delegates in place of the annotated member getters/setters that are automatically generated by a ValueSetAdapter.
+//
+// Use in non-threaded situations:  Manually constructed ValueInterconnection objects can be asked to block use of the internal mutex (provied that it is also not being regisgtered).
+// This approach is useful in cases where a single threaded entity wants to use IVA/IVI constructs within a single threaded environment where the use of per call IVI mutex locking would
+// impeed performance when it is not otherwise useful to do so.
 
 namespace MosaicLib.Modular.Interconnect.Values
 {
     #region IValuesInterconnection
 
     /// <summary>
-    /// This interface defines the basic externally visible methods and properties that are exposed by Values Interconnection implementation objects.
-    /// Clients are generally expected to make most use of the GetValueAdapter factory methods methods.  
-    /// ValueSetAdapter classes are generally expected to use the IValueAccessor array versions of the Set and Update methods.
+    /// IValuesInterconnection (aka IVI).  This is the primary interface that is implemented by the Interconnection Value table object, namely <seealso cref="ValuesInterconnection"/>.
+    /// This table is used to allow clients to identify and exchange values through named entires in the internal value table.
+    /// Clients are generally expected to make most use of the GetValueAdapter factory methods methods to obtain IValueAccessor instances (aka IVA) to perform access to individual named values.
+    /// In addition to methods to generate individual IVAs, this interface also supports the following additional features:
+    /// <list type="bullet">
+    /// <item>The ability to add/update metadata for sets of IVAs.</item>
+    /// <item>The ability to add from/to name mapping that is used when generating IVAs so that two names can be mapped to use the same table entry (the table entry will use the to name)</item>
+    /// <item>The ability to monitor the table for new entries and to search through the table for entries that match specific filter conditions based on their names and metadata.</item>
+    /// </list>
     /// </summary>
     public interface IValuesInterconnection
     {
@@ -138,6 +192,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <param name="accessorArray">Gives an array of items.  Only non-null items will be Set.</param>
         /// <param name="numEntriesToSet">Limits how much of the array will be used.  Maximum index of itesm that are looked at will be &lt; this value.  When negative value is passed, this parameter's value will be replaced with accessorArray.Length</param>
         /// <param name="optimize">When false all accessors will have their current value pushed into the corresonding table entries.  When true, only accessors that have their IsSetPending property true will have their value pushed in to the corresponding table entries</param>
+        /// <remarks>This signature is being retained for backward comptability</remarks>
         void Set(IValueAccessor[] accessorArray, int numEntriesToSet, bool optimize);
 
         /// <summary>
@@ -179,19 +234,22 @@ namespace MosaicLib.Modular.Interconnect.Values
 
     /// <summary>
     /// Defines the supported modes for setting a table entry.  
-    /// <para/>Default (0x00), Optimize (0x01), IfValueSeqNumIsZero (0x02)
+    /// <para/>Default (0x00), IfValueSeqNumIsZero (0x01), Optimize (0x02), IfIsValueUpdatedNeeded (0x04)
     /// </summary>
     [Flags]
     public enum SetMode
     {
-        /// <summary>Always Set the corresponding table entry even if the given value accessor's value has not been set since it was last updated from the table. (0x00)</summary>
+        /// <summary>Default value used when no other flags are selected.  Always Set the corresponding table entry even if the given value accessor's value has not been set since it was last updated from the table. [0x00]</summary>
         Default = 0x00,
 
-        /// <summary>Only Set the corresponding table entry if the given value accessor's value has been set since it was last updated from the table. (0x01)</summary>
-        Optimize = 0x01,
+        /// <summary>Set each given table entry if (and only if) the table entry is in its initial state (aka its value sequence number is zero).  [0x01]</summary>
+        IfValueSeqNumIsZero = 0x01,
 
-        /// <summary>Only set any given table entry if the table entry is in its initial state (aka its value sequence number is zero).  (0x02)</summary>
-        IfValueSeqNumIsZero = 0x02,
+        /// <summary>Set each given table entry if the corresponding IVA's value has been set since it was last updated from the table (IVA.IsSetPending).  [0x02]</summary>
+        Optimize = 0x02,
+
+        /// <summary>Set each given table entry if the table entry's value has changed since the last time the IVA was Updated or Set (IVA.IsValueUpdateNeeded).  [0x04]</summary>
+        OrIsValueUpdatedNeeded = 0x04,
     }
 
     #endregion
@@ -199,8 +257,11 @@ namespace MosaicLib.Modular.Interconnect.Values
     #region IValueAccessor and IValueAccessor<TValueType>
 
     /// <summary>
-    /// This interface defines the publicly available behavior for a ValueAdapter object, namely an object that is used to access a specific value in
-    /// an interconnection table space.  This version provides access to the value as a System.Object.  
+    /// IValueAccessor (aka IVA).  This interface defines the client usable facet of the ValuesInterconnection's internal value accessor implementation class.
+    /// This object gives the client access to the last transferred value (via Update or Set), or metadata (via Update) of the named table entry, 
+    /// the ability to Update the IVA from the table or Set the table from the IVA, the ability to add, or update the meta data for this named table entry,
+    /// and the ability to check if the table has been updated since the IVA was last transfered (IsUpdatedNeeded) or to check if the IVA's value has been assigned since the Set or Update method was used (IsSetPending).
+    /// The Set method supports a number of variants as well as variants of the SetIfDifferent method.
     /// </summary>
     public interface IValueAccessor
     {
@@ -240,23 +301,26 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <summary>Sets the corresponding interconnection table space entry's value from this accessors current ValueContainer contents.  This method supports call chaining.</summary>
         IValueAccessor Set();
 
-        /// <summary>Sets ValueContainer to the given value and then Sets the corresponding interconnection table space entry's value from the given one.  This method supports call chaining.</summary>
+        /// <summary>Sets VC to the given value and then Sets the corresponding interconnection table space entry's value from the given one.  This method supports call chaining.</summary>
         IValueAccessor Set(ValueContainer valueContainer);
 
-        /// <summary>Converts valueAsObject to a ValueContainer and then calls Set(valueContainer) to set the access and the corresponding interconnect table entry from it.  This method supports call chaining.</summary>
+        /// <summary>Converts <paramref name="valueAsObject"/> to a ValueContainer and then calls Set(valueContainer) to set the access and the corresponding interconnect table entry from it.  This method supports call chaining.</summary>
         IValueAccessor Set(object valueAsObject);
 
-        /// <summary>Checks if the current ValueContainer is different than the given one.  If the are not Equal then calls Set(valueContainer) to set the local and interconnect values from the given one.  This method supports call chaining.</summary>
-        IValueAccessor SetIfDifferent(ValueContainer valueContainer);
+        /// <summary>Checks if the current <paramref name="valueContainer"/> is different than the given one, or optionally if IsValueUpdateNeeded is true.  If they are not Equal, or optionally when IsValueUpdateNeeded is true, it then calls Set(valueContainer) to set the local and interconnect values from the given one.  This method supports call chaining.</summary>
+        IValueAccessor SetIfDifferent(ValueContainer valueContainer, bool orWhenValueUpdateNeeded = false);
 
-        /// <summary>Converts valueAsObject to a ValueContainer and then calls SetIfDifferent(valueContainer) to set the access and the corresponding interconnect table entry from it if needed.  This method supports call chaining.</summary>
-        IValueAccessor SetIfDifferent(object valueAsObject);
+        /// <summary>Converts the given <paramref name="valueAsObject"/> to a ValueContainer and then calls SetIfDifferent(valueContainer, <paramref name="orWhenValueUpdateNeeded"/>) to set the access and the corresponding interconnect table entry from it if needed.  This method supports call chaining.</summary>
+        IValueAccessor SetIfDifferent(object valueAsObject, bool orWhenValueUpdateNeeded = false);
 
         /// <summary>Resets this value accessor and the corresponding IVI table entry to be empty with sequence number zero.</summary>
         IValueAccessor Reset();
 
         /// <summary>This property returns true if the ValueSeqNum is not the same as the CurrentSeqNum or MetaDataSeqNum is not the same as CurrentMetaDataSeqNum.</summary>
         bool IsUpdateNeeded { get; }
+
+        /// <summary>This property returns true if the ValueSeqNum is not the same as the CurrentSeqNum.</summary>
+        bool IsValueUpdateNeeded { get; }
 
         /// <summary>This method updates the locally stored value, metadata, and seqNums from the interconnection table space's corresponding table entry.  If the value IsSetPending then its value will be replaced by the table entry's value.  This method supports call chaining.</summary>
         IValueAccessor Update();
@@ -278,7 +342,7 @@ namespace MosaicLib.Modular.Interconnect.Values
     }
 
     /// <summary>
-    /// Provides a type specific version of the underlying IValueAccessor which already includes the required casting operations.
+    /// Provides a type specific version of the underlying IValueAccessor which automatically includes the required ValueContainer Get/Set (casting) operations.
     /// </summary>
     /// <typeparam name="TValueType">Defines the specific type that is to be used with the Value property.</typeparam>
     public interface IValueAccessor<TValueType> : IValueAccessor
@@ -290,7 +354,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         TValueType Value { get; set; }
 
         /// <summary>
-        /// property is updated each time the Value property is read.  null indicates that the conversion was successfull while any other value indicates why it was not.
+        /// property is updated each time the Value property is read.  null indicates that the conversion was successful while any other value indicates why it was not.
         /// </summary>
         System.Exception LastValueGetException { get; }
 
@@ -299,11 +363,11 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// </summary>
         TValueType GetValue(bool rethrow);
 
-        /// <summary>Updates the ValueContainer to contain the given value and then transfers the container to the corresponding interconnection table space entry.  This method supports call chaining.</summary>
+        /// <summary>Updates the ValueContainer to contain the given <paramref name="value"/> and then transfers the container to the corresponding interconnection table space entry.  This method supports call chaining.</summary>
         IValueAccessor<TValueType> Set(TValueType value);
 
-        /// <summary>If the given value is not Object.Equals Value then Updates both the local copy and the corresponding interconnection table space entry's value from the given one.  This method supports call chaining.</summary>
-        IValueAccessor<TValueType> SetIfDifferent(TValueType value);
+        /// <summary>Converts the given <paramref name="value"/> to a ValueContainer and then calls SetIfDifferent(valueContainer, <paramref name="orWhenValueUpdateNeeded"/>) to set the access and the corresponding interconnect table entry from it if needed.  This method supports call chaining.</summary>
+        IValueAccessor<TValueType> SetIfDifferent(TValueType value, bool orWhenValueUpdateNeeded = false);
 
         /// <summary>
         /// This method updates the locally stored value, metadata, and seqNums from the interconnection table space's corresponding table entry.  
@@ -311,12 +375,21 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// This method supports call chaining.
         /// </summary>
         new IValueAccessor<TValueType> Update();
+
+        /// <summary>
+        /// This property defines the value of rethrow that is used with the Value property.  This property defaults to true.
+        /// <para/>This property can be set using the SetRethrowInValueGetter extension method.
+        /// </summary>
+        bool RethrowInValueGetter { get; set; }
     }
 
     #endregion
 
     #region IIVIRegistration
 
+    /// <summary>
+    /// Interface used for IVI Registration.  This concept is primarily intended for use with remoting and other cases where multiple named IVI tables can be defined and used by various clients.
+    /// </summary>
     public interface IIVIRegistration
     {
         /// <summary>Gives the "name" of this registartion table instance</summary>
@@ -577,13 +650,13 @@ namespace MosaicLib.Modular.Interconnect.Values
     /// Instances of this class implement a basic Name to ID mapping and ID indexed table of values.  These value table entries are accessed using IValueAccessor objects constructed
     /// using the GetValueAccessor factory methods that are implemented here.  These methods create the required table entry if none already exists for the given name and then
     /// create and return an internal IValueAccessor implementation object.  Access (read or write) to this table, and the dictionary related meta-data are all guarded using a single
-    /// mutex.  This gives first come, first served semantics to external entities that are calling Set or Update so as to guaranty that all single calls to Set or Update methods produce
-    /// atomically consistent updates to the table and accessors.  The use of the array versions of Set and Update allow this atomicity to span across updates from and sets to arbitrary sets of
-    /// named value table entries.
+    /// mutex.  This gives first come first served semantics to external entities that are calling Set or Update so as to guarantee that all single calls to Set or Update methods produce
+    /// atomically consistent updates to the table and accessors.  The use of the array versions of Set and Update methods allow this atomicity to span across updates from and sets to 
+    /// arbitrary groups of IVAs and their assocaited sets of named value table entries.
     /// </summary>
     public class ValuesInterconnection : IValuesInterconnection, IEnumerable
     {
-        #region construction
+        #region Construction
 
         /// <summary>
         /// Constructor.  
@@ -848,8 +921,9 @@ namespace MosaicLib.Modular.Interconnect.Values
         {
             accessorArray = accessorArray ?? emptyValueAccessorArray;
 
-            bool optimize = ((setMode & SetMode.Optimize) != 0);
             bool ifValueSeqNumIsZero = ((setMode & SetMode.IfValueSeqNumIsZero) != 0);
+            bool optimize = ((setMode & SetMode.Optimize) != 0);
+            bool orIsValueUpdateNeeded = ((setMode & SetMode.OrIsValueUpdatedNeeded) != 0);
 
             int accessorArrayLength = accessorArray.Length;
             if (numEntriesToSet < 0 || numEntriesToSet > accessorArrayLength)
@@ -857,32 +931,34 @@ namespace MosaicLib.Modular.Interconnect.Values
 
             int numEntriesSet = 0;
 
-            if (optimize || ifValueSeqNumIsZero)
-            {
-                bool areAnySetsPending = false;
+            bool areAnySetsPending = false;
 
-                if (optimize)
-                    areAnySetsPending |= accessorArray.Any(iva => iva != null && iva.IsSetPending);
+            if (ifValueSeqNumIsZero)
+                areAnySetsPending = accessorArray.Any(iva => iva != null && iva.CurrentSeqNum == 0);
+            else if (optimize)
+                areAnySetsPending = accessorArray.Any(iva => iva != null && (iva.IsSetPending || (orIsValueUpdateNeeded && iva.IsValueUpdateNeeded)));
+            else
+                areAnySetsPending = numEntriesToSet > 0;
 
-                if (ifValueSeqNumIsZero)
-                    areAnySetsPending |= accessorArray.Any(iva => iva != null && iva.CurrentSeqNum == 0);
-
-                if (!areAnySetsPending)
-                    return;
-            }
+            if (!areAnySetsPending)
+                return;
 
             using (var scopedLock = new ScopedLock(mutex))
             {
                 for (int idx = 0; idx < numEntriesToSet; idx++)
                 {
-                    IValueAccessor accessor = accessorArray[idx];
-                    ValueAccessorImpl valueAccessor = ((accessor as ValueAccessorImpl) ?? emptyValueAccessor);
+                    IValueAccessor iva = accessorArray[idx];
+                    ValueAccessorImpl valueAccessor = ((iva as ValueAccessorImpl) ?? emptyValueAccessor);
 
-                    if (accessor != null && (accessor.IsSetPending || !optimize) && (!ifValueSeqNumIsZero || accessor.CurrentSeqNum == 0) && valueAccessor.IVI == this)
+                    if (iva == null || (ifValueSeqNumIsZero && iva.CurrentSeqNum != 0) || valueAccessor.IVI != this)
+                    {
+                        // skip this IVA
+                    }
+                    else if (iva.IsSetPending || !optimize || (orIsValueUpdateNeeded && iva.IsValueUpdateNeeded))
                     {
                         valueAccessor.InnerGuardedSetTableEntryFromValue();
 
-                        SynchrounousCustomPostSetTableEntryFromValueHandler(accessor);
+                        SynchrounousCustomPostSetTableEntryFromValueHandler(iva);
 
                         numEntriesSet++;
                     }
@@ -1149,7 +1225,7 @@ namespace MosaicLib.Modular.Interconnect.Values
 
         #endregion
 
-        #region ValueTableEntry and ValueAdapterImpl implementation classes
+        #region ValueTableEntry and ValueAccessorImpl implementation classes
 
         /// <summary>
         /// Table entry implementation class.  Contains the parts that are required to be stored per named value in the interconnect table space.
@@ -1350,25 +1426,27 @@ namespace MosaicLib.Modular.Interconnect.Values
                 return Set();
             }
 
-            /// <summary>Checks if the current ValueContainer is different than the given one.  If the are not Equal then calls Set(valueContainer) to set the local and interconnect values from the given one.  This method supports call chaining.</summary>
-            public IValueAccessor SetIfDifferent(ValueContainer valueContainer)
+            /// <summary>Checks if the current <paramref name="valueContainer"/> is different than the given one, or optionally if IsValueUpdateNeeded is true.  If they are not Equal, or optionally when IsValueUpdateNeeded is true, it then calls Set(valueContainer) to set the local and interconnect values from the given one.  This method supports call chaining.</summary>
+            public IValueAccessor SetIfDifferent(ValueContainer valueContainer, bool orWhenValueUpdateNeeded = false)
             {
                 VC = valueContainer;
 
-                if (IsSetPending)
+                if (IsSetPending || (orWhenValueUpdateNeeded && IsValueUpdateNeeded))
                     Set();
 
                 return this;
             }
 
-            /// <summary>Converts valueAsObject to a ValueContainer and then calls SetIfDifferent(valueContainer) to set the access and the corresponding interconnect table entry from it if needed.  This method supports call chaining.</summary>
-            public IValueAccessor SetIfDifferent(object valueAsObject)
+            IValueAccessor IValueAccessor.SetIfDifferent(object valueAsObject, bool orWhenValueUpdateNeeded)
             {
-                return SetIfDifferent(new ValueContainer().SetFromObject(valueAsObject));
+                return SetIfDifferent(default(ValueContainer).SetFromObject(valueAsObject), orWhenValueUpdateNeeded: orWhenValueUpdateNeeded);
             }
 
             /// <summary>This property returns true if the ValueSeqNum is not the same as the CurrentSeqNum or MetaDataSeqNum is not the same as CurrentMetaDataSeqNum.</summary>
             public bool IsUpdateNeeded { get { return ((ValueSeqNum != CurrentSeqNum) || (MetaDataSeqNum != CurrentMetaDataSeqNum)); } }
+
+            /// <summary>This property returns true if the ValueSeqNum is not the same as the CurrentSeqNum.</summary>
+            public bool IsValueUpdateNeeded { get { return (ValueSeqNum != CurrentSeqNum); } }
 
             /// <summary>
             /// This method updates the locally stored value, metadata, and seqNums from the interconnection table space's corresponding table entry.  
@@ -1546,24 +1624,28 @@ namespace MosaicLib.Modular.Interconnect.Values
                     LastValueGetException = null;
                     try
                     {
-                        TValueType value = GetValue(true);
-                        LastValueGetException = null;
+                        TValueType value = GetValue(rethrow: RethrowInValueGetter);
+                        LastValueGetException = vc.LastGetValueException;
                         return value;
                     }
                     catch (System.Exception ex)
                     {
                         LastValueGetException = ex;
+
+                        if (RethrowInValueGetter)
+                            throw;
+
                         return default(TValueType);
                     }
                 }
                 set 
                 {
-                    VC = new ValueContainer().SetValue<TValueType>(value, decodedValueType, decodedTypeIsNullable);
+                    VC = default(ValueContainer).SetValue<TValueType>(value, decodedValueType, decodedTypeIsNullable);
                 } 
             }
 
             /// <summary>
-            /// property is updated each time the Value property is read.  null indicates that the conversion was successfull while any other value indicates why it was not.
+            /// property is updated each time the Value property is read.  null indicates that the conversion was successful while any other value indicates why it was not.
             /// </summary>
             public System.Exception LastValueGetException { get; protected set; }
 
@@ -1575,18 +1657,16 @@ namespace MosaicLib.Modular.Interconnect.Values
                 return vc.GetValue<TValueType>(decodedValueType, decodedTypeIsNullable, rethrow);
             }
 
-            /// <summary>Updates both the local copy and the corresponding interconnection table space entry's value from the given one.  This method supports call chaining.</summary>
-            public IValueAccessor<TValueType> Set(TValueType value)
+            IValueAccessor<TValueType> IValueAccessor<TValueType>.Set(TValueType value)
             {
-                Set(new ValueContainer().SetValue(value, decodedValueType, decodedTypeIsNullable));
+                Set(default(ValueContainer).SetValue(value, decodedValueType, decodedTypeIsNullable));
 
                 return this;
             }
 
-            /// <summary>If the given value is not Object.Equals Value then Updates both the local copy and the corresponding interconnection table space entry's value from the given one.  This method supports call chaining.</summary>
-            public IValueAccessor<TValueType> SetIfDifferent(TValueType value)
+            IValueAccessor<TValueType> IValueAccessor<TValueType>.SetIfDifferent(TValueType value, bool orWhenValueUpdateNeeded)
             {
-                SetIfDifferent(new ValueContainer().SetValue(value, decodedValueType, decodedTypeIsNullable));
+                SetIfDifferent(default(ValueContainer).SetValue(value, decodedValueType, decodedTypeIsNullable), orWhenValueUpdateNeeded: orWhenValueUpdateNeeded);
                
                 return this;
             }
@@ -1602,6 +1682,13 @@ namespace MosaicLib.Modular.Interconnect.Values
 
                 return this;
             }
+
+
+            /// <summary>
+            /// This property defines the value of rethrow that is used with the Value property.  This property defaults to false.
+            /// <para/>This property can be set using the SetRethrowInValueGetter extension method.
+            /// </summary>
+            public bool RethrowInValueGetter { get; set; }
         }
 
         #endregion
@@ -1614,17 +1701,17 @@ namespace MosaicLib.Modular.Interconnect.Values
     namespace Attributes
     {
         /// <summary>
-        /// This attribute is used to annotate public get/set properties and fields in a class in order that the class can be used as the ValueSet for
-        /// a ValueSetAdapter adapter.  Each such property or field in the ValueSet class specifies a specific property and value source that 
+        /// This attribute is used to annotate public get/set properties and fields in a public class in order that the class can be used as the ValueSet for
+        /// a ValueSetAdapter adapter.  Each such property or field in the value set class specifies a specific property and value source that 
 		/// will receive the values from Update calls and which is used as the value source for Set calls on the Adapter.
-        /// <para/>Name = null, NameAdjust = NameAdjust.Prefix0, SilenceIssues = false
+        /// <para/>defaults: Name = null, NameAdjust = NameAdjust.Prefix0, ItemAccess = ItemAccess.Normal
         /// </summary>
         [AttributeUsage(AttributeTargets.Property | AttributeTargets.Field, AllowMultiple = false)]
         public class ValueSetItemAttribute : AnnotatedItemAttributeBase
         {
             /// <summary>
             /// Default constructor.
-            /// <para/>Name = null, NameAdjust = NameAdjust.Prefix0, SilenceIssues = false, StorageType = ContainerStorageType.None
+            /// <para/>Name = null, NameAdjust = NameAdjust.Prefix0, ItemAccess = ItemAccess.Normal
             /// </summary>
             public ValueSetItemAttribute() 
             { }
@@ -1680,16 +1767,26 @@ namespace MosaicLib.Modular.Interconnect.Values
 
         /// <summary>
         /// This property determines if the Set method uses ValueContainer equality testing to determine which IValueAccessor objects to actually write to the table.
-        /// When this property is true (the default), equality testing will be used to prevent updating table entires for IValueAccessors that do not have a set pending (due to change in container value).
-        /// When this property is false, all value table entries will be Set, without regard to whether their value might have changed.
+        /// Internally this is equivilant to the SetMode.Optimize flag.
         /// </summary>
         bool OptimizeSets { get; set; }
 
         /// <summary>
-        /// Returns true if any of the IValueAccessors to which this adapter is attached indicate that there is a pending update 
+        /// This property directly selects the SetMode that will be used by the adapter's Set method when calling IVI.Set and thus controls selection of optimizations.
+        /// </summary>
+        SetMode SetMode { get; set; }
+
+        /// <summary>
+        /// Returns true if any of the IValueAccessors to which this adapter is attached indicate IsUpdateNeeded 
         /// (because the accessed value has been set elsewhere so there may be a new value to update that accessor from).
         /// </summary>
         bool IsUpdateNeeded { get; }
+
+        /// <summary>
+        /// Returns true if any of the IValueAccessors to which this adapter is attached indicate IsValueUpdateNeeded
+        /// (because the accessed value has been set elsewhere so there may be a new value to update that accessor from).
+        /// </summary>
+        bool IsValueUpdateNeeded { get; }
 
         /// <summary>
         /// Requests the IValuesInterconnection instance to update all of the adapter's IValueAccessor objects and then transfers the updated values
@@ -1711,7 +1808,7 @@ namespace MosaicLib.Modular.Interconnect.Values
     }
 
     /// <summary>
-    /// This interface extends the <see cref="IValueSetAdapter"/> one by adding the TransferValuesFromIVAs and TransferValuesToIVAs methods.
+    /// This interface extends <see cref="IValueSetAdapter"/> by adding the TransferValuesFromIVAs and TransferValuesToIVAs methods.
     /// These methods may be used to allow a value set adapter to be added to a <see cref="ValueSetAdapterGroup"/> or to otherwise be used to generate as set of IVAs and allow
     /// an external entity to manage the actual IVI to/from IVA interaction (likely using arrays of IVAs from this and other sources) while preserving the abstraction that this
     /// adapter provides in supporting customized local binding/adapting the the IVA values to other value endpoints.
@@ -1743,11 +1840,13 @@ namespace MosaicLib.Modular.Interconnect.Values
     /// <summary>
     /// This adapter group class provides a client with an object that can be used to efficiently manage operations on sets of ValueSetAdapaters including
     /// group wide Setup, IssueEmitter and ValueNoteEmitter assignment, OptimizeSets assignement, Set, IsUpdateNeeded and Update.
-    /// The primary purpose of this class is to support generation of a single array of IValueAccessor objects as the agregate of the set of such arrays from each of the ValueSetAdapterBase instances in this group.
-    /// This allows the group to be used to perform IVI updates to or from the group as a single atomic set and optimizes the number of IVI round trip calls by using the larger array of all of the IValueAccessors all at once.
-    /// <para/>Please note that the expected semantics of this use of this group are intentionally ambigious.  
+    /// The primary purpose of this class is to support generation of a single array of IValueAccessor objects as the agregate of the set of such arrays from 
+    /// each of the ValueSetAdapterBase instances that have been added to this group.  This allows the group to be used to perform IVI updates to or from the group as a 
+    /// single atomic set and optimizes the number of IVI round trip calls by using the larger array of all of the IValueAccessors all at once.
+    /// <para/>Please note that the expected semantics of the use of this group are intentionally ambigious.  
     /// This object is intended to support use with externally provided ValueSetAdapterBase objects either before they have been Setup, or after they have been setup.
-    /// This object may also be used to perform common setup steps to them by assigning this objects corresponding IValueSetAdapter property setters, each of which applies to all of the ValueSetAdapterBase instances in the group.
+    /// This object may also be used to perform common setup steps to them by assigning this objects corresponding IValueSetAdapter property setters, each of which applies 
+    /// to all of the ValueSetAdapterBase instances in the group.
     /// </summary>
     public class ValueSetAdapterGroup : IModularValueSetAdapter
     {
@@ -1837,7 +1936,6 @@ namespace MosaicLib.Modular.Interconnect.Values
         }
 
         private Logging.IMesgEmitter issueEmitter = null, valueNotEmitter = null;
-        private bool optimizeSets = true;
 
         /// <summary>
         /// Gives the caller get/set access to the IValuesInterconnection instance that will be used by all of the ValueSetAdapterBase instances in this group.
@@ -1938,10 +2036,16 @@ namespace MosaicLib.Modular.Interconnect.Values
 
         /// <summary>
         /// This property determines if the Set method uses ValueContainer equality testing to determine which IValueAccessor objects to actually write to the table.
-        /// When this property is true (the default), equality testing will be used to prevent updating table entires for IValueAccessors that do not have a set pending (due to change in container value).
-        /// When this property is false, all value table entries will be Set, without regard to whether their value might have changed.
+        /// Internally this is equivilant to the SetMode.Optimize flag.
         /// </summary>
-        public bool OptimizeSets { get { return optimizeSets; } set { optimizeSets = value; foreach (var vsab in imvsaList) vsab.OptimizeSets = value; } }
+        public bool OptimizeSets { get { return SetMode.IsSet(SetMode.Optimize); } set { SetMode = SetMode.Set(SetMode.Optimize, value); } }
+
+        /// <summary>
+        /// This property directly selects the SetMode that will be used by the adapter's Set method when calling IVI.Set and thus controls selection of optimizations.
+        /// <para/>Note: when this property is set, it also sets the SetMode's for all of the IModularValueSetAdapter instances that this group is attached to.
+        /// </summary>
+        public SetMode SetMode { get { return _setMode; } set { _setMode = value; foreach (var vasb in imvsaList) vasb.SetMode = value; } }
+        protected SetMode _setMode = SetMode.Optimize;
 
         /// <summary>
         /// Returns true if any of the IValueAccessors to which this adapter is attached indicate that there is a pending update 
@@ -1954,6 +2058,20 @@ namespace MosaicLib.Modular.Interconnect.Values
                 RebuildArraysIfNeeded();
 
                 return ivaArray.IsUpdateNeeded();
+            }
+        }
+
+        /// <summary>
+        /// Returns true if any of the IValueAccessors to which this adapter is attached indicate that there is a pending value update 
+        /// (because the accessed value has been set elsewhere so there may be a new value to update that accessor from).
+        /// </summary>
+        public bool IsValueUpdateNeeded
+        {
+            get
+            {
+                RebuildArraysIfNeeded();
+
+                return ivaArray.IsValueUpdateNeeded();
             }
         }
 
@@ -2041,7 +2159,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         where TValueSet : class
     {
         /// <summary>
-        /// Config instance constructor.  Assigns adapter to use given IValuesInterconnection valueInterconnect service instance.  This may be overridden during the Setup call.
+        /// Constructor.  Assigns adapter to use given IValuesInterconnection valueInterconnect service instance (if given).  This may be overridden during the Setup call.
         /// For use with Property Initializers and the Setup method to define and setup the adapter instance for use.
         /// <para/>Please Note: the Setup method must be called before the adapter can be used.  
         /// </summary>
@@ -2116,7 +2234,8 @@ namespace MosaicLib.Modular.Interconnect.Values
     /// </typeparam>
     /// <typeparam name="TAttribute">
     /// Allows the client to customize this adapter to make use of any <seealso cref="Attributes.ValueSetItemAttribute"/> derived attribute type.
-    /// This is intended to allow the client to make use of multiple custom attribute types in order to customize which adapter any given annotated item in a value set class the item is itended to be used with.
+    /// This is intended to allow the client to make use of multiple custom attribute types in order to customize which adapter any given annotated item in a value set 
+    /// class the item is intended to be used with.
     /// </typeparam>
     /// <remarks>
     /// The primary methods/properties used on this adapter are: Construction, ValueSet, Setup, Set, Update, IsUpdateNeeded
@@ -2333,8 +2452,8 @@ namespace MosaicLib.Modular.Interconnect.Values
     }
 
     /// <summary>
-    /// Base class for generaic ValueSetAdapter class used to support common pattern enforcement and to allow use of ValueSetAdapterGroup which applies to a set of ValueSetAdatperBase derived objects.
-    /// All of the non-TValueSet type implementation and portions of the TValueSet type specific implementation are implemented at this level.
+    /// Base class for generaic ValueSetAdapter class used to support common pattern enforcement and to allow use of ValueSetAdapterGroup which applies to a set of 
+    /// ValueSetAdatperBase derived objects.  All of the non-TValueSet type implementation and portions of the TValueSet type specific implementation are implemented at this level.
     /// </summary>
     public abstract class ValueSetAdapterBase 
         : ValueSetAdapterBase<Attributes.ValueSetItemAttribute>
@@ -2345,8 +2464,8 @@ namespace MosaicLib.Modular.Interconnect.Values
     }
 
     /// <summary>
-    /// Base class for generaic ValueSetAdapter class used to support common pattern enforcement and to allow use of ValueSetAdapterGroup which applies to a set of ValueSetAdatperBase derived objects.
-    /// All of the non-TValueSet type implementation and portions of the TValueSet type specific implementation are implemented at this level.
+    /// Base class for generaic ValueSetAdapter class used to support common pattern enforcement and to allow use of ValueSetAdapterGroup which applies to a set of 
+    /// ValueSetAdatperBase derived objects.  All of the non-TValueSet type implementation and portions of the TValueSet type specific implementation are implemented at this level.
     /// </summary>
     public abstract class ValueSetAdapterBase<TAttribute>
         : IModularValueSetAdapter, IGetSetIVI
@@ -2374,8 +2493,6 @@ namespace MosaicLib.Modular.Interconnect.Values
             NumItems = valueSetItemInfoList.Count;
 
             IVAArray = new IValueAccessor[NumItems];
-
-            OptimizeSets = true;
         }
 
         #endregion
@@ -2495,24 +2612,34 @@ namespace MosaicLib.Modular.Interconnect.Values
 
             TransferValuesToIVAs();
 
-            IVI.Set(IVAArray, NumItems, optimize: OptimizeSets);
+            IVI.Set(IVAArray, setMode: _setMode, numEntriesToSet: NumItems);
 
             return this;
         }
 
         /// <summary>
         /// This property determines if the Set method uses ValueContainer equality testing to determine which IValueAccessor objects to actually write to the table.
-        /// When this property is true (the default), equality testing will be used to prevent updating table entires for IValueAccessors that do not have a set pending (due to change in container value).
-        /// When this property is false, all value table entries will be Set, without regard to whether their value might have changed.
+        /// Internally this is equivilant to the SetMode.Optimize flag.
         /// </summary>
-        public bool OptimizeSets { get { return optimizeSets; } set { optimizeSets = value; } }
-        protected bool optimizeSets = false;
+        public bool OptimizeSets { get { return SetMode.IsSet(SetMode.Optimize); } set { SetMode = SetMode.Set(SetMode.Optimize, value); } }
 
         /// <summary>
-        /// Returns true if any of the IValueAccessors to which this adapter is attached indicate that there is a pending update 
+        /// This property directly selects the SetMode that will be used by the adapter's Set method when calling IVI.Set and thus controls selection of optimizations.
+        /// </summary>
+        public SetMode SetMode { get { return _setMode; } set { _setMode = value; } }
+        protected SetMode _setMode = SetMode.Optimize;
+
+        /// <summary>
+        /// Returns true if any of the IValueAccessors to which this adapter is attached indicate IsUpdateNeeded
         /// (because the accessed value has been set elsewhere so there may be a new value to update that accessor from).
         /// </summary>
         public bool IsUpdateNeeded { get { return IVAArray.IsUpdateNeeded(); } }
+
+        /// <summary>
+        /// Returns true if any of the IValueAccessors to which this adapter is attached indicate IsValueUpdateNeeded 
+        /// (because the accessed value has been set elsewhere so there may be a new value to update that accessor from).
+        /// </summary>
+        public bool IsValueUpdateNeeded { get { return IVAArray.IsValueUpdateNeeded(); } }
 
         /// <summary>
         /// Requests the IValuesInterconnection instance to update all of the adapter's IValueAccessor objects and then transfers the updated values
@@ -2747,9 +2874,9 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <summary>
         /// This method is used to add an DelegateItemSpec to the adapter.  These calls must all be completed before Setup is called.
         /// </summary>
-        public DelegateValueSetAdapter Add<TValueSet>(DelegateItemSpec<TValueSet> itemSpec)
+        public DelegateValueSetAdapter Add<TValueType>(DelegateItemSpec<TValueType> itemSpec)
         {
-            addedItemList.Add(new DelegateIVAItem<TValueSet>(itemSpec));
+            addedItemList.Add(new DelegateIVAItem<TValueType>(itemSpec));
 
             NumItems = addedItemList.Count;
 
@@ -2792,7 +2919,10 @@ namespace MosaicLib.Modular.Interconnect.Values
             return Setup(null, baseNames);
         }
 
-        IValueSetAdapter IValueSetAdapter.Setup(params string[] baseNames) { return this.Setup(baseNames); }
+        IValueSetAdapter IValueSetAdapter.Setup(params string[] baseNames) 
+        { 
+            return this.Setup(baseNames); 
+        }
 
         /// <summary>
         /// This method determines the set of full IVA Names from the added DelegateItemSpec items, and creates a set of IVA objects for them.
@@ -2851,7 +2981,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         {
             TransferValuesToIVAs();
 
-            IVI.Set(setSpecificIvaArray, numEntriesToSet: setSpecificIvaArrayLength, optimize: OptimizeSets);
+            IVI.Set(setSpecificIvaArray, setMode: _setMode, numEntriesToSet: setSpecificIvaArrayLength);
 
             return this;
         }
@@ -2860,17 +2990,27 @@ namespace MosaicLib.Modular.Interconnect.Values
 
         /// <summary>
         /// This property determines if the Set method uses ValueContainer equality testing to determine which IValueAccessor objects to actually write to the table.
-        /// When this property is true (the default), equality testing will be used to prevent updating table entires for IValueAccessors that do not have a set pending (due to change in container value).
-        /// When this property is false, all value table entries will be Set, without regard to whether their value might have changed.
+        /// Internally this is equivilant to the SetMode.Optimize flag.
         /// </summary>
-        public bool OptimizeSets { get { return optimizeSets; } set { optimizeSets = value; } }
-        protected bool optimizeSets = true;
+        public bool OptimizeSets { get { return SetMode.IsSet(SetMode.Optimize); } set { SetMode = SetMode.Set(SetMode.Optimize, value); } }
+
+        /// <summary>
+        /// This property directly selects the SetMode that will be used by the adapter's Set method when calling IVI.Set and thus controls selection of optimizations.
+        /// </summary>
+        public SetMode SetMode { get { return _setMode; } set { _setMode = value; } }
+        protected SetMode _setMode = SetMode.Optimize;
 
         /// <summary>
         /// Returns true if any of the Update specific IValueAccessors to which this adapter is attached indicate IsUpdateNeeded
         /// (because the accessed value has been set elsewhere so there may be a new value to update that accessor from).
         /// </summary>
         public bool IsUpdateNeeded { get { return updateSpecificIvaArray.IsUpdateNeeded(); } }
+
+        /// <summary>
+        /// Returns true if any of the Update specific IValueAccessors to which this adapter is attached indicate IsValueUpdateNeeded
+        /// (because the accessed value has been set elsewhere so there may be a new value to update that accessor from).
+        /// </summary>
+        public bool IsValueUpdateNeeded { get { return updateSpecificIvaArray.IsValueUpdateNeeded(); } }
 
         /// <summary>
         /// Requests the IValuesInterconnection instance to update all of the adapter's IValueAccessor objects and then transfers the updated values
@@ -3034,7 +3174,7 @@ namespace MosaicLib.Modular.Interconnect.Values
 
     #endregion
 
-    #region Related Extension Methods: IsUpdatedNeeded and IsSetPending for a IValueAccessor arrays
+    #region Extension Methods (IVA array IsUpdatedNeeded and IsSetPending, IVA.SetIfNeeded, IVA.SetVCInline variants, IVA.SetInitialValueIfNeeded, IVA.SetMetaData)
 
     public static partial class ExtensionMethods
     {
@@ -3047,6 +3187,21 @@ namespace MosaicLib.Modular.Interconnect.Values
             foreach (IValueAccessor iva in ivaArray ?? emptyIVAArray)
             {
                 if (iva != null && iva.IsUpdateNeeded)
+                    return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Checks each IVA in the given array and returns true if any such non-null IVA's IsValueUpdateNeeded flag is set.
+        /// Returns false if no such IVA IsValueUpdateNeeded flag is set, or the array is null or empty.
+        /// </summary>
+        public static bool IsValueUpdateNeeded(this IValueAccessor[] ivaArray)
+        {
+            foreach (IValueAccessor iva in ivaArray ?? emptyIVAArray)
+            {
+                if (iva != null && iva.IsValueUpdateNeeded)
                     return true;
             }
 
@@ -3143,6 +3298,16 @@ namespace MosaicLib.Modular.Interconnect.Values
             {
                 ivaImpl.IVI.SetMetaData(new IValueAccessor[] { iva }, metaDataIn: metaDataIn, mergeBehavior: mergeBehavior);
             }
+
+            return iva;
+        }
+
+        /// <summary>
+        /// This extension method is used to set the given <paramref name="iva"/>'s RethrowOnValueGetter to the given <paramref name="rethrow"/> value.
+        /// </summary>
+        public static IValueAccessor<TValueType> SetRethrowInValueGetter<TValueType>(this IValueAccessor<TValueType> iva, bool rethrow)
+        {
+            iva.RethrowInValueGetter = rethrow;
 
             return iva;
         }

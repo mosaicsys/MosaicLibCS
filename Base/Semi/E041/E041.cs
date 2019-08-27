@@ -1972,7 +1972,7 @@ namespace MosaicLib.Semi.E041
             /// <summary>Gives the client access to the state publisher object that the manager creates in order to publish anState changes after it has processed them.</summary>
             ISequencedObjectSource<IANState, Int32> IANSourceBase.ANStatePublisher { get { return ManagersANStatePublisher; } }
 
-            static INamedValueSet ClearEnabledActionsIfNeeded(INamedValueSet fromNVS)
+            static INamedValueSet ClearEnabledActionsIfNeeded(INamedValueSet fromNVS, string disableReason = null)
             {
                 if (fromNVS.IsAnyActionEnabled())
                 {
@@ -1980,7 +1980,13 @@ namespace MosaicLib.Semi.E041
 
                     foreach (NamedValue nv in toNVS)
                     {
-                        nv.VC = new ValueContainer(false);
+                        if (nv.GetActionDisableReason().IsNullOrEmpty())
+                        {
+                            if (disableReason.IsNeitherNullNorEmpty())
+                                nv.VC = new ValueContainer(disableReason);
+                            else
+                                nv.VC = new ValueContainer(false);
+                        }
                     }
 
                     return toNVS.MakeReadOnly();
@@ -1989,6 +1995,21 @@ namespace MosaicLib.Semi.E041
                 {
                     return fromNVS;
                 }
+            }
+
+            static INamedValueSet SetAllActionsToDisabled(INamedValueSet fromNVS, string disableReason = null)
+            {
+                NamedValueSet toNVS = new NamedValueSet(fromNVS);
+
+                foreach (NamedValue nv in toNVS)
+                {
+                    if (disableReason.IsNeitherNullNorEmpty())
+                        nv.VC = new ValueContainer(disableReason);
+                    else
+                        nv.VC = new ValueContainer(false);
+                }
+
+                return toNVS.MakeReadOnly();
             }
 
             /// <summary>Sets the signal state to be non-signaling.</summary>
@@ -2014,7 +2035,7 @@ namespace MosaicLib.Semi.E041
                         }
 
                         // clear any/all enabled actions as this point without removing the names of the available actions
-                        ANState.ActionList = ClearEnabledActionsIfNeeded(ANState.ActionList);
+                        ANState.ActionList = SetAllActionsToDisabled(ANState.ActionList);       // passing no specific reason sets the actions to each be false
                         
                         SetSignalState(ANSignalState.Off, reason, true);
                     }
@@ -2034,7 +2055,9 @@ namespace MosaicLib.Semi.E041
                     if (ANState.ANSignalState.IsActionActive())
                     {
                         anSignalState = ANSignalState.OnAndActionActive;     // OnAndActionActive state is sticky until an is Cleared or Action is marked as complete
-                        roActionList = ClearEnabledActionsIfNeeded(roActionList);
+
+                        string actionName = ANState.ActiveActionName;
+                        roActionList = ClearEnabledActionsIfNeeded(roActionList, actionName.IsNeitherNullNorEmpty() ? "Action {0} is active".CheckedFormat(actionName) : "An action is active");
                     }
 
                     if (!ANState.ActionList.IsEqualTo(roActionList))
@@ -2069,7 +2092,7 @@ namespace MosaicLib.Semi.E041
                     ANState.ActiveActionName = actionName;
 
                     // clear any/all enabled actions as this point without removing the names of the available actions
-                    ANState.ActionList = ClearEnabledActionsIfNeeded(ANState.ActionList);
+                    ANState.ActionList = ClearEnabledActionsIfNeeded(ANState.ActionList, "Action {0} has started".CheckedFormat(actionName));
 
                     SetSignalState(ANSignalState.OnAndActionActive, reason, true);
                 }

@@ -51,6 +51,10 @@ namespace MosaicLib.SerialIO
 			buffer = new byte [size];
 		}
 
+        /// <summary>When true (the default) allows the buffer to automatically re-align the buffer as a side effect of calling other methods.</summary>
+        public bool EnableAutoAlignment { get { return _enabledAutoAlignment; } set { _enabledAutoAlignment = value; } }
+        private bool _enabledAutoAlignment = true;
+
         /// <summary>Gives the caller access to the internal buffer for purposes of extracting data from it.</summary>
         /// <param name="buffer">Passes out a reference to the underlying byte array buffer</param>
         /// <param name="nextGetIdx">Passes out the index that marks the offset into the buffer at which the next unused byte is found</param>
@@ -76,7 +80,7 @@ namespace MosaicLib.SerialIO
 			buffer = this.buffer;
 			spaceRemaining = BufferDataSpaceRemaining;
 
-			if (putIdx != 0 && desiredSpace > spaceRemaining)
+			if (putIdx != 0 && desiredSpace > spaceRemaining && EnableAutoAlignment)
 			{
 				AlignBuffer();
 				spaceRemaining = BufferDataSpaceRemaining;
@@ -95,14 +99,17 @@ namespace MosaicLib.SerialIO
 			getIdx += n;
 			getTimeStamp = QpcTimeStamp.Now;
 
-			if (BufferEmpty)
+			if (BufferEmpty && EnableAutoAlignment)
 				ResetBuffer();
-			else if (BufferDataSpaceRemaining <= 0)
+			else if (BufferDataSpaceRemaining <= 0 && EnableAutoAlignment)
 				AlignBuffer();
 		}
 
         /// <summary>Empties the buffer by discarding any data that is currently in it.</summary>
         public void FlushBuffer() { ResetBuffer(true); }
+
+        /// <summary>Returns true if the sliding buffer is aligned (aka the next get index is at the start of the buffer).</summary>
+        public bool IsAligned { get { return getIdx == 0; } }
 
         /// <summary>Shifts any existing buffered data down so that the first byte in the buffer is obtained from index zero.  This makes the space available be as large as possible.</summary>
         public virtual void AlignBuffer()

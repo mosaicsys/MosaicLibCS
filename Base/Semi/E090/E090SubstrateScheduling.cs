@@ -492,7 +492,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
     /// This interface is the basis for both the IPreparednessState (et. al.) and the PreparednessQueryResult.  
     /// It is also the basis for a publisher class that can be used to publish a serializable copy of either of these.
     /// </summary>
-    public interface IPreparednessState
+    public interface IPreparednessState : IEquatable<IPreparednessState>
     {
         /// <summary>Gives the recipe name of the corresponding process spec (if any)</summary>
         string ProcessSpecRecipeName { get; }
@@ -587,6 +587,22 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
         {
             return "Preparedness {0} State:{1} ETTR:{2:f3} Reason:'{3}' NVS:{4}".CheckedFormat(ProcessSpecRecipeName.CombineRecipeNames(ProcessStepSpecRecipeName), SummaryState, EstimatedTimeToReady.TotalSeconds, Reason, NVS.SafeToStringSML());
         }
+
+        /// <summary>
+        /// Returns true if the object has the same contents as the given <paramref name="other"/> one.
+        /// </summary>
+        public bool Equals(IPreparednessState other)
+        {
+            return (other != null
+                    && ProcessSpecRecipeName == other.ProcessSpecRecipeName
+                    && ProcessStepSpecRecipeName == other.ProcessStepSpecRecipeName
+                    && SummaryState.Equals(other.SummaryState)
+                    && SummaryStateTimeStamp == other.SummaryStateTimeStamp
+                    && EstimatedTimeToReady == other.EstimatedTimeToReady
+                    && Reason == other.Reason
+                    && NVS.Equals(other.NVS)
+                    );
+        }
     }
 
     /// <summary>
@@ -652,7 +668,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
     /// <para/>As such all of the properties and method(s) supported by this interface on published objects must be thread safe and reenterant.  
     /// Normally this is a natural result of the underlying object being immutable.
     /// </summary>
-    public interface IPreparednessState<TProcessSpecType, TProcessStepSpecType> : IPreparednessState
+    public interface IPreparednessState<TProcessSpecType, TProcessStepSpecType> : IPreparednessState, IEquatable<IPreparednessState<TProcessSpecType, TProcessStepSpecType>>
         where TProcessSpecType : IProcessSpec
         where TProcessStepSpecType : IProcessStepSpec
     {
@@ -720,6 +736,22 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
         public override string ToString()
         {
             return "QueryResult {0} State:{1} ETTR:{2:f3} Reason:'{3}' NVS:{4}".CheckedFormat(ProcessSpec.CombineRecipeNames(ProcessStepSpec), SummaryState, EstimatedTimeToReady.TotalSeconds, Reason, NVS.SafeToStringSML());
+        }
+
+        /// <summary>
+        /// Returns true if the object has the same contents as the given <paramref name="other"/> one.
+        /// </summary>
+        public bool Equals(IPreparednessState other)
+        {
+            return (other != null
+                    && ProcessSpecRecipeName == other.ProcessSpecRecipeName
+                    && ProcessStepSpecRecipeName == other.ProcessStepSpecRecipeName
+                    && SummaryState.Equals(other.SummaryState)
+                    && SummaryStateTimeStamp == other.SummaryStateTimeStamp
+                    && EstimatedTimeToReady == other.EstimatedTimeToReady
+                    && Reason == other.Reason
+                    && NVS.Equals(other.NVS)
+                    );
         }
     }
 
@@ -808,6 +840,42 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
         {
             return "Preparedness {0} State:{1} ETTR:{2:f3} Reason:'{3}' NVS:{4}".CheckedFormat(ProcessSpec.CombineRecipeNames(ProcessStepSpec), SummaryState, EstimatedTimeToReady.TotalSeconds, Reason, NVS.SafeToStringSML());
         }
+
+        /// <summary>
+        /// Returns true if the object has the same contents as the given <paramref name="other"/> one.
+        /// </summary>
+        public bool Equals(IPreparednessState other)
+        {
+            var otherAsDownCast = other as IPreparednessState<TProcessSpecType, TProcessStepSpecType>;
+            if (otherAsDownCast != null)
+                return Equals(otherAsDownCast);
+
+            return (other != null
+                    && ProcessSpecRecipeName == other.ProcessSpecRecipeName
+                    && ProcessStepSpecRecipeName == other.ProcessStepSpecRecipeName
+                    && SummaryState.Equals(other.SummaryState)
+                    && SummaryStateTimeStamp == other.SummaryStateTimeStamp
+                    && EstimatedTimeToReady == other.EstimatedTimeToReady
+                    && Reason == other.Reason
+                    && NVS.Equals(other.NVS)
+                    );
+        }
+
+        /// <summary>
+        /// Returns true if the object has the same contents as the given <paramref name="other"/> one.
+        /// </summary>
+        public bool Equals(IPreparednessState<TProcessSpecType, TProcessStepSpecType> other)
+        {
+            return (other != null
+                    && object.ReferenceEquals(ProcessSpec, other.ProcessSpec)
+                    && object.ReferenceEquals(ProcessStepSpec, other.ProcessStepSpec)
+                    && SummaryState.Equals(other.SummaryState)
+                    && SummaryStateTimeStamp == other.SummaryStateTimeStamp
+                    && EstimatedTimeToReady == other.EstimatedTimeToReady
+                    && Reason == other.Reason
+                    && NVS.Equals(other.NVS)
+                    );
+        }
     }
 
     /// <summary>
@@ -815,6 +883,21 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
     /// </summary>
     public static partial class ExtensionMethods
     {
+        /// <summary>
+        /// Updates the SummaryState, SummaryStateTimeStamp and Reason in the given <paramref name="preparednessState"/> instance.
+        /// SummaryStateTimeStamp is set to QpcTimeStamp.Now if given <paramref name="qpcTimeStamp"/> value is "zero" (aka default(QpcTimeStamp)).
+        /// </summary>
+        public static PreparednessState<TProcessSpecType, TProcessStepSpecType> SetSummaryState<TProcessSpecType, TProcessStepSpecType>(this PreparednessState<TProcessSpecType, TProcessStepSpecType> preparednessState, QuerySummaryState summaryState, string reason, QpcTimeStamp qpcTimeStamp = default(QpcTimeStamp))
+            where TProcessSpecType : IProcessSpec
+            where TProcessStepSpecType : IProcessStepSpec
+        {
+            preparednessState.SummaryState = summaryState;
+            preparednessState.SummaryStateTimeStamp = qpcTimeStamp.MapDefaultToNow();
+            preparednessState.Reason = reason;
+
+            return preparednessState;
+        }
+
         public static string CombineRecipeNames(this IProcessSpec processSpec, IProcessStepSpec processStepSpec)
         {
             string processSpecRecipeName = (processSpec != null) ? processSpec.RecipeName : null;
@@ -941,7 +1024,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
     public interface ISubstrateTrackerBase
     {
         int ServiceDropReasonAssertion();
-        int ServiceBasicSJSStateChangeTriggers(ServiceBasicSJSStateChangeTriggerFlags flags);
+        int ServiceBasicSJSStateChangeTriggers(ServiceBasicSJSStateChangeTriggerFlags flags, bool updateIfNeeded = false, QpcTimeStamp qpcTimeStamp = default(QpcTimeStamp));
         void SetSubstrateJobState(SubstrateJobState sjs, string reason, bool ifNeeded = true);
 
         E039ObjectID SubstID { get; }
@@ -950,6 +1033,12 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
 
         E090SubstObserver SubstObserver { get; }
         E090SubstInfo Info { get; }
+
+        /// <summary>
+        /// When true (and when supported) this property indicates that the tracked substrate is expected to be in motion, either now, or in the near future.
+        /// <para/>this property can be used buy the ServiceBasicSJSStateChangeTriggers method to prevent requesting state changes that are only valid at the current substrate location.
+        /// </summary>
+        bool IsMotionPending { get; }
 
         QpcTimeStamp LastServiceStartTimeStamp { get; set; }
         QpcTimeStamp LastUpdateTimeStamp { get; set; }
@@ -970,7 +1059,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
     /// <summary>
     /// Flags used with ISubstrateTrackerBase.ServiceBasicSJSStateChangeTriggers to control which of its available behaviors shall be enabled for a given use situation.
     /// <para/>None (0x00), EnableInfoTriggeredRules (0x01), EnableWaitingForStartRules (0x02), EnableAutoStart (0x04), EnablePausingRules (0x08),
-    /// EnableStoppingRules (0x10), EnableAbortingRules (0x20), EnableRunningRules (0x40), All (0x7f)
+    /// EnableStoppingRules (0x10), EnableAbortingRules (0x20), EnableRunningRules (0x40), EnableAbortedAtWork(0x80), EnableHeldRules(0x100), EnablePausedRules(0x200), All (0x3ff)
     /// </summary>
     [Flags]
     public enum ServiceBasicSJSStateChangeTriggerFlags : int
@@ -984,8 +1073,10 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
         EnableAbortingRules = 0x20,
         EnableRunningRules = 0x40,
         EnableAbortedAtWork = 0x80,
+        EnableHeldRules = 0x100,
+        EnablePausedRules = 0x200,
 
-        All = (EnableInfoTriggeredRules | EnableWaitingForStartRules | EnableAutoStart | EnablePausingRules | EnableStoppingRules | EnableAbortingRules | EnableRunningRules),
+        All = (EnableInfoTriggeredRules | EnableWaitingForStartRules | EnableAutoStart | EnablePausingRules | EnableStoppingRules | EnableAbortingRules | EnableRunningRules | EnableHeldRules | EnablePausedRules),
     }
 
     /// <summary>
@@ -1213,15 +1304,16 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
         /// </summary>
         public override string ToString()
         {
+            string inMotionStr = (IsMotionPending ? " MotionPending" : "");
             string dropReqStr = (IsDropRequested ? " DropReq:{0}".CheckedFormat(DropRequestReason) : "");
 
             if (SubstObserver != null)
-                return "ST: {0}{1}".CheckedFormat(SubstObserver, dropReqStr);
+                return "ST: {0}{1}{2}".CheckedFormat(SubstObserver, inMotionStr, dropReqStr);
             else
                 return "ST: No substrate object found for given id '{0}'".CheckedFormat(SubstID.FullName);
         }
 
-        public virtual void Setup(IE039TableUpdater e039TableUpdater, E039ObjectID substID, Logging.IBasicLogger logger)
+        public virtual void Setup(IE039TableUpdater e039TableUpdater, E039ObjectID substID, Logging.IBasicLogger logger, bool setSJSToWaitingForStart = true)
         {
             SubstID = substID.MapNullToEmpty();
             E039TableUpdater = e039TableUpdater;
@@ -1234,7 +1326,8 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
             else
                 throw new SubstrateSchedulingException("No substrate object found for given id '{0}'".CheckedFormat(SubstID.FullName));
 
-            SetSubstrateJobState(SubstrateJobState.WaitingForStart, Fcns.CurrentMethodName);
+            if (setSJSToWaitingForStart)
+                SetSubstrateJobState(SubstrateJobState.WaitingForStart, Fcns.CurrentMethodName);
         }
 
         public virtual int ServiceDropReasonAssertion()
@@ -1279,8 +1372,11 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
             return didSomethingCount;
         }
 
-        public virtual int ServiceBasicSJSStateChangeTriggers(ServiceBasicSJSStateChangeTriggerFlags flags)
+        public virtual int ServiceBasicSJSStateChangeTriggers(ServiceBasicSJSStateChangeTriggerFlags flags, bool updateIfNeeded = false, QpcTimeStamp qpcTimeStamp = default(QpcTimeStamp))
         {
+            if (updateIfNeeded)
+                UpdateIfNeeded(qpcTimeStamp: qpcTimeStamp);
+
             int didSomethingCount = 0;
 
             bool enableInfoTriggeredRules = ((flags & ServiceBasicSJSStateChangeTriggerFlags.EnableInfoTriggeredRules) != 0);
@@ -1290,17 +1386,18 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
             bool enableStoppingRules = ((flags & ServiceBasicSJSStateChangeTriggerFlags.EnableStoppingRules) != 0);
             bool enableAbortingRules = ((flags & ServiceBasicSJSStateChangeTriggerFlags.EnableAbortingRules) != 0);
             bool enableRunningRules = ((flags & ServiceBasicSJSStateChangeTriggerFlags.EnableRunningRules) != 0);
+            bool enableHeldRules = ((flags & ServiceBasicSJSStateChangeTriggerFlags.EnableHeldRules) != 0);
+            bool enablePausedRules = ((flags & ServiceBasicSJSStateChangeTriggerFlags.EnablePausedRules) != 0);
 
-            var stInfo = SubstObserver.Info;
-            SubstState sts = stInfo.STS;
-            bool stsIsAtSource = sts.IsAtSource();
-            bool stsIsAtDestination = sts.IsAtDestination();
-            bool stsIsAtWork = sts.IsAtWork();
-            bool isAtSrcLoc = stInfo.LocID == stInfo.LinkToSrc.ToID.Name;
-            bool isAtDestLoc = stInfo.LocID == stInfo.LinkToDest.ToID.Name;
+            var stInfo = Info;
+            bool isUpdateNeededOrIsMotionPending = IsUpdateNeeded || IsMotionPending;
+            bool stsIsAtSource = stInfo.STS.IsAtSource() && !isUpdateNeededOrIsMotionPending;
+            bool stsIsAtDestination = stInfo.STS.IsAtDestination() && !isUpdateNeededOrIsMotionPending;        // once a substrate is "at destination" it is not supposed to be moved but service actions might move it
+            bool stsIsAtWork = stInfo.STS.IsAtWork() && !isUpdateNeededOrIsMotionPending;
+            bool isAtSrcLoc = stInfo.LocID == stInfo.LinkToSrc.ToID.Name && !isUpdateNeededOrIsMotionPending;
+            bool isAtDestLoc = stInfo.LocID == stInfo.LinkToDest.ToID.Name && !isUpdateNeededOrIsMotionPending;
 
             SubstProcState sps = stInfo.SPS;
-            bool spsIsNeedsProcessing = sps.IsNeedsProcessing();
 
             SubstrateJobState nextSJS = SubstrateJobState.Initial;
             string reason = null;
@@ -1346,18 +1443,23 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
                 }
 
                 if (nextSJS != SubstrateJobState.Initial && reason.IsNullOrEmpty())
+                {
                     reason = "Substrate reached a final state processing/transport state";
+                }
             }
 
-            if (nextSJS == SubstrateJobState.Initial && stsIsAtWork && sps == SubstProcState.Aborted && enableAbortingRules && flags.IsSet(ServiceBasicSJSStateChangeTriggerFlags.EnableAbortedAtWork))
+            if (enableAbortingRules)
             {
-                nextSJS = E090.SubstrateJobState.Aborted;
-                reason = "Substrate reached Aborted state AtWork";
+                if (nextSJS == SubstrateJobState.Initial && stsIsAtWork && sps == SubstProcState.Aborted && flags.IsSet(ServiceBasicSJSStateChangeTriggerFlags.EnableAbortedAtWork))
+                {
+                    nextSJS = E090.SubstrateJobState.Aborted;
+                    reason = "Substrate reached Aborted state AtWork";
+                }
             }
 
             if (nextSJS == SubstrateJobState.Initial)
             {
-                switch (SubstrateJobState)
+                switch (stInfo.SJS)
                 {
                     case SubstrateJobState.WaitingForStart:
                         if (enableWaitingForStartRules)
@@ -1398,10 +1500,36 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
                                 nextSJS = SubstrateJobState.Aborting;
                                 reason = "Abort requested";
                             }
-                            else if (spsIsNeedsProcessing && stsIsAtSource)
+                            else if (stsIsAtSource)
                             {
                                 nextSJS = SubstrateJobState.Paused;
                                 reason = "Paused condition reached";
+                            }
+                            else if (SubstrateJobRequestState == SubstrateJobRequestState.Run)
+                            {
+                                nextSJS = (stsIsAtWork ? SubstrateJobState.Running : SubstrateJobState.WaitingForStart);
+                                reason = "Resume requested";
+                            }
+                        }
+                        break;
+
+                    case SubstrateJobState.Paused:
+                        if (enablePausedRules)
+                        {
+                            if (SubstrateJobRequestState == SubstrateJobRequestState.Stop)
+                            {
+                                nextSJS = SubstrateJobState.Stopping;
+                                reason = "Stop requested";
+                            }
+                            else if (SubstrateJobRequestState == SubstrateJobRequestState.Abort)
+                            {
+                                nextSJS = SubstrateJobState.Aborting;
+                                reason = "Abort requested";
+                            }
+                            else if (SubstrateJobRequestState == SubstrateJobRequestState.Run)
+                            {
+                                nextSJS = (stsIsAtWork ? SubstrateJobState.Running : SubstrateJobState.WaitingForStart);
+                                reason = "Resume requested";
                             }
                         }
                         break;
@@ -1417,7 +1545,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
                             else if (stsIsAtSource)
                             {
                                 nextSJS = SubstrateJobState.Skipped;
-                                reason = "Stop completed";
+                                reason = "Stop completed (skipped)";
                             }
                         }
                         break;
@@ -1428,7 +1556,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
                             if (stsIsAtSource)
                             {
                                 nextSJS = SubstrateJobState.Skipped;
-                                reason = "Abort completed";
+                                reason = "Abort completed (skipped)";
                             }
                         }
                         break;
@@ -1454,7 +1582,25 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
                         }
                         break;
 
-                    case SubstrateJobState.Paused:
+                    case E090.SubstrateJobState.Held:
+                        if (enableHeldRules)
+                        {
+                            // cover cases where a held NeedsProcessing wafer flagged as Stop or Abort ends up AtSource, tyipcally through manual service actions.
+                            if (stsIsAtSource && sps.IsNeedsProcessing() && (SubstrateJobRequestState == E090.SubstrateJobRequestState.Stop || SubstrateJobRequestState == E090.SubstrateJobRequestState.Abort))
+                            {
+                                nextSJS = E090.SubstrateJobState.Skipped;
+                                reason = "{0} requested (held)".CheckedFormat(SubstrateJobRequestState);
+                            }
+
+                            // cover cases where a held InProcess wafer flagged as Abort ends up AtDestination, typically through manual service actions.
+                            if (isAtDestLoc && sps.IsInProcess() && SubstrateJobRequestState == E090.SubstrateJobRequestState.Abort)
+                            {
+                                nextSJS = E090.SubstrateJobState.Aborted;
+                                reason = "Abort requested (held AtDestLoc)";
+                            }
+                        }
+                        break;
+
                     case SubstrateJobState.Processed:
                     case SubstrateJobState.Stopped:
                     case SubstrateJobState.Aborted:
@@ -1463,10 +1609,20 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
                 }
             }
 
-            if (nextSJS != SubstrateJobState.Initial && SubstrateJobState != nextSJS)
+            // perform common Skipped detection and handling on transition to nextSJS for Stopping and Aborting cases
+            if ((nextSJS == SubstrateJobState.Stopping || nextSJS == SubstrateJobState.Aborting) && stsIsAtSource)
             {
-                SetSubstrateJobState(nextSJS, "{0} [{1} {2} {3}]".CheckedFormat(reason, sps, sts, SubstrateJobRequestState));
+                nextSJS = SubstrateJobState.Skipped;
+                reason = "{0} (skip)".CheckedFormat(reason);
+            }
+
+            if (nextSJS != SubstrateJobState.Initial && stInfo.SJS != nextSJS)
+            {
+                SetSubstrateJobState(nextSJS, "{0} [{1} {2} {3} {4}]".CheckedFormat(reason, sps, stInfo.STS, stInfo.LocID, SubstrateJobRequestState));
                 didSomethingCount++;
+
+                if (updateIfNeeded)
+                    UpdateIfNeeded(qpcTimeStamp: qpcTimeStamp);
             }
 
             return didSomethingCount;
@@ -1477,7 +1633,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
 
         public virtual void SetSubstrateJobState(SubstrateJobState sjs, string reason, bool ifNeeded = true)
         {
-            var entrySJS = SubstrateJobState;
+            var entrySJS = Info.SJS;
 
             if (ifNeeded && entrySJS == sjs)
             {
@@ -1487,12 +1643,10 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
 
             Logger.Trace.Emit("{0}({1}, sjs:{2}, reason:'{3}'{4})  current sjs:{5}", Fcns.CurrentMethodName, SubstID.FullName, sjs, reason, ifNeeded ? ", IfNeeded" : "", entrySJS);
 
-            SubstrateJobState = sjs;
-
             List<E039UpdateItem> updateItemList = new List<E039UpdateItem>();
-            updateItemList.Add(new E039UpdateItem.SetAttributes(SubstID, new NamedValueSet() { { "SJS", SubstrateJobState } }));
+            updateItemList.Add(new E039UpdateItem.SetAttributes(SubstID, new NamedValueSet() { { "SJS", sjs } }));
 
-            switch (SubstrateJobState)
+            switch (sjs)
             {
                 case SubstrateJobState.Processed:
                     if (Info.SPS.IsProcessingComplete())
@@ -1517,7 +1671,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
 
                 case SubstrateJobState.Aborting:
                     if (Info.InferredSPS != SubstProcState.Aborted)
-                        updateItemList.GenerateE090UpdateItems(Info, spsParam: SubstProcState.Aborted, updateBehavior: pendingSPSUpdateBehavior);
+                        updateItemList.GenerateE090UpdateItems(Info, spsParam: SubstProcState.Aborted, updateBehavior: pendingSPSUpdateBehavior & ~E090StateUpdateBehavior.AutoUpdateSTS);      // this transition does not change STS in order to avoid race conditions when substrate motion has already been committed do but has not actually been recorded.
                     break;
 
                 case SubstrateJobState.Aborted:
@@ -1568,6 +1722,11 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
 
         public E090SubstObserver SubstObserver { get; private set; }
         public E090SubstInfo Info { get { return SubstObserver.Info; } }
+
+        /// <summary>
+        /// When overriden in a derived class, this property can be used buy the ServiceBasicSJSStateChangeTriggers method to prevent requesting state changes that are only valid at the current substrate location.
+        /// </summary>
+        public virtual bool IsMotionPending { get { return false; } }
 
         public QpcTimeStamp LastServiceStartTimeStamp { get; set; }
         public int LastServiceStartSeqNum { get; set; }
@@ -1676,9 +1835,6 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
         }
         private SubstrateJobRequestState _substrateJobRequestState;
 
-        public SubstrateJobState SubstrateJobState { get; set; }
-        public string SubstrateJobStateReason { get; set; }
-
         protected static readonly E039UpdateItem.SyncExternal syncExternal = new E039UpdateItem.SyncExternal();
     }
 
@@ -1689,19 +1845,67 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
     /// <summary>
     /// This object type is used to count up the states of a set of one or more SubstrateTrackerBase objects to give a quick overview of the distribution of such a set of subsrates.
     /// </summary>
-    public class SubstrateStateTally
+    [DataContract(Namespace = MosaicLib.Constants.E090NameSpace)]
+    public class SubstrateStateTally : ICopyable<SubstrateStateTally>, IEquatable<SubstrateStateTally>
     {
-        public int total;
+        [DataMember(IsRequired = false, EmitDefaultValue = false)] public int total;
 
-        public int stsAtSource, stsAtWork, stsAtDestination, stsOther, stsLostAnywhere, stsRemovedAnywhere, stsLostOrRemovedAnywhere;
-        
-        public int spsNeedsProcessing;
-        public int spsInProcess;
-        public int spsProcessed, spsStopped, spsRejected, spsAborted, spsSkipped, spsLost;
-        public int spsProcessStepCompleted, spsOther;
+        [DataMember(IsRequired = false, EmitDefaultValue = false)] public int stsAtSource, stsAtWork, stsAtDestination, stsOther, stsLostAnywhere, stsRemovedAnywhere, stsLostOrRemovedAnywhere;
 
-        public int sjsWaitingForStart, sjsRunning, sjsProcessed, sjsRejected, sjsSkipped, sjsPausing, sjsPaused, sjsStopping, sjsStopped, sjsAborting, sjsAborted, sjsLost, sjsReturning, sjsReturned, sjsHeld, sjsRoutingAlarm, sjsRemoved, sjsOther;
-        public int sjsAbortedAtDestination;
+        [DataMember(IsRequired = false, EmitDefaultValue = false)] public int spsNeedsProcessing;
+
+        [DataMember(IsRequired = false, EmitDefaultValue = false)] public int spsInProcess;
+        [DataMember(IsRequired = false, EmitDefaultValue = false)] public int spsProcessed, spsStopped, spsRejected, spsAborted, spsSkipped, spsLost;
+        [DataMember(IsRequired = false, EmitDefaultValue = false)] public int spsProcessStepCompleted, spsOther;
+
+        [DataMember(IsRequired = false, EmitDefaultValue = false)] public int sjsWaitingForStart, sjsRunning, sjsProcessed, sjsRejected, sjsSkipped, sjsPausing, sjsPaused, sjsStopping, sjsStopped, sjsAborting, sjsAborted, sjsLost, sjsReturning, sjsReturned, sjsHeld, sjsRoutingAlarm, sjsRemoved, sjsOther;
+
+        [DataMember(IsRequired = false, EmitDefaultValue = false)] public int sjsAbortedAtDestination;
+
+        [DataMember(IsRequired = false, EmitDefaultValue = false)] public int motionPendingCount;
+
+        public bool Equals(SubstrateStateTally other)
+        {
+            return (other != null
+                    && total == other.total
+                    && stsAtSource == other.stsAtSource
+                    && stsAtWork == other.stsAtWork
+                    && stsAtDestination == other.stsAtDestination
+                    && stsOther == other.stsOther
+                    && stsLostAnywhere == other.stsLostAnywhere
+                    && stsLostOrRemovedAnywhere == other.stsLostOrRemovedAnywhere
+                    && spsNeedsProcessing == other.spsNeedsProcessing
+                    && spsInProcess == other.spsInProcess
+                    && spsProcessed == other.spsProcessed
+                    && spsStopped == other.spsStopped
+                    && spsRejected == other.spsRejected
+                    && spsAborted == other.spsAborted
+                    && spsSkipped == other.spsSkipped
+                    && spsLost == other.spsLost
+                    && spsProcessStepCompleted == other.spsProcessStepCompleted
+                    && spsOther == other.spsOther
+                    && sjsWaitingForStart == other.sjsWaitingForStart
+                    && sjsRunning == other.sjsRunning
+                    && sjsProcessed == other.sjsProcessed
+                    && sjsRejected == other.sjsRejected
+                    && sjsSkipped == other.sjsSkipped
+                    && sjsPausing == other.sjsPausing
+                    && sjsPaused == other.sjsPaused
+                    && sjsStopping == other.sjsStopping
+                    && sjsStopped == other.sjsStopped
+                    && sjsAborting == other.sjsAborting
+                    && sjsAborted == other.sjsAborted
+                    && sjsLost == other.sjsLost
+                    && sjsReturning == other.sjsReturning
+                    && sjsReturned == other.sjsReturned
+                    && sjsHeld == other.sjsHeld
+                    && sjsRoutingAlarm == other.sjsRoutingAlarm
+                    && sjsRemoved == other.sjsRemoved
+                    && sjsOther == other.sjsOther
+                    && sjsAbortedAtDestination == other.sjsAbortedAtDestination
+                    && motionPendingCount == other.motionPendingCount
+                    );
+        }
 
         public void Clear()
         {
@@ -1716,11 +1920,15 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
 
             sjsWaitingForStart = sjsRunning = sjsProcessed = sjsRejected = sjsSkipped = sjsPausing = sjsPaused = sjsStopping = sjsStopped = sjsAborting = sjsAborted = sjsLost = sjsReturning = sjsReturned = sjsHeld = sjsRoutingAlarm = sjsRemoved = sjsOther = 0;
             sjsAbortedAtDestination = 0;
+
+            motionPendingCount = 0;
         }
 
         public void Add(SubstrateTrackerBase st)
         {
-            Add(st.SubstObserver.Info, st.SubstrateJobState);
+            Add(st.SubstObserver.Info);
+            if (st.IsMotionPending)
+                motionPendingCount++;
         }
 
         public void Add(E090SubstInfo info)
@@ -1879,7 +2087,14 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
 
         public override string ToString()
         {
-            return "sts:[{0}] sps:[{1}] sjs:[{2}]".CheckedFormat(CustomToString(GetSTSNVS(), emptyString: "None"), CustomToString(GetSPSNVS(), emptyString: "None"), CustomToString(GetSJSNVS(), emptyString: "None"));
+            string motionPendingCountStr = (motionPendingCount > 0) ? " inMotion:{0}".CheckedFormat(motionPendingCount) : "";
+
+            return "sts:[{0}] sps:[{1}] sjs:[{2}]{3}".CheckedFormat(CustomToString(GetSTSNVS(), emptyString: "None"), CustomToString(GetSPSNVS(), emptyString: "None"), CustomToString(GetSJSNVS(), emptyString: "None"), motionPendingCountStr);
+        }
+
+        public SubstrateStateTally MakeCopyOfThis(bool deepCopy = true)
+        {
+            return (SubstrateStateTally)this.MemberwiseClone();
         }
     }
 

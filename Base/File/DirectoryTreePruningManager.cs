@@ -464,7 +464,7 @@ namespace MosaicLib.File
         /// <para/>returns the number of items that were successfully deleted.
         /// </summary>
         /// <param name="pruneItemList">Gives the list of DirectoryEntryInfo items that are to be removed from the file system.</param>
-        /// <param name="deleteEmitter">Gives the IMesgEmitter that will recieve messages about the successfull deletions</param>
+        /// <param name="deleteEmitter">Gives the IMesgEmitter that will recieve messages about the successful deletions</param>
         /// <param name="issueEmitter">Gives the IMesgEmitter that will receive any messages about failures while attempting to delete each item.</param>
         /// <param name="reason">Gives the string description for the reason that these items are to be deleted.  Null or Empty will be replaced with [NoReasonGiven]</param>
         /// <returns>The number of items that were successfully deleted.</returns>

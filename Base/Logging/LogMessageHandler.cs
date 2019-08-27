@@ -33,6 +33,7 @@ using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Config;
 using MosaicLib.Modular.Config.Attributes;
 using MosaicLib.Modular.Interconnect.Sets;
+using MosaicLib.Modular.Reflection.Attributes;
 using MosaicLib.Time;
 using MosaicLib.Utils;
 
@@ -1467,6 +1468,14 @@ namespace MosaicLib
             System.Reflection.Assembly mainAssembly = System.Reflection.Assembly.GetEntryAssembly();
             System.Reflection.Assembly currentAssembly = System.Reflection.Assembly.GetExecutingAssembly();
 
+            string hostingAssemblyInformationalVersion = hostingAssembly.GetInformationalVersion(mapNullFallbackValue: false, tryAutoFallbackValues: false);
+            string mainAssemblyInformationalVersion = mainAssembly.GetInformationalVersion(mapNullFallbackValue: false, tryAutoFallbackValues: false);
+            string currentAssemblyInformationalVersion = currentAssembly.GetInformationalVersion(mapNullFallbackValue: false, tryAutoFallbackValues: false);
+
+            string hostingAssemblyInformationalVersionStr = hostingAssemblyInformationalVersion.IsNeitherNullNorEmpty() ? " '{0}'".CheckedFormat(hostingAssemblyInformationalVersion) : "";
+            string mainAssemblyInformationalVersionStr = mainAssemblyInformationalVersion.IsNeitherNullNorEmpty() ? " '{0}'".CheckedFormat(mainAssemblyInformationalVersion) : "";
+            string currentAssemblyInformationalVersionStr = currentAssemblyInformationalVersion.IsNeitherNullNorEmpty() ? " '{0}'".CheckedFormat(currentAssemblyInformationalVersion) : "";
+
             DebuggableAttribute.DebuggingModes hostingAssemblyDebuggingFlags = hostingAssembly.GetDebuggingMode();
             DebuggableAttribute.DebuggingModes mainAssemblyDebuggingFlags = mainAssembly.GetDebuggingMode();
             DebuggableAttribute.DebuggingModes currentAssemblyDebuggingFlags = currentAssembly.GetDebuggingMode();
@@ -1487,9 +1496,9 @@ namespace MosaicLib
                 "Process name:'{0}' id:{1} {2}".CheckedFormat(currentProcess.ProcessName, currentProcess.Id, Environment.Is64BitProcess ? "64-bit" : "32-bit"),
                 "Machine:'{0}' os:'{1}'{2} Cores:{3} PageSize:{4}".CheckedFormat(machineName, Environment.OSVersion, Environment.Is64BitOperatingSystem ? " 64-bit" : "", Environment.ProcessorCount, Environment.SystemPageSize),
                 "User:'{0}' {1}".CheckedFormat(userName, Environment.UserInteractive ? "interactive" : "service"),
-                ((hostingAssembly != null) ? "Hosting Assembly: '{0}'{1}".CheckedFormat(hostingAssembly, hostingAssemblyDebugInfoStr) : null),
-                ((mainAssembly != null && mainAssembly != hostingAssembly) ? "Main Assembly: '{0}'{1}".CheckedFormat(mainAssembly, mainAssemblyDebugInfoStr) : null),
-                (currentAssemblyDebuggingFlags.IsDebuggingEnabled() ? "Current Assembly: '{0}'{1}".CheckedFormat(currentAssembly, currentAssemblyDebugInfoStr) : null),
+                ((hostingAssembly != null) ? "Hosting Assembly: '{0}'{1}{2}".CheckedFormat(hostingAssembly, hostingAssemblyInformationalVersionStr, hostingAssemblyDebugInfoStr) : null),
+                ((mainAssembly != null && mainAssembly != hostingAssembly) ? "Main Assembly: '{0}'{1}{2}".CheckedFormat(mainAssembly, mainAssemblyInformationalVersionStr, mainAssemblyDebugInfoStr) : null),
+                (currentAssemblyDebuggingFlags.IsDebuggingEnabled() ? "Current Assembly: '{0}'{1}{2}".CheckedFormat(currentAssembly, currentAssemblyInformationalVersionStr, currentAssemblyDebugInfoStr) : null),
                 (System.Diagnostics.Debugger.IsAttached ? "Debugger is attached" : null),
             }.Where(s => !s.IsNullOrEmpty()).ToArray();
 

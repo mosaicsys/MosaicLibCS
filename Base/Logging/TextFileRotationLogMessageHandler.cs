@@ -176,7 +176,7 @@ namespace MosaicLib
                 /// This method attempts to setup the <see cref="MosaicLib.File.DirectoryFileRotationManager"/> to manage the ring of log files.  This must be comleted successfully
                 /// before this LMH can be used to write to any log file.
                 /// </summary>
-                /// <returns>True if the setup operation was successfull</returns>
+                /// <returns>True if the setup operation was successful</returns>
 				protected bool SetupDirMgr()
 				{
 					lastSetupAttemptTime.SetToNow();
@@ -343,7 +343,7 @@ namespace MosaicLib
 					if (droppedMessageCount == lastLoggedDroppedMessageCount)
 						return;
 
-					logger.Error.Emit("DirMgr '{0}' dropped {1} messages since last successfull write", config.name, droppedMessageCount - lastLoggedDroppedMessageCount);
+					logger.Error.Emit("DirMgr '{0}' dropped {1} messages since last successful write", config.name, droppedMessageCount - lastLoggedDroppedMessageCount);
 
 					lastLoggedDroppedMessageCount = droppedMessageCount;
 				}
