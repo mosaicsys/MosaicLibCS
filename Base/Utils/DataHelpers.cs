@@ -1936,7 +1936,7 @@ namespace MosaicLib.Utils
         {
             try
             {
-                using (System.IO.FileStream fileStream = System.IO.File.Open(path, System.IO.FileMode.OpenOrCreate, System.IO.FileAccess.Write, System.IO.FileShare.None))
+                using (System.IO.FileStream fileStream = System.IO.File.Open(path, System.IO.FileMode.Create, System.IO.FileAccess.Write, System.IO.FileShare.None))
                 {
                     WriteObject(obj, fileStream);
                 }

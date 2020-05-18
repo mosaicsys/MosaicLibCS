@@ -140,7 +140,8 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
         /// Allows the hosting part to inform the tool when a GoOffline Action is being performed.
         /// This method is called after the hosting part has completed its own operations and they have all been completed successfully.
         /// </summary>
-        string PerformGoOofflineAction(IProviderFacet ipf, Func<bool> hasStopBeenRequestedDelegate);
+        /// <remarks>The name of this method had been spelled PerformGoOofflineAction.  This has been corrected and will require corresponding derived classes to have the corresponding name change applied.</remarks>
+        string PerformGoOfflineAction(IProviderFacet ipf, Func<bool> hasStopBeenRequestedDelegate);
 
         /// <summary>
         /// This method returns a list of reasons why the scheduler cannot be transitioned from the current given <paramref name="stateToTool"/> using the given <paramref name="requestNVS"/> request specification.  (See comments for Service above and here below for details on supported request patterns)

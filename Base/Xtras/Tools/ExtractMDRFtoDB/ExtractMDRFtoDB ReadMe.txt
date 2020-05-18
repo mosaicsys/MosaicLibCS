@@ -4,12 +4,12 @@
 
 This document is a readme which gives summary usage information about the ExtractMDRFtoDB tool.
 This tool is a follow on, and eventual replacement, to the existing ExtractMDRFtoCSV tool.  
-Its new behavior and capabiltites are intended to be more useful in data analytics workflows, both repeatitious and alacarte types of tasks.
+Its new behavior and capabiltites are intended to be more useful in data analytics workflows, both repeatitious and a-la-carte types of tasks.
 
 Unlike the prior ExtractMDRFtoCSV, this tool includes the following primary improvements:
 
 * Can consolidate data from more than one MDRF into a single output file so as to be able to reconstruct a single contiguous time range from a set of sequentially generated MDRF files.
-* Supports table centric output file formats.  Initially this tool supports output to SQLite3 files.
+* Supports table centric output file formats.
 * Supports extraction of Occurrence data into a MDRF_Occurrences table so that they may be used to better inform and index the extracted tabular data where appropriate.
 * Supports use with .ini style configuration files to support a wide range of pre-defined tasks.
 * Command line parsing has been adjusted to improve usefulness with drag and drop style of program useage.  Expected use patterns include dragging a single .ini file or dragging an .ini file and set of .mdrf files to the program (or a to a shortcut to it).
@@ -33,10 +33,10 @@ This tool processes its command line and selected files in phases:
 * Setup configuration and extract, process and remove key=value style arguments from the command line
 * Process configuration .ini file, if present, from the command line
 * Optionally change working directory to the directory of the location of the configuration .ini file (enabled by default)
-* Create/truncate and initialize the output data file
+* Create/truncate and initialize the output data file(s)
 * Process MDRF file specifications from command line
 * Read indicated MDRF files as configured
-* Write the selected contents from these MDRF files to the output file.
+* Write the selected contents from these MDRF files to the output file in time order (using DateTimeInfo from header of each MDRF file)
 
 ## General operation
 
@@ -56,16 +56,13 @@ Once the ini file, if any, has been processed the application determines the des
 selected data output file that the MDRF file contents will be extracted into.
 
 Then the application processes all of the remaining command line items as names of MDRF files or as search strings for names of MDRF files (*.MDRF for example).
-For each such file it reads the file's contents using the selected filter criteria and then writes that file's contents into the output data file.
-
-Depending on the selected output file format, writing to the output file is either done as the MDRF file contents are read or is batched together
-after all MDRF file contents have been read into memory.
+For each such file it reads the file's contents using the selected filter criteria and then writes that file's contents into the output data file(s).
 
 ## configuration files: supported keys and usage
 
-* MDRFFileSpec (string)
-* AutoCDToIniFileDirectory (boolean)
-* DataFileType (one of None, SQLite3)
+* MDRFFileSpec (string, may be used to specify the set of mdrf files to process, usually as *.mdrf.  Multiple file names may be specified if seperated by '|' (the pipe symbol) as in 'a.mdrf|b.mdrf')
+* AutoCDToIniFileDirectory (boolean - defaults to true)
+* DataFileType (one of SQLite3, CSV)
 * DateFileName (string)
 * CreateMode (one of Append, Truncate) - defaults to Truncate.
 * StartDateTime (string in supported System.DateTime parsable format)
@@ -130,5 +127,8 @@ parsers for this representation and thus the hope that such complex types can be
 by this application for these cases.
 
 Please note that by default TIMESTAMP is an F8 representation of the DateTime using the Julian calendar (https://en.wikipedia.org/wiki/Julian_day)
+
+Related Excel conversions:  (Derived from https://support.microsoft.com/en-us/office/insert-julian-dates-functions-0c7fa6aa-daff-402e-9990-93a5b76ba018)  
+To convert from a Julian Date value (say A10) to a DateTime serial number format (B10) the formula is [B10=A10-2415018.50].
 
 ## End of document

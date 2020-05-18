@@ -217,11 +217,12 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
     {
         IClientFacet SetSubstrateProcessSpecs(string jobID, ProcessSpecBase<ProcessStepSpecBase> processSpec, SubstrateJobRequestState initialSJRM, params E039ObjectID[] substIDsArray);
         IClientFacet SetSJRS(SubstrateJobRequestState sjrs, params E039ObjectID[] substIDsArray);
+        IClientFacet VerifyIdle();
     }
 
     public class TestSchedulerEngine : SimpleActivePartBase, ITestSchedulerEngine, ISubstrateSchedulerPart
     {
-        public TestSchedulerEngine(string partID = "Sched", TestECSParts ecsParts = null, TestSubstrateSchedulerTool substrateSchedulerTool = null)
+        public TestSchedulerEngine(string partID = "Sched", TestECSParts ecsParts = null, TestSubstrateSchedulerTool substrateSchedulerTool = null, bool verifyIdleOnDispose = true)
             : base (partID, initialSettings: SimpleActivePartBaseSettings.DefaultVersion2.Build(waitTimeLimit: (0.02).FromSeconds()))
         {
             EcsParts = ecsParts;
@@ -230,6 +231,18 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
             stateIVA = Values.Instance.GetValueAccessor<ISubstrateSchedulerPartState>("{0}.State".CheckedFormat(PartID));
             ServiceAndPublishStateIfNeeded(force: true);
+
+            if (verifyIdleOnDispose)
+            {
+                AddExplicitDisposeAction(() =>
+                    {
+                        string ec = PerformVerifyIdle(forDispose: true);
+                        if (ec.IsNeitherNullNorEmpty())
+                        {
+                            throw new System.InvalidOperationException("VerifyIdle failed: {0}".CheckedFormat(ec));
+                        }
+                    });
+            }
         }
 
         public TestECSParts EcsParts { get; private set;}
@@ -243,6 +256,11 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
         public IClientFacet SetSJRS(SubstrateJobRequestState sjrs, params E039ObjectID[] substIdArray)
         {
             return new BasicActionImpl(actionQ, ipf => PerformSetSJRS(ipf, sjrs, substIdArray), CurrentMethodName, ActionLoggingReference);
+        }
+
+        public IClientFacet VerifyIdle()
+        {
+            return new BasicActionImpl(ActionQueue, ipf => PerformVerifyIdle(forDispose: false), CurrentMethodName, ActionLoggingReference);
         }
 
         /// <summary>
@@ -307,7 +325,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             if (!denyReasonList.IsNullOrEmpty())
                 Log.Warning.Emit("Attempt to {0} gave warnings: {1}", ipf.ToString(ToStringSelect.MesgAndDetail), String.Join(", ", denyReasonList));
 
-            string ec = TestSubstrateSchedulerTool.PerformGoOofflineAction(ipf, () => HasStopBeenRequested);
+            string ec = TestSubstrateSchedulerTool.PerformGoOfflineAction(ipf, () => HasStopBeenRequested);
 
             return ec;
         }
@@ -405,6 +423,21 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             BusyReason = ipf.ToString(ToStringSelect.MesgAndDetail);
 
             return "";
+        }
+
+        private string PerformVerifyIdle(bool forDispose = false)
+        {
+            string ec = "";
+
+            if (!forDispose && !BaseState.IsBusy)
+                ec = "BaseState is not idle [{0}]".CheckedFormat(BaseState);
+            else if (forDispose && BaseState.UseState != UseState.Stopped)
+                ec = "BaseState is not Stopped on dispose [{0}]".CheckedFormat(BaseState);
+
+            if (ec.IsNullOrEmpty())
+                ec = TestSubstrateSchedulerTool.VerifyIdle();
+
+            return ec;
         }
 
         protected string PerformSetSelectedBehavior(IProviderFacet ipf, BehaviorEnableFlags flags, bool force, bool publish = true)
@@ -1345,9 +1378,31 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
         /// Allows the hosting part to inform the tool when a GoOffline Action is being performed.
         /// This method is called after the hosting part has completed its own operations and they have all been completed successfully.
         /// </summary>
-        public string PerformGoOofflineAction(IProviderFacet ipf, Func<bool> hasStopBeenRequestedDelegate)
+        public string PerformGoOfflineAction(IProviderFacet ipf, Func<bool> hasStopBeenRequestedDelegate)
         {
             return string.Empty;
+        }
+
+        public string VerifyIdle()
+        {
+            if (RouteSequenceFailedAnnunciator.ANState.IsSignaling)
+                return "RouteSeqeunceFailedAnnunciator is signaling";
+
+            if (PrepareFailedAnnunciator.ANState.IsSignaling)
+                return "PrepareFailedAnnunciator is signaling";
+
+            if (substrateStateTally.stsAtWork > 0)
+                return "There are still substrates at work in the tool [{0}]".CheckedFormat(substrateStateTally);
+
+            var occupiedSLOs = r1LocObserverArray.Concat(processLocObserverWithTrackerDictionary.ValueArray).Where(st => !st.UpdateInline().IsUnoccupied).ToArray();
+
+            if (occupiedSLOs.Length > 0)
+                return "One or more locations are not unoccupied: {0}".CheckedFormat(string.Join(",", occupiedSLOs.Select(slo => slo.ID.Name)));
+
+            if (srmActionSubstTrackerList.Count > 0)
+                return "There are still substrates in the SRM Action Subst Tracker list";
+
+            return "";
         }
 
         /// <summary>
@@ -1475,7 +1530,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
                 if (srmActionState.IsComplete)
                 {
-                    srmActionSubstTrackerList.Array.DoForEach(st => st.IsInSRMAction = false);
+                    srmActionSubstTrackerList.SafeTakeAll().DoForEach(st => st.IsInSRMAction = false);
 
                     if (srmActionState.Succeeded)
                     {
@@ -1741,7 +1796,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             {
                 string currentContinueActionDisableReason = anState.ActionList["Continue"].GetActionDisableReason();
 
-                if (currentContinueActionDisableReason != autoActionDisableReason)
+                if (currentContinueActionDisableReason != autoActionDisableReason && !RouteSequenceFailedAnnunciator.ANState.ANSignalState.IsActionActive())
                 {
                     PostRouteSequenceFailedError(stateToTool, "Continue action disable reason changed");
 
@@ -1866,7 +1921,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             {
                 string currentRetryActionDisableReason = anState.ActionList["Retry"].GetActionDisableReason();
 
-                if (currentRetryActionDisableReason != autoActionDisableReason)
+                if (currentRetryActionDisableReason != autoActionDisableReason && !PrepareFailedAnnunciator.ANState.ANSignalState.IsActionActive())
                 {
                     PostPrepareFailedError(stateToTool, "Retry action disable reason changed");
 
@@ -2163,6 +2218,9 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
         private void PostRouteSequenceFailedError(ISubstrateSchedulerPartState stateToTool, string reason)
         {
+            if (RouteSequenceFailedAnnunciator.ANState.ANSignalState.IsActionActive())
+                RouteSequenceFailedAnnunciator.NoteActionAborted("Aborting current action: Post called while action active [{0}]".CheckedFormat(reason));
+
             string autoActionDisableReason = GetAutoActionDisableReason(stateToTool);
 
             RouteSequenceFailedAnnunciator.Post(new NamedValueSet() { { "Continue", autoActionDisableReason }, {"Return", "" }, { "Hold", "" } }, reason);
@@ -2170,6 +2228,9 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
         private void PostPrepareFailedError(ISubstrateSchedulerPartState stateToTool, string reason)
         {
+            if (PrepareFailedAnnunciator.ANState.ANSignalState.IsActionActive())
+                PrepareFailedAnnunciator.NoteActionAborted("Aborting current action: Post called while action active [{0}]".CheckedFormat(reason));
+
             string autoActionDisableReason = GetAutoActionDisableReason(stateToTool);
 
             PrepareFailedAnnunciator.Post(new NamedValueSet() { { "Retry", autoActionDisableReason }, { "AbortJob", "" }, { "StopJob", "" }, { "PauseJob", "" } }, reason);

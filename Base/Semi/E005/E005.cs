@@ -20,12 +20,24 @@
  * limitations under the License.
  */
 
+using System;
 using System.Runtime.Serialization;
 
 namespace MosaicLib.Semi.E005
 {
-	//-------------------------------------------------------------------
-	// Section 9.6, Table 3: Data Item Dictionary
+    //-------------------------------------------------------------------
+    // Section 9.6, Table 3: Data Item Dictionary
+
+    [DataContract(Namespace = Constants.SemiNameSpace)]
+    [Flags]
+    public enum ALEN : byte
+    {
+        [EnumMember]
+        Disable = 0x00,
+
+        [EnumMember]
+        Enable = 0x80,
+    }
 
     /// <summary>
     /// Alarm Category Code Byte (the Alarm severity portion of it)
@@ -33,8 +45,12 @@ namespace MosaicLib.Semi.E005
     /// E041_Attention (100), E041_Warning (101), E041_Error (102), E041_Alarm (103) 
     /// </summary>
     [DataContract(Namespace = Constants.SemiNameSpace)]
+    [Flags]
     public enum ALCD : byte
     {
+        [EnumMember]
+        IsSet = 128,
+
         [EnumMember]
         PersonalSafety = 1,
 
@@ -357,6 +373,28 @@ namespace MosaicLib.Semi.E005
     }
 
     [DataContract(Namespace = Constants.SemiNameSpace)]
+    public enum ACKC5 : byte
+    {
+        [EnumMember]
+        Accepted = 0,
+        [EnumMember]
+        BaseErrorNotAcceptedRange = 1,
+        [EnumMember]
+        FirstUseSpecificCode = 64,
+    }
+
+    [DataContract(Namespace = Constants.SemiNameSpace)]
+    public enum ACKC6 : byte
+    {
+        [EnumMember]
+        Accepted = 0,
+        [EnumMember]
+        BaseErrorNotAcceptedRange = 1,
+        [EnumMember]
+        FirstUseSpecificCode = 64,
+    }
+
+    [DataContract(Namespace = Constants.SemiNameSpace)]
     public enum ACKC7 : byte
     {
         [EnumMember]
@@ -392,7 +430,7 @@ namespace MosaicLib.Semi.E005
     }
 
     [DataContract(Namespace = Constants.SemiNameSpace)]
-    public enum ACKC10
+    public enum ACKC10 : byte
     {
         [EnumMember]
         AcceptedForDisplay = 0,
@@ -400,6 +438,8 @@ namespace MosaicLib.Semi.E005
         MessageWillNotBeDisplayed = 1,
         [EnumMember]
         TerminalNotAvailable = 2,
+        [EnumMember]
+        Invalid = 255,
     }
 
     [DataContract(Namespace = Constants.SemiNameSpace)]
@@ -618,5 +658,24 @@ namespace MosaicLib.Semi.E005
         AlreadyOnline = 2,
         [EnumMember]
         Denied_Internal = 255,
+    }
+
+    [DataContract(Namespace = Constants.SemiNameSpace)]
+    public enum TIAACK : byte
+    {
+        [EnumMember]
+        EverythingCorrect = 0,
+        [EnumMember]
+        TooManySVIDs = 1,
+        [EnumMember]
+        NoMoreTracesAllowed = 2,
+        [EnumMember]
+        InvalidPeriod = 3,
+        [EnumMember]
+        UnknownSVID = 4,
+        [EnumMember]
+        BadREPGSZ = 5,
+        [EnumMember]
+        FirstUseSpecificCode = 64,
     }
 }

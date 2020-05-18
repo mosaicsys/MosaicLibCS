@@ -451,6 +451,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
             try
             {
                 fs = new FileStream(FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+
                 UpdateFileLength();
 
                 ResultCode = ReadHeaderBlocks();
@@ -1349,7 +1350,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
 
                     gpi.VC = DecodeGroupPointValue(gpi, dbb, ref decodeIndex);
                     if (!dbb.IsValid)
-                        return;
+                        break;
 
                     if (iva != null)
                     {
@@ -1395,7 +1396,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                         ValueContainer pointVC = DecodeGroupPointValue(gpi, dbb, ref decodeIndex);
 
                         if (!dbb.IsValid)
-                            return;
+                            break;
 
                         gpi.VC = pointVC;
 
@@ -1696,20 +1697,26 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
             int readStartOffset = cache.bufferStartOffsetInFile + cache.contentLen;
             int countToRead = Math.Min(desiredCacheCount - cache.contentLen, FileLength - readStartOffset);
 
+            string ec;
             try
             {
                 fs.Seek(readStartOffset, SeekOrigin.Begin);
-                fs.Read(cache.byteArray, cache.contentLen, countToRead);
+                int countRead = fs.Read(cache.byteArray, cache.contentLen, countToRead);
 
-                cache.contentLen += countToRead;
+                if (countRead > 0)
+                    cache.contentLen += countRead;
 
-                return string.Empty;
+                if (countRead < countToRead)
+                    ec = "ReadFile '{0}' offset:{1} failed: read count {2} less than requested count {3}".CheckedFormat(FilePath, readStartOffset, countRead, countToRead);
+                else
+                    ec = string.Empty;
             }
             catch (System.Exception ex)
             {
-                string ec = "ReadFile '{0}' offset:{1} count:{2} failed: {3} {4}".CheckedFormat(FilePath, readStartOffset, countToRead, ex.GetType(), ex.Message);
-                return ec;
+                ec = "ReadFile '{0}' offset:{1} count:{2} failed: {3}".CheckedFormat(FilePath, readStartOffset, countToRead, ex.ToString(ExceptionFormat.TypeAndMessage));
             }
+
+            return ec;
         }
 
         #endregion

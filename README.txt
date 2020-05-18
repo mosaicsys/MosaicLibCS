@@ -1,6 +1,7 @@
 This is the MosaicLibCS source library project.
 
-Copyright (c) Mosaic Systems Inc.  All rights reserved.  
+Copyright (c) Mosaic Systems Inc.
+All rights reserved.  
 
 Currently this project is hosted at github.com and can be cloned from 
 "https://github.com/mosaicsys/MosaicLibCS.git"

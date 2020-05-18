@@ -859,6 +859,21 @@ namespace MosaicLib.Semi.E039
         /// Returns true if the Type and Name are non-empty.  The UUID may be empty and Table may be null.
         /// </summary>
         public bool IsValid { get { return !Type.IsNullOrEmpty() && !Name.IsNullOrEmpty(); } }
+
+        /// <summary>Support Equality testing for boxed versions.</summary>
+        public override bool Equals(object rhsAsObject)
+        {
+            if ((rhsAsObject == null) || !(rhsAsObject is E039ObjectID))
+                return false;
+
+            return Equals((E039ObjectID)rhsAsObject);
+        }
+
+        /// <summary>Override GetHashCode because Equals has been.</summary>
+        public override int GetHashCode()
+        {
+            return base.GetHashCode();
+        }
     }
 
     /// <summary>

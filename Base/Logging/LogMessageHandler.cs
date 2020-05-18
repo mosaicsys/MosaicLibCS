@@ -302,6 +302,7 @@ namespace MosaicLib
             /// Use this method to read the stock set of ModularConfig points using the given configKeyPrefixStr and to update this ring configuration using the valid, non-zero values read from these keys.
             /// <para/>Keys are LogGate, DirectoryPath, MaxFilesToKeep, MaxFileAgeToKeepInDays, MaxTotalSizeToKeep, AdvanceAfterFileReachesSize, AdvanceAfterFileReachesAge, 
             /// IncludeQPCTime, IncludeThreadInfo, IncludeFileAndLine
+            /// <para/>Note: if no value (0) is given for the AdvanceAfterFileReachesSize (fileSizeLimit) then the method assigns this to be 50 Mbytes.
             /// </summary>
             public FileRotationLoggingConfig UpdateFromModularConfig(string configKeyPrefixStr, Logging.IMesgEmitter issueEmitter = null, Logging.IMesgEmitter valueEmitter = null, IConfig configInstance = null)
             {
@@ -331,6 +332,8 @@ namespace MosaicLib
 
                 if (configValues.AdvanceAfterFileReachesSize != 0)
                     advanceRules.fileSizeLimit = configValues.AdvanceAfterFileReachesSize;
+                else if (advanceRules.fileSizeLimit == 0)
+                    advanceRules.fileSizeLimit = 50 * 1024 * 1024;
 
                 if (configValues.AdvanceAfterFileReachesAge != TimeSpan.Zero)
                     advanceRules.FileAgeLimit = configValues.AdvanceAfterFileReachesAge;

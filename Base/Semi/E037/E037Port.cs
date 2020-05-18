@@ -962,7 +962,7 @@ namespace MosaicLib.Semi.E037
                             scanIdx += secsPayloadDataLength;
                         }
 
-                        decodedReceiveMesgList.Add(new E005.Message(headerDecoder.MakeCopyOfThis(), this).SetContentBytes(contentBytes, makeCopy: false));
+                        decodedReceiveMesgList.Add(new Message(headerDecoder.MakeCopyOfThis(), this, ManagerPortFacet).SetContentBytes(contentBytes, makeCopy: false));
                         ec = string.Empty;
                         break;
                     }
@@ -1454,12 +1454,13 @@ namespace MosaicLib.Semi.E037
                     else if (readyToSendOpQueue.Count > 0 && permitPostMessageSends)
                     {
                         var nextSendMessageOp = readyToSendOpQueue.Dequeue();
+                        var nextSendMesg = nextSendMessageOp.Mesg;
 
-                        TraceMesgs.Emit("Sending Mesg {0}", nextSendMessageOp.Mesg);
+                        GetMesgTraceEmitter(nextSendMesg).Emit("Sending Mesg {0}", nextSendMesg);
 
                         var lengthByteArray = new byte[4];
-                        var headerByteArray = nextSendMessageOp.Mesg.TenByteHeader.ByteArray;
-                        var bodyByteArray = nextSendMessageOp.Mesg.ContentBytes;
+                        var headerByteArray = nextSendMesg.TenByteHeader.ByteArray;
+                        var bodyByteArray = nextSendMesg.ContentBytes;
 
                         Data.Unpack((UInt32)headerByteArray.Length + (UInt32)bodyByteArray.Length, lengthByteArray);
 

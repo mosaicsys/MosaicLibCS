@@ -131,16 +131,6 @@ namespace MosaicLib.Semi.E005.Port
         [NamedValueSetItem]
         public TimeSpan T3_ReplyTO = TimeSpan.FromSeconds(45.0);
 
-        ///// <summary>Set this to enable transmit throttling</summary>
-        //public bool ThrottleEnable = false;
-        ///// <summary>Set this to limit the number of blocks that can be sent per throttle limit period</summary>
-        //public UInt32 ThrottleMaxBlocksPerLimitPeriod = 100;
-        ///// <summary>Set this to a non-zero period to define the limit period for which the </summary>
-        //public TimeSpan ThrottleLimitPeriodDuration = TimeSpan.FromSeconds(1.0);
-
-        ///// <summary>Property is true if Throttling is enabled and is usable</summary>
-        //public bool IsThrottlingEnabled { get { return (ThrottleEnable && (ThrottleLimitPeriodDuration != TimeSpan.Zero) && (ThrottleMaxBlocksPerLimitPeriod != 0)); } }
-
         /// <summary>Defines the maximum E005 SECS-II Message Body size that we can accept.</summary>
         [NamedValueSetItem]
         public UInt32 MaximumMesgBodySize = 1 * 1024 * 1024;
@@ -154,6 +144,9 @@ namespace MosaicLib.Semi.E005.Port
 
         [NamedValueSetItem]
         public Logging.MesgType MesgTraceMesgType = Logging.MesgType.Trace;
+
+        [NamedValueSetItem]
+        public Logging.MesgType HighRateMesgTraceMesgType = Logging.MesgType.Trace;
 
         public PortBaseConfig UpdateFromNVS(INamedValueSet nvs, string keyPrefix = "", Logging.IMesgEmitter issueEmitter = null, Logging.IMesgEmitter valueNoteEmitter = null)
         {
@@ -249,17 +242,30 @@ namespace MosaicLib.Semi.E005.Port
 
             PortBaseConfig = new Port.PortBaseConfig().UpdateFromNVS(portConfigNVS, issueEmitter: Log.Debug, valueNoteEmitter: Log.Trace);
 
-            var doneMesgType = portConfigNVS["DoneMesgType"].VC.GetValue<Logging.MesgType?>(rethrow: false) ?? Logging.MesgType.Trace;
-            var errorMesgType = portConfigNVS["ErrorMesgType"].VC.GetValue<Logging.MesgType?>(rethrow: false) ?? Logging.MesgType.Debug;
-            var stateMesgType = portConfigNVS["StateMesgType"].VC.GetValue<Logging.MesgType?>(rethrow: false) ?? Logging.MesgType.None;
-            var updateMesgType = portConfigNVS["UpdateMesgType"].VC.GetValue<Logging.MesgType?>(rethrow: false) ?? Logging.MesgType.Trace;
+            {
+                var doneMesgType = portConfigNVS["DoneMesgType"].VC.GetValue<Logging.MesgType?>(rethrow: false) ?? Logging.MesgType.Trace;
+                var errorMesgType = portConfigNVS["ErrorMesgType"].VC.GetValue<Logging.MesgType?>(rethrow: false) ?? Logging.MesgType.Debug;
+                var stateMesgType = portConfigNVS["StateMesgType"].VC.GetValue<Logging.MesgType?>(rethrow: false) ?? Logging.MesgType.None;
+                var updateMesgType = portConfigNVS["UpdateMesgType"].VC.GetValue<Logging.MesgType?>(rethrow: false) ?? Logging.MesgType.Trace;
 
-            ActionLoggingReference.Config = new ActionLoggingConfig(doneMesgType: doneMesgType, errorMesgType: errorMesgType, stateMesgType: stateMesgType, updateMesgType: updateMesgType, actionLoggingStyleSelect: ActionLoggingStyleSelect.IncludeRunTimeOnCompletion);
+                ActionLoggingReference.Config = new ActionLoggingConfig(doneMesgType: doneMesgType, errorMesgType: errorMesgType, stateMesgType: stateMesgType, updateMesgType: updateMesgType, actionLoggingStyleSelect: ActionLoggingStyleSelect.IncludeRunTimeOnCompletion);
+            }
 
             TraceLogger = new Logging.Logger(PartID + ".Trace", Logging.LookupDistributionGroupName);
 
+            {
+                var useTraceLoggerForHighRateMesg = portConfigNVS["UseTraceLoggerForHighRateMesgs"].VC.GetValue<bool?>(rethrow: false) ?? true;
+                var doneHighRateMesgType = portConfigNVS["DoneHighRateMesgType"].VC.GetValue<Logging.MesgType?>(rethrow: false) ?? Logging.MesgType.Trace;
+                var errorHighRateMesgType = portConfigNVS["ErrorHighRateMesgType"].VC.GetValue<Logging.MesgType?>(rethrow: false) ?? Logging.MesgType.Trace;
+                var stateHighRateMesgType = portConfigNVS["StateHighRateMesgType"].VC.GetValue<Logging.MesgType?>(rethrow: false) ?? Logging.MesgType.None;
+                var updateHighRateMesgType = portConfigNVS["UpdateHighRateMesgType"].VC.GetValue<Logging.MesgType?>(rethrow: false) ?? Logging.MesgType.None;
+
+                HighRateMesgActionLogging = new ActionLogging(useTraceLoggerForHighRateMesg ? TraceLogger : Log, new ActionLoggingConfig(doneMesgType: doneHighRateMesgType, errorMesgType: errorHighRateMesgType, stateMesgType: stateHighRateMesgType, updateMesgType: updateHighRateMesgType));
+            }
+
             TraceHeaders = TraceLogger.Emitter(PortBaseConfig.HeaderTraceMesgType);
             TraceMesgs = TraceLogger.Emitter(PortBaseConfig.MesgTraceMesgType);
+            TraceHighRateMesgs = TraceLogger.Emitter(PortBaseConfig.HighRateMesgTraceMesgType);
 
             SetConnectionState(PortConnectionState.Initial, CurrentMethodName, QpcTimeStamp.Now);
 		}
@@ -272,19 +278,23 @@ namespace MosaicLib.Semi.E005.Port
 
         public PortBaseConfig PortBaseConfig { get; private set; }
 
+        protected ActionLogging HighRateMesgActionLogging { get; private set; }
+
         protected Logging.ILogger TraceLogger { get; private set; }
 
-        public Logging.IMesgEmitter TraceMesgs = Logging.NullEmitter;
-
         public Logging.IMesgEmitter TraceHeaders = Logging.NullEmitter;
+        public Logging.IMesgEmitter TraceMesgs = Logging.NullEmitter;
+        public Logging.IMesgEmitter TraceHighRateMesgs = Logging.NullEmitter;
+
+        public Logging.IMesgEmitter GetMesgTraceEmitter(IMessage mesg) { return mesg.IsHighRate ? TraceHighRateMesgs : TraceMesgs; }
 
         #endregion
 
-		#region IPort Members (ones not covered above)
+        #region IPort Members (ones not covered above)
 
         IMessage IPort.CreateMessage(StreamFunction sf)
         {
-            return new Message(sf, this);
+            return new Message(sf, this) { IsHighRate = ManagerPortFacet.IsHighRateSF(sf) };
         }
 
         protected class SendMessageActionImpl : ActionImplBase<IMessage, NullObj>, ISendMessageAction
@@ -296,9 +306,10 @@ namespace MosaicLib.Semi.E005.Port
 
 		ISendMessageAction IPort.SendMessage(IMessage mesg)
 		{
-			// create the action anyways - it will fail when run
             Modular.Action.ActionMethodDelegateActionArgStrResult<IMessage, NullObj> method = PerformSendMessageAction;
-            ISendMessageAction action = new SendMessageActionImpl(actionQ, mesg, method, ActionLoggingReference, "SendMessage");
+            var selectedActionLoggingReference = mesg.IsHighRate ? HighRateMesgActionLogging : ActionLoggingReference;
+
+            ISendMessageAction action = new SendMessageActionImpl(actionQ, mesg, method, selectedActionLoggingReference, "SendMessage");
 
 			return action;
 		}
@@ -467,7 +478,8 @@ namespace MosaicLib.Semi.E005.Port
 
         protected string HandleReceivedMessage(IMessage mesg)
         {
-            TraceMesgs.Emit("Received Mesg {0}", mesg);
+            var traceMesgEmitter = GetMesgTraceEmitter(mesg);
+            traceMesgEmitter.Emit("Received Mesg {0}", mesg);
 
             StreamFunction sf = mesg.SF;
             UInt32 systemBytes = mesg.TenByteHeader.SystemBytes;
@@ -528,12 +540,12 @@ namespace MosaicLib.Semi.E005.Port
 
                 if (mesg.Reply != null)
                 {
-                    TraceMesgs.Emit("Sending message handler generated reply to Mesg {0}: {1}", mesg.TenByteHeader, mesg.Reply);
+                    traceMesgEmitter.Emit("Sending message handler generated reply to Mesg {0}: {1}", mesg.TenByteHeader, mesg.Reply);
                     PerformSendMessageAction(mesg.Reply, null);
                 }
                 else if (mesg.SF.ReplyExpected)
                 {
-                    TraceMesgs.Emit("Message handler did not generate inline reply to Mesg {0}", mesg.TenByteHeader);
+                    traceMesgEmitter.Emit("Message handler did not generate inline reply to Mesg {0}", mesg.TenByteHeader);
                 }
             }
             else

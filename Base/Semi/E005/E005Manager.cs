@@ -65,6 +65,9 @@ namespace MosaicLib.Semi.E005.Manager
 
         /// <summary>Returns a sequence number to use as DATAID values in client code.  Will be unique accross all of the ports that make use of this manager instance.</summary>
         UInt32 GetNextDATAID();
+
+        /// <summary>Returns true if the manager believes that the given stream function is a high rate stream function</summary>
+        bool IsHighRateSF(StreamFunction sf);
     }
 
     /// <summary>
@@ -105,6 +108,9 @@ namespace MosaicLib.Semi.E005.Manager
         /// </summary>
         void RegisterSFProcessingHandler(ReceivedMessageProcessingDelegate handler, params StreamFunction[] streamFunctionParamsArray);
 
+        /// <summary>Flags that the given set of stream/function values are considered high rate.</summary>
+        void SetSFSetAsHighRate(params StreamFunction[] streamFunctionParamsArray);
+
         /// <summary>Returns a sequence number to use as DATAID values in client code.  Will be unique accross all of the ports that make use of this manager instance.</summary>
         UInt32 GetNextDATAID();
     }
@@ -135,6 +141,12 @@ namespace MosaicLib.Semi.E005.Manager
         public static void RegisterSFProcessingHandler(this IManager manager, ReceivedMessageProcessingDelegate handler, params string[] streamFunctionStrParamsArray)
         {
             manager.RegisterSFProcessingHandler(handler, streamFunctionStrParamsArray.Select(sfStr => sfStr.ParseAsStreamFunction()).ToArray());
+        }
+
+        /// <summary>Flags that the given set of stream/function values are considered high rate.</summary>
+        public static void SetSFSetAsHighRate(this IManager manager, params string[] streamFunctionStrParamsArray)
+        {
+            manager.SetSFSetAsHighRate(streamFunctionStrParamsArray.Select(sfStr => sfStr.ParseAsStreamFunction()).ToArray());
         }
     }
 
@@ -343,6 +355,19 @@ namespace MosaicLib.Semi.E005.Manager
             }
         }
 
+        /// <summary>Flags that the given set of stream/function values are considered high rate.</summary>
+        void IManager.SetSFSetAsHighRate(params StreamFunction[] streamFunctionParamsArray)
+        {
+            lock (mainAPIMutex)
+            {
+                highRateSFSet.SafeAddRange(streamFunctionParamsArray.Select(sf => sf.B2B3));
+                roHighRateSFSet = new ReadOnlyHashSet<ushort>(highRateSFSet);
+            }
+        }
+
+        HashSet<ushort> highRateSFSet = new HashSet<ushort>();
+        ReadOnlyHashSet<ushort> roHighRateSFSet = ReadOnlyHashSet<ushort>.Empty;
+
         #endregion
 
         #region GetNextDATAID for both IManager and IManagerPortFacet interfaces
@@ -430,6 +455,11 @@ namespace MosaicLib.Semi.E005.Manager
 
                 mesg.SetReply(faultReplyMesg, replaceReply: true);
             }
+        }
+
+        bool IManagerPortFacet.IsHighRateSF(StreamFunction sf)
+        {
+            return roHighRateSFSet.Contains(sf.B2B3);
         }
 
         #endregion

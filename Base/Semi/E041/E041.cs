@@ -89,7 +89,8 @@ namespace MosaicLib.Semi.E041
     #region Constants
 
     /// <summary>
-    /// Constants
+    /// Constants:
+    /// <para/>Acknowledge, Ack
     /// </summary>
     public static partial class Constants
     {
@@ -254,20 +255,20 @@ namespace MosaicLib.Semi.E041
             return (alid == ANAlarmID.Lookup || alid == ANAlarmID.OptLookup);
         }
 
-        /// <summary>Returns true if the given alid value is ANAlarmID.None</summary>
+        /// <summary>Returns true if the given <paramref name="alid"/> value is ANAlarmID.None</summary>
         public static bool IsNone(this ANAlarmID alid)
         {
             return (alid == ANAlarmID.None);
         }
 
-        /// <summary>Returns true if the given alid value has been explicitly provided by the client (i.e. it is neither None, Lookup, nor OptLookup)</summary>
+        /// <summary>Returns true if the given <paramref name="alid"/> value has been explicitly provided by the client (i.e. it is neither None, Lookup, nor OptLookup)</summary>
         public static bool IsDefined(this ANAlarmID alid)
         {
             return (!alid.IsLookup() && !alid.IsNone());
         }
 
         /// <summary>
-        /// Returns true if the given signalState value indicates that the annunciator is signaling (it has been Posted and has not been Cleared)
+        /// Returns true if the given <paramref name="anSignalState"/> value indicates that the annunciator is signaling (it has been Posted and has not been Cleared)
         /// <para/>aka the signal state is not Off
         /// </summary>
         public static bool IsSignaling(this ANSignalState anSignalState)
@@ -275,13 +276,13 @@ namespace MosaicLib.Semi.E041
             return (anSignalState != ANSignalState.Off);
         }
 
-        /// <summary>Returns true if the given signalState value indicates that the annunciator is performing an action</summary>
+        /// <summary>Returns true if the given <paramref name="anSignalState"/> value indicates that the annunciator is performing an action (ANSignalState.OnAndActionActive)</summary>
         public static bool IsActionActive(this ANSignalState anSignalState)
         {
             return (anSignalState == ANSignalState.OnAndActionActive);
         }
 
-        /// <summary>Returns true if any NamedValue in the given actionList has true for its value</summary>
+        /// <summary>Returns true if any NamedValue in the given <paramref name="actionList"/> has true for its value</summary>
         public static bool IsAnyActionEnabled(this INamedValueSet actionList)
         {
             return actionList.Any((nv) => (nv.GetActionDisableReason() == string.Empty));
@@ -868,7 +869,7 @@ namespace MosaicLib.Semi.E041
 
     #endregion
 
-    #region ANManagerPart
+    #region ANManagerPart (IANManagerPart, SyncFlags, ANSourceMesgTypeConfig, IE30ALIDHandlerFacet, ANManagerPartConfig, IANEventListHandlerPart, ANEventInfo, ANEventType, ANManagerPart, ANRegistrationException)
 
     /// <summary>
     /// This interface defines the publicly available methods that are provided by the ANManagerPart.  
@@ -885,7 +886,7 @@ namespace MosaicLib.Semi.E041
         /// </summary>
         /// <exception cref="ANRegistrationException">thrown with appropriate message if given anSpec is not valid or if the given ANName has already been registered</exception>
         /// <remarks>As with CreateGoOnlineAction(bool andInitialize), this method also starts the target part if it has not already been started</remarks>
-        IANSource RegisterANSource(string sourceObjectID, IANSpec anSpec);
+        IANSource RegisterANSource(string sourceObjectID, IANSpec anSpec, ANSourceMesgTypeConfig? anSourceMesgTypeConfig = null);
 
         /// <summary>
         /// Requests that the manager create a new IANOccurrence type annunciator source for the given anSpec.  
@@ -895,7 +896,7 @@ namespace MosaicLib.Semi.E041
         /// </summary>
         /// <exception cref="ANRegistrationException">thrown with appropriate message if given anSpec is not valid for this type of source or if the given ANName has already been registered</exception>
         /// <remarks>As with CreateGoOnlineAction(bool andInitialize), this method also starts the target part if it has not already been started</remarks>
-        IANOccurrence RegisterANOccurrenceSource(string sourceObjectID, IANSpec anSpec);
+        IANOccurrence RegisterANOccurrenceSource(string sourceObjectID, IANSpec anSpec, ANSourceMesgTypeConfig? anSourceMesgTypeConfig = null);
 
         /// <summary>
         /// Requests that the manager create a new IANCondition type annunciator source for the given anSpec.  
@@ -905,7 +906,7 @@ namespace MosaicLib.Semi.E041
         /// </summary>
         /// <exception cref="ANRegistrationException">thrown with appropriate message if given anSpec is not valid for this type of source or if the given ANName has already been registered</exception>
         /// <remarks>As with CreateGoOnlineAction(bool andInitialize), this method also starts the target part if it has not already been started</remarks>
-        IANCondition RegisterANConditionSource(string sourceObjectID, IANSpec anSpec, IANConditionBehavior initialBehavior = default(IANConditionBehavior));
+        IANCondition RegisterANConditionSource(string sourceObjectID, IANSpec anSpec, IANConditionBehavior initialBehavior = default(IANConditionBehavior), ANSourceMesgTypeConfig? anSourceMesgTypeConfig = null);
 
         /// <summary>
         /// Allows the caller to obtain an object source publisher that publishes IANState updates for the given annunciator name (anName).  
@@ -964,6 +965,39 @@ namespace MosaicLib.Semi.E041
     }
 
     /// <summary>
+    /// This item is used to configure the Logging.MesgType values to be used for different types of ANSignalState transitions for an ANSource as Set, Clear, and Update
+    /// </summary>
+    public struct ANSourceMesgTypeConfig
+    {
+        /// <summary>Constant value that selects MesgType.Debug for Set, Clear, and Update</summary>
+        public static readonly ANSourceMesgTypeConfig Debug = new ANSourceMesgTypeConfig() { Set = Logging.MesgType.Debug, Clear = Logging.MesgType.Debug, Update = Logging.MesgType.Debug };
+
+        /// <summary>Constant value that selects MesgType.Warning for Set, and MesgType.Info for Clear and Update</summary>
+        public static readonly ANSourceMesgTypeConfig Warning_Info = new ANSourceMesgTypeConfig() { Set = Logging.MesgType.Warning, Clear = Logging.MesgType.Info, Update = Logging.MesgType.Info };
+
+        /// <summary>Constant value that selects MesgType.Error for Set, and MesgType.Info for Clear and Update</summary>
+        public static readonly ANSourceMesgTypeConfig Error_Info = new ANSourceMesgTypeConfig() { Set = Logging.MesgType.Error, Clear = Logging.MesgType.Info, Update = Logging.MesgType.Info };
+
+        /// <summary>Copy constructor for use in generating derived values.</summary>
+        public ANSourceMesgTypeConfig(ANSourceMesgTypeConfig other)
+            : this()
+        {
+            Set = other.Set;
+            Update = other.Update;
+            Clear = other.Clear;
+        }
+
+        /// <summary>Gives the MesgType used when changing the ANSignalState from non-signaling to signaling</summary>
+        public Logging.MesgType Set { get; set; }
+
+        /// <summary>Gives the MesgType used when changing the ANSignalState from signaling to signaling</summary>
+        public Logging.MesgType Update { get; set; }
+
+        /// <summary>Gives the MesgType used when changing the ANSignalState from signaling to non-signaling or from non-signaling to non-signaling</summary>
+        public Logging.MesgType Clear { get; set; }
+    }
+
+    /// <summary>
     /// This interface defines how an AnnunciatorManagerPart can lookup and indicate change in state of an e30 ALID.
     /// The ANManagerPart instance that is in use must be explicitly constructed and assigned with a non-null IE30ALIDHandlerFacet in order for this functionality to be used.
     /// </summary>
@@ -991,6 +1025,14 @@ namespace MosaicLib.Semi.E041
         public ANManagerPartConfig(string partID)
         {
             PartID = partID;
+            DefaultAlarmANMesgTypeConfig = ANSourceMesgTypeConfig.Debug;
+            DefaultErrorANMesgTypeConfig = ANSourceMesgTypeConfig.Debug;
+            DefaultWarningANMesgTypeConfig = ANSourceMesgTypeConfig.Debug;
+            DefaultDynamicANMesgTypeConfig = ANSourceMesgTypeConfig.Debug;
+            DefaultAttentionANMesgTypeConfig = ANSourceMesgTypeConfig.Debug;
+
+            AbortActiveActionInProgressOnPost = false;
+            ClearInactiveSelectedActionOnPost = false;
         }
 
         /// <summary>
@@ -1010,7 +1052,15 @@ namespace MosaicLib.Semi.E041
             ANEventInfoListHandlerPart = other.ANEventInfoListHandlerPart;
 
             ActionLoggingConfig = other.ActionLoggingConfig ?? ActionLoggingConfig.Debug_Debug_Trace_Trace;
-            ANEventHelperActionLoggingConfig = other.ANEventHelperActionLoggingConfig ?? other.ActionLoggingConfig ?? ActionLoggingConfig.Trace_Trace_Trace_Trace;
+
+            DefaultAlarmANMesgTypeConfig = other.DefaultAlarmANMesgTypeConfig;
+            DefaultErrorANMesgTypeConfig = other.DefaultErrorANMesgTypeConfig;
+            DefaultWarningANMesgTypeConfig = other.DefaultWarningANMesgTypeConfig;
+            DefaultDynamicANMesgTypeConfig = other.DefaultDynamicANMesgTypeConfig;
+            DefaultAttentionANMesgTypeConfig = other.DefaultAttentionANMesgTypeConfig;
+
+            AbortActiveActionInProgressOnPost = other.AbortActiveActionInProgressOnPost;
+            ClearInactiveSelectedActionOnPost = other.ClearInactiveSelectedActionOnPost;
         }
 
         /// <summary>Gives the PartID that the constructed ANManagerPart will use</summary>
@@ -1040,8 +1090,29 @@ namespace MosaicLib.Semi.E041
         /// <summary>Defines the ANManagerPart's ActionLoggingConfig that is used for part actions</summary>
         public ActionLoggingConfig ActionLoggingConfig { get; set; }
 
-        /// <summary>Defines the ANManagerPart's ActionLoggingConfig that is used for the internal ANEvent helper's actions</summary>
+        /// <summary>Defines the default MesgTypes to use for ANType.Alarm annunciators</summary>
+        public ANSourceMesgTypeConfig DefaultAlarmANMesgTypeConfig { get; set; }
+
+        /// <summary>Defines the default MesgTypes to use for ANType.Error annunciators</summary>
+        public ANSourceMesgTypeConfig DefaultErrorANMesgTypeConfig { get; set; }
+
+        /// <summary>Defines the default MesgTypes to use for ANType.Warning annunciators</summary>
+        public ANSourceMesgTypeConfig DefaultWarningANMesgTypeConfig { get; set; }
+
+        /// <summary>Defines the default MesgTypes to use for ANType.Dynamic annunciators</summary>
+        public ANSourceMesgTypeConfig DefaultDynamicANMesgTypeConfig { get; set; }
+
+        /// <summary>Defines the default MesgTypes to use for ANType.Attention annunciators</summary>
+        public ANSourceMesgTypeConfig DefaultAttentionANMesgTypeConfig { get; set; }
+
+        [Obsolete("This property is vestigial and will be removed in the future (2020-01-19)")]
         public ActionLoggingConfig ANEventHelperActionLoggingConfig { get; set; }
+
+        /// <summary>When set to true, calling Post on an IANSource that is in the ANSignalState.OnAndActionActive will abort the action before re-posting.</summary>
+        public bool AbortActiveActionInProgressOnPost { get; set; }
+
+        /// <summary>When set to true, calling Post on an IANSource will clear a selected action that is not active before re-posting.</summary>
+        public bool ClearInactiveSelectedActionOnPost { get; set; }
     }
 
     /// <summary>
@@ -1133,7 +1204,7 @@ namespace MosaicLib.Semi.E041
             SetupANEventDelivery();
         }
 
-        private ANManagerPartConfig ANManagerPartConfig { get; set; }
+        protected ANManagerPartConfig ANManagerPartConfig { get; set; }
 
         private IValuesInterconnection IVI { get; set; }
         private IConfig IConfig { get; set; }
@@ -1291,7 +1362,7 @@ namespace MosaicLib.Semi.E041
         /// </summary>
         /// <exception cref="ANRegistrationException">thrown with appropriate message if given anSpec is not vALID or if the given ANName has already been registered</exception>
         /// <remarks>As with CreateGoOnlineAction(bool andInitialize), this method also starts the target part if it has not already been started</remarks>
-        public IANSource RegisterANSource(string sourceObjectID, IANSpec anSpec)
+        public IANSource RegisterANSource(string sourceObjectID, IANSpec anSpec, ANSourceMesgTypeConfig? anSourceMesgTypeConfig = null)
         {
             string methodName = CurrentMethodName;
             string methodNameEx = "{0}({1}, {2})".CheckedFormat(methodName, sourceObjectID, anSpec);
@@ -1305,7 +1376,7 @@ namespace MosaicLib.Semi.E041
             ANSourceImpl sourceImpl = null;
             System.Exception ex = null;
 
-            IBasicAction action = new BasicActionImpl(actionQ, () => PerformRegisterAnnunciatorSource(sourceObjectID, anSpecCopy, false, ref sourceImpl, ref ex, methodName), methodNameEx, ActionLoggingReference);
+            IBasicAction action = new BasicActionImpl(actionQ, () => PerformRegisterAnnunciatorSource(sourceObjectID, anSpecCopy, false, ref sourceImpl, ref ex, methodName, anSourceMesgTypeConfig), methodNameEx, ActionLoggingReference);
             string ec = action.Run();
 
             if (ex != null)
@@ -1324,7 +1395,7 @@ namespace MosaicLib.Semi.E041
         /// </summary>
         /// <exception cref="ANRegistrationException">thrown with appropriate message if given anSpec is not valid for this type of source or if the given ANName has already been registered</exception>
         /// <remarks>As with CreateGoOnlineAction(bool andInitialize), this method also starts the target part if it has not already been started</remarks>
-        public IANOccurrence RegisterANOccurrenceSource(string sourceObjectID, IANSpec anSpec)
+        public IANOccurrence RegisterANOccurrenceSource(string sourceObjectID, IANSpec anSpec, ANSourceMesgTypeConfig? anSourceMesgTypeConfig = null)
         {
             string methodName = CurrentMethodName;
             string methodNameEx = "{0}({1}, {2})".CheckedFormat(methodName, sourceObjectID, anSpec);
@@ -1338,7 +1409,7 @@ namespace MosaicLib.Semi.E041
             ANSourceImpl sourceImpl = null;
             System.Exception ex = null;
 
-            IBasicAction action = new BasicActionImpl(actionQ, () => PerformRegisterAnnunciatorSource(sourceObjectID, anSpecCopy, true, ref sourceImpl, ref ex, methodName), methodNameEx, ActionLoggingReference);
+            IBasicAction action = new BasicActionImpl(actionQ, () => PerformRegisterAnnunciatorSource(sourceObjectID, anSpecCopy, true, ref sourceImpl, ref ex, methodName, anSourceMesgTypeConfig), methodNameEx, ActionLoggingReference);
             string ec = action.Run();
 
             if (ex != null)
@@ -1357,7 +1428,7 @@ namespace MosaicLib.Semi.E041
         /// </summary>
         /// <exception cref="ANRegistrationException">thrown with appropriate message if given anSpec is not valid for this type of source or if the given ANName has already been registered</exception>
         /// <remarks>As with CreateGoOnlineAction(bool andInitialize), this method also starts the target part if it has not already been started</remarks>
-        public IANCondition RegisterANConditionSource(string sourceObjectID, IANSpec anSpec, IANConditionBehavior initialANConditionBehavior = default(IANConditionBehavior))
+        public IANCondition RegisterANConditionSource(string sourceObjectID, IANSpec anSpec, IANConditionBehavior initialANConditionBehavior = default(IANConditionBehavior), ANSourceMesgTypeConfig? anSourceMesgTypeConfig = null)
         {
             string methodName = CurrentMethodName;
             string behaviorStr = ((initialANConditionBehavior != IANConditionBehavior.None) ? " {0}".CheckedFormat(initialANConditionBehavior) : "");
@@ -1372,7 +1443,7 @@ namespace MosaicLib.Semi.E041
             ANSourceImpl sourceImpl = null;
             System.Exception ex = null;
 
-            IBasicAction action = new BasicActionImpl(actionQ, () => PerformRegisterAnnunciatorSource(sourceObjectID, anSpecCopy, true, ref sourceImpl, ref ex, methodName), methodNameEx, ActionLoggingReference);
+            IBasicAction action = new BasicActionImpl(actionQ, () => PerformRegisterAnnunciatorSource(sourceObjectID, anSpecCopy, true, ref sourceImpl, ref ex, methodName, anSourceMesgTypeConfig), methodNameEx, ActionLoggingReference);
             string ec = action.Run();
 
             if (ex != null)
@@ -1489,7 +1560,7 @@ namespace MosaicLib.Semi.E041
 
         #region internal action implementations (PerformYYY methods and directly related methods).
 
-        private string PerformRegisterAnnunciatorSource(string sourceObjectID, ANSpec anSpecCopy, bool requiresService, ref ANSourceImpl sourceImpl, ref System.Exception ex, string reason)
+        private string PerformRegisterAnnunciatorSource(string sourceObjectID, ANSpec anSpecCopy, bool requiresService, ref ANSourceImpl sourceImpl, ref System.Exception ex, string reason, ANSourceMesgTypeConfig? anSourceMesgTypeConfig)
         {
             try
             {
@@ -1527,14 +1598,14 @@ namespace MosaicLib.Semi.E041
                     }
                 }
 
-                ANSourceImpl anSourceImpl = new ANSourceImpl() 
-                    { 
+                ANSourceImpl anSourceImpl = new ANSourceImpl()
+                    {
                         ParentPart = this,
                         ManagersImmutableANStatePublicationDelegate = (immutableANStatePublicationDelegate ?? (immutableANStatePublicationDelegate = AsyncAcceptANStateUpdate)),
                         ANSpec = anSpecCopy, 
                         SourceObjectID = sourceObjectID, 
                         AcceptAlarmReasonChangeAfterTimeSpan = ConfigValues.AcceptAlarmReasonChangeAfterTimeSpan,
-                    }.Setup(foundALID, foundALIDLookupState, reason);
+                    }.Setup(foundALID, foundALIDLookupState, reason, anSourceMesgTypeConfig);
 
                 anSourceTracking.anSpec = anSpecCopy;
                 anSourceTracking.anSourceImpl = anSourceImpl;
@@ -1833,19 +1904,43 @@ namespace MosaicLib.Semi.E041
 
             public Logging.ILogger Logger { get; private set; }
             public Logging.IMesgEmitter SetSignalStateEmitter { get; private set; }
+            public Logging.IMesgEmitter ClearSignalStateEmitter { get; private set; }
+            public Logging.IMesgEmitter UpdateSignalStateEmitter { get; private set; }
 
             public ISequencedObjectSource<IANState, Int32> ManagersANStatePublisher { get; set; }
 
             public IANState InitialANState { get; private set; }
 
-            public ANSourceImpl Setup(ANAlarmID initialFoundALID, ALIDLookupState initialALIDLookupState, string reason)
+            public ANSourceImpl Setup(ANAlarmID initialFoundALID, ALIDLookupState initialALIDLookupState, string reason, ANSourceMesgTypeConfig? anSourceMesgTypeConfig)
             {
                 lock (mutex)
                 {
                     ANState = new ANState() { ANSpec = ANSpec, Reason = reason };
 
                     Logger = new Logging.Logger("AN." + ANSpec.ANName);
-                    SetSignalStateEmitter = Logger.Debug;
+
+                    ANSourceMesgTypeConfig mesgTypeConfig;
+
+                    if (anSourceMesgTypeConfig != null)
+                    {
+                        mesgTypeConfig = anSourceMesgTypeConfig ?? ANSourceMesgTypeConfig.Error_Info;
+                    }
+                    else
+                    {
+                        switch (ANSpec.ANType)
+                        {
+                            case ANType.Alarm: mesgTypeConfig = ParentPart.ANManagerPartConfig.DefaultAlarmANMesgTypeConfig; break;
+                            case ANType.Error: mesgTypeConfig = ParentPart.ANManagerPartConfig.DefaultErrorANMesgTypeConfig; break;
+                            case ANType.Warning: mesgTypeConfig = ParentPart.ANManagerPartConfig.DefaultWarningANMesgTypeConfig; break;
+                            case ANType.Dynamic: mesgTypeConfig = ParentPart.ANManagerPartConfig.DefaultDynamicANMesgTypeConfig; break;
+                            case ANType.Attention: mesgTypeConfig = ParentPart.ANManagerPartConfig.DefaultAttentionANMesgTypeConfig; break;
+                            default: mesgTypeConfig = ANSourceMesgTypeConfig.Error_Info; break;
+                        }
+                    }
+
+                    SetSignalStateEmitter = Logger.Emitter(mesgTypeConfig.Set);
+                    ClearSignalStateEmitter = Logger.Emitter(mesgTypeConfig.Clear);
+                    UpdateSignalStateEmitter = Logger.Emitter(mesgTypeConfig.Update);
 
                     if (ANSpec.ALID.IsNone())
                     {
@@ -2021,11 +2116,11 @@ namespace MosaicLib.Semi.E041
                     {
                         if (ANState.ANSignalState.IsActionActive())
                         {
-                            SetSignalState(ANSignalState.OnAndActionAborted, "Clear used before action completed", true);
+                            SetSignalState(ANSignalState.OnAndActionAborted, "Clear used before action completed [{0}]".CheckedFormat(reason), true);
                             ANState.ActiveActionName = null;
+                            ANState.SelectedActionName = null;
                         }
-
-                        if (!ANState.SelectedActionName.IsNullOrEmpty())
+                        else if (!ANState.SelectedActionName.IsNullOrEmpty())
                         {
                             bool isAck = ANState.SelectedActionName == Constants.Ack || ANState.SelectedActionName == Constants.Acknowledge;
                             if (!isAck)
@@ -2054,10 +2149,27 @@ namespace MosaicLib.Semi.E041
 
                     if (ANState.ANSignalState.IsActionActive())
                     {
-                        anSignalState = ANSignalState.OnAndActionActive;     // OnAndActionActive state is sticky until an is Cleared or Action is marked as complete
+                        if (ParentPart.ANManagerPartConfig.AbortActiveActionInProgressOnPost)
+                        {
+                            SetSignalState(ANSignalState.OnAndActionAborted, "Post used before action completed [{0}]".CheckedFormat(reason), true);
+                            ANState.ActiveActionName = null;
+                            ANState.SelectedActionName = null;
+                        }
+                        else
+                        {
+                            anSignalState = ANSignalState.OnAndActionActive;     // OnAndActionActive state is sticky until an is Cleared or Action is marked as complete
 
-                        string actionName = ANState.ActiveActionName;
-                        roActionList = ClearEnabledActionsIfNeeded(roActionList, actionName.IsNeitherNullNorEmpty() ? "Action {0} is active".CheckedFormat(actionName) : "An action is active");
+                            string actionName = ANState.ActiveActionName;
+                            roActionList = ClearEnabledActionsIfNeeded(roActionList, actionName.IsNeitherNullNorEmpty() ? "Action {0} is active".CheckedFormat(actionName) : "An action is active");
+                        }
+                    }
+                    else if (!ANState.SelectedActionName.IsNullOrEmpty() && ParentPart.ANManagerPartConfig.ClearInactiveSelectedActionOnPost)
+                    {
+                        bool isAck = ANState.SelectedActionName == Constants.Ack || ANState.SelectedActionName == Constants.Acknowledge;
+                        if (!isAck)
+                            Logger.Debug.Emit("Post: removing unused SelectedActionName:'{0}'", ANState.SelectedActionName);
+
+                        ANState.SelectedActionName = null;
                     }
 
                     if (!ANState.ActionList.IsEqualTo(roActionList))
@@ -2334,16 +2446,38 @@ namespace MosaicLib.Semi.E041
                 {
                     string actionStr = ((anSignalState.IsActionActive() || !ANState.ActiveActionName.IsNullOrEmpty()) ? " action:'{0}'".CheckedFormat(ANState.ActiveActionName) : "");
 
+                    bool isSignalingNow = ANState.IsSignaling;
+                    bool wasSignalingBefore = LastSourceGeneratedState != null && LastSourceGeneratedState.IsSignaling;
+                    bool beingSet = (isSignalingNow && !wasSignalingBefore);
+                    bool beingCleared = (!isSignalingNow && wasSignalingBefore);
+
+                    Logging.IMesgEmitter emitter = Logging.NullEmitter;
+                    if (beingSet)
+                        emitter = SetSignalStateEmitter;
+                    else if (isSignalingNow)
+                        emitter = UpdateSignalStateEmitter;
+                    else
+                        emitter = ClearSignalStateEmitter;
+
                     if (LastSourceGeneratedState != null)
                     {
                         if (LastSourceGeneratedState.ANSignalState != anSignalState)
-                            SetSignalStateEmitter.Emit("State changed to {0}, '{1}' {2}{3} [from state:{4}]", anSignalState, reason, ANState.ActionList.ToString(false, true), actionStr, LastSourceGeneratedState.ANSignalState);
+                        {
+                            if (beingSet)
+                                emitter.Emit("Signaling state set to {0}, '{1}' {2}{3} [from state:{4}]", anSignalState, reason, ANState.ActionList.ToString(false, true), actionStr, LastSourceGeneratedState.ANSignalState);
+                            else if (beingCleared)
+                                emitter.Emit("Signaling state cleared to {0}, '{1}' {2}{3} [from state:{4}]", anSignalState, reason, ANState.ActionList.ToString(false, true), actionStr, LastSourceGeneratedState.ANSignalState);
+                            else
+                                emitter.Emit("Signaling state changed to {0}, '{1}' {2}{3} [from state:{4}]", anSignalState, reason, ANState.ActionList.ToString(false, true), actionStr, LastSourceGeneratedState.ANSignalState);
+                        }
                         else if (LastSourceGeneratedState.Reason != reason)
-                            SetSignalStateEmitter.Emit("Reason changed {0}, '{1}' {2}{3}", anSignalState, reason, ANState.ActionList.ToString(false, true), actionStr);
+                        {
+                            emitter.Emit("Reason changed {0}, '{1}' {2}{3}", anSignalState, reason, ANState.ActionList.ToString(false, true), actionStr);
+                        }
                     }
                     else
                     {
-                        SetSignalStateEmitter.Emit("Initial state id {0}, '{1}' {2}{3}", anSignalState, reason, ANState.ActionList.ToString(false, true), actionStr);
+                        emitter.Emit("Initial state id {0}, '{1}' {2}{3}", anSignalState, reason, ANState.ActionList.ToString(false, true), actionStr);
                     }
 
                     CloneAndPublishANStateToManager();

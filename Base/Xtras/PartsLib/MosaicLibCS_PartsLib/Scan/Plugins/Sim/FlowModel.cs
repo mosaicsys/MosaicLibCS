@@ -1041,10 +1041,14 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
             Force = 5,
         }
 
+        /// <summary>
+        /// Defines the selectable set of controller behaviors.
+        /// <para/>None (0x00), AntiWindUp (0x01), PermitIntegrationWhileSlewing (0x02), UseconductanceLinearizedPercentOpenSetpoint (0x04), UseDifferentialGuageReading (0x10)
+        /// </summary>
         [Flags]
         public enum ControllerBehavior : int
         {
-            None = 0x01,
+            None = 0x00,
             AntiWindUp = 0x01,
             PermitIntegrationWhileSlewing = 0x02,
             UseConductanceLinearizedPercentOpenSetpoint = 0x04,

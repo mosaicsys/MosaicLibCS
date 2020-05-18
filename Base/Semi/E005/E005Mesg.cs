@@ -40,6 +40,9 @@ namespace MosaicLib.Semi.E005
         /// <summary>Defines the Stream/Function for this message.  Primary messages may expect a reply.</summary>
         StreamFunction SF { get; }
 
+        /// <summary>When this property is true it indicates that high rate logging should be used for actions that relate to this message</summary>
+        bool IsHighRate { get; set; }
+
         /// <summary>Defines the sequence number to be used with this message.  This is generally used as the SystemBytes in the ten byte header.  A reply message's SeqNum comes from the primary message it is in reply to.</summary>
         UInt32 SeqNum { get; set; }
 
@@ -65,7 +68,7 @@ namespace MosaicLib.Semi.E005
         IMessage CreateReply();
 
         /// <summary>Sets the reply message that is to be associated with this message.  Throws if this message does not expect a reply or if one has already been given.  Supports call chaining</summary>
-        IMessage SetReply(IMessage reply, bool replaceReply = false);
+        IMessage SetReply(IMessage reply, bool replaceReply = false, bool isHighRateReply = false);
 
         /// <summary>Action factory method.  Calls the associated port's (or the default Manager's DefaultPort if null)'s SendMessage action factory method and returns the resulting action.  When this action is run it will ask the port to send this message.</summary>
         IClientFacet Send();
@@ -105,10 +108,11 @@ namespace MosaicLib.Semi.E005
         /// <summary>
         /// Internal constructor used to generate message bodies on reception.
         /// </summary>
-        internal Message(TenByteHeaderBase tbh, Port.IPort port)
+        internal Message(TenByteHeaderBase tbh, Port.IPort port, Manager.IManagerPortFacet managerPortFacet)
         {
             Port = port;
             SetTenByteHeader(tbh, keepMessageSF: false, keepMessageSeqNum: false);
+            IsHighRate = managerPortFacet.IsHighRateSF(SF);
         }
 
         #endregion
@@ -118,6 +122,9 @@ namespace MosaicLib.Semi.E005
 
         /// <summary>Defines the Stream/Function for this message.  Primary messages may expect a reply.</summary>
         public StreamFunction SF { get; private set; }
+
+        /// <summary>When this property is true it indicates that high rate logging should be used for actions that relate to this message</summary>
+        public bool IsHighRate { get; set; }
 
         /// <summary>Defines the sequence number to be used with this message.  This is generally used as the SystemBytes in the ten byte header.  A reply message's SeqNum comes from the primary message it is in reply to.</summary>
         public UInt32 SeqNum 
@@ -200,19 +207,23 @@ namespace MosaicLib.Semi.E005
             var reply = new Message(replySF, Port) 
                     { 
                         SF = replySF, 
-                        SeqNum = SeqNum 
+                        SeqNum = SeqNum,
+                        IsHighRate = IsHighRate,
                     }
                     .SetTenByteHeader(TenByteHeader.MakeCopyOfThis(), keepMessageSF: true, keepMessageSeqNum: true);
 
             return reply;
         }
 
-        IMessage IMessage.SetReply(IMessage reply, bool replaceReply)
+        IMessage IMessage.SetReply(IMessage reply, bool replaceReply, bool isHighRateReply)
         {
             if (Reply != null && !replaceReply)
                 throw new MessageException("{0} cannot be used when message already has an associated Reply [{1}]".CheckedFormat(Fcns.CurrentMethodName, this), this);
 
             Reply = reply;
+
+            if (isHighRateReply && !Reply.IsHighRate)
+                Reply.IsHighRate = true;
 
             return this;
         }
@@ -276,6 +287,15 @@ namespace MosaicLib.Semi.E005
         }
 
         /// <summary>
+        /// Sets the message's IsHighRate property to the given <paramref name="isHighRate"/> value (defaults to true).
+        /// </summary>
+        public static IMessage SetIsHighRate(this IMessage mesg, bool isHighRate = true)
+        {
+            mesg.IsHighRate = isHighRate;
+            return mesg;
+        }
+
+        /// <summary>
         /// Gets the given <paramref name="mesg"/>'s content bytes converted from E005 data to a ValueContainer.
         /// </summary>
         public static ValueContainer GetDecodedContents(this IMessage mesg, bool throwOnException = true)
@@ -294,7 +314,8 @@ namespace MosaicLib.Semi.E005
     #region StreamFunction, ExtensionMethods
 
     /// <summary>Helper struct used to pack, unpack and manipulate Stream/Function bytes for a message object.</summary>
-	public struct StreamFunction		// also used as Bytes2/Bytes3 in HSMS headers
+    /// <remarks>also used as Bytes2/Bytes3 in HSMS headers</remarks>
+	public struct StreamFunction
 	{
 		Byte byte2;
         Byte byte3;

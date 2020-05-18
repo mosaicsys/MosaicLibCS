@@ -36,6 +36,7 @@ using MosaicLib.Modular.Reflection.Attributes;
 using MosaicLib.Utils;
 using MosaicLib.Utils.Collections;
 using MosaicLib.Semi.E005.Data;
+using System.Runtime.CompilerServices;
 
 namespace MosaicLib.Modular.Common
 {
@@ -850,7 +851,408 @@ namespace MosaicLib.Modular.Common
 
         #endregion
 
-        #region SetValue variants
+        #region Type specifc GetValue, SetValue, and Create variants (GetValueYY, SetValueYY, CreateYY for YY in Bo, Bi, I1, I2, I4, I8, U1, U2, U4, U8, F4, F8)
+
+        /// <summary>
+        /// Gets the contents of this ValueContainer as the indicated type.  
+        /// If the contents matches the implicit type, or any directly convertable type, then it directly returns the related contents. 
+        /// Otherwise it returns the resulting using the generic GetValue{}(rethrow, allowAllTypeChangeAttempts) variant which handles supported type conversions.
+        /// </summary>
+        public bool GetValueBo(bool rethrow = true, bool allowAllTypeChangeAttempts = true)
+        {
+            switch (cvt)
+            {
+                case ContainerStorageType.Bo: return u.b;
+                default: return GetValue<bool>(rethrow: rethrow, allowTypeChangeAttempt: allowAllTypeChangeAttempts);
+            }
+        }
+
+        /// <summary>
+        /// Gets the contents of this ValueContainer as the indicated type.  
+        /// If the contents matches the implicit type, or any directly convertable type, then it directly returns the related contents. 
+        /// Otherwise it returns the resulting using the generic GetValue{}(rethrow, allowAllTypeChangeAttempts) variant which handles supported type conversions.
+        /// </summary>
+        public byte GetValueBi(bool rethrow = true, bool allowAllTypeChangeAttempts = true)
+        {
+            switch (cvt)
+            {
+                case ContainerStorageType.U1: return u.u8;
+                case ContainerStorageType.Bi: return u.bi;
+                case ContainerStorageType.Bo: return (byte)u.b.MapToInt();
+                default: return GetValue<byte>(rethrow: rethrow, allowTypeChangeAttempt: allowAllTypeChangeAttempts);
+            }
+        }
+
+        /// <summary>
+        /// Gets the contents of this ValueContainer as the indicated type.  
+        /// If the contents matches the implicit type, or any directly convertable type, then it directly returns the related contents. 
+        /// Otherwise it returns the resulting using the generic GetValue{}(rethrow, allowAllTypeChangeAttempts) variant which handles supported type conversions.
+        /// </summary>
+        public sbyte GetValueI1(bool rethrow = true, bool allowAllTypeChangeAttempts = true)
+        {
+            switch (cvt)
+            {
+                case ContainerStorageType.I1: return u.i8;
+                case ContainerStorageType.Bo: return (sbyte) u.b.MapToInt();
+                default: return GetValue<sbyte>(rethrow: rethrow, allowTypeChangeAttempt: allowAllTypeChangeAttempts);
+            }
+        }
+
+        /// <summary>
+        /// Gets the contents of this ValueContainer as the indicated type.  
+        /// If the contents matches the implicit type, or any directly convertable type, then it directly returns the related contents. 
+        /// Otherwise it returns the resulting using the generic GetValue{}(rethrow, allowAllTypeChangeAttempts) variant which handles supported type conversions.
+        /// </summary>
+        public short GetValueI2(bool rethrow = true, bool allowAllTypeChangeAttempts = true)
+        {
+            switch (cvt)
+            {
+                case ContainerStorageType.I2: return u.i16;
+                case ContainerStorageType.U1: return u.u8;
+                case ContainerStorageType.Bi: return u.bi;
+                case ContainerStorageType.I1: return u.i8;
+                case ContainerStorageType.Bo: return (short) u.b.MapToInt();
+                default: return GetValue<short>(rethrow: rethrow, allowTypeChangeAttempt: allowAllTypeChangeAttempts);
+            }
+        }
+
+        /// <summary>
+        /// Gets the contents of this ValueContainer as the indicated type.  
+        /// If the contents matches the implicit type, or any directly convertable type, then it directly returns the related contents. 
+        /// Otherwise it returns the resulting using the generic GetValue{}(rethrow, allowAllTypeChangeAttempts) variant which handles supported type conversions.
+        /// </summary>
+        public int GetValueI4(bool rethrow = true, bool allowAllTypeChangeAttempts = true)
+        {
+            switch (cvt)
+            {
+                case ContainerStorageType.I4: return u.i32;
+                case ContainerStorageType.U2: return u.u16;
+                case ContainerStorageType.I2: return u.i16;
+                case ContainerStorageType.U1: return u.u8;
+                case ContainerStorageType.Bi: return u.bi;
+                case ContainerStorageType.I1: return u.i8;
+                case ContainerStorageType.Bo: return u.b.MapToInt();
+                default: return GetValue<int>(rethrow: rethrow, allowTypeChangeAttempt: allowAllTypeChangeAttempts);
+            }
+        }
+
+        /// <summary>
+        /// Gets the contents of this ValueContainer as the indicated type.  
+        /// If the contents matches the implicit type, or any directly convertable type, then it directly returns the related contents. 
+        /// Otherwise it returns the resulting using the generic GetValue{}(rethrow, allowAllTypeChangeAttempts) variant which handles supported type conversions.
+        /// </summary>
+        public long GetValueI8(bool rethrow = true, bool allowAllTypeChangeAttempts = true)
+        {
+            switch (cvt)
+            {
+                case ContainerStorageType.I8: return u.i64;
+                case ContainerStorageType.U4: return u.u32;
+                case ContainerStorageType.I4: return u.i32;
+                case ContainerStorageType.U2: return u.u16;
+                case ContainerStorageType.I2: return u.i16;
+                case ContainerStorageType.U1: return u.u8;
+                case ContainerStorageType.Bi: return u.bi;
+                case ContainerStorageType.I1: return u.i8;
+                case ContainerStorageType.Bo: return u.b.MapToInt();
+                default: return GetValue<long>(rethrow: rethrow, allowTypeChangeAttempt: allowAllTypeChangeAttempts);
+            }
+        }
+
+        /// <summary>
+        /// Gets the contents of this ValueContainer as the indicated type.  
+        /// If the contents matches the implicit type, or any directly convertable type, then it directly returns the related contents. 
+        /// Otherwise it returns the resulting using the generic GetValue{}(rethrow, allowAllTypeChangeAttempts) variant which handles supported type conversions.
+        /// </summary>
+        public byte GetValueU1(bool rethrow = true, bool allowAllTypeChangeAttempts = true)
+        {
+            switch (cvt)
+            {
+                case ContainerStorageType.U1: return u.u8;
+                case ContainerStorageType.Bi: return u.bi;
+                case ContainerStorageType.Bo: return (byte)u.b.MapToInt();
+                default: return GetValue<byte>(rethrow: rethrow, allowTypeChangeAttempt: allowAllTypeChangeAttempts);
+            }
+        }
+
+        /// <summary>
+        /// Gets the contents of this ValueContainer as the indicated type.  
+        /// If the contents matches the implicit type, or any directly convertable type, then it directly returns the related contents. 
+        /// Otherwise it returns the resulting using the generic GetValue{}(rethrow, allowAllTypeChangeAttempts) variant which handles supported type conversions.
+        /// </summary>
+        public ushort GetValueU2(bool rethrow = true, bool allowAllTypeChangeAttempts = true)
+        {
+            switch (cvt)
+            {
+                case ContainerStorageType.U2: return u.u16;
+                case ContainerStorageType.U1: return u.u8;
+                case ContainerStorageType.Bi: return u.bi;
+                case ContainerStorageType.Bo: return (ushort)u.b.MapToInt();
+                default: return GetValue<ushort>(rethrow: rethrow, allowTypeChangeAttempt: allowAllTypeChangeAttempts);
+            }
+        }
+
+        /// <summary>
+        /// Gets the contents of this ValueContainer as the indicated type.  
+        /// If the contents matches the implicit type, or any directly convertable type, then it directly returns the related contents. 
+        /// Otherwise it returns the resulting using the generic GetValue{}(rethrow, allowAllTypeChangeAttempts) variant which handles supported type conversions.
+        /// </summary>
+        public uint GetValueU4(bool rethrow = true, bool allowAllTypeChangeAttempts = true)
+        {
+            switch (cvt)
+            {
+                case ContainerStorageType.U4: return u.u32;
+                case ContainerStorageType.U2: return u.u16;
+                case ContainerStorageType.U1: return u.u8;
+                case ContainerStorageType.Bi: return u.bi;
+                case ContainerStorageType.Bo: return (uint)u.b.MapToInt();
+                default: return GetValue<uint>(rethrow: rethrow, allowTypeChangeAttempt: allowAllTypeChangeAttempts);
+            }
+        }
+
+        /// <summary>
+        /// Gets the contents of this ValueContainer as the indicated type.  
+        /// If the contents matches the implicit type, or any directly convertable type, then it directly returns the related contents. 
+        /// Otherwise it returns the resulting using the generic GetValue{}(rethrow, allowAllTypeChangeAttempts) variant which handles supported type conversions.
+        /// </summary>
+        public ulong GetValueU8(bool rethrow = true, bool allowAllTypeChangeAttempts = true)
+        {
+            switch (cvt)
+            {
+                case ContainerStorageType.U8: return u.u64;
+                case ContainerStorageType.U4: return u.u32;
+                case ContainerStorageType.U2: return u.u16;
+                case ContainerStorageType.U1: return u.u8;
+                case ContainerStorageType.Bi: return u.bi;
+                case ContainerStorageType.Bo: return (uint) u.b.MapToInt();
+                default: return GetValue<ulong>(rethrow: rethrow, allowTypeChangeAttempt: allowAllTypeChangeAttempts);
+            }
+        }
+
+        /// <summary>
+        /// Gets the contents of this ValueContainer as the indicated type.  
+        /// If the contents matches the implicit type, or any directly convertable type, then it directly returns the related contents. 
+        /// Otherwise it returns the resulting using the generic GetValue{}(rethrow, allowAllTypeChangeAttempts) variant which handles supported type conversions.
+        /// </summary>
+        public float GetValueF4(bool rethrow = true, bool allowAllTypeChangeAttempts = true)
+        {
+            switch (cvt)
+            {
+                case ContainerStorageType.F4: return u.f32;
+                case ContainerStorageType.U2: return u.u16;
+                case ContainerStorageType.I2: return u.i16;
+                case ContainerStorageType.U1: return u.u8;
+                case ContainerStorageType.Bi: return u.bi;
+                case ContainerStorageType.I1: return u.i8;
+                case ContainerStorageType.Bo: return u.b.MapToInt();
+                default: return GetValue<float>(rethrow: rethrow, allowTypeChangeAttempt: allowAllTypeChangeAttempts);
+            }
+        }
+
+        /// <summary>
+        /// Gets the contents of this ValueContainer as the indicated type.  
+        /// If the contents matches the implicit type, or any directly convertable type, then it directly returns the related contents. 
+        /// Otherwise it returns the resulting using the generic GetValue{}(rethrow, allowAllTypeChangeAttempts) variant which handles supported type conversions.
+        /// </summary>
+        public double GetValueF8(bool rethrow = true, bool allowAllTypeChangeAttempts = true)
+        {
+            switch (cvt)
+            {
+                case ContainerStorageType.F8: return u.f64;
+                case ContainerStorageType.F4: return u.f32;
+                case ContainerStorageType.U4: return u.u32;
+                case ContainerStorageType.I4: return u.i32;
+                case ContainerStorageType.U2: return u.u16;
+                case ContainerStorageType.I2: return u.i16;
+                case ContainerStorageType.U1: return u.u8;
+                case ContainerStorageType.Bi: return u.bi;
+                case ContainerStorageType.I1: return u.i8;
+                case ContainerStorageType.Bo: return u.b.MapToInt();
+                default: return GetValue<double>(rethrow: rethrow, allowTypeChangeAttempt: allowAllTypeChangeAttempts);
+            }
+        }
+
+        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        public void SetValueBo(bool value) { cvt = ContainerStorageType.Bo; o = null; u = new Union() { b = value }; }
+
+        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        public void SetValueBi(byte value) { cvt = ContainerStorageType.Bi; o = null; u = new Union() { bi = value }; }
+
+        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        public void SetValueI1(sbyte value) { cvt = ContainerStorageType.I1; o = null; u = new Union() { i8 = value }; }
+
+        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        public void SetValueI2(short value) { cvt = ContainerStorageType.I2; o = null; u = new Union() { i16 = value }; }
+
+        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        public void SetValueI4(int value) { cvt = ContainerStorageType.I4; o = null; u = new Union() { i32 = value }; }
+
+        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        public void SetValueI8(long value) { cvt = ContainerStorageType.I8; o = null; u = new Union() { i64 = value }; }
+
+        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        public void SetValueU1(byte value) { cvt = ContainerStorageType.U1; o = null; u = new Union() { u8 = value }; }
+
+        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        public void SetValueU2(ushort value) { cvt = ContainerStorageType.U2; o = null; u = new Union() { u16 = value }; }
+
+        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        public void SetValueU4(uint value) { cvt = ContainerStorageType.U4; o = null; u = new Union() { u32 = value }; }
+
+        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        public void SetValueU8(ulong value) { cvt = ContainerStorageType.U8; o = null; u = new Union() { u64 = value }; }
+
+        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        public void SetValueF4(float value) { cvt = ContainerStorageType.F4; o = null; u = new Union() { f32 = value }; }
+
+        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        public void SetValueF8(double value) { cvt = ContainerStorageType.F8; o = null; u = new Union() { f64 = value }; }
+
+        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        public static ValueContainer CreateBo(bool value) { return new ValueContainer() { cvt = ContainerStorageType.Bo, u = new Union() { b = value } }; }
+
+        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        public static ValueContainer CreateBi(byte value) { return new ValueContainer() { cvt = ContainerStorageType.Bi, u = new Union() { bi = value } }; }
+
+        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        public static ValueContainer CreateI1(sbyte value) { return new ValueContainer() { cvt = ContainerStorageType.I1, u = new Union() { i8 = value } }; }
+
+        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        public static ValueContainer CreateI2(short value) { return new ValueContainer() { cvt = ContainerStorageType.I2, u = new Union() { i16 = value } }; }
+
+        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        public static ValueContainer CreateI4(int value) { return new ValueContainer() { cvt = ContainerStorageType.I4, u = new Union() { i32 = value } }; }
+
+        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        public static ValueContainer CreateI8(long value) { return new ValueContainer() { cvt = ContainerStorageType.I8, u = new Union() { i64 = value } }; }
+
+        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        public static ValueContainer CreateU1(byte value) { return new ValueContainer() { cvt = ContainerStorageType.U1, u = new Union() { u8 = value } }; }
+
+        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        public static ValueContainer CreateU2(ushort value) { return new ValueContainer() { cvt = ContainerStorageType.U2, u = new Union() { u16 = value } }; }
+
+        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        public static ValueContainer CreateU4(uint value) { return new ValueContainer() { cvt = ContainerStorageType.U4, u = new Union() { u32 = value } }; }
+
+        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        public static ValueContainer CreateU8(ulong value) { return new ValueContainer() { cvt = ContainerStorageType.U8, u = new Union() { u64 = value } }; }
+
+        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        public static ValueContainer CreateF4(float value) { return new ValueContainer() { cvt = ContainerStorageType.F4, u = new Union() { f32 = value } }; }
+
+        /// <summary>Creates and returns a ValueContainer that contains the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        public static ValueContainer CreateF8(double value) { return new ValueContainer() { cvt = ContainerStorageType.F8, u = new Union() { f64 = value } }; }
+
+        #endregion
+
+        #region Additional type specific GetValueYY, SetValueYY, and CreateYY variants (A, TimeSpan, DateTime)
+
+        /// <summary>
+        /// Gets the contents of this ValueContainer as the indicated type.  
+        /// If the contents matches the implicit type, or any directly convertable type, then it directly returns the related contents. 
+        /// Otherwise it returns the resulting using the generic GetValue{}(rethrow, allowAllTypeChangeAttempts) variant which handles supported type conversions.
+        /// </summary>
+        public string GetValueA(bool rethrow = true, bool allowAllTypeChangeAttempts = true)
+        {
+            switch (cvt)
+            {
+                case ContainerStorageType.A: return (o as string);
+                default: return GetValue<string>(rethrow: rethrow, allowTypeChangeAttempt: allowAllTypeChangeAttempts);
+            }
+        }
+
+        /// <summary>
+        /// Gets the contents of this ValueContainer as the indicated type.  
+        /// If the contents matches the implicit type, or any directly convertable type, then it directly returns the related contents. 
+        /// Otherwise it returns the resulting using the generic GetValue{}(rethrow, allowAllTypeChangeAttempts) variant which handles supported type conversions.
+        /// </summary>
+        public TimeSpan GetValueTS(bool rethrow = true, bool allowAllTypeChangeAttempts = true)
+        {
+            switch (cvt)
+            {
+                case ContainerStorageType.TS: return u.TimeSpan;
+                case ContainerStorageType.F8: return u.f64.FromSeconds();
+                default: return GetValue<TimeSpan>(rethrow: rethrow, allowTypeChangeAttempt: allowAllTypeChangeAttempts);
+            }
+        }
+
+        /// <summary>
+        /// Gets the contents of this ValueContainer as the indicated type.  
+        /// If the contents matches the implicit type, or any directly convertable type, then it directly returns the related contents. 
+        /// Otherwise it returns the resulting using the generic GetValue{}(rethrow, allowAllTypeChangeAttempts) variant which handles supported type conversions.
+        /// </summary>
+        public DateTime GetValueDT(bool rethrow = true, bool allowAllTypeChangeAttempts = true)
+        {
+            switch (cvt)
+            {
+                case ContainerStorageType.DT: return u.DateTime;
+                default: return GetValue<DateTime>(rethrow: rethrow, allowTypeChangeAttempt: allowAllTypeChangeAttempts);
+            }
+        }
+
+        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        public void SetValueA(string value) { cvt = ContainerStorageType.A; o = value; u = new Union() { }; }
+
+        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        public void SetValueTS(TimeSpan value) { cvt = ContainerStorageType.TS; o = null; u = new Union() { TimeSpan = value }; }
+
+        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        public void SetValueDT(DateTime value) { cvt = ContainerStorageType.DT; o = null; u = new Union() { DateTime = value }; }
+
+        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        public static ValueContainer CreateA(string value) { return new ValueContainer() { cvt = ContainerStorageType.A, o = value, u = new Union() { } }; }
+
+        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        public static ValueContainer CreateTS(TimeSpan value) { return new ValueContainer() { cvt = ContainerStorageType.TS, u = new Union() { TimeSpan = value } }; }
+
+        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        public static ValueContainer CreateDT(DateTime value) { return new ValueContainer() { cvt = ContainerStorageType.DT, u = new Union() { DateTime = value } }; }
+
+        #endregion
+
+        #region SetValue variants (Including type specific versions)
+
+        /// <summary>Type specific version of SetValue{}</summary>
+        public ValueContainer SetValue(bool value) { SetValueBo(value); return this; }
+
+        /// <summary>Type specific version of SetValue{}</summary>
+        public ValueContainer SetValue(sbyte value) { SetValueI1(value); return this; }
+
+        /// <summary>Type specific version of SetValue{}</summary>
+        public ValueContainer SetValue(short value) { SetValueI2(value); return this; }
+
+        /// <summary>Type specific version of SetValue{}</summary>
+        public ValueContainer SetValue(int value) { SetValueI4(value); return this; }
+
+        /// <summary>Type specific version of SetValue{}</summary>
+        public ValueContainer SetValue(long value) { SetValueI8(value); return this; }
+
+        /// <summary>Type specific version of SetValue{}</summary>
+        public ValueContainer SetValue(byte value) { SetValueU1(value); return this; }
+
+        /// <summary>Type specific version of SetValue{}</summary>
+        public ValueContainer SetValue(ushort value) { SetValueU2(value); return this; }
+
+        /// <summary>Type specific version of SetValue{}</summary>
+        public ValueContainer SetValue(uint value) { SetValueU4(value); return this; }
+
+        /// <summary>Type specific version of SetValue{}</summary>
+        public ValueContainer SetValue(ulong value) { SetValueU8(value); return this; }
+
+        /// <summary>Type specific version of SetValue{}</summary>
+        public ValueContainer SetValue(float value) { SetValueF4(value); return this; }
+
+        /// <summary>Type specific version of SetValue{}</summary>
+        public ValueContainer SetValue(double value) { SetValueF8(value); return this; }
+
+        /// <summary>Type specific version of SetValue{}</summary>
+        public ValueContainer SetValue(string value) { SetValueA(value); return this; }
+
+        /// <summary>Type specific version of SetValue{}</summary>
+        public ValueContainer SetValue(TimeSpan value) { SetValueTS(value); return this; }
+
+        /// <summary>Type specific version of SetValue{}</summary>
+        public ValueContainer SetValue(DateTime value) { SetValueDT(value); return this; }
 
         /// <summary>
         /// Typed value setter method.  
@@ -1357,7 +1759,8 @@ namespace MosaicLib.Modular.Common
                     }
                     else
                     {
-                        throw new ValueContainerGetValueException("Unable to get {0} as type '{1}': no recognized custom conversion exists".CheckedFormat(this, typeof(TValueType)), null);
+                        ThrowValueContainerGetValueException("Unable to get {0} as type '{1}': no recognized custom conversion exists".CheckedFormat(this, typeof(TValueType)), null);
+                        value = defaultValue;
                     }
                 }
                 else if (decodedValueType == ContainerStorageType.TimeSpan && cvt.IsFloatingPoint() && allowTypeChangeAttempt)
@@ -1514,7 +1917,12 @@ namespace MosaicLib.Modular.Common
                     value = defaultValue;
                     bool valueIsIntendedToBeNull = (cvt.IsReferenceType() && o == null);
                     if (!valueIsIntendedToBeNull)
-                        LastGetValueException = new ValueContainerGetValueException("Unable to get {0} as type '{1}': No known conversion exists".CheckedFormat(this, typeof(TValueType)), null);
+                    {
+                        if (allowTypeChangeAttempt)
+                            LastGetValueException = new ValueContainerGetValueException("Unable to get {0} as type '{1}': No known conversion exists".CheckedFormat(this, typeof(TValueType)), null);
+                        else
+                            LastGetValueException = new ValueContainerGetValueException("Unable to get {0} as type '{1}': allowTypeChangeAttempt is false".CheckedFormat(this, typeof(TValueType)), null);
+                    }
                 }
             }
             catch (System.Exception ex)
@@ -1531,7 +1939,7 @@ namespace MosaicLib.Modular.Common
             }
 
             if (rethrow && LastGetValueException != null)
-                throw LastGetValueException;
+                ThrowGivenException(LastGetValueException);
 
             return value;
         }
@@ -1598,6 +2006,28 @@ namespace MosaicLib.Modular.Common
 
                 return false;
             }
+        }
+
+        #endregion
+
+        #region Throw helpers (ThrowValueContainerGetValueException, ThrowGivenException)
+
+        /// <summary>
+        /// Throw helper method used to throw a ValueContainerGetValueException.  Use of this method is intended to allow more ValueContainer methods to be inlined.
+        /// </summary>
+        /// <exception cref="ValueContainerGetValueException">constructs and throws this exception type</exception>
+        public static void ThrowValueContainerGetValueException(string message, System.Exception innerException = null)
+        {
+            throw new ValueContainerGetValueException(message, innerException: innerException);
+        }
+
+        /// <summary>
+        /// Throw helper method used to throw the given exception.  Use of this method is intended to allow more ValueContainer methods to be inlined.
+        /// </summary>
+        /// <exception cref="System.Exception">Throws the given exception of this base type</exception>
+        public static void ThrowGivenException(System.Exception ex)
+        {
+            throw ex;
         }
 
         #endregion
@@ -1904,6 +2334,7 @@ namespace MosaicLib.Modular.Common
     /// <summary>
     /// Enumeration that is used with the ValueContainer struct.
     /// <para/>None (0 : default), Custom, Object, String, IListOfString, IListOfVC, INamedValueSet, INamedValue, Boolean, Binary, SByte, Int16, Int32, Int64, Byte, UInt16, UInt32, UInt64, Single, Double, TimeSpan, DateTime
+    /// <para/>Alternates: A, LS, L, Bo, Bi, I1, I2, I4, I8, U1, U2, U4, U8, F4, F8, TS, DT
     /// </summary>
     public enum ContainerStorageType : byte
     {
@@ -1982,6 +2413,10 @@ namespace MosaicLib.Modular.Common
         F4 = Single,
         /// <summary>Alternate version of Double.  Use Union.f64 field</summary>
         F8 = Double,
+        /// <summary>Alternate version of TimeSpan.  Use Union.TimeSpan property</summary>
+        TS = TimeSpan,
+        /// <summary>Alternate version of DateTime.  Use Union.DateTime property</summary>
+        DT = DateTime,
     }
 
     /// <summary>Standard extension methods wrapper class/namespace</summary>
@@ -2390,6 +2825,48 @@ namespace MosaicLib.Modular.Common
 
             return fallbackValue;
         }
+
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using ContainerStorageType.Bo</summary>
+        public static ValueContainer CreateVC(this bool value) { return ValueContainer.CreateBo(value); }
+
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using ContainerStorageType.I1</summary>
+        public static ValueContainer CreateVC(this sbyte value) { return ValueContainer.CreateI1(value); }
+
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using ContainerStorageType.I2</summary>
+        public static ValueContainer CreateVC(this short value) { return ValueContainer.CreateI2(value); }
+
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using ContainerStorageType.I4</summary>
+        public static ValueContainer CreateVC(this int value) { return ValueContainer.CreateI4(value); }
+
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using ContainerStorageType.I8</summary>
+        public static ValueContainer CreateVC(this long value) { return ValueContainer.CreateI8(value); }
+
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using ContainerStorageType.U1</summary>
+        public static ValueContainer CreateVC(this byte value) { return ValueContainer.CreateU1(value); }
+
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using ContainerStorageType.U2</summary>
+        public static ValueContainer CreateVC(this ushort value) { return ValueContainer.CreateU2(value); }
+
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using ContainerStorageType.U4</summary>
+        public static ValueContainer CreateVC(this uint value) { return ValueContainer.CreateU4(value); }
+
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using ContainerStorageType.U8</summary>
+        public static ValueContainer CreateVC(this ulong value) { return ValueContainer.CreateU8(value); }
+
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using ContainerStorageType.F4</summary>
+        public static ValueContainer CreateVC(this float value) { return ValueContainer.CreateF4(value); }
+
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using ContainerStorageType.F8</summary>
+        public static ValueContainer CreateVC(this double value) { return ValueContainer.CreateF8(value); }
+
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using ContainerStorageType.DateTime</summary>
+        public static ValueContainer CreateVC(this DateTime value) { return ValueContainer.CreateDT(value); }
+
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using ContainerStorageType.TimeStamp</summary>
+        public static ValueContainer CreateVC(this TimeSpan value) { return ValueContainer.CreateTS(value); }
+
+        /// <summary>Creates a ValueContainer to contain the given <paramref name="value"/> using ContainerStorageType.A</summary>
+        public static ValueContainer CreateVC(this string value) { return ValueContainer.CreateA(value); }
     }
 
     /// <summary>
@@ -4554,7 +5031,7 @@ namespace MosaicLib.Modular.Common
         private void OnDeserialized(StreamingContext context)
         {
             MakeReadOnly();
-    }
+        }
 
         #endregion
     }
@@ -5961,8 +6438,7 @@ namespace MosaicLib.Modular.Common
     /// <remarks>
     /// The primary methods/properties used on this adapter are: Construction, ValueSet, Setup, Set, Get
     /// </remarks>
-    public class NamedValueSetAdapter<TValueSet, TAttribute> 
-        : DisposableBase, INamedValueSetAdapter 
+    public class NamedValueSetAdapter<TValueSet, TAttribute> : INamedValueSetAdapter
         where TValueSet : class
         where TAttribute : Attributes.NamedValueSetItemAttribute, new()
     {

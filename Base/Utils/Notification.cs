@@ -885,7 +885,7 @@ namespace MosaicLib.Utils
 	/// <summary>Define the delegate type that is used with our generic IEventHandlerNotificationList and derived types</summary>
 	public delegate void EventHandlerDelegate<EventArgsType>(object source, EventArgsType eventArgs);
 
-	/// <summary> Define the interface that is provided to clients to allow them to add and remove their typed EventHandler delegates </summary>
+	/// <summary> Define the interface that is provided to clients to allow them to add and remove their typed EventHandler delegates</summary>
 	public interface IEventHandlerNotificationList<EventArgsType>
 	{
         /// <summary>

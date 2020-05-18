@@ -334,7 +334,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
 
                     if (settings.MDRFFileSpec.IsNeitherNullNorEmpty())
                     {
-                        argList.Add(settings.MDRFFileSpec);
+                        argList.AddRange(settings.MDRFFileSpec.Split('|'));
                         settings.MDRFFileSpec = null;
                     }
 
@@ -460,9 +460,9 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                             });
                     }
 
-                    var nextToWrite = sortedWorkItemsArray.FirstOrDefault(item => !item.written && item.mdrfContent != null);
+                    var nextToWrite = sortedWorkItemsArray.FirstOrDefault(item => !item.written);
 
-                    if (nextToWrite != null)
+                    if (nextToWrite != null && nextToWrite.mdrfContent != null)
                     {
                         var mdrfFileName = nextToWrite.mdrfFileName;
                         var mdrfReader = nextToWrite.mdrfFileReader;

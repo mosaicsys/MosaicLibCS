@@ -61,7 +61,7 @@ namespace MosaicLib.WPF.Timers
     public static class SharedDispatcherTimerFactory
     {
         /// <summary>
-        /// Obtains the ISharedDispatcherTimer instance from the dictionary for the given <paramref name="rate"/> value (createing one if needed) and returns it.
+        /// Obtains the ISharedDispatcherTimer instance from the dictionary for the given <paramref name="rate"/> value (creating one if needed) and returns it.
         /// <para/>Please note that the given <paramref name="rate"/> will be converted to the nearest tick interval and only one ISharedDispatcherTimer instance is created per requested tick interval.
         /// </summary>
         public static ISharedDispatcherTimer GetSharedTimer(double rate)
@@ -70,7 +70,7 @@ namespace MosaicLib.WPF.Timers
         }
 
         /// <summary>
-        /// Obtains the ISharedDispatcherTimer instance from the dictionary for the given <paramref name="tickInterval"/> (createing one if needed) and returns it.
+        /// Obtains the ISharedDispatcherTimer instance from the dictionary for the given <paramref name="tickInterval"/> (creating one if needed) and returns it.
         /// </summary>
         public static ISharedDispatcherTimer GetSharedTimer(TimeSpan tickInterval)
         {
@@ -78,7 +78,7 @@ namespace MosaicLib.WPF.Timers
         }
 
         /// <summary>
-        /// Obtains the ISharedDispatcherTimer instance from the dictionary for the given <paramref name="tickInterval"/> (createing one if needed) and returns it.
+        /// Obtains the ISharedDispatcherTimer instance from the dictionary for the given <paramref name="tickInterval"/> (creating one if needed) and returns it.
         /// </summary>
         private static ISharedDispatcherTimer GetSharedTimer(double rate, TimeSpan tickInterval)
         {
@@ -93,7 +93,7 @@ namespace MosaicLib.WPF.Timers
         private static Dictionary<TimeSpan, ISharedDispatcherTimer> sharedTimerDictionary = new Dictionary<TimeSpan, ISharedDispatcherTimer>();
 
         /// <summary>
-        /// Obtains the ISharedDispatcherTimer instance from the dictionary (createing one if needed),
+        /// Obtains the ISharedDispatcherTimer instance from the dictionary (creating one if needed),
         /// Adds any of the optional Tick event handler signatures (as supported by the ISharedDispatchTimer's TickNotificationList)
         /// and returns an IDisposable token that will release use of the timer and will remove any given Tick event handler signatures from the underlying TickNotificationList when the token is dipsosed.
         /// </summary>

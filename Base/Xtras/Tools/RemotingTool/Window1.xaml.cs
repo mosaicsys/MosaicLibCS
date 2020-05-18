@@ -53,6 +53,7 @@ using Modular = MosaicLib.Modular;
 using MosaicLib.WPF.Timers;
 using MosaicLib.Semi.E039;
 using MosaicLib.WPF.Tools.Sets;
+using MosaicLib.Modular.Reflection.Attributes;
 
 namespace RemotingTool
 {
@@ -88,6 +89,7 @@ namespace RemotingTool
                 BufferSize = MosaicLib.Modular.Interconnect.Remoting.Buffers.BufferPool.DefaultBufferSize;
                 SessionExpirationPeriod = (1.0).FromMinutes();
                 E039ObjectTableSetName = "E039ObjectSet";
+                IVIRelayMinimumUpdateInterval = (0.2).FromSeconds();
             }
 
             [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
@@ -128,6 +130,9 @@ namespace RemotingTool
 
             [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
             public string E039ObjectTableSetName { get; set; }
+
+            [ConfigItem(IsOptional = true, ReadOnlyOnce = true)]
+            public TimeSpan IVIRelayMinimumUpdateInterval { get; set; }
         }
 
         ConfigValues config = new ConfigValues();
@@ -148,8 +153,7 @@ namespace RemotingTool
             InitializeComponent();
 
             System.Reflection.Assembly currentExecAssy = System.Reflection.Assembly.GetExecutingAssembly();
-            var currentExecAssyFullNameSplit = currentExecAssy.FullName.Split(' ').Select(item => item.Trim(',')).ToArray();
-            Title = "{0} [{1}]".CheckedFormat(currentExecAssyFullNameSplit.SafeAccess(0), currentExecAssyFullNameSplit.SafeAccess(1));
+            Title = currentExecAssy.GetSummaryNameAndVersion();
 
             WVIA = new WPFValueInterconnectAdapter(IVI);
 
@@ -168,8 +172,8 @@ namespace RemotingTool
                     { "BufferPool.BufferSize", config.BufferSize },
                     { "SessionExpirationPeriod", config.SessionExpirationPeriod },
                 },
-                StreamToolsConfigArray = new MessageStreamToolConfigBase[] 
-                { 
+                StreamToolsConfigArray = new MessageStreamToolConfigBase[]
+                {
                     new ActionRelayMessageStreamToolConfig()
                     {
                         ToolLogGate = config.ToolLogGate,
@@ -181,13 +185,14 @@ namespace RemotingTool
                         RemoteIVIName = config.IVITableName,
                         IVIRelayDirection = IVIRelayDirection.FromServer,
                         ResetClientSideIVAsOnCloseOrFailure = true,
+                        MinimumUpdateInterval = config.IVIRelayMinimumUpdateInterval,
                     },
                     new SetRelayMessageStreamToolConfig<Logging.LogMessage>()
                     {
                         ToolLogGate = config.ToolLogGate,
-                         ClearClientSetOnCloseOrFailure = true,
-                         SetID = new Modular.Interconnect.Sets.SetID(config.RemoteLogMessageSetName, generateUUIDForNull: false),
-                         MaximumItemsPerMessage = config.RemoteLogMessageSetMaximumItemsPerMessage,
+                        ClearClientSetOnCloseOrFailure = true,
+                        SetID = new Modular.Interconnect.Sets.SetID(config.RemoteLogMessageSetName, generateUUIDForNull: false),
+                        MaximumItemsPerMessage = config.RemoteLogMessageSetMaximumItemsPerMessage,
                     },
                     new SetRelayMessageStreamToolConfig<E039Object>()
                     {

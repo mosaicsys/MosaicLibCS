@@ -31,6 +31,7 @@ using MosaicLib.Modular.Action;
 using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Interconnect.Parts;
 using MosaicLib.Modular.Interconnect.Values;
+using System.Threading;
 
 namespace MosaicLib.Modular.Part
 {
@@ -390,6 +391,15 @@ namespace MosaicLib.Modular.Part
 
         /// <summary>Defines the minimum value that the WaitTimeLimit property can be set to.  0.0 seconds.</summary>
         public static readonly TimeSpan minWaitTimeLimit = TimeSpan.FromSeconds(0.0);
+
+        /// <summary>When non-null, this property's value is used to initialize the IsBackground property on the Part's main thread.</summary>
+        public bool? IsBackground { get; set; }
+
+        /// <summary>When non-null, this property's value is used to initialize the Priorty property on the Part's main thread.</summary>
+        public ThreadPriority? ThreadPriority { get; set; }
+
+        /// <summary>When non-null, this property gives the ApartmentState that should be used for this Part's main thread.  If this value is null then the thread will use the MTA AparementState.</summary>
+        public ApartmentState ? ApartmentState { get; set; }
 
         /// <summary>
         /// Contains SimplePartBaseSettings that will be used by the SimplePartBase class
@@ -899,7 +909,22 @@ namespace MosaicLib.Modular.Part
                     mainThread = new System.Threading.Thread(MainThreadFcn)
                     {
                         Name = PartID,
+                        IsBackground = settings.IsBackground ?? false,
                     };
+
+                    if (settings.ThreadPriority != null)
+                    {
+                        var threadPriorityToUse = settings.ThreadPriority ?? ThreadPriority.Normal;
+                        Log.Debug.Emit("Setting main thread to use ThreadPriority.{0}", threadPriorityToUse);
+                        mainThread.Priority = threadPriorityToUse;
+                    }
+
+                    if (settings.ApartmentState != null)
+                    {
+                        var apartmentStateToUse = settings.ApartmentState ?? ApartmentState.MTA;
+                        Log.Debug.Emit("Setting main thread to use ApartmentState.{0}", apartmentStateToUse);
+                        mainThread.SetApartmentState(apartmentStateToUse);
+                    }
 
                     mainThread.Start();
                 }
@@ -1428,7 +1453,7 @@ namespace MosaicLib.Modular.Part
         protected void LogThreadInfo(Logging.IMesgEmitter emitter)
         {
             System.Threading.Thread currentThread = System.Threading.Thread.CurrentThread;
-            emitter.Emit("ThreadInfo: Name:'{0}', Managed ThreadID:{1:d4}, Win32 ThreadID:${2:x4}", (currentThread.Name ?? String.Empty), currentThread.ManagedThreadId, Utils.Win32.GetCurrentThreadId());
+            emitter.Emit("ThreadInfo: Name:'{0}', Managed ThreadID:{1:d4}, Win32 ThreadID:${2:x4} {3} {4}", (currentThread.Name ?? String.Empty), currentThread.ManagedThreadId, Utils.Win32.GetCurrentThreadId(), currentThread.Priority, currentThread.GetApartmentState());
         }
 
         /// <summary>

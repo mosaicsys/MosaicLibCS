@@ -398,6 +398,16 @@ namespace MosaicLib.Modular.Config
         Logging.IMesgEmitter TraceEmitter { get; }
 
         #endregion
+
+        #region manual LogGate controls for use by client code
+
+        /// <summary>This get/set property allows client code to obtain and modify the instance log gate that this IConfig instance is using with its main logger.</summary>
+        Logging.LogGate MainLoggerLogGate { get; set; }
+
+        /// <summary>This get/set property allows client code to obtain and modify the instance log gate that this IConfig instance is using with its trace logger.</summary>
+        Logging.LogGate TraceLoggerLogGate { get; set; }
+
+        #endregion
     }
 
     /// <summary>
@@ -1038,6 +1048,12 @@ namespace MosaicLib.Modular.Config
                 return allKnownKeysDictionary.Values.ToArray().GetEnumerator();
             }
         }
+
+        /// <summary>This get/set property allows client code to obtain and modify the instance log gate that this IConfig instance is using with its main logger.</summary>
+        public Logging.LogGate MainLoggerLogGate { get { return Logger.InstanceLogGate; } set { Logger.InstanceLogGate = value; } }
+
+        /// <summary>This get/set property allows client code to obtain and modify the instance log gate that this IConfig instance is using with its trace logger.</summary>
+        public Logging.LogGate TraceLoggerLogGate { get { return Trace.InstanceLogGate; } set { Trace.InstanceLogGate = value; } }
 
         #endregion
 

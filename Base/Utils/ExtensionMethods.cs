@@ -279,7 +279,7 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        #region Other Array, IList, List, IEnumerable, and ICollection related extension methods (IsNullOrEmpty, IsEmpty, MapNullToEmpty, SafeLength, SafeCount, SetAll, Clear, SafeAccess, SafeToArray, SafeTakeFirst, SafeTakeLast, SafeAddSet, SafeAddItems, ConditionalAddItems, SafeContains)
+        #region Other Array, IList, List, IEnumerable, and ICollection related extension methods (IsNullOrEmpty, IsEmpty, MapNullToEmpty, SafeLength, SafeCount, SetAll, Clear, SafeAccess, SafeToArray, SafeTakeFirst, SafeTakeLast, SafeTakeAll, SafeAddSet, SafeAddItems, ConditionalAddItems, SafeContains)
 
         /// <summary>
         /// Extension method returns true if the given array is null or its Length is zero.
@@ -508,11 +508,11 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Extension method to "safely" take (remove) and return the first element of the given list.  Returns defaultValue if the list is empty
+        /// Extension method to "safely" take (remove) and return the first element of the given list.  Returns defaultValue if the list is null or empty.
         /// </summary>
         public static ItemType SafeTakeFirst<ItemType>(this IList<ItemType> itemList, ItemType defaultValue = default(ItemType))
         {
-            if (itemList.Count <= 0)
+            if (itemList.IsNullOrEmpty())
                 return defaultValue;
 
             ItemType item = itemList[0];
@@ -522,11 +522,11 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Extension method to "safely" take (remove) and return the last element of the given list.  Returns defaultValue if the list is empty
+        /// Extension method to "safely" take (remove) and return the last element of the given list.  Returns defaultValue if the list is null or empty.
         /// </summary>
         public static ItemType SafeTakeLast<ItemType>(this IList<ItemType> itemList, ItemType defaultValue = default(ItemType))
         {
-            if (itemList.Count <= 0)
+            if (itemList.IsNullOrEmpty())
                 return defaultValue;
 
             int takeFromIdx = (itemList.Count - 1);
@@ -535,6 +535,21 @@ namespace MosaicLib.Utils
 
             return item;
         }
+
+        /// <summary>
+        /// Extension method to "safely" take (remove) and return an array of all of the items that were taken from given list.  Returns the empty array if the given list is null or empty.
+        /// </summary>
+        public static ItemType [] SafeTakeAll<ItemType>(this IList<ItemType> itemList, ItemType [] defaultValue = default(ItemType []))
+        {
+            if (itemList.IsNullOrEmpty())
+                return EmptyArrayFactory<ItemType>.Instance;
+
+            var itemArray = itemList.ToArray();
+            itemList.Clear();
+
+            return itemArray;
+        }
+
 
         /// <summary>
         /// Extension method to make a copy of the given <paramref name="array"/>.  
@@ -930,6 +945,30 @@ namespace MosaicLib.Utils
         {
             return ((value != 0.0f) ? (1.0f / value) : fallbackValue);
         }
+
+        /// <summary>Returns true if the given <paramref name="value"/> is NaN.</summary>
+        public static bool IsNaN(this double value) { return double.IsNaN(value); }
+
+        /// <summary>Returns true if the given <paramref name="value"/> is NaN.</summary>
+        public static bool IsNaN(this float value) { return float.IsNaN(value); }
+
+        /// <summary>Returns true if the given <paramref name="value"/> is either positive or negative infinity.</summary>
+        public static bool IsInfinity(this double value) { return double.IsInfinity(value); }
+
+        /// <summary>Returns true if the given <paramref name="value"/> is either positive or negative infinity.</summary>
+        public static bool IsInfinity(this float value) { return float.IsInfinity(value); }
+
+        /// <summary>Returns true if the given <paramref name="value"/> is positive infinity.</summary>
+        public static bool IsPositiveInfinity(this double value) { return double.IsPositiveInfinity(value); }
+
+        /// <summary>Returns true if the given <paramref name="value"/> is positive infinity.</summary>
+        public static bool IsPositiveInfinity(this float value) { return float.IsPositiveInfinity(value); }
+
+        /// <summary>Returns true if the given <paramref name="value"/> is positive infinity.</summary>
+        public static bool IsNegativeInfinity(this double value) { return double.IsNegativeInfinity(value); }
+
+        /// <summary>Returns true if the given <paramref name="value"/> is positive infinity.</summary>
+        public static bool IsNegativeInfinity(this float value) { return float.IsNegativeInfinity(value); }
 
         #endregion
 
@@ -2219,6 +2258,77 @@ namespace MosaicLib.Utils
                 }
             }
         }
+
+        #endregion
+
+        #region Linq enumeration helper Functions (methods)
+
+        /// <summary>
+        /// This method returns an IEnumerable{double} that enumerates the values from 0.0 to 1.0 in <paramref name="n"/> steps.
+        /// If <paramref name="oneInclusive"/> is true then the range ends at 1.0 otherwise it ends at the step before 1.0.
+        /// If <paramref name="n"/> is less than or equal to zero then the resulting enumerable range will be the empty set.
+        /// If <paramref name="n"/> is 1 then the resulting enumerable will a single 0.0 value (!<paramref name="oneInclusive"/>) or a single 1.0 value (otherwise)
+        /// </summary>
+        public static IEnumerable<double> F8UnitRangeEnumerable(int n, bool oneInclusive = false)
+        {
+            if (n <= 0)
+            {
+                return f8ReadOnlyListEmpty;
+            }
+            else if (n == 1)
+            {
+                return !oneInclusive ? f8ReadOnlyList0 : f8ReadOnlyList1;
+            }
+            else if (!oneInclusive)
+            {
+                var stepInterval = ((double)n).SafeOneOver();
+                return Enumerable.Range(0, n).Select(posIdx => posIdx * stepInterval);
+            }
+            else
+            {
+                var nMinusOne = (n - 1);
+                var stepInterval = ((double)nMinusOne).SafeOneOver();
+                return Enumerable.Range(0, n).Select(posIdx => (posIdx == nMinusOne) ? 1.0 : posIdx * stepInterval);
+            }
+        }
+
+        private static readonly ReadOnlyIList<double> f8ReadOnlyListEmpty = new ReadOnlyIList<double>();
+        private static readonly ReadOnlyIList<double> f8ReadOnlyList0 = new ReadOnlyIList<double>(0.0);
+        private static readonly ReadOnlyIList<double> f8ReadOnlyList1 = new ReadOnlyIList<double>(1.0);
+
+
+        /// <summary>
+        /// This method returns an IEnumerable{float} that enumerates the values from 0.0 to 1.0 in <paramref name="n"/> steps.
+        /// If <paramref name="oneInclusive"/> is true then the range ends at 1.0 otherwise it ends at the step before 1.0.
+        /// If <paramref name="n"/> is less than or equal to zero then the resulting enumerable range will be the empty set.
+        /// If <paramref name="n"/> is 1 then the resulting enumerable will a single 0.0 value (!<paramref name="oneInclusive"/>) or a single 1.0 value (otherwise)
+        /// </summary>
+        public static IEnumerable<float> F4UnitRangeEnumerable(int n, bool oneInclusive = false)
+        {
+            if (n <= 0)
+            {
+                return f4ReadOnlyListEmpty;
+            }
+            else if (n == 1)
+            {
+                return !oneInclusive ? f4ReadOnlyList0 : f4ReadOnlyList1;
+            }
+            else if (!oneInclusive)
+            {
+                var stepInterval = ((float)n).SafeOneOver();
+                return Enumerable.Range(0, n).Select(posIdx => posIdx * stepInterval);
+            }
+            else
+            {
+                var nMinusOne = (n - 1);
+                var stepInterval = ((float)nMinusOne).SafeOneOver();
+                return Enumerable.Range(0, n).Select(posIdx => (posIdx == nMinusOne) ? 1.0f : posIdx * stepInterval);
+            }
+        }
+
+        private static readonly ReadOnlyIList<float> f4ReadOnlyListEmpty = new ReadOnlyIList<float>();
+        private static readonly ReadOnlyIList<float> f4ReadOnlyList0 = new ReadOnlyIList<float>(0.0f);
+        private static readonly ReadOnlyIList<float> f4ReadOnlyList1 = new ReadOnlyIList<float>(1.0f);
 
         #endregion
     }

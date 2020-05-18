@@ -3269,6 +3269,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         /// <summary>
         /// This extension method is used to conditionally initialize the corresponding table entry in the IVI (from which this <paramref name="iva"/> was obtained) to the value in this <paramref name="iva"/> if the table entry's value is in its initial state where its ValueSeqNum is 0.
         /// If the table entry has already been set (ValueSetNum != 0) then this method has no effect.
+        /// <para/>Note: this method is generally used with the SetVCInline extension method.
         /// </summary>
         public static TIValueAccessor SetInitialValueIfNeeded<TIValueAccessor>(this TIValueAccessor iva) 
             where TIValueAccessor : IValueAccessor

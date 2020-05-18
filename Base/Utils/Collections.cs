@@ -182,7 +182,7 @@ namespace MosaicLib.Utils
             /// <summary>
             /// Dequeues and removes all of the items in the queue and returns them in an array.
             /// </summary>
-            public ItemType [] DequeueAll()
+            public ItemType[] DequeueAll()
             {
                 ItemType[] array;
 
@@ -684,6 +684,148 @@ namespace MosaicLib.Utils
 
         #endregion
 
+        #region ReadOnlyHashSet
+
+        [Serializable]
+        public class ReadOnlyHashSet<TItemType> : ISet<TItemType>, ICollection<TItemType>, IEnumerable<TItemType>, IEnumerable
+        {
+            public ReadOnlyHashSet(IEnumerable<TItemType> set = null)
+            {
+                itemsArray = set.SafeToArray();
+            }
+
+            public static ReadOnlyHashSet<TItemType> Empty { get { return _Empty; } }
+            private static readonly ReadOnlyHashSet<TItemType> _Empty = new ReadOnlyHashSet<TItemType>();
+
+            private TItemType[] itemsArray;
+            private static readonly TItemType[] emptyArray = EmptyArrayFactory<TItemType>.Instance;
+
+            [NonSerialized]
+            private ISet<TItemType> _setOfItems = null;
+
+            private ISet<TItemType> SetOfItems { get { return _setOfItems ?? (_setOfItems = new HashSet<TItemType>().SafeAddRange(itemsArray)); } }
+
+            /// <summary>Returns the count of the number of items that are in this set</summary>
+            public int Count
+            {
+                get { return itemsArray.Length; }
+            }
+
+            #region ISet, ICollection, IEnumerable implementations
+
+            bool ISet<TItemType>.Add(TItemType value)
+            {
+                throw new System.NotSupportedException("{0}.{1} cannot be used.  collection is read-only".CheckedFormat(Fcns.CurrentClassLeafName, Fcns.CurrentMethodName));
+            }
+
+            void ISet<TItemType>.ExceptWith(IEnumerable<TItemType> other)
+            {
+                throw new System.NotSupportedException("{0}.{1} cannot be used.  collection is read-only".CheckedFormat(Fcns.CurrentClassLeafName, Fcns.CurrentMethodName));
+            }
+
+            void ISet<TItemType>.IntersectWith(IEnumerable<TItemType> other)
+            {
+                throw new System.NotSupportedException("{0}.{1} cannot be used.  collection is read-only".CheckedFormat(Fcns.CurrentClassLeafName, Fcns.CurrentMethodName));
+            }
+
+            /// <summary>Returns true if this set is a proper (strict) subset of the <paramref name="other"/> given collection.</summary>
+            /// <exception cref="System.ArgumentNullException">is thrown if <paramref name="other"/> is null</exception>
+            public bool IsProperSubsetOf(IEnumerable<TItemType> other)
+            {
+                return SetOfItems.IsProperSubsetOf(other);
+            }
+
+            /// <summary>Returns true if this set is a proper (strict) superset of the <paramref name="other"/> given collection.</summary>
+            /// <exception cref="System.ArgumentNullException">is thrown if <paramref name="other"/> is null</exception>
+            public bool IsProperSupersetOf(IEnumerable<TItemType> other)
+            {
+                return SetOfItems.IsProperSupersetOf(other);
+            }
+
+            /// <summary>Returns true if this set is a subset of the <paramref name="other"/> given collection.</summary>
+            /// <exception cref="System.ArgumentNullException">is thrown if <paramref name="other"/> is null</exception>
+            public bool IsSubsetOf(IEnumerable<TItemType> other)
+            {
+                return SetOfItems.IsSubsetOf(other);
+            }
+
+            /// <summary>Returns true if this set is a superset of the <paramref name="other"/> given collection.</summary>
+            /// <exception cref="System.ArgumentNullException">is thrown if <paramref name="other"/> is null</exception>
+            public bool IsSupersetOf(IEnumerable<TItemType> other)
+            {
+                return SetOfItems.IsSupersetOf(other);
+            }
+
+            /// <summary>Returns true if this set overlaps the <paramref name="other"/> given collection.</summary>
+            /// <exception cref="System.ArgumentNullException">is thrown if <paramref name="other"/> is null</exception>
+            public bool Overlaps(IEnumerable<TItemType> other)
+            {
+                return SetOfItems.Overlaps(other);
+            }
+
+            /// <summary>Returns true if this set contains the same set of elements as the <paramref name="other"/> given collection.</summary>
+            /// <exception cref="System.ArgumentNullException">is thrown if <paramref name="other"/> is null</exception>
+            public bool SetEquals(IEnumerable<TItemType> other)
+            {
+                return SetOfItems.SetEquals(other);
+            }
+
+            void ISet<TItemType>.SymmetricExceptWith(IEnumerable<TItemType> other)
+            {
+                throw new System.NotSupportedException("{0}.{1} cannot be used.  collection is read-only".CheckedFormat(Fcns.CurrentClassLeafName, Fcns.CurrentMethodName));
+            }
+
+            void ISet<TItemType>.UnionWith(IEnumerable<TItemType> other)
+
+            {
+                throw new System.NotSupportedException("{0}.{1} cannot be used.  collection is read-only".CheckedFormat(Fcns.CurrentClassLeafName, Fcns.CurrentMethodName));
+            }
+
+            void ICollection<TItemType>.Add(TItemType item)
+            {
+                throw new System.NotSupportedException("{0}.{1} cannot be used.  collection is read-only".CheckedFormat(Fcns.CurrentClassLeafName, Fcns.CurrentMethodName));
+            }
+
+            void ICollection<TItemType>.Clear()
+            {
+                throw new System.NotSupportedException("{0}.{1} cannot be used.  collection is read-only".CheckedFormat(Fcns.CurrentClassLeafName, Fcns.CurrentMethodName));
+            }
+
+            bool ICollection<TItemType>.Contains(TItemType item)
+            {
+                return SetOfItems.Contains(item);
+            }
+
+            void ICollection<TItemType>.CopyTo(TItemType[] array, int arrayIndex)
+            {
+                itemsArray.CopyTo(array, arrayIndex);
+            }
+
+            bool ICollection<TItemType>.IsReadOnly
+            {
+                get { return true; }
+            }
+
+            bool ICollection<TItemType>.Remove(TItemType item)
+            {
+                throw new System.NotSupportedException("{0}.{1} cannot be used.  collection is read-only".CheckedFormat(Fcns.CurrentClassLeafName, Fcns.CurrentMethodName));
+            }
+
+            public IEnumerator<TItemType> GetEnumerator()
+            {
+                return new ArrayEnumerator<TItemType>(itemsArray);
+            }
+
+            IEnumerator IEnumerable.GetEnumerator()
+            {
+                return new ArrayEnumerator<TItemType>(itemsArray);
+            }
+
+            #endregion
+        }
+
+        #endregion
+
         #region ArrayEnumerator
 
         /// <summary>
@@ -1044,7 +1186,7 @@ namespace MosaicLib.Utils
                     return readOnlyIList;
                 }
             }
-            
+
             #endregion
 
             #region Private fields
@@ -1076,7 +1218,7 @@ namespace MosaicLib.Utils
             private volatile bool rebuildVolatileReadOnlyIList = true;
 
             #endregion
-            
+
             #region IList, ICollection, IEnumerable implementations
 
             void IList<ObjectType>.Insert(int index, ObjectType item)
@@ -1230,8 +1372,8 @@ namespace MosaicLib.Utils
             object ICollection.SyncRoot
             {
                 get { return listMutex; }
-            } 
-           
+            }
+
             #endregion
         }
 
@@ -1248,12 +1390,12 @@ namespace MosaicLib.Utils
             #region Private fields and related private methods
 
             private List<TItemType> list;
-            private TItemType [] _array = null;
+            private TItemType[] _array = null;
             private ReadOnlyIList<TItemType> _readOnlyIList = null;
 
             /// <summary>Clears all cached copies of this list's contents.  (sets _array and _readOnlyIList to null)</summary>
-            private void NoteContentsChanged() 
-            { 
+            private void NoteContentsChanged()
+            {
                 _array = null;
                 _readOnlyIList = null;
             }
@@ -1287,7 +1429,7 @@ namespace MosaicLib.Utils
             /// </summary>
             public TItemType[] Array
             {
-                get 
+                get
                 {
                     return _array ?? (_array = list.ToArray());
                 }
@@ -1326,7 +1468,7 @@ namespace MosaicLib.Utils
                     throw new System.ArgumentNullException("match");
 
                 int remoteCount = 0;
-                for (int idx = 0; idx < list.Count; )
+                for (int idx = 0; idx < list.Count;)
                 {
                     TItemType item = list[idx];
                     if (match(item))
@@ -1470,13 +1612,13 @@ namespace MosaicLib.Utils
             #region Private fields and related private methods
 
             private Dictionary<TKeyType, TValueType> dictionary;
-            private TKeyType [] _keyArray = null;
-            private TValueType [] _valueArray = null;
-            private KeyValuePair<TKeyType, TValueType> [] _keyValuePairArray = null;
+            private TKeyType[] _keyArray = null;
+            private TValueType[] _valueArray = null;
+            private KeyValuePair<TKeyType, TValueType>[] _keyValuePairArray = null;
 
             /// <summary>Clears all cached copies of this list's contents.  (sets _keyArray, _valueArray, and _keyValuePairArray to null)</summary>
-            private void NoteContentsChanged() 
-            { 
+            private void NoteContentsChanged()
+            {
                 _keyArray = null;
                 _valueArray = null;
                 _keyValuePairArray = null;
@@ -1512,7 +1654,7 @@ namespace MosaicLib.Utils
             /// </summary>
             public TKeyType[] KeyArray
             {
-                get 
+                get
                 {
                     return _keyArray ?? (_keyArray = dictionary.Keys.ToArray());
                 }
@@ -1714,7 +1856,7 @@ namespace MosaicLib.Utils
         /// <para/>This class implicilty uses default(<typeparamref name="TItemType"/>) to indicate when a token position is empty.
         /// As such you cannot Add default values to the set.
         /// </summary>
-        [DataContract(Namespace=MosaicLib.Constants.MosaicLibNameSpaceRoot)]
+        [DataContract(Namespace = MosaicLib.Constants.MosaicLibNameSpaceRoot)]
         public class TokenSet<TItemType> : ITokenSet<TItemType>
         {
             private static readonly EqualityComparer<TItemType> defaultEqualityComparer = EqualityComparer<TItemType>.Default;
@@ -1798,8 +1940,8 @@ namespace MosaicLib.Utils
             }
 
             /// <summary>Getter returns true if the list is read only.  Setter may be used to set the list to be read-only, but may not be used to set a read/only set to be read/write</summary>
-            public bool IsReadOnly 
-            { 
+            public bool IsReadOnly
+            {
                 get { return isReadOnly; }
                 set
                 {
@@ -1961,7 +2103,7 @@ namespace MosaicLib.Utils
 
             private bool isReadOnly;
 
-            [DataMember(Order=1000, IsRequired=false, EmitDefaultValue=false)]
+            [DataMember(Order = 1000, IsRequired = false, EmitDefaultValue = false)]
             private TItemType token1;
 
             [DataMember(Order = 2000, IsRequired = false, EmitDefaultValue = false)]
@@ -1973,8 +2115,8 @@ namespace MosaicLib.Utils
             private List<TItemType> moreTokens;
 
             [DataMember(Order = 4000, Name = "moreTokens", IsRequired = false, EmitDefaultValue = false)]
-            private TItemType[] MoreTokensArray 
-            { 
+            private TItemType[] MoreTokensArray
+            {
                 get { return moreTokens.SafeToArray(mapNullToEmpty: false).MapEmptyToNull(); }
                 set { moreTokens = (value.IsNullOrEmpty() ? null : new List<TItemType>(value)); }
             }
@@ -2167,7 +2309,7 @@ namespace MosaicLib.Utils
             return dictionary;
         }
 
-        /// <summary>Adds (using SafeSetKeyValue)  the given <paramref name="itemSet"/> set of items to the given <paramref name="dictionary"/> and returns it (to support call chaining)</summary>
+        /// <summary>Adds (using SafeSetKeyValue) the given <paramref name="itemSet"/> set of items to the given <paramref name="dictionary"/> and returns it (to support call chaining)</summary>
         public static TDictionary SafeAddRange<TDictionary, TKey, TValue>(this TDictionary dictionary, IEnumerable<KeyValuePair<TKey, TValue>> itemSet)
             where TDictionary : IDictionary<TKey, TValue>
         {
@@ -2272,7 +2414,7 @@ namespace MosaicLib.Utils
     namespace Collections.Trees
     {
         public class Tree<TItemType, TKeyPathItemType>
-            where TKeyPathItemType: IEquatable<TKeyPathItemType>
+            where TKeyPathItemType : IEquatable<TKeyPathItemType>
         {
             public TreeNode<TItemType, TKeyPathItemType> RootNode { get; private set; }
 
@@ -2296,7 +2438,7 @@ namespace MosaicLib.Utils
 
                     if (currentNode == null)
                     {
-                        currentNode = new TreeNode<TItemType,TKeyPathItemType> { Item = item, KeyPathArray = keyPathArray, IsRootNode = keyPathArray.IsNullOrEmpty() };
+                        currentNode = new TreeNode<TItemType, TKeyPathItemType> { Item = item, KeyPathArray = keyPathArray, IsRootNode = keyPathArray.IsNullOrEmpty() };
                         treeNodeDictionary[keyPathArray] = currentNode;
 
                         var parentNode = currentNode.TryToFillInAndReturnParentNode(treeNodeDictionary);
@@ -2383,7 +2525,7 @@ namespace MosaicLib.Utils
 
         public static partial class ExtensionMethods
         {
-            public static TreeNode<TItemType,TKeyPathItemType> TryToFillInAndReturnParentNode<TItemType, TKeyPathItemType>(this TreeNode<TItemType, TKeyPathItemType> treeNode, Dictionary<TKeyPathItemType[], TreeNode<TItemType, TKeyPathItemType>> treeNodeDictionary)
+            public static TreeNode<TItemType, TKeyPathItemType> TryToFillInAndReturnParentNode<TItemType, TKeyPathItemType>(this TreeNode<TItemType, TKeyPathItemType> treeNode, Dictionary<TKeyPathItemType[], TreeNode<TItemType, TKeyPathItemType>> treeNodeDictionary)
             {
                 var currentNode = treeNode;
 
@@ -2406,7 +2548,7 @@ namespace MosaicLib.Utils
                     currentNode.ParentNode = parentNode;
 
                     currentNode = parentNode;
-               }
+                }
 
                 return treeNode.ParentNode;
             }
@@ -2540,15 +2682,15 @@ namespace MosaicLib.Utils
             /// Public property that allows the caller to obtain an array containing the names of the clients that have tokens that have not been released yet.
             /// </summary>
             /// <remarks>This property is provided to allow test code to safely infer the contents of the internal token list.</remarks>
-            public string[] CurrentClientsList 
-            { 
-                get 
+            public string[] CurrentClientsList
+            {
+                get
                 {
                     lock (tokenListMutex)
                     {
                         return tokenList.Select((t) => t.ClientName).ToArray();
                     }
-                } 
+                }
             }
 
             /// <summary>
@@ -2649,12 +2791,12 @@ namespace MosaicLib.Utils
                 /// <summary>
                 /// Each assigned ReleaseAction gets added to the explicit dispose action list provided by DisposableBase (wrapped in a binding delegate).  Generally only the SharedResourceSetupAndReleaseBase will make use of this to add its own release action.
                 /// </summary>
-                public Action<ISharedResourceTokenBase> ReleaseAction 
+                public Action<ISharedResourceTokenBase> ReleaseAction
                 {
                     set
                     {
                         AddExplicitDisposeAction(() => value(this));
-                    } 
+                    }
                 }
             }
         }

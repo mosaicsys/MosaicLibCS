@@ -596,7 +596,7 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
         private double? SummaryStateTimeStampAgeInSec
         {
             get { return !SummaryStateTimeStamp.IsZero ? SummaryStateTimeStamp.Age.TotalSeconds : (double?)null; }
-            set { SummaryStateTimeStamp = (value != null) ? (QpcTimeStamp.Now + (value ?? 0.0).FromSeconds()) : QpcTimeStamp.Zero; }
+            set { SummaryStateTimeStamp = (value != null) ? (QpcTimeStamp.Now - (value ?? 0.0).FromSeconds()) : QpcTimeStamp.Zero; }
         }
 
         /// <summary>

@@ -58,6 +58,9 @@ namespace MosaicLib.Utils
 			/// <summary>Enum value when format should look like 1970-01-01 00:00:00.000</summary>
 			LogDefault = 0,
 
+            /// <summary>Enum value when format should look like 19700101_000000</summary>
+            Short,
+
 			/// <summary>Enum value when format should look like 19700101_000000.000</summary>
 			ShortWithMSec,
 		}
@@ -74,16 +77,13 @@ namespace MosaicLib.Utils
 			{
 				default:
 				case DateTimeFormat.LogDefault:
-					result = Fcns.CheckedFormat("{0}-{1}-{2} {3}:{4}:{5}.{6}", 
-													dt.Year.ToString("D4"), dt.Month.ToString("D2"), dt.Day.ToString("D2"),
-													dt.Hour.ToString("D2"), dt.Minute.ToString("D2"), dt.Second.ToString("D2"), 
-													dt.Millisecond.ToString("D3")); 
+                    result = dt.ToString("yyyy-MM-dd HH:mm:ss.fff");
 					break;
+                case DateTimeFormat.Short:
+                    result = dt.ToString("yyyyMMdd_HHmmss");
+                    break;
 				case DateTimeFormat.ShortWithMSec:
-					result = Fcns.CheckedFormat("{0}{1}{2}_{3}{4}{5}.{6}", 
-													dt.Year.ToString("D4"), dt.Month.ToString("D2"), dt.Day.ToString("D2"),
-													dt.Hour.ToString("D2"), dt.Minute.ToString("D2"), dt.Second.ToString("D2"), 
-													dt.Millisecond.ToString("D3"));
+                    result = dt.ToString("yyyyMMdd_HHmmss.fff");
 					break;
 			}
 

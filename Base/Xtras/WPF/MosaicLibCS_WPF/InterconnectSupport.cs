@@ -75,7 +75,16 @@ namespace MosaicLib.WPF.Interconnect
         internal bool IsUpdateNeeded { get { return (IVA.IsUpdateNeeded || (LastServicedValueSeqNum != IVA.ValueSeqNum) || (LastServicedMetaDataSeqNum != IVA.MetaDataSeqNum)); } }
 
         /// <summary>The caller may attach event notifiers to this notification list to be informed when the observed IValueAccessor has been updated or set by this object.</summary>
-        public IEventHandlerNotificationList<UpdateEventArgs> UpdateNotificationList { get { return _updateNotificationList ?? (_updateNotificationList = new EventHandlerNotificationList<UpdateEventArgs>() { Source = this }); } }
+        public IEventHandlerNotificationList<UpdateEventArgs> UpdateNotificationList { get { return CreateUpdateNotificationListIfNeeded(); } }
+
+        /// <summary>Returns the UpdateNotificationList as an IBasicNotifciationList</summary>
+        public IBasicNotificationList BasicNotificationList { get { return CreateUpdateNotificationListIfNeeded(); } }
+
+        private EventHandlerNotificationList<UpdateEventArgs> CreateUpdateNotificationListIfNeeded()
+        {
+            return _updateNotificationList ?? (_updateNotificationList = new EventHandlerNotificationList<UpdateEventArgs>() { Source = this });
+        }
+
         EventHandlerNotificationList<UpdateEventArgs> _updateNotificationList;
 
         /// <summary>Defines the sources for UpdateItems.  [FromIVA, ToIVA]</summary>

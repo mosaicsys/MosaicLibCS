@@ -662,7 +662,7 @@ namespace MosaicLib.Modular.Reflection
                 {
                     Func<TAnnotatedClass, bool> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, bool>(itemInfo);
                     if (canUseQuickSetValue)
-                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<bool>(pfGetter(annotatedInstance)); };
+                        vcGetter = (annotatedInstance) => { return ValueContainer.CreateBo(pfGetter(annotatedInstance)); };
                     else
                         vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<bool>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
@@ -670,7 +670,7 @@ namespace MosaicLib.Modular.Reflection
                 {
                     Func<TAnnotatedClass, sbyte> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, sbyte>(itemInfo);
                     if (canUseQuickSetValue)
-                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<sbyte>(pfGetter(annotatedInstance)); };
+                        vcGetter = (annotatedInstance) => { return ValueContainer.CreateI1(pfGetter(annotatedInstance)); };
                     else
                         vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<sbyte>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
@@ -678,7 +678,7 @@ namespace MosaicLib.Modular.Reflection
                 {
                     Func<TAnnotatedClass, short> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, short>(itemInfo);
                     if (canUseQuickSetValue)
-                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<short>(pfGetter(annotatedInstance)); };
+                        vcGetter = (annotatedInstance) => { return ValueContainer.CreateI2(pfGetter(annotatedInstance)); };
                     else
                         vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<short>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
@@ -686,7 +686,7 @@ namespace MosaicLib.Modular.Reflection
                 {
                     Func<TAnnotatedClass, int> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, int>(itemInfo);
                     if (canUseQuickSetValue)
-                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<int>(pfGetter(annotatedInstance)); };
+                        vcGetter = (annotatedInstance) => { return ValueContainer.CreateI4(pfGetter(annotatedInstance)); };
                     else
                         vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<int>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
@@ -694,7 +694,7 @@ namespace MosaicLib.Modular.Reflection
                 {
                     Func<TAnnotatedClass, long> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, long>(itemInfo);
                     if (canUseQuickSetValue)
-                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<long>(pfGetter(annotatedInstance)); };
+                        vcGetter = (annotatedInstance) => { return ValueContainer.CreateI8(pfGetter(annotatedInstance)); };
                     else
                         vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<long>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
@@ -702,7 +702,9 @@ namespace MosaicLib.Modular.Reflection
                 {
                     Func<TAnnotatedClass, byte> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, byte>(itemInfo);
                     if (canUseQuickSetValue)
-                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<byte>(pfGetter(annotatedInstance)); };
+                        vcGetter = (annotatedInstance) => { return ValueContainer.CreateU1(pfGetter(annotatedInstance)); };
+                    else if (useStorageType == ContainerStorageType.Bi)
+                        vcGetter = (annotatedInstance) => { return ValueContainer.CreateBi(pfGetter(annotatedInstance)); };
                     else
                         vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<byte>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
@@ -710,7 +712,7 @@ namespace MosaicLib.Modular.Reflection
                 {
                     Func<TAnnotatedClass, ushort> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, ushort>(itemInfo);
                     if (canUseQuickSetValue)
-                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<ushort>(pfGetter(annotatedInstance)); };
+                        vcGetter = (annotatedInstance) => { return ValueContainer.CreateU2(pfGetter(annotatedInstance)); };
                     else
                         vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<ushort>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
@@ -718,7 +720,7 @@ namespace MosaicLib.Modular.Reflection
                 {
                     Func<TAnnotatedClass, uint> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, uint>(itemInfo);
                     if (canUseQuickSetValue)
-                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<uint>(pfGetter(annotatedInstance)); };
+                        vcGetter = (annotatedInstance) => { return ValueContainer.CreateU4(pfGetter(annotatedInstance)); };
                     else
                         vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<uint>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
@@ -726,7 +728,7 @@ namespace MosaicLib.Modular.Reflection
                 {
                     Func<TAnnotatedClass, ulong> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, ulong>(itemInfo);
                     if (canUseQuickSetValue)
-                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<ulong>(pfGetter(annotatedInstance)); };
+                        vcGetter = (annotatedInstance) => { return ValueContainer.CreateU8(pfGetter(annotatedInstance)); };
                     else
                         vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<ulong>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
@@ -734,7 +736,7 @@ namespace MosaicLib.Modular.Reflection
                 {
                     Func<TAnnotatedClass, float> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, float>(itemInfo);
                     if (canUseQuickSetValue)
-                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<float>(pfGetter(annotatedInstance)); };
+                        vcGetter = (annotatedInstance) => { return ValueContainer.CreateF4(pfGetter(annotatedInstance)); };
                     else
                         vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<float>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
@@ -742,7 +744,7 @@ namespace MosaicLib.Modular.Reflection
                 {
                     Func<TAnnotatedClass, double> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, double>(itemInfo);
                     if (canUseQuickSetValue)
-                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<double>(pfGetter(annotatedInstance)); };
+                        vcGetter = (annotatedInstance) => { return ValueContainer.CreateF8(pfGetter(annotatedInstance)); };
                     else
                         vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<double>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
@@ -838,7 +840,7 @@ namespace MosaicLib.Modular.Reflection
                 {
                     Func<TAnnotatedClass, string> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, string>(itemInfo);
                     if (canUseQuickSetValue)
-                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<string>(pfGetter(annotatedInstance)); };
+                        vcGetter = (annotatedInstance) => { return ValueContainer.CreateA(pfGetter(annotatedInstance)); };
                     else
                         vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<string>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
@@ -887,7 +889,7 @@ namespace MosaicLib.Modular.Reflection
                 {
                     Func<TAnnotatedClass, TimeSpan> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, TimeSpan>(itemInfo);
                     if (canUseQuickSetValue)
-                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<TimeSpan>(pfGetter(annotatedInstance)); };
+                        vcGetter = (annotatedInstance) => { return ValueContainer.CreateTS(pfGetter(annotatedInstance)); };
                     else
                         vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<TimeSpan>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
@@ -903,7 +905,7 @@ namespace MosaicLib.Modular.Reflection
                 {
                     Func<TAnnotatedClass, DateTime> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, DateTime>(itemInfo);
                     if (canUseQuickSetValue)
-                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<DateTime>(pfGetter(annotatedInstance)); };
+                        vcGetter = (annotatedInstance) => { return ValueContainer.CreateDT(pfGetter(annotatedInstance)); };
                     else
                         vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<DateTime>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
@@ -1008,57 +1010,57 @@ namespace MosaicLib.Modular.Reflection
                 if (itemInfo.ItemType == typeof(bool))
                 {
                     Action<TAnnotatedClass, bool> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, bool>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<bool>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValueBo(rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(sbyte))
                 {
                     Action<TAnnotatedClass, sbyte> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, sbyte>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<sbyte>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValueI1(rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(short))
                 {
                     Action<TAnnotatedClass, short> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, short>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<short>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValueI2(rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(int))
                 {
                     Action<TAnnotatedClass, int> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, int>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<int>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValueI4(rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(long))
                 {
                     Action<TAnnotatedClass, long> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, long>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<long>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValueI8(rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(byte))
                 {
                     Action<TAnnotatedClass, byte> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, byte>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<byte>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValueU1(rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(ushort))
                 {
                     Action<TAnnotatedClass, ushort> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, ushort>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<ushort>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValueU2(rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(uint))
                 {
                     Action<TAnnotatedClass, uint> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, uint>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<uint>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValueU4(rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(ulong))
                 {
                     Action<TAnnotatedClass, ulong> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, ulong>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<ulong>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValueU8(rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(float))
                 {
                     Action<TAnnotatedClass, float> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, float>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<float>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValueF4(rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(double))
                 {
                     Action<TAnnotatedClass, double> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, double>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<double>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValueF8(rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(bool?))
                 {
@@ -1118,7 +1120,7 @@ namespace MosaicLib.Modular.Reflection
                 else if (itemInfo.ItemType == typeof(string))
                 {
                     Action<TAnnotatedClass, string> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, string>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<string>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValueA(rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(object))
                 {
@@ -1193,7 +1195,7 @@ namespace MosaicLib.Modular.Reflection
                 else if (itemInfo.ItemType == typeof(TimeSpan))
                 {
                     Action<TAnnotatedClass, TimeSpan> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, TimeSpan>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<TimeSpan>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValueTS(rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(TimeSpan?))
                 {
@@ -1203,7 +1205,7 @@ namespace MosaicLib.Modular.Reflection
                 else if (itemInfo.ItemType == typeof(DateTime))
                 {
                     Action<TAnnotatedClass, DateTime> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, DateTime>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<DateTime>(allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValueDT(rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(DateTime?))
                 {

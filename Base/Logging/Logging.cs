@@ -109,8 +109,8 @@ namespace MosaicLib
 
 		/// <summary>
         /// This enum defines a set of message types and an implicit ranking of their severities.
-        /// <para/>message types: None, Fatal, Error, Warning, Signif, Info, Debug, Trace
-        /// <para/>other values: Max, All
+        /// <para/>message types: None (0), Fatal (1), Error (2), Warning (3), Signif (4), Info (5), Debug (6), Trace (7)
+        /// <para/>other values: Max (7), All (8)
         /// </summary>
         [DataContract(Namespace=Constants.LoggingNameSpace)]
 		public enum MesgType : int
@@ -1494,6 +1494,9 @@ namespace MosaicLib
             /// <summary>Returns the common LoggerSourceInfo for this logger.</summary>
             LoggerSourceInfo LoggerSourceInfo { get; }
 
+            /// <summary>Gives get/set access to the logger's current client specifieid LogGate value.</summary>
+            LogGate InstanceLogGate { get; set; }
+
             /// <summary>Returns the Distribution Group Name for this logger</summary>
             string GroupName { get; set; }
 
@@ -2709,7 +2712,7 @@ namespace MosaicLib
 
 		#endregion
 
-        #region internal ConfigLogger (Logger for use in Modular.Config that prevents recursive use of config when createing such logger objects
+        #region internal ConfigLogger (Logger for use in Modular.Config that prevents recursive use of config when creating such logger objects
 
 		/// <summary>
         /// This class provides the standard basic implementation for use as an ILogger in Modular.Config portions of the codebase.
@@ -2732,7 +2735,7 @@ namespace MosaicLib
         #endregion
 
         //-------------------------------------------------------------------
-		#region Trace helper objects (CtorDisposeTrace, EntryExitTrace, TimerTrace)
+		#region Trace helper objects (CtorDisposeTrace, EntryExitTrace, TimerTrace, RateTrace)
 
         /// <summary>
         /// This class is used to provide a Trace on construction/destruction.  It logs a configurable message on construction and explicit disposal.
@@ -2766,9 +2769,10 @@ namespace MosaicLib
             /// <param name="disposePrefixStr">Gives the name used for dispose type emitted messages.  Typically used when sub-classing this object for other purposes.</param>
             /// <param name="warningMesgType">Gives the Warning MesgType to use for the emitted warning messages (if any).</param>
             /// <param name="setStartTime">When true, requests that the object set its StartTime using SetStartTime.</param>
+            /// <param name="emitStart">When false this prevents emitting the start message</param>
             [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-            public CtorDisposeTrace(IBasicLogger logger, string traceID = null, MesgType mesgType = defaultMesgType, string ctorPrefixStr = "Ctor:", string disposePrefixStr = "Dispose:", MesgType warningMesgType = defaultWarningMesgType, bool setStartTime = false)
-                : this((logger != null) ? logger.Emitter(mesgType) : null, traceID ?? new System.Diagnostics.StackFrame(1).GetMethod().Name, ctorPrefixStr, disposePrefixStr, (logger != null) ? logger.Emitter(warningMesgType) : null, setStartTime)
+            public CtorDisposeTrace(IBasicLogger logger, string traceID = null, MesgType mesgType = defaultMesgType, string ctorPrefixStr = "Ctor:", string disposePrefixStr = "Dispose:", MesgType warningMesgType = defaultWarningMesgType, bool setStartTime = false, bool emitStart = true)
+                : this((logger != null) ? logger.Emitter(mesgType) : null, traceID ?? new System.Diagnostics.StackFrame(1).GetMethod().Name, ctorPrefixStr, disposePrefixStr, (logger != null) ? logger.Emitter(warningMesgType) : null, setStartTime, emitStart)
             { }
 
             /// <summary>Full Constructor for use with emitter.</summary>
@@ -2778,8 +2782,9 @@ namespace MosaicLib
             /// <param name="disposePrefixStr">Gives the name used for dispose type emitted messages.  Typically used when sub-classing this object for other purposes.</param>
             /// <param name="warningEmitter">Gives emitter instance to use for warning output.</param>
             /// <param name="setStartTime">When true, requests that the object set its StartTime using SetStartTime.</param>
+            /// <param name="emitStart">When false this prevents emitting the start message</param>
             [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-            public CtorDisposeTrace(IMesgEmitter emitter, string traceID = null, string ctorPrefixStr = "Ctor:", string disposePrefixStr = "Dispose:", IMesgEmitter warningEmitter = null, bool setStartTime = false)
+            public CtorDisposeTrace(IMesgEmitter emitter, string traceID = null, string ctorPrefixStr = "Ctor:", string disposePrefixStr = "Dispose:", IMesgEmitter warningEmitter = null, bool setStartTime = false, bool emitStart = true)
             {
                 traceID = traceID ?? new System.Diagnostics.StackFrame(1).GetMethod().Name;
 
@@ -2788,7 +2793,7 @@ namespace MosaicLib
 
                 string ctorStr = String.Concat(ctorPrefixStr.MapNullToEmpty(), traceID);
 
-                if (mesgEmitter != null)
+                if (mesgEmitter != null && emitStart)
                     mesgEmitter.Emit(ctorStr);
 
                 disposeStr = String.Concat(disposePrefixStr.MapNullToEmpty(), traceID);
@@ -3016,10 +3021,44 @@ namespace MosaicLib
             { }
 		}
 
-		#endregion
+        /// <summary>
+        /// This class is generally used as a rate calculator.  It is based on the CtorDisposeTrace with modified default log message prefixes.
+        /// By default Result messages use MesgType.Debug.
+        /// <para/>Also supports Count and ExtraMessage properties.
+        /// </summary>
+        /// <remarks>
+        ///	using (var tTrace = new MosaicLib.Logging.RateTrace(logger, "MeasurementName")) { [do stuff] }
+        /// </remarks>
+        public class RateTrace : CtorDisposeTrace
+        {
+            /// <summary>Result:</summary>
+            private const string resultPrefixStr = "Result:";
+            /// <summary>MesgType.Debug</summary>
+            private const MesgType defaultStartStopMesgType = MesgType.Debug;
 
-		//-------------------------------------------------------------------
-	}
+            /// <summary>constructor.</summary>
+            /// <param name="logger">provides logger that will be used to emit Result(dispose) messages</param>
+            /// <param name="traceID">Gives caller provided traceID to generate "Result:{traceID}" messages for.  When null this will be replaced with the name of the method that called this one.</param>
+            /// <param name="mesgType">Gives message type to use for emitted Start and Stop messages</param>
+            /// <param name="warningMesgType">Gives the Warning MesgType to use for the emitted warning messages (if any).</param>
+            [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+            public RateTrace(IBasicLogger logger, string traceID = null, MesgType mesgType = MesgType.Debug, MesgType warningMesgType = defaultWarningMesgType)
+                : base(logger, traceID ?? new System.Diagnostics.StackFrame(1).GetMethod().Name, mesgType, "", resultPrefixStr, warningMesgType: warningMesgType, setStartTime: true, emitStart: false)
+            { }
+
+            /// <summary>constructor for use with emitter.</summary>
+            /// <param name="emitter">Gives emitter instance to use for normal output.</param>
+            /// <param name="traceID">Gives caller provided traceID to generate "Result:{traceID}" messages for.</param>
+            /// <param name="warningEmitter">Gives emitter instance to use for warning output.</param>
+            public RateTrace(IMesgEmitter emitter, string traceID, IMesgEmitter warningEmitter = null)
+                : base(emitter, traceID, "", resultPrefixStr, warningEmitter: warningEmitter, setStartTime: true, emitStart: false)
+            { }
+        }
+
+        #endregion
+
+        //-------------------------------------------------------------------
+    }
 
     #region Logging related ExtensionMethods
 
