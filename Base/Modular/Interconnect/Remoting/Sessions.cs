@@ -527,7 +527,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
 
                                 clientSessionArray = null;
 
-                                newClientSession.SetState(qpcTimeStamp, SessionStateCode.ServerSessionInitial, Fcns.CurrentMethodName);
+                                newClientSession.SetState(qpcTimeStamp, SessionStateCode.ServerSessionInitial, "ProcessSessionLevelInboundBuffer");
 
                                 HandleNewSessionDelegate handleNewSessionDelegate = HandleNewSessionDelegate;
                                 if (handleNewSessionDelegate != null)
@@ -962,7 +962,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
             switch (StateCode)
             {
                 case SessionStateCode.RequestTransportConnect:
-                    SetState(qpcTimeStamp, SessionStateCode.RequestSessionOpen, "{0}[{1}]".CheckedFormat(Fcns.CurrentMethodName, transportEndpoint));
+                    SetState(qpcTimeStamp, SessionStateCode.RequestSessionOpen, "NoteTransportIsConnected[{0}]".CheckedFormat(transportEndpoint));
                     GenerateAndAddManagementBufferToSendNowList(qpcTimeStamp, ManagementType.RequestOpenSession, serviceTransmitter: true);
                     break;
                 default:
@@ -973,7 +973,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
 
         public void NoteTransportIsClosed(QpcTimeStamp qpcTimeStamp, object transportEndpoint, string failureCode = "")
         {
-            SetState(qpcTimeStamp, SessionStateCode.ConnectionClosed, "{0}: {1}".CheckedFormat(Fcns.CurrentMethodName, failureCode));
+            SetState(qpcTimeStamp, SessionStateCode.ConnectionClosed, "NoteTransportIsClosed: {0}".CheckedFormat(failureCode));
         }
 
         private int HandleSessionProtocolViolation(QpcTimeStamp qpcTimeStamp, string failureCode, bool serviceTransmitter = true, TerminationReasonCode terminationReasonCode = TerminationReasonCode.ProtocolViolation)
@@ -1032,7 +1032,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
                 return;
             }
 
-            string reason = Fcns.CurrentMethodName;
+            string reason = "HandleOutboundMessage";
 
             message.SetState(qpcTimeStamp, Messages.MessageState.SendPosted, reason);
 
@@ -1316,7 +1316,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
 
                     if (runLength > 0)
                     {
-                        Messages.Message receivedMessage = new Messages.Message(bufferSourcePool: BufferPool, stateEmitter: TraceEmitter, issueEmitter: IssueEmitter).SetState(qpcTimeStamp, Messages.MessageState.Received, Fcns.CurrentMethodName);
+                        Messages.Message receivedMessage = new Messages.Message(bufferSourcePool: BufferPool, stateEmitter: TraceEmitter, issueEmitter: IssueEmitter).SetState(qpcTimeStamp, Messages.MessageState.Received, "ServiceMessageAccumulationAndDelivery");
 
                         EventAndPerformanceRecording.RecordReceived(receivedMessage);
 
@@ -1742,7 +1742,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
             lastRecvdValidAckBufferSeqNum = ackBufferSeqNum;
             lastRecvdValidAckBufferSeqNumTimeStamp = qpcTimeStamp;
 
-            string reason = Fcns.CurrentMethodName;
+            string reason = "ProcessReceivedBufferAck";
 
             foreach (var buffer in deliveryPendingList.FilterAndRemove(txBuffer => txBuffer.SeqNum <= lastRecvdValidAckBufferSeqNum))
             {
@@ -2029,7 +2029,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
 
                 GenerateAndAddManagementBufferToSendNowList(qpcTimeStamp, ManagementType.SessionRequestAcceptedResponse);
 
-                SetState(qpcTimeStamp, SessionStateCode.Active, Fcns.CurrentMethodName);
+                SetState(qpcTimeStamp, SessionStateCode.Active, "ProcessServerSessionInitialOpen");
 
                 return 1;
             }

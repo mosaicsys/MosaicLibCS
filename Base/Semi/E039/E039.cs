@@ -1434,6 +1434,10 @@ namespace MosaicLib.Semi.E039
             CustomActionLoggingConfigDict = other.CustomActionLoggingConfigDict;
 
             PartQueueSize = other.PartQueueSize;
+
+            AddObjectServiceActionPermittedTypeNameSet = other.AddObjectServiceActionPermittedTypeNameSet;
+            RemoveObjectServiceActionPermittedTypeNameSet = other.RemoveObjectServiceActionPermittedTypeNameSet;
+            SetAttributesServiceActionPermittedTypeNameSet = other.SetAttributesServiceActionPermittedTypeNameSet;
         }
 
         internal void SetupForUse()
@@ -1491,6 +1495,15 @@ namespace MosaicLib.Semi.E039
 
         /// <summary>When this value is greater than 10 it will increase the parts ActionQueue size to be the indicated size.</summary>
         public int PartQueueSize { get; set; }
+
+        /// <summary>Defines the rules for type names that determine if they support the AddObject service action.  When null (default) the service action will not be supported for any type</summary>
+        public MatchRuleSet AddObjectServiceActionPermittedTypeNameSet { get; set; }
+
+        /// <summary>Defines the rules for type names that determine if they support the RemoveObject service action.  When null (default) the service action will not be supported for any type</summary>
+        public MatchRuleSet RemoveObjectServiceActionPermittedTypeNameSet { get; set; }
+
+        /// <summary>Defines the rules for type names that determine if they support the SetAttributes service action.  When null (default) the service action will not be supported for any type</summary>
+        public MatchRuleSet SetAttributesServiceActionPermittedTypeNameSet { get; set; }
 
         private IValuesInterconnection _partBaseIVI, _objectIVI;
         private ISetsInterconnection _isi;
@@ -1601,10 +1614,7 @@ namespace MosaicLib.Semi.E039
             ExternalSyncFactory = Config.ExternalSyncFactory;
 
             if (!Config.CustomActionLoggingConfigDict.IsNullOrEmpty())
-            {
-                customActionLoggingReferenceDict = new Dictionary<string, ActionLogging>();
-                customActionLoggingReferenceDict.SafeAddRange(Config.CustomActionLoggingConfigDict.Select(kvp => KVP.Create(kvp.Key, new ActionLogging(ActionLoggingReference) { Config = kvp.Value })));
-            }
+                customActionLoggingReferenceDict = new ReadOnlyIDictionary<string,ActionLogging>(Config.CustomActionLoggingConfigDict.Select(kvp => KVP.Create(kvp.Key, new ActionLogging(ActionLoggingReference) { Config = kvp.Value })));
 
             persistHelperPart = new PersistHelper("{0}.ph".CheckedFormat(PartID), Config);
 
@@ -1720,7 +1730,7 @@ namespace MosaicLib.Semi.E039
 
         static readonly E039ObjectID[] emptyE039ObjectIDArray = EmptyArrayFactory<E039ObjectID>.Instance;
 
-        Dictionary<string, ActionLogging> customActionLoggingReferenceDict = null;
+        ReadOnlyIDictionary<string, ActionLogging> customActionLoggingReferenceDict = null;
 
         #endregion
 
@@ -2527,6 +2537,54 @@ namespace MosaicLib.Semi.E039
         {
             ServicePersistWrites();
             ServicePendingSyncOperations();
+        }
+
+        protected override string PerformServiceActionEx(IProviderFacet ipf, string serviceName, INamedValueSet npv)
+        {
+            var objID = npv["objID"].VC.GetValue<E039ObjectID>(rethrow: false);
+            var typeName = (objID != null ? objID.Type : null);
+
+            switch (serviceName)
+            {
+                case "AddObject":   // warning - this service action should only be used with caution
+                    if (typeName.IsNeitherNullNorEmpty() && Config.AddObjectServiceActionPermittedTypeNameSet.MatchesAny(typeName, false))
+                    {
+                        var attributes = npv["attributes"].VC.GetValue<INamedValueSet>(rethrow: true);
+                        var flags = npv["flags"].VC.GetValue<E039ObjectFlags>(rethrow: false);
+                        var ifNeeded = npv["ifNeeded"].VC.GetValueBo(rethrow: false);
+                        var mergeBehaviorNV = npv["mergeBehavior"];
+                        var mergeBehavior = mergeBehaviorNV.IsNullOrEmpty() ? mergeBehaviorNV.VC.GetValue<NamedValueMergeBehavior>(rethrow: true) : NamedValueMergeBehavior.AddAndUpdate;
+                        var updateItem = new E039UpdateItem.AddObject(objID, attributes, flags, ifNeeded, mergeBehavior);
+
+                        return PerformUpdates(ipf, updateItem, null);
+                    }
+                    break;
+
+                case "RemoveObject":
+                    if (typeName.IsNeitherNullNorEmpty() && Config.RemoveObjectServiceActionPermittedTypeNameSet.MatchesAny(typeName, false))
+                    {
+                        var updateItem = new E039UpdateItem.RemoveObject(objID);
+
+                        return PerformUpdates(ipf, updateItem, null);
+                    }
+                    break;
+
+                case "SetAttributes":
+                    if (typeName.IsNeitherNullNorEmpty() && Config.SetAttributesServiceActionPermittedTypeNameSet.MatchesAny(typeName, false))
+                    {
+                        var attributes = npv["attributes"].VC.GetValue<INamedValueSet>(rethrow: true);
+                        var mergeBehaviorNV = npv["mergeBehavior"];
+                        var mergeBehavior = mergeBehaviorNV.IsNullOrEmpty() ? mergeBehaviorNV.VC.GetValue<NamedValueMergeBehavior>(rethrow: true) : NamedValueMergeBehavior.AddAndUpdate;
+                        var updateItem = new E039UpdateItem.SetAttributes(objID, attributes, mergeBehavior);
+
+                        return PerformUpdates(ipf, updateItem, null);
+                    }
+                    break;
+
+                default: break;
+            }
+
+            return base.PerformServiceActionEx(ipf, serviceName, npv);
         }
 
         #endregion

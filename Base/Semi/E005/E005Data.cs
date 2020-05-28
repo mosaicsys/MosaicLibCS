@@ -258,7 +258,7 @@ namespace MosaicLib.Semi.E005.Data
             catch (System.Exception ex)
             {
                 if (throwOnException)
-                    throw new ConvertValueException("{0} failed on '{1}'".CheckedFormat(Fcns.CurrentMethodName, vc), ex);
+                    new ConvertValueException("{0} failed on '{1}'".CheckedFormat(Fcns.CurrentMethodName, vc), ex).Throw();
 
                 return emptyByteArray;
             }
@@ -275,7 +275,7 @@ namespace MosaicLib.Semi.E005.Data
             catch (System.Exception ex)
             {
                 if (throwOnException)
-                    throw new ConvertValueException("{0} failed on '{1}'".CheckedFormat(Fcns.CurrentMethodName, vc), ex);
+                    new ConvertValueException("{0} failed on '{1}'".CheckedFormat(Fcns.CurrentMethodName, vc), ex).Throw();
 
                 return ValueContainer.Empty;
             }
@@ -298,7 +298,7 @@ namespace MosaicLib.Semi.E005.Data
             catch (System.Exception ex)
             {
                 if (throwOnException)
-                    throw new ConvertValueException("{0} failed on '{1}'".CheckedFormat(Fcns.CurrentMethodName, nvs), ex);
+                    new ConvertValueException("{0} failed on '{1}'".CheckedFormat(Fcns.CurrentMethodName, nvs), ex).Throw();
 
                 return emptyByteArray;
             }
@@ -333,7 +333,7 @@ namespace MosaicLib.Semi.E005.Data
             }
 
             if (exToThrow != null && throwOnException)
-                throw exToThrow;
+                exToThrow.Throw();
 
             return nvs;
         }
@@ -401,7 +401,7 @@ namespace MosaicLib.Semi.E005.Data
             catch (System.Exception ex)
             {
                 if (throwOnException)
-                    throw new ConvertValueException("{0} failed on '{1}'".CheckedFormat(Fcns.CurrentMethodName, nv), ex);
+                    new ConvertValueException("{0} failed on '{1}'".CheckedFormat(Fcns.CurrentMethodName, nv), ex).Throw();
 
                 return emptyByteArray;
             }
@@ -434,7 +434,7 @@ namespace MosaicLib.Semi.E005.Data
             }
 
             if (exToThrow != null && throwOnException)
-                throw exToThrow;
+                exToThrow.Throw();
 
             return nv;
         }
@@ -747,7 +747,8 @@ namespace MosaicLib.Semi.E005.Data
                     foreach (var item in (itemArray as double[])) { byteArrayBuilder.AppendRaw(item); }
                     break;
                 default:
-                    throw new UnsupportedTypeException("{0} does not support use with ItemFormatCode.{1}".CheckedFormat(Fcns.CurrentMethodName, ifc), null);
+                    new UnsupportedTypeException("{0} does not support use with ItemFormatCode.{1}".CheckedFormat(Fcns.CurrentMethodName, ifc)).Throw();
+                    break;
             }
         }
 
@@ -816,9 +817,13 @@ namespace MosaicLib.Semi.E005.Data
                 case ContainerStorageType.UInt64: byteArrayBuilder.AppendRaw(vc.u.u64); return;
                 case ContainerStorageType.Single: byteArrayBuilder.AppendRaw(vc.u.f32); return;
                 case ContainerStorageType.Double: byteArrayBuilder.AppendRaw(vc.u.f64); return;
-                default: throw new UnsupportedTypeException("{0} cannot be used directly with {1}".CheckedFormat(Fcns.CurrentMethodName, vc), null);
+                default:
+                    new UnsupportedTypeException("{0} cannot be used directly with {1}".CheckedFormat(Fcns.CurrentMethodName, vc)).Throw();
+                    return;
             }
         }
+
+
 
         /// <summary>Appends the raw contents of the given <paramref name="bo"/> to the given <paramref name="byteArrayBuilder"/></summary>
         public static void AppendRaw(this List<byte> byteArrayBuilder, bool bo)
@@ -953,7 +958,7 @@ namespace MosaicLib.Semi.E005.Data
             {
                 string byteArrayInHex = MosaicLib.Utils.ByteArrayTranscoders.HexStringTranscoder.Encode(byteArray);
 
-                throw new ConvertValueException("{0} failed on '{1}': {2}".CheckedFormat(Fcns.CurrentMethodName, byteArrayInHex, ec), null);
+                new ConvertValueException("{0} failed on '{1}': {2}".CheckedFormat(Fcns.CurrentMethodName, byteArrayInHex, ec)).Throw();
             }
 
             return vc;
@@ -1814,7 +1819,7 @@ namespace MosaicLib.Semi.E005.Data
     /// </summary>
     public class ConvertValueException : System.Exception
     {
-        public ConvertValueException(string mesg, System.Exception innerException) : base(mesg, innerException) { }
+        public ConvertValueException(string mesg, System.Exception innerException = null) : base(mesg, innerException) { }
     }
 
     /// <summary>
@@ -1822,7 +1827,7 @@ namespace MosaicLib.Semi.E005.Data
     /// </summary>
     public class GetValueException : System.Exception
     {
-        public GetValueException(string mesg, System.Exception innerException) : base(mesg, innerException) { }
+        public GetValueException(string mesg, System.Exception innerException = null) : base(mesg, innerException) { }
     }
 
     /// <summary>
@@ -1830,7 +1835,7 @@ namespace MosaicLib.Semi.E005.Data
     /// </summary>
     public class SetValueException : System.Exception
     {
-        public SetValueException(string mesg, System.Exception innerException) : base(mesg, innerException) { }
+        public SetValueException(string mesg, System.Exception innerException = null) : base(mesg, innerException) { }
     }
 
     /// <summary>
@@ -1838,7 +1843,7 @@ namespace MosaicLib.Semi.E005.Data
     /// </summary>
     public class UnsupportedTypeException : System.Exception
     {
-        public UnsupportedTypeException(string mesg, System.Exception innerException) : base(mesg, innerException) { }
+        public UnsupportedTypeException(string mesg, System.Exception innerException = null) : base(mesg, innerException) { }
     }
 
     #endregion

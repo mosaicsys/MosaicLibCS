@@ -239,7 +239,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                         string ec = PerformVerifyIdle(forDispose: true);
                         if (ec.IsNeitherNullNorEmpty())
                         {
-                            throw new System.InvalidOperationException("VerifyIdle failed: {0}".CheckedFormat(ec));
+                            new System.InvalidOperationException("VerifyIdle failed: {0}".CheckedFormat(ec)).Throw();
                         }
                     });
             }
@@ -686,7 +686,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
         public override void Setup(IE039TableUpdater e039TableUpdater, E039ObjectID substID, Logging.IBasicLogger logger, ProcessSpecBase<ProcessStepSpecBase> processSpec)
         {
-            throw new System.InvalidOperationException("This method can no longer be used directly - use the local variant instead");
+            new System.InvalidOperationException("This method can no longer be used directly - use the local variant instead").Throw();
         }
 
         public TestECSParts ECSParts { get; set; }
@@ -3150,7 +3150,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
             int minValidStation = IsCircular ? 2 : 3;
             if (numStations < minValidStation)
-                throw new System.ArgumentException(paramName: "numStations", message: "value must be {0} or larger for {1} engine".CheckedFormat(minValidStation, engineType));
+                new System.ArgumentException(paramName: "numStations", message: "value must be {0} or larger for {1} engine".CheckedFormat(minValidStation, engineType)).Throw();
 
             E039TableUpdater = e039TableUpdater;
             NumStations = numStations;

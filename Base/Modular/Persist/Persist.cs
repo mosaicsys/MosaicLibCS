@@ -417,13 +417,13 @@ namespace MosaicLib.Modular.Persist
         private void TestValues()
         {
             if (string.IsNullOrEmpty(FileBaseDirPath))
-                throw new System.ArgumentException("FileBaseDirPath property must not be empty or null");
+                new System.ArgumentException("FileBaseDirPath property must not be empty or null").Throw();
             if (string.IsNullOrEmpty(FileBaseName))
-                throw new System.ArgumentException("FileBaseName property must not be empty or null");
+                new System.ArgumentException("FileBaseName property must not be empty or null").Throw();
             if (string.IsNullOrEmpty(FileRingSpecStr))
-                throw new System.ArgumentException("FileRingSpecStr parameter must not be empty or null");
+                new System.ArgumentException("FileRingSpecStr parameter must not be empty or null").Throw();
             if (ExpectedMaximumFileSize <= 0)
-                throw new System.ArgumentException("ExpectedMaximumFileSize must be greater than zero");
+                new System.ArgumentException("ExpectedMaximumFileSize must be greater than zero").Throw();
         }
 
         /// <summary>
@@ -573,16 +573,16 @@ namespace MosaicLib.Modular.Persist
                 if (System.IO.File.Exists(ringConfig.FileBaseDirPath))
                 {
                     // nothing good to do here - directory path refers to a file...
-                    throw new PersistentStorageException(Utils.Fcns.CheckedFormat("BaseDirectoryPath:'{0}' is not a directory", ringConfig.FileBaseDirPath));
+                    new PersistentStorageException(Utils.Fcns.CheckedFormat("BaseDirectoryPath:'{0}' is not a directory", ringConfig.FileBaseDirPath)).Throw();
                 }
 
                 try
                 {
                     System.IO.Directory.CreateDirectory(ringConfig.FileBaseDirPath);
                 }
-                catch (System.Exception e)
+                catch (System.Exception ex)
                 {
-                    throw new PersistentStorageException(Utils.Fcns.CheckedFormat("CreateDirectory:'{0}' failed: [{1}]", ringConfig.FileBaseDirPath, e.ToString()));
+                    new PersistentStorageException(Utils.Fcns.CheckedFormat("CreateDirectory:'{0}' failed: [{1}]", ringConfig.FileBaseDirPath, ex.ToString())).Throw();
                 }
 
                 directoryPathKnownToExist = true;
@@ -685,7 +685,7 @@ namespace MosaicLib.Modular.Persist
                         ObjType currentObj = loadedObj as ObjType;
 
                         if (loadedObj != null && currentObj == null)
-                            throw new PersistentStorageException(Utils.Fcns.CheckedFormat("Reader produced object:'{0}' cannot be casted to target type", loadedObj.GetType()));
+                            new PersistentStorageException(Utils.Fcns.CheckedFormat("Reader produced object:'{0}' cannot be casted to target type", loadedObj.GetType())).Throw();
 
                         if (loadedObj == (object)Object)        // if the derived object does not create new objects on InnerReadObject then we may need to reload the last oldest object at the end
                             reloadAtEnd = true;
@@ -714,10 +714,10 @@ namespace MosaicLib.Modular.Persist
                     if (firstLoadEx == null)
                         firstLoadEx = e;
                 }
-                catch (System.Exception e)
+                catch (System.Exception ex)
                 {
                     if (firstLoadEx == null)
-                        firstLoadEx = new PersistentStorageException(Utils.Fcns.CheckedFormat("Attempt to load '{0}' object from path '{1}' failed", typeof(ObjType), trialPath), e);
+                        firstLoadEx = new PersistentStorageException(Utils.Fcns.CheckedFormat("Attempt to load '{0}' object from path '{1}' failed", typeof(ObjType), trialPath), ex);
                 }
             }
 
@@ -741,7 +741,7 @@ namespace MosaicLib.Modular.Persist
                         ObjType currentObj = loadedObj as ObjType;
 
                         if (loadedObj != null && currentObj == null)
-                            throw new PersistentStorageException(Utils.Fcns.CheckedFormat("Final Load failed: Reader produced object:'{0}' cannot be casted to target type", loadedObj.GetType()));
+                            new PersistentStorageException(Utils.Fcns.CheckedFormat("Final Load failed: Reader produced object:'{0}' cannot be casted to target type", loadedObj.GetType())).Throw();
 
                         loadedValidObject = true;
                     }
@@ -751,10 +751,10 @@ namespace MosaicLib.Modular.Persist
                     if (firstLoadEx == null)
                         firstLoadEx = e;
                 }
-                catch (System.Exception e)
+                catch (System.Exception ex)
                 {
                     if (firstLoadEx == null)
-                        firstLoadEx = new PersistentStorageException(Utils.Fcns.CheckedFormat("Final reload failed: could not read object '{0}' from path '{1}'", typeof(ObjType), choosenObjPath), e);
+                        firstLoadEx = new PersistentStorageException(Utils.Fcns.CheckedFormat("Final reload failed: could not read object '{0}' from path '{1}'", typeof(ObjType), choosenObjPath), ex);
                 }
             }
 
@@ -818,14 +818,14 @@ namespace MosaicLib.Modular.Persist
             {
                 IssueEmitter.Emit("{0} failed: seqNum:{1} filePath:'{2}' throwing:{3}", methodName, lastSavedSeqNum, lastUsedFilePath, firstLoadEx);
 
-                throw throwEx;
+                throwEx.Throw();
             }
             else
             {
                 IssueEmitter.Emit("{0} failed: seqNum:{1} filePath:'{2}' error:{3}", methodName, lastSavedSeqNum, lastUsedFilePath, firstLoadEx);
-
-                return false;
             }
+
+            return false;
         }
 
         /// <summary>
@@ -963,10 +963,10 @@ namespace MosaicLib.Modular.Persist
                     lastUsedFilePath = filePath;
                 }
             }
-            catch (System.Exception e)
+            catch (System.Exception ex)
             {
                 if (firstEx == null)
-                    firstEx = new PersistentStorageException(Utils.Fcns.CheckedFormat("Save '{0}' to path:'{1}' failed", typeof(ObjType), filePath), e);
+                    firstEx = new PersistentStorageException(Utils.Fcns.CheckedFormat("Save '{0}' to path:'{1}' failed", typeof(ObjType), filePath), ex);
             }
 
             if (updateLastException)
@@ -980,7 +980,9 @@ namespace MosaicLib.Modular.Persist
             {
                 IssueEmitter.Emit("{0} failed: seqNum:{1} filePath:'{2}' throwing:{3}", methodName, lastSavedSeqNum, lastUsedFilePath, firstEx);
 
-                throw firstEx;
+                firstEx.Throw();
+
+                return false;
             }
             else if (saveSucceeded)
             {

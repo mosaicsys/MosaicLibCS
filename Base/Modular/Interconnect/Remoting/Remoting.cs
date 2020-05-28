@@ -415,7 +415,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
 
         public IClientFacet Sync(SyncFlags syncFlags = default(SyncFlags))
         {
-            BasicActionImpl action = new BasicActionImpl(actionQ, PerformSync, CurrentMethodName, ActionLoggingReference);
+            BasicActionImpl action = new BasicActionImpl(actionQ, PerformSync, "Sync", ActionLoggingReference);
             action.NamedParamValues = new NamedValueSet() { { "syncFlags", syncFlags } };
             return action;
         }
@@ -726,7 +726,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
             traceLogger = new Logging.Logger(PartID + ".Trace", groupName: Logging.LookupDistributionGroupName, initialInstanceLogGate: Config.ConfigNVS["TraceLogger.InitialInstanceLogGate"].VC.GetValue(rethrow: false, defaultValue: Logging.LogGate.Debug));
 
             if (Config.StreamToolsConfigArray.IsNullOrEmpty())
-                throw new System.ArgumentOutOfRangeException("Config.StreamToolsConfigArray", "Must contain at least one StreamToolConfigBase derived instance");
+                new System.ArgumentOutOfRangeException("Config.StreamToolsConfigArray", "Must contain at least one StreamToolConfigBase derived instance").Throw();
 
             bufferPool = new BufferPool(PartID + ".bp", configNVS: config.ConfigNVS, bufferStateEmitter: traceLogger.Trace);
 
@@ -805,7 +805,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
                 Fcns.DisposeOfObject(ref bufferPool);
 
             if (BaseState.ConnState.IsConnectedOrConnecting() && setConnStateToDisconnectedIfNeeded)
-                SetBaseState(ConnState.Disconnected, CurrentMethodName);
+                SetBaseState(ConnState.Disconnected, "Release");
         }
 
         protected override string PerformGoOnlineActionEx(IProviderFacet ipf, bool andInitialize, INamedValueSet npv)
@@ -1032,7 +1032,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
 
         public IClientFacet Sync(SyncFlags syncFlags = default(SyncFlags)) 
         {
-            BasicActionImpl action = new BasicActionImpl(actionQ, PerformSync, CurrentMethodName, ActionLoggingReference);
+            BasicActionImpl action = new BasicActionImpl(actionQ, PerformSync, "Sync", ActionLoggingReference);
             action.NamedParamValues = new NamedValueSet() { { "syncFlags", syncFlags } };
             return action;
         }

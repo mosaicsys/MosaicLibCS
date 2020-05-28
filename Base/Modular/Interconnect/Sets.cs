@@ -1573,9 +1573,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
             finally
             {
                 if (processNoteItemsRemoved && removedItemContainerList.Count > 0)
-                {
                     InnerNoteItemsRemoved(removedItemContainerList);
-                }
             }
         }
 
@@ -1628,9 +1626,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
             finally
             {
                 if (processNoteItemsRemoved && removedItemContainerList.Count > 0)
-                {
                     InnerNoteItemsRemoved(removedItemContainerList);
-                }
             }
         }
 
@@ -1840,7 +1836,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
                 {
                     string methodName = new System.Diagnostics.StackFrame(1).GetMethod().Name;
 
-                    throw new SetUseException("{0} cannot be used with this {1} ISet instance because it has mutex".CheckedFormat(methodName, SetType));
+                    new SetUseException("{0} cannot be used with this {1} ISet instance because it has mutex".CheckedFormat(methodName, SetType)).Throw();
                 }
             }
         }
@@ -1855,7 +1851,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
         {
             string methodName = new System.Diagnostics.StackFrame(skipFramesExtraFrames + 1).GetMethod().Name;
 
-            throw new System.NotSupportedException("Method {0} not supported on {1} Set because it is {2}".CheckedFormat(methodName, SetType, Changeability));
+            new System.NotSupportedException("Method {0} not supported on {1} Set because it is {2}".CheckedFormat(methodName, SetType, Changeability)).Throw();
         }
 
         #endregion
@@ -2824,7 +2820,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
             if (dca == null)
             {
                 string methodName = new System.Diagnostics.StackFrame(1).GetMethod().Name;
-                throw new SetUseException("{0}/{1}: {2} cannot be used with this set: TObjectType:{3} is not compatible with DataContract serialization".CheckedFormat(SetID, SetType, methodName, TObjectTypeType));
+                new SetUseException("{0}/{1}: {2} cannot be used with this set: TObjectType:{3} is not compatible with DataContract serialization".CheckedFormat(SetID, SetType, methodName, TObjectTypeType)).Throw();
             }
         }
 
@@ -2837,7 +2833,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
         {
             if (!SetID.IsEqualTo(setDelta.SetID))
             {
-                throw new SetUseException("{0} {1} cannot be used with an ISetDelta from {2}".CheckedFormat(SetID, SetType, setDelta.SetID));
+                new SetUseException("{0} {1} cannot be used with an ISetDelta from {2}".CheckedFormat(SetID, SetType, setDelta.SetID)).Throw();
             }
         }
 
@@ -3040,7 +3036,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
             trackingSourceSet = (trackingSourceReferenceSet as ISet<TObjectType>) ?? (trackingSourceTrackingSet as ISet<TObjectType>);
 
             if (trackingSourceSet == null)
-                throw new SetUseException("{0} type cannot be used with set {1}: {2] is not a supported type to track".CheckedFormat(this.GetType(), setToTrack.SetID, setToTrack.GetType()));
+                new SetUseException("{0} type cannot be used with set {1}: {2] is not a supported type to track".CheckedFormat(this.GetType(), setToTrack.SetID, setToTrack.GetType())).Throw();
 
             SourceSetType = trackingSourceSet.SetType;
             SourceChangeability = trackingSourceSet.Changeability;
@@ -3081,12 +3077,13 @@ namespace MosaicLib.Modular.Interconnect.Sets
                         else if (trackingSourceSet is TrackingSet<TObjectType>)
                             innerTrackingSet = new TrackingSet<TObjectType>(trackingSourceSet as TrackingSet<TObjectType>);
                         else
-                            throw new SetUseException("The underlying source set [{0}] set type is not supported with this object".CheckedFormat(trackingSourceSet));
+                            new SetUseException("The underlying source set [{0}] set type is not supported with this object".CheckedFormat(trackingSourceSet)).Throw();
                         break;
 
                     case UseModel.ApplyDeltasExplicitly:
                     default:
-                        throw new SetUseException("{0} cannot be used after its use has been set to {1}".CheckedFormat(Fcns.CurrentMethodName, useModel));
+                        new SetUseException("{0} cannot be used after its use has been set to {1}".CheckedFormat(Fcns.CurrentMethodName, useModel)).Throw();
+                        break;
                 }
             }
 
@@ -3139,7 +3136,8 @@ namespace MosaicLib.Modular.Interconnect.Sets
 
                     case UseModel.UseTwoStepUpdate:
                     default:
-                        throw new SetUseException("{0} cannot be used after its use has been set to {1}".CheckedFormat(Fcns.CurrentMethodName, useModel));
+                        new SetUseException("{0} cannot be used after its use has been set to {1}".CheckedFormat(Fcns.CurrentMethodName, useModel)).Throw();
+                        break;
                 }
             }
 

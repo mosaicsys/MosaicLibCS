@@ -72,9 +72,7 @@ namespace MosaicLib.Time
 		{
 			if (QueryPerformanceFrequency(out qpcRateInHZ) == false)
 			{
-				// high-performance counter not supported
-
-				throw new System.ComponentModel.Win32Exception();
+				new System.ComponentModel.Win32Exception("high performance counter is not supported").Throw();
 			}
 
 			if (qpcRateInHZ > 0)
@@ -200,10 +198,10 @@ namespace MosaicLib.Time
 		/// <remarks>Throws an System.ArgumentException if the rhsObj is not a QpcTimeStamp.</remarks>
 		public int CompareTo(object rhsObj)
 		{
-			if (rhsObj != null && rhsObj is QpcTimeStamp)
-				return CompareTo((QpcTimeStamp) rhsObj);
-			else
-				throw new System.ArgumentException("Invalid use of QpcTimeStamp.Compare(object rhs)");
+            if (rhsObj == null || !(rhsObj is QpcTimeStamp))
+                new System.ArgumentException("Invalid use of QpcTimeStamp.Compare(object rhs)").Throw();
+
+			return CompareTo((QpcTimeStamp) rhsObj);
 		}
 
 		/// <summary>Returns true if the rhs timestamp value is equal to this object's timestamp value.</summary>

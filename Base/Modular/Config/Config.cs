@@ -964,7 +964,7 @@ namespace MosaicLib.Modular.Config
                         icka.ResultCode = ec;
 
                     if (rethrow)
-                        throw ex;
+                        ex.Throw();
                 }
             }
             else
@@ -1874,12 +1874,12 @@ namespace MosaicLib.Modular.Config
 
         /// <summary>
         /// This method throws a NotSupportedException.
-        /// The exception message is the given reasonPrefix + " is not supported when this object IsReadOnly property has been set to true"
+        /// The exception message is the given reasonPrefix + " is not supported by this object"
         /// </summary>
         /// <exception cref="System.NotSupportedException">thrown</exception>
         private void ThrowNotSupportedException(string reasonPrefix)
         {
-            throw new System.NotSupportedException(reasonPrefix + " is not supportedby this object");
+            new System.NotSupportedException(reasonPrefix + " is not supported by this object").Throw();
         }
 
         #region Serializable parts

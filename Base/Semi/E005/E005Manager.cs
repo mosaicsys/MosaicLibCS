@@ -204,14 +204,15 @@ namespace MosaicLib.Semi.E005.Manager
             if (!makeDefault)
                 makeDefault = portConfigNVS.Contains("MakeDefault");
 
-            IPort port;
+            IPort port = null;
+
             lock (mainAPIMutex)
             {
                 if (portByNameDictionary.ContainsKey(portName))
-                    throw new ManagerException("Cannot create Port '{0}': another port with this name already exists".CheckedFormat(portName));
+                    new ManagerException("Cannot create Port '{0}': another port with this name already exists".CheckedFormat(portName)).Throw();
 
                 if (makeDefault && defaultPort != null)
-                    throw new ManagerException("Cannot create Port '{0}': MakeDefault requested and there is already another default port: '{1}' [{2}]".CheckedFormat(portName, defaultPort.PartID, defaultPort.PortNum));
+                    new ManagerException("Cannot create Port '{0}': MakeDefault requested and there is already another default port: '{1}' [{2}]".CheckedFormat(portName, defaultPort.PartID, defaultPort.PortNum)).Throw();
 
                 int portNum = portByNameDictionary.Count + 1;
 
@@ -228,7 +229,8 @@ namespace MosaicLib.Semi.E005.Manager
                         break;
 
                     default:
-                        throw new ManagerException("Cannot create Port '{0}': the specified port type {1} is not supported or valid".CheckedFormat(portName, portType));
+                        new ManagerException("Cannot create Port '{0}': the specified port type {1} is not supported or valid".CheckedFormat(portName, portType)).Throw();
+                        break;
                 }
 
                 portByNameDictionary[portName] = port;
@@ -300,7 +302,7 @@ namespace MosaicLib.Semi.E005.Manager
                         defaultPort = portByNameDictionary.ValueArray.FirstOrDefault();
 
                     if (defaultPort == null)
-                        throw new ManagerException("Cannot get default port: there are no defined ports");
+                        new ManagerException("Cannot get default port: there are no defined ports").Throw();
 
                     return defaultPort;
                 }
@@ -332,7 +334,7 @@ namespace MosaicLib.Semi.E005.Manager
             }
 
             if (port == null && throwOnNotFound)
-                throw new ManagerException("Port '{0}' was not found".CheckedFormat(portName));
+                new ManagerException("Port '{0}' was not found".CheckedFormat(portName)).Throw();
 
             return port;
         }
@@ -350,7 +352,7 @@ namespace MosaicLib.Semi.E005.Manager
                 {
                     string ec = InnerAddHandler(handler, sf);
                     if (ec.IsNeitherNullNorEmpty())
-                        throw new ManagerException(ec);
+                        new ManagerException(ec).Throw();
                 }
             }
         }

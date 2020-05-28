@@ -734,7 +734,8 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                         break;
 
                     default:
-                        throw new System.ArgumentException("gaugeType");
+                        new System.ArgumentException("gaugeType").Throw();
+                        break;
                 }
 
                 minimumDifferentialValueInStdUnits = double.NegativeInfinity;
@@ -2346,7 +2347,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                     totalResistanceInKPaSecPerM3 = nodePairResistanceArray.Sum();
 
                     //if (double.IsNaN(totalResistanceInKPaSecPerM3) || totalResistanceInKPaSecPerM3 <= 0.0)
-                    //    throw new System.InvalidOperationException("resistance");
+                    //    new System.InvalidOperationException("resistance").Throw();
 
                     double end1EffectiveVolumeM3 = _volumeInM3 * 0.5;
                     double end2EffectiveVolumeM3 = _volumeInM3 * 0.5;
@@ -2711,10 +2712,10 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                     double summedVolumetricFlowOutOfNodeInSCMS = VolumetricFlowOutOfNodeInSCMS - (IsChamber ? 0.0 : ConnectedToNodeArray.Sum(item => item.VolumetricFlowOutOfNodeInSCMS));    // for chambers the flow has already been summed
 
                     //if (double.IsNaN(summedVolumeM3) || double.IsInfinity(summedVolumeM3) || summedVolumeM3 <= 0.0)
-                    //    throw new System.InvalidOperationException("summedVolumeM3");
+                    //    new System.InvalidOperationException("summedVolumeM3").Throw();
 
                     //if (double.IsNaN(TemperatureInDegK) || double.IsInfinity(TemperatureInDegK) || TemperatureInDegK <= 0.0)
-                    //    throw new System.InvalidOperationException("TemperatureInDegK");
+                    //    new System.InvalidOperationException("TemperatureInDegK").Throw();
 
                     double currentMoles = Physics.Gasses.IdealGasLaw.ToMoles(PressureInKPa, summedVolumeM3, TemperatureInDegK);
 
@@ -2731,7 +2732,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
 
                     // note: it is expected that the pressure may actually reach zero when the above delta calculation logic overshoots 
                     //if (double.IsNaN(updatedPressureInKPa) || double.IsInfinity(updatedPressureInKPa) || updatedPressureInKPa < 0.0)
-                    //    throw new System.InvalidOperationException("updatedPressureInKPa");
+                    //    new System.InvalidOperationException("updatedPressureInKPa").Throw();
                 }
 
                 SetPressureAndDistributeToSubNodes(updatedPressureInKPa);
@@ -2825,10 +2826,10 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                 double pEnd2 = End2.PressureInKPa;
 
                 //if (double.IsNaN(pEnd1) || double.IsInfinity(pEnd1))
-                //    throw new System.InvalidOperationException("pEnd1");
+                //    new System.InvalidOperationException("pEnd1").Throw();
 
                 //if (double.IsNaN(pEnd2) || double.IsInfinity(pEnd2))
-                //    throw new System.InvalidOperationException("pEnd2");
+                //    new System.InvalidOperationException("pEnd2").Throw();
 
                 double pDiff = pEnd2 - pEnd1;       // we are calculating the flow out of End1 (and into End2) which occurs when p@End2 > p@End1
                 double pAvg = (pEnd1 + pEnd2) * 0.5;
@@ -2836,7 +2837,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                 resistanceInKPaSecPerM3 = ResistanceInKPaSecPerM3;
 
                 //if (double.IsNaN(resistanceInKPaSecPerM3) || resistanceInKPaSecPerM3 <= 0.0)
-                //    throw new System.InvalidOperationException("resistance");
+                //    new System.InvalidOperationException("resistance").Throw();
 
                 double flowRateM3PerSec = (double.IsInfinity(resistanceInKPaSecPerM3) ? 0.0 : pDiff / resistanceInKPaSecPerM3);
 
@@ -2873,7 +2874,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                 volumetricFlowOutOfEnd1InSCMS = (!IsBondingConnectionBetweenChambers) ? ((pAvg / Physics.Gasses.Air.StandardAtmPressureInKPa) * flowRateM3PerSec) : 0.0;
 
                 //if (double.IsNaN(volumetricFlowInSCMS) || double.IsInfinity(volumetricFlowInSCMS))
-                //    throw new System.InvalidOperationException("volumetricFlowInSCMS");
+                //    new System.InvalidOperationException("volumetricFlowInSCMS").Throw();
             }
 
             public override void UpdateFlows()
@@ -2909,10 +2910,10 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                     double lengthM = Config.LengthInM; // mm => m
 
                     //if (double.IsNaN(lengthM) || double.IsInfinity(lengthM) || lengthM <= 0.0)
-                    //    throw new System.InvalidOperationException("lengthM");
+                    //    new System.InvalidOperationException("lengthM").Throw();
 
                     //if (double.IsNaN(areaM2) || double.IsInfinity(areaM2))
-                    //    throw new System.InvalidOperationException("areaM2");
+                    //    new System.InvalidOperationException("areaM2").Throw();
 
                     /* Hagen–Poiseuille flow equation:
                      * 
@@ -2935,7 +2936,7 @@ namespace MosaicLib.PartsLib.Scan.Plugin.Sim.FlowModel
                     double resistanceInKPaSecPerM3 = ((areaM2 > 0.0) ? ((Math.PI * 8.0 * Physics.Gasses.N2.ViscosityInKPaS * lengthM) / (areaM2 * areaM2)) : double.PositiveInfinity);
 
                     //if (double.IsNaN(resistanceInKPaSecPerM3) || resistanceInKPaSecPerM3 <= 0.0)
-                    //    throw new System.InvalidOperationException("resistance");
+                    //    new System.InvalidOperationException("resistance").Throw();
 
                     return resistanceInKPaSecPerM3 * Config.EffectiveResistanceGainAdjustment;
                 }

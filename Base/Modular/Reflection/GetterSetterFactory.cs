@@ -26,6 +26,8 @@ using System.Reflection.Emit;
 using System.Linq;
 using System.Linq.Expressions;
 
+using MosaicLib.Utils;
+
 namespace MosaicLib.Modular.Reflection
 {
     /// <summary>
@@ -48,14 +50,14 @@ namespace MosaicLib.Modular.Reflection
             Type resultType = typeof(TResult);
 
             if (!targetObjType.Equals(pi.DeclaringType) && !targetObjType.IsSubclassOf(pi.DeclaringType))
-                throw new System.NotSupportedException("Cannot create property getter function when given TObject is not derived from the given PropertyInfo instance's DeclaringType");
+                new System.NotSupportedException("Cannot create property getter function when given TObject is not derived from the given PropertyInfo instance's DeclaringType").Throw();
 
             MethodInfo pgGetMethod = pi.GetGetMethod();
             if (pgGetMethod == null)
-                throw new System.NotSupportedException("Cannot create property setter action when given PropertyInfo's GetMethod does not exist");
+                new System.NotSupportedException("Cannot create property setter action when given PropertyInfo's GetMethod does not exist").Throw();
 
             if (pgGetMethod.IsStatic)
-                throw new System.NotSupportedException("Cannot create property setter action when given PropertyInfo's GetMethod is static");
+                new System.NotSupportedException("Cannot create property setter action when given PropertyInfo's GetMethod is static").Throw();
 
             if (resultType.Equals(pi.PropertyType))
             {
@@ -80,7 +82,8 @@ namespace MosaicLib.Modular.Reflection
             }
             else
             {
-                throw new System.NotSupportedException("Cannot create property getter function when given TResult is not the same as the given PropertyInfo instance's PropertyType and the given TResult is not assignable from the PropertyType reference type.");
+                new System.NotSupportedException("Cannot create property getter function when given TResult is not the same as the given PropertyInfo instance's PropertyType and the given TResult is not assignable from the PropertyType reference type.").Throw();
+                return null;
             }
         }
 
@@ -99,17 +102,17 @@ namespace MosaicLib.Modular.Reflection
             Type valueType = typeof(TValue);
 
             if (!targetObjType.Equals(pi.DeclaringType) && !targetObjType.IsSubclassOf(pi.DeclaringType))
-                throw new System.NotSupportedException("Cannot create property setter function when given TObject is not derived from the given PropertyInfo instance's DeclaringType");
+                new System.NotSupportedException("Cannot create property setter function when given TObject is not derived from the given PropertyInfo instance's DeclaringType").Throw();
 
             if (targetObjType.IsValueType)
-                throw new System.NotSupportedException("Cannot create property setter action when given TObject is a value type");
+                new System.NotSupportedException("Cannot create property setter action when given TObject is a value type").Throw();
 
             MethodInfo piSetMethod = pi.GetSetMethod();
             if (piSetMethod == null)
-                throw new System.NotSupportedException("Cannot create property setter action when given PropertyInfo's SetMethod does not exist");
+                new System.NotSupportedException("Cannot create property setter action when given PropertyInfo's SetMethod does not exist").Throw();
 
             if (piSetMethod.IsStatic)
-                throw new System.NotSupportedException("Cannot create property setter action when given PropertyInfo's SetMethod is static");
+                new System.NotSupportedException("Cannot create property setter action when given PropertyInfo's SetMethod is static").Throw();
 
             if (valueType.Equals(pi.PropertyType))
             {
@@ -136,7 +139,8 @@ namespace MosaicLib.Modular.Reflection
             }
             else
             {
-                throw new System.NotSupportedException("Cannot create property setter function when given TValue is not the same as the given PropertyInfo instance's PropertyType and the PropertyType is not assignable from the TValue reference type.");
+                new System.NotSupportedException("Cannot create property setter function when given TValue is not the same as the given PropertyInfo instance's PropertyType and the PropertyType is not assignable from the TValue reference type.").Throw();
+                return null;
             }
         }
 
@@ -161,10 +165,10 @@ namespace MosaicLib.Modular.Reflection
             Type resultType = typeof(TResult);
 
             if (!targetObjType.Equals(fi.DeclaringType) && !targetObjType.IsSubclassOf(fi.DeclaringType))
-                throw new System.NotSupportedException("Cannot create field getter function when given TObject is not derived from the given FieldInfo instance's DeclaringType");
+                new System.NotSupportedException("Cannot create field getter function when given TObject is not derived from the given FieldInfo instance's DeclaringType").Throw();
 
             if (fi.IsStatic)
-                throw new System.NotSupportedException("Cannot create field getter action when given FieldInfo refers to a static field");
+                new System.NotSupportedException("Cannot create field getter action when given FieldInfo refers to a static field").Throw();
 
             if (resultType.Equals(fi.FieldType))
             {
@@ -189,7 +193,8 @@ namespace MosaicLib.Modular.Reflection
             }
             else
             {
-                throw new System.NotSupportedException("Cannot create field getter action when given TResult is neither equal to, nor assignable from a reference to the given FieldInfo instance's FieldType");
+                new System.NotSupportedException("Cannot create field getter action when given TResult is neither equal to, nor assignable from a reference to the given FieldInfo instance's FieldType").Throw();
+                return null;
             }
         }
 
@@ -208,13 +213,13 @@ namespace MosaicLib.Modular.Reflection
             Type valueType = typeof(TValue);
 
             if (!targetObjType.Equals(fi.DeclaringType) && !targetObjType.IsSubclassOf(fi.DeclaringType))
-                throw new System.NotSupportedException("Cannot create field setter action when given TObject is not derived from the given FieldInfo instance's DeclaringType");
+                new System.NotSupportedException("Cannot create field setter action when given TObject is not derived from the given FieldInfo instance's DeclaringType").Throw();
 
             if (targetObjType.IsValueType)
-                throw new System.NotSupportedException("Cannot create field setter action when given TObject is a value type");
+                new System.NotSupportedException("Cannot create field setter action when given TObject is a value type").Throw();
 
             if (fi.IsStatic)
-                throw new System.NotSupportedException("Cannot create field setter action when given FieldInfo refers to a static field");
+                new System.NotSupportedException("Cannot create field setter action when given FieldInfo refers to a static field").Throw();
 
             if (valueType.Equals(fi.FieldType))
             {
@@ -243,7 +248,8 @@ namespace MosaicLib.Modular.Reflection
             }
             else
             {
-                throw new System.NotSupportedException("Cannot create field setter action when given TValue is neither equal to, nor assignable as a reference to the given FieldInfo instance's FieldType");
+                new System.NotSupportedException("Cannot create field setter action when given TValue is neither equal to, nor assignable as a reference to the given FieldInfo instance's FieldType").Throw();
+                return null;
             }
         }
     }

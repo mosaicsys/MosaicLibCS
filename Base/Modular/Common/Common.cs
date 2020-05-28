@@ -1759,7 +1759,7 @@ namespace MosaicLib.Modular.Common
                     }
                     else
                     {
-                        ThrowValueContainerGetValueException("Unable to get {0} as type '{1}': no recognized custom conversion exists".CheckedFormat(this, typeof(TValueType)), null);
+                        new ValueContainerGetValueException("Unable to get {0} as type '{1}': no recognized custom conversion exists".CheckedFormat(this, typeof(TValueType))).Throw();
                         value = defaultValue;
                     }
                 }
@@ -1939,7 +1939,7 @@ namespace MosaicLib.Modular.Common
             }
 
             if (rethrow && LastGetValueException != null)
-                ThrowGivenException(LastGetValueException);
+                LastGetValueException.Throw();
 
             return value;
         }
@@ -1975,7 +1975,7 @@ namespace MosaicLib.Modular.Common
                     LastGetValueException = ex;
 
                 if (rethrow)
-                    throw;
+                    ex.Throw();
 
                 return false;
             }
@@ -2010,21 +2010,15 @@ namespace MosaicLib.Modular.Common
 
         #endregion
 
-        #region Throw helpers (ThrowValueContainerGetValueException, ThrowGivenException)
+        #region Throw helpers (ThrowValueContainerGetValueException, ThrowGivenException - both are now obsolete)
 
-        /// <summary>
-        /// Throw helper method used to throw a ValueContainerGetValueException.  Use of this method is intended to allow more ValueContainer methods to be inlined.
-        /// </summary>
-        /// <exception cref="ValueContainerGetValueException">constructs and throws this exception type</exception>
+        [Obsolete("This method has been depricated.  Please switch to using the new MosaicLib.Utils System.Exception.Throw() extension method (2020-05-26)")]
         public static void ThrowValueContainerGetValueException(string message, System.Exception innerException = null)
         {
             throw new ValueContainerGetValueException(message, innerException: innerException);
         }
 
-        /// <summary>
-        /// Throw helper method used to throw the given exception.  Use of this method is intended to allow more ValueContainer methods to be inlined.
-        /// </summary>
-        /// <exception cref="System.Exception">Throws the given exception of this base type</exception>
+        [Obsolete("This method has been depricated.  Please switch to using the new MosaicLib.Utils System.Exception.Throw() extension method (2020-05-26)")]
         public static void ThrowGivenException(System.Exception ex)
         {
             throw ex;
@@ -2467,6 +2461,7 @@ namespace MosaicLib.Modular.Common
 
         /// <summary>
         /// Returns true if the given ContainerStorageType is a signed or unsigned integer.  Boolean is treated as an unsigned type.
+        /// <para/>I1, I2, I4, I8 => <paramref name="includeSigned"/>, Bo, Bi, U1, U2, U4, U8 +> <paramref name="includeUnsigned"/>
         /// </summary>
         public static bool IsInteger(this ContainerStorageType cst, bool includeSigned = true, bool includeUnsigned = true)
         {
@@ -2524,6 +2519,241 @@ namespace MosaicLib.Modular.Common
                     return true;
                 default:
                     return false;
+            }
+        }
+
+        /// <summary>
+        /// Returns true if the given <paramref name="vc"/> is neither IsNull nor IsEmpty
+        /// </summary>
+        public static bool IsNeitherNullNorEmpty(this ValueContainer vc)
+        {
+            return !vc.IsNullOrEmpty;
+        }
+
+        /// <summary>
+        /// If <paramref name="lhs"/> is type compatible with <paramref name="rhs"/> then this method returns the one that has the largest range, otherwise this method returns the given <paramref name="fallbackValue"/> (defaults to ContainerStorageType.None)
+        /// <para/>available conversion rules (can be chained): Bi => U1, Bo => I1 or U1, I1 => I2, I2 => I4 or F4, I4 => I8 or F8, U1 => U2 or I2 or F4, U2 => U4 or I4 or F4, U4 => U8 or I8 or F8, F4 => F8
+        /// <para/>None,any or any,None => any
+        /// </summary>
+        public static ContainerStorageType Upcast(this ContainerStorageType lhs, ContainerStorageType rhs, ContainerStorageType fallbackValue = ContainerStorageType.None, bool allowTypeChangeAttempts = false)
+        {
+            if (lhs == rhs || rhs == ContainerStorageType.None)
+                return lhs;
+            else if (lhs == ContainerStorageType.None)
+                return rhs;
+            else if (lhs < rhs)
+                return rhs.Upcast(lhs, fallbackValue: fallbackValue);
+
+            // lhs is known >= rhs so decode in order of increasing values of lhs.
+            switch (lhs)
+            {
+                case ContainerStorageType.Bi: // rhs can be Bo
+                    if (rhs == ContainerStorageType.Bo)
+                        return lhs;
+                    break;
+
+                case ContainerStorageType.I1: // rhs can be Bi, Bo
+                    if (rhs == ContainerStorageType.Bo)
+                        return lhs;
+                    else if (rhs == ContainerStorageType.Bi)
+                        return ContainerStorageType.I2;
+                    break;
+
+                case ContainerStorageType.I2: // rhs can be Bi, Bo, I1
+                    if (rhs == ContainerStorageType.Bo || rhs == ContainerStorageType.Bi || rhs == ContainerStorageType.I1)
+                        return lhs;
+                    break;
+
+                case ContainerStorageType.I4: // rhs can be Bi, Bo, I1, I2
+                    if (rhs == ContainerStorageType.Bo || rhs == ContainerStorageType.Bi || rhs == ContainerStorageType.I1 || rhs == ContainerStorageType.I2)
+                        return lhs;
+                    break;
+
+                case ContainerStorageType.I8: // rhs can be Bi, Bo, I1, I2, I4
+                    if (rhs == ContainerStorageType.Bo || rhs == ContainerStorageType.Bi || rhs == ContainerStorageType.I1 || rhs == ContainerStorageType.I2 || rhs == ContainerStorageType.I4)
+                        return lhs;
+                    break;
+
+                case ContainerStorageType.U1:  // rhs can be Bi, Bo, I1, I2, I4, I8
+                    if (rhs == ContainerStorageType.Bo || rhs == ContainerStorageType.Bi)
+                        return lhs;
+                    if (rhs == ContainerStorageType.I2 || rhs == ContainerStorageType.I4 || rhs == ContainerStorageType.I8)
+                        return rhs;
+                    if (rhs == ContainerStorageType.I1)
+                        return ContainerStorageType.I2;
+                    break;
+
+                case ContainerStorageType.U2:  // rhs can be Bi, Bo, I1, I2, I4, I8, U1
+                    if (rhs == ContainerStorageType.Bo || rhs == ContainerStorageType.Bi || rhs == ContainerStorageType.U1)
+                        return lhs;
+                    if (rhs == ContainerStorageType.I4 || rhs == ContainerStorageType.I8)
+                        return rhs;
+                    if (rhs == ContainerStorageType.I1 || rhs == ContainerStorageType.I2)
+                        return ContainerStorageType.I4;
+                    break;
+
+                case ContainerStorageType.U4:  // rhs can be Bi, Bo, I1, I2, I4, I8, U1, U2
+                    if (rhs == ContainerStorageType.Bo || rhs == ContainerStorageType.Bi || rhs == ContainerStorageType.U1 || rhs == ContainerStorageType.U2)
+                        return lhs;
+                    if (rhs == ContainerStorageType.I8)
+                        return rhs;
+                    if (rhs == ContainerStorageType.I1 || rhs == ContainerStorageType.I2 || rhs == ContainerStorageType.I4)
+                        return ContainerStorageType.I8;
+                    break;
+
+                case ContainerStorageType.U8:  // rhs can be Bi, Bo, I1, I2, I4, I8, U1, U2, U4
+                    if (rhs == ContainerStorageType.Bo || rhs == ContainerStorageType.Bi || rhs == ContainerStorageType.U1 || rhs == ContainerStorageType.U2 || rhs == ContainerStorageType.U4)
+                        return lhs;
+                    break;
+
+                case ContainerStorageType.F4:  // rhs can be Bi, Bo, I1, I2, I4, I8, U1, U2, U4, U8
+                    if (rhs == ContainerStorageType.Bo || rhs == ContainerStorageType.Bi || rhs == ContainerStorageType.I1 || rhs == ContainerStorageType.I2 || rhs == ContainerStorageType.U1 || rhs == ContainerStorageType.U2)
+                        return lhs;
+                    if (rhs == ContainerStorageType.I4 || rhs == ContainerStorageType.U4)
+                        return ContainerStorageType.F8;
+                    break;
+
+                case ContainerStorageType.F8:  // rhs can be Bi, Bo, I1, I2, I4, I8, U1, U2, U4, U8, F4
+                    if (rhs == ContainerStorageType.Bo || rhs == ContainerStorageType.Bi || rhs == ContainerStorageType.I1 || rhs == ContainerStorageType.I2 || rhs == ContainerStorageType.I4
+                        || rhs == ContainerStorageType.U1 || rhs == ContainerStorageType.U2 || rhs == ContainerStorageType.U4 || rhs == ContainerStorageType.F4)
+                    {
+                        return lhs;
+                    }
+                    break;
+            }
+
+            if (allowTypeChangeAttempts && (lhs == ContainerStorageType.A || rhs == ContainerStorageType.A))
+                return ContainerStorageType.A;
+
+            return fallbackValue;            
+        }
+
+        /// <summary>
+        /// For value types, this method attempts to convert the given <paramref name="value"/> by upcasting its contents to the given <paramref name="cst"/>.
+        /// If the given <paramref name="cst"/> is the same as the <paramref name="value"/>'s contents then the value is returned.
+        /// If the given <paramref name="cst"/> is a reachable upcast fromt the given <paramref name="value"/>'s contents then the upcasted contents are returned.
+        /// Otherwise the fallbackValue is returned.
+        /// </summary>
+        public static ValueContainer Cast(this ValueContainer value, ContainerStorageType cst, ValueContainer fallbackValue = default(ValueContainer), bool allowUpcastAttempt = true, bool allowTypeChangeAttempt = false, bool rethrow = false)
+        {
+            if (value.cvt == cst)
+                return value;
+
+            if (allowUpcastAttempt || allowTypeChangeAttempt)
+            {
+                switch (cst)
+                {
+                    case ContainerStorageType.Bi: return ValueContainer.CreateBi(value.GetValueBi(rethrow: rethrow, allowAllTypeChangeAttempts: allowTypeChangeAttempt));
+                    case ContainerStorageType.Bo: return ValueContainer.CreateBo(value.GetValueBo(rethrow: rethrow, allowAllTypeChangeAttempts: allowTypeChangeAttempt));
+                    case ContainerStorageType.I1: return ValueContainer.CreateI1(value.GetValueI1(rethrow: rethrow, allowAllTypeChangeAttempts: allowTypeChangeAttempt));
+                    case ContainerStorageType.I2: return ValueContainer.CreateI2(value.GetValueI2(rethrow: rethrow, allowAllTypeChangeAttempts: allowTypeChangeAttempt));
+                    case ContainerStorageType.I4: return ValueContainer.CreateI4(value.GetValueI4(rethrow: rethrow, allowAllTypeChangeAttempts: allowTypeChangeAttempt));
+                    case ContainerStorageType.I8: return ValueContainer.CreateI8(value.GetValueI8(rethrow: rethrow, allowAllTypeChangeAttempts: allowTypeChangeAttempt));
+                    case ContainerStorageType.U1: return ValueContainer.CreateU1(value.GetValueU1(rethrow: rethrow, allowAllTypeChangeAttempts: allowTypeChangeAttempt));
+                    case ContainerStorageType.U2: return ValueContainer.CreateU2(value.GetValueU2(rethrow: rethrow, allowAllTypeChangeAttempts: allowTypeChangeAttempt));
+                    case ContainerStorageType.U4: return ValueContainer.CreateU4(value.GetValueU4(rethrow: rethrow, allowAllTypeChangeAttempts: allowTypeChangeAttempt));
+                    case ContainerStorageType.U8: return ValueContainer.CreateU8(value.GetValueU8(rethrow: rethrow, allowAllTypeChangeAttempts: allowTypeChangeAttempt));
+                    case ContainerStorageType.F4: return ValueContainer.CreateF4(value.GetValueF4(rethrow: rethrow, allowAllTypeChangeAttempts: allowTypeChangeAttempt));
+                    case ContainerStorageType.F8: return ValueContainer.CreateF8(value.GetValueF8(rethrow: rethrow, allowAllTypeChangeAttempts: allowTypeChangeAttempt));
+                    case ContainerStorageType.A: 
+                        if (allowTypeChangeAttempt)
+                            return ValueContainer.CreateA(value.GetValueA(rethrow: rethrow, allowAllTypeChangeAttempts: true));
+                        break;
+                    default:
+                        break;
+                }
+            }
+
+            return fallbackValue;
+        }
+
+        /// <summary>
+        /// Compares the contents of the given <paramref name="lhs"/> to the contents of the given <paramref name="rhs"/> and returns a signed integer that indicates the relative order of the two values.
+        /// Returns a negative integer if <paramref name="lhs"/> is less than <paramref name="rhs"/>, zero if they are equal, or a possitive integer otherwise.
+        /// If the two given values do not have the same content type, or they cannot be successfully upcasted or converted to a common superset type then the method returns the given <paramref name="fallbackValue"/> which defaults to -2
+        /// </summary>
+        public static int CompareTo(this ValueContainer lhs, ValueContainer rhs, bool allowUpcastAttempt = true, bool allowTypeChangeAttempts = false, bool rethrow = false, int fallbackValue = int.MinValue)
+        {
+            bool comparible = (lhs.cvt == rhs.cvt && !lhs.IsNullOrEmpty);
+            if (!comparible && (allowUpcastAttempt || allowTypeChangeAttempts))
+            {
+                var upcastedCST = lhs.cvt.Upcast(rhs.cvt, allowTypeChangeAttempts: allowTypeChangeAttempts);
+
+                if (lhs.cvt != upcastedCST)
+                    lhs = lhs.Cast(upcastedCST, fallbackValue: lhs, allowUpcastAttempt: true, allowTypeChangeAttempt: allowTypeChangeAttempts, rethrow: rethrow);
+
+                if (rhs.cvt != upcastedCST)
+                    rhs = rhs.Cast(upcastedCST, fallbackValue: rhs, allowUpcastAttempt: true, allowTypeChangeAttempt: allowTypeChangeAttempts, rethrow: rethrow);
+
+                comparible = (lhs.cvt == rhs.cvt && !lhs.IsNullOrEmpty);
+            }
+
+            if (!comparible)
+                return fallbackValue;
+
+            switch (lhs.cvt)
+            {
+                case ContainerStorageType.Bi: return lhs.u.bi.CompareTo(rhs.u.bi);
+                case ContainerStorageType.Bo: return lhs.u.b.MapToInt().CompareTo(rhs.u.b.MapToInt());
+                case ContainerStorageType.I1: return lhs.u.i8.CompareTo(rhs.u.i8);
+                case ContainerStorageType.I2: return lhs.u.i16.CompareTo(rhs.u.i16);
+                case ContainerStorageType.I4: return lhs.u.i32.CompareTo(rhs.u.i32);
+                case ContainerStorageType.I8: return lhs.u.i64.CompareTo(rhs.u.i64);
+                case ContainerStorageType.U1: return lhs.u.u8.CompareTo(rhs.u.u8);
+                case ContainerStorageType.U2: return lhs.u.u16.CompareTo(rhs.u.u16);
+                case ContainerStorageType.U4: return lhs.u.u32.CompareTo(rhs.u.u32);
+                case ContainerStorageType.U8: return lhs.u.u64.CompareTo(rhs.u.u64);
+                case ContainerStorageType.F4: return lhs.u.f32.CompareTo(rhs.u.f32);
+                case ContainerStorageType.F8: return lhs.u.f64.CompareTo(rhs.u.f64);
+                case ContainerStorageType.A: return lhs.GetValueA(rethrow: rethrow, allowAllTypeChangeAttempts: allowTypeChangeAttempts).MapNullToEmpty().CompareTo(rhs.GetValueA(rethrow: rethrow, allowAllTypeChangeAttempts: allowTypeChangeAttempts).MapNullToEmpty());
+                default: return fallbackValue;
+            }
+        }
+
+        /// <summary>
+        /// Returns true if the given value is IsNull, IsEmpty, or IsZero
+        /// </summary>
+        public static bool IsNullOrEmptyOrZero(this ValueContainer vc)
+        {
+            return (vc.IsNullOrEmpty || vc.IsZero());
+        }
+
+        /// <summary>
+        /// Returns true if the given value contains a value that is zero.  CST must be one of (Bi, Bo, I1..I8, U1..U8, F4 or F8)
+        /// </summary>
+        public static bool IsZero(this ValueContainer vc)
+        {
+            switch (vc.cvt)
+            {
+                case ContainerStorageType.Bi: return vc.u.bi == 0;
+                case ContainerStorageType.Bo: return vc.u.b.MapToInt() == 0;
+                case ContainerStorageType.I1: return vc.u.i8 == 0;
+                case ContainerStorageType.I2: return vc.u.i16 == 0;
+                case ContainerStorageType.I4: return vc.u.i32 == 0;
+                case ContainerStorageType.I8: return vc.u.i64 == 0;
+                case ContainerStorageType.U1: return vc.u.u8 == 0;
+                case ContainerStorageType.U2: return vc.u.u16 == 0;
+                case ContainerStorageType.U4: return vc.u.u32 == 0;
+                case ContainerStorageType.U8: return vc.u.u64 == 0;
+                case ContainerStorageType.F4: return vc.u.f32 == 0;
+                case ContainerStorageType.F8: return vc.u.f64 == 0;
+                default: return false;
+            }
+        }
+
+        /// <summary>
+        /// If the given <paramref name="vc"/> is a number (integer or floating type) then this method sets its value to zero and returns it otherwise this method returns the given <paramref name="fallbackValue"/>.
+        /// </summary>
+        public static ValueContainer SetZero(this ValueContainer vc, ValueContainer fallbackValue = default(ValueContainer))
+        {
+            if (vc.cvt.IsInteger() || vc.cvt.IsFloatingPoint())
+            {
+                vc.u = default(ValueContainer.Union);
+                return vc;
+            }
+            else
+            {
+                return fallbackValue;
             }
         }
 
@@ -2877,9 +3107,56 @@ namespace MosaicLib.Modular.Common
         /// <summary>
         /// Constructor requires message and innerException (which may be null)
         /// </summary>
-        public ValueContainerGetValueException(string message, System.Exception innerException) 
+        public ValueContainerGetValueException(string message, System.Exception innerException = null) 
             : base(message, innerException) 
         { }
+    }
+
+    #endregion
+
+    #region VCRange
+
+    /// <summary>
+    /// Helper struct used to define a range using an optional Low and optional High limit.
+    /// </summary>
+    public struct VCRange : IEquatable<VCRange>
+    {
+        /// <summary>When this property has been given a non-Empty numeric value it defines the Low end of the range</summary>
+        public ValueContainer Low { get; set; }
+
+        /// <summary>When this property has been given a non-Empty numeric value it defines the High end of the range</summary>
+        public ValueContainer High { get; set; }
+
+        public bool IsNullOrEmpty { get { return Low.IsNullOrEmpty && High.IsNullOrEmpty; } }
+
+        /// <summary>
+        /// Returns true if the given <paramref name="vc"/> is in the range defined by [Low .. High] where the Low and High limits are only tested if they are NeitherNullNorEmpty.  
+        /// <para/>(<paramref name="vc"/> &gt;= Low || Low.IsNullOrEmpty) &amp;&amp; (<paramref name="vc"/> &lt;= High || High.IsNullOrEmpty)
+        /// </summary>
+        public bool IsInRange(ValueContainer vc)
+        {
+            bool inRange = (Low.IsNullOrEmpty || vc.CompareTo(Low, fallbackValue: -1) >= 0)
+                        && (High.IsNullOrEmpty || vc.CompareTo(High, fallbackValue: 1) <= 0)
+                        ;
+
+            return inRange;
+        }
+
+        /// <summary>
+        /// Debugging and logging helper method
+        /// </summary>
+        public override string ToString()
+        {
+            return IsNullOrEmpty ? "[NoRange]" : "{0}..{1}".CheckedFormat(Low, High);
+        }
+
+        /// <summary>
+        /// IEquality{VCRange} implementation method.  Returns true if this VCRange has the same contents as the given <paramref name="other"/> VCRange.
+        /// </summary>
+        public bool Equals(VCRange other)
+        {
+            return Low.Equals(other.Low) && High.Equals(other.High);
+        }
     }
 
     #endregion
@@ -3620,7 +3897,7 @@ namespace MosaicLib.Modular.Common
                     if (tsi != null)
                         typeToSpecItemDictionary[targetType] = tsi;
                     else
-                        throw new CustomSerializerException("could not create TypeSerializerItem for type:'{0}' factory:'{1}'".CheckedFormat(targetType, factoryName));
+                        new CustomSerializerException("could not create TypeSerializerItem for type:'{0}' factory:'{1}'".CheckedFormat(targetType, factoryName)).Throw();
 
                     return tsi;
                 }
@@ -3686,7 +3963,7 @@ namespace MosaicLib.Modular.Common
                     if (tsi != null)
                         typeStrToSpecItemDictionary[targetTypeStr] = tsi;
                     else
-                        throw new CustomSerializerException("could not create TypeSerializerItem for typeStr:'{0}' factory:'{1}'".CheckedFormat(targetTypeStr, factoryName));
+                        new CustomSerializerException("could not create TypeSerializerItem for typeStr:'{0}' factory:'{1}'".CheckedFormat(targetTypeStr, factoryName)).Throw();
 
                     return tsi;
                 }
@@ -4375,7 +4652,7 @@ namespace MosaicLib.Modular.Common
             ThrowIfIsReadOnly("The RemoveAt method");
 
             if (index < 0 || index >= Count)
-                throw new System.ArgumentOutOfRangeException("index", "the given index is less than 0 or it is greater than or equal to the set's Count");
+                new System.ArgumentOutOfRangeException("index", "the given index is less than 0 or it is greater than or equal to the set's Count").Throw();
 
             nameToIndexDictionary = null;
             list.RemoveAt(index);
@@ -4435,12 +4712,12 @@ namespace MosaicLib.Modular.Common
                 ThrowIfIsReadOnly("The String indexed property setter");
 
                 if (value == null)
-                    throw new System.ArgumentNullException("value");
+                    new System.ArgumentNullException("value").Throw();
 
                 string sanitizedName = name.Sanitize();
 
                 if (sanitizedName != value.Name.Sanitize())
-                    throw new System.ArgumentException("value.Name must match index string for string Indexed Setter.");
+                    new System.ArgumentException("value.Name must match index string for string Indexed Setter.").Throw();
 
                 SetValue(sanitizedName, value.VC);
             }
@@ -4455,7 +4732,7 @@ namespace MosaicLib.Modular.Common
             get 
             {
                 if (index < 0 || index >= Count)
-                    throw new System.ArgumentOutOfRangeException("index", "the given index is less than 0 or it is greater than or equal to the set's Count");
+                    new System.ArgumentOutOfRangeException("index", "the given index is less than 0 or it is greater than or equal to the set's Count").Throw();
 
                 return list[index];
             }
@@ -4649,12 +4926,12 @@ namespace MosaicLib.Modular.Common
             ThrowIfIsReadOnly("The Add(item) method");
 
             if (item == null)
-                throw new System.ArgumentNullException("item");
+                new System.ArgumentNullException("item").Throw();
 
             string sanitizedName = item.Name.Sanitize();
 
             if (AttemptToFindItemIndexInList(sanitizedName, false) >= 0)
-                throw new System.ArgumentException("An element with the same sanitized item.Name already exists in this set.");
+                new System.ArgumentException("An element with the same sanitized item.Name already exists in this set.").Throw();
 
             nameToIndexDictionary = null;
             list.Add(item);
@@ -4770,7 +5047,7 @@ namespace MosaicLib.Modular.Common
         private void ThrowIfIsReadOnly(string reasonPrefix)
         {
             if (IsReadOnly)
-                throw new System.NotSupportedException(reasonPrefix + " is not supported when this object's IsReadOnly property has been set to true");
+                new System.NotSupportedException(reasonPrefix + " is not supported when this object's IsReadOnly property has been set to true").Throw();
         }
 
         private bool isReadOnly;
@@ -5257,7 +5534,7 @@ namespace MosaicLib.Modular.Common
         private void ThrowIfIsReadOnly(string reasonPrefix)
         {
             if (IsReadOnly)
-                throw new System.NotSupportedException(reasonPrefix + " is not supported when this object's IsReadOnly property has been set");
+                new System.NotSupportedException(reasonPrefix + " is not supported when this object's IsReadOnly property has been set").Throw();
         }
 
         private bool isReadOnly;
@@ -5622,6 +5899,22 @@ namespace MosaicLib.Modular.Common
         }
 
         /// <summary>
+        /// Returns true if the given <paramref name="iNvSet"/> is neither Null nor Empty
+        /// </summary>
+        public static bool IsNeitherNullNorEmpty(this INamedValueSet iNvSet)
+        {
+            return !iNvSet.IsNullOrEmpty();
+        }
+
+        /// <summary>
+        /// Returns true if the given <paramref name="iNv"/> is neither Null nor Empty
+        /// </summary>
+        public static bool IsNeitherNullNorEmpty(this INamedValue iNv)
+        {
+            return !iNv.IsNullOrEmpty();
+        }
+
+        /// <summary>
         /// passes the given <paramref name="iNvSet"/> through as the return value unless it is a non-null, empty set in which case this method returns null.
         /// </summary>
         public static INamedValueSet MapEmptyToNull(this INamedValueSet iNvSet)
@@ -5702,10 +5995,10 @@ namespace MosaicLib.Modular.Common
             bool add = mergeBehavior.IsAddSelected();
             bool update = mergeBehavior.IsUpdateSelected();
 
-            bool removeEmpty = ((mergeBehavior & NamedValueMergeBehavior.RemoveEmpty) != NamedValueMergeBehavior.None);
-            bool removeNull = ((mergeBehavior & NamedValueMergeBehavior.RemoveNull) != NamedValueMergeBehavior.None);
-            bool appendLists = ((mergeBehavior & NamedValueMergeBehavior.AppendLists) != NamedValueMergeBehavior.None);
-            bool isSum = ((mergeBehavior & NamedValueMergeBehavior.Sum) != NamedValueMergeBehavior.None);
+            bool removeEmpty = ((mergeBehavior & NamedValueMergeBehavior.RemoveEmpty) != 0);
+            bool removeNull = ((mergeBehavior & NamedValueMergeBehavior.RemoveNull) != 0);
+            bool appendLists = ((mergeBehavior & NamedValueMergeBehavior.AppendLists) != 0);
+            bool isSum = ((mergeBehavior & NamedValueMergeBehavior.Sum) != 0);
 
             if (lhsRW == null || lhsRW.IsReadOnly)
             {
@@ -5744,7 +6037,7 @@ namespace MosaicLib.Modular.Common
                         else if (update)
                         {
                             if (isSum)
-                                lhsRW.SetValue(rhsItem.Name, lhsItem.VC.Sum(rhsItem.VC));
+                                lhsRW.SetValue(rhsItem.Name, lhsItem.VC.Sum(rhsItem.VC, allowUpcastAttempts: ((mergeBehavior & NamedValueMergeBehavior.EnableUpcast) != 0)));
                             else if (!isAppend)
                                 lhsRW.SetValue(rhsItem.Name, rhsItem.VC);
                             else if (rhsIsIListOfString)
@@ -5772,12 +6065,28 @@ namespace MosaicLib.Modular.Common
         /// Returns a ValueContainer containing the sum of the given <paramref name="lhs"/> and <paramref name="rhs"/> values, 
         /// if the two values have the same contained type and that type is "sumable", 
         /// or returns the given <paramref name="lhs"/> value if they are not.
+        /// if the <paramref name="lhs"/> value is Empty then this method returns the <paramref name="rhs"/> value.
         /// </summary>
-        public static ValueContainer Sum(this ValueContainer lhs, ValueContainer rhs)
+        public static ValueContainer Sum(this ValueContainer lhs, ValueContainer rhs, bool allowUpcastAttempts = false, bool rethrow = false)
         {
+            bool isCompatible = (lhs.cvt == rhs.cvt);
+
+            if (!isCompatible && allowUpcastAttempts)
+            {
+                var upcastedCST = lhs.cvt.Upcast(rhs.cvt);
+
+                if (lhs.cvt != upcastedCST)
+                    lhs = lhs.Cast(upcastedCST, fallbackValue: lhs, allowUpcastAttempt: true, rethrow: rethrow);
+
+                if (rhs.cvt != upcastedCST)
+                    rhs = rhs.Cast(upcastedCST, fallbackValue: rhs, allowUpcastAttempt: true, rethrow: rethrow);
+
+                isCompatible = (lhs.cvt == rhs.cvt);
+            }
+
             ValueContainer result = lhs;
 
-            if (lhs.cvt == rhs.cvt)
+            if (isCompatible)
             {
                 switch (lhs.cvt)
                 {
@@ -5787,11 +6096,11 @@ namespace MosaicLib.Modular.Common
                     case ContainerStorageType.Boolean: result.u.b = lhs.u.b | rhs.u.b; break;
                     case ContainerStorageType.Binary: result.u.bi = unchecked((Byte)(lhs.u.bi + rhs.u.bi)); break;
                     case ContainerStorageType.SByte: result.u.i8 = unchecked((SByte)(lhs.u.i8 + rhs.u.i8)); break;
-                    case ContainerStorageType.Int16: result.u.i16 = unchecked((Int16) (lhs.u.i16 + rhs.u.i16)); break;
+                    case ContainerStorageType.Int16: result.u.i16 = unchecked((Int16)(lhs.u.i16 + rhs.u.i16)); break;
                     case ContainerStorageType.Int32: result.u.i32 = lhs.u.i32 + rhs.u.i32; break;
                     case ContainerStorageType.Int64: result.u.i64 = lhs.u.i64 + rhs.u.i64; break;
-                    case ContainerStorageType.Byte: result.u.u8 = unchecked((Byte) (lhs.u.u8 + rhs.u.u8)); break;
-                    case ContainerStorageType.UInt16: result.u.u16 = unchecked((UInt16) (lhs.u.u16 + rhs.u.u16)); break;
+                    case ContainerStorageType.Byte: result.u.u8 = unchecked((Byte)(lhs.u.u8 + rhs.u.u8)); break;
+                    case ContainerStorageType.UInt16: result.u.u16 = unchecked((UInt16)(lhs.u.u16 + rhs.u.u16)); break;
                     case ContainerStorageType.UInt32: result.u.u32 = lhs.u.u32 + rhs.u.u32; break;
                     case ContainerStorageType.UInt64: result.u.u64 = lhs.u.u64 + rhs.u.u64; break;
                     case ContainerStorageType.Single: result.u.f32 = lhs.u.f32 + rhs.u.f32; break;
@@ -5801,6 +6110,10 @@ namespace MosaicLib.Modular.Common
                     default:
                         break;
                 }
+            }
+            else if (lhs.IsEmpty && (allowUpcastAttempts || rhs.cvt == ContainerStorageType.Boolean))
+            {
+                result = rhs;
             }
 
             return result;
@@ -5890,6 +6203,9 @@ namespace MosaicLib.Modular.Common
 
         /// <summary>Select to request that the merge operation produce the given merge from NVS without change.</summary>
         Replace = 0x40,
+
+        /// <summary>Combine with Sum to allow the sum to cast the Upcast the values if needed and supported</summary>
+        EnableUpcast = 0x80,
 
         /// <summary>Shorthand for AddNewItems [0x01]</summary>
         AddOnly = AddNewItems,
@@ -6584,7 +6900,7 @@ namespace MosaicLib.Modular.Common
         public NamedValueSetAdapter<TValueSet, TAttribute> Set(INamedValueSet nvs, TValueSet valueSet, bool merge = false)
         {
             if (valueSet == null)
-                throw new System.ArgumentNullException("valueSet");
+                new System.ArgumentNullException("valueSet").Throw();
 
             foreach (var iasi in itemAccessSetupInfoArray)
             {
@@ -6604,7 +6920,7 @@ namespace MosaicLib.Modular.Common
         public INamedValueSet Get(bool asReadOnly = false)
         {
             if (ValueSet == null)
-                throw new System.NullReferenceException("ValueSet property must be non-null before Get can be called");
+                new System.NullReferenceException("ValueSet property must be non-null before Get can be called").Throw();
 
             return Get(ValueSet, asReadOnly: asReadOnly);
         }
@@ -6616,7 +6932,7 @@ namespace MosaicLib.Modular.Common
         public INamedValueSet Get(TValueSet valueSet, bool asReadOnly = false)
         {
             if (valueSet == null)
-                throw new System.ArgumentNullException("valueSet");
+                new System.ArgumentNullException("valueSet").Throw();
 
             NamedValueSet nvs = new NamedValueSet();
 

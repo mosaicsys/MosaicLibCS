@@ -104,6 +104,7 @@
     <Compile Include="Semi\E005\E005Mesg.cs" />
     <Compile Include="Semi\E005\E005Port.cs" />
     <Compile Include="Semi\E037\E037Port.cs" />
+    <Compile Include="Semi\E039\E039Accumulators.cs" />
     <Compile Include="Semi\E040\E040.cs" />
     <Compile Include="Semi\E090\E090SubstrateRouting.cs" />
     <Compile Include="Semi\E090\E090SubstrateScheduling.cs" />

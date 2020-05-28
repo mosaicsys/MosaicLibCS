@@ -133,7 +133,7 @@ namespace MosaicLib.Semi.E005
             set
             {
                 if (_seqNum != 0)
-                    throw new MessageException("The SeqNum property cannot be be changed after a non-zero value has been assigned [{0}]".CheckedFormat(this), this);
+                    new MessageException("The SeqNum property cannot be be changed after a non-zero value has been assigned [{0}]".CheckedFormat(this), this).Throw();
 
                 _seqNum = value;
             } 
@@ -168,7 +168,7 @@ namespace MosaicLib.Semi.E005
             set
             {
                 if (_port != null)
-                    throw new MessageException("This message is already associated with a port", this);
+                    new MessageException("This message is already associated with a port", this).Throw();
 
                 _port = value;
             }
@@ -187,7 +187,7 @@ namespace MosaicLib.Semi.E005
         public IMessage SetContentBytes(byte[] contentByteArray, bool makeCopy = true)
         {
             if (_contentBytes != null)
-                throw new MessageException("{0} cannot be used when message already has non-null contents [{1}]".CheckedFormat(Fcns.CurrentMethodName, this), this);
+                new MessageException("{0} cannot be used when message already has non-null contents [{1}]".CheckedFormat(Fcns.CurrentMethodName, this), this).Throw();
 
             _contentBytes = (makeCopy) ? contentByteArray.SafeToArray() : contentByteArray;
 
@@ -197,10 +197,10 @@ namespace MosaicLib.Semi.E005
         IMessage IMessage.CreateReply()
         {
             if (!SF.ReplyExpected)
-                throw new MessageException("{0} is not valid for this message [{1}]".CheckedFormat(Fcns.CurrentMethodName, this), this);
+                new MessageException("{0} is not valid for this message [{1}]".CheckedFormat(Fcns.CurrentMethodName, this), this).Throw();
 
             if (Reply != null)
-                throw new MessageException("{0} cannot be used when message already has an associated Reply [{1}]".CheckedFormat(Fcns.CurrentMethodName, this), this);
+                new MessageException("{0} cannot be used when message already has an associated Reply [{1}]".CheckedFormat(Fcns.CurrentMethodName, this), this).Throw();
 
             var replySF = SF.ReplySF;
 
@@ -218,7 +218,7 @@ namespace MosaicLib.Semi.E005
         IMessage IMessage.SetReply(IMessage reply, bool replaceReply, bool isHighRateReply)
         {
             if (Reply != null && !replaceReply)
-                throw new MessageException("{0} cannot be used when message already has an associated Reply [{1}]".CheckedFormat(Fcns.CurrentMethodName, this), this);
+                new MessageException("{0} cannot be used when message already has an associated Reply [{1}]".CheckedFormat(Fcns.CurrentMethodName, this), this).Throw();
 
             Reply = reply;
 
@@ -302,10 +302,11 @@ namespace MosaicLib.Semi.E005
         {
             if (mesg != null)
                 return ValueContainer.Empty.ConvertFromE005Data(mesg.ContentBytes, throwOnException: throwOnException);
-            else if (throwOnException)
-                throw new System.NullReferenceException("mesg was null");
-            else
-                return ValueContainer.Empty;
+
+            if (throwOnException)
+                new System.NullReferenceException("mesg was null").Throw();
+
+            return ValueContainer.Empty;
         }
     }
 
@@ -404,7 +405,7 @@ namespace MosaicLib.Semi.E005
             if (!(scanner.MatchToken("S", skipLeadingWhiteSpace: false, requireTokenEnd: false) && scanner.ParseValue(out stream, 0, tokenType: TokenType.NumericDigits) && stream.IsInRange(1, 255)))
             {
                 if (throwOnIssue)
-                    throw new MessageException("'{0}' {1} failed: could not parse stream value Snnn".CheckedFormat(s, Fcns.CurrentMethodName));
+                    new MessageException("'{0}' {1} failed: could not parse stream value Snnn".CheckedFormat(s, Fcns.CurrentMethodName)).Throw();
             }
 
             scanner.MatchToken(@"/", skipLeadingWhiteSpace: false, skipTrailingWhiteSpace: false, requireTokenEnd: false);
@@ -413,14 +414,14 @@ namespace MosaicLib.Semi.E005
             if (!(scanner.MatchToken("F", skipLeadingWhiteSpace: false, requireTokenEnd: false) && scanner.ParseValue(out function, 0, tokenType: TokenType.NumericDigits) && stream.IsInRange(1, 255)))
             {
                 if (throwOnIssue)
-                    throw new MessageException("'{0}' {1} failed: could not parse function value Fnnn".CheckedFormat(s, Fcns.CurrentMethodName));
+                    new MessageException("'{0}' {1} failed: could not parse function value Fnnn".CheckedFormat(s, Fcns.CurrentMethodName)).Throw();
             }
 
             bool expectReply = scanner.MatchToken("W") || scanner.MatchToken("[W]");
 
             if (!scanner.IsAtEnd && throwOnIssue)
             {
-                throw new MessageException("'{0}' {1} failed: unrecognized content at '{2}'".CheckedFormat(s, Fcns.CurrentMethodName, scanner.Rest));
+                new MessageException("'{0}' {1} failed: unrecognized content at '{2}'".CheckedFormat(s, Fcns.CurrentMethodName, scanner.Rest)).Throw();
             }
 
             return new StreamFunction((byte)stream, (byte)function, expectReply);

@@ -302,7 +302,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                 if (args.SafeLength() <= 0)
                 {
                     WriteUsage();
-                    throw new ExitException();
+                    new ExitException().Throw();
                 }
 
                 Config.AddStandardProviders(ref args, StandardProviderSelect.All);
@@ -355,7 +355,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                 if (settings.DataFileName.IsNullOrEmpty() && settings.DataFileType != DataFileType.None)
                 {
                     WriteUsage("Given {0} DataFileName must be a non-empty string".CheckedFormat(settings.DataFileType));
-                    throw new ExitException();
+                    new ExitException().Throw();
                 }
 
                 switch (settings.DataFileType)
@@ -376,7 +376,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                 if (dataWriter == null)
                 {
                     WriteUsage("Given DataFileSpec type:{0} '{1}' is not valid [type not recognized]".CheckedFormat(settings.DataFileType, settings.DataFileName));
-                    throw new ExitException();
+                    new ExitException().Throw();
                 }
 
                 dataWriter.WriteMessage("{0} being run with arguments: {1}".CheckedFormat(currentExecAssy.GetSummaryNameAndVersion(), string.Join(" ", entryArgs)), writeToConsole: false);
@@ -387,7 +387,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                 if (mdrfFileNames.IsNullOrEmpty())
                 {
                     WriteUsage("No MDRF files were specified on the command line or in any configuration ini file or other configuration source.\r    At least one MDRF file name or search pattern must be specified for normal operation.");
-                    throw new ExitException();
+                    new ExitException().Throw();
                 }
 
                 QpcTimeStamp startTime = QpcTimeStamp.Now;
@@ -926,7 +926,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                 Settings = settings;
 
                 if (settings.DataFileType != DataFileType.SQLite3)
-                    throw new System.ArgumentException("{0} cannot be used with DataFileType.{1}".CheckedFormat(Fcns.CurrentClassLeafName, settings.DataFileType));
+                    new System.ArgumentException("{0} cannot be used with DataFileType.{1}".CheckedFormat(Fcns.CurrentClassLeafName, settings.DataFileType)).Throw();
 
                 if (settings.CreateMode == CreateMode.Truncate && System.IO.File.Exists(settings.DataFileName))
                 {

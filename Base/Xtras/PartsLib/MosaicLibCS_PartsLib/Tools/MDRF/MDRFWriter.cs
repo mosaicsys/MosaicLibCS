@@ -704,7 +704,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
             catch (System.Exception ex)
             {
                 if (rethrow)
-                    throw;
+                    ex.Throw();
 
                 ec = RecordError("{0} failed: {1} {2}".CheckedFormat(CurrentMethodName, currentFileInfo, ex.ToString(ExceptionFormat.TypeAndMessage)), dtPair);
 

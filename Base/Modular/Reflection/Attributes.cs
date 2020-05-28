@@ -955,7 +955,7 @@ namespace MosaicLib.Modular.Reflection
                 //{
                 //    vcGetter = (annotatedInstance) =>
                 //    {
-                //        throw new System.NotSupportedException("VCGetter faild: Cannot get {0} [{1}]".CheckedFormat(itemInfo.DerivedName, itemInfo.ItemType));
+                //        new System.NotSupportedException("VCGetter faild: Cannot get {0} [{1}]".CheckedFormat(itemInfo.DerivedName, itemInfo.ItemType)).Throw();
                 //    };
                 //}
 
@@ -980,7 +980,7 @@ namespace MosaicLib.Modular.Reflection
                             updateIssueEmitter.Emit("Unable to get value from DerivedName:'{0}' [type:'{1}']: {2}", itemInfo.DerivedName, itemInfo.ItemType, ex);
 
                         if (rethrow)
-                            throw;
+                            ex.Throw();
 
                         return ValueContainer.Empty;
                     }
@@ -1249,7 +1249,7 @@ namespace MosaicLib.Modular.Reflection
                             if (vc.IsNullOrEmpty)
                             {
                                 if (!isNullable && rethrow)
-                                    throw new System.InvalidCastException("Cannot cast {0} to be of type {1}".CheckedFormat(vc, itemInfo.ItemType));
+                                    new System.InvalidCastException("Cannot cast {0} to be of type {1}".CheckedFormat(vc, itemInfo.ItemType)).Throw();
                             }
                             else
                             {
@@ -1275,7 +1275,7 @@ namespace MosaicLib.Modular.Reflection
                             GlobalLastException = ex;
 
                             if (rethrow)
-                                throw;
+                                ex.Throw();
                         }
 
                         if (value == null && !isNullable)
@@ -1301,7 +1301,7 @@ namespace MosaicLib.Modular.Reflection
                 //{
                 //    vcSetter = (annotatedInstance, vc, rethrow) =>
                 //    {
-                //        throw new System.NotSupportedException("VCSetter faild: Cannot set {0} [{1}] to {2}{3}".CheckedFormat(itemInfo.DerivedName, itemInfo.ItemType, vc.ToStringSML(), rethrow ? " rethrow" : ""));
+                //        new System.NotSupportedException("VCSetter faild: Cannot set {0} [{1}] to {2}{3}".CheckedFormat(itemInfo.DerivedName, itemInfo.ItemType, vc.ToStringSML(), rethrow ? " rethrow" : "")).Throw();
                 //    };
                 //}
 
@@ -1324,7 +1324,7 @@ namespace MosaicLib.Modular.Reflection
                             updateIssueEmitter.Emit("Unable to set value '{0}' to DerivedName:'{1}' [type:'{2}']: {3}", vc, itemInfo.DerivedName, itemInfo.ItemType, ex);
 
                         if (rethrow)
-                            throw;
+                            ex.Throw();
                     }
                 };
 

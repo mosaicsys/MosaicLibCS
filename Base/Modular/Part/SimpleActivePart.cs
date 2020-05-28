@@ -902,7 +902,7 @@ namespace MosaicLib.Modular.Part
 				if (actionQ != null)
 					actionQ.QueueEnable = true;
 				else
-					throw new System.NullReferenceException(FmtStdEC("Failed to construct action queue"));
+					new System.NullReferenceException(FmtStdEC("Failed to construct action queue")).Throw();
 
                 if (mainThread == null)
                 {
@@ -1134,7 +1134,9 @@ namespace MosaicLib.Modular.Part
                 {
                     Log.Trace.Emit("{0}: Derived class PerformGoOnlineAction method threw exception: {1} [rethrowing]", description, ex.ToString(ExceptionFormat.TypeAndMessageAndStackTrace));
 
-                    throw;
+                    ex.Throw();
+
+                    return null;
                 }
             }
 

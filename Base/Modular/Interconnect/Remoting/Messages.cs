@@ -288,7 +288,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Messages
 
         public Message Clear(QpcTimeStamp qpcTimeStamp)
         {
-            SetState(qpcTimeStamp, MessageState.Initial, Fcns.CurrentMethodName);
+            SetState(qpcTimeStamp, MessageState.Initial, "Clear");
 
             return this;
         }
@@ -338,7 +338,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Messages
             public override int Read(byte[] buffer, int offset, int count)
             {
                 if (!buffer.IsSafeIndex(offset, length: count))
-                    throw new System.ArgumentException("Invalid offset/count combination [bufferSize:{0} offset:{1} count:{2}]".CheckedFormat(buffer.SafeLength(), offset, count));
+                    new System.ArgumentException("Invalid offset/count combination [bufferSize:{0} offset:{1} count:{2}]".CheckedFormat(buffer.SafeLength(), offset, count)).Throw();
 
                 int putToOffset = offset;
 
@@ -423,7 +423,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Messages
             public override void Write(byte[] buffer, int offset, int count) 
             {
                 if (!buffer.IsSafeIndex(offset, length: count))
-                    throw new System.ArgumentException("Invalid offset/count combination [bufferSize:{0} offset:{1} count:{2}]".CheckedFormat(buffer.SafeLength(), offset, count));
+                    new System.ArgumentException("Invalid offset/count combination [bufferSize:{0} offset:{1} count:{2}]".CheckedFormat(buffer.SafeLength(), offset, count)).Throw();
 
                 Buffers.BufferPool useBufferPool = message.bufferSourcePool ?? fallbackDefaultBufferPool;
 
@@ -440,7 +440,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Messages
                         currentBuffer = useBufferPool.Acquire(tsNow);
 
                         if (currentBuffer == null)
-                            throw new System.OutOfMemoryException("Unable to acquire a buffer from the message bufferPool");
+                            new System.OutOfMemoryException("Unable to acquire a buffer from the message bufferPool").Throw();
 
                         bufferList.Add(currentBuffer);
 

@@ -1087,6 +1087,12 @@ namespace MosaicLib.Utils
                     Add(new MatchRule(matchType, ruleString));
             }
 
+            /// <summary>Shorthand constructor to build a MatchRuleSet that contains an InSet match rule for the given <paramref name="stringSet"/>.</summary>
+            public MatchRuleSet(IEnumerable<string> stringSet)
+            {
+                Add(MatchRule.InSet(stringSet));
+            }
+
             /// <summary>Debugging and Logging helper method</summary>
             public override string ToString()
             {
@@ -1217,6 +1223,9 @@ namespace MosaicLib.Utils
             /// <summary>Static factory method to create MatchType.Regex match rule instances</summary>
             public static MatchRule Regex(string regex) { return new MatchRule(MatchType.Regex, regex); }
 
+            /// <summary>Static factory method to create MatchType.InSet match rule instances</summary>
+            public static MatchRule InSet(IEnumerable<string> stringSet) { return new MatchRule(MatchType.InSet) { Set = new ReadOnlyHashSet<string>(stringSet) }; }
+
             private static readonly MatchRule matchRuleAny = new MatchRule(MatchType.Any);
             private static readonly MatchRule matchRuleNone = new MatchRule(MatchType.None);
 
@@ -1251,6 +1260,7 @@ namespace MosaicLib.Utils
             {
                 MatchType = other.MatchType;
                 RuleString = other.RuleString;
+                Set = other.Set;
                 BuildRegexIfNeeded();
             }
 
@@ -1262,6 +1272,10 @@ namespace MosaicLib.Utils
             /// <remarks>Note that the constructor sanitizes this string at construction time so that this property will never return null.</remarks>
             [DataMember(Order = 2)]
             public String RuleString { get; private set; }
+
+            /// <summary>Defines the, optional, set of values that may be used to match against.</summary>
+            [DataMember(Order = 3)]
+            public ReadOnlyHashSet<string> Set { get; private set; }
 
             /// <summary>Internal storage for the pre-computed regular expression engine if this object was constructed using StringMatchType.Regex.</summary>
             internal System.Text.RegularExpressions.Regex regex = null;
@@ -1294,6 +1308,7 @@ namespace MosaicLib.Utils
                     case MatchType.Contains: return testString.Contains(RuleString);
                     case MatchType.Regex: return BuildRegexIfNeeded().IsMatch(testString);
                     case MatchType.Exact: return (testString == RuleString);
+                    case MatchType.InSet: return (Set ?? ReadOnlyHashSet<string>.Empty).Contains(testString);
                     default: return false;
                 }
             }
@@ -1303,7 +1318,10 @@ namespace MosaicLib.Utils
             /// </summary>
             public override string ToString()
             {
-                return "MatchType.{0} '{1}'".CheckedFormat(MatchType, RuleString);
+                if (MatchType != MatchType.InSet)
+                    return "MatchType.{0} '{1}'".CheckedFormat(MatchType, RuleString);
+                else
+                    return "MatchType.{0} '{1}'".CheckedFormat(MatchType, string.Join("|", Set ?? ReadOnlyHashSet<string>.Empty));
             }
         }
 
@@ -1335,6 +1353,9 @@ namespace MosaicLib.Utils
             /// <summary>matches if the string value is exactly the same as the RuleString</summary>
             [EnumMember]
             Exact,
+            /// <summary>matches if the string value is found in a predefined set of strings</summary>
+            [EnumMember]
+            InSet,
         }
     }
 

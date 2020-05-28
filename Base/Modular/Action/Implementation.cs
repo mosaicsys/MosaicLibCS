@@ -1241,14 +1241,14 @@ namespace MosaicLib.Modular.Action
 					{
 						EmitActionError("Preventing attempt to update fixed paramValue", actionState.StateCode);
 
-						throw new System.FieldAccessException("Action.ParamValue set failed: value is fixed");
+						new System.FieldAccessException("Action.ParamValue set failed: value is fixed").Throw();
 					}
 
 					if (!actionState.CanStart)
 					{
 						EmitActionError("Preventing attempt to update paramValue", actionState.StateCode);
 
-						throw new System.FieldAccessException("Action.ParamValue can only be set while action is Idle");
+						new System.FieldAccessException("Action.ParamValue can only be set while action is Idle").Throw();
 					}
 
 					paramValue = value;

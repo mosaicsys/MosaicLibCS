@@ -108,6 +108,7 @@
     <Compile Include="Converters\CommonConverters.cs" />
     <Compile Include="Converters\LoggingConverters.cs" />
     <Compile Include="Converters\RadioButtonConverter.cs" />
+    <Compile Include="Converters\SemiConverters.cs" />
     <Compile Include="Extensions\Commands.cs" />
     <Compile Include="Extensions\ButtonIsPressedObserver.cs" />
     <Compile Include="Extensions\Attachable.cs" />

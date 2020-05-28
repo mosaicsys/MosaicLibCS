@@ -634,7 +634,7 @@ namespace MosaicLib.Utils
             catch (System.Exception ex)
             {
                 if (rethrow && ex != null)
-                    throw;
+                    ex.Throw();
 
                 return fallbackValue;
             }
@@ -654,7 +654,7 @@ namespace MosaicLib.Utils
             catch (System.Exception ex)
             {
                 if (rethrow && ex != null)
-                    throw;
+                    ex.Throw();
 
                 return fallbackValue;
             }
@@ -687,7 +687,7 @@ namespace MosaicLib.Utils
             catch (System.Exception ex)
             {
                 if (rethrow && ex != null)
-                    throw;
+                    ex.Throw();
 
                 return fallbackValue;
             }
@@ -727,7 +727,7 @@ namespace MosaicLib.Utils
                 }
                 else
                 {
-                    throw new System.IndexOutOfRangeException("invalid combination of size, startIdx, and length [{0}, {1}, {2}]".CheckedFormat(byteArray.SafeCount(), startIdx, length));
+                    new System.IndexOutOfRangeException("invalid combination of size, startIdx, and length [{0}, {1}, {2}]".CheckedFormat(byteArray.SafeCount(), startIdx, length)).Throw();
                 }
 
                 Marshal.StructureToPtr(value, gchP, false);
@@ -737,7 +737,7 @@ namespace MosaicLib.Utils
             catch (System.Exception ex)
             {
                 if (rethrow && ex != null)
-                    throw;
+                    ex.Throw();
 
                 return 0;
             }
@@ -797,7 +797,7 @@ namespace MosaicLib.Utils
                 }
                 else
                 {
-                    throw new System.IndexOutOfRangeException("invalid combination of size, and startIdx [{0}, {1}]".CheckedFormat(byteArray.SafeCount(), startIdx));
+                    new System.IndexOutOfRangeException("invalid combination of size, and startIdx [{0}, {1}]".CheckedFormat(byteArray.SafeCount(), startIdx)).Throw();
                 }
 
                 valueOut = (TObjType)Marshal.PtrToStructure(gchP, typeof(TObjType));
@@ -809,7 +809,7 @@ namespace MosaicLib.Utils
                 valueOut = fallbackValue;
 
                 if (rethrow && ex != null)
-                    throw;
+                    ex.Throw();
 
                 return 0;
             }
@@ -1909,10 +1909,10 @@ namespace MosaicLib.Utils
                     return ReadObject(fileStream);
                 }
             }
-            catch
+            catch (System.Exception ex)
             {
                 if (rethrow)
-                    throw;
+                    ex.Throw();
 
                 return defaultValue;
             }
@@ -1941,10 +1941,10 @@ namespace MosaicLib.Utils
                     WriteObject(obj, fileStream);
                 }
             }
-            catch
+            catch (System.Exception ex)
             {
                 if (rethrow)
-                    throw;
+                    ex.Throw();
             }
         }
 
@@ -2282,10 +2282,13 @@ namespace MosaicLib.Utils
 
                 return result;
             }
-            catch
+            catch (System.Exception ex)
             {
+                // only dispose of the writeMemoryStream if we have an error during processing.  Otherwise keep using this one for future conversions.
                 Fcns.DisposeOfObject(ref writeMemoryStream);
-                throw;
+
+                ex.Throw();
+                return null;
             }
         }
 

@@ -139,19 +139,21 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                 ITransportConnectionFactory connectionFactoryForType = typeDictionary.SafeTryGetValue(connectionType);
 
                 if (connectionFactoryForType == null)
-                    throw new TransportConnectionFactoryException("{0} failed: ConnectionType '{2}' is not recognized in {2}".CheckedFormat(Fcns.CurrentMethodName, connectionType, connParamsNVS.ToStringSML()));
+                    new TransportConnectionFactoryException("{0} failed: ConnectionType '{2}' is not recognized in {2}".CheckedFormat(Fcns.CurrentMethodName, connectionType, connParamsNVS.ToStringSML())).Throw();
 
                 try 
                 {
                     return connectionFactoryForType.CreateServerConnection(connParamsNVS, sessionManager);
                 }
-                catch (TransportConnectionFactoryException)
+                catch (TransportConnectionFactoryException ex)
                 {
-                    throw;
+                    ex.Throw();
+                    return null;
                 }
                 catch (System.Exception ex)
                 {
-                    throw new TransportConnectionFactoryException("Encountered unexpected exception", ex);
+                    new TransportConnectionFactoryException("Encountered unexpected exception", ex).Throw();
+                    return null;
                 }
             }
         }
@@ -167,19 +169,21 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                 ITransportConnectionFactory connectionFactoryForType = typeDictionary.SafeTryGetValue(connectionType);
 
                 if (connectionFactoryForType == null)
-                    throw new TransportConnectionFactoryException("{0} failed: ConnectionType '{2}' is not recognized in {2}".CheckedFormat(Fcns.CurrentMethodName, connectionType, connParamsNVS.ToStringSML()));
+                    new TransportConnectionFactoryException("{0} failed: ConnectionType '{2}' is not recognized in {2}".CheckedFormat(Fcns.CurrentMethodName, connectionType, connParamsNVS.ToStringSML())).Throw();
 
                 try 
                 {
                     return connectionFactoryForType.CreateClientConnection(connParamsNVS, session);
                 }
-                catch (TransportConnectionFactoryException)
+                catch (TransportConnectionFactoryException ex)
                 {
-                    throw;
+                    ex.Throw();
+                    return null;
                 }
                 catch (System.Exception ex)
                 {
-                    throw new TransportConnectionFactoryException("Encountered unexpected exception", ex);
+                    new TransportConnectionFactoryException("Encountered unexpected exception", ex).Throw();
+                    return null;
                 }
             }
         }
@@ -370,7 +374,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                             break;
 
                         default:
-                            throw new TransportConnectionFactoryException("Unable to construct {0}: Role {1} is not valid.  {2}".CheckedFormat(Fcns.CurrentClassLeafName, Role, connParamsNVS.ToStringSML()));
+                            new TransportConnectionFactoryException("Unable to construct {0}: Role {1} is not valid.  {2}".CheckedFormat(Fcns.CurrentClassLeafName, Role, connParamsNVS.ToStringSML())).Throw();
+                            break;
                     }
 
                     if (udpPort != null && udpPort.Client != null)
@@ -381,7 +386,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                     udpSocket = ((udpPort != null) ? udpPort.Client : null);
 
                     if (udpSocket == null)
-                        throw new TransportConnectionFactoryException("Unable to construct {0} {1}: settings {2} are not valid".CheckedFormat(Role, Fcns.CurrentClassLeafName, connParamsNVS.ToStringSML()));
+                        new TransportConnectionFactoryException("Unable to construct {0} {1}: settings {2} are not valid".CheckedFormat(Role, Fcns.CurrentClassLeafName, connParamsNVS.ToStringSML())).Throw();
 
                     logger = new Logging.Logger("{0}_{1}{2:d2}_Port{3:d5}".CheckedFormat(ConnectionType, Role, InstanceNum, Port));
 
@@ -417,7 +422,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                 }
                 catch (System.Exception ex)
                 {
-                    throw new TransportConnectionFactoryException("Construction of {0} {1} with settings {2} generated unexpected exception {3}".CheckedFormat(Role, Fcns.CurrentClassLeafName, connParamsNVS.ToStringSML(), ex.ToString(ExceptionFormat.TypeAndMessage)), ex);
+                    new TransportConnectionFactoryException("Construction of {0} {1} with settings {2} generated unexpected exception {3}".CheckedFormat(Role, Fcns.CurrentClassLeafName, connParamsNVS.ToStringSML(), ex.ToString(ExceptionFormat.TypeAndMessage)), ex).Throw();
                 }
             }
 
@@ -541,7 +546,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
             private void HandleCompletedSend(QpcTimeStamp qpcTimeStamp, SendTracker st)
             {
                 if (st.buffer.State == Buffers.BufferState.SendPosted)
-                    st.buffer.SetState(qpcTimeStamp, Buffers.BufferState.Sent, Fcns.CurrentMethodName);
+                    st.buffer.SetState(qpcTimeStamp, Buffers.BufferState.Sent, "HandleCompletedSend");
 
                 trace.Emit("st:{0:x4} sent [{1} to {2}]", st.seqNum & 0x0ffff, st.buffer, st.ipEndPoint);
             }
@@ -623,6 +628,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
 
             private int ServicePostedRecv(QpcTimeStamp qpcTimeStamp)
             {
+                const string methodName = "ServicePostedRecv";
                 int count = 0;
                 {
                     List<RecvTracker> doneRTWithBufferList = postedRecvList.FilterAndRemove(rt => (rt == null || rt.done)).Where(rt => rt != null).ToList();
@@ -646,7 +652,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
 
                         trace.Emit("rt:{0:x4} BeingReceiveFrom calling", rt.seqNum & 0x0ffff);
 
-                        buffer.SetState(qpcTimeStamp, Buffers.BufferState.ReceivePosted, Fcns.CurrentMethodName);
+                        buffer.SetState(qpcTimeStamp, Buffers.BufferState.ReceivePosted, methodName);
 
                         postedRecvList.Add(rt);
 
@@ -913,7 +919,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
 
                             break;
                         default:
-                            throw new TransportConnectionFactoryException("Unable to construct {0}: Role {1} is not valid.  {2}".CheckedFormat(Fcns.CurrentClassLeafName, Role, connParamsNVS.ToStringSML()));
+                            new TransportConnectionFactoryException("Unable to construct {0}: Role {1} is not valid.  {2}".CheckedFormat(Fcns.CurrentClassLeafName, Role, connParamsNVS.ToStringSML())).Throw();
+                            break;
                     }
 
                     if (IsClient)
@@ -926,7 +933,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                 }
                 catch (System.Exception ex)
                 {
-                    throw new TransportConnectionFactoryException("Construction of {0} {1} with settings {2} generated unexpected exception {3}".CheckedFormat(Role, Fcns.CurrentClassLeafName, connParamsNVS.ToStringSML(), ex.ToString(ExceptionFormat.TypeAndMessage)), ex);
+                    new TransportConnectionFactoryException("Construction of {0} {1} with settings {2} generated unexpected exception {3}".CheckedFormat(Role, Fcns.CurrentClassLeafName, connParamsNVS.ToStringSML(), ex.ToString(ExceptionFormat.TypeAndMessage)), ex).Throw();
                 }
             }
 
@@ -1246,7 +1253,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
 
                 public void Release(string reason)
                 {
-                    SetState(TCPTransport.ConnectionTrackerState.Closed, reason ?? Fcns.CurrentMethodName);
+                    SetState(TCPTransport.ConnectionTrackerState.Closed, reason ?? "Release");
 
                     Fcns.DisposeOfObject(ref tcpClient);
                     tcpSocket = null;
@@ -1567,7 +1574,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                                 break;
 
                             default:
-                                throw new System.InvalidOperationException("ConnectionState {0} is not valid or supported here".CheckedFormat(ct.State));
+                                new System.InvalidOperationException("ConnectionState {0} is not valid or supported here".CheckedFormat(ct.State)).Throw();
+                                break;
                         }
                     }
                     catch (System.Exception ex)
@@ -1584,7 +1592,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
 
             private void ReleaseConnectionTrackers()
             {
-                connectionTrackerList.FilterAndRemove().DoForEach(ct => ct.Release(Fcns.CurrentMethodName));
+                connectionTrackerList.FilterAndRemove().DoForEach(ct => ct.Release("ReleaseConnectionTrackers"));
             }
 
             List<ConnectionTracker> connectionTrackerList = new List<ConnectionTracker>();
@@ -1606,7 +1614,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                         if (firstAddress != null)
                             ct.remoteIPAddress = firstAddress;
                         else
-                            throw new HostNotFoundException("GetHostByAddress '{0}' gave no valid addresses".CheckedFormat(ct.remoteHostName));
+                            new HostNotFoundException("GetHostByAddress '{0}' gave no valid addresses".CheckedFormat(ct.remoteHostName)).Throw();
                     }
                     catch (System.Exception ex)
                     {
@@ -1683,19 +1691,19 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                         }
                         else if (readCount != TcpBufferRunHeaderV1.size)
                         {
-                            throw new TCPTransportProtocolViolation("Invalid Buffer run header: receive produced unexpected total byte count: {0}, expected total:{1}, this readCount:{2}".CheckedFormat(ct.incommingBufferRunHeaderByteCount, TcpBufferRunHeaderV1.size, readCount));
+                            new TCPTransportProtocolViolation("Invalid Buffer run header: receive produced unexpected total byte count: {0}, expected total:{1}, this readCount:{2}".CheckedFormat(ct.incommingBufferRunHeaderByteCount, TcpBufferRunHeaderV1.size, readCount)).Throw();
                         }
                         else
                         {
                             ct.incommingBufferRunHeader = ct.incommingBufferRunHeaderByteArray.MarshalStructFromByteArray<TcpBufferRunHeaderV1>(rethrow: true);
 
                             if (!ct.incommingBufferRunHeader.IsMagicValid)
-                                throw new TCPTransportProtocolViolation("Received invalid buffer run header: Magic {0:x8} != expected {1:x8}".CheckedFormat(ct.incommingBufferRunHeader.Magic, TcpBufferRunHeaderV1.MagicValueV1));
+                                new TCPTransportProtocolViolation("Received invalid buffer run header: Magic {0:x8} != expected {1:x8}".CheckedFormat(ct.incommingBufferRunHeader.Magic, TcpBufferRunHeaderV1.MagicValueV1)).Throw();
 
                             ct.bufferRunBufferLenArray = ct.incommingBufferRunHeader.BufferLenArray.Where(len => len != 0).ToArray();
                             int firstBadBufferLength = ct.bufferRunBufferLenArray.Where(len => len > ct.bufferPool.BufferSize).FirstOrDefault();
                             if (firstBadBufferLength != 0)
-                                throw new TCPTransportProtocolViolation("Received invalid buffer run header {0}: Requested Len {1} > MaxBufferLen {2}".CheckedFormat(ct, firstBadBufferLength, ct.bufferPool.BufferSize));
+                                new TCPTransportProtocolViolation("Received invalid buffer run header {0}: Requested Len {1} > MaxBufferLen {2}".CheckedFormat(ct, firstBadBufferLength, ct.bufferPool.BufferSize)).Throw();
 
                             ct.SetState(ConnectionTrackerState.ReadyToIssueBufferReceives, "valid buffer run header received [{0}]".CheckedFormat(ct.incommingBufferRunHeader));
                         }
@@ -1725,7 +1733,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                         if (rt.receivedByteCount < rt.expectedReadCount)
                             ct.SetState(ConnectionTrackerState.ReissuePartiallyCompleteReceive, "EndReceive gave {0} bytes of buffer data [now have {1} of {2}]".CheckedFormat(readCount, rt.receivedByteCount, rt.expectedReadCount));
                         else if (rt.receivedByteCount != rt.expectedReadCount)
-                            throw new TCPTransportProtocolViolation("Invalid Buffer delivery: EndReceive produced unexpected byte count: {0}, expecting: {1} [from brh:{2}]".CheckedFormat(readCount, rt.expectedReadCount, ct.incommingBufferRunHeader));
+                            new TCPTransportProtocolViolation("Invalid Buffer delivery: EndReceive produced unexpected byte count: {0}, expecting: {1} [from brh:{2}]".CheckedFormat(readCount, rt.expectedReadCount, ct.incommingBufferRunHeader)).Throw();
                         else
                         {
                             QpcTimeStamp tsNow = QpcTimeStamp.Now;
@@ -1735,7 +1743,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                                 buffer.SetState(tsNow, Buffers.BufferState.Received, "EndReceive completed");
 
                                 if (!buffer.header.IsPurposeCodeValid)
-                                    throw new TCPTransportProtocolViolation("Received invalid Buffer: PurposeCode {0} is not valid".CheckedFormat(buffer.header.PurposeCode));
+                                    new TCPTransportProtocolViolation("Received invalid Buffer: PurposeCode {0} is not valid".CheckedFormat(buffer.header.PurposeCode)).Throw();
                             }
 
                             ct.SetState(ConnectionTrackerState.ProcessReceivedBuffers, "a run of buffers have been received [total bytes:{0} buffers:{1}]".CheckedFormat(readCount, rt.bufferArray.Length));
@@ -1805,6 +1813,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
 
             void InnerPostSendOneBufferRun(ConnectionTracker ct, Buffers.Buffer [] bufferArray, int offset, int count)
             {
+                const string methodName = "InnerPostSendOneBufferRun";
+
                 if (ct != null && ct.tcpSocket != null && !IsDisposingOrDisposed && !inRelease)
                 {
                     Buffers.Buffer[] bufferSubArray = bufferArray.SafeSubArray(offset, count);
@@ -1824,7 +1834,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                     ct.postedSendList.Add(st);
 
                     if (traceLogger.Trace.IsEnabled)
-                        traceLogger.Trace.Emit("{0}: issuing BeginSend(Run {1})", Fcns.CurrentMethodName, st.brHeader);
+                        traceLogger.Trace.Emit("{0}: issuing BeginSend(Run {1})", methodName, st.brHeader);
 
                     st.iar = ct.tcpSocket.BeginSend(bufferSegementList, SocketFlags.None, HandleConnectionBeginSendAsynchRequestCallback, st);
                 }
@@ -1841,7 +1851,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
 
             private void HandleCompletedSend(QpcTimeStamp qpcTimeStamp, SendTracker st)
             {
-                string reason = Fcns.CurrentMethodName;
+                string reason = "HandleCompletedSend";
 
                 foreach (var buffer in st.bufferArray)
                 {
@@ -1867,7 +1877,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                         int sendCount = ct.tcpSocket.EndSend(iar);
 
                         if (sendCount != st.totalByteCount)
-                            throw new TCPTransportProtocolViolation("Invalid Buffer delivery: EndSend produced unexpected byte count: {0}, expecting: {1} [from brh:{2}]".CheckedFormat(sendCount, st.totalByteCount, st.brHeader));
+                            new TCPTransportProtocolViolation("Invalid Buffer delivery: EndSend produced unexpected byte count: {0}, expecting: {1} [from brh:{2}]".CheckedFormat(sendCount, st.totalByteCount, st.brHeader)).Throw();
 
                         st.done = true;
                     }
@@ -1921,7 +1931,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                         bufferLenArray.SafeCopyFrom(value);
 
                         if (value.SafeLength() > maxBuffersInRun)
-                            throw new System.ArgumentOutOfRangeException("BufferLenArray", "Array length must be between 0 and {0}".CheckedFormat(maxBuffersInRun));
+                            new System.ArgumentOutOfRangeException("BufferLenArray", "Array length must be between 0 and {0}".CheckedFormat(maxBuffersInRun)).Throw();
                     }
                 }
 
@@ -2141,6 +2151,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
 
             private int ServicePostedSends(QpcTimeStamp qpcTimeStamp)
             {
+                const string methodName = "ServicePostedSends";
                 int count = 0;
 
                 lock (LocalPort.Mutex)
@@ -2214,7 +2225,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                     foreach (var bdi in deliveredBDIArray)
                     {
                         if (bdi.buffer.State == Buffers.BufferState.SendPosted)
-                            bdi.buffer.SetState(qpcTimeStamp, Buffers.BufferState.Sent, Fcns.CurrentMethodName);
+                            bdi.buffer.SetState(qpcTimeStamp, Buffers.BufferState.Sent, methodName);
                     }
                 }
 

@@ -1248,7 +1248,7 @@ namespace MosaicLib.Semi.E041
                 IClientFacet action = new BasicActionImpl(actionQ, setE30ALIDHandlerFacetDelegate, "E30ALIDHandlerFacet setter", ActionLoggingReference).RunInline();
 
                 if (!action.ActionState.Succeeded)
-                    throw new System.InvalidOperationException(action.ActionState.ResultCode);
+                    new System.InvalidOperationException(action.ActionState.ResultCode).Throw();
             }
         }
         private volatile IE30ALIDHandlerFacet e30ALIDHandlerFacet = null;
@@ -1368,7 +1368,7 @@ namespace MosaicLib.Semi.E041
             string methodNameEx = "{0}({1}, {2})".CheckedFormat(methodName, sourceObjectID, anSpec);
 
             if (anSpec.ANType == ANType.Alarm)
-                throw new ANRegistrationException("{0} is not valid: ANType {1} is not compatible with this usage interface type".CheckedFormat(methodNameEx, anSpec.ANType));
+                new ANRegistrationException("{0} is not valid: ANType {1} is not compatible with this usage interface type".CheckedFormat(methodNameEx, anSpec.ANType)).Throw();
 
             StartPartIfNeeded();
             
@@ -1382,7 +1382,7 @@ namespace MosaicLib.Semi.E041
             if (ex != null)
                 throw ex;
             if (!ec.IsNullOrEmpty())
-                throw new ANRegistrationException("Internal: {0} failed with error: {1}".CheckedFormat(methodNameEx, ec));
+                new ANRegistrationException("Internal: {0} failed with error: {1}".CheckedFormat(methodNameEx, ec)).Throw();
 
             return sourceImpl;
         }
@@ -1401,7 +1401,7 @@ namespace MosaicLib.Semi.E041
             string methodNameEx = "{0}({1}, {2})".CheckedFormat(methodName, sourceObjectID, anSpec);
 
             if (anSpec.ANType == ANType.Alarm)
-                throw new ANRegistrationException("{0} is not valid: ANType {1} is not compatible with this usage interface type".CheckedFormat(methodNameEx, anSpec.ANType));
+                new ANRegistrationException("{0} is not valid: ANType {1} is not compatible with this usage interface type".CheckedFormat(methodNameEx, anSpec.ANType)).Throw();
 
             StartPartIfNeeded();
 
@@ -1415,7 +1415,7 @@ namespace MosaicLib.Semi.E041
             if (ex != null)
                 throw ex;
             if (!ec.IsNullOrEmpty())
-                throw new ANRegistrationException("Internal: {0} failed with error: {1}".CheckedFormat(methodNameEx, ec));
+                new ANRegistrationException("Internal: {0} failed with error: {1}".CheckedFormat(methodNameEx, ec)).Throw();
 
             return sourceImpl;
         }
@@ -1435,7 +1435,7 @@ namespace MosaicLib.Semi.E041
             string methodNameEx = "{0}({1}, {2}{3})".CheckedFormat(methodName, sourceObjectID, anSpec, behaviorStr);
 
             if (anSpec.ANType == ANType.Error)
-                throw new ANRegistrationException("{0} is not valid: ANType {1} is not compatible with this usage interface type".CheckedFormat(methodNameEx, anSpec.ANType));
+                new ANRegistrationException("{0} is not valid: ANType {1} is not compatible with this usage interface type".CheckedFormat(methodNameEx, anSpec.ANType)).Throw();
 
             StartPartIfNeeded();
 
@@ -1450,7 +1450,7 @@ namespace MosaicLib.Semi.E041
                 throw ex;
 
             if (!ec.IsNullOrEmpty())
-                throw new ANRegistrationException("Internal: {0} failed with error: {1}".CheckedFormat(methodNameEx, ec));
+                new ANRegistrationException("Internal: {0} failed with error: {1}".CheckedFormat(methodNameEx, ec)).Throw();
 
             sourceImpl.IANConditionBehavior = initialANConditionBehavior;
 
@@ -1570,7 +1570,7 @@ namespace MosaicLib.Semi.E041
 
                 if (anSourceTracking.anSourceImpl != null)
                 {
-                    throw new ANRegistrationException("Registration failed: {0} has already been registered by {1}".CheckedFormat(anName, anSourceTracking.anSourceImpl.SourceObjectID));
+                    new ANRegistrationException("Registration failed: {0} has already been registered by {1}".CheckedFormat(anName, anSourceTracking.anSourceImpl.SourceObjectID)).Throw();
                 }
 
                 // setup the new source, add a new tracking object for it, and return it.

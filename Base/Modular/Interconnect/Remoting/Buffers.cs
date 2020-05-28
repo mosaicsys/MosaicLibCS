@@ -625,12 +625,12 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Buffers
                 Buffer buffer = bufferArray[bufferIndex];
                 bufferArray[bufferIndex] = null;
 
-                return buffer.SetState(qpcTimeStamp, BufferState.Acquired, reason ?? "BufferPool.{0}.1".CheckedFormat(Fcns.CurrentMethodName));
+                return buffer.SetState(qpcTimeStamp, BufferState.Acquired, reason ?? "BufferPool.Acquire.1");
             }
             else
             {
                 Buffer buffer = new Buffer(bufferSize: BufferSize, bufferPool: this, stateEmitter: BufferStateEmitter)
-                                .SetState(qpcTimeStamp, BufferState.Created, reason ?? "BufferPool.{0}.2".CheckedFormat(Fcns.CurrentMethodName));
+                                .SetState(qpcTimeStamp, BufferState.Created, reason ?? "BufferPool.Acquire.2");
 
                 return buffer;
             }
@@ -645,7 +645,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Buffers
             { }
             else if (buffer.bufferPool == this && buffer.byteArraySize >= BufferSize && bufferCount < MaxBuffersToRetain)
             {
-                buffer.Clear(qpcTimeStamp, clearByteArrayContents: ClearBufferContentsOnRelease, reason: reason ?? "BufferPool.{0}.1".CheckedFormat(Fcns.CurrentMethodName));
+                buffer.Clear(qpcTimeStamp, clearByteArrayContents: ClearBufferContentsOnRelease, reason: reason ?? "BufferPool.Release.1");
 
                 int bufferIndex = bufferCount++;
 
@@ -653,7 +653,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Buffers
             }
             else
             {
-                buffer.Release(qpcTimeStamp, reason ?? "BufferPool.{0}.1".CheckedFormat(Fcns.CurrentMethodName));
+                buffer.Release(qpcTimeStamp, reason ?? "BufferPool.Release.2");
             }
         }
     }

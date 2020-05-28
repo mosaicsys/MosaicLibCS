@@ -86,13 +86,13 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
         /// <summary>Gives the nominal maximum TimeSpan during which a given MDRF file can be recorded.  Defaults to 24 hours</summary>
         public TimeSpan MaxFileRecordingPeriod { get; set; }
 
-        /// <summary>Gives the minimum file recording period for cases where a file is started just before a new file boundary condition is detected.  Defaults to 15 seconds</summary>
+        /// <summary>Gives the minimum file recording period for cases where a file is started just before a new file boundary condition is detected.  Defaults to 15.0 seconds</summary>
         public TimeSpan MinInterFileCreateHoldoffPeriod { get; set; }
 
-        /// <summary>Gives the minimum nominal interval between updating the FileIndex.  Set this to be much smaller if you are expecting to use the index to querty the file contents while a file is being written.  Defaults to 60 seconds.</summary>
+        /// <summary>Gives the minimum nominal interval between updating the FileIndex.  Set this to be much smaller if you are expecting to use the index to querty the file contents while a file is being written.  Defaults to 60.0 seconds.</summary>
         public TimeSpan MinNominalFileIndexWriteInterval { get; set; }
 
-        /// <summary>Gives the nominal interval between time triggered group write all operations.  Defaults to 60 seconds.</summary>
+        /// <summary>Gives the nominal interval between time triggered group write all operations.  Defaults to 15.0 minutes.</summary>
         public TimeSpan MinNominalWriteAllInterval { get; set; }
 
         /// <summary>Gives the offset used with I8 values in preparation for U8Auto coding.  Defaults to 120</summary>

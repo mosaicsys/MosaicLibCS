@@ -332,7 +332,17 @@ namespace MosaicLib.Semi.E090
             return new E039ObjectID(substName, Constants.SubstrateObjectType, assignUUID: assignUUID, tableObserver: tableObserver);
         }
 
+        public static E039ObjectID CreateE090SubstID(this IE039TableObserver tableObserver, string substName, bool assignUUID = false)
+        {
+            return new E039ObjectID(substName, Constants.SubstrateObjectType, assignUUID: assignUUID, tableObserver: tableObserver);
+        }
+
         public static E039ObjectID CreateE090SubstLocID(this string substLocName, IE039TableObserver tableObserver = null)
+        {
+            return new E039ObjectID(substLocName, Constants.SubstrateLocationObjectType, tableObserver: tableObserver);
+        }
+
+        public static E039ObjectID CreateE090SubstLocID(this IE039TableObserver tableObserver, string substLocName)
         {
             return new E039ObjectID(substLocName, Constants.SubstrateLocationObjectType, tableObserver: tableObserver);
         }
@@ -1359,6 +1369,7 @@ namespace MosaicLib.Semi.E090
             return "SubstObs: {0}{1}".CheckedFormat(Info, IsUpdateNeeded ? " UpdateNeeded" : "");
         }
     }
+
     #endregion
 
     #region E090SubstLocInfo, E090SubstInfo helper structs.

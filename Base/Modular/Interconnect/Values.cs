@@ -570,7 +570,7 @@ namespace MosaicLib.Modular.Interconnect.Values
             }
 
             if (ivi == null && throwOnNotFound)
-                throw new IVINameNotFoundException("IVI name '{0}' was not found in IVIRegistration table '{1}'".CheckedFormat(iviName, Name));
+                new IVINameNotFoundException("IVI name '{0}' was not found in IVIRegistration table '{1}'".CheckedFormat(iviName, Name)).Throw();
 
             if (!mesg.IsNullOrEmpty())
                 Logger.Debug.Emit(mesg);
@@ -617,7 +617,8 @@ namespace MosaicLib.Modular.Interconnect.Values
                                 break;
 
                             case DuplicateIVINameRegistrationBehavior.Throw:
-                                throw new DuplicateIValuesInterconnectionNameException("Registration of IVI name '{0}' failed: by request cannot replace previously registered ivi with the same name [{1}]".CheckedFormat(sanitizedIVIName, Name));
+                                new DuplicateIValuesInterconnectionNameException("Registration of IVI name '{0}' failed: by request cannot replace previously registered ivi with the same name [{1}]".CheckedFormat(sanitizedIVIName, Name)).Throw();
+                                break;
                         }
                     }
                 }
@@ -1633,7 +1634,7 @@ namespace MosaicLib.Modular.Interconnect.Values
                         LastValueGetException = ex;
 
                         if (RethrowInValueGetter)
-                            throw;
+                            ex.Throw();
 
                         return default(TValueType);
                     }
@@ -2590,7 +2591,7 @@ namespace MosaicLib.Modular.Interconnect.Values
                 IVI = ivi;
 
             if (!IsValueSetValid)
-                throw new System.NullReferenceException("ValueSet property must be Valid (non-null) before Setup can be called");
+                new System.NullReferenceException("ValueSet property must be Valid (non-null) before Setup can be called").Throw();
 
             InnerSetup(baseNames);
 
@@ -2649,7 +2650,7 @@ namespace MosaicLib.Modular.Interconnect.Values
         public IValueSetAdapter Update()
         {
             if (!IsValueSetValid)
-                throw new System.NullReferenceException("ValueSet property must be Valid (non-null) before Update can be called");
+                new System.NullReferenceException("ValueSet property must be Valid (non-null) before Update can be called").Throw();
 
             IVI.Update(IVAArray, numEntriesToUpdate: NumItems);
 

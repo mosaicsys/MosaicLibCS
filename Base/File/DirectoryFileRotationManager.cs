@@ -437,14 +437,14 @@ namespace MosaicLib.File
 				if (basePathInfo.Exists)
 				{
 					if (basePathInfo.IsFile)
-                        throw new SetupFailureException(Utils.Fcns.CheckedFormat("target path '{0}' does not specify a directory.", configDirPath));
+                        new SetupFailureException(Utils.Fcns.CheckedFormat("target path '{0}' does not specify a directory.", configDirPath)).Throw();
 				}
 				else
 				{
 					if (config.createDirectoryIfNeeded)
                         System.IO.Directory.CreateDirectory(configDirPath);
 					else
-                        throw new SetupFailureException(Utils.Fcns.CheckedFormat("target path '{0}' does not exist.", configDirPath));
+                        new SetupFailureException(Utils.Fcns.CheckedFormat("target path '{0}' does not exist.", configDirPath)).Throw();
 				}
 
 				// directory exists or has been created - now scan it and record each of the entries that are found therein

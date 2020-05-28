@@ -1259,7 +1259,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
         public void SetProcessSpecAndStepNum(IProcessSpec processSpec, int stepNum, string defaultStepRecipeName = null)
         {
             if (ProcessSpec != null || StepNum != 0)
-                throw new System.InvalidOperationException("This method is not valid once a non-null ProcessSpec, or a non-zero StepNum has been assigned to this step");
+                new System.InvalidOperationException("This method is not valid once a non-null ProcessSpec, or a non-zero StepNum has been assigned to this step").Throw();
 
             ProcessSpec = processSpec;
             StepNum = stepNum;
@@ -1325,7 +1325,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
             if (substPublisher != null)
                 SubstObserver = new E090SubstObserver(substPublisher);
             else
-                throw new SubstrateSchedulingException("No substrate object found for given id '{0}'".CheckedFormat(SubstID.FullName));
+                new SubstrateSchedulingException("No substrate object found for given id '{0}'".CheckedFormat(SubstID.FullName)).Throw();
 
             if (setSJSToWaitingForStart)
                 SetSubstrateJobState(SubstrateJobState.WaitingForStart, Fcns.CurrentMethodName);

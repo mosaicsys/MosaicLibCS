@@ -88,7 +88,7 @@ namespace MosaicLib.Utils
     /// <para/>This class is intended to be used with IDisposable use patterns such as with using statements.  
     /// It does not register a finalizer or provide any finalizer related behavior.
     /// </summary>
-    public sealed class InvokeDelegateOnDispose : DisposableBaseBase
+    public sealed class InvokeDelegateOnDispose : IDisposable
     {
         /// <summary>
         /// Define the Delegate type that will be invoked on explicit Dispose of this object.
@@ -113,7 +113,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Implementation method for IDisposable.Dispose.  Calls the Action and/or Delegate (if either/both are non-null)
         /// </summary>
-        public override void Dispose()
+        public void Dispose()
         {
             if (Action != null)
             {
@@ -247,7 +247,7 @@ namespace MosaicLib.Utils
 			catch (System.Exception ex)
 			{
 				Asserts.TakeBreakpointAfterFault("DisposableBase::Dispose(CalledExplicitly) triggered exception", ex);
-				throw;
+				ex.Throw();
 			}
 			finally
 			{
@@ -334,7 +334,7 @@ namespace MosaicLib.Utils
     #region DisposableBaseBase
 
     /// <summary>
-    /// Defines the base class of the DisposableBase class(s).
+    /// Defines the base class of the DisposableBase class(s).  This class implements IDisposable but does not creat any implicit finalizer.
     /// </summary>
     /// <remarks>
     /// Provides default virtual implementation of Dispose method.  It is necessary to provide this explicit base class for the 
@@ -434,7 +434,7 @@ namespace MosaicLib.Utils
                 catch (System.Exception ex)
                 {
                     Asserts.TakeBreakpointAfterFault("DisposableList::Dispose(CalledExplicitly) triggered exception", ex);
-                    throw;
+                    ex.Throw();
                 }
             }
 

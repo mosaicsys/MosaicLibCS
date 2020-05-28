@@ -26,6 +26,7 @@ using System.Runtime.InteropServices;
 namespace MosaicLib.Win32.Registry
 {
     using Microsoft.Win32;      // this using is located here to address namespace and symbol definition overlap issues in this source.
+    using MosaicLib.Utils;
 
     #region Fcns static class
 
@@ -153,9 +154,9 @@ namespace MosaicLib.Win32.Registry
                 RegistryKey nextKey = null;
 
                 if (keyPathArray == null)
-                    throw new System.ArgumentNullException("keyPathArray");
+                    new System.ArgumentNullException("keyPathArray").Throw();
                 else if (keyPathArray.Length == 0)
-                    throw new System.ArgumentException("must have at least one element", "keyPathArray");
+                    new System.ArgumentException("must have at least one element", "keyPathArray").Throw();
 
                 int keyIdx = 0;
 
@@ -175,13 +176,13 @@ namespace MosaicLib.Win32.Registry
                         if (nextKey == null)
                             nextKey = currentKey.CreateSubKey(keyName, permissions);
                         if (nextKey == null)
-                            throw new System.ArgumentException(Utils.Fcns.CheckedFormat("Unable to create key:{0} under path:{1}, {2}", keyName, currentKey.ToString(), permissions.ToString()), Utils.Fcns.CheckedFormat("keyPathArray[{0}]", keyIdx));
+                            new System.ArgumentException(Utils.Fcns.CheckedFormat("Unable to create key:{0} under path:{1}, {2}", keyName, currentKey.ToString(), permissions.ToString()), Utils.Fcns.CheckedFormat("keyPathArray[{0}]", keyIdx)).Throw();
                     }
                     else
                     {
                         nextKey = currentKey.OpenSubKey(keyName, permissions);
                         if (nextKey == null)
-                            throw new System.ArgumentException(Utils.Fcns.CheckedFormat("Unable to open key:{0} under path:{1}, {2}", keyName, currentKey.ToString(), permissions.ToString()), Utils.Fcns.CheckedFormat("keyPathArray[{0}]", keyIdx));
+                            new System.ArgumentException(Utils.Fcns.CheckedFormat("Unable to open key:{0} under path:{1}, {2}", keyName, currentKey.ToString(), permissions.ToString()), Utils.Fcns.CheckedFormat("keyPathArray[{0}]", keyIdx)).Throw();
                     }
 
                     if (!preventDisposeCurrentKey)
@@ -193,13 +194,14 @@ namespace MosaicLib.Win32.Registry
 
                 return currentKey;
             }
-            catch
+            catch (System.Exception ex)
             {
                 // will re-throw the original exception after disposing of any intermediate key
                 if (!preventDisposeCurrentKey && currentKey != null)
                     Utils.Fcns.DisposeOfObject(ref currentKey);
 
-                throw;
+                ex.Throw();
+                return null;
             }
         }
 
@@ -223,7 +225,8 @@ namespace MosaicLib.Win32.Registry
                 case "HKEY_CURRENT_CONFIG": case "HKCC": return RegistryHive.CurrentConfig;
                 case "HKEY_PERFORMANCE_DATA": case "HKPD": return RegistryHive.PerformanceData;
                 default:
-                    throw new System.ArgumentException(Utils.Fcns.CheckedFormat("HiveName:{0} not found", hiveName), "hiveName");
+                    new System.ArgumentException(Utils.Fcns.CheckedFormat("HiveName:{0} not found", hiveName), "hiveName").Throw();
+                    return default(RegistryHive);
             }
         }
 
@@ -242,7 +245,8 @@ namespace MosaicLib.Win32.Registry
                 case RegistryHive.CurrentConfig: return Registry.CurrentConfig;
                 case RegistryHive.PerformanceData: return Registry.PerformanceData;
                 default:
-                    throw new System.ArgumentException(Utils.Fcns.CheckedFormat("HiveCode:{0} is not valid for HiveName:{1}", hiveCode, hiveName), "hiveName");
+                    new System.ArgumentException(Utils.Fcns.CheckedFormat("HiveCode:{0} is not valid for HiveName:{1}", hiveCode, hiveName), "hiveName").Throw();
+                    return null;
             }
         }
 

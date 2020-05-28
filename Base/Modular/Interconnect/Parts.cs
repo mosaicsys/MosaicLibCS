@@ -196,7 +196,7 @@ namespace MosaicLib.Modular.Interconnect.Parts
             }
 
             if (part == null && throwOnNotFound)
-                throw new PartIDNotFoundException("PartID '{0}' was not found in Action Interconnection '{1}'".CheckedFormat(partID, Name));
+                new PartIDNotFoundException("PartID '{0}' was not found in Action Interconnection '{1}'".CheckedFormat(partID, Name)).Throw();
 
             return part;
         }
@@ -274,7 +274,8 @@ namespace MosaicLib.Modular.Interconnect.Parts
                                 break;
 
                             case DuplicatePartIDRegistrationBehavior.Throw:
-                                throw new DuplicatePartIDException("Registration of PartID '{0}' failed: by request cannot replace previously registered part with the same name [{1} {2}]".CheckedFormat(sanitizedPartID, Name, existingPart.GetType()));
+                                new DuplicatePartIDException("Registration of PartID '{0}' failed: by request cannot replace previously registered part with the same name [{1} {2}]".CheckedFormat(sanitizedPartID, Name, existingPart.GetType())).Throw();
+                                break;
                         }
                     }
                 }

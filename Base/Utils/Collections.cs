@@ -694,6 +694,10 @@ namespace MosaicLib.Utils
                 itemsArray = set.SafeToArray();
             }
 
+            public ReadOnlyHashSet(TItemType item1, params TItemType [] itemParamsArray)
+                : this(item1.Concat(itemParamsArray))
+            { }
+
             public static ReadOnlyHashSet<TItemType> Empty { get { return _Empty; } }
             private static readonly ReadOnlyHashSet<TItemType> _Empty = new ReadOnlyHashSet<TItemType>();
 
@@ -871,7 +875,7 @@ namespace MosaicLib.Utils
                 {
                     if (index <= 0 || index >= arrayLength + 1)
                     {
-                        throw new System.InvalidOperationException("The enumerator is positioned before the first element of the array or after the last element");
+                        new System.InvalidOperationException("The enumerator is positioned before the first element of the array or after the last element").Throw();
                     }
 
                     return this.Current;
@@ -1465,7 +1469,7 @@ namespace MosaicLib.Utils
             public int RemoveAll(Predicate<TItemType> match)
             {
                 if (match == null)
-                    throw new System.ArgumentNullException("match");
+                    new System.ArgumentNullException("match").Throw();
 
                 int remoteCount = 0;
                 for (int idx = 0; idx < list.Count;)
@@ -2151,7 +2155,7 @@ namespace MosaicLib.Utils
             private void ThrowIfIsReadOnly(string reasonPrefix)
             {
                 if (IsReadOnly)
-                    throw new System.NotSupportedException(reasonPrefix + " is not supported when this object's IsReadOnly property has been set");
+                    new System.NotSupportedException(reasonPrefix + " is not supported when this object's IsReadOnly property has been set").Throw();
             }
         }
 
@@ -2434,7 +2438,7 @@ namespace MosaicLib.Utils
                     TreeNode<TItemType, TKeyPathItemType> currentNode = null;
 
                     if (treeNodeDictionary.TryGetValue(keyPathArray, out currentNode) && currentNode != null && currentNode.Item != null && throwOnDuplicate)
-                        throw new DuplicatePathException("Key path [{0}] already found while building tree".CheckedFormat(keyPathArray.ToString(separator: " ")));
+                        new DuplicatePathException("Key path [{0}] already found while building tree".CheckedFormat(keyPathArray.ToString(separator: " "))).Throw();
 
                     if (currentNode == null)
                     {

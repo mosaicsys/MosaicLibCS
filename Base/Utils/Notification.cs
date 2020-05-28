@@ -1486,9 +1486,9 @@ namespace MosaicLib.Utils
             WaitEventNotifier wenRef = item as WaitEventNotifier;
 
             if (item == null)
-                throw new System.NullReferenceException("Given item is null");
+                new System.NullReferenceException("Given item is null").Throw();
             else if (wenRef == null || wenRef.behavior != Behavior || !System.Object.ReferenceEquals((object) this, wenRef.CreatedInPool))
-                throw new System.NotSupportedException("Given item was not obtained from this pool.");
+                new System.NotSupportedException("Given item was not obtained from this pool.").Throw();
 
             item = null;
             eventNotifierPool.ReturnObjectToPool(ref wenRef);

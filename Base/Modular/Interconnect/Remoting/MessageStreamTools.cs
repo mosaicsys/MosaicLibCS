@@ -698,6 +698,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
         public void HandleInboundMessage(QpcTimeStamp qpcTimeStamp, Messages.Message mesg)
         {
+            const string methodName = "HandleInboundMessage";
+
             try
             {
                 using (var mesgIStream = mesg.MessageReadingStream)
@@ -770,13 +772,13 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
                                 break;
 
                             default:
-                                requestFailureCode = "{0}: '{1}' is not supported here".CheckedFormat(Fcns.CurrentMethodName, pushItem);
+                                requestFailureCode = "the push item's type is not supported here";
                                 break;
                         }
 
                         if (!requestFailureCode.IsNullOrEmpty())
                         {
-                            logger.Debug.Emit("{0}: {1} failed: {2}", Fcns.CurrentMethodName, pushItem, requestFailureCode);
+                            logger.Debug.Emit("{0}: {1} failed: {2}", methodName, pushItem, requestFailureCode);
 
                             PushItem requestFailurePushBackItem = new PushItem() { itemType = PushItemType.Failure, actionID = pushItem.actionID, failureCode = requestFailureCode, pending = true };
                             pendingPushItemList.Add(requestFailurePushBackItem);
@@ -784,10 +786,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
                         if (!clientFailureCode.IsNullOrEmpty())
                         {
-                            if (pushItem.itemType != PushItemType.Failure)
-                                logger.Debug.Emit("{0}: {1} failed: {2}", Fcns.CurrentMethodName, pushItem, clientFailureCode);
-                            else
-                                logger.Debug.Emit("{0}: {1} failed: {2}", Fcns.CurrentMethodName, pushItem, clientFailureCode);
+                            logger.Debug.Emit("{0}: {1} failed: {2}", methodName, pushItem, clientFailureCode);
 
                             HandleInboundFailure(pushItem.actionID, clientFailureCode);
                         }
@@ -862,6 +861,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
         {
             ClientActionTracker cat = clientFacetActionDictionary.SafeTryGetValue(actionID);
             IClientFacet icf = (cat != null) ? cat.icf : null;
+            const string methodName = "HandleInboundCancelRequest";
 
             if (icf != null)
             {
@@ -869,12 +869,12 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
                 if (!icfActionState.IsCancelRequested)
                 {
-                    logger.Debug.Emit("{0}: requesting cancel for id:{1} [action:{2}, state:{3}]", Fcns.CurrentMethodName, actionID, icf.ToString(ToStringSelect.MesgAndDetail), icfActionState);
+                    logger.Debug.Emit("{0}: requesting cancel for id:{1} [action:{2}, state:{3}]", methodName, actionID, icf.ToString(ToStringSelect.MesgAndDetail), icfActionState);
                     icf.RequestCancel();
                 }
                 else
                 {
-                    logger.Debug.Emit("{0}: redundant request for id:{1} [ignored]", Fcns.CurrentMethodName, actionID);
+                    logger.Debug.Emit("{0}: redundant request for id:{1} [ignored]", methodName, actionID);
                 }
 
                 return string.Empty;
@@ -889,6 +889,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
         {
             ProviderActionTracker pat = providerFacetActionDictionary.SafeTryGetValue(actionID);
             IProviderFacet ipf = ((pat != null) ? pat.ipf : null);
+            const string methodName = "HandleInboundUpdate";
 
             if (ipf != null)
             {
@@ -902,12 +903,12 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
                 {
                     if (!updateNVS.IsNullOrEmpty() && !updateNVS.Equals(currentActionState.NamedValues))
                     {
-                        logger.Debug.Emit("{0}: note received action state update id:{1} '{2}' stateCode:{3} nvs:{4}", Fcns.CurrentMethodName, actionID, pat.requestStr, updateActionState.StateCode, updateActionState.NamedValues.SafeToStringSML());
+                        logger.Debug.Emit("{0}: note received action state update id:{1} '{2}' stateCode:{3} nvs:{4}", methodName, actionID, pat.requestStr, updateActionState.StateCode, updateActionState.NamedValues.SafeToStringSML());
                         ipf.UpdateNamedValues(updateNVS);
                     }
                     else
                     {
-                        logger.Debug.Emit("{0}: note received action state update id:{1} '{2}' stateCode:{3}", Fcns.CurrentMethodName, actionID, pat.requestStr, updateActionState.StateCode);
+                        logger.Debug.Emit("{0}: note received action state update id:{1} '{2}' stateCode:{3}", methodName, actionID, pat.requestStr, updateActionState.StateCode);
                         // else - we cannot reflect all action state changes back into the provider facet as some would violate the state model of the parent action.  As such they just get logged as debug messages.
                     }
                 }
@@ -915,12 +916,12 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
                 {
                     if (!updateNVS.IsNullOrEmpty())
                     {
-                        logger.Debug.Emit("{0}: note received action state update id:{1} '{2}' stateCode:{3} rc:'{4}' nvs:{5}", Fcns.CurrentMethodName, actionID, pat.requestStr, updateActionState.StateCode, updateActionState.ResultCode, updateActionState.NamedValues.SafeToStringSML());
+                        logger.Debug.Emit("{0}: note received action state update id:{1} '{2}' stateCode:{3} rc:'{4}' nvs:{5}", methodName, actionID, pat.requestStr, updateActionState.StateCode, updateActionState.ResultCode, updateActionState.NamedValues.SafeToStringSML());
                         ipf.CompleteRequest(updateActionState.ResultCode, updateNVS);
                     }
                     else
                     {
-                        logger.Debug.Emit("{0}: note received action state update id:{1} '{2}' stateCode:{3} rc:'{4}'", Fcns.CurrentMethodName, actionID, pat.requestStr, updateActionState.StateCode, updateActionState.ResultCode);
+                        logger.Debug.Emit("{0}: note received action state update id:{1} '{2}' stateCode:{3} rc:'{4}'", methodName, actionID, pat.requestStr, updateActionState.StateCode, updateActionState.ResultCode);
                         ipf.CompleteRequest(updateActionState.ResultCode);
                     }
 
@@ -937,10 +938,11 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
         private void HandleInboundFailure(ulong actionID, string failureCode)
         {
+            const string methodName = "HandleInboundFailure";
             string ec = HandleInboundUpdate(actionID, new ActionStateCopy(ActionStateCode.Complete, failureCode, null));
 
             if (!ec.IsNullOrEmpty())
-                logger.Debug.Emit("{0} id:{1} '{2}' failed: {3}", Fcns.CurrentMethodName, actionID, failureCode, ec);
+                logger.Debug.Emit("{0} id:{1} '{2}' failed: {3}", methodName, actionID, failureCode, ec);
         }
 
         #endregion
@@ -1035,6 +1037,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
         public override int Service(QpcTimeStamp qpcTimeStamp)
         {
             int count = 0;
+            const string methodName = "Service";
 
             // check for and propagate cancel requests from the provider facet side to the client facet side.
             foreach (var at in providerFacetActionDictionary.ValueArray)
@@ -1049,7 +1052,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
                     pendingPushItemList.Add(at.pushItem);
 
-                    logger.Debug.Emit("{0}: note requesting cancel for id:{1} '{2}' ", Fcns.CurrentMethodName, at.actionID, at.requestStr);
+                    logger.Debug.Emit("{0}: note requesting cancel for id:{1} '{2}' ", methodName, at.actionID, at.requestStr);
                 }
             }
 
@@ -1244,6 +1247,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
         public void HandleInboundMessage(QpcTimeStamp qpcTimeStamp, Messages.Message mesg)
         {
+            const string methodName = "HandleInboundMessage";
+
             if (isClientSide)
             {
                 try
@@ -1255,7 +1260,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
                     if (!clientSetupComplete)
                     {
-                        logger.Debug.Emit("{0}: client setup is complete for TrackingSet {1} [initial count:{2}]", Fcns.CurrentMethodName, trackingSet.SetID, trackingSet.Count);
+                        logger.Debug.Emit("{0}: client setup is complete for TrackingSet {1} [initial count:{2}]", methodName, trackingSet.SetID, trackingSet.Count);
                         clientSetupComplete = true;
                     }
                 }
@@ -1383,6 +1388,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
         public IVIRelayMessageStreamTool(string hostPartID, int stream, INotifyable hostNotifier, Buffers.BufferPool bufferPool, IVIRelayMessageStreamToolConfig config)
             : base("IVIRelay", hostPartID, stream, hostNotifier, bufferPool, isClientSideIn: true, config: config)
         {
+            updateIntervalTimer.TriggerInterval = Config.MinimumUpdateInterval;
+
             ivi = Config.ClientIVI ?? Values.Values.Instance;
 
             switch (Config.IVIRelayDirection)
@@ -1390,8 +1397,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
                 case IVIRelayDirection.FromServer: isInitiator = false; isAcceptor = true; waitBeforeRegistration = false; break;
                 case IVIRelayDirection.ToServer: isInitiator = true; isAcceptor = false; waitBeforeRegistration = false; break;
                 case IVIRelayDirection.Bidirectional: isInitiator = true; isAcceptor = true; waitBeforeRegistration = true; break;
-                default:
-                    throw new System.ArgumentException("IVIRelayDirection", "{0} is not a supported value".CheckedFormat(Config.IVIRelayDirection));
+                default: new System.ArgumentException("IVIRelayDirection", "{0} is not a supported value".CheckedFormat(Config.IVIRelayDirection)).Throw(); break;
             }
 
             localNamePrefix = Config.ServerToClientToNamePrefix.MapNullToEmpty();
@@ -1407,6 +1413,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
         public IVIRelayMessageStreamTool(string hostPartID, int stream, INotifyable hostNotifier, Buffers.BufferPool bufferPool, Messages.Message streamSetupMessage, INamedValueSet streamSetupMessageNVS, IIVIRegistration iIVIRegistration, IValuesInterconnection defaultIVI)
             : base("IVIRelay", hostPartID, stream, hostNotifier, bufferPool, isClientSideIn: false, config: new IVIRelayMessageStreamToolConfig().ApplyValues(streamSetupMessageNVS))
         {
+            updateIntervalTimer.TriggerInterval = Config.MinimumUpdateInterval;
+
             IIVIRegistration = iIVIRegistration ?? Values.IVIRegistration.Instance;
 
             if (Config.RemoteIVIName.IsNullOrEmpty())
@@ -1436,6 +1444,17 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
         private string localNamePrefix;
         private INamedValueSet localMetaDataFilterNVS;
         private string[] mdKeywordFilterArray;
+
+        #endregion
+
+        #region ResetState override
+
+        public override void ResetState(QpcTimeStamp qpcTimeStamp, ResetType resetType, string reason = null, string extra = null)
+        {
+            updateIntervalTimer.Reset(triggerImmediately: true);
+
+            base.ResetState(qpcTimeStamp, resetType, reason, extra);
+        }
 
         #endregion
 
@@ -1544,6 +1563,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
         public void HandleInboundMessage(QpcTimeStamp qpcTimeStamp, Messages.Message mesg)
         {
             bool updateArraysNeeded = false;
+            const string methodName = "HandleInboundMessage";
 
             try
             {
@@ -1691,7 +1711,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
 
                                         if ((pushItem.itemFlags & PushItemFlags.HasFailureCode) != 0)
                                         {
-                                            logger.Debug.Emit("{0}: push item {1} received with (or generated) failureCode: {2}", Fcns.CurrentMethodName, pushItem, data.failureCode);
+                                            logger.Debug.Emit("{0}: push item {1} received with (or generated) failureCode: {2}", methodName, pushItem, data.failureCode);
 
                                             if (data.vce == null)
                                             {
@@ -1731,6 +1751,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
         #region Transmitter: ServiceAndGenerateNextMessageToSend, Service
 
         List<PushItem> pendingPushItemList = new List<PushItem>();
+
+        QpcTimer updateIntervalTimer = new QpcTimer() { SelectedBehavior = QpcTimer.Behavior.NewAutoReset };
 
         public Messages.Message ServiceAndGenerateNextMessageToSend(QpcTimeStamp qpcTimeStamp)
         {
@@ -1819,10 +1841,12 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
         {
             int count = 0;
 
-            if (enableInitiatingRegistration && checkForNewValueNamesIntervalTimer.IsTriggered)
+            if (enableInitiatingRegistration && checkForNewValueNamesIntervalTimer.GetIsTriggered(qpcTimeStamp))
                 ServiceInitiatorRegistration();
 
-            if (isInitiator)
+            bool updateTimerIsTriggered = updateIntervalTimer.GetIsTriggered(qpcTimeStamp);
+
+            if (isInitiator && updateTimerIsTriggered)
             {
                 int updateCount = 0;
 
@@ -1849,7 +1873,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
             }
 
             // we only scan for changes and back propagate remotely assigned IVA values for iva registrations we have accepted when this connection is Bidirectional
-            if (isAcceptor && Config.IVIRelayDirection == IVIRelayDirection.Bidirectional)
+            if (isAcceptor && Config.IVIRelayDirection == IVIRelayDirection.Bidirectional && updateTimerIsTriggered)
             {
                 int updateCount = 0;
 
@@ -2342,9 +2366,9 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
             LastNotifiedSessionState = eventArgs;
         }
 
-        public void ResetState(QpcTimeStamp qpcTimeStamp, ResetType resetType, string reason = null, string extra = null)
+        public virtual void ResetState(QpcTimeStamp qpcTimeStamp, ResetType resetType, string reason = null, string extra = null)
         {
-            string methodName = Fcns.CurrentMethodName;
+            const string methodName = "ResetState";
 
             reason = (reason.IsNullOrEmpty() ? resetType.ToString() : "{0}:{1}".CheckedFormat(resetType, reason));
             reason = (extra.IsNeitherNullNorEmpty() ? "{0} [{1}]".CheckedFormat(reason, extra) : reason);

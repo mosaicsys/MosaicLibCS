@@ -232,7 +232,7 @@ namespace MosaicLib.Utils
 			else if (assertType == AssertType.ThrowException)
 			{
 				if (!ignoreFault)
-					throw new AssertException(mesg, sourceFrame);
+					new AssertException(mesg, sourceFrame).Throw();
 
 				return;
 			}

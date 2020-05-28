@@ -1387,6 +1387,18 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
+        /// Variant of TimeSpan.FromSeconds that derives the time span from the recriprocal of the given <paramref name="hz"/> value measured in Hertz (cycles per second) as a TimeSpan.
+        /// If the given <paramref name="hz"/> value is zero then this method returns the given fallbackValue.
+        /// </summary>
+        public static TimeSpan FromHz(this double hz, TimeSpan fallbackValue = default(TimeSpan))
+        {
+            if (hz != 0.0 && !hz.IsNaN() && !hz.IsInfinity())
+                return (1.0 / hz).FromSeconds();
+            else
+               return fallbackValue;
+        }
+
+        /// <summary>
         /// Returns true if the given timeSpan value is equal to TimeSpan.Zero
         /// </summary>
         public static bool IsZero(this TimeSpan timeSpan)
@@ -1899,7 +1911,7 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        #region Exception related methods (System.Exeception.ToString)
+        #region Exception related methods (System.Exeception.ToString(ExceptionFormat), System.Exception.Throw())
 
         /// <summary>
         /// Exception formatting helper extension method.  Accepts a given System.Exception and a ExceptionFormat parameter
@@ -1944,6 +1956,16 @@ namespace MosaicLib.Utils
         }
 
         private static readonly IList<char> boxEscapeCharsList = new ReadOnlyIList<char>(new [] { '[', ']' });
+
+        /// <summary>
+        /// Exception throw helper extension method.  This method throws the given System.Exception <paramref name="ex"/>.  
+        /// This method can be used to improve the ability of the calling method to support being inlined.
+        /// </summary>
+        /// <exception cref="System.Exception">Throws the given System.Execption</exception>
+        public static void Throw(this System.Exception ex)
+        {
+            throw ex;
+        }
 
         #endregion
 

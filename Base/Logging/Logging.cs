@@ -576,10 +576,11 @@ namespace MosaicLib
             public static explicit operator LogGate(string str)
             {
                 LogGate logGate = default(LogGate);
-                if (logGate.TryParse(str))
-                    return logGate;
 
-                throw new System.InvalidCastException("No valid cast to LogGate found for value {0}".CheckedFormat(new ValueContainer(str)));
+                if (!logGate.TryParse(str))
+                    new System.InvalidCastException("No valid cast to LogGate found for value {0}".CheckedFormat(new ValueContainer(str))).Throw();
+
+                return logGate;
             }
 
             /// <summary>
@@ -2103,7 +2104,7 @@ namespace MosaicLib
             public ThrowMesgEmitter(ExceptionFactoryDelegate exceptionFactoryDelegate)
             {
                 if (exceptionFactoryDelegate == null)
-                    throw new System.ArgumentNullException("exceptionFactoryDelegate");
+                    new System.ArgumentNullException("exceptionFactoryDelegate").Throw();
 
                 this.exceptionFactoryDelegate = exceptionFactoryDelegate;
             }
@@ -2136,7 +2137,7 @@ namespace MosaicLib
             {
                 System.Exception ex = exceptionFactoryDelegate(str);
                 if (ex != null)
-                    throw ex;
+                    ex.Throw();
             }
 
             private ExceptionFactoryDelegate exceptionFactoryDelegate;

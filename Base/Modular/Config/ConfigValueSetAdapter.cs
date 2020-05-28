@@ -204,7 +204,7 @@ namespace MosaicLib.Modular.Config
                 ConfigInstance = configInstance ?? Config.Instance;
 
             if (ValueSet == null)
-                throw new System.NullReferenceException("ValueSet property must be non-null before Setup can be called");
+                new System.NullReferenceException("ValueSet property must be non-null before Setup can be called").Throw();
 
             // setup all of the static information
             bool anySetupIssues = false;
@@ -353,7 +353,7 @@ namespace MosaicLib.Modular.Config
         private ConfigValueSetAdapter<TConfigValueSet> Update(bool isFirstUpdate, Logging.IMesgEmitter updateIssueEmitter, Logging.IMesgEmitter valueNoteEmitter)
         {
             if (ValueSet == null)
-                throw new System.NullReferenceException("ValueSet property must be non-null before {0} can be called".CheckedFormat(Fcns.CurrentMethodName));
+                new System.NullReferenceException("ValueSet property must be non-null before {0} can be called".CheckedFormat(Fcns.CurrentMethodName)).Throw();
 
             if (!IsUpdateNeeded && !isFirstUpdate)
                 return this;
@@ -393,7 +393,7 @@ namespace MosaicLib.Modular.Config
         public ConfigValueSetAdapter<TConfigValueSet> Set(string commentStr = "", bool andUpdateAfterSet = true)
         {
             if (ValueSet == null)
-                throw new System.NullReferenceException("ValueSet property must be non-null before {0} can be called".CheckedFormat(Fcns.CurrentMethodName));
+                new System.NullReferenceException("ValueSet property must be non-null before {0} can be called".CheckedFormat(Fcns.CurrentMethodName)).Throw();
 
             List<Tuple<KeySetupInfo, ValueContainer, Logging.IMesgEmitter, Logging.IMesgEmitter>> pendingUpdateItemList = new List<Tuple<KeySetupInfo, ValueContainer, Logging.IMesgEmitter, Logging.IMesgEmitter>>();
 

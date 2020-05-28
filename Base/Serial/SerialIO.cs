@@ -244,7 +244,7 @@ namespace MosaicLib.SerialIO
             set
             {
                 if (RxPacketEndScannerDelegate != null)
-                    throw new System.ArgumentException("RxLineTerm (RxPacketEndStrArray) and RxPacketEndScanerDelegate cannot both be used as the same time");
+                    new System.ArgumentException("RxLineTerm (RxPacketEndStrArray) and RxPacketEndScanerDelegate cannot both be used as the same time").Throw();
 
                 switch (value)
                 {
@@ -306,7 +306,7 @@ namespace MosaicLib.SerialIO
             set 
             {
                 if (rxPacketEndScannerDelegate != null)
-                    throw new System.ArgumentException("RxPacketEndStrArray and RxPacketEndScanerDelegate cannot both be used as the same time");
+                    new System.ArgumentException("RxPacketEndStrArray and RxPacketEndScanerDelegate cannot both be used as the same time").Throw();
 
                 rxPacketEndStrArray = value;
             }
@@ -323,7 +323,7 @@ namespace MosaicLib.SerialIO
             set 
             {
                 if (!RxPacketEndStrArray.IsNullOrEmpty())
-                    throw new System.ArgumentException("RxPacketEndScanerDelegate and RxPacketEndStrArray cannot both be used as the same time");
+                    new System.ArgumentException("RxPacketEndScanerDelegate and RxPacketEndStrArray cannot both be used as the same time").Throw();
 
                 rxPacketEndScannerDelegate = value; 
             }
