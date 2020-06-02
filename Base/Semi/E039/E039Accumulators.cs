@@ -76,9 +76,9 @@ namespace MosaicLib.Semi.E039.Accumulators
     /// </summary>
     public static class Settings
     {
-        /// <summary>Static get/set property used to define the base set of flags that are used when creating an E039 Accumulator object using this code.  [Pinned]</summary>
+        /// <summary>Static get/set property used to define the base set of flags that are used when creating an E039 Accumulator object using this code.  [None]</summary>
         public static E039ObjectFlags DefaultAddObjectFlags { get { return _defaultAddObjectFlags & (E039ObjectFlags.ClientUsableFlags); } set { _defaultAddObjectFlags = value; } }
-        private static E039ObjectFlags _defaultAddObjectFlags = E039ObjectFlags.Pinned;
+        private static E039ObjectFlags _defaultAddObjectFlags = E039ObjectFlags.None;
 
         /// <summary>Gives the default LogConfigSelect value used with E039.Update when the EM does not explicitly provide a value. [null]</summary>
         public static string DefaultIncrementLogConfigSelect { get; set; }
@@ -86,7 +86,7 @@ namespace MosaicLib.Semi.E039.Accumulators
         /// <summary>Restores these settings to their default values</summary>
         public static void ResetToDefaults()
         {
-            DefaultAddObjectFlags = E039ObjectFlags.Pinned;
+            DefaultAddObjectFlags = E039ObjectFlags.None;
             DefaultIncrementLogConfigSelect = null;
         }
     }
@@ -108,9 +108,10 @@ namespace MosaicLib.Semi.E039.Accumulators
             : this()
         {
             Obj = obj;
-            ObjID = (Obj != null) ? Obj.ID : E039ObjectID.Empty;
+            bool objIsNotNull = (Obj != null);
+            ObjID = objIsNotNull ? Obj.ID : null;
 
-            INamedValueSet attributes = (Obj != null) ? Obj.Attributes : NamedValueSet.Empty;
+            INamedValueSet attributes = objIsNotNull ? Obj.Attributes : NamedValueSet.Empty;
 
             Value = attributes[Constants.ValueAttributeName].VC;
             Range1 = new VCRange()
@@ -213,7 +214,7 @@ namespace MosaicLib.Semi.E039.Accumulators
         public string ToString(bool includeObjID)
         {
             if (IsEmpty)
-                return "E039AccumulatorInfo Empty";
+                return "E039AccumulatorInfo [Empty]";
 
             StringBuilder sb = new StringBuilder("E039AccumulatorInfo");
 
@@ -643,7 +644,7 @@ namespace MosaicLib.Semi.E039.Accumulators
         /// The behavior of the ifNeeded object creation is determined by the GenerateCreateAccumulatorUpdateItem method which makes use of the GenerateAccumulatorAddItemAttributes(<paramref name="initialAttributes"/>, <paramref name="initialInfo"/>, <paramref name="initialValue"/>) method.
         /// <para/>If the initial value defined by the given attribute related parameters is not an F8 then this method will first attempt to cast it to an F8 and, if that fails, will replace the initial value with [F8 0.0].
         /// </summary>
-        public static E039AccumulatorTotalizingSourceHelper CreateAccumulatorAndTotalizingHelper(this IE039TableUpdater tableUpdater, string accumulatorName, TimeSpan? updateHoldoffPeriod = null, string e039LogConfigSelect = null, INamedValueSet initialAttributes = null, E039AccumulatorInfo? initialInfo = null, ValueContainer initialValue = default(ValueContainer), string accumulatorObjectType = Constants.DefaultAccumulatorObjectType, E039ObjectFlags flags = E039ObjectFlags.Pinned)
+        public static E039AccumulatorTotalizingSourceHelper CreateAccumulatorAndTotalizingHelper(this IE039TableUpdater tableUpdater, string accumulatorName, TimeSpan? updateHoldoffPeriod = null, string e039LogConfigSelect = null, INamedValueSet initialAttributes = null, E039AccumulatorInfo? initialInfo = null, ValueContainer initialValue = default(ValueContainer), string accumulatorObjectType = Constants.DefaultAccumulatorObjectType, E039ObjectFlags flags = E039ObjectFlags.None)
         {
             var addItemAttributes = GenerateAccumulatorAddItemAttributes(initialAttributes, initialInfo, initialValue);
 
@@ -667,7 +668,7 @@ namespace MosaicLib.Semi.E039.Accumulators
         /// Construction helper method - This method combines accumulator construction (when needed) with creation of a corresponding helper.
         /// The behavior of the ifNeeded object creation is determined by the GenerateCreateAccumulatorUpdateItem method which makes use of the GenerateAccumulatorAddItemAttributes(<paramref name="initialAttributes"/>, <paramref name="initialInfo"/>, <paramref name="initialValue"/>) method.
         /// </summary>
-        public static E039AccumulatorSourceHelper CreateAccumulatorAndHelper(this IE039TableUpdater tableUpdater, string accumulatorName, TimeSpan? updateHoldoffPeriod = null, string e039LogConfigSelect = null, INamedValueSet initialAttributes = null, E039AccumulatorInfo? initialInfo = null, ValueContainer initialValue = default(ValueContainer), string accumulatorObjectType = Constants.DefaultAccumulatorObjectType, E039ObjectFlags flags = E039ObjectFlags.Pinned)
+        public static E039AccumulatorSourceHelper CreateAccumulatorAndHelper(this IE039TableUpdater tableUpdater, string accumulatorName, TimeSpan? updateHoldoffPeriod = null, string e039LogConfigSelect = null, INamedValueSet initialAttributes = null, E039AccumulatorInfo? initialInfo = null, ValueContainer initialValue = default(ValueContainer), string accumulatorObjectType = Constants.DefaultAccumulatorObjectType, E039ObjectFlags flags = E039ObjectFlags.None)
         {
             E039AccumulatorObserver accumObs;
             tableUpdater.CreateAccumulatorAndObserver(accumulatorName, out accumObs, initialAttributes: initialAttributes, initialInfo: initialInfo, initialValue: initialValue, accumulatorObjectType: accumulatorObjectType, flags: flags);
@@ -679,7 +680,7 @@ namespace MosaicLib.Semi.E039.Accumulators
         /// Construction helper method - This method combines accumulator construction (when needed)
         /// The behavior of the ifNeeded object creation is determined by the GenerateCreateAccumulatorUpdateItem method which makes use of the GenerateAccumulatorAddItemAttributes(<paramref name="initialAttributes"/>, <paramref name="initialInfo"/>, <paramref name="initialValue"/>) method.
         /// </summary>
-        public static string CreateAccumulatorAndObserver(this IE039TableUpdater tableUpdater, string accumulatorName, out E039AccumulatorObserver accumObs, INamedValueSet initialAttributes = null, E039AccumulatorInfo? initialInfo = null, ValueContainer initialValue = default(ValueContainer), string accumulatorObjectType = Constants.DefaultAccumulatorObjectType, E039ObjectFlags flags = E039ObjectFlags.Pinned)
+        public static string CreateAccumulatorAndObserver(this IE039TableUpdater tableUpdater, string accumulatorName, out E039AccumulatorObserver accumObs, INamedValueSet initialAttributes = null, E039AccumulatorInfo? initialInfo = null, ValueContainer initialValue = default(ValueContainer), string accumulatorObjectType = Constants.DefaultAccumulatorObjectType, E039ObjectFlags flags = E039ObjectFlags.None)
         {
             var accumulatorID = tableUpdater.CreateAccumulatorID(accumulatorName, accumulatorObjectType: accumulatorObjectType);
 
@@ -699,7 +700,7 @@ namespace MosaicLib.Semi.E039.Accumulators
         /// When the accumulator already exists then these attributes will be merged with its existing attributes using this merge behavior so only attrribute values that are specified here and are not already present (with this or another value) in the accumulator object will be added to the object.
         /// Any exisiting accumulator attribute value will not be changed by this item.
         /// </summary>
-        public static E039UpdateItem.AddObject GenerateCreateAccumulatorUpdateItem(this E039ObjectID accumID, INamedValueSet initialAttributes = null, E039AccumulatorInfo? initialInfo = null, ValueContainer initialValue = default(ValueContainer), E039ObjectFlags flags = E039ObjectFlags.Pinned)
+        public static E039UpdateItem.AddObject GenerateCreateAccumulatorUpdateItem(this E039ObjectID accumID, INamedValueSet initialAttributes = null, E039AccumulatorInfo? initialInfo = null, ValueContainer initialValue = default(ValueContainer), E039ObjectFlags flags = E039ObjectFlags.None)
         {
             var addItemAttributes = GenerateAccumulatorAddItemAttributes(initialAttributes, initialInfo, initialValue);
 

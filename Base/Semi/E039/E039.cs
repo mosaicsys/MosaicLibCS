@@ -310,8 +310,9 @@ namespace MosaicLib.Semi.E039
 
         /// <summary>
         /// This UpdateItem is used to add an object with the given objID and attributes to the Table.  
-        /// The given Flags will be used to control how the addition is performed, and will be re-used when reloading the object from persistent storage
-        /// the next time the part is constructed.
+        /// The given Flags will be used to control how the addition is performed, and will be re-used when reloading the object from persistent storage the next time the part is constructed.
+        /// If IfNeeded is false and the object already exists then the AddObject opertion will fail.
+        /// If IfNeeded is true and the object already exists then the AddObject operation will succeed and the conatined Attributes will be merged with the existing object's Attributes using the contained MergeBehavior (usually AddAndUpdate, AddNewItems, or None), and the given Flags value will be used to update/replace the ClientUsableFlags flags in the object.  If an IVA has already been created and the new flags do not indicate CreateIVA then IVA creation and use will be disable the next time the object is reloaded from persist storage.
         /// </summary>
         public class AddObject : ObjIDAndAttributeBase
         {
@@ -1048,7 +1049,7 @@ namespace MosaicLib.Semi.E039
         [EnumMember]
         Pinned = 0x10,
 
-        /// <summary>Client usable: Flag indicates that the client would like the table manager to create an IVA for this object [0x0100]</summary>
+        /// <summary>Client usable: Flag indicates that the client would like the table manager to create an IVA for this object.  Generally the use of this flag should not be combined with the use of the Pinned flag.  [0x0100]</summary>
         [EnumMember]
         CreateIVA = 0x100,
 
@@ -1219,7 +1220,8 @@ namespace MosaicLib.Semi.E039
         }
 
         /// <summary>
-        /// "Copy" constructor.  Includes optional parameters that may be used to modify the copy in specific ways.
+        /// "Copy" constructor.  Useful for cloning.  Includes optional parameters that may be used to modify the copy in specific ways.
+        /// <para/>Pass <paramref name="serializeForRemoteUse"/> as true if this clone is intended for publication use (aka needs to include its Type in the serialized output).
         /// </summary>
         public E039Object(IE039Object other, E039ObjectID alternateID = null, bool serializeForRemoteUse = false)
         {
@@ -1320,6 +1322,8 @@ namespace MosaicLib.Semi.E039
         [OnDeserialized]
         private void OnDeserialized(StreamingContext sc)
         {
+            // The Type is non-empty when deserializing an object that was cloned for remote serialization use (serializeForRemoteUse was given as true).  
+            // The Type is empty when deserialization was from a persist file where the type is implicit in the location of the object in the type table that it is found under.
             if (!Type.IsNullOrEmpty())
                 _id = new E039ObjectID(Name, Type, UUID, tableObserver: null);
 
@@ -1352,7 +1356,16 @@ namespace MosaicLib.Semi.E039
         {
             StringBuilder sb = new StringBuilder();
 
-            sb.Append(ID.ToString(toStringSelect));
+            if (ID != null)
+                sb.Append(ID.ToString(toStringSelect));
+            else
+            {
+                if (Type != null)
+                    sb.CheckedAppendFormat("{0}:", Type);
+                else
+                    sb.Append("[$$PersistReload_NoType$$]:");
+                sb.CheckedAppendFormat("{0}", Name);
+            }
 
             bool linkShortIDs = toStringSelect.IsSet(E039ToStringSelect.LinkedShortIDs);
             E039ToStringSelect linkIDToStringSelect = linkShortIDs ? E039ToStringSelect.None : E039ToStringSelect.FullName;
@@ -2465,7 +2478,7 @@ namespace MosaicLib.Semi.E039
                     var setUpdateTracker = activeSetUpdateCollectorList[idx];
 
                     // clone the touched objects to be published so that we can enable their serializeWithType option.  This will allow the derserialized versions to fully reconsitute their E039ObjectID on deserialization (using the annotated OnDeserialized method).
-                    E039Object[] addedObjectsArray = setUpdateTracker.addedSetItemTrackersList.Select(ot => new E039Object(ot.lastPublishedObj, serializeForRemoteUse: true)).ToArray();
+                    E039Object[] addedObjectsArray = setUpdateTracker.addedSetItemTrackersList.Select(ot => ot.lastPublishedObjSerializeForRemoteUse ?? new E039Object(ot.lastPublishedObj, serializeForRemoteUse: true)).ToArray();
 
                     if (setUpdateTracker.referenceSet != null)
                     {
@@ -2857,8 +2870,9 @@ namespace MosaicLib.Semi.E039
             public NamedValueSet objAttributesWorking;
 
             public ulong lastPublishedSeqNum;
-            public E039Object lastPublishedObj;        // used for serialization and IVA publication.  Each instance must be treated as being immutable (read only) once it has been published.
-            public volatile IE039Object volatileLastPublishedIObj;
+            public E039Object lastPublishedObj;        // used for local publication and persistance.  Each instance must be treated as being immutable (read only) once it has been published.
+            public volatile IE039Object volatileLastPublishedIObj;      // used for local publication and for InnerGetTypeAndInstanceFilteredSet.  Each instance must be treated as being immutable (read only) once it has been published.
+            public E039Object lastPublishedObjSerializeForRemoteUse;     // used for set contents and for IVA publication.  Each instance must be treated as being immutable (read only) once it has been published.
 
             public volatile InterlockedNotificationRefObject<IE039Object> objPublisher = new InterlockedNotificationRefObject<IE039Object>();
 
@@ -2876,13 +2890,19 @@ namespace MosaicLib.Semi.E039
                 {
                     lastPublishedObj = new E039Object(obj);
                     volatileLastPublishedIObj = lastPublishedObj;
+                    lastPublishedObjSerializeForRemoteUse = null;
                 }
 
                 if (objPublisher != null)
                     objPublisher.Object = volatileLastPublishedIObj;
 
                 if (objIVA != null)
-                    objIVA.Set(volatileLastPublishedIObj);
+                {
+                    if (lastPublishedObjSerializeForRemoteUse == null)
+                        lastPublishedObjSerializeForRemoteUse = new E039Object(lastPublishedObj, serializeForRemoteUse: true);
+
+                    objIVA.Set(lastPublishedObjSerializeForRemoteUse);       // the same object may be Set to the IVA multiple times if publicationTriggeredByLinkedObject is true.
+                }
 
                 typeTableTracker.lastPublishedSeqNum = seqNum;
                 typeSetTracker.lastPublishedSeqNum = seqNum;

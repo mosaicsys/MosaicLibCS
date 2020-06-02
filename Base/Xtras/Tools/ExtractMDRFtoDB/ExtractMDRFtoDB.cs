@@ -151,7 +151,9 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                 return this;
             }
 
-            private HashSet<string> IncludeGroupSet, IncludeIOPointSet, IncludeOccurrenceSet;
+            private List<string> IncludeIOPointSetList;
+            private HashSet<string> IncludeGroupSet, IncludeOccurrenceSet;
+            private Dictionary<string, int> IncludePointSetAndPosition;
             private List<string> IncludeIOPointPrefixSet, IncludeIOPointContainsSet, ExcludeIOPointContainsSet;
 
             public MapNameFromToList MapNameFromToList;
@@ -164,7 +166,10 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                     IncludeGroupSet = new HashSet<string>(IncludeGroupSpecStr.Split(ItemSplitChar).Select(item => item.Trim()));
 
                 if (IncludeIOPointSpecStr.IsNeitherNullNorEmpty())
-                    IncludeIOPointSet = new HashSet<string>(IncludeIOPointSpecStr.Split(ItemSplitChar).Select(item => item.Trim()));
+                {
+                    IncludeIOPointSetList = IncludeIOPointSpecStr.Split(ItemSplitChar).Select(item => item.Trim()).ToList();
+                    IncludePointSetAndPosition = new Dictionary<string, int>().SafeAddRange(IncludeIOPointSetList.Select((name, index) => KVP.Create(name, index + 1)));
+                }
 
                 if (IncludeIOPointPrefixSpecStr.IsNeitherNullNorEmpty())
                     IncludeIOPointPrefixSet = new List<string>(IncludeIOPointPrefixSpecStr.Split(ItemSplitChar).Select(item => item.Trim()));
@@ -200,16 +205,45 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                 return Map(occurrenceInfo.Name, TokenType.OccurrenceName);
             }
 
-            public string GetMappedName(IGroupPointInfo groupPointInfo, IGroupInfo groupInfo)
+            private string Map(string givenToken, TokenType tokenType)
+            {
+                HashSet<string> tokenTypeIncludeSet = null;
+                switch (tokenType)
+                {
+                    case TokenType.GroupName: tokenTypeIncludeSet = IncludeGroupSet; break;
+                    case TokenType.OccurrenceName: tokenTypeIncludeSet = IncludeOccurrenceSet; break;
+                    default: break;
+                }
+
+                if (givenToken.IsNullOrEmpty() || (tokenTypeIncludeSet != null && !tokenTypeIncludeSet.Contains(givenToken)))
+                    return string.Empty;
+
+                var outputToken = givenToken;
+                if (MapNameFromToList != null && MapNameFromToList.Map(givenToken, ref outputToken))
+                    return outputToken;
+                else
+                    return givenToken;
+            }
+
+            public Tuple<string, bool, int> GetMappedNameAndOrder(IGroupPointInfo groupPointInfo, IGroupInfo groupInfo)
             {
                 string combinedName = "{0}.{1}".CheckedFormat(groupInfo.Name, groupPointInfo.Name);
+                int order = 0;
 
-                bool includeName = (IncludeIOPointSet == null && IncludeIOPointPrefixSet == null && (ExcludeIOPointContainsSet != null || IncludeIOPointContainsSet == null));
+                bool includeName = (IncludePointSetAndPosition == null && IncludeIOPointPrefixSet == null && (ExcludeIOPointContainsSet != null || IncludeIOPointContainsSet == null));
 
-                if (IncludeIOPointSet != null)
+                if (IncludePointSetAndPosition != null)
                 {
-                    if (IncludeIOPointSet.Contains(groupPointInfo.Name) || IncludeIOPointSet.Contains(combinedName))
+                    if (IncludePointSetAndPosition.ContainsKey(groupPointInfo.Name))
+                    {
+                        order = IncludePointSetAndPosition.SafeTryGetValue(groupPointInfo.Name);
                         includeName = true;
+                    }
+                    else if (IncludePointSetAndPosition.ContainsKey(combinedName))
+                    {
+                        order = IncludePointSetAndPosition.SafeTryGetValue(combinedName);
+                        includeName = true;
+                    }
                 }
 
                 if (ExcludeIOPointContainsSet != null)
@@ -231,40 +265,19 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                 }
 
                 if (!includeName)
-                    return string.Empty;
+                    return Tuple.Create(string.Empty, false, 0);
 
                 if (MapNameFromToList != null)
                 {
                     string mappedName = null;
 
                     if (MapNameFromToList.Map(combinedName, ref mappedName))
-                        return mappedName;
+                        return Tuple.Create(mappedName, order > 0, order);
                     else if (MapNameFromToList.Map(groupPointInfo.Name, ref mappedName))
-                        return mappedName;
+                        return Tuple.Create(mappedName, order > 0, order);
                 }
 
-                return groupPointInfo.Name;
-            }
-
-            public string Map(string givenToken, TokenType tokenType)
-            {
-                HashSet<string> tokenTypeIncludeSet = null;
-                switch (tokenType)
-                {
-                    case TokenType.GroupName: tokenTypeIncludeSet = IncludeGroupSet; break;
-                    case TokenType.IOPointName: tokenTypeIncludeSet = IncludeIOPointSet; break;
-                    case TokenType.OccurrenceName: tokenTypeIncludeSet = IncludeOccurrenceSet; break;
-                    default: break;
-                }
-
-                if (givenToken.IsNullOrEmpty() || (tokenTypeIncludeSet != null && !tokenTypeIncludeSet.Contains(givenToken)))
-                    return string.Empty;
-
-                var outputToken = givenToken;
-                if (MapNameFromToList != null && MapNameFromToList.Map(givenToken, ref outputToken))
-                    return outputToken;
-                else
-                    return givenToken;
+                return Tuple.Create(groupPointInfo.Name, order > 0, order);
             }
         }
 
@@ -735,10 +748,16 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                 TableName = MappedGroupName.IsNeitherNullNorEmpty() ? MappedGroupName : string.Empty;
                 GroupInfo = groupInfo;
                 VCEHelper = vceHelper;
-                MappedGroupPointInfoArray = groupInfo.GroupPointInfoArray.Select(gpi => new MappedGroupPointInfo(gpi, groupInfo, settings)).ToArray();
-                NumPoints = MappedGroupPointInfoArray.Length;
+                RawMappedGroupPointInfoArray = groupInfo.GroupPointInfoArray.Select((gpi, index) => new MappedGroupPointInfo(index, gpi, groupInfo, settings)).ToArray();
 
-                RecordThisGroup = MappedGroupName.IsNeitherNullNorEmpty() && !MappedGroupName.Contains("'") && MappedGroupPointInfoArray.Any(mgpi => mgpi.RecordThisPoint);
+                var orderedMGPIArray = RawMappedGroupPointInfoArray.Where(mgpi => mgpi.MappedPointHasExplicitOrder).OrderBy(mgpi => mgpi.MappedPointExplicitOrder).ToArray();
+                var unorderedMGPIArray = RawMappedGroupPointInfoArray.Where(mgpi => !mgpi.MappedPointHasExplicitOrder).ToArray();
+
+                FilteredMappedGroupPointInfoArray = orderedMGPIArray.Concat(unorderedMGPIArray).Where(mgpi => mgpi.RecordThisPoint).ToArray();
+
+                NumFilteredPoints = FilteredMappedGroupPointInfoArray.Length;
+
+                RecordThisGroup = MappedGroupName.IsNeitherNullNorEmpty() && !MappedGroupName.Contains("'") && (NumFilteredPoints > 0);
 
                 if (settings.UsingNominalSampleInterval)
                 {
@@ -752,23 +771,34 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
             public string TableName { get; private set; }
             public IGroupInfo GroupInfo { get; private set; }
             public VCEHelper VCEHelper { get; private set; }
-            public MappedGroupPointInfo[] MappedGroupPointInfoArray { get; private set; }
-            public int NumPoints { get; private set; }
+            public MappedGroupPointInfo[] RawMappedGroupPointInfoArray { get; private set; }
+            public MappedGroupPointInfo[] FilteredMappedGroupPointInfoArray { get; private set; }
+            public int NumFilteredPoints { get; private set; }
             public bool FindFirstNonEmptyDone { get; private set; }
-            public List<VCSetDataRow> dataRowList = new List<VCSetDataRow>();
+            public List<VCSetDataRow> filteredMGPIDataRowList = new List<VCSetDataRow>();
             public bool UsingRowAddCadencingTimer { get; private set; }
             public QpcTimer rowAddCadencingTimer;
 
             public class MappedGroupPointInfo
             {
-                public MappedGroupPointInfo(IGroupPointInfo groupPointInfo, IGroupInfo groupInfo, Settings settings)
+                public MappedGroupPointInfo(int indexInGroup, IGroupPointInfo groupPointInfo, IGroupInfo groupInfo, Settings settings)
                 {
-                    MappedPointName = settings.GetMappedName(groupPointInfo, groupInfo);
+                    MappedPointFromGroupPointIndex = indexInGroup;
+                    var t = settings.GetMappedNameAndOrder(groupPointInfo, groupInfo);
+                    if (t != null)
+                    {
+                        MappedPointName = t.Item1;
+                        MappedPointHasExplicitOrder = t.Item2;
+                        MappedPointExplicitOrder = t.Item3;
+                    }
                     RecordThisPoint = MappedPointName.IsNeitherNullNorEmpty() && !MappedPointName.Contains("'");
                     GroupPointInfo = groupPointInfo;
                 }
 
+                public int MappedPointFromGroupPointIndex { get; private set; }
                 public string MappedPointName { get; private set; }
+                public int MappedPointExplicitOrder { get; private set; }
+                public bool MappedPointHasExplicitOrder { get; private set; }
                 public bool RecordThisPoint { get; private set; }
                 public IGroupPointInfo GroupPointInfo { get; private set; }
                 public ContainerStorageType ExtractedCST { get; set; }
@@ -780,16 +810,16 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
 
                 if (includeThisRow)
                 {
-                    var vcSetDataRow = new VCSetDataRow(pceData, MappedGroupPointInfoArray, VCEHelper);
-                    dataRowList.Add(vcSetDataRow);
+                    var vcSetDataRow = new VCSetDataRow(pceData, FilteredMappedGroupPointInfoArray, VCEHelper);
+                    filteredMGPIDataRowList.Add(vcSetDataRow);
 
                     if (!FindFirstNonEmptyDone)
                     {
                         bool haveNone = false;
 
-                        for (int idx = 0; idx < NumPoints; idx++)
+                        for (int idx = 0; idx < NumFilteredPoints; idx++)
                         {
-                            var mgpi = MappedGroupPointInfoArray[idx];
+                            var mgpi = FilteredMappedGroupPointInfoArray[idx];
                             if (mgpi.ExtractedCST == ContainerStorageType.None && mgpi.RecordThisPoint)
                             {
                                 var vc = vcSetDataRow.VCArray[idx];
@@ -838,6 +868,9 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
             public List<VCDataRow> vcRowList = new List<VCDataRow>();
         }
 
+        /// <summary>
+        /// Contains a set of information from the PCEData (SeqNum, UTCDateTime, FileDeltaTimeStamp, PCE) and an array of the correspondingly selected ValueContainer from the corresponding set of GroupPointInfo objects.
+        /// </summary>
         public class VCSetDataRow
         {
             public VCSetDataRow(ProcessContentEventData pceData, GroupDataAccumulator.MappedGroupPointInfo [] mappedGroupPointInfoArray, VCEHelper vceHelper)
@@ -1213,8 +1246,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
 
             public void AddAccumulatedGroupData(MDRFContent mdrfContent, GroupDataAccumulator groupDataAccumulator, DateTime fileBaseTime)
             {
-                var columnDecoderTupleArray = groupDataAccumulator.MappedGroupPointInfoArray.Select((mgpi, index) => Tuple.Create(index, mgpi.RecordThisPoint && mgpi.ExtractedCST != ContainerStorageType.None, mgpi.MappedPointName, mgpi)).ToArray();
-                var filteredColumnDecoderTupleArray = columnDecoderTupleArray.Where(t => t.Item2).ToArray();
+                var filteredColumnDecoderTupleArray = groupDataAccumulator.FilteredMappedGroupPointInfoArray.Select((mgpi, index) => Tuple.Create(index, mgpi.RecordThisPoint && mgpi.ExtractedCST != ContainerStorageType.None, mgpi.MappedPointName, mgpi)).ToArray();
 
                 const int includeColumnCountLimit = 995;
                 if (filteredColumnDecoderTupleArray.Length > includeColumnCountLimit)
@@ -1285,7 +1317,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                     var insertDataRowCmd = new SQLiteCommand(dbConn) { CommandText = "INSERT INTO '{0}' (DateTime,{1}) VALUES (?,{2})".CheckedFormat(groupDataAccumulator.TableName, String.Join(",", filteredColumnNames.Select(colName => "'{0}'".CheckedFormat(colName))), String.Join(",", filteredColumnNames.Select(name => "?"))) };
                     var dateTimeParam = new SQLiteParameter("dateTime");
 
-                    var ioPointParamsTupleArray = columnDecoderTupleArray.Where(t => t.Item2).Select(t => Tuple.Create(new SQLiteParameter(t.Item3), t.Item1)).ToArray();
+                    var ioPointParamsTupleArray = filteredColumnDecoderTupleArray.Select(t => Tuple.Create(new SQLiteParameter(t.Item3), t.Item1)).ToArray();
 
                     insertDataRowCmd.Parameters.Add(dateTimeParam);
                     insertDataRowCmd.Parameters.AddRange(ioPointParamsTupleArray.Select(t => t.Item1).ToArray());
@@ -1293,7 +1325,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                     var transaction = dbConn.BeginTransaction();
                     int count = 0;
                     {
-                        foreach (var vcSetRow in groupDataAccumulator.dataRowList)
+                        foreach (var vcSetRow in groupDataAccumulator.filteredMGPIDataRowList)
                         {
                             if (++count % 2000 == 0)
                             {
@@ -1408,7 +1440,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                         {
                             mappedGroupName = groupDataAccumulator.MappedGroupName,
                             fileStream = System.IO.File.CreateText(filePath),
-                            columnNameArray = groupDataAccumulator.MappedGroupPointInfoArray.Select(mgpi => mgpi.MappedPointName).ToArray(),
+                            columnNameArray = groupDataAccumulator.FilteredMappedGroupPointInfoArray.Select(mgpi => mgpi.MappedPointName).ToArray(),
                         };
 
                         groupWriteHelperDictionary[groupWriteHelper.mappedGroupName] = groupWriteHelper;
@@ -1418,13 +1450,13 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                     }
 
                     // build mapping from this gda's MappedGroupPointInfoArray to the column indexes that the CSV uses.
-                    var columnNameAndIndexKVPSet = groupDataAccumulator.MappedGroupPointInfoArray.Select((mgpi, columnIndex) => KVP.Create(mgpi.MappedPointName, columnIndex)).ToArray();
+                    var columnNameAndIndexKVPSet = groupDataAccumulator.FilteredMappedGroupPointInfoArray.Select((mgpi, columnIndex) => KVP.Create(mgpi.MappedPointName, columnIndex)).ToArray();
                     var mappedPointNameToIndexDictionary = new Dictionary<string, int>().SafeAddRange(columnNameAndIndexKVPSet);
 
                     int[] reverseMappedPointIndexByColumn = groupWriteHelper.columnNameArray.Select(columnName => mappedPointNameToIndexDictionary.SafeTryGetValue(columnName, fallbackValue: -1)).ToArray();
 
                     var fileStream = groupWriteHelper.fileStream;
-                    foreach (var row in groupDataAccumulator.dataRowList)
+                    foreach (var row in groupDataAccumulator.filteredMGPIDataRowList)
                     {
                         fileStream.Write("{0:MM/dd/yyyy HH:mm:ss.fff}".CheckedFormat(fileBaseTime + row.FileDeltaTimeStamp.FromSeconds()));
                         foreach (var mappedPointIndex in reverseMappedPointIndexByColumn)
