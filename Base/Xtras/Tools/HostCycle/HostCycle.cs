@@ -61,6 +61,8 @@ namespace HostCycle
             manager = new ManagerBase(partID + ".Mgr");
             port = manager.CreatePort(manager.PartID + ".HSMS", PortType.E037_Active_SingleSession, makeDefault: true, portConfigNVS: portSettingsNVS);
 
+            port.BaseStateNotifier.NotificationList.AddItem(this);
+
             var lpPortNumRange = Enumerable.Range(1, numLPs);
 
             EventReportNotificationList = new EventHandlerNotificationList<EventReport>(this);
@@ -137,6 +139,9 @@ namespace HostCycle
         protected override string PerformGoOnlineActionEx(IProviderFacet ipf, bool andInitialize, INamedValueSet npv)
         {
             hasInitializeBeenRequested |= andInitialize;
+
+            if (BaseState.ExplicitFaultReason.IsNeitherNullNorEmpty())
+                SetExplicitFaultReason(""); // clear any prior explicit fault reason.
 
             PerformMainLoopService();
 
@@ -561,7 +566,29 @@ namespace HostCycle
             ServicePendingEvents();
             ServiceS6F1Queue();
             Service039Support();
+
+            {
+                var portBaseState = port.BaseState;
+                var portIsFaulted = portBaseState.IsFaulted();
+
+                if (BaseState.UseState.IsOnline(acceptAttemptOnline: false, acceptUninitialized: false) && BaseState.IsFaulted() != portIsFaulted)
+                {
+                    if (portIsFaulted && !object.ReferenceEquals(portBaseState, lastFaultedPortBaseState))
+                    {
+                        var portFaultReason = $"{port.PartID} is faulted: ${portBaseState}";
+                        if (BaseState.ExplicitFaultReason != portFaultReason)
+                            SetExplicitFaultReason(portFaultReason);
+
+                        lastFaultedPortBaseState = portBaseState;
+                    }
+                    else if (BaseState.ExplicitFaultReason.IsNeitherNullNorEmpty())
+                    {
+                        SetExplicitFaultReason("");
+                    }
+                }
+            }
         }
+        private IBaseState lastFaultedPortBaseState;
 
         private void ReadConfigValues()
         {
@@ -611,6 +638,7 @@ namespace HostCycle
         {
             try
             {
+                manager.RegisterSFProcessingHandler(RootAsyncS1F13Handler, "S1/F13", "S1/F13[W]");
                 manager.RegisterSFProcessingHandler(RootAsyncS6F11Handler, "S6/F11", "S6/F11[W]");
                 manager.RegisterSFProcessingHandler(RootAsyncS10F1Handler, "S10/F1", "S10/F1[W]");
                 manager.RegisterSFProcessingHandler(RootAsyncS16F7Handler, "S16/F7", "S16/F7[W]");
@@ -1459,6 +1487,22 @@ namespace HostCycle
         ReadOnlyIDictionary<ValueContainer, EventSpec> eventIDToEventSpecDictionary = new ReadOnlyIDictionary<ValueContainer, EventSpec>();
         List<ReportSpec> reportSpecList = new List<ReportSpec>();
 
+        /// <summary>S1/F13: Establish Communications Request (CR) handler</summary>
+        private void RootAsyncS1F13Handler(IMessage mesg)
+        {
+            var bodyVC = mesg.GetDecodedContents();
+
+            eqpInfoNVS.SetValue("MDLN", bodyVC.SafeAccess(0).GetValue<string>(rethrow: true).MapNullToEmpty());
+            eqpInfoNVS.SetValue("SOFTREV", bodyVC.SafeAccess(1).GetValue<string>(rethrow: true).MapNullToEmpty());
+
+            ivaEqpInfoNVS.Set(eqpInfoNVS);
+
+            if (mesg.SF.ReplyExpected)
+            {
+                mesg.SetReply(mesg.CreateReply().SetContentBytes(new L(new Bi((byte)MosaicLib.Semi.E005.COMMACK.Accepted), new L())));      // S1F14 Establish Communications Request Acknowledge (CRA): host sends empty list for item 2 (nomninally MDLN, SOFTREV)
+            }
+        }
+
         /// <summary>S6/F11: Event Report Send (ERS) handler</summary>
         private void RootAsyncS6F11Handler(IMessage mesg)
         {
@@ -1946,16 +1990,8 @@ namespace HostCycle
 
         private string EnableAllAlarms(bool enable = true)
         {
-            var mesg = port.CreateMessage("S5F3W").SetContentBytes(new L(new Bi((byte)ALEN.Enable), new VCB(ValueContainer.Create<int[]>(new int[0]))));
-
-            string ec = mesg.Send().Run();
-
-            if (ec.IsNullOrEmpty())
-            {
-                var ackc5 = mesg.Reply.GetDecodedContents().SafeAccess(0).GetValue<ACKC5>(rethrow: false);
-                if (ackc5 != ACKC5.Accepted)
-                    ec = "{0} was not accepted: ackc5:{1} [{2}]".CheckedFormat(mesg, ackc5, mesg.Reply);
-            }
+            string ec = string.Empty;
+            ValueContainer firstALID = default(ValueContainer);
 
             // s5f5 - ALIDs
             if (ec.IsNullOrEmpty())
@@ -1973,6 +2009,30 @@ namespace HostCycle
                         aiUpdateSet = aiUpdateSet.OrderBy(ai => ai.ALID.GetValue<long>(rethrow: false)).ToArray();
 
                     aiUpdateSet.DoForEach(ai => AsynchHandleRxALIDInfo(ai));
+
+                    firstALID = aiUpdateSet.FirstOrDefault()?.ALID ?? default(ValueContainer);
+                }
+            }
+
+            if (ec.IsNullOrEmpty())
+            {
+                ValueContainer alidSetSpec;
+                switch (firstALID.cvt)
+                {
+                    case ContainerStorageType.I4: alidSetSpec = ValueContainer.Create(new int[0]); break;
+                    case ContainerStorageType.U4: alidSetSpec = ValueContainer.Create(new uint[0]); break;
+                    default: alidSetSpec = ValueContainer.Create(new uint[0]); break;
+                }
+
+                var mesg = port.CreateMessage("S5F3W").SetContentBytes(new L(new Bi((byte)ALEN.Enable), new VCB(alidSetSpec)));
+
+                ec = mesg.Send().Run();
+
+                if (ec.IsNullOrEmpty())
+                {
+                    var ackc5 = mesg.Reply.GetDecodedContents().SafeAccess(0).GetValue<ACKC5>(rethrow: false);
+                    if (ackc5 != ACKC5.Accepted)
+                        ec = "{0} was not accepted: ackc5:{1} [{2}]".CheckedFormat(mesg, ackc5, mesg.Reply);
                 }
             }
 
@@ -2373,6 +2433,7 @@ namespace HostCycle
 
             stateVSA = new ValueSetAdapter<State>() { ValueSet = state, IssueEmitter = Log.Debug, ValueNoteEmitter = Log.Trace }.Setup(PartID + ".").Set();
 
+            ivaAutoPWCAndCancel = Values.Instance.GetValueAccessor<bool>(PartID + ".AutoPWCAndCancel").Set(false);
             ivaCycleSelected = Values.Instance.GetValueAccessor<bool>(PartID + ".CycleSelected").Set(false);
             ivaRequestPause = Values.Instance.GetValueAccessor<bool>(PartID + ".RequestPause").Set(false);
             ivaRequestStop = Values.Instance.GetValueAccessor<bool>(PartID + ".RequestStop").Set(false);
@@ -2380,6 +2441,7 @@ namespace HostCycle
             ivaRunNumber = Values.Instance.GetValueAccessor<string>(PartID + ".RunNumber").Set("");
         }
 
+        IValueAccessor<bool> ivaAutoPWCAndCancel;
         IValueAccessor<bool> ivaCycleSelected;
         IValueAccessor<bool> ivaRequestPause;
         IValueAccessor<bool> ivaRequestStop;
@@ -2496,7 +2558,59 @@ namespace HostCycle
                 else
                     RequestResumeAllJobs();
             }
+
+            var entryIVAAutoPWCAndCancelValue = ivaAutoPWCAndCancel.Value;
+            var ivaAutoPWCAndCancelValue = ivaAutoPWCAndCancel.Update().Value;
+            if (ivaAutoPWCAndCancelValue && !entryIVAAutoPWCAndCancelValue)
+                ivaRunNumber.Set($"{runNumber = 0}");
+
+            if (ivaAutoPWCAndCancelValue)
+            {
+                string activity = "";
+                string ec = null;
+
+                if (state.CIDS == CIDS.WaitingForHost && state.LTS == LTS.TransferBlocked)
+                {
+                    if (autoPWCAndCancelHoldoffTimer.StartIfNeeded().IsTriggered)
+                    {
+                        activity = "PWC1";
+                        ec = RunGenericS3F17(CARRIERACTION.ProceedWithCarrier, new NamedValueSet() { { "CarrierID", state.CIDS_CarrierID } });
+                        pwcIssued |= ec.IsNullOrEmpty();
+                    }
+                }
+                else if (state.CSMS == CSMS.WaitingForHost && state.LTS == LTS.TransferBlocked)
+                {
+                    if (autoPWCAndCancelHoldoffTimer.StartIfNeeded().IsTriggered)
+                    {
+                        activity = "PWC2";
+                        ec = RunGenericS3F17(CARRIERACTION.ProceedWithCarrier, new NamedValueSet() { { "CarrierID", state.CIDS_CarrierID } });
+                        pwcIssued |= ec.IsNullOrEmpty();
+                    }
+                }
+                else if ((state.CSMS == CSMS.SlotMapVerificationOk || state.CSMS == CSMS.SlotMapVerificationFailed) && state.LTS == LTS.TransferBlocked && pwcIssued)
+                {
+                    if (autoPWCAndCancelHoldoffTimer.StartIfNeeded().IsTriggered)
+                    {
+                        pwcIssued = false;
+                        activity = "CancelCarrierAtPort";
+                        ec = RunGenericS3F17(CARRIERACTION.CancelCarrierAtPort, NamedValueSet.Empty);
+                        ivaRunNumber.Set($"{++runNumber}");
+                    }
+                }
+
+                if (ec != null)
+                    autoPWCAndCancelHoldoffTimer.Stop();
+
+                if (ec.IsNeitherNullNorEmpty())
+                {
+                    Log.Signif.Emit($"Disabling AutoPWCAndCancel during '{activity}': {ec}");
+                    ivaAutoPWCAndCancel.Set(false);
+                }
+            }
         }
+
+        bool pwcIssued = false;
+        QpcTimer autoPWCAndCancelHoldoffTimer = new QpcTimer() { TriggerInterval = (1.0).FromSeconds() };
 
         private void RequestAbortAllJobs()
         {

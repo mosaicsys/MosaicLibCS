@@ -1534,12 +1534,13 @@ namespace MosaicLib.Semi.E037
         {
             TerminateTcpClient();
 
-            SetConnectionState(PortConnectionState.NotConnected, "{0} encountered connection related exception: {1}".CheckedFormat(methodName, socketEx.ToString(ExceptionFormat.TypeAndMessage)), qpcTimeStamp);
+            SetConnectionState(PortConnectionState.Failed, "{0} encountered connection related exception: {1}".CheckedFormat(methodName, socketEx.ToString(ExceptionFormat.TypeAndMessage)), qpcTimeStamp);
         }
 
         private void HandleNonSocketException(string methodName, System.Exception ex, QpcTimeStamp qpcTimeStamp)
         {
             TerminateTcpClient();
+
             if (isActivePort)
                 SetConnectionState(PortConnectionState.OutOfService, "{0} encountered unexpected non-socket exception: {1}".CheckedFormat(methodName, ex.ToString(ExceptionFormat.TypeAndMessageAndStackTrace)), qpcTimeStamp);
             else

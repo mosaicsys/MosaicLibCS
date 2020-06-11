@@ -1361,8 +1361,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
 
                 AddExplicitDisposeAction(() =>
                     {
-                        Fcns.DisposeOfObject(ref occurrenceFileStream);
-                        Fcns.DisposeOfObject(ref groupFileStreamList);
+                        Fcns.DisposeOfObject(ref fileStreamDisposableList);
                     });
             }
 
@@ -1413,6 +1412,8 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
 
                         occurrenceFileStream = System.IO.File.CreateText(filePath);
 
+                        fileStreamDisposableList.Add(occurrenceFileStream);
+
                         // write the header.
                         occurrenceFileStream.WriteLine("DateTime,Name,Value");
                     }
@@ -1445,6 +1446,8 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
 
                         groupWriteHelperDictionary[groupWriteHelper.mappedGroupName] = groupWriteHelper;
 
+                        fileStreamDisposableList.Add(groupWriteHelper.fileStream);
+
                         // write the header.
                         groupWriteHelper.fileStream.WriteLine(string.Concat("DateTime,", string.Join(",", groupWriteHelper.columnNameArray)));
                     }
@@ -1456,6 +1459,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                     int[] reverseMappedPointIndexByColumn = groupWriteHelper.columnNameArray.Select(columnName => mappedPointNameToIndexDictionary.SafeTryGetValue(columnName, fallbackValue: -1)).ToArray();
 
                     var fileStream = groupWriteHelper.fileStream;
+
                     foreach (var row in groupDataAccumulator.filteredMGPIDataRowList)
                     {
                         fileStream.Write("{0:MM/dd/yyyy HH:mm:ss.fff}".CheckedFormat(fileBaseTime + row.FileDeltaTimeStamp.FromSeconds()));
@@ -1482,16 +1486,19 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
 
                         fileStream.WriteLine();
                     }
+
+                    fileStream.Flush();
                 }
             }
 
             object mutex = new object();
 
+            DisposableList<System.IO.StreamWriter> fileStreamDisposableList = new DisposableList<StreamWriter>();
+
             System.IO.StreamWriter occurrenceFileStream;
 
-            DisposableList<System.IO.StreamWriter> groupFileStreamList = new DisposableList<StreamWriter>();
             Dictionary<string, GroupWriteHelper> groupWriteHelperDictionary = new Dictionary<string, GroupWriteHelper>();
-
+         
             private class GroupWriteHelper
             {
                 public string mappedGroupName;

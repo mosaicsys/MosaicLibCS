@@ -26,7 +26,7 @@ using System.Reflection;
 [assembly: AssemblyCompany("Mosaic Systems Inc.")]
 [assembly: AssemblyCopyright("Copyright © Mosaic Systems Inc.  All rights reserved.")]
 
-[assembly: AssemblyInformationalVersion("0.1.7.0_PR06: Preview 06")]
+[assembly: AssemblyInformationalVersion("0.1.7.0_PR07: Preview 07")]
 [assembly: AssemblyFileVersion("0.1.7.0")]
 [assembly: AssemblyVersion("0.1.7.0")]
 

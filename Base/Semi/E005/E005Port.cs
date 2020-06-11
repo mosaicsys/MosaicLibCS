@@ -596,7 +596,6 @@ namespace MosaicLib.Semi.E005.Port
         public PortConnectionState PortConnectionState { get; private set; }
         public QpcTimeStamp PortConnectionStateTimeStamp { get; private set; }
 
-
 		protected virtual void SetConnectionState(PortConnectionState state, string reason, QpcTimeStamp qpcTimeStamp)
 		{
 			PortConnectionState entryState = PortConnectionState;
