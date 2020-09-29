@@ -2160,6 +2160,127 @@ namespace MosaicLib.Utils
         }
 
         #endregion
+
+        #region Deduplicator
+
+        /// <summary>
+        /// This class is used to convert a loose sequence of item instances into a sequence of item instances where recent duplicates are replaced with the prior equal instance.
+        /// This can be used to help reduce the memory storeage space used when a sequence of non-identical, but otherwise equal, objects are generated.  
+        /// An example of this is meta data forwarding for IVAs propagated using a remoting connection.
+        /// <para/>Note: this class only provides heuristic deduplication.  
+        /// This class only considers one item for each given hash code and as such, if it is given a sequence of non-equal items with the same hash code value, 
+        /// it may not replace given items with an equal prior item that is in its history.
+        /// </summary>
+        public class Deduplicator<TItemType> where TItemType : IEquatable<TItemType>
+        {
+            /// <summary>Constructor.  Sets MaxHistoryCount to the given <paramref name="maxHistoryCount"/> value.</summary>
+            public Deduplicator(int maxHistoryCount = 100)
+            {
+                MaxHistoryCount = maxHistoryCount;
+            }
+
+            /// <summary>
+            /// Gives the current max history count.  
+            /// If this value is set to be less than the current number of items in the hisotry set then this property will remove the excess items from the history set.
+            /// </summary>
+            public int MaxHistoryCount
+            {
+                get { return _MaxHistoryCount; }
+                set
+                {
+                    _MaxHistoryCount = value;
+                    RemoveHistoryItemsIfNeeded(value);
+                }
+            }
+
+            private int _MaxHistoryCount;
+
+            /// <summary>
+            /// Debugging and logging helper method
+            /// </summary>
+            public override string ToString()
+            {
+                return "Deduplicator<{0}> {1} Matches:{2} NonMatches:{3} hit rate:{4:f2}".CheckedFormat(typeof(TItemType).GetTypeLeafName(), MaxHistoryCount, MatchCount, NonMatchCount, MatchCount * ((double)MatchCount + NonMatchCount).SafeOneOver());
+            }
+
+            private struct ValueHashPair
+            {
+                public int HashCode { get; set; }
+                public TItemType Value { get; set; }
+
+                public override string ToString()
+                {
+                    return "hash:{0} value:{1}".CheckedFormat(HashCode, Value.SafeToString(mapNullTo: "[Null]"));
+                }
+            }
+
+            private Queue<ValueHashPair> valueHashPairHistoryQueue = new Queue<ValueHashPair>();
+            private Dictionary<int, ValueHashPair> valueHashPairDictionary = new Dictionary<int, ValueHashPair>();
+
+            /// <summary>
+            /// This value is incremented each time the Process method is able to substitute the given item with a previously processed one of equal content
+            /// </summary>
+            public int MatchCount { get; set; }
+
+            /// <summary>
+            /// This value is incremented each time the Process method given an item that does not equal to any previously processed one within the hashcode and MaxHistoryCount constraints.
+            /// </summary>
+            public int NonMatchCount { get; set; }
+
+            /// <summary>
+            /// Removes the prior contents from the history set so that Processing of future items will not produce items that have been processed prior to this call.
+            /// </summary>
+            public void Clear()
+            {
+                valueHashPairHistoryQueue.Clear();
+                valueHashPairDictionary.Clear();
+                MatchCount = 0;
+                NonMatchCount = 0;
+            }
+
+            /// <summary>
+            /// Processes the given <paramref name="itemIn"/> instance and either returns it unmodified or returns a recently given previous item instance
+            /// that has equal content.
+            /// </summary>
+            public TItemType Process(TItemType itemIn)
+            {
+                var itemInHashCode = itemIn.SafeGetHashCode();
+
+                ValueHashPair vhp = default(ValueHashPair);
+                if (valueHashPairDictionary.TryGetValue(itemInHashCode, out vhp) && vhp.Value.SafeEquals(itemIn))
+                {
+                    MatchCount += 1;
+                    return vhp.Value;
+                }
+                else
+                {
+                    RemoveHistoryItemsIfNeeded(Math.Max(MaxHistoryCount - 1, 0));
+
+                    var newItemVHP = new ValueHashPair() { HashCode = itemInHashCode, Value = itemIn };
+
+                    valueHashPairHistoryQueue.Enqueue(newItemVHP);
+                    valueHashPairDictionary[itemInHashCode] = newItemVHP;
+
+                    NonMatchCount += 1;
+
+                    return itemIn;
+                }
+            }
+
+            /// <summary>
+            /// Common method use to shrink the history set, either on change in the MaxHistoryCount or on Process of a new item that is about to be added to the set.
+            /// </summary>
+            private void RemoveHistoryItemsIfNeeded(int maxCount)
+            {
+                while (valueHashPairHistoryQueue.Count > maxCount)
+                {
+                    var removeVHP = valueHashPairHistoryQueue.Dequeue();
+                    valueHashPairDictionary.Remove(removeVHP.HashCode);
+                }
+            }
+        }
+
+        #endregion
     }
 
     /// <summary>

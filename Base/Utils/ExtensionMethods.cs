@@ -2032,7 +2032,7 @@ namespace MosaicLib.Utils
 
         #endregion
 
-        #region IEquatable EMs (SafeEquals)
+        #region IEquatable EMs (SafeEquals, SafeGetHashCode)
 
         /// <summary>
         /// If <paramref name="item"/> is not null, then returns the results of calling <paramref name="item"/>.Equals(<paramref name="other"/>), or returns true if <paramref name="other"/> is also null, or returns false otherwise.
@@ -2043,6 +2043,31 @@ namespace MosaicLib.Utils
                 return item.Equals(other);
 
             return (other == null);
+        }
+
+        /// <summary>
+        /// If the given <paramref name="item"/> is not null then this method returns the result of calling <paramref name="item"/>.GetHashCode, otherwise this method returns the given <paramref name="hashCodeForNull"/>.
+        /// </summary>
+        public static int SafeGetHashCode<TItemType>(this TItemType item, int hashCodeForNull = -1)
+        {
+            if (item != null)
+                return item.GetHashCode();
+
+            return hashCodeForNull;
+        }
+
+        #endregion
+
+        #region Task related (StartTaskInline)
+
+        /// <summary>
+        /// This EM calls Start on the given <paramref name="task"/> instance and then returns it to support a call-chained version of Task.Start().
+        /// </summary>
+        /// <remarks>Note that attempt to use Task.StartInline for this method name caused collision with the ICF.StateInline version.</remarks>
+        public static TTaskType StartTaskInline<TTaskType>(this TTaskType task) where TTaskType : System.Threading.Tasks.Task
+        {
+            task.Start();
+            return task;
         }
 
         #endregion

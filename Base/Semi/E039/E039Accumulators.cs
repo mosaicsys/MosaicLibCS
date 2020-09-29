@@ -544,6 +544,7 @@ namespace MosaicLib.Semi.E039.Accumulators
             : base(accumObs: accumObs, updateHoldoffPeriod: updateHoldoffPeriod, e039LogConfigSelect: e039LogConfigSelect)
         {
             MaximumInterServicePeriod = DefaultMaximumInterServicePeriod;
+            ValueToTotalizeScaleFactor = 1.0;
         }
 
         /// <summary>
@@ -556,6 +557,11 @@ namespace MosaicLib.Semi.E039.Accumulators
         /// Gives the value to totalize as last explicitly updated (for use with normal Service method) or as updated by last call to ServiceWithValueToTotalize.
         /// </summary>
         public double ValueToTotalize { get; set; }
+
+        /// <summary>
+        /// Allows the caller to provide a scale factor that can be used for unit conversion.  Defaults to 1.0
+        /// </summary>
+        public double ValueToTotalizeScaleFactor { get; set; }
 
         /// <summary>
         /// Gives the timestamp 
@@ -603,7 +609,7 @@ namespace MosaicLib.Semi.E039.Accumulators
                     sequentialExceededMessageCount = 0;
                 }
 
-                base.Increment(ValueContainer.CreateF8(ValueToTotalize * lastServiceTimeStampAge.TotalSeconds), qpcTimeStamp: qpcTimeStamp, pushNow: pushNow);
+                base.Increment(ValueContainer.CreateF8(ValueToTotalize * ValueToTotalizeScaleFactor * lastServiceTimeStampAge.TotalSeconds), qpcTimeStamp: qpcTimeStamp, pushNow: pushNow);
 
                 return 1;
             }

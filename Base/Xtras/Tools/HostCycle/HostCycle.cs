@@ -1929,7 +1929,7 @@ namespace HostCycle
                     var ecVCs = mesg.Reply.GetDecodedContents().GetValue<IList<ValueContainer>>(rethrow: true);
                     var ecVC = ecVCs.SafeAccess(0);
 
-                    var ecIVA = ECID_IVI.GetValueAccessor(ecInfo.Name);
+                    var ecIVA = ECID_IVI.GetValueAccessor(ecInfo.IVAName);
                     ecIVA.Set(ecVC);
                 }
             }

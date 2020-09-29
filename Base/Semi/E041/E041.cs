@@ -2941,8 +2941,8 @@ namespace MosaicLib.Semi.E041
                     SyncTracking_NoteFailedEventDelivery(actionState.ResultCode);
 
                 weAreWaiting = false;
-                pendingDeliverEventList.Clear();
-                lastDeliveredEventListSeqNum = pendingDeliverEventListSeqNum;
+                pendingDeliveryEventList.Clear();
+                lastDeliveredEventListSeqNum = pendingDeliveryEventListSeqNum;
             }
 
             if (!syncItemsArWaitingForEventDelivery && lastStateSeqNum <= lastDeliveredEventListSeqNum)
@@ -2953,31 +2953,31 @@ namespace MosaicLib.Semi.E041
             if (!anEventListHandlerPartBaseState.IsOnline)
                 return;
 
-            pendingDeliverEventListSeqNum = GenerateNextEventSeqNum();
+            pendingDeliveryEventListSeqNum = GenerateNextEventSeqNum();
 
             foreach (var anSourceTracker in anSourceTrackingList.Array)
             {
                 if (anSourceTracker.sendRegistrationEvent)
                 {
-                    pendingDeliverEventList.Add(new ANEventInfo() { ANEventType = ANEventType.Registration, ANState = anSourceTracker.lastServicedANState ?? anSourceTracker.initialANState });
+                    pendingDeliveryEventList.Add(new ANEventInfo() { ANEventType = ANEventType.Registration, ANState = anSourceTracker.lastServicedANState ?? anSourceTracker.initialANState });
                     anSourceTracker.sendRegistrationEvent = false;
                     anSourceTracker.sendStateEvent = false;
                 }
                 else if (anSourceTracker.sendStateEvent || anSourceTracker.lastEventSeqNum >= lastDeliveredEventListSeqNum)
                 {
-                    pendingDeliverEventList.Add(new ANEventInfo() { ANEventType = ANEventType.State, ANState = anSourceTracker.lastServicedANState ?? anSourceTracker.initialANState });
+                    pendingDeliveryEventList.Add(new ANEventInfo() { ANEventType = ANEventType.State, ANState = anSourceTracker.lastServicedANState ?? anSourceTracker.initialANState });
                     anSourceTracker.sendStateEvent = false;
                 }
             }
 
-            if (pendingDeliverEventList.Count > 0)
+            if (pendingDeliveryEventList.Count > 0)
             {
                 anEventHandlerICF.Start();
                 weAreWaiting = true;
             }
             else
             {
-                lastDeliveredEventListSeqNum = pendingDeliverEventListSeqNum;
+                lastDeliveredEventListSeqNum = pendingDeliveryEventListSeqNum;
             }
         }
 
@@ -2985,15 +2985,15 @@ namespace MosaicLib.Semi.E041
         {
             anEventListHandlerPart = ANManagerPartConfig.ANEventInfoListHandlerPart;
             anEventListHandlerPartBaseState = (anEventListHandlerPart != null) ? anEventListHandlerPart.BaseState : MosaicLib.Modular.Part.BaseState.None;
-            anEventHandlerICF = (anEventListHandlerPart != null) ? anEventListHandlerPart.ProcessANEventList(pendingDeliverEventList) : null;
+            anEventHandlerICF = (anEventListHandlerPart != null) ? anEventListHandlerPart.ProcessANEventList(pendingDeliveryEventList) : null;
         }
 
         IANEventListHandlerPart anEventListHandlerPart;
         IBaseState anEventListHandlerPartBaseState = MosaicLib.Modular.Part.BaseState.None;
         IClientFacet anEventHandlerICF;
         bool weAreWaiting = false;
-        ulong pendingDeliverEventListSeqNum = 0;
-        List<ANEventInfo> pendingDeliverEventList = new List<ANEventInfo>();
+        ulong pendingDeliveryEventListSeqNum = 0;
+        List<ANEventInfo> pendingDeliveryEventList = new List<ANEventInfo>();
         ulong lastDeliveredEventListSeqNum = 0;
 
         #endregion

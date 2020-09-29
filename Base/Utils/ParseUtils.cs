@@ -511,7 +511,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Extracts a TokenType.SimpleFileName token and parses it using Int32.TryParse as a Decimal number or as a HexNumber if the token is prefixed with "0x", "0X", or "$".
+        /// Extracts a TokenType.ToNextTokenSeparator token and parses it using Int32.TryParse as a Decimal number or as a HexNumber if the token is prefixed with "0x", "0X", or "$".
         /// RequireTokenEnd, SkipTrailingWhiteSpace
         /// </summary>
         /// <param name="value">assigned to the parsed value or to zero if the extraction or parse were not successful.</param>
@@ -522,7 +522,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Extracts a TokenType.SimpleFileName token and parses it using Int32.TryParse as a Decimal number or as a HexNumber if the token is prefixed with "0x", "0X", or "$".
+        /// Extracts a TokenType.ToNextTokenSeparator token and parses it using Int32.TryParse as a Decimal number or as a HexNumber if the token is prefixed with "0x", "0X", or "$".
         /// </summary>
         public bool ParseValue(out Int32 value, bool skipTrailingWhiteSpace, bool requireTokenEnd = false)
         {
@@ -530,7 +530,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Extracts a TokenType.SimpleFileName token and parses it using Uint32.TryParse as a Decimal number or as a HexNumber if the token is prefixed with "0x", "0X", or "$".
+        /// Extracts a TokenType.ToNextTokenSeparator token and parses it using Uint32.TryParse as a Decimal number or as a HexNumber if the token is prefixed with "0x", "0X", or "$".
         /// SkipTrailingWhiteSpace
         /// </summary>
         /// <param name="value">assigned to the parsed value or to zero if the extraction or parse were not successful.</param>
@@ -541,7 +541,7 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>
-        /// Extracts a TokenType.SimpleFileName token and parses it using Uint32.TryParse as a Decimal number or as a HexNumber if the token is prefixed with "0x", "0X", or "$".
+        /// Extracts a TokenType.ToNextTokenSeparator token and parses it using Uint32.TryParse as a Decimal number or as a HexNumber if the token is prefixed with "0x", "0X", or "$".
         /// </summary>
         public bool ParseValue(out UInt32 value, bool skipTrailingWhiteSpace, bool requireTokenEnd = false)
         {

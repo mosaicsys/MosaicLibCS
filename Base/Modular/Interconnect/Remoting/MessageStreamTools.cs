@@ -1444,6 +1444,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
         private string localNamePrefix;
         private INamedValueSet localMetaDataFilterNVS;
         private string[] mdKeywordFilterArray;
+        private Utils.Collections.Deduplicator<INamedValueSet> mdDeduplicator = new Deduplicator<INamedValueSet>();
 
         #endregion
 
@@ -1649,7 +1650,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
                                     if ((pushItem.itemFlags & PushItemFlags.HasMDNVS) != 0)
                                     {
                                         if (pushItem.data.mdNVS != null)
-                                            iva.SetMetaData(pushItem.data.mdNVS, mergeBehavior: NamedValueMergeBehavior.AddAndUpdate);
+                                            iva.SetMetaData(mdDeduplicator.Process(pushItem.data.mdNVS), mergeBehavior: NamedValueMergeBehavior.AddAndUpdate);
                                         ivaTracker.lastMDSeqNum = iva.MetaDataSeqNum;
                                     }
 
@@ -1704,7 +1705,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
                                         if ((pushItem.itemFlags & PushItemFlags.HasMDNVS) != 0)
                                         {
                                             if (data.mdNVS != null)
-                                                ivaTracker.iva.SetMetaData(data.mdNVS, mergeBehavior: NamedValueMergeBehavior.AddAndUpdate);
+                                                ivaTracker.iva.SetMetaData(mdDeduplicator.Process(data.mdNVS), mergeBehavior: NamedValueMergeBehavior.AddAndUpdate);
                                             ivaTracker.lastMDSeqNum = iva.MetaDataSeqNum;
                                             ivaTracker.lastSetTime = qpcTimeStamp;
                                         }

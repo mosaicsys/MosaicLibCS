@@ -61,6 +61,7 @@ namespace MosaicLib.Utils.Pooling
 
         /// <summary>
         /// Defines the length of the free list, above which Released items will be discarded, rather than being appended to the free list.
+        /// <para/>If this value is zero then all released elements will be retained in the free list without limit.
         /// </summary>
         public int MaxItemsToKeep { get; set; }
 
@@ -103,7 +104,7 @@ namespace MosaicLib.Utils.Pooling
             if (item == null)
                 return;
 
-            if (freeList.Count < MaxItemsToKeep)
+            if (freeList.Count < MaxItemsToKeep || MaxItemsToKeep == 0)
             {
                 Action<TItemType> clearDelegate = ClearDelegate;
                 if (clearDelegate != null)

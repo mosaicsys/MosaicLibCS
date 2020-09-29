@@ -1316,6 +1316,7 @@ namespace MosaicLib.Modular.Part
                     settings.BaseStatePublicationValueName = "{0}.BaseState".CheckedFormat(PartID);
 
                 baseStatePublisherIVA = (settings.PartBaseIVI ?? Values.Instance).GetValueAccessor(settings.BaseStatePublicationValueName);
+                baseStatePublisherIVA.SetMetaData(new NamedValueSet() { { "PartType", PartType } }.MakeReadOnly());
                 baseStatePublisherIVA.Set(publishedBaseState.Object);
             }
         }
