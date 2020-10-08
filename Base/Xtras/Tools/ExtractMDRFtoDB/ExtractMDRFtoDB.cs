@@ -38,7 +38,12 @@ using MosaicLib.Utils;
 using MosaicLib.Utils.Collections;
 using MosaicLib.Utils.StringMatching;
 
+using Mosaic.ToolsLib.MDRF2.Reader;
+
 using System.Data.SQLite;
+using MessagePack;
+using Mosaic.ToolsLib.MDRF2.Common;
+using Mosaic.ToolsLib.MessagePackUtils;
 
 namespace MosaicLib.Tools.ExtractMDRFtoDB
 {
@@ -301,6 +306,8 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
 
         public class ExitException : System.Exception { }
 
+        private static Logging.ILogger appLogger;
+
         static void Main(string[] args)
         {
             IDataWriter dataWriter = null;
@@ -320,6 +327,10 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
 
                 Config.AddStandardProviders(ref args, StandardProviderSelect.All);
                 Logging.AddLogMessageHandlerToDefaultDistributionGroup(Logging.CreateConsoleLogMessageHandler(logGate: Logging.LogGate.Signif));
+                if (System.Diagnostics.Debugger.IsAttached)
+                    Logging.AddLogMessageHandlerToDefaultDistributionGroup(Logging.CreateDiagnosticTraceLogMessageHandler(logGate: Logging.LogGate.All));
+
+                appLogger = new Logging.Logger("Main");
 
                 List<string> argList = new List<string>().SafeAddSet(args);
 
@@ -340,7 +351,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
 
                 foreach (var iniFileName in iniFileNameArray.Take(1))
                 {
-                    var localIConfig = new MosaicLib.Modular.Config.ConfigBase("LocalConfig_{0}".CheckedFormat(System.IO.Path.GetFileNameWithoutExtension(iniFileName)));
+                    var localIConfig = new MosaicLib.Modular.Config.ConfigBase($"LocalConfig_{System.IO.Path.GetFileNameWithoutExtension(iniFileName)}");
                     localIConfig.AddProvider(new MosaicLib.Modular.Config.IniFileConfigKeyProvider("IniFileCKP", iniFileName));
 
                     settings.UpdateFromConfig(localIConfig, setupForUse: false);
@@ -367,7 +378,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
 
                 if (settings.DataFileName.IsNullOrEmpty() && settings.DataFileType != DataFileType.None)
                 {
-                    WriteUsage("Given {0} DataFileName must be a non-empty string".CheckedFormat(settings.DataFileType));
+                    WriteUsage($"Given {settings.DataFileType} DataFileName must be a non-empty string");
                     new ExitException().Throw();
                 }
 
@@ -388,12 +399,12 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
 
                 if (dataWriter == null)
                 {
-                    WriteUsage("Given DataFileSpec type:{0} '{1}' is not valid [type not recognized]".CheckedFormat(settings.DataFileType, settings.DataFileName));
+                    WriteUsage($"Given DataFileSpec type:{settings.DataFileType} '{settings.DataFileName}' is not valid [type not recognized]");
                     new ExitException().Throw();
                 }
 
-                dataWriter.WriteMessage("{0} being run with arguments: {1}".CheckedFormat(currentExecAssy.GetSummaryNameAndVersion(), string.Join(" ", entryArgs)), writeToConsole: false);
-                dataWriter.WriteMessage(" and current directory:{0}".CheckedFormat(System.IO.Directory.GetCurrentDirectory()), writeToConsole: false);
+                dataWriter.WriteMessage($"{currentExecAssy.GetSummaryNameAndVersion()} being run with arguments: {string.Join(" ", entryArgs)}", writeToConsole: false);
+                dataWriter.WriteMessage($" and current directory:{System.IO.Directory.GetCurrentDirectory()}", writeToConsole: false);
 
                 var mdrfFileNames = GetFileNamesFromArgs(argList.ToArray());
 
@@ -408,7 +419,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
 
                 int maxThreadsToUse = Math.Max(1, settings.MaxThreadsToUse.MapDefaultTo(System.Environment.ProcessorCount));
 
-                Console.WriteLine("Starting processing of {0} files on <= {1} threads".CheckedFormat(mdrfFileNames.Length, maxThreadsToUse));
+                Console.WriteLine($"Starting processing of {mdrfFileNames.Length} files on <= {maxThreadsToUse} threads");
 
                 DateTime dateTimeNow = DateTime.Now;
 
@@ -420,17 +431,23 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                         QpcTimeStamp lapTime0 = QpcTimeStamp.Now;
 
                         var mdrfFileName = item.mdrfFileName;
-                        var mdrfReader = new MDRFFileReader(mdrfFileName, mdrfFileReaderBehavior: MDRFFileReaderBehavior.AttemptToDecodeOccurrenceBodyAsNVS);
+                        var mdrfReader = new MDRF2FileReadingHelper(mdrfFileName, appLogger, MDRFFileReaderBehavior.AttemptToDecodeOccurrenceBodyAsNVS);
+
+                        mdrfReader.ReadHeadersIfNeeded();
+
+                        var fileInfo = mdrfReader.FileInfo;
+
                         item.mdrfFileReader = mdrfReader;
-                        var fileKBytes = mdrfReader.FileLength * (1.0 / 1024.0);
+                        item.mdrfFileInfo = fileInfo;
+                        var fileKBytes = fileInfo.FileLength * (1.0 / 1024.0);
 
                         QpcTimeStamp lapTime1 = QpcTimeStamp.Now;
                         double elapsed1 = (lapTime1 - lapTime0).TotalSeconds;
 
-                        Console.WriteLine("Loaded index for {0}: Size:{1:f3}k StartTime:{2} Length:{3:f3} hours [took:{4:f3} sec]".CheckedFormat(mdrfFileName, fileKBytes, mdrfReader.DateTimeInfo.UTCDateTime.ToLocalTime(), mdrfReader.FileIndexInfo.LastBlockInfo.BlockDeltaTimeStamp.FromSeconds().TotalHours, elapsed1));
+                        Console.WriteLine($"Loaded index for {mdrfFileName}: Size:{fileKBytes:f3}k StartTime:{fileInfo.DateTimeInfo.UTCDateTime.ToLocalTime()} [took:{elapsed1:f3} sec]");
                     });
 
-                var sortedWorkItemsArray = initialWorkItemsArray.OrderBy(item => item.mdrfFileReader.DateTimeInfo.UTCDateTime).ToArray();
+                var sortedWorkItemsArray = initialWorkItemsArray.OrderBy(item => item.mdrfFileInfo.DateTimeInfo.UTCDateTime).ToArray();
 
                 for (; ; )
                 {
@@ -450,7 +467,8 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                             {
                                 var mdrfFileName = nextToRead.mdrfFileName;
                                 var mdrfReader = nextToRead.mdrfFileReader;
-                                var fileKBytes = mdrfReader.FileLength * (1.0 / 1024.0);
+                                var mdrfFileInfo = nextToRead.mdrfFileInfo;
+                                var fileKBytes = mdrfFileInfo.FileLength * (1.0 / 1024.0);
 
                                 QpcTimeStamp lapTime1 = QpcTimeStamp.Now;
 
@@ -461,13 +479,13 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                                     QpcTimeStamp lapTime2 = QpcTimeStamp.Now;
                                     double elapsed2 = (lapTime2 - lapTime1).TotalSeconds;
 
-                                    Console.WriteLine("Loaded contents for {0}: Size:{1:f3}k [took:{2:f3} sec, avgRate:{3:f3} k/s]".CheckedFormat(mdrfFileName, fileKBytes, elapsed2, fileKBytes * (elapsed2.SafeOneOver())));
+                                    Console.WriteLine($"Loaded contents for {mdrfFileName}: Size:{fileKBytes:f3}k [took:{elapsed2:f3} sec, avgRate:{fileKBytes * (elapsed2.SafeOneOver()):f3} k/s]");
 
                                     nextToRead.mdrfContent = contents;
                                 }
                                 else
                                 {
-                                    Console.WriteLine("No contents processed for {0}".CheckedFormat(mdrfFileName));
+                                    Console.WriteLine($"No contents processed for {mdrfFileName}");
                                     nextToRead.written = true;
                                 }
                             });
@@ -479,8 +497,9 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                     {
                         var mdrfFileName = nextToWrite.mdrfFileName;
                         var mdrfReader = nextToWrite.mdrfFileReader;
+                        var mdrfFileInfo = nextToWrite.mdrfFileInfo;
                         var contents = nextToWrite.mdrfContent;
-                        var fileKBytes = mdrfReader.FileLength * (1.0 / 1024.0);
+                        var fileKBytes = mdrfFileInfo.FileLength * (1.0 / 1024.0);
                         QpcTimeStamp lapTime2 = QpcTimeStamp.Now;
 
                         dataWriter.WriteContent(contents);
@@ -490,9 +509,9 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                         QpcTimeStamp lapTime3 = QpcTimeStamp.Now;
                         double elapsed3 = (lapTime3 - lapTime2).TotalSeconds;
 
-                        Console.WriteLine("Saved contents for {0}: Size:{1:f3}k [took:{2:f3} sec, avgRate:{3:f3} k/s]".CheckedFormat(mdrfFileName, fileKBytes, elapsed3, fileKBytes * (elapsed3.SafeOneOver())));
+                        Console.WriteLine($"Saved contents for {mdrfFileName}: Size:{fileKBytes:f3}k [took:{elapsed3:f3} sec, avgRate:{fileKBytes * (elapsed3.SafeOneOver()):f3} k/s]");
 
-                        totalBytes.Add((ulong)mdrfReader.FileLength);
+                        totalBytes.Add((ulong)mdrfFileInfo.FileLength);
                     }
 
                     // prevent this method from spinning overly fast.
@@ -504,20 +523,20 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                 var totalElapsedTime = startTime.Age.TotalSeconds;
                 var totalKBytes = totalBytes.VolatileValue * (1.0 / 1024.0);
 
-                Console.WriteLine("Completed processing of {0} files: {1:f3}k took {2:f3} seconds.  AvgRate:{3:f3} k/s".CheckedFormat(mdrfFileNames.Length, totalKBytes, totalElapsedTime, totalKBytes * (totalElapsedTime.SafeOneOver())));
+                Console.WriteLine($"Completed processing of {mdrfFileNames.Length} files: {totalKBytes:f3}k took {totalElapsedTime:f3} seconds.  AvgRate:{totalKBytes * (totalElapsedTime.SafeOneOver()):f3} k/s");
             }
             catch (ExitException)
             { }
             catch (ErrorMessageException ex)
             {
                 if (ex.InnerException == null)
-                    Console.WriteLine("{0}: failed with error: {1}".CheckedFormat(appName, ex.Message));
+                    Console.WriteLine($"{appName}: failed with error: {ex.Message}");
                 else
-                    Console.WriteLine("{0}: failed with error: {1} [inner:{2}]".CheckedFormat(appName, ex.Message, ex.InnerException.ToString(ExceptionFormat.TypeAndMessage)));
+                    Console.WriteLine($"{appName}: failed with error: {ex.Message} [inner:{ex.InnerException.ToString(ExceptionFormat.TypeAndMessage)}]");
             }
             catch (System.Exception ex)
             {
-                Console.WriteLine("{0}: failed with exception: {1}".CheckedFormat(appName, ex.ToString(ExceptionFormat.AllButStackTrace)));
+                Console.WriteLine($"{appName}: failed with exception: {ex.ToString(ExceptionFormat.AllButStackTrace)}");
             }
             finally
             {
@@ -527,7 +546,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                 }
                 catch (System.Exception ex)
                 {
-                    Console.WriteLine("{0}: during final disposal of data writer: failed with exception: {1}".CheckedFormat(appName, ex.ToString(ExceptionFormat.AllButStackTrace)));
+                    Console.WriteLine($"{appName}: during final disposal of data writer: failed with exception: {ex.ToString(ExceptionFormat.AllButStackTrace)}");
                 }
             }
 
@@ -538,7 +557,8 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
         private class PendingWorkItem
         {
             public string mdrfFileName;
-            public MDRFFileReader mdrfFileReader;
+            public MDRF2FileReadingHelper mdrfFileReader;
+            public IMDRF2FileInfo mdrfFileInfo;
             public bool readPosted;
             public volatile MDRFContent mdrfContent;
             public volatile bool written;
@@ -552,12 +572,13 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                 Console.WriteLine();
             }
 
-            Console.WriteLine("Usage: {0} [configFileName.ini] [fileName.mdrf] ...".CheckedFormat(appName));
+            Console.WriteLine($"Usage: {appName} [configFileName.ini] [fileName.mdrf] ...");
             Console.WriteLine("    This program generally reads the ini file contents to configure its operation and then processes all of the indicated mdrf files using that selected configuration.");
             Console.WriteLine("    See 'ExtractMDRFtoDB ReadMe.txt' for more details on the operation and use of this program.  This file is generally provided with the executable.");
+            Console.WriteLine("Supported mdrf file extensions: .mdrf, .mdrf2, .mdrf2.lz4");
             Console.WriteLine();
 
-            Console.WriteLine("Assembly: {0}", currentExecAssy.GetSummaryNameAndVersion());
+            Console.WriteLine($"Assembly: {currentExecAssy.GetSummaryNameAndVersion()}");
         }
 
         private static string [] GetFileNamesFromArgs(string [] args)
@@ -570,11 +591,11 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                 var argExt = System.IO.Path.GetExtension(arg);
 
                 if (argExt.IsNullOrEmpty())
-                    arg = arg.AddSuffixIfNeeded(".mdrf");
+                    arg = arg.AddSuffixIfNeeded(".mdrf2.lz4");
 
-                if (!arg.EndsWith(".mdrf", StringComparison.InvariantCultureIgnoreCase))
+                if (!MDRF2FileReadingHelper.IsSupportedFileExtension(arg))
                 {
-                    Console.WriteLine("Do not know how to process '{0}'".CheckedFormat(arg));
+                    Console.WriteLine($"Do not know how to process '{arg}'");
                     continue;
                 }
 
@@ -596,97 +617,121 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
 
         #region ReadContents, MDRFContent, VCEHelper, GroupDataAccumulator, OccurrenceAccumulator, MessageAccumulator, VCSetDataRow, VCDataRow, ProcessContentEventHandlerDelegate (et. al.)
 
-        private static MDRFContent ReadContents(DateTime dateTimeNow, Settings settings, MDRFFileReader mdrfFileReader)
+        private static MDRFContent ReadContents(DateTime dateTimeNow, Settings settings, MDRF2FileReadingHelper mdrfFileReader)
         {
-            DateTime fileStartTime = mdrfFileReader.DateTimeInfo.UTCDateTime.ToLocalTime();
-            DateTime estimatedFileEndTime = fileStartTime + mdrfFileReader.FileIndexInfo.LastBlockInfo.BlockDeltaTimeStamp.FromSeconds();
+            var fileInfo = mdrfFileReader.FileInfo;
+            DateTime fileStartTime = fileInfo.DateTimeInfo.UTCDateTime.ToLocalTime();
 
             MDRFContent contentBuilder = new MDRFContent(mdrfFileReader, settings);
 
-            ReadAndProcessFilterSpec filterSpec = new ReadAndProcessFilterSpec()
+            List<IMDRF2QueryRecord> queryRecordList = new List<IMDRF2QueryRecord>();
+
+            MDRF2FileReadingHelper.Filter filterSpec = new MDRF2FileReadingHelper.Filter()
             {
-                AutoRewindToPriorFullGroupRow = false,
-
-                PCEMask = ProcessContentEvent.NewTimeStamp | ProcessContentEvent.Occurrence | ProcessContentEvent.Message | ProcessContentEvent.Error
-                        | ProcessContentEvent.StartOfFullGroup | ProcessContentEvent.Group | ProcessContentEvent.PartialGroup | ProcessContentEvent.EmptyGroup,
-
-                FileIndexUserRowFlagBitsMask = contentBuilder.FileIndexUserRowFlagBitsMaskOfInterest,
-                GroupFilterDelegate = contentBuilder.GroupFilterDelegate,
-                OccurrenceFilterDelegate = contentBuilder.OccurrenceFilterDelegate,
+                ItemTypeSelect = MDRF2QueryItemTypeSelect.Mesg | MDRF2QueryItemTypeSelect.Error | MDRF2QueryItemTypeSelect.DecodingIssue | MDRF2QueryItemTypeSelect.Occurrence | MDRF2QueryItemTypeSelect.Object,
+                UserRowFlagBitMask = contentBuilder.FileIndexUserRowFlagBitsMaskOfInterest,
+                GroupIDHashSet = contentBuilder.GroupIDFilterSet,
+                OccurrenceDictionary = contentBuilder.OccurrenceIDDictionary,
+                ObjectTypeNameSet = null,
+                GroupDataRecordingDelegate = contentBuilder.GroupDataRecordingHandler,
+                NoteOtherRecordDelegate = contentBuilder.NoteOtherRecordDelegate,
             };
 
             if (!settings.StartDateTime.IsZero())
             {
-                filterSpec.FirstDateTime = settings.StartDateTime;
-                if (estimatedFileEndTime < filterSpec.FirstDateTime - (2.0).FromHours())
-                    return null;    // this file ends at least 2 hours before the filter start time - skip this file.
+                filterSpec.StartDateTime = settings.StartDateTime;
             }
 
             if (!settings.EndDateTime.IsZero())
             {
-                filterSpec.LastDateTime = settings.EndDateTime;
-                if (fileStartTime > filterSpec.LastDateTime + (2.0).FromSeconds())
-                    return null;   // this file starts at least 2 hours after the filter end time - skip this file. 
+                filterSpec.EndDateTime = settings.EndDateTime;
             }
 
-            filterSpec.EventHandlerDelegate = (sender, pceData) => ProcessContentEventHandlerDelegate(contentBuilder, pceData, settings);
-
-            mdrfFileReader.ReadAndProcessContents(filterSpec);
+            foreach (var record in mdrfFileReader.GenerateFilteredRecords(filterSpec, System.Threading.CancellationToken.None))
+            {
+                contentBuilder.HandleEnumeratedRecord(record);
+            }
 
             return contentBuilder;
         }
 
         public class MDRFContent
         {
-            public MDRFContent(MDRFFileReader mdrfFileReader, Settings settings)
+            public MDRFContent(MDRF2FileReadingHelper mdrfFileReader, Settings settings)
             {
                 MDRFFileReader = mdrfFileReader;
+                FileInfo = mdrfFileReader.FileInfo;
 
-                LibraryInfo = mdrfFileReader.LibraryInfo;
-                SetupInfo = mdrfFileReader.SetupInfo;
-                FileIndexInfo = mdrfFileReader.FileIndexInfo;
-                DateTimeInfo = mdrfFileReader.DateTimeInfo;
+                LibraryInfo = FileInfo.LibraryInfo;
+                SetupInfo = FileInfo.SetupInfo;
+                DateTimeInfo = FileInfo.DateTimeInfo;
 
-                GroupDataAccumulatorArray = mdrfFileReader.GroupInfoArray.Select(groupInfo => new GroupDataAccumulator(groupInfo, vceHelper, settings)).ToArray();
-                OccurrenceAccumulatorArray = mdrfFileReader.OccurrenceInfoArray.Select(occurrenceInfo => new OccurrenceAccumulator(occurrenceInfo, vceHelper, settings)).ToArray();
+                GroupDataAccumulatorArray = FileInfo.SpecItemSet.GroupDictionary.ValueArray.Select(groupInfo => new GroupDataAccumulator(groupInfo, settings)).ToArray();
+                GroupDataAccumulatorByGroupIDDictionary = new Dictionary<int, GroupDataAccumulator>().SafeAddRange(GroupDataAccumulatorArray.Select(gda => KVP.Create(gda.GroupInfo.GroupID, gda)));
+                GroupIDFilterSet = new HashSet<int>().SafeAddRange(GroupDataAccumulatorArray.Where(gda => gda.RecordThisGroup).Select(gda => gda.GroupInfo.GroupID));
 
-                GroupDataAccumulatorByFileIDDictionary = new Dictionary<int, GroupDataAccumulator>().SafeAddRange(GroupDataAccumulatorArray.Select(gda => KVP.Create(gda.GroupInfo.FileID, gda)));
-                OccurrenceAccumulatorByFileIDDictionary = new Dictionary<int, OccurrenceAccumulator>().SafeAddRange(OccurrenceAccumulatorArray.Select(oa => KVP.Create(oa.OccurrenceInfo.FileID, oa)));
-                
-                MessageList = new List<IMessageInfo>();
-                ErrorList = new List<IMessageInfo>();
-
-                if (GroupDataAccumulatorArray.Any(gda => !gda.RecordThisGroup))
-                    groupFilterSet = new HashSet<int>().SafeAddRange(GroupDataAccumulatorArray.Where(gda => gda.RecordThisGroup).Select(gda => gda.GroupInfo.GroupID));
-
-                if (OccurrenceAccumulatorArray.Any(oa => !oa.RecordThisOccurrence))
-                    occurrenceFilterSet = new HashSet<int>().SafeAddRange(OccurrenceAccumulatorArray.Where(oa => oa.RecordThisOccurrence).Select(oa => oa.OccurrenceInfo.OccurrenceID));
+                OccurrenceAccumulatorArray = FileInfo.SpecItemSet.OccurrenceDictionary.ValueArray.Select(occurrenceInfo => new OccurrenceAccumulator(occurrenceInfo, settings)).ToArray();
+                OccurrenceAccumulatorByOccurrenceIDDictionary = new Dictionary<int, OccurrenceAccumulator>().SafeAddRange(OccurrenceAccumulatorArray.Select(oa => KVP.Create(oa.OccurrenceInfo.OccurrenceID, oa)));
+                OccurrenceIDDictionary = new Dictionary<int, IOccurrenceInfo>().SafeAddRange(OccurrenceAccumulatorArray.Where(oa => oa.RecordThisOccurrence).Select(oa => KVP.Create(oa.OccurrenceInfo.OccurrenceID, oa.OccurrenceInfo)));
             }
 
-            private HashSet<int> groupFilterSet = null;
-            private HashSet<int> occurrenceFilterSet = null;
-
-            public Func<IGroupInfo, bool> GroupFilterDelegate
+            public IMDRF2QueryRecord GroupDataRecordingHandler(MDRF2FileReadingHelper.Filter filter, int groupID, in MDRF2DateTimeStampPair dtPair, ref MessagePackReader mpReader, MessagePackSerializerOptions mpOptions, IGroupInfo groupInfoFromMDRF1)
             {
-                get
+                var groupAccumulator = GroupDataAccumulatorByGroupIDDictionary.SafeTryGetValue(groupID);
+                if (groupAccumulator != null)
                 {
-                    if (groupFilterSet == null)
-                        return null;
+                    if (groupInfoFromMDRF1 == null)
+                        groupAccumulator.Add(dtPair, mpReader.DeserializeVC(mpOptions).GetValueL(rethrow: true));
                     else
-                        return (igi => groupFilterSet.Contains(igi.GroupID));
+                        groupAccumulator.Add(dtPair, new ReadOnlyIList<ValueContainer>(groupInfoFromMDRF1.GroupPointInfoArray.Select(gpi => gpi.VC)));
+                }
+
+                return null;
+            }
+
+            public IMDRF2QueryRecord NoteOtherRecordDelegate(MDRF2FileReadingHelper.Filter filter, MDRF2QueryItemTypeSelect recordType, in MDRF2DateTimeStampPair dtPair, object data)
+            {
+                return null;
+            }
+
+            public void HandleEnumeratedRecord(IMDRF2QueryRecord record)
+            {
+                var itemType = record.ItemType;
+
+                switch (itemType)
+                {
+                    case MDRF2QueryItemTypeSelect.Mesg:
+                        MessageList.Add(record as IMDRF2QueryRecord<string>);
+                        break;
+
+                    case MDRF2QueryItemTypeSelect.Error:
+                        ErrorList.Add(record as IMDRF2QueryRecord<string>);
+                        break;
+
+                    case MDRF2QueryItemTypeSelect.Occurrence:
+                        {
+                            var r = record as IMDRF2QueryRecord<MDRF2OccurrenceQueryRecordData>;
+
+                            var occurrenceAccumulator = OccurrenceAccumulatorByOccurrenceIDDictionary.SafeTryGetValue(r.Data.OccurrenceInfo.OccurrenceID);
+                            occurrenceAccumulator?.Add(r);
+                        }
+                        break;
+
+                    case MDRF2QueryItemTypeSelect.Object:
+                        ObjectList.Add(record);
+                        break;
+
+                    //case MDRF2QueryItemTypeSelect.PointSet:
+                    //    pointSetAccumulatorList.Add(record);
+                    //    break;
+
+                    default:
+                        break;
                 }
             }
 
-            public Func<IOccurrenceInfo, bool> OccurrenceFilterDelegate
-            {
-                get
-                {
-                    if (occurrenceFilterSet == null)
-                        return null;
-                    else
-                        return (ioi => occurrenceFilterSet.Contains(ioi.OccurrenceID));
-                }
-            }
+            public HashSet<int> GroupIDFilterSet { get; set; }
+            public Dictionary<int, IOccurrenceInfo> OccurrenceIDDictionary { get; set; }
 
             public ulong FileIndexUserRowFlagBitsMaskOfInterest
             {
@@ -699,20 +744,23 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                 }
             }
 
-            public MDRFFileReader MDRFFileReader { get; private set; }
+            public MDRF2FileReadingHelper MDRFFileReader { get; private set; }
+            public IMDRF2FileInfo FileInfo { get; private set; }
             public LibraryInfo LibraryInfo { get; private set; }
             public SetupInfo SetupInfo { get; private set; }
-            public FileIndexInfo FileIndexInfo { get; private set; }
             public DateTimeInfo DateTimeInfo { get; private set; }
 
+            //public List<IMDRF2QueryRecord> pointSetAccumulatorList { get; private set; } = new List<IMDRF2QueryRecord>();
+
             public GroupDataAccumulator[] GroupDataAccumulatorArray { get; private set; }
+            public IDictionary<int, GroupDataAccumulator> GroupDataAccumulatorByGroupIDDictionary { get; private set; }
+
             public OccurrenceAccumulator[] OccurrenceAccumulatorArray { get; private set; }
+            public IDictionary<int, OccurrenceAccumulator> OccurrenceAccumulatorByOccurrenceIDDictionary { get; private set; }
 
-            public IDictionary<int, GroupDataAccumulator> GroupDataAccumulatorByFileIDDictionary { get; private set; }
-            public IDictionary<int, OccurrenceAccumulator> OccurrenceAccumulatorByFileIDDictionary { get; private set; }
-
-            public List<IMessageInfo> MessageList { get; private set; }
-            public List<IMessageInfo> ErrorList { get; private set; }
+            public List<IMDRF2QueryRecord<string>> MessageList { get; private set; } = new List<IMDRF2QueryRecord<string>>();
+            public List<IMDRF2QueryRecord<string>> ErrorList { get; private set; } = new List<IMDRF2QueryRecord<string>>();
+            public List<IMDRF2QueryRecord> ObjectList { get; private set; } = new List<IMDRF2QueryRecord>();
 
             VCEHelper vceHelper = new VCEHelper();
         }
@@ -741,13 +789,12 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
 
         public class GroupDataAccumulator
         {
-            public GroupDataAccumulator(IGroupInfo groupInfo, VCEHelper vceHelper, Settings settings)
+            public GroupDataAccumulator(IGroupInfo groupInfo, Settings settings)
             {
                 MappedGroupName = settings.GetMappedName(groupInfo);
 
                 TableName = MappedGroupName.IsNeitherNullNorEmpty() ? MappedGroupName : string.Empty;
                 GroupInfo = groupInfo;
-                VCEHelper = vceHelper;
                 RawMappedGroupPointInfoArray = groupInfo.GroupPointInfoArray.Select((gpi, index) => new MappedGroupPointInfo(index, gpi, groupInfo, settings)).ToArray();
 
                 var orderedMGPIArray = RawMappedGroupPointInfoArray.Where(mgpi => mgpi.MappedPointHasExplicitOrder).OrderBy(mgpi => mgpi.MappedPointExplicitOrder).ToArray();
@@ -759,6 +806,11 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
 
                 RecordThisGroup = MappedGroupName.IsNeitherNullNorEmpty() && !MappedGroupName.Contains("'") && (NumFilteredPoints > 0);
 
+                CommonSetup(settings);
+            }
+
+            private void CommonSetup(Settings settings)
+            {
                 if (settings.UsingNominalSampleInterval)
                 {
                     UsingRowAddCadencingTimer = true;
@@ -770,7 +822,6 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
             public bool RecordThisGroup { get; private set; }
             public string TableName { get; private set; }
             public IGroupInfo GroupInfo { get; private set; }
-            public VCEHelper VCEHelper { get; private set; }
             public MappedGroupPointInfo[] RawMappedGroupPointInfoArray { get; private set; }
             public MappedGroupPointInfo[] FilteredMappedGroupPointInfoArray { get; private set; }
             public int NumFilteredPoints { get; private set; }
@@ -804,13 +855,13 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                 public ContainerStorageType ExtractedCST { get; set; }
             }
 
-            public void Add(ProcessContentEventData pceData)
+            public void Add(in MDRF2DateTimeStampPair dtPair, IList<ValueContainer> vcList)
             {
-                bool includeThisRow = (!UsingRowAddCadencingTimer || rowAddCadencingTimer.GetIsTriggered(new QpcTimeStamp(pceData.FileDeltaTimeStamp)));
+                bool includeThisRow = (!UsingRowAddCadencingTimer || rowAddCadencingTimer.GetIsTriggered(new QpcTimeStamp(dtPair.FileDeltaTime)));
 
                 if (includeThisRow)
                 {
-                    var vcSetDataRow = new VCSetDataRow(pceData, FilteredMappedGroupPointInfoArray, VCEHelper);
+                    var vcSetDataRow = new VCSetDataRow(dtPair, FilteredMappedGroupPointInfoArray, vcList);
                     filteredMGPIDataRowList.Add(vcSetDataRow);
 
                     if (!FindFirstNonEmptyDone)
@@ -840,24 +891,22 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
 
         public class OccurrenceAccumulator
         {
-            public OccurrenceAccumulator(IOccurrenceInfo occurrenceInfo, VCEHelper vceHelper, Settings settings)
+            public OccurrenceAccumulator(IOccurrenceInfo occurrenceInfo, Settings settings)
             {
                 MappedOccurrenceName = settings.GetMappedName(occurrenceInfo);
                 RecordThisOccurrence = MappedOccurrenceName.IsNeitherNullNorEmpty() && !MappedOccurrenceName.Contains("'");
                 OccurrenceInfo = occurrenceInfo;
-                VCEHelper = vceHelper;
             }
 
             public string MappedOccurrenceName { get; private set; }
             public bool RecordThisOccurrence { get; private set; }
             public IOccurrenceInfo OccurrenceInfo { get; private set; }
-            public VCEHelper VCEHelper { get; private set; }
 
-            public List<VCDataRow> vcRowList = new List<VCDataRow>();
+            public List<IMDRF2QueryRecord<MDRF2OccurrenceQueryRecordData>> occurrenceRecordList = new List<IMDRF2QueryRecord<MDRF2OccurrenceQueryRecordData>>();
 
-            public void Add(ProcessContentEventData pceData)
+            public void Add(IMDRF2QueryRecord<MDRF2OccurrenceQueryRecordData> record)
             {
-                vcRowList.Add(new VCDataRow(pceData, VCEHelper));
+                occurrenceRecordList.Add(record);
             }
         }
 
@@ -868,85 +917,55 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
             public List<VCDataRow> vcRowList = new List<VCDataRow>();
         }
 
-        /// <summary>
-        /// Contains a set of information from the PCEData (SeqNum, UTCDateTime, FileDeltaTimeStamp, PCE) and an array of the correspondingly selected ValueContainer from the corresponding set of GroupPointInfo objects.
-        /// </summary>
         public class VCSetDataRow
         {
-            public VCSetDataRow(ProcessContentEventData pceData, GroupDataAccumulator.MappedGroupPointInfo [] mappedGroupPointInfoArray, VCEHelper vceHelper)
+            public VCSetDataRow(in MDRF2DateTimeStampPair dtPair, ExtractMDRFtoDB.GroupDataAccumulator.MappedGroupPointInfo [] mappedGroupPointInfoArray, IList<ValueContainer> vcList)
             {
-                SeqNum = pceData.SeqNum;
-                UTCDateTime = pceData.UTCDateTime;
-                FileDeltaTimeStamp = pceData.FileDeltaTimeStamp;
-                PCE = pceData.PCE;
+                UTCDateTime = dtPair.DateTime.ToUniversalTime();
+                FileDeltaTimeStamp = dtPair.FileDeltaTime;
 
-                VCArray = new ValueContainer[mappedGroupPointInfoArray.Length];
-                VCArray.SafeCopyFrom(mappedGroupPointInfoArray.Select(mgpi => vceHelper.Normalize(mgpi.RecordThisPoint ? mgpi.GroupPointInfo.VC : ValueContainer.Empty)));
+                if (mappedGroupPointInfoArray != null)
+                {
+                    VCArray = new ValueContainer[mappedGroupPointInfoArray.Length];
+                    VCArray.SafeCopyFrom(mappedGroupPointInfoArray.Select(mgpi => mgpi.RecordThisPoint ? vcList.SafeAccess(mgpi.MappedPointFromGroupPointIndex) : ValueContainer.Empty));
+                }
+                else
+                {
+                    VCArray = vcList.ToArray();
+                }
             }
 
-            public UInt64 SeqNum { get; set; }
             /// <summary>This DateTime is generated from the FileDeltaTimeStamp (which is recorded) by inference using the DateTime values recorded in the current row, and the next row (if it is present).  Due to the relative sample timing and the use of interpolation, individual DateTime values may not be strictly monotonic in relation to the underlying delta timestamp values.</summary>
             public DateTime UTCDateTime { get; set; }
             public double FileDeltaTimeStamp { get; set; }
-            public ProcessContentEvent PCE { get; set; }
 
             public ValueContainer[] VCArray { get; set; }
         }
 
         public class VCDataRow
         {
-            public VCDataRow(ProcessContentEventData pceData, VCEHelper vceHelper)
+            public VCDataRow(in MDRF2DateTimeStampPair dtPair, in ValueContainer vc, ExtractMDRFtoDB.VCEHelper vceHelper)
             {
-                SeqNum = pceData.SeqNum;
-                UTCDateTime = pceData.UTCDateTime;
-                FileDeltaTimeStamp = pceData.FileDeltaTimeStamp;
-                PCE = pceData.PCE;
+                UTCDateTime = dtPair.DateTime.ToUniversalTime();
+                FileDeltaTime = dtPair.FileDeltaTime;
 
-                VC = pceData.VC;
-                NormalizedVC = vceHelper.Normalize(pceData.VC);
+                VC = vc;
+                NormalizedVC = vceHelper.Normalize(vc);
             }
 
-            public UInt64 SeqNum { get; set; }
             /// <summary>This DateTime is generated from the FileDeltaTimeStamp (which is recorded) by inference using the DateTime values recorded in the current row, and the next row (if it is present).  Due to the relative sample timing and the use of interpolation, individual DateTime values may not be strictly monotonic in relation to the underlying delta timestamp values.</summary>
             public DateTime UTCDateTime { get; set; }
-            public double FileDeltaTimeStamp { get; set; }
-            public ProcessContentEvent PCE { get; set; }
+            public double FileDeltaTime { get; set; }
 
             public ValueContainer VC { get; set; }
             public ValueContainer NormalizedVC { get; set; }
-        }
-
-        private static void ProcessContentEventHandlerDelegate(MDRFContent contentBuilder, ProcessContentEventData pceData, Settings settings)
-        {
-            switch (pceData.PCE & ~(ProcessContentEvent.EmptyGroup | ProcessContentEvent.PartialGroup | ProcessContentEvent.StartOfFullGroup))
-            {
-                case ProcessContentEvent.Group:
-                    var groupAccumulator = contentBuilder.GroupDataAccumulatorByFileIDDictionary.SafeTryGetValue(pceData.GroupInfo.FileID);
-                    if (groupAccumulator != null)
-                        groupAccumulator.Add(pceData);
-                    break;
-
-                case ProcessContentEvent.Occurrence:
-                    var occurrenceAccumulator = contentBuilder.OccurrenceAccumulatorByFileIDDictionary.SafeTryGetValue(pceData.OccurrenceInfo.FileID);
-                    if (occurrenceAccumulator != null)
-                        occurrenceAccumulator.Add(pceData);
-                    break;
-
-                case ProcessContentEvent.Message:
-                    contentBuilder.MessageList.Add(pceData.MessageInfo);
-                    break;
-
-                case ProcessContentEvent.Error:
-                    contentBuilder.ErrorList.Add(pceData.MessageInfo);
-                    break;
-            }
         }
 
         #endregion
 
         public interface IDataWriter : IDisposable
         {
-            void WriteContent(MDRFContent mdrfContent);
+            void WriteContent(ExtractMDRFtoDB.MDRFContent mdrfContent);
 
             void WriteMessage(string mesg, bool writeToConsole = true, Logging.IMesgEmitter emitter = null);
             void WriteError(string errorMesg, bool writeToConsole = true, Logging.IMesgEmitter emitter = null);
@@ -954,14 +973,14 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
 
         public class SQLite3DataWriter : DisposableBase, IDataWriter
         {
-            public SQLite3DataWriter(Settings settings)
+            public SQLite3DataWriter(ExtractMDRFtoDB.Settings settings)
             {
                 Settings = settings;
 
-                if (settings.DataFileType != DataFileType.SQLite3)
+                if (settings.DataFileType != ExtractMDRFtoDB.DataFileType.SQLite3 && settings.DataFileType != DataFileType.SQLite)
                     new System.ArgumentException("{0} cannot be used with DataFileType.{1}".CheckedFormat(Fcns.CurrentClassLeafName, settings.DataFileType)).Throw();
 
-                if (settings.CreateMode == CreateMode.Truncate && System.IO.File.Exists(settings.DataFileName))
+                if (settings.CreateMode == ExtractMDRFtoDB.CreateMode.Truncate && System.IO.File.Exists(settings.DataFileName))
                 {
                     Console.WriteLine("Deleting existing file '{0}' before extraction", settings.DataFileName);
 
@@ -1000,7 +1019,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                 dbConn.Open();
                 new[] 
                 {
-                    "CREATE TABLE IF NOT EXISTS MDRF_Files (Name TEXT, SizeBytes INT NOT NULL, StartDateTime TIMESTAMP NOT NULL, LastBlockDateTime TIMESTAMP NOT NULL, WasProperlyClosed INT NOT NULL, FileInfo TEXT, DateTimeInfo TEXT, OccurrencesInfo TEXT, GroupsInfo TEXT)",
+                    "CREATE TABLE IF NOT EXISTS MDRF_Files (Name TEXT, SizeBytes INT NOT NULL, StartDateTime TIMESTAMP NOT NULL, SetupInfo TEXT, DateTimeInfo TEXT, OccurrencesInfo TEXT, GroupsInfo TEXT)",
                     "CREATE TABLE IF NOT EXISTS MDRF_Messages (DateTime TIMESTAMP NOT NULL, Text TEXT)",
                     "CREATE TABLE IF NOT EXISTS MDRF_Errors (DateTime TIMESTAMP NOT NULL, Text TEXT)",
                     "CREATE TABLE IF NOT EXISTS MDRF_Occurrences (DateTime TIMESTAMP NOT NULL, Name TEXT, Value TEXT)",
@@ -1017,14 +1036,14 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                 var getTablesColumns = getTablesResultsReader.GetFieldNames().ToArray();
                 var getTablesResults = getTablesResultsReader.GenerateValuesEnumerator().ToArray();
 
-                var tableNames = getTablesResults.Select(vcArray => vcArray.FirstOrDefault().GetValue<string>(rethrow: false)).ToArray();
+                var tableNames = getTablesResults.Select(vcArray => vcArray.FirstOrDefault().GetValueA(rethrow: false)).ToArray();
             }
 
-            Settings Settings { get; set; }
+        ExtractMDRFtoDB.Settings Settings { get; set; }
 
-            public void WriteContent(MDRFContent mdrfContent)
+            public void WriteContent(ExtractMDRFtoDB.MDRFContent mdrfContent)
             {
-                DateTime fileBaseTime = mdrfContent.MDRFFileReader.DateTimeInfo.UTCDateTime.ToLocalTime();
+                DateTime fileBaseTime = mdrfContent.FileInfo.DateTimeInfo.UTCDateTime.ToLocalTime();
 
                 lock (mutex)
                 {
@@ -1033,11 +1052,11 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
 
                     // add any messages
                     if (mdrfContent.MessageList.Count > 0)
-                        AddMessages(mdrfContent.MessageList, fileBaseTime);
+                        AddMessages(mdrfContent.MessageList);
 
                     // add any errors
                     if (mdrfContent.ErrorList.Count > 0)
-                        AddErrors(mdrfContent.ErrorList, fileBaseTime);
+                        AddErrors(mdrfContent.ErrorList);
 
                     AddAccumulatedOccurrences(mdrfContent.OccurrenceAccumulatorArray.Where(oa => oa.RecordThisOccurrence), fileBaseTime);
 
@@ -1049,15 +1068,13 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
 
             public void WriteMessage(string mesg, bool writeToConsole = true, Logging.IMesgEmitter emitter = null)
             {
-                DateTime dtNow = DateTime.Now.ToUniversalTime();
-
-                IMessageInfo iMesgInfo = new MessageInfo()
+                IMDRF2QueryRecord<string> iMesgInfo = new MDRF2QueryRecord<string>()
                 {
-                    Message = mesg,
-                    FileDeltaTimeStamp = 0.0,
+                    DTPair = MDRF2DateTimeStampPair.NowUTCTimeSince1601Only,
+                    Data = mesg,
                 };
 
-                AddMessages(new[] { iMesgInfo }.ToList(), dtNow);
+                AddMessages(new[] { iMesgInfo }.ToList());
 
                 if (writeToConsole)
                     Console.WriteLine(mesg);
@@ -1068,15 +1085,13 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
 
             public void WriteError(string errorMesg, bool writeToConsole = true, Logging.IMesgEmitter emitter = null)
             {
-                DateTime dtNow = DateTime.Now.ToUniversalTime();
-
-                IMessageInfo iErrorMesgInfo = new MessageInfo()
+                IMDRF2QueryRecord<string> iErrorMesgInfo = new MDRF2QueryRecord<string>()
                 {
-                    Message = errorMesg,
-                    FileDeltaTimeStamp = 0.0,
+                    DTPair = MDRF2DateTimeStampPair.NowUTCTimeSince1601Only,
+                    Data = errorMesg,
                 };
 
-                AddErrors(new[] { iErrorMesgInfo }.ToList(), dtNow);
+                AddErrors(new[] { iErrorMesgInfo }.ToList());
 
                 if (writeToConsole)
                     Console.WriteLine(errorMesg);
@@ -1085,21 +1100,19 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                     emitter.Emit(errorMesg);
             }
 
-            public void AddMDRFFileToTable(MDRFContent mdrfContent, DateTime fileBaseTime)
+            public void AddMDRFFileToTable(ExtractMDRFtoDB.MDRFContent mdrfContent, DateTime fileBaseTime)
             {
                 lock (mutex)
                 {
-                    var insertFileCmd = new SQLiteCommand(dbConn) { CommandText = "INSERT INTO MDRF_Files (Name, SizeBytes, StartDateTime, LastBlockDateTime, WasProperlyClosed, FileInfo, DateTimeInfo, OccurrencesInfo, GroupsInfo) VALUES (@name, @sizeBytes, @startDateTime, @lastBlockDateTime, @wasProperlyClosed, @fileInfo, @dateTimeInfo, @occurrencesInfo, @groupsInfo)" };
+                    var insertFileCmd = new SQLiteCommand(dbConn) { CommandText = "INSERT INTO MDRF_Files (Name, SizeBytes, StartDateTime, SetupInfo, DateTimeInfo, OccurrencesInfo, GroupsInfo) VALUES (@name, @sizeBytes, @startDateTime, @setupInfo, @dateTimeInfo, @occurrencesInfo, @groupsInfo)" };
 
-                    insertFileCmd.Parameters.AddWithValue("name", mdrfContent.MDRFFileReader.FilePath);
-                    insertFileCmd.Parameters.AddWithValue("sizeBytes", mdrfContent.MDRFFileReader.FileLength);
+                    insertFileCmd.Parameters.AddWithValue("name", mdrfContent.FileInfo.FileNameAndRelativePath);
+                    insertFileCmd.Parameters.AddWithValue("sizeBytes", mdrfContent.FileInfo.FileLength);
                     insertFileCmd.Parameters.AddWithValue("startDateTime", fileBaseTime);
-                    insertFileCmd.Parameters.AddWithValue("lastBlockDateTime", fileBaseTime + mdrfContent.FileIndexInfo.LastBlockInfo.BlockDeltaTimeStamp.FromSeconds());
-                    insertFileCmd.Parameters.AddWithValue("wasProperlyClosed", mdrfContent.MDRFFileReader.FileIndexInfo.FileWasProperlyClosed);
-                    insertFileCmd.Parameters.AddWithValue("fileInfo", ValueContainer.Create(mdrfContent.MDRFFileReader.LibraryInfo.NVS).ConvertToRawJSON());
-                    insertFileCmd.Parameters.AddWithValue("dateTimeInfo", ValueContainer.Create(mdrfContent.MDRFFileReader.DateTimeInfo.NVS).ConvertToRawJSON());
-                    insertFileCmd.Parameters.AddWithValue("occurrencesInfo", ValueContainer.Create(mdrfContent.MDRFFileReader.OccurrenceInfoArray.ConvertToNVS()).ConvertToRawJSON());
-                    insertFileCmd.Parameters.AddWithValue("groupsInfo", ValueContainer.Create(mdrfContent.MDRFFileReader.GroupInfoArray.ConvertToNVS()).ConvertToRawJSON());
+                    insertFileCmd.Parameters.AddWithValue("setupInfo", ValueContainer.Create(mdrfContent.FileInfo.SetupInfoNVS).ConvertToRawJSON());
+                    insertFileCmd.Parameters.AddWithValue("dateTimeInfo", ValueContainer.Create(mdrfContent.FileInfo.DateTimeInfo.NVS).ConvertToRawJSON());
+                    insertFileCmd.Parameters.AddWithValue("occurrencesInfo", ValueContainer.Create(mdrfContent.FileInfo.SpecItemSet.OccurrenceDictionary.ValueArray.ConvertToNVS()).ConvertToRawJSON());
+                    insertFileCmd.Parameters.AddWithValue("groupsInfo", ValueContainer.Create(mdrfContent.FileInfo.SpecItemSet.GroupDictionary.ValueArray.ConvertToNVS()).ConvertToRawJSON());
 
                     using (var transaction = dbConn.BeginTransaction())
                     {
@@ -1110,7 +1123,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                 }
             }
 
-            public void AddMessages(List<IMessageInfo> messageList, DateTime fileBaseTime)
+            public void AddMessages(List<IMDRF2QueryRecord<string>> messageList)
             {
                 lock (mutex)
                 {
@@ -1123,8 +1136,8 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                     {
                         foreach (var mesg in messageList)
                         {
-                            dateTimeParam.Value = fileBaseTime + mesg.FileDeltaTimeStamp.FromSeconds();
-                            textParam.Value = mesg.Message;
+                            dateTimeParam.Value = mesg.DTPair.DateTime.ToLocalTime();
+                            textParam.Value = mesg.Data;
 
                             insertMesgCmd.ExecuteNonQuery();
                         }
@@ -1134,7 +1147,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                 }
             }
 
-            public void AddErrors(List<IMessageInfo> errorList, DateTime fileBaseTime)
+            public void AddErrors(List<IMDRF2QueryRecord<string>> errorList)
             {
                 lock (mutex)
                 {
@@ -1147,8 +1160,8 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                     {
                         foreach (var mesg in errorList)
                         {
-                            dateTimeParam.Value = fileBaseTime + mesg.FileDeltaTimeStamp.FromSeconds();
-                            textParam.Value = mesg.Message;
+                            dateTimeParam.Value = mesg.DTPair.DateTime.ToLocalTime();
+                            textParam.Value = mesg.Data;
 
                             insertMesgCmd.ExecuteNonQuery();
                         }
@@ -1160,8 +1173,8 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
 
             private void AddAccumulatedOccurrences(IEnumerable<OccurrenceAccumulator> occurrenceAccumulatorSet, DateTime fileBaseTime)
             {
-                VCEHelper vceHelper = new VCEHelper();
-                var flattenedSortedArray = occurrenceAccumulatorSet.SelectMany(accum => accum.vcRowList.Select(vcRow => Tuple.Create(accum.OccurrenceInfo.Name, fileBaseTime + vcRow.FileDeltaTimeStamp.FromSeconds(), vcRow.NormalizedVC.ValueAsObject, vcRow.VC.GetValue<INamedValueSet>(rethrow: false).MapNullToEmpty().BuildDictionary()))).OrderBy(t => t.Item2).ToArray();
+                ExtractMDRFtoDB.VCEHelper vceHelper = new ExtractMDRFtoDB.VCEHelper();
+                var flattenedSortedArray = occurrenceAccumulatorSet.SelectMany(accum => accum.occurrenceRecordList.Select(record => Tuple.Create(accum.OccurrenceInfo.Name, record.DTPair.DateTime.ToLocalTime(), record, record.Data.VC.GetValueNVS(rethrow: false).MapNullToEmpty().BuildDictionary()))).OrderBy(t => t.Item2).ToArray();
 
                 Dictionary<string, string> keyColumnNameSet = new Dictionary<string, string>();
 
@@ -1177,7 +1190,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                     var getTableInfoCmd = new SQLiteCommand(dbConn) { CommandText = "PRAGMA table_info(MDRF_Occurrences)" };
                     var getTableInfoReader = getTableInfoCmd.ExecuteReader();
                     var getTableInfoResults = getTableInfoReader.GenerateValuesEnumerator().ToArray();
-                    var existingColumnNameSet = new HashSet<string>(getTableInfoResults.Select(vcArray => vcArray.SafeAccess(1).GetValue<string>(rethrow: false)));
+                    var existingColumnNameSet = new HashSet<string>(getTableInfoResults.Select(vcArray => vcArray.SafeAccess(1).GetValueA(rethrow: false)));
 
                     // add missing columns as needed.
                     foreach (var columnName in keyColumnNameSet.Values)
@@ -1228,7 +1241,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
 
                             nameParam.Value = t.Item1;
                             dateTimeParam.Value = t.Item2;
-                            valueParam.Value = t.Item3;
+                            valueParam.Value = vceHelper.Normalize(t.Item3.Data.VC);
 
                             foreach (var kvp in keyParamDictionary)
                             {
@@ -1244,7 +1257,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                 }
             }
 
-            public void AddAccumulatedGroupData(MDRFContent mdrfContent, GroupDataAccumulator groupDataAccumulator, DateTime fileBaseTime)
+            public void AddAccumulatedGroupData(ExtractMDRFtoDB.MDRFContent mdrfContent, ExtractMDRFtoDB.GroupDataAccumulator groupDataAccumulator, DateTime fileBaseTime)
             {
                 var filteredColumnDecoderTupleArray = groupDataAccumulator.FilteredMappedGroupPointInfoArray.Select((mgpi, index) => Tuple.Create(index, mgpi.RecordThisPoint && mgpi.ExtractedCST != ContainerStorageType.None, mgpi.MappedPointName, mgpi)).ToArray();
 
@@ -1252,7 +1265,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                 if (filteredColumnDecoderTupleArray.Length > includeColumnCountLimit)
                 {
                     var strippedColumnNamesArray = filteredColumnDecoderTupleArray.Skip(includeColumnCountLimit).Select(t => t.Item3).ToArray();
-                    string fileName = System.IO.Path.GetFileName(mdrfContent.MDRFFileReader.FilePath);
+                    string fileName = System.IO.Path.GetFileName(mdrfContent.FileInfo.FileNameAndRelativePath);
 
                     WriteError("File: '{0}' Group '{1}' has more columns ({2}) than SQLite supports.  Truncating to {3}".CheckedFormat(fileName, groupDataAccumulator.TableName, filteredColumnDecoderTupleArray.Length, includeColumnCountLimit));
                     filteredColumnDecoderTupleArray = filteredColumnDecoderTupleArray.Take(includeColumnCountLimit).ToArray();
@@ -1278,7 +1291,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                     var getTableInfoCmd = new SQLiteCommand(dbConn) { CommandText = "PRAGMA table_info('{0}')".CheckedFormat(groupDataAccumulator.TableName) };
                     var getTableInfoReader = getTableInfoCmd.ExecuteReader();
                     var getTableInfoResults = getTableInfoReader.GenerateValuesEnumerator().ToArray();
-                    var existingColumnNameSet = new HashSet<string>(getTableInfoResults.Select(vcArray => vcArray.SafeAccess(1).GetValue<string>(rethrow: false)));
+                    var existingColumnNameSet = new HashSet<string>(getTableInfoResults.Select(vcArray => vcArray.SafeAccess(1).GetValueA(rethrow: false)));
 
                     foreach (var mgpi in mgpiArray)
                     {
@@ -1353,7 +1366,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
 
         public class CSVDataWriter : DisposableBase, IDataWriter
         {
-            public CSVDataWriter(Settings settings)
+            public CSVDataWriter(ExtractMDRFtoDB.Settings settings)
             {
                 Settings = settings;
                 extensionToUse = System.IO.Path.GetExtension(Settings.DataFileName).MapNullOrEmptyTo(".csv");
@@ -1365,12 +1378,12 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                     });
             }
 
-            Settings Settings { get; set; }
+            ExtractMDRFtoDB.Settings Settings { get; set; }
             string baseFileName, extensionToUse;
 
-            public void WriteContent(MDRFContent mdrfContent)
+            public void WriteContent(ExtractMDRFtoDB.MDRFContent mdrfContent)
             {
-                DateTime fileBaseTime = mdrfContent.MDRFFileReader.DateTimeInfo.UTCDateTime.ToLocalTime();
+                DateTime fileBaseTime = mdrfContent.FileInfo.DateTimeInfo.UTCDateTime.ToLocalTime();
 
                 lock (mutex)
                 {
@@ -1402,7 +1415,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
 
             private void AddAccumulatedOccurrences(IEnumerable<OccurrenceAccumulator> occurrenceAccumulatorSet, DateTime fileBaseTime)
             {
-                var flattenedSortedArray = occurrenceAccumulatorSet.SelectMany(accum => accum.vcRowList.Select(vcRow => Tuple.Create(accum.OccurrenceInfo.Name, fileBaseTime + vcRow.FileDeltaTimeStamp.FromSeconds(), vcRow.NormalizedVC.ValueAsObject))).OrderBy(t => t.Item2).ToArray();
+                var flattenedSortedArray = occurrenceAccumulatorSet.SelectMany(accum => accum.occurrenceRecordList.Select(record => Tuple.Create(accum.OccurrenceInfo.Name, record.DTPair.DateTime.ToLocalTime(), record, record.Data.VC.GetValueNVS(rethrow: false).MapNullToEmpty().BuildDictionary()))).OrderBy(t => t.Item2).ToArray();
 
                 lock (mutex)
                 {
@@ -1420,14 +1433,14 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
 
                     foreach (var t in flattenedSortedArray)
                     {
-                        occurrenceFileStream.WriteLine("{0:MM/dd/yyyy HH:mm:ss.fff},{1},{2}".CheckedFormat(t.Item2, t.Item1, t.Item3));
+                        occurrenceFileStream.WriteLine("{0:MM/dd/yyyy HH:mm:ss.fff},{1},{2}".CheckedFormat(t.Item2, t.Item1, t.Item3.Data.VC));
                     }
 
                     occurrenceFileStream.Flush();
                 }
             }
 
-            private void AddAccumulatedGroupData(MDRFContent mdrfContent, GroupDataAccumulator groupDataAccumulator, DateTime fileBaseTime)
+            private void AddAccumulatedGroupData(ExtractMDRFtoDB.MDRFContent mdrfContent, ExtractMDRFtoDB.GroupDataAccumulator groupDataAccumulator, DateTime fileBaseTime)
             {
                 lock (mutex)
                 {

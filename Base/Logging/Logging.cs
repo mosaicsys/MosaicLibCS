@@ -556,9 +556,9 @@ namespace MosaicLib
             public static explicit operator LogGate(ValueContainer vc)
             {
                 if (vc.cvt.IsInteger(includeSigned: true, includeUnsigned: true))
-                    return (LogGate)vc.GetValue<int>(rethrow: true);
+                    return (LogGate)vc.GetValueI4(rethrow: true);
                 else
-                    return (LogGate)vc.GetValue<string>(rethrow: true);
+                    return (LogGate)vc.GetValueA(rethrow: true);
             }
 
             /// <summary>
@@ -958,8 +958,8 @@ namespace MosaicLib
 		///		a MesgType, a message string, an optional INamedValueSet, and an optional data byte array
 		/// </remarks>
         [DataContract(Namespace=Constants.LoggingNameSpace), Serializable]
-        public class LogMessage : ILogMessage
-		{
+        public class LogMessage : ILogMessage, IEquatable<LogMessage>
+        {
             /// <summary>Default constructor.</summary>
 			public LogMessage() 
             {
@@ -1037,6 +1037,34 @@ namespace MosaicLib
                 SetThreadID();
 
                 return this;
+            }
+
+            /// <summary>
+            /// Externally usable factory for LogMessage objects.  Typcially used during deserialization.
+            /// </summary>
+            public static LogMessage Generate(string loggerName, int loggerID, MesgType mesgType, string mesg, INamedValueSet nvs, byte [] data, bool emitted, QpcTimeStamp emittedQpcTime, int seqNum, int threadID, int win32ThreadID, string threadName, DateTime emittedDateTime, bool setThreadIDIfNeeded = true)
+            {
+                var lm = new LogMessage()
+                {
+                    _loggerName = loggerName,
+                    _loggerID = loggerID,
+                    MesgType = mesgType,
+                    _mesg = mesg,
+                    _nvs = nvs.ConvertToReadOnly(),
+                    _data = data,
+                    _emitted = emitted,
+                    _emittedQpcTime = emittedQpcTime,
+                    SeqNum = seqNum,
+                    ThreadID = threadID,
+                    Win32ThreadID = win32ThreadID,
+                    _threadName = threadName,
+                    EmittedDateTime = emittedDateTime,
+                };
+
+                if (setThreadIDIfNeeded && threadID == 0 && win32ThreadID == 0 && threadName == null)
+                    lm.SetThreadID();
+
+                return lm;
             }
 
             /// <summary>
@@ -1244,6 +1272,11 @@ namespace MosaicLib
                 return this.Equals(other, includeEmittedQpcTime: false);
             }
 
+            bool IEquatable<LogMessage>.Equals(LogMessage other)
+            {
+                return this.Equals(other, includeEmittedQpcTime: false);
+            }
+
             /// <summary>
             /// IEquatable{ILogMessage}.Equals implementation method - allows caller to indicate if emittedQpcTime should be included in comparison (defaults to false).
             /// </summary>
@@ -1260,7 +1293,7 @@ namespace MosaicLib
                     && Data.IsEqualTo(other.Data)
                     && Emitted == other.Emitted
                     && (!includeEmittedQpcTime || EmittedQpcTime == other.EmittedQpcTime)
-                    && EmittedDateTime == other.EmittedDateTime
+                    && EmittedDateTime.ToUniversalTime() == other.EmittedDateTime.ToUniversalTime()
                     && ThreadID == other.ThreadID
                     && Win32ThreadID == other.Win32ThreadID
                     && ThreadName == other.ThreadName

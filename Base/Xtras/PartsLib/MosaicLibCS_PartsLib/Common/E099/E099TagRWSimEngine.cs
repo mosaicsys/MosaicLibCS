@@ -436,15 +436,15 @@ namespace MosaicLib.PartsLib.Common.E099.Sim
 
             if (counterIsEnabledIVA.IsUpdateNeeded || tagIsPresentIVA.IsUpdateNeeded)
             {
-                privateState.CounterIsEnabled = counterIsEnabledIVA.Update().VC.GetValue<bool>(false);
-                privateState.TagIsPresent = tagIsPresentIVA.Update().VC.GetValue<bool>(false);
+                privateState.CounterIsEnabled = counterIsEnabledIVA.Update().VC.GetValueBo(false);
+                privateState.TagIsPresent = tagIsPresentIVA.Update().VC.GetValueBo(false);
 
                 PublishPrivateState();
             }
 
             if (isOnlineIVA.IsUpdateNeeded)
             {
-                if (isOnlineIVA.Update().VC.GetValue<bool>(false))
+                if (isOnlineIVA.Update().VC.GetValueBo(false))
                     PerformGoOnlineAction(false);
                 else
                     PerformGoOfflineAction();

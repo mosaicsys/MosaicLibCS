@@ -664,7 +664,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting
         {
             INamedValueSet messageNVS = message.NVS;
 
-            string toolTypeStr = messageNVS["ToolTypeStr"].VC.GetValue<string>(rethrow: false);
+            string toolTypeStr = messageNVS["ToolTypeStr"].VC.GetValueA(rethrow: false);
             
             MessageStreamTools.IMessageStreamTool messageStreamTool = null;
 

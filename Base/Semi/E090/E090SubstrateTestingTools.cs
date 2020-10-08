@@ -2485,7 +2485,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
             if (useArmObserver.ID.Name != fromLocName && ec.IsNullOrEmpty())
             {
-                string failNextGetFromLocName = substObs.Object.Attributes["FailNextGetFromLocName"].VC.GetValue<string>(rethrow: false);
+                string failNextGetFromLocName = substObs.Object.Attributes["FailNextGetFromLocName"].VC.GetValueA(rethrow: false);
 
                 if (ec.IsNullOrEmpty() && failNextGetFromLocName.IsNeitherNullNorEmpty() && failNextGetFromLocName == substObs.Info.LocID)
                 {
@@ -2502,7 +2502,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
             if (ec.IsNullOrEmpty() && !useArmObserver.ID.Equals(toLocObs.ID))
             {
-                string failNextPutToLocName = substObs.Object.Attributes["FailNextPutToLocName"].VC.GetValue<string>(rethrow: false);
+                string failNextPutToLocName = substObs.Object.Attributes["FailNextPutToLocName"].VC.GetValueA(rethrow: false);
 
                 if (ec.IsNullOrEmpty() && failNextPutToLocName.IsNeitherNullNorEmpty() && failNextPutToLocName == toLocObs.ID.Name)
                 {
@@ -2562,7 +2562,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
             if (fromArmObserver.ID.Name != substCurrentLocName && ec.IsNullOrEmpty())
             {
-                string failNextGetFromLocName = substObs.Object.Attributes["FailNextGetFromLocName"].VC.GetValue<string>(rethrow: false);
+                string failNextGetFromLocName = substObs.Object.Attributes["FailNextGetFromLocName"].VC.GetValueA(rethrow: false);
 
                 if (ec.IsNullOrEmpty() && failNextGetFromLocName.IsNeitherNullNorEmpty() && failNextGetFromLocName == substObs.Info.LocID)
                 {
@@ -2579,7 +2579,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
             if (ec.IsNullOrEmpty())
             {
-                string failNextGetFromLocName = swapWithSubstObs.Object.Attributes["FailNextGetFromLocName"].VC.GetValue<string>(rethrow: false);
+                string failNextGetFromLocName = swapWithSubstObs.Object.Attributes["FailNextGetFromLocName"].VC.GetValueA(rethrow: false);
 
                 if (ec.IsNullOrEmpty() && failNextGetFromLocName.IsNeitherNullNorEmpty() && failNextGetFromLocName == swapWithSubstObs.Info.LocID)
                 {
@@ -2596,7 +2596,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
             if (ec.IsNullOrEmpty())
             {
-                string failNextPutToLocName = substObs.Object.Attributes["FailNextPutToLocName"].VC.GetValue<string>(rethrow: false);
+                string failNextPutToLocName = substObs.Object.Attributes["FailNextPutToLocName"].VC.GetValueA(rethrow: false);
 
                 if (ec.IsNullOrEmpty() && failNextPutToLocName.IsNeitherNullNorEmpty() && failNextPutToLocName == swapAtLocObs.ID.Name)
                 {
@@ -2691,7 +2691,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             switch (serviceName)
             {
                 case "SetExplicitFaultReason":
-                    SetExplicitFaultReason(npv["Reason"].VC.GetValue<string>(rethrow: true));
+                    SetExplicitFaultReason(npv["Reason"].VC.GetValueA(rethrow: true));
                     PerformMainLoopService();
                     return string.Empty;
                 default:
@@ -2895,7 +2895,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             if (!preparednessState.Query(stepSpec.ProcessSpec, stepSpec).SummaryState.IsSet(QuerySummaryState.Ready))
                 return "Part is not ready to perform this process [{0}]".CheckedFormat(preparednessState);
 
-            TimeSpan processTime = stepSpec.StepVariables["ProcessTime"].VC.GetValue<TimeSpan>(rethrow: false);
+            TimeSpan processTime = stepSpec.StepVariables["ProcessTime"].VC.GetValueTS(rethrow: false);
 
             if (autoReleaseTransferPermissionLocNameAtStart != null)
             {
@@ -2981,7 +2981,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             if (entryEngineState == EngineState.RunningProcess && currentProcessTracker != null)
             {
                 var pendingSPS = currentProcessTracker.IPF.NamedParamValues["PendingSPS"].VC.GetValue(rethrow: false, defaultValue: SubstProcState.ProcessStepCompleted);
-                var resultCode = currentProcessTracker.IPF.NamedParamValues["ResultCode"].VC.GetValue<string>(rethrow: false).MapNullToEmpty();
+                var resultCode = currentProcessTracker.IPF.NamedParamValues["ResultCode"].VC.GetValueA(rethrow: false).MapNullToEmpty();
                 var setSJRS = currentProcessTracker.IPF.NamedParamValues["SetSJRS"].VC.GetValue<SubstrateJobRequestState>(rethrow: false);
 
                 E039TableUpdater.SetPendingSubstProcState(currentProcessTracker.SubstObserver, pendingSPS);
@@ -3322,7 +3322,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
             if (autoAcquireTransferPermissionLocNameAtEnd != null && autoAcquireTransferPermissionLocNameAtEnd != OutputLocID.Name && !(IsCircular && autoAcquireTransferPermissionLocNameAtEnd == ""))
                 return "AutoAcquireTransferPermissionLocNameAtEnd value '{0}' is not a valid process output location".CheckedFormat(autoAcquireTransferPermissionLocNameAtEnd);
 
-            TimeSpan stepInterval = stepSpec.StepVariables["StepInterval"].VC.GetValue<TimeSpan>(rethrow: false);
+            TimeSpan stepInterval = stepSpec.StepVariables["StepInterval"].VC.GetValueTS(rethrow: false);
 
             if (!BaseState.UseState.IsOnline(acceptOnlineFailure: false))
                 return "Part is not online [{0}]".CheckedFormat(BaseState);

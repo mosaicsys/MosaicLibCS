@@ -194,7 +194,8 @@ namespace MosaicLib.WPF.Controls
                 if (lastPartBaseState.IsBusy)
                 {
                     color = colors.busyColor;
-                    toolTipMesg = (lastActionInfo != null) ? "Busy, {0}".CheckedFormat(lastActionInfo) : "Busy";
+
+                    toolTipMesg = (lastActionInfo != null) ? "Busy, {0} [{1}]".CheckedFormat(lastActionInfo, lastPartBaseState.Reason) : "Busy [{0}]".CheckedFormat(lastPartBaseState.Reason);
                 }
                 else if ((lastActionInfo != null) && lastActionInfo.ActionState.Failed)
                 {

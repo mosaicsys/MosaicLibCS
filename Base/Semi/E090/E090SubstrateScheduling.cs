@@ -2008,7 +2008,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
 
             foreach (var nv in nvs)
             {
-                int count = nv.VC.GetValue<int>(rethrow: false);
+                int count = nv.VC.GetValueI4(rethrow: false);
 
                 if (count > 0)
                 {

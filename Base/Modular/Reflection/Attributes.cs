@@ -853,22 +853,34 @@ namespace MosaicLib.Modular.Reflection
                 else if (itemInfo.ItemType == typeof(string[]))
                 {
                     Func<TAnnotatedClass, string[]> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, string[]>(itemInfo);
-                    vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<string[]>(pfGetter(annotatedInstance), useStorageType, isNullable); };
+                    if (canUseQuickSetValue)
+                        vcGetter = (annotatedInstance) => { return ValueContainer.CreateLS(pfGetter(annotatedInstance)); };
+                    else
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<string[]>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
                 else if (itemInfo.ItemType == typeof(ValueContainer[]))
                 {
                     Func<TAnnotatedClass, ValueContainer[]> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, ValueContainer[]>(itemInfo);
-                    vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<ValueContainer[]>(pfGetter(annotatedInstance), useStorageType, isNullable); };
+                    if (canUseQuickSetValue)
+                        vcGetter = (annotatedInstance) => { return ValueContainer.CreateL(pfGetter(annotatedInstance)); };
+                    else
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<ValueContainer[]>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
                 else if (typeof(IList<string>).IsAssignableFrom(itemInfo.ItemType))
                 {
                     Func<TAnnotatedClass, IList<string>> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, IList<string>>(itemInfo);
-                    vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<IList<string>>(pfGetter(annotatedInstance), useStorageType, isNullable); };
+                    if (canUseQuickSetValue)
+                        vcGetter = (annotatedInstance) => { return ValueContainer.CreateLS(pfGetter(annotatedInstance)); };
+                    else
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<IList<string>>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
                 else if (typeof(IList<ValueContainer>).IsAssignableFrom(itemInfo.ItemType))
                 {
                     Func<TAnnotatedClass, IList<ValueContainer>> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, IList<ValueContainer>>(itemInfo);
-                    vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<IList<ValueContainer>>(pfGetter(annotatedInstance), useStorageType, isNullable); };
+                    if (canUseQuickSetValue)
+                        vcGetter = (annotatedInstance) => { return ValueContainer.CreateL(pfGetter(annotatedInstance)); };
+                    else
+                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<IList<ValueContainer>>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
                 else if (itemInfo.ItemType == typeof(ValueContainer))
                 {
@@ -921,7 +933,7 @@ namespace MosaicLib.Modular.Reflection
                 {
                     Func<TAnnotatedClass, INamedValueSet> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, INamedValueSet>(itemInfo);
                     if (canUseQuickSetValue)
-                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<INamedValueSet>(pfGetter(annotatedInstance)); };
+                        vcGetter = (annotatedInstance) => { return ValueContainer.CreateNVS(pfGetter(annotatedInstance)); };
                     else
                         vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<INamedValueSet>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
@@ -929,7 +941,7 @@ namespace MosaicLib.Modular.Reflection
                 {
                     Func<TAnnotatedClass, INamedValue> pfGetter = AnnotatedClassItemAccessHelper.GenerateGetter<TAnnotatedClass, INamedValue>(itemInfo);
                     if (canUseQuickSetValue)
-                        vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<INamedValue>(pfGetter(annotatedInstance)); };
+                        vcGetter = (annotatedInstance) => { return ValueContainer.CreateNV(pfGetter(annotatedInstance)); };
                     else
                         vcGetter = (annotatedInstance) => { return default(ValueContainer).SetValue<INamedValue>(pfGetter(annotatedInstance), useStorageType, isNullable); };
                 }
@@ -1145,12 +1157,12 @@ namespace MosaicLib.Modular.Reflection
                 else if (itemInfo.ItemType == typeof(IList<string>))
                 {
                     Action<TAnnotatedClass, IList<string>> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, IList<string>>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<IList<string>>(decodedValueType: ContainerStorageType.IListOfString, isNullable: false, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValueLS(allowAllTypeChangeAttempts: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(IList<ValueContainer>))
                 {
                     Action<TAnnotatedClass, IList<ValueContainer>> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, IList<ValueContainer>>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<IList<ValueContainer>>(decodedValueType: ContainerStorageType.IListOfVC, isNullable: false, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValueL(allowAllTypeChangeAttempts: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(List<string>))
                 {
@@ -1165,12 +1177,12 @@ namespace MosaicLib.Modular.Reflection
                 else if (itemInfo.ItemType == typeof(ReadOnlyIList<string>))
                 {
                     Action<TAnnotatedClass, ReadOnlyIList<string>> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, ReadOnlyIList<string>>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<ReadOnlyIList<string>>(decodedValueType: ContainerStorageType.IListOfString, isNullable: false, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValueLS(allowAllTypeChangeAttempts: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(ReadOnlyIList<ValueContainer>))
                 {
                     Action<TAnnotatedClass, ReadOnlyIList<ValueContainer>> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, ReadOnlyIList<ValueContainer>>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<ReadOnlyIList<ValueContainer>>(decodedValueType: ContainerStorageType.IListOfVC, isNullable: false, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValueL(allowAllTypeChangeAttempts: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(ReadOnlyCollection<string>))
                 {
@@ -1215,22 +1227,22 @@ namespace MosaicLib.Modular.Reflection
                 else if (itemInfo.ItemType == typeof(INamedValueSet))
                 {
                     Action<TAnnotatedClass, INamedValueSet> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, INamedValueSet>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<INamedValueSet>(decodedValueType: ContainerStorageType.INamedValueSet, isNullable: false, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValueNVS(allowAllTypeChangeAttempts: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(INamedValue))
                 {
                     Action<TAnnotatedClass, INamedValue> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, INamedValue>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<INamedValue>(decodedValueType: ContainerStorageType.INamedValue, isNullable: false, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValueNV(allowAllTypeChangeAttempts: true, rethrow: rethrow || forceRethrowFlag)); };
                 }
                 else if (itemInfo.ItemType == typeof(NamedValueSet))
                 {
                     Action<TAnnotatedClass, NamedValueSet> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, NamedValueSet>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<INamedValueSet>(decodedValueType: ContainerStorageType.INamedValueSet, isNullable: false, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag).ConvertToReadOnly(mapNullToEmpty: false)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValueNVS(allowAllTypeChangeAttempts: true, rethrow: rethrow || forceRethrowFlag).ConvertToReadOnly(mapNullToEmpty: false)); };
                 }
                 else if (itemInfo.ItemType == typeof(NamedValue))
                 {
                     Action<TAnnotatedClass, NamedValue> pfSetter = AnnotatedClassItemAccessHelper.GenerateSetter<TAnnotatedClass, NamedValue>(itemInfo);
-                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValue<INamedValue>(decodedValueType: ContainerStorageType.INamedValue, isNullable: false, allowTypeChangeAttempt: true, rethrow: rethrow || forceRethrowFlag).ConvertToReadOnly(mapNullToEmpty: false)); };
+                    vcSetter = (annotatedInstance, vc, rethrow) => { pfSetter(annotatedInstance, vc.GetValueNV(allowAllTypeChangeAttempts: true, rethrow: rethrow || forceRethrowFlag).ConvertToReadOnly(mapNullToEmpty: false)); };
                 }
                 else if (itemInfo.ItemType.IsEnum || (nullableBaseType != null && nullableBaseType.IsEnum))
                 {
@@ -1264,7 +1276,7 @@ namespace MosaicLib.Modular.Reflection
                                     case ContainerStorageType.U4: value = System.Enum.ToObject(enumType, vc.u.u32); break;
                                     case ContainerStorageType.U8: value = System.Enum.ToObject(enumType, vc.u.u64); break;
                                     default:
-                                        value = System.Enum.Parse(enumType, vc.GetValue<string>(rethrow));
+                                        value = System.Enum.Parse(enumType, vc.GetValueA(rethrow));
                                         break;
                                 }
                             }

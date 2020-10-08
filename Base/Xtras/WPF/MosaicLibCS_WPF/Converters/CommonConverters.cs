@@ -167,7 +167,7 @@ namespace MosaicLib.WPF.Converters
 
         public override object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            int indexFromValue = ValueContainer.CreateFromObject(value).GetValue<int>(rethrow: false);
+            int indexFromValue = ValueContainer.CreateFromObject(value).GetValueI4(rethrow: false);
 
             string [] tokenSetArray = parameter.SafeToString().Split(Delimiter);
 

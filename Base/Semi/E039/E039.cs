@@ -659,13 +659,13 @@ namespace MosaicLib.Semi.E039
     {
         IClientFacet Sync();
     }
-    
+
     #endregion
 
     #region E039ToStringSelect
 
     /// <summary>
-    /// None (0x00), FullName (0x01), UUID (0x02), Attributes (0x04), LinkedShortIDs (0x10), LinkedFullIDs (0x20)
+    /// None (0x00), FullName (0x01), UUID (0x02), Attributes (0x04), FlagsIfNeeded (0x08), LinkedShortIDs (0x10), LinkedFullIDs (0x20)
     /// </summary>
     [Flags]
     public enum E039ToStringSelect : int
@@ -678,6 +678,8 @@ namespace MosaicLib.Semi.E039
         UUID = 0x02,
         /// <summary>Output of an object should include its attributes [0x04]</summary>
         Attributes = 0x04,
+        /// <summary>Output of an object should include its flags if any any are set [0x08]</summary>
+        FlagsIfNeeded = 0x08,
         /// <summary>Output of links should include just the Name of the link endpoints [0x10]</summary>
         LinkedShortIDs = 0x10,
         /// <summary>Output of links should include the FullName's of each of the link endpoints [0x20]</summary>
@@ -686,8 +688,8 @@ namespace MosaicLib.Semi.E039
         /// <summary>FullName | UUID [0x03]</summary>
         DefaultObjIDSelect = (FullName | UUID),
 
-        /// <summary>DefaultObjIDSelect(FullName | UUID) | Attributes | LinkedShortIDs [0x17]</summary>
-        DefaultObjSelect = (DefaultObjIDSelect | Attributes | LinkedShortIDs),
+        /// <summary>DefaultObjIDSelect(FullName | UUID) | Attributes | FlagsIfNeeded | LinkedShortIDs [0x17]</summary>
+        DefaultObjSelect = (DefaultObjIDSelect | Attributes | FlagsIfNeeded | LinkedShortIDs),
     }
 
     #endregion
@@ -1049,7 +1051,7 @@ namespace MosaicLib.Semi.E039
         [EnumMember]
         Pinned = 0x10,
 
-        /// <summary>Client usable: Flag indicates that the client would like the table manager to create an IVA for this object.  Generally the use of this flag should not be combined with the use of the Pinned flag.  [0x0100]</summary>
+        /// <summary>Client usable: Flag indicates that the client would like the table manager to create an IVA for this object.  Use of this flag also implicitly causes the object to act as if it is Pinned.  [0x0100]</summary>
         [EnumMember]
         CreateIVA = 0x100,
 
@@ -1063,6 +1065,11 @@ namespace MosaicLib.Semi.E039
 
     public static partial class ExtensionMethods
     {
+        /// <summary>
+        /// Returns true if the given <paramref name="flags"/> value has its Pinned and/or CreateIVA bits set.
+        /// </summary>
+        public static bool IsPinnedOrCreateIVA(this E039ObjectFlags flags) { return ((flags & (E039ObjectFlags.Pinned | E039ObjectFlags.CreateIVA)) != 0); }
+
         /// <summary>
         /// Returns true if the given <paramref name="flags"/> value has the IsFinal bit set.
         /// </summary>
@@ -1205,7 +1212,7 @@ namespace MosaicLib.Semi.E039
     /// This object supports mutability within this assembly and is immutable for all code outside of this assembly (property setters are defined to be internal)
     /// </summary>
     [DataContract(Namespace = Constants.E039NameSpace, Name = "ObjInst")]
-    public class E039Object : IE039Object
+    public class E039Object : IE039Object, IEquatable<E039Object>
     {
         /// <summary>Returns an empty IE039Object instance</summary>
         public static IE039Object Empty { get { return _empty; } }
@@ -1331,6 +1338,11 @@ namespace MosaicLib.Semi.E039
                 _attributes.MakeReadOnly();
         }
 
+        bool IEquatable<E039Object>.Equals(E039Object other)
+        {
+            return Equals(other);
+        }
+
         /// <summary>
         /// Returns true if this object's ID, Flags, Attributes, LinksToOtherObjectsList and LinksFromOtherObjectsList are all Equal to the <paramref name="other"/>'s
         /// </summary>
@@ -1345,7 +1357,7 @@ namespace MosaicLib.Semi.E039
                 );
         }
 
-        /// <summary>Debug and Logging helper.  Returns ToString(E039ToStringSelect.DefaultObjSelect) [DefaultObjIDSelect(FullName | UUID) | Attributes | LinkedShortIDs]</summary>
+        /// <summary>Debug and Logging helper.  Returns ToString(E039ToStringSelect.DefaultObjSelect) [DefaultObjIDSelect(FullName | UUID) | Attributes | FlagsIfNeeded | LinkedShortIDs]</summary>
         public override string ToString()
         {
             return ToString(E039ToStringSelect.DefaultObjSelect);
@@ -1381,6 +1393,9 @@ namespace MosaicLib.Semi.E039
 
             if (toStringSelect.IsSet(E039ToStringSelect.Attributes))
                 sb.CheckedAppendFormat(" attribs:{0}", Attributes);
+
+            if (toStringSelect.IsSet(E039ToStringSelect.FlagsIfNeeded) && Flags != E039ObjectFlags.None)
+                sb.CheckedAppendFormat(" flags:{0}", Flags);
 
             return sb.ToString();
         }
@@ -1430,6 +1445,7 @@ namespace MosaicLib.Semi.E039
 
             DefaultFallbackReferenceSet = other.DefaultFallbackReferenceSet;
             DefaultFallbackReferenceHistorySet = other.DefaultFallbackReferenceHistorySet;
+            DefaultFallbackE039ObjectHistoryRecorder = other.DefaultFallbackE039ObjectHistoryRecorder;
 
             defaultPersistWriteHoldoff = DefaultTypeSetSpec.PersistWriteHoldoff;
 
@@ -1488,6 +1504,14 @@ namespace MosaicLib.Semi.E039
         /// </summary>
         public IReferenceSet<E039Object> DefaultFallbackReferenceHistorySet { get; set; }
 
+        /// <summary>
+        /// When non-null this delegate is given a copy of each newly published (and persisted) E039Object, provided that the table set that the object belongs to does not specify a different delegate.
+        /// </summary>
+        public Action<E039Object> DefaultFallbackE039ObjectHistoryRecorder { get; set; }
+
+        /// <summary>
+        /// When non-empty this array gives the set of 
+        /// </summary>
         public E039TableTypeSetPersistSpecItem [] TypeSetPersistSpecItemArray { get; set; }
 
         /// <summary>Defines the factory object that is used to create external Sync actions which are used when the table client requests an external sync as part of a set of update itmes.</summary>
@@ -1555,6 +1579,8 @@ namespace MosaicLib.Semi.E039
                 ReferenceSetCapacity = other.ReferenceSetCapacity;
                 ReferenceSet = other.ReferenceSet;
                 ReferenceHistorySet = other.ReferenceHistorySet;
+
+                E039ObjectHistoryRecorder = other.E039ObjectHistoryRecorder;
             }
         }
 
@@ -1593,6 +1619,11 @@ namespace MosaicLib.Semi.E039
         /// This property may be used by the client code to give the table manager the reference history set to use (as externally constructed, configured and optionally registered)
         /// </summary>
         public IReferenceSet<E039Object> ReferenceHistorySet { get; set; }
+
+        /// <summary>
+        /// When non-null this delegate is given a copy of each newly published (and persisted) E039Object for the objects in this persist set.
+        /// </summary>
+        public Action<E039Object> E039ObjectHistoryRecorder { get; set; }
 
         /// <summary>
         /// This method is used by the table part to make any post clone changes that are needed before the configuration contents can be used.
@@ -2224,7 +2255,7 @@ namespace MosaicLib.Semi.E039
                 // Identify the set of other ObjectTrackers that we will be removing after we have unlinked this object fully.
                 E039LinkFilter filter = updateItem.RemoveLinkedToOtherObjectsFilter ?? E039Link.FilterNone;
 
-                ot.linkTrackerPairsToOtherObjectsDictionary.Values.Where(ltp => ((ltp.ObjectTracker != null) && !ltp.ObjectTracker.flags.IsSet(E039ObjectFlags.Pinned) && filter(ltp.Link))).DoForEach(ltp => potentialObjectTrackersToRemoveListPerPass.Add(ltp.ObjectTracker));
+                ot.linkTrackerPairsToOtherObjectsDictionary.Values.Where(ltp => ((ltp.ObjectTracker != null) && !ltp.ObjectTracker.flags.IsPinnedOrCreateIVA() && filter(ltp.Link))).DoForEach(ltp => potentialObjectTrackersToRemoveListPerPass.Add(ltp.ObjectTracker));
 
                 // unlink this object from other objects: capture the current set of LinkTrackerPairs in both directions, clear the two dictionaries and then remove the links from any remaining linked objects
                 LinkTrackerPair[] linkTrackerPairsFromOtherObjectsArray = ot.linkTrackerPairsFromOtherObjectsDictionary.Values.ToArray();
@@ -2441,7 +2472,10 @@ namespace MosaicLib.Semi.E039
                 InnerHandleChangedLinksIfNeeded(ot);
 
             foreach (var ot in touchedOTArray)
+            {
                 ot.Publish(seqNums.PublishedObjectSeqNum = GetNextSeqNum(), publicationTriggeredByLinkedObject: false);
+                InnerRecordE039ObjectHistory(ot);
+            }
 
             // sweep through all of the just published objects and do an upstream linked object publish if the upstream object has a lower seqNum than than the last published one for the object we just published.
             foreach (var ot in touchedOTArray)
@@ -2478,7 +2512,7 @@ namespace MosaicLib.Semi.E039
                     var setUpdateTracker = activeSetUpdateCollectorList[idx];
 
                     // clone the touched objects to be published so that we can enable their serializeWithType option.  This will allow the derserialized versions to fully reconsitute their E039ObjectID on deserialization (using the annotated OnDeserialized method).
-                    E039Object[] addedObjectsArray = setUpdateTracker.addedSetItemTrackersList.Select(ot => ot.lastPublishedObjSerializeForRemoteUse ?? new E039Object(ot.lastPublishedObj, serializeForRemoteUse: true)).ToArray();
+                    E039Object[] addedObjectsArray = setUpdateTracker.addedSetItemTrackersList.Select(ot => ot.GetObjSerializedForRemoteUse()).ToArray();
 
                     if (setUpdateTracker.referenceSet != null)
                     {
@@ -2513,12 +2547,50 @@ namespace MosaicLib.Semi.E039
             if (ot != null && ot.lastPublishedSeqNum < seqNum || firstLevel)
             {
                 if (!firstLevel)
+                {
                     ot.Publish(seqNum, publicationTriggeredByLinkedObject: true);
+                    // NOTE: we do not (re)record objects that are published through linkage
+                }
 
                 foreach (var ltp in ot.linkTrackerPairsFromOtherObjectsDictionary.Values)
+                {
                     InnerRecursivePublishThroughLinksFromOtherObjects(ltp.ObjectTracker, seqNum);
+                }
             }
         }
+
+        /// <summary>
+        /// Handle checking if there is a non-null E039ObjectHistoryRecorder (either from the set config or from the default value in the part config)
+        /// and if so obtain a copy of the object serialized for remote use and call the recorder delegate with this object in a try catch wrapper.  
+        /// Throttle any resulting exception logging to no more than one per second.
+        /// </summary>
+        private void InnerRecordE039ObjectHistory(ObjectTracker ot)
+        {
+            var objToRecord = ot.GetObjSerializedForRemoteUse();
+            var historyRecorderDelegate = ot.typeSetTracker.setConfig.E039ObjectHistoryRecorder ?? Config.DefaultFallbackE039ObjectHistoryRecorder;
+
+            if (historyRecorderDelegate != null)
+            {
+                bool timerStarted = e039ObjectHistoryExceptionLogHoldoffTimer.Started;
+                try
+                {
+                    historyRecorderDelegate(objToRecord);
+
+                    if (timerStarted)
+                        e039ObjectHistoryExceptionLogHoldoffTimer.Stop();
+                }
+                catch (System.Exception ex)
+                {
+                    if (!timerStarted)
+                        e039ObjectHistoryExceptionLogHoldoffTimer.Reset(triggerImmediately: true);
+
+                    if (e039ObjectHistoryExceptionLogHoldoffTimer.IsTriggered)
+                        Log.Debug.Emit("E039ObjectHistoryRecorder failed for {0}: {1}", objToRecord.ID.FullName, ex.ToString(ExceptionFormat.TypeAndMessageAndStackTrace));
+                }
+            }
+        }
+
+        QpcTimer e039ObjectHistoryExceptionLogHoldoffTimer = new QpcTimer() { TriggerInterval = (1.0).FromSeconds(), AutoReset = true };
 
         #endregion
 
@@ -2562,7 +2634,7 @@ namespace MosaicLib.Semi.E039
                 case "AddObject":   // warning - this service action should only be used with caution
                     if (typeName.IsNeitherNullNorEmpty() && Config.AddObjectServiceActionPermittedTypeNameSet.MatchesAny(typeName, false))
                     {
-                        var attributes = npv["attributes"].VC.GetValue<INamedValueSet>(rethrow: true);
+                        var attributes = npv["attributes"].VC.GetValueNVS(rethrow: true);
                         var flags = npv["flags"].VC.GetValue<E039ObjectFlags>(rethrow: false);
                         var ifNeeded = npv["ifNeeded"].VC.GetValueBo(rethrow: false);
                         var mergeBehaviorNV = npv["mergeBehavior"];
@@ -2585,7 +2657,7 @@ namespace MosaicLib.Semi.E039
                 case "SetAttributes":
                     if (typeName.IsNeitherNullNorEmpty() && Config.SetAttributesServiceActionPermittedTypeNameSet.MatchesAny(typeName, false))
                     {
-                        var attributes = npv["attributes"].VC.GetValue<INamedValueSet>(rethrow: true);
+                        var attributes = npv["attributes"].VC.GetValueNVS(rethrow: true);
                         var mergeBehaviorNV = npv["mergeBehavior"];
                         var mergeBehavior = mergeBehaviorNV.IsNullOrEmpty() ? mergeBehaviorNV.VC.GetValue<NamedValueMergeBehavior>(rethrow: true) : NamedValueMergeBehavior.AddAndUpdate;
                         var updateItem = new E039UpdateItem.SetAttributes(objID, attributes, mergeBehavior);
@@ -2643,7 +2715,7 @@ namespace MosaicLib.Semi.E039
         PersistHelper persistHelperPart;
 
         TypeSetTracker[] typeSetTrackerArray = null;
-        TypeSetTracker defaultTypeSetTracker = null;
+        readonly TypeSetTracker defaultTypeSetTracker = null;
         Dictionary<string, ObjectTracker> uuidToObjectTrackerDictionary = new Dictionary<string, ObjectTracker>();
         Dictionary<string, TypeTableTracker> typeNameToTypeTableTrackerDictionary = new Dictionary<string, TypeTableTracker>();
 
@@ -2681,7 +2753,7 @@ namespace MosaicLib.Semi.E039
 
         #region support fields for asynchronous methods
 
-        object externalDictionaryMutex = new object();
+        readonly object externalDictionaryMutex = new object();
         Dictionary<string, ObjectTracker> externalUUIDToObjectTrackerDictionary = new Dictionary<string, ObjectTracker>();
         Dictionary<string, Dictionary<string, ObjectTracker>> externalTypeToObjectNameDictionaryDictionary = new Dictionary<string, Dictionary<string, ObjectTracker>>();
 
@@ -2897,17 +2969,24 @@ namespace MosaicLib.Semi.E039
                     objPublisher.Object = volatileLastPublishedIObj;
 
                 if (objIVA != null)
-                {
-                    if (lastPublishedObjSerializeForRemoteUse == null)
-                        lastPublishedObjSerializeForRemoteUse = new E039Object(lastPublishedObj, serializeForRemoteUse: true);
-
-                    objIVA.Set(lastPublishedObjSerializeForRemoteUse);       // the same object may be Set to the IVA multiple times if publicationTriggeredByLinkedObject is true.
-                }
+                    objIVA.Set(GetObjSerializedForRemoteUse());       // the same object may be Set to the IVA multiple times if publicationTriggeredByLinkedObject is true.
 
                 typeTableTracker.lastPublishedSeqNum = seqNum;
                 typeSetTracker.lastPublishedSeqNum = seqNum;
 
                 touched = false;
+            }
+
+            /// <summary>
+            /// Updates the lastPublishedObjSerializedforRemoteUse if needed and returns it.
+            /// This object has been marked to include Type information when serialized so that it may be included in locations or collections where its Type is not implicitly known (Remoting, Recording, ...)
+            /// </summary>
+            public E039Object GetObjSerializedForRemoteUse()
+            {
+                if (lastPublishedObjSerializeForRemoteUse == null)
+                    lastPublishedObjSerializeForRemoteUse = new E039Object(lastPublishedObj, serializeForRemoteUse: true);
+
+                return lastPublishedObjSerializeForRemoteUse;
             }
         }
 
@@ -3347,7 +3426,7 @@ namespace MosaicLib.Semi.E039
             this.infoFactoryDelegate = infoFactoryDelegate ?? (obj => default(TDerivedObjectInfoType));
         }
 
-        private Func<IE039Object, TDerivedObjectInfoType> infoFactoryDelegate;
+        private readonly Func<IE039Object, TDerivedObjectInfoType> infoFactoryDelegate;
 
         /// <summary>Gives the <typeparamref name="TDerivedObjectInfoType"/> generated using the constructed infoFactoryDelegate from the last observed object.</summary>
         public TDerivedObjectInfoType Info { get; private set; }

@@ -231,9 +231,9 @@ namespace MosaicLib.Modular.Config
 
                 case "SetKey":
                     {
-                        string key = npv["key"].VC.GetValue<string>(rethrow: true);
+                        string key = npv["key"].VC.GetValueA(rethrow: true);
                         ValueContainer value = npv["value"].VC;
-                        string comment = npv["comment"].VC.GetValue<string>(rethrow: false, defaultValue: null).MapNullTo("{0} operation has been performed using the {1} part".CheckedFormat(serviceName, PartID));
+                        string comment = npv["comment"].VC.GetValueA(rethrow: false).MapNullTo("{0} operation has been performed using the {1} part".CheckedFormat(serviceName, PartID));
                         bool? ensureExists = npv["ensureExists"].VC.GetValue<bool?>(rethrow: false);
 
                         IConfigKeyAccess icka = Config.GetConfigKeyAccess(key, ensureExists: ensureExists, defaultValue: value);
@@ -255,7 +255,7 @@ namespace MosaicLib.Modular.Config
                     {
                         string [] keys = npv["keys"].VC.GetValue<string []>(rethrow: true);
                         ValueContainer [] values = npv["values"].VC.GetValue<ValueContainer []>(rethrow: true);
-                        string comment = npv["comment"].VC.GetValue<string>(rethrow: false, defaultValue: null).MapNullTo("{0} operation has been performed using the {1} part".CheckedFormat(serviceName, PartID));
+                        string comment = npv["comment"].VC.GetValueA(rethrow: false).MapNullTo("{0} operation has been performed using the {1} part".CheckedFormat(serviceName, PartID));
                         bool? ensureExists = npv["ensureExists"].VC.GetValue<bool?>(rethrow: false);
 
                         if (keys.SafeLength() != values.SafeLength())

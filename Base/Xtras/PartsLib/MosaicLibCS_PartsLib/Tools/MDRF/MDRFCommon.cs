@@ -67,11 +67,23 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
         /// <summary>When true, the MDRFWriter will create the DirPath directoy if needed.  When false it will not attempt to do this.  Defaults to true</summary>
         public bool CreateDirectoryIfNeeded { get; set; }
 
-        /// <summary>Gives the maximum MDRF data block size.  Used to size internal buffers.  Defaults to 252144.</summary>
+        /// <summary>Gives the maximum MDRF data block size.  Used to size internal buffers.  Not used in MDRF2.  Defaults to 252144.</summary>
         public Int32 MaxDataBlockSize { get; set; }
- 
-        /// <summary>Gives the nominal maximum MDRF file size after which a new file will be created.  Defaults to 100 * 1024 * 1024</summary>
+
+        /// <summary>Gives the nominal maximum MDRF2 file block write length.  Not used in MDRF1.  Defaults to 65536.</summary>
+        public Int32 NominalMaxDataBlockSize { get; set; }
+
+        /// <summary>Only used with MDRF2 - defines the initial size of the block buffer that is used for serializing the file's meta data.</summary>
+        public const Int32 InitialMetaDataBlockSize = 256 * 1024;
+
+        /// <summary>Only used for MDRF2 - defines the extras space allocated to the initial block buffer so as to minimize the number of reallocations required to reach steady state. [10240]</summary>
+        public const Int32 NominalExtraDataBlockSize = 10240;
+
+        /// <summary>Gives the nominal maximum MDRF file size after which a new file will be created.  Defaults to 100 * 1024 * 1024 for MDRF and 50*1024*1024 for MDRF2.</summary>
         public Int32 NominalMaxFileSize { get; set; }
+
+        /// <summary>Only available for MDRF2 files.  When > 0 the writer will generate .mdrf2.lz4 files using LZ4 compression in place of the .mdrf2 uncompressed version.  [1]</summary>
+        public int CompressionLevel { get; set; }
 
         /// <summary>
         /// Defines the size of the file index block, in rows.
@@ -79,7 +91,8 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
         /// Each row records the file offset (and delta times) to the first block in the row's given region of the file.
         /// In addition flag bits are recorded and retained in each row as the bitwise or of the flag bits of all blocks that have been written (started) within this rows corresponding file region.
         /// This allows clients to make use of some form of random access based on the use of known user assigned and writer flag bits.
-        /// Defaults to 2048.
+        /// <para/>Setting this value to zero effictively disables the use (and updates to) the index block as the file is written.
+        /// <para/>Defaults to 2048.
         /// </summary>
         public Int32 FileIndexNumRows { get; set; }
 
@@ -89,19 +102,24 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
         /// <summary>Gives the minimum file recording period for cases where a file is started just before a new file boundary condition is detected.  Defaults to 15.0 seconds</summary>
         public TimeSpan MinInterFileCreateHoldoffPeriod { get; set; }
 
-        /// <summary>Gives the minimum nominal interval between updating the FileIndex.  Set this to be much smaller if you are expecting to use the index to querty the file contents while a file is being written.  Defaults to 60.0 seconds.</summary>
+        /// <summary>
+        /// Gives the minimum nominal interval between updating the FileIndex.  
+        /// Set this to be much smaller if you are expecting to use the index to querty the file contents while a file is being written.  
+        /// <para/>For MDRF2 this value defines the nominal interval on which inline index records are generated and a content block is written to the output stream along with the rest of the records that have been accumulated since the start of the last inline index record was written.
+        /// <para/>Defaults to 60.0 seconds for MDRF and 10.0 seconds for MDRF2.
+        /// </summary>
         public TimeSpan MinNominalFileIndexWriteInterval { get; set; }
 
         /// <summary>Gives the nominal interval between time triggered group write all operations.  Defaults to 15.0 minutes.</summary>
         public TimeSpan MinNominalWriteAllInterval { get; set; }
 
-        /// <summary>Gives the offset used with I8 values in preparation for U8Auto coding.  Defaults to 120</summary>
+        /// <summary>Gives the offset used with I8 values in preparation for U8Auto coding.  Not used with MDRF2.  Defaults to 120</summary>
         public Int64 I8Offset { get; set; }
 
-        /// <summary>Gives the offset used with I4 values in preparation for U8Auto coding.  Defaults to 120</summary>
+        /// <summary>Gives the offset used with I4 values in preparation for U8Auto coding.  Not used with MDRF2.  Defaults to 120</summary>
         public Int32 I4Offset { get; set; }
 
-        /// <summary>Gives the offset used with I2 values in preparation for U8Auto coding.  Defaults to 27</summary>
+        /// <summary>Gives the offset used with I2 values in preparation for U8Auto coding.  Not used with MDRF2.  Defaults to 27</summary>
         public Int16 I2Offset { get; set; }
 
         /// <summary>Default constructor.  Calls SetFrom(null).</summary>
@@ -122,6 +140,8 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
                 FileNamePrefix = string.Empty;
                 CreateDirectoryIfNeeded = true;
                 MaxDataBlockSize = 262144;
+                NominalMaxDataBlockSize = 0;
+                NominalMaxFileSize = 65536;
                 NominalMaxFileSize = 100 * 1024 * 1024;
                 FileIndexNumRows = 2048;            // 51200 bytes per row.  42 seconds per row (assuming full file consumes one day)
                 MaxFileRecordingPeriod = (24.0).FromHours();
@@ -141,7 +161,9 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
                 FileNamePrefix = other.FileNamePrefix;
                 CreateDirectoryIfNeeded = other.CreateDirectoryIfNeeded;
                 MaxDataBlockSize = other.MaxDataBlockSize;
+                NominalMaxDataBlockSize = other.NominalMaxDataBlockSize;
                 NominalMaxFileSize = other.NominalMaxFileSize;
+                CompressionLevel = other.CompressionLevel;
                 FileIndexNumRows = other.FileIndexNumRows;
                 MaxFileRecordingPeriod = other.MaxFileRecordingPeriod;
                 MinInterFileCreateHoldoffPeriod = other.MinInterFileCreateHoldoffPeriod;
@@ -167,6 +189,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
 
             CreateDirectoryIfNeeded = CreateDirectoryIfNeeded.MapDefaultTo(other.CreateDirectoryIfNeeded);
             MaxDataBlockSize = MaxDataBlockSize.MapDefaultTo(other.MaxDataBlockSize);
+            NominalMaxDataBlockSize = NominalMaxDataBlockSize.MapDefaultTo(other.NominalMaxDataBlockSize);
             NominalMaxFileSize = NominalMaxFileSize.MapDefaultTo(other.NominalMaxFileSize);
             FileIndexNumRows = FileIndexNumRows.MapDefaultTo(other.FileIndexNumRows);
             MaxFileRecordingPeriod = MaxFileRecordingPeriod.MapDefaultTo(other.MaxFileRecordingPeriod);
@@ -191,7 +214,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
         /// <para/>MaxDataBlockSize must be between 65536 and 1048576, rounded up to the next multiple of 16384,
         /// NominalMaxFileSize must be between 524288 and 2147483647 (Int32.MaxValue),
         /// MaxFileRecordingPeriod must be between 5 minutes and 7 days,
-        /// FileIndexNumRows must be between 256 and 65536,
+        /// FileIndexNumRows must be 0 or between 256 and 65536,
         /// MinInterFileCreateHoldoffPeriod must be between 15 seconds and 1 hour,
         /// If I8Offset/I4Offset/I2Offset is -1 it will be set to zero.
         /// </summary>
@@ -199,12 +222,13 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
         {
             // clip and round the maxDataBlockSize up to the next multiple of 4096 that is not larger than i4OneMillion
             MaxDataBlockSize = (MaxDataBlockSize.Clip(65536, i4OneMillion) + 0xfff) & 0x7ffff000;
+            NominalMaxDataBlockSize = (NominalMaxDataBlockSize.Clip(1, i4OneMillion));
 
             NominalMaxFileSize = NominalMaxFileSize.Clip(i4HalfMillion, Int32.MaxValue);
 
             MaxFileRecordingPeriod = MaxFileRecordingPeriod.Clip(TimeSpan.FromMinutes(5.0), TimeSpan.FromDays(7.0));
 
-            FileIndexNumRows = FileIndexNumRows.Clip(256, 65536);
+            FileIndexNumRows = (FileIndexNumRows != -1) ? FileIndexNumRows.Clip(256, 65536) : 0;
 
             MinInterFileCreateHoldoffPeriod = MinInterFileCreateHoldoffPeriod.Clip(TimeSpan.FromSeconds(15.0), TimeSpan.FromHours(1.0));
 
@@ -235,20 +259,94 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
         public Int16 ConvertToI2FromU2WithOffset(UInt16 u2) { return unchecked((Int16)(u2 - I2Offset)); }
 
         #endregion
+
+        #region MDRF2DefaultValue
+
+        public static SetupInfo DefaultForMDRF2
+        {
+            get
+            {
+                return new SetupInfo()
+                {
+                    NominalMaxDataBlockSize = 65536,
+                    NominalMaxFileSize = 50*1024*1024,
+                    CompressionLevel = 1,
+                    MaxFileRecordingPeriod = (24.0).FromHours(),
+                    MinInterFileCreateHoldoffPeriod = (15.0).FromSeconds(),
+                    MinNominalFileIndexWriteInterval = (10.0).FromSeconds(),
+                    MinNominalWriteAllInterval = (15.0).FromMinutes(),
+                    FileIndexNumRows = -1,      // maps to 0 in ClipValues
+                    I8Offset = -1,      // maps to 0 in ClipValues
+                    I4Offset = -1,      // maps to 0 in ClipValues
+                    I2Offset = -1,      // maps to 0 in ClipValues
+                };
+            }
+        }
+
+        #endregion
+
+        public SetupInfo UpdateFrom(INamedValueSet nvs)
+        {
+            DirPath = nvs["setup.DirPath"].VC.GetValueA(rethrow: false);
+            ClientName = nvs["setup.ClientName"].VC.GetValueA(rethrow: false);
+            FileNamePrefix = nvs["setup.FileNamePrefix"].VC.GetValueA(rethrow: false);
+            CreateDirectoryIfNeeded = nvs["setup.CreateDirectoryIfNeeded"].VC.GetValueBo(rethrow: false);
+            MaxDataBlockSize = nvs["setup.MaxDataBlockSize"].VC.GetValueI4(rethrow: false);
+            NominalMaxDataBlockSize = nvs["setup.NominalMaxDataBlockSize"].VC.GetValueI4(rethrow: false);
+            NominalMaxFileSize = nvs["setup.NominalMaxFileSize"].VC.GetValueI4(rethrow: false);
+            FileIndexNumRows = nvs["setup.FileIndexNumRows"].VC.GetValueI4(rethrow: false);
+            CompressionLevel = nvs["setup.CompressionLevel"].VC.GetValueI4(rethrow: false);
+            MaxFileRecordingPeriod = nvs["setup.MaxFileRecordingPeriod"].VC.GetValueTS(rethrow: false);
+            MinInterFileCreateHoldoffPeriod = nvs["setup.MinInterFileCreateHoldoffPeriod"].VC.GetValueTS(rethrow: false);
+            MinNominalFileIndexWriteInterval = nvs["setup.MinNominalFileIndexWriteInterval"].VC.GetValueTS(rethrow: false);
+            MinNominalWriteAllInterval = nvs["setup.MinNominalWriteAllInterval"].VC.GetValueTS(rethrow: false);
+            I8Offset = nvs["setup.I8Offset"].VC.GetValueI8(rethrow: false);
+            I4Offset = nvs["setup.I4Offset"].VC.GetValueI4(rethrow: false);
+            I2Offset = nvs["setup.I2Offset"].VC.GetValueI2(rethrow: false);
+
+            return this;
+        }
+
+        public NamedValueSet UpdateNVSFromThis(NamedValueSet nvs)
+        {
+            nvs.SetValue("setup.DirPath", DirPath);
+            nvs.SetValue("setup.ClientName", ClientName);
+            nvs.SetValue("setup.FileNamePrefix", FileNamePrefix);
+            nvs.SetValue("setup.CreateDirectoryIfNeeded", CreateDirectoryIfNeeded);
+            nvs.ConditionalSetValue("setup.MaxDataBlockSize", MaxDataBlockSize != 0, MaxDataBlockSize);
+            nvs.ConditionalSetValue("setup.NominalMaxDataBlockSize", NominalMaxDataBlockSize != 0, NominalMaxDataBlockSize);
+            nvs.ConditionalSetValue("setup.NominalMaxFileSize", NominalMaxFileSize != 0, NominalMaxFileSize);
+            nvs.ConditionalSetValue("setup.FileIndexNumRows", FileIndexNumRows != 0, FileIndexNumRows);
+            nvs.ConditionalSetValue("setup.CompressionLevel", CompressionLevel > 0, CompressionLevel);
+            nvs.SetValue("setup.MaxFileRecordingPeriodInSeconds", MaxFileRecordingPeriod.TotalSeconds);
+            nvs.SetValue("setup.MinInterFileCreateHoldoffPeriodInSeconds", MinInterFileCreateHoldoffPeriod.TotalSeconds);
+            nvs.SetValue("setup.MinNominalFileIndexWriteIntervalInSeconds", MinNominalFileIndexWriteInterval.TotalSeconds);
+            nvs.SetValue("setup.MinNominalWriteAllIntervalInSeconds", MinNominalWriteAllInterval.TotalSeconds);
+            nvs.ConditionalSetValue("setup.I8Offset", I8Offset != 0, I8Offset);
+            nvs.ConditionalSetValue("setup.I4Offset", I4Offset != 0, I4Offset);
+            nvs.ConditionalSetValue("setup.I2Offset", I2Offset != 0, I2Offset);
+
+            return nvs;
+        }
     }
 
     #endregion
 
-    #region LibraryInfo
+    #region ILibraryInfo, LibraryInfo
 
-    public class LibraryInfo
+    public interface ILibraryInfo
     {
-        public INamedValueSet NVS { get; internal set; }
+        string Type { get; }
+        string Name { get; }
+        string Version { get; }
 
-        public string Type { get; internal set; }
-        public string Name { get; internal set; }
-        public string Version { get; internal set; }
+        INamedValueSet NVS { get; }
 
+        NamedValueSet UpdateNVSFromThis(NamedValueSet nvs);
+    }
+
+    public class LibraryInfo : ILibraryInfo
+    {
         public LibraryInfo()
         {
             NVS = NamedValueSet.Empty;
@@ -257,11 +355,46 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
             Version = string.Empty;
         }
 
+        public LibraryInfo(ILibraryInfo other)
+        {
+            NVS = NamedValueSet.Empty;
+            Type = other.Type;
+            Name = other.Name;
+            Version = other.Version;
+        }
+
+        public INamedValueSet NVS { get; set; }
+
+        public string Type { get; set; }
+        public string Name { get; set; }
+        public string Version { get; set; }
+
         public override string ToString()
         {
-            string nvsStr = (NVS.IsNullOrEmpty() ? "" : " {0}".CheckedFormat(NVS));
+            string nvsStr = (NVS.IsNullOrEmpty() ? "" : " {0}".CheckedFormat(NVS.ToStringSML()));
 
-            return "LibInfo Type:'{0}' Name:'{1}' Version:'{2}' {3}".CheckedFormat(Type, Name, Version, nvsStr);
+            return "LibInfo Type:'{0}' Name:'{1}' Version:'{2}'{3}".CheckedFormat(Type, Name, Version, nvsStr);
+        }
+
+        public LibraryInfo UpdateFrom(INamedValueSet nvs, bool updateNVSProperty = true)
+        {
+            if (NVS == null || updateNVSProperty)
+                NVS = nvs.ConvertToReadOnly();
+
+            Type = nvs["lib.Type"].VC.GetValueA(rethrow: false).MapNullToEmpty();
+            Name = nvs["lib.Name"].VC.GetValueA(rethrow: false).MapNullToEmpty();
+            Version = nvs["lib.Version"].VC.GetValueA(rethrow: false).MapNullToEmpty();
+
+            return this;
+        }
+
+        public NamedValueSet UpdateNVSFromThis(NamedValueSet nvs)
+        {
+            nvs.SetValue("lib.Type", Type);
+            nvs.SetValue("lib.Name", Name);
+            nvs.SetValue("lib.Version", Version);
+
+            return nvs;
         }
     }
 
@@ -271,17 +404,17 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
 
     public class DateTimeInfo
     {
-        public INamedValueSet NVS { get; internal set; }
+        public INamedValueSet NVS { get; set; }
 
-        public double BlockDeltaTimeStamp { get; internal set; }
-        public double QPCTime { get; internal set; }
-        public double UTCTimeSince1601 { get; internal set; }
+        public double BlockDeltaTimeStamp { get; set; }
+        public double QPCTime { get; set; }
+        public double UTCTimeSince1601 { get; set; }
         public DateTime UTCDateTime { get { return UTCTimeSince1601.GetDateTimeFromUTCTimeSince1601(); } }
-        public int TimeZoneOffset { get; internal set; }
-        public bool DSTIsActive { get; internal set; }
-        public int DSTBias { get; internal set; }
-        public string TZName0 { get; internal set; }
-        public string TZName1 { get; internal set; }
+        public int TimeZoneOffset { get; set; }
+        public bool DSTIsActive { get; set; }
+        public int DSTBias { get; set; }
+        public string TZName0 { get; set; }
+        public string TZName1 { get; set; }
 
         public DateTimeInfo()
         {
@@ -289,19 +422,79 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
             TZName0 = string.Empty;
             TZName1 = string.Empty;
         }
+
+        public DateTimeInfo UpdateFrom(QpcTimeStamp qpcTimeStamp, double fileDeltaTimeStamp, DateTime dtNow, double utcTimeSince1601)
+        {
+            var isDST = TimeZoneInfo.Local.IsDaylightSavingTime(dtNow);
+            var utcOffset = TimeZoneInfo.Local.GetUtcOffset(dtNow);
+            TimeZoneInfo localTZ = TimeZoneInfo.Local;
+
+            BlockDeltaTimeStamp = fileDeltaTimeStamp;
+            QPCTime = qpcTimeStamp.Time;
+            UTCTimeSince1601 = utcTimeSince1601;
+            TimeZoneOffset = (int)Math.Round(localTZ.BaseUtcOffset.TotalSeconds);
+            DSTIsActive = isDST;
+            DSTBias = (int)Math.Round((utcOffset - localTZ.BaseUtcOffset).TotalSeconds);
+            TZName0 = localTZ.StandardName;
+            TZName1 = localTZ.DaylightName;
+
+            return this;
+        }
+
+        public DateTimeInfo UpdateFrom(INamedValueSet nvs, bool updateNVSProperty = true)
+        {
+            if (NVS == null || updateNVSProperty)
+                NVS = nvs.ConvertToReadOnly();
+
+            BlockDeltaTimeStamp = nvs["BlockDeltaTimeStamp"].VC.GetValueF8(rethrow: false);
+            QPCTime = nvs["QPCTime"].VC.GetValueF8(rethrow: false);
+            UTCTimeSince1601 = nvs["UTCTimeSince1601"].VC.GetValueF8(rethrow: false);
+            TimeZoneOffset = nvs["TimeZoneOffset"].VC.GetValueI4(rethrow: false);
+            DSTIsActive = nvs["DSTIsActive"].VC.GetValueBo(rethrow: false);
+            DSTBias = nvs["DSTBias"].VC.GetValueI4(rethrow: false);
+            TZName0 = nvs["TZName0"].VC.GetValueA(rethrow: false);
+            TZName1 = nvs["TZName1"].VC.GetValueA(rethrow: false);
+
+            return this;
+        }
+
+        public NamedValueSet UpdateNVSFromThis(NamedValueSet nvs)
+        {
+            nvs.SetValue("BlockDeltaTimeStamp", BlockDeltaTimeStamp);
+            nvs.SetValue("QPCTime", QPCTime);
+            nvs.SetValue("UTCTimeSince1601", UTCTimeSince1601);      // aka FTime with time measured in seconds
+            nvs.SetValue("TimeZoneOffset", TimeZoneOffset);
+            nvs.SetValue("DSTIsActive", DSTIsActive);
+            nvs.SetValue("DSTBias", DSTBias);
+            nvs.SetValue("TZName0", TZName0);
+            nvs.SetValue("TZName1", TZName1);
+
+            return nvs;
+        }
     }
 
     #endregion
 
     #region DateTimeStampPair
 
-    public class DateTimeStampPair
+    /// <summary>
+    /// During recording this object is used to aquire a QpcTimeStamp, and optionally a DateTime
+    /// This object generally represents a pairing of a FileDeltaTime and a DateTime.  
+    /// It is also used to generate FileDeltaTime values during recording
+    /// </summary>
+    public class DateTimeStampPair : ICopyable<DateTimeStampPair>
     {
         public QpcTimeStamp qpcTimeStamp;
         public DateTime dateTime;
         public double utcTimeSince1601;
 
         public double fileDeltaTimeStamp;
+
+        /// <summary>Logging and debug helper</summary>
+        public override string ToString()
+        {
+            return "fdt:{0:f6} dt:{1:o}".CheckedFormat(fileDeltaTimeStamp, dateTime);
+        }
 
         /// <summary>
         /// "Default" constructor.  Sets contents to default values (zero)
@@ -317,13 +510,20 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
             SetFrom(other);
         }
 
-
         /// <summary>
         /// Returns a DateTimeStampPair with its contents initialized to reflect the current DateTime/QpcTimeStamp (Now)
         /// </summary>
         public static DateTimeStampPair Now
         {
             get { return new DateTimeStampPair().SetToNow(); }
+        }
+
+        /// <summary>
+        /// Returns a DateTimeStampPair with its contents initialized to reflect the current QpcTimeStamp (Now) and with DateTime set to be empty.
+        /// </summary>
+        public static DateTimeStampPair NowQpcOnly
+        {
+            get { return new DateTimeStampPair().SetToNow(includeDateTime: false); }
         }
 
         /// <summary>
@@ -335,13 +535,13 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
         }
 
         /// <summary>
-        /// Sets the current object's values from DateTime/QpcTimeStamp Now.  Sets the fileDeltaTimeStamp to 0.0.
+        /// Sets the current object's values from QpcTimeStamp.Now and optinally DateTime.Now.  Sets the fileDeltaTimeStamp to 0.0.
         /// <para/>Supports call chaining
         /// </summary>
-        public DateTimeStampPair SetToNow()
+        public DateTimeStampPair SetToNow(bool includeDateTime = true)
         {
             qpcTimeStamp = QpcTimeStamp.Now;
-            dateTime = DateTime.Now;
+            dateTime = includeDateTime ? DateTime.Now : default(DateTime);
             utcTimeSince1601 = dateTime.GetUTCTimeSince1601();
             fileDeltaTimeStamp = 0.0;
 
@@ -365,6 +565,19 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
             return this;
         }
 
+        /// <summary>
+        /// Creates and returns a DateTimeStampPair from the given fileDeltaTimeStamp and utcTimeSince1601 values - typically used during deserialization.
+        /// </summary>
+        public static DateTimeStampPair CreateFrom(double fileDeltaTimeStamp, double utcTimeSince1601)
+        {
+            return new DateTimeStampPair()
+            {
+                fileDeltaTimeStamp = fileDeltaTimeStamp,
+                utcTimeSince1601 = utcTimeSince1601,
+                dateTime = utcTimeSince1601.GetDateTimeFromUTCTimeSince1601(),
+            };
+        }
+
         private static readonly DateTimeStampPair internalZero = new DateTimeStampPair();
 
         /// <summary>
@@ -374,7 +587,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
         /// scaling defined in the setupInfo.
         /// Otherwise does nothing.
         /// </summary>
-        internal DateTimeStampPair UpdateFileDeltas(DateTimeStampPair fileReferenceDTPair)
+        public DateTimeStampPair UpdateFileDeltas(DateTimeStampPair fileReferenceDTPair)
         {
             if (fileReferenceDTPair != null)
                 fileDeltaTimeStamp = (qpcTimeStamp.Time - fileReferenceDTPair.qpcTimeStamp.Time);
@@ -382,11 +595,30 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
             return this;
         }
 
+        /// <summary>
+        /// If this dateTime value is zero (aka default) then this method sets it to the given <paramref name="proxyNowValue"/> if it is non-null or to DateTime.Now if it is.
+        /// </summary>
+        public DateTimeStampPair UpdateDateTimeToNowIfNeeded(DateTime? proxyNowValue = null)
+        {
+            if (dateTime.IsZero())
+                dateTime = proxyNowValue ?? DateTime.Now;
+
+            return this;
+        }
+
+        /// <summary>
+        /// Sets the fileDeltaTimeStamp to 0.0
+        /// </summary>
         public DateTimeStampPair ClearFileDeltas()
         {
             fileDeltaTimeStamp = 0.0;
 
             return this;
+        }
+
+        public DateTimeStampPair MakeCopyOfThis(bool deepCopy = true)
+        {
+            return (DateTimeStampPair)MemberwiseClone();
         }
     }
 
@@ -399,6 +631,21 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
         public FileIndexInfo(SetupInfo setupInfo) : base(setupInfo) { }
 
         public FileIndexInfo(int numRows = 0) : base(numRows) { }
+
+        /// <summary>
+        /// Returns the number of bytes between the given <paramref name="row"/> and the next non-empty row, or the end of the file, whichever comes first. 
+        /// </summary>
+        public int GetRowLength(FileIndexRowBase row, int fileLength)
+        {
+            var rowIndex = row.RowIndex;
+
+            FileIndexRowBase nextRow = FileIndexRowArray.Skip(rowIndex + 1).Where(scanRow => !scanRow.IsEmpty).FirstOrDefault();
+
+            if (nextRow != null)
+                return nextRow.FileOffsetToStartOfFirstBlock - row.FileOffsetToStartOfFirstBlock;
+            else
+                return fileLength - row.FileOffsetToStartOfFirstBlock;
+        }
     }
 
     public class TFileIndexInfo<TRowType, TLastBlockInfoType> 
@@ -409,10 +656,12 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
         {
             int numNonEmptyRows = FileIndexRowArray.Where(row => row != null && !row.IsEmpty).Count();
 
-            return "FileIndex NumRows:{0} RowSizeDivisor:{1} NumNonEmptyRows:{2}{3}".CheckedFormat(NumRows, RowSizeDivisor, numNonEmptyRows, FileWasProperlyClosed ? "" : " [NotProperlyClosed]");
+            var indexStateStr = !IndexInUse ? " [IndexNotInUse]" : (FileWasProperlyClosed ? "" : " [NotProperlyClosed]");
+
+            return "FileIndex NumRows:{0} RowSizeDivisor:{1} NumNonEmptyRows:{2}{3}".CheckedFormat(NumRows, RowSizeDivisor, numNonEmptyRows, indexStateStr);
         }
 
-        #region NowRow, RowSizeDivisor, and NominalMaxFileSize
+        #region NumRows, RowSizeDivisor, and NominalMaxFileSize
 
         public Int32 NumRows { get; internal set; }                 // 0..3
         private Int32 rowSizeDivisor;                               // 4..7
@@ -443,6 +692,9 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
         #endregion
 
         public TLastBlockInfoType LastBlockInfo { get; internal set; }
+
+        /// <summary>Returns true if the index is in use (aka if the NumRows &gt; 1)</summary>
+        public bool IndexInUse { get { return (NumRows > 1); } }
 
         /// <summary>Returns true if the last block's block type is the expected FileEnd block type</summary>
         public bool FileWasProperlyClosed
@@ -634,6 +886,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
         string Comment { get; }
         int FileID { get; }
         int ClientID { get; }
+        ContainerStorageType CST { get; }
         Semi.E005.Data.ItemFormatCode IFC { get; }
 
         INamedValueSet ClientNVS { get; }
@@ -644,7 +897,6 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
         UInt64 FileIndexUserRowFlagBits { get; }
 
         IList<int> GroupPointFileIDList { get; }
-        IList<IGroupPointInfo> GroupPointInfoList { get; }
         IGroupPointInfo[] GroupPointInfoArray { get; }
         
         int GroupID { get; }
@@ -654,18 +906,17 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
 
     public interface IGroupPointInfo : IMetaDataCommonInfo
     {
-        ContainerStorageType ValueCST { get; }
-
         ValueContainer VC { get; set; }
 
-        int GroupID { get; }
         int SourceID { get; }
+
+        IGroupInfo GroupInfo { get; }
+        string FullName { get; }
     }
 
     public interface IOccurrenceInfo : IMetaDataCommonInfo
     {
         UInt64 FileIndexUserRowFlagBits { get; }
-        ContainerStorageType ContentCST { get; }
         bool IsHighPriority { get; }
 
         int OccurrenceID { get; }
@@ -673,24 +924,26 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
 
     public class MetaDataCommonInfoBase : IMetaDataCommonInfo
     {
-        public MDItemType ItemType { get; internal set; }
-        public string Name { get; internal set; }
-        public string Comment { get; internal set; }
-        public int FileID { get; internal set; }
-        public int ClientID { get; internal set; }
-        public Semi.E005.Data.ItemFormatCode IFC { get; internal set; }
-        public INamedValueSet ClientNVS { get; internal set; }
+        public MDItemType ItemType { get; set; }
+        public string Name { get; set; }
+        public string Comment { get; set; }
+        public int FileID { get; set; }
+        public int ClientID { get; set; }
+        public ContainerStorageType CST { get; set; }
+        public Semi.E005.Data.ItemFormatCode IFC { get; set; }
+        public INamedValueSet ClientNVS { get; set; }
 
         public MetaDataCommonInfoBase() {}
-        public MetaDataCommonInfoBase(MetaDataCommonInfoBase rhs)
+        public MetaDataCommonInfoBase(MetaDataCommonInfoBase other)
         {
-            ItemType = rhs.ItemType;
-            Name = rhs.Name;
-            Comment = rhs.Comment;
-            FileID = rhs.FileID;
-            ClientID = rhs.ClientID;
-            IFC = rhs.IFC;
-            ClientNVS = rhs.ClientNVS;
+            ItemType = other.ItemType;
+            Name = other.Name;
+            Comment = other.Comment;
+            FileID = other.FileID;
+            ClientID = other.ClientID;
+            CST = other.CST;
+            IFC = other.IFC;
+            ClientNVS = other.ClientNVS;
         }
 
         public override string ToString()
@@ -698,7 +951,207 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
             string nvsStr = (ClientNVS.IsNullOrEmpty() ? "" : " {0}".CheckedFormat(ClientNVS));
             string commentStr = (Comment.IsNullOrEmpty() ? "" : " Comment:'{0}'".CheckedFormat(Comment));
 
-            return "{0} '{1}' FileID:{2} ClientID:{3} IFC:{4}{5}{6}".CheckedFormat(ItemType, Name, FileID, ClientID, IFC, nvsStr, commentStr);
+            return "{0} '{1}' FileID:{2} ClientID:{3} CST:{4} IFC:{5}{6}{7}".CheckedFormat(ItemType, Name, FileID, ClientID, CST, IFC, nvsStr, commentStr);
+        }
+    }
+
+    public class SpecItemSet
+    {
+        public IMetaDataCommonInfo[] SpecItems { get; set; }
+        public IDictionaryWithCachedArrays<string, IOccurrenceInfo> OccurrenceDictionary { get; set; }
+        public IDictionaryWithCachedArrays<string, IGroupInfo> GroupDictionary { get; set; }
+        public IDictionaryWithCachedArrays<string, IGroupPointInfo> PointFullNameDictionary { get; set; }
+        public IDictionaryWithCachedArrays<string, IGroupPointInfo> PointAliasDictionary { get; set; }
+    }
+
+    /// <summary>
+    /// Extension Methods
+    /// </summary>
+    public static partial class ExtensionMethods
+    {
+        public static NamedValueSet UpdateNVSFromThis(this IMetaDataCommonInfo mdci, NamedValueSet nvs)
+        {
+            nvs.SetValue("Name", mdci.Name);
+            nvs.SetValue("ItemType", mdci.ItemType);
+            nvs.ConditionalSetValue("Comment", mdci.Comment.IsNeitherNullNorEmpty(), mdci.Comment);
+            nvs.SetValue("FileID", mdci.FileID);
+            nvs.SetValue("ClientID", mdci.ClientID);
+            nvs.ConditionalSetValue("CST", mdci.CST != ContainerStorageType.None, mdci.CST);
+            nvs.ConditionalSetValue("IFC", mdci.IFC != Semi.E005.Data.ItemFormatCode.None, mdci.IFC);
+            nvs.ConditionalSetValue("ClientNVS", mdci.ClientNVS.IsNeitherNullNorEmpty(), mdci.ClientNVS);
+
+            if (mdci is IOccurrenceInfo)
+            {
+                var ioi = (IOccurrenceInfo)mdci;
+
+                nvs.ConditionalSetKeyword("IsHighPriority", ioi.IsHighPriority);
+                nvs.ConditionalSetValue("FileIndexUserRowFlagBits", ioi.FileIndexUserRowFlagBits != 0, ioi.FileIndexUserRowFlagBits);
+            }
+            else if (mdci is IGroupInfo)
+            {
+                var igi = (IGroupInfo)mdci;
+
+                nvs.SetValue("ItemList", string.Join(",", igi.GroupPointFileIDList));
+                nvs.ConditionalSetValue("FileIndexUserRowFlagBits", igi.FileIndexUserRowFlagBits != 0, igi.FileIndexUserRowFlagBits);
+            }
+
+            return nvs;
+        }
+
+        public static SpecItemSet CreateSpecItemSet(this IList<INamedValueSet> setupInfoNVSSet, INamedValueSet clientNVS = null, bool rethrow = true)
+        {
+            var specItems = setupInfoNVSSet.Select(nvs => nvs.CreateMDCI(rethrow: rethrow)).WhereIsNotDefault().ToArray();
+
+            var groupPointInfoArray = specItems.Select(item => item as GroupPointInfo).WhereIsNotDefault().ToArray();
+            var pointFileIDDictionary = new Dictionary<int, GroupPointInfo>().SafeAddRange(groupPointInfoArray.Select(gpi => KVP.Create(gpi.FileID, gpi)));
+            var groupInfoArray = specItems.Select(item => item as GroupInfo).WhereIsNotDefault().ToArray();
+
+            foreach (var gi in groupInfoArray)
+            {
+                var gpiArray = gi.GroupPointFileIDList.Select(pointFileID => pointFileIDDictionary.SafeTryGetValue(pointFileID)).WhereIsNotDefault().ToArray();
+
+                gi.GroupPointInfoArray = gpiArray;
+                gpiArray.DoForEach(gpi => gpi.GroupInfo = gi);
+            }
+
+            var groupDictionary = new IDictionaryWithCachedArrays<string, IGroupInfo>().SafeAddRange(groupInfoArray.Select(igi => KVP.Create(igi.Name, igi as IGroupInfo)));
+ 
+            var specSet = new SpecItemSet()
+            {
+                SpecItems = specItems,
+                OccurrenceDictionary = new IDictionaryWithCachedArrays<string, IOccurrenceInfo>().SafeAddRange(specItems.Select(item => item as IOccurrenceInfo).WhereIsNotDefault().Select(ioi => KVP.Create(ioi.Name, ioi))),
+                GroupDictionary = groupDictionary,
+                PointFullNameDictionary = new IDictionaryWithCachedArrays<string, IGroupPointInfo>().SafeAddRange(groupPointInfoArray.Select(gpi => KVP.Create(gpi.FullName, gpi as IGroupPointInfo))),
+            };
+
+            // extract and build dictionary(s) for point name alias handling
+            var pad = new IDictionaryWithCachedArrays<string, string>();
+
+            foreach (var gpi in groupPointInfoArray)
+            {
+                var alias = gpi.ClientNVS["Alias"].VC.GetValueA(rethrow: false).MapNullToEmpty();
+                var aliases = gpi.ClientNVS["Aliases"].VC.GetValueLS(rethrow: false).MapNullToEmpty();
+
+                foreach (var s in new[] { alias }.Concat(aliases).Where(s => s.IsNeitherNullNorEmpty()))
+                    pad.SafeSetKeyValue(s, gpi.FullName, onlyTakeFirst: true);
+            }
+
+            foreach (var gi in groupInfoArray)
+            {
+                var pointAliasesNVS = gi.ClientNVS["PointAliases"].VC.GetValueNVS(rethrow: false).MapNullToEmpty();
+
+                foreach (var nv in pointAliasesNVS)
+                    pad.SafeSetKeyValue(nv.Name, "{0}.{1}".CheckedFormat(gi.Name, nv.VC.GetValueA(rethrow: rethrow)), onlyTakeFirst: true);
+            }
+
+            {
+                var clientPointAliaseNVS = clientNVS.MapNullToEmpty()["PointAliases"].VC.GetValueNVS(rethrow: false).MapNullToEmpty();
+
+                foreach (var nv in clientPointAliaseNVS)
+                    pad.SafeSetKeyValue(nv.Name, nv.VC.GetValueA(rethrow: rethrow), onlyTakeFirst: true);
+            }
+
+            specSet.PointAliasDictionary = new IDictionaryWithCachedArrays<string, IGroupPointInfo>().SafeAddRange(pad.Select(kvpIn => KVP.Create(kvpIn.Key, specSet.PointFullNameDictionary.SafeTryGetValue(kvpIn.Value))).Where(kvp => kvp.Key.IsNullOrEmpty() && kvp.Value != null));
+
+            return specSet;
+        }
+
+        public static IMetaDataCommonInfo CreateMDCI(this INamedValueSet nvs, bool rethrow = true, IMetaDataCommonInfo fallbackValue = null)
+        {
+            var itemTypeVC = nvs["ItemType"].VC;
+            var itemType = itemTypeVC.GetValue<MDItemType>(rethrow: rethrow);
+
+            var name = nvs["Name"].VC.GetValueA(rethrow: rethrow);
+            var comment = nvs["Comment"].VC.GetValueA(rethrow: false).MapNullToEmpty();
+            var fileID = nvs["FileID"].VC.GetValueI4(rethrow: rethrow);
+            var clientID = nvs["ClientID"].VC.GetValueI4(rethrow: rethrow);
+            var cst = nvs["CST"].VC.GetValue<ContainerStorageType>(rethrow: false);
+            var ifc = nvs["IFC"].VC.GetValue<Semi.E005.Data.ItemFormatCode>(rethrow: false, defaultValue: Semi.E005.Data.ItemFormatCode.None);
+            var clientNVS = nvs["ClientNVS"].VC.GetValueNVS(rethrow: false).MapNullToEmpty();
+
+            switch (itemType)
+            {
+                case MDItemType.Occurrence:
+                    return new OccurrenceInfo()
+                    {
+                        ItemType = itemType,
+                        Name = name,
+                        Comment = comment,
+                        FileID = fileID,
+                        ClientID = clientID,
+                        CST = cst,
+                        IFC = ifc,
+                        ClientNVS = clientNVS,
+                        IsHighPriority = nvs.Contains("IsHighPriority"),
+                        FileIndexUserRowFlagBits = nvs["FileIndexUserRowFlagBits"].VC.GetValueU8(rethrow: false),
+                    };
+
+                case MDItemType.Group:
+                    return new GroupInfo()
+                    {
+                        ItemType = itemType,
+                        Name = name,
+                        Comment = comment,
+                        FileID = fileID,
+                        ClientID = clientID,
+                        CST = cst,
+                        IFC = ifc,
+                        ClientNVS = clientNVS,
+                        FileIndexUserRowFlagBits = nvs["FileIndexUserRowFlagBits"].VC.GetValueU8(rethrow: false),
+                        GroupPointFileIDList = new ReadOnlyIList<int>(nvs["ItemList"].VC.GetValueA(rethrow: false).MapNullToEmpty().Split(',').Select(s => new StringScanner(s).ParseValue<int>(0))),
+                    };
+
+                case MDItemType.Source:
+                    return new GroupPointInfo()
+                    {
+                        ItemType = itemType,
+                        Name = name,
+                        Comment = comment,
+                        FileID = fileID,
+                        ClientID = clientID,
+                        CST = cst,
+                        IFC = ifc,
+                        ClientNVS = clientNVS,
+                    };
+
+                default:
+                    break;
+            }
+
+            if (rethrow)
+                new System.InvalidOperationException("{0} is not a valid MDItemType".CheckedFormat(itemTypeVC)).Throw();
+
+            return fallbackValue;
+        }
+
+        public static SpecItemSet Merge(this IEnumerable<SpecItemSet> specItemSetSet)
+        {
+            Dictionary<string, IMetaDataCommonInfo> specItemDict = new Dictionary<string, IMetaDataCommonInfo>();
+            IDictionaryWithCachedArrays<string, IOccurrenceInfo> oDict = new IDictionaryWithCachedArrays<string, IOccurrenceInfo>();
+            IDictionaryWithCachedArrays<string, IGroupInfo> gDict = new IDictionaryWithCachedArrays<string, IGroupInfo>();
+            IDictionaryWithCachedArrays<string, IGroupPointInfo> pFullNameDict = new IDictionaryWithCachedArrays<string, IGroupPointInfo>();
+            IDictionaryWithCachedArrays<string, IGroupPointInfo> pAliasDict = new IDictionaryWithCachedArrays<string, IGroupPointInfo>();
+
+            foreach (var specItemSet in specItemSetSet)
+            {
+                // keep the last item of each name
+                specItemSet.SpecItems.DoForEach(specItem => specItemDict[specItem.Name] = specItem);
+                specItemSet.OccurrenceDictionary.ValueArray.DoForEach(oItem => oDict[oItem.Name] = oItem);
+                specItemSet.GroupDictionary.ValueArray.DoForEach(gItem => gDict[gItem.Name] = gItem);
+                specItemSet.PointFullNameDictionary.ValueArray.DoForEach(pItem => pFullNameDict[pItem.FullName] = pItem);
+                specItemSet.PointAliasDictionary.KeyValuePairArray.DoForEach(kvp => pAliasDict[kvp.Key] = kvp.Value);
+            }
+
+            var result = new SpecItemSet()
+            {
+                SpecItems = specItemDict.Values.ToArray(),
+                OccurrenceDictionary = oDict,
+                GroupDictionary = gDict,
+                PointFullNameDictionary = pFullNameDict,
+                PointAliasDictionary = pAliasDict,
+            };
+
+            return result;
         }
     }
 
@@ -707,7 +1160,6 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
         public UInt64 FileIndexUserRowFlagBits { get; internal set; }
 
         public IList<int> GroupPointFileIDList { get; internal set; }
-        public IList<IGroupPointInfo> GroupPointInfoList { get; internal set; }
         public IGroupPointInfo[] GroupPointInfoArray { get; internal set; }
 
         public int GroupID { get { return ClientID; } }
@@ -720,12 +1172,13 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
 
     public class GroupPointInfo : MetaDataCommonInfoBase, IGroupPointInfo
     {
-        public ContainerStorageType ValueCST { get; internal set; }
-
         public ValueContainer VC { get; set; }
 
-        public int GroupID { get { return ClientID; } }
-        public int SourceID { get; internal set; }
+        public int SourceID { get { return ClientID; } }
+
+        public IGroupInfo GroupInfo { get; set; }
+        public string FullName { get { return _FullName ?? (_FullName = "{0}.{1}".CheckedFormat(GroupInfo.Name, Name)); } }
+        private string _FullName;
 
         public GroupPointInfo() { }
         public GroupPointInfo(MetaDataCommonInfoBase rhs) : base(rhs) { }
@@ -734,7 +1187,6 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
     public class OccurrenceInfo : MetaDataCommonInfoBase, IOccurrenceInfo
     {
         public UInt64 FileIndexUserRowFlagBits { get; internal set; }
-        public ContainerStorageType ContentCST { get; internal set; }
         public bool IsHighPriority { get; internal set; }
 
         public int OccurrenceID { get { return ClientID; } }
@@ -800,7 +1252,6 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
 
     #endregion
 
-
     #region IMessageInfo
 
     public interface IMessageInfo
@@ -828,16 +1279,18 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
     /// centric library versions.
     /// <para/>This library uses predefined fixed block IDs in the range of 0x00000000 through 0x0000000f, 0x3fff0000 through 0x3fffffff and 0x7fff0000 through 0x7fffffff
     /// </summary>
-
     public enum FixedBlockTypeID : int
     {
-        /// <summary>Resevered value.  No dynamically assigned ID may use this value.</summary>
+        /// <summary>Resevered value.  No dynamically assigned ID may use this value. [0x00000000]</summary>
         None = 0x00000000,
 
-        /// <summary>Very high rate block - used to record a new delta time stamp (In I8 format)</summary>
+        /// <summary>Very high rate block - used to record a new delta time stamp (In F8 format)  [0x00000001]</summary>
         TimeStampUpdateV1 = 0x00000001,
 
-        /// <summary>Resevered value.  This value is the first value that is assigned during setup.  Generally groups are assigned fileIDs first so that they use low numbered (1 byte) fileIDs.</summary>
+        /// <summary>Fixed block type (MDRF2 FileID in record header) used when recording objects using custom serialization.  Only used in MDRF2 files.  [0x00000002]</summary>
+        Object = 0x00000002,
+
+        /// <summary>Resevered value.  This value is the first value that is assigned during setup.  Generally groups are assigned fileIDs first so that they use low numbered (1 byte) fileIDs.  [0x00000010]</summary>
         FirstDynamicallyAssignedID = 0x000000010,
 
         /// <summary>FixedBlockTypeID for File Heater: 0x7fffba5e (version 1)</summary>
@@ -880,22 +1333,37 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
 
     /// <summary>
     /// This enumeration defines a set of flag bit values that are used in the file index to identify what types of data blocks are present (start) in any given row of the file index.
+    /// <para/>None (0x0000), ContainsHeaderOrMetaData (0x0001), ContainsHighPriorityOccurrence (0x0002), ContainsOccurrence(0x0004), ContainsDateTime (0x0008), ContainsObject (0x0100), ContainsStartOfFullGroup (0x0080), ContainsMessage (0x0100), ContainsError (0x0200), ContainsGroup (0x0400), ContainsGroupSet (0x0800), ContainsEnd (0x8000)
     /// </summary>
     [Flags]
     public enum FileIndexRowFlagBits : ushort
     {
-        /// <summary>No specifically identified data block types start in this row: 0x0000</summary>
+        /// <summary>No specifically identified data block types start in this row [0x0000]</summary>
         None = 0x0000,
-        /// <summary>At least one file Header or MetaData block starts in this row: 0x0001</summary>
+        /// <summary>At least one file Header or MetaData block starts in this row [0x0001]</summary>
         ContainsHeaderOrMetaData = 0x0001,
-        /// <summary>At least one high priority occurrence data block starts in this row: 0x0002</summary>
+        /// <summary>At least one high priority (signficant) occurrence data block starts in this row [0x0002]</summary>
         ContainsHighPriorityOccurrence = 0x0002,
-        /// <summary>At least one occurrence data block starts in this row: 0x0004</summary>
+        /// <summary>At least one occurrence data block starts in this row [0x0004]</summary>
         ContainsOccurrence = 0x0004,
-        /// <summary>At least one date time data block starts in this row: 0x0008</summary>
+        /// <summary>At least one date time data block starts in this row [0x0008]</summary>
         ContainsDateTime = 0x0008,
-        /// <summary>At least one full group (writeAll) starts in this row: 0x0080</summary>
+        /// <summary>At least one custom object block was added to this "row" [0x0010] [MDRF2 only]</summary>
+        ContainsObject = 0x0010,
+        /// <summary>At least one custom significant object block was added to this "row" [0x0020] [MDRF2 only]</summary>
+        ContainsSignificantObject = 0x0020,
+        /// <summary>At least one full group (writeAll) starts in this row [0x0080]</summary>
         ContainsStartOfFullGroup = 0x0080,
+        /// <summary>At least one message record is in this "row" 0x0100]</summary>
+        ContainsMessage = 0x0100,
+        /// <summary>At least one error record is in this "row" [0x0200]</summary>
+        ContainsError = 0x0200,
+        /// <summary>At least one group is in this "row" [0x0400] [MDRF2 only]</summary>
+        ContainsGroup = 0x0400,
+        /// <summary>At least one group set is in this "row" [0x0800] [MDRF2 only]</summary>
+        ContainsGroupSet = 0x0800,
+        /// <summary>This "row"/block contains an End record [0x8000] [MDRF2 only]</summary>
+        ContainsEnd = 0x8000,
     }
 
     /// <summary>

@@ -120,9 +120,9 @@ namespace MosaicLib.PartsLib.Tools.Performance
                 FileIndexUserRowFlagBits = (ulong) Config.AggregateGroupsFileIndexUserRowFlagBits,
                 GroupPointInfoArray = new MDRF.Writer.GroupPointInfo[]
                 {
-                    peakReadNormalRateGPI = new MDRF.Writer.GroupPointInfo() { Name = "peakReadRate", ValueCST = ContainerStorageType.Double, VC = new ValueContainer(0.0) },
-                    peakReadThroughRateGPI = new MDRF.Writer.GroupPointInfo() {Name = "peakReadThroughRate", ValueCST = ContainerStorageType.Double, VC = new ValueContainer(0.0) },
-                    peakWriteThroughRateGPI = new MDRF.Writer.GroupPointInfo() {Name = "peakWriteThroughRate", ValueCST = ContainerStorageType.Double, VC = new ValueContainer(0.0) },
+                    peakReadNormalRateGPI = new MDRF.Writer.GroupPointInfo() { Name = "peakReadRate", CST = ContainerStorageType.Double, VC = new ValueContainer(0.0) },
+                    peakReadThroughRateGPI = new MDRF.Writer.GroupPointInfo() {Name = "peakReadThroughRate", CST = ContainerStorageType.Double, VC = new ValueContainer(0.0) },
+                    peakWriteThroughRateGPI = new MDRF.Writer.GroupPointInfo() {Name = "peakWriteThroughRate", CST = ContainerStorageType.Double, VC = new ValueContainer(0.0) },
                 },
                 Touched = true,
             };
@@ -142,7 +142,7 @@ namespace MosaicLib.PartsLib.Tools.Performance
             mdrfWriter.Add(avgRatesGroup);
             mdrfWriter.AddRange(registerGroupsSet.Select(t => t.Item1.GroupInfo).Concat(registerGroupsSet.Select(t => t.Item2.GroupInfo)));
 
-            noMDRFLogger = new Logging.Logger(PartID).SetDefaultNamedValueSetForEmitter(Logging.LogGate.All, new NamedValueSet() { { "noMDRF" } });
+            noMDRFLogger = new Logging.Logger(PartID).SetDefaultNamedValueSetForEmitter(Logging.LogGate.All, Defaults.PerfLoggerDefaultNVS);
         }
 
         void Release()

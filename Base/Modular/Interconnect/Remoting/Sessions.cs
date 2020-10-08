@@ -484,9 +484,9 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
                         if (managementType == ManagementType.RequestOpenSession && bufferHeader.SeqNum == 0)
                         {
                             int startAtIndex = bufferHeader.Length;
-                            string clientUUID = bufferNVS["ClientUUID"].VC.GetValue<string>(rethrow: false);
-                            ulong clientInstanceNum = bufferNVS["ClientInstanceNum"].VC.GetValue<ulong>(rethrow: false);
-                            string name = bufferNVS["Name"].VC.GetValue<string>(rethrow: false);
+                            string clientUUID = bufferNVS["ClientUUID"].VC.GetValueA(rethrow: false);
+                            ulong clientInstanceNum = bufferNVS["ClientInstanceNum"].VC.GetValueU8(rethrow: false);
+                            string name = bufferNVS["Name"].VC.GetValueA(rethrow: false);
 
                             if (!clientUUID.IsNullOrEmpty() && clientInstanceNum != 0)
                             {
@@ -1936,9 +1936,9 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
 
             INamedValueSet bufferNVS = buffer.GetPayloadAsE005NVS(NamedValueSet.Empty);
             ManagementType managementType = bufferNVS["Type"].VC.GetValue<ManagementType>(rethrow: false);
-            string remoteName = bufferNVS["Name"].VC.GetValue<string>(rethrow: false);
-            string clientUUID = bufferNVS["ClientUUID"].VC.GetValue<string>(rethrow: false);
-            ulong clientInstanceNum = bufferNVS["ClientInstanceNum"].VC.GetValue<ulong>(rethrow: false);
+            string remoteName = bufferNVS["Name"].VC.GetValueA(rethrow: false);
+            string clientUUID = bufferNVS["ClientUUID"].VC.GetValueA(rethrow: false);
+            ulong clientInstanceNum = bufferNVS["ClientInstanceNum"].VC.GetValueU8(rethrow: false);
 
             EventAndPerformanceRecording.RecordReceived(managementType);
 
@@ -2019,7 +2019,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
 
         private int ProcessServerSessionInitialOpen(QpcTimeStamp qpcTimeStamp, string remoteName, string clientUUID, ulong clientInstanceNum, INamedValueSet bufferNVS)
         {
-            int bufferSize = bufferNVS["BufferSize"].VC.GetValue<int>(rethrow: false);
+            int bufferSize = bufferNVS["BufferSize"].VC.GetValueI4(rethrow: false);
 
             if (!remoteName.IsNullOrEmpty() && !ClientUUID.IsNullOrEmpty() && ClientInstanceNum != 0 && BufferPool.BufferSize == bufferSize)
             {
@@ -2042,7 +2042,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Sessions
         private int ProcessClientSessionOpenAcceptance(QpcTimeStamp qpcTimeStamp, INamedValueSet bufferNVS)
         {
             var bufferSizeVC = bufferNVS["BufferSize"].VC;
-            int bufferSize = bufferSizeVC.GetValue<int>(rethrow: false);
+            int bufferSize = bufferSizeVC.GetValueI4(rethrow: false);
 
             if (bufferSize != BufferPool.BufferSize)
             {

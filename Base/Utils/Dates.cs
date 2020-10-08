@@ -33,18 +33,33 @@ namespace MosaicLib.Utils
     public static class Dates
 	{
         /// <summary>
-        /// This method converts the given dt DateTime into a double in units of seconds (UTC) since 00:00:00.000 Jan 1, 1601 (aka the FTime base offset).
+        /// This method converts the given <paramref name="dt"/> DateTime into a double in units of seconds (UTC) since 00:00:00.000 Jan 1, 1601 (aka the FTime base offset).
         /// </summary>
-        public static double GetUTCTimeSince1601(this DateTime dt)
+        public static double GetUTCTimeSince1601(this DateTime dt, bool mapZero = true)
         {
-            return dt.ToFileTimeUtc() * 0.0000001;
+            if (dt.IsZero())
+                return 0.0;
+            else
+                return dt.ToFileTimeUtc() * 0.0000001;
         }
 
         /// <summary>
-        /// This method converts the given utcTimeSince1601 into a UTC DateTime value.
+        /// This method converts the given <paramref name="utcTimeSince1601"/> into a UTC DateTime value.  
+        /// <paramref name="utcTimeSince1601"/> is a double in units of seconds (UTC) since  00:00:00.000 Jan 1, 1601 (aka the FTime base offset).
+        /// <para/>If the given <paramref name="utcTimeSince1601"/> is either infinity and <paramref name="mapInfinities"/> is given as true (the default)
+        /// Then this method returns DateTime.MaxValue for PositiveInfinity and DateTime.MinValue for NegativeInfinity.
         /// </summary>
-        public static DateTime GetDateTimeFromUTCTimeSince1601(this double utcTimeSince1601)
+        public static DateTime GetDateTimeFromUTCTimeSince1601(this double utcTimeSince1601, bool mapInfinities = true, bool mapZero = true)
         {
+            if (utcTimeSince1601 == 0.0 && mapZero)
+            {
+                return default(DateTime);
+            }
+            else if (utcTimeSince1601.IsInfinity() && mapInfinities)
+            {
+                return (utcTimeSince1601 > 0) ? DateTime.MaxValue : DateTime.MinValue;
+            }
+
             long utcFTime = unchecked((long)(utcTimeSince1601 * 10000000.0));
 
             return DateTime.FromFileTimeUtc(utcFTime);
@@ -63,6 +78,9 @@ namespace MosaicLib.Utils
 
 			/// <summary>Enum value when format should look like 19700101_000000.000</summary>
 			ShortWithMSec,
+
+            /// <summary>Enum value when format should look like </summary>
+            RoundTrip,
 		}
 
 		/// <summary>Converts the given DateTime value to a string using the given summary desired format</summary>
@@ -85,6 +103,9 @@ namespace MosaicLib.Utils
 				case DateTimeFormat.ShortWithMSec:
                     result = dt.ToString("yyyyMMdd_HHmmss.fff");
 					break;
+                case DateTimeFormat.RoundTrip:
+                    result = dt.ToString("o");
+                    break;
 			}
 
 			return result;

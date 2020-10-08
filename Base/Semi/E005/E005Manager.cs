@@ -196,7 +196,7 @@ namespace MosaicLib.Semi.E005.Manager
 
         IPort IManager.CreatePort(string portName, PortType portType, bool makeDefault, INamedValueSet portConfigNVS, bool goOnline)
         {
-            portName = (portName ?? portConfigNVS["PortName"].VC.GetValue<string>(rethrow: true)).Sanitize();
+            portName = (portName ?? portConfigNVS["PortName"].VC.GetValueA(rethrow: true)).Sanitize();
 
             if (portType == PortType.None)
                 portType = portConfigNVS["PortType"].VC.GetValue<PortType>(rethrow: true);

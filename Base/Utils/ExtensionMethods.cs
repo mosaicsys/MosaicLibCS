@@ -757,6 +757,21 @@ namespace MosaicLib.Utils
 
         #endregion
 
+        #region Queue related (SafeTryDequeue)
+
+        /// <summary>
+        /// Safe Extension method version of Queue.Dequeue that returns the next item from <paramref name="fromQueue"/> if it is non-empty or <paramref name="fallbackValue"/> if it is null or empty.
+        /// </summary>
+        public static TItemType SafeTryDequeue<TItemType>(this Queue<TItemType> fromQueue, TItemType fallbackValue = default(TItemType))
+        {
+            if (fromQueue != null && fromQueue.Count > 0)
+                return fromQueue.Dequeue();
+            else
+                return fallbackValue;
+        }
+
+        #endregion
+
         #region byte arrays as bit masks (byteArray.SetBit, byteArray.GetBit)
 
         /// <summary>
@@ -1426,6 +1441,20 @@ namespace MosaicLib.Utils
             System.Threading.Thread.Sleep(timeSpan);
         }
 
+        /// <summary>Blocks the current thread for the specified <paramref name="timeSpan"/> if it is not null</summary>
+        public static void SleepIfNotNull(this TimeSpan ? timeSpan)
+        {
+            if (timeSpan != null)
+                System.Threading.Thread.Sleep(timeSpan ?? TimeSpan.Zero);
+        }
+
+        /// <summary>Blocks the current thread for the specified <paramref name="timeSpan"/> if it is greater than zero.</summary>
+        public static void ConditionalSleep(this TimeSpan timeSpan)
+        {
+            if (timeSpan > TimeSpan.Zero)
+                System.Threading.Thread.Sleep(timeSpan);
+        }
+
         #endregion
 
         #region DateTime related (Age, Min, Max, IsZero)
@@ -2054,6 +2083,34 @@ namespace MosaicLib.Utils
                 return item.GetHashCode();
 
             return hashCodeForNull;
+        }
+
+        #endregion
+
+        #region Path operations (MakeRelativePath)
+
+        /// <summary>
+        /// Removes the <paramref name="rootDirPathToRemove"/> directory path prefix from the given <paramref name="path"/> if the <paramref name="path"/>
+        /// is rooted from (aka is prefixed with) the given <paramref name="rootDirPathToRemove"/>.
+        /// </summary>
+        public static string MakeRelativePath(this string path, string rootDirPathToRemove)
+        {
+            if (!System.IO.Path.IsPathRooted(path))
+               path = System.IO.Path.GetFullPath(path);
+
+            if (!System.IO.Path.IsPathRooted(rootDirPathToRemove))
+                rootDirPathToRemove = System.IO.Path.GetFullPath(rootDirPathToRemove);
+
+            char[] directorySeperatorDelimiters = new char[] { System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar, System.IO.Path.VolumeSeparatorChar };
+
+            bool rootDirPathEndsInPathDelimiter = directorySeperatorDelimiters.Contains(rootDirPathToRemove.LastOrDefault());
+
+            path = path.RemovePrefixIfNeeded(rootDirPathToRemove);
+
+            if (!rootDirPathEndsInPathDelimiter && directorySeperatorDelimiters.Contains(path.FirstOrDefault()))
+                path = path.Substring(1);
+
+            return path;
         }
 
         #endregion

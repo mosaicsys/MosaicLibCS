@@ -1,6 +1,6 @@
 //-------------------------------------------------------------------
-/*! @file MDRFWriterPart.cs
- *  @brief a passive part that supports writing MDRF (Mosaic Data Recording Format) files.
+/*! @file MDRFWriter.cs
+ *  @brief classes that are used to support writing MDRF (Mosaic Data Recording Format) files.
  * 
  * Copyright (c) Mosaic Systems Inc.
  * Copyright (c) 2016 Mosaic Systems Inc.
@@ -86,7 +86,9 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
         bool IsFileOpen { get; }
         FileInfo CurrentFileInfo { get; }
         FileInfo LastFileInfo { get; }
-        FileInfo? NextClosedFileInfo { get; }
+
+        /// <summary>Returns the FileInfo for the next file that was reported as being closed.  Continues to return the next one from the internal list until the client catches up with the number of files that the writer has recently closed.</summary>
+        MDRF.Writer.FileInfo? NextClosedFileInfo { get; }
 
         int CloseCurrentFile(string reason, DateTimeStampPair dtPair = null);
     }
@@ -118,16 +120,16 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
     public struct FileInfo : IEquatable<FileInfo>
     {
         /// <summary>Gives the full file path for the this file</summary>
-        public string FilePath { get; internal set; }
+        public string FilePath { get; set; }
 
         /// <summary>Gives the count of the number of files that the source writter has created</summary>
-        public int SeqNum { get; internal set; }
+        public int SeqNum { get; set; }
 
         /// <summary>Gives the total size of the current file</summary>
-        public int FileSize { get; internal set; }
+        public int FileSize { get; set; }
 
         /// <summary>Is true if the file was active (open) when this information was obtained</summary>
-        public bool IsActive { get; internal set; }
+        public bool IsActive { get; set; }
 
         /// <summary>Returns true if this FileInfo has the same contents as the given other FileInfo</summary>
         public bool Equals(FileInfo other)
@@ -197,13 +199,12 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
     /// </summary>
     public class GroupPointInfo : MetaDataCommonInfo
     {
-        public ContainerStorageType ValueCST { get; set; }
         public IValueAccessor ValueSourceIVA { get; set; }
 
         public ValueContainer VC { get { return _vc; } set { _vc = value; VCHasBeenSet = true; } }
         private ValueContainer _vc;
         public bool VCHasBeenSet { get; set; }
-        public bool VCIsUsable { get { return (ValueCST == ContainerStorageType.None || ValueCST == VC.cvt); } }
+        public bool VCIsUsable { get { return (CST == ContainerStorageType.None || CST == VC.cvt); } }
 
         public int GroupID { get; set; }
         public int SourceID { get { return ClientID; } set { ClientID = value; } }
@@ -214,7 +215,6 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
     public class OccurrenceInfo : MetaDataCommonInfo, IOccurrenceInfo
     {
         public UInt64 FileIndexUserRowFlagBits { get; set; }
-        public ContainerStorageType ContentCST { get; set; }
         public bool IsHighPriority { get; set; }
 
         public int OccurrenceID { get { return ClientID; } set { ClientID = value; } }
@@ -224,11 +224,17 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
     public class MetaDataCommonInfo : IMetaDataCommonInfo
     {
+        public MetaDataCommonInfo()
+        {
+            IFC = ItemFormatCode.None;
+        }
+
         public MDItemType ItemType { get; protected set; }
         public string Name { get; set; }
         public string Comment { get; set; }
         public INamedValueSet ClientNVS { get; set; }
         public Semi.E005.Data.ItemFormatCode IFC { get; protected set; }
+        public ContainerStorageType CST { get; set; }
 
         public int ClientID { get; set; }
         public int FileID { get; set; }
@@ -238,13 +244,14 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
             string nvsStr = (ClientNVS.IsNullOrEmpty() ? "" : " {0}".CheckedFormat(ClientNVS));
             string commentStr = (Comment.IsNullOrEmpty() ? "" : " Comment:'{0}'".CheckedFormat(Comment));
 
-            return "{0} name:'{1}' clientID:{2} fileID:{3} ifc:{4}{5}{6}".CheckedFormat(ItemType, Name, ClientID, FileID, IFC, nvsStr, commentStr);
+            return "{0} name:'{1}' clientID:{2} fileID:{3} cst:{4} ifc:{5}{6}{7}".CheckedFormat(ItemType, Name, ClientID, FileID, CST, IFC, nvsStr, commentStr);
         }
     }
 
     /// <summary>
     /// Additional bitfield enum that is used with SetupInfo.ClientNVS ("WriterBehavior") to specify additional options on when to write file should advance
-    /// <para/>None (0x00), AdvanceOnDayBoundary (0x01), WriteAllBeforeEveryOccurrence (0x02), FlushAfterEveryOccurrence (0x04), FlushAfterEveryGroupWrite (0x08), FlushAfterEveryMessage (0x10), FlushAfterAnything (0x1c)
+    /// <para/>None (0x00), AdvanceOnDayBoundary (0x01), WriteAllBeforeEveryOccurrence (0x02), FlushAfterEveryOccurrence (0x04), FlushAfterEveryGroupWrite (0x08), FlushAfterEveryMessage (0x10), FlushAfterEveryObject (0x20), FlushAfterAnything (0x3c), 
+    /// WriteAllBeforeEveryObject (0x40), WriteGroupsBeforeEveryOccurrence (0x80), WriteGroupsBeforeEveryObject (0x100)
     /// </summary>
     [Flags]
     public enum WriterBehavior : int
@@ -280,9 +287,29 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
         FlushAfterEveryMessage = 0x10,
 
         /// <summary>
-        /// FlushAfterAnything = (FlushAfterEveryOccurrence | FlushAfterEveryGroupWrite | FlushAfterEveryMessage) [0x1c]
+        /// When this behavior option is selected, the RecordObject method will always issue a Flush call before returning. [0x20]
         /// </summary>
-        FlushAfterAnything = (FlushAfterEveryOccurrence | FlushAfterEveryGroupWrite | FlushAfterEveryMessage),
+        FlushAfterEveryObject = 0x20,
+
+        /// <summary>
+        /// FlushAfterAnything = (FlushAfterEveryOccurrence | FlushAfterEveryGroupWrite | FlushAfterEveryMessage | FlushAfterEveryObject) [0x3c]
+        /// </summary>
+        FlushAfterAnything = (FlushAfterEveryOccurrence | FlushAfterEveryGroupWrite | FlushAfterEveryMessage | FlushAfterEveryObject),
+
+        /// <summary>
+        /// When this behavior option is selected, the RecordObject method will always issue RecordGroups with the writeAll flag set to true. [0x40]
+        /// </summary>
+        WriteAllBeforeEveryObject = 0x40,
+
+        /// <summary>
+        /// When this behavior option is selected, the RecordOccurrence method will call RecordGroups before recording the given occurrence. [MDRF2 only] [0x80]
+        /// </summary>
+        WriteGroupsBeforeEveryOccurrence = 0x80,
+
+        /// <summary>
+        /// When this behavior option is selected, the RecordObject method will call RecordGroups before recording the given occurrence. [MDRF2 only] [0x100]
+        /// </summary>
+        WriteGroupsBeforeEveryObject = 0x100,
     }
 
     #endregion
@@ -440,7 +467,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
             {
                 dtPair = (dtPair ?? DateTimeStampPair.Now).UpdateFileDeltas(fileReferenceDTPair);
 
-                string ec = ActiviateFile(dtPair);
+                string ec = ActivateFile(dtPair);
 
                 if (!ec.IsNullOrEmpty())
                 {
@@ -580,7 +607,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
                 writeAll |= writerBehavior.IsSet(WriterBehavior.WriteAllBeforeEveryOccurrence);
 
-                string ec = ActiviateFile(dtPair);
+                string ec = ActivateFile(dtPair);
 
                 if (writeAll)
                     RecordGroups(writeAll, dtPair, WriterBehavior.None);        // no "special" writer behaviors are selected when recursively using RecordGroups
@@ -631,7 +658,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
                 writeAll |= writerBehavior.IsSet(WriterBehavior.WriteAllBeforeEveryOccurrence);
 
-                string ec = ActiviateFile(dtPair);
+                string ec = ActivateFile(dtPair);
 
                 if (writeAll)
                     RecordGroups(writeAll, dtPair, WriterBehavior.None);        // no "special" writer behaviors are selected when recursively using RecordGroups
@@ -941,7 +968,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
         QpcTimer dstRecheckTimer = new QpcTimer() { TriggerIntervalInSec = 1.0, AutoReset = true }.StartIfNeeded();
 
-        string ActiviateFile(DateTimeStampPair dtPair)
+        string ActivateFile(DateTimeStampPair dtPair)
         {
             ReassignIDsAndBuildNewTrackersIfNeeded(dtPair);
 
@@ -1069,6 +1096,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 		        nvSet.SetValue("setup.I4Offset", setup.I4Offset);
 		        nvSet.SetValue("setup.I2Offset", setup.I2Offset);
 
+                nvSet.SetValue("Instance.UUID", Guid.NewGuid().ToString());
 
                 try
                 {
@@ -1358,8 +1386,13 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
 
             bool thisIsFirstWrite = (offsetToStartOfFileIndexPayload == 0);
 
+            if (!thisIsFirstWrite && !fileIndexData.IndexInUse)
+                return string.Empty;        // in this case we only write one row.
+
             if (!thisIsFirstWrite)
+            {
                 fileIndexData.UpdateDataBuffer();
+            }
             else
             {
                 // generate a data block header for the file index and 
@@ -1770,7 +1803,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
                 setupInfo = gt.setupInfo;
                 groupInfo = gt.groupInfo;
                 groupPointInfo = gpi;
-                ifc = gpi.ValueCST.ConvertToItemFormatCode();
+                ifc = gpi.CST.ConvertToItemFormatCode();
 
                 AddClientNVSItems();
 
@@ -1998,7 +2031,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
                 occurrenceInfo = oi;
                 AddClientNVSItems();
 
-                ifc = occurrenceInfo.ContentCST.ConvertToItemFormatCode();
+                ifc = occurrenceInfo.CST.ConvertToItemFormatCode();
 
                 fileIndexRowFlagBits = FileIndexRowFlagBits.ContainsOccurrence | (oi.IsHighPriority ? FileIndexRowFlagBits.ContainsHighPriorityOccurrence : FileIndexRowFlagBits.None);
             }
@@ -2074,8 +2107,8 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
         OccurrenceTracker[] occurrenceTrackerArray;
         TrackerCommon[] allMetaDataItemsArray;     // in order of source, group, occurrence
 
-        OccurrenceTracker errorOccurrenceTracker = new OccurrenceTracker(new OccurrenceInfo() { Name = "Error", ContentCST = ContainerStorageType.String, IsHighPriority = true }) { FileID = unchecked((int)FixedBlockTypeID.ErrorV1), mdItemType = MDItemType.Occurrence, fileIndexRowFlagBits = FileIndexRowFlagBits.ContainsOccurrence | FileIndexRowFlagBits.ContainsHighPriorityOccurrence };
-        OccurrenceTracker mesgOccurrenceTracker = new OccurrenceTracker(new OccurrenceInfo() { Name = "Message", ContentCST = ContainerStorageType.String, IsHighPriority = false }) { FileID = unchecked((int)FixedBlockTypeID.MessageV1), mdItemType = MDItemType.Occurrence, fileIndexRowFlagBits = FileIndexRowFlagBits.ContainsOccurrence };
+        OccurrenceTracker errorOccurrenceTracker = new OccurrenceTracker(new OccurrenceInfo() { Name = "Error", CST = ContainerStorageType.String, IsHighPriority = true }) { FileID = unchecked((int)FixedBlockTypeID.ErrorV1), mdItemType = MDItemType.Occurrence, fileIndexRowFlagBits = FileIndexRowFlagBits.ContainsOccurrence | FileIndexRowFlagBits.ContainsHighPriorityOccurrence };
+        OccurrenceTracker mesgOccurrenceTracker = new OccurrenceTracker(new OccurrenceInfo() { Name = "Message", CST = ContainerStorageType.String, IsHighPriority = false }) { FileID = unchecked((int)FixedBlockTypeID.MessageV1), mdItemType = MDItemType.Occurrence, fileIndexRowFlagBits = FileIndexRowFlagBits.ContainsOccurrence };
 
         Queue<MessageItem> errorQueue = new Queue<MessageItem>(MessageItem.maxQueueSize);
         int errorQueueCount;
@@ -2500,7 +2533,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
                 defaultRecordEventOccurranceInfo = new OccurrenceInfo()
                 {
                      Name = "DefaultRecordEventOccurrance",
-                     ContentCST = ContainerStorageType.Object,
+                     CST = ContainerStorageType.Object,
                 };
 
                 List<OccurrenceInfo> occuranceInfoList = new List<OccurrenceInfo>();

@@ -41,7 +41,7 @@ namespace MosaicLib.WPF.Converters
             ValueContainer vc = ValueContainer.CreateFromObject(value);
 
             if (targetType == typeof(string) || targetType == typeof(object))
-                return vc.GetValue<string>(rethrow: false);
+                return vc.GetValueA(rethrow: false);
             else if (targetType == typeof(MosaicLib.Logging.LogGate))
                 return vc.GetValue<MosaicLib.Logging.LogGate>(rethrow: false);
             else

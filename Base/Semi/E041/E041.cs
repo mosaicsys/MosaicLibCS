@@ -302,9 +302,9 @@ namespace MosaicLib.Semi.E041
 
             switch (actionEnableVC.cvt)
             {
-                case ContainerStorageType.String: return actionEnableVC.GetValue<string>(false) ?? "ActionDisableReasonIsNull";
-                case ContainerStorageType.IListOfString: return ((actionEnableVC.GetValue<string []>(false).SafeCount() > 0) ? actionEnableVC.ToStringSML() : string.Empty);
-                default: return actionEnableVC.GetValue<bool>(false) ? String.Empty : "Action is not currently enabled {0}".CheckedFormat(actionEnableVC);
+                case ContainerStorageType.String: return actionEnableVC.GetValueA(false) ?? "ActionDisableReasonIsNull";
+                case ContainerStorageType.IListOfString: return ((actionEnableVC.GetValueLS(false).SafeCount() > 0) ? actionEnableVC.ToStringSML() : string.Empty);
+                default: return actionEnableVC.GetValueBo(false) ? String.Empty : "Action is not currently enabled {0}".CheckedFormat(actionEnableVC);
             }
         }
     }
@@ -348,8 +348,8 @@ namespace MosaicLib.Semi.E041
 
     /// <summary>This is the storage implementation and serialization object for the IANSpec interface.</summary>
     [DataContract(Namespace = MosaicLib.Constants.SemiNameSpace), Serializable]
-	public class ANSpec : IANSpec
-	{
+	public class ANSpec : IANSpec, IEquatable<ANSpec>
+    {
         /// <summary>Gives the Name of the Annunciator</summary>
         [DataMember(Order = 10)]
         public string ANName { get; set; }
@@ -425,6 +425,11 @@ namespace MosaicLib.Semi.E041
                     && ALID == other.ALID
                     && MetaData.IsEqualTo(other.MetaData, compareReadOnly: false)
                     );
+        }
+
+        bool IEquatable<ANSpec>.Equals(ANSpec other)
+        {
+            return Equals(other);
         }
 
         /// <summary>
@@ -563,7 +568,7 @@ namespace MosaicLib.Semi.E041
     /// <summary>This is the storage implementation and serialization object for the IANState interface.</summary>
     [DataContract(Namespace = MosaicLib.Constants.SemiNameSpace), Serializable]
     [KnownType(typeof(ANSpec))]
-    public class ANState : IANState
+    public class ANState : IANState, IEquatable<ANState>
 	{
         /// <summary>Default constructor</summary>
         public ANState() {}
@@ -669,12 +674,18 @@ namespace MosaicLib.Semi.E041
             return IsEqualTo(other);
         }
 
+        bool IEquatable<ANState>.Equals(ANState other)
+        {
+            return Equals(other);
+        }
+
         /// <summary>
         /// Returns true if this ANState has the same contents as the given <paramref name="other"/> IANState.
         /// Set <paramref name="compareTimeStamp"/> to false to prevent comparing the actual SeqAndTimeInfo.TimeStamp values.  
         /// Set <paramref name="compareDateTime"/> to false to prevent comparing the actual SeqAndTimeInfo.DateTime values.
         /// </summary>
-        public bool IsEqualTo(IANState other, bool compareTimeStamp = true, bool compareDateTime = true)
+        /// <remarks>compareDateTime has been turned off by default due to loss of Tick precision in string serialized versions of DateTime for corresponding round trip patterns.</remarks>
+        public bool IsEqualTo(IANState other, bool compareTimeStamp = true, bool compareDateTime = false)
         {
             return (other != null
                     && ANSpec.Equals(other.ANSpec)
@@ -952,7 +963,7 @@ namespace MosaicLib.Semi.E041
 
     /// <summary>
     /// This enumeration is used with the Sync action to select which behaviors in the ANManagerPart should be performed.
-    /// <para/>None (0x00), ANEventDelivery (0x01)
+    /// <para/>None (0x00), ANEventDelivery (0x01), ANHistoryRecordingDelivery
     /// </summary>
     [Flags]
     public enum SyncFlags : int
@@ -962,6 +973,9 @@ namespace MosaicLib.Semi.E041
 
         /// <summary>Waits for the IANManagerPart to complete the next ANEvent Delivery pass.  [0x01]</summary>
         ANEventDelivery = 0x01,
+
+        /// <summary>Waits (as needed) for the IANManagerPart to complete the next History Recording delivery pass. [0x02]</summary>
+        ANHistoryRecordingDelivery = 0x02,
     }
 
     /// <summary>
@@ -1050,6 +1064,7 @@ namespace MosaicLib.Semi.E041
             E30ALIDHandlerFacet = other.E30ALIDHandlerFacet;
             ALIDDictionary = other.ALIDDictionary;
             ANEventInfoListHandlerPart = other.ANEventInfoListHandlerPart;
+            ANStateHistoryRecorder = other.ANStateHistoryRecorder;
 
             ActionLoggingConfig = other.ActionLoggingConfig ?? ActionLoggingConfig.Debug_Debug_Trace_Trace;
 
@@ -1086,6 +1101,11 @@ namespace MosaicLib.Semi.E041
         /// If a client needs know when they have been delivered then the client should run a Sync(SyncFlags.ANEventDelivery) action, on completion of which all pending updates from the point of the action being started will have been delivered.
         /// </summary>
         public IANEventListHandlerPart ANEventInfoListHandlerPart { get; set; }
+
+        /// <summary>
+        /// When non-null, this delegate will be given the new ANState values as they are processed and published.  Normally this is attached to glue code that supports recording these state objects for later retreival and analysis.
+        /// </summary>
+        public Action<ANState> ANStateHistoryRecorder { get; set; }
 
         /// <summary>Defines the ANManagerPart's ActionLoggingConfig that is used for part actions</summary>
         public ActionLoggingConfig ActionLoggingConfig { get; set; }
@@ -1622,6 +1642,8 @@ namespace MosaicLib.Semi.E041
                 // set and publish the initialANState
                 anSourceTracking.Publish(anSourceTracking.initialANState = new ANState(anSourceImpl.InitialANState));
 
+                RecordANStateHistory(anSourceTracking.initialANState);
+
                 anSourceTracking.sendRegistrationEvent = true;
                 lastStateSeqNum = anSourceTracking.lastEventSeqNum = GenerateNextEventSeqNum();
 
@@ -1681,7 +1703,7 @@ namespace MosaicLib.Semi.E041
 
             if (npv.Contains("ANName"))
             {
-                anSourceTracking = FindANSourceTrackingByName(npv["ANName"].VC.GetValue<string>(false), false);
+                anSourceTracking = FindANSourceTrackingByName(npv["ANName"].VC.GetValueA(false), false);
                 anSource = ((anSourceTracking != null) ? anSourceTracking.anSourceImpl : null);
             }
 
@@ -1696,7 +1718,7 @@ namespace MosaicLib.Semi.E041
                         if (anSource == null)
                             return "ANName param is missing or invalid";
 
-                        string selectedActionName = npv["SelectedActionName"].VC.GetValue<string>(false);
+                        string selectedActionName = npv["SelectedActionName"].VC.GetValueA(false);
                         if (selectedActionName.IsNullOrEmpty())
                             return "SelectedActionName is missing or is invalid";
 
@@ -1735,7 +1757,7 @@ namespace MosaicLib.Semi.E041
 
                 case "SelectActionNameForAll":
                     {
-                        string selectedActionName = npv["SelectedActionName"].VC.GetValue<string>(false);
+                        string selectedActionName = npv["SelectedActionName"].VC.GetValueA(false);
                         if (selectedActionName.IsNullOrEmpty())
                             return "SelectedActionName is missing or is invalid";
 
@@ -2346,7 +2368,7 @@ namespace MosaicLib.Semi.E041
                         actionListSetNeeded = (changeAnSignalState
                                                   || nvAcknowledge.VC.cvt != ContainerStorageType.A
                                                   || actionList.Count != 1
-                                                  || (nvAcknowledge.VC.GetValue<string>(rethrow: false) != reason && (AcceptAlarmReasonChangeAfterTimeSpan == TimeSpan.Zero || ANState.TimeStamp.Age >= AcceptAlarmReasonChangeAfterTimeSpan))
+                                                  || (nvAcknowledge.VC.GetValueA(rethrow: false) != reason && (AcceptAlarmReasonChangeAfterTimeSpan == TimeSpan.Zero || ANState.TimeStamp.Age >= AcceptAlarmReasonChangeAfterTimeSpan))
                                                  );
 
                         if (actionListSetNeeded)
@@ -2687,6 +2709,8 @@ namespace MosaicLib.Semi.E041
                                 anStateHistorySet.Add(anState);
                             }
 
+                            RecordANStateHistory(anState);
+
                             if (anState.ANSignalState.IsSignaling())
                             {
                                 anStateCurrentActiveSet.RemoveAndAdd((an) => (an.ANName == anState.ANName), anState);
@@ -2733,6 +2757,37 @@ namespace MosaicLib.Semi.E041
         {
             return anSourceTrackingList.Array.SafeAccess(anState.ANSpec.ANManagerTableRegistrationNum - 1) ?? FindANSourceTrackingByName(anState.ANName, false);
         }
+
+        /// <summary>
+        /// Handle checking if there is a non-null ANStateHistoryRecorder and if so call it with the given <paramref name="anState"/> in a try catch wrapper.
+        /// Throttle any resulting exception logging to no more than one per second.
+        /// </summary>
+        private void RecordANStateHistory(ANState anState)
+        {
+            var historyRecorderDelegate = ANManagerPartConfig.ANStateHistoryRecorder;
+
+            if (historyRecorderDelegate != null)
+            {
+                bool timerStarted = anStateHistoryExceptionLogHoldoffTimer.Started;
+                try
+                {
+                    historyRecorderDelegate(anState);
+
+                    if (timerStarted)
+                        anStateHistoryExceptionLogHoldoffTimer.Stop();
+                }
+                catch (System.Exception ex)
+                {
+                    if (!timerStarted)
+                        anStateHistoryExceptionLogHoldoffTimer.Reset(triggerImmediately: true);
+
+                    if (anStateHistoryExceptionLogHoldoffTimer.IsTriggered)
+                        Log.Debug.Emit("ANStateHistoryRecorder failed for {0}: {1}", anState, ex.ToString(ExceptionFormat.TypeAndMessageAndStackTrace));
+                }
+            }
+        }
+
+        QpcTimer anStateHistoryExceptionLogHoldoffTimer = new QpcTimer() { TriggerInterval = (1.0).FromSeconds(), AutoReset = true };
 
         #endregion
 
@@ -2823,8 +2878,8 @@ namespace MosaicLib.Semi.E041
             return (anState.ANSignalState == ANSignalState.OnAndWaiting
                     && anState.SelectedActionName.IsNullOrEmpty()
                     && anState.ActionList.Count == 1
-                    && (anState.ActionList.GetValue(Constants.Acknowledge).GetValue<bool>(false) 
-                        || anState.ActionList.GetValue(Constants.Ack).GetValue<bool>(false))
+                    && (anState.ActionList.GetValue(Constants.Acknowledge).GetValueBo(false) 
+                        || anState.ActionList.GetValue(Constants.Ack).GetValueBo(false))
                     );
         }
 
@@ -2836,10 +2891,13 @@ namespace MosaicLib.Semi.E041
         {
             PerformMainLoopService();
 
-            if (flags == SyncFlags.None)
+            bool waitForANEventDelivery = ((flags & SyncFlags.ANEventDelivery) != 0);
+            bool waitForANHistoryRecordingDelivery = ((flags & SyncFlags.ANHistoryRecordingDelivery) != 0);
+
+            if (!waitForANEventDelivery)
                 return string.Empty;
 
-            var syncTracker = new SyncTracker() { syncEventSeqNum = GenerateNextEventSeqNum(), ipf = ipf, syncFlags = flags, waitingForEventDelivery = flags.IsSet(SyncFlags.ANEventDelivery) };
+            var syncTracker = new SyncTracker() { syncEventSeqNum = GenerateNextEventSeqNum(), ipf = ipf, syncFlags = flags, waitingForEventDelivery = waitForANEventDelivery };
 
             pendingSyncTrackerList.Add(syncTracker);
 

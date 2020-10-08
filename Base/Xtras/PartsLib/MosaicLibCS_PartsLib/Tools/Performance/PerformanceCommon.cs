@@ -39,6 +39,17 @@ using MosaicLib.Utils.Collections;
 namespace MosaicLib.PartsLib.Tools.Performance
 {
     /// <summary>
+    /// Defaults
+    /// </summary>
+    public static partial class Defaults
+    {
+        /// <summary>
+        /// Default value is NVS with single "noMDRF" keyword item which is commonly used to block a log message from being injected into and MDRF file.
+        /// </summary>
+        public static INamedValueSet PerfLoggerDefaultNVS = new NamedValueSet() { "noMDRF" }.MakeReadOnly();
+    }
+
+    /// <summary>
     /// This is an initial, general purpose, histograming tool for use with double values.
     /// Client defines the set of boundary values which divide up the bins.  
     /// For a client provided set of m boundary values there are m+1 bins.
@@ -374,14 +385,14 @@ namespace MosaicLib.PartsLib.Tools.Performance
 
         public void UpdateGroupItems()
         {
-            countGPI.VC = countGPI.VC.SetValue<int>(Histogram.Count, countGPI.ValueCST, false);
-            minGPI.VC = minGPI.VC.SetValue<double>(Histogram.Minimum, minGPI.ValueCST, false);
-            maxGPI.VC = maxGPI.VC.SetValue<double>(Histogram.Maximum, maxGPI.ValueCST, false);
-            avgGPI.VC = avgGPI.VC.SetValue<double>(Histogram.Average, avgGPI.ValueCST, false);
-            sdGPI.VC = sdGPI.VC.SetValue<double>(Histogram.StandardDeviation, sdGPI.ValueCST, false);
-            medianEstGPI.VC = medianEstGPI.VC.SetValue<double>(Histogram.MedianEstimate, medianEstGPI.ValueCST, false);
-            percentile5EstGPI.VC = percentile5EstGPI.VC.SetValue<double>(Histogram.GetPercentialValueEstimate(5.0), percentile5EstGPI.ValueCST, false);
-            percentile95EstGPI.VC = percentile95EstGPI.VC.SetValue<double>(Histogram.GetPercentialValueEstimate(95.0), percentile95EstGPI.ValueCST, false);
+            countGPI.VC = ValueContainer.CreateI4(Histogram.Count);
+            minGPI.VC = ValueContainer.CreateF8(Histogram.Minimum);
+            maxGPI.VC = ValueContainer.CreateF8(Histogram.Maximum);
+            avgGPI.VC = ValueContainer.CreateF8(Histogram.Average);
+            sdGPI.VC = ValueContainer.CreateF8(Histogram.StandardDeviation);
+            medianEstGPI.VC = ValueContainer.CreateF8(Histogram.MedianEstimate);
+            percentile5EstGPI.VC = ValueContainer.CreateF8(Histogram.GetPercentialValueEstimate(5.0));
+            percentile95EstGPI.VC = ValueContainer.CreateF8(Histogram.GetPercentialValueEstimate(95.0));
 
             if (!lastBinCountArray.Equals(Histogram.BinCountArray))
                 binsGPI.VC = new ValueContainer(lastBinCountArray = Histogram.BinCountArray.MakeCopyOf());
@@ -411,14 +422,14 @@ namespace MosaicLib.PartsLib.Tools.Performance
 
         public MDRF.Writer.GroupInfo GroupInfo { get; private set; }
 
-        public MDRF.Writer.GroupPointInfo countGPI = new MDRF.Writer.GroupPointInfo() { Name = "count", Comment = "sample count", ValueCST = ContainerStorageType.Int32, VC = new ValueContainer(0) };
-        public MDRF.Writer.GroupPointInfo minGPI = new MDRF.Writer.GroupPointInfo() { Name = "min", ValueCST = ContainerStorageType.Double, VC = new ValueContainer(0.0) };
-        public MDRF.Writer.GroupPointInfo maxGPI = new MDRF.Writer.GroupPointInfo() { Name = "max", ValueCST = ContainerStorageType.Double, VC = new ValueContainer(0.0) };
-        public MDRF.Writer.GroupPointInfo avgGPI = new MDRF.Writer.GroupPointInfo() { Name = "avg", ValueCST = ContainerStorageType.Double, VC = new ValueContainer(0.0) };
-        public MDRF.Writer.GroupPointInfo sdGPI = new MDRF.Writer.GroupPointInfo() { Name = "sd", ValueCST = ContainerStorageType.Double, VC = new ValueContainer(0.0) };
-        public MDRF.Writer.GroupPointInfo medianEstGPI = new MDRF.Writer.GroupPointInfo() { Name = "medianEst", ValueCST = ContainerStorageType.Double, VC = new ValueContainer(0.0) };
-        public MDRF.Writer.GroupPointInfo percentile5EstGPI = new MDRF.Writer.GroupPointInfo() { Name = "percentile5Est", ValueCST = ContainerStorageType.Double, VC = new ValueContainer(0.0) };
-        public MDRF.Writer.GroupPointInfo percentile95EstGPI = new MDRF.Writer.GroupPointInfo() { Name = "percentile95Est", ValueCST = ContainerStorageType.Double, VC = new ValueContainer(0.0) };
+        public MDRF.Writer.GroupPointInfo countGPI = new MDRF.Writer.GroupPointInfo() { Name = "count", Comment = "sample count", CST = ContainerStorageType.Int32, VC = new ValueContainer(0) };
+        public MDRF.Writer.GroupPointInfo minGPI = new MDRF.Writer.GroupPointInfo() { Name = "min", CST = ContainerStorageType.Double, VC = new ValueContainer(0.0) };
+        public MDRF.Writer.GroupPointInfo maxGPI = new MDRF.Writer.GroupPointInfo() { Name = "max", CST = ContainerStorageType.Double, VC = new ValueContainer(0.0) };
+        public MDRF.Writer.GroupPointInfo avgGPI = new MDRF.Writer.GroupPointInfo() { Name = "avg", CST = ContainerStorageType.Double, VC = new ValueContainer(0.0) };
+        public MDRF.Writer.GroupPointInfo sdGPI = new MDRF.Writer.GroupPointInfo() { Name = "sd", CST = ContainerStorageType.Double, VC = new ValueContainer(0.0) };
+        public MDRF.Writer.GroupPointInfo medianEstGPI = new MDRF.Writer.GroupPointInfo() { Name = "medianEst", CST = ContainerStorageType.Double, VC = new ValueContainer(0.0) };
+        public MDRF.Writer.GroupPointInfo percentile5EstGPI = new MDRF.Writer.GroupPointInfo() { Name = "percentile5Est", CST = ContainerStorageType.Double, VC = new ValueContainer(0.0) };
+        public MDRF.Writer.GroupPointInfo percentile95EstGPI = new MDRF.Writer.GroupPointInfo() { Name = "percentile95Est", CST = ContainerStorageType.Double, VC = new ValueContainer(0.0) };
         public MDRF.Writer.GroupPointInfo binsGPI = new MDRF.Writer.GroupPointInfo() { Name = "bins" };
 
         public override string ToString()

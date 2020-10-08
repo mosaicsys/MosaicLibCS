@@ -2435,21 +2435,31 @@ namespace MosaicLib.Utils
         }
 
         /// <summary>Adds (using SafeSetKeyValue) the given <paramref name="itemSet"/> set of items to the given <paramref name="dictionary"/> and returns it (to support call chaining)</summary>
-        public static TDictionary SafeAddRange<TDictionary, TKey, TValue>(this TDictionary dictionary, IEnumerable<KeyValuePair<TKey, TValue>> itemSet)
+        public static TDictionary SafeAddRange<TDictionary, TKey, TValue>(this TDictionary dictionary, IEnumerable<KeyValuePair<TKey, TValue>> itemSet, bool onlyTakeFirst = false)
             where TDictionary : IDictionary<TKey, TValue>
         {
             if (itemSet != null && dictionary != null)
-                itemSet.DoForEach(item => dictionary.SafeSetKeyValue(item));
+                itemSet.DoForEach(item => dictionary.SafeSetKeyValue(item, onlyTakeFirst: onlyTakeFirst));
 
             return dictionary;
         }
 
         /// <summary>If the given <paramref name="dictionary"/> is non-null and the given <paramref name="kvp"/>'s Key is non-null then uses the TKey indexed setter to set the key's value in the dictionary.  Returns the given <paramref name="dictionary"/> to support call chaining.</summary>
-        public static TDictionary SafeSetKeyValue<TDictionary, TKey, TValue>(this TDictionary dictionary, KeyValuePair<TKey, TValue> kvp)
+        public static TDictionary SafeSetKeyValue<TDictionary, TKey, TValue>(this TDictionary dictionary, KeyValuePair<TKey, TValue> kvp, bool onlyTakeFirst = false)
             where TDictionary : IDictionary<TKey, TValue>
         {
-            if (dictionary != null && kvp.Key != null)
+            if (dictionary != null && kvp.Key != null && (!onlyTakeFirst || !dictionary.ContainsKey(kvp.Key)))
                 dictionary[kvp.Key] = kvp.Value;
+
+            return dictionary;
+        }
+
+        /// <summary>If the given <paramref name="dictionary"/> is non-null and the given <paramref name="key"/> is non-null then uses the TKey indexed setter to set the <paramref name="key"/>'s <paramref name="value"/> in the dictionary.  Returns the given <paramref name="dictionary"/> to support call chaining.</summary>
+        public static TDictionary SafeSetKeyValue<TDictionary, TKey, TValue>(this TDictionary dictionary, TKey key, TValue value, bool onlyTakeFirst = false)
+            where TDictionary : IDictionary<TKey, TValue>
+        {
+            if (dictionary != null && key != null && (!onlyTakeFirst || !dictionary.ContainsKey(key)))
+                dictionary[key] = value;
 
             return dictionary;
         }

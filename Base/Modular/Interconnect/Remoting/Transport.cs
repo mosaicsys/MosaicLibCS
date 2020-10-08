@@ -134,7 +134,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
 
             lock (mutex)
             {
-                string connectionType = connParamsNVS["ConnectionType"].VC.GetValue<string>(rethrow: false);
+                string connectionType = connParamsNVS["ConnectionType"].VC.GetValueA(rethrow: false);
 
                 ITransportConnectionFactory connectionFactoryForType = typeDictionary.SafeTryGetValue(connectionType);
 
@@ -164,7 +164,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
 
             lock (mutex)
             {
-                string connectionType = connParamsNVS["ConnectionType"].VC.GetValue<string>(rethrow: false);
+                string connectionType = connParamsNVS["ConnectionType"].VC.GetValueA(rethrow: false);
 
                 ITransportConnectionFactory connectionFactoryForType = typeDictionary.SafeTryGetValue(connectionType);
 
@@ -336,9 +336,9 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                 try
                 {
                     Port = ConnParamsNVS["Port"].VC.GetValue<int>(rethrow: false, defaultValue: Constants.DefaultUDPPort);
-                    ConnectionType = ConnParamsNVS["ConnectionType"].VC.GetValue<string>(rethrow: false).MapNullToEmpty();
+                    ConnectionType = ConnParamsNVS["ConnectionType"].VC.GetValueA(rethrow: false).MapNullToEmpty();
                     NumConcurrentReads = ConnParamsNVS["NumConcurrentReads"].VC.GetValue<int>(rethrow: false, defaultValue: IsServer ? DefaultServerConcurrentReads : DefaultClientConcurrentReads);
-                    int requestReceiveBufferSize = ConnParamsNVS["ReceiveBufferSize"].VC.GetValue<int>(rethrow: false);
+                    int requestReceiveBufferSize = ConnParamsNVS["ReceiveBufferSize"].VC.GetValueI4(rethrow: false);
 
                     IPV6 = ConnectionType.EndsWith("v6");
 
@@ -348,7 +348,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                             if (connParamsNVS.Contains("IPAddress"))
                             {
                                 IPAddress ipAddress;
-                                if (IPAddress.TryParse(connParamsNVS["IPAddress"].VC.GetValue<string>(rethrow: false).MapNullToEmpty(), out ipAddress))
+                                if (IPAddress.TryParse(connParamsNVS["IPAddress"].VC.GetValueA(rethrow: false).MapNullToEmpty(), out ipAddress))
                                     IPAddress = ipAddress;
                                 else
                                     IPAddress = IPAddress.None;
@@ -852,7 +852,7 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                 {
                     Port = ConnParamsNVS["Port"].VC.GetValue<int>(rethrow: false, defaultValue: Constants.DefaultTCPPort);
                     KeepAlivePeriod = ConnParamsNVS["KeepAlivePeriod"].VC.GetValue<TimeSpan>(rethrow: false, defaultValue: (10.0).FromSeconds());
-                    ConnectionType = ConnParamsNVS["ConnectionType"].VC.GetValue<string>(rethrow: false).MapNullToEmpty();
+                    ConnectionType = ConnParamsNVS["ConnectionType"].VC.GetValueA(rethrow: false).MapNullToEmpty();
                     TCPOptimizations = ConnParamsNVS["TCPOptimizations"].VC.GetValue<TCPOptimizations>(rethrow: false, defaultValue: TCPOptimizations.OptimizedDefault);
 
                     IPV6 = ConnectionType.EndsWith("v6");
@@ -867,12 +867,12 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
                         case TransportRole.Client:
                             if (connParamsNVS.Contains("HostName"))
                             {
-                                HostName = connParamsNVS["HostName"].VC.GetValue<string>(rethrow: false);
+                                HostName = connParamsNVS["HostName"].VC.GetValueA(rethrow: false);
                             }
                             else if (connParamsNVS.Contains("IPAddress"))
                             {
                                 IPAddress ipAddress;
-                                if (IPAddress.TryParse(connParamsNVS["IPAddress"].VC.GetValue<string>(rethrow: false).MapNullToEmpty(), out ipAddress))
+                                if (IPAddress.TryParse(connParamsNVS["IPAddress"].VC.GetValueA(rethrow: false).MapNullToEmpty(), out ipAddress))
                                     IPAddress = ipAddress;
                                 else
                                     IPAddress = IPAddress.None;
@@ -2014,8 +2014,8 @@ namespace MosaicLib.Modular.Interconnect.Remoting.Transport
 
                 ConnParamsNVS = (connParamsNVS = connParamsNVS.ConvertToReadOnly(mapNullToEmpty: true));
 
-                TransmitDelayCount = ConnParamsNVS["TransmitDelayCount"].VC.GetValue<int>(rethrow: false);
-                TransmitReorderInterval = ConnParamsNVS["TransmitReorderInterval"].VC.GetValue<int>(rethrow: false);
+                TransmitDelayCount = ConnParamsNVS["TransmitDelayCount"].VC.GetValueI4(rethrow: false);
+                TransmitReorderInterval = ConnParamsNVS["TransmitReorderInterval"].VC.GetValueI4(rethrow: false);
                 TransmitReorderAdditionalDelay = ConnParamsNVS["TransmitReorderAdditionalDelay"].VC.GetValue<int>(rethrow: false, defaultValue: 1);
 
                 SessionBase = sessionBase;

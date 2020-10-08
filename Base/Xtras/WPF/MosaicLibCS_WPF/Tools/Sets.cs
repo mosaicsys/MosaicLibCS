@@ -691,7 +691,7 @@ namespace MosaicLib.WPF.Tools.Sets
                     ValueContainer enabledSourcesVC = ValueContainer.CreateFromObject(enabledSources);
                     string[] enabledSourceArray = (enabledSourcesVC.cvt.IsList() 
                                                         ? enabledSourcesVC.GetValue<string[]>(rethrow: false) 
-                                                        : enabledSourcesVC.GetValue<string>(rethrow: false).MapNullToEmpty().Split('|').Select(s => s.Trim()).Where(s => s.IsNeitherNullNorEmpty()).ToArray()) 
+                                                        : enabledSourcesVC.GetValueA(rethrow: false).MapNullToEmpty().Split('|').Select(s => s.Trim()).Where(s => s.IsNeitherNullNorEmpty()).ToArray()) 
                                                     ?? EmptyArrayFactory<string>.Instance;
                     HashSet<string> sourceFilterHashSet = (enabledSourceArray.IsNullOrEmpty()) ? null : new HashSet<string>(enabledSourceArray);
 

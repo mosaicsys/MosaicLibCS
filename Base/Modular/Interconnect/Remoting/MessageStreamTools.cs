@@ -229,10 +229,10 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
         {
             nvs = nvs ?? NamedValueSet.Empty;
 
-            SetID = new Sets.SetID(nvs["SetID.Name"].VC.GetValue<string>(rethrow: false), nvs["SetID.UUID"].VC.GetValue<string>(rethrow: false).MapEmptyTo());
-            MaximumItemsPerMessage = nvs["MaximumItemsPerMessage"].VC.GetValue<int>(rethrow: false);
-            MinimumUpdateInterval = nvs["MinimumUpdateInterval"].VC.GetValue<TimeSpan>(rethrow: false);
-            SetItemTypeStr = nvs["SetItemTypeStr"].VC.GetValue<string>(rethrow: false).MapNullToEmpty();
+            SetID = new Sets.SetID(nvs["SetID.Name"].VC.GetValueA(rethrow: false), nvs["SetID.UUID"].VC.GetValueA(rethrow: false).MapEmptyTo());
+            MaximumItemsPerMessage = nvs["MaximumItemsPerMessage"].VC.GetValueI4(rethrow: false);
+            MinimumUpdateInterval = nvs["MinimumUpdateInterval"].VC.GetValueTS(rethrow: false);
+            SetItemTypeStr = nvs["SetItemTypeStr"].VC.GetValueA(rethrow: false).MapNullToEmpty();
             ClearClientSetOnCloseOrFailure = nvs.Contains("ClearClientSetOnCloseOrFailure");
 
             return base.ApplyValues(nvs);
@@ -338,16 +338,16 @@ namespace MosaicLib.Modular.Interconnect.Remoting.MessageStreamTools
         {
             nvs = nvs ?? NamedValueSet.Empty;
 
-            RemoteIVIName = nvs["RemoteIVIName"].VC.GetValue<string>(rethrow: false);
+            RemoteIVIName = nvs["RemoteIVIName"].VC.GetValueA(rethrow: false);
             IVIRelayDirection = nvs["IVIRelayDirection"].VC.GetValue<IVIRelayDirection>(rethrow: false);
-            MinimumUpdateInterval = nvs["MinimumUpdateInterval"].VC.GetValue<TimeSpan>(rethrow: false);
-            MaxItemsPerMessage = nvs["MaxItemsPerMessage"].VC.GetValue<int>(rethrow: false);
-            ServerToClientFromNamePrefix = nvs["ServerToClientFromNamePrefix"].VC.GetValue<string>(rethrow: false).MapNullToEmpty();
-            ServerToClientToNamePrefix = nvs["ServerToClientToNamePrefix"].VC.GetValue<string>(rethrow: false).MapNullToEmpty();
-            ServerToClientMetaDataFilterNVS = nvs["ServerToClientMetaDataFilterNVS"].VC.GetValue<INamedValueSet>(rethrow: false);
-            ClientToServerMetaDataFilterNVS = nvs["ClientToServerMetaDataFilterNVS"].VC.GetValue<INamedValueSet>(rethrow: false);
+            MinimumUpdateInterval = nvs["MinimumUpdateInterval"].VC.GetValueTS(rethrow: false);
+            MaxItemsPerMessage = nvs["MaxItemsPerMessage"].VC.GetValueI4(rethrow: false);
+            ServerToClientFromNamePrefix = nvs["ServerToClientFromNamePrefix"].VC.GetValueA(rethrow: false).MapNullToEmpty();
+            ServerToClientToNamePrefix = nvs["ServerToClientToNamePrefix"].VC.GetValueA(rethrow: false).MapNullToEmpty();
+            ServerToClientMetaDataFilterNVS = nvs["ServerToClientMetaDataFilterNVS"].VC.GetValueNVS(rethrow: false);
+            ClientToServerMetaDataFilterNVS = nvs["ClientToServerMetaDataFilterNVS"].VC.GetValueNVS(rethrow: false);
             ResetClientSideIVAsOnCloseOrFailure = nvs.Contains("ResetClientSideIVAsOnCloseOrFailure");
-            IVATurnaroundHoldoffPeriod = nvs["IVATurnaroundHoldoffPeriod"].VC.GetValue<TimeSpan>(rethrow: false);
+            IVATurnaroundHoldoffPeriod = nvs["IVATurnaroundHoldoffPeriod"].VC.GetValueTS(rethrow: false);
 
             return base.ApplyValues(nvs);
         }

@@ -1391,9 +1391,9 @@ namespace MosaicLib.Semi.E090
             ObjID = (Obj != null) ? Obj.ID : E039ObjectID.Empty;
 
             INamedValueSet attributes = (Obj != null) ? Obj.Attributes : NamedValueSet.Empty;
-            InstanceNum = attributes[Constants.InstanceNumAttributeName].VC.GetValue<int>(rethrow: false);
+            InstanceNum = attributes[Constants.InstanceNumAttributeName].VC.GetValueI4(rethrow: false);
             MapSlotState = attributes[Constants.MapSlotStateAttributeName].VC.GetValue<Semi.E087.SlotState?>(rethrow: false);
-            NotAccessibleReason = attributes[Constants.NotAccessibleReasonAttributeName].VC.GetValue<string>(rethrow: false).MapNullToEmpty();
+            NotAccessibleReason = attributes[Constants.NotAccessibleReasonAttributeName].VC.GetValueA(rethrow: false).MapNullToEmpty();
 
             LinkToSubst = Obj.FindFirstLinkTo(Constants.ContainsLinkKey);
             SrcLinksToHere = Obj.FindLinksFrom(Constants.SourceLocationLinkKey).ToArray();
@@ -1566,8 +1566,8 @@ namespace MosaicLib.Semi.E090
             SPS = attributes[Constants.SubstrateProcessingStateAttributeName].VC.GetValue(rethrow: false, defaultValue: SubstProcState.Undefined);
             STS = attributes[Constants.SubstrateTransportStateAttributeName].VC.GetValue(rethrow: false, defaultValue: SubstState.Undefined);
             PendingSPS = attributes[Constants.PendingSubstrateProcessingStateAttributeName].VC.GetValue<SubstProcState>(rethrow: false, defaultValue: SubstProcState.Undefined);
-            LotID = attributes[Constants.LotIDAttributeName].VC.GetValue<string>(rethrow: false).MapNullToEmpty();
-            SubstUsageStr = attributes[Constants.SubstrateUsageAttributeName].VC.GetValue<string>(rethrow: false).MapNullToEmpty();
+            LotID = attributes[Constants.LotIDAttributeName].VC.GetValueA(rethrow: false).MapNullToEmpty();
+            SubstUsageStr = attributes[Constants.SubstrateUsageAttributeName].VC.GetValueA(rethrow: false).MapNullToEmpty();
 
             LocsLinkedToHere = Obj.FindLinksFrom(Constants.ContainsLinkKey).ToArray();
             LinkToSrc = Obj.FindFirstLinkTo(Constants.SourceLocationLinkKey);
@@ -1750,19 +1750,19 @@ namespace MosaicLib.Semi.E090
         private SubstProcState[] GetSPSListFromSavedAttributes()
         {
             INamedValueSet attributes = _deriveListsFromAttributes.MapNullToEmpty();
-            return (attributes[Constants.SPSListAttributeName].VC.GetValue<ReadOnlyIList<string>>(rethrow: false) ?? ReadOnlyIList<string>.Empty).Select(str => str.TryParse<SubstProcState>()).ToArray();
+            return (attributes[Constants.SPSListAttributeName].VC.GetValueLS(rethrow: false) ?? ReadOnlyIList<string>.Empty).Select(str => str.TryParse<SubstProcState>()).ToArray();
         }
 
         private ReadOnlyIList<string> GetSPSLocListFromSavedAttributes()
         {
             INamedValueSet attributes = _deriveListsFromAttributes.MapNullToEmpty();
-            return (attributes[Constants.SPSLocListAttributeName].VC.GetValue<ReadOnlyIList<string>>(rethrow: false) ?? ReadOnlyIList<string>.Empty);
+            return (attributes[Constants.SPSLocListAttributeName].VC.GetValueLS(rethrow: false) ?? ReadOnlyIList<string>.Empty);
         }
 
         private DateTime[] GetSPSDateTimeListFromSavedAttributes()
         {
             INamedValueSet attributes = _deriveListsFromAttributes.MapNullToEmpty();
-            return (attributes[Constants.SPSDateTimeListAttributeName].VC.GetValue<ReadOnlyIList<string>>(rethrow: false) ?? ReadOnlyIList<string>.Empty).Select(str => { try { return DateTime.ParseExact(str, "o", null); } catch { return default(DateTime); } }).ToArray();
+            return (attributes[Constants.SPSDateTimeListAttributeName].VC.GetValueLS(rethrow: false) ?? ReadOnlyIList<string>.Empty).Select(str => { try { return DateTime.ParseExact(str, "o", null); } catch { return default(DateTime); } }).ToArray();
         }
 
         private Item[] GetZippedItemArraySavedAttributes()

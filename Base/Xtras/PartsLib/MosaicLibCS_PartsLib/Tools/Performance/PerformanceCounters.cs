@@ -248,7 +248,7 @@ namespace MosaicLib.PartsLib.Tools.Performance
 
             mdrfWriter.Add(groupInfo);
 
-            noMDRFLogger = new Logging.Logger(PartID).SetDefaultNamedValueSetForEmitter(Logging.LogGate.All, new NamedValueSet() { { "noMDRF" } });
+            noMDRFLogger = new Logging.Logger(PartID).SetDefaultNamedValueSetForEmitter(Logging.LogGate.All, Defaults.PerfLoggerDefaultNVS);
         }
 
         PerformanceCountersPartConfig Config { get; set; }
@@ -274,7 +274,7 @@ namespace MosaicLib.PartsLib.Tools.Performance
                 gpInfo = new MDRF.Writer.GroupPointInfo()
                 {
                     Name = pcs.PointName,
-                    ValueCST = ContainerStorageType.None,
+                    CST = ContainerStorageType.None,
                 };
 
                 try

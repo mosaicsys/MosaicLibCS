@@ -28,19 +28,22 @@ using System.Text;
 using MosaicLib;
 using MosaicLib.Modular.Common;
 using MosaicLib.Modular.Config;
-using MosaicLib.Modular.Interconnect.Values;
-using MosaicLib.Modular.Interconnect.Values.Attributes;
 using MosaicLib.Modular.Reflection.Attributes;
 using MosaicLib.PartsLib.Tools.MDRF.Common;
 using MosaicLib.PartsLib.Tools.MDRF.Reader;
 using MosaicLib.Time;
 using MosaicLib.Utils;
+using MosaicLib.Utils.Collections;
+
+using Mosaic.ToolsLib.MDRF2.Reader;
+using Mosaic.ToolsLib.MDRF2.Common;
 
 namespace MosaicLib.Tools.ExtractMDRFtoCSV
 {
     public static class ExtractMDRFtoCSV
     {
         private static string appName = "AppNameNotFound";
+        private static Logging.ILogger appLogger;
         private static System.Reflection.Assembly currentExecAssy = System.Reflection.Assembly.GetExecutingAssembly();
 
         static void Main(string[] args)
@@ -50,6 +53,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
                 System.Diagnostics.Process currentProcess = System.Diagnostics.Process.GetCurrentProcess();
 
                 appName = System.IO.Path.GetFileName(currentProcess.MainModule.ModuleName);
+                appLogger = new Logging.Logger("Main");
 
                 bool stopProcessingArgs = false;
 
@@ -118,9 +122,11 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
             }
         }
 
+        //MDRF2DirectoryTracker 
+
         /// <summary>
         /// Bitmask used by command line parser to help record what what the client wants the tool to do.
-        /// <para/>None, IncludeOccurrences, IncludeExtra, Sparse, List, ListIndex, ListGroups, ListOccurrences
+        /// <para/>None, IncludeOccurrences, IncludeObjects, IncludeExtra, List, ListIndex, ListGroups, ListOccurrences, ListMessages, ListObjects, Debug, MapBool
         /// </summary>
         [Flags]
         public enum Select
@@ -128,24 +134,27 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
             None = 0x0000,
             IncludeOccurrences = 0x0001,
             IncludeExtras = 0x0002,
-            Sparse = 0x0004,
+            //Sparse = 0x0004,
             NoData = 0x0008,
             HeaderAndDataOnly = 0x0010,
+            IncludeObjects = 0x0020,
             ListInfo = 0x0100,
             ListIndex = 0x0200,
             ListGroupInfo = 0x0400,
             ListOccurrenceInfo = 0x0800,
             ListOccurrences = 0x1000,
             ListMessages = 0x2000,
+            ListObjects = 0x4000,
             Debug = 0x10000,
             MapBool = 0x20000,
 
             io = IncludeOccurrences,
             ie = IncludeExtras,
             ix = IncludeExtras,
-            s = Sparse,
+            //s = Sparse,
             nd = NoData,
             hado = HeaderAndDataOnly,
+            iobj = IncludeObjects,
             l = ListInfo,
             List = ListInfo,
             li = ListIndex,
@@ -153,6 +162,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
             loi = ListOccurrenceInfo,
             lo = ListOccurrences,
             lm = ListMessages,
+            lobj = ListObjects,
             d = Debug,
             mb = MapBool,
         }
@@ -167,14 +177,14 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
 
         private static void WriteUsage()
         {
-            Console.WriteLine("Usage: {0} [-IncludeOccurrences | -IncludeExtras".CheckedFormat(appName));
-            Console.WriteLine("       | -Sparse | -NoData | -HeaderAndDataOnly | -MapBool | -group:name | -tag:tag");
-            Console.WriteLine("       | -interval:interval | -start:deltaTime | -end:deltaTime | -tail:period] [fileName.mdrf] ...");
-            Console.WriteLine("   or: {0} [-List | -ListIndex | -ListGroupInfo | -ListOccurrenceInfo] [fileName.mdrf] ...".CheckedFormat(appName));
+            Console.WriteLine("Usage: {0} [-IncludeOccurrences | -IncludeExtras | -IncludeObjects".CheckedFormat(appName));
+            Console.WriteLine("       | -NoData | -HeaderAndDataOnly | -MapBool | -group:name | -tag:tag");
+            Console.WriteLine("       | -interval:interval | -start:deltaTime | -end:deltaTime | -tail:period] [fileName.mdrf|.mdrf2|.mdrf2.lz4] ...");
+            Console.WriteLine("   or: {0} [-List | -ListIndex | -ListGroupInfo | -ListOccurrenceInfo | -ListObjects] [fileName.mdrf] ...".CheckedFormat(appName));
             Console.WriteLine("   or: {0} [-ListOccurrences | -ListMessages] [fileName.mdrf] ...".CheckedFormat(appName));
-            Console.WriteLine(" Also accepts: -io, -ie, -s, -nd, -hado, -mb, -g:name, -t:tag, -s:dt, -e:dt, -i:interval");
+            Console.WriteLine(" Also accepts: -io, -ie, -iobj, -nd, -hado, -mb, -g:name, -t:tag, -s:dt, -e:dt, -i:interval");
             Console.WriteLine("               -l, -li, -lgi, -loi");
-            Console.WriteLine("               -lo, -lm");
+            Console.WriteLine("               -lo, -lm, -lobj");
             Console.WriteLine();
 
             Console.WriteLine("Assembly: {0}", currentExecAssy.GetSummaryNameAndVersion());
@@ -183,7 +193,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
         private static void ProcessFileNameArg(string arg)
         {
             if (!System.IO.Path.HasExtension(arg))
-                arg = arg + ".mdrf";
+                arg = arg + ".mdrf2.lz4";
 
             string filePart = System.IO.Path.GetFileName(arg);
             string pathPart = System.IO.Path.GetDirectoryName(arg).MapNullOrEmptyTo(".");
@@ -202,35 +212,57 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
             }
         }
 
+        static IMDRF2QueryFactory mdrf2QueryFactory;
+
         private static void ProcessMDRFFile(string mdrfFilePath)
         {
-            using (currentReader = new MDRFFileReader(mdrfFilePath, mdrfFileReaderBehavior: MDRFFileReaderBehavior.EnableLiveFileHeuristics))
+            var mdrFileName = Path.GetFileName(mdrfFilePath);
+            mdrf2QueryFactory = mdrf2QueryFactory ?? new MDRF2QueryFactory(appLogger);
+
+            var fileInfo = new MDRF2FileInfo(mdrfFilePath).PopulateIfNeeded();
+
+            QpcTimeStamp startTime = QpcTimeStamp.Now;
+
+            var digestInfo = mdrf2QueryFactory.GetFileDigestInfo(fileInfo);
+
+            var runTime = startTime.Age;
+
+            var fileSummary = digestInfo.Item2;
+            var specItemSet = fileInfo.SpecItemSet;
+
             {
-                if (!currentReader.ResultCode.IsNullOrEmpty())
+                if (!fileInfo.IsUsable)
                 {
-                    Console.WriteLine("Failed to open '{0}': {1}".CheckedFormat(System.IO.Path.GetFileName(mdrfFilePath), currentReader.ResultCode));
+                    Console.WriteLine($"'{System.IO.Path.GetFileName(mdrfFilePath)}': Is not usable: {fileInfo.FaultCode}");
                     return;
                 }
 
                 if (select.IsAnySet(Select.ListInfo | Select.ListIndex | Select.ListGroupInfo | Select.ListOccurrenceInfo))
                 {
-                    ListSelectedMDRFParts(currentReader);
+                    Console.WriteLine("File: '{0}' size: {1:f3} kB{2}", Path.GetFileName(fileInfo.FileNameAndRelativePath), fileInfo.FileLength * (1.0 / 1024), fileSummary.EndRecordFound ? "" : ",NotProperlyClosed");
+
+                    ListSelectedMDRFParts(fileInfo, digestInfo);
+
                     return;
                 }
 
                 if (select.IsAnySet(Select.ListOccurrences | Select.ListMessages))
                 {
-                    ListOccurrencesAndMessages(currentReader);
+                    Console.WriteLine("File: '{0}' size: {1:f3} kB{2}", Path.GetFileName(fileInfo.FileNameAndRelativePath), fileInfo.FileLength * (1.0 / 1024), fileSummary.EndRecordFound ? "" : ",NotProperlyClosed");
+
+                    ListOccurrencesAndObjectsAndMessages(fileInfo, digestInfo);
+
                     return;
                 }
 
-                string noExtensionPath = mdrfFilePath.RemoveSuffixIfNeeded(".mdrf");
+                string noExtensionPath = mdrfFilePath.RemoveSuffixIfNeeded(".mdrf").RemoveSuffixIfNeeded(".mdrf2").RemoveSuffixIfNeeded(".mdrf2.lz4");
                 if (!fileNameTag.IsNullOrEmpty())
                     noExtensionPath = "{0}_{1}".CheckedFormat(noExtensionPath, fileNameTag);
 
                 string csvPath = noExtensionPath.AddSuffixIfNeeded(".csv");
+                string csvName = Path.GetFileName(csvPath);
 
-                Console.WriteLine("Processing '{0}' {1} bytes => '{2}'".CheckedFormat(System.IO.Path.GetFileName(mdrfFilePath), currentReader.FileLength, System.IO.Path.GetFileName(csvPath)));
+                Console.WriteLine($"Processing '{mdrFileName}' => '{csvName}'");
 
                 if (System.IO.File.Exists(csvPath))
                     System.IO.File.Delete(csvPath);
@@ -241,20 +273,30 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
 
                     Func<IGroupInfo, bool> groupFilterDelegate = (selectedGroupList.IsNullOrEmpty() ? (Func<IGroupInfo, bool>)((IGroupInfo gi) => true) : ((IGroupInfo gi) => selectedGroupList.Any(grpName => gi.Name.Contains(grpName))));
 
-                    IGroupInfo[] FilteredGroupInfoArray = currentReader.GroupInfoArray.Where(gi => groupFilterDelegate(gi)).ToArray();
+                    IGroupInfo[] FilteredGroupInfoArray = specItemSet.GroupDictionary.ValueArray.Where(gi => groupFilterDelegate(gi)).ToArray();
 
                     if (!headerAndDataOnly)
                     {
-                        sw.CheckedWriteLine("$File.Path,{0}{1}", System.IO.Path.GetFullPath(mdrfFilePath), currentReader.FileIndexInfo.FileWasProperlyClosed ? "" : ",NotProperlyClosed");
+                        var indexStateStr = fileSummary.EndRecordFound ? "" : ",NotProperlyClosed";
+                        sw.CheckedWriteLine("$File.Path,{0}{1}", System.IO.Path.GetFullPath(mdrfFilePath), indexStateStr);
 
-                        sw.CheckedWriteLine("$File.Size,{0}", currentReader.FileLength);
-                        sw.CheckedWriteLine("$File.Date.First,{0:o}", currentReader.DateTimeInfo.UTCDateTime.ToLocalTime());
-                        sw.CheckedWriteLine("$File.Date.Last,{0:o}", currentReader.FileIndexInfo.FileIndexRowArray.Select(row => row.FirstBlockDateTime + (row.LastBlockDeltaTimeStamp - row.FirstBlockDeltaTimeStamp).FromSeconds()).Max().ToLocalTime());
-                        sw.CheckedWriteLine("$File.Elapsed.Hours,{0:f6}", currentReader.FileIndexInfo.LastBlockInfo.BlockDeltaTimeStamp / 3600.0);
+                        sw.CheckedWriteLine("$File.Size,{0}", fileInfo.FileLength);
+                        sw.CheckedWriteLine("$File.Date.First,{0:o}", fileInfo.DateTimeInfo.UTCDateTime.ToLocalTime());
+                        sw.CheckedWriteLine("$File.Date.Last,{0:o}", fileSummary.LastFileDTPair.DateTime.ToLocalTime());
+                        sw.CheckedWriteLine("$File.Elapsed.Hours,{0:f6}", fileSummary.LastFileDTPair.FileDeltaTime.FromSeconds().TotalHours);
 
-                        foreach (var key in new string[] { "HostName", "CurrentProcess.ProcessName", "Environment.MachineName", "Environment.OSVersion", "Environment.Is64BitOperatingSystem", "Environment.ProcessorCount" })
+                        foreach (var key in new string[] 
+                            {
+                                "HostName",
+                                "Environment.MachineName", "MachineName",
+                                "Environment.OSVersion", "OSVersion",
+                                "Environment.Is64BitOperatingSystem", "Is64BitOperatingSystem",
+                                "Environment.ProcessorCount", "ProcessorCount",
+                                "CurrentProcess.ProcessName", "ProcessName",
+                            })
                         {
-                            sw.WriteLineKeyIfPresent(currentReader.LibraryInfo.NVS, key);
+                            foreach (var nvs in fileInfo.NonSpecMetaNVS)
+                                sw.WriteLineKeyIfPresent(nvs.VC.GetValueNVS(rethrow: false).MapNullToEmpty(), key);
                         }
 
                         if (FilteredGroupInfoArray.SafeLength() <= 1)
@@ -282,180 +324,165 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
 
                     sw.CheckedWriteLine(String.Join(",", columnNames));
 
-                    if (tailTime != 0.0)
+                    var fullPointNamesArray = FilteredGroupInfoArray.SelectMany(gi => gi.GroupPointInfoArray.Select(gpi => gpi.FullName)).ToArray();
+                    MDRF2QuerySpec querySpec = new MDRF2QuerySpec()
                     {
-                        endDeltaTime = currentReader.FileIndexInfo.LastBlockInfo.BlockDeltaTimeStamp;
-                        startDeltaTime = Math.Max(0.0, endDeltaTime - tailTime);
-                    }
-
-                    ReadAndProcessFilterSpec filterSpec = new ReadAndProcessFilterSpec()
-                    {
-                        FirstFileDeltaTimeStamp = startDeltaTime,
-                        LastFileDeltaTimeStamp = endDeltaTime,
-                        EventHandlerDelegate = (sender, pceData) => ProcessContentEventHandlerDelegate(sw, sender, pceData),
-                        PCEMask = ProcessContentEvent.All,
-                        FileIndexUserRowFlagBitsMask = 0,
-                        NominalMinimumGroupAndTimeStampUpdateInterval = nominalUpdateInterval,
-                        GroupFilterDelegate = groupFilterDelegate,
+                        AllowRecordReuse = true,
+                        PointSetSpec = Tuple.Create(fullPointNamesArray, MDRF2PointSetArrayItemType.VC | MDRF2PointSetArrayItemType.ReuseArrays, nominalUpdateInterval.FromSeconds()),
+                        ItemTypeSelect = MDRF2QueryItemTypeSelect.All & ~(MDRF2QueryItemTypeSelect.FileDeltaTimeUpdate),
+                        OccurrenceNameArray = null, // all occurrences
+                        ObjectTypeNameSet = null, // all object types
                     };
 
-                    currentReader.ReadAndProcessContents(filterSpec);
+                    if (tailTime == 0.0)
+                    {
+                        querySpec.StartUTCTimeSince1601 = fileInfo.DateTimeInfo.UTCTimeSince1601 + startDeltaTime;
+                        querySpec.EndUTCTimeSince1601 = fileInfo.DateTimeInfo.UTCTimeSince1601 + endDeltaTime;
+                    }
+                    else
+                    {
+                        querySpec.StartUTCTimeSince1601 = fileSummary.LastFileDTPair.UTCTimeSince1601 - tailTime;
+                        querySpec.EndUTCTimeSince1601 = fileSummary.LastFileDTPair.UTCTimeSince1601;
+                    }
+
+                    bool debugSelected = select.IsSet(Select.Debug);
+                    bool includeExtrasSelected = select.IsSet(Select.IncludeExtras) && !debugSelected;
+                    bool includeOccurrences = select.IsSet(Select.IncludeOccurrences) && !debugSelected;
+                    bool includePointSetData = !select.IsSet(Select.NoData);
+                    bool mapBool = select.IsSet(Select.MapBool);
+                    bool mapNone = true;
+
+                    int inlineIndexCount = 0;
+
+                    foreach (var record in mdrf2QueryFactory.CreateQuery(querySpec, fileInfo))
+                    {
+                        var dtPair = record.DTPair;
+
+                        if (debugSelected)
+                            sw.CheckedWriteLine("$Debug {0}", record);
+
+                        switch (record.ItemType)
+                        {
+                            case MDRF2QueryItemTypeSelect.FileStart:
+                            case MDRF2QueryItemTypeSelect.FileEnd:
+                                if (includeExtrasSelected)
+                                    sw.CheckedWriteLine("${0} ts:{1:f6} {2:o}", record.ItemType, dtPair.FileDeltaTime, dtPair.DateTime.ToLocalTime());
+                                break;
+                            case MDRF2QueryItemTypeSelect.InlineIndexRecord:
+                            case MDRF2QueryItemTypeSelect.InlineIndexRecord | MDRF2QueryItemTypeSelect.WillSkip:
+                                inlineIndexCount++;
+                                if (includeExtrasSelected)
+                                    sw.CheckedWriteLine("${0} rowIdx:{1} firstTS:{2:f6} {3:o} userFlags:0x{4:x16}", record.ItemType, inlineIndexCount, dtPair.FileDeltaTime, dtPair.DateTime.ToLocalTime(), (record.DataAsObject as Mosaic.ToolsLib.MDRF2.Common.InlineIndexRecord)?.BlockUserRowFlagBits);
+                                break;
+                            case MDRF2QueryItemTypeSelect.BlockEnd:
+                                if (includeExtrasSelected)
+                                    sw.CheckedWriteLine("${0} rowIdx:{1} firstTS:{2:f6} {3:o} userFlags:0x{4:x16}", record.ItemType, inlineIndexCount, dtPair.FileDeltaTime, dtPair.DateTime.ToLocalTime(), (record.DataAsObject as Mosaic.ToolsLib.MDRF2.Common.InlineIndexRecord)?.BlockUserRowFlagBits);
+                                break;
+                            case MDRF2QueryItemTypeSelect.PointSet:
+                                if (includePointSetData)
+                                {
+                                    sw.CheckedWrite("{0:MM/dd/yyyy HH:mm:ss.fff},{1:f6}", dtPair.DateTime.ToLocalTime(), dtPair.FileDeltaTime);
+
+                                    foreach (var vc in (record.DataAsObject as ValueContainer []).MapNullToEmpty())
+                                    {
+                                        string vcStr;
+                                        if (vc.cvt == ContainerStorageType.Boolean && mapBool)
+                                            vcStr = vc.GetValueI4(rethrow: false).ToString();
+                                        else if (vc.cvt.IsString() || vc.IsObject || vc.IsNull)
+                                            vcStr = vc.ToString();
+                                        else if (vc.IsEmpty)
+                                            vcStr = (mapNone) ? string.Empty : vc.ToString();
+                                        else
+                                            vcStr = vc.ValueAsObject.SafeToString();
+
+                                        sw.CheckedWrite(",{0}", vcStr.Replace(',', '|'));
+                                    }
+
+                                    sw.CheckedWriteLine("");
+                                }
+                                break;
+                            case MDRF2QueryItemTypeSelect.Occurrence:
+                                if (includeOccurrences)
+                                {
+                                    var oqrd = (MDRF2OccurrenceQueryRecordData) record.DataAsObject;
+                                    sw.CheckedWriteLine("${0} ts:{1:f6} {2:o} {3} {4}", record.ItemType, dtPair.FileDeltaTime, dtPair.DateTime.ToLocalTime(), oqrd.OccurrenceInfo.Name, oqrd.VC);
+                                }
+                                break;
+                            case MDRF2QueryItemTypeSelect.Object:
+                                if (includeOccurrences)
+                                    sw.CheckedWriteLine("${0} ts:{1:f6} {2:o} {3}", record.ItemType, dtPair.FileDeltaTime, dtPair.DateTime.ToLocalTime(), ValueContainer.Create(record.DataAsObject));
+                                break;
+                            case MDRF2QueryItemTypeSelect.Mesg:
+                            case MDRF2QueryItemTypeSelect.Error:
+                                if (includeExtrasSelected)
+                                    sw.CheckedWriteLine("${0} ts:{1:f6} {2:o} {3}", record.ItemType, dtPair.FileDeltaTime, dtPair.DateTime.ToLocalTime(), ValueContainer.Create(record.DataAsObject));
+                                break;
+                            case MDRF2QueryItemTypeSelect.DecodingIssue:
+                                {
+                                    var ex = record.DataAsObject as System.Exception;
+                                    if (ex == null)
+                                        sw.CheckedWriteLine("${0} ts:{1:f6} {2:o} {3}", record.ItemType, dtPair.FileDeltaTime, dtPair.DateTime.ToLocalTime(), ValueContainer.Create(record.DataAsObject));
+                                    else
+                                        sw.CheckedWriteLine("${0} ts:{1:f6} {2:o} {3}", record.ItemType, dtPair.FileDeltaTime, dtPair.DateTime.ToLocalTime(), ex.ToString(ExceptionFormat.TypeAndMessage));
+                                }
+                                break;
+                            default:
+                                break;
+                        }
+                    }
                 }
             }
         }
 
-        private static MDRFFileReader currentReader = null;
-
-        private static void ProcessContentEventHandlerDelegate(StreamWriter sw, object sender, ProcessContentEventData pceData)
+        public static void ListSelectedMDRFParts(IMDRF2FileInfo fileInfo, Tuple<IMDRF2FileInfo, MDRF2QueryFileSummary, Mosaic.ToolsLib.MDRF2.Common.InlineIndexRecord[]> digestInfo)
         {
-            bool debugSelected = select.IsSet(Select.Debug);
-            bool includeExtrasSelected = select.IsSet(Select.IncludeExtras);
-
-            switch (pceData.PCE)
-            {
-                case ProcessContentEvent.ReadingStart:
-                case ProcessContentEvent.ReadingEnd:
-                    if (debugSelected)
-                        sw.CheckedWriteLine("$Debug {0}", pceData);
-                    else if (includeExtrasSelected)
-                        sw.CheckedWriteLine("${0} ts:{1:f6} {2:o}", pceData.PCE, pceData.FileDeltaTimeStamp, pceData.UTCDateTime.ToLocalTime());
-                    return;
-                case ProcessContentEvent.RowStart:
-                case ProcessContentEvent.RowEnd:
-                    if (debugSelected)
-                        sw.CheckedWriteLine("$Debug {0}", pceData);
-                    else if (includeExtrasSelected)
-                        sw.CheckedWriteLine("${0} rowIdx:{1} firstTS:{2:f6} {3:o} userFlags:0x{4:x16}", pceData.PCE, pceData.Row.RowIndex, pceData.FileDeltaTimeStamp, pceData.UTCDateTime.ToLocalTime(), pceData.Row.FileIndexUserRowFlagBits);
-                    return;
-
-                case ProcessContentEvent.StartOfFullGroup:
-                    if (debugSelected)
-                        sw.CheckedWriteLine("$Debug {0}", pceData);
-                    else if (includeExtrasSelected)
-                        sw.CheckedWriteLine("${0}", pceData.PCE);
-                    return;
-
-                case ProcessContentEvent.GroupSetEnd:
-                    if (debugSelected)
-                        sw.CheckedWriteLine("$Debug {0}", pceData);
-
-                    if (select.IsSet(Select.NoData))
-                    { }
-                    else if (pceData.FilteredGroupInfoArray.Any(gi => gi.Touched))
-                    {
-                        sw.CheckedWrite("{0:MM/dd/yyyy HH:mm:ss.fff},{1:f6}", pceData.UTCDateTime.ToLocalTime(), pceData.FileDeltaTimeStamp);
-
-                        foreach (IGroupInfo gi in pceData.FilteredGroupInfoArray)
-                        {
-                            if (gi.Touched || !select.IsSet(Select.Sparse))
-                            {
-                                foreach (var gpiVC in gi.GroupPointInfoArray.Select(gpi => gpi.VC))
-                                {
-                                    string gpiVCStr;
-                                    if (gpiVC.cvt == ContainerStorageType.Boolean && select.IsSet(Select.MapBool))
-                                        gpiVCStr = gpiVC.GetValue<int>(rethrow: false).ToString();
-                                    else if (gpiVC.cvt.IsString() || gpiVC.IsObject || gpiVC.IsNullOrEmpty)
-                                        gpiVCStr = gpiVC.ToString();
-                                    else
-                                        gpiVCStr = gpiVC.ValueAsObject.SafeToString();
-
-                                    sw.CheckedWrite(",{0}", gpiVCStr.Replace(',', '|'));
-                                }
-                            }
-                            else
-                            {
-                                sw.CheckedWrite(new string(',', gi.GroupPointInfoArray.SafeLength()));
-                            }
-
-                            gi.Touched = false;
-                        }
-
-                        sw.CheckedWriteLine("");
-                    }
-                    return;
-
-                case ProcessContentEvent.Group:
-                case ProcessContentEvent.PartialGroup:
-                case ProcessContentEvent.EmptyGroup:
-                case (ProcessContentEvent.Group | ProcessContentEvent.PartialGroup):
-                case (ProcessContentEvent.Group | ProcessContentEvent.EmptyGroup):
-                    if (debugSelected)
-                        sw.CheckedWriteLine("$Debug {0}", pceData);
-                    return;
-
-                case ProcessContentEvent.Occurrence:
-                    if (debugSelected)
-                        sw.CheckedWriteLine("$Debug {0}", pceData);
-                    else if (select.IsSet(Select.IncludeOccurrences))
-                        sw.CheckedWriteLine("${0} ts:{1:f6} {2:o} {3} {4}", pceData.PCE, pceData.FileDeltaTimeStamp, pceData.UTCDateTime.ToLocalTime(), pceData.OccurrenceInfo.Name, pceData.VC);
-                    return;
-
-                case ProcessContentEvent.Error:
-                case ProcessContentEvent.Message:
-                    if (debugSelected)
-                        sw.CheckedWriteLine("$Debug {0}", pceData);
-                    else if (includeExtrasSelected || pceData.PCE == ProcessContentEvent.Error)
-                        sw.CheckedWriteLine("${0} ts:{1:f6} {2:o} {3}", pceData.PCE, pceData.FileDeltaTimeStamp, pceData.UTCDateTime.ToLocalTime(), pceData.MessageInfo.Message);
-                    return;
-
-                default:
-                    return;
-            }
-        }
-
-        public static void ListSelectedMDRFParts(PartsLib.Tools.MDRF.Reader.MDRFFileReader reader)
-        {
-            Console.WriteLine("File: '{0}' size: {1} kB{2}", Path.GetFileName(reader.FilePath), reader.FileLength * (1.0 / 1024), reader.FileIndexInfo.FileWasProperlyClosed ? "" : " NotProperlyClosed");
+            var fileSummary = digestInfo.Item2;
+            var specItemSet = fileInfo.SpecItemSet;
+            var inlineIndexArray = digestInfo.Item3;
 
             if (select.IsSet(Select.ListInfo))
             {
-                Console.WriteLine(" Date First: {0:o}", reader.DateTimeInfo.UTCDateTime.ToLocalTime());
-                Console.WriteLine(" Date  Last: {0:o}", reader.FileIndexInfo.FileIndexRowArray.Select(row => row.FirstBlockDateTime + (row.LastBlockDeltaTimeStamp - row.FirstBlockDeltaTimeStamp).FromSeconds()).Max().ToLocalTime());
-                Console.WriteLine(" Elapsed Hours: {0:f6}", reader.FileIndexInfo.LastBlockInfo.BlockDeltaTimeStamp / 3600.0);
+                Console.WriteLine(" Date First: {0:o}", fileInfo.DateTimeInfo.UTCDateTime.ToLocalTime());
+                Console.WriteLine(" Date  Last: {0:o}", fileSummary.LastFileDTPair.DateTime.ToLocalTime());
+                Console.WriteLine(" Elapsed Hours: {0:f6}", fileSummary.LastFileDTPair.FileDeltaTime.FromSeconds().TotalHours);
 
-                foreach (var key in new string[] { "Environment.MachineName", "Environment.OSVersion" })
+                foreach (var key in new string[] { "Environment.MachineName", "Environment.OSVersion", "MachineName", "OSVersion" })
                 {
-                    currentReader.LibraryInfo.NVS.ConsoleWriteLineKeyIfPresent(key);
+                    foreach (var nvs in fileInfo.NonSpecMetaNVS)
+                        nvs.VC.GetValueNVS(rethrow:false).MapNullToEmpty().ConsoleWriteLineKeyIfPresent(key);
                 }
 
                 if (!select.IsSet(Select.ListGroupInfo))
-                    Console.WriteLine(" Groups: {0}", String.Join(",", reader.GroupInfoArray.Select(gi => gi.Name).ToArray()));
+                    Console.WriteLine(" Groups: {0}", String.Join(",", specItemSet.GroupDictionary.ValueArray.Select(gi => gi.Name).ToArray()));
                 if (!select.IsSet(Select.ListOccurrenceInfo))
-                    Console.WriteLine(" Occurrences: {0}", String.Join(",", reader.OccurrenceInfoArray.Select(oi => oi.Name).ToArray()));
+                    Console.WriteLine(" Occurrences: {0}", String.Join(",", specItemSet.OccurrenceDictionary.ValueArray.Select(oi => oi.Name).ToArray()));
             }
 
             if (select.IsSet(Select.ListIndex))
             {
-                Console.WriteLine("Index NumRows: {0} RowSizeDivisor: {1}", reader.FileIndexInfo.NumRows, reader.FileIndexInfo.RowSizeDivisor);
+                Console.WriteLine("Index NumRows: {0}", inlineIndexArray.Length);
                 List<int> emptyRowIndexList = new List<int>();
 
-                for (int rowIdx = 0; rowIdx < reader.FileIndexInfo.NumRows; rowIdx++)
+                FileIndexRowFlagBits mask = ~FileIndexRowFlagBits.ContainsGroup;
+                for (int rowIdx = 0; rowIdx < inlineIndexArray.Length; rowIdx++)
                 {
-                    FileIndexRowBase row = reader.FileIndexInfo.FileIndexRowArray.SafeAccess(rowIdx);
-                    if (row == null || row.IsEmpty)
-                        emptyRowIndexList.Add(rowIdx);
-                    else
+                    var row = inlineIndexArray[rowIdx];
                     {
-                        WriteEmptyRows(" EmptyRow(s):", emptyRowIndexList);
-
-                        Console.WriteLine(" RowIdx:{0:d4} Offset:{1} RFBits:${2:X4} URFBits:${3:X8} 1stDTS:{4:f3} lastDTS:{5:f3} 1stDT:{6:yyyyMMdd_HHmmssfff}", rowIdx, row.FileOffsetToStartOfFirstBlock, (ulong)row.FileIndexRowFlagBits, row.FileIndexUserRowFlagBits, row.LastBlockDeltaTimeStamp, row.FirstBlockDeltaTimeStamp, row.FirstBlockDateTime);
-                        if (row.FileIndexRowFlagBits != FileIndexRowFlagBits.None)
-                            Console.WriteLine("              RFBits:{0}", row.FileIndexRowFlagBits);
+                        Console.WriteLine(" RowIdx:{0:d4} Size:{1} RFBits:${2:X4} URFBits:${3:X8} 1stDTS:{4:f3} lastDTS:{5:f3} 1stDT:{6:yyyyMMdd_HHmmssfff}", rowIdx, row.BlockByteCount, (ulong)row.BlockFileIndexRowFlagBits, row.BlockUserRowFlagBits, row.BlockLastFileDeltaTime, row.BlockFirstFileDeltaTime, row.FirstDTPair.DateTime.ToLocalTime());
+                        if ((row.BlockFileIndexRowFlagBits & mask) != FileIndexRowFlagBits.None)
+                            Console.WriteLine("              RFBits:{0}", row.BlockFileIndexRowFlagBits & mask);
                     }
                 }
-
-                WriteEmptyRows(" EmptyRow(s):", emptyRowIndexList);
-
-                Console.WriteLine(" LastBlock: type: {0} size: {1}", reader.FileIndexInfo.LastBlockInfo.FixedBlockTypeID, reader.FileIndexInfo.LastBlockInfo.BlockTotalLength);
             }
 
             if (select.IsSet(Select.ListGroupInfo))
             {
-                if (reader.GroupInfoArray.SafeCount() > 0)
+                var groupInfoArray = specItemSet.GroupDictionary.ValueArray;
+                if (groupInfoArray.SafeCount() > 0)
                 {
-                    foreach (var gi in reader.GroupInfoArray)
+                    foreach (var gi in groupInfoArray)
                     {
-                        Console.WriteLine("GroupInfo '{0}' id:{1} fileID:{2} URFBits:${3:x4} points:{4}", gi.Name, gi.GroupID, gi.FileID, gi.FileIndexUserRowFlagBits, GetClippedGPIListString(gi, clipAfterLength: 55));
+                        Console.WriteLine("GroupInfo '{0}' id:{1} fileID:{2} URFBits:${3:x4} points:{4}", gi.Name, gi.GroupID, gi.FileID, gi.FileIndexUserRowFlagBits, GetClippedGPIListString(gi, clipAfterLength: 100));
                     }
                 }
                 else
@@ -466,9 +493,10 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
 
             if (select.IsSet(Select.ListOccurrenceInfo))
             {
-                if (reader.OccurrenceInfoArray.SafeCount() > 0)
+                var occurrenceInfoArray = specItemSet.OccurrenceDictionary.ValueArray;
+                if (occurrenceInfoArray.SafeCount() > 0)
                 {
-                    foreach (var oi in reader.OccurrenceInfoArray)
+                    foreach (var oi in occurrenceInfoArray)
                     {
                         Console.WriteLine("OccurrenceInfo '{0}' id:{1} fileID:{2} URFBits:${3:x4} ", oi.Name, oi.OccurrenceID, oi.FileID, oi.FileIndexUserRowFlagBits);
                     }
@@ -482,41 +510,66 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
             Console.WriteLine();
         }
 
-        public static void ListOccurrencesAndMessages(PartsLib.Tools.MDRF.Reader.MDRFFileReader reader)
+        public static void ListOccurrencesAndObjectsAndMessages(IMDRF2FileInfo fileInfo, Tuple<IMDRF2FileInfo, MDRF2QueryFileSummary, Mosaic.ToolsLib.MDRF2.Common.InlineIndexRecord[]> digestInfo)
         {
-            Console.WriteLine("File: '{0}' size: {1} kB{2}", Path.GetFileName(reader.FilePath), reader.FileLength * (1.0 / 1024), reader.FileIndexInfo.FileWasProperlyClosed ? "" : " NotProperlyClosed");
+            var fileSummary = digestInfo.Item2;
+            var specItemSet = fileInfo.SpecItemSet;
+            var inlineIndexArray = digestInfo.Item3;
 
-            int lineCount = 0;
             bool listMessages = select.IsSet(Select.ListMessages);
             bool listOccurrences = select.IsSet(Select.ListOccurrences);
+            bool listObjects = select.IsSet(Select.ListObjects);
 
-            ReadAndProcessFilterSpec filterSpec = new ReadAndProcessFilterSpec()
+            MDRF2QuerySpec querySpec = new MDRF2QuerySpec()
             {
-                EventHandlerDelegate = (sender, pceData) => ProcessContentEventHandlerDelegate2(sender, pceData, ref lineCount),
-                PCEMask = ProcessContentEvent.None.Set(ProcessContentEvent.Occurrence, listOccurrences).Set(ProcessContentEvent.Message | ProcessContentEvent.Error, listMessages),
+                ItemTypeSelect = ((listMessages) ? (MDRF2QueryItemTypeSelect.Mesg | MDRF2QueryItemTypeSelect.Error | MDRF2QueryItemTypeSelect.DecodingIssue) : default)
+                                | ((listOccurrences) ? (MDRF2QueryItemTypeSelect.Occurrence) : default)
+                                | ((listObjects) ? (MDRF2QueryItemTypeSelect.Object) : default),
+                OccurrenceNameArray = null,
+                PointSetSpec = Tuple.Create<string[], MDRF2PointSetArrayItemType, TimeSpan>(EmptyArrayFactory<string>.Instance, MDRF2PointSetArrayItemType.None, TimeSpan.Zero),
+                ObjectTypeNameSet = null,
             };
 
-            currentReader.ReadAndProcessContents(filterSpec);
+            int lineCount = 0;
+
+            foreach (var record in mdrf2QueryFactory.CreateQuery(querySpec, fileInfo))
+            {
+                var dtPair = record.DTPair;
+                switch (record.ItemType)
+                {
+                    case MDRF2QueryItemTypeSelect.Occurrence:
+                        {
+                            var queryData = (MDRF2OccurrenceQueryRecordData) record.DataAsObject;
+                            Console.WriteLine("{0:d5} ts:{1:f3} {2:o} {3} {4} {5}".CheckedFormat(++lineCount, dtPair.FileDeltaTime, dtPair.DateTime.ToLocalTime(), record.ItemType, queryData.OccurrenceInfo.Name, queryData.VC));
+                        }
+                        break;
+                    case MDRF2QueryItemTypeSelect.Object:
+                        {
+                            Console.WriteLine("{0:d5} ts:{1:f3} {2:o} {3} {4}".CheckedFormat(++lineCount, dtPair.FileDeltaTime, dtPair.DateTime.ToLocalTime(), record.ItemType, ValueContainer.Create(record.DataAsObject)));
+                        }
+                        break;
+                    case MDRF2QueryItemTypeSelect.Mesg:
+                    case MDRF2QueryItemTypeSelect.Error:
+                        {
+                            Console.WriteLine("{0:d5} ts:{1:f3} {2:o} {3} {4}".CheckedFormat(++lineCount, dtPair.FileDeltaTime, dtPair.DateTime.ToLocalTime(), record.ItemType, ValueContainer.Create(record.DataAsObject)));
+                        }
+                        break;
+                    case MDRF2QueryItemTypeSelect.DecodingIssue:
+                        {
+                            var ex = record.DataAsObject as System.Exception;
+
+                            if (ex == null)
+                                Console.WriteLine("{0:d5} ts:{1:f3} {2:o} {3} {4}".CheckedFormat(++lineCount, dtPair.FileDeltaTime, dtPair.DateTime.ToLocalTime(), record.ItemType, ValueContainer.Create(record.DataAsObject)));
+                            else
+                                Console.WriteLine("{0:d5} ts:{1:f3} {2:o} {3} {4}".CheckedFormat(++lineCount, dtPair.FileDeltaTime, dtPair.DateTime.ToLocalTime(), record.ItemType, ex.ToString(ExceptionFormat.TypeAndMessage)));
+                        }
+                        break;
+                    default:
+                        break;
+                }
+            }
 
             Console.WriteLine();
-        }
-
-        private static void ProcessContentEventHandlerDelegate2(object sender, ProcessContentEventData pceData, ref int lineCount)
-        {
-            switch (pceData.PCE)
-            {
-                case ProcessContentEvent.Occurrence:
-                    Console.WriteLine("{0:d5} ts:{1:f3} {2:o} {3} {4} {5}".CheckedFormat(++lineCount, pceData.FileDeltaTimeStamp, pceData.UTCDateTime.ToLocalTime(), pceData.PCE, pceData.OccurrenceInfo.Name, pceData.VC));
-                    return;
-
-                case ProcessContentEvent.Error:
-                case ProcessContentEvent.Message:
-                    Console.WriteLine("{0:d5} ts:{1:f3} {2:o} {3} {4}".CheckedFormat(++lineCount, pceData.FileDeltaTimeStamp, pceData.UTCDateTime.ToLocalTime(), pceData.PCE, pceData.MessageInfo.Message));
-                    return;
-
-                default:
-                    return;
-            }
         }
 
         private static string GetClippedGPIListString(IGroupInfo gi, int clipAfterLength = 60)
@@ -537,38 +590,6 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
             }
 
             return sb.ToString();
-        }
-
-        private static void WriteEmptyRows(string prefix, List<int> emptyRowIndexList)
-        {
-            if (!emptyRowIndexList.IsNullOrEmpty())
-            {
-                StringBuilder sb = new StringBuilder();
-
-                while (emptyRowIndexList.Count > 0)
-                {
-                    int rangeStart = emptyRowIndexList.SafeTakeFirst(defaultValue: -1);
-                    int rangeEnd = rangeStart;
-
-                    while (emptyRowIndexList.Count > 0 && emptyRowIndexList[0] == rangeEnd + 1)
-                    {
-                        rangeEnd += 1;
-                        emptyRowIndexList.RemoveAt(0);
-                    }
-
-                    if (sb.Length > 0)
-                        sb.Append(",");
-
-                    if (rangeStart == rangeEnd)
-                        sb.CheckedAppendFormat("{0}", rangeStart);
-                    else if (rangeStart+1 == rangeEnd)
-                        sb.CheckedAppendFormat("{0},{1}", rangeStart, rangeEnd);
-                    else
-                        sb.CheckedAppendFormat("{0}..{1}", rangeStart, rangeEnd);
-                }
-
-                Console.WriteLine("{0}{1}", prefix, sb.ToString());
-            }
         }
     }
 

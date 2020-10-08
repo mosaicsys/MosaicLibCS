@@ -30,6 +30,7 @@ using MosaicLib.Modular.Config;
 using MosaicLib.Time;
 using MosaicLib.Utils;
 using MosaicLib.Utils.Collections;
+using MosaicLib.Modular.Common;
 
 namespace MosaicLib
 {
@@ -165,7 +166,7 @@ namespace MosaicLib
                     /// calls its UpdateFromModularConfig method to fill in its values from modular config.  Finally this method updates the localy stored
                     /// values from the updated FileRotationLoggingConfig contents and reconstructs the LineFormat
                     /// </summary>
-                    public Config UpdateFromModularConfig(string configKeyPrefixStr, Logging.IMesgEmitter issueEmitter = null, Logging.IMesgEmitter valueEmitter = null, IConfig configInstance = null)
+                    public Config UpdateFromModularConfig(string configKeyPrefixStr, Logging.IMesgEmitter issueEmitter = null, Logging.IMesgEmitter valueEmitter = null, IConfig configInstance = null, INamedValueSet preloadFromNVS = null)
                     {
                         FileRotationLoggingConfig frlConfig = new FileRotationLoggingConfig(Name, DirPath)
                         {
@@ -180,7 +181,7 @@ namespace MosaicLib
                             purgeRules = new FileRotationLoggingConfig.PurgeRules(PruneRules),
                             mesgQueueSize = MesgQueueSize,
                         };
-                        frlConfig.UpdateFromModularConfig(configKeyPrefixStr, issueEmitter: issueEmitter, valueEmitter: valueEmitter, configInstance: configInstance);
+                        frlConfig.UpdateFromModularConfig(configKeyPrefixStr, issueEmitter: issueEmitter, valueEmitter: valueEmitter, configInstance: configInstance, preloadFromNVS: preloadFromNVS);
 
                         DirPath = frlConfig.dirPath;
                         FileNamePrefix = frlConfig.fileNamePrefix;

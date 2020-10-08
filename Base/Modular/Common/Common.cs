@@ -324,7 +324,7 @@ namespace MosaicLib.Modular.Common
                         cvt = ContainerStorageType.IListOfString;
                         u = rhs.u;
 
-                        IList<string> rhsILS = rhs.GetValue<IList<String>>(ContainerStorageType.IListOfString, isNullable: false, rethrow: false);
+                        IList<string> rhsILS = rhs.GetValueLS(rethrow: false);
 
                         if (rhsILS == null || rhsILS is ReadOnlyIList<string>)
                         {
@@ -345,7 +345,7 @@ namespace MosaicLib.Modular.Common
                         cvt = ContainerStorageType.IListOfVC;
                         u = rhs.u;
 
-                        IList<ValueContainer> rhsILVC = rhs.GetValue<IList<ValueContainer>>(ContainerStorageType.IListOfVC, isNullable: false, rethrow: false);
+                        IList<ValueContainer> rhsILVC = rhs.GetValueL(rethrow: false);
 
                         if (rhsILVC == null || rhsILVC is ReadOnlyIList<ValueContainer>)
                         {
@@ -1145,7 +1145,21 @@ namespace MosaicLib.Modular.Common
 
         #endregion
 
-        #region Additional type specific GetValueYY, SetValueYY, and CreateYY variants (A, TimeSpan, DateTime)
+        #region Additional type specific GetValueYY, SetValueYY, and CreateYY variants (Object, A, TimeSpan, DateTime, LS, L, NVS, NV)
+
+        /// <summary>
+        /// Gets the contents of this ValueContainer as the indicated type.  
+        /// If the contents matches the implicit type, or any directly convertable type, then it directly returns the related contents. 
+        /// Otherwise it returns the resulting using the generic GetValue{}(rethrow, allowAllTypeChangeAttempts) variant which handles supported type conversions.
+        /// </summary>
+        public object GetValueObject(bool rethrow = true, bool allowAllTypeChangeAttempts = true)
+        {
+            switch (cvt)
+            {
+                case ContainerStorageType.Object: return o;
+                default: return GetValue<object>(rethrow: rethrow, allowTypeChangeAttempt: allowAllTypeChangeAttempts);
+            }
+        }
 
         /// <summary>
         /// Gets the contents of this ValueContainer as the indicated type.  
@@ -1190,6 +1204,62 @@ namespace MosaicLib.Modular.Common
             }
         }
 
+        /// <summary>
+        /// Gets the contents of this ValueContainer as the indicated type.  
+        /// If the contents matches the implicit type, or any directly convertable type, then it directly returns the related contents. 
+        /// Otherwise it returns the resulting using the generic GetValue{}(rethrow, allowAllTypeChangeAttempts) variant which handles supported type conversions.
+        /// </summary>
+        public ReadOnlyIList<string> GetValueLS(bool rethrow = true, bool allowAllTypeChangeAttempts = true)
+        {
+            switch (cvt)
+            {
+                case ContainerStorageType.LS: return o as ReadOnlyIList<string>;
+                default: return GetValue<ReadOnlyIList<string>>(rethrow: rethrow, allowTypeChangeAttempt: allowAllTypeChangeAttempts);
+            }
+        }
+
+        /// <summary>
+        /// Gets the contents of this ValueContainer as the indicated type.  
+        /// If the contents matches the implicit type, or any directly convertable type, then it directly returns the related contents. 
+        /// Otherwise it returns the resulting using the generic GetValue{}(rethrow, allowAllTypeChangeAttempts) variant which handles supported type conversions.
+        /// </summary>
+        public ReadOnlyIList<ValueContainer> GetValueL(bool rethrow = true, bool allowAllTypeChangeAttempts = true)
+        {
+            switch (cvt)
+            {
+                case ContainerStorageType.L: return o as ReadOnlyIList<ValueContainer>;
+                default: return GetValue<ReadOnlyIList<ValueContainer>>(rethrow: rethrow, allowTypeChangeAttempt: allowAllTypeChangeAttempts);
+            }
+        }
+
+        /// <summary>
+        /// Gets the contents of this ValueContainer as the indicated type.  
+        /// If the contents matches the implicit type, or any directly convertable type, then it directly returns the related contents. 
+        /// Otherwise it returns the resulting using the generic GetValue{}(rethrow, allowAllTypeChangeAttempts) variant which handles supported type conversions.
+        /// </summary>
+        public INamedValueSet GetValueNVS(bool rethrow = true, bool allowAllTypeChangeAttempts = true)
+        {
+            switch (cvt)
+            {
+                case ContainerStorageType.NVS: return o as INamedValueSet;
+                default: return GetValue<INamedValueSet>(rethrow: rethrow, allowTypeChangeAttempt: allowAllTypeChangeAttempts);
+            }
+        }
+
+        /// <summary>
+        /// Gets the contents of this ValueContainer as the indicated type.  
+        /// If the contents matches the implicit type, or any directly convertable type, then it directly returns the related contents. 
+        /// Otherwise it returns the resulting using the generic GetValue{}(rethrow, allowAllTypeChangeAttempts) variant which handles supported type conversions.
+        /// </summary>
+        public INamedValue GetValueNV(bool rethrow = true, bool allowAllTypeChangeAttempts = true)
+        {
+            switch (cvt)
+            {
+                case ContainerStorageType.NV: return o as INamedValue;
+                default: return GetValue<INamedValue>(rethrow: rethrow, allowTypeChangeAttempt: allowAllTypeChangeAttempts);
+            }
+        }
+
         /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
         public void SetValueA(string value) { cvt = ContainerStorageType.A; o = value; u = new Union() { }; }
 
@@ -1200,13 +1270,43 @@ namespace MosaicLib.Modular.Common
         public void SetValueDT(DateTime value) { cvt = ContainerStorageType.DT; o = null; u = new Union() { DateTime = value }; }
 
         /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
-        public static ValueContainer CreateA(string value) { return new ValueContainer() { cvt = ContainerStorageType.A, o = value, u = new Union() { } }; }
+        public void SetValueLS(IList<string> value, bool mapNullToEmpty = true) { cvt = ContainerStorageType.LS; o = value.ConvertToReadOnly(mapNullToEmpty: mapNullToEmpty); u = new Union() { }; }
+
+        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        public void SetValueL(IList<ValueContainer> value, bool mapNullToEmpty = true) { cvt = ContainerStorageType.L; o = value.ConvertToReadOnly(mapNullToEmpty: mapNullToEmpty); u = new Union() { }; }
+
+        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        public void SetValueNVS(INamedValueSet value, bool mapNullToEmpty = true) { cvt = ContainerStorageType.NVS; o = value.ConvertToReadOnly(mapNullToEmpty: mapNullToEmpty); u = default(Union); }
+
+        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        public void SetValueNV(INamedValue value, bool mapNullToEmpty = true) { cvt = ContainerStorageType.NV; o = value.ConvertToReadOnly(mapNullToEmpty: mapNullToEmpty); u = default(Union); }
+
+        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        public static ValueContainer CreateA(string value) { return new ValueContainer() { cvt = ContainerStorageType.A, o = value, u = default(Union) }; }
+
+        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        public static ValueContainer CreateLS(IList<string> value, bool mapNullToEmpty = true) { return new ValueContainer() { cvt = ContainerStorageType.LS, o = value.ConvertToReadOnly(mapNullToEmpty: mapNullToEmpty), u = default(Union) }; }
+
+        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        public static ValueContainer CreateLS(string [] value, bool mapNullToEmpty = true) { return new ValueContainer() { cvt = ContainerStorageType.LS, o = value.ConvertToReadOnly(mapNullToEmpty: mapNullToEmpty), u = default(Union) }; }
+
+        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        public static ValueContainer CreateL(IList<ValueContainer> value, bool mapNullToEmpty = true) { return new ValueContainer() { cvt = ContainerStorageType.L, o = value.ConvertToReadOnly(mapNullToEmpty: mapNullToEmpty), u = default(Union) }; }
+
+        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        public static ValueContainer CreateL(ValueContainer [] value, bool mapNullToEmpty = true) { return new ValueContainer() { cvt = ContainerStorageType.L, o = value.ConvertToReadOnly(mapNullToEmpty: mapNullToEmpty), u = default(Union) }; }
 
         /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
         public static ValueContainer CreateTS(TimeSpan value) { return new ValueContainer() { cvt = ContainerStorageType.TS, u = new Union() { TimeSpan = value } }; }
 
         /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
         public static ValueContainer CreateDT(DateTime value) { return new ValueContainer() { cvt = ContainerStorageType.DT, u = new Union() { DateTime = value } }; }
+
+        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        public static ValueContainer CreateNVS(INamedValueSet value, bool mapNullToEmpty = true) { return new ValueContainer() { cvt = ContainerStorageType.NVS, o = value.ConvertToReadOnly(mapNullToEmpty: mapNullToEmpty), u = default(Union) }; }
+
+        /// <summary>Sets the contents of this ValueContainer to the given <paramref name="value"/> using the corresonding ContainerStorageType.</summary>
+        public static ValueContainer CreateNV(INamedValue value, bool mapNullToEmpty = true) { return new ValueContainer() { cvt = ContainerStorageType.NV, o = value.ConvertToReadOnly(mapNullToEmpty: mapNullToEmpty), u = default(Union) }; }
 
         #endregion
 
@@ -1253,6 +1353,24 @@ namespace MosaicLib.Modular.Common
 
         /// <summary>Type specific version of SetValue{}</summary>
         public ValueContainer SetValue(DateTime value) { SetValueDT(value); return this; }
+
+        /// <summary>Type specific version of SetValue{}</summary>
+        public ValueContainer SetValue(IList<string> value) { SetValueLS(value); return this; }
+
+        /// <summary>Type specific version of SetValue{}</summary>
+        public ValueContainer SetValue(string [] value) { SetValueLS(value); return this; }
+
+        /// <summary>Type specific version of SetValue{}</summary>
+        public ValueContainer SetValue(IList<ValueContainer> value) { SetValueL(value); return this; }
+
+        /// <summary>Type specific version of SetValue{}</summary>
+        public ValueContainer SetValue(ValueContainer [] value) { SetValueL(value); return this; }
+
+        /// <summary>Type specific version of SetValue{}</summary>
+        public ValueContainer SetValue(INamedValue value) { SetValueNV(value); return this; }
+
+        /// <summary>Type specific version of SetValue{}</summary>
+        public ValueContainer SetValue(INamedValueSet value) { SetValueNVS(value); return this; }
 
         /// <summary>
         /// Typed value setter method.  
@@ -2336,7 +2454,7 @@ namespace MosaicLib.Modular.Common
     /// <summary>
     /// Enumeration that is used with the ValueContainer struct.
     /// <para/>None (0 : default), Custom, Object, String, IListOfString, IListOfVC, INamedValueSet, INamedValue, Boolean, Binary, SByte, Int16, Int32, Int64, Byte, UInt16, UInt32, UInt64, Single, Double, TimeSpan, DateTime
-    /// <para/>Alternates: A, LS, L, Bo, Bi, I1, I2, I4, I8, U1, U2, U4, U8, F4, F8, TS, DT
+    /// <para/>Alternates: A, LS, L, Bo, Bi, I1, I2, I4, I8, U1, U2, U4, U8, F4, F8, TS, DT, NVS, NV
     /// </summary>
     public enum ContainerStorageType : byte
     {
@@ -2419,6 +2537,10 @@ namespace MosaicLib.Modular.Common
         TS = TimeSpan,
         /// <summary>Alternate version of DateTime.  Use Union.DateTime property</summary>
         DT = DateTime,
+        /// <summary>Alternate version of INamedValueSet.  Use Object field</summary>
+        NVS = INamedValueSet,
+        /// <summary>Alternate version of INamedValue.  Use Object field</summary>
+        NV = INamedValue,
     }
 
     /// <summary>Standard extension methods wrapper class/namespace</summary>
@@ -2845,14 +2967,14 @@ namespace MosaicLib.Modular.Common
 
             switch (vcCST)
             {
-                case ContainerStorageType.INamedValueSet: xmlWriter.WriteRawJSONElement(elementName, vc.GetValue<INamedValueSet>(rethrow: true)); return;
-                case ContainerStorageType.INamedValue: xmlWriter.WriteRawJSONElement(elementName, vc.GetValue<INamedValue>(rethrow: true)); return;
-                case ContainerStorageType.IListOfString: xmlWriter.WriteRawJSONElement(elementName, vc.GetValue<IEnumerable<string>>(rethrow: true)); return;
-                case ContainerStorageType.IListOfVC: xmlWriter.WriteRawJSONElement(elementName, vc.GetValue<IEnumerable<ValueContainer>>(rethrow: true)); return;
-                case ContainerStorageType.String: xmlWriter.WriteRawJSONElement(elementName, vc.GetValue<string>(rethrow: true)); return;
-                case ContainerStorageType.Custom: xmlWriter.WriteRawJSONElement(elementName, vc.GetValue<string>(rethrow: true)); return;
-                case ContainerStorageType.DateTime: xmlWriter.WriteRawJSONElement(elementName, vc.GetValue<DateTime>(rethrow: true).ToString("o")); return;
-                case ContainerStorageType.TimeSpan: xmlWriter.WriteRawJSONElement(elementName, vc.GetValue<TimeSpan>(rethrow: true).ToString()); return;
+                case ContainerStorageType.INamedValueSet: xmlWriter.WriteRawJSONElement(elementName, vc.GetValueNVS(rethrow: true)); return;
+                case ContainerStorageType.INamedValue: xmlWriter.WriteRawJSONElement(elementName, vc.GetValueNV(rethrow: true)); return;
+                case ContainerStorageType.IListOfString: xmlWriter.WriteRawJSONElement(elementName, vc.GetValueLS(rethrow: true)); return;
+                case ContainerStorageType.IListOfVC: xmlWriter.WriteRawJSONElement(elementName, vc.GetValueL(rethrow: true)); return;
+                case ContainerStorageType.String: xmlWriter.WriteRawJSONElement(elementName, vc.GetValueA(rethrow: true)); return;
+                case ContainerStorageType.Custom: xmlWriter.WriteRawJSONElement(elementName, vc.GetValueA(rethrow: true)); return;
+                case ContainerStorageType.DateTime: xmlWriter.WriteRawJSONElement(elementName, vc.GetValueDT(rethrow: true).ToString("o")); return;
+                case ContainerStorageType.TimeSpan: xmlWriter.WriteRawJSONElement(elementName, vc.GetValueTS(rethrow: true).ToString()); return;
                 case ContainerStorageType.None: xmlWriter.WriteRawJSONElementNull(elementName); return;
                 case ContainerStorageType.Object: xmlWriter.WriteRawJSONElementAsDecodedObject(elementName, vc.o); return;
                 default: break;
@@ -2899,9 +3021,9 @@ namespace MosaicLib.Modular.Common
 
                 bool hasDataContractAttribute = (!oType.GetCustomAttributes(typeof(DataContractAttribute), false).IsNullOrEmpty());
                 bool hasCollectionDataContractAttribute = (!oType.GetCustomAttributes(typeof(CollectionDataContractAttribute), false).IsNullOrEmpty());
-                bool hasSerializableAttribute = (!oType.GetCustomAttributes(typeof(SerializableAttribute), false).IsNullOrEmpty());
+                //bool hasSerializableAttribute = (!oType.GetCustomAttributes(typeof(SerializableAttribute), false).IsNullOrEmpty());
 
-                if (hasDataContractAttribute || hasCollectionDataContractAttribute || hasSerializableAttribute)
+                if (hasDataContractAttribute || hasCollectionDataContractAttribute /*|| hasSerializableAttribute*/)
                 {
                     new DataContractJsonSerializer(oType).WriteObject(xmlWriter, o);
                 }
@@ -3357,16 +3479,16 @@ namespace MosaicLib.Modular.Common
                         sGetValue = vc.o as string; 
                         break;
                     case ContainerStorageType.IListOfString:
-                        slGetValue = new Details.sl(vc.GetValue<IEnumerable<string>>(ContainerStorageType.IListOfString, isNullable: false, rethrow: false)); 
+                        slGetValue = new Details.SL(vc.GetValueLS(rethrow: false)); 
                         break;
                     case ContainerStorageType.IListOfVC: 
-                        vcaGetValue = vc.GetValue<IEnumerable<ValueContainer>>(ContainerStorageType.IListOfVC, isNullable: false, rethrow: false).Select(vcItem => new ValueContainerEnvelope() { VC = vcItem }).ToArray(); 
+                        vcaGetValue = vc.GetValueL(rethrow: false).Select(vcItem => new ValueContainerEnvelope() { VC = vcItem }).ToArray(); 
                         break;
                     case ContainerStorageType.INamedValueSet:
-                        nvsGetValue = vc.GetValue<INamedValueSet>(ContainerStorageType.INamedValueSet, isNullable: false, rethrow: false).ConvertToReadOnly();
+                        nvsGetValue = vc.GetValueNVS(rethrow: false).ConvertToReadOnly();
                         break;
                     case ContainerStorageType.INamedValue:
-                        nviGetValue = vc.GetValue<INamedValue>(ContainerStorageType.INamedValue, isNullable: false, rethrow: false).ConvertToReadOnly();
+                        nviGetValue = vc.GetValueNV(rethrow: false).ConvertToReadOnly();
                         break;
                 }
 
@@ -3413,7 +3535,7 @@ namespace MosaicLib.Modular.Common
         private string sGetValue;
 
         [NonSerialized]
-        private Details.sl slGetValue;
+        private Details.SL slGetValue;
 
         [NonSerialized]
         private CustomSerialization.TypeAndValueCarrier tavcGetValue;
@@ -3427,26 +3549,26 @@ namespace MosaicLib.Modular.Common
         [DataMember(EmitDefaultValue = false, IsRequired = false)]
         private bool Null { get { return nullGetValue; } set { if (value) VC = new ValueContainer() { cvt = ContainerStorageType.Object, o = null }; } }
 
-        [DataMember(EmitDefaultValue = false, IsRequired = false)]
-        private object o { get { return oGetValue; } set { VC = new ValueContainer() { cvt = ContainerStorageType.Object, o = value }; } }
+        [DataMember(EmitDefaultValue = false, IsRequired = false, Name = "o")]
+        private object O { get { return oGetValue; } set { VC = new ValueContainer() { cvt = ContainerStorageType.Object, o = value }; } }
 
-        [DataMember(EmitDefaultValue = false, IsRequired = false)]
-        private NamedValue nvi { get { return nviGetValue; } set { VC = ValueContainer.Create(value.MakeReadOnly()); } }
+        [DataMember(EmitDefaultValue = false, IsRequired = false, Name = "nvi")]
+        private NamedValue NVI { get { return nviGetValue; } set { VC = ValueContainer.Create(value.MakeReadOnly()); } }
 
-        [DataMember(EmitDefaultValue = false, IsRequired = false)]
-        private NamedValueSet nvs { get { return nvsGetValue; } set { VC = ValueContainer.Create(value.MakeReadOnly()); } }
+        [DataMember(EmitDefaultValue = false, IsRequired = false, Name = "nvs")]
+        private NamedValueSet NVS { get { return nvsGetValue; } set { VC = ValueContainer.Create(value.MakeReadOnly()); } }
 
-        [DataMember(EmitDefaultValue = false, IsRequired = false)]
-        private VCEArrayHelper array { get { return vceArrayHelper; } set { VC = value.VC; } }
+        [DataMember(EmitDefaultValue = false, IsRequired = false, Name = "array")]
+        private VCEArrayHelper Array { get { return vceArrayHelper; } set { VC = value.VC; } }
 
-        [DataMember(EmitDefaultValue = false, IsRequired = false)]
-        private string s { get { return sGetValue; } set { VC = new ValueContainer() { cvt = ContainerStorageType.String, o = value }; } }
+        [DataMember(EmitDefaultValue = false, IsRequired = false, Name = "s")]
+        private string S { get { return sGetValue; } set { VC = new ValueContainer() { cvt = ContainerStorageType.String, o = value }; } }
 
-        [DataMember(EmitDefaultValue = false, IsRequired = false)]
-        private Details.sl sl { get { return ((vc.cvt == ContainerStorageType.IListOfString) ? new Details.sl(vc.o as IList<String>) : null); } set { VC = new ValueContainer() { cvt = ContainerStorageType.IListOfString, o = new ReadOnlyIList<string>(value) }; } }
+        [DataMember(EmitDefaultValue = false, IsRequired = false, Name = "sl")]
+        private Details.SL SL { get { return ((vc.cvt == ContainerStorageType.IListOfString) ? new Details.SL(vc.o as IList<String>) : null); } set { VC = new ValueContainer() { cvt = ContainerStorageType.IListOfString, o = new ReadOnlyIList<string>(value) }; } }
 
-        [DataMember(EmitDefaultValue = false, IsRequired = false)]
-        private CustomSerialization.TypeAndValueCarrier tavc 
+        [DataMember(EmitDefaultValue = false, IsRequired = false, Name = "tavc")]
+        private CustomSerialization.TypeAndValueCarrier TAVC 
         { 
             get { return tavcGetValue; } 
             set 
@@ -3463,50 +3585,50 @@ namespace MosaicLib.Modular.Common
             } 
         }
 
-        [DataMember(EmitDefaultValue = false, IsRequired = false)]
-        private ValueContainerEnvelope[] vca { get { return vcaGetValue; } set { VC = ValueContainer.Create(new ReadOnlyIList<ValueContainer>(value.Select((ve) => ve.VC))); } }
+        [DataMember(EmitDefaultValue = false, IsRequired = false, Name = "vca")]
+        private ValueContainerEnvelope[] VCA { get { return vcaGetValue; } set { VC = ValueContainer.Create(new ReadOnlyIList<ValueContainer>(value.Select((ve) => ve.VC))); } }
 
-        [DataMember(EmitDefaultValue = false, IsRequired = false)]
-        private bool? b { get { return ((vc.cvt == ContainerStorageType.Boolean) ? (bool?)vc.u.b : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.Boolean, u = new ValueContainer.Union() { b = value.GetValueOrDefault() } } : ValueContainer.Null); } }
+        [DataMember(EmitDefaultValue = false, IsRequired = false, Name = "b")]
+        private bool? B { get { return ((vc.cvt == ContainerStorageType.Boolean) ? (bool?)vc.u.b : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.Boolean, u = new ValueContainer.Union() { b = value.GetValueOrDefault() } } : ValueContainer.Null); } }
 
-        [DataMember(EmitDefaultValue = false, IsRequired = false)]
-        private Byte ? bi { get { return ((vc.cvt == ContainerStorageType.Binary) ? (Byte?)vc.u.bi : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.Binary, u = new ValueContainer.Union() { bi = value.GetValueOrDefault() } } : ValueContainer.Null); } }
+        [DataMember(EmitDefaultValue = false, IsRequired = false, Name = "bi")]
+        private Byte ? Bi { get { return ((vc.cvt == ContainerStorageType.Binary) ? (Byte?)vc.u.bi : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.Binary, u = new ValueContainer.Union() { bi = value.GetValueOrDefault() } } : ValueContainer.Null); } }
 
-        [DataMember(EmitDefaultValue = false, IsRequired = false)]
-        private Single? f32 { get { return ((vc.cvt == ContainerStorageType.Single) ? (Single?)vc.u.f32 : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.Single, u = new ValueContainer.Union() { f32 = value.GetValueOrDefault() } } : ValueContainer.Null); } }
+        [DataMember(EmitDefaultValue = false, IsRequired = false, Name = "f32")]
+        private Single? F32 { get { return ((vc.cvt == ContainerStorageType.Single) ? (Single?)vc.u.f32 : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.Single, u = new ValueContainer.Union() { f32 = value.GetValueOrDefault() } } : ValueContainer.Null); } }
 
-        [DataMember(EmitDefaultValue = false, IsRequired = false)]
-        private Double? f64 { get { return ((vc.cvt == ContainerStorageType.Double) ? (Double?)vc.u.f64 : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.Double, u = new ValueContainer.Union() { f64 = value.GetValueOrDefault() } } : ValueContainer.Null); } }
+        [DataMember(EmitDefaultValue = false, IsRequired = false, Name = "f64")]
+        private Double? F64 { get { return ((vc.cvt == ContainerStorageType.Double) ? (Double?)vc.u.f64 : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.Double, u = new ValueContainer.Union() { f64 = value.GetValueOrDefault() } } : ValueContainer.Null); } }
 
-        [DataMember(EmitDefaultValue = false, IsRequired = false)]
-        private SByte? i8 { get { return ((vc.cvt == ContainerStorageType.SByte) ? (SByte?)vc.u.i8 : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.SByte, u = new ValueContainer.Union() { i8 = value.GetValueOrDefault() } } : ValueContainer.Null); } }
+        [DataMember(EmitDefaultValue = false, IsRequired = false, Name = "i8")]
+        private SByte? I8 { get { return ((vc.cvt == ContainerStorageType.SByte) ? (SByte?)vc.u.i8 : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.SByte, u = new ValueContainer.Union() { i8 = value.GetValueOrDefault() } } : ValueContainer.Null); } }
 
-        [DataMember(EmitDefaultValue = false, IsRequired = false)]
-        private Int16? i16 { get { return ((vc.cvt == ContainerStorageType.Int16) ? (Int16?)vc.u.i16 : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.Int16, u = new ValueContainer.Union() { i16 = value.GetValueOrDefault() } } : ValueContainer.Null); } }
+        [DataMember(EmitDefaultValue = false, IsRequired = false, Name = "i16")]
+        private Int16? I16 { get { return ((vc.cvt == ContainerStorageType.Int16) ? (Int16?)vc.u.i16 : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.Int16, u = new ValueContainer.Union() { i16 = value.GetValueOrDefault() } } : ValueContainer.Null); } }
 
-        [DataMember(EmitDefaultValue = false, IsRequired = false)]
-        private Int32? i32 { get { return ((vc.cvt == ContainerStorageType.Int32) ? (Int32?)vc.u.i32 : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.Int32, u = new ValueContainer.Union() { i32 = value.GetValueOrDefault() } } : ValueContainer.Null); } }
+        [DataMember(EmitDefaultValue = false, IsRequired = false, Name = "i32")]
+        private Int32? I32 { get { return ((vc.cvt == ContainerStorageType.Int32) ? (Int32?)vc.u.i32 : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.Int32, u = new ValueContainer.Union() { i32 = value.GetValueOrDefault() } } : ValueContainer.Null); } }
 
-        [DataMember(EmitDefaultValue = false, IsRequired = false)]
-        private Int64? i64 { get { return ((vc.cvt == ContainerStorageType.Int64) ? (Int64?)vc.u.i64 : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.Int64, u = new ValueContainer.Union() { i64 = value.GetValueOrDefault() } } : ValueContainer.Null); } }
+        [DataMember(EmitDefaultValue = false, IsRequired = false, Name = "i64")]
+        private Int64? I64 { get { return ((vc.cvt == ContainerStorageType.Int64) ? (Int64?)vc.u.i64 : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.Int64, u = new ValueContainer.Union() { i64 = value.GetValueOrDefault() } } : ValueContainer.Null); } }
 
-        [DataMember(EmitDefaultValue = false, IsRequired = false)]
-        private Byte? u8 { get { return ((vc.cvt == ContainerStorageType.Byte) ? (Byte?)vc.u.u8 : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.Byte, u = new ValueContainer.Union() { u8 = value.GetValueOrDefault() } } : ValueContainer.Null); } }
+        [DataMember(EmitDefaultValue = false, IsRequired = false, Name = "u8")]
+        private Byte? U8 { get { return ((vc.cvt == ContainerStorageType.Byte) ? (Byte?)vc.u.u8 : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.Byte, u = new ValueContainer.Union() { u8 = value.GetValueOrDefault() } } : ValueContainer.Null); } }
 
-        [DataMember(EmitDefaultValue = false, IsRequired = false)]
-        private UInt16? u16 { get { return ((vc.cvt == ContainerStorageType.UInt16) ? (UInt16?)vc.u.u16 : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.UInt16, u = new ValueContainer.Union() { u16 = value.GetValueOrDefault() } } : ValueContainer.Null); } }
+        [DataMember(EmitDefaultValue = false, IsRequired = false, Name = "u16")]
+        private UInt16? U16 { get { return ((vc.cvt == ContainerStorageType.UInt16) ? (UInt16?)vc.u.u16 : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.UInt16, u = new ValueContainer.Union() { u16 = value.GetValueOrDefault() } } : ValueContainer.Null); } }
 
-        [DataMember(EmitDefaultValue = false, IsRequired = false)]
-        private UInt32? u32 { get { return ((vc.cvt == ContainerStorageType.UInt32) ? (UInt32?)vc.u.u32 : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.UInt32, u = new ValueContainer.Union() { u32 = value.GetValueOrDefault() } } : ValueContainer.Null); } }
+        [DataMember(EmitDefaultValue = false, IsRequired = false, Name = "u32")]
+        private UInt32? U32 { get { return ((vc.cvt == ContainerStorageType.UInt32) ? (UInt32?)vc.u.u32 : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.UInt32, u = new ValueContainer.Union() { u32 = value.GetValueOrDefault() } } : ValueContainer.Null); } }
 
-        [DataMember(EmitDefaultValue = false, IsRequired = false)]
-        private UInt64? u64 { get { return ((vc.cvt == ContainerStorageType.UInt64) ? (UInt64?)vc.u.u64 : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.UInt64, u = new ValueContainer.Union() { u64 = value.GetValueOrDefault() } } : ValueContainer.Null); } }
+        [DataMember(EmitDefaultValue = false, IsRequired = false, Name = "u64")]
+        private UInt64? U64 { get { return ((vc.cvt == ContainerStorageType.UInt64) ? (UInt64?)vc.u.u64 : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.UInt64, u = new ValueContainer.Union() { u64 = value.GetValueOrDefault() } } : ValueContainer.Null); } }
 
-        [DataMember(EmitDefaultValue = false, IsRequired = false)]
-        private TimeSpan? ts { get { return ((vc.cvt == ContainerStorageType.TimeSpan) ? (TimeSpan?)vc.u.TimeSpan : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.TimeSpan, u = new ValueContainer.Union() { TimeSpan = value.GetValueOrDefault() } } : ValueContainer.Null); } }
+        [DataMember(EmitDefaultValue = false, IsRequired = false, Name = "ts")]
+        private TimeSpan? TS { get { return ((vc.cvt == ContainerStorageType.TimeSpan) ? (TimeSpan?)vc.u.TimeSpan : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.TimeSpan, u = new ValueContainer.Union() { TimeSpan = value.GetValueOrDefault() } } : ValueContainer.Null); } }
 
-        [DataMember(EmitDefaultValue = false, IsRequired = false)]
-        private DateTime? dt { get { return ((vc.cvt == ContainerStorageType.DateTime) ? (DateTime?)vc.u.DateTime : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.DateTime, u = new ValueContainer.Union() { DateTime = value.GetValueOrDefault() } } : ValueContainer.Null); } }
+        [DataMember(EmitDefaultValue = false, IsRequired = false, Name = "dt")]
+        private DateTime? DT { get { return ((vc.cvt == ContainerStorageType.DateTime) ? (DateTime?)vc.u.DateTime : null); } set { VC = (value.HasValue ? new ValueContainer() { cvt = ContainerStorageType.DateTime, u = new ValueContainer.Union() { DateTime = value.GetValueOrDefault() } } : ValueContainer.Null); } }
 
         #endregion
 
@@ -3529,28 +3651,28 @@ namespace MosaicLib.Modular.Common
             if (array != null)
             {
                 Type arrayType = array.GetType();
-            if (arrayType == typeof(bool[]))
-                bo = array as bool[];
-            else if (arrayType == typeof(sbyte[]))
-                i1 = array as sbyte[];
-            else if (arrayType == typeof(short[]))
-                i2 = array as short[];
-            else if (arrayType == typeof(int[]))
-                i4 = array as int[];
-            else if (arrayType == typeof(long[]))
-                i8 = array as long[];
-            else if (arrayType == typeof(byte[]))
-                u1 = array as byte[];
-            else if (arrayType == typeof(ushort[]))
-                u2 = array as ushort[];
-            else if (arrayType == typeof(uint[]))
-                u4 = array as uint[];
-            else if (arrayType == typeof(ulong[]))
-                u8 = array as ulong[];
-            else if (arrayType == typeof(float[]))
-                f4 = array as float[];
-            else if (arrayType == typeof(double[]))
-                f8 = array as double[];
+                if (arrayType == typeof(bool[]))
+                    bo = array as bool[];
+                else if (arrayType == typeof(sbyte[]))
+                    i1 = array as sbyte[];
+                else if (arrayType == typeof(short[]))
+                    i2 = array as short[];
+                else if (arrayType == typeof(int[]))
+                    i4 = array as int[];
+                else if (arrayType == typeof(long[]))
+                    i8 = array as long[];
+                else if (arrayType == typeof(byte[]))
+                    u1 = array as byte[];
+                else if (arrayType == typeof(ushort[]))
+                    u2 = array as ushort[];
+                else if (arrayType == typeof(uint[]))
+                    u4 = array as uint[];
+                else if (arrayType == typeof(ulong[]))
+                    u8 = array as ulong[];
+                else if (arrayType == typeof(float[]))
+                    f4 = array as float[];
+                else if (arrayType == typeof(double[]))
+                    f8 = array as double[];
             }
         }
 
@@ -3563,40 +3685,40 @@ namespace MosaicLib.Modular.Common
         public ValueContainer VC { get; private set; }
 
         [NonSerialized]
-        private bool[] bo;
+        private readonly bool[] bo;
 
         [NonSerialized]
-        private sbyte[] i1;
+        private readonly sbyte[] i1;
 
         [NonSerialized]
-        private short[] i2;
+        private readonly short[] i2;
 
         [NonSerialized]
-        private int[] i4;
+        private readonly int[] i4;
 
         [NonSerialized]
-        private long[] i8;
+        private readonly long[] i8;
 
         [NonSerialized]
-        private byte[] u1;
+        private readonly byte[] u1;
 
         [NonSerialized]
-        private ushort[] u2;
+        private readonly ushort[] u2;
 
         [NonSerialized]
-        private uint[] u4;
+        private readonly uint[] u4;
 
         [NonSerialized]
-        private ulong[] u8;
+        private readonly ulong[] u8;
 
         [NonSerialized]
-        private float[] f4;
+        private readonly float[] f4;
 
         [NonSerialized]
-        private double[] f8;
+        private readonly double[] f8;
 
         [NonSerialized]
-        private BiArray bi;
+        private readonly BiArray bi;
 
         [DataMember(EmitDefaultValue = false, IsRequired = false)]
         private bool[] Bo { get { return bo; } set { VC = ValueContainer.Create(value); } }
@@ -3639,14 +3761,14 @@ namespace MosaicLib.Modular.Common
     {
         /// <summary>Internal - no documentation provided</summary>
         [CollectionDataContract(ItemName = "s", Namespace = Constants.ModularNameSpace)]
-        internal class sl : List<String>
+        internal class SL : List<String>
         {
             /// <summary>Internal - no documentation provided</summary>
-            public sl() 
+            public SL() 
             { }
 
             /// <summary>Internal - no documentation provided</summary>
-            public sl(IEnumerable<string> strings) 
+            public SL(IEnumerable<string> strings) 
                 : base(strings ?? emptyIListOfString) 
             { }
 
@@ -3674,13 +3796,14 @@ namespace MosaicLib.Modular.Common
             /// <summary>
             /// Required constructor - allows the caller to construct an immutable instance with any/all properties initialized to any correspondingly given parameter values.
             /// </summary>
-            public TypeAndValueCarrier(string typeStr = null, string assemblyFileName = null, string factoryName = null, string valueStr = null, byte [] valueByteArray = null) 
+            public TypeAndValueCarrier(string typeStr = null, string assemblyFileName = null, string factoryName = null, string valueStr = null, byte [] valueByteArray = null, string errorCode = null) 
             {
                 TypeStr = typeStr;
                 AssemblyFileName = assemblyFileName;
                 FactoryName = factoryName;
                 ValueStr = valueStr;
                 ValueByteArray = valueByteArray;
+                _ErrorCode = errorCode.MapEmptyToNull();
             }
 
             /// <summary>
@@ -3715,6 +3838,14 @@ namespace MosaicLib.Modular.Common
             public byte[] ValueByteArray { get; private set; }
 
             /// <summary>
+            /// Gives any error code assocaited with the generation of conveayance of this object
+            /// </summary>
+            public string ErrorCode { get { return _ErrorCode.MapNullToEmpty(); } }
+
+            [DataMember(Order = 300, Name = "ec", EmitDefaultValue = false, IsRequired = false)]
+            private string _ErrorCode = null;
+
+            /// <summary>
             /// Debugging and logging helper method
             /// </summary>
             public override string ToString()
@@ -3731,6 +3862,9 @@ namespace MosaicLib.Modular.Common
 
                 if (ValueStr == null && ValueByteArray == null)
                     sb.CheckedAppendFormat(" noValue");
+
+                if (_ErrorCode.IsNeitherNullNorEmpty())
+                    sb.CheckedAppendFormat(" ec:'{0}'", _ErrorCode);
 
                 return sb.ToString();
             }
@@ -3993,8 +4127,8 @@ namespace MosaicLib.Modular.Common
             private List<ITypeSerializerItemFactory> factoryItemList = new List<ITypeSerializerItemFactory>();
 
             private ITypeSerializerItemFactory[] useFactoryItemArray = null;
-            private static ITypeSerializerItemFactory jsonDCSerializerFactory = new JsonDataContractFallbackItemFactory() { FactoryName = "FallbackJsonDC" };
-            private static ITypeSerializerItemFactory binarySerializerFactory = new BinaryFormatterFallbackItemFactory() { FactoryName = "FallbackBinaryFormatter" };
+            private static readonly ITypeSerializerItemFactory jsonDCSerializerFactory = new JsonDataContractFallbackItemFactory() { FactoryName = "FallbackJsonDC" };
+            private static readonly ITypeSerializerItemFactory binarySerializerFactory = new BinaryFormatterFallbackItemFactory() { FactoryName = "FallbackBinaryFormatter" };
 
             private Dictionary<string, ITypeSerializerItemFactory> factoryNameToFactoryDictionary = new Dictionary<string, ITypeSerializerItemFactory>();
             private Dictionary<string, ITypeSerializerItem> typeStrToSpecItemDictionary = new Dictionary<string, ITypeSerializerItem>();
@@ -5800,14 +5934,14 @@ namespace MosaicLib.Modular.Common
                     break;
                 case ContainerStorageType.IListOfString:
                     {
-                        IList<string> sList = vc.GetValue<IList<string>>(rethrow: rethrow) ?? emptyIListOfString;
+                        IList<string> sList = vc.GetValueLS(rethrow: rethrow) ?? emptyIListOfString;
 
                         invs = new NamedValueSet(sList.Select(s => new NamedValue(s) { IsReadOnly = asReadOnly })) { IsReadOnly = asReadOnly };
                     }
                     break;
                 case ContainerStorageType.IListOfVC:
                     {
-                        IList<ValueContainer> vcList = vc.GetValue<IList<ValueContainer>>(rethrow: rethrow) ?? emptyIListOfVC;
+                        IList<ValueContainer> vcList = vc.GetValueL(rethrow: rethrow) ?? emptyIListOfVC;
 
                         invs = new NamedValueSet(vcList.Select(vcItem => vcItem.ConvertToNamedValue(asReadOnly: asReadOnly, rethrow: rethrow, mapNullToEmpty: mapNullToEmpty))) { IsReadOnly = asReadOnly };
                     }
@@ -5858,7 +5992,7 @@ namespace MosaicLib.Modular.Common
                     break;
                 case ContainerStorageType.IListOfString:
                     {
-                        IList<string> sList = vc.GetValue<IList<string>>(rethrow: rethrow) ?? emptyIListOfString;
+                        IList<string> sList = vc.GetValueLS(rethrow: rethrow) ?? emptyIListOfString;
 
                         string nodeName = sList.SafeAccess(0);
 
@@ -5873,9 +6007,9 @@ namespace MosaicLib.Modular.Common
                     break;
                 case ContainerStorageType.IListOfVC:
                     {
-                        IList<ValueContainer> vcList = vc.GetValue<IList<ValueContainer>>(rethrow: rethrow) ?? emptyIListOfVC;
+                        IList<ValueContainer> vcList = vc.GetValueL(rethrow: rethrow) ?? emptyIListOfVC;
 
-                        string nodeName = vcList.SafeAccess(0).GetValue<string>(rethrow: rethrow);
+                        string nodeName = vcList.SafeAccess(0).GetValueA(rethrow: rethrow);
 
                         switch (vcList.Count)
                         {
@@ -5890,7 +6024,7 @@ namespace MosaicLib.Modular.Common
                     inv = NamedValue.Empty;
                     break;
                 default: 
-                    inv = new NamedValue(vc.GetValue<string>(rethrow: rethrow)); 
+                    inv = new NamedValue(vc.GetValueA(rethrow: rethrow)); 
                     break;
             }
 
@@ -6059,9 +6193,9 @@ namespace MosaicLib.Modular.Common
                             else if (!isAppend)
                                 lhsRW.SetValue(rhsItem.Name, rhsItem.VC);
                             else if (rhsIsIListOfString)
-                                lhsRW.SetValue(rhsItem.Name, new ReadOnlyIList<string>(lhsItem.VC.GetValue<IList<string>>(false, emptyIListOfString).Concat(rhsItem.VC.GetValue<IList<string>>(false, emptyIListOfString))));
+                                lhsRW.SetValue(rhsItem.Name, new ReadOnlyIList<string>((lhsItem.VC.GetValueLS(false) ?? emptyIListOfString).Concat(rhsItem.VC.GetValueLS(false) ?? emptyIListOfString)));
                             else
-                                lhsRW.SetValue(rhsItem.Name, new ReadOnlyIList<ValueContainer>(lhsItem.VC.GetValue<IList<ValueContainer>>(false, emptyIListOfVC).Concat(rhsItem.VC.GetValue<IList<ValueContainer>>(false, emptyIListOfVC))));
+                                lhsRW.SetValue(rhsItem.Name, new ReadOnlyIList<ValueContainer>((lhsItem.VC.GetValueL(false) ?? emptyIListOfVC).Concat(rhsItem.VC.GetValueL(false) ?? emptyIListOfVC)));
                         }
                         // else leave the existing lhs item alone.
                     }
@@ -6109,8 +6243,8 @@ namespace MosaicLib.Modular.Common
                 switch (lhs.cvt)
                 {
                     case ContainerStorageType.String: result.o = string.Concat((lhs.o as string), (rhs.o as string)); break;      // string.Concat does MapNullToEmpty on its own
-                    case ContainerStorageType.IListOfString: result.SetValue<IList<string>>(new ReadOnlyIList<string>(lhs.GetValue(false, emptyIListOfString).Concat(rhs.GetValue(false, emptyIListOfString)))); break;
-                    case ContainerStorageType.IListOfVC: result.SetValue<IList<ValueContainer>>(new ReadOnlyIList<ValueContainer>(lhs.GetValue(false, emptyIListOfVC).Concat(rhs.GetValue(false, emptyIListOfVC)))); break;
+                    case ContainerStorageType.IListOfString: result.SetValueLS(new ReadOnlyIList<string>(lhs.GetValue(false, emptyIListOfString).Concat(rhs.GetValue(false, emptyIListOfString)))); break;
+                    case ContainerStorageType.IListOfVC: result.SetValueL(new ReadOnlyIList<ValueContainer>(lhs.GetValue(false, emptyIListOfVC).Concat(rhs.GetValue(false, emptyIListOfVC)))); break;
                     case ContainerStorageType.Boolean: result.u.b = lhs.u.b | rhs.u.b; break;
                     case ContainerStorageType.Binary: result.u.bi = unchecked((Byte)(lhs.u.bi + rhs.u.bi)); break;
                     case ContainerStorageType.SByte: result.u.i8 = unchecked((SByte)(lhs.u.i8 + rhs.u.i8)); break;
@@ -6970,8 +7104,8 @@ namespace MosaicLib.Modular.Common
 
         #region private fields, properties
 
-        Type TValueSetType = typeof(TValueSet);
-        string TValueSetTypeStr = typeof(TValueSet).Name;
+        readonly Type TValueSetType = typeof(TValueSet);
+        readonly string TValueSetTypeStr = typeof(TValueSet).Name;
 
         List<ItemInfo<TAttribute>> valueSetItemInfoList = null;       // gets built by the AnnotatedClassItemAccessHelper.
         int NumItems { get; set; }
@@ -7012,13 +7146,15 @@ namespace MosaicLib.Modular.Common
         }
 
         /// <remarks>Non-null elements in this array correspond to fully vetted gettable and settable ValueSet items.</remarks>
-        ItemAccessSetupInfo<TAttribute>[] itemAccessSetupInfoArray = null;
+        readonly ItemAccessSetupInfo<TAttribute>[] itemAccessSetupInfoArray = null;
 
         #endregion
 
         #region message emitter glue
 
         private Logging.IMesgEmitter issueEmitter = null, valueNoteEmitter = null;
+
+        /// <summary>If the given <paramref name="emitterRef"/>is null then this method sets it to the Logging.NullEmitter.  Returns the original, or updated, <paramref name="emitterRef"/></summary>
         private Logging.IMesgEmitter FixupEmitterRef(ref Logging.IMesgEmitter emitterRef)
         {
             if (emitterRef == null)

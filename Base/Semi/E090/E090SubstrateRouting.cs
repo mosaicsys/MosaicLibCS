@@ -922,9 +922,9 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
         {
             switch (routingRequest)
             {
-                case "Approach": return new ApproachLocationItem(nvp["robotOrRobotArmLocName"].VC.GetValue<string>(rethrow: false), nvp["toSubstLocName"].VC.GetValue<string>(rethrow: false));
-                case "Move": return new MoveSubstrateItem(nvp["substName"].VC.GetValue<string>(rethrow: false).CreateE090SubstID(tableObserver: tableObserver), nvp["toSubstLocName"].VC.GetValue<string>(rethrow: false));
-                case "Swap": return new SwapSubstratesItem(nvp["substName"].VC.GetValue<string>(rethrow: false).CreateE090SubstID(tableObserver: tableObserver), nvp["swapWithSubstName"].VC.GetValue<string>(rethrow: false).CreateE090SubstID(tableObserver: tableObserver));
+                case "Approach": return new ApproachLocationItem(nvp["robotOrRobotArmLocName"].VC.GetValueA(rethrow: false), nvp["toSubstLocName"].VC.GetValueA(rethrow: false));
+                case "Move": return new MoveSubstrateItem(nvp["substName"].VC.GetValueA(rethrow: false).CreateE090SubstID(tableObserver: tableObserver), nvp["toSubstLocName"].VC.GetValueA(rethrow: false));
+                case "Swap": return new SwapSubstratesItem(nvp["substName"].VC.GetValueA(rethrow: false).CreateE090SubstID(tableObserver: tableObserver), nvp["swapWithSubstName"].VC.GetValueA(rethrow: false).CreateE090SubstID(tableObserver: tableObserver));
                 default: return null;
             }
         }

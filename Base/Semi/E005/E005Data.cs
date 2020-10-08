@@ -365,7 +365,7 @@ namespace MosaicLib.Semi.E005.Data
                     {
                         vcName = DecodeE005Data(byteArray, ref startIndex, ref ec);
 
-                        name = vcName.GetValue<string>(false);
+                        name = vcName.GetValueA(false);
                     }
 
                     if (ec.IsNullOrEmpty() && name.IsNullOrEmpty())
@@ -457,7 +457,7 @@ namespace MosaicLib.Semi.E005.Data
                 {
                     vcName = DecodeE005Data(byteArray, ref startIndex, ref ec);
 
-                    nv.Name = vcName.GetValue<string>(false);
+                    nv.Name = vcName.GetValueA(false);
                 }
 
                 if (ec.IsNullOrEmpty() && nv.Name.IsNullOrEmpty())
@@ -521,8 +521,8 @@ namespace MosaicLib.Semi.E005.Data
                 case ContainerStorageType.Single: byteArrayBuilder.AppendIH(ItemFormatCode.F4, 4); byteArrayBuilder.AppendRaw(vc.u.f32); return;
                 case ContainerStorageType.Double: byteArrayBuilder.AppendIH(ItemFormatCode.F8, 8); byteArrayBuilder.AppendRaw(vc.u.f64); return;
                 case ContainerStorageType.String: byteArrayBuilder.AppendWithIH(vc.o as string); return;
-                case ContainerStorageType.IListOfString: byteArrayBuilder.AppendWithIH(vc.GetValue<string[]>(true)); return;
-                case ContainerStorageType.IListOfVC: byteArrayBuilder.AppendWithIH(vc.GetValue<IList<ValueContainer>>(true)); return;
+                case ContainerStorageType.IListOfString: byteArrayBuilder.AppendWithIH(vc.GetValueLS(true)); return;
+                case ContainerStorageType.IListOfVC: byteArrayBuilder.AppendWithIH(vc.GetValueL(true)); return;
                 case ContainerStorageType.INamedValueSet: byteArrayBuilder.AppendWithIH(vc.o as INamedValueSet); return;
                 case ContainerStorageType.INamedValue: byteArrayBuilder.AppendWithIH(vc.o as INamedValue); return;
                 case ContainerStorageType.Object:
@@ -1098,7 +1098,7 @@ namespace MosaicLib.Semi.E005.Data
 
                 case ItemFormatCode.A:
                 case ItemFormatCode.J:
-                    vc.SetValue<string>(ByteArrayTranscoders.ByteStringTranscoder.Encode(byteArray, localStartIndex, ibNumElements));
+                    vc.SetValueA(ByteArrayTranscoders.ByteStringTranscoder.Encode(byteArray, localStartIndex, ibNumElements));
                     break;
 
                 case ItemFormatCode.W:
@@ -1804,9 +1804,9 @@ namespace MosaicLib.Semi.E005.Data
             if (typeof(ElementType) != typeof(byte))
                 return new ValueContainer(Value);
             else if (TypeConversionSettings.ByteIsBinary)
-                return ValueContainer.Empty.SetValue(Value, ContainerStorageType.Binary, false);
+                return ValueContainer.Create(Value, ContainerStorageType.Binary, false);
             else
-                return ValueContainer.Empty.SetValue(Value, ContainerStorageType.Byte, false);
+                return ValueContainer.Create(Value, ContainerStorageType.Byte, false);
         }
     }
 

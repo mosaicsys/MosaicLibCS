@@ -886,7 +886,7 @@ namespace MosaicLib.Semi.E087
         /// </summary>
         public static string ToSlotStateString(this ValueContainer slotStateVC, bool rethrow = true, SlotStateStringFormat format = SlotStateStringFormat.Graphics)
         {
-            SlotState[] slotStateArray = slotStateVC.GetValue<IList<ValueContainer>>(rethrow: rethrow).MapNullToEmpty().Select(vc => vc.GetValue<SlotState>(rethrow: rethrow)).ToArray();
+            SlotState[] slotStateArray = slotStateVC.GetValueL(rethrow: rethrow).MapNullToEmpty().Select(vc => vc.GetValue<SlotState>(rethrow: rethrow)).ToArray();
 
             return slotStateArray.ToString(format: format);
         }

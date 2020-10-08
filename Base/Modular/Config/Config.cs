@@ -2344,7 +2344,7 @@ namespace MosaicLib.Modular.Config
         /// </summary>
         internal static string InternalGetDesciption(this IConfigKeyAccess icka)
         {
-            return icka.MetaData["Description"].VC.GetValue<string>(rethrow: false).MapNullToEmpty();
+            return icka.MetaData["Description"].VC.GetValueA(rethrow: false).MapNullToEmpty();
         }
 
         /// <summary>
@@ -2364,9 +2364,9 @@ namespace MosaicLib.Modular.Config
         internal static string InternalGetValueAsString(this IConfigKeyAccess icka)
         {
             if (icka.VC.cvt == ContainerStorageType.String)
-                return icka.VC.GetValue<string>(ContainerStorageType.String, false, false);
+                return icka.VC.GetValueA(false);
             else if (icka.VC.cvt.IsReferenceType())
-                return icka.VC.GetValue<string>(ContainerStorageType.String, false, false);
+                return icka.VC.GetValueA(false);
             else if (icka.VC.IsNullOrNone)       // special case so that an empty container gives back ValueAsString as just null rather than "None"
                 return null;
             else

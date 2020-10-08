@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 2013
-VisualStudioVersion = 12.0.40629.0
+# Visual Studio 15
+VisualStudioVersion = 15.0.28307.1145
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MosaicLibCSBase2010", "..\..\MosaicLibCSBase2010.csproj", "{DFD5D17D-1977-4B56-A4EB-5955B40B6ABB}"
 EndProject
@@ -16,6 +16,10 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RemotingTool", "RemotingTool\RemotingTool.csproj", "{4C2FC8BD-45FF-4518-A947-1CE110863214}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExtractMDRFtoDB", "ExtractMDRFtoDB\ExtractMDRFtoDB.csproj", "{C2B66642-A1EB-4C66-BEBE-F693D38287D7}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "JsonDotNet", "..\JsonDotNet\JsonDotNet.csproj", "{308DA580-BD27-4DC4-9BE1-923DD3CE6016}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mosaic_ToolsLib", "..\ToolsLib\Mosaic_ToolsLib.csproj", "{A5BBA654-157B-4D3E-A7CA-F44BD36D0EF4}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -51,8 +55,19 @@ Global
 		{C2B66642-A1EB-4C66-BEBE-F693D38287D7}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C2B66642-A1EB-4C66-BEBE-F693D38287D7}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{C2B66642-A1EB-4C66-BEBE-F693D38287D7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{308DA580-BD27-4DC4-9BE1-923DD3CE6016}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{308DA580-BD27-4DC4-9BE1-923DD3CE6016}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{308DA580-BD27-4DC4-9BE1-923DD3CE6016}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{308DA580-BD27-4DC4-9BE1-923DD3CE6016}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A5BBA654-157B-4D3E-A7CA-F44BD36D0EF4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A5BBA654-157B-4D3E-A7CA-F44BD36D0EF4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A5BBA654-157B-4D3E-A7CA-F44BD36D0EF4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A5BBA654-157B-4D3E-A7CA-F44BD36D0EF4}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {9AA17869-402A-404E-8162-7593CBB43716}
 	EndGlobalSection
 EndGlobal

@@ -1,6 +1,6 @@
 //-------------------------------------------------------------------
-/*! @file MDRFReaderPart.cs
- *  @brief an active part that supports reading MDRF (Mosaic Data Recording Format) files.
+/*! @file MDRFReader.cs
+ *  @brief classes that are used to support reading MDRF (Mosaic Data Recording Format) files.
  * 
  * Copyright (c) Mosaic Systems Inc.
  * Copyright (c) 2016 Mosaic Systems Inc.
@@ -128,33 +128,37 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
             bool dateTimesAreDefaults = (FirstDateTime == DateTime.MinValue && LastDateTime == DateTime.MaxValue);
             bool eventBlockOffsetsAreDefaults = (FirstEventBlockStartOffset == 0 && LastEventBlockStartOffset == int.MaxValue);
             bool fileWasProperlyClosed = fileIndexInfo.FileWasProperlyClosed;
+            bool indexInUse = fileIndexInfo.IndexInUse;
 
             // first filter out all of the null/empty rows and all of the rows that do not have the desired userRowFlagBitsSet (if desired).
 
             Func<FileIndexRowBase, bool> filterFunction = row => (row != null && !row.IsEmpty && ((FileIndexUserRowFlagBitsMask == 0) || (row.FileIndexUserRowFlagBits & FileIndexUserRowFlagBitsMask) != 0));
 
-            FileIndexRowBase[] filteredFIRBArray = fileIndexInfo.FileIndexRowArray.Where(filterFunction).ToArray();
+            FileIndexRowBase[] filteredFIRBArray = indexInUse ? fileIndexInfo.FileIndexRowArray.Where(filterFunction).ToArray() : fileIndexInfo.FileIndexRowArray;
 
             int firstFilteredIndex = 0;
             int lastFilteredIndex = filteredFIRBArray.SafeLength() - 1;
 
             // find first filtered row that is at or after all constraints
-            while (firstFilteredIndex < lastFilteredIndex)
+            if (indexInUse)
             {
-                FileIndexRowBase nextFilteredFIB = filteredFIRBArray.SafeAccess(firstFilteredIndex + 1);
+                while (firstFilteredIndex < lastFilteredIndex)
+                {
+                    FileIndexRowBase nextFilteredFIB = filteredFIRBArray.SafeAccess(firstFilteredIndex + 1);
 
-                if (!deltaTSAreDefaults && FirstFileDeltaTimeStamp >= nextFilteredFIB.FirstBlockDeltaTimeStamp)
-                    firstFilteredIndex++;
-                else if (!dateTimesAreDefaults && FirstDateTime >= nextFilteredFIB.FirstBlockDateTime)
-                    firstFilteredIndex++;
-                else if (!eventBlockOffsetsAreDefaults && FirstEventBlockStartOffset >= nextFilteredFIB.FileOffsetToStartOfFirstBlock)
-                    firstFilteredIndex++;
-                else
-                    break;
+                    if (!deltaTSAreDefaults && FirstFileDeltaTimeStamp >= nextFilteredFIB.FirstBlockDeltaTimeStamp)
+                        firstFilteredIndex++;
+                    else if (!dateTimesAreDefaults && FirstDateTime >= nextFilteredFIB.FirstBlockDateTime)
+                        firstFilteredIndex++;
+                    else if (!eventBlockOffsetsAreDefaults && FirstEventBlockStartOffset >= nextFilteredFIB.FileOffsetToStartOfFirstBlock)
+                        firstFilteredIndex++;
+                    else
+                        break;
+                }
             }
 
             // if we can trust the index to contain the last valid row then rewinde the lastFilteredIndex as long as it cannot contain any data for the user defined filtered range
-            if (fileWasProperlyClosed)
+            if (fileWasProperlyClosed && indexInUse)
             {
                 while (firstFilteredIndex < lastFilteredIndex)
                 {
@@ -171,7 +175,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                 }
             }
 
-            if (firstFilteredIndex > 0 && AutoRewindToPriorFullGroupRow)
+            if (firstFilteredIndex > 0 && AutoRewindToPriorFullGroupRow && indexInUse)
             {
                 // rewind to first prior row that has its ContainsStartOfFullGroup bit set, or until we get back to the front of the file)
                 while (firstFilteredIndex > 0)
@@ -223,7 +227,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
         /// <summary>Reports that reading is starting on a file [0x0001]</summary>
         ReadingStart = 0x0001,
 
-        /// <summary>Reports that reading has ended on a file [0x0002]</summary>
+        /// <summary>Reports that reading has ended on a file.  VC is boolean indicating if file was properly closed. [0x0002]</summary>
         ReadingEnd = 0x0002,
 
         /// <summary>Reports that the reader has started reading on a new row in the index</summary>
@@ -403,7 +407,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
 
     /// <summary>
     /// bitfield enumeration used to define various MDRFFileReader behavior settings
-    /// <para/>None (0x0000), AutoCreateIVI (0x01), EnableLiveFileHeurstics (0x02)
+    /// <para/>None (0x0000), AutoCreateIVI (0x01), EnableLiveFileHeurstics (0x02), AttemptToDecodeOccurrenceBodyAsNVS (0x10)
     /// </summary>
     [Flags]
     public enum MDRFFileReaderBehavior : int
@@ -435,9 +439,10 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
     {
         #region Construction (and Release)
 
-        public MDRFFileReader(string path, IValuesInterconnection ivi = null, MDRFFileReaderBehavior mdrfFileReaderBehavior = MDRFFileReaderBehavior.AutoCreateIVI)
+        public MDRFFileReader(string path, IValuesInterconnection ivi = null, MDRFFileReaderBehavior mdrfFileReaderBehavior = MDRFFileReaderBehavior.AutoCreateIVI, Action<object> readObjectEventHandlerHook = null)
         {
             MDRFFileReaderBehavior = mdrfFileReaderBehavior;
+            ReadObjectEventHandlerHook = readObjectEventHandlerHook;
             AddExplicitDisposeAction(Release);
 
             FilePath = path.MapNullToEmpty();
@@ -480,7 +485,9 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                 enableLiveFileHeuristics = value.IsSet(MDRFFileReaderBehavior.EnableLiveFileHeuristics);
             }
         }
+
         private MDRFFileReaderBehavior _mdrfFileReaderBehavior;
+        private Action<object> ReadObjectEventHandlerHook { get; set; }
         private bool autoCreateIVI, enableLiveFileHeuristics;
 
         #endregion
@@ -493,6 +500,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
         public bool IsFileOpen { get { return (fs != null); } }
         public string ResultCode { get; private set; }
 
+        public string InstanceUUID { get; private set; }
         public string HostName { get; private set; }
         public LibraryInfo LibraryInfo { get; private set; }
         public SetupInfo SetupInfo { get; private set; }
@@ -574,33 +582,36 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
 
                 LibraryInfo.NVS = setupAndLibNVS.ConvertToReadOnly();
 
-                LibraryInfo.Type = setupAndLibNVS["lib.Type"].VC.GetValue<string>(false).MapNullToEmpty();
-                LibraryInfo.Name = setupAndLibNVS["lib.Name"].VC.GetValue<string>(false).MapNullToEmpty();
-                LibraryInfo.Version = setupAndLibNVS["lib.Version"].VC.GetValue<string>(false).MapNullToEmpty();
+                LibraryInfo.Type = setupAndLibNVS["lib.Type"].VC.GetValueA(false).MapNullToEmpty();
+                LibraryInfo.Name = setupAndLibNVS["lib.Name"].VC.GetValueA(false).MapNullToEmpty();
+                LibraryInfo.Version = setupAndLibNVS["lib.Version"].VC.GetValueA(false).MapNullToEmpty();
 
                 SetupInfo = new Common.SetupInfo();
 
-                SetupInfo.DirPath = setupAndLibNVS["setup.DirPath"].VC.GetValue<string>(false).MapNullToEmpty();
-                SetupInfo.ClientName = setupAndLibNVS["setup.ClientName"].VC.GetValue<string>(false).MapNullToEmpty();
-                SetupInfo.FileNamePrefix = setupAndLibNVS["setup.FileNamePrefix"].VC.GetValue<string>(false).MapNullToEmpty();
-                SetupInfo.CreateDirectoryIfNeeded = setupAndLibNVS["setup.CreateDirectoryIfNeeded"].VC.GetValue<bool>(false);
-                SetupInfo.MaxDataBlockSize = setupAndLibNVS["setup.MaxDataBlockSize"].VC.GetValue<Int32>(false);
-                SetupInfo.NominalMaxFileSize = setupAndLibNVS["setup.NominalMaxFileSize"].VC.GetValue<Int32>(false);
-                SetupInfo.FileIndexNumRows = setupAndLibNVS["setup.FileIndexNumRows"].VC.GetValue<Int32>(false);
+                SetupInfo.DirPath = setupAndLibNVS["setup.DirPath"].VC.GetValueA(false).MapNullToEmpty();
+                SetupInfo.ClientName = setupAndLibNVS["setup.ClientName"].VC.GetValueA(false).MapNullToEmpty();
+                SetupInfo.FileNamePrefix = setupAndLibNVS["setup.FileNamePrefix"].VC.GetValueA(false).MapNullToEmpty();
+                SetupInfo.CreateDirectoryIfNeeded = setupAndLibNVS["setup.CreateDirectoryIfNeeded"].VC.GetValueBo(false);
+                SetupInfo.MaxDataBlockSize = setupAndLibNVS["setup.MaxDataBlockSize"].VC.GetValueI4(false);
+                SetupInfo.NominalMaxFileSize = setupAndLibNVS["setup.NominalMaxFileSize"].VC.GetValueI4(false);
+                SetupInfo.FileIndexNumRows = setupAndLibNVS["setup.FileIndexNumRows"].VC.GetValueI4(false);
 
-                SetupInfo.MaxFileRecordingPeriod = setupAndLibNVS["setup.MaxFileRecordingPeriodInSeconds"].VC.GetValue<TimeSpan>(false);
-                SetupInfo.MinInterFileCreateHoldoffPeriod = setupAndLibNVS["setup.MinInterFileCreateHoldoffPeriodInSeconds"].VC.GetValue<TimeSpan>(false);
-                SetupInfo.MinNominalFileIndexWriteInterval = setupAndLibNVS["setup.MinNominalFileIndexWriteIntervalInSeconds"].VC.GetValue<TimeSpan>(false);
-                SetupInfo.MinNominalWriteAllInterval = setupAndLibNVS["setup.MinNominalWriteAllIntervalInSeconds"].VC.GetValue<TimeSpan>(false);
+                SetupInfo.MaxFileRecordingPeriod = setupAndLibNVS["setup.MaxFileRecordingPeriodInSeconds"].VC.GetValueTS(false);
+                SetupInfo.MinInterFileCreateHoldoffPeriod = setupAndLibNVS["setup.MinInterFileCreateHoldoffPeriodInSeconds"].VC.GetValueTS(false);
+                SetupInfo.MinNominalFileIndexWriteInterval = setupAndLibNVS["setup.MinNominalFileIndexWriteIntervalInSeconds"].VC.GetValueTS(false);
+                SetupInfo.MinNominalWriteAllInterval = setupAndLibNVS["setup.MinNominalWriteAllIntervalInSeconds"].VC.GetValueTS(false);
 
-                SetupInfo.I8Offset = setupAndLibNVS["setup.I8Offset"].VC.GetValue<Int64>(false);
-                SetupInfo.I4Offset = setupAndLibNVS["setup.I4Offset"].VC.GetValue<Int32>(false);
-                SetupInfo.I2Offset = setupAndLibNVS["setup.I2Offset"].VC.GetValue<Int16>(false);
+                SetupInfo.I8Offset = setupAndLibNVS["setup.I8Offset"].VC.GetValueI8(false);
+                SetupInfo.I4Offset = setupAndLibNVS["setup.I4Offset"].VC.GetValueI4(false);
+                SetupInfo.I2Offset = setupAndLibNVS["setup.I2Offset"].VC.GetValueI2(false);
 
-                HostName = setupAndLibNVS["HostName"].VC.GetValue<string>(false).MapNullToEmpty();
+                InstanceUUID = setupAndLibNVS["Instance.UUID"].VC.GetValueA(false).MapNullToEmpty();
+                HostName = setupAndLibNVS["HostName"].VC.GetValueA(false).MapNullToEmpty();
 
                 SetupInfo.ClientNVS = new NamedValueSet().ConvertFromE005Data(fileHeaderDbb.payloadDataArray, ref decodeIndex, ref ec);
             }
+
+            InnerSignalEventAndCheckForStopRequest(Tuple.Create((INamedValueSet) setupAndLibNVS, LibraryInfo, SetupInfo));
 
             // attempt to decode the first DateTimeInfo
             {
@@ -608,15 +619,17 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                 dateTimeInfoNVS = new NamedValueSet().ConvertFromE005Data(dateTimeDbb.payloadDataArray, ref decodeIndex, ref ec);
 
                 DateTimeInfo.NVS = dateTimeInfoNVS.ConvertToReadOnly();
-                DateTimeInfo.BlockDeltaTimeStamp = dateTimeInfoNVS["BlockDeltaTimeStamp"].VC.GetValue<double>(false);
-                DateTimeInfo.QPCTime = dateTimeInfoNVS["QPCTime"].VC.GetValue<double>(false);
-                DateTimeInfo.UTCTimeSince1601 = dateTimeInfoNVS["UTCTimeSince1601"].VC.GetValue<double>(false);
-                DateTimeInfo.TimeZoneOffset = dateTimeInfoNVS["TimeZoneOffset"].VC.GetValue<Int32>(false);
-                DateTimeInfo.DSTIsActive = dateTimeInfoNVS["DSTIsActive"].VC.GetValue<bool>(false);
-                DateTimeInfo.DSTBias = dateTimeInfoNVS["DSTBias"].VC.GetValue<Int32>(false);
-                DateTimeInfo.TZName0 = dateTimeInfoNVS["TZName0"].VC.GetValue<string>(false).MapNullToEmpty();
-                DateTimeInfo.TZName1 = dateTimeInfoNVS["TZName1"].VC.GetValue<string>(false).MapNullToEmpty();
+                DateTimeInfo.BlockDeltaTimeStamp = dateTimeInfoNVS["BlockDeltaTimeStamp"].VC.GetValueF8(false);
+                DateTimeInfo.QPCTime = dateTimeInfoNVS["QPCTime"].VC.GetValueF8(false);
+                DateTimeInfo.UTCTimeSince1601 = dateTimeInfoNVS["UTCTimeSince1601"].VC.GetValueF8(false);
+                DateTimeInfo.TimeZoneOffset = dateTimeInfoNVS["TimeZoneOffset"].VC.GetValueI4(false);
+                DateTimeInfo.DSTIsActive = dateTimeInfoNVS["DSTIsActive"].VC.GetValueBo(false);
+                DateTimeInfo.DSTBias = dateTimeInfoNVS["DSTBias"].VC.GetValueI4(false);
+                DateTimeInfo.TZName0 = dateTimeInfoNVS["TZName0"].VC.GetValueA(false).MapNullToEmpty();
+                DateTimeInfo.TZName1 = dateTimeInfoNVS["TZName1"].VC.GetValueA(false).MapNullToEmpty();
             }
+
+            InnerSignalEventAndCheckForStopRequest(Tuple.Create((INamedValueSet)dateTimeInfoNVS, DateTimeInfo));
 
             // attempt to decode the FileIndexInfo
             AttemptToDecodeFileIndexDbbAndGenerateFileIndexInfo(fileIndexDbb, ref ec);
@@ -693,6 +706,8 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
 
                 decodeIndex += FileIndexRowBase.SerializedSize;
             }
+
+            InnerSignalEventAndCheckForStopRequest(FileIndexInfo);
         }
 
         private string ReadMetaDataBlocks()
@@ -762,10 +777,10 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                     MetaDataCommonInfoBase mdci = new MetaDataCommonInfoBase()
                     {
                         ItemType = mdItemType,
-                        Name = nvs["Name"].VC.GetValue<string>(false).MapNullToEmpty(),
-                        Comment = nvs["Comment"].VC.GetValue<string>(false),
-                        FileID = nvs["FileID"].VC.GetValue<int>(false),
-                        ClientID = nvs["ClientID"].VC.GetValue<int>(false),
+                        Name = nvs["Name"].VC.GetValueA(false).MapNullToEmpty(),
+                        Comment = nvs["Comment"].VC.GetValueA(false),
+                        FileID = nvs["FileID"].VC.GetValueI4(false),
+                        ClientID = nvs["ClientID"].VC.GetValueI4(false),
                         IFC = nvs["IFC"].VC.GetValue<Semi.E005.Data.ItemFormatCode>(false),
                         ClientNVS = new NamedValueSet(nvs.Where<INamedValue>(inv => inv.Name.StartsWith("c.")).Select<INamedValue, INamedValue>(inv => new NamedValue(inv.Name.Substring(2), inv.VC))).ConvertToReadOnly(),
                     };
@@ -776,7 +791,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                             {
                                 LocalGroupPointInfo gpi = new LocalGroupPointInfo(mdci)
                                 {
-                                    ValueCST = mdci.IFC.ConvertToContainerStorageType(),
+                                    CST = mdci.IFC.ConvertToContainerStorageType(),
                                     IVA = (IVI != null) ? IVI.GetValueAccessor(mdci.Name) : null,
                                 };
                                 gpiList.Add(gpi);
@@ -788,8 +803,8 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                             {
                                 LocalGroupInfo gi = new LocalGroupInfo(mdci)
                                 {
-                                    FileIndexUserRowFlagBits = nvs["FileIndexUserRowFlagBits"].VC.GetValue<UInt64>(false),
-                                    GroupPointFileIDList = new ReadOnlyIList<int>(nvs["ItemList"].VC.GetValue<string>(false).MapNullToEmpty().Split(',').Select(s => new StringScanner(s).ParseValue<int>(0)).Where(clientID => clientID > 0)),
+                                    FileIndexUserRowFlagBits = nvs["FileIndexUserRowFlagBits"].VC.GetValueU8(false),
+                                    GroupPointFileIDList = new ReadOnlyIList<int>(nvs["ItemList"].VC.GetValueA(false).MapNullToEmpty().Split(',').Select(s => new StringScanner(s).ParseValue<int>(0)).Where(clientID => clientID > 0)),
                                 };
                                 giList.Add(gi);
                                 giDictionary[gi.Name] = gi;
@@ -800,7 +815,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                             {
                                 OccurrenceInfo oi = new OccurrenceInfo(mdci)
                                 {
-                                    FileIndexUserRowFlagBits = nvs["FileIndexUserRowFlagBits"].VC.GetValue<UInt64>(false),
+                                    FileIndexUserRowFlagBits = nvs["FileIndexUserRowFlagBits"].VC.GetValueU8(false),
                                 };
                                 oiList.Add(oi);
                                 oiDictionary[oi.Name] = oi;
@@ -810,6 +825,8 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                         default:
                             break;
                     }
+
+                    InnerSignalEventAndCheckForStopRequest(Tuple.Create((INamedValueSet) nvs, mdci));
                 }
 
                 resultCode = resultCode.MapNullOrEmptyTo(ec);
@@ -827,7 +844,8 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                                     return mddci as LocalGroupPointInfo;
                                 }).Where(gpi => gpi != null).ToArray();
 
-                gi.GroupPointInfoList = new ReadOnlyIList<IGroupPointInfo>(gpiArray);
+                gpiArray.DoForEach(gpi => gpi.GroupInfo = gi);
+
                 gi.GroupPointInfoArray = gpiArray;
                 gi.GroupPointIVAArray = gpiArray.Select(gpi => gpi.IVA).ToArray();      // preserve IVA ordering relative to other indexed group point objects.  Do not filter out nulls here.
             }
@@ -1037,7 +1055,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                 SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = ProcessContentEvent.RowEnd, Row = currentScanRow, FileDeltaTimeStamp = currentScanRow.LastBlockDeltaTimeStamp });
 
             // signal the end of the file
-            SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = ProcessContentEvent.ReadingEnd, FileDeltaTimeStamp = lastDbbTimeStamp });
+            SignalEventIfEnabled(filterSpec, new ProcessContentEventData() { PCE = ProcessContentEvent.ReadingEnd, FileDeltaTimeStamp = lastDbbTimeStamp, Row = currentScanRow, VC = ValueContainer.CreateBo(FileIndexInfo.FileWasProperlyClosed) });
         }
 
         private void ResetTimers(ReadAndProcessFilterSpec filterSpec)
@@ -1152,7 +1170,23 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
         {
             try
             {
-                filterSpec.EventHandlerDelegate(this, eventData);
+                if (filterSpec.EventHandlerDelegate != null)
+                    filterSpec.EventHandlerDelegate(this, eventData);
+            }
+            catch (MDRFStopReadingRequestException)
+            {
+                stopReadingRequestHasBeenTriggered = true;
+            }
+
+            InnerSignalEventAndCheckForStopRequest(eventData);
+        }
+
+        private void InnerSignalEventAndCheckForStopRequest(object eventData)
+        {
+            try
+            {
+                if (ReadObjectEventHandlerHook != null)
+                    ReadObjectEventHandlerHook(eventData);
             }
             catch (MDRFStopReadingRequestException)
             {
@@ -1258,7 +1292,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                 FixedBlockTypeID = dbb.FixedBlockTypeID,
                 FileDeltaTimeStamp = dbb.fileDeltaTimeStamp,
                 MessageRecordedUtcTime = messageRecordedUtcTimeU8.CastToF8(),
-                Message = messageVC.GetValue<string>(false),
+                Message = messageVC.GetValueA(false),
             };
 
             if (dbb.FixedBlockTypeID == FixedBlockTypeID.ErrorV1)
@@ -1287,15 +1321,15 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
             {
                 try
                 {
-                    var vcList = occurrenceVC.GetValue<ReadOnlyIList<ValueContainer>>(rethrow: true);
+                    var vcList = occurrenceVC.GetValueL(rethrow: true);
 
                     NamedValueSet nvs = new NamedValueSet();
 
                     foreach (var vcListItem in vcList)
                     {
-                        var itemList = vcListItem.GetValue<ReadOnlyIList<ValueContainer>>(rethrow: true);
+                        var itemList = vcListItem.GetValueL(rethrow: true);
 
-                        var key = itemList[0].GetValue<string>(rethrow: true);
+                        var key = itemList[0].GetValueA(rethrow: true);
                         switch (itemList.Count)
                         {
                             case 1: nvs.SetKeyword(key); break;
@@ -1335,7 +1369,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
             }
             
             GroupBlockFlagBits groupBlockFlagBits = unchecked((GroupBlockFlagBits) (dbb.payloadDataArray.SafeAccess(decodeIndex++)));
-            int numPoints = gi.GroupPointInfoList.Count;
+            int numPoints = gi.GroupPointInfoArray.Length;
 
             if ((groupBlockFlagBits & GroupBlockFlagBits.HasUpdateMask) == GroupBlockFlagBits.None)
             {
@@ -1345,7 +1379,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
 
                 for (int gpiIndex = 0; gpiIndex < numPoints; gpiIndex++)
                 {
-                    IGroupPointInfo gpi = gi.GroupPointInfoList[gpiIndex];
+                    IGroupPointInfo gpi = gi.GroupPointInfoArray[gpiIndex];
                     IValueAccessor iva = (lgi ?? emptyLGI).GroupPointIVAArray.SafeAccess(gpiIndex);
 
                     gpi.VC = DecodeGroupPointValue(gpi, dbb, ref decodeIndex);
@@ -1390,7 +1424,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
                 {
                     if (dbb.payloadDataArray.GetBit(gpiIndex + bitIndexOffset))
                     {
-                        IGroupPointInfo gpi = gi.GroupPointInfoList[gpiIndex];
+                        IGroupPointInfo gpi = gi.GroupPointInfoArray[gpiIndex];
                         IValueAccessor iva = (lgi ?? emptyLGI).GroupPointIVAArray.SafeAccess(gpiIndex);
 
                         ValueContainer pointVC = DecodeGroupPointValue(gpi, dbb, ref decodeIndex);
@@ -1588,6 +1622,8 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Reader
 
             if (dbb.IsValid)
                 atOffsetInFile += dbb.TotalLength;
+
+            InnerSignalEventAndCheckForStopRequest(dbb);
 
             return dbb;
         }
