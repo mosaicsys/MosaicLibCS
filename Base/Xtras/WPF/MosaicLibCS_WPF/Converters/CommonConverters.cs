@@ -81,6 +81,36 @@ namespace MosaicLib.WPF.Converters
     }
 
     /// <summary>
+    /// Supports bindable, one way, conversion of an object to an I4.  
+    /// Starts by trying System.Convert.ChangeType, and then ValueContainer.CreateFromObject().GetValueI4().
+    /// <para/>The ConvertBack method alsways returns Binding.DoNothing
+    /// </summary>
+    public class ObjectToI4Converter : OneWayValueConverterBase
+    {
+        public override object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            try
+            {
+                try
+                {
+                    var i4 = System.Convert.ChangeType(value, typeof(int));
+                    return i4;
+                }
+                catch
+                {
+                    var valueVC = ValueContainer.CreateFromObject(value);
+                    return valueVC.GetValueI4(rethrow: true);
+                }
+            }
+            catch
+            {
+                var paramVC = ValueContainer.CreateFromObject(parameter);
+                return paramVC.GetValueI4(rethrow: false);
+            }
+        }
+    }
+
+    /// <summary>
     /// Supports bindable, one way, conversion of an object to a string by creating a value container for the given object and then calling ToStringSML on it.
     /// <para/>The ConvertBack method alsways returns Binding.DoNothing
     /// </summary>

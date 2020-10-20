@@ -1307,7 +1307,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                 }
                 .Where(kvp => kvp.Value != null)
                 ;
-            locNameToPrepareDictionary = new Dictionary<string, IPrepare<IProcessSpec, IProcessStepSpec>>().SafeAddRange(locNameToPrepareKVPSet);
+            locNameToPrepareDictionary = new Dictionary<string, IPrepare<IProcessSpec, IProcessStepSpec>>().SafeAddRange(locNameToPrepareKVPSet, onlyTakeFirst: false);
 
             normalMoveFromLocSet = new HashSet<string>(r1LocObserverArray.Concat(processLocObserverWithTrackerDictionary.ValueArray).Select(obs => obs.ID.Name));
         }

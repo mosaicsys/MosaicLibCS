@@ -1871,14 +1871,16 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
         /// <summary>
         /// Action factory method.  When run the resulting action will record the given object <paramref name="obj"/> using MDRF2's object recording mechanism.
         /// If <paramref name="writeAll"/> is true then this action will record all groups before writing this one.
+        /// If <paramref name="isHighRate"/> is true then this action will use the configured high rate action logging.
         /// </summary>
-        IClientFacet RecordObject(object obj, bool writeAll = false);
+        IClientFacet RecordObject(object obj, bool writeAll = false, bool isHighRate = true);
 
         /// <summary>
         /// Action factory method.  When run the resulting action will record the given set of objects from <paramref name="objArray"/> using MDRF2's object recording mechanism.
         /// If <paramref name="writeAll"/> is true then this action will record all groups before writing this one.
+        /// If <paramref name="isHighRate"/> is true then this action will use the configured high rate action logging.
         /// </summary>
-        IClientFacet RecordObjects(object [] objArray, bool writeAll = false);
+        IClientFacet RecordObjects(object [] objArray, bool writeAll = false, bool isHighRate = true);
     }
 
     /// <summary>
@@ -1922,7 +1924,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
                 GroupDefinitionItemArray = other.GroupDefinitionItemArray.SafeToArray();
 
             if (other.OccurrenceDefinitionItemArray != null)
-                OccurrenceDefinitionItemArray = other.OccurrenceDefinitionItemArray.Select(item => new MDRFRecordingEngineItems.OccurrenceDefinitionItem() { OccurrenceName = item.OccurrenceName, EventNames = item.EventNames.SafeToArray(mapNullToEmpty: false), OccurrenceMetaData = item.OccurrenceMetaData }).ToArray();
+                OccurrenceDefinitionItemArray = other.OccurrenceDefinitionItemArray.Select(item => new MDRF2RecordingEngineItems.OccurrenceDefinitionItem() { OccurrenceName = item.OccurrenceName, EventNames = item.EventNames.SafeToArray(mapNullToEmpty: false), OccurrenceMetaData = item.OccurrenceMetaData }).ToArray();
 
             if (other.PruningConfig != null)
             {
@@ -1934,6 +1936,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
 
             NominalPruningInterval = other.NominalPruningInterval;
             ActionLoggingConfig = new ActionLoggingConfig(other.ActionLoggingConfig);
+            HighRateActionLoggingConfig = new ActionLoggingConfig(other.HighRateActionLoggingConfig);
         }
 
         /// <summary>Defines the PartID that will be used by the MDRFRecordingEngine that is constructed from this configuration object</summary>
@@ -1959,10 +1962,10 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
         public bool AllocateUserRowFlagBitsForGroups { get; set; }
 
         /// <summary>Gives the array of GroupDefinitionItems that are used to define the groups that will be recorded by the engine</summary>
-        public MDRFRecordingEngineItems.GroupDefinitionItem[] GroupDefinitionItemArray { get; set; }
+        public MDRF2RecordingEngineItems.GroupDefinitionItem[] GroupDefinitionItemArray { get; set; }
 
         /// <summary>Gives the array of OccurrenceDefinitionItems that are used to define the occurrence types that may be directly recorded by this engine.  The client may also directly register OccurrenceInfo objects with the underlying MDRFWriter.</summary>
-        public MDRFRecordingEngineItems.OccurrenceDefinitionItem[] OccurrenceDefinitionItemArray { get; set; }
+        public MDRF2RecordingEngineItems.OccurrenceDefinitionItem[] OccurrenceDefinitionItemArray { get; set; }
 
         /// <summary>Gives the pruning configuration for the DirectoryTreePruningManager that can be used by the engine to prevent the engine from filling the local storage.</summary>
         public DirectoryTreePruningManager.Config PruningConfig { get; set; }
@@ -1972,10 +1975,14 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
 
         private static readonly TimeSpan[] emptyTimeSpanArray = EmptyArrayFactory<TimeSpan>.Instance;
 
+        /// <summary>Defines ActionLoggingConfig used for most action factory methods in resulting part.</summary>
         public ActionLoggingConfig ActionLoggingConfig { get; set; } = ActionLoggingConfig.Debug_Error_Trace_Trace;
+
+        /// <summary>Defines ActionLoggingConfig used for actions that are indicated by the client as being "high rate".</summary>
+        public ActionLoggingConfig HighRateActionLoggingConfig { get; set; } = ActionLoggingConfig.Trace_Trace_Trace_Trace;
     }
 
-    namespace MDRFRecordingEngineItems
+    namespace MDRF2RecordingEngineItems
     {
         /// <summary>
         /// Defines the characteristics of a Group that will be recorded using an MDRF2RecordingEngine
@@ -2032,11 +2039,14 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
             Config = new MDRF2RecordingEngineConfig(config);
 
             ActionLoggingReference.Config = Config.ActionLoggingConfig;
+            highRateActionLoggingReference = new ActionLogging(Log, Config.HighRateActionLoggingConfig);
 
             AddExplicitDisposeAction(() => Fcns.DisposeOfObject(ref mdrfWriter));
         }
 
         public MDRF2RecordingEngineConfig Config { get; private set; }
+
+        private readonly ActionLogging highRateActionLoggingReference;
 
         #endregion
 
@@ -2150,14 +2160,14 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
         private Dictionary<string, MDRF.Writer.OccurrenceInfo> occurrenceInfoDictionary = new Dictionary<string, MDRF.Writer.OccurrenceInfo>();
 
 
-        public IClientFacet RecordObject(object obj, bool writeAll = false)
+        public IClientFacet RecordObject(object obj, bool writeAll = false, bool isHighRate = true)
         {
-            return new BasicActionImpl(ActionQueue, () => PerformRecordObjects(obj, null, writeAll: writeAll), "RecordObject", ActionLoggingReference, obj.SafeToString());
+            return new BasicActionImpl(ActionQueue, () => PerformRecordObjects(obj, null, writeAll: writeAll), "RecordObject", isHighRate ? highRateActionLoggingReference : ActionLoggingReference, obj.SafeToString());
         }
 
-        public IClientFacet RecordObjects(object[] objArray, bool writeAll = false)
+        public IClientFacet RecordObjects(object[] objArray, bool writeAll = false, bool isHighRate = true)
         {
-            return new BasicActionImpl(ActionQueue, () => PerformRecordObjects(null, objArray, writeAll: writeAll), "RecordObject", ActionLoggingReference, String.Join(",", objArray.Select(obj => obj.SafeToString())));
+            return new BasicActionImpl(ActionQueue, () => PerformRecordObjects(null, objArray, writeAll: writeAll), "RecordObject", isHighRate ? highRateActionLoggingReference : ActionLoggingReference, String.Join(",", objArray.Select(obj => obj.SafeToString())));
         }
 
         private string PerformRecordObjects(object obj1, object[] objArray, bool writeAll)
@@ -2379,31 +2389,8 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
 
     #region MDRF2LogMessageHandlerAdapter, MDRF2LogMessageHandlerAdapterConfig
 
-    public class MDRF2LogMessageHandlerAdapterConfig
+    public class MDRF2LogMessageHandlerAdapterConfig : ICopyable<MDRF2LogMessageHandlerAdapterConfig>
     {
-        public MDRF2LogMessageHandlerAdapterConfig()
-        {
-            NormalMesgUserFileIndexRowFlagBits = 0;
-            NormalMesgFlushesWriter = false;
-            SignificantMesgTypeLogGate = Logging.LogGate.Signif;
-            SignificantMesgUserFileIndexRowFlagBits = 0;
-            SignificantMesgIsHighPriority = true;
-            SignificantMesgFlushesWriter = true;
-            FlushFlagstoUseAfterEachMessageBlock = MDRF.Writer.FlushFlags.File;  
-        }
-
-        public MDRF2LogMessageHandlerAdapterConfig(MDRF2LogMessageHandlerAdapterConfig other)
-        {
-            NormalMesgUserFileIndexRowFlagBits = other.NormalMesgUserFileIndexRowFlagBits;
-            NormalMesgFlushesWriter = other.NormalMesgFlushesWriter;
-            SignificantMesgTypeLogGate = other.SignificantMesgTypeLogGate;
-            SignificantMesgUserFileIndexRowFlagBits = other.SignificantMesgUserFileIndexRowFlagBits;
-            SignificantMesgIsHighPriority = other.SignificantMesgIsHighPriority;
-            SignificantMesgFlushesWriter = other.SignificantMesgFlushesWriter;
-            FlushFlagstoUseAfterEachMessageBlock = other.FlushFlagstoUseAfterEachMessageBlock;
-            OnlyRecordMessagesIfFileIsAlreadyActive = other.OnlyRecordMessagesIfFileIsAlreadyActive;
-        }
-
         [ConfigItem(IsOptional = true)]
         public ulong NormalMesgUserFileIndexRowFlagBits { get; set; }
 
@@ -2411,22 +2398,27 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
         public bool NormalMesgFlushesWriter { get; set; }
 
         [ConfigItem(IsOptional = true)]
-        public Logging.LogGate SignificantMesgTypeLogGate { get; set; }
+        public Logging.LogGate SignificantMesgTypeLogGate { get; set; } = Logging.LogGate.Signif;
 
         [ConfigItem(IsOptional = true)]
         public ulong SignificantMesgUserFileIndexRowFlagBits { get; set; }
 
         [ConfigItem(IsOptional = true)]
-        public bool SignificantMesgIsHighPriority { get; set; }
+        public bool SignificantMesgIsHighPriority { get; set; } = true;
 
         [ConfigItem(IsOptional = true)]
         public bool SignificantMesgFlushesWriter { get; set; }
 
         [ConfigItem(IsOptional = true)]
-        public MDRF.Writer.FlushFlags FlushFlagstoUseAfterEachMessageBlock { get; set; }
+        public MDRF.Writer.FlushFlags FlushFlagsToUseAfterEachMessageBlock { get; set; } = MDRF.Writer.FlushFlags.None;
 
         [ConfigItem(IsOptional = true)]
         public bool OnlyRecordMessagesIfFileIsAlreadyActive { get; set; }
+
+        public MDRF2LogMessageHandlerAdapterConfig MakeCopyOfThis(bool deepCopy = true)
+        {
+            return (MDRF2LogMessageHandlerAdapterConfig)MemberwiseClone();
+        }
 
         /// <summary>
         /// Update this object's ConfigItem marked public properties from corresponingly named config keys (using the namePrefix)
@@ -2451,13 +2443,13 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
             : base(name, logGate, recordSourceStackFrame: false)
         {
             this.mdrfWriter = mdrfWriter;
-            Config = new MDRF2LogMessageHandlerAdapterConfig(config);
+            Config = config.MakeCopyOfThis();
 
             // do not attempt to dispose of the mdrfWriter when this class stops using it.
-            AddExplicitDisposeAction(() => {mdrfWriter = null;});
+            AddExplicitDisposeAction(() => { this.mdrfWriter = null; });
         }
 
-        readonly IMDRF2Writer mdrfWriter;
+        IMDRF2Writer mdrfWriter;
         MDRF2LogMessageHandlerAdapterConfig Config { get; set; }
 
         public override void HandleLogMessages(Logging.LogMessage[] lmArray)
@@ -2473,8 +2465,8 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
                     InnerInnerHandleLogMessage(lm, blockFlush: true);
                 }
 
-                if (Config.FlushFlagstoUseAfterEachMessageBlock != MDRF.Writer.FlushFlags.None && mdrfWriter != null && mdrfWriter.IsFileOpen)
-                    mdrfWriter.Flush(Config.FlushFlagstoUseAfterEachMessageBlock);
+                if (Config.FlushFlagsToUseAfterEachMessageBlock != MDRF.Writer.FlushFlags.None && mdrfWriter?.IsFileOpen == true)
+                    mdrfWriter?.Flush(Config.FlushFlagsToUseAfterEachMessageBlock);
             }
 
 
@@ -2489,7 +2481,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void InnerInnerHandleLogMessage(Logging.LogMessage lm, bool blockFlush = false, bool forceFlush = false)
         {
-            if (!IsMessageTypeEnabled(lm) || lm.NamedValueSet.Contains("noMDRF") || mdrfWriter == null || (Config.OnlyRecordMessagesIfFileIsAlreadyActive && !mdrfWriter.IsFileOpen))
+            if (!IsMessageTypeEnabled(lm) || lm.NamedValueSet.Contains("noMDRF") || (Config.OnlyRecordMessagesIfFileIsAlreadyActive && mdrfWriter?.IsFileOpen != true))
                 return;
 
             Logging.MesgType mesgType = lm.MesgType;
@@ -2498,7 +2490,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
             forceFlush |= !blockFlush && (mesgTypeIsSignificant ? Config.SignificantMesgFlushesWriter : Config.NormalMesgFlushesWriter);
             var userRowFlagBits = mesgTypeIsSignificant ? Config.SignificantMesgUserFileIndexRowFlagBits : Config.NormalMesgUserFileIndexRowFlagBits;
 
-            mdrfWriter.RecordObject(lm, forceFlush: forceFlush, isSignificant: mesgTypeIsSignificant, userRowFlagBits: userRowFlagBits);
+            mdrfWriter?.RecordObject(lm, forceFlush: forceFlush, isSignificant: mesgTypeIsSignificant, userRowFlagBits: userRowFlagBits);
         }
     }
 

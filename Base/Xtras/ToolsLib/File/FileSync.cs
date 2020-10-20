@@ -134,7 +134,7 @@ namespace Mosaic.ToolsLib.File.FileSync
                 if (pruningManager == null && Config.DirectoryTreePruningManagerConfig != null)
                 {
                     pruningManager = new MosaicLib.File.DirectoryTreePruningManager($"{PartID}.PruneMgr", Config.DirectoryTreePruningManagerConfig);
-                    recentlyTouchedFileSetForPruningManager = new HashSet<string>();
+                    recentlyTouchedFileFullPathSetForPruningManager = new HashSet<string>();
                 }
 
                 StartLocalTrackingTimers();
@@ -165,7 +165,7 @@ namespace Mosaic.ToolsLib.File.FileSync
             {
                 QpcTimeStamp qpcTimeStamp = QpcTimeStamp.Now;
 
-                if (!IsConnected && BaseState.IsOnline && Config.AutoReconnectHoldoff != null)
+                if (!IsConnected && (BaseState.IsOnline || BaseState.UseState == UseState.AttemptOnlineFailed) && Config.AutoReconnectHoldoff != null)
                 {
                     if (AreAnySyncOperationsInProgress || autoReconnectHoldoffTimer.StartIfNeeded(Config.AutoReconnectHoldoff ?? TimeSpan.Zero).GetIsTriggered(qpcTimeStamp))
                     {
@@ -196,15 +196,15 @@ namespace Mosaic.ToolsLib.File.FileSync
                     if (BaseState.IsOnline)
                     {
                         pruningManager.Service();
-                        if (recentlyTouchedFileSetForPruningManager.Count > 0)
+                        if (recentlyTouchedFileFullPathSetForPruningManager.Count > 0)
                         {
-                            recentlyTouchedFileSetForPruningManager.DoForEach(fileName => pruningManager.NotePathAdded(fileName));
-                            recentlyTouchedFileSetForPruningManager.Clear();
+                            recentlyTouchedFileFullPathSetForPruningManager.DoForEach(fileName => pruningManager.NotePathAdded(fileName));
+                            recentlyTouchedFileFullPathSetForPruningManager.Clear();
                         }
                     }
-                    else if (recentlyTouchedFileSetForPruningManager.Count > 0)
+                    else if (recentlyTouchedFileFullPathSetForPruningManager.Count > 0)
                     {
-                        recentlyTouchedFileSetForPruningManager.Clear();
+                        recentlyTouchedFileFullPathSetForPruningManager.Clear();
                     }
                 }
 
@@ -284,7 +284,7 @@ namespace Mosaic.ToolsLib.File.FileSync
             }
 
             private MosaicLib.File.DirectoryTreePruningManager pruningManager;
-            private HashSet<string> recentlyTouchedFileSetForPruningManager;
+            private HashSet<string> recentlyTouchedFileFullPathSetForPruningManager;
 
             #region Sync support (Sync, PerformSync, SyncTracker, ServicePendingSyncs, CancelPendingSyncs)
 
@@ -907,7 +907,7 @@ namespace Mosaic.ToolsLib.File.FileSync
                     if (!retransferFileContents)
                         ft.successfullyTransferredCount = ft.localSyncFileInfo.FileLength;
 
-                    recentlyTouchedFileSetForPruningManager?.Add(ft.fileNameAndRelativePath);
+                    recentlyTouchedFileFullPathSetForPruningManager?.Add(ft.fileFullPath);
 
                     AddToPendingEvaluateListIfNeeded(ft);
 
@@ -1257,7 +1257,7 @@ namespace Mosaic.ToolsLib.File.FileSync
 
                             fs.Write(serverResponse.Data, 0, serverResponse.DataCount);
 
-                            recentlyTouchedFileSetForPruningManager?.Add(ft.fileNameAndRelativePath);
+                            recentlyTouchedFileFullPathSetForPruningManager?.Add(ft.fileFullPath);
 
                             long endOfWritePosition = serverResponse.FileOffset + serverResponse.DataCount;
                             long numBytesAddedToFile = endOfWritePosition - ft.localSyncFileInfo.FileLength;
@@ -1351,8 +1351,8 @@ namespace Mosaic.ToolsLib.File.FileSync
                         postedTransactionSetBuffer = new System.Collections.Concurrent.BlockingCollection<Transaction[]>(10);
                     }
 
-                    if (tcpClientTask == null)
-                        tcpClientTask = TcpClientTaskMethod();
+                    if (tcpClientTask == null || tcpClientTask.IsCompleted)
+                        tcpClientTask = Task.Run(TcpClientTaskMethod);
 
                     if (runPing)
                     {
@@ -1395,16 +1395,27 @@ namespace Mosaic.ToolsLib.File.FileSync
                             break;
 
                         if (cancellationToken.IsCancellationRequested)
-                            ec = "Cancel requseted (token)";
+                            ec = "Cancel requested (token)";
                         else if ((ipf ?? CurrentAction)?.IsCancelRequestActive == true)
-                            ec = "Cancel requseted (action)";
+                            ec = "Cancel requested (action)";
                         else if (HasStopBeenRequested)
                             ec = "Part stop requested";
+                        else if (!IsConnected)
+                            ec = "Connection lost";
                     }
                 }
                 catch (System.Exception ex)
                 {
                     ec = $"{CurrentMethodName} failed: {ex.ToString(ExceptionFormat.TypeAndMessageAndStackTrace)}";
+                }
+
+                if (ec.IsNeitherNullNorEmpty())
+                {
+                    try
+                    {
+                        postedTransactionSetBuffer.TryTake(out Transaction[] abandonedTransactionsArray, 100, cancellationToken);
+                    }
+                    catch { }
                 }
 
                 return ec;
@@ -2130,7 +2141,7 @@ namespace Mosaic.ToolsLib.File.FileSync
                             var tcpClient = tcpAcceptTask.Result;
 
                             if (tcpClient != null)
-                                tcpClientTaskList.Add(new Task(() => ServiceTcpClient(tcpClient)).StartTaskInline());
+                                tcpClientTaskList.Add(Task.Run(() => ServiceTcpClient(tcpClient)));
 
                             Fcns.DisposeOfObject(ref tcpAcceptTask);
                         }
@@ -2569,7 +2580,7 @@ namespace Mosaic.ToolsLib.File.FileSync
                 if (pruningManager == null && Config.DirectoryTreePruningManagerConfig != null)
                 {
                     pruningManager = new MosaicLib.File.DirectoryTreePruningManager($"{PartID}.PruneMgr", Config.DirectoryTreePruningManagerConfig);
-                    recentlyTouchedFileSetForPruningManager = new HashSet<string>();
+                    recentlyTouchedFileFullPathSetForPruningManager = new HashSet<string>();
                 }
 
                 // note that file tracking support can operate even if the FileSystemWatcher cannot be created.
@@ -2642,21 +2653,21 @@ namespace Mosaic.ToolsLib.File.FileSync
                     if (BaseState.IsOnline)
                     {
                         pruningManager.Service();
-                        if (recentlyTouchedFileSetForPruningManager.Count > 0)
+                        if (recentlyTouchedFileFullPathSetForPruningManager.Count > 0)
                         {
-                            recentlyTouchedFileSetForPruningManager.DoForEach(fileName => pruningManager.NotePathAdded(fileName));
-                            recentlyTouchedFileSetForPruningManager.Clear();
+                            recentlyTouchedFileFullPathSetForPruningManager.DoForEach(fileName => pruningManager.NotePathAdded(fileName));
+                            recentlyTouchedFileFullPathSetForPruningManager.Clear();
                         }
                     }
-                    else if (recentlyTouchedFileSetForPruningManager.Count > 0)
+                    else if (recentlyTouchedFileFullPathSetForPruningManager.Count > 0)
                     {
-                        recentlyTouchedFileSetForPruningManager.Clear();
+                        recentlyTouchedFileFullPathSetForPruningManager.Clear();
                     }
                 }
             }
 
             private MosaicLib.File.DirectoryTreePruningManager pruningManager;
-            private HashSet<string> recentlyTouchedFileSetForPruningManager;
+            private HashSet<string> recentlyTouchedFileFullPathSetForPruningManager;
 
             QpcTimer transferBusyUpdateHoldoffTimer = new QpcTimer() { TriggerInterval = (1.0).FromSeconds(), AutoReset = true }.Start();
             bool IsTransferBusy => (pendingTransferFileTrackerList.Count > 0);
@@ -3341,7 +3352,7 @@ namespace Mosaic.ToolsLib.File.FileSync
                     if (!retransferFileContents)
                         ft.successfullyTransferredCount = ft.destinationSyncFileInfo.FileLength;
 
-                    recentlyTouchedFileSetForPruningManager?.Add(ft.fileNameAndRelativePath);
+                    recentlyTouchedFileFullPathSetForPruningManager?.Add(ft.fullDestinationPath);
 
                     AddToPendingEvaluateListIfNeeded(ft);
 
@@ -3487,7 +3498,7 @@ namespace Mosaic.ToolsLib.File.FileSync
                             }
 
                             if (tbIsLastBlockInFile)
-                                recentlyTouchedFileSetForPruningManager?.Add(ft.fileNameAndRelativePath);
+                                recentlyTouchedFileFullPathSetForPruningManager?.Add(ft.fullDestinationPath);
 
                             if (numBytesAddedToFile > 0 || tbIsLastBlockInFile)
                             {
@@ -4097,6 +4108,10 @@ namespace Mosaic.ToolsLib.File.FileSync
                     int rxCount = await tcpStream.ReadAsync(lenPrefixBuffer, lenPrefixBufferCount, lenPrefixLen - lenPrefixBufferCount, cancellationToken);
                     if (rxCount > 0)
                         lenPrefixBufferCount += rxCount;
+                    else if (lenPrefixBufferCount == 0)
+                        return;
+                    else
+                        new System.IO.EndOfStreamException($"{Fcns.CurrentMethodName} failed while reading length prefix (got {lenPrefixBufferCount} of {lenPrefixLen} bytes): stream.Read gave zero bytes (socket closed)").Throw();
                 }
 
                 blockLen = ExtractMPI4PrefixLength();
@@ -4109,6 +4124,8 @@ namespace Mosaic.ToolsLib.File.FileSync
                     int rxCount = await tcpStream.ReadAsync(buffer, bufferCount, blockLen - bufferCount, cancellationToken);
                     if (rxCount > 0)
                         bufferCount += rxCount;
+                    else
+                        new System.IO.EndOfStreamException($"{Fcns.CurrentMethodName} failed while reading {blockLen} block: stream.Read gave zero bytes (socket closed)").Throw();
                 }
             }
 

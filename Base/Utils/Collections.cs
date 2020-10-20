@@ -585,7 +585,7 @@ namespace MosaicLib.Utils
             [NonSerialized]
             private ReadOnlyIList<TValue> _rolOfValues = null;
 
-            private IDictionary<TKey, TValue> DOfItems { get { return _dOfItems ?? (_dOfItems = new Dictionary<TKey, TValue>(itemsArray.SafeLength()).SafeAddRange(itemsArray)); } }
+            private IDictionary<TKey, TValue> DOfItems { get { return _dOfItems ?? (_dOfItems = new Dictionary<TKey, TValue>(itemsArray.SafeLength()).SafeAddRange(itemsArray, onlyTakeFirst: false)); } }
             private ReadOnlyIList<TKey> ROLOfKeys { get { return _rolOfKeys ?? (_rolOfKeys = new ReadOnlyIList<TKey>(itemsArray.Select(item => item.Key))); } }
             private ReadOnlyIList<TValue> ROLOfValues { get { return _rolOfValues ?? (_rolOfValues = new ReadOnlyIList<TValue>(itemsArray.Select(item => item.Value))); } }
 

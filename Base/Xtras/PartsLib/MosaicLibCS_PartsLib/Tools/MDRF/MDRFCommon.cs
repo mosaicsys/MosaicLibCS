@@ -1003,7 +1003,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
             var specItems = setupInfoNVSSet.Select(nvs => nvs.CreateMDCI(rethrow: rethrow)).WhereIsNotDefault().ToArray();
 
             var groupPointInfoArray = specItems.Select(item => item as GroupPointInfo).WhereIsNotDefault().ToArray();
-            var pointFileIDDictionary = new Dictionary<int, GroupPointInfo>().SafeAddRange(groupPointInfoArray.Select(gpi => KVP.Create(gpi.FileID, gpi)));
+            var pointFileIDDictionary = new Dictionary<int, GroupPointInfo>().SafeAddRange(groupPointInfoArray.Select(gpi => KVP.Create(gpi.FileID, gpi)), onlyTakeFirst: false);
             var groupInfoArray = specItems.Select(item => item as GroupInfo).WhereIsNotDefault().ToArray();
 
             foreach (var gi in groupInfoArray)
@@ -1014,14 +1014,14 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
                 gpiArray.DoForEach(gpi => gpi.GroupInfo = gi);
             }
 
-            var groupDictionary = new IDictionaryWithCachedArrays<string, IGroupInfo>().SafeAddRange(groupInfoArray.Select(igi => KVP.Create(igi.Name, igi as IGroupInfo)));
+            var groupDictionary = new IDictionaryWithCachedArrays<string, IGroupInfo>().SafeAddRange(groupInfoArray.Select(igi => KVP.Create(igi.Name, igi as IGroupInfo)), onlyTakeFirst: false);
  
             var specSet = new SpecItemSet()
             {
                 SpecItems = specItems,
-                OccurrenceDictionary = new IDictionaryWithCachedArrays<string, IOccurrenceInfo>().SafeAddRange(specItems.Select(item => item as IOccurrenceInfo).WhereIsNotDefault().Select(ioi => KVP.Create(ioi.Name, ioi))),
+                OccurrenceDictionary = new IDictionaryWithCachedArrays<string, IOccurrenceInfo>().SafeAddRange(specItems.Select(item => item as IOccurrenceInfo).WhereIsNotDefault().Select(ioi => KVP.Create(ioi.Name, ioi)), onlyTakeFirst: false),
                 GroupDictionary = groupDictionary,
-                PointFullNameDictionary = new IDictionaryWithCachedArrays<string, IGroupPointInfo>().SafeAddRange(groupPointInfoArray.Select(gpi => KVP.Create(gpi.FullName, gpi as IGroupPointInfo))),
+                PointFullNameDictionary = new IDictionaryWithCachedArrays<string, IGroupPointInfo>().SafeAddRange(groupPointInfoArray.Select(gpi => KVP.Create(gpi.FullName, gpi as IGroupPointInfo)), onlyTakeFirst: false),
             };
 
             // extract and build dictionary(s) for point name alias handling
@@ -1051,7 +1051,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Common
                     pad.SafeSetKeyValue(nv.Name, nv.VC.GetValueA(rethrow: rethrow), onlyTakeFirst: true);
             }
 
-            specSet.PointAliasDictionary = new IDictionaryWithCachedArrays<string, IGroupPointInfo>().SafeAddRange(pad.Select(kvpIn => KVP.Create(kvpIn.Key, specSet.PointFullNameDictionary.SafeTryGetValue(kvpIn.Value))).Where(kvp => kvp.Key.IsNullOrEmpty() && kvp.Value != null));
+            specSet.PointAliasDictionary = new IDictionaryWithCachedArrays<string, IGroupPointInfo>().SafeAddRange(pad.Select(kvpIn => KVP.Create(kvpIn.Key, specSet.PointFullNameDictionary.SafeTryGetValue(kvpIn.Value))).Where(kvp => kvp.Key.IsNullOrEmpty() && kvp.Value != null), onlyTakeFirst: false);
 
             return specSet;
         }

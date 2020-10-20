@@ -104,7 +104,19 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
         /// <para/>Note: The returned query execution object can only be enumerated once.  Attempts to use it more than once will throw an exception.
         /// </summary>
         IEnumerable<IMDRF2QueryRecord> CreateQuery(MDRF2QuerySpec querySpec, params IMDRF2FileInfo [] fileInfoParamsArray);
-        IEnumerable<IMDRF2QueryRecord> CreateQuery(MDRF2QuerySpec querySpec, IMDRF2FileInfo[] fileInfoArray, out ApplyDynamicQueryAdjustItemsDelegate applyDynamicQueryAdjustItemsDelegate);
+
+        /// <summary>
+        /// Creates and returns an IEnumerable{IMDRF2QueryRecord} query execution object that can be used (once) to extract MDRF2 record contents from the given set of MDRF files (<paramref name="fileInfoArray"/>) using the given <paramref name="querySpec"/>.
+        /// The <paramref name="applyDynamicQueryAdjustItemsDelegate"/> passes the caller a delegate that can be used while enumerating the resulting query to change dynamically adjustable query parameters such as the PointSetSampleInterval.
+        /// The <paramref name="enableAutoSync"/> property is used by a directory tracking query factory when the given <paramref name="fileInfoArray"/> is given as null, which causes the tracker to use its FilterFiles method to obtain the set of files to use.
+        /// </summary>
+        IEnumerable<IMDRF2QueryRecord> CreateQuery(MDRF2QuerySpec querySpec, IMDRF2FileInfo[] fileInfoArray, out ApplyDynamicQueryAdjustItemsDelegate applyDynamicQueryAdjustItemsDelegate, bool enableAutoSync = true);
+    }
+
+    public delegate void ApplyDynamicQueryAdjustItemsDelegate(ref DynamicQueryAdjustItems dynamicQueryAdjustItems);
+    public struct DynamicQueryAdjustItems
+    {
+        public TimeSpan? PointSetSampleInterval { get; set; }
     }
 
     public interface IMDRF2QueryRecord
@@ -269,7 +281,8 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
 
                 using (var reader = new MDRF2FileReadingHelper(this.FullPath, populateIfNeededLogger))
                 {
-                    reader.ReadHeadersIfNeeded();
+                    var filter = new MDRF2FileReadingHelper.Filter() { EndOfStreamExceptionIsEndOfFile = true, DecompressionEngineExceptionIsEndOfFile = true };
+                    reader.ReadHeadersIfNeeded(filter);
                     return reader.FileInfo;
                 }
             }
@@ -344,12 +357,6 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
         /// [Defaults to true]
         /// </summary>
         public bool DecompressionEngineExceptionIsEndOfFile { get; set; } = true;
-    }
-
-    public delegate void ApplyDynamicQueryAdjustItemsDelegate(ref DynamicQueryAdjustItems dynamicQueryAdjustItems);
-    public struct DynamicQueryAdjustItems
-    {
-        public TimeSpan? PointSetSampleInterval { get; set; }
     }
 
     /// <summary>
@@ -599,7 +606,7 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
                 int lastItemIndex = setCount - 1;
                 int startSearchFence = startIndex;
 
-                while (startIndex < lastItemIndex)
+                while (startSearchFence < (lastItemIndex - 1))
                 {
                     var testIndex = (startSearchFence + lastItemIndex) >> 1;
                     var testValue = set[testIndex].DateTimeInfo.UTCTimeSince1601;
@@ -848,7 +855,11 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
 
             if (pendingFileNameSet.Count > 0)
             {
-                foreach (var fileNameAndRelativePath in pendingFileNameSet)
+                var pendingFileNameSetArray = pendingFileNameSet.ToArray();
+
+                pendingFileNameSet.Clear();
+
+                foreach (var fileNameAndRelativePath in pendingFileNameSetArray)
                 {
                     bool isDirectory = System.IO.Directory.Exists(System.IO.Path.Combine(RootDirFullPath, fileNameAndRelativePath));
                     var isSupportedFileExt = MDRF2FileReadingHelper.IsSupportedFileExtension(fileNameAndRelativePath);
@@ -974,7 +985,8 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
                                 {
                                     using (var fileReaderHelper = new MDRF2FileReadingHelper(new MDRF2FileInfo(ft.fileNameAndRelativePath, ft.fileNameFromConfiguredPath, ft.fullPath), Log))
                                     {
-                                        fileReaderHelper.ReadHeadersIfNeeded();
+                                        fileReaderHelper.ReadHeadersIfNeeded();     // this may throw if the file does not contain a full pair of header records yet.
+
                                         ft.mdrf2FileInfo = fileReaderHelper.FileInfo.MakeCopyOfThis();
                                         ft.fileLength = fileReaderHelper.FileInfo.FileLength;
                                         ft.lastScanTime = qpcTimeStamp;
@@ -1045,10 +1057,11 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
             return CreateQuery(querySpec, fileInfoParamsArray, out ApplyDynamicQueryAdjustItemsDelegate applyDynamicQueryAdjustItemsDelegate);
         }
 
-        public virtual IEnumerable<IMDRF2QueryRecord> CreateQuery(MDRF2QuerySpec querySpec, IMDRF2FileInfo[] fileInfoArray, out ApplyDynamicQueryAdjustItemsDelegate applyDynamicQueryAdjustItemsDelegate)
+        public virtual IEnumerable<IMDRF2QueryRecord> CreateQuery(MDRF2QuerySpec querySpec, IMDRF2FileInfo[] fileInfoArray, out ApplyDynamicQueryAdjustItemsDelegate applyDynamicQueryAdjustItemsDelegate, bool enableAutoSync = true)
         {
+            // populate fileSetArray as needed - replace a null array with results of calling FilterFiles.
             if (fileInfoArray == null)
-                fileInfoArray = FilterFiles(querySpec, autoSync: true);
+                fileInfoArray = FilterFiles(querySpec, autoSync: enableAutoSync);
 
             if (queryFactory == null)
                 queryFactory = new MDRF2QueryFactory(QueryLogger);
@@ -1073,7 +1086,7 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
             return CreateQuery(querySpec, fileInfoParamsArray, out ApplyDynamicQueryAdjustItemsDelegate applyDynamicQueryAdjustItemsDelegate);
         }
 
-        public virtual IEnumerable<IMDRF2QueryRecord> CreateQuery(MDRF2QuerySpec querySpec, IMDRF2FileInfo[] fileInfoArray, out ApplyDynamicQueryAdjustItemsDelegate applyDynamicQueryAdjustItemsDelegate)
+        public virtual IEnumerable<IMDRF2QueryRecord> CreateQuery(MDRF2QuerySpec querySpec, IMDRF2FileInfo[] fileInfoArray, out ApplyDynamicQueryAdjustItemsDelegate applyDynamicQueryAdjustItemsDelegate, bool enableAutoSync = true)
         {
             // Create initial TaskSpec
 
@@ -1086,8 +1099,6 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
                 PointSetArrayType = querySpec.PointSetSpec?.Item2 ?? MDRF2PointSetArrayItemType.F8,
                 PointSetIntervalInSec = (querySpec.PointSetSpec?.Item3 ?? TimeSpan.Zero).TotalSeconds,
             };
-
-            // populate FileSetArray correctly - replace given FileInfo objects with loaded ones if and as needed.
 
             queryTaskSpec.FileSetArray = fileInfoArray.MapNullToEmpty();
 
@@ -1262,7 +1273,7 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
                 rhFilter.ObjectTypeNameSet = (clientQuerySpec.ObjectTypeNameSet != null) ? new HashSet<string>(clientQuerySpec.ObjectTypeNameSet) : null;
 
                 pointInfoArray = QueryTaskSpec.PointNamesArray.Select(pointName => specItemSet.PointFullNameDictionary.SafeTryGetValue(pointName) ?? specItemSet.PointAliasDictionary.SafeTryGetValue(pointName)).ToArray();
-                var pointInfoToPositionDictionary = new Dictionary<IGroupPointInfo, int>().SafeAddRange(pointInfoArray.Select((igpi, index) => KVP.Create(igpi, index)));
+                var pointInfoToPositionDictionary = new Dictionary<IGroupPointInfo, int>().SafeAddRange(pointInfoArray.Select((igpi, index) => KVP.Create(igpi, index)).Where(kvp => kvp.Key != null));
 
                 var groupInfoHashSet = new HashSet<IGroupInfo>(pointInfoArray.WhereIsNotDefault().Select(gpi => gpi?.GroupInfo));
 
@@ -1503,6 +1514,17 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
                 const MDRF2QueryItemTypeSelect canEmitPointSetRecordOnItemTypes = (MDRF2QueryItemTypeSelect.InlineIndexRecord | MDRF2QueryItemTypeSelect.FileDeltaTimeUpdate | MDRF2QueryItemTypeSelect.FileEnd | MDRF2QueryItemTypeSelect.DecodingIssue | MDRF2QueryItemTypeSelect.ExtractionStopped | MDRF2QueryItemTypeSelect.ExtractionCancelled);
                 IMDRF2QueryRecord result = null;
 
+                if (recordType == MDRF2QueryItemTypeSelect.FileStart)
+                {
+                    switch (QueryTaskSpec.PointSetArrayType & MDRF2PointSetArrayItemType.TypeMask)
+                    {
+                        case MDRF2PointSetArrayItemType.VC: QueryTaskSpec.pointVCArray.SetAll(ValueContainer.Empty); break;
+                        case MDRF2PointSetArrayItemType.F4: QueryTaskSpec.pointF4Array.SetAll(float.NaN); break;
+                        case MDRF2PointSetArrayItemType.F8: QueryTaskSpec.pointF8Array.SetAll(double.NaN); break;
+                        default: break;
+                    }
+                }
+
                 if (HaveNewData && ((recordType & canEmitPointSetRecordOnItemTypes) != 0))
                 {
                     // generate a point set record
@@ -1542,7 +1564,7 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
                         var nextSkipGroupsUntilAfterFDT = filter.SkipGroupsUntilAfterFDT + pointSetIntervalInSec;
 
                         if (nextSkipGroupsUntilAfterFDT + pointSetIntervalInSec < dtPair.FileDeltaTime)
-                            nextSkipGroupsUntilAfterFDT = dtPair.FileDeltaTime;
+                            nextSkipGroupsUntilAfterFDT = dtPair.FileDeltaTime - pointSetIntervalInSec;
 
                         filter.SkipGroupsUntilAfterFDT = nextSkipGroupsUntilAfterFDT;
                     }
@@ -1851,7 +1873,19 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
             }
             catch (System.Exception ex)
             {
-                FaultCode = $"{Fcns.CurrentMethodName} failed: {ex.ToString(ExceptionFormat.TypeAndMessageAndStackTrace)}";
+                if (ex is System.IO.EndOfStreamException && filter?.EndOfStreamExceptionIsEndOfFile == true)
+                {
+                    FaultCode = "";
+                }
+                else if (ex.GetType().ToString().StartsWith("K4os.Compression.LZ4") && filter?.DecompressionEngineExceptionIsEndOfFile == true)
+                {
+                    FaultCode = "";
+                }
+                else
+                {
+                    FaultCode = $"{Fcns.CurrentMethodName} failed: {ex.ToString(ExceptionFormat.TypeAndMessageAndStackTrace)}";
+                }
+
                 fileInfo.FaultCode = fileInfo.FaultCode.MapNullOrEmptyTo(FaultCode);
 
                 FileInfo = fileInfo.MakeCopyOfThis();

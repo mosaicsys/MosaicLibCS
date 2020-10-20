@@ -7,5 +7,6 @@ Debug
 .vs
 
 .MyS*
-/packages
-/Base/Xtras/Tools/packages
+packages
+bin
+obj

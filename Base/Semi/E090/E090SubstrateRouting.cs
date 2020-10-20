@@ -984,7 +984,7 @@ namespace MosaicLib.Semi.E090.SubstrateRouting
             else if (!autoITPRDictionaryIsEmpty && !manualITPRDictionaryIsEmpty)
             {
                 // both auto and manual are provided as non-empty - internally use the union of the auto with the manual set.  the manual set has priority (same name items replaces any one corresponding from the auto set)
-                ManualLocNameToITPRDictionary = new ReadOnlyIDictionary<string, ITransferPermissionRequest>(AutoLocNameToITPRDictionary.ConvertToWritable().SafeAddRange(ManualLocNameToITPRDictionary));
+                ManualLocNameToITPRDictionary = new ReadOnlyIDictionary<string, ITransferPermissionRequest>(AutoLocNameToITPRDictionary.ConvertToWritable().SafeAddRange(ManualLocNameToITPRDictionary, onlyTakeFirst: false));
             }
         }
 

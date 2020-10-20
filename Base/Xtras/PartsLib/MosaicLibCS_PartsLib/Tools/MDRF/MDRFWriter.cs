@@ -2736,7 +2736,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
             mdrfWriter.Add(normalMesgOccurrenceInfo, significantOccurrenceInfo);
 
             // do not attempt to dispose of the mdrfWriter when this class stops using it.
-            AddExplicitDisposeAction(() => {mdrfWriter = null;});
+            AddExplicitDisposeAction(() => { this.mdrfWriter = null; });
         }
 
         IMDRFWriter mdrfWriter;
