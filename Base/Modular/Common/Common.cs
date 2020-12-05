@@ -7059,7 +7059,7 @@ namespace MosaicLib.Modular.Common
                 INamedValue inv = nvs[iasi.NVSItemName];
 
                 if (iasi != null && iasi.MemberFromValueAction != null && (!merge || !inv.IsNullOrEmpty()))
-                    iasi.MemberFromValueAction(ValueSet, inv.VC, IssueEmitter, ValueNoteEmitter, rethrow: false);
+                    iasi.MemberFromValueAction(valueSet, inv.VC, IssueEmitter, ValueNoteEmitter, rethrow: false);
             }
 
             return this;

@@ -42,6 +42,7 @@ using Mosaic.ToolsLib.BufferWriter;
 using Mosaic.ToolsLib.File.FileSync.Common;
 
 using MessagePack;
+using System.Runtime.Serialization;
 
 namespace Mosaic.ToolsLib.File.FileSync
 {
@@ -68,7 +69,7 @@ namespace Mosaic.ToolsLib.File.FileSync
             public TimeSpan TcpClientReceiveAndSendTimeout { get; set; } = (5.0).FromMinutes();
 
             /// <summary>Defines the ActionLoggingConfig that is used for part's external actions</summary>
-            public ActionLoggingConfig ActionLoggingConfig { get; set; } = new ActionLoggingConfig(Logging.MesgType.Debug, Logging.MesgType.Debug, Logging.MesgType.Debug, Logging.MesgType.Debug, ActionLoggingStyleSelect.IncludeRunTimeOnCompletion);
+            public ActionLoggingConfig ActionLoggingConfig { get; set; } = ActionLoggingConfig.Debug_Debug_Debug_Debug.Update(actionLoggingStyleSelect: ActionLoggingStyleSelect.IncludeRunTimeOnCompletion);
             public Logging.LogGate InitialInstanceLogGate { get; set; } = Logging.LogGate.Debug;
 
             public MosaicLib.File.DirectoryTreePruningManager.Config DirectoryTreePruningManagerConfig { get; set; } = null;
@@ -290,7 +291,7 @@ namespace Mosaic.ToolsLib.File.FileSync
 
             public IClientFacet Sync(TimeSpan nominalWaitTimeLimit, SyncFlags syncFlags = default)
             {
-                return new BasicActionImpl(ActionQueue, (ipf) => PerformSync(ipf, nominalWaitTimeLimit, syncFlags), "Sync", ActionLoggingReference, mesgDetails: $"timeLimit:{nominalWaitTimeLimit.TotalSeconds:f3}s, {syncFlags}");
+                return new BasicActionImpl(ActionQueue, (ipf) => PerformSync(ipf, nominalWaitTimeLimit, syncFlags), "Sync", ActionLoggingReference, mesgDetails: (nominalWaitTimeLimit.IsZero() ? $"{syncFlags}" : $"timeLimit:{nominalWaitTimeLimit.TotalSeconds:f3}s, {syncFlags}"));
             }
 
             private string PerformSync(IProviderFacet ipf, TimeSpan nominalWaitTimeLimit, SyncFlags syncFlags)
@@ -1616,11 +1617,11 @@ namespace Mosaic.ToolsLib.File.FileSync
             public IValuesInterconnection IVI { get; set; }
 
             /// <summary>Defines the ActionLoggingConfig that is used for part's external actions</summary>
-            public ActionLoggingConfig ActionLoggingConfig { get; set; } = ActionLoggingConfig.Debug_Debug_Trace_Trace;
+            public ActionLoggingConfig ActionLoggingConfig { get; set; } = ActionLoggingConfig.Debug_Debug_Trace_Trace.Update(actionLoggingStyleSelect: ActionLoggingStyleSelect.IncludeRunTimeOnCompletion);
             public Logging.LogGate InitialInstanceLogGate { get; set; } = Logging.LogGate.Debug;
 
             /// <summary>Defines the ActionLoggingConfig that is used for part's internal actions</summary>
-            public ActionLoggingConfig InternalActionLoggingConfig { get; set; } = ActionLoggingConfig.Trace_Trace_Trace_Trace;
+            public ActionLoggingConfig InternalActionLoggingConfig { get; set; } = ActionLoggingConfig.Trace_Trace_Trace_Trace.Update(actionLoggingStyleSelect: ActionLoggingStyleSelect.IncludeRunTimeOnCompletion);
 
             public TimeSpan? PerTranscationSetRateLimitSleepPeriod { get; set; } = (0.001).FromSeconds();     // or null, or TimeSpan.Zero
 
@@ -1632,7 +1633,7 @@ namespace Mosaic.ToolsLib.File.FileSync
             }
         }
 
-        public class TCPFileSyncServer : SimpleActivePartBase
+        public class TCPFileSyncServer : SimpleActivePartBase, ISyncActionFactory
         {
             #region Construction, Release, PerformGoOnlineActionEx, PerformGoOfflineAction, PerformMainLoopService (et. al.)
 
@@ -1727,6 +1728,22 @@ namespace Mosaic.ToolsLib.File.FileSync
                 }
 
                 ServiceNetworking();
+            }
+
+            #endregion
+
+            #region Sync support
+
+            public IClientFacet Sync(TimeSpan nominalWaitTimeLimit = default, SyncFlags syncFlags = default)
+            {
+                return new BasicActionImpl(ActionQueue, (ipf) => PerformSync(ipf, nominalWaitTimeLimit, syncFlags), "Sync", ActionLoggingReference, mesgDetails: (nominalWaitTimeLimit.IsZero() ? $"{syncFlags}" : $"timeLimit:{nominalWaitTimeLimit.TotalSeconds:f3}s, {syncFlags}"));
+            }
+
+            private string PerformSync(IProviderFacet ipf, TimeSpan nominalWaitTimeLimit, SyncFlags syncFlags)
+            {
+                ServiceFileTracking(forceFullUpdate: syncFlags.IsSet(SyncFlags.Full));
+
+                return string.Empty;
             }
 
             #endregion
@@ -1846,12 +1863,14 @@ namespace Mosaic.ToolsLib.File.FileSync
             private bool rescanDirectoryNeeded = true;
             QpcTimer rescanIntervalTimer;
 
-            public int ServiceFileTracking(bool forceFullUpdate = false)
+            private int ServiceFileTracking(QpcTimeStamp qpcTimeStamp = default, bool forceFullUpdate = false)
             {
+                qpcTimeStamp = qpcTimeStamp.MapDefaultToNow();
+
                 long entrySyncFileInfoSeqNumGen = syncFileInfoSeqNumGen;
 
                 fullUpdateNeeded |= forceFullUpdate || (asyncErrorCount > 0);
-                rescanDirectoryNeeded |= fullUpdateNeeded | rescanIntervalTimer.IsTriggered;
+                rescanDirectoryNeeded |= fullUpdateNeeded | rescanIntervalTimer.GetIsTriggered(qpcTimeStamp);
 
                 if (fullUpdateNeeded)
                 {
@@ -2521,7 +2540,7 @@ namespace Mosaic.ToolsLib.File.FileSync
             public bool UpdateLastWriteTimeFromSource { get { return DestinationFileTimeHandling == DestinationFileTimeHandling.UpdateCreationAndLastWriteTimesFromSource; } }
 
             /// <summary>Defines the ActionLoggingConfig that is used for part's external actions</summary>
-            public ActionLoggingConfig ActionLoggingConfig { get; set; } = new ActionLoggingConfig(Logging.MesgType.Debug, Logging.MesgType.Debug, Logging.MesgType.Debug, Logging.MesgType.Debug, ActionLoggingStyleSelect.IncludeRunTimeOnCompletion);
+            public ActionLoggingConfig ActionLoggingConfig { get; set; } = ActionLoggingConfig.Debug_Debug_Debug_Debug.Update(actionLoggingStyleSelect: ActionLoggingStyleSelect.IncludeRunTimeOnCompletion);
             public Logging.LogGate InitialInstanceLogGate { get; set; } = Logging.LogGate.Debug;
 
             public int NominalMaximumTransactionsPerSet { get; set; } = 20; // up to 5 mbytes of pending transfer per set.
@@ -2721,7 +2740,7 @@ namespace Mosaic.ToolsLib.File.FileSync
 
             public IClientFacet Sync(TimeSpan nominalWaitTimeLimit, SyncFlags syncFlags = default)
             {
-                return new BasicActionImpl(ActionQueue, (ipf) => PerformSync(ipf, nominalWaitTimeLimit, syncFlags), "Sync", ActionLoggingReference, mesgDetails: $"timeLimit:{nominalWaitTimeLimit.TotalSeconds:f3}s, {syncFlags}");
+                return new BasicActionImpl(ActionQueue, (ipf) => PerformSync(ipf, nominalWaitTimeLimit, syncFlags), "Sync", ActionLoggingReference, mesgDetails: (nominalWaitTimeLimit.IsZero() ? $"{syncFlags}" : $"timeLimit:{nominalWaitTimeLimit.TotalSeconds:f3}s, {syncFlags}"));
             }
 
             private string PerformSync(IProviderFacet ipf, TimeSpan nominalWaitTimeLimit, SyncFlags syncFlags)
@@ -3072,12 +3091,14 @@ namespace Mosaic.ToolsLib.File.FileSync
             private bool rescanDirectoryNeeded = true;
             QpcTimer rescanIntervalTimer;
 
-            public int ServiceFileTracking(QpcTimeStamp qpcTimeStamp, bool forceFullUpdate = false)
+            private int ServiceFileTracking(QpcTimeStamp qpcTimeStamp, bool forceFullUpdate = false)
             {
+                qpcTimeStamp = qpcTimeStamp.MapDefaultToNow();
+
                 long entrySyncFileInfoSeqNumGen = syncFileInfoSeqNumGen;
 
                 fullUpdateNeeded |= forceFullUpdate || (asyncErrorCount > 0);
-                rescanDirectoryNeeded |= fullUpdateNeeded | rescanIntervalTimer.IsTriggered;
+                rescanDirectoryNeeded |= fullUpdateNeeded | rescanIntervalTimer.GetIsTriggered(qpcTimeStamp);
 
                 if (fullUpdateNeeded)
                 {
@@ -3760,15 +3781,37 @@ namespace Mosaic.ToolsLib.File.FileSync
             UpdateCreationAndLastWriteTimesFromSource,
         }
 
-        public interface IFileSyncClient : IActivePartBase
+        /// <summary>
+        /// This interface is supported by all file sync client parts
+        /// </summary>
+        public interface IFileSyncClient : ISyncActionFactory, IActivePartBase
+        { }
+
+        /// <summary>
+        /// This interface defines a sync action factory method.
+        /// </summary>
+        public interface ISyncActionFactory
         {
-            IClientFacet Sync(TimeSpan nominalWaitTimeLimit, SyncFlags syncFlags = default);
+            /// <summary>
+            /// Action factory method.  When run this action will attempt to perform the requested sync operation based on the given <paramref name="syncFlags"/>. 
+            /// If the provider supports it, this action will limit its nominal maximum run time to the given <paramref name="nominalWaitTimeLimit"/> when it is non-zero.
+            /// </summary>
+            IClientFacet Sync(TimeSpan nominalWaitTimeLimit = default, SyncFlags syncFlags = default);
         }
 
-        [Flags]
+        /// <summary>
+        /// This flag enumeration is used to specify the synchronization operation characteristics that the client would like the provider to perform.
+        /// <para/>Default (0x00), Full (0x01), Recent (0x02)
+        /// </summary>
+        [Flags, DataContract(Namespace = MosaicLib.Constants.ToolsLibNameSpace)]
         public enum SyncFlags
         {
+            /// <summary>Placeholder default sync request - used to confirm that the provider has completed a normal background update iteration and wait until any related pending deliveries are complete [0x00]</summary>
+            [EnumMember]
             Default = 0x00,
+
+            /// <summary>Full sync request - used to request the provider to fully rescan all of the files and wait for all related transfers to be complete.  [0x01]</summary>
+            [EnumMember]
             Full = 0x01,
         }
 
@@ -3793,7 +3836,7 @@ namespace Mosaic.ToolsLib.File.FileSync
             /// <summary>Gives the number of bytes that the client would like to read for the given FileID and starting at the given FileOffset.</summary>
             [Key(5)]
             public int RequestedTransferSize { get; set; }
-            /// <summary>This flag is true if the client is performing a full sync request and would like the server's TcpClient specific task to ask the main part to run a Sync before obtaining the udpated SyncFileInfoArray that is typically generated in these requests.</summary>
+            /// <summary>This flag is true if the client is performing a non-default sync request and would like the server's TcpClient specific task to ask the main part to run a Sync before obtaining the udpated SyncFileInfoArray that is typically generated in these requests.</summary>
             [Key(6)]
             public bool SyncRequest { get; set; }
 
@@ -3909,7 +3952,6 @@ namespace Mosaic.ToolsLib.File.FileSync
         public static partial class Constants
         {
             public const int DefaultTCPPort = 22972;
-            public const int DefaultUDPPort = 22972;
         }
 
         /// <summary>

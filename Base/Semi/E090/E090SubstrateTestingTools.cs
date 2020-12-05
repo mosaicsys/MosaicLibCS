@@ -853,10 +853,12 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
                 if (serviceEvaluationUpdates)
                     UpdateEvalInfo(alreadyFoundFirstWaitingForStartSubstrate: alreadyFoundFirstWaitingForStartSubstrate, stateToTool: stateToTool);
-
-                if (serviceDropReasonUpdates)
-                    didCount += ServiceDropReasonAssertion();
             }
+
+            bool isFinalOrNull = SubstObserver.Object.IsFinalOrNull();
+
+            if (serviceDropReasonUpdates && (substUpdateNeeded || isFinalOrNull))
+                didCount += ServiceDropReasonAssertion();
 
             if (serviceProcessCompletion)
             {
@@ -889,7 +891,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
                 {
                     // this is typically used to record the final SPS for substrates that finished their last processing step at PM4, after they have been moved onto a robot arm.
                     var finalSPS = GetFinalSPS();
-                    if (finalSPS.IsProcessingComplete())
+                    if (finalSPS.IsProcessingComplete() && !isFinalOrNull)
                     {
                         Logger.Debug.Emit("Setting {0} final SPS to {1} [at loc:{2}]", SubstID.FullName, finalSPS, currentLoc);
  
@@ -905,7 +907,7 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
         private ReadOnlyIList<string> GetNextLocNameList(ISubstrateSchedulerPartState stateToTool)
         {
-            if (CurrentStationProcessICF != null || Info.STS.IsAtDestination())
+            if (CurrentStationProcessICF != null || Info.STS.IsAtDestination() || SubstObserver.Object.IsFinalOrNull() || IsDropRequested)
                 return ReadOnlyIList<string>.Empty;
 
             IProcessStepSpec stepSpec = NextStepSpec;
@@ -993,6 +995,12 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
         {
             var entryNextLocNameList = evalInfo.nextLocNameList.MapNullToEmpty();
             var entryNextLocNameListVCStr = evalInfo.nextLocNameListVCStr;
+
+            if (SubstObserver.Object.IsFinalOrNull())
+            {
+                evalInfo.Clear(andNextLocNameListVCStr: true);
+                return;
+            }
 
             var st = this;
 
@@ -1134,13 +1142,14 @@ namespace MosaicLib.Semi.E090.SubstrateTestingTools
 
             public StationEvaluationItem firstCanMoveToStationEval, firstCanSwapAtStationEval, firstPossibleAlmostAvailableForApproachToStationEval;
 
-            public void Clear()
+            public void Clear(bool andNextLocNameListVCStr = true)
             {
                 currentStation = TestStationEnum.None;
                 currentLocObs = null;
                 currentITPR = null;
                 nextLocNameList = ReadOnlyIList<string>.Empty;
-                //nextLocNameListVCStr = string.Empty;  // do not clear this
+                if (andNextLocNameListVCStr)
+                    nextLocNameListVCStr = string.Empty;
                 nextStationEvalList.Clear();
                 flags = default(Flags);
                 firstCanMoveToStationEval = firstCanSwapAtStationEval = firstPossibleAlmostAvailableForApproachToStationEval = default(StationEvaluationItem);

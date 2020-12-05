@@ -2590,8 +2590,8 @@ namespace MosaicLib.Modular.Interconnect.Values
             if (ivi != null || IVI == null)
                 IVI = ivi;
 
-            if (!IsValueSetValid)
-                new System.NullReferenceException("ValueSet property must be Valid (non-null) before Setup can be called").Throw();
+            //if (!IsValueSetValid)
+            //    new System.NullReferenceException("ValueSet property must be Valid (non-null) before Setup can be called").Throw();
 
             InnerSetup(baseNames);
 

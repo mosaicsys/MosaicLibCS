@@ -1,7 +1,7 @@
 ﻿//-------------------------------------------------------------------
 /*! @file CommonAssemblyInfo.cs
- *  @brief This file contains the common assembly attributes for all of thee MosaicLibCS related assemblies.
- *  This file is generally included (by link) in the corresponding asseembly project files next to the assembly specific AssemblyInfo.cs file.
+ *  @brief This file contains the common assembly attributes for all of the MosaicLibCS related assemblies.
+ *  This file is generally included (by link) in the corresponding assembly project files next to the assembly specific AssemblyInfo.cs file.
  * 
  * Copyright (c) Mosaic Systems Inc.
  * Copyright (c) 2019 Mosaic Systems Inc.
@@ -26,7 +26,7 @@ using System.Reflection;
 [assembly: AssemblyCompany("Mosaic Systems Inc.")]
 [assembly: AssemblyCopyright("Copyright © Mosaic Systems Inc.  All rights reserved.  Licensed under the Apache License, Version 2.0.")]
 
-[assembly: AssemblyInformationalVersion("0.1.8.0_PR02: Preview 02")]
+[assembly: AssemblyInformationalVersion("0.1.8.0_PR03: Preview 03")]
 [assembly: AssemblyFileVersion("0.1.8.0")]
 [assembly: AssemblyVersion("0.1.8.0")]
 

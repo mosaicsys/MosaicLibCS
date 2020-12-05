@@ -629,7 +629,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
             MDRF2FileReadingHelper.Filter filterSpec = new MDRF2FileReadingHelper.Filter()
             {
                 ItemTypeSelect = MDRF2QueryItemTypeSelect.Mesg | MDRF2QueryItemTypeSelect.Error | MDRF2QueryItemTypeSelect.DecodingIssue | MDRF2QueryItemTypeSelect.Occurrence | MDRF2QueryItemTypeSelect.Object,
-                UserRowFlagBitMask = contentBuilder.FileIndexUserRowFlagBitsMaskOfInterest,
+                InlineIndexUserRowFlagBitMask = contentBuilder.FileIndexUserRowFlagBitsMaskOfInterest,
                 GroupIDHashSet = contentBuilder.GroupIDFilterSet,
                 OccurrenceDictionary = contentBuilder.OccurrenceIDDictionary,
                 ObjectTypeNameSet = null,

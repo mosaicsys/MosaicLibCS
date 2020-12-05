@@ -124,6 +124,7 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
         IMDRF2FileInfo FileInfo { get; }
         Common.MDRF2DateTimeStampPair DTPair { get; }
         MDRF2QueryItemTypeSelect ItemType { get; }
+        ulong UserRowFlagBits { get; }
         object DataAsObject { get; }
     }
 
@@ -136,15 +137,17 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
     {
         public IMDRF2FileInfo FileInfo { get; set; }
         public MDRF2QueryItemTypeSelect ItemType { get; set; }
+        public ulong UserRowFlagBits { get; set; }
         public Common.MDRF2DateTimeStampPair DTPair { get; set; }
         public TItemType Data { get; set; }
         object IMDRF2QueryRecord.DataAsObject { get { return Data; } }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public MDRF2QueryRecord<TItemType> Update(in Common.MDRF2DateTimeStampPair dtPair, TItemType data = default)
+        public MDRF2QueryRecord<TItemType> Update(in Common.MDRF2DateTimeStampPair dtPair, TItemType data = default, ulong ? userRowFlagBits = null)
         {
             DTPair = dtPair;
             Data = data;
+            UserRowFlagBits = userRowFlagBits ?? UserRowFlagBits;
 
             return this;
         }
@@ -152,7 +155,11 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
         public override string ToString()
         {
             string dataStr = Data.SafeToString(mapNullTo: "[Null]");
-            return $"MDRF2QueryRecord<{typeof(TItemType).GetTypeLeafName()}> {ItemType} {DTPair} data:{dataStr}";
+
+            if (UserRowFlagBits != 0)
+                return $"MDRF2QueryRecord<{typeof(TItemType).GetTypeLeafName()}> {ItemType} urfb:{UserRowFlagBits:x4} {DTPair} data:{dataStr}";
+            else
+                return $"MDRF2QueryRecord<{typeof(TItemType).GetTypeLeafName()}> {ItemType} {DTPair} data:{dataStr}";
         }
     }
 
@@ -163,18 +170,23 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
             FileInfo = other.FileInfo;
             DTPair = other.DTPair;
             ItemType = other.ItemType;
+            UserRowFlagBits = other.UserRowFlagBits;
             DataAsObject = other.DataAsObject;
         }
 
         public IMDRF2FileInfo FileInfo { get; private set; }
         public Common.MDRF2DateTimeStampPair DTPair { get; private set; }
         public MDRF2QueryItemTypeSelect ItemType { get; private set; }
+        public ulong UserRowFlagBits { get; set; }
         public object DataAsObject { get; private set; }
 
         public override string ToString()
         {
             string dataStr = DataAsObject.SafeToString(mapNullTo: "[Null]");
-            return $"MDRF2QueryRecordStruct {ItemType} {DTPair} data:{dataStr}";
+            if (UserRowFlagBits != 0)
+                return $"MDRF2QueryRecordStruct {ItemType} urfb:{UserRowFlagBits:x4} {DTPair} data:{dataStr}";
+            else
+                return $"MDRF2QueryRecordStruct {ItemType} {DTPair} data:{dataStr}";
         }
     }
 
@@ -281,8 +293,14 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
 
                 using (var reader = new MDRF2FileReadingHelper(this.FullPath, populateIfNeededLogger))
                 {
-                    var filter = new MDRF2FileReadingHelper.Filter() { EndOfStreamExceptionIsEndOfFile = true, DecompressionEngineExceptionIsEndOfFile = true };
-                    reader.ReadHeadersIfNeeded(filter);
+                    var rhFilter = new MDRF2FileReadingHelper.Filter()
+                    {
+                        DecompressionEngineExceptionIsEndOfFile = true,
+                        EndOfStreamExceptionIsEndOfFile = true,
+                    };
+
+                    // attempt to read the header.  This may fail or throw if the file does not have a complete set of header records written to it yet.
+                    reader.ReadHeadersIfNeeded(rhFilter);
                     return reader.FileInfo;
                 }
             }
@@ -331,6 +349,12 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
         /// Note: the MDRF2QueryItemTypeSelect.Object flag must be included in the ItemTypeSelect in order for the query engine to yeild object records.
         /// </summary>
         public ReadOnlyHashSet<string> ObjectTypeNameSet { get; set; } = null;
+
+        /// <summary>
+        /// When this is non-zero it is used to indicate the set of user row flag bit values that are associated with the object types to be decoded and will prevent decoding blocks (and individual records in some cases) when they do not contain any such object instances.
+        /// <para/>Note: use of this option may block decoding of object types that were not recorded with any matching flag bit value, or which were recorded with zero for the flag bit value.
+        /// </summary>
+        public ulong ObjectSpecificUserRowFlagBits { get; set; }
 
         /// <summary>
         /// When this value is false (the default) the query execution engine will generate new record instances for all records that are yeilded by the enumeration.  
@@ -668,7 +692,9 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
         public string RootDirPath { get; set; } = ".";
         public TimeSpan ScanForChangesInterval { get; set; } = (30.0).FromSeconds();
         public int FSWInternalBufferSize { get; set; } = 65536;
-        public ActionLoggingConfig ActionLoggingConfig { get; set; } = ActionLoggingConfig.Debug_Debug_Trace_Trace;
+        public ActionLoggingConfig ActionLoggingConfig { get; set; } = ActionLoggingConfig.Debug_Debug_Trace_Trace.Update(actionLoggingStyleSelect: ActionLoggingStyleSelect.IncludeRunTimeOnCompletion);
+        public bool DecompressionEngineExceptionIsEndOfFile { get; set; } = true;
+        public bool EndOfStreamExceptionIsEndOfFile { get; set; } = true;
 
         public MDRF2DirectoryTrackerConfig MakeCopyOfThis(bool deepCopy = true)
         {
@@ -985,12 +1011,27 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
                                 {
                                     using (var fileReaderHelper = new MDRF2FileReadingHelper(new MDRF2FileInfo(ft.fileNameAndRelativePath, ft.fileNameFromConfiguredPath, ft.fullPath), Log))
                                     {
-                                        fileReaderHelper.ReadHeadersIfNeeded();     // this may throw if the file does not contain a full pair of header records yet.
+                                        MDRF2FileReadingHelper.Filter rhFilter = new MDRF2FileReadingHelper.Filter()
+                                        {
+                                            DecompressionEngineExceptionIsEndOfFile = Config.DecompressionEngineExceptionIsEndOfFile,
+                                            EndOfStreamExceptionIsEndOfFile = Config.EndOfStreamExceptionIsEndOfFile,
+                                        };
 
-                                        ft.mdrf2FileInfo = fileReaderHelper.FileInfo.MakeCopyOfThis();
+                                        // attempt to read the header.  This may fail or throw if the file does not have a complete set of header records written to it yet.
+                                        fileReaderHelper.ReadHeadersIfNeeded(rhFilter);
+
                                         ft.fileLength = fileReaderHelper.FileInfo.FileLength;
                                         ft.lastScanTime = qpcTimeStamp;
-                                        ft.faultCode = ft.mdrf2FileInfo.IsUsable ? "" : $"This is not a valid MDRF2 or MDRF file: {ft.mdrf2FileInfo.FaultCode}";
+
+                                        if (fileReaderHelper.HeadersRead)
+                                        {
+                                            ft.mdrf2FileInfo = fileReaderHelper.FileInfo.MakeCopyOfThis();
+                                            ft.faultCode = ft.mdrf2FileInfo.IsUsable ? "" : $"This is not a valid MDRF2 or MDRF file: {ft.mdrf2FileInfo.FaultCode}";
+                                        }
+                                        else
+                                        {
+                                            Log.Trace.Emit($"File '{ft.fileNameAndRelativePath}':{ft.fileLength} is not usable yet [{fileReaderHelper.HeaderReadFailedReason}]");
+                                        }
                                     }
                                 }
                                 else
@@ -1292,40 +1333,42 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
                     pointDecoderArrayByGroupDictionary[gi.GroupID] = new GroupPointStateAndDecoder() { GroupToPointIndexMap = mapBuilderList.ToArray() };
                 }
 
-                bool anyFileIndexRowFlagBitMaskMissing = false;
-                FileIndexRowFlagBits fileIndexRowFlagBitMask = default;
-                bool anyUserRowFlagBitMaskMissing = false;
-                UInt64 userRowFlagBitMask = 0;
+                bool anyInlineIndexRowFlagBitMaskMissing = false;
+                FileIndexRowFlagBits inlineIndexRowFlagBitMask = default;
+                bool anyInlineIndexUserRowFlagBitMaskMissing = false;
+                UInt64 inlineIndexUserRowFlagBitMask = 0;
 
                 foreach (var oi in rhFilter.OccurrenceDictionary.Values)
                 {
-                    fileIndexRowFlagBitMask |= oi.IsHighPriority ? (FileIndexRowFlagBits.ContainsHighPriorityOccurrence) : (FileIndexRowFlagBits.ContainsHighPriorityOccurrence | FileIndexRowFlagBits.ContainsOccurrence);
+                    inlineIndexRowFlagBitMask |= oi.IsHighPriority ? (FileIndexRowFlagBits.ContainsHighPriorityOccurrence) : (FileIndexRowFlagBits.ContainsHighPriorityOccurrence | FileIndexRowFlagBits.ContainsOccurrence);
                     if (oi.FileIndexUserRowFlagBits != 0)
-                        userRowFlagBitMask |= oi.FileIndexUserRowFlagBits;
+                        inlineIndexUserRowFlagBitMask |= oi.FileIndexUserRowFlagBits;
                     else
-                        anyUserRowFlagBitMaskMissing = true;
+                        anyInlineIndexUserRowFlagBitMaskMissing = true;
                 }
 
                 foreach (var gi in groupInfoHashSet)
                 {
-                    anyFileIndexRowFlagBitMaskMissing = true;
+                    anyInlineIndexRowFlagBitMaskMissing = true;
                     if (gi.FileIndexUserRowFlagBits != 0)
-                        userRowFlagBitMask |= gi.FileIndexUserRowFlagBits;
+                        inlineIndexUserRowFlagBitMask |= gi.FileIndexUserRowFlagBits;
                     else
-                        anyUserRowFlagBitMaskMissing = true;
+                        anyInlineIndexUserRowFlagBitMaskMissing = true;
                 }
 
                 if (rhFilter.ObjectTypeNameSet == null || rhFilter.ObjectTypeNameSet.Count > 0)
-                    fileIndexRowFlagBitMask |= FileIndexRowFlagBits.ContainsObject | FileIndexRowFlagBits.ContainsSignificantObject;
+                    inlineIndexRowFlagBitMask |= FileIndexRowFlagBits.ContainsObject | FileIndexRowFlagBits.ContainsSignificantObject;
+
+                rhFilter.ObjectSpecificUserRowFlagBitMask = QueryTaskSpec.ClientQuerySpec.ObjectSpecificUserRowFlagBits;
 
                 if ((rhFilter.ItemTypeSelect & MDRF2QueryItemTypeSelect.Mesg) != 0)
-                    fileIndexRowFlagBitMask |= FileIndexRowFlagBits.ContainsMessage;
+                    inlineIndexRowFlagBitMask |= FileIndexRowFlagBits.ContainsMessage;
 
                 if ((rhFilter.ItemTypeSelect & MDRF2QueryItemTypeSelect.Error) != 0)
-                    fileIndexRowFlagBitMask |= FileIndexRowFlagBits.ContainsError;
+                    inlineIndexRowFlagBitMask |= FileIndexRowFlagBits.ContainsError;
 
-                rhFilter.FileIndexRowFlagBitMask = anyFileIndexRowFlagBitMaskMissing ? FileIndexRowFlagBits.None : fileIndexRowFlagBitMask;
-                rhFilter.UserRowFlagBitMask = anyUserRowFlagBitMaskMissing ? 0 : userRowFlagBitMask;
+                rhFilter.InlineIndexRowFlagBitMask = anyInlineIndexRowFlagBitMaskMissing ? FileIndexRowFlagBits.None : inlineIndexRowFlagBitMask;
+                rhFilter.InlineIndexUserRowFlagBitMask = anyInlineIndexUserRowFlagBitMaskMissing ? 0 : (inlineIndexUserRowFlagBitMask | rhFilter.ObjectSpecificUserRowFlagBitMask);
 
                 rhFilter.AllowRecordReuse = QueryTaskSpec.ClientQuerySpec.AllowRecordReuse;
 
@@ -1630,13 +1673,16 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
             public MDRF2QueryItemTypeSelect ItemTypeSelect { get; set; } = MDRF2QueryItemTypeSelect.None;
 
             /// <summary>Used by the client to specify which file index row flag bit values they would like processed.  InlineIndex record blocks that do not contain indicated record types will be skipped.  When this is set to None (0) it selects that no filtering will be performed using this value.</summary>
-            public FileIndexRowFlagBits FileIndexRowFlagBitMask { get; set; } = FileIndexRowFlagBits.None;
+            public FileIndexRowFlagBits InlineIndexRowFlagBitMask { get; set; } = FileIndexRowFlagBits.None;
 
             /// <summary>Used by the client to specify which user row flag bit values they would like processed.  InlineIndex record blocks that do not contain records associated with the given mask will be skipped.  When this is set to 0 it selects that no related filtering will be performed using this value.</summary>
-            public UInt64 UserRowFlagBitMask { get; set; } = 0;
+            public UInt64 InlineIndexUserRowFlagBitMask { get; set; } = 0;
 
             /// <summary>Defines the set of object types that should be extracted and for which query records should be yielded.  When null is used it indicates that all objects shall be extracted and yielded.</summary>
             public HashSet<string> ObjectTypeNameSet { get; set; }
+
+            /// <summary>When non-zero, this property defines the set of object specific user row flag bits that this filter should perform callbacks for.  If this is non-zero then objects records that were not recorded with a non-zero value will not be decoded or reported.</summary>
+            public ulong ObjectSpecificUserRowFlagBitMask { get; set; }
 
             /// <summary>
             /// Defines the mapping of Occurrence ID values to their corresponding IOccurrenceInfo objects.  All occurence types that the client would like records generated for and yielded must be included in this dictionary and must include a non-null IOccurrenceInfo instance.
@@ -1805,6 +1851,11 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
         public string FaultCode { get { return _FaultCode.MapNullToEmpty(); } private set { _FaultCode = value; } }
         private string _FaultCode = null;
 
+        /// <summary>
+        /// Whenever the header read fails to successfully read the headers but no FaultCode is latched/noted, this property will describe the reason.
+        /// </summary>
+        public string HeaderReadFailedReason { get; set; }
+
         public void ReadHeadersIfNeeded(Filter filter = null)
         {
             try
@@ -1869,6 +1920,7 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
                     FileInfo = fileInfo.MakeCopyOfThis();
 
                     HeadersRead = true;
+                    HeaderReadFailedReason = string.Empty;
                 }
             }
             catch (System.Exception ex)
@@ -1876,10 +1928,12 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
                 if (ex is System.IO.EndOfStreamException && filter?.EndOfStreamExceptionIsEndOfFile == true)
                 {
                     FaultCode = "";
+                    HeaderReadFailedReason = $"Headers are not complete [{ex.ToString(ExceptionFormat.TypeAndMessage)}]";
                 }
                 else if (ex.GetType().ToString().StartsWith("K4os.Compression.LZ4") && filter?.DecompressionEngineExceptionIsEndOfFile == true)
                 {
                     FaultCode = "";
+                    HeaderReadFailedReason = $"Headers are not complete [{ex.ToString(ExceptionFormat.TypeAndMessage)}]";
                 }
                 else
                 {
@@ -1899,8 +1953,8 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
             else
             {
                 bool processIndexOnly = ((filter.ItemTypeSelect & ~(MDRF2QueryItemTypeSelect.InlineIndexRecord | MDRF2QueryItemTypeSelect.FileEnd | MDRF2QueryItemTypeSelect.FileStart)) == 0)
-                                      && (filter.UserRowFlagBitMask == 0)
-                                      && (filter.FileIndexRowFlagBitMask == 0)
+                                      && (filter.InlineIndexUserRowFlagBitMask == 0)
+                                      && (filter.InlineIndexRowFlagBitMask == 0)
                                       && (filter.GroupIDHashSet != null && filter.GroupIDHashSet.IsEmpty())
                                       && (filter.ObjectTypeNameSet != null && filter.ObjectTypeNameSet.IsEmpty())
                                       && (filter.OccurrenceDictionary != null && filter.OccurrenceDictionary.IsEmpty())
@@ -2071,10 +2125,10 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
                             bool inTimeRange = !outOfTimeRange;
 
                             var blockFileIndexRowFlagsBits = CurrentInlineIndexRecord.BlockFileIndexRowFlagBits;
-                            var filteredBlockFileIndexRowFlagBits = blockFileIndexRowFlagsBits & filter.FileIndexRowFlagBitMask;
+                            var filteredBlockFileIndexRowFlagBits = blockFileIndexRowFlagsBits & filter.InlineIndexRowFlagBitMask;
 
-                            bool fileIndexBitsMatch = ((filteredBlockFileIndexRowFlagBits != 0) || (filter.FileIndexRowFlagBitMask == 0));
-                            bool userRowFlagBitsMatch = (((CurrentInlineIndexRecord.BlockUserRowFlagBits & filter.UserRowFlagBitMask) != 0) || (filter.UserRowFlagBitMask == 0));
+                            bool fileIndexBitsMatch = ((filteredBlockFileIndexRowFlagBits != 0) || (filter.InlineIndexRowFlagBitMask == 0));
+                            bool userRowFlagBitsMatch = (((CurrentInlineIndexRecord.BlockUserRowFlagBits & filter.InlineIndexUserRowFlagBitMask) != 0) || (filter.InlineIndexUserRowFlagBitMask == 0));
 
                             bool blockMayHaveGroupsToProcess = (CurrentInlineIndexRecord.LastDTPair.FileDeltaTime >= filter.SkipGroupsUntilAfterFDT) && (filter.GroupIDHashSet == null || filter.GroupIDHashSet.Count > 0);
                             bool blockMayHaveOccurrencesToProcess = ((blockFileIndexRowFlagsBits & (FileIndexRowFlagBits.ContainsOccurrence | FileIndexRowFlagBits.ContainsHighPriorityOccurrence)) != 0) && (filter.OccurrenceDictionary == null || filter.OccurrenceDictionary.Count > 0);
@@ -2219,75 +2273,117 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
                         }
                         break;
 
-                    case MPHeaderByteCode.FixArray3:    // Object or Mesg or Error : [L3 objKnownTypeName objKnownTypeData nil]
+                    case MPHeaderByteCode.FixArray3:    // Object or Mesg or Error : new [L3 recordUserRowFlagBits objKnownTypeName objKnownTypeData], old [L3 objKnownTypeName objKnownTypeData nil]
                         {
                             if (filter.IsInTimeRange(CurrentQRDTPair))
                             {
-                                fileSummary.ProcessedObjectCount += 1;
+                                mpReader.ReadArrayHeader();
 
-                                var objTypeHashSet = filter.ObjectTypeNameSet;
-                                var acceptAll = (objTypeHashSet == null);
+                                ulong recordUserRowFlagBits = 0;
+
+                                if (mpReader.NextMessagePackType == MessagePackType.Integer)
+                                    recordUserRowFlagBits = mpReader.ReadUInt64();
+
                                 bool enableEmitObject = ((filter.ItemTypeSelect & MDRF2QueryItemTypeSelect.Object) != 0);
 
-                                mpReader.ReadArrayHeader();
+                                bool enableEmitThisObject = enableEmitObject && (((recordUserRowFlagBits & filter.ObjectSpecificUserRowFlagBitMask) != 0) || (filter.ObjectSpecificUserRowFlagBitMask == 0));
+
+                                var objTypeHashSet = filter.ObjectTypeNameSet;
+                                var acceptAllObjectTypes = (objTypeHashSet == null);
+
                                 string objKnownTypeName = mpReader.ReadString();
 
                                 switch (objKnownTypeName)
                                 {
-                                    case Common.Constants.ObjKnownType_Mesg:
+                                    case Common.Constants.ObjKnownType_Mesg:    // this is a pseudo object type - it has its own ItemTypeSelect value but is serialized as an object
                                         if ((filter.ItemTypeSelect & MDRF2QueryItemTypeSelect.Mesg) != 0)
                                         {
+                                            fileSummary.ProcessedObjectCount += 1;
+
                                             var mesgT = Common.MesgAndErrorBodyFormatter.Instance.Deserialize(ref mpReader, mpOptions);
-                                            state.AddRecord(new MDRF2QueryRecord<string>() { FileInfo = FileInfo, DTPair = mesgT.Item2, ItemType = MDRF2QueryItemTypeSelect.Mesg, Data = mesgT.Item1 });
+                                            state.AddRecord(new MDRF2QueryRecord<string>() { FileInfo = FileInfo, DTPair = mesgT.Item2, ItemType = MDRF2QueryItemTypeSelect.Mesg, Data = mesgT.Item1, UserRowFlagBits = recordUserRowFlagBits });
+                                        }
+                                        else
+                                        {
+                                            fileSummary.SkippedRecordCount += 1;
                                         }
                                         break;
 
-                                    case Common.Constants.ObjKnownType_Error:
+                                    case Common.Constants.ObjKnownType_Error:    // this is a pseudo object type - it has its own ItemTypeSelect value but is serialized as an object
                                         if ((filter.ItemTypeSelect & MDRF2QueryItemTypeSelect.Error) != 0)
                                         {
+                                            fileSummary.ProcessedObjectCount += 1;
+
                                             var mesgT = Common.MesgAndErrorBodyFormatter.Instance.Deserialize(ref mpReader, mpOptions);
-                                            state.AddRecord(new MDRF2QueryRecord<string>() { FileInfo = FileInfo, DTPair = mesgT.Item2, ItemType = MDRF2QueryItemTypeSelect.Error, Data = mesgT.Item1 });
+                                            state.AddRecord(new MDRF2QueryRecord<string>() { FileInfo = FileInfo, DTPair = mesgT.Item2, ItemType = MDRF2QueryItemTypeSelect.Error, Data = mesgT.Item1, UserRowFlagBits = recordUserRowFlagBits });
+                                        }
+                                        else
+                                        {
+                                            fileSummary.SkippedRecordCount += 1;
                                         }
                                         break;
 
                                     case Common.Constants.ObjKnownType_LogMessage:
-                                        if (enableEmitObject && (acceptAll || objTypeHashSet.Contains(objKnownTypeName) || objTypeHashSet.Contains(typeString_ILogMessage) || objTypeHashSet.Contains(typeString_LogMessage)))
+                                        if (enableEmitThisObject && (acceptAllObjectTypes || objTypeHashSet.Contains(objKnownTypeName) || objTypeHashSet.Contains(typeString_ILogMessage) || objTypeHashSet.Contains(typeString_LogMessage)))
                                         {
+                                            fileSummary.ProcessedObjectCount += 1;
+
                                             if (!filter.AllowRecordReuse || logMessageObjectQueryRecord == null)
                                                 logMessageObjectQueryRecord = new MDRF2QueryRecord<Logging.ILogMessage>() { FileInfo = FileInfo, ItemType = MDRF2QueryItemTypeSelect.Object };
 
-                                            state.AddRecord(logMessageObjectQueryRecord.Update(CurrentQRDTPair, LogMessageFormatter.Instance.Deserialize(ref mpReader, mpOptions)));
+                                            state.AddRecord(logMessageObjectQueryRecord.Update(CurrentQRDTPair, LogMessageFormatter.Instance.Deserialize(ref mpReader, mpOptions), recordUserRowFlagBits));
+                                        }
+                                        else
+                                        {
+                                            fileSummary.SkippedRecordCount += 1;
+                                            fileSummary.SkippedUserRowFlagBits |= recordUserRowFlagBits;
                                         }
 
                                         break;
 
                                     case Common.Constants.ObjKnownType_E039Object:
-                                        if (enableEmitObject && (acceptAll || objTypeHashSet.Contains(objKnownTypeName) || objTypeHashSet.Contains(typeString_IE039Object) || objTypeHashSet.Contains(typeString_E039Object)))
+                                        if (enableEmitThisObject && (acceptAllObjectTypes || objTypeHashSet.Contains(objKnownTypeName) || objTypeHashSet.Contains(typeString_IE039Object) || objTypeHashSet.Contains(typeString_E039Object)))
                                         {
+                                            fileSummary.ProcessedObjectCount += 1;
+
                                             if (!filter.AllowRecordReuse || e039ObjectQueryRecord == null)
                                                 e039ObjectQueryRecord = new MDRF2QueryRecord<MosaicLib.Semi.E039.IE039Object>() { FileInfo = FileInfo, ItemType = MDRF2QueryItemTypeSelect.Object };
 
-                                            state.AddRecord(e039ObjectQueryRecord.Update(CurrentQRDTPair, E039ObjectFormatter.Instance.Deserialize(ref mpReader, mpOptions)));
+                                            state.AddRecord(e039ObjectQueryRecord.Update(CurrentQRDTPair, E039ObjectFormatter.Instance.Deserialize(ref mpReader, mpOptions), recordUserRowFlagBits));
+                                        }
+                                        else
+                                        {
+                                            fileSummary.SkippedRecordCount += 1;
+                                            fileSummary.SkippedUserRowFlagBits |= recordUserRowFlagBits;
                                         }
 
                                         break;
 
                                     case Common.Constants.ObjKnownType_ValueContainer:
-                                        if (enableEmitObject && (acceptAll || objTypeHashSet.Contains(objKnownTypeName) || objTypeHashSet.Contains("ValueContainer") || objTypeHashSet.Contains(typeString_ValueContainer)))
+                                        if (enableEmitThisObject && (acceptAllObjectTypes || objTypeHashSet.Contains(objKnownTypeName) || objTypeHashSet.Contains("ValueContainer") || objTypeHashSet.Contains(typeString_ValueContainer)))
                                         {
+                                            fileSummary.ProcessedObjectCount += 1;
+
                                             if (!filter.AllowRecordReuse || vcObjectQueryRecord == null)
                                                 vcObjectQueryRecord = new MDRF2QueryRecord<ValueContainer>() { FileInfo = FileInfo, ItemType = MDRF2QueryItemTypeSelect.Object };
 
-                                            state.AddRecord(vcObjectQueryRecord.Update(CurrentQRDTPair, VCFormatter.Instance.Deserialize(ref mpReader, mpOptions)));
+                                            state.AddRecord(vcObjectQueryRecord.Update(CurrentQRDTPair, VCFormatter.Instance.Deserialize(ref mpReader, mpOptions), recordUserRowFlagBits));
+                                        }
+                                        else
+                                        {
+                                            fileSummary.SkippedRecordCount += 1;
+                                            fileSummary.SkippedUserRowFlagBits |= recordUserRowFlagBits;
                                         }
 
                                         break;
 
                                     case Common.Constants.ObjKnownType_TypeAndValueCarrier:
-                                        if (enableEmitObject)
+                                        if (enableEmitThisObject)
                                         {
+                                            fileSummary.ProcessedObjectCount += 1;
+
                                             var tavc = TypeAndValueCarrierFormatter.Instance.Deserialize(ref mpReader, mpOptions);
-                                            if (tavc != null && (acceptAll || objTypeHashSet.Contains(objKnownTypeName) || objTypeHashSet.Contains(tavc.TypeStr)))
+                                            if (tavc != null && (acceptAllObjectTypes || objTypeHashSet.Contains(objKnownTypeName) || objTypeHashSet.Contains(tavc.TypeStr)))
                                             {
                                                 try
                                                 {
@@ -2297,7 +2393,7 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
                                                     if (!filter.AllowRecordReuse || objectQueryRecord == null)
                                                         objectQueryRecord = new MDRF2QueryRecord<object>() { FileInfo = FileInfo, ItemType = MDRF2QueryItemTypeSelect.Object };
 
-                                                    state.AddRecord(objectQueryRecord.Update(CurrentQRDTPair, obj));
+                                                    state.AddRecord(objectQueryRecord.Update(CurrentQRDTPair, obj, recordUserRowFlagBits));
                                                 }
                                                 catch (System.Exception ex)
                                                 {
@@ -2305,11 +2401,18 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
                                                 }
                                             }
                                         }
+                                        else
+                                        {
+                                            fileSummary.SkippedRecordCount += 1;
+                                            fileSummary.SkippedUserRowFlagBits |= recordUserRowFlagBits;
+                                        }
+
                                         break;
 
                                     default:
                                         // unrecognized object type
                                         state.AddRecord(GenerateAndLogDecodingIssue(filter, $"Encountered unexpected object known type name '{objKnownTypeName}' in block [{CurrentInlineIndexRecord}]"));
+
                                         break;
                                 }
                             }

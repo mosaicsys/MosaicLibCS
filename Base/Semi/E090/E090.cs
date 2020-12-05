@@ -1917,6 +1917,9 @@ namespace MosaicLib.Semi.E090
             if (SJS != SubstrateJobState.Initial)
                 sb.CheckedAppendFormat(" SJS:{0}", SJS);
 
+            if (IsFinal)
+                sb.Append(" [Final]");
+
             return sb.ToString();
         }
     }

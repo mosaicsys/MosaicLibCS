@@ -486,8 +486,18 @@ namespace MosaicLib.Semi.E039
             }
         }
 
+        /// <summary>Requests that the table manager has saved the current (indicated) table set contents.</summary>
         public class SyncPersist : ObjIDBase
         {
+            /// <summary>Requests the table manager to persist the current state of the table set specified by the given <paramref name="objTypeName"/></summary>
+            public SyncPersist(string objTypeName, TimeSpan? waitTimeLimit = null, bool failOnWaitTimeLimitReached = false)
+                : this(new E039ObjectID(string.Empty, objTypeName), waitTimeLimit: waitTimeLimit, failOnWaitTimeLimitReached: failOnWaitTimeLimitReached)
+            { }
+
+            /// <summary>
+            /// When the given <paramref name="objID"/> is null this request that the table manager save the current state of all table sets that are persisted.
+            /// When the given <paramref name="objID"/> is not null, this requests that the table manager save the current state of the table set which is used with the given <paramref name="objID"/>'s Type.
+            /// </summary>
             public SyncPersist(E039ObjectID objID = null, TimeSpan? waitTimeLimit = null, bool failOnWaitTimeLimitReached = false)
                 : base(objID)
             {
@@ -499,10 +509,8 @@ namespace MosaicLib.Semi.E039
             public bool FailOnWaitTimeLimitReached { get; private set; }
         }
 
-        public class SyncPublication : ObjIDBase
-        {
-            public SyncPublication(E039ObjectID objID = null) : base(objID) { }
-        }
+        /// <summary>Requests the table manager to perform an iteration of object state publcation.</summary>
+        public class SyncPublication : E039UpdateItem {}
 
         public class SyncExternal : E039UpdateItem
         {
@@ -1073,17 +1081,25 @@ namespace MosaicLib.Semi.E039
         /// <summary>
         /// Returns true if the given <paramref name="flags"/> value has the IsFinal bit set.
         /// </summary>
-        public static bool IsFinal(this E039ObjectFlags flags) { return flags.IsSet(E039ObjectFlags.IsFinal); }
+        public static bool IsFinal(this E039ObjectFlags flags) { return ((flags & E039ObjectFlags.IsFinal) != 0); }
 
         /// <summary>
         /// Returns true if the given <paramref name="obj"/> is non-null and its Flags property has the IsFinal bit set 
         /// to indicate that this is the final value that will be published to the corresonding publisher, 
         /// generally because the object is being removed from the table.
         /// </summary>
-        public static bool IsFinal(this IE039Object obj) 
-        { 
-            return (obj != null) && obj.Flags.IsFinal(); 
+        public static bool IsFinal(this IE039Object obj, bool orNull = false) 
+        {
+            if (obj != null)
+                return obj.Flags.IsFinal();
+            else
+                return orNull;
         }
+
+        /// <summary>
+        /// Returns true if the given <paramref name="obj"/> IsFinal or is null.
+        /// </summary>
+        public static bool IsFinalOrNull(this IE039Object obj) { return obj.IsFinal(orNull: true); }
 
         /// <summary>
         /// Attempts to obtain, and return, the object identified by the given <paramref name="objID"/> using the TableObserver that the <paramref name="objID"/> references.
@@ -2334,16 +2350,17 @@ namespace MosaicLib.Semi.E039
             ulong completeAfterSeqNum = seqNums.PublishedObjectSeqNum;
 
             string typeName = updateItem.ObjID.Type;
-            TypeSetTracker[] relevantTypeSetTrackerArray = (typeName.IsNullOrEmpty() ? typeSetTrackerArray : new [] { FindTypeSetTrackerForType(typeName) }).Where(tst => tst.persistFileRingAdapter != null).ToArray();
+            TypeSetTracker[] selectedTypeSetTrackerArray = (typeName.IsNullOrEmpty() ? typeSetTrackerArray : new[] { FindTypeSetTrackerForType(typeName) });
 
-            if (relevantTypeSetTrackerArray.Any(tst => tst == null))
-                return "Given type name '{0}' was not found".CheckedFormat(typeName);
+            if (selectedTypeSetTrackerArray.Any(tst => tst == null))
+                return "Given type name '{0}' was not found".CheckedFormat(typeName);    // Note: this code path is no expected as FindTypeSetTrackerForType will return the defaultTypeSetTracker if no specific one is found.
+
+            TypeSetTracker[] relevantTypeSetTrackerArray = selectedTypeSetTrackerArray.Where(tst => tst.persistFileRingAdapter != null).ToArray();
 
             if (relevantTypeSetTrackerArray.IsEmpty() || relevantTypeSetTrackerArray.All(tst => !tst.IsWritePending && !tst.IsWriteActive))
                 return string.Empty;
 
-            // there is work to do.
-
+            // there is work to do to persist the relevant table sets.
             foreach (var tst in relevantTypeSetTrackerArray)
             {
                 if (tst.IsWritePending)

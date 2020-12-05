@@ -344,6 +344,9 @@ namespace MosaicLib.Semi.E041
 
         /// <summary>Returns true if this object's ALID is any value other than ALID_None, ALID_Lookup, or ALID_OptLookup</summary>
         bool HasALID { get; }
+
+        /// <summary>Returns true if this object is in its initial/empty state</summary>
+        bool IsEmpty { get; }
     }
 
     /// <summary>This is the storage implementation and serialization object for the IANSpec interface.</summary>
@@ -380,6 +383,9 @@ namespace MosaicLib.Semi.E041
         /// <summary>Returns true if this object's ALID was explicitly defined by the client (i.e. it is neither None, Lookup, nor OptLookup</summary>
         public bool HasALID { get { return ALID.IsDefined(); } }
 
+        /// <summary>Returns true if this object is in its initial/empty state</summary>
+        public bool IsEmpty { get { return this.Equals(Empty); } }
+
         /// <summary>Carries information about this annunciator that was provided by the client when the registering the corresponding ANSource.</summary>
         public INamedValueSet MetaData { get { return _metaData.MapNullToEmpty(); } set { _metaData = value.MapEmptyToNull().ConvertToReadOnly(mapNullToEmpty: false); } }
 
@@ -406,7 +412,9 @@ namespace MosaicLib.Semi.E041
         {
             string mdStr = (_metaData != null ? " MetaData:{0}".CheckedFormat(_metaData.SafeToStringSML()) : "");
 
-            if (ANManagerTableRegistrationNum != 0)
+            if (IsEmpty)
+                return "ANSpec: [Empty]";
+            else if (ANManagerTableRegistrationNum != 0)
                 return "ANSpec: {0} {1} RegNum:{2} ALID:{3}{4}".CheckedFormat(ANName, ANType, ANManagerTableRegistrationNum, ALID, mdStr);
             else
                 return "ANSpec: {0} {1} ALID:{2}{3}".CheckedFormat(ANName, ANType, ALID, mdStr);
@@ -450,6 +458,12 @@ namespace MosaicLib.Semi.E041
         {
             return base.GetHashCode();
         }
+
+        /// <summary>
+        /// Returns an "empty" IANSpec instance - makes use of default constructor
+        /// </summary>
+        public static IANSpec Empty { get { return _Empty; } }
+        private static readonly IANSpec _Empty = new ANSpec();
     }
 
     #endregion
@@ -512,6 +526,9 @@ namespace MosaicLib.Semi.E041
 
         /// <summary>Returns true if this IANState has the same contents as the given <paramref name="other"/></summary>
         bool IsEqualTo(IANState other, bool compareTimeStamp = true, bool compareDateTime = true);
+
+        /// <summary>Returns true if this object is in its initial/empty state</summary>
+        bool IsEmpty { get; }
     }
 
     /// <summary>
@@ -598,7 +615,7 @@ namespace MosaicLib.Semi.E041
         public IANSpec ANSpec { get; set; }
 
         /// <summary>Gives the annunciator name (from ANSpec) of the annunciator that produced this state.</summary>
-        public string ANName { get { return ANSpec.ANName; } set { } }
+        public string ANName { get { return (ANSpec ?? E041.ANSpec.Empty).ANName; } set { } }
 
         /// <summary>This gives he ANSignalState value that the annunciator currently has.</summary>
         [DataMember(Order = 300)]
@@ -688,7 +705,7 @@ namespace MosaicLib.Semi.E041
         public bool IsEqualTo(IANState other, bool compareTimeStamp = true, bool compareDateTime = false)
         {
             return (other != null
-                    && ANSpec.Equals(other.ANSpec)
+                    && ANSpec.SafeEquals(other.ANSpec)
                     && ANName == other.ANName
                     && ANSignalState == other.ANSignalState
                     && Reason == other.Reason
@@ -704,13 +721,19 @@ namespace MosaicLib.Semi.E041
                     );
         }
 
+        /// <summary>Returns true if this object is in its initial/empty state</summary>
+        public bool IsEmpty { get { return this.IsEqualTo(Empty); } }
+
         /// <summary>Debugging and logging helper method</summary>
         public override string ToString()
         {
             string anSpecStr = (ANSpec != null ? ANSpec.ToString() : "NoANSpec");
             string nvStr = (_namedValues != null ? " NamedValues:{0}".CheckedFormat(_namedValues.SafeToStringSML()) : "");
 
-            return "ANState {0} {1} {2} sel:{3}{4} alid:{5} reason:'{6}'{7}".CheckedFormat(anSpecStr, ANSignalState, ActionList.ToString(false, true), SelectedActionName.MapNullOrEmptyTo("[None]"), ActionAbortRequested ? " AbortReq" : string.Empty, ALID, Reason, nvStr);
+            if (IsEmpty)
+                return "ANState: [Empty]";
+            else
+                return "ANState: {0} {1} {2} sel:{3}{4} alid:{5} reason:'{6}'{7}".CheckedFormat(anSpecStr, ANSignalState, ActionList.ToString(false, true), SelectedActionName.MapNullOrEmptyTo("[None]"), ActionAbortRequested ? " AbortReq" : string.Empty, ALID, Reason, nvStr);
         }
 
         /// <summary>
@@ -731,6 +754,13 @@ namespace MosaicLib.Semi.E041
         {
             return base.GetHashCode();
         }
+
+        /// <summary>
+        /// Returns an "empty" IANState instance - makes use of default constructor combined with Empty IANSpec
+        /// </summary>
+        public static IANState Empty { get { return _Empty; } }
+        private static readonly IANState _Empty = new ANState() { ANSpec = E041.ANSpec.Empty };
+
     }
 
     #endregion

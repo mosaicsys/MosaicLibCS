@@ -95,6 +95,9 @@ namespace MosaicLib.Modular.Action
         /// <summary>Canned configuration: Done=Info, Error=Info, State=Trace, Update=Trace</summary>
         public static ActionLoggingConfig Info_Info_Trace_Trace { get { return info_info_trace_trace; } }
 
+        /// <summary>Canned configuration: Done=Debug, Error=Debug, State=Debug, Update=Debug</summary>
+        public static ActionLoggingConfig Debug_Debug_Debug_Debug { get { return debug_debug_debug_debug; } }
+
         /// <summary>Canned configuration: Done=Debug, Error=Debug, State=Trace, Update=Trace</summary>
         public static ActionLoggingConfig Debug_Debug_Trace_Trace { get { return debug_debug_trace_trace; } }
 
@@ -111,10 +114,25 @@ namespace MosaicLib.Modular.Action
         private static readonly ActionLoggingConfig info_error_debug_debug = new ActionLoggingConfig(Logging.MesgType.Info, Logging.MesgType.Error, Logging.MesgType.Debug, Logging.MesgType.Debug);
         private static readonly ActionLoggingConfig info_error_trace_trace = new ActionLoggingConfig(Logging.MesgType.Info, Logging.MesgType.Error, Logging.MesgType.Trace, Logging.MesgType.Trace);
         private static readonly ActionLoggingConfig info_info_trace_trace = new ActionLoggingConfig(Logging.MesgType.Info, Logging.MesgType.Info, Logging.MesgType.Trace, Logging.MesgType.Trace);
+        private static readonly ActionLoggingConfig debug_debug_debug_debug = new ActionLoggingConfig(Logging.MesgType.Debug, Logging.MesgType.Debug, Logging.MesgType.Debug, Logging.MesgType.Debug);
         private static readonly ActionLoggingConfig debug_debug_trace_trace = new ActionLoggingConfig(Logging.MesgType.Debug, Logging.MesgType.Debug, Logging.MesgType.Trace, Logging.MesgType.Trace);
         private static readonly ActionLoggingConfig debug_error_trace_trace = new ActionLoggingConfig(Logging.MesgType.Debug, Logging.MesgType.Error, Logging.MesgType.Trace, Logging.MesgType.Trace);
         private static readonly ActionLoggingConfig trace_trace_trace_trace = new ActionLoggingConfig(Logging.MesgType.Trace, Logging.MesgType.Trace, Logging.MesgType.Trace, Logging.MesgType.Trace);
         private static readonly ActionLoggingConfig none_none_none_none = new ActionLoggingConfig(Logging.MesgType.None, Logging.MesgType.None, Logging.MesgType.None, Logging.MesgType.None);
+    }
+
+    /// <summary>
+    /// Extension Methods
+    /// </summary>
+    public static partial class ExtensionMethods
+    {
+        /// <summary>
+        /// Returns a new ActionLoggingConfig instance with the specified (non-null) properties updated.
+        /// </summary>
+        public static ActionLoggingConfig Update(this ActionLoggingConfig other, Logging.MesgType? doneMesgType = null, Logging.MesgType? errorMesgType = null, Logging.MesgType? stateMesgType = null, Logging.MesgType? updateMesgType = null, ActionLoggingStyleSelect? actionLoggingStyleSelect = null)
+        {
+            return new ActionLoggingConfig(other, doneMesgType: doneMesgType, errorMesgType: errorMesgType, stateMesgType: stateMesgType, updateMesgType: updateMesgType, actionLoggingStyleSelect: actionLoggingStyleSelect);
+        }
     }
 
     /// <summary>

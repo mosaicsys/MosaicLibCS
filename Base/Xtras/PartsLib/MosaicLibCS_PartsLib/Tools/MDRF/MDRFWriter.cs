@@ -122,7 +122,7 @@ namespace MosaicLib.PartsLib.Tools.MDRF.Writer
         /// <summary>Gives the full file path for the this file</summary>
         public string FilePath { get; set; }
 
-        /// <summary>Gives the count of the number of files that the source writter has created</summary>
+        /// <summary>Gives the count of the number of files that the source writer has created</summary>
         public int SeqNum { get; set; }
 
         /// <summary>Gives the total size of the current file</summary>

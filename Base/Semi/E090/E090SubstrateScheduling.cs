@@ -1353,7 +1353,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
                     else if (JobTrackerLinkage.IsDropRequested)
                         nextDropReasonRequest = "Substrate Object has been removed and linked Job is requesting to be dropped [{0}]".CheckedFormat(JobTrackerLinkage.DropRequestReason);
                 }
-                else if (SubstObserver.Object == null)      // this is not an expected case
+                else if (SubstObserver.Object.IsFinalOrNull())      // this is not an expected case
                 {
                     nextDropReasonRequest = "Substrate Object has been removed unexpectedly";
                 }
@@ -1375,10 +1375,12 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
 
         public virtual int ServiceBasicSJSStateChangeTriggers(ServiceBasicSJSStateChangeTriggerFlags flags, bool updateIfNeeded = false, QpcTimeStamp qpcTimeStamp = default(QpcTimeStamp))
         {
-            if (updateIfNeeded)
-                UpdateIfNeeded(qpcTimeStamp: qpcTimeStamp);
-
             int didSomethingCount = 0;
+
+            if (updateIfNeeded)
+                didSomethingCount += UpdateIfNeeded(qpcTimeStamp: qpcTimeStamp).MapToInt();
+
+            bool isFinalOrNull = SubstObserver.Object.IsFinalOrNull();
 
             bool enableInfoTriggeredRules = ((flags & ServiceBasicSJSStateChangeTriggerFlags.EnableInfoTriggeredRules) != 0);
             bool enableWaitingForStartRules = ((flags & ServiceBasicSJSStateChangeTriggerFlags.EnableWaitingForStartRules) != 0);
@@ -1437,9 +1439,9 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
                         default: break;
                     }
                 }
-                else if (Info.IsFinal)
+                else if (isFinalOrNull)
                 {
-                    nextSJS = SubstrateJobState.Removed;
+                    // nextSJS = SubstrateJobState.Removed;     // we cannot set the next SJS to anything since the substrate has already been removed.
                     reason = "Substrate has been removed/deleted unexpectedly";
                 }
 
@@ -1449,7 +1451,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
                 }
             }
 
-            if (enableAbortingRules)
+            if (enableAbortingRules && !isFinalOrNull)
             {
                 if (nextSJS == SubstrateJobState.Initial && stsIsAtWork && sps == SubstProcState.Aborted && flags.IsSet(ServiceBasicSJSStateChangeTriggerFlags.EnableAbortedAtWork))
                 {
@@ -1458,7 +1460,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
                 }
             }
 
-            if (nextSJS == SubstrateJobState.Initial)
+            if (nextSJS == SubstrateJobState.Initial && !isFinalOrNull)
             {
                 switch (stInfo.SJS)
                 {
@@ -1611,7 +1613,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
             }
 
             // perform common Skipped detection and handling on transition to nextSJS for Stopping and Aborting cases
-            if ((nextSJS == SubstrateJobState.Stopping || nextSJS == SubstrateJobState.Aborting) && stsIsAtSource)
+            if ((nextSJS == SubstrateJobState.Stopping || nextSJS == SubstrateJobState.Aborting) && stsIsAtSource && !isFinalOrNull)
             {
                 nextSJS = SubstrateJobState.Skipped;
                 reason = "{0} (skip)".CheckedFormat(reason);
@@ -1623,7 +1625,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
                 didSomethingCount++;
 
                 if (updateIfNeeded)
-                    UpdateIfNeeded(qpcTimeStamp: qpcTimeStamp);
+                    didSomethingCount += UpdateIfNeeded(qpcTimeStamp: qpcTimeStamp).MapToInt();
             }
 
             return didSomethingCount;
@@ -1639,6 +1641,12 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
             if (ifNeeded && entrySJS == sjs)
             {
                 Logger.Debug.Emit("{0}({1}, sjs:{2}, reason:'{3}'): Not needed", Fcns.CurrentMethodName, SubstID.FullName, sjs, reason);
+                return;
+            }
+
+            if (SubstObserver.Object.IsFinalOrNull())
+            {
+                Logger.Debug.Emit("{0}({1}, sjs:{2}, reason:'{3}'): cannot be performed now - substrate has already been removed", Fcns.CurrentMethodName, SubstID.FullName, sjs, reason);
                 return;
             }
 
@@ -1851,7 +1859,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
     {
         [DataMember(IsRequired = false, EmitDefaultValue = false)] public int total;
 
-        [DataMember(IsRequired = false, EmitDefaultValue = false)] public int stsAtSource, stsAtWork, stsAtDestination, stsOther, stsLostAnywhere, stsRemovedAnywhere, stsLostOrRemovedAnywhere;
+        [DataMember(IsRequired = false, EmitDefaultValue = false)] public int stsAtSource, stsAtWork, stsAtDestination, stsOther, stsLostAnywhere, stsRemovedAnywhere;
 
         [DataMember(IsRequired = false, EmitDefaultValue = false)] public int spsNeedsProcessing;
 
@@ -1865,6 +1873,8 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
 
         [DataMember(IsRequired = false, EmitDefaultValue = false)] public int motionPendingCount;
 
+        public int stsLostOrRemovedAnywhere { get { return stsLostAnywhere + stsRemovedAnywhere; } }
+
         public bool Equals(SubstrateStateTally other)
         {
             return (other != null
@@ -1874,7 +1884,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
                     && stsAtDestination == other.stsAtDestination
                     && stsOther == other.stsOther
                     && stsLostAnywhere == other.stsLostAnywhere
-                    && stsLostOrRemovedAnywhere == other.stsLostOrRemovedAnywhere
+                    && stsRemovedAnywhere == other.stsRemovedAnywhere
                     && spsNeedsProcessing == other.spsNeedsProcessing
                     && spsInProcess == other.spsInProcess
                     && spsProcessed == other.spsProcessed
@@ -1911,7 +1921,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
         public void Clear()
         {
             total = 0;
-            stsAtSource = stsAtWork = stsAtDestination = stsOther = stsLostAnywhere = stsLostOrRemovedAnywhere = 0;
+            stsAtSource = stsAtWork = stsAtDestination = stsOther = stsLostAnywhere = stsRemovedAnywhere = 0;
 
             spsNeedsProcessing = 0;
 
@@ -1943,16 +1953,18 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
 
             var sts = info.STS;
             var inferredSPS = info.InferredSPS;
+            var inferredSJS = sjs;
 
             if (info.SPS == SubstProcState.Lost)
             {
                 stsLostAnywhere++;
-                stsLostOrRemovedAnywhere++;
+                inferredSJS = SubstrateJobState.Lost;
             }
             else if (info.IsFinal)
             {
                 stsRemovedAnywhere++;
-                stsLostOrRemovedAnywhere++;
+                inferredSPS = SubstProcState.Lost;
+                inferredSJS = SubstrateJobState.Removed;
             }
             else
             {
@@ -1979,7 +1991,7 @@ namespace MosaicLib.Semi.E090.SubstrateScheduling
                 default: spsOther++; break;
             }
 
-            switch (sjs)
+            switch (inferredSJS)
             {
                 case SubstrateJobState.WaitingForStart: sjsWaitingForStart++; break;
                 case SubstrateJobState.Running: sjsRunning++; break;

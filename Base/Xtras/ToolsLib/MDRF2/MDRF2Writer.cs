@@ -53,9 +53,16 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
 {
     #region MDRF2Writer implementation
 
+    /// <summary>
+    /// This interface gives the methods and properties that the IMDRF2Writer supports on top of the normal set that the IMDRFWriter supports (on which this interface is based)
+    /// </summary>
     public interface IMDRF2Writer : MDRF.Writer.IMDRFWriter
     {
+        /// <summary>Method used to record an object into the current MDRF2 file</summary>
         string RecordObject(object obj, DateTimeStampPair dtPairIn = null, bool writeAll = false, bool forceFlush = false, bool isSignificant = false, ulong userRowFlagBits = 0);
+
+        /// <summary>Gives the total number of client operations that this writer has been asked to perform.  This allows a client to tell if other clients have used the writer recently</summary>
+        ulong ClientOpRequestCount { get; }
     }
 
     /// <summary>
@@ -109,7 +116,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
     /// and includes the length of the block so that the reader can skip fully decoding the block if it is easily known to contain no information of note.
     /// Within each block there will be one or more records.  The first block in the file is always used to contain the file meta data.
     /// All blocks thereafter are used to store timestamp, group, occurrance, messages, and records with other recorded data formats.
-    /// This writter attempts to accumulate group and occurrence related records until either the block reaches a desired minimum nominal size, 
+    /// This writer attempts to accumulate group and occurrence related records until either the block reaches a desired minimum nominal size, 
     /// or the age of the first record in the block is overly long.  At this point the block being accumulated is written out and the next block is started.
     /// </remarks>
     public class MDRF2Writer : SimplePartBase, IMDRF2Writer
@@ -185,6 +192,8 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
             {
                 try
                 {
+                    InnerNoteClientOpRequested();
+
                     var dtPair = MDRF2DateTimeStampPair.Now;
                     InnerCloseCurrentFile("On Release or Dispose", ref dtPair);
 
@@ -198,8 +207,9 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
                 }
                 finally
                 {
-                    fs = null;
+                    fileStream = null;
                     lz4EncoderStream = null;
+                    outputStream = null;
 
                     metaDataBlockBufferWriter = null;
                     inlineIndexBlockBufferWriter = null;
@@ -208,20 +218,25 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
             }
         }
 
+        /// <inheritdoc/>
         public MDRF2Writer Add(MDRF.Writer.GroupInfo groupInfo)
         {
             return Add(new[] { groupInfo });
         }
 
+        /// <inheritdoc/>
         public MDRF2Writer Add(params MDRF.Writer.GroupInfo[] groupInfoParamsArray)
         {
             return AddRange(groupInfoParamsArray ?? EmptyArrayFactory<MDRF.Writer.GroupInfo>.Instance);
         }
 
+        /// <inheritdoc/>
         public MDRF2Writer AddRange(IEnumerable<MDRF.Writer.GroupInfo> groupInfoSet)
         {
             using (var scopedLock = new ScopedLock(mutex))
             {
+                InnerNoteClientOpRequested();
+
                 groupInfoList.AddRange(groupInfoSet.Where(gi => gi != null));
                 groupOrOccurrenceInfoListModified = true;
             }
@@ -229,20 +244,25 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
             return this;
         }
 
+        /// <inheritdoc/>
         public MDRF2Writer Add(MDRF.Writer.OccurrenceInfo occurrenceInfo)
         {
             return Add(new[] { occurrenceInfo });
         }
 
+        /// <inheritdoc/>
         public MDRF2Writer Add(params MDRF.Writer.OccurrenceInfo[] occurrenceInfoParamsArray)
         {
             return AddRange(occurrenceInfoParamsArray ?? EmptyArrayFactory<MDRF.Writer.OccurrenceInfo>.Instance);
         }
 
+        /// <inheritdoc/>
         public MDRF2Writer AddRange(IEnumerable<MDRF.Writer.OccurrenceInfo> occurrenceInfoSet)
         {
             using (var scopedLock = new ScopedLock(mutex))
             {
+                InnerNoteClientOpRequested();
+
                 occurrenceInfoList.AddRange(occurrenceInfoSet.Where(oi => oi != null));
                 groupOrOccurrenceInfoListModified = true;
             }
@@ -270,6 +290,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
         MDRF.Writer.IMDRFWriter MDRF.Writer.IMDRFWriter.Add(params MDRF.Writer.OccurrenceInfo[] occurrenceInfoParamsArray) { return AddRange(occurrenceInfoParamsArray ?? EmptyArrayFactory<MDRF.Writer.OccurrenceInfo>.Instance); }
         MDRF.Writer.IMDRFWriter MDRF.Writer.IMDRFWriter.AddRange(IEnumerable<MDRF.Writer.OccurrenceInfo> occurrenceInfoSet) { return AddRange(occurrenceInfoSet); }
 
+        /// <inheritdoc/>
         public string RecordGroups(bool writeAll = false, DateTimeStampPair dtPairIn = null)
         {
             if (IsDisposed)
@@ -277,6 +298,8 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
 
             using (var scopedLock = new ScopedLock(mutex))
             {
+                InnerNoteClientOpRequested();
+
                 MDRF2DateTimeStampPair dtPair = (dtPairIn != null) ? new MDRF2DateTimeStampPair(dtPairIn, setUTCTimeSince1601IfNeeded: false) : MDRF2DateTimeStampPair.NowQPCOnly;
 
                 return InnerRecordGroups(writeAll, ref dtPair, writerBehavior);
@@ -383,11 +406,13 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
             }
         }
 
+        /// <inheritdoc/>
         public string RecordOccurrence(IOccurrenceInfo occurrenceInfo, object dataValue, DateTimeStampPair dtPairIn = null, bool writeAll = false, bool forceFlush = false)
         {
             return RecordOccurrence(occurrenceInfo, ValueContainer.CreateFromObject(dataValue), dtPairIn: dtPairIn, writeAll: writeAll, forceFlush: forceFlush);
         }
 
+        /// <inheritdoc/>
         public string RecordOccurrence(IOccurrenceInfo occurrenceInfo, ValueContainer dataVC = default(ValueContainer), DateTimeStampPair dtPairIn = null, bool writeAll = false, bool forceFlush = false)
         {
             if (occurrenceInfo == null)
@@ -398,6 +423,8 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
 
             using (var scopedLock = new ScopedLock(mutex))
             {
+                InnerNoteClientOpRequested();
+
                 MDRF2DateTimeStampPair dtPair = (dtPairIn != null) ? new MDRF2DateTimeStampPair(dtPairIn, setUTCTimeSince1601IfNeeded: false) : MDRF2DateTimeStampPair.NowQPCOnly;
 
                 ReassignIDsAndBuildNewTrackersIfNeeded();
@@ -459,6 +486,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
             }
         }
 
+        /// <inheritdoc/>
         public string RecordObject(object obj, DateTimeStampPair dtPairIn = null, bool writeAll = false, bool forceFlush = false, bool isSignificant = false, ulong userRowFlagBits = 0)
         {
             var oType = obj?.GetType();
@@ -468,6 +496,8 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
 
             using (var scopedLock = new ScopedLock(mutex))
             {
+                InnerNoteClientOpRequested();
+
                 MDRF2DateTimeStampPair dtPair = (dtPairIn != null) ? new MDRF2DateTimeStampPair(dtPairIn, setUTCTimeSince1601IfNeeded: false) : MDRF2DateTimeStampPair.NowQPCOnly;
 
                 writeAll |= ((writerBehavior & MDRF.Writer.WriterBehavior.WriteAllBeforeEveryObject) != 0);
@@ -487,41 +517,42 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
 
                         UpdateFileDeltaTimeStampIfNeeded(ref mpWriter, ref dtPair);
 
-                        // [L3 objectKnownType serializedObject nil]
+                        // [L3 userRowFlagBits objectKnownType serializedObject]
+                        // older version was [L3 objectKnownType serializedObject nil]
                         mpWriter.WriteArrayHeader(3);
 
                         if (obj == null)
                         {
-                            mpWriter.WriteNil();
+                            mpWriter.Write(userRowFlagBits);
                             mpWriter.WriteNil();
                             mpWriter.WriteNil();
                         }
                         else if (oType == typeof(MosaicLib.Logging.LogMessage))
                         {
+                            mpWriter.Write(userRowFlagBits);
                             mpWriter.Write(Common.Constants.ObjKnownType_LogMessage);
                             LogMessageFormatter.Instance.Serialize(ref mpWriter, obj as Logging.ILogMessage, mpOptions);
-                            mpWriter.WriteNil();
                         }
                         else if (typeof(MosaicLib.Semi.E039.IE039Object).IsAssignableFrom(oType))
                         {
+                            mpWriter.Write(userRowFlagBits);
                             mpWriter.Write(Common.Constants.ObjKnownType_E039Object);
                             E039ObjectFormatter.Instance.Serialize(ref mpWriter, obj as MosaicLib.Semi.E039.IE039Object, mpOptions);
-                            mpWriter.WriteNil();
                         }
                         else if (oType == typeof(MosaicLib.Modular.Common.ValueContainer))
                         {
+                            mpWriter.Write(userRowFlagBits);
                             mpWriter.Write(Common.Constants.ObjKnownType_ValueContainer);
                             VCFormatter.Instance.Serialize(ref mpWriter, (ValueContainer)obj, mpOptions);
-                            mpWriter.WriteNil();
                         }
                         else
                         {
                             var customSerializer = MosaicLib.Modular.Common.CustomSerialization.CustomSerialization.Instance.GetCustomTypeSerializerItemFor(oType);
                             var tavc = customSerializer.Serialize(obj);
 
+                            mpWriter.Write(userRowFlagBits);
                             mpWriter.Write(Common.Constants.ObjKnownType_TypeAndValueCarrier);
                             TypeAndValueCarrierFormatter.Instance.Serialize(ref mpWriter, tavc, mpOptions);
-                            mpWriter.WriteNil();
                         }
 
                         mpWriter.Flush();
@@ -544,6 +575,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
             }
         }
 
+        /// <inheritdoc/>
         public string Flush(MDRF.Writer.FlushFlags flushFlags = MDRF.Writer.FlushFlags.All, DateTimeStampPair dtPairIn = null)
         {
             if (IsDisposed)
@@ -551,6 +583,8 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
 
             using (var scopedLock = new ScopedLock(mutex))
             {
+                InnerNoteClientOpRequested();
+
                 MDRF2DateTimeStampPair dtPair = (dtPairIn != null) ? new MDRF2DateTimeStampPair(dtPairIn, setUTCTimeSince1601IfNeeded: false) : MDRF2DateTimeStampPair.NowQPCOnly;
 
                 string ec = string.Empty;
@@ -589,7 +623,10 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
                 ec = FinishAndWriteCurrentBlock(blockBufferWriter, ref dtPair, ifNeeded: true);
 
                 if (ec.IsNullOrEmpty() && ((flushFlags & MDRF.Writer.FlushFlags.File) != 0))
-                    fs.Flush();
+                {
+                    lz4EncoderStream?.Flush();
+                    fileStream.Flush();
+                }
             }
             catch (System.Exception ex)
             {
@@ -604,6 +641,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
             return ec;
         }
 
+        /// <inheritdoc/>
         public int GetCurrentFileSize()
         {
             if (IsDisposed)
@@ -615,6 +653,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
             }
         }
 
+        /// <inheritdoc/>
         public bool IsFileOpen
         {
             get
@@ -629,6 +668,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
             }
         }
 
+        /// <inheritdoc/>
         public MDRF.Writer.FileInfo CurrentFileInfo
         {
             get
@@ -643,6 +683,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
             }
         }
 
+        /// <inheritdoc/>
         public MDRF.Writer.FileInfo LastFileInfo
         {
             get
@@ -661,6 +702,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
         volatile int volatileClosedFileListCount = 0;
         List<MDRF.Writer.FileInfo> closedFileList = new List<MDRF.Writer.FileInfo>();
 
+        /// <inheritdoc/>
         public MDRF.Writer.FileInfo? NextClosedFileInfo
         {
             get
@@ -682,6 +724,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
             }
         }
 
+        /// <inheritdoc/>
         public int CloseCurrentFile(string reason, DateTimeStampPair dtPairIn = null)
         {
             if (IsDisposed)
@@ -689,6 +732,8 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
 
             using (var scopedLock = new ScopedLock(mutex))
             {
+                InnerNoteClientOpRequested();
+
                 MDRF2DateTimeStampPair dtPair = (dtPairIn != null) ? new MDRF2DateTimeStampPair(dtPairIn, setUTCTimeSince1601IfNeeded: false) : MDRF2DateTimeStampPair.NowQPCOnly;
 
                 return InnerCloseCurrentFile(reason, ref dtPair);
@@ -721,6 +766,14 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
 
             return LastFileInfo.FileSize;
         }
+
+        /// <inheritdoc/>
+        public ulong ClientOpRequestCount { get; private set; }
+
+        /// <summary>
+        /// Note: use of this method requires that the mutex (if any) has already been acquired.
+        /// </summary>
+        private void InnerNoteClientOpRequested() { ClientOpRequestCount += 1; }
 
         #endregion
 
@@ -943,7 +996,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
             {
                 int useStreamBufferSize = setup.NominalMaxDataBlockSize.Clip(1024, 65536);
 
-                fs = new FileStream(currentFileInfo.FilePath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.Read, useStreamBufferSize, FileOptions.None);
+                fileStream = new FileStream(currentFileInfo.FilePath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.Read, useStreamBufferSize, FileOptions.None);
 
                 if (enableLZ4Compression)
                 {
@@ -967,8 +1020,10 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
                         default: selectedLZ4Level = (WriterConfig.CompressionLevel <= 0) ? K4os.Compression.LZ4.LZ4Level.L00_FAST : K4os.Compression.LZ4.LZ4Level.L12_MAX; break;
                     }
 
-                    lz4EncoderStream = K4os.Compression.LZ4.Streams.LZ4Stream.Encode(fs, level: selectedLZ4Level, leaveOpen: true);
+                    lz4EncoderStream = K4os.Compression.LZ4.Streams.LZ4Stream.Encode(fileStream, level: selectedLZ4Level, leaveOpen: true);
                 }
+
+                outputStream = (lz4EncoderStream as System.IO.Stream) ?? fileStream;
             }
             catch (System.Exception ex)
             {
@@ -1195,12 +1250,12 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
             NoteRecordAddedToBuffer(FileIndexRowFlagBits.ContainsHeaderOrMetaData | FileIndexRowFlagBits.ContainsEnd, 0);
         }
 
-        /// <summary>Returns true if we have a non-null file stream (fs)</summary>
-        bool InnerIsFileOpen { get { return (fs != null); } }
+        /// <summary>Returns true if we have a non-null file stream (fileStream)</summary>
+        bool InnerIsFileOpen { get { return (fileStream != null); } }
 
         void CloseFile(ref MDRF2DateTimeStampPair dtPair)
         {
-            if (fs != null)
+            if (fileStream != null)
             {
                 try
                 {
@@ -1219,15 +1274,18 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
                         Fcns.DisposeOfObject(ref lz4EncoderStream);
                     }
 
-                    fs.Flush();
-                    fs.Close();
-                    Fcns.DisposeOfObject(ref fs);
+                    fileStream.Flush();
+                    fileStream.Close();
+                    Fcns.DisposeOfObject(ref fileStream);
+
+                    outputStream = null;
                 }
                 catch (System.Exception ex)
                 {
                     RecordError("{0} failed: {1} {2}".CheckedFormat(CurrentMethodName, currentFileInfo, ex.ToString(ExceptionFormat.TypeAndMessage)));
                     lz4EncoderStream = null;
-                    fs = null;
+                    fileStream = null;
+                    outputStream = null;
                 }
             }
         }
@@ -1636,7 +1694,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
 
             try
             {
-                if (fs != null)
+                if (outputStream != null)
                 {
                     var currentRecordByteCount = (uint)bufferWriter.CurrentCount;
 
@@ -1661,11 +1719,9 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
                         headerMPWriter.Flush();
                     }
 
-                    var oStream = ((lz4EncoderStream as Stream) ?? fs);
-
-                    oStream.Write(inlineIndexBlockBufferWriter.ByteArray, 0, inlineIndexBlockBufferWriter.CurrentCount);
-                    oStream.Write(bufferWriter.ByteArray, 0, bufferWriter.CurrentCount);
-                    oStream.Flush();
+                    outputStream.Write(inlineIndexBlockBufferWriter.ByteArray, 0, inlineIndexBlockBufferWriter.CurrentCount);
+                    outputStream.Write(bufferWriter.ByteArray, 0, bufferWriter.CurrentCount);
+                    outputStream.Flush();
                 }
                 else
                 {
@@ -1823,8 +1879,9 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
 
         MDRF.Writer.WriterBehavior writerBehavior;
 
-        System.IO.FileStream fs;
+        System.IO.FileStream fileStream;
         K4os.Compression.LZ4.Streams.LZ4EncoderStream lz4EncoderStream;
+        System.IO.Stream outputStream;
 
         DateTime fileReferenceDateTime = default;
         MDRF2DateTimeStampPair fileReferenceQPCDTPair = default;
@@ -1872,15 +1929,24 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
         /// Action factory method.  When run the resulting action will record the given object <paramref name="obj"/> using MDRF2's object recording mechanism.
         /// If <paramref name="writeAll"/> is true then this action will record all groups before writing this one.
         /// If <paramref name="isHighRate"/> is true then this action will use the configured high rate action logging.
+        /// If <paramref name="isSignificant"/> is true then this action will record the object using being significant.
+        /// If <paramref name="userRowFlagBits"/> is non-zero then its value will be added (logically ored) into the inline index user row flag bit values and will be attached to the object record (for newly recorded MDRF2 objects).
         /// </summary>
-        IClientFacet RecordObject(object obj, bool writeAll = false, bool isHighRate = true);
+        IClientFacet RecordObject(object obj, bool writeAll = false, bool isHighRate = true, bool isSignificant = false, ulong userRowFlagBits = 0);
 
         /// <summary>
         /// Action factory method.  When run the resulting action will record the given set of objects from <paramref name="objArray"/> using MDRF2's object recording mechanism.
         /// If <paramref name="writeAll"/> is true then this action will record all groups before writing this one.
         /// If <paramref name="isHighRate"/> is true then this action will use the configured high rate action logging.
+        /// If <paramref name="isSignificant"/> is true then this action will record the objects using being significant.
+        /// If <paramref name="userRowFlagBits"/> is non-zero then its value will be added (logically ored) into the inline index user row flag bit values and will be attached to the object records (for newly recorded MDRF2 objects).
         /// </summary>
-        IClientFacet RecordObjects(object [] objArray, bool writeAll = false, bool isHighRate = true);
+        IClientFacet RecordObjects(object [] objArray, bool writeAll = false, bool isHighRate = true, bool isSignificant = false, ulong userRowFlagBits = 0);
+
+        /// <summary>
+        /// Action factory method.  When run the resulting action will request the underlying MDRFWriter instance to perform a Flush operation with the given <paramref name="flushFlags"/>.
+        /// </summary>
+        IClientFacet Flush(FlushFlags flushFlags = FlushFlags.All, bool isHighRate = true);
     }
 
     /// <summary>
@@ -1945,7 +2011,7 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
         /// <summary>Gives the MDRF SetupInfo that is used to configure the underlying MDRFWriter.</summary>
         public SetupInfo SetupInfo { get; set; } = SetupInfo.DefaultForMDRF2;
 
-        /// <summary>Gives the nominal scan priod for recording groups.</summary>
+        /// <summary>Gives the nominal scan priod for recording groups.  If this value is zero it disables peridic recording of groups</summary>
         public TimeSpan NominalScanPeriod { get; set; } = (0.1).FromSeconds();
 
         /// <summary>
@@ -2102,6 +2168,8 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
             if (!eventNameToOccurrenceInfoDictionary.TryGetValue(eventName, out occurrenceInfo) || occurrenceInfo == null)
                 occurrenceInfo = defaultRecordEventOccurranceInfo;
 
+            lastWriterClientOpRequestCount++;
+
             return mdrfWriter.RecordOccurrence(occurrenceInfo, occurrenceDataNVS, writeAll: writeAll);
         }
 
@@ -2130,6 +2198,8 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
             if (!occurrenceInfoDictionary.TryGetValue(occurrenceName.Sanitize(), out occurrenceInfo) || occurrenceInfo == null)
                 return "'{0}' not a known occurrence name".CheckedFormat(occurrenceName);
 
+            lastWriterClientOpRequestCount++;
+
             return mdrfWriter.RecordOccurrence(occurrenceInfo, occurrenceDataNVS, writeAll: writeAll);
         }
 
@@ -2152,6 +2222,8 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
             if (!BaseState.IsOnline)
                 return "Part is not Online";
 
+            lastWriterClientOpRequestCount++;
+
             return mdrfWriter.RecordOccurrence(occurrenceInfo, occurrenceDataNVS, writeAll: writeAll);
         }
 
@@ -2159,25 +2231,30 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
         private Dictionary<string, MDRF.Writer.OccurrenceInfo> eventNameToOccurrenceInfoDictionary = new Dictionary<string, MDRF.Writer.OccurrenceInfo>();
         private Dictionary<string, MDRF.Writer.OccurrenceInfo> occurrenceInfoDictionary = new Dictionary<string, MDRF.Writer.OccurrenceInfo>();
 
-
-        public IClientFacet RecordObject(object obj, bool writeAll = false, bool isHighRate = true)
+        ///<inheritdoc/>
+        public IClientFacet RecordObject(object obj, bool writeAll = false, bool isHighRate = true, bool isSignificant = false, ulong userRowFlagBits = 0)
         {
-            return new BasicActionImpl(ActionQueue, () => PerformRecordObjects(obj, null, writeAll: writeAll), "RecordObject", isHighRate ? highRateActionLoggingReference : ActionLoggingReference, obj.SafeToString());
+            return new BasicActionImpl(ActionQueue, () => PerformRecordObjects(obj, null, writeAll: writeAll, isSignificant, userRowFlagBits), "RecordObject", isHighRate ? highRateActionLoggingReference : ActionLoggingReference, obj.SafeToString());
         }
 
-        public IClientFacet RecordObjects(object[] objArray, bool writeAll = false, bool isHighRate = true)
+        ///<inheritdoc/>
+        public IClientFacet RecordObjects(object[] objArray, bool writeAll = false, bool isHighRate = true, bool isSignificant = false, ulong userRowFlagBits = 0)
         {
-            return new BasicActionImpl(ActionQueue, () => PerformRecordObjects(null, objArray, writeAll: writeAll), "RecordObject", isHighRate ? highRateActionLoggingReference : ActionLoggingReference, String.Join(",", objArray.Select(obj => obj.SafeToString())));
+            return new BasicActionImpl(ActionQueue, () => PerformRecordObjects(null, objArray, writeAll: writeAll, isSignificant, userRowFlagBits), "RecordObject", isHighRate ? highRateActionLoggingReference : ActionLoggingReference, String.Join(",", objArray.Select(obj => obj.SafeToString())));
         }
 
-        private string PerformRecordObjects(object obj1, object[] objArray, bool writeAll)
+        private string PerformRecordObjects(object obj1, object[] objArray, bool writeAll, bool isSignificant, ulong userRowFlagBits)
         {
             if (!BaseState.IsOnline)
                 return "Part is not Online";
 
             string ec = string.Empty;
             if (obj1 != null)
-                ec = mdrfWriter.RecordObject(obj1, writeAll: writeAll);
+            {
+                ec = mdrfWriter.RecordObject(obj1, writeAll: writeAll, isSignificant: isSignificant, userRowFlagBits: userRowFlagBits);
+
+                lastWriterClientOpRequestCount++;
+            }
 
             if (!objArray.IsNullOrEmpty() && ec.IsNullOrEmpty())
             {
@@ -2185,13 +2262,30 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
                 for (int idx = 0; idx < arrayLen; idx++)
                 {
                     var obj = objArray[idx];
-                    ec = mdrfWriter.RecordObject(obj, writeAll: writeAll);
+
+                    ec = mdrfWriter.RecordObject(obj, writeAll: writeAll, isSignificant: isSignificant, userRowFlagBits: userRowFlagBits);
+
+                    lastWriterClientOpRequestCount++;
+
                     if (ec.IsNeitherNullNorEmpty())
                         break;
                 }
             }
 
             return ec;
+        }
+
+        ///<inheritdoc/>
+        public IClientFacet Flush(FlushFlags flushFlags = FlushFlags.All, bool isHighRate = true)
+        {
+            return new BasicActionImpl(ActionQueue, () => PerformFlush(flushFlags), "Flush", isHighRate ? highRateActionLoggingReference : ActionLoggingReference, $"{flushFlags}");
+        }
+
+        private string PerformFlush(FlushFlags flushFlags)
+        {
+            lastWriterClientOpRequestCount++;
+
+            return mdrfWriter.Flush(flushFlags);
         }
 
         /// <summary>
@@ -2322,7 +2416,10 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
                 mdrfWriter.AddRange(groupInfoList);
                 mdrfWriter.AddRange(occuranceInfoList);
 
-                mdrfWriterServiceTimer = new QpcTimer() { TriggerInterval = Config.NominalScanPeriod, AutoReset = true, Started = true };
+                lastWriterClientOpRequestCount = default;
+                lastWriterClientOpRequestTimeStamp = default;
+
+                mdrfWriterServiceTimer = new QpcTimer() { TriggerInterval = Config.NominalScanPeriod, AutoReset = true, Started = !Config.NominalScanPeriod.IsZero() };
             }
 
             return string.Empty;
@@ -2331,6 +2428,8 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
         protected override string PerformGoOfflineAction()
         {
             PerformMainLoopService(forceServiceWriter: true, forceServicePruning: true);
+
+            lastWriterClientOpRequestCount++;
 
             mdrfWriter.CloseCurrentFile("Closed by request: {0}".CheckedFormat(CurrentActionDescription));
 
@@ -2354,11 +2453,20 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
                 currentScanPeriodScheduleIndex = capturedScanPeriodScheduleIndex;
                 TimeSpan scanPeriod = Config.ScanPeriodScheduleArray.SafeAccess(currentScanPeriodScheduleIndex, defaultValue: Config.NominalScanPeriod);
 
-                mdrfWriterServiceTimer.Start(scanPeriod);
+                if (!scanPeriod.IsZero())
+                {
+                    mdrfWriterServiceTimer.Start(scanPeriod);
+
+                    Log.Debug.Emit("Scan period set to index:{0} period:{1:f3} sec", currentScanPeriodScheduleIndex, scanPeriod.TotalSeconds);
+                }
+                else
+                {
+                    mdrfWriterServiceTimer.Stop();
+
+                    Log.Debug.Emit("Scan stopped [index:{0} period:{1:f3} sec]", currentScanPeriodScheduleIndex, scanPeriod.TotalSeconds);
+                }
 
                 PerformMainLoopService(forceServiceWriter: true);
-
-                Log.Debug.Emit("Scan Period changed to index:{0} period:{1:f3} sec", currentScanPeriodScheduleIndex, scanPeriod.TotalSeconds);
             }
             else
             {
@@ -2371,7 +2479,13 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
             if (BaseState.IsOnline)
             {
                 if (mdrfWriterServiceTimer.IsTriggered || forceServiceWriter)
+                {
                     mdrfWriter.RecordGroups(writeAll: forceServiceWriter);
+
+                    lastWriterClientOpRequestCount++;
+                }
+
+                InnerServiceTimerTriggeredFlush();
 
                 if (pruningManager != null && (pruningServiceTimer.IsTriggered || forceServicePruning))
                 {
@@ -2381,6 +2495,33 @@ namespace Mosaic.ToolsLib.MDRF2.Writer
 
                     pruningManager.Service();
                 }
+            }
+        }
+
+        private ulong lastWriterClientOpRequestCount = 0;
+        QpcTimeStamp lastWriterClientOpRequestTimeStamp;
+
+        private void InnerServiceTimerTriggeredFlush()
+        {
+            var capturedWriterClientOpRequestCount = mdrfWriter.ClientOpRequestCount;
+
+            var lastWriterClientOpRequestTimeStampIsZero = lastWriterClientOpRequestTimeStamp.IsZero;
+
+            if (lastWriterClientOpRequestCount != capturedWriterClientOpRequestCount && lastWriterClientOpRequestTimeStampIsZero)
+            {
+                lastWriterClientOpRequestCount = capturedWriterClientOpRequestCount;
+                lastWriterClientOpRequestTimeStamp = QpcTimeStamp.Now;
+
+                Log.Trace.Emit("External writer client op detected");
+            }
+            else if (!lastWriterClientOpRequestTimeStampIsZero && lastWriterClientOpRequestTimeStamp.Age > Config.SetupInfo.MinNominalFileIndexWriteInterval && mdrfWriter.IsFileOpen)
+            {
+                lastWriterClientOpRequestCount = capturedWriterClientOpRequestCount + 1;
+                lastWriterClientOpRequestTimeStamp = default;
+
+                mdrfWriter.Flush();
+
+                Log.Trace.Emit("Writer flushed after external writer client op detected.");
             }
         }
 

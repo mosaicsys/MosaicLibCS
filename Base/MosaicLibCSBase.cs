@@ -85,6 +85,9 @@ namespace MosaicLib
 
         /// <summary>urn://mosaicsys.com/NS/MLib.PartsLib</summary>
         public const string PartsLibNameSpace = MosaicLibNameSpaceRoot + ".PartsLib";
+
+        /// <summary>urn://mosaicsys.com/NS/MLib.ToolsLib</summary>
+        public const string ToolsLibNameSpace = MosaicLibNameSpaceRoot + ".ToolsLib";
     }
 }
 
