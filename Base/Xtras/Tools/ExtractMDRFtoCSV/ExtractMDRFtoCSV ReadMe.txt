@@ -97,6 +97,6 @@ file that is found in the current directory.
 | Term | Description |
 |:--|:--|
 | MDRF | Mosaic Data Recording Format: This is a binary data recording file format that supports long term, variable rate, recording, and efficient replay, of both columnar and occurrence type information.  |
-| CSV | Comma Separated Value file.  Generally suitable for direct import into tools such as Excel. |
+| CSV | Comma Separated Value file.  Generally suitable for direct import into tools such as Excel.  This file produces CSV output escaped per RFC4180 [https://tools.ietf.org/html/rfc4180] |
 
 ## End of Document

@@ -278,7 +278,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
                     if (!headerAndDataOnly)
                     {
                         var indexStateStr = fileSummary.EndRecordFound ? "" : ",NotProperlyClosed";
-                        sw.CheckedWriteLine("$File.Path,{0}{1}", System.IO.Path.GetFullPath(mdrfFilePath), indexStateStr);
+                        sw.CheckedWriteLine("$File.Path,{0}{1}", System.IO.Path.GetFullPath(mdrfFilePath).GenerateRFC4180EscapedVersion(), indexStateStr);
 
                         sw.CheckedWriteLine("$File.Size,{0}", fileInfo.FileLength);
                         sw.CheckedWriteLine("$File.Date.First,{0:o}", fileInfo.DateTimeInfo.UTCDateTime.ToLocalTime());
@@ -322,7 +322,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
                     else
                         columnNames = columnNames.Concat(FilteredGroupInfoArray.SelectMany((gi, idx) => gi.GroupPointInfoArray.Select(gpi => "{0}:{1}".CheckedFormat(idx+1, gpi.Name)))).ToArray();
 
-                    sw.CheckedWriteLine(String.Join(",", columnNames));
+                    sw.CheckedWriteLine(String.Join(",", columnNames.Select(name => name.GenerateRFC4180EscapedVersion())));
 
                     var fullPointNamesArray = FilteredGroupInfoArray.SelectMany(gi => gi.GroupPointInfoArray.Select(gpi => gpi.FullName)).ToArray();
                     MDRF2QuerySpec querySpec = new MDRF2QuerySpec()
@@ -395,7 +395,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
                                         else
                                             vcStr = vc.ValueAsObject.SafeToString();
 
-                                        sw.CheckedWrite(",{0}", vcStr.Replace(',', '|'));
+                                        sw.CheckedWrite(",{0}", vcStr.GenerateRFC4180EscapedVersion());
                                     }
 
                                     sw.CheckedWriteLine("");
@@ -584,7 +584,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
                     sb.Append(",");
 
                 if (sb.Length + gpiName.Length <= clipAfterLength)
-                    sb.Append(gpiName);
+                    sb.Append(gpiName.GenerateRFC4180EscapedVersion());
                 else
                     return "{0}...".CheckedFormat(sb);
             }
@@ -598,13 +598,13 @@ namespace MosaicLib.Tools.ExtractMDRFtoCSV
         public static void WriteLineKeyIfPresent(this StreamWriter sw, INamedValueSet nvs, string key)
         {
             if (nvs.Contains(key))
-                sw.CheckedWriteLine("${0},{1}", key, nvs[key].VC);
+                sw.CheckedWriteLine("${0},{1}", key.GenerateRFC4180EscapedVersion(), nvs[key].VC.ToString().GenerateRFC4180EscapedVersion());
         }
 
         public static void ConsoleWriteLineKeyIfPresent(this INamedValueSet nvs, string key)
         {
             if (nvs.Contains(key))
-                Console.WriteLine(" {0}".CheckedFormat(nvs[key]));
+                Console.WriteLine(" {0}".CheckedFormat(nvs[key].ToString().GenerateRFC4180EscapedVersion()));
         }
     }
 }

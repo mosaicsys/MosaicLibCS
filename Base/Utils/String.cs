@@ -338,6 +338,53 @@ namespace MosaicLib.Utils
             sb.Append(c);
         }
 
+        /// <summary>
+        /// If needed, generate and return a version of the given string where strings that contain a comma or " (double quote), or line breaks (CR or LF) are escaped by placing them in quotes and escapaing any quotes or line break characters.
+        /// <para/>This method maps the null value to the given <paramref name="mapNullTo"/>
+        /// <para/>Quoting is done as per RFC 4180 [https://tools.ietf.org/html/rfc4180] and is also covered within [https://en.wikipedia.org/wiki/Comma-separated_values]
+        /// </summary>
+        public static string GenerateRFC4180EscapedVersion(this string s, string mapNullTo = "", char valueDelimiterChar = ',')
+        {
+            if (!s.NeedsEscapeForRFC4180(valueDelimiterChar: valueDelimiterChar))
+                return (s ?? mapNullTo);
+
+            StringBuilder sb = new StringBuilder("\"");
+
+            // once we have decide to enclose the string in double quotes ("...") then we only need to modify the string contents if it actually contains double quotes
+            if (!s.Contains('\"'))
+            {
+                sb.Append(s);
+            }
+            else
+            {
+                foreach (char c in s)
+                {
+                    if (c == '\"')
+                        sb.Append("\"\"");
+                    else
+                        sb.Append(c);
+                }
+            }
+
+            sb.Append("\"");
+
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// For any non-null string <paramref name="s"/> this method evaluates if any character in the given string is in the rfc4180ForceEscapeCharSet in which case the method returns true.
+        /// If the string <paramref name="s"/> is empty then the method returns false, and if it is null the method returns the given <paramref name="mapNullTo"/> which defaults to false.
+        /// </summary>
+        private static bool NeedsEscapeForRFC4180(this string s, bool mapNullTo = false, char valueDelimiterChar = ',')
+        {
+            if (s == null)
+                return mapNullTo;
+
+            return s.Any(c => ((c == valueDelimiterChar) || rfc4180ForceEscapeCharSet.Contains(c)));
+        }
+
+        private static readonly ReadOnlyHashSet<char> rfc4180ForceEscapeCharSet = new ReadOnlyHashSet<char>(new[] { '\"', '\r', '\n' });
+
         #endregion
 
         #region static CheckedFormat methods

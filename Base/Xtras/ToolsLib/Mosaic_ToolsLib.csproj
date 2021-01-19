@@ -50,6 +50,7 @@
     </Compile>
     <Compile Include="BufferWriter\BufferWriter.cs" />
     <Compile Include="File\FileSync.cs" />
+    <Compile Include="File\CrypographicFileHelpers.cs" />
     <Compile Include="JsonDotNet\JsonDotNetConfigProvider.cs" />
     <Compile Include="JsonDotNet\JsonDotNetCustomSerializer.cs" />
     <Compile Include="JsonDotNet\JsonDotNetPersist.cs" />

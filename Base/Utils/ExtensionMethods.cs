@@ -446,7 +446,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method "safe" version of ToArray method.  If the given <paramref name="set"/> is non-null then this method returns the Linq ToArray method applied to the <paramref name="set"/>.
         /// If the <paramref name="set"/> is null and the given <paramref name="fallbackArray"/> is non-null then this method returns the <paramref name="fallbackArray"/>.
-        /// If the <paramref name="set"/> and the <paramref name="fallbackArray"/> values are null then this creates and returns an empty array of the given ItemType (<paramref name="mapNullToEmpty"/> is true) or null (<paramref name="mapNullToEmpty"/> is false)
+        /// If the <paramref name="set"/> and the <paramref name="fallbackArray"/> values are null then this method returns an empty array of the given ItemType (<paramref name="mapNullToEmpty"/> is true) or null (<paramref name="mapNullToEmpty"/> is false)
         /// </summary>
         public static ItemType[] SafeToArray<ItemType>(this IEnumerable<ItemType> set, ItemType[] fallbackArray = null, bool mapNullToEmpty = true)
         {
@@ -459,7 +459,7 @@ namespace MosaicLib.Utils
         /// <summary>
         /// Extension method "safe" version of ToArray method.  If the given <paramref name="collection"/> is non-null then this method returns the Linq ToArray method applied to the <paramref name="collection"/>.
         /// If the <paramref name="collection"/> is null and the given <paramref name="fallbackArray"/> is non-null then this method returns the <paramref name="fallbackArray"/>.
-        /// If the <paramref name="collection"/> and the <paramref name="fallbackArray"/> values are null then this creates and returns an empty array of the given ItemType (<paramref name="mapNullToEmpty"/> is true) or null (<paramref name="mapNullToEmpty"/> is false)
+        /// If the <paramref name="collection"/> and the <paramref name="fallbackArray"/> values are null then this method returns an empty array of the given ItemType (<paramref name="mapNullToEmpty"/> is true) or null (<paramref name="mapNullToEmpty"/> is false)
         /// </summary>
         public static ItemType[] SafeToArray<ItemType>(this ICollection<ItemType> collection, ItemType[] fallbackArray = null, bool mapNullToEmpty = true)
         {

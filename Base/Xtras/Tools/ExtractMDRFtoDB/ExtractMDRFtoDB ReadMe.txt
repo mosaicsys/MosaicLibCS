@@ -131,4 +131,12 @@ Please note that by default TIMESTAMP is an F8 representation of the DateTime us
 Related Excel conversions:  (Derived from https://support.microsoft.com/en-us/office/insert-julian-dates-functions-0c7fa6aa-daff-402e-9990-93a5b76ba018)  
 To convert from a Julian Date value (say A10) to a DateTime serial number format (B10) the formula is [B10=A10-2415018.50].
 
+### CSV
+
+When CSV is selected as the output format, the application generates a set of csv files, one per table.  
+
+Because CSV files do not support modifying the header line contents after it has been written (which can be done with SQLite3 output) the following two caveoughts apply:
+* Generally CSV output uses the same basic logic and configuration as SQLite3 output does with the exception that when multiple MDRF files are being processed the column names in the resulting CSV output will be determined by the io point names in the first MDRF file.  IO point names that are only present in MDRF files that are processed alter will not be included in this output.
+* The use of the AddOccurrenceKeyColumns configuration value is not supported with this output format.
+
 ## End of document

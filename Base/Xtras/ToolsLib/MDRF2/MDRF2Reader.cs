@@ -664,13 +664,20 @@ namespace Mosaic.ToolsLib.MDRF2.Reader
             foreach (var record in queryFactory.CreateQuery(querySpec, fileInfo))
             {
                 var inlineIndexRecord = record.DataAsObject as Common.InlineIndexRecord;
+
                 if (inlineIndexRecord != null)
                 {
                     inlineIndexRecordList.Add(inlineIndexRecord);
                     continue;
                 }
 
-                fileSummary = record.DataAsObject as MDRF2QueryFileSummary;
+                var fileSummaryRecord = record.DataAsObject as MDRF2QueryFileSummary;
+
+                if (fileSummaryRecord != null)
+                {
+                    fileSummary = fileSummaryRecord;
+                    break;
+                }
             }
 
             return Tuple.Create(fileInfo, fileSummary, inlineIndexRecordList.ToArray());

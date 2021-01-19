@@ -251,12 +251,6 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                     }
                 }
 
-                if (ExcludeIOPointContainsSet != null)
-                {
-                    if (ExcludeIOPointContainsSet.Any(testContains => groupPointInfo.Name.Contains(testContains)))
-                        includeName = false;
-                }
-
                 if (IncludeIOPointPrefixSet != null)
                 {
                     if (IncludeIOPointPrefixSet.Any(testPrefix => groupPointInfo.Name.StartsWith(testPrefix)))
@@ -267,6 +261,12 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                 {
                     if (IncludeIOPointContainsSet.Any(testContains => groupPointInfo.Name.Contains(testContains)))
                         includeName = true;
+                }
+
+                if (ExcludeIOPointContainsSet != null)
+                {
+                    if (ExcludeIOPointContainsSet.Any(testContains => groupPointInfo.Name.Contains(testContains)))
+                        includeName = false;
                 }
 
                 if (!includeName)
@@ -1433,7 +1433,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
 
                     foreach (var t in flattenedSortedArray)
                     {
-                        occurrenceFileStream.WriteLine("{0:MM/dd/yyyy HH:mm:ss.fff},{1},{2}".CheckedFormat(t.Item2, t.Item1, t.Item3.Data.VC));
+                        occurrenceFileStream.WriteLine("{0:MM/dd/yyyy HH:mm:ss.fff},{1},{2}".CheckedFormat(t.Item2, t.Item1.GenerateRFC4180EscapedVersion(), t.Item3.Data.VC.ToString().GenerateRFC4180EscapedVersion()));
                     }
 
                     occurrenceFileStream.Flush();
@@ -1462,7 +1462,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                         fileStreamDisposableList.Add(groupWriteHelper.fileStream);
 
                         // write the header.
-                        groupWriteHelper.fileStream.WriteLine(string.Concat("DateTime,", string.Join(",", groupWriteHelper.columnNameArray)));
+                        groupWriteHelper.fileStream.WriteLine(string.Concat("DateTime,", string.Join(",", groupWriteHelper.columnNameArray.Select(name => name.GenerateRFC4180EscapedVersion()))));
                     }
 
                     // build mapping from this gda's MappedGroupPointInfoArray to the column indexes that the CSV uses.
@@ -1492,7 +1492,7 @@ namespace MosaicLib.Tools.ExtractMDRFtoDB
                                     break;
 
                                 default:
-                                    fileStream.Write(vc.ValueAsObject.SafeToString());
+                                    fileStream.Write(vc.ValueAsObject.SafeToString().GenerateRFC4180EscapedVersion());
                                     break;
                             }
                         }
