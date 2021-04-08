@@ -556,9 +556,9 @@ namespace MosaicLib
             public static explicit operator LogGate(ValueContainer vc)
             {
                 if (vc.cvt.IsInteger(includeSigned: true, includeUnsigned: true))
-                    return (LogGate)vc.GetValue<int>(rethrow: true);
+                    return (LogGate)vc.GetValueI4(rethrow: true);
                 else
-                    return (LogGate)vc.GetValue<string>(rethrow: true);
+                    return (LogGate)vc.GetValueA(rethrow: true);
             }
 
             /// <summary>

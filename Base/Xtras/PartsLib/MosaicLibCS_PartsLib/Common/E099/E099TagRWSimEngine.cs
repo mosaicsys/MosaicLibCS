@@ -350,7 +350,7 @@ namespace MosaicLib.PartsLib.Common.E099.Sim
             IVI = ivi ?? Values.Instance;
 
             //This part is a simulated primary part
-            PrivateBaseState = new BaseState(true, true) { ConnState = ConnState.NotApplicable };
+            PrivateBaseState = new BaseState(true, true) { PartID = PartID, ConnState = ConnState.NotApplicable };
 
             TagRWSimEngineConfig defaultConfig = new TagRWSimEngineConfig() { ReaderType = ReaderType.TIRIS, Mode = E099TagRWSimEngineMode.IDOnly };
             configAccessAdapter = new ConfigValueSetAdapter<TagRWSimEngineConfig>() { ValueSet = defaultConfig, SetupIssueEmitter = Log.Error, UpdateIssueEmitter = Log.Error, ValueNoteEmitter = Log.Debug }.Setup(PartID + ".");

@@ -302,9 +302,9 @@ namespace MosaicLib.Semi.E041
 
             switch (actionEnableVC.cvt)
             {
-                case ContainerStorageType.String: return actionEnableVC.GetValue<string>(false) ?? "ActionDisableReasonIsNull";
+                case ContainerStorageType.String: return actionEnableVC.GetValueA(false) ?? "ActionDisableReasonIsNull";
                 case ContainerStorageType.IListOfString: return ((actionEnableVC.GetValue<string []>(false).SafeCount() > 0) ? actionEnableVC.ToStringSML() : string.Empty);
-                default: return actionEnableVC.GetValue<bool>(false) ? String.Empty : "Action is not currently enabled {0}".CheckedFormat(actionEnableVC);
+                default: return actionEnableVC.GetValueBo(false) ? String.Empty : "Action is not currently enabled {0}".CheckedFormat(actionEnableVC);
             }
         }
     }

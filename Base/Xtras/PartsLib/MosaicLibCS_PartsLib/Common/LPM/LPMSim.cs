@@ -58,16 +58,23 @@ namespace MosaicLib.PartsLib.Common.LPM.Sim
 
     #region LPMSimPartConfigBase
 
+    /// <summary>
+    /// None (0), Fixload6M, VisionLPM, TDK_TAS300J1, PortA300, TAS300J1=TDK_TAS300J1
+    /// </summary>
     public enum LPType : int
     {
         None = 0,
         Fixload6M,
         VisionLPM,
         TDK_TAS300J1,
+        PortA300,
 
         TAS300J1 = TDK_TAS300J1,    // support alternate name
     }
 
+    /// <summary>
+    /// None (0), Hermos, BrooksRFID, OmronV640
+    /// </summary>
     public enum LPTagRWType : int
     {
         None = 0,
@@ -286,6 +293,98 @@ namespace MosaicLib.PartsLib.Common.LPM.Sim
         internal bool IsEqualTo(LPMSimConfigSetAndArrayItems rhs)
         {
             return ItemsAsArray.IsEqualTo(rhs.ItemsAsArray);
+        }
+    }
+
+    #endregion
+
+    #region SimDecodedPodInfoAndPodSensorModel (IDecodedPodInfo and IPodSensorValues related helper classes)
+
+    public class SimDecodedPodInfoAndPodSensorModel : DecodedPodInfoAndPodSensorModel
+    {
+        public SimDecodedPodInfoAndPodSensorModel(string carrierTypeSpecStr = "", CarrierType customCarrierType = CarrierType.None, OCA customOCA = OCA.None, InfoPads customInfoPads = InfoPads.None, int customNumSlots = 0, double customPitch = 0.0)
+            : base(carrierTypeSpecStr, customCarrierType, customOCA, customInfoPads, customNumSlots, customPitch)
+        { }
+
+        public override void Service(IPodSensorValues podSensorValues, IPositionState posState = null, OCA ocaStateIn = OCA.None, CarrierType ocaCassetteTypeBitsIn = CarrierType.None)
+        {
+            var initialOCAInstalled = SetupDecodedPodInfo.OCA.IsInstalled();
+            var initialOCAHasCover = SetupDecodedPodInfo.OCA.HasCover();
+            var ocaStateInOCAInstalled = ocaStateIn.IsInstalled();
+            var enableOCASensorMapping = ((ocaStateIn & OCA.DisableSensorMapping) == 0);
+
+            var simPressanceSensorTripped = false;
+            var simCassettePlaced = false;
+            var simCassettePlacedInOCAWithCoverClosed = false;
+
+            if (initialOCAInstalled && ocaStateInOCAInstalled)
+            {
+                // simulation specific behavior for cases where the OCA has a cover
+                // note: TAS OCA trips one of three placement sensors while closed.  It only trips the other two when the cassette is properly placed.  
+                // It also only trips the presence sensor when being installed/removed or when cover is partially open, or when cassette is partially or fully placed.
+
+                switch (podSensorValues.PresentPlacedSensorValues)
+                {
+                    // OCA open and empty
+                    case PresentPlaced.None:
+                        ocaStateIn |= OCA.Open;
+                        simPressanceSensorTripped = true;
+                        simCassettePlaced = false;
+                        simCassettePlacedInOCAWithCoverClosed = false;
+                        break;
+                    // OCA open and cassette placed
+                    case PresentPlaced.Present:
+                    case PresentPlaced.Present | PresentPlaced.PartiallyPlaced:
+                        ocaStateIn |= OCA.Open;
+                        simPressanceSensorTripped = true;
+                        simCassettePlaced = true;
+                        simCassettePlacedInOCAWithCoverClosed = false;
+                        break;
+                    // OCA closed and cassette placed
+                    case PresentPlaced.Present | PresentPlaced.Placed:
+                        simPressanceSensorTripped = true;
+                        simCassettePlaced = true;
+                        simCassettePlacedInOCAWithCoverClosed = true;
+                        break;
+                    // (aka fault state) - OCA closed and empty
+                    case PresentPlaced.Placed:
+                        simPressanceSensorTripped = false;
+                        simCassettePlaced = false;
+                        simCassettePlacedInOCAWithCoverClosed = false;
+                        break;
+                }
+
+                if (posState != null)
+                {
+                    if (posState.IsClamped)
+                        ocaStateIn |= OCA.Clamped;
+                    if (!posState.IsUndocked)
+                        ocaStateIn |= OCA.Locked;
+                }
+            }
+
+            base.Service(podSensorValues, posState, ocaStateIn, ocaCassetteTypeBitsIn);
+
+            if (initialOCAInstalled && enableOCASensorMapping)
+            {
+                if (ocaStateInOCAInstalled)
+                {
+                    // use above logic to decide if mapped pos sensors (the ones that are to be reported to the connected driver) are fully placed (cassette present and door closed) or partially placed (adapter present and at least one placement sensor pressed but not all of them)
+                    if (simCassettePlacedInOCAWithCoverClosed)
+                        AdjustedPodSensorValues.MappedPresentPlaced = (PresentPlaced.Present | PresentPlaced.Placed);
+                    else if (simPressanceSensorTripped || simCassettePlaced)
+                        AdjustedPodSensorValues.MappedPresentPlaced = (PresentPlaced.Present | PresentPlaced.PartiallyPlaced);
+                    else
+                        AdjustedPodSensorValues.MappedPresentPlaced = (PresentPlaced.PartiallyPlaced);
+                }
+                else
+                {
+                    if (podSensorValues.IsProperlyPlaced)
+                        AdjustedPodSensorValues.MappedPresentPlaced = (PresentPlaced.Present | PresentPlaced.Placed);
+                    else
+                        AdjustedPodSensorValues.MappedPresentPlaced = (PresentPlaced.Present | PresentPlaced.PartiallyPlaced);
+                }
+            }
         }
     }
 

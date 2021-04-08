@@ -58,7 +58,6 @@ namespace MosaicLib.Modular.Part
         [EnumMember]
         AttemptOnline = 2,
 		
-        /// <summary>part is online but it requires initialization before it can be used normally. (3)</summary>
         [EnumMember]
         [Obsolete("Please switch to using the correctly spelled version (2018-05-23)")]
         OnlineUnintialized = 3,
@@ -889,7 +888,7 @@ namespace MosaicLib.Modular.Part
 
         /// <summary>
         /// Used to select which parts to include when using the customized version of the BaseState ToString method
-        /// <para/>None (0x00), PartID (0x01), UseState (0x02), ActionName (0x04), ConnState (0x08), Reason (0x10), UseStateNoPrefix (0x20), ExplicitFaultReason (0x40), All (0x5f), AllExceptPartID (0x7c)
+        /// <para/>None (0x00), PartID (0x01), UseState (0x02), ActionName (0x04), ConnState (0x08), Reason (0x10), UseStateNoPrefix (0x20), ExplicitFaultReason (0x40), All (0x5f), AllForPart (0x7c)
         /// </summary>
         [Flags]
         public enum ToStringSelect : int
@@ -921,7 +920,7 @@ namespace MosaicLib.Modular.Part
             /// <summary>(PartID | UseState | ActionName | ConnState | Reason) [0x5f]</summary>
             All = (PartID | UseState | ActionName | ConnState | Reason | ExplicitFaultReason),
 
-            /// <summary>(UseStateNoPrefix | ActionName | ConnState | Reason) [0x7c]</summary>
+            /// <summary>(UseStateNoPrefix | ActionName | ConnState | Reason | ExplicitFaultReason) [0x7c]</summary>
             AllForPart = (UseStateNoPrefix | ActionName | ConnState | Reason | ExplicitFaultReason),
         }
 
@@ -1201,6 +1200,7 @@ namespace MosaicLib.Modular.Part
         /// <param name="partID">Gives the PartID/Name that the part will report and use.</param>
         /// <param name="basicLogger">Optionally gives the <see cref="Logging.IBasicLogger"/> instance that the part shall use for logging.  Part will use new Logging.Logger(partID) if this is null.</param>
         /// <param name="initialSettings">Optionally gives the SimplePartBaseSettings that will be used to configure this part's behavior.  Part will use default values if this is null.</param>
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
         protected SimplePartBase(string partID, Logging.IBasicLogger basicLogger = null, SimplePartBaseSettings? initialSettings = null) 
             : this(partID, new System.Diagnostics.StackFrame(1).GetMethod().DeclaringType.ToString(), basicLogger: basicLogger, initialSettings: initialSettings) 
         { }

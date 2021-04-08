@@ -107,7 +107,7 @@ namespace MosaicLib.PartsLib.Common.E084
             ActionLoggingConfig = Modular.Action.ActionLoggingConfig.Info_Error_Trace_Trace;    // redefine the log levels for actions 
 
             //This part is a simulated primary part
-            PrivateBaseState = new BaseState(true, true) { ConnState = ConnState.NotApplicable };
+            PrivateBaseState = new BaseState(true, true) { PartID = PartID, ConnState = ConnState.NotApplicable };
 
             this.lpmSimPart = lpmSimPart;
 
