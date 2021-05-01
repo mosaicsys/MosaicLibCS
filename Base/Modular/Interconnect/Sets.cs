@@ -2815,6 +2815,7 @@ namespace MosaicLib.Modular.Interconnect.Sets
         }
 
         /// <summary>Throws a SetUseException if no IDataContractAdapter was constructed for these tracking set, typically because TObjectType is not known to support use with DataContract serialization.</summary>
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
         protected void ThrowIfTObjectTypeIsNotUsableWithDataContractSerialization()
         {
             if (dca == null)

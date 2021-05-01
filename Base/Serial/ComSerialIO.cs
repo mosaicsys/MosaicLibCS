@@ -130,7 +130,7 @@ namespace MosaicLib.SerialIO
 			this.comPortConfig = comPortConfig;
             PortBehavior = new PortBehaviorStorage() { DataDeliveryBehavior = DataDeliveryBehavior.ByteStream, IsClientPort = true };
 
-			PrivateBaseState = new BaseState(false, true);
+            PrivateBaseState = new BaseState(false, true) { PartID = PartID };
 			PublishBaseState("object constructed");
 
 			CreatePort();

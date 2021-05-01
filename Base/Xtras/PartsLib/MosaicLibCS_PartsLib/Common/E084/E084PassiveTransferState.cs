@@ -320,8 +320,9 @@ namespace MosaicLib.PartsLib.Common.E084
         //  V2.0.1 2016-08-16: Version passing all basic tests.
         //  V2.0.2 2016-09-06: Changed logging so that "Recovery Available" message can be logged at Info level rather than Warning level
         //  V2.0.3 2016-09-11: Source cleanup to resolve and remove remaining Todo elements (mainly remaining vestiges of old C++ field naming conventions)
+        //  V2.0.4 2021-04-05: Changed to use IPodSensorValues.PresentPlacedSensorValues in place of prior IPodSensorValues.PresentPlaced in relation to addition of MappedPresentPlaced.
 
-        public const string E084PassiveTransferStateMachineVersionStr = "V2.0.3 2016-09-11";
+        public const string E084PassiveTransferStateMachineVersionStr = "V2.0.4 2021-04-05";
 
         #endregion
 
@@ -757,7 +758,7 @@ namespace MosaicLib.PartsLib.Common.E084
             priv.timeInState = (tsNow - priv.stateCodeTime).TotalSeconds;
             priv.activePIOOutputPinsElapsedTime = (tsNow - priv.activePIOOutputPinsTimeStamp).TotalSeconds;
 
-            if (priv.podSensorValues.PresentPlaced.DoesPlacedEqualPresent())		// keep advancing the last confirmed time for pod transition timeout detection during transfers
+            if (priv.podSensorValues.PresentPlacedSensorValues.DoesPlacedEqualPresent())		// keep advancing the last confirmed time for pod transition timeout detection during transfers
                 priv.lastConfirmedPPStateTime = tsNow;
 
             // update outputs any time the lcInterlockTripped state changes
@@ -1178,8 +1179,8 @@ namespace MosaicLib.PartsLib.Common.E084
                 case StateCode.Fault_TP4_Timeout:
                 case StateCode.Fault_TP5_Timeout:
                 case StateCode.Fault_TP6_Timeout: maintainCurrentState = maintainTimeoutState; break;
-                case StateCode.Fault_PodTransitionTimeout: maintainCurrentState = (maintainTimeoutState || !priv.podSensorValues.PresentPlaced.DoesPlacedEqualPresent()); break;
-                case StateCode.Fault_UnexpectedPodPlacement: maintainCurrentState = (maintainTimeoutState || !priv.podSensorValues.PresentPlaced.DoesPlacedEqualPresent()); break;
+                case StateCode.Fault_PodTransitionTimeout: maintainCurrentState = (maintainTimeoutState || !priv.podSensorValues.PresentPlacedSensorValues.DoesPlacedEqualPresent()); break;
+                case StateCode.Fault_UnexpectedPodPlacement: maintainCurrentState = (maintainTimeoutState || !priv.podSensorValues.PresentPlacedSensorValues.DoesPlacedEqualPresent()); break;
                 default: break;
             }
 
@@ -1257,7 +1258,7 @@ namespace MosaicLib.PartsLib.Common.E084
 
             double podPlacementTimeSinceLastConfirmed = (tsNow - priv.lastConfirmedPPStateTime).TotalSeconds;
 
-            if (!priv.podSensorValues.PresentPlaced.DoesPlacedEqualPresent()
+            if (!priv.podSensorValues.PresentPlacedSensorValues.DoesPlacedEqualPresent()
                 && (priv.stateCode.IsLoading() || priv.stateCode.IsUnloading())
                 && config.Times.PodPlacementTransitionTimeout > 0
                 && podPlacementTimeSinceLastConfirmed > config.Times.PodPlacementTransitionTimeout
@@ -1272,7 +1273,7 @@ namespace MosaicLib.PartsLib.Common.E084
                 reason = "PodPlacementTransitionTimeout: placement transition has used {0:f2} sec, limit:{1:f2} sec, state:'{2}'".CheckedFormat(
                             podPlacementTimeSinceLastConfirmed,
                             config.Times.PodPlacementTransitionTimeout,
-                            priv.podSensorValues.PresentPlaced);
+                            priv.podSensorValues.PresentPlacedSensorValues);
 
                 SetState(StateCode.Fault_PodTransitionTimeout, reason);
 
@@ -1291,9 +1292,9 @@ namespace MosaicLib.PartsLib.Common.E084
                     case StateCode.SelectedAndLoadable:
                     case StateCode.RequestStartLoad:
                     case StateCode.ReadyToStartLoad:
-                        if (!priv.podSensorValues.PresentPlaced.IsNeitherPresentNorPlaced() || priv.portUsageContextInfo.APresentOrPlacementAlarmIsActive)
+                        if (!priv.podSensorValues.PresentPlacedSensorValues.IsNeitherPresentNorPlaced() || priv.portUsageContextInfo.APresentOrPlacementAlarmIsActive)
                         {
-                            reason = "Unexpected PodPlacement state '{0}'{1} detected".CheckedFormat(priv.podSensorValues.PresentPlaced, (priv.portUsageContextInfo.APresentOrPlacementAlarmIsActive ? " PPAlarm" : ""));
+                            reason = "Unexpected PodPlacement state '{0}'{1} detected".CheckedFormat(priv.podSensorValues.PresentPlacedSensorValues, (priv.portUsageContextInfo.APresentOrPlacementAlarmIsActive ? " PPAlarm" : ""));
                             SetState(StateCode.Fault_UnexpectedPodPlacement, reason);
 
                             return true;
@@ -1302,9 +1303,9 @@ namespace MosaicLib.PartsLib.Common.E084
                     case StateCode.SelectedAndUnloadable:
                     case StateCode.RequestStartUnload:
                     case StateCode.ReadyToStartUnload:
-                        if (!priv.podSensorValues.PresentPlaced.IsProperlyPlaced() || priv.portUsageContextInfo.APresentOrPlacementAlarmIsActive)
+                        if (!priv.podSensorValues.PresentPlacedSensorValues.IsProperlyPlaced() || priv.portUsageContextInfo.APresentOrPlacementAlarmIsActive)
                         {
-                            reason = "Unexpected PodPlacement state '{0}'{1} detected".CheckedFormat(priv.podSensorValues.PresentPlaced, (priv.portUsageContextInfo.APresentOrPlacementAlarmIsActive ? " PPAlarm" : ""));
+                            reason = "Unexpected PodPlacement state '{0}'{1} detected".CheckedFormat(priv.podSensorValues.PresentPlacedSensorValues, (priv.portUsageContextInfo.APresentOrPlacementAlarmIsActive ? " PPAlarm" : ""));
                             SetState(StateCode.Fault_UnexpectedPodPlacement, reason);
 
                             return true;
@@ -1667,7 +1668,7 @@ namespace MosaicLib.PartsLib.Common.E084
                     transitionReason2 = "LoadStartAborted:-VALID,-CS_0,-TR_REQ";
                     break;
                 case StateCode.Loading:
-                    if (priv.podSensorValues.PresentPlaced.IsProperlyPlaced())
+                    if (priv.podSensorValues.PresentPlacedSensorValues.IsProperlyPlaced())
                     {
                         nextState1 = StateCode.LoadingAndPodPresent;
                         transitionReason1 = "PodIsProperlyPlaced";
@@ -1707,7 +1708,7 @@ namespace MosaicLib.PartsLib.Common.E084
                     transitionReason2 = "UnloadStartAborted:-VALID,-CS_0,-TR_REQ";
                     break;
                 case StateCode.Unloading:
-                    if (priv.podSensorValues.PresentPlaced.IsNeitherPresentNorPlaced())
+                    if (priv.podSensorValues.PresentPlacedSensorValues.IsNeitherPresentNorPlaced())
                     {
                         nextState1 = StateCode.UnloadingAndPodRemoved;
                         transitionReason1 = "PodIsNeitherPresentNorPlaced";
@@ -2082,7 +2083,7 @@ namespace MosaicLib.PartsLib.Common.E084
             {
                 double timeInPPState = (QpcTimeStamp.Now - priv.lastPresentOrPlacementAlarmIsActiveTime).TotalSeconds;
 
-                if (priv.podSensorValues.PresentPlaced.DoesPlacedEqualPresent() && timeInPPState < config.Times.PostPPFaultHoldoff)
+                if (priv.podSensorValues.PresentPlacedSensorValues.DoesPlacedEqualPresent() && timeInPPState < config.Times.PostPPFaultHoldoff)
                 {
                     inactiveState = StateCode.NotAvail_PodPlacementFault;
                     stateReason = "In Post Pod Placement Alarm holdoff period";

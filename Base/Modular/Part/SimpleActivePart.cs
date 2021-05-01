@@ -682,10 +682,10 @@ namespace MosaicLib.Modular.Part
             { }
 		}
 
-		#endregion
+        #endregion
 
-		//-----------------------------------------------------------------
-		#region CTOR and DTOR (et. al.)
+        //-----------------------------------------------------------------
+        #region CTOR and DTOR (et. al.)
 
         /// <summary>
         /// Constructor variant: caller provides PartID.
@@ -696,6 +696,7 @@ namespace MosaicLib.Modular.Part
         /// <param name="initialSettings">Defines the initial set of settings that the part will use.  If this value is null then the part uses default settings with WaitTimeLimit set to 0.1 seconds.</param>
         /// <param name="enableQueue">Set to true for the parts ActionQueue to be enabled even before the part has been started.  Set to false to prevent actions from being started until this part has been started and has enabled its queue.</param>
         /// <param name="queueSize">Defines the maximum number of pending actions that may be placed in the queue before further attempts to start new actions will be blocked and will fail.</param>
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
         public SimpleActivePartBase(string partID, SimpleActivePartBaseSettings? initialSettings = null, bool enableQueue = true, int queueSize = 10)
             : this(partID, new System.Diagnostics.StackFrame(1).GetMethod().DeclaringType.ToString(), initialSettings: initialSettings, enableQueue: enableQueue, queueSize: queueSize) 
         {}
@@ -710,6 +711,7 @@ namespace MosaicLib.Modular.Part
         /// <param name="waitTimeLimit">Defines the nominal maximum period that the part's outer main thread loop will wait for the next notify occurrance.  Sets the default "spin" rate for the part.</param>
         /// <param name="enableQueue">Set to true for the parts ActionQueue to be enabled even before the part has been started.  Set to false to prevent actions from being started until this part has been started and has enabled its queue.</param>
         /// <param name="queueSize">Defines the maximum number of pending actions that may be placed in the queue before further attempts to start new actions will be blocked and will fail.</param>
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
         public SimpleActivePartBase(string partID, TimeSpan waitTimeLimit, bool enableQueue = true, int queueSize = 10)
             : this(partID, new System.Diagnostics.StackFrame(1).GetMethod().DeclaringType.ToString(), waitTimeLimit, enableQueue, queueSize)
         {}

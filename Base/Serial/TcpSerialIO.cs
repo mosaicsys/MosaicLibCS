@@ -167,7 +167,7 @@ namespace MosaicLib.SerialIO
 
             PortBehavior = new PortBehaviorStorage() { DataDeliveryBehavior = DataDeliveryBehavior.ByteStream, IsNetworkPort = true, IsClientPort = true };
 
-			PrivateBaseState = new BaseState(false, true);
+			PrivateBaseState = new BaseState(false, true) { PartID = PartID };
 			PublishBaseState("object constructed");
 		}
 

@@ -910,6 +910,7 @@ namespace MosaicLib.Semi.E087
         /// SlotState value (casted as an integer), shifted right by one.  char array index 0 is for the SlotState.Invalid state,
         /// char array index 1 is for SlotState.Undefined, etc... All states that after incrementing, do not map to valid index will
         /// be represented in the output by a ?.
+        /// <para/>aka index each slot state (Invalid, Undefined, Empty, NotEmpty, CorrectlyOccupied, DoubleSlotted, CrossSlotted) into <paramref name="slotStateToCharMappingArray"/> to get resulting char at the corresponding slot map position in the output.
         /// </summary>
         public static string ToString(this IList<SlotState> slotStateList, char[] slotStateToCharMappingArray)
         {
@@ -921,6 +922,7 @@ namespace MosaicLib.Semi.E087
         /// SlotState value (casted as an integer), shifted right by one.  char array index 0 is for the SlotState.Invalid state,
         /// char array index 1 is for SlotState.Undefined, etc... All states that after incrementing, do not map to valid index will
         /// be represented in the output by a ?.
+        /// <para/>aka index each slot state (Invalid, Undefined, Empty, NotEmpty, CorrectlyOccupied, DoubleSlotted, CrossSlotted) into <paramref name="slotStateToCharMappingArray"/> to get resulting char at the corresponding slot map position in the output.
         /// </summary>
         public static string ToString(this SlotState [] slotStateArray, char[] slotStateToCharMappingArray)
         {

@@ -86,6 +86,7 @@ namespace MosaicLib.WPF.Common
         /// </summary>
         public static System.Reflection.Assembly CallerAssembly
         {
+            [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
             get
             {
                 try
